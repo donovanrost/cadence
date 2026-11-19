@@ -64,8 +64,12 @@ defmodule Cadence.MissionModels.SeparationTest do
     assert {:ok, %{status: :approved}} = approve(c.importer, c)
   end
 
-  test "no person (nil) is never refused for separation", c do
-    assert {:ok, _checked} = RevisionDecisions.separation(c.org, c.mid, c.model, nil)
+  # #280 (mms-security's review of 4b13d1b87): with no person, separation can't tell the viewer
+  # from an importer, so under 'independent' it fails closed. Approval never gets here without a
+  # person (human approver required first), and the read answers not_admin before it.
+  test "no person (nil) is refused under independent", c do
+    assert {:refused, %{reason: :self, via_service: nil, service: nil}} =
+             RevisionDecisions.separation(c.org, c.mid, c.model, nil)
   end
 
   defp read_reason(scope, c) do

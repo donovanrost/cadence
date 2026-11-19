@@ -54,12 +54,19 @@ defmodule CadenceWeb.ActivationApprovals do
   end
 
   def decide(scope, session, input) do
-    case Activations.review(scope, session.mission_id, input) do
+    case scope |> Activations.review(session.mission_id, input) |> without_details() do
       {:ok, data} ->
         %{status: "ok", data: data}
 
       {:error, :activation_self_approval_forbidden} ->
         %{status: "invalid", message: "A different person must review this request."}
+
+      # #280: who requested it can't be established (a service with no accountable people).
+      {:error, :activation_approver_authors_unknown} ->
+        %{
+          status: "invalid",
+          message: "No one can approve this yet: Cadence can't tell who requested it."
+        }
 
       {:error, :invalid_activation_decision} ->
         %{status: "invalid", message: "Provide a decision rationale of at most 4096 bytes."}
@@ -80,4 +87,11 @@ defmodule CadenceWeb.ActivationApprovals do
   rescue
     _ -> %{status: "unavailable"}
   end
+
+  # #280 refusals carry details for the console; this page words them by code alone.
+  defp without_details({:error, {code, %{} = _details}})
+       when code in [:activation_self_approval_forbidden, :activation_approver_authors_unknown],
+       do: {:error, code}
+
+  defp without_details(result), do: result
 end

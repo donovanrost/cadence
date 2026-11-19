@@ -84,7 +84,18 @@ defmodule CadenceWeb.Console.MissionModelRevisionController do
             mission_model_decision_reason_required mission_model_decision_reason_too_long
             mission_model_no_active_binding_set mission_model_revision_not_in_catalog)a
 
+  # #280 (U100): the self-approval refusal always says whether it came through a service.
+  defp error(conn, :mission_model_self_approval_forbidden),
+    do: Problem.respond(conn, :mission_model_self_approval_forbidden, %{via_service: nil})
+
   defp error(conn, reason) when reason in @codes, do: Problem.respond(conn, reason)
+
+  defp error(conn, {reason, details})
+       when reason in [
+              :mission_model_self_approval_forbidden,
+              :mission_model_approver_authors_unknown
+            ],
+       do: Problem.respond(conn, reason, details)
 
   defp error(conn, {:invalid_params, details}),
     do: Problem.respond(conn, :invalid_params, details)

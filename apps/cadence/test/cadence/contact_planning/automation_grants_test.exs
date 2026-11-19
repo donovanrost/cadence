@@ -45,7 +45,12 @@ defmodule Cadence.ContactPlanning.AutomationGrantsTest do
         capabilities: [:mission_admin]
       })
 
-    assert {:ok, issued} = Auth.issue_service_identity(service_identity)
+    assert {:ok, issued} =
+             Auth.issue_service_identity(
+               service_identity,
+               Cadence.ServiceIdentityFixtures.issuer_scope(@organization_id)
+             )
+
     assert {:ok, service_scope} = Auth.authenticate_api_token(issued.api_token)
 
     %{

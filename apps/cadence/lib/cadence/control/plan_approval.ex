@@ -69,6 +69,10 @@ defmodule Cadence.Control.PlanApproval do
         {:error,
          {:contact_plan_self_approval_forbidden, because(plan, PlanOperations.actor_id(scope))}}
 
+      # #280: the overlap came through a service identity the approver is accountable for.
+      {:error, {:contact_plan_self_approval_forbidden, %{via_service: via}}} ->
+        {:error, {:contact_plan_self_approval_forbidden, because(plan, {:ok, via.id}), via}}
+
       other ->
         other
     end

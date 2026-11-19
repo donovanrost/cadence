@@ -139,6 +139,17 @@ defmodule CadenceWeb.Console.ConfigJSON do
 
   @doc "Sends the envelope for a facade error and halts."
   @spec error(Plug.Conn.t(), term()) :: Plug.Conn.t()
+  # #280 (U100): who made this change set can't be established (a service with nobody on record).
+  def error(conn, {:change_set_approver_authors_unknown, details}),
+    do:
+      respond_raw(
+        conn,
+        403,
+        "change_set_approver_authors_unknown",
+        "Not approved: Cadence can't tell who made this change set, so this can't be approved yet.",
+        details
+      )
+
   def error(conn, {:invalid_op, index, errors}),
     do: respond(conn, :invalid_op, %{index: index, errors: encode(errors)})
 

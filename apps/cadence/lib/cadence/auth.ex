@@ -7,7 +7,7 @@ defmodule Cadence.Auth do
 
   alias Cadence.Accounts
   alias Cadence.Accounts.OrganizationMembership
-  alias Cadence.Auth.{Policy, Scope, ServiceIdentity, ServiceIdentityRow}
+  alias Cadence.Auth.{Policy, Scope, ServiceAccountability, ServiceIdentity, ServiceIdentityRow}
   alias Cadence.Missions
   alias Cadence.Organizations
   alias Cadence.Repo
@@ -18,13 +18,17 @@ defmodule Cadence.Auth do
           api_token: binary()
         }
 
-  @spec issue_service_identity(ServiceIdentity.t()) ::
+  @doc """
+  Issues a service identity on behalf of `issued_by`, the acting scope. Its actor is recorded as
+  accountable for the identity in the same transaction (#280, `ServiceAccountability`).
+  """
+  @spec issue_service_identity(ServiceIdentity.t(), Scope.t()) ::
           {:ok, issued_service_identity()} | {:error, term()}
-  def issue_service_identity(%ServiceIdentity{} = service_identity) do
+  def issue_service_identity(%ServiceIdentity{} = service_identity, %Scope{} = issued_by) do
     api_token = generate_api_token()
 
     with :ok <- validate_service_identity_scope(service_identity) do
-      persist_service_identity(service_identity, api_token)
+      persist_service_identity(service_identity, api_token, issued_by)
     end
   end
 
@@ -177,22 +181,27 @@ defmodule Cadence.Auth do
     Organizations.fetch_organization(organization_membership.organization_id)
   end
 
-  defp persist_service_identity(%ServiceIdentity{} = service_identity, api_token) do
+  defp persist_service_identity(%ServiceIdentity{} = service_identity, api_token, issued_by) do
     case Repo.transaction(fn ->
-           insert_service_identity_or_rollback(service_identity, api_token)
+           insert_service_identity_or_rollback(service_identity, api_token, issued_by)
          end) do
       {:ok, result} -> {:ok, result}
       {:error, reason} -> {:error, reason}
     end
   end
 
-  defp insert_service_identity_or_rollback(%ServiceIdentity{} = service_identity, api_token) do
-    case insert_service_identity(Repo, service_identity, api_token) do
-      {:ok, persisted_service_identity} ->
-        %{service_identity: persisted_service_identity, api_token: api_token}
-
-      {:error, reason} ->
-        Repo.rollback(reason)
+  defp insert_service_identity_or_rollback(service_identity, api_token, issued_by) do
+    with {:ok, persisted} <- insert_service_identity(Repo, service_identity, api_token),
+         :ok <-
+           ServiceAccountability.record(
+             persisted.organization_id,
+             persisted.service_identity_id,
+             :issued,
+             issued_by
+           ) do
+      %{service_identity: persisted, api_token: api_token}
+    else
+      {:error, reason} -> Repo.rollback(reason)
     end
   end
 

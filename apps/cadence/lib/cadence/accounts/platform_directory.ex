@@ -8,10 +8,9 @@ defmodule Cadence.Accounts.PlatformDirectory do
   import Ecto.Query
 
   alias Cadence.Accounts.{OrganizationInvitationRow, OrganizationMembershipRow, UserRow}
-  alias Cadence.Auth.ServiceIdentityRow
+  alias Cadence.Auth.{ServiceAccountableRow, ServiceIdentityRow}
   alias Cadence.Missions.MissionRow
   alias Cadence.Organizations.OrganizationRow
-  alias Cadence.Persistence.JsonDocument
   alias Cadence.Repo
 
   @doc "Organizations by slug after `after_id`, optionally matching `q` in name or slug."
@@ -140,11 +139,19 @@ defmodule Cadence.Accounts.PlatformDirectory do
     |> for_organization(organization_id)
     |> join(:inner, [s], o in OrganizationRow, on: o.organization_id == s.organization_id)
     |> join(:left, [s], m in MissionRow, on: m.mission_id == s.mission_id)
+    # The issuer the server recorded (#280), never the client-writable metadata.
+    |> join(:left, [s], a in ServiceAccountableRow,
+      on:
+        a.organization_id == s.organization_id and
+          a.service_identity_id == s.service_identity_id and a.event == "issued" and
+          a.actor_kind == "user"
+    )
     |> order_by([s], desc: s.inserted_at, desc: s.service_identity_id)
-    |> select([s, o, m], %{
+    |> select([s, o, m, a], %{
       row: s,
       organization: %{id: o.organization_id, name: o.display_name},
-      mission: %{id: m.mission_id, name: m.display_name}
+      mission: %{id: m.mission_id, name: m.display_name},
+      issued_by: a.user_id
     })
   end
 
@@ -156,15 +163,8 @@ defmodule Cadence.Accounts.PlatformDirectory do
       capabilities: s.capabilities,
       mission: found.mission.id && found.mission,
       created_at: s.inserted_at,
-      created_by_id: creator_id(s)
+      created_by_id: found.issued_by
     }
-
-  defp creator_id(s) do
-    case JsonDocument.unwrap_value(s.metadata) || %{} do
-      %{"created_by" => %{"id" => id}} when is_binary(id) -> id
-      _unknown -> nil
-    end
-  end
 
   defp organization_view(row),
     do: %{

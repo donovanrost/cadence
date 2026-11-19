@@ -77,6 +77,15 @@ defmodule Cadence.Management.Commanding.RequestReview do
   defp receipt({:error, {:command_request_self_approval_not_allowed, _}}),
     do: {:rejected, "A different person must review this request."}
 
+  # #280: through a service identity the reviewer is accountable for.
+  defp receipt({:error, {:command_request_self_approval_not_allowed, _, _via}}),
+    do: {:rejected, "A different person must review this request."}
+
+  defp receipt({:error, {:command_request_approver_authors_unknown, _, _service}}),
+    do:
+      {:rejected,
+       "No one can approve this yet: Cadence can't tell who sent this command request."}
+
   # ux U87.
   defp receipt({:error, :command_request_in_group}),
     do:

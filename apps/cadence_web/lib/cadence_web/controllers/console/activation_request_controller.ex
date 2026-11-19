@@ -54,11 +54,18 @@ defmodule CadenceWeb.Console.ActivationRequestController do
   defp error(conn, {:not_resumable, code}),
     do: Problem.respond(conn, :not_resumable, %{error_code: code})
 
+  # #280 (U100): the self-approval refusal always says whether it came through a service.
+  defp error(conn, :self_approval_forbidden),
+    do: Problem.respond(conn, :self_approval_forbidden, %{via_service: nil})
+
+  defp error(conn, {reason, details})
+       when reason in [:self_approval_forbidden, :activation_approver_authors_unknown],
+       do: Problem.respond(conn, reason, details)
+
   defp error(conn, reason)
        when reason in [
               :activation_request_not_found,
               :configuration_changes_group_not_found,
-              :self_approval_forbidden,
               :not_requester,
               :activation_policy_changed,
               :activation_execution_in_progress

@@ -5,10 +5,12 @@ defmodule Cadence.ActivationVerticalSliceTest do
 
   alias Cadence.Accounts.User
   alias Cadence.ApplicationDispatch.BindingSet
-  alias Cadence.Auth.Scope
+  alias Cadence.Auth
+  alias Cadence.Auth.{Scope, ServiceAccountableRow, ServiceIdentity}
   alias Cadence.Catalog.MissionModel.Layer
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Control.MissionRuntimeReconciler
+  alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.MissionModelApproval
   alias Cadence.MissionModelCatalogNaming
@@ -162,6 +164,106 @@ defmodule Cadence.ActivationVerticalSliceTest do
                request.activation_request_id,
                "self approval must fail"
              )
+  end
+
+  describe "a service identity's request (#280)" do
+    setup do
+      organization_id = unique("org-service-request")
+      mission_id = unique("mission-service-request")
+      %{organization: organization} = persist_mission_scope(organization_id, mission_id)
+      issuer = user_scope(organization_id, unique("issuer"))
+
+      {:ok, %{service_identity: service}} =
+        Auth.issue_service_identity(
+          ServiceIdentity.new(%{
+            organization_id: organization_id,
+            mission_id: mission_id,
+            display_name: "Rollout bot",
+            capabilities: [:mission_admin]
+          }),
+          issuer
+        )
+
+      service_scope =
+        Scope.new(%{
+          organization_id: organization_id,
+          organization: organization,
+          service_identity: service
+        })
+
+      binding_set = persist_binding_set(organization_id, mission_id, "service-request-basis")
+
+      %{
+        organization_id: organization_id,
+        mission_id: mission_id,
+        issuer: issuer,
+        service: service,
+        service_scope: service_scope,
+        binding_set: binding_set,
+        request: request!(service_scope, mission_id, binding_set)
+      }
+    end
+
+    test "its issuer can't approve it, and the refusal names the service", c do
+      id = c.service.service_identity_id
+
+      assert {:error,
+              {:activation_self_approval_forbidden,
+               %{via_service: %{id: ^id, name: "Rollout bot"}}}} =
+               ManagementActivations.approve(c.issuer, c.request.activation_request_id, "mine")
+
+      refute match?(
+               {:error, {:activation_self_approval_forbidden, _}},
+               ManagementActivations.approve(
+                 user_scope(c.organization_id, unique("other")),
+                 c.request.activation_request_id,
+                 "someone else"
+               )
+             )
+    end
+
+    test "under 'direct' a request still needs no approval: #280 adds no refusal", c do
+      put_approval_requirement(c.issuer, c.mission_id, "direct")
+      assert %{state: :approved} = request!(c.service_scope, c.mission_id, c.binding_set)
+    end
+
+    test "with nobody on record for the service, nobody can approve it", c do
+      Repo.delete_all(
+        from(row in ServiceAccountableRow,
+          where: row.service_identity_id == ^c.service.service_identity_id
+        )
+      )
+
+      id = c.service.service_identity_id
+
+      assert {:error, {:activation_approver_authors_unknown, %{service: %{id: ^id}}}} =
+               ManagementActivations.approve(
+                 user_scope(c.organization_id, unique("other")),
+                 c.request.activation_request_id,
+                 "unknown authors"
+               )
+    end
+  end
+
+  defp request!(service_scope, mission_id, binding_set) do
+    assert {:ok, request} =
+             ManagementActivations.request(
+               service_scope,
+               mission_id,
+               binding_set.binding_set_id,
+               binding_set.version
+             )
+
+    request
+  end
+
+  defp put_approval_requirement(scope, mission_id, requirement) do
+    policy = ActivationPolicy.load(scope.organization_id, mission_id)
+
+    {:ok, _} =
+      ActivationPolicy.save(scope, mission_id, policy.token, %{
+        "value" => %{"approval_requirement" => requirement}
+      })
   end
 
   defp persist_binding_set(organization_id, mission_id, binding_set_id) do

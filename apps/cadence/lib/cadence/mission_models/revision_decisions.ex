@@ -8,8 +8,11 @@ defmodule Cadence.MissionModels.RevisionDecisions do
   - Approval names the comparison report the approver saw. It must be this revision's and must
     have passed; a report whose replay didn't run (no qualification corpus) passes, and says so.
   - Under 'independent' approval (the mission's governance setting) whoever imported the revision
-    can't approve it (`:mission_model_self_approval_forbidden`). A revision whose importer wasn't
-    recorded can be approved by any administrator; the approval records that.
+    can't approve it (`:mission_model_self_approval_forbidden`). A service importer counts as the
+    people accountable for it, and a service nobody is accountable for refuses everyone
+    (`:mission_model_approver_authors_unknown`, #280). A revision whose importer wasn't recorded at
+    all (a seed's system actor, a legacy `%{}`) can be approved by any administrator; the approval
+    records that (MM-2).
   - Approval needs a candidate (or already approved) revision whose four runtime plans are ready.
   - Approval needs a catalog revision that names the revision
     (`:mission_model_revision_not_in_catalog`, director 11-17, interim); rejecting doesn't.
@@ -20,7 +23,7 @@ defmodule Cadence.MissionModels.RevisionDecisions do
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Catalog
   alias Cadence.Catalog.MissionModel.Revision
-  alias Cadence.Governance.ActivationPolicy
+  alias Cadence.Governance.{Accountability, ActivationPolicy}
   alias Cadence.MissionModels.{Comparison, RevisionRow, RuntimePlanRow}
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Repo
@@ -29,8 +32,9 @@ defmodule Cadence.MissionModels.RevisionDecisions do
   @type service :: %{id: binary(), name: binary() | nil}
 
   @typedoc """
-  Why separation of duties bars a person from approving a revision (U100). Today only `:self`
-  (they imported it), with both services nil; #280 adds `:authors_unknown` and the services.
+  Why separation of duties bars a person from approving a revision (U100): `:self` (they imported
+  it, or `via_service`, a service identity they're accountable for, did) or `:authors_unknown`
+  (`service` imported it and nobody is on record as accountable for it, #280).
   """
   @type refusal :: %{
           reason: :self | :authors_unknown,
@@ -54,10 +58,31 @@ defmodule Cadence.MissionModels.RevisionDecisions do
     policy = ActivationPolicy.evidence(organization_id, mission_id)
     importers = Catalog.model_importers(organization_id, mission_id, revision_id)
 
-    if policy["separation_of_duties"] == true and is_binary(person_id) and person_id in importers,
-      do: {:refused, %{reason: :self, via_service: nil, service: nil}},
-      else: {:ok, %{policy: policy, importers: importers}}
+    if policy["separation_of_duties"] == true do
+      # #280: every importer counts as people: a service importer is its issuer and rotators
+      # (`Governance.Accountability`), and a service nobody is accountable for refuses everyone.
+      actors = Catalog.model_import_actors(organization_id, mission_id, revision_id)
+
+      case separate(organization_id, person_id, actors) do
+        :ok ->
+          {:ok, %{policy: policy, importers: importers}}
+
+        {:error, {:self, via}} ->
+          {:refused, %{reason: :self, via_service: via, service: nil}}
+
+        {:error, {:unknown, svc}} ->
+          {:refused, %{reason: :authors_unknown, via_service: nil, service: svc}}
+      end
+    else
+      {:ok, %{policy: policy, importers: importers}}
+    end
   end
+
+  # No person can't be told apart from an importer, so it fails closed (#280).
+  defp separate(_organization_id, nil, _actors), do: {:error, {:self, nil}}
+
+  defp separate(organization_id, person_id, actors),
+    do: Accountability.separate(organization_id, {:user, person_id}, actors)
 
   @spec approve(Scope.t(), binary(), binary(), binary(), keyword()) ::
           {:ok, Revision.t()} | {:error, term()}
@@ -247,8 +272,18 @@ defmodule Cadence.MissionModels.RevisionDecisions do
 
   defp independent(row, %{"id" => actor_id}) do
     case separation(row.organization_id, row.mission_id, row.revision_id, actor_id) do
-      {:refused, _refusal} -> {:error, :mission_model_self_approval_forbidden}
-      {:ok, checked} -> {:ok, checked}
+      {:ok, checked} ->
+        {:ok, checked}
+
+      {:refused, %{reason: :self, via_service: nil}} ->
+        {:error, :mission_model_self_approval_forbidden}
+
+      # #280 (U100): through a service identity the approver is accountable for.
+      {:refused, %{reason: :self, via_service: via}} ->
+        {:error, {:mission_model_self_approval_forbidden, %{via_service: via}}}
+
+      {:refused, %{reason: :authors_unknown, service: service}} ->
+        {:error, {:mission_model_approver_authors_unknown, %{service: service}}}
     end
   end
 

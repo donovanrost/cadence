@@ -299,7 +299,19 @@ defmodule CadenceWeb.Console.Problem do
     mission_model_revision_not_approved:
       {409, "Not applied: the catalog revision isn't approved yet."},
     activation_self_approval_forbidden:
-      {403, "A different person must review this configuration."}
+      {403, "A different person must review this configuration."},
+    # #280 (U100): who made this can't be established; details.service names the service whose
+    # accountable people aren't recorded (null when none is involved).
+    activation_approver_authors_unknown:
+      {403, "Not approved: Cadence can't tell who made this, so this can't be approved yet."},
+    contact_plan_approver_authors_unknown:
+      {403, "Not approved: Cadence can't tell who made this plan, so this can't be approved yet."},
+    mission_model_approver_authors_unknown:
+      {403,
+       "Not approved: Cadence can't tell who imported this revision, so this can't be approved yet."},
+    command_request_approver_authors_unknown:
+      {403,
+       "Not approved: Cadence can't tell who sent this command request, so this can't be approved yet."}
   }
 
   @doc "Sends the error envelope for a known reason atom and halts."

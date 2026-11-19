@@ -49,7 +49,7 @@ defmodule Cadence.Reads.MissionModelApprovals do
         org |> ApprovalReads.latest_reports(mission_id, [revision_id]) |> Map.get(revision_id)
 
       viewer_id = scope.user && scope.user.user_id
-      blocked = cannot_decide(scope, mission_id, row, plans_ready)
+      {blocked, blocked_details} = cannot_decide(scope, mission_id, row, plans_ready)
 
       catalog_revision =
         case ModelRevisions.first_for_model(org, mission_id, row.id) do
@@ -68,6 +68,9 @@ defmodule Cadence.Reads.MissionModelApprovals do
          viewer_can_decide: is_nil(blocked),
          viewer_is_importer: is_binary(viewer_id) and viewer_id in importers,
          cannot_decide_because: blocked,
+         # #280 (ux U100): via_service for self_approval through a service; service for
+         # authors_unknown. Nil otherwise.
+         cannot_decide_details: blocked_details,
          # Approve only (lead 11-17, ux U88): no catalog revision names this model revision, so
          # domain's guard refuses approving it; Reject stays. cannot_decide_because wins if set.
          cannot_approve_because: if(is_nil(catalog_revision), do: "not_in_catalog"),
@@ -225,7 +228,8 @@ defmodule Cadence.Reads.MissionModelApprovals do
   defp person(%{"id" => id} = by), do: %{id: id, name: by["display_name"] || by["name"]}
   defp person(_none), do: nil
 
-  # The first reason the viewer can't decide, in ux's order; nil when they can.
+  # The first reason the viewer can't decide, in ux's order (nil when they can), with the separation
+  # refusal's details when that's the reason.
   defp cannot_decide(scope, mission_id, row, plans_ready) do
     viewer_id = scope.user && scope.user.user_id
 
@@ -234,22 +238,17 @@ defmodule Cadence.Reads.MissionModelApprovals do
         organization_id: scope.organization_id,
         mission_id: mission_id
       }) != :ok ->
-        "not_admin"
+        {"not_admin", nil}
 
       row.status != "candidate" ->
-        "not_approvable"
-
-      match?(
-        {:refused, _refusal},
-        RevisionDecisions.separation(scope.organization_id, mission_id, row.id, viewer_id)
-      ) ->
-        "self_approval"
-
-      not plans_ready ->
-        "plans_not_ready"
+        {"not_approvable", nil}
 
       true ->
-        nil
+        case RevisionDecisions.separation(scope.organization_id, mission_id, row.id, viewer_id) do
+          {:refused, refusal} -> separation_reason(refusal)
+          {:ok, _checked} when not plans_ready -> {"plans_not_ready", nil}
+          {:ok, _checked} -> {nil, nil}
+        end
     end
   end
 
@@ -268,6 +267,14 @@ defmodule Cadence.Reads.MissionModelApprovals do
       RevisionBase.breaking(org, mission_id, revision)
     )
   end
+
+  defp separation_reason(%{reason: :self, via_service: nil}), do: {"self_approval", nil}
+
+  defp separation_reason(%{reason: :self, via_service: via}),
+    do: {"self_approval", %{via_service: via}}
+
+  defp separation_reason(%{reason: :authors_unknown, service: service}),
+    do: {"authors_unknown", %{service: service}}
 
   defp importer(org, mission_id, revision_id),
     do: org |> Catalog.model_importers(mission_id, revision_id) |> first_importer()

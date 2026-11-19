@@ -11,8 +11,10 @@ defmodule Cadence.Catalog.ModelImporters do
     declarations' provenance carries the run id), so a reimport, which makes no catalog revision,
     makes a model revision only its run names: whoever ran it is its importer. A reimport never
     changes the original revision's importers. A run's requester counts only when it is a user
-    actor (`"actor_kind" => "user"` with its `"user_id"`), so a service or system actor
-    (`Catalog.Actor`) never does; a failed run counts no one.
+    actor (`"actor_kind" => "user"` with its `"user_id"`); a failed run counts no one.
+
+  `list/3` is the people named directly. `actors/3` adds the service identities that imported it,
+  whose accountable people count for separation (#280); the system actor still counts no one.
 
   Empty when no importer was recorded. Both columns are `JsonDocument`-wrapped (`{"value": …}`).
   """
@@ -25,6 +27,21 @@ defmodule Cadence.Catalog.ModelImporters do
 
   @spec list(binary(), binary(), binary()) :: [binary()]
   def list(organization_id, mission_id, mission_model_revision_id) do
+    organization_id
+    |> actors(mission_id, mission_model_revision_id)
+    |> Enum.flat_map(fn
+      {:user, id} -> [id]
+      _service -> []
+    end)
+  end
+
+  @doc """
+  Every actor who imported the revision, people and service identities alike (#280): a service's
+  accountable people count for separation (`Governance.Accountability`). The system actor and
+  unrecorded actors count no one, as before.
+  """
+  @spec actors(binary(), binary(), binary()) :: [{:user, binary()} | {:service, binary()}]
+  def actors(organization_id, mission_id, mission_model_revision_id) do
     revisions =
       from(row in RevisionRow,
         where:
@@ -55,16 +72,21 @@ defmodule Cadence.Catalog.ModelImporters do
 
   defp revision_importer(created_by) do
     case JsonDocument.unwrap_value(created_by) do
-      %{"user_id" => id} when is_binary(id) and id != "" -> id
-      %{"id" => id} when is_binary(id) and id != "" -> id
+      %{"actor_kind" => "service"} = actor -> service(actor)
+      %{"user_id" => id} when is_binary(id) and id != "" -> {:user, id}
+      %{"id" => id} when is_binary(id) and id != "" -> {:user, id}
       _not_recorded -> nil
     end
   end
 
   defp run_importer(requested_by) do
     case JsonDocument.unwrap_value(requested_by) do
-      %{"actor_kind" => "user", "user_id" => id} when is_binary(id) and id != "" -> id
-      _not_a_person -> nil
+      %{"actor_kind" => "user", "user_id" => id} when is_binary(id) and id != "" -> {:user, id}
+      %{"actor_kind" => "service"} = actor -> service(actor)
+      _not_counted -> nil
     end
   end
+
+  defp service(%{"service_identity_id" => id}) when is_binary(id) and id != "", do: {:service, id}
+  defp service(_actor), do: nil
 end

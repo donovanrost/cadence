@@ -142,6 +142,13 @@ defmodule CadenceWeb.SpacecraftConfigurationPage do
   defp message(:activation_self_approval_forbidden),
     do: "A different person must review this configuration."
 
+  # #280: through a service identity the reviewer is accountable for, or one nobody is.
+  defp message({:activation_self_approval_forbidden, _via}),
+    do: "A different person must review this configuration."
+
+  defp message({:activation_approver_authors_unknown, _service}),
+    do: "No one can approve this yet: Cadence can't tell who requested it."
+
   defp message(:spacecraft_catalog_required),
     do: "Choose a catalog before submitting this configuration."
 

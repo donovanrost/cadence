@@ -28,7 +28,7 @@ defmodule Cadence.Configuration.Submission do
     Staging
   }
 
-  alias Cadence.Governance.{ActivationLocks, ActivationPolicy}
+  alias Cadence.Governance.{Accountability, ActivationLocks, ActivationPolicy}
   alias Cadence.Ids
   alias Cadence.Repo
 
@@ -453,17 +453,27 @@ defmodule Cadence.Configuration.Submission do
     end
   end
 
-  defp independent(set, %{"kind" => "user"} = reviewer) do
-    reviewer_key = key(reviewer)
-
+  # #280: authors are compared as people: a service author counts as its accountable people
+  # (issuer and rotators). No console route lets a service stage today, but the domain allows it;
+  # an unknown set refuses with its own code (fail closed), never as if the reviewer authored it.
+  defp independent(set, %{"kind" => "user", "id" => reviewer_id}) do
     authors =
       set.change_set_id
       |> ChangeSetStore.changes()
-      |> Enum.map(& &1.author_key)
+      |> Enum.map(&author_actor(&1.author_key))
 
-    if reviewer_key in [key(set.submitted_by) | authors],
-      do: {:error, :reviewer_is_author},
-      else: :ok
+    case Accountability.separate(set.organization_id, {:user, reviewer_id}, [
+           set.submitted_by | authors
+         ]) do
+      :ok ->
+        :ok
+
+      {:error, {:self, _via}} ->
+        {:error, :reviewer_is_author}
+
+      {:error, {:unknown, service}} ->
+        {:error, {:change_set_approver_authors_unknown, %{service: service}}}
+    end
   end
 
   defp independent(_set, _reviewer), do: {:error, :forbidden}
@@ -525,6 +535,7 @@ defmodule Cadence.Configuration.Submission do
     end
   end
 
-  defp key(nil), do: nil
-  defp key(%{"kind" => kind, "id" => id}), do: kind <> ":" <> id
+  defp author_actor("user:" <> id), do: {:user, id}
+  defp author_actor("service:" <> id), do: {:service, id}
+  defp author_actor(_other), do: nil
 end

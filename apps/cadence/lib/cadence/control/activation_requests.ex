@@ -158,6 +158,10 @@ defmodule Cadence.Control.ActivationRequests do
   defp decision_result({:error, :activation_self_approval_forbidden}),
     do: {:error, :self_approval_forbidden}
 
+  # #280 (U100): through a service identity the approver is accountable for.
+  defp decision_result({:error, {:activation_self_approval_forbidden, details}}),
+    do: {:error, {:self_approval_forbidden, details}}
+
   defp decision_result({:error, :activation_request_not_pending_approval}),
     do: {:error, {:not_pending, nil}}
 

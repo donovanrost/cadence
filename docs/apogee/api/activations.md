@@ -114,7 +114,14 @@ Errors:
 - `403 not_requester` (withdraw): "Only the person who requested it can withdraw it."
 - `409 not_pending {state}`: already decided (`state` is the request's state, or null when it
   changed under you).
-- `403 self_approval_forbidden`: you requested it.
+- `403 self_approval_forbidden`, `details: {via_service: {id, name} | null}`: you requested it, or
+  (#280) a service identity you're accountable for requested it. `via_service` names that service
+  (null when it was you). Accountable means you issued it, rotated its key, or were recorded as
+  accountable by an org admin.
+- `403 activation_approver_authors_unknown`, `details: {service: {id, name} | null}` (#280): the
+  request came from a service identity with nobody recorded as accountable for it, so nobody can
+  approve it until an org admin records who is (People › Service identities). It's #236's code;
+  `service` is null when no service is involved. Nothing is recorded.
 - `409 activation_policy_changed` (approve only; reject always works): the activation policy
   changed since the request; request it again. (It's not `policy_changed`, which is the planning policy's code.)
 - `409 nothing_to_resume {state}` (resume): `succeeded` ("It already applied."), `in_progress`

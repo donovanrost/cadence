@@ -1,7 +1,7 @@
 defmodule CadenceWeb.ServiceIdentityController do
   use CadenceWeb, :controller
 
-  action_fallback CadenceWeb.FallbackController
+  action_fallback(CadenceWeb.FallbackController)
 
   alias CadenceWeb.API.IdentityJSON, as: IdentityJSON
 
@@ -42,7 +42,7 @@ defmodule CadenceWeb.ServiceIdentityController do
              service_identity_params
            ),
          {:ok, %{service_identity: issued_service_identity, api_token: api_token}} <-
-           Cadence.Auth.issue_service_identity(service_identity) do
+           Cadence.Auth.issue_service_identity(service_identity, conn.assigns.current_scope) do
       conn
       |> put_status(:created)
       |> json(%{

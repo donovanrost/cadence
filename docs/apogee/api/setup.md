@@ -206,12 +206,15 @@ by its catalog revision ("catalog rev 4"); the model revision id is Technical de
 - `GET /:id` → `{id, status, imported_at, imported_by, catalog_revision, decision {kind:
   approved|rejected, by {id, name}, at, report_id | null, reason | null, retroactive} | null,
   viewer_can_decide, viewer_is_importer, cannot_decide_because: not_admin | not_approvable |
-  self_approval | plans_not_ready | null, cannot_approve_because: not_in_catalog | null,
+  self_approval | authors_unknown | plans_not_ready | null, cannot_decide_details: {via_service:
+  {id, name} | null} | {service: {id, name} | null} | null, cannot_approve_because: not_in_catalog | null,
   plans_ready, comparison: <cmp> | null}`. `imported_by`
   null reads "Importer not recorded". `cannot_approve_because` (11-17, ux U88) is
   `not_in_catalog` when no catalog revision names the model revision (a second run of a file
   makes one): Approve is refused (`409 mission_model_revision_not_in_catalog`), Reject stays;
-  `cannot_decide_because` wins when both are set. Importers (11-17) are the people recorded on the catalog
+  `cannot_decide_because` wins when both are set. `self_approval` and `authors_unknown` (#280) come
+  from the same check the approve path makes; `cannot_decide_details` carries the approve refusal's
+  details for them (null otherwise). Importers (11-17) are the people recorded on the catalog
   revisions naming the model revision plus the people who ran a completed import run that made
   it (every run makes its own model revision, so a reimport's has only its runner);
   `imported_by` is the first. A service or Cadence's own seed never counts as one.
@@ -243,7 +246,10 @@ by its catalog revision ("catalog rev 4"); the model revision id is Technical de
 - `POST /:id/approve {comparison_report_id}` and `POST /:id/reject {reason}` (reason required;
   only a candidate) → `200` the read. Refusals, worded per ux U65: `403 forbidden` (not an org
   admin), `403 human_mission_model_approver_required`, `403 mission_model_self_approval_forbidden`
-  (the importer, under 'independent'), `409 mission_model_comparison_not_passed`, `409
+  (the importer, under 'independent'; `details: {via_service: {id, name} | null}`, #280: a service
+  identity you're accountable for imported it), `403 mission_model_approver_authors_unknown`
+  (`details: {service: {id, name} | null}`, #280: a service identity with nobody recorded as
+  accountable imported it, so nobody can approve it yet), `409 mission_model_comparison_not_passed`, `409
   mission_model_comparison_mismatch` (another revision's report: run it again), `409
   mission_model_runtime_plans_not_ready`, `409 mission_model_revision_not_approvable`, `404
   mission_model_revision_not_found` / `mission_model_comparison_report_not_found`, `422
@@ -906,6 +912,18 @@ Responses carry `cache-control: no-store`.
   `404 service_identity_not_found` (not active), `403 forbidden`.
 - `DELETE /service-identities/:id` → `204`. The identity is disabled: its token stops working and
   it leaves the directory (O3). Errors: `404 service_identity_not_found`, `403 forbidden`.
+- `POST /service-identities/:id/accountable {user_ids: [user_id]}` → `204` (#280). Records people
+  as accountable for the identity, for approvals. Use it for an identity issued before #280 with
+  nobody on record. The acting admin is recorded too. Errors: `422 invalid_params` (`user_ids`: each
+  must be a person in this organization), `404 service_identity_not_found`, `403 forbidden` (not an
+  org admin, or not a person).
+- **Accountability (#280, ux U100):** whoever creates an identity, and whoever rotates its key, is
+  recorded as accountable for it, from the session, in the same transaction. Its acts then count as
+  theirs wherever an approval kind refuses approving your own work: catalog imports, activation
+  requests, contact plans (including approvals under an automation grant), command requests and
+  change sets. An identity issued by another service counts as that service's people,
+  transitively. If anyone in the chain is unknown, nobody can approve its work (`*_approver_authors_unknown`).
+  The directory's `created_by` comes from this record, never from identity metadata.
 
 ## Comms reads (G1, T1, T2)
 
