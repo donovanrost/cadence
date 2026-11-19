@@ -399,6 +399,32 @@ and this stack's QuestDB only. devops samples disk before and after (qa pastes t
 Growth this slot can't stop: identity_states adds ~3.6 GB/day until domain's change (a) stops writing a state for a
 first-seen canonical observation (#99).
 
+## Daily contact-plan horizon check
+
+(Director via lead, 11-19.) Every day, with the retention slot, qa checks that the contact plan reaches **at least
+24 h ahead**: the latest `scheduled_contacts.starts_at` minus now. The check is read-only:
+`bash var/qa-scripts/plan-horizon-check.sh --notify`. It logs `PLAN HORIZON OK` or `PLAN HORIZON ALARM` in qa's
+checklist, and on an alarm it sends lead an alarm line. The next plan belongs to lead and domain: drafted through
+the console, approved by a different agent, in a qa slot. qa never writes a plan.
+
+Why: the plan approved on 11-17 ran out at **11-18 19:23:18Z** and nobody noticed. The 23:00Z pass cluster that
+the day's notes assumed was never scheduled, and it only came to light after the laptop slept 21:58Z–01:20Z
+(post-sleep check, 11-19 01:22Z: 0 future passes).
+
+## Strict compile in dries
+
+(Lead, 11-19.) A dry's strict compile uses CI's command at the repo root, which builds every workspace project
+(cadence, cadence_web, cadence_simulator and the rest):
+
+```
+MIX_ENV=test mix workspace.run -t compile --order postorder --early-stop --env-var MIX_ENV=test -- --force --warnings-as-errors
+```
+
+A bare `mix compile --warnings-as-errors` at the root builds only the workspace app, so it proves nothing about the
+apps. Until 11-19 qa's `dry-picks.sh` and `dry-step4-part1.sh` did exactly that, and the older per-app dries never
+compiled the simulator. Their "strict compile 0" lines covered the apps only through the suites' own (non-strict)
+test compile. All qa dry scripts now run the command above.
+
 ## Tripped partition (#99 replay-safe ids)
 
 domain's text (11-17, with #99's hand-off), as given:
