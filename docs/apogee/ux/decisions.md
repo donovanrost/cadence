@@ -4041,8 +4041,9 @@ Not a crit: nothing is wrong, a person's call may simply be out of date.
     newer revisions aren't used. Look at each, and keep the decision or change it." with `Show all 3` listing each as
     "02:08:11Z · marked as a conflict by Mira K. at 11-18 03:40Z · newer revision 11-19 05:40Z".
   - The source of the revision is named when the read has it ("from the 11-19 backfill"; late or corrected data
-    too, never a replay, whose samples are their own, domain); without one the clause drops (U20). The decider and the time are one event (U29); a nameless person drops the name
-    ("marked … as a conflict at 11-18 03:40Z"), never an id (U25); a service gets "(a service identity)" (U103).
+    too, never a replay, whose samples are their own, domain); without one the clause drops (U20). The decider and
+    the time are one event (U29); a nameless person drops the name ("marked … as a conflict at 11-18 03:40Z"), never
+    an id (U25); a service gets "(a service identity)" (U103).
   - Actions: `Review` opens the sample (U80's aside, at that time, with all revisions shown) for one sample; `Show
     all 3` for several. `Keep the decisions` (`Keep the decision`) for anyone who can decide: an acknowledgement, it
     changes nothing in the data. Someone who can't decide gets `Review` only, and the line "An operator who can decide
