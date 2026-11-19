@@ -41,7 +41,9 @@ rules you work to, and reviews UI that crosses squads.
   **Technical details**.
 - **A missing value reads as a plain noun phrase** ("a catalog revision", U65), never null, a blank or an invented
   value. A count that can't be computed is `—` with its reason (design-language §1).
-- **Who and when are one event (U29):** "by Mira K. at 03:40Z" together, or neither.
+- **Who and when are one event (U29):** "by Mira K. at 03:40Z" together, or neither. A service identity is marked
+  so it doesn't read as a person: "by Nightly planner (a service identity) at 05:40Z" in a sentence, the `Service`
+  tag beside its name in a table (as the audit does). A service without a name is never shown as an id (U25).
 - **Refusals open with what didn't happen, by the person's act:** "Not saved:", "Not sent:", "Not approved:",
   "Not applied:". Then why, in one sentence, then what to do. An approval refused before it was recorded ends
   "Your approval wasn't recorded." (U95).
