@@ -223,8 +223,7 @@ part 2, the 001 repair, the gap fixes) sat still for ~3 h 20 min under a hold wi
   - Docs only: none.
   - Frontend: typecheck + lint (+ tests) for the console app (see `docs/apogee/ARCHITECTURE.md`).
   - Elixir (api only): `mix format`, the all-projects compile above (or `mix compile --force --warnings-as-errors` inside each app you touched), `mix credo --strict` on touched
-    files, and the tests for the touched area. **Only api, api-ops and domain run Elixir tests**, since parallel runs fight
-    over the `cadence_test` database (domain uses `MIX_TEST_PARTITION=12`, api-ops uses `3`; partitions are claimed in qa's runbook register). qa runs the dev server against the dev database.
+    files, and the tests for the touched area. Every engineer runs the Elixir tests for their own work, in their own worktree, through their machine's heavy gate. On laptop 1, use your claimed partition (claimed in qa's runbook register; domain uses `MIX_TEST_PARTITION=12`, api-ops `3`). On a worker machine, use that machine's own test Postgres and the partitions devops set up there (dashboards still never runs Elixir: lead, 11-17). qa runs the dev server against the dev database.
 - **Heavy jobs go through the team gate (director, 2026-11-17):** `var/heavy-gate.sh --agent <you> -- <command>`
   (status: `var/heavy-gate.sh --status`). Heavy = full suites, test directories, hooked commits, builds, vue-tsc /
   typecheck, pnpm install, credo, the architecture check. The gate waits until BOTH the 1-min and 5-min load are
