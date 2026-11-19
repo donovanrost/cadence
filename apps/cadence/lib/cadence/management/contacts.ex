@@ -69,7 +69,7 @@ defmodule Cadence.Management.Contacts do
     to: ContactPlans
 
   @doc false
-  defdelegate start_execution_projection(organization_id, mission_id, plan_id, now),
+  defdelegate start_execution_projection(organization_id, mission_id, plan_id, now, started_by),
     to: ContactPlans
 
   @doc false

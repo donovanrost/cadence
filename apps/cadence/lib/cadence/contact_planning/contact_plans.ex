@@ -415,10 +415,17 @@ defmodule Cadence.ContactPlanning.ContactPlans do
   end
 
   @doc false
-  @spec start_execution_projection(binary(), binary(), binary(), DateTime.t()) ::
+  @spec start_execution_projection(binary(), binary(), binary(), DateTime.t(), binary()) ::
           {:ok, ContactPlan.t()} | {:error, term()}
-  def start_execution_projection(organization_id, mission_id, plan_id, %DateTime{} = now) do
-    start_execution_projection_unpublished(organization_id, mission_id, plan_id, now)
+  def start_execution_projection(
+        organization_id,
+        mission_id,
+        plan_id,
+        %DateTime{} = now,
+        started_by
+      )
+      when is_binary(started_by) do
+    start_execution_projection_unpublished(organization_id, mission_id, plan_id, now, started_by)
     |> PlanUpdates.published(organization_id, mission_id)
   end
 
@@ -426,7 +433,8 @@ defmodule Cadence.ContactPlanning.ContactPlans do
          organization_id,
          mission_id,
          plan_id,
-         %DateTime{} = now
+         %DateTime{} = now,
+         started_by
        ) do
     Repo.transaction(fn ->
       case lock_plan(organization_id, mission_id, plan_id) do
@@ -435,7 +443,7 @@ defmodule Cadence.ContactPlanning.ContactPlans do
 
         {:ok, %ContactPlanRow{lifecycle_state: state} = row}
         when state in ["approved", "executing", "partially_reserved", "failed"] ->
-          advance_execution_projection(row, now)
+          advance_execution_projection(row, now, started_by)
 
         {:ok, _row} ->
           Repo.rollback(:contact_plan_not_executable)
@@ -495,7 +503,8 @@ defmodule Cadence.ContactPlanning.ContactPlans do
              |> ContactPlanRow.projection_changeset(%{
                current_version: row.current_version,
                lifecycle_state: Atom.to_string(state),
-               lifecycle_changed_by: row.approved_by,
+               # #268: the run's outcome stays with whoever started it (the claim recorded them).
+               lifecycle_changed_by: row.lifecycle_changed_by,
                lifecycle_changed_at: now,
                lifecycle_reason: reason,
                approved_version: row.approved_version,
@@ -1116,13 +1125,23 @@ defmodule Cadence.ContactPlanning.ContactPlans do
     end
   end
 
-  defp advance_execution_projection(%ContactPlanRow{approved_version: version} = row, now)
+  # #268 (ca-security): the one who started booking is written only on the approved -> executing
+  # claim, under the plan row lock. A second or racing run re-projects 'executing' and keeps the
+  # recorded starter (it booked nothing new); before #268 this was always the approver.
+  defp advance_execution_projection(
+         %ContactPlanRow{approved_version: version} = row,
+         now,
+         started_by
+       )
        when is_integer(version) do
+    changed_by =
+      if row.lifecycle_state == "approved", do: started_by, else: row.lifecycle_changed_by
+
     case row
          |> ContactPlanRow.projection_changeset(%{
            current_version: row.current_version,
            lifecycle_state: "executing",
-           lifecycle_changed_by: row.approved_by,
+           lifecycle_changed_by: changed_by,
            lifecycle_changed_at: now,
            lifecycle_reason: "execution started",
            approved_version: row.approved_version,
@@ -1135,7 +1154,7 @@ defmodule Cadence.ContactPlanning.ContactPlans do
     end
   end
 
-  defp advance_execution_projection(_row, _now),
+  defp advance_execution_projection(_row, _now, _started_by),
     do: Repo.rollback(:contact_plan_not_approved)
 
   defp fetch_version_row(row, version) do

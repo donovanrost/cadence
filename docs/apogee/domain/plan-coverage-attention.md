@@ -140,7 +140,7 @@ and **nothing is being booked** for them.
     submitted_at: DateTime | nil,                 # pending_approval only
     sent_back: nil | %{by: %{id, name}, at, comment},
     approved_at: DateTime | nil,                  # approved / interrupted only
-    booking: nil | %{reserved, total, last_progress_at}   # interrupted only
+    booking: nil | %{reserved, total, bookable, last_progress_at}   # approved (after the grace) and interrupted; bookable: passes never placed (#268)
   },
   approvers: [%{id, name}]                        # organization admins, never the author
 }

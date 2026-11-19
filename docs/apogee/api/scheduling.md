@@ -372,6 +372,17 @@ Re-executes an approved plan whose execution was **interrupted**, or that was ap
 started. Items are idempotent, so booked passes aren't rebooked. Returns `202 {plan_id, state:
 "executing"}`, or `409 plan_not_resumable`.
 
+- `409 contact_plan_day_ended` (#268, 2026-11-19), `details: {day}` (`YYYY-MM-DD`): the plan's day
+  (its window's UTC date, as K1 and Now group plans) has ended, so nothing is booked and nothing
+  starts. It's checked first, whatever the plan's state.
+- Who started booking (#268): the run's own actor (the person who pressed Book, or the approver
+  when approve starts it). It's recorded on the plan's lifecycle only when the run claims an
+  `approved` plan; a second or racing run keeps the first starter.
+- An **approve** of an ended day's plan isn't changed here: it records the decision and starts
+  booking off the request, and the run's passes fail at the provider. After #273's rule lands,
+  such a plan's passes are all past their booking window, so the approve answers `409
+  contact_plan_all_opportunities_expired` and records nothing.
+
 ### Plan states `interrupted` and `unconfirmed` (DECISIONS #52)
 
 A plan whose lifecycle is `executing` while no session holds its execution lock (cluster-wide)

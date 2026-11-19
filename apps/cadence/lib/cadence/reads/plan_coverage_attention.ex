@@ -103,7 +103,9 @@ defmodule Cadence.Reads.PlanCoverageAttention do
 
       :approved ->
         started? = not before?(now, DateTime.add(plan.approved_at, @grace_s))
-        %{open?: started?, state: :approved, plan: plan, summary: summary, booking: nil}
+        # #268: the count Now's 'Book N passes' shows (its passes never placed).
+        booking = if started?, do: booking(org, mission, plan)
+        %{open?: started?, state: :approved, plan: plan, summary: summary, booking: booking}
 
       :interrupted ->
         booking = booking(org, mission, plan)
@@ -192,6 +194,8 @@ defmodule Cadence.Reads.PlanCoverageAttention do
     %{
       reserved: Enum.count(items, &(&1.lifecycle_state == :reserved)),
       total: length(items),
+      # #268 (ux): the passes 'Book N passes' / 'Book the other N' would send: never placed.
+      bookable: Enum.count(items, &(&1.lifecycle_state in [:pending, :requesting])),
       last_progress_at: items |> progress_times() |> Enum.max(DateTime, fn -> nil end)
     }
   end

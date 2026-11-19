@@ -81,7 +81,7 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
 
   defp execute_locked(current_scope, mission_id, plan_id, opts) do
     with :ok <- authorize_execution(current_scope, mission_id, opts),
-         {:ok, plan} <- begin_execution(current_scope.organization_id, mission_id, plan_id, opts),
+         {:ok, plan} <- begin_execution(current_scope, mission_id, plan_id, opts),
          items <-
            list(
              current_scope.organization_id,
@@ -178,8 +178,18 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
 
   def list_page(_, _, _, _, _), do: {:error, :invalid_contact_plan_review_page}
 
-  defp begin_execution(organization_id, mission_id, plan_id, opts) do
-    ManagementContacts.start_execution_projection(organization_id, mission_id, plan_id, now(opts))
+  # #268: the executing scope is recorded as the one who started booking (not the approver); the
+  # projection writes it only on the approved -> executing claim.
+  defp begin_execution(%Scope{} = scope, mission_id, plan_id, opts) do
+    %{"id" => started_by} = Scope.audit_actor(scope)
+
+    ManagementContacts.start_execution_projection(
+      scope.organization_id,
+      mission_id,
+      plan_id,
+      now(opts),
+      started_by
+    )
   end
 
   defp process_item(

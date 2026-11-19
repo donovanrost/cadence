@@ -185,6 +185,8 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
 
     %{
       organization_id: organization_id,
+      organization: organization,
+      suffix: suffix,
       mission_id: mission_id,
       member_scope: member_scope,
       plan: approved_plan,
@@ -699,6 +701,42 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
     end
   end
 
+  describe "#268: who started booking" do
+    test "the first claim records the one who started it, not the approver; a second run keeps it",
+         context do
+      second = scope(context.organization, :member, "second-#{context.suffix}")
+      reserve = successful_reserver(self())
+
+      assert {:ok, _first} = execute(context, reserve)
+      assert_received {:provider_mutation, _ref}
+      flush_mutations()
+
+      # A second Book, by someone else, after the first claimed it: it books nothing more and
+      # leaves the starter as it was (ca-security).
+      assert {:ok, _second} =
+               ContactPlanExecutions.execute(
+                 second,
+                 context.mission_id,
+                 context.plan.contact_plan_id,
+                 now: DateTime.add(@now, 3, :second),
+                 resolve_route: context.resolve_route,
+                 reserve: reserve
+               )
+
+      refute_receive {:provider_mutation, _ref}, 100
+
+      assert {:ok, plan, _version} =
+               ManagementContacts.fetch_plan(
+                 context.organization_id,
+                 context.mission_id,
+                 context.plan.contact_plan_id
+               )
+
+      assert plan.lifecycle_changed_by == context.member_scope.user.user_id
+      refute plan.lifecycle_changed_by == plan.approved_by
+    end
+  end
+
   # The setup's plan: approved at @now + 1 s and accepted (items pending), never executed. Its
   # passes are on 07-16; the requirement's window opens 21:00Z that day.
   describe "U61 plan_coverage: a day whose booking hasn't started, or stopped (lead 11-16)" do
@@ -707,7 +745,13 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
       assert coverage(context, DateTime.add(@now, 60, :second)) == nil
 
       assert %{
-               plan: %{state: "approved", revision: 1, approved_at: approved_at, booking: nil},
+               plan: %{
+                 state: "approved",
+                 revision: 1,
+                 approved_at: approved_at,
+                 # #268: what Now's 'Book N passes' shows (every accepted pass, none placed yet).
+                 booking: %{bookable: bookable, total: bookable, reserved: 0}
+               },
                first_window_at: first,
                severity: "caution",
                p1: true
@@ -715,6 +759,7 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
 
       assert approved_at == context.plan.approved_at
       assert first == DateTime.add(@now, 3_600, :second)
+      assert bookable > 0
     end
 
     test "booking under way (its lock held) is covered; lock free with a pass never placed reopens",
@@ -797,6 +842,14 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
         context.plan.contact_plan_id,
         state
       )
+
+  defp flush_mutations do
+    receive do
+      {:provider_mutation, _ref} -> flush_mutations()
+    after
+      0 -> :ok
+    end
+  end
 
   defp put_pending(item) do
     put_item_state(item, "pending", provider_reservation_id: nil)

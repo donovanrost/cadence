@@ -302,6 +302,37 @@ defmodule CadenceWeb.Console.ContactPlanApproveTest do
     end
   end
 
+  describe "execute once the plan's day has ended (#268)" do
+    test "is refused with 409 contact_plan_day_ended and the day, whatever the plan's state", c do
+      plan_id = member_plan(c)
+      submit!(c, c.member, plan_id, "op-day-submit")
+      approve!(c, c.admin, plan_id, "op-day-approve")
+
+      # Move the plan's passes two days back, so its day (the window's UTC date) has ended.
+      past = DateTime.utc_now() |> DateTime.add(-2 * 86_400) |> DateTime.truncate(:microsecond)
+
+      %{"passes" => passes} = get_as(c, c.admin, "/#{plan_id}")["data"]
+      ids = Enum.map(passes, & &1["snapshot_id"])
+
+      Repo.update_all(
+        from(s in ContactOpportunitySnapshotRow,
+          where: s.contact_opportunity_snapshot_id in ^ids
+        ),
+        set: [starts_at: past, ends_at: DateTime.add(past, 600)]
+      )
+
+      day = past |> DateTime.to_date() |> Date.to_iso8601()
+      # The approve's own run has ended; drop its progress so only a new run would show.
+      drain_progress(plan_id)
+      conn = post_as(c, c.admin, plan_id, "execute", %{})
+
+      assert %{"code" => "contact_plan_day_ended", "details" => %{"day" => ^day}} =
+               json_response(conn, 409)["error"]
+
+      refute_receive {:scheduling_progress, %{kind: :execute, id: ^plan_id}}, 200
+    end
+  end
+
   describe "params" do
     test "submit refuses a decision_note (422): approving is its own action", c do
       plan_id = member_plan(c)
@@ -388,6 +419,14 @@ defmodule CadenceWeb.Console.ContactPlanApproveTest do
     |> where([a], a.organization_id == ^c.org.organization_id and a.contact_plan_id == ^plan_id)
     |> select([a], a.policy_document)
     |> Repo.one()
+  end
+
+  defp drain_progress(plan_id) do
+    receive do
+      {:scheduling_progress, %{id: ^plan_id}} -> drain_progress(plan_id)
+    after
+      0 -> :ok
+    end
   end
 
   # The fixture route isn't bookable, so execution ends failed, but off the request; await it so
