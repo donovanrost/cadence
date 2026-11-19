@@ -118,14 +118,6 @@ Errors:
   (#280) a service identity you're accountable for requested it. `via_service` names that service
   (null when it was you). Accountable means you issued it, rotated its key, or were recorded as
   accountable by an org admin.
-- `403 activation_approver_authors_unknown`, `details: {service: {id, name} | null}` (#280): the
-  request came from a service identity with nobody recorded as accountable for it, so nobody can
-  approve it until an org admin records who is (People › Service identities). The same applies when
-  a version under review was saved under such a service's id (a change set's applier). It's #236's
-  code: when the configuration's authors can't be read at all, `details` is
-  `{spacecraft_ids, service: null}` instead. A version saved under a service's id counts as that
-  service's accountable people for `activation_approver_authored_content`. Nothing is recorded.
-  REST activations carry no details.
 - `403 activation_approver_authored_content` (#236): you saved a version of a reviewed spacecraft's
   configuration since its active one, so another person approves it, even when someone else
   submitted it (only where the request's policy needs an independent approver). `details:
@@ -134,16 +126,25 @@ Errors:
   EARENDIL-004's configuration in this request, so another person approves it. Your approval
   wasn't recorded."; several, up to three names then "and N more spacecraft"; else the generic
   line. Nothing is recorded; Reject stays open to you.
-- `403 activation_approver_authors_unknown` (#236, fails closed): Cadence couldn't determine who
-  saved the configuration being activated (a reviewed version it can't find, or unreadable review
-  evidence), so nobody may approve it as it stands. `details` as above, naming the craft whose
-  authors couldn't be read (`[]` when the evidence itself is unreadable), plus `service: null`
-  (ux U100: this code always sends `service`; #280 sends `{id, name}` under the same code when a
-  service identity's accountable people aren't recorded, and that picks U100's service line).
-  ux's line for `service: null`: "Not approved:
-  Cadence can't tell who saved this configuration, so it can't check that you weren't one of them.
-  Your approval wasn't recorded. Reject it so the requester can send it again; if it keeps
-  happening, tell the team that runs Cadence for you." Nothing is recorded.
+- `403 activation_approver_authors_unknown` (#236 and #280; one code, ux U100): who made this
+  can't be established, so nobody may approve it as it stands. Nothing is recorded. `details.service`
+  is always sent and picks the case and the line:
+  - `null`, #236 (fails closed): Cadence can't determine who saved the configuration being activated
+    (a reviewed version it can't find, or unreadable review evidence). `details: {spacecraft_ids,
+    spacecraft: [{id, name}], service: null}`, naming the craft whose authors couldn't be read (`[]`
+    when the evidence itself is unreadable). U94's line: "Not approved: Cadence can't tell who
+    saved this configuration, so it can't check that you weren't one of them. Your approval wasn't
+    recorded. Reject it so the requester can send it again; if it keeps happening, tell the team
+    that runs Cadence for you."
+  - `{id, name}`, #280: the request came from a service identity with nobody recorded as
+    accountable for it, or a version under review was saved under such a service's id (a change
+    set's applier). Nobody can approve it until an org admin records who is (People › Service
+    identities). `details: {service: {id, name}}`. U100's line names the service, never its id
+    (U25): "Not approved: Nightly planner has no one recorded as accountable for it, so this can't
+    be approved yet. An org admin records who's accountable in People › Service identities. Your
+    approval wasn't recorded."; a null `name` reads "the service identity that requested this".
+  - A version saved under a service's id counts as that service's accountable people for
+    `activation_approver_authored_content`. REST activations carry no details.
 - `409 activation_policy_changed` (approve only; reject always works): the activation policy
   changed since the request; request it again. (It's not `policy_changed`, which is the planning policy's code.)
 - `409 nothing_to_resume {state}` (resume): `succeeded` ("It already applied."), `in_progress`

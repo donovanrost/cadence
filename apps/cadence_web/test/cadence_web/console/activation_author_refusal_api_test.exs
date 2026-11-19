@@ -6,13 +6,19 @@ defmodule CadenceWeb.Console.ActivationAuthorRefusalAPITest do
   """
   use CadenceWeb.ConnCase, async: false
 
+  import Ecto.Query
+
+  alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Applications.SpacecraftConfiguration.{Drafts, Review}
   alias Cadence.Applications.TelemetryDecomFixtures, as: CatalogFixtures
-  alias Cadence.Auth.Scope
+  alias Cadence.Auth
+  alias Cadence.Auth.{Scope, ServiceAccountableRow, ServiceIdentity}
   alias Cadence.Catalog.SpacecraftConfigurationInput
   alias Cadence.Control.ActivationRequests.Refusals
   alias Cadence.Governance.ActivationPolicy
-  alias CadenceWeb.Console.{ApproveRefusals, Problem}
+  alias Cadence.Management.Activations, as: ManagementActivations
+  alias Cadence.Repo
+  alias CadenceWeb.Console.ApproveRefusals
   alias CadenceWeb.TestFixtures
 
   setup do
@@ -48,6 +54,9 @@ defmodule CadenceWeb.Console.ActivationAuthorRefusalAPITest do
       Review.request_many(b_scope, mission.mission_id, %{craft.spacecraft_id => token})
 
     %{
+      org: org,
+      mission: mission,
+      author_scope: a_scope,
       author: a,
       approver: approver,
       craft: craft,
@@ -116,7 +125,89 @@ defmodule CadenceWeb.Console.ActivationAuthorRefusalAPITest do
              }
            } =
              build_conn()
-             |> Problem.respond(:activation_approver_authors_unknown, details)
+             |> ApproveRefusals.authors_unknown(details)
+             |> json_response(403)
+  end
+
+  # #280 (mms-security's #435) under the same code (ux U100): a service with nobody recorded as
+  # accountable for it requested the review, so nobody may approve it. details.service names it,
+  # and so does the line: U100's, never U94's configuration line and never the service's id.
+  test "a service with nobody on record requested it: a 403 naming the service (#280, U100)", c do
+    {:ok, %{service_identity: service}} =
+      Auth.issue_service_identity(
+        ServiceIdentity.new(%{
+          organization_id: c.org.organization_id,
+          mission_id: c.mission.mission_id,
+          display_name: "Rollout bot",
+          capabilities: [:mission_admin]
+        }),
+        c.author_scope
+      )
+
+    service_scope =
+      Scope.new(%{
+        organization_id: c.org.organization_id,
+        organization: c.org,
+        service_identity: service
+      })
+
+    # A service may request a binding-set activation (a spacecraft configuration review needs a
+    # person), so this one is the service's.
+    binding_set =
+      BindingSet.new(%{
+        organization_id: c.org.organization_id,
+        mission_id: c.mission.mission_id,
+        binding_set_id: "binding-set-service-#{System.unique_integer([:positive])}",
+        version: 1
+      })
+
+    {:ok, _} = Cadence.Governance.persist_binding_set(c.org.organization_id, binding_set)
+
+    {:ok, request} =
+      ManagementActivations.request(
+        service_scope,
+        c.mission.mission_id,
+        binding_set.binding_set_id,
+        binding_set.version
+      )
+
+    Repo.delete_all(
+      from(row in ServiceAccountableRow,
+        where: row.service_identity_id == ^service.service_identity_id
+      )
+    )
+
+    id = service.service_identity_id
+    path = c.base <> "/#{request.activation_request_id}"
+
+    assert %{
+             "error" => %{
+               "code" => "activation_approver_authors_unknown",
+               "message" => message,
+               "details" => %{"service" => %{"id" => ^id, "name" => "Rollout bot"}}
+             }
+           } =
+             c.approver
+             |> TestFixtures.member_conn()
+             |> post(path <> "/approve", %{"reason" => "Reviewed"})
+             |> json_response(403)
+
+    assert message ==
+             "Not approved: Rollout bot has no one recorded as accountable for it, so this can't " <>
+               "be approved yet. An org admin records who's accountable in People › Service " <>
+               "identities. Your approval wasn't recorded."
+
+    assert %{"state" => "approval_pending", "decision" => nil} =
+             c.approver |> TestFixtures.member_conn() |> get(path) |> json_response(200) |> data()
+
+    # A service whose name can't be read is never shown by its id (U25).
+    assert %{
+             "error" => %{
+               "message" => "Not approved: the service identity that requested this" <> _
+             }
+           } =
+             build_conn()
+             |> ApproveRefusals.authors_unknown(%{service: %{id: id, name: nil}})
              |> json_response(403)
   end
 

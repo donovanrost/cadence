@@ -57,9 +57,11 @@ defmodule CadenceWeb.Console.ActivationRequestController do
   defp error(conn, {:activation_approver_authored_content, %{} = details}),
     do: ApproveRefusals.authored(conn, details)
 
-  # #236 fail-closed: the authors couldn't be determined, so nobody may approve it as it stands.
+  # #236 fail-closed and #280 (one wire code, ux U100): who made it can't be established, so nobody
+  # may approve it as it stands. details.service picks the line: null for #236's unreadable
+  # configuration authors (Refusals.explain builds that map), {id, name} for #280's service.
   defp error(conn, {:activation_approver_authors_unknown, %{} = details}),
-    do: Problem.respond(conn, :activation_approver_authors_unknown, details)
+    do: ApproveRefusals.authors_unknown(conn, details)
 
   defp error(conn, {:not_resumable, code}),
     do: Problem.respond(conn, :not_resumable, %{error_code: code})
@@ -68,18 +70,8 @@ defmodule CadenceWeb.Console.ActivationRequestController do
   defp error(conn, :self_approval_forbidden),
     do: Problem.respond(conn, :self_approval_forbidden, %{via_service: nil})
 
-  # #236 (#434): the configuration's authors couldn't be read. One wire code with #280's: U100's
-  # details.service is null here (api 11-19), never the raw id list.
-  defp error(conn, {:activation_approver_authors_unknown, ids}) when is_list(ids),
-    do:
-      Problem.respond(conn, :activation_approver_authors_unknown, %{
-        spacecraft_ids: ids,
-        service: nil
-      })
-
-  defp error(conn, {reason, %{} = details})
-       when reason in [:self_approval_forbidden, :activation_approver_authors_unknown],
-       do: Problem.respond(conn, reason, details)
+  defp error(conn, {:self_approval_forbidden, %{} = details}),
+    do: Problem.respond(conn, :self_approval_forbidden, details)
 
   defp error(conn, reason)
        when reason in [
