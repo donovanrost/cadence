@@ -59,14 +59,25 @@ function approval(extra: Readonly<Record<string, unknown>>, value: unknown = "di
 const refused = (code: string): ApiError => ({ kind: "forbidden", code, message: "Forbidden" });
 
 describe("#233 limits, read from allowed_values and can_inherit (ux U96)", () => {
-  it("reads both keys, and absent keys limit nothing (fields that aren't governed)", () => {
-    const f = approval({});
+  it("reads both keys, and absent keys limit nothing on a field that isn't governed", () => {
+    const f = approval({ path: "other_setting" });
     expect([f.allowed_values, f.can_inherit]).toEqual([undefined, undefined]);
     expect([readOnly(f), canInherit(f), disabledValues([f])]).toEqual([false, true, {}]);
     expect([readOnlyHint(f), optionsHint(f), inheritHint(f, "EARENDIL")]).toEqual([
       null,
       null,
       null,
+    ]);
+  });
+  it("the approval setting without allowed_values fails closed: read-only, no Reset (ca-security C1)", () => {
+    const f = approval({}, "independent");
+    const unread =
+      "Cadence couldn't read who may change this setting, so it can't be changed here. Reload to try again.";
+    expect([readOnly(f), canInherit(f), disabledValues([f])]).toEqual([true, false, {}]);
+    expect([readOnlyHint(f), optionsHint(f), inheritHint(f, "EARENDIL")]).toEqual([
+      unread,
+      null,
+      unread,
     ]);
   });
   it("a mission admin may only tighten: Applies without approval is shown disabled", () => {

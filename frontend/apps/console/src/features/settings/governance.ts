@@ -15,8 +15,19 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 /** The form's text for an enum value (SchemaForm's option value). */
 const optionText = (v: unknown) => (typeof v === "string" ? v : JSON.stringify(v));
 
-/** The viewer can't change this field at all (allowed_values []). */
-export const readOnly = (f: SettingsField) => f.allowed_values?.length === 0;
+/**
+ * The approval setting's allowed_values is missing from the read (#233 always sends it), so the
+ * console can't tell what this viewer may choose. ca-security C1: it fails closed (read-only, no
+ * Reset to inherited) rather than offer 'direct'. Presentation only; the server still refuses.
+ */
+const limitsUnread = (f: SettingsField) => isApproval(f) && f.allowed_values === undefined;
+
+/** ux U86: what the console can't read, for the approval setting with its limits missing. */
+const UNREAD_LINE =
+  "Cadence couldn't read who may change this setting, so it can't be changed here. Reload to try again.";
+
+/** The viewer can't change this field at all (allowed_values [], or the approval setting's limits unread). */
+export const readOnly = (f: SettingsField) => f.allowed_values?.length === 0 || limitsUnread(f);
 
 /**
  * Per field, the enum options this viewer can't choose, as SchemaForm option text: shown disabled,
@@ -42,6 +53,7 @@ export function disabledValues(
  */
 export function readOnlyHint(f: SettingsField): string | null {
   if (!isApproval(f) || !readOnly(f)) return null;
+  if (limitsUnread(f)) return UNREAD_LINE;
   return same(f.value, STRICTEST)
     ? "It's already set to the strictest option. Only an organization admin can loosen it."
     : "Only a mission admin or an organization admin can change this.";
@@ -68,14 +80,17 @@ export const onlyPin = (f: SettingsField) => pinnable(f) && f.allowed_values?.le
 export const pinLine = (missionName: string) =>
   `${missionName} uses the organization's setting. Set it for ${missionName} to keep it if the organization's setting changes.`;
 
-/** The viewer may clear the mission's value back to the organization's (absent = may). */
-export const canInherit = (f: SettingsField) => f.can_inherit !== false;
+/** The viewer may clear the mission's value back to the organization's (absent = may, except the
+ * approval setting with its limits unread). */
+export const canInherit = (f: SettingsField) => f.can_inherit !== false && !limitsUnread(f);
 
 /** ux U96: why Reset to inherited is disabled. TODO(#233): approval-only, as readOnlyHint. */
 export const inheritHint = (f: SettingsField, missionName: string): string | null =>
-  isApproval(f) && !canInherit(f)
-    ? `The organization's setting lets changes apply without approval, so only an organization admin can switch ${missionName} to it.`
-    : null;
+  limitsUnread(f)
+    ? UNREAD_LINE
+    : isApproval(f) && !canInherit(f)
+      ? `The organization's setting lets changes apply without approval, so only an organization admin can switch ${missionName} to it.`
+      : null;
 
 /**
  * ux U96: a refused approval-setting save, worded by the level it saved; null for any other failure
