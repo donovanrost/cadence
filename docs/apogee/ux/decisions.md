@@ -3470,3 +3470,86 @@ which would read as grantable.
     endpoint, so there's no `service_identity_id_not_assignable`.
   - That a service identity's acts count as its issuer's and rotators' for approvals (ux, 11-19): not in these
     refusals. It goes on the create and rotate confirm sheets, where a person takes on a service's acts: U100 (#280).
+
+### U99 · An import that matches a catalog revision that already exists (#119) (mms-ux / mms-engineer / mms-security)
+An import whose content matches a mission model revision that already exists creates no new revision. The run's
+result must say so, and must never read "Imported" or show a rev N → rev N+1 header. A rejected revision can't be
+reviewed again, so re-importing its content never reopens it: a corrected catalog is new content and becomes a new
+revision. Data (mms-engineer): the run's result `matched existing <status>`, plus the matched revision's catalog
+name (U65: "catalog rev 4"), its status, and who decided it, when and why. The import run read carries them, joined
+at read time and not snapshotted, so a match that was waiting shows its later decision once it's made. The words
+describe the revision as it is now.
+
+Shape (mms-engineer, #119): `matched_revision: null | {revision: {id, number, label|null} | null, status:
+candidate|approved|rejected|retired (read live), decision: null | {kind: approved|rejected, by: {name|null}, at,
+reason|null}, cannot_approve: null | {reason: "self" | "authors_unknown", via_service: {id, name|null} | null,
+service: {id, name|null} | null}}`, the same fields as the separation check's refusal. `decision` is null unless both who and when are known. `cannot_approve` is the gate's own answer: whatever
+refuses this viewer's approve, from the one separation check the approve path itself uses (fe-setup's call: one
+source, extracted as #280's first commit), never re-derived from "the viewer is among the importers"
+(mms-security). It's null when nothing bars the viewer. Until #280 lands, only `self` with both services null
+occurs.
+
+- **Where:** the run's verdict callout on the import page (Catalog.md § C), in place of "Parsed and validated, no
+  schema errors.". The header reads `Catalog rev 4` (the matched revision), never `rev 14 → rev 5`. Each case's
+  action is `Open rev 4`, which opens that revision in Setup › Catalog.
+- **Matched an approved revision** (info):
+  "This file matches catalog rev 4, so no new revision was created. Rev 4 was approved by Ana R. at 11-15 09:12Z."
+  C3 Roll out to stays, because rolling out rev 4 is a real next step.
+- **Matched a revision waiting for approval** (caution):
+  "This file matches catalog rev 4, so no new revision was created. Rev 4 is waiting for approval in Setup ›
+  Catalog." No C3: spacecraft can't move to it until it's approved (U65's hold).
+  - **When the viewer can't approve rev 4** (mms-security; the gate's own answer, never inferred by the console),
+    the line adds a sentence, picked by the server's one answer (U100's cases, up-front form: no "Not
+    approved:" and no "Your approval wasn't recorded."). The server picks one cause, and the console never
+    combines them:
+    - `self`, `via_service` null (the viewer imported it; importing it again makes you an importer): "Because you
+      imported this content, another org admin has to approve rev 4."
+    - `self`, `via_service` {name}: "Because Nightly planner, a service identity you're accountable for, imported
+      this content, another org admin has to approve rev 4."
+    - `authors_unknown`, `service` {name}: "Rev 4 can't be approved yet: Nightly planner has no one recorded as
+      accountable for it. An org admin records who's accountable in People › Service identities."
+    - `authors_unknown`, `service` null: U100's revision form, up front, with no "yet", since nothing can be
+      recorded later (ux): "Rev 4 can't be approved: Cadence can't tell who imported it, so it can't check that
+      you weren't one of them. Reject it; a corrected catalog imported again becomes a new revision." "Yet" stays
+      only in the `service` {name} case, where an org admin can record who's accountable.
+    - A service with no name (`name` null; nothing guarantees one on the run's recorded actor): the sentence
+      drops the name, never shows the id (U25; the id goes in Technical details):
+      - `self`: "Because a service identity you're accountable for imported this content, another org admin has
+        to approve rev 4."
+      - `authors_unknown`: "Rev 4 can't be approved yet: the service identity that imported it has no one
+        recorded as accountable for it. An org admin records who's accountable in People › Service identities."
+    - A reason this console doesn't know: "You can't approve rev 4, so another org admin has to." It never
+      guesses which case applies. (`reason` is read as known text.)
+    - `cannot_approve` null or absent: nothing is added; U65's and U100's refusals stay the backstop.
+- **Matched a rejected revision** (caution):
+  "This file matches catalog rev 4, which was rejected by Ana R. at 11-15 09:12Z: “Wrong FSW build.” No new
+  revision was created. To try again, correct the catalog and import the corrected file. It becomes a new
+  revision." No C3. Nothing on the page offers to review rev 4 again.
+- **Amends U65's reject confirm:** its body's "To try again, import a new revision." becomes "To try again, correct
+  the catalog and import the corrected file." After #119, importing the same file again returns the rejected
+  revision, so the old advice leads nowhere. The rest of U65's confirm is unchanged.
+- **Missing parts (U20, U29):** `decision` null shows neither who nor when ("Rev 4 was approved." / "which was
+  rejected"). `by.name` null with a time drops only the name ("Rev 4 was approved at 11-15 09:12Z."), never "by
+  Unknown" and never an id. No reason: drop the quote. `revision` null reads as the unnumbered case, without
+  `Open the revision`. The words key on `status`; `decision` only supplies who, when and why. An unnumbered revision (U65): "This file matches a catalog revision that
+  already exists…" with `Open the revision`. A status this console doesn't know: only the first sentence, "This
+  file matches catalog rev 4, so no new revision was created.", with the status in Technical details. It's never
+  mapped onto a known case.
+- **Retired** (in the read's vocabulary, but nothing on develop sets it): it reads as the unknown-status case,
+  with only the first sentence and `Open rev 4`, and no C3. It never reads like approved, because that would offer
+  a rollout the model gate may refuse. It gets its own line once domain defines what retired means.
+- **Import runs table:** the Status tag reads `Matches rev 4` (info). For a rejected match it reads
+  `Matches rejected rev 4` (caution, mark + word). Never `Succeeded`, which would imply a new revision.
+- **Technical details** (closed): the run's result as sent (`matched existing · rejected`) and the mission model
+  revision id.
+- **Security (mms-security, confirmed 11-19):**
+  - Matching is only within the mission and organization (mms-engineer: identical bytes in another mission get their
+    own revision). The decider's name and reason shown here are on rev 4's page already (U65's decided line).
+    This holds while everyone who can import can also read a revision's decision. Revisit it if mission roles ever
+    split who may import from who may read.
+  - When the server's organization or mission check fails closed, the page shows a plain import error. It never
+    shows a match line, or another revision's status, decider or reason.
+  - The rejection reason is a person's free text: rendered as text, never as HTML.
+  - A re-import never resets, reopens or copies an approval or a rejection. (It does add the importer; see the
+    waiting case.)
+  - The words never suggest re-importing as a way around a rejection.
