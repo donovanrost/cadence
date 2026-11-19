@@ -28,6 +28,6 @@ ecto-nested-associations, otp-essentials as needed) before writing code.
 ## Rules
 - Run Elixir tests with **`MIX_TEST_PARTITION=2`** (a separate `cadence_test2` database; create it with
   `MIX_TEST_PARTITION=2 mix ecto.create` / migrate as needed) so you don't fight api over `cadence_test`.
-- `mix format`, `mix compile --warnings-as-errors`, `mix credo --strict`, and
+- `mix format`, the all-projects compile from TEAM.md › Quality bar (never a plain `mix compile` at the root: it builds only the workspace app), `mix credo --strict`, and
   `mix cadence.architecture.check` must pass for your changes.
 - Commit per TEAM.md section Git (`HK=0 git commit -m … -- <paths>`).

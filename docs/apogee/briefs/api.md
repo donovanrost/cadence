@@ -22,6 +22,6 @@ Modifying APIs is allowed; prefer clean, purpose-built endpoints.
    alongside the code so frontend can build against it.
 
 ## Rules
-- `mix compile --warnings-as-errors`, `mix credo --strict`, `mix format`, and tests for every endpoint
+- the all-projects compile from TEAM.md › Quality bar (never a plain `mix compile` at the root: it builds only the workspace app), `mix credo --strict`, `mix format`, and tests for every endpoint
   (`cd apps/cadence_web && mix test`). Controllers call the `Cadence` facade (domain layering).
 - Authorization: org/mission scoping must be enforced server side on every endpoint.

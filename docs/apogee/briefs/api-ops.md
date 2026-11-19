@@ -22,7 +22,7 @@ fe-ops when each one lands.
 
 ## Rules
 - Elixir tests with **`MIX_TEST_PARTITION=3`** (own `cadence_test3` DB: `MIX_TEST_PARTITION=3 mix ecto.create`, migrate).
-- `mix format`, `mix compile --warnings-as-errors`, `mix credo --strict`, `mix cadence.architecture.check`.
+- `mix format`, the all-projects compile from TEAM.md › Quality bar (never a plain `mix compile` at the root: it builds only the workspace app), `mix credo --strict`, `mix cadence.architecture.check`.
 - Controllers call the `Cadence` facade; org/mission scoping enforced server-side on every endpoint.
 - Domain-model changes in `apps/cadence` that go beyond read functions: coordinate with **domain**.
 - The machine is shared by 8 agents. Run targeted test files, not the whole suite, unless you're about to report a milestone.

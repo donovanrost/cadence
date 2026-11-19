@@ -74,7 +74,7 @@ Send a teammate a message with (`herdr` may not be on PATH in agent shells; use 
 
 ## Quality bar
 
-- Elixir: `mix compile --warnings-as-errors`, `mix credo --strict` (don't add violations),
+- Elixir: compile every project with warnings as errors: `MIX_ENV=test mix workspace.run -t compile --order postorder --early-stop --env-var MIX_ENV=test -- --force --warnings-as-errors` at the repo root (the CI command; a plain `mix compile` at the root builds only the workspace app, not cadence, cadence_web, the simulator or the packages); `mix credo --strict` at the repo root (don't add violations),
   `mix format`, per-app tests (`cd apps/cadence_web && mix test`).
 - Frontend: typecheck + lint for the new app pass; no file over 400 lines; no render
   function/template block over ~50 lines without extraction.
@@ -125,7 +125,7 @@ part 2, the 001 repair, the gap fixes) sat still for ~3 h 20 min under a hold wi
 - Checks to run before committing:
   - Docs only: none.
   - Frontend: typecheck + lint (+ tests) for the console app (see `docs/apogee/ARCHITECTURE.md`).
-  - Elixir (api only): `mix format`, `mix compile --warnings-as-errors`, `mix credo --strict` on touched
+  - Elixir (api only): `mix format`, the all-projects compile above (or `mix compile --force --warnings-as-errors` inside each app you touched), `mix credo --strict` on touched
     files, and the tests for the touched area. **Only api, api-ops and domain run Elixir tests**, since parallel runs fight
     over the `cadence_test` database (domain uses `MIX_TEST_PARTITION=12`, api-ops uses `3`; partitions are claimed in qa's runbook register). qa runs the dev server against the dev database.
 - **Heavy jobs go through the team gate (director, 2026-11-17):** `var/heavy-gate.sh --agent <you> -- <command>`
