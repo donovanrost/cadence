@@ -7,10 +7,14 @@ defmodule Mix.Tasks.Cadence.Questdb.Migrate do
 
       mix cadence.questdb.migrate
       mix cadence.questdb.migrate --plan
+      mix cadence.questdb.migrate --check
 
   ## Options
 
     * `--plan` - print local migration files without connecting to QuestDB
+    * `--check` - read-only: exit 0 if QuestDB's schema is current for this build, 1 if it is
+      behind (missing columns or unapplied migrations: run this task before restarting), 2 if
+      the schema can't be read. Sends only `SELECT`s. A restart's pre-flight runs it.
     * `--migrations-path` - override the SQL migrations directory
     * `--http-endpoint` - QuestDB HTTP endpoint, defaults to `http://127.0.0.1:9000`
     * `--host` - retained for future PGWire support
@@ -34,6 +38,7 @@ defmodule Mix.Tasks.Cadence.Questdb.Migrate do
         args,
         strict: [
           plan: :boolean,
+          check: :boolean,
           migrations_path: :string,
           http_endpoint: :string,
           host: :string,
@@ -50,10 +55,42 @@ defmodule Mix.Tasks.Cadence.Questdb.Migrate do
 
     migrations_path = opts[:migrations_path] || SchemaMigrator.default_migrations_path()
 
-    if opts[:plan] do
-      print_plan!(migrations_path)
+    cond do
+      opts[:plan] -> print_plan!(migrations_path)
+      opts[:check] -> check!(migrations_path, opts)
+      true -> apply_pending!(migrations_path, opts)
+    end
+  end
+
+  @doc false
+  # The exit status and message for a `SchemaMigrator.check/1` result (`--check`).
+  @spec check_report(SchemaMigrator.check_result()) :: {0 | 1 | 2, binary()}
+  def check_report(:ok), do: {0, "QuestDB schema is current for this build."}
+
+  def check_report({:behind, %{missing_columns: missing, pending_migrations: pending}}) do
+    {1,
+     "QuestDB schema is behind this build: missing columns #{list(missing)}; " <>
+       "unapplied migrations #{list(pending)}. Run mix cadence.questdb.migrate before restarting."}
+  end
+
+  def check_report({:error, reason}),
+    do: {2, "Could not read the QuestDB schema: #{inspect(reason)}"}
+
+  defp list([]), do: "none"
+  defp list(items), do: Enum.join(items, ", ")
+
+  defp check!(migrations_path, opts) do
+    {status, message} =
+      migrations_path
+      |> migrator_opts(opts)
+      |> SchemaMigrator.check()
+      |> check_report()
+
+    if status == 0 do
+      Mix.shell().info(message)
     else
-      apply_pending!(migrations_path, opts)
+      Mix.shell().error(message)
+      exit({:shutdown, status})
     end
   end
 
@@ -89,20 +126,21 @@ defmodule Mix.Tasks.Cadence.Questdb.Migrate do
     end
   end
 
-  defp apply_pending!(migrations_path, opts) do
-    migrator_opts =
-      [
-        migrations_path: migrations_path,
-        http_endpoint: opts[:http_endpoint],
-        hostname: opts[:host],
-        port: opts[:port],
-        database: opts[:database],
-        username: opts[:username],
-        password: opts[:password]
-      ]
-      |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+  defp migrator_opts(migrations_path, opts) do
+    [
+      migrations_path: migrations_path,
+      http_endpoint: opts[:http_endpoint],
+      hostname: opts[:host],
+      port: opts[:port],
+      database: opts[:database],
+      username: opts[:username],
+      password: opts[:password]
+    ]
+    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+  end
 
-    case SchemaMigrator.apply_pending(migrator_opts) do
+  defp apply_pending!(migrations_path, opts) do
+    case SchemaMigrator.apply_pending(migrator_opts(migrations_path, opts)) do
       {:ok, []} ->
         Mix.shell().info("QuestDB schema is up to date.")
 
