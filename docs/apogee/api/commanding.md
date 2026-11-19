@@ -638,3 +638,25 @@ Discards the draft. The response is `204` (idempotent).
 `POST /command-groups` takes an optional `draft_revision`. Once the group is created, the caller's
 draft is deleted in the same transaction, **only if it is still at that revision**, so a newer
 autosave from another tab survives.
+
+## REST command requests: command-group members (owner: api-ops; four-eyes P0, 2026-11-18)
+
+The pre-console REST API under `/api/organizations/:organization_id/missions/:mission_id`
+(the `:api` and `:authenticated_api` pipelines) keeps its own error body, `{"errors": [{"reason":
+"<code>", "message": "…"}]}`, not the console envelope. Since **2026-11-18** a command request
+that belongs to a command group is decided, queued and released only through its group, and only a
+group submission makes a request a group member (#249). These are breaking changes: a request that
+used to succeed is now refused.
+
+| Endpoint | New refusal | Meaning | Instead |
+| --- | --- | --- | --- |
+| `POST /command_requests/:id/approve` · `/reject` | `409 command_request_in_group` | The request belongs to a command group. Nothing was recorded. | Decide the group: `POST /api/console/v1/missions/:mission_id/command-groups/:id/decision` (GO, GO excluding, send back, NO-GO). |
+| `POST /command_requests/:id/enqueue` | `409 command_request_in_group` | The same, for queueing. Nothing was queued. | The group's GO queues its members. |
+| `POST /command_queue_entries/:id/release` | `409 command_group_not_armed` | The entry is a group member and its group isn't armed (`queued`, after its GO), judged from the server's group row. Nothing was released. | Give the group its GO; its release goes through the group. |
+| `POST /command_requests` | `422 command_request_group_reserved` | The request's `metadata` names a group (`metadata["group"]`). Nothing was created. | Submit the group: `POST /api/console/v1/missions/:mission_id/command-groups`. Drop group keys from a standalone request's `metadata`. |
+
+The `message` is ux U87's words: "This command is part of a command group. Approve it with the
+group's GO/NO-GO.", "A command joins a command group only when the group is submitted." and
+"This command's group hasn't been given its GO, so it can't be sent." Membership is read from the
+server's group records, never from a caller's metadata. Requests outside any group are unchanged. The console's named release already refused an unarmed group (`command_group_not_armed`
+under `refused`, in the release section above).
