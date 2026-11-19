@@ -40,20 +40,23 @@ const reasonFor = (needsComment: string) =>
 /**
  * #376 (U79): a blocking hold stops Approve, never Send back. Up front from the checks; after a
  * 409 holds_blocking, until a reload's checks show the hold cleared (the server's checks may
- * have seen it before the console's did).
+ * have seen it before the console's did). #395: only checks requested at or after the refusal
+ * count as that reload; a read already in flight then carries the older answer.
  */
-const refusedForHold = ref(false);
+const refusedForHoldAt = ref<Date | null>(null);
 const holdInChecks = computed(
   () => props.preview.status === "ready" && blockingReason(props.preview.value) !== null,
 );
 watch(
-  () => (props.preview.status === "ready" ? props.preview.value : null),
-  (checks, before) => {
-    if (checks !== null && checks !== before && blockingReason(checks) === null)
-      refusedForHold.value = false;
+  () => props.preview,
+  (checks) => {
+    const since = refusedForHoldAt.value;
+    if (since === null || checks.status !== "ready" || blockingReason(checks.value) !== null)
+      return;
+    if (checks.requestedAt && checks.requestedAt >= since) refusedForHoldAt.value = null;
   },
 );
-const holdStands = computed(() => holdInChecks.value || refusedForHold.value);
+const holdStands = computed(() => holdInChecks.value || refusedForHoldAt.value !== null);
 const approveReason = computed(() =>
   busy.value
     ? "Working…"
@@ -74,7 +77,7 @@ async function decide(decision: "approve" | "send_back") {
     if (result.ok) emit("result", result.value);
     else {
       if (decision === "approve" && isError(result.error, "holds_blocking"))
-        refusedForHold.value = true;
+        refusedForHoldAt.value = new Date();
       failure.value =
         (decision === "approve" ? checksRefusal(result.error, "approve") : null) ??
         refusalOutcome(result.error, "changed");

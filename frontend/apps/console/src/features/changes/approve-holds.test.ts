@@ -93,7 +93,7 @@ function set() {
   if (!r.ok) throw new Error(JSON.stringify(r.error));
   return r.value;
 }
-function checks(blocking: boolean): RemoteState<Preview> {
+function checks(blocking: boolean, requestedAt = new Date()): RemoteState<Preview> {
   const items = blocking
     ? [{ kind: "spacecraft", reason: "spacecraft_commands_waiting", blocking: true }]
     : [];
@@ -103,7 +103,7 @@ function checks(blocking: boolean): RemoteState<Preview> {
     effects: [],
   });
   if (!r.ok) throw new Error(JSON.stringify(r.error));
-  return { status: "ready", value: r.value, receivedAt: new Date() };
+  return { status: "ready", value: r.value, receivedAt: new Date(), requestedAt };
 }
 
 describe("#376: Approve and a blocking hold", () => {
@@ -135,6 +135,9 @@ describe("#376: Approve and a blocking hold", () => {
     expect(approve(w)?.attributes("aria-disabled")).toBe("true");
     expect(w.get("[data-hold-stands]").text()).toBe(HOLD_STANDS);
 
+    // #395: a read already in flight at the 409 (older answer, no hold) doesn't clear it.
+    await w.setProps({ preview: checks(false, new Date(Date.now() - 60_000)) });
+    expect(approve(w)?.attributes("aria-disabled")).toBe("true");
     // A reload that still shows the hold keeps it disabled; one without it clears it.
     await w.setProps({ preview: checks(true) });
     expect(approve(w)?.attributes("aria-disabled")).toBe("true");
