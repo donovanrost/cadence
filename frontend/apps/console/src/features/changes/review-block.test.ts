@@ -102,20 +102,34 @@ describe("#320: the review panel", () => {
 describe("ux U79 (TEMPORARY, deleted with 9ac6dc8ee): a legacy route conversion batch", () => {
   const conversion = { legacy_conversion: { batch: 2, batches_total: 10 } };
 
-  it("blocks the batch's stager with U79's own line", () => {
-    expect(reviewBlocked(set({ ...blockedAs("reviewer_is_author"), ...conversion }))).toEqual({
-      line: "You staged this batch, so someone else reviews and applies it.",
-      code: null,
-    });
+  const blocked = { ...blockedAs("reviewer_is_author"), ...conversion };
+  const STAGER = "You staged this batch, so someone else reviews and applies it.";
+
+  it("gives U79's line only to the batch's stager, among its authors (#412)", () => {
+    expect(reviewBlocked(set(blocked), "u1")).toEqual({ line: STAGER, code: null });
+    // A submitter who staged nothing (not in authors), or a viewer we can't name: #320's line.
+    expect(reviewBlocked(set(blocked), "u2")?.line).toBe(AUTHOR);
+    expect(reviewBlocked(set(blocked))?.line).toBe(AUTHOR);
   });
 
   it("names a conversion batch's stager, or leaves out a nameless one", () => {
-    expect(conversionStager(set(conversion))).toBe(
+    expect(conversionStager(set(conversion), "u2")).toBe(
       "Staged by Mira K. Someone else reviews and applies it.",
     );
     expect(
-      conversionStager(set({ ...conversion, authors: [{ kind: "user", id: "u1", name: null }] })),
+      conversionStager(
+        set({ ...conversion, authors: [{ kind: "user", id: "u1", name: null }] }),
+        "u2",
+      ),
     ).toBe("Staged earlier. Someone else reviews and applies it.");
     expect(conversionStager(set())).toBeNull();
+  });
+
+  it("tells the blocked stager only who staged it; the review block already says the rest (#406)", () => {
+    expect(conversionStager(set(blocked), "u1")).toBe("Staged by Mira K.");
+    // Another blocked viewer (the submitter) and a reviewer still read both sentences.
+    expect(conversionStager(set(blocked), "u2")).toBe(
+      "Staged by Mira K. Someone else reviews and applies it.",
+    );
   });
 });

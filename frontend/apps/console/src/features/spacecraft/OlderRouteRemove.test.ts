@@ -80,6 +80,41 @@ describe("older route Remove… (ux U79)", () => {
     w.unmount();
   });
 
+  it("a conversion_in_progress refusal keeps its Open change set link (U79; #405 review)", async () => {
+    const { w } = await render([], "m-converting");
+    vi.stubGlobal("fetch", (url: string) => {
+      if (url.endsWith("/stage"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: "conversion_in_progress",
+                message: "A conversion batch is staged.",
+                details: { change_set_id: "cs-9", batch: 3 },
+              },
+            }),
+            { status: 409 },
+          ),
+        );
+      const data = url.endsWith("/config") ? configWith([]) : {};
+      return Promise.resolve(new Response(JSON.stringify({ data })));
+    });
+    buttons()
+      .find((b) => b.textContent?.trim() === "Remove…")
+      ?.click();
+    await flushPromises();
+    buttons()
+      .find((b) => b.textContent?.trim() === "Stage removal")
+      ?.click();
+    await flushPromises();
+    expect(document.body.textContent).toContain(
+      "Batch 3 of the route conversion is staged, so other changes can't be staged in this mission until it's applied or discarded.",
+    );
+    const row = w.findAll("tr").find((tr) => tr.text().includes("qa-pre-routing-175358"));
+    expect(row?.findAll("a").map((a) => a.text())).toContain("Open change set");
+    w.unmount();
+  });
+
   it("says 'Removal staged' with Open change set once the open set holds it", async () => {
     const { w } = await render(
       [{ kind: "legacy_routing_rule", action: "delete", entity_id: "old-1" }],
