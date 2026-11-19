@@ -14,6 +14,7 @@ acceptance. Language: `../design-language.md`; routes: `../information-architect
 | 2 · Ops | [Fleet, Alarms, Telemetry, Timeline](OpsLists.md) | none (from components) | fe-ops |
 | 2 · Setup | [Readiness](Setup.md) | Setup (S1) | fe-setup |
 | 2 · Setup | [Add spacecraft](AddSpacecraft.md) | AddSpacecraft (S2) | fe-setup |
+| 2 · Setup | [Spacecraft directory and page](Spacecraft.md) | none (from the console) | fe-setup |
 | 2 · Setup | [Catalog import](Catalog.md) | Catalog (S3) | fe-setup |
 | 2 · Setup | [Profile](Profile.md) | Profile (S4) | fe-setup |
 | 2 · Setup | [People & access](People.md) | People (S5) | fe-setup |
