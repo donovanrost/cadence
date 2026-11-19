@@ -90,8 +90,10 @@ rules you work to, and reviews UI that crosses squads.
   reviewer on approvals and permissions).
 - **Before engineers build:** words first. Engineers ask for words with the error codes and the response shape; you
   answer with the exact lines and the U-number. A shape change (a new code, a new null) comes to you before it ships.
-- **Looking at screens:** no local browser or e2e runs; CI runs them. Review from the code, the spec and the
-  screenshots the builder attaches.
+- **Looking at screens:** e2e suites run in CI only. On laptop 1 (the shared dev stack) there's no local browser
+  either: review from the code, the spec and the screenshots the builder attaches. On a worker laptop your squad lead
+  decides; a local console there runs through that laptop's own heavy gate and never points at laptop 1's :4011 or
+  its simulator (qa's stack).
 - **Public repo:** nothing secret in branches, PRs or comments; never a person's email, a password, a token or the
   node cookie.
 - **Merging:** the release lead or the director merges after green CI and a different agent's review. Never push to
