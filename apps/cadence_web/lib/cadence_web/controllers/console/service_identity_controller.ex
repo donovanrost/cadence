@@ -85,11 +85,8 @@ defmodule CadenceWeb.Console.ServiceIdentityController do
       "Not rotated: this service identity has access you don't have yourself (#{roles}), " <>
         "so you can't rotate its key. Ask someone who has that access to rotate it."
 
-  @role_words %{
-    platform_admin: "Platform admin",
-    organization_admin: "Org admin",
-    mission_admin: "Mission admin"
-  }
+  # A service identity can hold only these two (ServiceIdentity.normalize_capability/1).
+  @role_words %{organization_admin: "Org admin", mission_admin: "Mission admin"}
 
   defp roles(capabilities) do
     words = Enum.map(capabilities, &Map.get(@role_words, &1, Atom.to_string(&1)))
