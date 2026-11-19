@@ -3102,7 +3102,9 @@ Communications, Changes) for ux's look.
     EARENDIL-004 yet, so every setting is new." and the rows show only the new value. Switches are never rows
     (#109). api's labels and values (sent as text; a missing value is `Not set`):
     - `catalog_revision_id` → `Catalog revision`, "catalog rev 14" (U65).
-    - `telemetry_source_endpoint_id` → `Packet source`, the source's name (never an id, U25).
+    - `telemetry_source_endpoint_id` → `Packet source`, the source's name (never an id, U25). A source that's set but
+      whose name the server couldn't look up (`name` null; #415, #235): `Unknown packet source`, with the id in
+      Technical details. It isn't `Not set`, which means no source was chosen.
     - `handled_apids` → `Handled APIDs` (U40's name, as the workspace has it), the APIDs comma-separated up to 8, else "14 APIDs"; none: `None`.
     - `protocol.downlink` / `.uplink` → `Downlink protocol` / `Uplink protocol` (TM, AOS, USLP, TC);
       `frame_size` → `Frame size`, `secondary_header_length` → `Secondary header`, `insert_zone_length` →
