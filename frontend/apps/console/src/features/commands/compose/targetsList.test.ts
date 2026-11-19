@@ -28,7 +28,7 @@ describe("Compose target list at scale", () => {
     // a11y B3 (#243): the toggle stays (250 targets plus its row), says Hide, keeps focus.
     expect(details.findAll("li")).toHaveLength(251);
     expect(all.attributes("aria-expanded")).toBe("true");
-    expect(all.text()).toBe("Hide");
+    expect(all.text()).toBe("Show first 200");
     expect(document.activeElement).toBe(all.element);
     await all.trigger("click");
     expect(details.findAll("li")).toHaveLength(201);

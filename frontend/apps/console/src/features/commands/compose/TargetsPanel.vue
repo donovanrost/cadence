@@ -56,7 +56,10 @@ const dropLeft = () =>
 const LIST_CAP = 200;
 const listOpen = ref(false);
 const showAll = ref(false);
-/** a11y B3 (#243): Show all N ↔ Hide stays put with aria-expanded (it used to unmount on click). */
+/**
+ * a11y B3 (#243): Show all N ↔ Show first N stays put with aria-expanded (it used to unmount on
+ * click); the BatchPreview pair, since it goes back to the first rows (ca-ux).
+ */
 const listId = useId();
 const onToggle = (e: Event) => {
   if (e.target instanceof HTMLDetailsElement) listOpen.value = e.target.open;
@@ -208,7 +211,11 @@ function addOne(id: string) {
               :aria-expanded="showAll"
               :aria-controls="listId"
               @click="showAll = !showAll"
-              >{{ showAll ? "Hide" : `Show all ${formatCount(targets.length)}` }}</ApButton
+              >{{
+                showAll
+                  ? `Show first ${formatCount(LIST_CAP)}`
+                  : `Show all ${formatCount(targets.length)}`
+              }}</ApButton
             >
           </li>
         </ul>

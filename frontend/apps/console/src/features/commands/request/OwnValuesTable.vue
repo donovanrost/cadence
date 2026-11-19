@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, useId } from "vue";
-import { ApButton, ApStatusMark } from "@/ui";
+import { ApButton, ApStatusMark, formatCount } from "@/ui";
 import type { CommandArgument } from "../api.ts";
 import type { Group } from "../groups/show.ts";
 import { cellOf, rawEntries, tableArgs, type Override } from "./ownValues.ts";
@@ -19,7 +19,10 @@ const props = defineProps<{
 }>();
 const FIRST = 8;
 const all = ref(false);
-/** a11y B3 (#243): Show all N ↔ Hide stays put with aria-expanded (it used to unmount on click). */
+/**
+ * a11y B3 (#243): Show all N ↔ Show first N stays put with aria-expanded (it used to unmount on
+ * click); the BatchPreview pair, since it goes back to the first rows (ca-ux).
+ */
 const tableId = useId();
 const names = computed(() => tableArgs(props.command, props.overrides));
 const shared = computed(() => rawEntries(props.command.argument_values_json));
@@ -90,7 +93,7 @@ const rows = computed(() => (all.value ? props.overrides : props.overrides.slice
       :aria-expanded="all"
       :aria-controls="tableId"
       @click="all = !all"
-      >{{ all ? "Hide" : `Show all ${overrides.length}` }}</ApButton
+      >{{ all ? `Show first ${FIRST}` : `Show all ${formatCount(overrides.length)}` }}</ApButton
     >
   </div>
 </template>

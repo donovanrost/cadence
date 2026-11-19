@@ -140,7 +140,7 @@ function paste() {
           :disabled="latest.state.value.status !== 'ready'"
           :disabled-reason="
             latest.state.value.status === 'failed'
-              ? 'Current values couldn\'t be read.'
+              ? 'Current values couldn\'t be read. Reload to try again.'
               : 'Reading current values…'
           "
           @click="emit('change', fillFromCurrent(item, ids, current))"
