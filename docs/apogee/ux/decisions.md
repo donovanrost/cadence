@@ -3760,15 +3760,16 @@ read, the dry run).
   breaking changes".
 - **On a revision's page,** the breaking count is the one against the revision before it in the same database (by
   number), the base C3's diff uses on the import page. Both revisions are immutable, so the count doesn't move when
-  later revisions are imported (only a release that changes what counts as breaking can change it). Data (mms-engineer and fe-setup, 11-19, #195's two-reads build; final): the revision read
-  carries `import_run_id` (never null when the revision is there), `breaking` (an integer, or null when it isn't
-  known) and `breaking_base` (`{catalog_revision_id, revision}`, the revision compared against; null when there is
-  none). The same three states the server sends, never computed in the console:
+  later revisions are imported (only a release that changes what counts as breaking can change it). Data
+  (mms-engineer and fe-setup, 11-19, #195's two-reads build; final): the revision read carries `import_run_id`
+  (never null when the revision is there), `breaking` (an integer, or null when it isn't known) and `breaking_base`
+  (`{catalog_revision_id, revision}`, the revision compared against; null when there is none). The same three
+  states the server sends, never computed in the console:
   - `breaking` > 0: the callout and checkbox below, as on the import page, plus what it compared against: "Rev 4
     changes 3 commands or points in a way that breaks existing use, compared with rev 3. Cadence can't tell yet
     what uses them." `breaking` 0: no callout,
     no checkbox.
-  - No earlier revision (`breaking_base` null): "Rev 1 is the first revision in its database, so Cadence has
+  - No earlier revision (`breaking_base` null): "Rev 1 is the first revision of this catalog, so Cadence has
     nothing earlier to compare it with and can't tell what it breaks. Check what uses its commands and points
     before you stage." The acknowledgment checkbox reads "I've checked what rev 1 changes". There's no
     `Open its import`, since its diff has nothing to compare.
