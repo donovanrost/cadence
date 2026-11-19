@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ApPanel, ApTable, ApTag, formatShort, plural, type ApColumn, type OpState } from "@/ui";
-import type { ImportRun, ImportStatus } from "./api.ts";
+import { ApPanel, ApTable, ApTag, plural, type ApColumn, type OpState } from "@/ui";
+import { startedLine, type ImportRun, type ImportStatus } from "./api.ts";
 
 /** Recent import runs; each links to its validation + diff page. */
 defineProps<{ runs: readonly ImportRun[] }>();
@@ -52,7 +52,7 @@ function diagnostics(run: ImportRun): string {
           diagnostics(row)
         }}</span>
       </template>
-      <template #cell-started="{ row }">{{ formatShort(new Date(row.started_at)) }}</template>
+      <template #cell-started="{ row }">{{ startedLine(row) }}</template>
     </ApTable>
   </ApPanel>
 </template>

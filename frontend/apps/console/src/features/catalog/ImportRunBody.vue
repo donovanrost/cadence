@@ -7,6 +7,7 @@ import DiffStrip from "./DiffStrip.vue";
 import ImportVerdict from "./ImportVerdict.vue";
 import RolloutPanel from "./RolloutPanel.vue";
 import { ARTIFACT_LIVE } from "./artifact.ts";
+import { importBreaking } from "./breaking.ts";
 import ImportRunFile from "./ImportRunFile.vue";
 import { formatBytes, type ImportRunDetail } from "./importRun.ts";
 
@@ -43,6 +44,6 @@ const fileLine = computed(() =>
   <RolloutPanel
     v-if="canStage && run.status === 'succeeded' && run.revision"
     :revision="run.revision"
-    :breaking="run.diff?.summary.breaking ?? 0"
+    :breaking="importBreaking(run)"
   />
 </template>

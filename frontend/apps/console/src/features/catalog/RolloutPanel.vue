@@ -11,7 +11,8 @@ import {
 } from "@/features/changes/index.ts";
 import { useMissionInvalidation } from "@/live";
 import { useMissionScope } from "@/shell";
-import { ApButton, ApPanel, plural } from "@/ui";
+import { ApButton, ApPanel } from "@/ui";
+import { breakingWords, type Breaking } from "./breaking.ts";
 import RolloutBreaking from "./RolloutBreaking.vue";
 import RolloutChoose from "./RolloutChoose.vue";
 import RolloutDryRun from "./RolloutDryRun.vue";
@@ -27,9 +28,11 @@ import { useRolloutDryRun } from "./useRolloutDryRun.ts";
 /** C3 Roll out to (Catalog.md, #65): stage this revision by profile or on a few spacecraft. */
 const props = defineProps<{
   revision: Readonly<{ id: string; number: number }>;
-  /** Breaking changes in the diff; staging needs them checked (no C2 fixes yet). */
-  breaking: number;
+  /** U102: what the server knows about breaking changes; staging needs them checked (no C2 yet). */
+  breaking: Breaking;
 }>();
+const breakingLine = computed(() => breakingWords(props.breaking, props.revision.number));
+const breakingCount = computed(() => (props.breaking.kind === "count" ? props.breaking.count : 0));
 const router = useRouter();
 const scope = useMissionScope();
 const missionId = computed(() => scope.value.mission.id);
@@ -83,8 +86,7 @@ const blocked = computed((): string | null => {
   // qa #50: a set that moves nobody isn't worth staging.
   if (rolloutMoves(d.preview, props.revision.id) === 0)
     return `Nothing to stage: no spacecraft would move to rev ${props.revision.number}.`;
-  if (props.breaking > 0 && !acknowledged.value)
-    return `Check the ${plural(props.breaking, "breaking change")} first.`;
+  if (breakingLine.value && !acknowledged.value) return breakingLine.value.reason;
   return null;
 });
 
@@ -95,7 +97,7 @@ async function stage() {
   busy.value = true;
   failure.value = null;
   try {
-    const breaking = props.breaking > 0 ? ` · ${props.breaking} breaking` : "";
+    const breaking = breakingCount.value > 0 ? ` · ${breakingCount.value} breaking` : "";
     const r = await stageChange(missionId.value, {
       summary: `${label.value.replace(/^Stage /, "Roll out ")}${breaking}`,
       source: { surface: "catalog_rollout" },
@@ -124,10 +126,10 @@ async function stage() {
       />
       <RolloutDryRun :dry-run="dryRun" :revision="revision" :from="from" :unprofiled="unprofiled" />
       <RolloutBreaking
-        v-if="breaking > 0"
+        v-if="breakingLine"
         v-model="acknowledged"
-        :revision-number="revision.number"
         :breaking="breaking"
+        :words="breakingLine"
       />
       <FailureOutcomeCallout v-if="failure" :outcome="failure" />
       <ApButton
