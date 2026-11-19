@@ -36,7 +36,7 @@ const catalogRow = {
 };
 const apidsRow = {
   field: "handled_apids",
-  label: "Decoded APIDs",
+  label: "Handled APIDs",
   before: [1, 2],
   after: [1, 2, 3],
 };
@@ -104,7 +104,7 @@ describe("#235 what a spacecraft configuration request changes", () => {
     });
     expect(changesHeading(c)).toBe("What changes · 312 spacecraft");
     expect(summaryLines(c)).toEqual([
-      "300 spacecraft change: Catalog revision (300), Decoded APIDs (12).",
+      "300 spacecraft change: Catalog revision (300), Handled APIDs (12).",
       "12 have no changes.",
       "5 start for the first time.",
     ]);
@@ -165,7 +165,7 @@ describe("#235 what a spacecraft configuration request changes", () => {
     });
     expect(rowLine(source, false)).toBe("Packet source: Not set → X-band RX");
     const apids = rowOf({ ...apidsRow, before: [], after: [1, 2, 3, 4, 5, 6, 7, 8, 9] });
-    expect(rowLine(apids, false)).toBe("Decoded APIDs: None → 9 APIDs");
+    expect(rowLine(apids, false)).toBe("Handled APIDs: None → 9 APIDs");
     expect(valueWord(rowOf(apidsRow), "after")).toBe("0x01, 0x02, 0x03");
     const frame = rowOf({ field: "frame_size", label: "x", before: 1115, after: 1 });
     expect(rowLine(frame, false)).toBe("Frame size: 1,115 bytes → 1 byte");

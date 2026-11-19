@@ -46,4 +46,33 @@ describe("ApTabLinks on a narrow screen", () => {
     expect(w.find("nav").classes()).toContain("overflow-x-auto");
     expect(w.findAll("a").every((a) => a.classes().includes("whitespace-nowrap"))).toBe(true);
   });
+
+  it("fades the edge that has more links behind it, and only while it does (ux #349)", async () => {
+    const w = mount(ApTabLinks, {
+      props: { links, active: "overview", label: "Sections" },
+      global: { plugins: [router] },
+    });
+    const nav = w.find("nav");
+    const size = (scrollLeft: number) => {
+      Object.defineProperty(nav.element, "scrollWidth", { configurable: true, value: 600 });
+      Object.defineProperty(nav.element, "clientWidth", { configurable: true, value: 390 });
+      nav.element.scrollLeft = scrollLeft;
+    };
+    const fades = () => nav.classes().filter((c) => c.startsWith("[mask-image"));
+    size(0);
+    await nav.trigger("scroll");
+    expect(fades()).toEqual([
+      "[mask-image:linear-gradient(to_right,#000_calc(100%-24px),transparent)]",
+    ]);
+    size(100);
+    await nav.trigger("scroll");
+    expect(fades()[0]).toContain("transparent,#000_24px,#000_calc(100%-24px),transparent");
+    size(210);
+    await nav.trigger("scroll");
+    expect(fades()).toEqual(["[mask-image:linear-gradient(to_right,transparent,#000_24px)]"]);
+    Object.defineProperty(nav.element, "scrollWidth", { configurable: true, value: 390 });
+    nav.element.scrollLeft = 0;
+    await nav.trigger("scroll");
+    expect(fades()).toEqual([]);
+  });
 });

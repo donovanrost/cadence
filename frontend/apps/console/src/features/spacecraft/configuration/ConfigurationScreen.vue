@@ -8,7 +8,6 @@ import { useMissionScope } from "@/shell/index.ts";
 import {
   ApBreadcrumb,
   ApButton,
-  ApEmptyState,
   ApPageHeader,
   ApRemote,
   ApSelect,
@@ -76,7 +75,9 @@ const name = computed(() =>
 );
 const crumbs = computed((): readonly ApCrumb[] => {
   const list: ApCrumb[] = [{ label: "Spacecraft", to: { name: "setup.spacecraft" } }];
-  if (props.spacecraftId)
+  // ux #349/#352: the middle crumb only once the craft's name has arrived (not while loading, not
+  // when the read failed).
+  if (props.spacecraftId && state.value.status === "ready")
     list.push({
       label: name.value,
       to: { name: "setup.spacecraft.one", params: { spacecraftId: props.spacecraftId } },
@@ -103,11 +104,13 @@ const craftOptions = (s: ConfigurationSnapshot) =>
 <template>
   <div class="mx-auto flex w-full max-w-[1400px] flex-col gap-4">
     <ApBreadcrumb :crumbs="crumbs" />
-    <ApEmptyState v-if="refusal" state="off" :headline="refusal.text">
+    <!-- U98, ux #349: the read's refusal is the page's empty state, a body sentence, no mark. -->
+    <div v-if="refusal" role="status" class="flex flex-col items-start gap-2 px-4 py-6">
+      <p class="m-0 max-w-[60ch] text-base leading-[1.55] text-text-3">{{ refusal.text }}</p>
       <ApButton v-if="refusal.comms" size="compact" :to="{ name: 'setup.comms' }"
         >Open Comms</ApButton
       >
-    </ApEmptyState>
+    </div>
     <ApRemote v-else :state="state" loading-label="Loading configuration…" @retry="refetch">
       <template #default="{ value }">
         <ApPageHeader

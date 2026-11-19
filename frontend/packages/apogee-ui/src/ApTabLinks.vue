@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { RouteLocationRaw } from "vue-router";
 
 /** Section navigation between routes (links, not ARIA tabs). Looks like ApSegmented `tabs`. */
@@ -24,14 +24,49 @@ function showActive() {
     const at = link.getBoundingClientRect();
     if (at.left < box.left) strip.scrollLeft += at.left - box.left;
     else if (at.right > box.right) strip.scrollLeft += at.right - box.right;
+    measure();
   });
 }
-onMounted(showActive);
+/**
+ * ux #349: a strip cut off on a narrow screen shows that it scrolls. The edge with more links
+ * behind it fades, and the fade goes once that end is reached.
+ */
+const more = ref<Readonly<{ left: boolean; right: boolean }>>({ left: false, right: false });
+function measure() {
+  const strip = nav.value;
+  if (!strip) return;
+  more.value = {
+    left: strip.scrollLeft > 1,
+    right: strip.scrollLeft + strip.clientWidth < strip.scrollWidth - 1,
+  };
+}
+const fade = computed(() => {
+  const { left, right } = more.value;
+  if (left && right)
+    return "[mask-image:linear-gradient(to_right,transparent,#000_24px,#000_calc(100%-24px),transparent)]";
+  if (right) return "[mask-image:linear-gradient(to_right,#000_calc(100%-24px),transparent)]";
+  if (left) return "[mask-image:linear-gradient(to_right,transparent,#000_24px)]";
+  return "";
+});
+// A resize (a rotated phone, a narrowed window) keeps the active link in view and the fade right (ux #352).
+onMounted(() => {
+  showActive();
+  window.addEventListener("resize", showActive);
+});
+onBeforeUnmount(() => window.removeEventListener("resize", showActive));
 watch(() => props.active, showActive);
+// New or relabelled links change the strip's width (fe-setup's #352 review).
+watch(() => props.links, showActive, { deep: true });
 </script>
 
 <template>
-  <nav ref="nav" :aria-label="label" class="flex overflow-x-auto border-b border-hairline">
+  <nav
+    ref="nav"
+    :aria-label="label"
+    class="flex overflow-x-auto border-b border-hairline"
+    :class="fade"
+    @scroll.passive="measure"
+  >
     <RouterLink
       v-for="link in links"
       :key="link.key"

@@ -37,7 +37,8 @@ export const snapshotWire = (o: Record<string, unknown> = {}) => ({
     {
       id: "cr-14",
       name: "EARENDIL FSW",
-      label: "catalog rev 14",
+      label: "FSW 2.4",
+      number: 14,
       declarations: 812,
       packets: 40,
       commands: 120,
