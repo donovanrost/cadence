@@ -337,7 +337,7 @@ jobs:
           path: ~/.npm
           key: npm-v1-${{ runner.os }}-${{ hashFiles('apps/cadence_web/package-lock.json') }}
 
-  # Not in ci-ok yet: joins after a week without flakes (docs/ci/browser-in-ci-ok.md).
+  # Required through ci-ok since 2026-11-19: no flake in its probation (docs/ci/browser-in-ci-ok.md).
   browser:
     name: Federation browser (${{ matrix.shard }}/2)
     needs: [changes, browser-assets]
@@ -574,7 +574,7 @@ jobs:
 
   # Production reads and writes telemetry through QuestDB, but the test env swaps every
   # telemetry store for Postgres. This job runs against a real QuestDB (docs/ci/questdb-integration.md).
-  # Kept out of ci-ok for its first clean week, like the browser shards.
+  # Required through ci-ok since 2026-11-19: no flake in its probation (docs/ci/questdb-integration.md).
   questdb-integration:
     name: QuestDB integration
     needs: changes
@@ -639,7 +639,7 @@ jobs:
   # The test env runs with the ingress journal on, but production's default is off (config.exs).
   # This reruns the ingest tests tagged @moduletag :ingest_journal_matrix with it off (director
   # 11-14; api-ops 3c94a9853). Journal-only tests in those modules skip themselves, visibly.
-  # Kept out of ci-ok for its first clean week, like the browser shards.
+  # Required through ci-ok since 2026-11-19: no flake in its probation (docs/ci/questdb-integration.md, "Related").
   ingest-journal-off:
     name: Ingest tests, journal off
     needs: changes
@@ -689,11 +689,14 @@ jobs:
         test-core,
         test-web,
         browser-assets,
+        browser,
         test-web-publication,
         test-packages,
         producer-coverage,
         js-audit,
         frontend-quality,
+        questdb-integration,
+        ingest-journal-off,
       ]
     if: always()
     runs-on: ubuntu-24.04

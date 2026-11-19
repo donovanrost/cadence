@@ -1,6 +1,6 @@
 # CI proposal: QuestDB integration job
 
-Status: **P0 built** (`questdb-integration` in `ci.yml`, outside ci-ok for its first clean week).
+Status: **P0 built**; `questdb-integration` and `ingest-journal-off` joined `ci-ok` on 2026-11-19 (see the end).
 P1 is approved in principle; lead schedules it after api-ops' and domain's current fixes (BACKLOG).
 Director, 2026-11-14. Owner: devops.
 
@@ -72,3 +72,21 @@ is `false`. api-ops' planned shape (names final when it lands, after their inges
 `CADENCE_TEST_INGRESS_JOURNAL=off|on` (default on) in `apps/cadence/config/test.exs`. Then CI adds a
 parallel rerun: `CADENCE_TEST_INGRESS_JOURNAL=off mix test --only ingest_journal_matrix`. About 100 of the 506 core test
 files touch ingest, so expect ~1–2 min of job time and no added wall clock.
+
+## Joined `ci-ok` (2026-11-19)
+
+`questdb-integration` and `ingest-journal-off` are in `ci-ok`'s `needs` now. Before, a red in either one didn't
+block a merge.
+
+Tally from 2026-11-13T08:21Z to 2026-11-19 ~17:3xZ: every attempt of every completed `ci.yml` run, 352 runs:
+
+| Job | Success | Failure | Cancelled | Skipped |
+| --- | ---: | ---: | ---: | ---: |
+| QuestDB integration | 147 | 0 | 15 | 122 |
+| Ingest tests, journal off | 139 | 1 | 18 | 122 |
+
+The journal-off failure was real, not a flake. On PR #251 (run 44439604173, job 135277031323, 11-19 01:48Z),
+`ContactSettlementTest:372` (39LEY replay bookkeeping) needs the ingress journal and failed with it off, 54/55. The test
+got its `requires_ingress_journal` guard in 528e05179, which is on develop. Cancelled = superseded runs; skipped =
+docs-only changes.
+
