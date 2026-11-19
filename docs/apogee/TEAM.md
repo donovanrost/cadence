@@ -82,7 +82,7 @@ Send a teammate a message with (`herdr` may not be on PATH in agent shells; use 
   - the ingest journal-off matrix: `cd apps/cadence && CADENCE_TEST_INGRESS_JOURNAL=off mix test --only ingest_journal_matrix`;
   - the simulator suite: `cd apps/cadence_simulator && mix test`, with the same `MIX_TEST_PARTITION`;
   - `mix test.planes` at the repo root;
-  - `mix test.cluster` at the repo root. It starts Erlang distribution and peer nodes, so it runs only with qa's OK (the epmd rule), or is left to CI with that said in the PR.
+  - `mix test.cluster` at the repo root. It starts Erlang distribution and peer nodes, and each peer runs its own `epmd -daemon`, which can bind on all interfaces next to the dev epmd (11-19 02:14Z). Leave it to CI and say so in the PR; run it locally only with qa's OK (the epmd rule).
 - Frontend: typecheck + lint for the new app pass; no file over 400 lines; no render
   function/template block over ~50 lines without extraction.
 - Real data only. No invented stats in shipped UI; if the backend lacks something, the api
