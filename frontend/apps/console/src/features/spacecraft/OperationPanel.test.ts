@@ -2,6 +2,7 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { decode, missionId } from "@/api/index.ts";
 import { detailReader } from "./detail.ts";
+import { configWith } from "./older-route.fixtures.ts";
 import OperationPanel from "./OperationPanel.vue";
 
 // useConfigState listens for config changes live.
@@ -34,6 +35,20 @@ function detail() {
   });
   if (!r.ok) throw new Error(JSON.stringify(r.error));
   return r.value;
+}
+
+/** The open set stages commanding off for EARENDIL-312; the head is r6, so it applies with r7. */
+function configWithStagedOff() {
+  const config = configWith([
+    {
+      kind: "spacecraft",
+      entity_id: "sc-312",
+      action: "update",
+      paths: ["commanding_enabled"],
+      payload: { changes: [{ path: "commanding_enabled", value: false }] },
+    },
+  ]);
+  return { ...config, head: { ...config.head, revision: 6 } };
 }
 
 function render(canStage = true, mission = "m-ops") {
@@ -94,6 +109,27 @@ describe("Operation switches (#309, U40)", () => {
         ],
       },
     ]);
+    w.unmount();
+  });
+
+  it("a staged switch shows its target and 'Staged · applies with r7', the r kept lower-case", async () => {
+    vi.stubGlobal("fetch", (url: string) => {
+      const data = url.endsWith("/schema")
+        ? { kind: "spacecraft", fields: [] }
+        : url.endsWith("/config")
+          ? configWithStagedOff()
+          : {};
+      return Promise.resolve(new Response(JSON.stringify({ data })));
+    });
+    const w = mount(OperationPanel, {
+      props: { missionId: missionId("m-staged"), detail: detail(), canStage: true },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const tag = w.findAll("span").find((s) => s.text().startsWith("Staged · applies with"));
+    expect(tag?.text()).toBe("Staged · applies with r7");
+    expect(tag?.find("span.normal-case").text()).toBe("r7");
+    expect(radio("Commanding", "Off")?.getAttribute("aria-checked")).toBe("true");
     w.unmount();
   });
 

@@ -107,11 +107,10 @@ async function confirmOff() {
             <span class="text-md text-readout">{{ row.sentence }}</span>
           </div>
           <div class="flex flex-wrap items-center gap-2">
-            <ApTag
-              v-if="row.staged !== null && appliesWith"
-              state="caution"
-              :label="`Staged · applies with ${appliesWith}`"
-            />
+            <!-- U40: the revision keeps its lower-case r ("r7", never a plan's "R7"; mms-ux). -->
+            <ApTag v-if="row.staged !== null && appliesWith" state="caution"
+              >Staged · applies with <span class="normal-case">{{ appliesWith }}</span></ApTag
+            >
             <ApTag v-else-if="row.on === null" state="off" label="Not set" />
             <ApSegmented
               v-if="canStage"
