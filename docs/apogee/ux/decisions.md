@@ -3181,11 +3181,11 @@ Communications, Changes) for ux's look.
 
 ### U95 · Approve refused before anything is recorded (L10 decide panel; P3 "approved = applied", ahead of (B)) (api / fe-ops)
 The Activations decide panel's Approve now checks that the request can apply, and refuses before recording a decision.
-Every line starts "Not approved:" and says why. "Your approval wasn't recorded." follows the why, and anything another
-person does ("The requester sends it again."). When the reader has something to do ("Try again", "Reload…", "Send it
-back…", "Approve it once…"), that sentence comes after it, so the line ends on the reader's act; otherwise "Your
-approval wasn't recorded." ends the line. (Order amended 11-19: lines had landed both ways. New lines follow this;
-a landed line moves when its screen is next changed.) After a refusal, Approve is disabled with the line as its A6
+Every line starts "Not approved:" and says why. "Your approval wasn't recorded." comes after the why and after
+anything another person does ("The requester sends it again."). When the reader has something to do ("Try again",
+"Reload…", "Send it back…", "Approve it once…"), that sentence comes after it, so the line ends on the reader's act;
+otherwise "Your approval wasn't recorded." ends the line. (Order amended 11-19: lines had landed both ways. New lines
+follow this; a landed console line moves when its screen is next changed.) After a refusal, Approve is disabled with the line as its A6
 reason; Reject stays, so the request can be cleared. Words reuse U41, U65, U88, U90 and U94.
 
 - `approved_activation_content_mismatch` (U41's cause): "Not approved: what this request would apply changed after it
@@ -3496,7 +3496,7 @@ groups, provider changes, qualification cases (no service authors them).
   `details.service` (null, never omitted; #236 sends null too), which picks the line:
   - `{id, name}` (a service whose accountable people aren't recorded; under an automation grant it can be the approving
     service): "Not approved: Nightly planner has no one recorded as accountable for it, so this can't be approved yet.
-    Your approval wasn't recorded. An org admin records who's accountable in People › Service identities." With a
+    An org admin records who's accountable in People › Service identities. Your approval wasn't recorded." With a
     null `name`: "the service identity that imported this revision" (requested this, submitted this plan, sent this
     command request; the approving one under a grant: "the service identity approving for this automation") in its
     place, never an id (U25; the id goes in Technical details).
@@ -3926,15 +3926,15 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
     - `not_a_person`: never shown in the console (a service can't sign in); as `not_admin` if it is.
     - A reason the console doesn't know: "You can't approve this grant, so another org admin approves it." with the
       code in Technical details.
-- **Approve refusals** (nothing recorded; each ends "Your approval wasn't recorded.", U95):
+- **Approve refusals** (nothing recorded; each says "Your approval wasn't recorded." after the why, U95):
   - 403 `automation_grant_self_approval_forbidden`, `because: "proposed"`: "Not approved: you proposed this grant,
     so another org admin approves it. Your approval wasn't recorded." `because: "accountable"` (`grantee`, the service the grant empowers; a different key from U100's
     `via_service` on purpose): "Not
     approved: you're accountable for Nightly planner, so another org admin approves its grant. Your approval wasn't
     recorded." Then Approve is disabled with the up-front line.
   - 403 `automation_grant_approver_authors_unknown` (`service`): "Not approved: Nightly planner has no one
-    recorded as accountable for it, so its grant can't be approved yet. Your approval wasn't recorded. An org admin
-    records who's accountable in People › Service identities." (U100's words)
+    recorded as accountable for it, so its grant can't be approved yet. An org admin records who's
+    accountable in People › Service identities. Your approval wasn't recorded." (U100's words)
   - 409 `automation_grant_not_proposed` (`state`; `decided_by` and `decided_at`, both or neither): with them, as U97: "This
     grant was already approved by Ana R. at 11-19 06:52Z, so your approval wasn't recorded. Reload to see it." /
     "…already rejected by…"; the viewer: "You already approved this grant at 11-19 06:52Z. Reload to see it." (with
