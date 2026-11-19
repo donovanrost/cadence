@@ -3746,3 +3746,69 @@ fixes their words and lists what the legacy pages offered that the console doesn
 **Parity left for fe-setup** (legacy L19, not in the console yet; build, or record why not): the `Readiness` link in
 the page header; the protocol preset picker ("Choose protocol preset", "No protocol preset selected", with "Pinned
 profile" and "Current"); the installed, available and app versions (the console shows `v3` only).
+
+### U105 · An automation grant takes effect only after a second admin approves it (#283) (mms-security / ca-ux / fe-ops)
+Under "Needs a second person's approval", issuing a grant (Contact planning › Policy › Grants) makes a proposal that
+authorizes nothing until a different org admin approves it. That admin must be outside the people accountable for the
+service it names (U100). Under "Applies without approval", the proposer's own approval stands, as for other kinds.
+Revoking or narrowing is a tightening: any org admin does it alone, at once. Pattern: the policy's own
+"Waiting for approval" panel (P5), which this mirrors. Codes are mms-security's; the lines below are keyed by
+condition until the codes are fixed.
+
+- **States** (the `State` column; mark + word, B2): `PROPOSED` (caution), `ACTIVE` (nominal), `REJECTED` (off),
+  `REVOKED` (off), `EXPIRED` (stale). A proposal nobody decided in time is `EXPIRED`, and its row reads "Proposed by
+  Mira K. at 11-19 06:40Z; no one decided it in time." A proposed grant's `Valid until` reads "30 days from approval"
+  (validity starts at approval), never a date.
+- **The sheet** (`Grant automation…`):
+  - Under "Needs a second person's approval": title `Propose a grant`, commit `Propose grant`, and a muted line
+    above the footer: "It takes effect once another org admin approves it. Until then Nightly planner can't act under
+    it." After the answer: "Proposed. It takes effect when another org admin approves it." (U20: only on the
+    proposed outcome).
+  - Under "Applies without approval": title `Grant automation`, commit `Grant`, muted line "It takes effect at once.
+    No second person's approval is needed, as this mission's setting allows." After the answer: "Granted. Nightly
+    planner can act under it until 12-19 06:40Z."
+  - Any other answer: "Cadence didn't confirm the grant. Reload to see it."
+- **Waiting for approval** (a panel on a proposed grant, as P5): "Proposed by Mira K. at 11-19 06:40Z: <reason>. It
+  takes effect when another org admin approves it." Then `Approve grant for Nightly planner` and `Reject…` (reason
+  required, as P5's comment: "Give a reason first."). The note goes on the decision.
+  - **Up front (A6, from the server's flags, never computed in the console; #233's pattern):** Approve is disabled
+    with its reason, muted under it and as its description; Reject stays unless the flags say otherwise:
+    - the proposer: "You proposed this grant, so another org admin approves it."
+    - accountable for the service: "You're accountable for Nightly planner, so another org admin approves its grant."
+    - the accountable set unknown: "Cadence doesn't know who is accountable for Nightly planner, so its grant can't
+      be approved yet. An org admin records who's accountable in People › Service identities."
+    - not an org admin: no panel actions, and the line "Org admins approve grants."
+    - an unknown reason: "You can't approve this grant, so another org admin approves it." with the code in
+      Technical details.
+- **Approve refusals** (nothing recorded, so each ends "Your approval wasn't recorded.", U95):
+  - own proposal: "Not approved: you proposed this grant, so another org admin approves it. Your approval wasn't
+    recorded."
+  - accountable for the service: "Not approved: you're accountable for Nightly planner, so another org admin
+    approves its grant. Your approval wasn't recorded."
+  - set unknown: "Not approved: Cadence doesn't know who is accountable for Nightly planner, so its grant can't be
+    approved yet. Your approval wasn't recorded. An org admin records who's accountable in People › Service
+    identities."
+  - setting changed since the proposal: "Not approved: the mission's approval setting changed after this grant was
+    proposed. Your approval wasn't recorded. Propose it again."
+  - already decided: "Not approved: this grant was already rejected by Ana R. at 06:52Z, so your approval wasn't
+    recorded." / "…already approved by…"; the viewer: "You already approved this grant at 06:52Z."; no decider: "Not
+    approved: this grant isn't waiting for approval any more. Your approval wasn't recorded. Reload to see it."
+  - proposal expired: "Not approved: no one decided this grant in time, so it expired. Your approval wasn't recorded.
+    Propose it again."
+  - a code the console doesn't know: "Not approved: Cadence refused this approval. Your approval wasn't recorded."
+    with the code in Technical details.
+- **Use under a grant that isn't approved** (the service's plan, submit or approve refused), on the plan's state line
+  as U100's automation line: "Not submitted automatically: Nightly planner's grant isn't approved yet." / "…grant
+  has expired." / "…grant was revoked." (approve: "Not approved automatically: …"; plan: "Not drafted
+  automatically: …").
+- **Revoke** stays one act, at once, with a reason, even while a change to the same grant is proposed. Its sheet adds
+  no approval line. If a widening proposal is pending, the revoke sheet says: "This also ends the proposal waiting
+  for approval."
+- **Widening** (more actions, more services, longer validity) is a new proposal, worded as the sheet above.
+- **Audit** (who and when as one event, U29): "Proposed a grant for Nightly planner", "Approved Mira K.'s grant for
+  Nightly planner", "Rejected Mira K.'s grant for Nightly planner: <reason>", "Revoked the grant for Nightly planner:
+  <reason>", "Narrowed the grant for Nightly planner: <what changed>", "The proposed grant for Nightly planner
+  expired; no one decided it in time."
+- **Not here:** whether a grant approved under "Applies without approval" keeps working after the mission moves to
+  "Needs a second person's approval" (#283's open question 1, the director's call); widening who may propose or
+  approve to mission admins (open question 2).
