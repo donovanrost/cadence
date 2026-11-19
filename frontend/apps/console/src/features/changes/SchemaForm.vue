@@ -10,7 +10,14 @@ import {
 } from "./kindSchema.ts";
 
 /** A change-set edit form generated from a kind schema (never hand-written per field; U24 units). */
-defineProps<{ schema: KindSchema; errors: Readonly<Record<string, string>> }>();
+const props = defineProps<{
+  schema: KindSchema;
+  errors: Readonly<Record<string, string>>;
+  /** Per field path, enum options shown but not choosable (option text; settings #233, ux U96). */
+  disabledValues?: Readonly<Record<string, readonly string[]>>;
+  /** Per field path, an extra line in the field's own hint, so it's announced with the control (A6). */
+  hints?: Readonly<Record<string, string>>;
+}>();
 const values = defineModel<FormValues>({ required: true });
 const option = (v: unknown) => (typeof v === "string" ? v : JSON.stringify(v));
 function set(path: string, value: string) {
@@ -25,7 +32,11 @@ const isSelect = (f: SchemaField) =>
 const selectOptions = (f: SchemaField) =>
   isCurrency(f)
     ? currencies.map((c) => ({ value: c, label: c }))
-    : (f.enum ?? []).map((o) => ({ value: option(o.value), label: o.label }));
+    : (f.enum ?? []).map((o) => ({
+        value: option(o.value),
+        label: o.label,
+        disabled: props.disabledValues?.[f.path]?.includes(option(o.value)) ?? false,
+      }));
 const yesNo = (f: SchemaField) => {
   const def = f.default === true ? "true" : f.default === false ? "false" : null;
   return [
@@ -40,6 +51,7 @@ const hint = (f: SchemaField) =>
     f.help,
     f.unit === "s" ? "e.g. 48h, 2d, 90m" : null,
     f.default !== null && f.type !== "boolean" ? `Default ${defaultText(f)}` : null,
+    props.hints?.[f.path] ?? null,
   ]
     .filter(Boolean)
     .join(" · ") || undefined;

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { diffEdits, SchemaForm, type FormValues } from "@/features/changes/index.ts";
+import { canAdministerOrganization, useConsoleScope, useSession } from "@/shell";
 import { ApButton, ApCallout, ApPanel, ApTag, formatShort } from "@/ui";
 import MissionSettingsSection from "./MissionSettingsSection.vue";
 import SettingsValues from "./SettingsValues.vue";
@@ -11,6 +12,7 @@ import {
   type SettingsScope,
   type SettingsSection,
 } from "./api.ts";
+import { disabledValues, lockedLine } from "./governance.ts";
 import { useSectionSave } from "./useSectionSave.ts";
 
 /**
@@ -41,6 +43,14 @@ const headerTag = computed(() =>
   mission.value ? setHereCount(props.section) : sectionTag(props.section, props.scope.kind),
 );
 const canChange = computed(() => props.canEdit && props.section.locked !== true);
+/** ux U96: a locked mission section offers its organization's settings to an organization admin. */
+const where = useConsoleScope();
+const session = useSession();
+const orgAdmin = computed(
+  () =>
+    (where.value.kind === "mission" || where.value.kind === "organization") &&
+    canAdministerOrganization(session, where.value.organization),
+);
 /** The organization's form; a mission's fields edit one at a time. */
 const editable = computed(() => !mission.value && canChange.value);
 const meta = computed(() => {
@@ -76,8 +86,16 @@ function submit() {
       {{ section.purpose }}
     </p>
     <ApCallout v-if="section.locked" tone="info"
-      >The organization sets these and doesn't allow missions to override them.</ApCallout
-    >
+      >{{ lockedLine(section.key) }}
+      <template v-if="mission && orgAdmin" #action>
+        <ApButton
+          size="compact"
+          variant="ghost"
+          :to="{ name: 'org.settings', params: { section: section.key } }"
+          >Open organization settings</ApButton
+        >
+      </template>
+    </ApCallout>
     <MissionSettingsSection
       v-if="mission"
       :scope="scope"
@@ -91,6 +109,7 @@ function submit() {
         v-model="values"
         :schema="{ kind: 'settings', fields: section.fields }"
         :errors="errors"
+        :disabled-values="disabledValues(section.fields)"
       />
       <ApCallout v-if="note" :tone="note.tone">{{ note.text }}</ApCallout>
       <div class="flex flex-wrap gap-2">
