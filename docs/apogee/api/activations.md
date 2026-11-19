@@ -76,7 +76,9 @@ that fails or stalls shows on Now).
   - `rows` compare the reviewed version with what runs now. `first_start`: nothing is active for
     the craft, so every set field is a row with `before: null`. Fields, in this order:
     `catalog_revision {id, number|null}`, `telemetry_source {id, name|null}` (`name` is `null` when
-    the source's name can't be looked up for the mission), `handled_apids [int]`,
+    the source's name can't be looked up for the mission; it reads "Unknown packet source", ux U94,
+    and the id only in Technical details; distinct from `null` for the whole value, "Not set"),
+    `handled_apids [int]`,
     `downlink`, `uplink` (the protocol word), `frame_size`, `secondary_header_length`,
     `insert_zone_length`, `ocf_length` (int), `truncated_primary_header` (bool); a missing value
     is `null` ("Not set"). `label` is the fallback word. The switches are never rows (#109);
