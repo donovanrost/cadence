@@ -157,6 +157,13 @@ describe("not ready, gaps and partial approval (U97, ux's #257 check)", () => {
     expect(approveRefusal(ack(["r4"]), { ...who, unmet }).text).toMatch(
       /^Not approved: 1 gap needs/,
     );
+    // ca-ux's #338 review: requirements the loaded plan can't place by spacecraft aren't counted.
+    expect(approveRefusal(ack(["r9"]), { ...who, unmet }).text).toBe(
+      "Not approved: some gaps need a reason first. Your approval wasn't recorded. Give a reason for each, then approve.",
+    );
+    expect(approveRefusal(ack([]), who).text).toMatch(
+      /^Not approved: some gaps need a reason first/,
+    );
   });
 });
 

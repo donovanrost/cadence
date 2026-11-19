@@ -167,13 +167,14 @@ export function approveRefusal(error: ApiError, w: Who): Refusal {
     );
   if (code === "acknowledgements_required") {
     const gaps = gapCount(error, w);
-    if (gaps > 0) {
-      const need = `${plural(gaps, "gap")} ${gaps === 1 ? "needs" : "need"} a reason first`;
-      return refusal(
-        `Not approved: ${need}. Your approval wasn't recorded. Give a reason for each, then approve.`,
-        need,
-      );
-    }
+    const need =
+      gaps > 0
+        ? `${plural(gaps, "gap")} ${gaps === 1 ? "needs" : "need"} a reason first`
+        : "some gaps need a reason first";
+    return refusal(
+      `Not approved: ${need}. Your approval wasn't recorded. Give a reason for each, then approve.`,
+      need,
+    );
   }
   if (code === "plan_not_ready") return notReady(error, r);
   if (code === "invalid_params") {
@@ -193,7 +194,9 @@ function gapCount(error: ApiError, w: Who): number {
   const missing = new Set(detailsOf(error, missingDetails)?.missing ?? []);
   const unmet = w.unmet ?? [];
   const of = (list: typeof unmet) => new Set(list.map((u) => u.spacecraft_id ?? "—")).size;
-  return of(unmet.filter((u) => missing.has(u.requirement_id))) || of(unmet) || missing.size;
+  // Only gaps the loaded plan can name by spacecraft; otherwise 0, and the line goes countless
+  // (ca-ux's #338 review: never count requirements as gaps).
+  return of(unmet.filter((u) => missing.has(u.requirement_id)));
 }
 
 /** U97: plan_not_ready by what blocks it: conflicting passes, else uncovered spacecraft. */
