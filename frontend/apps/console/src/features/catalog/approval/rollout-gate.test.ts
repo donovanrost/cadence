@@ -43,11 +43,17 @@ describe("rolloutGate (U102 'Where', #195)", () => {
     });
   });
 
-  it("has no C3 without a catalog revision, or for retired and unknown statuses (U99)", () => {
+  it("says a retired revision can't be moved to, and that those on it keep it (#392)", () => {
+    expect(rolloutGate(read({ status: "retired" }))).toEqual({
+      kind: "line",
+      line: "Rev 4 is retired, so spacecraft can't move to it. Any already on it keep it.",
+    });
+  });
+
+  it("has no C3 and no line without a catalog revision, or for an unknown status (U99, #392)", () => {
     expect(rolloutGate(read({ status: "approved", catalog_revision: null }))).toEqual({
       kind: "none",
     });
-    expect(rolloutGate(read({ status: "retired" }))).toEqual({ kind: "none" });
     expect(rolloutGate(read({ status: "superseded" }))).toEqual({ kind: "none" });
   });
 });
