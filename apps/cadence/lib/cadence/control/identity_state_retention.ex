@@ -24,6 +24,12 @@ defmodule Cadence.Control.IdentityStateRetention do
     * `:live`: deletes;
     * `:off`: does nothing.
 
+  **Never during a pass** (lead, #368 review): before every batch it asks
+  `Cadence.Contacts.PassClusters.near?/1` (any contact from AOS−5 min to LOS+5 min, or a realized
+  one still active). If a pass is near, the tick stops there (`stopped: :pass_cluster`, logged as
+  skipped) and the next tick resumes from the same cursor. Dry ticks skip too: their walk reads
+  as much as a live one.
+
   It never vacuums: Postgres's autovacuum makes the space reusable, and nothing returns it to the
   disk (VACUUM FULL or a repack is a separate, planned step).
   """
@@ -32,7 +38,7 @@ defmodule Cadence.Control.IdentityStateRetention do
 
   require Logger
 
-  alias Cadence.Contacts.JournalReclaim
+  alias Cadence.Contacts.{JournalReclaim, PassClusters}
   alias Cadence.Telemetry.Storage.ObservationIdentityStates.Retention
 
   @env "CADENCE_IDENTITY_STATE_RETENTION"
@@ -131,6 +137,10 @@ defmodule Cadence.Control.IdentityStateRetention do
   defp next_cursor(%{cursor: cursor}), do: cursor
 
   defp walk(outcome, opts) do
+    if pass_near?(opts), do: %{outcome | stopped: :pass_cluster}, else: walk_batch(outcome, opts)
+  end
+
+  defp walk_batch(outcome, opts) do
     batch = Retention.batch(outcome.mode, outcome.cursor, outcome.cutoff, opts[:scan_size])
 
     outcome = %{
@@ -164,10 +174,25 @@ defmodule Cadence.Control.IdentityStateRetention do
       stopped: stopped
     }
 
+  # `:pass_near?` (a 0-arity function) replaces the contacts check in tests.
+  defp pass_near?(opts) do
+    case Keyword.get(opts, :pass_near?) do
+      check when is_function(check, 0) -> check.()
+      nil -> PassClusters.near?(Keyword.get_lazy(opts, :now, &DateTime.utc_now/0))
+    end
+  end
+
   defp settings(opts) do
     @defaults
     |> Keyword.merge(Application.get_env(:cadence, __MODULE__, []))
     |> Keyword.merge(opts)
+  end
+
+  defp log(%{stopped: :pass_cluster} = outcome) do
+    Logger.info(
+      "identity state retention #{outcome.mode} skipped: a pass is near (AOS-5 min to LOS+5 min); " <>
+        "matched=#{outcome.matched} batches=#{outcome.batches}, resumes next tick"
+    )
   end
 
   defp log(%{matched: 0}), do: :ok

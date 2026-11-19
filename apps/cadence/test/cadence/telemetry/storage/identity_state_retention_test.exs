@@ -161,6 +161,57 @@ defmodule Cadence.Telemetry.Storage.IdentityStateRetentionTest do
     end
   end
 
+  describe "near a pass (lead, #368 review)" do
+    test "a tick does nothing while a pass is near, and is logged as skipped" do
+      old = state!("pass-old", last_seen_hours_ago: 120)
+
+      # The test config logs at :warning; let the info line through for this test (async: false).
+      previous = Logger.level()
+      Logger.configure(level: :info)
+      on_exit(fn -> Logger.configure(level: previous) end)
+
+      log =
+        ExUnit.CaptureLog.capture_log([level: :info], fn ->
+          assert %{stopped: :pass_cluster, matched: 0, batches: 0} =
+                   [mode: :live, pass_near?: fn -> true end]
+                   |> Kernel.++(@settings)
+                   |> then(&start_and_tick/1)
+        end)
+
+      assert log =~ "skipped: a pass is near"
+      assert present?(old)
+    end
+
+    test "a pass that comes near mid-walk stops it before the next batch; the next tick resumes" do
+      ids = for n <- 1..4, do: state!("mid-#{n}", last_seen_hours_ago: 100)
+      {:ok, calls} = Agent.start_link(fn -> 0 end)
+      near_after_first = fn -> Agent.get_and_update(calls, &{&1 >= 1, &1 + 1}) end
+
+      first =
+        IdentityStateRetention.run(
+          [mode: :live, scan_size: 2, max_batches: 10, pass_near?: near_after_first] ++ @settings
+        )
+
+      assert %{stopped: :pass_cluster, matched: 2, batches: 1} = first
+
+      rest =
+        IdentityStateRetention.run(
+          [mode: :live, scan_size: 2, cursor: first.cursor, pass_near?: fn -> false end] ++
+            @settings
+        )
+
+      assert %{matched: 2, stopped: :end} = rest
+      refute Enum.any?(ids, &present?/1)
+    end
+
+    test "a dry tick skips too" do
+      _old = state!("pass-dry", last_seen_hours_ago: 120)
+
+      assert %{stopped: :pass_cluster, matched: 0} =
+               IdentityStateRetention.run([mode: :dry, pass_near?: fn -> true end] ++ @settings)
+    end
+  end
+
   test "the supervised process runs a tick on request" do
     old = state!("process-old", last_seen_hours_ago: 120)
 
@@ -174,6 +225,16 @@ defmodule Cadence.Telemetry.Storage.IdentityStateRetentionTest do
 
     assert %{matched: 1} = IdentityStateRetention.run_now(:identity_state_retention_under_test)
     refute present?(old)
+  end
+
+  defp start_and_tick(opts) do
+    pid =
+      start_supervised!(
+        {IdentityStateRetention, [name: :retention_pass_test, tick_ms: 0] ++ opts}
+      )
+
+    Sandbox.allow(Repo, self(), pid)
+    IdentityStateRetention.run_now(:retention_pass_test)
   end
 
   # A recorded state (the real write path), then aged and shaped by a direct update.
