@@ -141,20 +141,15 @@ defmodule Cadence.ContactPlanning.ProjectionRaceTest do
   # - SET CONSTRAINTS ALL DEFERRED defers the deferrable "current version" keys, which close the
   #   only cycles (plans <-> versions, requirements <-> versions);
   # - tables are deleted children first, by the non-deferrable foreign keys among them.
-  defp delete_organization!(organization_id) do
-    run(fn ->
-      {:ok, :ok} =
-        DecisionRecordPurge.run(fn ->
-          SQL.query!(Repo, "SET CONSTRAINTS ALL DEFERRED", [])
+  defp delete_organization!(organization_id),
+    do:
+      run(fn -> {:ok, :ok} = DecisionRecordPurge.run(fn -> delete_rows!(organization_id) end) end)
 
-          for table <- deletion_order() do
-            SQL.query!(Repo, ~s(DELETE FROM "#{table}" WHERE organization_id = $1), [
-              organization_id
-            ])
-          end
+  defp delete_rows!(organization_id) do
+    SQL.query!(Repo, "SET CONSTRAINTS ALL DEFERRED", [])
 
-          :ok
-        end)
+    Enum.each(deletion_order(), fn table ->
+      SQL.query!(Repo, ~s(DELETE FROM "#{table}" WHERE organization_id = $1), [organization_id])
     end)
   end
 
@@ -189,11 +184,7 @@ defmodule Cadence.ContactPlanning.ProjectionRaceTest do
     if MapSet.size(remaining) == 0 do
       Enum.reverse(acc)
     else
-      ready =
-        Enum.reject(remaining, fn table ->
-          Enum.any?(edges, fn [child, parent] -> parent == table and child in remaining end)
-        end)
-
+      ready = Enum.reject(remaining, &referenced?(&1, remaining, edges))
       if ready == [], do: raise("foreign-key cycle among #{inspect(MapSet.to_list(remaining))}")
 
       children_first(
@@ -203,4 +194,7 @@ defmodule Cadence.ContactPlanning.ProjectionRaceTest do
       )
     end
   end
+
+  defp referenced?(table, remaining, edges),
+    do: Enum.any?(edges, fn [child, parent] -> parent == table and child in remaining end)
 end
