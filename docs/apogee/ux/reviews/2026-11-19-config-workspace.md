@@ -24,11 +24,9 @@ the a11y checklist. Ranked: wrong meaning first, then words, then layout. Owner:
      insert zone 0 B · OCF 4 B".
 4. **390: the tab row is cut off** ("COMMU…") with no cue that it scrolls. Either wrap the tabs to two rows or give
    the row a visible overflow cue, and keep the selected tab in view.
-5. **390: a floating "Sign in" control** (bottom left, on every screen) covers "Open Operation" on the phone and
-   says "Sign in" to a signed-in user (QA, top right). If it's a dev-only overlay, it must not ship; if it's the
-   console's, it's a bug. fe-ops to confirm which.
-
 ## Not findings (pending, or already ruled)
+- The floating "Sign in" pill is Tidewave, a dev-only Phoenix tool (`:dev` dependency), not in a release build
+  (fe-ops). Not the console's; qa may hide it for spec runs if it covers what a screen needs.
 - `r7` isn't a link yet: that's U101 (#151), still to build.
 - The page header has the name only. Spacecraft.md puts name + SCID on the spacecraft's page; for the
   configuration page that's optional, since the breadcrumb carries the spacecraft.
