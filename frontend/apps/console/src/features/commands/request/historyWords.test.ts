@@ -126,7 +126,48 @@ describe("history words (ux U70)", () => {
         }),
         null,
       ),
-    ).toBe("Resolved as not sent by Ground ops key at 03:20:05Z");
+    ).toBe("Resolved as not sent by Ground ops key (a service identity) at 03:20:05Z");
+  });
+  it("marks a service identity resolver, named or not (ux U70, U103)", () => {
+    const resolved = (
+      by:
+        | { id: string; name: string | null; kind?: "user" | "service_identity" }
+        | null
+        | undefined,
+    ) =>
+      attemptLine(
+        attempt({
+          state: "release_failed",
+          failure: { kind: "resolved", code: "not_sent", by, at: "2026-11-16T03:20:05Z" },
+        }),
+        null,
+      );
+    // A person: unchanged, with or without the kind.
+    expect(resolved({ id: "u", name: "Mira K.", kind: "user" })).toBe(
+      "Resolved as not sent by Mira K. at 03:20:05Z",
+    );
+    // A named service identity: its name, marked as a service.
+    expect(resolved({ id: "key-1", name: "ops-automation", kind: "service_identity" })).toBe(
+      "Resolved as not sent by ops-automation (a service identity) at 03:20:05Z",
+    );
+    // A nameless service identity: the kind is known, so it's said; never the id.
+    expect(resolved({ id: "key-1", name: null, kind: "service_identity" })).toBe(
+      "Resolved as not sent by a service identity at 03:20:05Z",
+    );
+    // A resolver with no name and no known kind: who isn't known.
+    expect(resolved({ id: "u", name: null })).toBe(
+      "Resolved as not sent at 03:20:05Z; who resolved it isn't known",
+    );
+    expect(resolved({ id: "u", name: null, kind: "user" })).toBe(
+      "Resolved as not sent at 03:20:05Z; who resolved it isn't known",
+    );
+    // No resolver recorded.
+    expect(resolved(undefined)).toBe(
+      "Resolved as not sent at 03:20:05Z; who resolved it wasn't recorded",
+    );
+    expect(resolved(null)).toBe(
+      "Resolved as not sent at 03:20:05Z; who resolved it wasn't recorded",
+    );
   });
   it("words verifiers and their evidence", () => {
     expect(verifierLine(verifier())).toBe("Mode applied · verified at 03:12:04Z");
