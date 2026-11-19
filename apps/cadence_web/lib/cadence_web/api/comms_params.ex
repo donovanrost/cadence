@@ -1,5 +1,5 @@
 defmodule CadenceWeb.API.CommsParams do
-  @moduledoc "Spacecraft and communications configuration request parsing boundary."
+  @moduledoc "Communications configuration request parsing boundary (spacecraft create retired, #328)."
 
   import CadenceWeb.API.ParamParser
 
@@ -12,7 +12,6 @@ defmodule CadenceWeb.API.CommsParams do
   }
 
   alias Cadence.SourceEndpoints.SourceEndpoint
-  alias Cadence.Spacecraft
 
   @spec source_endpoint(binary(), binary(), map()) :: {:ok, SourceEndpoint.t()} | {:error, term()}
   def source_endpoint(organization_id, mission_id, params)
@@ -35,25 +34,6 @@ defmodule CadenceWeb.API.CommsParams do
          source_ref: string_value(params, "source_ref"),
          scid: scid,
          display_name: string_value(params, "display_name"),
-         metadata: map_value(params, "metadata")
-       })}
-    end
-  end
-
-  @spec spacecraft(binary(), binary(), map()) :: {:ok, Spacecraft.t()} | {:error, term()}
-  # Returns a `%Cadence.Spacecraft{}` (its switches, L22, stay nil: they're set through change
-  # sets only).
-  def spacecraft(organization_id, mission_id, params)
-      when is_binary(organization_id) and is_binary(mission_id) and is_map(params) do
-    with {:ok, display_name} <- required_string(params, "display_name"),
-         {:ok, scid} <- non_neg_integer(params, "scid", nil) do
-      {:ok,
-       Spacecraft.new(%{
-         spacecraft_id: string_value(params, "spacecraft_id"),
-         organization_id: organization_id,
-         mission_id: mission_id,
-         display_name: display_name,
-         scid: scid,
          metadata: map_value(params, "metadata")
        })}
     end

@@ -59,6 +59,22 @@ defmodule CadenceWeb.ControlPlaneApiFixtures do
     }
   end
 
+  @doc """
+  A spacecraft in the mission, through the store (#328: the REST create it replaces is retired;
+  spacecraft are created through the console's change sets).
+  """
+  def persist_api_spacecraft!(organization_id, mission_id, attrs) do
+    spacecraft =
+      Spacecraft.new(
+        Map.merge(%{organization_id: organization_id, mission_id: mission_id}, attrs)
+      )
+
+    assert {:ok, persisted} =
+             Cadence.SpacecraftStore.persist_spacecraft(organization_id, spacecraft)
+
+    persisted
+  end
+
   def authorize(conn, api_token) do
     put_req_header(conn, "authorization", "Bearer " <> api_token)
   end

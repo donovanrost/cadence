@@ -645,20 +645,12 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
     %{conn: conn, api_token: api_token, organization_id: organization_id, mission_id: mission_id} =
       bootstrap(conn)
 
-    spacecraft_conn =
-      conn
-      |> authorize(api_token)
-      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/spacecraft", %{
-        "spacecraft" => %{
-          "spacecraft_id" => "spacecraft-commanding-001",
-          "display_name" => "SC-CMD-001",
-          # The release guard (#38) matches the gateway's SCID to the target's.
-          "scid" => 31
-        }
-      })
-
-    assert %{"data" => %{"spacecraft_id" => "spacecraft-commanding-001"}} =
-             json_response(spacecraft_conn, 201)
+    persist_api_spacecraft!(organization_id, mission_id, %{
+      spacecraft_id: "spacecraft-commanding-001",
+      display_name: "SC-CMD-001",
+      # The release guard (#38) matches the gateway's SCID to the target's.
+      scid: 31
+    })
 
     source_endpoint_conn =
       conn
