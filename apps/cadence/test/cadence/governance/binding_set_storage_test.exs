@@ -184,6 +184,43 @@ defmodule Cadence.Governance.BindingSetStorageTest do
     end
   end
 
+  describe "re-persisting a version (api-ops, #475)" do
+    test "the same content writes nothing; other content is refused and changes nothing" do
+      assert {:ok, _} = Governance.persist_binding_set(@org, fleet("fleet", 1, 6))
+      before = {count("governed_binding_artifacts"), count("governed_binding_set_members")}
+
+      assert {:ok, _} = Governance.persist_binding_set(@org, fleet("fleet", 1, 6))
+
+      assert {count("governed_binding_artifacts"), count("governed_binding_set_members")} ==
+               before
+
+      for other <- [
+            fleet("fleet", 1, 7),
+            fleet("fleet", 1, 6, packet_id: fn _n -> "hk-other" end)
+          ] do
+        assert {:error, :binding_set_version_changed} =
+                 Governance.persist_binding_set(@org, other)
+
+        assert {count("governed_binding_artifacts"), count("governed_binding_set_members")} ==
+                 before
+      end
+
+      assert {:ok, read} = Governance.fetch_binding_set(@org, @mission, "fleet", 1)
+      assert BindingSet.content_sha256(read) == @golden_sha256
+    end
+
+    test "a version's members can't be updated or deleted" do
+      assert {:ok, _} = Governance.persist_binding_set(@org, fleet("fleet", 1, 6))
+
+      for sql <- [
+            "UPDATE governed_binding_set_members SET source_endpoint_ref = 'x'",
+            "DELETE FROM governed_binding_set_members"
+          ] do
+        assert_raise Postgrex.Error, ~r/insert-only/, fn -> Repo.query!(sql) end
+      end
+    end
+  end
+
   describe "artifacts" do
     test "are insert-only, and can't be deleted while a version references them" do
       assert {:ok, _} = Governance.persist_binding_set(@org, fleet("fleet", 1, 6))

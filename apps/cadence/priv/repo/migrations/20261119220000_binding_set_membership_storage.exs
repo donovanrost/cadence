@@ -53,6 +53,9 @@ defmodule Cadence.Repo.Migrations.BindingSetMembershipStorage do
       timestamps(type: :utc_datetime_usec, updated_at: false)
     end
 
+    # RESTRICT on the set too (fe-setup, #475): unlike the rows form's children, which CASCADE, a
+    # version's members are never deleted (trigger below), so pruning a membership version is a
+    # deliberate later change, not a side effect of deleting its row.
     execute("""
     ALTER TABLE governed_binding_set_members
       ADD CONSTRAINT governed_binding_set_members_set_fkey
@@ -79,12 +82,19 @@ defmodule Cadence.Repo.Migrations.BindingSetMembershipStorage do
     $$ LANGUAGE plpgsql
     """)
 
-    for table <- ["governed_binding_artifacts", "governed_binding_set_members"] do
-      execute("""
-      CREATE TRIGGER #{table}_insert_only BEFORE UPDATE ON #{table}
-        FOR EACH ROW EXECUTE FUNCTION governed_binding_insert_only()
-      """)
-    end
+    # Artifacts: no UPDATE (a referenced one can't be deleted either: RESTRICT; an unreferenced
+    # one may be collected later). Members: no UPDATE or DELETE, so a version's membership is
+    # exactly what was written with it (api-ops, #475).
+    execute("""
+    CREATE TRIGGER governed_binding_artifacts_insert_only BEFORE UPDATE ON governed_binding_artifacts
+      FOR EACH ROW EXECUTE FUNCTION governed_binding_insert_only()
+    """)
+
+    execute("""
+    CREATE TRIGGER governed_binding_set_members_insert_only
+      BEFORE UPDATE OR DELETE ON governed_binding_set_members
+      FOR EACH ROW EXECUTE FUNCTION governed_binding_insert_only()
+    """)
 
     execute("""
     CREATE FUNCTION governed_binding_set_storage_immutable() RETURNS trigger AS $$

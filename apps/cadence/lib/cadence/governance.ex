@@ -63,11 +63,14 @@ defmodule Cadence.Governance do
       end)
       # #447: membership form when it expands back exactly, today's rows otherwise (and said so).
       |> Multi.run(:storage, fn _repo, _changes -> {:ok, plan_storage(binding_set)} end)
+      # api-ops (#475): a version that already exists is never added to. A membership version
+      # re-persisted with the same content writes nothing; with other content it's refused.
+      |> Multi.run(:existing, fn repo, _changes -> {:ok, existing_version(repo, binding_set)} end)
       |> Multi.run(:binding_set_row, fn repo, %{storage: storage} ->
         GovernancePersistence.persist_binding_set(repo, binding_set, storage_attrs(storage))
       end)
-      |> Multi.run(:binding_rows, fn repo, %{binding_set_row: row, storage: storage} ->
-        persist_binding_rows(repo, row, storage, binding_set)
+      |> Multi.run(:binding_rows, fn repo, changes ->
+        persist_binding_rows(repo, changes, binding_set)
       end)
       |> Repo.transaction()
       |> case do
@@ -609,18 +612,45 @@ defmodule Cadence.Governance do
 
   defp storage_attrs(:rows), do: %{storage_form: "rows"}
 
-  # The version row decides: one that already existed keeps the form it was written with.
-  defp persist_binding_rows(repo, %BindingSetRow{storage_form: "membership"} = row, storage, _set) do
-    case storage do
-      {:membership, artifacts, members, _sha} ->
+  defp existing_version(repo, %BindingSet{} = binding_set) do
+    repo.get_by(BindingSetRow,
+      mission_id: binding_set.mission_id,
+      binding_set_id: binding_set.binding_set_id,
+      version: binding_set.version
+    )
+  end
+
+  # A new version is written in its planned form. An existing membership version is immutable: the
+  # same content (the plan hashes as stored) is a no-op, anything else is refused, and nothing is
+  # written either way. An existing rows version keeps today's idempotent row inserts.
+  defp persist_binding_rows(repo, %{existing: nil, binding_set_row: row, storage: storage}, set) do
+    case {row.storage_form, storage} do
+      # The row may be another transaction's that won the insert: fill it only if it's this content.
+      {"membership", {:membership, artifacts, members, sha}} when sha == row.content_sha256 ->
         BindingSetStorage.insert(repo, row, artifacts, members)
 
-      :rows ->
-        {:error, :binding_set_storage_form_changed}
+      {"rows", _storage} ->
+        persist_rows(repo, row, set)
+
+      {_form, _storage} ->
+        {:error, :binding_set_version_changed}
     end
   end
 
-  defp persist_binding_rows(repo, %BindingSetRow{} = row, _storage, %BindingSet{} = binding_set) do
+  defp persist_binding_rows(
+         _repo,
+         %{existing: %BindingSetRow{storage_form: "membership"} = row, storage: storage},
+         _set
+       ) do
+    case storage do
+      {:membership, _artifacts, _members, sha} when sha == row.content_sha256 -> {:ok, :unchanged}
+      _other -> {:error, :binding_set_version_changed}
+    end
+  end
+
+  defp persist_binding_rows(repo, %{binding_set_row: row}, set), do: persist_rows(repo, row, set)
+
+  defp persist_rows(repo, %BindingSetRow{} = row, %BindingSet{} = binding_set) do
     with {:ok, _instances} <-
            GovernancePersistence.persist_capability_instances(
              repo,
