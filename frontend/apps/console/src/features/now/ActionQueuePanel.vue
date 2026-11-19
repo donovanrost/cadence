@@ -38,7 +38,7 @@ function retried(row: QueueItem, outcome: RetryOutcome) {
   void landFocus(list.value, row.key);
 }
 function discarded(row: QueueItem, item: Attention | null) {
-  retried(row, { text: null, items: item ? [item] : [], emptied: false });
+  retried(row, { text: null, items: item ? [item] : [], emptied: false, failed: false });
 }
 let discarding: QueueItem | null = null;
 /** U54: Retry… / Close without retry… open their sheets; the returned item patches the row. */
@@ -117,6 +117,9 @@ function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Recor
     pane
     flush
   >
+    <!-- a11y B6 (#243): a row command's outcome, announced without moving focus (always present). -->
+    <p class="sr-only" role="status">{{ command.said.value.status }}</p>
+    <p class="sr-only" role="alert">{{ command.said.value.alert }}</p>
     <ApRemote :state="state" loading-label="LOADING QUEUE…" @retry="$emit('retry')">
       <template #default="{ value: items }">
         <UnshownCallout :unshown="unshown" />

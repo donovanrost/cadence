@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { missionId as missionIdReader, decode } from "@/api/index.ts";
 import { attentionReader, type Attention } from "./attention.ts";
+import { nextTick, ref } from "vue";
+import { coverageRow } from "./coverage.ts";
 import {
   bookTargets,
+  useQueueCommand,
   NO_ACCESS,
   NO_ACCESS_SEEN,
   retryTargets,
@@ -141,8 +144,34 @@ describe("Book on Now's plan_coverage item (#268)", () => {
           reply(409, err("contact_plan_day_ended", "x", { day: "2026-11-16" })),
         ),
     );
-    expect((await bookTargets(missionIdReader("m"), [coverage])).text).toBe(
+    const refused = await bookTargets(missionIdReader("m"), [coverage]);
+    expect([refused.text, refused.failed]).toEqual([
       "Not booked: 11-16 has ended, so R41 can't be booked any more.",
+      true,
+    ]);
+  });
+
+  // a11y B6 (#243): the outcome goes to the panel's live regions; a refusal is an alert.
+  it("announces a refusal as an alert and a start as a status", async () => {
+    const row = coverageRow({ priority: 1, state: "crit", spacecraftIds: [] }, "k", coverage);
+    const command = useQueueCommand(ref(missionIdReader("m")), () => {});
+    const day = reply(409, err("contact_plan_day_ended", "x", { day: "2026-11-16" }));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(day));
+    await command.run(row);
+    await nextTick();
+    expect(command.said.value).toEqual({
+      status: "",
+      alert: "Not booked: 11-16 has ended, so R41 can't be booked any more.",
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(reply(202, { data: { plan_id: "plan-41", state: "executing" } })),
     );
+    await command.run(row);
+    await nextTick();
+    expect(command.said.value).toEqual({ status: "Booking started.", alert: "" });
   });
 });

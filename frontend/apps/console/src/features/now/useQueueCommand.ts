@@ -1,5 +1,5 @@
 import type { MissionId } from "@/api/index.ts";
-import { shallowRef, type Ref } from "vue";
+import { nextTick, shallowRef, type Ref } from "vue";
 import {
   decoders as d,
   describeApiError,
@@ -63,11 +63,12 @@ export async function seenTargets(
   for (const a of targets) {
     const r = await markSeen(missionId, a);
     if (r.ok) items.push(r.value);
-    else if (r.error.kind === "forbidden") return { text: seenNoAccess(a), items, emptied: false };
+    else if (r.error.kind === "forbidden")
+      return { text: seenNoAccess(a), items, emptied: false, failed: true };
     else if (r.error.kind !== "not_found")
-      return { text: describeApiError(r.error), items, emptied: false };
+      return { text: describeApiError(r.error), items, emptied: false, failed: true };
   }
-  return { text: null, items, emptied: false };
+  return { text: null, items, emptied: false, failed: false };
 }
 
 /**
@@ -79,14 +80,15 @@ export async function bookTargets(
   targets: readonly Attention[],
 ): Promise<RetryOutcome> {
   const planId = targets[0]?.plan?.id;
-  if (!planId) return { text: null, items: [], emptied: false };
+  if (!planId) return { text: null, items: [], emptied: false, failed: false };
   const r = await request(
     `/missions/${encodeURIComponent(missionId)}/contact-plans/${encodeURIComponent(planId)}/execute`,
     d.object({ plan_id: d.token }),
     { method: "POST", body: {} },
   );
-  if (r.ok) return { text: "Booking started.", items: [], emptied: false };
-  if (r.error.kind === "forbidden") return { text: NO_ACCESS_BOOK, items: [], emptied: false };
+  if (r.ok) return { text: "Booking started.", items: [], emptied: false, failed: false };
+  if (r.error.kind === "forbidden")
+    return { text: NO_ACCESS_BOOK, items: [], emptied: false, failed: true };
   // #268 (ux): nothing started; the item then resolves as the day ended.
   if (isError(r.error, "contact_plan_day_ended")) {
     const t = targets[0];
@@ -96,9 +98,10 @@ export async function bookTargets(
       text: `Not booked: ${day} has ended, so ${plan} can't be booked any more.`,
       items: [],
       emptied: false,
+      failed: true,
     };
   }
-  return { text: describeApiError(r.error), items: [], emptied: false };
+  return { text: describeApiError(r.error), items: [], emptied: false, failed: true };
 }
 
 /** archive_quarantine's retry answers with counts beside the item (api, U49). */
@@ -129,6 +132,8 @@ export type RetryOutcome = Readonly<{
   items: readonly Attention[];
   /** A fold where every item was retried: it empties, so hold it 5 s reading `text` (ux). */
   emptied: boolean;
+  /** `text` says a refusal or failure (a11y B6: announced as an alert), not a result (status). */
+  failed: boolean;
 }>;
 
 const conflictItem = d.object({ item: attentionReader });
@@ -157,17 +162,20 @@ export async function retryTargets(
       if (current) items.push(current.item);
     } else if (e.kind === "not_found") dropped += 1;
     else if (e.kind === "forbidden")
-      return { text: noAccessText("retry", [a]), items, emptied: false };
+      return { text: noAccessText("retry", [a]), items, emptied: false, failed: true };
     else failed.push(describeApiError(e));
   }
   const retried = targets.length - dropped - failed.length;
-  if (targets.length === 1) return { text: failed[0] ?? null, items, emptied: false };
-  if (failed.length === 0) return { text: `Retried ${retried}.`, items, emptied: retried > 0 };
+  if (targets.length === 1)
+    return { text: failed[0] ?? null, items, emptied: false, failed: failed.length > 0 };
+  if (failed.length === 0)
+    return { text: `Retried ${retried}.`, items, emptied: retried > 0, failed: false };
   const reason = failed[0]?.replace(/[.!?]+$/, "");
   return {
     text: `Retried ${retried} of ${targets.length - dropped}. ${failed.length} failed${reason ? `: ${reason}` : ""}.`,
     items,
     emptied: false,
+    failed: true,
   };
 }
 
@@ -178,6 +186,20 @@ export function useQueueCommand(
 ) {
   const running = shallowRef<ReadonlySet<string>>(new Set());
   const notes = shallowRef<Readonly<Record<string, string>>>({});
+  /**
+   * a11y B6 (#243): the outcome, for the panel's two always-present live regions. The row's sentence
+   * shows it too, but isn't live, and focus stays on the button. Cleared first so the same words
+   * said twice are announced twice.
+   */
+  const said = shallowRef<Readonly<{ status: string; alert: string }>>({ status: "", alert: "" });
+  async function say(outcome: RetryOutcome) {
+    if (!outcome.text) return;
+    said.value = { status: "", alert: "" };
+    await nextTick();
+    said.value = outcome.failed
+      ? { status: "", alert: outcome.text }
+      : { status: outcome.text, alert: "" };
+  }
 
   async function run(item: QueueItem) {
     if (!item.command || running.value.has(item.key)) return;
@@ -189,6 +211,7 @@ export function useQueueCommand(
       const { [item.key]: _old, ...rest } = notes.value;
       notes.value = outcome.text && !outcome.emptied ? { ...rest, [item.key]: outcome.text } : rest;
       onDone(item, outcome);
+      void say(outcome);
     } finally {
       running.value = new Set([...running.value].filter((k) => k !== item.key));
     }
@@ -213,5 +236,5 @@ export function useQueueCommand(
     return note ? `${base} ${note}` : base;
   }
 
-  return { running, run, sentenceFor };
+  return { running, run, sentenceFor, said };
 }
