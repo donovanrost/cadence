@@ -21,8 +21,9 @@ defineEmits<{ retry: [] }>();
   <p class="m-0 font-semibold text-readout">{{ value.summary }}</p>
   <RollbackOps :ops="value.ops" :diffs="value.preview?.diffs ?? []" />
   <ApCallout v-if="value.outside.length > 0" tone="caution">
-    {{ plural(value.outside.length, "item") }} changed outside change sets since r{{ to }}. The
-    rollback overwrites them; you'll acknowledge that when you submit.
+    {{ plural(value.outside.length, "part of the configuration", "parts of the configuration") }}
+    changed outside change sets since r{{ to }}. The rollback overwrites them; you'll acknowledge
+    that when you submit.
   </ApCallout>
   <ApCallout v-if="value.preview === null" tone="info"
     >Nothing differs from the live revision.</ApCallout

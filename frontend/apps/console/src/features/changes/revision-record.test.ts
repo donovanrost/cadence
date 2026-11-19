@@ -141,4 +141,43 @@ describe("the four-eyes record in change history (U89, P3 #227)", () => {
     expect(() => p3([approval(ana, { admin_mode: "yes" })])).toThrow();
     expect(() => p3([approval(ana, { separated_from: [{ id: "u1" }] })])).toThrow();
   });
+
+  it("drops a person the server can't name; the act and the time stay (#308, U25)", () => {
+    const nameless = { kind: "user", id: "u9", name: null };
+    expect(
+      text(
+        revisionHeader(
+          revisionSummary({
+            ...preP3,
+            submitted_by: nameless,
+            applied_by: ana,
+            approvals: [approval(ana)],
+          }),
+        ),
+      ),
+    ).toBe("Submitted · approved and applied by Ana R. · 11-17 09:12Z");
+    expect(text(revisionHeader(p3([approval(nameless as typeof ana)], owen)))).toBe(
+      "Submitted by Mira K. · approved · applied by Owen P. · 11-17 09:12Z",
+    );
+    expect(text(revisionHeader(p3([approval(ana), approval(nameless as typeof ana)], owen)))).toBe(
+      "Submitted by Mira K. · approved by Ana R. · applied by Owen P. · 11-17 09:12Z",
+    );
+    expect(
+      text(revisionHeader(revisionSummary({ ...preP3, applied_by: nameless, approvals: [] }))),
+    ).toBe("Applied 2026-11-17 09:12:00Z");
+  });
+
+  it("names Cadence and service identities (U103, #371); a nameless approver in admin mode keeps its tag", () => {
+    const system = { kind: "system", id: null, name: null };
+    const service = { kind: "service", id: "svc-1", name: "Nightly planner" };
+    expect(text(revisionHeader(p3([approval(service as typeof ana)], system as typeof ana)))).toBe(
+      "Submitted by Mira K. · approved by Nightly planner (a service identity) · applied by Cadence · 11-17 09:12Z",
+    );
+    const nameless = { kind: "user", id: "u9", name: null };
+    const row = p3([approval(nameless as typeof ana, { admin_mode: true })], owen);
+    expect(tagged(revisionHeader(row))).toEqual([""]);
+    expect(text(revisionHeader(row))).toBe(
+      "Submitted by Mira K. · approved · applied by Owen P. · 11-17 09:12Z",
+    );
+  });
 });

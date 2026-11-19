@@ -19,13 +19,20 @@ const columns: readonly ApColumn[] = [
   { key: "kind", label: "Kind" },
 ];
 
-/** U89: the approvers' names, comma-separated, each with its ADMIN MODE tag. */
+/**
+ * U89: the approvers' names, comma-separated, each with its ADMIN MODE tag. A nameless approver
+ * drops (#308); when none can be named the cell reads "Not known".
+ */
 function approverParts(row: RevisionSummary) {
   const a = approvedBy(row);
   return a.kind === "approvers"
     ? a.approvers.flatMap((actor, i) => (i === 0 ? [{ actor }] : [{ text: ", " }, { actor }]))
     : [];
 }
+const namedApprovers = (row: RevisionSummary) => {
+  const a = approvedBy(row);
+  return a.kind === "approvers" && a.approvers.length > 0;
+};
 
 function kindLabel(row: RevisionSummary): string {
   switch (row.kind) {
@@ -36,7 +43,8 @@ function kindLabel(row: RevisionSummary): string {
     case "rollback":
       return row.rolls_back_to === null ? "Rollback" : `Rollback to r${row.rolls_back_to}`;
     case "legacy_activation":
-      return "Legacy activation";
+      // #308: matches rollback_crosses_legacy's words; a kind tag (ca-ux).
+      return "Activated outside change sets";
   }
 }
 </script>
@@ -67,10 +75,16 @@ function kindLabel(row: RevisionSummary): string {
       /></span>
     </template>
     <template #cell-applied="{ row }">{{ formatAbsolute(new Date(row.applied_at)) }}</template>
-    <template #cell-by="{ row }">{{ submittedBy(row) ? who(submittedBy(row)) : "—" }}</template>
+    <!-- #308 (U25): a person the server can't name reads "Not known" (muted), never "someone". -->
+    <template #cell-by="{ row }">
+      <template v-if="!submittedBy(row)">—</template>
+      <span v-else-if="who(submittedBy(row)) === null" class="text-text-3">Not known</span>
+      <template v-else>{{ who(submittedBy(row)) }}</template>
+    </template>
     <template #cell-approved="{ row }">
       <template v-if="approvedBy(row).kind === 'not_needed'">Not needed</template>
-      <RecordLine v-else-if="approvedBy(row).kind === 'approvers'" :parts="approverParts(row)" />
+      <RecordLine v-else-if="namedApprovers(row)" :parts="approverParts(row)" />
+      <span v-else-if="approvedBy(row).kind === 'approvers'" class="text-text-3">Not known</span>
       <span v-else class="text-text-3">—</span>
     </template>
     <template #cell-why="{ row }">
@@ -81,7 +95,7 @@ function kindLabel(row: RevisionSummary): string {
         >{{ row.reason ?? row.summary ?? "—" }}</span
       >
     </template>
-    <template #cell-changes="{ row }">{{ plural(row.entry_count, "entry", "entries") }}</template>
+    <template #cell-changes="{ row }">{{ plural(row.entry_count, "change") }}</template>
     <template #cell-kind="{ row }"
       ><span class="text-text-3">{{ kindLabel(row) }}</span></template
     >

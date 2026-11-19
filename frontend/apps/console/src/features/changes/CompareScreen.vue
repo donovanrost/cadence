@@ -29,10 +29,14 @@ const crumbs = computed((): readonly ApCrumb[] => [
       >
       <template v-if="state.status === 'ready'" #subtitle>
         <span class="text-md text-text-3"
-          >{{ plural(state.value.entries.length, "entity", "entities") }} changed after r{{
-            from
+          >{{
+            plural(
+              state.value.entries.length,
+              "part of the configuration",
+              "parts of the configuration",
+            )
           }}
-          up to r{{ to }}.</span
+          changed after r{{ from }}, up to r{{ to }}.</span
         >
       </template>
     </ApPageHeader>
