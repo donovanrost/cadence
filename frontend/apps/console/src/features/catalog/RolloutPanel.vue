@@ -61,7 +61,8 @@ const profileOf = (id: string) =>
   rollout.state.value.status === "ready"
     ? (rollout.state.value.value.profiles.find((p) => p.id === id) ?? null)
     : null;
-const names = computed(() => chosen.value.map((c) => profileOf(c.id)?.name ?? c.id));
+/** U25 (#308): a profile with no name reads "Unknown profile", never its id. */
+const names = computed(() => chosen.value.map((c) => profileOf(c.id)?.name ?? "Unknown profile"));
 /** One chosen profile: the catalog its older-version spacecraft keep ("rev 14"). */
 const from = computed(() =>
   chosen.value.length === 1

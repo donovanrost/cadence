@@ -61,8 +61,9 @@ async function reset(o: ProfileOverride) {
         >{{ overrideCraft(o) }}</RouterLink
       >
       <span class="text-md text-readout">
-        <span :class="fieldOf(o) ? 'text-text-2' : 'font-mono text-text-3'">{{
-          fieldOf(o)?.label ?? o.path
+        <!-- #308 (U25): a path with no field label reads "Other setting"; the path isn't shown. -->
+        <span :class="fieldOf(o) ? 'text-text-2' : 'text-text-3'">{{
+          fieldOf(o)?.label ?? "Other setting"
         }}</span>
         {{ valueText(fieldOf(o), o.spacecraft_value) }} instead of
         {{ valueText(fieldOf(o), o.profile_value) }}

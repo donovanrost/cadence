@@ -13,6 +13,7 @@ import {
 } from "@/ui";
 import AppStatusLine from "./AppStatusLine.vue";
 import AppSurfaceNotice from "./AppSurfaceNotice.vue";
+import { fetchSpacecraftDetail } from "@/features/spacecraft/index.ts";
 import { fetchScopedApps } from "./api.ts";
 import { fetchSurfaceHost } from "./host.ts";
 import type { SaveOutcome } from "./saveOutcome.ts";
@@ -121,14 +122,28 @@ const links = computed((): readonly ApTabLink[] =>
       : { name: "setup.app", params: { appKey: appKey.value, surface: s.surface_id } },
   })),
 );
+/**
+ * #308 (U25): the craft crumb names the craft, "Unknown spacecraft" when it has none, never its
+ * id; it's left out until the read has loaded (as #352).
+ */
+const craft = useRemoteQuery(
+  () =>
+    spacecraftId.value ? { missionId: missionId.value, spacecraftId: spacecraftId.value } : null,
+  fetchSpacecraftDetail,
+);
+const craftCrumb = computed((): ApCrumb | null =>
+  spacecraftId.value && craft.state.value.status === "ready"
+    ? {
+        label: craft.state.value.value.spacecraft.name.trim() || "Unknown spacecraft",
+        to: { name: "setup.spacecraft.one", params: { spacecraftId: spacecraftId.value } },
+      }
+    : null,
+);
 const crumbs = computed((): readonly ApCrumb[] =>
   spacecraftId.value
     ? [
         { label: "Spacecraft", to: { name: "setup.spacecraft" } },
-        {
-          label: spacecraftId.value,
-          to: { name: "setup.spacecraft.one", params: { spacecraftId: spacecraftId.value } },
-        },
+        ...(craftCrumb.value ? [craftCrumb.value] : []),
         { label: name.value },
       ]
     : [{ label: "Apps", to: { name: "setup.apps" } }, { label: name.value }],
