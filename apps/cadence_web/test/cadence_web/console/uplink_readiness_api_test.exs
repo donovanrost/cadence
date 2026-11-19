@@ -223,10 +223,6 @@ defmodule CadenceWeb.Console.UplinkReadinessAPITest do
            } =
              get_data(c, "/command-groups/#{group_id}")
 
-    # #421: a qualifier tick here deleted the hand-written entry before the pass read; paused, the
-    # tick waits until the test ends.
-    if qualifier = Process.whereis(UplinkQualification), do: send(qualifier, :tick)
-
     assert %{"uplink_readiness" => %{"reason" => "provider_conflict"}} =
              get_data(c, "/passes/#{c.reservation.provider_reservation_id}")
 
