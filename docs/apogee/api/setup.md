@@ -511,7 +511,9 @@ The shape is setup-shapes.md §C3, plus `declaration_count`.
   same base as the revision read's `breaking_base` (the model approval gate above).
 - `requested_by`: as the index's run row (C1 above).
 - `diff` (DECISIONS #9 v1, from the two revisions alone): `null` when there's no base or either
-  revision can't be read. Otherwise `{summary: {commands: {before, after, added, changed,
+  revision can't be read: it has no model, its model revision isn't stored for this mission, or its
+  declarations can't be queried (#367: a missing model is never read as an empty one, which would
+  show every item added and 0 breaking). Otherwise `{summary: {commands: {before, after, added, changed,
   removed}, telemetry: {…}, unchanged, total_before, breaking}, changes: [{op, kind, name, change,
   breaking}], truncated}`.
   - `total_before` counts the base revision's commands plus telemetry parameters; `unchanged` is

@@ -29,10 +29,12 @@ defmodule Cadence.Reads.CatalogDiff do
   @max_changes 500
   @max_depth 4
 
+  # LEFT JOIN: a revision with no declarations still gives one row (value NULL), so zero rows
+  # means the revision isn't there (#367), never an empty model.
   @query """
   SELECT d.value
-  FROM mission_model_revisions AS r,
-       jsonb_each(r.revision_document->'value'->'declarations') AS d
+  FROM mission_model_revisions AS r
+  LEFT JOIN LATERAL jsonb_each(r.revision_document->'value'->'declarations') AS d ON TRUE
   WHERE r.organization_id = $1 AND r.mission_id = $2 AND r.revision_id = $3
   """
 
@@ -99,6 +101,11 @@ defmodule Cadence.Reads.CatalogDiff do
 
   defp declarations(organization_id, mission_id, revision_id) do
     case Repo.query(@query, [organization_id, mission_id, revision_id]) do
+      # #367: a missing revision is unreadable. Read as empty, a missing base would make every
+      # item "added" with 0 breaking, hiding what breaks.
+      {:ok, %{rows: []}} ->
+        {:error, :declarations_unavailable}
+
       {:ok, %{rows: rows}} ->
         {:ok,
          for(
