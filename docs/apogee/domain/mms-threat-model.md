@@ -64,6 +64,32 @@ completes; that's harmless, since it's the same as approving before importing.
 
 Merged with ca-security's notes (11-19); one list.
 
+**⚠ Behaviour change first (api-ops 11-19: director and lead see this before the build): automated
+contact-plan approval under 'independent'.**
+- **Today:** a service holding an automation grant with `:submit` and `:approve` plans, submits AND approves its
+  own contact plan. `ContactPlanApprovals.separate_approver/5` skips non-user actors, so nothing refuses it.
+  `fleet_automation_test.exs:138` ("an exact grant plans, approves, and executes once…") covers exactly this. It
+  runs under the default mode, 'independent' (`config/config.exs:43`, `approval_required: true`).
+- **After #280:**
+  - The author's set (the planning service's issuer + rotators) and the approver's set (the same people plus the
+    grant's approver) always overlap.
+  - So under 'independent' a service can never approve a plan it authored itself. With no accountable people on
+    record, it's refused as unknown.
+  - Under 'direct', nothing changes: plans don't refuse self there, and #280 adds no refusal.
+- **What still works under 'independent':**
+  - a person outside the set approves the automated plan; or
+  - a second service whose accountable people (and grant approver) don't overlap the author's approves it.
+  This is in effect approval-sweep Ruling C option 2.
+- **What fails on the dev stack:**
+  - Any mission under 'independent' with a console-issued planning grant that includes `:approve` stops
+    auto-approving its own plans: they wait in `pending_approval` for a person.
+  - No seed issues a grant (none in `dev/`), so only grants issued by hand in the console (`contact_grant_controller`
+    → `Control.PlanningGrants.issue`) are affected. qa can say whether any exist on the dev stack; I don't read it.
+- **Test impact:** `fleet_automation_test.exs:138` must change. Either set the mission to 'direct', or use a
+  second service with a disjoint set. Also add the refusal case.
+- **Console:** the grant form should say that under 'independent' a grant's approve doesn't cover the service's
+  own plans (ux words).
+
 **Rule (ca-security, 11-19):**
 - The accountable set (issuer + every rotator, transitively) REPLACES "self" wherever a kind ALREADY
   refuses self-approval, whatever the mode. It never adds a separation the kind doesn't have; it only
@@ -73,6 +99,8 @@ Merged with ca-security's notes (11-19); one list.
   - Under every mode it applies where the kind always refuses self-approval (activations; commands
     wherever a second GO is required).
 - An approver in the set is refused; an unknown set fails closed.
+- **Stated exactly (api-ops):** #280 widens who counts as "self". It never adds a refusal to a kind or a mode
+  that doesn't refuse self-approval today.
 - Today every check below compares **person ids only**, so a service author is invisible to all of them.
 
 **Who can be a service, and with what:** only `organization_admin` and `mission_admin` can be granted to a
