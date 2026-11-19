@@ -86,6 +86,26 @@ describe("useTabTrap on a mounted sheet", () => {
     w.unmount();
   });
 
+  it("closes on Esc from anywhere while it's up, focus on <body> included", () => {
+    let closed = 0;
+    const Closing = defineComponent({
+      setup() {
+        const root = useTemplateRef<HTMLElement>("root");
+        useTabTrap(root, () => (closed += 1));
+        return () => h("div", { ref: "root" }, [h("input")]);
+      },
+    });
+    const w = mount(Closing, { attachTo: document.body });
+    document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(closed).toBe(1);
+    // Not while an IME is composing (dashboards #492).
+    document.body.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, isComposing: true }),
+    );
+    expect(closed).toBe(1);
+    w.unmount();
+  });
+
   it("stops listening once the sheet is gone", () => {
     const w = mount(Sheet, { attachTo: document.body });
     w.unmount();
