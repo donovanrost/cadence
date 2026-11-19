@@ -2889,7 +2889,8 @@ and should never fire; when it does, something went round the product. NO-GO, se
   the 409). When it's true, `GO` and `GO excluding…` are disabled before a click, with the line as their A6 reason,
   less "Not released:" since nothing was tried: "This group's commands changed after it was submitted (12 then, 13
   now), so it isn't what was reviewed. Give it NO-GO and submit the commands again. Tell the team that runs Cadence
-  for you: a group shouldn't change after it's submitted." `NO-GO`, send back and abort stay. Without the counts the
+  for you: a group shouldn't change after it's submitted." The reason sits muted under the GO buttons and as their
+  description. U92's line has no "nothing was released" ending to drop. `NO-GO`, send back and abort stay enabled. Without the counts the
   bracket goes. When the flag is missing (an older server) the console blocks nothing up front and the 409 stays the
   backstop; it never guesses from its own member list (U20).
 - **Nowhere else:** it isn't on Now or in the audit by itself; only at GO.
