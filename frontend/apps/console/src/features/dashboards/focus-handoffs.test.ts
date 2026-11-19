@@ -51,6 +51,7 @@ describe("Library Delete refused as in use", () => {
       props: { missionId: missionId("m1") },
       attachTo: document.body,
     });
+    // oxlint-disable-next-line typescript/no-unsafe-call, typescript/no-unsafe-member-access -- vue-tsc checks the exposed open(); the lint type service can't resolve SFC instances.
     w.vm.open({ id: "i1", name: "Battery", latest_version: 2, updated_at: null });
     await flushPromises();
     button("Delete")?.focus();

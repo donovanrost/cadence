@@ -101,7 +101,9 @@ async function expectTrapped(page: Page, sheet: Locator, nonModal: boolean): Pro
       const where = await sheet.evaluate((d) => {
         const active = document.activeElement;
         if (active === null || active === document.body)
-          return d instanceof HTMLDialogElement && d.matches(":modal") ? "browser" : "<body> (lost)";
+          return d instanceof HTMLDialogElement && d.matches(":modal")
+            ? "browser"
+            : "<body> (lost)";
         return d.contains(active)
           ? "inside"
           : `${active.tagName.toLowerCase()} "${(active.textContent ?? "").trim().slice(0, 40)}"`;

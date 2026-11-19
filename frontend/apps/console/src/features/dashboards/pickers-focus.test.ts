@@ -24,7 +24,10 @@ afterEach(() => {
 });
 const live = (w: { find: (s: string) => { text: () => string } }) =>
   w.find('[aria-live="polite"]').text();
-const typeSearch = async (w: ReturnType<typeof mount>, text: string) => {
+const typeSearch = async (
+  w: { find: (s: string) => { setValue: (v: string) => Promise<void> } },
+  text: string,
+) => {
   await w.find('input[type="search"]').setValue(text);
   await flushPromises();
 };
