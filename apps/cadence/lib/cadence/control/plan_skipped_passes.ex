@@ -38,10 +38,13 @@ defmodule Cadence.Control.PlanSkippedPasses do
           expiry_margin_seconds: ExpiredPasses.margin_seconds()
         }
 
+      # Only when the plan or version is gone (the read 404s first). The contract keeps
+      # expired_digest always present: the empty set's, and the approve recomputes and fails
+      # closed anyway (domain's review).
       {:error, _missing} ->
         %{
           expired: nil,
-          expired_digest: nil,
+          expired_digest: ExpiredPasses.digest([]),
           next_expiry_at: nil,
           expiry_margin_seconds: ExpiredPasses.margin_seconds()
         }

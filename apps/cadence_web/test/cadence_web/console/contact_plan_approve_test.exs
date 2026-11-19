@@ -358,6 +358,17 @@ defmodule CadenceWeb.Console.ContactPlanApproveTest do
       assert approvals(c, c.plan_id) == []
     end
 
+    # api-ops' review: authorization comes before the closed-set checks, so neither 409 (which
+    # carries the set) can answer someone who may not approve.
+    test "a member's approve with a closed pass is 403 forbidden, not a 409 with the set", c do
+      close!(c.closed)
+      conn = post_as(c, c.member, c.plan_id, "approve", %{"operation_id" => "op-member-closed"})
+
+      assert %{"code" => "forbidden"} = error = json_response(conn, 403)["error"]
+      refute Map.has_key?(error["details"] || %{}, "expired")
+      assert approvals(c, c.plan_id) == []
+    end
+
     test "a decision with nothing skipped shows no skipped set in the history", c do
       approve!(c, c.admin, c.plan_id, "op-none")
       assert %{"skipped" => nil} = approved_history_entry(c, c.plan_id)
