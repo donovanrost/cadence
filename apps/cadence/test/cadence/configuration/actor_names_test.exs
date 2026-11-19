@@ -55,9 +55,11 @@ defmodule Cadence.Configuration.ActorNamesTest do
         ] do
       assert {:ok, view} = read.()
       refute inspect(view) =~ "@example.test"
+      refute inspect(view) =~ outsider
     end
 
-    assert {:ok, %{applied_by: %{id: ^outsider, name: nil}}} =
+    # Neither the name nor the id reaches the organization (ca-security on #487).
+    assert {:ok, %{applied_by: %{id: nil, name: nil}}} =
              Configuration.get_revision(c.alice, c.mission, 3)
   end
 
@@ -84,9 +86,19 @@ defmodule Cadence.Configuration.ActorNamesTest do
 
     assert %{
              a: %{name: "Config bot"},
-             b: %{name: nil},
+             b: %{id: nil, name: nil},
              c: %{name: "Cadence"}
            } = ActorNames.named(view, c.mission)
+  end
+
+  test "with no head to name anyone under, nobody is named or identified" do
+    view = [
+      %{kind: "user", id: "someone", name: "Stored"},
+      %{kind: "system", id: "cadence", name: "Cadence"}
+    ]
+
+    assert [%{kind: "user", id: nil, name: nil}, %{kind: "system", name: "Cadence"}] =
+             ActorNames.named(view, "mission-without-head")
   end
 
   defp stage_and_apply(scope, mission, name) do

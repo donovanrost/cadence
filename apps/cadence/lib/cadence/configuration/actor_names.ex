@@ -8,7 +8,14 @@ defmodule Cadence.Configuration.ActorNames do
   The `name` stored in a change set's or revision's actor document is never used for a person or
   a service. Records written before #471 stored `display_name || email`, so the stored name can
   be an email (lead 11-19: old rows read through this, no reset). Actors are `%{kind, id, name}`
-  (`Status`'s shape); every actor in a view is named with one batched lookup per kind.
+  (`Status`'s shape); every actor in a view is named with one batched lookup per kind. A person
+  or service it doesn't name gets `id: nil` too, keeping `kind`, so their id doesn't reach the
+  organization either (ca-security, api-ops on #487).
+
+  Guard: any map in the view with exactly the keys `kind`, `id` and `name` is treated as an
+  actor. Only `kind` "user" and "service" are looked up; any other kind (Cadence's "system", or
+  an entity shaped like an actor) passes through unchanged. A read model must not use that exact
+  three-key shape with kind "user" or "service" for anything but an actor.
   """
 
   import Ecto.Query
@@ -53,17 +60,25 @@ defmodule Cadence.Configuration.ActorNames do
   defp collect(list, acc) when is_list(list), do: Enum.reduce(list, acc, &collect/2)
   defp collect(_other, acc), do: acc
 
-  defp replace(%{kind: kind, id: id, name: name} = actor, names) when map_size(actor) == 3,
-    do: %{actor | name: name_for(kind, id, name, names)}
+  defp replace(%{kind: kind, id: id, name: name} = actor, names) when map_size(actor) == 3 do
+    {id, name} = name_for(kind, id, name, names)
+    %{actor | id: id, name: name}
+  end
 
   defp replace(%_struct{} = struct, _names), do: struct
   defp replace(%{} = map, names), do: Map.new(map, fn {k, v} -> {k, replace(v, names)} end)
   defp replace(list, names) when is_list(list), do: Enum.map(list, &replace(&1, names))
   defp replace(other, _names), do: other
 
-  defp name_for("user", id, _stored, names), do: Map.get(names.users, id)
-  defp name_for("service", id, _stored, names), do: Map.get(names.services, id)
+  # `{id, name}`. A person or service not named in this organization (a platform admin, someone
+  # who has left, another organization's service, or a member with no display name) keeps
+  # neither: their id doesn't reach the organization either (ca-security on #487, as #474 does).
+  defp name_for("user", id, _stored, names), do: known(id, Map.get(names.users, id))
+  defp name_for("service", id, _stored, names), do: known(id, Map.get(names.services, id))
   # Cadence's own system actor, and any other `{kind, id, name}` map in a view (an entity named
-  # by kind, not an actor), keep their name: only people and services are looked up.
-  defp name_for(_other, _id, stored, _names), do: stored
+  # by kind, not an actor), keep their id and name: only people and services are looked up.
+  defp name_for(_other, id, stored, _names), do: {id, stored}
+
+  defp known(id, name) when is_binary(name), do: {id, name}
+  defp known(_id, nil), do: {nil, nil}
 end
