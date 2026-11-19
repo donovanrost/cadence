@@ -102,12 +102,14 @@ describe("Now's queue, read item by item (ux U86)", () => {
     ]);
     expect(w.text()).toContain("6 open · sorted by urgency");
     expect(w.findAll("ul > li")).toHaveLength(5);
-    const line = w.find('[role="status"]');
+    const line = w.find('[role="status"]:not(.sr-only)');
     expect(line.text()).toContain(unshownWords(1));
     expect(line.find("summary").text()).toBe("Technical details");
     expect(line.find("details p").text()).toBe("attention, contact_start, i-0");
     expect(line.find("button").text()).toBe("Reload");
     expect(w.html().indexOf(unshownWords(1))).toBeLessThan(w.html().indexOf("<ul"));
+    // #243 B6: the panel's command-outcome regions are always present (and empty until an act).
+    expect(w.findAll('.sr-only[role="status"], .sr-only[role="alert"]')).toHaveLength(2);
   });
 
   it("all dropped: the line alone, never 'Nothing needs you'", () => {
@@ -119,7 +121,7 @@ describe("Now's queue, read item by item (ux U86)", () => {
     expect(w.text()).not.toContain("Nothing needs you");
     expect(
       w
-        .find('[role="status"]')
+        .find('[role="status"]:not(.sr-only)')
         .findAll("details p")
         .map((p) => p.text()),
     ).toEqual(["attention, contact_start, i-1", "attention, contact_start, i-2"]);
