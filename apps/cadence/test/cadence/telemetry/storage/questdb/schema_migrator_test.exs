@@ -25,6 +25,12 @@ defmodule Cadence.Telemetry.Storage.QuestDB.SchemaMigratorTest do
                name: "add_telemetry_observation_identity_id",
                sql: observation_identity_sql,
                checksum: observation_identity_checksum
+             },
+             %{
+               version: "20261117000000",
+               name: "add_telemetry_observation_provenance_columns",
+               sql: provenance_sql,
+               checksum: provenance_checksum
              }
            ] = migrations
 
@@ -43,6 +49,24 @@ defmodule Cadence.Telemetry.Storage.QuestDB.SchemaMigratorTest do
              "ADD COLUMN IF NOT EXISTS observation_identity_id STRING"
 
     assert is_binary(observation_identity_checksum)
+
+    # DECISIONS #103: one additive statement; CAPACITY per the design's tenant-mix sizing.
+    assert provenance_sql =~ "ALTER TABLE telemetry_observations ADD COLUMN IF NOT EXISTS"
+
+    for column <- [
+          "mission_model_revision_id SYMBOL CAPACITY 16384 CACHE",
+          "runtime_plan_id SYMBOL CAPACITY 32768 CACHE",
+          "producer_kind SYMBOL CAPACITY 256 CACHE",
+          "producer_id SYMBOL CAPACITY 16384 CACHE",
+          "semantic_id SYMBOL CAPACITY 262144 NOCACHE",
+          "qualified_name SYMBOL CAPACITY 262144 NOCACHE",
+          "identity_ref VARCHAR",
+          "binding_rule_derived BOOLEAN",
+          "packet_refs_derived BOOLEAN"
+        ],
+        do: assert(provenance_sql =~ column)
+
+    assert is_binary(provenance_checksum)
   end
 
   test "migration plan sorts files by version and ignores non-migration sql files" do

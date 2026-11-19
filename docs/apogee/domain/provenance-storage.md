@@ -250,7 +250,13 @@ since a resize is cheap on 9.1+ and a fixed-capacity bring-your-own instance hol
   characters, UTF-16) and ~74–124 per `qualified_name`. At 262,144 values that is ~46 MB and ≤33
   MB per instance, once, against ~214 GiB a day of rows at 1,000 spacecraft.
 - **The capacity-sized hash index cost** is checked on the copy in the build's QuestDB test, not
-  assumed.
+  assumed. So is the write cost of `NOCACHE` (domain's review): ingest rows/s for `semantic_id`
+  `CACHE` vs `NOCACHE` at a pass-like batch. If `NOCACHE` costs measurably, `semantic_id` goes
+  `CACHE` (~46 MB of heap is acceptable on managed).
+- **Past year 3** the shared dictionaries keep growing (mix 3 adds ~30k names a year from churn
+  alone, plus new tenants) and are never pruned. Auto-scale covers that on managed; the real bound
+  is the next table generation (D or later). B's reader keeps filtering by `point_id`, never by
+  `semantic_id`, so `NOCACHE` stays off the read path.
 - **Not in B (a note for D's slot):** the existing per-point `SYMBOL`s (`point_id`,
   `observable_id`, `packet_definition_id`) are still at capacity 256. Managed instances auto-scale.
   A bring-your-own instance on QuestDB before 9.1 with more than ~200 points is already past them,
