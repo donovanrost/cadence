@@ -210,7 +210,7 @@ describe("booking windows closed since the approver looked (#273, #340)", () => 
     expect(
       approveRefusal(changed(set(["a", "b", "c"])), { ...who, shown, proposal: true }).text,
     ).toBe(
-      "Not applied: the booking window closed for 2 more of the proposal's passes after you opened it, so what you'd approve changed. Nothing was booked. Check the list and apply it again.",
+      "Not applied: the booking window closed for 2 more of the proposal's passes after you opened it, so what you'd apply changed. Nothing was booked. Check the list and apply it again.",
     );
   });
   it("words step 1's interim refusal without a count", () => {
