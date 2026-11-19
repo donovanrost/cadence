@@ -2308,18 +2308,18 @@ change set like any override. There's no separate routes editor.
       staged part of this change set or sent it for review, so another person reviews it. Your approval wasn't
       recorded."; Send back "Not sent back: you staged part of this change set or sent it for review, so another
       person reviews it. Nothing changed."
-    - **Approve refused by the checks** (#262, ca-ux 11-19, ux's order; the review runs the checks again, and these
-      used to answer 500). Nothing is written, so the set stays in review and each line ends with U95's "Your
-      approval wasn't recorded.":
+    - **Approve refused by the checks** (#262, ca-ux 11-19; the review runs the checks again, and these used to
+      answer 500). Nothing is written, so the set stays in review, and each line says U95's "Your approval wasn't
+      recorded." after the why (#375):
       - Up front: when the read already shows a blocking hold, Approve is disabled with the A6/A7 reason "A blocking
         hold stands; see the checks." The 409 stays the backstop.
       - 409 `holds_blocking` (approve's own line; the stage/apply line stays): "Not approved: a blocking hold stands,
-        so nothing was applied and the change set stays in review. Approve it once the hold clears; the checks show
-        it. Your approval wasn't recorded." The holds show in the checks, not in the line. After it, Approve is disabled
+        so nothing was applied and the change set stays in review. Your approval wasn't recorded. Approve it once the
+        hold clears; the checks show it." The holds show in the checks, not in the line. After it, Approve is disabled
         with the up-front reason until a reload shows the hold cleared.
       - 503 `preview_failed` (Cadence couldn't run the checks: a database or connection error, a server fault):
         "Not approved: Cadence couldn't run the checks, so nothing was applied and the change set stays in review.
-        Try again; if it keeps happening, tell the team that runs Cadence for you. Your approval wasn't recorded."
+        Your approval wasn't recorded. Try again; if it keeps happening, tell the team that runs Cadence for you."
         Unlike U95's usual rule, Approve stays enabled after it, because trying again is the fix. The cause goes in
         Technical details, never in the line. Send back doesn't run the checks, so it never meets this.
       - K3's submit meeting 503 `preview_failed` (it used to fall to a generic 422), opened by the act the button
