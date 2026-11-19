@@ -61,30 +61,28 @@ defmodule Cadence.Governance.BindingSetStorage do
       Map.new(instances, &{&1.capability_instance_id, &1.source_endpoint_ref})
 
     with :ok <- placeholder_absent(instances ++ rules),
-         {:ok, rule_groups} <- group_rules(rules, endpoint_by_instance) do
-      instances
-      |> Enum.group_by(& &1.source_endpoint_ref)
-      |> Enum.sort_by(fn {endpoint, _rows} -> endpoint || "" end)
-      |> Enum.reduce_while({:ok, %{}, []}, fn {endpoint, group}, {:ok, artifacts, members} ->
-        case template(endpoint, group, Map.get(rule_groups, endpoint, [])) do
-          {:ok, template} ->
-            sha = ContentHash.term_sha256(template)
-            member = %{sha: sha, source_endpoint_ref: endpoint}
-            {:cont, {:ok, Map.put(artifacts, sha, template), [member | members]}}
-
-          {:error, reason} ->
-            {:halt, {:error, reason}}
-        end
-      end)
-      |> case do
-        {:ok, artifacts, members} ->
-          {:ok, Enum.map(artifacts, fn {sha, template} -> %{sha: sha, template: template} end),
-           Enum.reverse(members)}
-
-        error ->
-          error
-      end
+         {:ok, rule_groups} <- group_rules(rules, endpoint_by_instance),
+         {:ok, artifacts, members} <- templates(instances, rule_groups) do
+      {:ok, Enum.map(artifacts, fn {sha, template} -> %{sha: sha, template: template} end),
+       Enum.reverse(members)}
     end
+  end
+
+  defp templates(instances, rule_groups) do
+    instances
+    |> Enum.group_by(& &1.source_endpoint_ref)
+    |> Enum.sort_by(fn {endpoint, _rows} -> endpoint || "" end)
+    |> Enum.reduce_while({:ok, %{}, []}, fn {endpoint, group}, {:ok, artifacts, members} ->
+      case template(endpoint, group, Map.get(rule_groups, endpoint, [])) do
+        {:ok, template} ->
+          sha = ContentHash.term_sha256(template)
+          member = %{sha: sha, source_endpoint_ref: endpoint}
+          {:cont, {:ok, Map.put(artifacts, sha, template), [member | members]}}
+
+        {:error, reason} ->
+          {:halt, {:error, reason}}
+      end
+    end)
   end
 
   @doc "The rows `members` stand for, from their artifacts' templates (by sha)."

@@ -34,6 +34,7 @@ defmodule Cadence.Governance do
   alias Cadence.Governance.Persistence, as: GovernancePersistence
   alias Cadence.Management.Comms.SourceEndpointReferences
   alias Cadence.Missions
+  alias Cadence.Persistence.OrganizationScope
   alias Cadence.Repo
   alias Cadence.Telemetry.{FieldDefinition, PacketDefinition}
 
@@ -533,15 +534,37 @@ defmodule Cadence.Governance do
   # through the storage codec, equal the rows the rows form stores, and both hydrate to the same
   # content_sha256. Anything else stores rows, with a log line and a telemetry count.
   defp plan_storage(%BindingSet{} = binding_set) do
+    # The row takes its organization from the mission when the set doesn't carry one
+    # (OrganizationScope), and a read hydrates with the row's: the guard uses the same.
+    organization_id =
+      binding_set.organization_id ||
+        OrganizationScope.organization_id_for_mission(binding_set.mission_id)
+
+    if is_binary(organization_id),
+      do: plan_membership(binding_set, organization_id),
+      else: unscoped(binding_set)
+  end
+
+  # A version with no organization (its mission has no row) can't have tenant-scoped artifacts,
+  # so it stays rows. Not a guard failure: every product path persists through
+  # persist_binding_set/2, which requires the mission in its organization first.
+  defp unscoped(%BindingSet{} = binding_set) do
+    Logger.debug(
+      "binding set #{binding_set.binding_set_id} v#{binding_set.version} has no organization; stored as rows"
+    )
+
+    :rows
+  end
+
+  defp plan_membership(%BindingSet{} = binding_set, organization_id) do
     shell = %BindingSetRow{
       binding_set_id: binding_set.binding_set_id,
-      organization_id: binding_set.organization_id,
+      organization_id: organization_id,
       mission_id: binding_set.mission_id,
       version: binding_set.version
     }
 
-    with true <- is_binary(binding_set.organization_id) || {:error, :organization_required},
-         {:ok, instance_rows, rule_rows} <- GovernancePersistence.binding_rows(binding_set),
+    with {:ok, instance_rows, rule_rows} <- GovernancePersistence.binding_rows(binding_set),
          {instances, rules} = reference = BindingSetStorage.as_stored(instance_rows, rule_rows),
          {:ok, artifacts, members} <- BindingSetStorage.compress(instances, rules),
          templates = Map.new(artifacts, &{&1.sha, BindingSetStorage.codec(&1.template)}),
