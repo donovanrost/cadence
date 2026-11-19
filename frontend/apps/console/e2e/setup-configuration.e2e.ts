@@ -11,6 +11,7 @@ import { expect, test } from "./support/fixtures.ts";
 // cluster (docs/apogee/qa/runbook.md); #242 brings these specs into CI.
 
 const CRAFT = "spacecraft-earendil-001";
+// The read and anything under it (the packets route too; the read side never calls it).
 const WORKSPACE = `**/spacecraft/${CRAFT}/configuration/workspace**`;
 const screenPath = (section: string) =>
   missionPath(`setup/spacecraft/${CRAFT}/configuration/${section}`);
@@ -68,6 +69,24 @@ test.describe("Setup spacecraft configuration (B)", () => {
     await expect(page.getByRole("table")).toBeVisible();
     await expectAccessible(page);
     await attachScreens(page, testInfo, "changes");
+  });
+
+  test("not set up: nothing is active yet, with the steps", async ({ page }, testInfo) => {
+    await answerWorkspace(page, { active: null, saved_version: null, review: null });
+    await openConsole(page, screenPath("overview"));
+    await expect(
+      page.getByText(/^Nothing runs for EARENDIL-001 until its configuration is activated/),
+    ).toBeVisible();
+    await attachScreens(page, testInfo, "not-set-up");
+  });
+
+  test("a craft that isn't on this mission (404) says so, as a state", async ({
+    page,
+  }, testInfo) => {
+    await page.route(WORKSPACE, (route) => route.fulfill(jsonProblem(404, "spacecraft_not_found")));
+    await openConsole(page, screenPath("overview"));
+    await expect(page.getByText("This spacecraft isn't on this mission.")).toBeVisible();
+    await attachScreens(page, testInfo, "not-on-mission");
   });
 
   test("can't view: a 403 on the read says so, with who grants access (U98)", async ({
