@@ -92,7 +92,9 @@ describe("U94 status, steps and fields", () => {
     expect(catalogWord(read(), "cr-14")).toBe("EARENDIL FSW · catalog rev 14");
     expect(catalogWord(s, null)).toBe("No catalog revision");
     expect(apidsWord([42, 43])).toBe("0x2A, 0x2B");
-    expect(framingWord(s.document.protocol)).toBe("TM ↓ / TC ↑ · 1,115 B frames · headers 0/0/4 B");
+    expect(framingWord(s.document.protocol)).toBe(
+      "TM / TC · 1,115-byte frames · secondary header 0 bytes · insert zone 0 bytes · OCF 4 bytes",
+    );
   });
 });
 

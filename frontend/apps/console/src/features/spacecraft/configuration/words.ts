@@ -75,13 +75,17 @@ export const apidsWord = (apids: readonly number[]) =>
     : "None";
 
 const LINK = { tm: "TM", aos: "AOS", uslp: "USLP", tc: "TC" } as const;
-/** "TM ↓ / TC ↑ · 1,115 B frames · headers 0/0/4 B" (protocol terms stay, U94). */
+/**
+ * "TM / TC · 1,115-byte frames · secondary header 0 bytes · insert zone 0 bytes · OCF 4 bytes"
+ * (protocol terms stay, U94; no arrows, sizes named, ux #349).
+ */
 export function framingWord(p: ConfigurationDocument["protocol"]): string {
   if (!p) return "Not set";
   const down = vocabularyText(p.downlink, LINK);
   const up = vocabularyText(p.uplink, LINK);
   const truncated = p.truncated_primary_header ? " · truncated primary header" : "";
-  return `${down} ↓ / ${up} ↑ · ${p.frame_size.toLocaleString("en-US")} B frames · headers ${p.secondary_header_length}/${p.insert_zone_length}/${p.ocf_length} B${truncated}`;
+  const bytes = (n: number) => `${n.toLocaleString("en-US")} ${n === 1 ? "byte" : "bytes"}`;
+  return `${down} / ${up} · ${p.frame_size.toLocaleString("en-US")}-byte frames · secondary header ${bytes(p.secondary_header_length)} · insert zone ${bytes(p.insert_zone_length)} · OCF ${bytes(p.ocf_length)}${truncated}`;
 }
 
 /**
