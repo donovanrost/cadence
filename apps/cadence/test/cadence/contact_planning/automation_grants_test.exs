@@ -21,6 +21,8 @@ defmodule Cadence.ContactPlanning.AutomationGrantsTest do
       persist_mission_scope(@organization_id, @mission_id)
 
     admin_scope = scope(organization, :organization_admin)
+    # #283: a second org admin approves proposals under 'independent'.
+    approver_scope = scope(organization, :organization_admin, "approver")
     member_scope = scope(organization, :member)
 
     assert {:ok, policy, policy_version} =
@@ -55,6 +57,7 @@ defmodule Cadence.ContactPlanning.AutomationGrantsTest do
 
     %{
       admin_scope: admin_scope,
+      approver_scope: approver_scope,
       member_scope: member_scope,
       service_scope: service_scope,
       service_identity: issued.service_identity,
@@ -79,6 +82,11 @@ defmodule Cadence.ContactPlanning.AutomationGrantsTest do
                now: @now
              )
 
+    # #283: under 'independent' the grant is proposed and authorizes nothing until approved.
+    assert grant.lifecycle_state == :proposed
+    assert grant.proposed_by == context.admin_scope.user.user_id
+    assert {:ok, grant} = approve(context, grant, @now)
+
     assert grant.lifecycle_state == :active
     assert grant.service_identity_id == context.service_identity.service_identity_id
     assert grant.fleet_planning_policy_id == context.policy.fleet_planning_policy_id
@@ -89,7 +97,7 @@ defmodule Cadence.ContactPlanning.AutomationGrantsTest do
     assert grant.maximum_estimated_cost_micros == 500
     assert grant.currency == "USD"
     assert grant.maximum_execution_concurrency == 2
-    assert grant.approved_by == context.admin_scope.user.user_id
+    assert grant.approved_by == context.approver_scope.user.user_id
     assert grant.content_sha256 =~ ~r/\A[0-9a-f]{64}\z/
 
     assert {:ok, ^grant} =
@@ -147,13 +155,7 @@ defmodule Cadence.ContactPlanning.AutomationGrantsTest do
 
   test "service authorization requires exact action, evidence, time, actor, and policy",
        context do
-    assert {:ok, grant} =
-             AutomationGrants.issue(
-               context.admin_scope,
-               @mission_id,
-               grant_attrs(context.service_identity),
-               now: @now
-             )
+    grant = active!(context)
 
     assert {:ok, ^grant} =
              AutomationGrants.authorize(
@@ -236,24 +238,9 @@ defmodule Cadence.ContactPlanning.AutomationGrantsTest do
              )
   end
 
-  test "revocation is exact, durable, and immediately stops the service", context do
-    assert {:ok, grant} =
-             AutomationGrants.issue(
-               context.admin_scope,
-               @mission_id,
-               grant_attrs(context.service_identity),
-               now: @now
-             )
-
-    assert {:error, :stale_automation_grant_hash} =
-             AutomationGrants.revoke(
-               context.admin_scope,
-               @mission_id,
-               grant.automation_grant_id,
-               String.duplicate("0", 64),
-               "Wrong hash",
-               now: @now
-             )
+  # #283 (ca-security): a revoke is a tightening and is never refused, even on a stale hash.
+  test "revocation is durable and immediately stops the service", context do
+    grant = active!(context)
 
     assert {:ok, revoked} =
              AutomationGrants.revoke(
@@ -281,13 +268,7 @@ defmodule Cadence.ContactPlanning.AutomationGrantsTest do
   end
 
   test "policy drift invalidates a previously active grant", context do
-    assert {:ok, grant} =
-             AutomationGrants.issue(
-               context.admin_scope,
-               @mission_id,
-               grant_attrs(context.service_identity),
-               now: @now
-             )
+    grant = active!(context)
 
     assert {:ok, _draft, version_two} =
              FleetPlanningPolicies.version(
@@ -417,6 +398,30 @@ defmodule Cadence.ContactPlanning.AutomationGrantsTest do
     assert version.content_sha256 == context.policy_version.content_sha256
   end
 
+  defp approve(context, grant, now),
+    do:
+      AutomationGrants.approve(
+        context.approver_scope,
+        @mission_id,
+        grant.automation_grant_id,
+        grant.content_sha256,
+        now: now
+      )
+
+  # A grant proposed by the admin and approved by the second admin (#283).
+  defp active!(context, overrides \\ %{}) do
+    assert {:ok, proposed} =
+             AutomationGrants.issue(
+               context.admin_scope,
+               @mission_id,
+               grant_attrs(context.service_identity, overrides),
+               now: @now
+             )
+
+    assert {:ok, grant} = approve(context, proposed, @now)
+    grant
+  end
+
   defp grant_attrs(service_identity, overrides \\ %{}) do
     Map.merge(
       %{
@@ -464,12 +469,14 @@ defmodule Cadence.ContactPlanning.AutomationGrantsTest do
     }
   end
 
-  defp scope(organization, role) do
+  defp scope(organization, role, name \\ nil) do
+    who = name || role
+
     user =
       User.new(%{
-        user_id: "automation-grant-user-#{role}",
-        email: "automation-grant-#{role}@example.test",
-        display_name: "Automation Grant #{role}"
+        user_id: "automation-grant-user-#{who}",
+        email: "automation-grant-#{who}@example.test",
+        display_name: "Automation Grant #{who}"
       })
 
     membership =

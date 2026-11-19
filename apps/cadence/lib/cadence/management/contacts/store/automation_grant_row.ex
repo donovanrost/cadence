@@ -32,6 +32,17 @@ defmodule Cadence.Management.Contacts.Store.AutomationGrantRow do
     field(:revoked_by, :string)
     field(:revoked_at, :utc_datetime_usec)
     field(:revocation_reason, :string, default: "")
+    field(:validity_seconds, :integer)
+    field(:proposed_by, :string)
+    field(:proposed_at, :utc_datetime_usec)
+    field(:proposal_expires_at, :utc_datetime_usec)
+    field(:approval_policy, :map)
+    field(:rejected_by, :string)
+    field(:rejected_at, :utc_datetime_usec)
+    field(:rejection_reason, :string)
+    field(:withdrawn_by, :string)
+    field(:withdrawn_at, :utc_datetime_usec)
+    field(:replaces_grant_id, :string)
 
     timestamps()
   end
@@ -58,17 +69,67 @@ defmodule Cadence.Management.Contacts.Store.AutomationGrantRow do
     :content_sha256,
     :revoked_by,
     :revoked_at,
-    :revocation_reason
+    :revocation_reason,
+    :validity_seconds,
+    :proposed_by,
+    :proposed_at,
+    :proposal_expires_at,
+    :approval_policy,
+    :rejected_by,
+    :rejected_at,
+    :rejection_reason,
+    :withdrawn_by,
+    :withdrawn_at,
+    :replaces_grant_id
   ]
 
-  @required @fields --
-              [
-                :maximum_estimated_cost_micros,
-                :currency,
-                :revoked_by,
-                :revoked_at,
-                :revocation_reason
-              ]
+  # Always present; the rest depends on the state (AutomationGrant's shape checks, #283).
+  @required [
+    :automation_grant_id,
+    :organization_id,
+    :mission_id,
+    :service_identity_id,
+    :fleet_planning_policy_id,
+    :fleet_planning_policy_version,
+    :allowed_actions,
+    :maximum_horizon_seconds,
+    :maximum_contacts,
+    :maximum_execution_concurrency,
+    :validity_seconds,
+    :lifecycle_state,
+    :proposed_by,
+    :proposed_at,
+    :proposal_expires_at,
+    :approval_reason,
+    :content_sha256
+  ]
+
+  # The state-changing fields a decision writes onto the projection row; every change is built
+  # from a validated AutomationGrant (`transition_changeset/2`), never from caller params.
+  @transition_fields [
+    :lifecycle_state,
+    :approved_by,
+    :approved_at,
+    :approval_policy,
+    :valid_from,
+    :valid_until,
+    :rejected_by,
+    :rejected_at,
+    :rejection_reason,
+    :withdrawn_by,
+    :withdrawn_at,
+    :revoked_by,
+    :revoked_at,
+    :revocation_reason,
+    :allowed_actions,
+    :maximum_horizon_seconds,
+    :maximum_contacts,
+    :maximum_estimated_cost_micros,
+    :currency,
+    :maximum_execution_concurrency,
+    :validity_seconds,
+    :content_sha256
+  ]
 
   @spec changeset(AutomationGrant.t()) :: Ecto.Changeset.t()
   def changeset(%AutomationGrant{} = grant) do
@@ -83,11 +144,15 @@ defmodule Cadence.Management.Contacts.Store.AutomationGrantRow do
     )
   end
 
-  @spec revocation_changeset(struct(), map()) :: Ecto.Changeset.t()
-  def revocation_changeset(%__MODULE__{} = row, attrs) do
+  @doc """
+  The row moved to `grant`'s state (approve, reject, withdraw, revoke, narrow). `grant` is the
+  row's own grant after the transition, built and shape-checked by AutomationGrant.new/1, so the
+  row can only hold a valid state; the identity and scope fields never change.
+  """
+  @spec transition_changeset(struct(), AutomationGrant.t()) :: Ecto.Changeset.t()
+  def transition_changeset(%__MODULE__{} = row, %AutomationGrant{} = grant) do
     row
-    |> cast(attrs, [:lifecycle_state, :revoked_by, :revoked_at, :revocation_reason])
-    |> validate_required([:lifecycle_state, :revoked_by, :revoked_at, :revocation_reason])
+    |> cast(Map.take(domain_attrs(grant), @transition_fields), @transition_fields)
     |> common_validations()
   end
 
@@ -116,6 +181,17 @@ defmodule Cadence.Management.Contacts.Store.AutomationGrantRow do
       revoked_by: row.revoked_by,
       revoked_at: row.revoked_at,
       revocation_reason: row.revocation_reason,
+      validity_seconds: row.validity_seconds,
+      proposed_by: row.proposed_by,
+      proposed_at: row.proposed_at,
+      proposal_expires_at: row.proposal_expires_at,
+      approval_policy: row.approval_policy,
+      rejected_by: row.rejected_by,
+      rejected_at: row.rejected_at,
+      rejection_reason: row.rejection_reason,
+      withdrawn_by: row.withdrawn_by,
+      withdrawn_at: row.withdrawn_at,
+      replaces_grant_id: row.replaces_grant_id,
       inserted_at: row.inserted_at,
       updated_at: row.updated_at
     })
@@ -128,7 +204,8 @@ defmodule Cadence.Management.Contacts.Store.AutomationGrantRow do
     |> validate_number(:maximum_contacts, greater_than: 0)
     |> validate_optional_non_negative(:maximum_estimated_cost_micros)
     |> validate_number(:maximum_execution_concurrency, greater_than: 0)
-    |> validate_inclusion(:lifecycle_state, ~w(active revoked))
+    |> validate_inclusion(:lifecycle_state, ~w(proposed active rejected revoked withdrawn))
+    |> validate_number(:validity_seconds, greater_than: 0)
     |> validate_subset(:allowed_actions, ~w(plan repair submit approve execute))
     |> validate_length(:allowed_actions, min: 1)
     |> validate_validity()
@@ -184,7 +261,18 @@ defmodule Cadence.Management.Contacts.Store.AutomationGrantRow do
       content_sha256: grant.content_sha256,
       revoked_by: grant.revoked_by,
       revoked_at: grant.revoked_at,
-      revocation_reason: grant.revocation_reason
+      revocation_reason: grant.revocation_reason,
+      validity_seconds: grant.validity_seconds,
+      proposed_by: grant.proposed_by,
+      proposed_at: grant.proposed_at,
+      proposal_expires_at: grant.proposal_expires_at,
+      approval_policy: grant.approval_policy,
+      rejected_by: grant.rejected_by,
+      rejected_at: grant.rejected_at,
+      rejection_reason: grant.rejection_reason,
+      withdrawn_by: grant.withdrawn_by,
+      withdrawn_at: grant.withdrawn_at,
+      replaces_grant_id: grant.replaces_grant_id
     }
   end
 end
