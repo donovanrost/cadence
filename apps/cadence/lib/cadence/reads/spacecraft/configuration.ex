@@ -30,7 +30,8 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
   defp load_locked(scope, mission, craft, section) do
     id = craft.spacecraft_id
 
-    with {:ok, active} <- ConfigurationActive.load(mission) do
+    with {:ok, active} <- ConfigurationActive.load(mission),
+         {:ok, switches} <- switches(mission, id) do
       current = ConfigurationDrafts.snapshot(mission, craft)
       approval = ActivationPolicy.load(mission.organization_id, mission.mission_id)
       active_entry = active.entries[id]
@@ -73,7 +74,7 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
          saved_version: current.row && current.row.version,
          document: current.document,
          external_changes: current.external_changes,
-         switches: switches(mission, id),
+         switches: switches,
          active:
            active_entry &&
              %{
@@ -138,15 +139,20 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
 
   # DECISIONS #109: change sets are the only writer of both switches; read off the spacecraft row
   # under the configuration lock. `set` false: no change set has set it (the value reads off).
-  # `revision` (the change-set revision that last set it) isn't stored yet: null.
+  # `revision` (the change-set revision that last set it) isn't stored yet: null. A craft removed
+  # between authorize and this locked read is spacecraft_not_found (404), never a crash (#272).
   defp switches(mission, id) do
-    {:ok, craft} =
-      SpacecraftStore.fetch_spacecraft(mission.organization_id, mission.mission_id, id)
+    case SpacecraftStore.fetch_spacecraft(mission.organization_id, mission.mission_id, id) do
+      {:ok, craft} ->
+        {:ok,
+         %{
+           telemetry_enabled: switch(craft.telemetry_enabled),
+           commanding_enabled: switch(craft.commanding_enabled)
+         }}
 
-    %{
-      telemetry_enabled: switch(craft.telemetry_enabled),
-      commanding_enabled: switch(craft.commanding_enabled)
-    }
+      {:error, _missing} ->
+        {:error, :spacecraft_not_found}
+    end
   end
 
   defp switch(value), do: %{value: value == true, set: is_boolean(value), revision: nil}

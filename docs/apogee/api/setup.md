@@ -333,10 +333,10 @@ console's mission scope), so the mission's existence doesn't leak.
 | `spacecraft_catalog_unavailable` | 422 | The catalog revision isn't this mission's |
 | `spacecraft_packet_input_unavailable` | 422 | The source isn't this craft's |
 | `spacecraft_source_limit_exceeded` | 422 | Too many sources |
-| `mission_model_revision_not_approved` | 409 | The catalog's model isn't approved (U65) |
+| `mission_model_revision_not_approved` | 409 | The catalog's model isn't approved (U65). `details {mission_model_revision_ids, catalog_revision_numbers}`: one number per id, in the same order; an entry is `null` when that catalog revision has no number, so read it as "a catalog revision" (U65, #272) |
 | `activation_self_approval_forbidden` | 403 | (L10 approve) A different person must review |
 | `forbidden` | 403 | No operate access |
-| `spacecraft_not_found` | 404 | |
+| `spacecraft_not_found` | 404 | Also when the craft is removed between the access check and the read (#272) |
 
 ## `GET /api/console/v1/missions/:mission_id/readiness`
 

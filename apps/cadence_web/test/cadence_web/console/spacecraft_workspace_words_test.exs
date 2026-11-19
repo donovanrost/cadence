@@ -31,6 +31,17 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceWordsTest do
              "Not sent: the catalog revision isn't approved yet."
   end
 
+  test "a read the viewer can't make reads as a view refusal, no opener (U98, #272)" do
+    for action <- [:show, :packets] do
+      assert Words.message(:forbidden, action, %{name: "EARENDIL-004"}) ==
+               "You can't view EARENDIL-004's configuration. " <>
+                 "Ask a mission admin or an org admin for access."
+    end
+
+    assert Words.message(:forbidden, :show, %{name: nil}) =~ "You can't view this spacecraft's"
+    assert Words.message(:forbidden, :save, %{name: "EARENDIL-004"}) =~ "You can't change"
+  end
+
   test "a refusal a save and a submit share opens by action; never an id" do
     ctx = %{name: "EARENDIL-004"}
 

@@ -7,10 +7,14 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceSwitchesAPITest do
   """
   use CadenceWeb.ConnCase, async: false
 
+  import Ecto.Query
+
   alias Cadence.Applications.SpacecraftConfiguration.Active
   alias Cadence.Applications.SpacecraftConfiguration.Drafts
   alias Cadence.Applications.TelemetryDecomFixtures, as: CatalogFixtures
   alias Cadence.Governance.ActivationPolicy
+  alias Cadence.Management.Activations.ActivationRequestRow
+  alias Cadence.Repo
   alias Cadence.SpacecraftStore
   alias CadenceWeb.TestFixtures
 
@@ -60,6 +64,35 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceSwitchesAPITest do
 
     assert %{"telemetry_enabled" => true, "commanding_enabled" => true} =
              active.entries[c.craft.spacecraft_id]["document"]
+  end
+
+  # #272 (fe-setup's #269 review): the console path can't go around review. The client picks the
+  # intent, but on a mission whose setting requires review an 'activate' is refused one layer
+  # down (activation_policy_changed); this pins it at the route, with nothing applied.
+  test "on a mission that requires review, submit with intent activate is a 409 and applies nothing",
+       c do
+    data = workspace(c)
+
+    document =
+      Map.merge(data["document"], %{
+        "catalog_revision_id" => c.catalog,
+        "telemetry_source_endpoint_id" => c.endpoint,
+        "handled_apids" => [42]
+      })
+
+    assert %{"data" => saved} = put_draft(c, data["token"], document) |> json_response(200)
+
+    assert %{"error" => %{"code" => "activation_policy_changed"}} =
+             submit(c, saved, "activate") |> json_response(409)
+
+    {:ok, active} = Active.load(c.mission)
+    refute Map.has_key?(active.entries, c.craft.spacecraft_id)
+
+    # Nor is a request recorded for anyone to approve (fe-setup's #288 review).
+    assert Repo.aggregate(
+             from(r in ActivationRequestRow, where: r.mission_id == ^mid(c)),
+             :count
+           ) == 0
   end
 
   test "a change set flips a switch after the draft was saved: submit is a 409 in ux's words",
