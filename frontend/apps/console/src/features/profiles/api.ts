@@ -106,10 +106,23 @@ export function fetchProfiles(
   return request(`/missions/${encodeURIComponent(missionId)}/profiles`, profilesReader, { signal });
 }
 
-/** "CCSDS TM / TC" style protocol line. */
+/**
+ * P7 (#313, ux §10): "CCSDS TM / TC", no arrows. A family both labels share ("CCSDS") is said
+ * once; otherwise both labels in full ("CCSDS TM / Custom TC").
+ */
 export function protocolLine(p: ProfileSummary): string {
-  return `${p.downlinkProtocol.label} ↓ · ${p.uplinkProtocol.label} ↑`;
+  const down = p.downlinkProtocol.label;
+  const up = p.uplinkProtocol.label;
+  const [family, downName] = splitFamily(down);
+  const [upFamily, upName] = splitFamily(up);
+  return family !== null && family === upFamily
+    ? `${family} ${downName} / ${upName}`
+    : `${down} / ${up}`;
 }
+const splitFamily = (label: string): readonly [string | null, string] => {
+  const at = label.lastIndexOf(" ");
+  return at > 0 ? [label.slice(0, at), label.slice(at + 1)] : [null, label];
+};
 
 /** Profile.md list: overrides read caution past 10% of the profile's fleet [decision]. */
 export const manyOverrides = (p: ProfileSummary) =>

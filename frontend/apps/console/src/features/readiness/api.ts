@@ -87,7 +87,10 @@ export type Readiness = Readonly<{
   verdict: Readonly<Record<Severity, number>>;
   areas: readonly ReadinessArea[];
   findings: readonly Finding[];
-  /** null: the server has no unified change feed, so the Recent changes panel is omitted. */
+  /**
+   * null only when the revisions couldn't be read (api setup.md), so R2 says so (U86); `[]` is
+   * nothing applied yet. (#313 R2: there's no feed-less case to leave the panel out for.)
+   */
   recentChanges: readonly RecentChange[] | null;
 }>;
 
