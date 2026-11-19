@@ -8,13 +8,10 @@ defmodule Cadence.Control.PlanningGrantDecisions do
   """
 
   alias Cadence.Auth.Scope
-  alias Cadence.ContactPlanning.{AutomationGrantReview, GrantOperations}
+  alias Cadence.ContactPlanning.{AutomationGrantReview, AutomationGrants, GrantOperations}
   alias Cadence.Control.PlanningGrants
   alias Cadence.Governance.ActivationPolicy
-  alias Cadence.Management.Contacts.Store.AutomationGrantRow
   alias Cadence.Repo
-
-  import Ecto.Query
 
   @doc "Approves the proposal read at `sha256`: `{:ok, {:decided | :replayed, row}}`."
   @spec approve(Scope.t(), binary(), binary(), map()) :: {:ok, tuple()} | {:error, term()}
@@ -63,7 +60,7 @@ defmodule Cadence.Control.PlanningGrantDecisions do
     do: ActivationPolicy.with_stable_policy(organization_id, fn -> Repo.transaction(fun) end)
 
   defp decide(scope, op, request, act) do
-    with :ok <- lock_row(scope.organization_id, op.mission_id, op.grant_id),
+    with :ok <- AutomationGrants.lock(scope.organization_id, op.mission_id, op.grant_id),
          :new <-
            GrantOperations.check(scope, op.mission_id, op.id, op.grant_id, op.action, request),
          {:ok, grant} <- act.(),
@@ -93,22 +90,6 @@ defmodule Cadence.Control.PlanningGrantDecisions do
   # Every grant act is person-only (#283): refused before anything is read or recorded.
   defp person(%Scope{actor_kind: :user, user: %{user_id: id}}) when is_binary(id), do: :ok
   defp person(_scope), do: {:error, :authenticated_user_required}
-
-  defp lock_row(organization_id, mission_id, grant_id) do
-    AutomationGrantRow
-    |> where(
-      [r],
-      r.organization_id == ^organization_id and r.mission_id == ^mission_id and
-        r.automation_grant_id == ^grant_id
-    )
-    |> lock("FOR UPDATE")
-    |> select([r], r.automation_grant_id)
-    |> Repo.one()
-    |> case do
-      nil -> {:error, :automation_grant_not_found}
-      _id -> :ok
-    end
-  end
 
   defp required(params, key) do
     case params[Atom.to_string(key)] do

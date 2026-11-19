@@ -45,6 +45,12 @@ defmodule Cadence.Architecture.DependencyBoundary do
     "lib/cadence/management/contacts.ex",
     "lib/cadence/management/contacts/",
     "lib/cadence/contact_planning/automation_grants.ex",
+    # #283: the grant proposal, review and decision modules, with the grants they review.
+    "lib/cadence/contact_planning/automation_grant_review.ex",
+    "lib/cadence/contact_planning/automation_grant_decisions.ex",
+    "lib/cadence/contact_planning/grant_separation.ex",
+    "lib/cadence/contact_planning/grant_narrowing.ex",
+    "lib/cadence/contact_planning/grant_operations.ex",
     "lib/cadence/contact_planning/contact_plan_approvals.ex",
     "lib/cadence/contact_planning/contact_plans.ex",
     "lib/cadence/contact_planning/contact_requirement_templates.ex",
