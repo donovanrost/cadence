@@ -3782,9 +3782,9 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
   - **Up front (A6) from `viewer_can_decide` and `cannot_decide_because`, never computed in the console** (#233's
     pattern). Approve is disabled with its reason, muted under it and as its description; Reject stays:
     - `proposer`: "You proposed this grant, so another org admin approves it."
-    - `accountable` (`cannot_decide_details.service`): "You're accountable for Nightly planner, so another org admin
+    - `accountable` (`cannot_decide_details.grantee`, the same key as the 403): "You're accountable for Nightly planner, so another org admin
       approves its grant."
-    - `authors_unknown`: "Cadence doesn't know who is accountable for Nightly planner, so its grant can't be approved
+    - `authors_unknown` (`cannot_decide_details.service`): "Cadence doesn't know who is accountable for Nightly planner, so its grant can't be approved
       yet. An org admin records who's accountable in People › Service identities."
     - `not_admin`: no actions; the panel's line ends "Org admins approve grants."
     - `not_proposed`: no panel (the row's state says why).
