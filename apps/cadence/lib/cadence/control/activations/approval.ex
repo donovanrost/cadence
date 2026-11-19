@@ -91,20 +91,26 @@ defmodule Cadence.Control.Activations.Approval do
 
   defp distinct_from_authors(_scope, _request), do: :ok
 
-  # The author ids (across every reviewed craft) that count as the approver: each distinct id is
-  # checked once, so a 500-craft fleet review costs one check per author, not per craft.
+  # The author ids (across every reviewed craft) that count as the approver. Each distinct id is
+  # checked once, and which ids are service identities is read in ONE query over all of them
+  # (#439), so the craft count and the number of people who saved add no queries. Only a service
+  # author costs its own accountable-people read.
   # No approver to compare (no person or service on the scope): every author counts, so it fails
   # closed. Approval requires a person before this (Management's decidable).
   defp self_authors(_organization_id, nil, by_spacecraft),
     do: {:ok, by_spacecraft |> Map.values() |> List.flatten() |> Enum.uniq()}
 
   defp self_authors(organization_id, approver, by_spacecraft) do
-    by_spacecraft
-    |> Map.values()
-    |> List.flatten()
-    |> Enum.uniq()
-    |> Enum.reduce_while({:ok, []}, fn author, {:ok, acc} ->
-      actors = Accountability.actors_for_ids(organization_id, [author])
+    authors = by_spacecraft |> Map.values() |> List.flatten() |> Enum.uniq()
+
+    services =
+      for {:service, id} <- Accountability.actors_for_ids(organization_id, authors),
+          into: MapSet.new(),
+          do: id
+
+    Enum.reduce_while(authors, {:ok, []}, fn author, {:ok, acc} ->
+      # As actors_for_ids/2 counts a bare id: the person, and the service when one has that id.
+      actors = [{:user, author} | if(author in services, do: [{:service, author}], else: [])]
 
       case Accountability.separate(organization_id, approver, actors) do
         :ok -> {:cont, {:ok, acc}}
