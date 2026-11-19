@@ -206,3 +206,67 @@ describe("gap windows (ux U73, api 3386a8bf3)", () => {
     );
   });
 });
+
+/** #273 (U61/U97, #340/#341): an approval's recorded skipped passes on its history row. */
+describe("history: passes an approval skipped", () => {
+  const now = new Date("2026-11-19T12:00:00Z");
+  const approved = (skipped: unknown) => {
+    const h = decode(planHistoryReader, {
+      plan_id: "plan_1",
+      latest_version: 41,
+      truncated: false,
+      versions: [],
+      decisions: [
+        {
+          kind: "approved",
+          version: 41,
+          round: 1,
+          actor: { kind: "user", id: "u-ana", name: "Ana R." },
+          at: "2026-11-19T06:52:00Z",
+          text: null,
+          unchanged: null,
+          acknowledgements: [],
+          exceptions: [],
+          automation_grant_id: null,
+          skipped,
+        },
+      ],
+    });
+    if (!h.ok) throw new Error("fixture");
+    const [row] = historyLines(h.value, now);
+    if (!row) throw new Error("no row");
+    return row;
+  };
+  const item = (reason: string) => ({
+    snapshot_id: "s1",
+    spacecraft: { id: "sc_1", name: "EARENDIL-001", scid: 1 },
+    station: { id: "gs-1", code: "SVA", name: "Svalbard" },
+    aos: "2026-11-19T07:00:00Z",
+    expires_at: reason === "no_booking_window" ? null : "2026-11-19T06:50:00Z",
+    reason,
+  });
+  it("says what was booked and skipped, with the list under Show N", () => {
+    const row = approved({
+      count: 36,
+      reservable_count: 1476,
+      items: [item("opportunity_expired")],
+    });
+    expect(row.line).toBe(
+      "Approved R41 by Ana R. at 06:52Z · 1,476 passes to book; 36 skipped (booking window closed)",
+    );
+    expect(row.skipped).toEqual({
+      label: "Show 36",
+      lines: ["EARENDIL-001 · SVA · AOS 07:00Z"],
+      capped: "Showing the first 1 of 36.",
+    });
+  });
+  it("says 'no open booking window' when the provider gave a listed pass none", () => {
+    const row = approved({ count: 1, reservable_count: 9, items: [item("no_booking_window")] });
+    expect(row.line).toContain("9 passes to book; 1 skipped (no open booking window)");
+  });
+  it("adds nothing when nothing was skipped or the server doesn't say (pre-#273)", () => {
+    expect(approved(null).line).toBe("Approved R41 by Ana R. at 06:52Z");
+    expect(approved(null).skipped).toBeNull();
+    expect(approved(undefined).skipped).toBeNull();
+  });
+});

@@ -8,6 +8,7 @@ import {
 } from "@/api";
 import { formatCount } from "@/ui";
 import type { PlanDetail } from "./api.ts";
+import { expiredLine, expiredReader, noWindow, type Expired } from "./lifecycle.ts";
 
 /**
  * A plan's history (ux U73, A10; api 7a83a958b `GET /contact-plans/:id/history`): its versions and
@@ -72,6 +73,11 @@ const decisionRow = d.object({
     2_000,
   ),
   automation_grant_id: d.nullable(d.token),
+  /**
+   * #273 (api): an approval's skipped passes, as recorded on the decision (never recomputed), the
+   * plan read's expired shape; null when none, before #273, and on submitted or rejected entries.
+   */
+  skipped: d.optional(expiredReader),
 });
 
 export const planHistoryReader = d.object({
@@ -128,6 +134,8 @@ export type HistoryLine = Readonly<{
   /** `text` is the row (ux: no raw id leads it); `id` goes under Technical details. */
   details: readonly Readonly<{ id: string; text: string }>[];
   detailsLabel: string | null;
+  /** #273: the passes an approval skipped (booking window closed), under their own `Show N`. */
+  skipped: Readonly<{ label: string; lines: readonly string[]; capped: string | null }> | null;
 }>;
 
 export function versionLine(v: VersionRow, current: number, now: Date = new Date()): HistoryLine {
@@ -151,6 +159,27 @@ export function versionLine(v: VersionRow, current: number, now: Date = new Date
     view: v.version === current ? null : v.version,
     details: [],
     detailsLabel: null,
+    skipped: null,
+  };
+}
+
+/**
+ * #273 (U61/U97, #340/#341): "1,476 passes to book; 36 skipped (booking window closed)", or
+ * "(no open booking window)" when the provider gave a listed pass no window. Null: none skipped.
+ */
+function skippedPart(s: Expired | null | undefined, now: Date) {
+  if (!s || s.count === 0) return null;
+  const why = s.items.some(noWindow) ? "no open booking window" : "booking window closed";
+  return {
+    clause: `${formatCount(s.reservable_count)} ${s.reservable_count === 1 ? "pass" : "passes"} to book; ${formatCount(s.count)} skipped (${why})`,
+    list: {
+      label: `Show ${formatCount(s.count)}`,
+      lines: s.items.map((i) => expiredLine(i, now)),
+      capped:
+        s.count > s.items.length
+          ? `Showing the first ${formatCount(s.items.length)} of ${formatCount(s.count)}.`
+          : null,
+    },
   };
 }
 
@@ -190,7 +219,14 @@ export function decisionLine(
 ): HistoryLine {
   const t = when(e.at, now);
   const r = `R${e.version}`;
-  const base = { key: `d${e.version}-${e.at}`, at: e.at, counts: null, tags: [], view: null };
+  const base = {
+    key: `d${e.version}-${e.at}`,
+    at: e.at,
+    counts: null,
+    tags: [],
+    view: null,
+    skipped: null,
+  };
   if (e.kind === "submitted") {
     const n = e.acknowledgements.length;
     const lead = e.unchanged
@@ -210,12 +246,16 @@ export function decisionLine(
     const lead = e.automation_grant_id
       ? `Approved ${r} automatically under an automation policy at ${t}`
       : `Approved ${r} by ${who(e.actor, "an org admin")} at ${t}`;
+    const skipped = skippedPart(e.skipped, now);
+    const line =
+      n > 0 ? `${lead} · ${formatCount(n)} ${n === 1 ? "exception" : "exceptions"}` : lead;
     return {
       ...base,
-      line: n > 0 ? `${lead} · ${formatCount(n)} ${n === 1 ? "exception" : "exceptions"}` : lead,
+      line: skipped ? `${line} · ${skipped.clause}` : line,
       quote: quote(e.text),
       details: e.exceptions.map((x) => ({ id: x.requirement_id, text: gapText(x, planDay) })),
       detailsLabel: n > 0 ? `Show ${formatCount(n)}` : null,
+      skipped: skipped?.list ?? null,
     };
   }
   if (e.kind === "rejected") {

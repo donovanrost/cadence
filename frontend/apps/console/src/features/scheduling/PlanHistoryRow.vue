@@ -8,6 +8,7 @@ import type { HistoryLine } from "./plan-history.ts";
 defineProps<{ row: HistoryLine }>();
 const route = useRoute();
 const shown = ref(false);
+const showSkipped = ref(false);
 </script>
 
 <template>
@@ -24,6 +25,14 @@ const shown = ref(false);
         >{{ shown ? "Hide" : row.detailsLabel }}</ApButton
       >
       <ApButton
+        v-if="row.skipped"
+        variant="ghost"
+        size="compact"
+        :aria-expanded="showSkipped"
+        @click="showSkipped = !showSkipped"
+        >{{ showSkipped ? "Hide" : row.skipped.label }}</ApButton
+      >
+      <ApButton
         v-if="row.view !== null"
         variant="ghost"
         size="compact"
@@ -32,6 +41,14 @@ const shown = ref(false);
       >
     </span>
     <span v-if="row.quote" class="text-sm text-text-2">{{ row.quote }}</span>
+    <!-- #273: the passes this approval skipped because their booking window had closed. -->
+    <ul
+      v-if="showSkipped && row.skipped"
+      class="m-0 flex list-none flex-col gap-0.5 p-0 font-mono text-sm text-text-2 tabular"
+    >
+      <li v-for="(line, i) in row.skipped.lines" :key="i">{{ line }}</li>
+      <li v-if="row.skipped.capped" class="font-sans text-text-3">{{ row.skipped.capped }}</li>
+    </ul>
     <span v-if="row.counts" class="font-mono text-sm text-text-3 tabular">{{ row.counts }}</span>
     <!-- ux U73 / design-language §8: no raw id leads a row; reasons, ids under Technical details. -->
     <template v-if="shown">
