@@ -179,7 +179,9 @@ reason, blocking, sentence, details?}`; sentences are ux's U40):
 | `scid_shared_in_organization` | no (acknowledge) | a spacecraft create, or an update changing its SCID, when another mission in the same organization has a non-archived spacecraft with that SCID and the two missions' non-archived providers share a provider account (ux U81 §1; never across organizations). One item per other mission the viewer can open, plus at most one folded item for the rest | `{scid, provider_accounts: [{id, name}], mission: {id, name} \| null, mission_count}`: all four keys always; `provider_accounts` ≥ 1, sorted by name, `name` nullable (the union on the folded item); `mission` null on the folded item; `mission_count` 1 when named, ≥ 1 when folded |
 
 `earliest_pass_at` is ISO 8601 UTC or null. The sentences already carry the counts and the §4
-short time. A blocking item can't be acknowledged away: submit answers `409 holds_blocking`.
+short time. A blocking item can't be acknowledged away: submit answers `409 holds_blocking`,
+and so does approve if one appeared after the submit; checks that can't run answer
+`503 preview_failed` ([changes.md](changes.md) Errors, #262).
 If an apply still meets one of the telemetry conditions (applied anyway, or a race after the
 preview), it answers in words, never a generic failure (ux U63): `409 telemetry_app_not_installed`
 or `409 telemetry_packet_inputs_required`, `details: {spacecraft_ids}`, `message` naming up to three

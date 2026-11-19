@@ -107,6 +107,14 @@ defmodule Cadence.Configuration.Submission do
 
       {:error, {:in_use, _uses}} = error ->
         reopen_on_failure(set, error)
+
+      # #262: a blocking hold that appeared since the submit, or a preview that couldn't run. The
+      # set stays in review and nothing is written; it can be approved once the cause clears.
+      {:error, {:holds_blocking, _preview}} = error ->
+        error
+
+      {:error, {:preview_failed, _cause}} = error ->
+        error
     end
   end
 
@@ -264,10 +272,22 @@ defmodule Cadence.Configuration.Submission do
       {:ok, preview} ->
         {:ok, preview}
 
+      # #262: Cadence couldn't run the checks (Preview.run's database rescue, or its transaction
+      # ending in anything but the preview). Logged here, so a preview bug that fails every time
+      # shows up and isn't only retried; the caller gets preview_failed, without the cause.
       {:error, reason} ->
-        {:error, reason}
+        cause = preview_cause(reason)
+        Logger.error("change set #{set.change_set_id}: its checks couldn't run: #{cause}")
+        {:error, {:preview_failed, cause}}
     end
   end
+
+  # The cause's first line only: a database error's later lines can carry row values.
+  defp preview_cause({:preview_failed, message}) when is_binary(message),
+    do: message |> String.split("\n", parts: 2) |> hd()
+
+  defp preview_cause(reason) when is_atom(reason), do: Atom.to_string(reason)
+  defp preview_cause(_reason), do: "an unexpected transaction result"
 
   defp locked(set, params, fun) do
     apply_transaction(set, fn ->
