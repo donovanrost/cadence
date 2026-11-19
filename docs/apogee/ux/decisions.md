@@ -3229,7 +3229,9 @@ are api's, switched on with `knownErrorCode`.
 - **Success only from the answer (U20):** "Approved. Booking 40 passes." only on the 202 with `outcome: "approved"`.
   Any other success answer: "Cadence didn't record an approval for R41. Reload to see the plan; if it's still waiting,
   try again or tell the team that runs Cadence for you." The UI never tells an approver something happened when it
-  didn't.
+  didn't. Submit likewise: "Sent for approval." only when `outcome` is `pending_approval`; any other answer (an older
+  server's `executing`, an unknown outcome): "Cadence didn't confirm that R41 was sent for approval. Reload to see the
+  plan."
 - **One act under "Applies without approval"** (ux's call for the director, 11-19). The API stays split. When the read
   says `approval_setting: "direct"` and the viewer is an org admin, a draft or sent-back plan gets ONE action, `Approve
   and book N passes` (sheet title `Approve and book the plan`): the console calls submit, then approve with the
@@ -3239,14 +3241,18 @@ are api's, switched on with `knownErrorCode`.
     both recorded."
   - Re-plan's Apply the same: `Approve and apply the proposal`, confirm "This sends the proposal and approves it, and
     sends 12 booking requests." plus the muted line.
-  - The submit is refused: the submit line below; nothing was sent or approved.
+  - The note for the record goes only as the approval's `decision_note` (the act the admin took); the submission
+    carries none, so the history shows it once, on the decision.
+  - The submit is refused: the submit line below; nothing was sent or approved. A submit answer other than
+    `pending_approval` stops the chain too (no approve call), with the submit's U20 line.
   - The submit lands and the approve is refused: "R41 was sent for approval, but not approved: <the approve refusal's
     reason>. It's waiting for approval." The reason is the refusal's first sentence after "Not approved:", with
     "R41" as "it" and without its ending (e.g. `forbidden`: "…not approved: only an org admin approves contact
     plans."). Example: "R41 was sent for approval, but not
     approved: it changed after you opened it, so it isn't what you reviewed. It's waiting for approval." The plan then
     opens awaiting approval with `Approve and book the plan` to try again; after a self-approval refusal (the setting
-    changed to "Needs a second person's approval") Approve is disabled with its A6 reason instead.
+    changed to "Needs a second person's approval") Approve is disabled with its A6 reason instead. The typed note stays in
+    the field for the retry.
   - The approve's 403 stays the backstop: the setting can change between the read and the click.
 - **Everyone else** (members, and admins under "Needs a second person's approval", `approval_setting: "independent"`):
   `Request approval` (sent back `Submit the plan again`; Re-plan `Request approval for the proposal`, confirm "This
