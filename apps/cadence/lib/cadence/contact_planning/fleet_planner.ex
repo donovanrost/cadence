@@ -16,7 +16,8 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
     FleetPlanningRuns,
     FleetRepairInputs,
     FleetRunLock,
-    Planner
+    Planner,
+    RepairPairing
   }
 
   @type result :: %{
@@ -185,10 +186,13 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
                candidate_contact_plan_id: plan.contact_plan_id,
                candidate_contact_plan_version: version.version,
                result_summary_document:
-                 Map.merge(run.result_summary_document, %{
+                 run.result_summary_document
+                 |> Map.merge(%{
                    "candidate_contact_plan_id" => plan.contact_plan_id,
                    "candidate_contact_plan_version" => version.version
                  })
+                 # qa #30: which lost bookings this repair's new passes replace, fixed now.
+                 |> Map.merge(RepairPairing.summary(run, version))
              },
              opts
            ) do
@@ -640,10 +644,34 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
     [
       now: Keyword.get(opts, :now, DateTime.utc_now()),
       locked_commitments: repair_locked_commitments ++ caller_locked_commitments,
-      locked_snapshot_ids: Keyword.get(opts, :locked_snapshot_ids, [])
+      locked_snapshot_ids: Keyword.get(opts, :locked_snapshot_ids, []),
+      # DECISIONS #78: drafts and repairs plan around live single bookings.
+      occupied: occupied(run)
     ]
     |> Keyword.put(:fleet_planning_run_id, run.fleet_planning_run_id)
   end
+
+  # Recorded on the run by whoever started it (`Contacts.SingleBookings.occupancy_document/3`).
+  defp occupied(%{input_document: %{"occupied" => occupied}}) when is_list(occupied) do
+    Enum.flat_map(occupied, fn o ->
+      with {:ok, from, _} <- DateTime.from_iso8601(o["starts_at"] || ""),
+           {:ok, to, _} <- DateTime.from_iso8601(o["ends_at"] || "") do
+        [
+          %{
+            reservation_id: o["reservation_id"],
+            spacecraft_id: o["spacecraft_id"],
+            antenna_ref: o["antenna_ref"],
+            starts_at: from,
+            ends_at: to
+          }
+        ]
+      else
+        _invalid -> []
+      end
+    end)
+  end
+
+  defp occupied(_run), do: []
 
   defp fleet_outcome(%{"coverage" => coverage}) when is_map(coverage) do
     if Enum.all?(coverage, fn {_id, result} -> result["state"] == "satisfied" end),

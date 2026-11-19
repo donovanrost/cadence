@@ -9,18 +9,18 @@ defmodule Cadence.Applications.ActionContractLedgerTest do
     ledgers = ActionContractLedger.ledgers()
 
     assert map_size(ledgers) == 3
-    assert length(ledgers.declared) == 60
+    assert length(ledgers.declared) == 24
     assert ledgers.declared == ledgers.provider
     assert ledgers.declared == ledgers.registry
-    assert length(Enum.uniq(ledgers.declared)) == 60
+    assert length(Enum.uniq(ledgers.declared)) == 24
 
     assert ledgers.declared
            |> Enum.frequencies_by(&elem(&1, 0)) == %{
-             "mission_catalog" => 13,
-             "spacecraft" => 12,
+             "mission_catalog" => 11,
+             "spacecraft" => 6,
              "telemetry_decom" => 4,
-             "comms" => 12,
-             "organization_admin" => 19
+             "comms" => 2,
+             "organization_admin" => 1
            }
   end
 
@@ -28,9 +28,9 @@ defmodule Cadence.Applications.ActionContractLedgerTest do
     valid = %ActionRequest{
       application_key: "comms",
       application_version: 1,
-      surface_id: "provider_new",
+      surface_id: "routing_new",
       surface_version: 1,
-      action_id: "create_provider"
+      action_id: "save"
     }
 
     assert :ok = ActionContractLedger.admit(valid, Cadence.Applications.Comms.ActionProvider)
@@ -38,8 +38,11 @@ defmodule Cadence.Applications.ActionContractLedgerTest do
     for request <- [
           %{valid | application_key: "spacecraft"},
           %{valid | application_version: 2},
-          %{valid | surface_id: "provider_show", surface_version: 2},
-          %{valid | action_id: "archive_provider", surface_id: "provider_new"},
+          %{valid | surface_id: "transport", surface_version: 2},
+          %{valid | action_id: "archive_provider", surface_id: "routing_new"},
+          # Host-action sweep batch 1: the transport and ground station forms bind nothing.
+          %{valid | surface_id: "transport_new"},
+          %{valid | surface_id: "ground_station_edit"},
           %{valid | surface_id: nil, surface_version: nil}
         ] do
       assert {:error, :unsupported_application_action} =

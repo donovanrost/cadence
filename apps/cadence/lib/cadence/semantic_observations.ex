@@ -11,6 +11,7 @@ defmodule Cadence.SemanticObservations do
 
   alias Ecto.Multi
 
+  alias Cadence.Alarms.{Episodes, Notify, Sources}
   alias Cadence.Catalog.MissionModel.Canonical
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Repo
@@ -37,9 +38,22 @@ defmodule Cadence.SemanticObservations do
     |> evaluation_multi(transitions)
     |> Repo.transaction()
     |> case do
-      {:ok, _changes} -> :ok
-      {:error, _operation, reason, _changes} -> {:error, reason}
+      {:ok, changes} ->
+        notify_alarm_changes(changes)
+        :ok
+
+      {:error, _operation, reason, _changes} ->
+        {:error, reason}
     end
+  end
+
+  defp notify_alarm_changes(changes) do
+    changes
+    |> Enum.flat_map(fn
+      {{:alarm_episode, _evidence, _index}, {:changed, mission_id}} -> [mission_id]
+      _other -> []
+    end)
+    |> Notify.missions_changed()
   end
 
   defp evaluation_multi(evaluations, transitions) do
@@ -111,17 +125,29 @@ defmodule Cadence.SemanticObservations do
   defp add_transitions(%{semantic_result: result} = prepared, transitions, accumulator) do
     updates = Map.new(result.parameter_updates, &{&1.update_id, &1})
     context = semantic_context(prepared)
+    rules = Map.get(prepared, :alarm_rules, %{})
 
     transitions
     |> Enum.with_index()
     |> Enum.reduce(accumulator, fn {monitoring_result, index}, {multi, evaluations} ->
       update = Map.fetch!(updates, monitoring_result.update_id)
       evaluation_attrs = MonitoringEvaluationRow.attrs(monitoring_result, update, context)
+      match = Map.get(rules, {monitoring_result.policy_id, monitoring_result.update_id})
 
-      {add_transition(multi, prepared, index, monitoring_result, evaluation_attrs),
-       [MonitoringEvaluationRow.changeset(evaluation_attrs) | evaluations]}
+      {add_transition(
+         multi,
+         prepared,
+         index,
+         monitoring_result,
+         evaluation_attrs,
+         {update, match}
+       ), [MonitoringEvaluationRow.changeset(evaluation_attrs) | evaluations]}
     end)
   end
+
+  # Flight events: `prepared.alarm_rules` (`SemanticRuntime.AlarmRules`, built by the partition
+  # owner) says which rule opened or escalated each alarm transition. Missing (an older prepared
+  # result, a recovered commit of another generation): the episode classifies by value instead.
 
   defp persist_evaluations(repo, changesets) do
     with {:ok, rows} <- evaluation_rows(changesets) do
@@ -154,7 +180,7 @@ defmodule Cadence.SemanticObservations do
     end)
   end
 
-  defp add_transition(multi, prepared, index, result, evaluation_attrs) do
+  defp add_transition(multi, prepared, index, result, evaluation_attrs, {update, match}) do
     transition_attrs = AlarmTransitionRow.attrs(evaluation_attrs, result)
 
     latest_attrs = %{
@@ -183,6 +209,12 @@ defmodule Cadence.SemanticObservations do
       conflict_target: [:mission_id, :spacecraft_scope_id, :parameter_id, :policy_id],
       allow_stale: true
     )
+    |> Multi.run({:alarm_episode, prepared.raw_evidence.evidence_id, index}, fn repo, _changes ->
+      observation =
+        Sources.catalog(evaluation_attrs, update, transition_attrs.transition_id, match)
+
+      Episodes.record(repo, observation)
+    end)
   end
 
   defp semantic_context(%{observation_context: context}) when is_map(context), do: context

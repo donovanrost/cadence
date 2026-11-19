@@ -15,7 +15,7 @@ defmodule Cadence.Comms.RoutingRuleStore do
     Transport
   }
 
-  alias Cadence.Comms.TransportStore
+  alias Cadence.Comms.{TransportStore, UplinkGateway}
 
   alias Cadence.Contacts.{
     LinkAssignment,
@@ -31,6 +31,8 @@ defmodule Cadence.Comms.RoutingRuleStore do
   alias Cadence.SourceEndpoints
   alias Cadence.Spacecraft
   alias Cadence.SpacecraftStore
+
+  @materialized_keys ["materialized_link_assignment_ids", "materialized_path_template_ids"]
 
   @spec create_routing_rule(binary(), RoutingRule.t(), keyword()) ::
           {:ok, RoutingRule.t()} | {:error, term()}
@@ -67,11 +69,70 @@ defmodule Cadence.Comms.RoutingRuleStore do
   def update_routing_rule(organization_id, mission_id, routing_rule_id, attrs, opts \\ [])
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(routing_rule_id) and
              is_map(attrs) and is_list(opts) do
+    case fetch_routing_rule(organization_id, mission_id, routing_rule_id) do
+      {:ok, current_rule} -> update_from(current_rule, attrs, opts)
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Creates or updates a materialized route to match `desired` (by its deterministic id),
+  reviving it when it was archived. Returns what happened. `also:` names fields beyond the
+  route's own to keep in step (a spacecraft's extra route keeps its written document in
+  `:metadata`); by default only the route fields count.
+  """
+  @spec put_route(binary(), RoutingRule.t(), keyword()) ::
+          {:ok, RoutingRule.t(), :created | :updated | :unchanged} | {:error, term()}
+  def put_route(organization_id, %RoutingRule{} = desired, opts \\ []) do
+    case fetch_routing_rule_state(organization_id, desired.mission_id, desired.routing_rule_id) do
+      {:error, :routing_rule_not_found} ->
+        with {:ok, rule} <- create_routing_rule(organization_id, desired, opts),
+             do: {:ok, rule, :created}
+
+      {:ok, current} ->
+        refresh_route(current, desired, opts)
+    end
+  end
+
+  @route_fields [
+    :display_name,
+    :purpose_label,
+    :direction,
+    :transport_id,
+    :transport_version,
+    :role,
+    :spacecraft_type_id,
+    :spacecraft_type_version
+  ]
+
+  defp refresh_route(current, desired, opts) do
+    {also, opts} = Keyword.pop(opts, :also, [])
+    fields = @route_fields ++ also
+
+    if same_route?(current, desired, fields) do
+      {:ok, current, :unchanged}
+    else
+      with {:ok, rule} <- update_from(current, route_attrs(desired, fields), opts),
+           do: {:ok, rule, :updated}
+    end
+  end
+
+  defp same_route?(current, desired, fields) do
+    current.lifecycle_state == :active and current.enabled? and
+      Map.take(current, fields) == Map.take(desired, fields)
+  end
+
+  defp route_attrs(desired, fields) do
+    desired
+    |> Map.take(fields)
+    |> Map.merge(%{lifecycle_state: :active, enabled?: true})
+  end
+
+  defp update_from(%RoutingRule{} = current_rule, attrs, opts) do
     transaction_result =
       Repo.transaction(fn ->
-        with {:ok, %RoutingRule{} = current_rule} <-
-               fetch_routing_rule(organization_id, mission_id, routing_rule_id),
-             {:ok, next_rule} <- build_next_rule(current_rule, attrs),
+        with {:ok, next_rule} <- build_next_rule(current_rule, attrs),
+             :ok <- retire_materialized(current_rule),
              {:ok, prepared_rule} <- prepare_rule(next_rule),
              {:ok, materialized_rule} <- materialize_runtime_compatibility(prepared_rule),
              {:ok, _count} <- update_rule_row(materialized_rule),
@@ -233,6 +294,80 @@ defmodule Cadence.Comms.RoutingRuleStore do
     |> Enum.map(&RoutingRuleRow.to_domain/1)
   end
 
+  @doc """
+  `list_routing_rules_for_spacecraft/3` for many spacecraft in one query (fleet-scale previews):
+  `%{spacecraft_id => [rule]}`, each list in the same order, every id present.
+  """
+  @spec list_routing_rules_for_spacecrafts(binary(), binary(), [binary()]) :: %{
+          binary() => [map()]
+        }
+  def list_routing_rules_for_spacecrafts(organization_id, mission_id, spacecraft_ids)
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(spacecraft_ids) do
+    found =
+      RoutingRuleRow
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.spacecraft_id in ^spacecraft_ids and row.lifecycle_state != "archived"
+      )
+      |> order_by([row], asc: row.purpose_label, asc: row.direction)
+      |> Repo.all()
+      |> Enum.map(&RoutingRuleRow.to_domain/1)
+      |> Enum.group_by(& &1.spacecraft_id)
+
+    Map.new(spacecraft_ids, &{&1, Map.get(found, &1, [])})
+  end
+
+  @doc "Active profile-route counts per rule for spacecraft on one profile version."
+  @spec profile_route_counts(binary(), binary(), binary(), pos_integer()) :: %{
+          binary() => non_neg_integer()
+        }
+  def profile_route_counts(organization_id, mission_id, spacecraft_type_id, version) do
+    organization_id
+    |> profile_routes_query(mission_id, spacecraft_type_id, version)
+    |> group_by([row], row.profile_rule_id)
+    |> select([row], {row.profile_rule_id, count(row.routing_rule_id)})
+    |> Repo.all()
+    |> Map.new()
+  end
+
+  @doc "The first `limit` route names of one profile rule, by name."
+  @spec profile_route_samples(
+          binary(),
+          binary(),
+          binary(),
+          pos_integer(),
+          binary(),
+          pos_integer()
+        ) ::
+          [binary()]
+  def profile_route_samples(
+        organization_id,
+        mission_id,
+        spacecraft_type_id,
+        version,
+        rule_id,
+        limit
+      ) do
+    organization_id
+    |> profile_routes_query(mission_id, spacecraft_type_id, version)
+    |> where([row], row.profile_rule_id == ^rule_id)
+    |> order_by([row], asc: row.display_name)
+    |> limit(^limit)
+    |> select([row], row.display_name)
+    |> Repo.all()
+  end
+
+  defp profile_routes_query(organization_id, mission_id, spacecraft_type_id, version) do
+    RoutingRuleRow
+    |> where(
+      [row],
+      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+        row.origin == "profile" and row.lifecycle_state == "active" and
+        row.spacecraft_type_id == ^spacecraft_type_id and row.spacecraft_type_version == ^version
+    )
+  end
+
   defp apply_routing_search(query, nil), do: query
   defp apply_routing_search(query, ""), do: query
 
@@ -304,8 +439,9 @@ defmodule Cadence.Comms.RoutingRuleStore do
              rule.transport_version
            ),
          {:ok, provider_profile} <- fetch_materialized_provider(rule, transport),
+         context = %{spacecraft: spacecraft, transport: transport, provider: provider_profile},
          {:ok, materialized} <-
-           materialize_for_directions(rule, source_endpoint.source_endpoint_id, provider_profile) do
+           materialize_for_directions(rule, source_endpoint.source_endpoint_id, context) do
       {:ok, merge_materialized_refs(rule, materialized)}
     end
   end
@@ -321,10 +457,10 @@ defmodule Cadence.Comms.RoutingRuleStore do
   defp materialize_for_directions(
          %RoutingRule{direction: :bidirectional} = rule,
          source_endpoint_ref,
-         provider
+         context
        ) do
-    with {:ok, inbound} <- materialize_direction(rule, :inbound, source_endpoint_ref, provider),
-         {:ok, outbound} <- materialize_direction(rule, :outbound, source_endpoint_ref, provider) do
+    with {:ok, inbound} <- materialize_direction(rule, :inbound, source_endpoint_ref, context),
+         {:ok, outbound} <- materialize_direction(rule, :outbound, source_endpoint_ref, context) do
       {:ok, [inbound, outbound]}
     end
   end
@@ -332,15 +468,20 @@ defmodule Cadence.Comms.RoutingRuleStore do
   defp materialize_for_directions(
          %RoutingRule{direction: direction} = rule,
          source_endpoint_ref,
-         provider
+         context
        ) do
     with {:ok, materialized} <-
-           materialize_direction(rule, direction, source_endpoint_ref, provider) do
+           materialize_direction(rule, direction, source_endpoint_ref, context) do
       {:ok, [materialized]}
     end
   end
 
-  defp materialize_direction(rule, direction, source_endpoint_ref, provider) do
+  defp materialize_direction(
+         rule,
+         direction,
+         source_endpoint_ref,
+         %{provider: provider} = context
+       ) do
     path_direction = path_direction(direction)
     selection_role = selection_role(rule.role)
 
@@ -349,6 +490,37 @@ defmodule Cadence.Comms.RoutingRuleStore do
       "version" => provider.version
     }
 
+    with {:ok, transport_refs} <- transport_refs(rule, direction, context) do
+      persist_direction(
+        rule,
+        source_endpoint_ref,
+        path_direction,
+        selection_role,
+        [
+          provider_ref
+        ],
+        transport_refs
+      )
+    end
+  end
+
+  # Outbound legs release commands through an uplink gateway for this spacecraft (#44).
+  defp transport_refs(rule, :outbound, context) do
+    with {:ok, ref} <-
+           UplinkGateway.ensure(rule, context.spacecraft, context.transport, context.provider),
+         do: {:ok, [ref]}
+  end
+
+  defp transport_refs(_rule, _direction, _context), do: {:ok, []}
+
+  defp persist_direction(
+         rule,
+         source_endpoint_ref,
+         path_direction,
+         selection_role,
+         provider_refs,
+         transport_refs
+       ) do
     path_template =
       PathTemplate.new(%{
         mission_id: rule.mission_id,
@@ -356,7 +528,8 @@ defmodule Cadence.Comms.RoutingRuleStore do
         direction: path_direction,
         selection_role: selection_role,
         provider_path_ref: rule.provider_path_ref,
-        provider_profile_refs: [provider_ref],
+        provider_profile_refs: provider_refs,
+        transport_profile_refs: transport_refs,
         metadata: %{
           "display_name" => "#{rule.display_name} #{path_direction}",
           "materialized_from_routing_rule_id" => rule.routing_rule_id
@@ -441,6 +614,22 @@ defmodule Cadence.Comms.RoutingRuleStore do
     }
   end
 
+  # Every save materializes fresh path templates and link assignments; retire the previous
+  # ones so they stop counting as live paths (they were left active before).
+  defp retire_materialized(%RoutingRule{} = rule) do
+    patch = %{"retired_by_routing_rule" => rule.routing_rule_id}
+
+    rule.metadata
+    |> Map.get("materialized_link_assignment_ids", [])
+    |> Enum.each(&LinkAssignmentStore.delete(rule.organization_id, rule.mission_id, &1, patch))
+
+    rule.metadata
+    |> Map.get("materialized_path_template_ids", [])
+    |> Enum.each(&PathTemplateStore.delete(rule.organization_id, rule.mission_id, &1, patch))
+
+    :ok
+  end
+
   defp update_rule_row(%RoutingRule{} = rule) do
     case Repo.get_by(RoutingRuleRow,
            organization_id: rule.organization_id,
@@ -472,6 +661,12 @@ defmodule Cadence.Comms.RoutingRuleStore do
               role: Atom.to_string(rule.role),
               enabled: rule.enabled?,
               materialized_link_assignment_id: rule.materialized_link_assignment_id,
+              origin: Atom.to_string(rule.origin),
+              profile_rule_id: rule.profile_rule_id,
+              spacecraft_type_id: rule.spacecraft_type_id,
+              spacecraft_type_version: rule.spacecraft_type_version,
+              ground_station_id: rule.ground_station_id,
+              leg_direction: rule.leg_direction,
               metadata: %{"value" => rule.metadata},
               updated_at: DateTime.utc_now()
             ]
@@ -506,7 +701,14 @@ defmodule Cadence.Comms.RoutingRuleStore do
        role: Map.get(attrs, :role, rule.role),
        enabled?: Map.get(attrs, :enabled?, rule.enabled?),
        materialized_link_assignment_id: nil,
-       metadata: metadata
+       origin: rule.origin,
+       profile_rule_id: rule.profile_rule_id,
+       spacecraft_type_id: Map.get(attrs, :spacecraft_type_id, rule.spacecraft_type_id),
+       spacecraft_type_version:
+         Map.get(attrs, :spacecraft_type_version, rule.spacecraft_type_version),
+       ground_station_id: rule.ground_station_id,
+       leg_direction: rule.leg_direction,
+       metadata: Map.drop(metadata, @materialized_keys)
      })}
   end
 

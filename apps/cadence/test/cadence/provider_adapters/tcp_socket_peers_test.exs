@@ -1,7 +1,7 @@
 defmodule Cadence.ProviderAdapters.TCPSocketPeersTest do
   @moduledoc """
-  A listening provider never refuses a second peer silently: it is closed and logged with its
-  address, never left in the listen backlog believing it is connected.
+  DECISIONS #67: a listening provider never refuses a second peer silently, and drops a peer
+  that qualification couldn't verify so the attested one can connect (qa #38 positive test).
   """
   use Cadence.DataCase, async: false
 
@@ -76,21 +76,47 @@ defmodule Cadence.ProviderAdapters.TCPSocketPeersTest do
     %{provider: provider, port: :sys.get_state(provider).port}
   end
 
-  test "a second peer is refused with a warning naming it, and the first keeps the session", c do
-    first = connect!(c.port)
-    first_address = local_address(first)
-    assert eventually(fn -> :sys.get_state(c.provider).session_peer == first_address end)
+  test "a second peer is refused with a warning naming it; an unverified peer is dropped and the next one connects",
+       c do
+    stray = connect!(c.port)
+    stray_address = local_address(stray)
+    assert eventually(fn -> :sys.get_state(c.provider).session_peer == stray_address end)
 
+    # The attested peer arrives second: refused (closed), never left waiting in the backlog.
     log =
       capture_log(fn ->
-        second = connect!(c.port)
-        assert {:error, :closed} = :gen_tcp.recv(second, 0, 2_000)
-        :gen_tcp.close(second)
+        attested = connect!(c.port)
+        assert {:error, :closed} = :gen_tcp.recv(attested, 0, 2_000)
+        :gen_tcp.close(attested)
       end)
 
     assert log =~ "refused a second connection from 127.0.0.1:"
-    assert log =~ "#{first_address} is connected"
-    assert :sys.get_state(c.provider).session_peer == first_address
+    assert log =~ "#{stray_address} is connected"
+
+    # Qualification couldn't verify the stray: drop it and keep accepting.
+    log =
+      capture_log(fn ->
+        assert {:error, :peer_not_connected} =
+                 TCPSocket.drop_unverified_peer(c.provider, "127.0.0.1:1", :mismatch)
+
+        assert :ok =
+                 TCPSocket.drop_unverified_peer(
+                   c.provider,
+                   stray_address,
+                   :attestation_peer_mismatch
+                 )
+      end)
+
+    assert log =~ "dropped unverified peer #{stray_address}"
+    assert {:error, :closed} = :gen_tcp.recv(stray, 0, 2_000)
+
+    assert {:ok, %{uplink_session: %{status: :blocked, reason: :unverified_peer_connected}}} =
+             TCPSocket.snapshot(c.provider)
+
+    attested = connect!(c.port)
+    attested_address = local_address(attested)
+    assert eventually(fn -> :sys.get_state(c.provider).session_peer == attested_address end)
+    assert {:ok, _handle} = TCPSocket.uplink_session(c.provider)
   end
 
   test "repeat warnings about the same peer address are rate-limited", c do

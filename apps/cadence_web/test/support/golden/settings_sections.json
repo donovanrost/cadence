@@ -1,0 +1,9 @@
+{
+  "about": "Every settings section, its owner and scopes. owner: \"cadence\" = a Cadence.Management.Settings host section; an application key = that application's settings_sections; \"console\" = added by Cadence.Management.ConsoleSettings only. host: true = the host still has a settings.section contribution for it (frontend/apps/host/src/settings/contributions.ts; dropped when §11c C deletes SettingsPage.vue). Guarded by apps/cadence_web/test/cadence_web/settings_sections_golden_test.exs (server and console) and frontend/apps/host/src/settings/contributions.golden.test.ts (host).",
+  "sections": [
+    { "key": "cadence.governance", "owner": "cadence", "scopes": ["organization", "mission"], "host": true },
+    { "key": "cadence.pass_review", "owner": "cadence", "scopes": ["organization", "mission"], "host": false },
+    { "key": "commanding.defaults", "owner": "ops_console", "scopes": ["organization", "mission"], "host": true },
+    { "key": "cadence.configuration", "owner": "console", "scopes": ["organization", "mission"], "host": false }
+  ]
+}

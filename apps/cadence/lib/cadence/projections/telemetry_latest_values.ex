@@ -82,6 +82,16 @@ defmodule Cadence.Projections.TelemetryLatestValues do
     end
   end
 
+  @doc """
+  Whether a run of this job type is safe to run again after the node stopped mid-run (Jobs
+  recovery, 11-14): yes. The rebuild replaces the scope's current values from the Postgres
+  sample records in one transaction (CurrentValueStore.Postgres.replace_values_for_scope:
+  delete plus upsert), calls nothing external and publishes nothing.
+  """
+  @spec rerun_safe?(atom()) :: boolean()
+  def rerun_safe?(:telemetry_latest_value_rebuild), do: true
+  def rerun_safe?(_job_type), do: false
+
   @doc false
   @spec execute_enqueued_run(binary()) :: {:ok, Run.t()} | {:error, term()}
   def execute_enqueued_run(rebuild_run_id) when is_binary(rebuild_run_id) do

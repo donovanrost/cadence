@@ -38,6 +38,17 @@ defmodule Cadence.GroundNetworks.ProviderEventInbox do
   @default_claim_limit 50
   @default_processing_timeout_ms 60_000
 
+  # A retried event waits base * 2^(attempts - 1), capped, before it's claimed again; after
+  # @max_attempts it's quarantined `retry_exhausted` (director 11-14: 22 events retried every
+  # second for six hours, ~291k provider reads and audit rows). The reconciler's own poll still
+  # reads the reservation, so a quarantined event loses no authority; reprocess starts it over.
+  @retry_base_ms 2_000
+  @retry_max_ms 300_000
+  @max_attempts 20
+
+  @doc "Attempts (claims) an event gets before it's quarantined `retry_exhausted`."
+  def max_attempts(opts \\ []), do: Keyword.get(opts, :max_attempts, @max_attempts)
+
   @type ingest_summary :: %{
           inserted: non_neg_integer(),
           duplicates: non_neg_integer(),
@@ -152,13 +163,26 @@ defmodule Cadence.GroundNetworks.ProviderEventInbox do
       )
 
     limit = Keyword.get(opts, :limit, @default_claim_limit)
+    base_s = Keyword.get(opts, :retry_base_ms, @retry_base_ms) / 1_000
+    max_s = Keyword.get(opts, :retry_max_ms, @retry_max_ms) / 1_000
+    claimed_naive = DateTime.to_naive(claimed_at)
 
     Repo.transaction(fn ->
       rows =
         ProviderEventInboxRow
         |> where(
           [row],
-          row.processing_state in ["received", "reprocessing"] or
+          row.processing_state == "reprocessing" or
+            (row.processing_state == "received" and
+               (row.attempt_count == 0 or is_nil(row.last_attempted_at) or
+                  fragment(
+                    "? + make_interval(secs => least(?::float8, ?::float8 * power(2, least(? - 1, 30)))) <= ?::timestamp",
+                    row.last_attempted_at,
+                    ^max_s,
+                    ^base_s,
+                    row.attempt_count,
+                    ^claimed_naive
+                  ))) or
             (row.processing_state == "processing" and row.last_attempted_at <= ^stale_before)
         )
         |> order_by([row], asc: row.received_at, asc: row.provider_event_inbox_id)
@@ -194,6 +218,12 @@ defmodule Cadence.GroundNetworks.ProviderEventInbox do
   @spec retry(ProviderEventInboxEntry.t(), term(), keyword()) ::
           {:ok, ProviderEventInboxEntry.t()} | {:error, term()}
   def retry(%ProviderEventInboxEntry{} = entry, reason, opts \\ []) do
+    if entry.attempt_count >= max_attempts(opts),
+      do: quarantine(entry, %{code: :retry_exhausted, last_error: reason}, opts),
+      else: requeue(entry, reason, opts)
+  end
+
+  defp requeue(entry, reason, opts) do
     error = bounded_error("processing_retry", reason, now(opts))
 
     transition_with_audit(
@@ -505,6 +535,7 @@ defmodule Cadence.GroundNetworks.ProviderEventInbox do
         processed_at: processed_at,
         error_document: error
       })
+      |> restart_attempts(state)
 
     multi =
       Multi.new()
@@ -528,6 +559,10 @@ defmodule Cadence.GroundNetworks.ProviderEventInbox do
       {:error, _operation, reason, _changes} -> {:error, reason}
     end
   end
+
+  # An operator's reprocess is a fresh run: the backoff and the attempt cap start over.
+  defp restart_attempts(attrs, :reprocessing), do: Map.put(attrs, :attempt_count, 0)
+  defp restart_attempts(attrs, _state), do: attrs
 
   defp update_processing(repo, entry, attrs) do
     case repo.get(ProviderEventInboxRow, entry.provider_event_inbox_id) do

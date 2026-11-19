@@ -508,7 +508,7 @@ defmodule CadenceWeb.OpsCommandWorkspacePageTest do
     assert current["data"]["monitor"]["mission_id"] == c.mission
   end
 
-  test "members observe execution and fresh role changes remove preparation access", c do
+  test "a member demoted from admin keeps preparation access (DECISIONS #62)", c do
     path = path(c) <> "&focus_command_id=missing-command"
     assert {:error, {:redirect, %{to: "/sign-in"}}} = live(build_conn(), path)
     {:ok, view, _} = live(TestFixtures.member_conn(c.user), path)
@@ -519,14 +519,8 @@ defmodule CadenceWeb.OpsCommandWorkspacePageTest do
     |> Repo.update!()
 
     assert %{"snapshot" => %{"status" => "ready", "data" => data}} = read(view, path, captured)
-    assert data["state"] == "observe"
     assert data["monitor"]["query"]["focus_command_id"] == "missing-command"
-    refute Map.has_key?(data, "catalog")
-    refute Map.has_key?(data, "workbench")
-
-    assert %{"snapshot" => %{"status" => "rejected"}} =
-             action(view, path, captured, "preview_targets", %{})
-
+    assert Map.has_key?(data, "workbench")
     assert draft_count(c) == 0
   end
 

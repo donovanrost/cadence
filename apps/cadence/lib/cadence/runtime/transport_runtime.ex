@@ -135,6 +135,9 @@ defmodule Cadence.Runtime.TransportRuntime do
   def recovery_exchange(runtime, exchange, permit),
     do: GenServer.call(runtime, {:session_action, :exchange, [exchange, permit]})
 
+  def drop_session_peer(runtime, peer, reason),
+    do: GenServer.call(runtime, {:session_action, :drop_peer, [peer, reason]})
+
   def block_session(runtime, reason),
     do: GenServer.call(runtime, {:session_action, :block, [reason]})
 
@@ -271,8 +274,10 @@ defmodule Cadence.Runtime.TransportRuntime do
     do: {:reply, {:error, :transport_runtime_quiesced}, state}
 
   def handle_call(:uplink_admission, _from, state) do
-    case TransportSession.admit(state) do
-      {:ok, permit, next} -> {:reply, {:ok, permit}, next}
+    with {:ok, permit, next} <- TransportSession.admit(state),
+         :ok <- uplink_ready(next, permit) do
+      {:reply, {:ok, permit}, next}
+    else
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
   end
@@ -849,6 +854,24 @@ defmodule Cadence.Runtime.TransportRuntime do
   defp command_name(%UplinkRequest{} = action_request), do: action_request.command_name
   defp command_name(%ProviderRequest{} = action_request), do: action_request.command_name
   defp command_name(_action_request), do: nil
+
+  # #33: once the session admits, a busy extension (a COP-1 release in flight) still refuses,
+  # before any release is claimed; the permit just granted is handed back. Only an explicit
+  # busy refuses; anything else is left to the release itself.
+  defp uplink_ready(state, permit) do
+    case CapabilityRegistry.transport_uplink_readiness(
+           state.process_namespace.capability_registry,
+           state.family_key,
+           state.extension_state
+         ) do
+      {:error, {:uplink_busy, _reason}} = busy ->
+        TransportSession.finish_admission(state, permit)
+        busy
+
+      _ready ->
+        :ok
+    end
+  end
 
   defp signal_phase(%UplinkRequest{}), do: :acceptance
   defp signal_phase(_action_request), do: nil

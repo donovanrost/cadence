@@ -6,20 +6,7 @@ import { join } from "node:path";
 const appRoot = import.meta.dirname;
 const sourceRoot = join(appRoot, "src");
 const entryFiles = ["federated-application.ts"];
-const surfaceIds = [
-  "organization_home",
-  "provider_accounts",
-  "provider_account_new",
-  "provider_account_show",
-  "notifications",
-  "notifications_bell",
-  "admin_home",
-  "admin_runtime",
-  "admin_organizations",
-  "admin_organization_new",
-  "admin_organization_show",
-  "admin_organization_invite",
-];
+const surfaceIds = ["notifications", "notifications_bell"];
 
 /** @param {string} directory @returns {Promise<string[]>} */
 async function sourceFiles(directory) {
@@ -64,10 +51,10 @@ void test("declares one app-level exposed renderer for every contributed surface
   assert.equal(new Set(surfaceIds).size, surfaceIds.length);
   assert.match(manifest, /applicationKey: "organization_admin"/);
   assert.match(manifest, /packageId: "cadence\.organization-admin"/);
-  assert.match(manifest, /installableScopes: \["organization", "user", "admin"\]/);
-  assert.match(contribution, /scope: "organization"/);
+  assert.match(manifest, /installableScopes: \["user"\]/);
+  // §11c A + L13: no organization-scope surface is left (user scope only).
+  assert.doesNotMatch(contribution, /scope: "organization"/);
   assert.match(contribution, /scope: "user"/);
-  assert.match(contribution, /scope: "admin"/);
 });
 
 /** @param {string} path */

@@ -7,7 +7,7 @@ defmodule Cadence.Reads.MissionModels.ActiveBasis do
   This adapter exposes no activation mutation or runtime process operation.
   """
 
-  alias Cadence.Catalog.SpacecraftModelBindings, as: ModelBindings
+  alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Control.SpacecraftModelBindings
 
   alias Cadence.Activations
@@ -21,21 +21,33 @@ defmodule Cadence.Reads.MissionModels.ActiveBasis do
 
   def with_command_catalog(organization_id, mission_id, operation) do
     Activations.with_locked_command_basis(organization_id, mission_id, fn activation ->
-      with {:ok, basis} <- MissionModelPromotion.command_authoring_basis(activation),
-           {:ok, catalog} <-
-             MissionModelPlanDecoder.command_authoring_catalog(basis.runtime_plans) do
-        snapshot = %{
-          basis: basis,
-          catalog: catalog,
-          activation_id: activation.activation_id,
-          activation: activation,
-          generation: activation.generation,
-          token: AuthoringIdentity.digest({activation, basis.runtime_plans.command})
-        }
-
-        operation.(snapshot)
-      end
+      with {:ok, snapshot} <- command_snapshot(activation), do: operation.(snapshot)
     end)
+  end
+
+  @doc """
+  The same snapshot as `with_command_catalog/3`, read **without** the activation
+  lock, for long read-only validation (group preflight). Its `token` identifies
+  the generation, so a later locked step can check nothing changed in between.
+  """
+  def command_catalog_snapshot(organization_id, mission_id) do
+    with {:ok, activation} <- Activations.fetch_active_activation(organization_id, mission_id),
+         do: command_snapshot(activation)
+  end
+
+  defp command_snapshot(activation) do
+    with {:ok, basis} <- MissionModelPromotion.command_authoring_basis(activation),
+         {:ok, catalog} <- MissionModelPlanDecoder.command_authoring_catalog(basis.runtime_plans) do
+      {:ok,
+       %{
+         basis: basis,
+         catalog: catalog,
+         activation_id: activation.activation_id,
+         activation: activation,
+         generation: activation.generation,
+         token: AuthoringIdentity.digest({activation, basis.runtime_plans.command})
+       }}
+    end
   end
 
   def fetch_runtime_basis(organization_id, mission_id) do
@@ -45,18 +57,14 @@ defmodule Cadence.Reads.MissionModels.ActiveBasis do
 
   def fetch_command_runtime_basis(organization_id, mission_id, source_endpoint_id) do
     with {:ok, activation} <- Activations.fetch_active_activation(organization_id, mission_id) do
-      case activation.metadata do
-        %{"spacecraft_configurations" => _} ->
-          command_runtime_basis(activation, source_endpoint_id)
-
-        _ ->
-          MissionModelPromotion.runtime_basis(activation)
-      end
+      if FleetSnapshot.fleet?(activation.metadata),
+        do: command_runtime_basis(activation, source_endpoint_id),
+        else: MissionModelPromotion.runtime_basis(activation)
     end
   end
 
   defp command_runtime_basis(activation, source) do
-    case ModelBindings.entry_for_source(activation.metadata, source) do
+    case FleetSnapshot.entry_for_source(activation.metadata, source) do
       {:ok, %{"commanding_enabled" => true}} ->
         SpacecraftModelBindings.runtime_basis(activation, source)
 
@@ -66,10 +74,15 @@ defmodule Cadence.Reads.MissionModels.ActiveBasis do
   end
 
   @doc "Selects a target's immutable plan while the caller retains the generation lock."
-  def for_target(
-        %{activation: %{metadata: %{"spacecraft_configurations" => _}} = activation} = snapshot,
-        target
-      ) do
+  def for_target(%{activation: %{metadata: metadata} = activation} = snapshot, target) do
+    if FleetSnapshot.fleet?(metadata),
+      do: target_basis(snapshot, activation, target),
+      else: {:ok, snapshot}
+  end
+
+  def for_target(snapshot, _target), do: {:ok, snapshot}
+
+  defp target_basis(snapshot, activation, target) do
     with {:ok, basis} <-
            SpacecraftModelBindings.command_basis(
              activation,
@@ -79,8 +92,6 @@ defmodule Cadence.Reads.MissionModels.ActiveBasis do
       {:ok, %{snapshot | basis: basis, catalog: catalog}}
     end
   end
-
-  def for_target(snapshot, _target), do: {:ok, snapshot}
 
   def active_revision_id(organization_id, mission_id) do
     case Activations.fetch_active_activation(organization_id, mission_id) do

@@ -41,10 +41,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.SpacecraftTest do
     assert Enum.all?(
              [
                "cadence.spacecraft.applications",
-               "cadence.spacecraft.edit",
                "cadence.spacecraft.list",
-               "cadence.spacecraft.new",
-               "cadence.spacecraft.profile.new",
                "cadence.spacecraft.profile.show",
                "cadence.spacecraft.profiles",
                "cadence.spacecraft.readiness",
@@ -55,11 +52,20 @@ defmodule Cadence.Reads.ApplicationSurfaces.SpacecraftTest do
              &Map.has_key?(context.providers, {"spacecraft", &1})
            )
 
+    # Host-action sweep row 2: the new, profile_new and edit form surfaces are gone.
+    for gone <- ~w(cadence.spacecraft.edit cadence.spacecraft.new cadence.spacecraft.profile.new),
+        do: refute(Map.has_key?(context.providers, {"spacecraft", gone}))
+
     assert Map.has_key?(context.providers, {"telemetry_decom", "cadence.telemetry_decom.manage"})
     refute Map.has_key?(context.providers, {"spacecraft", "cadence.telemetry_decom.manage"})
 
-    assert {:ok, %{"data" => %{"page" => %{"id" => "spacecraft-new-page"}}}} =
-             dispatch(context, HostContext.mission(@mission_id), "new", "cadence.spacecraft.new")
+    assert {:ok, %{"data" => %{}}} =
+             dispatch(
+               context,
+               HostContext.mission(@mission_id),
+               "list",
+               "cadence.spacecraft.list"
+             )
 
     assert {:ok, %{"data" => %{"page" => %{"id" => "spacecraft-show-page"}}}} =
              dispatch(

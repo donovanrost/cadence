@@ -147,6 +147,8 @@ defmodule Cadence.Commanding.Dispatcher do
         ),
       list_pending_queue_lanes_fun:
         Keyword.get(opts, :list_pending_queue_lanes_fun, &Commanding.list_pending_queue_lanes/0),
+      expire_due_fun:
+        Keyword.get(opts, :expire_due_fun, &Cadence.Commanding.expire_due_requests/0),
       lane_dispatcher_opts: lane_dispatcher_opts(opts),
       safety_poll_interval_ms:
         Keyword.get(opts, :safety_poll_interval_ms, @default_safety_poll_interval_ms),
@@ -188,6 +190,7 @@ defmodule Cadence.Commanding.Dispatcher do
 
   @impl true
   def handle_info(:reconcile, state) do
+    _ = state.expire_due_fun.()
     _ = reconcile_dispatch_lanes(state, :safety)
     schedule_next_reconcile(state)
     {:noreply, state}
@@ -213,7 +216,35 @@ defmodule Cadence.Commanding.Dispatcher do
 
     summary = %{pending_lane_count: length(pending_lanes)}
     emit(:reconcile, state, summary, %{reason: reason})
-    summary
+    with_lane_status(summary, state, pending_lanes, reason)
+  end
+
+  # An operator's reconcile_now also reports each lane's last result and next timer (#38).
+  defp with_lane_status(summary, state, pending_lanes, :manual),
+    do: Map.put(summary, :lanes, Enum.map(pending_lanes, &lane_status(state, &1)))
+
+  defp with_lane_status(summary, _state, _pending_lanes, _reason), do: summary
+
+  defp lane_status(state, lane) do
+    status =
+      case DispatchSupervisor.lane_dispatcher(
+             state.process_namespace,
+             lane.organization_id,
+             lane.mission_id,
+             lane.queue_lane_key
+           ) do
+        {:ok, pid} -> LaneDispatcher.status(pid)
+        :error -> {:error, :noproc}
+      end
+
+    lane
+    |> Map.take([:organization_id, :mission_id, :queue_lane_key])
+    |> Map.merge(
+      case status do
+        {:ok, status} -> status
+        {:error, reason} -> %{last_result: nil, next_dispatch: nil, waiting: nil, error: reason}
+      end
+    )
   end
 
   defp schedule_next_reconcile(%{

@@ -7,6 +7,8 @@ defmodule Cadence.ContactPlanning.ContactRequirementVersion do
   @directions [:downlink, :uplink, :bidirectional, :tracking]
   @success_measures [:any_contact, :minimum_duration, :minimum_data_volume, :contact_count]
   @priorities [:routine, :high, :critical]
+  # DECISIONS #74: 10 min to 7 days, and no longer than the requirement's window.
+  @max_gap_range 600..604_800
 
   @type direction :: :downlink | :uplink | :bidirectional | :tracking
   @type success_measure ::
@@ -30,6 +32,7 @@ defmodule Cadence.ContactPlanning.ContactRequirementVersion do
           minimum_data_volume_bytes: pos_integer() | nil,
           contact_count: pos_integer(),
           minimum_separation_seconds: non_neg_integer(),
+          max_gap_seconds: pos_integer() | nil,
           priority: priority(),
           provider_constraints_document: map(),
           station_constraints_document: map(),
@@ -59,6 +62,7 @@ defmodule Cadence.ContactPlanning.ContactRequirementVersion do
     :minimum_data_volume_bytes,
     :contact_count,
     :minimum_separation_seconds,
+    :max_gap_seconds,
     :priority,
     :provider_constraints_document,
     :station_constraints_document,
@@ -120,6 +124,7 @@ defmodule Cadence.ContactPlanning.ContactRequirementVersion do
             value(attrs, :minimum_separation_seconds, 0),
             :minimum_separation_seconds
           ),
+        max_gap_seconds: optional_positive(value(attrs, :max_gap_seconds), :max_gap_seconds),
         priority:
           attrs
           |> value(:priority, :routine)
@@ -173,6 +178,35 @@ defmodule Cadence.ContactPlanning.ContactRequirementVersion do
       "rationale" => version.rationale,
       "metadata" => version.metadata
     }
+    # Only when set, so versions without a limit keep their content hash (DECISIONS #74).
+    |> then(fn document ->
+      if version.max_gap_seconds,
+        do: Map.put(document, "max_gap_seconds", version.max_gap_seconds),
+        else: document
+    end)
+  end
+
+  @doc "The accepted `max_gap_seconds` range (DECISIONS #74); also capped by the window."
+  def max_gap_range, do: @max_gap_range
+
+  @doc """
+  `:ok`, or why `max_gap_seconds` is out of range: 600 s to 7 days, and no longer than the
+  requirement's window (DECISIONS #74).
+  """
+  @spec max_gap_error(t()) :: :ok | {:error, binary()}
+  def max_gap_error(%__MODULE__{max_gap_seconds: nil}), do: :ok
+
+  def max_gap_error(%__MODULE__{max_gap_seconds: gap} = version) do
+    cond do
+      gap not in @max_gap_range ->
+        {:error, "must be between 600 and 604800 seconds"}
+
+      gap > DateTime.diff(version.latest_end, version.earliest_start) ->
+        {:error, "must not be longer than the window"}
+
+      true ->
+        :ok
+    end
   end
 
   @spec content_sha256(t()) :: binary()

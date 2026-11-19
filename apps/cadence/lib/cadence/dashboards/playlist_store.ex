@@ -5,31 +5,6 @@ defmodule Cadence.Dashboards.PlaylistStore do
   alias Cadence.Dashboards.DocumentStore.DashboardRow
   alias Cadence.Repo
 
-  def list(org, mission, query) do
-    scoped(DashboardPlaylist, org, mission)
-    |> search(query.q)
-    |> after_id(:dashboard_playlist_id, query.after)
-    |> order_by([p], asc: p.dashboard_playlist_id)
-    |> select([p], %{
-      id: p.dashboard_playlist_id,
-      name: p.name,
-      description: p.description,
-      count: fragment("cardinality(?)", p.dashboard_ids),
-      dwell_seconds: p.dwell_seconds,
-      wallboard_mode: p.wallboard_mode
-    })
-    |> page()
-  end
-
-  def choices(org, mission, query) do
-    active(org, mission)
-    |> search(query.q)
-    |> after_id(:dashboard_id, query.after)
-    |> order_by([d], asc: d.dashboard_id)
-    |> select([d], %{id: d.dashboard_id, name: d.name, published_version: d.published_version})
-    |> page()
-  end
-
   def create(org, mission, attrs, actor) do
     Repo.transaction(fn ->
       ids = attrs["dashboard_ids"]
@@ -51,11 +26,74 @@ defmodule Cadence.Dashboards.PlaylistStore do
     end)
   end
 
-  def dashboard(org, mission, id) do
-    active(org, mission)
-    |> where([d], d.dashboard_id == ^id)
-    |> select([d], %{id: d.dashboard_id, name: d.name})
-    |> Repo.one()
+  @doc """
+  Updates a playlist observed at `expected_updated_at` (Q6): `{:ok, playlist}`, or
+  `{:error, :not_found | {:invalid_dashboard, ids} | {:stale, current} | changeset}`.
+  """
+  def update(org, mission, id, attrs, actor, expected_updated_at) do
+    Repo.transaction(fn ->
+      playlist =
+        scoped(DashboardPlaylist, org, mission)
+        |> where([p], p.dashboard_playlist_id == ^id)
+        |> lock("FOR UPDATE")
+        |> Repo.one()
+
+      cond do
+        is_nil(playlist) -> Repo.rollback(:not_found)
+        playlist.updated_at != expected_updated_at -> Repo.rollback({:stale, playlist})
+        true -> :ok
+      end
+
+      if ids = attrs["dashboard_ids"], do: available!(org, mission, ids)
+
+      changes =
+        attrs
+        |> Map.take(~w(name description dashboard_ids dwell_seconds wallboard_mode))
+        |> Map.put("updated_by", actor)
+
+      case playlist |> DashboardPlaylist.changeset(changes) |> Repo.update() do
+        {:ok, updated} -> updated
+        {:error, changeset} -> Repo.rollback(changeset)
+      end
+    end)
+  end
+
+  @doc "Deletes a playlist (hard: nothing references one). `{:ok, playlist}` or `{:error, :not_found}`."
+  def delete(org, mission, id) do
+    Repo.transaction(fn ->
+      scoped(DashboardPlaylist, org, mission)
+      |> where([p], p.dashboard_playlist_id == ^id)
+      |> lock("FOR UPDATE")
+      |> Repo.one()
+      |> case do
+        nil -> Repo.rollback(:not_found)
+        playlist -> Repo.delete!(playlist)
+      end
+    end)
+  end
+
+  defp available!(org, mission, ids) do
+    available =
+      active(org, mission)
+      |> where([d], d.dashboard_id in ^ids)
+      |> order_by([d], asc: d.dashboard_id)
+      |> lock("FOR SHARE")
+      |> select([d], d.dashboard_id)
+      |> Repo.all()
+
+    case Enum.reject(ids, &(&1 in available)) do
+      [] -> :ok
+      missing -> Repo.rollback({:invalid_dashboard, missing})
+    end
+  end
+
+  @doc "Playlists that show this dashboard, by name (archive's 'used by', director Q10)."
+  def using_dashboard(org, mission, dashboard_id) do
+    scoped(DashboardPlaylist, org, mission)
+    |> where([p], ^dashboard_id in p.dashboard_ids)
+    |> order_by([p], asc: p.name, asc: p.dashboard_playlist_id)
+    |> select([p], %{id: p.dashboard_playlist_id, name: p.name})
+    |> Repo.all()
   end
 
   defp active(org, mission),
@@ -63,18 +101,4 @@ defmodule Cadence.Dashboards.PlaylistStore do
 
   defp scoped(schema, org, mission),
     do: where(schema, [r], r.organization_id == ^org and r.mission_id == ^mission)
-
-  defp search(query, ""), do: query
-
-  defp search(query, text),
-    do: where(query, [r], fragment("strpos(lower(?), lower(?)) > 0", r.name, ^text))
-
-  defp after_id(query, _, nil), do: query
-  defp after_id(query, key, cursor), do: where(query, [r], field(r, ^key) > ^cursor)
-
-  defp page(query) do
-    rows = query |> limit(26) |> Repo.all()
-    visible = Enum.take(rows, 25)
-    %{rows: visible, next: if(length(rows) > 25, do: List.last(visible).id, else: nil)}
-  end
 end

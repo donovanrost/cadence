@@ -246,6 +246,21 @@ defmodule Cadence.IngressArchive do
     |> policy()
   end
 
+  @doc """
+  Bytes Cadence received per realized contact (S9 pass review), or `:unknown` when the backend
+  can't say. Contacts absent from the map have no indexed evidence.
+  """
+  @spec received_bytes(binary(), [binary()]) :: {:ok, %{binary() => non_neg_integer()}} | :unknown
+  def received_bytes(_mission_id, []), do: {:ok, %{}}
+
+  def received_bytes(mission_id, realized_contact_ids) do
+    backend = backend(configured_policy())
+
+    if function_exported?(backend, :received_bytes, 2),
+      do: {:ok, backend.received_bytes(mission_id, realized_contact_ids)},
+      else: :unknown
+  end
+
   defp backend(%{backend: backend}), do: ensure_backend_loaded!(backend)
 
   defp call_backend(%{backend_opts: backend_opts} = policy, function, args) do

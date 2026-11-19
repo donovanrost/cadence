@@ -5,7 +5,6 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanningTest do
   alias Cadence.Applications.{ActionRequest, HostContext}
   alias Cadence.Applications.OpsConsole.Actions.ContactPlanning
   alias Cadence.Auth.Scope
-  alias Cadence.ContactPlanning.ContactRequirements
   alias Cadence.ContactPlanning.OpportunityCapability
   alias Cadence.Spacecraft
 
@@ -57,58 +56,30 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanningTest do
     scope: scope,
     host_context: host_context
   } do
-    assert {"contact_requirement_new", "save"} in ContactPlanning.bindings()
     assert {"contact_plan_show", "execute-plan"} in ContactPlanning.bindings()
-    refute {"contact_requirement_show", "toggle-opportunity"} in ContactPlanning.bindings()
+    refute Enum.any?(ContactPlanning.bindings(), &match?({"contact_requirement_" <> _, _}, &1))
 
     assert {:error, :unsupported_action} =
              ContactPlanning.execute(
                scope,
                host_context,
-               "contact_requirement_show",
-               request("toggle-opportunity", %{"snapshot_id" => "snapshot-1"})
-             )
-  end
-
-  test "save authorizes and persists the exact Contact Requirement domain result", %{
-    scope: scope,
-    host_context: host_context
-  } do
-    assert {:ok,
-            %{
-              "contactRequirementId" => requirement_id,
-              "version" => 1,
-              "contentSha256" => content_sha256
-            }} =
-             ContactPlanning.execute(
-               scope,
-               host_context,
                "contact_requirement_new",
-               request("save", %{"contact_requirement" => requirement_params()})
+               request("save", %{"contact_requirement" => %{}})
              )
-
-    assert content_sha256 =~ ~r/\A[0-9a-f]{64}\z/
-
-    assert {:ok, requirement, version} =
-             ContactRequirements.fetch(@organization_id, @mission_id, requirement_id)
-
-    assert requirement.contact_requirement_id == requirement_id
-    assert version.service_direction == :downlink
-    assert version.contact_intent == "payload_downlink"
   end
 
   test "rejects a request bound to another mission", %{scope: scope, host_context: host_context} do
     params = %{
       "mission_id" => @other_mission_id,
-      "contact_requirement" => requirement_params()
+      "contact_search" => %{"spacecraft_id" => @spacecraft_id}
     }
 
     assert {:error, :scope_mismatch} =
              ContactPlanning.execute(
                scope,
                host_context,
-               "contact_requirement_new",
-               request("save", params)
+               "contact_schedule",
+               request("validate", params)
              )
   end
 
@@ -151,7 +122,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanningTest do
              ContactPlanning.execute(
                scope,
                host_context,
-               "contact_requirement_new",
+               "contact_schedule",
                request("unknown-action", %{})
              )
 
@@ -159,8 +130,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanningTest do
              ContactPlanning.execute(
                scope,
                host_context,
-               "contact_requirement_new",
-               request("save", %{"contact_requirement" => %{"spacecraft_id" => self()}})
+               "contact_schedule",
+               request("validate", %{"contact_search" => %{"spacecraft_id" => self()}})
              )
   end
 
@@ -170,27 +141,6 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanningTest do
       application_version: 1,
       action_id: action_id,
       params: params
-    }
-  end
-
-  defp requirement_params do
-    %{
-      "spacecraft_id" => @spacecraft_id,
-      "contact_intent" => "payload_downlink",
-      "earliest_start" => "2026-07-16T21:00:00",
-      "latest_end" => "2026-07-17T04:00:00",
-      "success_measure" => "minimum_data_volume",
-      "minimum_duration_seconds" => "600",
-      "preferred_duration_seconds" => "900",
-      "minimum_data_volume_bytes" => "1000000000",
-      "contact_count" => "1",
-      "minimum_separation_seconds" => "0",
-      "priority" => "high",
-      "allowed_providers" => "",
-      "excluded_providers" => "",
-      "allowed_stations" => "",
-      "excluded_stations" => "",
-      "rationale" => "Downlink before the next collection period"
     }
   end
 end

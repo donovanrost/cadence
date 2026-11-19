@@ -8,71 +8,10 @@ defmodule Cadence.Applications.OrganizationAdminQuery do
 
   @query_contracts [
     %{
-      id: "cadence.organization.home",
-      version: 1,
-      surface_id: "organization_home",
-      stream?: false
-    },
-    %{
-      id: "cadence.organization.provider_accounts.list",
-      version: 1,
-      surface_id: "provider_accounts",
-      stream?: true
-    },
-    %{
-      id: "cadence.organization.provider_accounts.new",
-      version: 1,
-      surface_id: "provider_account_new",
-      stream?: false
-    },
-    %{
-      id: "cadence.organization.provider_account.show",
-      version: 1,
-      surface_id: "provider_account_show",
-      stream?: false
-    },
-    %{
-      id: "cadence.organization.notifications",
-      version: 1,
-      surface_id: "notifications",
-      stream?: true
-    },
-    %{
       id: "cadence.organization.notifications_bell",
       version: 1,
       surface_id: "notifications_bell",
       stream?: true
-    },
-    %{id: "cadence.platform_admin.home", version: 1, surface_id: "admin_home", stream?: false},
-    %{
-      id: "cadence.platform_admin.runtime",
-      version: 1,
-      surface_id: "admin_runtime",
-      stream?: true
-    },
-    %{
-      id: "cadence.platform_admin.organizations",
-      version: 1,
-      surface_id: "admin_organizations",
-      stream?: true
-    },
-    %{
-      id: "cadence.platform_admin.organization.new",
-      version: 1,
-      surface_id: "admin_organization_new",
-      stream?: false
-    },
-    %{
-      id: "cadence.platform_admin.organization.show",
-      version: 1,
-      surface_id: "admin_organization_show",
-      stream?: true
-    },
-    %{
-      id: "cadence.platform_admin.organization.invite",
-      version: 1,
-      surface_id: "admin_organization_invite",
-      stream?: false
     }
   ]
 
@@ -113,69 +52,8 @@ defmodule Cadence.Applications.OrganizationAdminQuery do
     end
   end
 
-  defp surface_data(scope, %HostContext{placement: :organization}, "organization_home", _params) do
-    with {:ok, organization} <- Cadence.Organizations.fetch_organization(scope.organization_id) do
-      {:ok, %{organization_id: organization.organization_id}}
-    end
-  end
-
-  defp surface_data(scope, %HostContext{placement: :organization}, "provider_accounts", _params),
-    do: Providers.ProviderAccountList.props(scope)
-
-  defp surface_data(
-         _scope,
-         %HostContext{placement: :organization},
-         "provider_account_new",
-         _params
-       ),
-       do: {:ok, Providers.ProviderAccountNew.props()}
-
-  defp surface_data(
-         scope,
-         %HostContext{placement: :organization},
-         "provider_account_show",
-         params
-       ) do
-    with {:ok, provider_account_id} <- required_param(params, "provider_account_id") do
-      Providers.ProviderAccountShow.props(scope, provider_account_id)
-    end
-  end
-
-  defp surface_data(scope, %HostContext{placement: :user}, "notifications", _params),
-    do: {:ok, Providers.Notifications.props(scope)}
-
   defp surface_data(scope, %HostContext{placement: :user}, "notifications_bell", _params),
     do: {:ok, Providers.Notifications.bell_props(scope)}
-
-  defp surface_data(_scope, %HostContext{placement: :admin}, "admin_home", _params),
-    do: {:ok, Providers.AdminHome.props()}
-
-  defp surface_data(_scope, %HostContext{placement: :admin}, "admin_runtime", params),
-    do: {:ok, Providers.AdminRuntime.props(params)}
-
-  defp surface_data(_scope, %HostContext{placement: :admin}, "admin_organizations", _params),
-    do: {:ok, Providers.AdminOrganizationList.props()}
-
-  defp surface_data(_scope, %HostContext{placement: :admin}, "admin_organization_new", _params),
-    do: {:ok, Providers.AdminOrganizationNew.props()}
-
-  defp surface_data(_scope, %HostContext{placement: :admin}, "admin_organization_show", params) do
-    with {:ok, organization_id} <- required_param(params, "organization_id") do
-      case Providers.AdminOrganizationShow.props(organization_id) do
-        {:ok, props} -> {:ok, props}
-        {:error, reason} -> {:error, reason}
-      end
-    end
-  end
-
-  defp surface_data(_scope, %HostContext{placement: :admin}, "admin_organization_invite", params) do
-    with {:ok, organization_id} <- required_param(params, "organization_id") do
-      case Providers.AdminOrganizationInvite.props(organization_id) do
-        {:ok, props} -> {:ok, props}
-        {:error, reason} -> {:error, reason}
-      end
-    end
-  end
 
   defp surface_data(_scope, _host_context, _surface_id, _params),
     do: {:error, :unsupported_application_host_context}
@@ -233,10 +111,6 @@ defmodule Cadence.Applications.OrganizationAdminQuery do
   defp validate_context(_scope, _host_context, _surface_id),
     do: {:error, :scope_mismatch}
 
-  defp authorize_organization_surface(scope, organization_id, "organization_home") do
-    Policy.authorize(scope, :operate_organization, %{organization_id: organization_id})
-  end
-
   defp authorize_organization_surface(scope, organization_id, _surface_id) do
     Policy.authorize(scope, :read_organization, %{organization_id: organization_id})
   end
@@ -253,19 +127,6 @@ defmodule Cadence.Applications.OrganizationAdminQuery do
         {:error, :unknown_surface}
     end
   end
-
-  defp required_param(params, key) when is_map(params) do
-    case Map.get(params, key) || Map.get(params, query_param_key(key)) do
-      value when is_binary(value) and value != "" -> {:ok, value}
-      _missing -> {:error, :application_surface_subject_required}
-    end
-  end
-
-  defp required_param(_params, _key), do: {:error, :application_surface_subject_required}
-
-  defp query_param_key("provider_account_id"), do: :provider_account_id
-  defp query_param_key("organization_id"), do: :organization_id
-  defp query_param_key(_key), do: nil
 
   @doc "Fetches a query contract by its durable string identity."
   @spec fetch(binary(), pos_integer()) :: {:ok, map()} | {:error, :unknown_query}

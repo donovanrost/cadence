@@ -1,7 +1,7 @@
 defmodule CadenceWeb.ActivationController do
   use CadenceWeb, :controller
 
-  action_fallback CadenceWeb.FallbackController
+  action_fallback(CadenceWeb.FallbackController)
 
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Control.Activations, as: ControlActivations
@@ -93,7 +93,7 @@ defmodule CadenceWeb.ActivationController do
            ),
          {:ok, reason} <- ActivationParams.decision(Map.get(params, "decision", %{})),
          {:ok, %ActivationRequest{} = request, %ActivationDecision{} = decision, approved} <-
-           ManagementActivations.approve(
+           ControlActivations.approve(
              conn.assigns.current_scope,
              activation_request_id,
              reason

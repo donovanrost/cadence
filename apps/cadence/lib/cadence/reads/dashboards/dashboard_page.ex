@@ -11,7 +11,7 @@ defmodule Cadence.Reads.Dashboards.DashboardPage do
   when it names a spacecraft of this mission.
   """
   alias Cadence.Auth.{Policy, Scope}
-  alias Cadence.Dashboards.{AuthoringDraft, DashboardSummary, Documents}
+  alias Cadence.Dashboards.{DashboardSummary, Documents}
   alias Cadence.Reads.Dashboards.Workspace
   alias Cadence.SpacecraftStore
 
@@ -49,48 +49,6 @@ defmodule Cadence.Reads.Dashboards.DashboardPage do
   end
 
   def load(_, _, _, _), do: {:error, :unavailable}
-
-  @doc """
-  Projects a staged authoring transaction for the edit-mode page: the same view
-  shape, with the unsaved candidate resolved in place of the saved draft.
-
-  When someone else saved a newer version, the candidate is still shown (the
-  preview reauthorizes edit access) and reported as conflicting, so the author
-  can review it before discarding to adopt the newer version.
-  """
-  @spec staged(Scope.t(), struct(), map()) ::
-          {:ok, view(), %{document: struct(), conflict: boolean()}} | {:error, atom()}
-  def staged(%Scope{} = scope, %AuthoringDraft{} = draft, runtime) when is_map(runtime) do
-    with {:ok, options} <- scope_options(scope, draft.mission_id, runtime),
-         {:ok, document, conflict} <- candidate(scope, draft),
-         {:ok, snapshot} <- Workspace.preview(scope, document, runtime: runtime),
-         {:ok, summary} <-
-           Documents.fetch_summary(scope.organization_id, draft.mission_id, draft.dashboard_id) do
-      {:ok,
-       %{
-         version: 2,
-         author: true,
-         saved: saved(summary),
-         snapshot: snapshot,
-         scope_options: options
-       }, %{document: document, conflict: conflict}}
-    else
-      {:error, :invalid_scope} -> {:error, :invalid_scope}
-      _ -> {:error, :unavailable}
-    end
-  rescue
-    _ -> {:error, :unavailable}
-  catch
-    _, _ -> {:error, :unavailable}
-  end
-
-  defp candidate(scope, draft) do
-    case AuthoringDraft.current(scope, draft) do
-      {:ok, document} -> {:ok, document, false}
-      {:error, :conflict} -> {:ok, draft.document, true}
-      error -> error
-    end
-  end
 
   # Everyone resolves the current version. Only a legacy dashboard that was never
   # made current falls back to its latest version, and only for authors

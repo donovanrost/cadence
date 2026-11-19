@@ -500,6 +500,7 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase do
       subject_ref: normalize_criteria_subject(Map.get(criteria, "subject_ref")),
       comparison: Map.get(criteria, "comparison"),
       value: Map.get(criteria, "value"),
+      value_from_argument: Map.get(criteria, "value_from_argument"),
       range_min: numeric_value(Map.get(criteria, "range_min")),
       range_max: numeric_value(Map.get(criteria, "range_max")),
       use_calibrated: Map.get(criteria, "use_calibrated", true),

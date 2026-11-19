@@ -1,7 +1,9 @@
 defmodule Cadence.ContactPlanning.FleetPlanningStartsTest do
   use Cadence.DataCase, async: false
+  alias Cadence.Control.Scheduling
   alias Cadence.FleetStartFixtures, as: Fixtures
   alias Cadence.Management.Contacts.Store.{ContactRequirementRow, ContactRequirementTemplateRow}
+  alias Cadence.PolicyReviewer
   alias Cadence.Repo
   alias Ecto.Changeset
 
@@ -10,7 +12,8 @@ defmodule Cadence.ContactPlanning.FleetPlanningStartsTest do
     ContactRequirementTemplates,
     FleetPlanningPolicies,
     FleetPlanningRuns,
-    FleetPlanningStarts
+    FleetPlanningStarts,
+    FleetStartInputs
   }
 
   setup do: Fixtures.setup_start()
@@ -55,7 +58,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningStartsTest do
              t.contact_requirement_template_id
            ) == []
 
-    changed = put_in(params, ["fleet_run", "horizon_end"], "2026-07-17T09:00:00.000000Z")
+    changed = put_in(params, ["fleet_run", "horizon_end"], "2030-07-17T09:00:00.000000Z")
 
     assert {:error, :fleet_planning_review_changed} =
              FleetPlanningStarts.create(
@@ -111,7 +114,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningStartsTest do
 
     assert {:ok, _, _, _} =
              FleetPlanningPolicies.approve(
-               c.admin,
+               PolicyReviewer.reviewer(c.admin),
                c.mission_id,
                c.policy.fleet_planning_policy_id,
                2,
@@ -224,7 +227,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningStartsTest do
                Map.put(params, "evidence", Map.put(review.evidence, "mission_id", "foreign"))
              )
 
-    over = put_in(params, ["fleet_run", "horizon_end"], "2026-07-18T04:00:00.000001Z")
+    over = put_in(params, ["fleet_run", "horizon_end"], "2030-07-18T04:00:00.000001Z")
 
     assert {:error, :fleet_planning_horizon_exceeds_policy} =
              FleetPlanningStarts.preview(c.scope, c.mission_id, over)
@@ -245,7 +248,9 @@ defmodule Cadence.ContactPlanning.FleetPlanningStartsTest do
              FleetPlanningStarts.preview(
                c.scope,
                c.mission_id,
-               Map.put(params, "requirements_page", 2)
+               params
+               |> Map.put("requirements_page", 2)
+               |> Map.put("as_of", first.evidence["as_of"])
              )
 
     assert first.requirements.total == 27
@@ -273,6 +278,46 @@ defmodule Cadence.ContactPlanning.FleetPlanningStartsTest do
     assert FleetPlanningRuns.list(c.organization_id, c.mission_id) == []
   end
 
+  test "a start reloads its inputs at the review's instant, not the wall clock (G1)", c do
+    params = Fixtures.params()
+    earlier = DateTime.utc_now() |> DateTime.add(-600) |> DateTime.truncate(:second)
+    as_of = DateTime.to_iso8601(earlier)
+
+    assert {:ok, review} =
+             FleetPlanningStarts.preview(c.scope, c.mission_id, Map.put(params, "as_of", as_of))
+
+    assert review.evidence["as_of"] == as_of
+
+    for stale <- [
+          earlier |> DateTime.add(-600) |> DateTime.to_iso8601(),
+          DateTime.utc_now() |> DateTime.add(600) |> DateTime.to_iso8601()
+        ] do
+      assert {:error, :fleet_planning_review_changed} =
+               FleetPlanningStarts.create(
+                 c.scope,
+                 c.mission_id,
+                 Map.put(params, "evidence", Map.put(review.evidence, "as_of", stale))
+               )
+
+      assert {:error, :fleet_planning_review_changed} =
+               FleetPlanningStarts.preview(c.scope, c.mission_id, Map.put(params, "as_of", stale))
+    end
+
+    assert {:error, :fleet_planning_start_input_invalid} =
+             FleetPlanningStarts.create(
+               c.scope,
+               c.mission_id,
+               Map.put(params, "evidence", Map.delete(review.evidence, "as_of"))
+             )
+
+    assert {:ok, _run, [_ref]} =
+             FleetPlanningStarts.create(
+               c.scope,
+               c.mission_id,
+               Map.put(params, "evidence", review.evidence)
+             )
+  end
+
   test "previously generated closed demand is not advertised or recreated as new demand", c do
     assert {:ok, template, _} =
              ContactRequirementTemplates.create(c.admin, c.mission_id, Fixtures.template_attrs())
@@ -286,8 +331,8 @@ defmodule Cadence.ContactPlanning.FleetPlanningStartsTest do
                c.scope,
                c.mission_id,
                template.contact_requirement_template_id,
-               ~U[2026-07-17 04:00:00.000000Z],
-               ~U[2026-07-17 08:00:00.000000Z]
+               ~U[2030-07-17 04:00:00.000000Z],
+               ~U[2030-07-17 08:00:00.000000Z]
              )
 
     for result <- generated do
@@ -364,8 +409,8 @@ defmodule Cadence.ContactPlanning.FleetPlanningStartsTest do
                c.scope,
                c.mission_id,
                template.contact_requirement_template_id,
-               ~U[2026-07-17 04:00:00.000000Z],
-               ~U[2026-07-17 08:00:00.000000Z]
+               ~U[2030-07-17 04:00:00.000000Z],
+               ~U[2030-07-17 08:00:00.000000Z]
              )
 
     for result <- generated do
@@ -376,8 +421,8 @@ defmodule Cadence.ContactPlanning.FleetPlanningStartsTest do
                  result.requirement.contact_requirement_id,
                  1,
                  %{
-                   earliest_start: ~U[2026-07-18 04:00:00.000000Z],
-                   latest_end: ~U[2026-07-18 08:00:00.000000Z]
+                   earliest_start: ~U[2030-07-18 04:00:00.000000Z],
+                   latest_end: ~U[2030-07-18 08:00:00.000000Z]
                  }
                )
     end
@@ -396,4 +441,70 @@ defmodule Cadence.ContactPlanning.FleetPlanningStartsTest do
 
     assert ref.contact_requirement_id == c.requirement.contact_requirement_id
   end
+
+  # U52: the estimate the Start screen reads, and the limit refusal with its full count.
+  describe "template fan-out" do
+    test "the estimate counts each template's capped occurrences x targets and names the capped",
+         c do
+      assert {:ok, t, _} =
+               ContactRequirementTemplates.create(
+                 c.admin,
+                 c.mission_id,
+                 Fixtures.template_attrs()
+               )
+
+      template_id = t.contact_requirement_template_id
+      %{"fleet_run" => %{"horizon_start" => start}} = Fixtures.params(true)
+      {:ok, start, 0} = DateTime.from_iso8601(start)
+
+      # Hourly, cap 10: a 4 h window holds 5 occurrences (inclusive), uncapped.
+      assert {:ok, %{count: 5, limit: 50_000, capped: []}} =
+               FleetStartInputs.estimate(c.organization_id, c.mission_id, window(start, 4))
+
+      # A 24 h window holds 25; the cap keeps the first 10 and says where it stopped.
+      last = DateTime.add(start, 9 * 3_600)
+
+      assert {:ok,
+              %{count: 10, capped: [%{template_id: ^template_id, limit: 10, last_at: ^last}]}} =
+               FleetStartInputs.estimate(c.organization_id, c.mission_id, window(start, 24))
+
+      # Through the facade, for the Start screen's day (UTC): 04:00 to 00:00 the next day, capped
+      # at 10 from 04:00, so the last kept is 13:00.
+      day_last = DateTime.add(start, 9 * 3_600)
+
+      assert {:ok, %{count: 10, capped: [%{template_id: ^template_id, last_at: ^day_last}]}} =
+               Scheduling.draft_template_estimate(
+                 c.scope,
+                 c.mission_id,
+                 DateTime.to_date(start)
+               )
+    end
+
+    test "a start over the fan-out limit is refused with its whole count", c do
+      for _ <- 1..2 do
+        assert {:ok, _, _} =
+                 ContactRequirementTemplates.create(
+                   c.admin,
+                   c.mission_id,
+                   Fixtures.template_attrs()
+                 )
+      end
+
+      previous = Application.get_env(:cadence, :template_fan_out_limit)
+      Application.put_env(:cadence, :template_fan_out_limit, 3)
+
+      on_exit(fn ->
+        if previous,
+          do: Application.put_env(:cadence, :template_fan_out_limit, previous),
+          else: Application.delete_env(:cadence, :template_fan_out_limit)
+      end)
+
+      # Two templates x 5 occurrences: the full 10, not the first template's 5.
+      assert {:error, {:fleet_planning_occurrence_limit_exceeded, 10, 3}} =
+               FleetPlanningStarts.preview(c.scope, c.mission_id, Fixtures.params(true))
+    end
+  end
+
+  defp window(start, hours),
+    do: %{horizon_start: start, horizon_end: DateTime.add(start, hours * 3_600)}
 end

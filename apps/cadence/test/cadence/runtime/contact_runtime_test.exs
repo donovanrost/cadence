@@ -1,6 +1,8 @@
 defmodule Cadence.Runtime.ContactRuntimeTest do
   use Cadence.RuntimeCase, async: false
 
+  @moduletag :ingest_journal_matrix
+
   import Ecto.Query
 
   alias Cadence.Contacts.{

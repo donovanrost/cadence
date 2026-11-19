@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cadence font comparison</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Sans+Condensed:wght@500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;family=Martian+Mono:wght@400;500;600&amp;family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Saira:wght@400;500;600&amp;family=Saira+Condensed:wght@500;600;700&amp;family=Azeret+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#05070A}
+a{color:#E6EDF3}a:hover{color:#FFFFFF}
+.pnl{background:#0A0E13;border:1px solid #1C2530}
+.k{font:500 11px 'JetBrains Mono',monospace;color:#7D8A99;letter-spacing:.04em}
+.tn{font-variant-numeric:tabular-nums}
+</style>
+</helmet>
+<div style="font-family: 'IBM Plex Sans', system-ui, sans-serif; color: #E6EDF3; min-height: 100vh; box-sizing: border-box; padding: 64px 24px 80px; background-color: #05070A; background-image: linear-gradient(rgba(230,237,243,.03) 1px, transparent 1px), linear-gradient(90deg, rgba(230,237,243,.03) 1px, transparent 1px); background-size: 40px 40px">
+<div style="max-width: 1320px; margin: 0 auto; display: flex; flex-direction: column; gap: 32px">
+
+<header style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 24px; align-items: flex-end">
+<div style="display: flex; flex-direction: column; gap: 12px; max-width: 760px">
+<span class="k">TYPE STUDY · SAME CONTENT, FIVE STACKS</span>
+<h1 style="margin: 0; font: 700 56px/0.95 'Barlow Condensed', sans-serif; letter-spacing: .04em; text-transform: uppercase">Font comparison</h1>
+<p style="margin: 0; font-size: 16px; line-height: 1.55; color: #9DAAB8">Each panel uses one stack for labels, sentences, live numbers and ids. Numbers use tabular figures, so countdowns hold still. Check the glyph line at the bottom of each panel: 0 vs O and 1 vs l vs I are what operators misread.</p>
+</div>
+<div class="k" style="display: flex; flex-direction: column; gap: 4px; text-align: right"><span>LABEL · condensed, uppercase</span><span>TEXT · sentences</span><span>NUMBER · live values, tabular</span><span>ID · mono, literal ids and commands</span></div>
+</header>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(600px, 1fr)); gap: 16px">
+<sc-for list="{{opts}}" as="o" hint-placeholder-count="5">
+<section class="pnl" style="display: flex; flex-direction: column">
+<div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; padding: 12px 18px; border-bottom: 1px solid #1C2530">
+<span class="k" style="color: #E6EDF3">{{o.key}}</span>
+<span style="font-size: 15px; font-weight: 600">{{o.name}}</span>
+<span class="k" style="margin-left: auto">{{o.tag}}</span>
+</div>
+<div style="padding: 18px; display: flex; flex-direction: column; gap: 16px">
+
+<div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<span style="font-family: {{o.cond}}; font-weight: 600; font-size: 13px; letter-spacing: .18em; text-transform: uppercase; color: #7D8A99">Next AOS · Fairbanks</span>
+<span class="tn" style="font-family: {{o.num}}; font-weight: 500; font-size: 44px; line-height: 1; letter-spacing: -0.01em">T−00:38:10</span>
+</div>
+<div style="display: flex; gap: 20px">
+<div style="display: flex; flex-direction: column; gap: 4px; border-left: 2px solid #FF4D57; padding-left: 10px"><span style="font-family: {{o.cond}}; font-weight: 600; font-size: 12px; letter-spacing: .18em; color: #7D8A99">VBAT</span><span class="tn" style="font-family: {{o.num}}; font-size: 26px; color: #FF6B73">23.1 <span style="font-size: 13px; color: #7D8A99">V</span></span></div>
+<div style="display: flex; flex-direction: column; gap: 4px; border-left: 2px solid #2A3644; padding-left: 10px"><span style="font-family: {{o.cond}}; font-weight: 600; font-size: 12px; letter-spacing: .18em; color: #7D8A99">LIMIT</span><span class="tn" style="font-family: {{o.num}}; font-size: 26px">24.0 <span style="font-size: 13px; color: #7D8A99">V</span></span></div>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 6px">
+<span style="font-family: {{o.cond}}; font-weight: 700; font-size: 26px; letter-spacing: .06em; text-transform: uppercase">EARENDIL-312 · VBAT below limit</span>
+<p style="margin: 0; font-family: {{o.text}}; font-size: 15px; line-height: 1.5; color: #9DAAB8">Solar array current fell 18% since orbit 4,808, so the battery isn't recharging in sunlight. Low power safe uplinks at the next Fairbanks AOS.</p>
+</div>
+
+<div style="display: flex; flex-direction: column; border: 1px solid #1C2530">
+<div class="tn" style="display: grid; grid-template-columns: 70px 1fr 1fr 70px; gap: 12px; padding: 8px 12px; font-family: {{o.num}}; font-size: 14px"><span style="font-family: {{o.cond}}; font-weight: 600; letter-spacing: .14em">FBK</span><span>02:59:40Z</span><span>9m 12s</span><span>64°</span></div>
+<div class="tn" style="display: grid; grid-template-columns: 70px 1fr 1fr 70px; gap: 12px; padding: 8px 12px; border-top: 1px solid #1C2530; font-family: {{o.num}}; font-size: 14px"><span style="font-family: {{o.cond}}; font-weight: 600; letter-spacing: .14em">SVB</span><span>03:13:08Z</span><span>11m 41s</span><span>37°</span></div>
+<div class="tn" style="display: grid; grid-template-columns: 70px 1fr 1fr 70px; gap: 12px; padding: 8px 12px; border-top: 1px solid #1C2530; font-family: {{o.num}}; font-size: 14px"><span style="font-family: {{o.cond}}; font-weight: 600; letter-spacing: .14em">AWA</span><span>03:33:51Z</span><span>7m 05s</span><span>21°</span></div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 6px; font-family: {{o.mono}}; font-size: 14px">
+<span>SET_POWER_MODE mode=LOW · PAYLOAD_PAUSE</span>
+<span style="color: #9DAAB8">SCID 312 · HK.battery_voltage · sc_01J9F3Q</span>
+</div>
+
+<div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; border-top: 1px solid #1C2530; padding-top: 12px">
+<span style="font-family: {{o.mono}}; font-size: 22px; letter-spacing: .08em">0O 1lI 5S 8B rn</span>
+<span class="tn" style="font-family: {{o.num}}; font-size: 22px; letter-spacing: .04em">0123456789</span>
+</div>
+
+<p class="k" style="margin: 0; line-height: 1.6">{{o.stack}}</p>
+<p style="margin: 0; font-size: 13px; line-height: 1.5; color: #9DAAB8">{{o.note}}</p>
+</div>
+</section>
+</sc-for>
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1900}}'>
+class Component extends DCLogic {
+renderVals() {
+const plexC = "'IBM Plex Sans Condensed', sans-serif";
+const plex = "'IBM Plex Sans', sans-serif";
+const opts = [
+{ key: 'A', name: 'Current', tag: 'ON THE CANVAS NOW', cond: "'Barlow Condensed', sans-serif", text: plex, num: "'JetBrains Mono', monospace", mono: "'JetBrains Mono', monospace", stack: 'LABEL Barlow Condensed · TEXT IBM Plex Sans · NUMBER + ID JetBrains Mono', note: 'Signage-like labels, but three families that don’t quite share a voice. Numbers in mono look techy but take more width.' },
+{ key: 'B', name: 'Plex + Martian Mono', tag: 'RECOMMENDED', cond: plexC, text: plex, num: plex, mono: "'Martian Mono', monospace", stack: 'LABEL IBM Plex Sans Condensed · TEXT + NUMBER IBM Plex Sans (tabular) · ID Martian Mono', note: 'One engineered family for everything a person reads. Martian Mono keeps ids sharp and technical without slab serifs.' },
+{ key: 'C', name: 'Plex + Geist Mono', tag: 'QUIETEST', cond: plexC, text: plex, num: plex, mono: "'Geist Mono', monospace", stack: 'LABEL IBM Plex Sans Condensed · TEXT + NUMBER IBM Plex Sans (tabular) · ID Geist Mono', note: 'Same as B with a calmer, more neutral mono. Ids recede, numbers lead.' },
+{ key: 'D', name: 'Saira + Azeret Mono', tag: 'CHOSEN', cond: "'Saira Condensed', sans-serif", text: "'Saira', sans-serif", num: "'Saira', sans-serif", mono: "'Azeret Mono', monospace", stack: 'LABEL Saira Condensed · TEXT + NUMBER Saira (tabular) · ID Azeret Mono', note: 'Squared curves echo cockpit displays. The most distinctive, and the closest to looking themed.' },
+{ key: 'E', name: 'All Geist', tag: 'MOST MODERN', cond: "'Geist', sans-serif", text: "'Geist', sans-serif", num: "'Geist', sans-serif", mono: "'Geist Mono', monospace", stack: 'LABEL Geist (tracked caps) · TEXT + NUMBER Geist (tabular) · ID Geist Mono', note: 'Clean and current, but no condensed cut, so labels run wider and it drifts back toward modern web software.' }
+];
+return { opts: opts };
+}
+}
+</script>
+</body>
+</html>

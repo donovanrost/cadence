@@ -92,6 +92,28 @@ defmodule Cadence.Contacts.ContactStore.ScheduledContactRow do
     |> validate_number(:current_revision, greater_than: 0)
   end
 
+  @doc """
+  A revision carrying the uplink leg a provider confirmed after an operator attested the
+  booking (DECISIONS #55): intents, uplink path templates, metadata and the revision number.
+  """
+  @spec uplink_revision_changeset(struct(), ScheduledContact.t()) :: Ecto.Changeset.t()
+  def uplink_revision_changeset(%__MODULE__{} = row, %ScheduledContact{} = contact) do
+    attrs =
+      contact
+      |> domain_attrs()
+      |> Map.take([
+        :contact_intents,
+        :path_template_ids,
+        :path_template_ref_documents,
+        :current_revision,
+        :metadata
+      ])
+
+    row
+    |> cast(attrs, Map.keys(attrs))
+    |> validate_number(:current_revision, greater_than: 0)
+  end
+
   @spec to_domain(struct()) :: ScheduledContact.t()
   def to_domain(%__MODULE__{} = row) do
     ScheduledContact.new(%{

@@ -26,6 +26,7 @@ defmodule Cadence.Commanding.VerifierSubjectTest do
   @spacecraft_id "spacecraft-earendil-001"
   @mode_parameter "semantic:parameter:09d9d79c3edb2d7b9c44164db362009b8b007a41273992ad01a951a86dfd910b"
   @released_at ~U[2026-11-14 00:35:05.169827Z]
+  @mode_argument %{argument_id: "argument:mode", name: "mode", base_type: :enumerated}
   @ids %{
     mission_id: @mission_id,
     source_endpoint_ref: "endpoint-001-uplink",
@@ -115,7 +116,7 @@ defmodule Cadence.Commanding.VerifierSubjectTest do
   end
 
   # DOVW1 as the release built it: released 00:35:05.169827Z, no plan delay, a 60 s timeout,
-  # equal to SCIENCE (4; this branch has no value_from_argument binding, so a literal), raw.
+  # equal to the commanded mode (sent as "4"), raw.
   defp mode_applied(subject_ref) do
     request =
       CommandRequest.new(
@@ -134,7 +135,7 @@ defmodule Cadence.Commanding.VerifierSubjectTest do
             criteria_type: :comparison,
             subject_ref: subject_ref,
             comparison: :equal,
-            value: 4,
+            value_from_argument: "argument:mode",
             use_calibrated: false
           })
       })
@@ -145,7 +146,8 @@ defmodule Cadence.Commanding.VerifierSubjectTest do
         request,
         CommandReleaseAttempt.new(Map.put(@ids, :command_release_attempt_id, "attempt-p9cs")),
         [plan],
-        @released_at
+        @released_at,
+        [@mode_argument]
       )
 
     instance

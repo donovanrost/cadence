@@ -62,6 +62,7 @@ defmodule Cadence.OperationalEvents.EventQuery do
     |> where([row], row.mission_id == ^mission_id)
     |> maybe_filter_atoms(:category, Keyword.get(opts, :category))
     |> maybe_filter_atoms(:kind, Keyword.get(opts, :kind))
+    |> maybe_exclude_housekeeping(Keyword.get(opts, :exclude_housekeeping))
     |> maybe_filter_atoms(:severity, Keyword.get(opts, :severity))
     |> maybe_filter_equals(
       :subject_kind,
@@ -91,6 +92,7 @@ defmodule Cadence.OperationalEvents.EventQuery do
     |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
     |> maybe_filter_atoms(:category, Keyword.get(opts, :category))
     |> maybe_filter_atoms(:kind, Keyword.get(opts, :kind))
+    |> maybe_exclude_housekeeping(Keyword.get(opts, :exclude_housekeeping))
     |> maybe_filter_atoms(:severity, Keyword.get(opts, :severity))
     |> maybe_filter_equals(
       :subject_kind,
@@ -164,6 +166,19 @@ defmodule Cadence.OperationalEvents.EventQuery do
   end
 
   defp maybe_filter_to_occurred_at(query, _to), do: query
+
+  # The Timeline's housekeeping rows (`source_*` and `*watermark*` kinds, the console's `data`
+  # kind): skipped in SQL when the reader excludes them (`exclude_housekeeping: true`), so a
+  # default page doesn't read ~92% of rows (per-write watermarks) only to drop them.
+  defp maybe_exclude_housekeeping(query, true),
+    do:
+      where(
+        query,
+        [row],
+        not like(row.kind, "source\\_%") and not like(row.kind, "%watermark%")
+      )
+
+  defp maybe_exclude_housekeeping(query, _keep), do: query
 
   defp maybe_filter_atoms(query, _field, nil), do: query
 

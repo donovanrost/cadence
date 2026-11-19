@@ -80,7 +80,14 @@ defmodule Cadence.MissionModels.Comparison do
     end
   end
 
-  @spec run(binary(), binary(), binary(), binary(), pos_integer()) ::
+  @doc """
+  Compares a candidate revision with its baseline (`baseline_revision_id:`, else the legacy
+  default) and stores the report. `binding_set_id`/`binding_set_version` name the configuration
+  it's for, or are both nil when the mission has none yet (its first revision, lead's gate finding
+  11-17): the report then records no binding set, and the legacy activation path, which matches
+  its own binding set, can't use it.
+  """
+  @spec run(binary(), binary(), binary(), binary() | nil, pos_integer() | nil, keyword()) ::
           {:ok, map()} | {:error, term()}
   def run(
         organization_id,
@@ -91,8 +98,10 @@ defmodule Cadence.MissionModels.Comparison do
         opts \\ []
       )
       when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(candidate_revision_id) and is_binary(binding_set_id) and
-             is_integer(binding_set_version) and binding_set_version > 0 do
+             is_binary(candidate_revision_id) and
+             ((is_binary(binding_set_id) and is_integer(binding_set_version) and
+                 binding_set_version > 0) or
+                (is_nil(binding_set_id) and is_nil(binding_set_version))) do
     with {:ok, %Revision{} = candidate} <-
            MissionModels.fetch_revision(organization_id, mission_id, candidate_revision_id),
          {:ok, candidate_plans} <-
@@ -257,9 +266,12 @@ defmodule Cadence.MissionModels.Comparison do
         run_case(qualification_case, baseline_plans, candidate_plans)
       end)
 
+    # Option C (director 11-15): with no approved qualification cases replay doesn't run, and the
+    # report says so ("not_run", qualification_corpus_required) for the approver to see; the static
+    # comparison and the human approval are the gate. A mission that has cases must pass them.
     status =
       cond do
-        cases == [] -> :failed
+        cases == [] -> :not_run
         Enum.all?(results, &(&1["status"] == "passed")) -> :passed
         true -> :failed
       end
@@ -356,7 +368,7 @@ defmodule Cadence.MissionModels.Comparison do
   end
 
   defp build_report(mission_id, candidate, baseline, binding_set_id, version, static, replay) do
-    status = if replay.status in [:not_required, :passed], do: :passed, else: :failed
+    status = if replay.status in [:not_required, :not_run, :passed], do: :passed, else: :failed
 
     report = %{
       "engine" => "mission_model_comparison_v1",
@@ -414,14 +426,7 @@ defmodule Cadence.MissionModels.Comparison do
 
     case Repo.insert(ComparisonReportRow.changeset(attrs),
            on_conflict: :nothing,
-           conflict_target: [
-             :organization_id,
-             :mission_id,
-             :candidate_revision_id,
-             :binding_set_id,
-             :binding_set_version,
-             :report_sha256
-           ],
+           conflict_target: identity_target(attrs),
            returning: true
          ) do
       {:ok, %ComparisonReportRow{comparison_report_id: nil}} ->
@@ -435,19 +440,49 @@ defmodule Cadence.MissionModels.Comparison do
     end
   end
 
+  # A report with no binding set (no configuration yet) dedupes on its own partial index.
+  defp identity_target(%{binding_set_id: nil}),
+    do:
+      {:unsafe_fragment,
+       "(organization_id, mission_id, candidate_revision_id, report_sha256) " <>
+         "WHERE binding_set_id IS NULL"}
+
+  defp identity_target(_attrs),
+    do: [
+      :organization_id,
+      :mission_id,
+      :candidate_revision_id,
+      :binding_set_id,
+      :binding_set_version,
+      :report_sha256
+    ]
+
   defp fetch_by_identity(attrs) do
     row =
-      Repo.get_by(ComparisonReportRow,
-        organization_id: attrs.organization_id,
-        mission_id: attrs.mission_id,
-        candidate_revision_id: attrs.candidate_revision_id,
-        binding_set_id: attrs.binding_set_id,
-        binding_set_version: attrs.binding_set_version,
-        report_sha256: attrs.report_sha256
+      ComparisonReportRow
+      |> where(
+        [row],
+        row.organization_id == ^attrs.organization_id and row.mission_id == ^attrs.mission_id and
+          row.candidate_revision_id == ^attrs.candidate_revision_id and
+          row.report_sha256 == ^attrs.report_sha256
       )
+      |> same_binding_set(attrs)
+      |> Repo.one()
 
     if row, do: {:ok, report_document(row)}, else: {:error, :comparison_report_not_found}
   end
+
+  defp same_binding_set(query, %{binding_set_id: nil}),
+    do: where(query, [row], is_nil(row.binding_set_id))
+
+  defp same_binding_set(query, attrs),
+    do:
+      where(
+        query,
+        [row],
+        row.binding_set_id == ^attrs.binding_set_id and
+          row.binding_set_version == ^attrs.binding_set_version
+      )
 
   defp report_document(row), do: JsonDocument.unwrap_value(row.report)
 

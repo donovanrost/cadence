@@ -78,8 +78,44 @@ defmodule Cadence.Contacts.ContactRuntimeConfig do
              scheduled_contact.path_template_ids,
              scheduled_contact.path_template_refs
            ) do
-      {:ok, assignment_paths ++ template_paths ++ scheduled_contact.paths}
+      {:ok,
+       assignment_paths ++ booked(scheduled_contact, template_paths) ++ scheduled_contact.paths}
     end
+  end
+
+  # A provider booking names the paths of the route it was booked on. On that contact those
+  # paths are the selected ones, even when the route is a candidate (a fallback station chosen
+  # because the primary was unavailable); otherwise the contact could never be scheduled.
+  defp booked(%ScheduledContact{metadata: %{"provider_reservation_id" => id}} = contact, paths)
+       when is_binary(id),
+       do: Enum.map(paths, &scope_uplink_resource(%{&1 | selection_role: :selected}, contact, id))
+
+  defp booked(_scheduled_contact, paths), do: paths
+
+  # DECISIONS #59: a provider-managed pass is its own external uplink session, so its uplink
+  # resource is the booking's, not the route listener's. Protocol state then doesn't carry
+  # from one pass into the next (each pass's FOP initializes from the FARM's first report),
+  # while a restart within a pass still finds that pass's sends and fails closed. Two sessions
+  # can't share one listener: it binds its port exclusively.
+  defp scope_uplink_resource(path, contact, reservation_id) do
+    booking = contact.provider_contact_ref || reservation_id
+
+    bindings =
+      Enum.map(path.provider_bindings, fn binding ->
+        case binding.configuration do
+          %{"uplink_resource_id" => resource} = config when is_binary(resource) ->
+            %{
+              binding
+              | configuration:
+                  Map.put(config, "uplink_resource_id", resource <> ":pass:" <> booking)
+            }
+
+          _no_uplink ->
+            binding
+        end
+      end)
+
+    %{path | provider_bindings: bindings}
   end
 
   defp resolve_link_assignment_paths(_organization_id, _mission_id, []), do: {:ok, []}

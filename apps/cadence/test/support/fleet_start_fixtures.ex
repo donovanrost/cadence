@@ -3,11 +3,12 @@ defmodule Cadence.FleetStartFixtures do
   alias Cadence.Accounts.{OrganizationMembership, User}
   alias Cadence.Auth.Scope
   alias Cadence.ContactPlanning.{ContactRequirements, FleetPlanningPolicies}
+  alias Cadence.PolicyReviewer
   alias Cadence.Spacecraft
   @organization_id "org-fleet-start"
   @mission_id "mission-fleet-start"
   @spacecraft_id "craft-fleet-start"
-  @now ~U[2026-07-17 04:00:00.000000Z]
+  @now ~U[2030-07-17 04:00:00.000000Z]
 
   def setup_start do
     %{organization: org, mission: mission} =
@@ -27,7 +28,7 @@ defmodule Cadence.FleetStartFixtures do
 
     {:ok, _, _, _} =
       FleetPlanningPolicies.approve(
-        admin,
+        PolicyReviewer.reviewer(admin),
         @mission_id,
         policy.fleet_planning_policy_id,
         version.version,

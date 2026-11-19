@@ -44,26 +44,45 @@ defmodule Cadence.Protocol.TMFrameIngress do
          {:ok, pipeline_state, frame_remainder, next_continuity_state} <-
            prepare_receive_stream(raw_evidence, pipeline_state, continuity_state, frame_remainder),
          absolute_base_offset = absolute_base_offset(raw_evidence, frame_remainder),
-         {:ok, sdu_octets, frame_infos, decode_anomalies, rest, next_pipeline_state} <-
-           TMFramePipeline.decode_sdu_octets_detailed(
+         {:ok, sdu_octets, frame_infos, decode_anomalies, rest, next_pipeline_state, scid_check} <-
+           TMFramePipeline.decode_sdu_octets_checked(
              frame_remainder <> raw_evidence.raw,
              codec_opts,
              pipeline_state,
              decode_context(raw_evidence, absolute_base_offset)
            ),
-         {:ok, packet_records} <- build_packet_records(raw_evidence, sdu_octets) do
+         {:ok, packet_records} <-
+           build_packet_records(raw_evidence, sdu_octets, absolute_base_offset) do
       transfer_frame_records =
         build_transfer_frame_records(raw_evidence, frame_infos, absolute_base_offset)
 
       protocol_anomalies =
         build_pipeline_anomalies(raw_evidence, decode_anomalies, absolute_base_offset)
 
+      frame_offsets =
+        pending_frame_offsets(
+          next_continuity_state,
+          frame_infos,
+          absolute_base_offset,
+          next_pipeline_state
+        )
+
       {:ok,
        %{
          packet_records: packet_records,
          transfer_frame_records: transfer_frame_records,
-         protocol_anomalies: protocol_anomalies
-       }, rest, next_pipeline_state, next_continuity_state}
+         protocol_anomalies: protocol_anomalies,
+         resume_offset: resume_offset(raw_evidence, rest, frame_offsets),
+         # What's still incomplete after this evidence: the partial frame's bytes and the
+         # buffered partial packets' octets (given up and counted if the stream ends here).
+         incomplete: %{
+           frame_bytes: byte_size(rest),
+           packet_octets: TMFramePipeline.stats(next_pipeline_state).buffered_octets
+         },
+         # The frame-SCID cross-check's tally (DECISIONS #102); nil without an expected SCID.
+         scid_check: scid_check && Map.put(scid_check, :spacecraft_id, raw_evidence.spacecraft_id)
+       }, rest, next_pipeline_state,
+       Map.put(next_continuity_state, :pending_frame_offsets, frame_offsets)}
     else
       {:error, reason, next_pipeline_state} ->
         {:error, reason, next_pipeline_state, continuity_state}
@@ -102,8 +121,41 @@ defmodule Cadence.Protocol.TMFrameIngress do
         {:ok, fresh_pipeline, <<>>, current}
       end
     else
-      {:ok, pipeline, remainder, current}
+      {:ok, pipeline, remainder,
+       Map.put(current, :pending_frame_offsets, Map.get(previous, :pending_frame_offsets, %{}))}
     end
+  end
+
+  @doc """
+  Where processing of this journal stream may durably resume after this evidence (an absolute
+  stream offset): the start of the earliest frame holding bytes of an incomplete frame (the
+  remainder) or of an incomplete packet (a reassembly buffer), else the evidence's end. A restart
+  that resumes there decodes the partial frame or packet again from its first byte, and nothing
+  before it twice (director 11-15: the processing ack ran past them, and they were lost). Nil
+  without journal offsets.
+  """
+  @spec resume_offset(RawEvidence.t(), binary(), map()) :: non_neg_integer() | nil
+  def resume_offset(%RawEvidence{} = raw_evidence, rest, frame_offsets) do
+    case metadata_value(raw_evidence.metadata || %{}, :journal_end_offset) do
+      end_offset when is_integer(end_offset) ->
+        Enum.min([end_offset - byte_size(rest) | Map.values(frame_offsets)])
+
+      _no_journal ->
+        nil
+    end
+  end
+
+  # The absolute offsets of the frames a buffered partial packet came from, keyed by
+  # {scid, vcid, frame_seq}: this evidence's frames added, then only those a buffer still names.
+  defp pending_frame_offsets(continuity, frame_infos, absolute_base_offset, pipeline) do
+    known =
+      Enum.reduce(frame_infos, Map.get(continuity, :pending_frame_offsets, %{}), fn info, acc ->
+        frame = info.frame
+        offset = absolute_base_offset + info.raw_frame_offset_bytes
+        Map.put(acc, {frame.scid, frame.vcid, frame.frame_seq}, offset)
+      end)
+
+    Map.take(known, TMFramePipeline.pending_source_frames(pipeline))
   end
 
   defp receive_boundary(previous, _current) when map_size(previous) == 0, do: nil
@@ -143,15 +195,27 @@ defmodule Cadence.Protocol.TMFrameIngress do
   # Without a source time a frame's time IS its receipt time: each frame takes the receipt time
   # of the journal record its bytes arrived in, not the first record of a merged batch.
   defp decode_context(%RawEvidence{source_time: nil} = raw_evidence, absolute_base_offset) do
-    %{
-      direction: raw_evidence.direction,
-      sdu_kind_hint: :space_packet,
-      frame_timestamp: &RawEvidence.receipt_time_at(raw_evidence, absolute_base_offset + &1)
-    }
+    raw_evidence
+    |> base_context()
+    |> Map.put(
+      :frame_timestamp,
+      &RawEvidence.receipt_time_at(raw_evidence, absolute_base_offset + &1)
+    )
   end
 
   defp decode_context(%RawEvidence{} = raw_evidence, _absolute_base_offset),
-    do: %{direction: raw_evidence.direction, sdu_kind_hint: :space_packet}
+    do: base_context(raw_evidence)
+
+  # The pass's one spacecraft's SCID, when the path resolved one (DECISIONS #102): frames with
+  # another SCID are refused before reassembly.
+  defp base_context(%RawEvidence{} = raw_evidence) do
+    context = %{direction: raw_evidence.direction, sdu_kind_hint: :space_packet}
+
+    case metadata_value(raw_evidence.metadata || %{}, :spacecraft_scid) do
+      scid when is_integer(scid) -> Map.put(context, :expected_scid, scid)
+      _none -> context
+    end
+  end
 
   # A packet is received when the frame completing it is: that frame's stamp (receipt fallback).
   defp packet_receipt_time(%RawEvidence{source_time: nil} = raw_evidence, sdu),
@@ -162,11 +226,12 @@ defmodule Cadence.Protocol.TMFrameIngress do
   defp generation_time_source(%RawEvidence{source_time: nil}), do: :receipt
   defp generation_time_source(%RawEvidence{}), do: :onboard
 
-  defp build_packet_records(%RawEvidence{} = raw_evidence, sdu_octets) when is_list(sdu_octets) do
+  defp build_packet_records(%RawEvidence{} = raw_evidence, sdu_octets, absolute_base_offset)
+       when is_list(sdu_octets) do
     sdu_octets
     |> Enum.with_index()
     |> Enum.reduce_while({:ok, []}, fn {sdu, ordinal}, {:ok, acc} ->
-      reduce_packet_record(raw_evidence, sdu, ordinal, acc)
+      reduce_packet_record(raw_evidence, sdu, {ordinal, absolute_base_offset}, acc)
     end)
     |> case do
       {:ok, packet_records} -> {:ok, Enum.reverse(packet_records)}
@@ -221,7 +286,7 @@ defmodule Cadence.Protocol.TMFrameIngress do
   defp build_pipeline_anomalies(%RawEvidence{} = raw_evidence, anomalies, absolute_base_offset)
        when is_list(anomalies) do
     Enum.map(anomalies, fn anomaly ->
-      metadata = Map.get(anomaly, :metadata, %{})
+      metadata = anomaly_metadata(raw_evidence, anomaly)
 
       ProtocolAnomaly.new(%{
         evidence_id: raw_evidence.evidence_id,
@@ -244,10 +309,22 @@ defmodule Cadence.Protocol.TMFrameIngress do
     end)
   end
 
-  defp reduce_packet_record(%RawEvidence{} = raw_evidence, sdu, ordinal, acc) do
+  # A refused frame's anomaly names its contact and path, for a later live read (DECISIONS #102).
+  defp anomaly_metadata(raw_evidence, %{anomaly_kind: :scid_mismatch} = anomaly) do
+    metadata = raw_evidence.metadata || %{}
+
+    Map.merge(anomaly.metadata, %{
+      realized_contact_id: metadata_value(metadata, :realized_contact_id),
+      path_id: metadata_value(metadata, :path_id)
+    })
+  end
+
+  defp anomaly_metadata(_raw_evidence, anomaly), do: Map.get(anomaly, :metadata, %{})
+
+  defp reduce_packet_record(%RawEvidence{} = raw_evidence, sdu, position, acc) do
     with :ok <- validate_tm_sdu_kind(sdu),
          {:ok, %PacketRecord{} = packet_record} <-
-           decode_tm_packet_record(raw_evidence, sdu, ordinal) do
+           decode_tm_packet_record(raw_evidence, sdu, position) do
       {:cont, {:ok, [packet_record | acc]}}
     else
       {:error, reason} ->
@@ -261,9 +338,9 @@ defmodule Cadence.Protocol.TMFrameIngress do
     {:error, {:unsupported_tm_sdu_kind, sdu.sdu_kind_hint}}
   end
 
-  defp decode_tm_packet_record(%RawEvidence{} = raw_evidence, sdu, ordinal) do
+  defp decode_tm_packet_record(%RawEvidence{} = raw_evidence, sdu, position) do
     SpacePacketDecoder.decode_packet(raw_evidence, sdu.octets,
-      packet_id: Identity.packet_id(raw_evidence.evidence_id, ordinal, sdu.octets),
+      packet_id: packet_id(raw_evidence, sdu, position),
       protocol_family: raw_evidence.protocol_family,
       source_time: sdu.timestamp || raw_evidence.source_time,
       receipt_time: packet_receipt_time(raw_evidence, sdu),
@@ -275,10 +352,24 @@ defmodule Cadence.Protocol.TMFrameIngress do
           map_id: sdu.map_id,
           quality: sdu.quality,
           source_frames: sdu.source_frames,
-          metadata: sdu.meta
+          metadata: Map.delete(sdu.meta, :raw_frame_offset_bytes)
         }
       }
     )
+  end
+
+  # A journaled packet's id is its journal position: the stream and the absolute offset of the
+  # frame that completed it, with its bytes (#71 follow-up). A replay that batches the journal
+  # differently gives it the same id, so it isn't archived twice. Without a journal stream, the
+  # evidence-scoped id as before.
+  defp packet_id(raw_evidence, sdu, {ordinal, absolute_base_offset}) do
+    case {journal_stream_id(raw_evidence), Map.get(sdu.meta || %{}, :raw_frame_offset_bytes)} do
+      {stream_id, offset} when is_binary(stream_id) and is_integer(offset) ->
+        Identity.journal_packet_id(stream_id, absolute_base_offset + offset, sdu.octets)
+
+      _no_journal_position ->
+        Identity.packet_id(raw_evidence.evidence_id, ordinal, sdu.octets)
+    end
   end
 
   defp application_anomaly_kind(:virtual_channel_frame_count_discontinuity),

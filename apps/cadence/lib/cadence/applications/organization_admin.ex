@@ -20,81 +20,6 @@ defmodule Cadence.Applications.OrganizationAdmin do
 
   @surface_contracts [
     %{
-      id: "organization_home",
-      fallback_path: "/",
-      scope: :organization,
-      component: "OrganizationHome",
-      purpose: :overview,
-      placement: :application_workspace,
-      navigation_label: "Overview",
-      navigation_order: 10,
-      query: "cadence.organization.home",
-      query_version: 1,
-      actions: [],
-      exposed_module: "./Application"
-    },
-    %{
-      id: "provider_accounts",
-      fallback_path: "/provider-accounts",
-      scope: :organization,
-      component: "ProviderAccountListPage",
-      purpose: :collection,
-      placement: :application_workspace,
-      navigation_label: "Provider Accounts",
-      navigation_order: 20,
-      query: "cadence.organization.provider_accounts.list",
-      query_version: 1,
-      actions: [],
-      exposed_module: "./Application"
-    },
-    %{
-      id: "provider_account_new",
-      fallback_path: "/provider-accounts/new",
-      scope: :organization,
-      component: "ProviderAccountNew",
-      purpose: :configuration,
-      placement: :application_workspace,
-      navigation_label: "New Provider Account",
-      navigation_order: 30,
-      query: "cadence.organization.provider_accounts.new",
-      query_version: 1,
-      actions: ["validate_provider_account_form", "register_provider_account"],
-      exposed_module: "./Application"
-    },
-    %{
-      id: "provider_account_show",
-      fallback_path: "/provider-accounts/:subject",
-      scope: :organization,
-      component: "ProviderAccountShow",
-      purpose: :subject_detail,
-      placement: :application_workspace,
-      navigation_label: "Provider Account",
-      navigation_order: 40,
-      query: "cadence.organization.provider_account.show",
-      query_version: 1,
-      actions: [
-        "validate_provider_account",
-        "rotate_provider_credential",
-        "revoke_provider_credential",
-        "grant_provider_account_mission",
-        "revoke_provider_account_mission"
-      ],
-      exposed_module: "./Application"
-    },
-    %{
-      id: "notifications",
-      scope: :user,
-      component: "NotificationsPage",
-      purpose: :activity,
-      placement: :application_workspace,
-      navigation_label: "Notifications",
-      navigation_order: 50,
-      query: "cadence.organization.notifications",
-      query_version: 1,
-      actions: ["accept_invitation", "mark_notification_read"],
-      exposed_module: "./Application"
-    },
-    %{
       id: "notifications_bell",
       scope: :user,
       component: "NotificationsBell",
@@ -105,90 +30,6 @@ defmodule Cadence.Applications.OrganizationAdmin do
       query: "cadence.organization.notifications_bell",
       query_version: 1,
       actions: ["mark_notification_read"],
-      exposed_module: "./Application"
-    },
-    %{
-      id: "admin_home",
-      fallback_path: "/",
-      scope: :admin,
-      component: "AdminHome",
-      purpose: :overview,
-      placement: :application_workspace,
-      navigation_label: "Overview",
-      navigation_order: 70,
-      query: "cadence.platform_admin.home",
-      query_version: 1,
-      actions: [],
-      exposed_module: "./Application"
-    },
-    %{
-      id: "admin_runtime",
-      fallback_path: "/runtime",
-      scope: :admin,
-      component: "AdminRuntime",
-      purpose: :activity,
-      placement: :application_workspace,
-      navigation_label: "Runtime",
-      navigation_order: 80,
-      query: "cadence.platform_admin.runtime",
-      query_version: 1,
-      actions: ["refresh_runtime", "filter_runtime_decisions"],
-      exposed_module: "./Application"
-    },
-    %{
-      id: "admin_organizations",
-      fallback_path: "/organizations",
-      scope: :admin,
-      component: "AdminOrganizationListPage",
-      purpose: :collection,
-      placement: :application_workspace,
-      navigation_label: "Organizations",
-      navigation_order: 90,
-      query: "cadence.platform_admin.organizations",
-      query_version: 1,
-      actions: [],
-      exposed_module: "./Application"
-    },
-    %{
-      id: "admin_organization_new",
-      fallback_path: "/organizations/new",
-      scope: :admin,
-      component: "AdminOrganizationNew",
-      purpose: :configuration,
-      placement: :application_workspace,
-      navigation_label: "New Organization",
-      navigation_order: 100,
-      query: "cadence.platform_admin.organization.new",
-      query_version: 1,
-      actions: ["validate_organization", "create_organization"],
-      exposed_module: "./Application"
-    },
-    %{
-      id: "admin_organization_show",
-      fallback_path: "/organizations/:subject",
-      scope: :admin,
-      component: "AdminOrganizationShow",
-      purpose: :subject_detail,
-      placement: :application_workspace,
-      navigation_label: "Organization",
-      navigation_order: 110,
-      query: "cadence.platform_admin.organization.show",
-      query_version: 1,
-      actions: ["issue_service_identity", "dismiss_service_token", "open_organization"],
-      exposed_module: "./Application"
-    },
-    %{
-      id: "admin_organization_invite",
-      fallback_path: "/organizations/:subject/invite",
-      scope: :admin,
-      component: "AdminOrganizationInvite",
-      purpose: :configuration,
-      placement: :application_workspace,
-      navigation_label: "Invite User",
-      navigation_order: 120,
-      query: "cadence.platform_admin.organization.invite",
-      query_version: 1,
-      actions: ["validate_invitation", "invite_organization_member"],
       exposed_module: "./Application"
     }
   ]
@@ -202,60 +43,9 @@ defmodule Cadence.Applications.OrganizationAdmin do
 
   @compatibility_wrappers [
     %{
-      surface_id: "organization_home",
-      live_view: "CadenceWeb.HostPageLive",
-      component: "OrganizationHome"
-    },
-    %{
-      surface_id: "provider_accounts",
-      live_view: "CadenceWeb.HostPageLive",
-      component: "ProviderAccountListPage"
-    },
-    %{
-      surface_id: "provider_account_new",
-      live_view: "CadenceWeb.HostPageLive",
-      component: "ProviderAccountNew"
-    },
-    %{
-      surface_id: "provider_account_show",
-      live_view: "CadenceWeb.HostPageLive",
-      component: "ProviderAccountShow"
-    },
-    %{
-      surface_id: "notifications",
-      live_view: "CadenceWeb.HostPageLive",
-      component: "NotificationsPage"
-    },
-    %{
       surface_id: "notifications_bell",
       live_view: "CadenceWeb.NotificationsBell",
       component: "NotificationsBell"
-    },
-    %{surface_id: "admin_home", live_view: "CadenceWeb.HostPageLive", component: "AdminHome"},
-    %{
-      surface_id: "admin_runtime",
-      live_view: "CadenceWeb.HostPageLive",
-      component: "AdminRuntime"
-    },
-    %{
-      surface_id: "admin_organizations",
-      live_view: "CadenceWeb.HostPageLive",
-      component: "AdminOrganizationListPage"
-    },
-    %{
-      surface_id: "admin_organization_new",
-      live_view: "CadenceWeb.HostPageLive",
-      component: "AdminOrganizationNew"
-    },
-    %{
-      surface_id: "admin_organization_show",
-      live_view: "CadenceWeb.HostPageLive",
-      component: "AdminOrganizationShow"
-    },
-    %{
-      surface_id: "admin_organization_invite",
-      live_view: "CadenceWeb.HostPageLive",
-      component: "AdminOrganizationInvite"
     }
   ]
 
@@ -280,12 +70,13 @@ defmodule Cadence.Applications.OrganizationAdmin do
       application_key: @application_key,
       version: @version,
       display_name: "Organization Administration",
-      description:
-        "Manage organization membership, providers, notifications, and administration.",
+      description: "Show your notifications and mark them read.",
       trust: :first_party,
       installation_policy: :platform,
       availability: :available,
-      installable_scopes: [:organization, :user, :admin],
+      # §11c A + L13: no organization-scope surface is left (home and provider accounts are in
+      # the console), so the remote installs at user scope only (the notifications bell).
+      installable_scopes: [:user],
       actions: action_definitions(),
       surfaces: Enum.map(@surface_contracts, &surface_definition/1)
     }
@@ -434,66 +225,10 @@ defmodule Cadence.Applications.OrganizationAdmin do
     end)
   end
 
-  defp action_permission("validate_provider_account_form"), do: "manage_provider_accounts"
-  defp action_permission("validate_provider_account"), do: "manage_provider_accounts"
-  defp action_permission("register_provider_account"), do: "manage_provider_accounts"
-
-  defp action_permission(action_id)
-       when action_id in [
-              "rotate_provider_credential",
-              "revoke_provider_credential",
-              "grant_provider_account_mission",
-              "revoke_provider_account_mission"
-            ],
-       do: "manage_provider_accounts"
-
-  defp action_permission("accept_invitation"), do: "accept_invitation"
   defp action_permission("mark_notification_read"), do: "read_notifications"
 
-  defp action_permission(action_id)
-       when action_id in ["refresh_runtime", "filter_runtime_decisions"],
-       do: "view_runtime"
-
-  defp action_permission(action_id)
-       when action_id in ["validate_organization", "create_organization"],
-       do: "manage_organizations"
-
-  defp action_permission("issue_service_identity"), do: "manage_service_identities"
-  defp action_permission("dismiss_service_token"), do: "dismiss_service_token"
-  defp action_permission("open_organization"), do: "open_organization"
-  defp action_permission("validate_invitation"), do: "manage_organizations"
-  defp action_permission("invite_organization_member"), do: "manage_organizations"
-
-  defp action_effect(action_id)
-       when action_id in [
-              "validate_provider_account_form",
-              "refresh_runtime",
-              "filter_runtime_decisions",
-              "validate_organization",
-              "dismiss_service_token",
-              "validate_invitation"
-            ],
-       do: :none
-
-  defp action_effect("accept_invitation"), do: :durable
-  defp action_effect("open_organization"), do: :external
-  defp action_effect("validate_provider_account"), do: :external
   defp action_effect(_action_id), do: :durable
 
-  defp action_intent(action_id)
-       when action_id in [
-              "refresh_runtime",
-              "filter_runtime_decisions",
-              "validate_provider_account_form",
-              "validate_organization",
-              "validate_invitation",
-              "dismiss_service_token"
-            ],
-       do: :diagnostic
-
-  defp action_intent("accept_invitation"), do: :operation
-  defp action_intent("open_organization"), do: :operation
-  defp action_intent("validate_provider_account"), do: :maintenance
   defp action_intent(_action_id), do: :configuration
 
   defp surface_definition(surface) do

@@ -7,11 +7,14 @@ defmodule Cadence.Runtime.MissionCoordinator do
 
   use GenServer
 
+  require Logger
+
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Runtime.Cluster
   alias Cadence.Runtime.GenerationApplied
   alias Cadence.Runtime.MissionAdmission
+  alias Cadence.Runtime.MissionCoordinator.PartitionBackoff
   alias Cadence.Runtime.MissionRuntime
   alias Cadence.Runtime.MissionRuntimeSpec
   alias Cadence.Runtime.PartitionKey
@@ -213,7 +216,9 @@ defmodule Cadence.Runtime.MissionCoordinator do
        requests: :gen_server.reqids_new(),
        request_counts: %{},
        pending_application: nil,
-       max_partition_requests: Keyword.get(opts, :max_partition_requests, 32)
+       max_partition_requests: Keyword.get(opts, :max_partition_requests, 32),
+       partition_backoff: %{},
+       owner_monitors: %{}
      }, {:continue, :recover_admission}}
   end
 
@@ -383,6 +388,14 @@ defmodule Cadence.Runtime.MissionCoordinator do
   def handle_info({:DOWN, permit, :process, _pid, _reason}, %{route_permits: permits} = state)
       when is_map_key(permits, permit) do
     {:noreply, release_route(state, permit)}
+  end
+
+  # An owner this coordinator started went down. A failed initialization backs its partition
+  # off, so the next frame can't start (and fail) another straight away.
+  def handle_info({:DOWN, ref, :process, pid, reason}, state)
+      when is_map_key(state.owner_monitors, pid) do
+    {{^ref, key}, monitors} = Map.pop(state.owner_monitors, pid)
+    {:noreply, owner_down(%{state | owner_monitors: monitors}, key, reason)}
   end
 
   @impl true
@@ -557,23 +570,59 @@ defmodule Cadence.Runtime.MissionCoordinator do
            state,
          %PartitionKey{} = partition_key
        ) do
-    case start_partition_owner(
-           state.process_namespace,
-           state.mission_id,
-           partition_key,
-           runtime_spec,
-           state.profiler
-         ) do
-      {:ok, partition_pid} ->
-        unless MapSet.member?(state.partitions, partition_key),
-          do: MissionAdmission.track(admission(state), partition_key)
+    with :ok <-
+           PartitionBackoff.check(
+             Map.get(state, :partition_backoff, %{}),
+             partition_key,
+             System.monotonic_time(:millisecond)
+           ),
+         {:ok, partition_pid} <-
+           start_partition_owner(
+             state.process_namespace,
+             state.mission_id,
+             partition_key,
+             runtime_spec,
+             state.profiler
+           ) do
+      unless MapSet.member?(state.partitions, partition_key),
+        do: MissionAdmission.track(admission(state), partition_key)
 
-        {:ok, partition_pid, %{state | partitions: MapSet.put(state.partitions, partition_key)}}
+      state =
+        state
+        |> monitor_owner(partition_pid, partition_key)
+        |> Map.put(:partitions, MapSet.put(state.partitions, partition_key))
 
-      {:error, reason} ->
-        {:error, reason}
+      {:ok, partition_pid, state}
     end
   end
+
+  defp monitor_owner(state, pid, key) do
+    monitors = Map.get(state, :owner_monitors, %{})
+
+    if is_map_key(monitors, pid),
+      do: state,
+      else: Map.put(state, :owner_monitors, Map.put(monitors, pid, {Process.monitor(pid), key}))
+  end
+
+  defp owner_down(state, key, {:shutdown, {:partition_initialization_failed, reason}}) do
+    {backoff, delay} =
+      PartitionBackoff.failed(
+        Map.get(state, :partition_backoff, %{}),
+        key,
+        reason,
+        System.monotonic_time(:millisecond)
+      )
+
+    Logger.warning(
+      "Partition #{inspect(PartitionKey.identifier(key))} failed to initialize; " <>
+        "not starting it again for #{delay}ms: #{inspect(reason, limit: 10, printable_limit: 300)}",
+      mission_id: state.mission_id
+    )
+
+    Map.put(state, :partition_backoff, backoff)
+  end
+
+  defp owner_down(state, _key, _reason), do: state
 
   defp start_partition_owner(
          process_namespace,

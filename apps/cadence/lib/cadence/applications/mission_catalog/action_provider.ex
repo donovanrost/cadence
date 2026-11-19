@@ -4,16 +4,13 @@ defmodule Cadence.Applications.MissionCatalog.ActionProvider do
   @behaviour Cadence.Applications.ActionProvider
 
   alias Cadence.Applications.ActionContractLedger
-  alias Cadence.Applications.{ActionRequest, ApplicationInstallations, HostContext}
+  alias Cadence.Applications.{ActionFailure, ActionRequest, ApplicationInstallations, HostContext}
   alias Cadence.Auth.Scope
   alias Cadence.Catalog.Reimport
   alias Cadence.Ids
-  alias Cadence.Missions.Creation
 
   @application_key "mission_catalog"
   @surface_action_bindings [
-    {"mission_new", 1, "validate"},
-    {"mission_new", 1, "save"},
     {"mission_applications", 1, "install"},
     {"mission_applications", 1, "disable"},
     {"mission_applications", 1, "uninstall"},
@@ -74,16 +71,10 @@ defmodule Cadence.Applications.MissionCatalog.ActionProvider do
        )
        when is_map(params) do
     case action_id do
-      "validate" ->
-        validate_mission(params)
-
-      "save" ->
-        save_mission(scope, host_context, params)
-
       action_id when action_id in ["install", "disable", "uninstall"] ->
         lifecycle(scope, host_context, action_id, params)
 
-      action_id when action_id in ["toggle-revision-form", "cancel-upload"] ->
+      action_id when action_id in ["validate", "save", "toggle-revision-form", "cancel-upload"] ->
         {:error, :mission_catalog_local_upload_boundary}
 
       "reimport" ->
@@ -99,24 +90,6 @@ defmodule Cadence.Applications.MissionCatalog.ActionProvider do
 
   defp ensure_surface_binding(%ActionRequest{} = request),
     do: ActionContractLedger.admit(request, __MODULE__)
-
-  defp validate_mission(params), do: creation_result(Creation.validate(params))
-
-  defp save_mission(
-         %Scope{organization_id: organization_id} = scope,
-         %HostContext{placement: :organization, organization_id: organization_id},
-         params
-       )
-       when is_binary(organization_id),
-       do: creation_result(Creation.create(scope, params))
-
-  defp save_mission(_scope, _host_context, _params),
-    do: {:error, :unsupported_application_host_context}
-
-  defp creation_result({:error, errors}) when is_map(errors) and not is_struct(errors),
-    do: {:error, :invalid_application_action_request}
-
-  defp creation_result(result), do: result
 
   defp lifecycle(scope, host_context, "install", %{"key" => application_key}) do
     with {:ok, application_key} <- application_key(application_key),
@@ -149,7 +122,17 @@ defmodule Cadence.Applications.MissionCatalog.ActionProvider do
          "artifact_id" => artifact_id
        }) do
     with {:ok, artifact_id} <- application_key(artifact_id) do
-      Reimport.execute(scope, mission_id, artifact_id)
+      case Reimport.execute(scope, mission_id, artifact_id) do
+        {:error, {:import_running, _run_id}} ->
+          {:error,
+           %ActionFailure{
+             code: "import_running",
+             message: "An import of this file is still running. Wait for it to finish."
+           }}
+
+        other ->
+          other
+      end
     end
   end
 

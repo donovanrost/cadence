@@ -15,8 +15,12 @@ defmodule Cadence.Applications.TelemetryDecom.ActionProvider do
     TelemetryDecom
   }
 
+  alias Cadence.Applications.ConfigurationLock
+  alias Cadence.Applications.SpacecraftConfiguration.Drafts, as: ConfigurationDrafts
   alias Cadence.Applications.TelemetryDecom.{Config, Review}
   alias Cadence.Auth.Scope
+
+  @direct_writes ["save_configuration", "disable", "save_packet_bindings"]
 
   @surface_action_bindings [
     {"manage", 1, "save_configuration"},
@@ -99,27 +103,45 @@ defmodule Cadence.Applications.TelemetryDecom.ActionProvider do
 
   defp review_result(result), do: result
 
+  # Once a mission has moved to reviewed spacecraft-configuration drafts, the direct host writes
+  # (save, disable, packet bindings) are refused here, server-side, under the configuration lock, as
+  # request_activation already is (DECISIONS rule (b), sweep row 6). The gate lives at this host
+  # boundary, not in the stores: the reviewed drafts path writes through the same TelemetryDecom
+  # and PacketBindings functions when it applies.
   defp execute_reviewed(
+         %Scope{organization_id: organization_id} = scope,
+         %HostContext{placement: :spacecraft, mission_id: mission_id} = host,
+         %ActionRequest{action_id: action} = request
+       )
+       when action in @direct_writes do
+    ConfigurationLock.run(organization_id, mission_id, fn ->
+      with :ok <- ConfigurationDrafts.legacy_apply_allowed(organization_id, mission_id) do
+        review(scope, host, request)
+      end
+    end)
+  end
+
+  defp execute_reviewed(scope, host, %ActionRequest{action_id: "request_activation"} = request),
+    do: review(scope, host, request)
+
+  defp execute_reviewed(scope, host, request), do: execute_action(scope, host, request)
+
+  defp review(
          %Scope{organization_id: organization_id} = scope,
          %HostContext{
            placement: :spacecraft,
            mission_id: mission_id,
            spacecraft_id: spacecraft_id
-         } = host,
+         } =
+           host,
          %ActionRequest{action_id: action, params: params} = request
-       )
-       when action in [
-              "save_configuration",
-              "request_activation",
-              "disable",
-              "save_packet_bindings"
-            ] do
+       ) do
     Review.run(organization_id, mission_id, spacecraft_id, action, params, fn ->
       execute_action(scope, host, request)
     end)
   end
 
-  defp execute_reviewed(scope, host, request), do: execute_action(scope, host, request)
+  defp review(scope, host, request), do: execute_action(scope, host, request)
 
   defp execute_action(
          %Scope{organization_id: organization_id},

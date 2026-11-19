@@ -108,37 +108,15 @@ defmodule Cadence.Applications.HistoricalWorkflowRequestTest do
     assert Repo.aggregate(EventRow, :count) == 0
   end
 
-  test "compatibility validation and submission share preflight and only confirmed valid input records requests" do
-    assert {:ok, %{"valid" => true, "errors" => []}} = execute("validate-request", values())
-    assert Repo.aggregate(EventRow, :count) == 0
+  # The host action path no longer validates or records requests (native path only: unused-request
+  # and lock checks); both are refused and nothing is written.
+  test "the host action path refuses validate and record, and writes nothing" do
+    assert {:error, :unsupported_application_action} = execute("validate-request", values())
 
-    assert {:error, :confirmation_required} =
-             execute(
-               "record-historical-workflow-request",
-               Map.put(values(), "confirmed", "false")
-             )
-
-    assert {:ok, %{"valid" => false}} =
-             execute("validate-request", Map.put(values(), "source_binding_id", "foreign"))
-
-    assert {:error, [%{field: "source_binding_id"}]} =
-             execute(
-               "record-historical-workflow-request",
-               Map.put(values(), "source_binding_id", "foreign")
-             )
+    assert {:error, :unsupported_application_action} =
+             execute("record-historical-workflow-request", values())
 
     assert Repo.aggregate(EventRow, :count) == 0
-    assert {:ok, %{"eventIds" => ids}} = execute("record-historical-workflow-request", values())
-    assert length(ids) == 2
-    events = Repo.all(from(row in EventRow, order_by: row.point_id))
-    assert Enum.sort(Enum.map(events, & &1.backfill_lifecycle_event_id)) == Enum.sort(ids)
-    assert Enum.map(events, & &1.point_id) == ["HK.rate", "HK.temp"]
-
-    assert Enum.all?(
-             events,
-             &(&1.actor_id == "service-one" and &1.organization_id == "org-one" and
-                 &1.mission_id == "mission-one")
-           )
   end
 
   defp execute(action, values) do

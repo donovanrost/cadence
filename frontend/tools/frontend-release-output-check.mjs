@@ -562,6 +562,9 @@ const generatedHostInitializationFacadeDigests = new Set([
   "1e3f6732cb52b572a122628e1eb4fed456100e2525188d1928498c74633a8bd7",
   "4663550f015e9b8c4c2de96c15ba5c4de4a430ea04677a803f0dce41728a6ff1",
   "6bf0a29a57c509da0be23879fb30cb2701ae4c9610a02161c2f6b707abef739f",
+  // cadence_surface_fixture: the console federation smoke's test-only remote, signed only with the
+  // smoke's test key; production publication refuses any reference to it (devops, lead 11-16).
+  "4138218136cd4657046ae03b4fbc9f3ea251b75b355ce1ef73fcd8f8877e5f31",
 ]);
 const generatedFederationRuntimePathPattern = /^assets\/dist-[A-Za-z0-9_-]+\.js$/;
 const generatedFederationRuntimeSourceDigests = new Set([

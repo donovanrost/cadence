@@ -4,27 +4,6 @@ defmodule Cadence.Administration.OrganizationInvitations do
   alias Cadence.Accounts.InvitationDelivery
   alias Cadence.Administration.Access
 
-  def load(scope, organization_id) do
-    with {:ok, user} <- Access.authorize(scope),
-         true <- Ids.valid_identifier?(organization_id),
-         {:ok, org} <- Organizations.fetch_organization(organization_id) do
-      {:ok,
-       %{
-         "version" => 1,
-         "user_id" => user.user_id,
-         "observed_at" => DateTime.to_iso8601(DateTime.utc_now()),
-         "organization" => %{
-           "id" => org.organization_id,
-           "name" => org.display_name,
-           "slug" => org.slug
-         },
-         "submitted" => nil
-       }}
-    else
-      _ -> {:error, :unavailable}
-    end
-  end
-
   def create(scope, organization_id, input) do
     with {:ok, user} <- Access.authorize(scope),
          true <- Ids.valid_identifier?(organization_id),

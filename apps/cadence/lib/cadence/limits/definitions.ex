@@ -6,7 +6,7 @@ defmodule Cadence.Limits.Definitions do
   alias Cadence.Limits.{Definition, DefinitionLifecycle, DefinitionLock, Facts}
   alias Cadence.Limits.GovernedLimitDefinitionRow, as: Row
   alias Cadence.Persistence.{JsonDocument, OrganizationScope}
-  alias Cadence.Platform.EventBus
+  alias Cadence.Platform.{EventBus, SaveTrail}
   alias Cadence.Repo
 
   def persist(%Definition{} = definition, opts \\ []) do
@@ -150,8 +150,14 @@ defmodule Cadence.Limits.Definitions do
   end
 
   # Compare JSON values so map iteration order and atom/string metadata keys do
-  # not create false conflicts; return the value represented by the stored row.
-  defp document(definition), do: definition |> Map.from_struct() |> JsonDocument.encode()
+  # not create false conflicts; return the value represented by the stored row. The save trail
+  # (who, via which path) isn't content: the same version saved again by someone else, or through
+  # another path, is the same version (SaveTrail).
+  defp document(definition),
+    do:
+      %{definition | metadata: SaveTrail.without(definition.metadata)}
+      |> Map.from_struct()
+      |> JsonDocument.encode()
 
   defp published_result({:ok, {definition, event}}, opts) do
     if event != :unchanged and
@@ -195,7 +201,8 @@ defmodule Cadence.Limits.Definitions do
   defp scoped(org, mission),
     do: from(d in Row, where: d.organization_id == ^org and d.mission_id == ^mission)
 
-  defp definition_id(point, set) do
+  @doc "A point and limit set's definition id: the same for every version, and after a retire."
+  def definition_id(point, set) do
     digest = :crypto.hash(:sha256, point <> ":" <> set) |> Base.url_encode64(padding: false)
     "limit_definition:#{binary_part(digest, 0, 16)}"
   end

@@ -440,8 +440,10 @@ useManagementHeader(
           {{ dirty ? "Unsaved selection" : "Selection matches saved inputs" }} ·
           {{ draft.ids.length }} / 512 packets
         </p>
+        <!-- devops' console federation smoke clicks this as its real canary: keep the testid. -->
         <button
           id="save-packet-bindings"
+          data-testid="save-packet-bindings"
           type="button"
           class="btn btn-primary btn-sm"
           :disabled="!canSave"

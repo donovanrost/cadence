@@ -12,6 +12,7 @@ defmodule Cadence.Commanding.RequestReviewDecisionTest do
   alias Cadence.Management.Commanding.ReviewPrecondition
   alias Cadence.Missions.{Mission, MissionRow}
   alias Cadence.Organizations.{Organization, OrganizationRow}
+  alias Cadence.TestSupport.DecisionRecordPurge
   alias Ecto.Adapters.SQL
   alias Ecto.Adapters.SQL.Sandbox
 
@@ -195,12 +196,17 @@ defmodule Cadence.Commanding.RequestReviewDecisionTest do
     end
   end
 
+  # Outside the sandbox: decision rows are append-only (DECISIONS #107), so their cleanup runs
+  # with the test-only purge setting.
   defp cleanup(c) do
-    Repo.delete_all(
-      from(row in CommandApprovalRow,
-        where: row.organization_id == ^c.org and row.mission_id == ^c.mission
-      )
-    )
+    {:ok, _} =
+      DecisionRecordPurge.run(fn ->
+        Repo.delete_all(
+          from(row in CommandApprovalRow,
+            where: row.organization_id == ^c.org and row.mission_id == ^c.mission
+          )
+        )
+      end)
 
     Repo.delete_all(
       from(row in CommandRequestRow,

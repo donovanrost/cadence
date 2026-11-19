@@ -84,7 +84,7 @@ defmodule CadenceWeb.SpacecraftConfigurationPageTest do
              )
 
     token = page(view)["data"]["token"]
-    render_hook(view, "host:context", %{"path" => "/missions/#{c.mission.mission_id}/catalog"})
+    render_hook(view, "host:context", %{"path" => "/missions/#{c.mission.mission_id}/ops"})
 
     render_hook(view, "host:spacecraft-configuration", %{
       "path" => c.path,
@@ -110,7 +110,7 @@ defmodule CadenceWeb.SpacecraftConfigurationPageTest do
 
     assert has_element?(view, "#application-shell")
     assert page(view)["data"]["section"] == "changes"
-    render_hook(view, "host:context", %{"path" => "/missions/#{c.mission.mission_id}/catalog"})
+    render_hook(view, "host:context", %{"path" => "/missions/#{c.mission.mission_id}/ops"})
 
     send(
       view.pid,

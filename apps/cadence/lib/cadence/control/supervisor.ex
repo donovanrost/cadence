@@ -3,6 +3,7 @@ defmodule Cadence.Control.Supervisor do
 
   use Supervisor
 
+  alias Cadence.Contacts.ContactSettler
   alias Cadence.Control.ProcessNamespace
   alias Cadence.Platform.RootComposition
   alias Cadence.Runtime.ProcessNamespace, as: RuntimeProcessNamespace
@@ -34,6 +35,9 @@ defmodule Cadence.Control.Supervisor do
     children =
       [
         {Registry, keys: :unique, name: process_namespace.registry},
+        # DECISIONS #71: ended contacts settle here, never in the contact scheduler.
+        {DynamicSupervisor,
+         strategy: :one_for_one, name: ContactSettler.supervisor_name(process_namespace)},
         {DynamicSupervisor,
          strategy: :one_for_one,
          name: process_namespace.mission_supervisor,
@@ -87,11 +91,39 @@ defmodule Cadence.Control.Supervisor do
         command_verifier_scheduler_children(composition) ++
         contact_scheduler_global_safety_children(composition) ++
         provider_reservation_reconciler_children(composition) ++
-        provider_event_ingestion_children(composition)
+        provider_event_ingestion_children(composition) ++
+        uplink_qualification_children(composition) ++
+        pass_results_close_out_children(composition.control_process_namespace) ++
+        semantic_commit_retirement_children(composition.control_process_namespace)
     else
       []
     end
   end
+
+  defp pass_results_close_out_children(%{pass_results_close_out: name}) when not is_nil(name),
+    do: [{Cadence.Control.PassResultsCloseOut, name: name}]
+
+  defp pass_results_close_out_children(_namespace), do: []
+
+  defp semantic_commit_retirement_children(%{semantic_commit_retirement: name})
+       when not is_nil(name),
+       do: [{Cadence.Control.SemanticCommitRetirement, name: name}]
+
+  defp semantic_commit_retirement_children(_namespace), do: []
+
+  # Provider-attested uplink qualification runs only when that policy is configured (#44 D2).
+  defp uplink_qualification_children(
+         %RootComposition{uplink_session_policy: Cadence.Control.UplinkSessionQualification} =
+           composition
+       ) do
+    [
+      {Cadence.Control.UplinkQualification,
+       name: Cadence.Control.UplinkQualification,
+       process_namespace: composition.runtime_process_namespace}
+    ]
+  end
+
+  defp uplink_qualification_children(_composition), do: []
 
   defp mission_runtime_opts(
          opts,

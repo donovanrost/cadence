@@ -73,6 +73,20 @@ defmodule Cadence.Commanding.RequestValidation do
     end)
   end
 
+  @doc "The active command-catalog snapshot, read without the activation lock."
+  defdelegate authoring_snapshot(organization_id, mission_id),
+    to: Cadence.Reads.MissionModels.ActiveBasis,
+    as: :command_catalog_snapshot
+
+  @doc """
+  Validates one request against a snapshot (from `authoring_snapshot/2` or
+  `with_authoring_catalog/3`) with the exact authoring rules. Must run inside a
+  transaction: target identities are read `FOR SHARE`. Returns the enriched
+  request and `%{target, target_token, snapshot}`.
+  """
+  def validate_on_snapshot(%CommandRequest{} = request, snapshot, expected_target \\ nil),
+    do: resolve_authoring_request(request, snapshot, expected_target)
+
   @doc "Validates a finite batch under one admitted model and held target identities."
   def with_authoring_requests(
         [%CommandRequest{} = first | _] = requests,
@@ -316,7 +330,12 @@ defmodule Cadence.Commanding.RequestValidation do
     end
   end
 
-  defp approval_required?(significance, critical, hazardous, release_policy_hint) do
+  @doc """
+  Whether a request for a command with this binding needs a second operator's
+  approval (DECISIONS #7: critical or hazardous commands, or a policy hint).
+  """
+  @spec approval_required?(atom() | nil, boolean(), boolean(), binary() | nil) :: boolean()
+  def approval_required?(significance, critical, hazardous, release_policy_hint) do
     critical or hazardous or significance in [:critical, :hazardous] or
       release_policy_hint in ["confirmation_required", "approval_required"]
   end

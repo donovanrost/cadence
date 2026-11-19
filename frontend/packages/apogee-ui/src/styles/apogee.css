@@ -1,0 +1,73 @@
+/*
+ * Apogee design language: tokens, document base and role utilities.
+ * Consumers import after `@import "tailwindcss";` and add an `@source` for this package.
+ */
+@import "./tokens.css";
+
+/*
+ * Layout breakpoints (design-language §5): md = 768px (mobile → desktop), console = 1100px (index
+ * rail → full rail, console layout holds still). A theme breakpoint sorts after md, unlike an
+ * arbitrary min-[1100px] variant, so `md:… console:…` on one property behaves as written.
+ */
+@theme {
+  --breakpoint-console: 68.75rem; /* 1100px; rem so it sorts against md (48rem) */
+}
+
+@layer base {
+  html,
+  body {
+    background-color: var(--color-vacuum);
+    color: var(--color-readout);
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+  }
+  body {
+    margin: 0;
+    background-image: var(--apogee-grid);
+    background-size: var(--apogee-grid-size);
+  }
+  a {
+    color: var(--color-readout);
+  }
+  a:hover {
+    color: var(--color-bright);
+  }
+  :focus-visible {
+    outline: var(--apogee-focus);
+    outline-offset: 2px;
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line) transparent;
+  }
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Label role (`lbl`): display 600 12px, .2em, uppercase, text-4. */
+@utility ap-label {
+  font: 600 var(--text-sm) / 1.2 var(--font-display);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--color-text-4);
+  margin: 0;
+}
+
+/*
+ * U18: at least 44px of hit area without changing visuals. Use as `max-md:hit-44` on small
+ * interactive elements (links in meta lines, breadcrumbs, segments, chips' remove buttons).
+ */
+@utility hit-44 {
+  position: relative;
+  &::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
+}

@@ -63,6 +63,18 @@ defmodule Cadence.Auth.Policy do
     end
   end
 
+  def authorize(%Scope{} = current_scope, :manage_organization_members, %{
+        organization_id: organization_id
+      }) do
+    authorize_organization_capability(current_scope, organization_id, :organization_admin)
+  end
+
+  # §11 L4: creating a mission in an organization. todo(authz): Cedar should decide this; today
+  # it's the organization's admins and platform admins.
+  def authorize(%Scope{} = current_scope, :create_missions, %{organization_id: organization_id}) do
+    authorize_organization_capability(current_scope, organization_id, :organization_admin)
+  end
+
   def authorize(%Scope{} = current_scope, :manage_provider_accounts, %{
         organization_id: organization_id
       }) do
@@ -70,6 +82,17 @@ defmodule Cadence.Auth.Policy do
   end
 
   def authorize(%Scope{} = current_scope, :approve_provider_changes, %{
+        organization_id: organization_id
+      }) do
+    authorize_organization_capability(current_scope, organization_id, :organization_admin)
+  end
+
+  # DECISIONS #92 (a): an organization administrator approves a mission-model revision, never a
+  # service; the importer/approver separation lives in MissionModels.RevisionDecisions.
+  def authorize(%Scope{actor_kind: :service}, :approve_mission_model, _params),
+    do: {:error, :human_mission_model_approver_required}
+
+  def authorize(%Scope{} = current_scope, :approve_mission_model, %{
         organization_id: organization_id
       }) do
     authorize_organization_capability(current_scope, organization_id, :organization_admin)
@@ -99,6 +122,8 @@ defmodule Cadence.Auth.Policy do
     authorize_organization_capability(current_scope, organization_id, :organization_admin)
   end
 
+  # todo(authz): Cedar should decide mission access per user. Today any active member operates
+  # every mission of their organization (no mission-level grant is checked here).
   def authorize(%Scope{} = current_scope, :operate_mission, %{
         organization_id: organization_id,
         mission_id: mission_id

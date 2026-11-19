@@ -1,0 +1,50 @@
+{
+  "id": "vocabulary-field-decoded-as-text",
+  "language": "TypeScript",
+  "severity": "error",
+  "message": "An enum-like field decoded as text: use known([...]) / knownText([...]) (or oneOf) so the vocabulary is typed (typing plan §12 A6). Genuine free text: put `// free-text: <why>` on the line above.",
+  "rule":
+    {
+      "kind": "pair",
+      "has":
+        {
+          "field": "key",
+          "regex": "^(\\w+_)?(state|status|kind|phase|reason|outcome|severity|role|mode|stage|condition|source|action|code|type)$",
+        },
+      "all":
+        [
+          {
+            "has":
+              {
+                "field": "value",
+                "any":
+                  [
+                    { "pattern": "$D.token" },
+                    { "pattern": "token" },
+                    { "pattern": "$D.string" },
+                    { "pattern": "string" },
+                    { "pattern": "$D.nullable($D.token)" },
+                    { "pattern": "$D.nullable($D.string)" },
+                    { "pattern": "nullable(token)" },
+                    { "pattern": "nullable(string)" },
+                    { "pattern": "$D.optional($D.token)" },
+                    { "pattern": "$D.optional($D.string)" },
+                    { "pattern": "optional(token)" },
+                    { "pattern": "optional(string)" },
+                    { "pattern": "$D.optional($D.nullable($D.token))" },
+                    { "pattern": "$D.optional($D.nullable($D.string))" },
+                    { "pattern": "optional(nullable(token))" },
+                    { "pattern": "optional(nullable(string))" },
+                  ],
+              },
+          },
+          { "not": { "follows": { "kind": "comment", "regex": "free-text:" } } },
+        ],
+    },
+  "files": ["apps/console/src/**"],
+  "ignores": [
+      "**/*.test.ts",
+      "ast-grep/fixtures/**",
+      # Not migrated yet (BACKLOG §12B, 178 sites on 11-13): each owner removes their file as they migrate.
+    ],
+}

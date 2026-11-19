@@ -13,7 +13,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.MissionCatalog do
   alias Cadence.Ids
   alias Cadence.Reads.Applications.Installations
   alias Cadence.Reads.Catalog.Pages
-  alias Cadence.Reads.Missions.{CreationForm, Directory, Overview}
+  alias Cadence.Reads.Missions.Overview
 
   @application_key "mission_catalog"
   @application_version 1
@@ -132,12 +132,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.MissionCatalog do
     end
   end
 
-  defp dispatch_surface(scope, %HostContext{placement: :organization}, "mission_list", _params),
-    do: Directory.load(scope.organization_id)
-
-  defp dispatch_surface(_scope, %HostContext{placement: :organization}, "mission_new", _params),
-    do: {:ok, CreationForm.new()}
-
   defp dispatch_surface(
          scope,
          %HostContext{placement: :mission, mission_id: mission_id},
@@ -173,9 +167,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.MissionCatalog do
 
   defp dispatch_surface(_scope, _host_context, _surface_id, _params),
     do: {:error, :unsupported_application_surface_query}
-
-  defp navigation(%HostContext{placement: :organization}, _surface_id, _params),
-    do: %{"fallback_href" => "/missions"}
 
   defp navigation(%HostContext{mission_id: mission_id}, surface_id, params),
     do: %{

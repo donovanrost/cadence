@@ -48,6 +48,33 @@ defmodule Cadence.Telemetry.SampleRecords do
     end
   end
 
+  @doc "Newest receipt time per spacecraft in a mission (`%{spacecraft_id => DateTime}`)."
+  @spec latest_receipts_by_spacecraft(binary(), binary()) :: %{binary() => DateTime.t()}
+  def latest_receipts_by_spacecraft(organization_id, mission_id)
+      when is_binary(organization_id) and is_binary(mission_id) do
+    TelemetrySampleRow
+    |> where([row], row.mission_id == ^mission_id and not is_nil(row.spacecraft_id))
+    |> where([row], row.organization_id == ^organization_id or is_nil(row.organization_id))
+    |> group_by([row], row.spacecraft_id)
+    |> select([row], {row.spacecraft_id, max(row.receipt_time)})
+    |> Repo.all()
+    |> Map.new()
+  end
+
+  @doc "The newest stored sample per point for one spacecraft (`PointLatest`, M23)."
+  @spec latest_by_point(binary(), binary(), binary(), [binary()]) :: [Sample.t()]
+  def latest_by_point(organization_id, mission_id, spacecraft_id, point_ids)
+      when is_binary(mission_id) and is_binary(spacecraft_id) and is_list(point_ids) do
+    TelemetrySampleRow
+    |> where([row], row.mission_id == ^mission_id and row.spacecraft_id == ^spacecraft_id)
+    |> where([row], row.organization_id == ^organization_id or is_nil(row.organization_id))
+    |> where([row], row.point_id in ^point_ids)
+    |> distinct([row], row.point_id)
+    |> order_by([row], asc: row.point_id, desc: row.receipt_time)
+    |> Repo.all()
+    |> Enum.map(&TelemetrySampleRow.to_domain/1)
+  end
+
   @spec list_samples(binary(), keyword()) :: [Sample.t()]
   def list_samples(mission_id, opts \\ []) when is_binary(mission_id) and is_list(opts) do
     TelemetrySampleRow

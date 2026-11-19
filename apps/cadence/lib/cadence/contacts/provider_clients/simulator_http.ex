@@ -3,6 +3,8 @@ defmodule Cadence.Contacts.ProviderClients.SimulatorHTTP do
 
   @behaviour Cadence.Contacts.ProviderClient
 
+  alias Cadence.Contacts.ProviderClients.OutboundGuard
+
   alias Cadence.GroundNetworks.{
     DeliveryProfile,
     Opportunity,
@@ -108,6 +110,23 @@ defmodule Cadence.Contacts.ProviderClients.SimulatorHTTP do
            ) do
       normalize(ProviderContact.from_external(data))
     end
+  end
+
+  @doc "The provider's result for a finished contact (S9); an error until it's available."
+  @impl true
+  def fetch_contact_result(%ProviderContext{} = context, provider_contact_ref, opts \\ []) do
+    request_data(context, :get, "/provider/v1/contacts/#{provider_contact_ref}/result", opts)
+  end
+
+  @doc "Asks the provider to attest the uplink session of a contact (#44 D2)."
+  @impl true
+  def attest_uplink_session(%ProviderContext{} = context, provider_contact_ref, attrs, opts \\ []) do
+    request_data(
+      context,
+      :post,
+      "/provider/v1/contacts/#{provider_contact_ref}/uplink-attestation",
+      Keyword.put(opts, :json, attrs)
+    )
   end
 
   @impl true
@@ -259,7 +278,15 @@ defmodule Cadence.Contacts.ProviderClients.SimulatorHTTP do
     with {:ok, base_url} <- require_context(context.base_url, :base_url),
          {:ok, environment_ref} <- require_context(context.environment_ref, :environment_ref),
          {:ok, credential} <- resolve_credential(context, opts) do
-      req_request = Keyword.get(opts, :req_request, &Req.request/1)
+      # Every request goes through the outbound guard (private and reserved networks refused,
+      # resolved before connecting, no redirects). An injected :req_request only replaces how a
+      # CHECKED request is sent (api's review): it can never skip the check.
+      guard_opts = [
+        send: Keyword.get(opts, :req_request),
+        resolver: Keyword.get(opts, :outbound_resolver)
+      ]
+
+      req_request = &OutboundGuard.request(&1, guard_opts)
 
       request_opts = [
         method: method,
@@ -285,11 +312,23 @@ defmodule Cadence.Contacts.ProviderClients.SimulatorHTTP do
   defp normalize_response({:ok, %Req.Response{status: status, body: body}}),
     do: {:error, ProviderError.from_response(status, body)}
 
+  # Refused before sending: the account's address isn't one Cadence may call. The detail stays
+  # generic (no resolved address in errors, metadata or audit).
+  defp normalize_response({:error, {code, _host}})
+       when code in [:outbound_address_denied, :outbound_address_unresolved],
+       do: {:error, ProviderError.invalid(outbound_detail(code))}
+
   defp normalize_response({:error, reason}) do
     if request_not_sent?(reason),
       do: {:error, ProviderError.unavailable(reason)},
       else: {:error, ProviderError.ambiguous(reason)}
   end
+
+  defp outbound_detail(:outbound_address_denied),
+    do: "the provider address is on a network Cadence doesn't call"
+
+  defp outbound_detail(:outbound_address_unresolved),
+    do: "the provider address could not be resolved"
 
   defp resolve_credential(%ProviderContext{credential_ref: nil}, _opts), do: {:ok, nil}
 

@@ -34,7 +34,10 @@ defmodule Cadence.Runtime.RealizedContactRuntimeSpec do
     :clock_mode,
     :metadata
   ]
-  defstruct @enforce_keys ++ [organization_id: nil, scheduled_contact_id: nil, initial_time: nil]
+  # intake?: false is a replay runtime (DECISIONS #71): journals and their drain, no provider
+  # adapter or transport, so it takes nothing new and stores what an ended contact left on disk.
+  defstruct @enforce_keys ++
+              [organization_id: nil, scheduled_contact_id: nil, initial_time: nil, intake?: true]
 
   @spec new(map()) :: {:ok, t()} | {:error, term()}
   def new(attrs) when is_map(attrs) do
@@ -59,6 +62,7 @@ defmodule Cadence.Runtime.RealizedContactRuntimeSpec do
          :ok <- binary_list(Map.get(attrs, :source_endpoint_refs, []), :source_endpoint_refs),
          :ok <- clock_mode(Map.get(attrs, :clock_mode, :live)),
          :ok <- metadata(Map.get(attrs, :metadata, %{})),
+         :ok <- boolean(Map.get(attrs, :intake?, true), :intake?),
          :ok <- exact_hash(Map.get(attrs, :content_sha256, content_sha256), content_sha256) do
       {:ok,
        %__MODULE__{
@@ -74,7 +78,8 @@ defmodule Cadence.Runtime.RealizedContactRuntimeSpec do
          paths: paths,
          clock_mode: Map.get(attrs, :clock_mode, :live),
          initial_time: Map.get(attrs, :initial_time),
-         metadata: Map.get(attrs, :metadata, %{})
+         metadata: Map.get(attrs, :metadata, %{}),
+         intake?: Map.get(attrs, :intake?, true)
        }}
     end
   end
@@ -123,6 +128,9 @@ defmodule Cadence.Runtime.RealizedContactRuntimeSpec do
   defp clock_mode(_mode), do: {:error, {:invalid_realized_contact_runtime_spec, :clock_mode}}
   defp metadata(value) when is_map(value), do: :ok
   defp metadata(_value), do: {:error, {:invalid_realized_contact_runtime_spec, :metadata}}
+
+  defp boolean(value, _field) when is_boolean(value), do: :ok
+  defp boolean(_value, field), do: {:error, {:invalid_realized_contact_runtime_spec, field}}
   defp exact_hash(hash, hash), do: :ok
   defp exact_hash(_claimed, _actual), do: {:error, :realized_contact_runtime_spec_hash_mismatch}
 end

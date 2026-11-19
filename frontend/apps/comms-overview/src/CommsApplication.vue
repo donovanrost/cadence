@@ -3,19 +3,11 @@ import type { FullPageSurfaceProps } from "@cadence/plugin-sdk";
 import { computed, onBeforeUnmount, onErrorCaptured, ref, shallowRef, watch } from "vue";
 import {
   admitFormSurface,
-  TransportCreation,
   RoutingCreation,
-  GroundStationEditor,
   FormActionFailure,
 } from "@cadence/communications/form-surfaces";
 import type { Component } from "vue";
 import CommsCanonicalSurface from "./CommsCanonicalSurface.vue";
-import {
-  admitProviderSurface,
-  ProviderList,
-  ProviderCreation,
-  ProviderDetail,
-} from "@cadence/communications/providers";
 
 const props = defineProps<FullPageSurfaceProps>();
 
@@ -28,13 +20,8 @@ const surfaceComponents: Record<string, Component> = {
   routing_detail: CommsCanonicalSurface,
   ground_stations: CommsCanonicalSurface,
   ground_station: CommsCanonicalSurface,
-  provider_list: ProviderList,
-  provider_new: ProviderCreation,
-  provider_show: ProviderDetail,
-  transport_new: TransportCreation,
+  // §11c comms batch 1 (director): only the routing form remains, until per-spacecraft Extra route.
   routing_new: RoutingCreation,
-  ground_station_new: GroundStationEditor,
-  ground_station_edit: GroundStationEditor,
 };
 
 const pageProps = shallowRef<Record<string, unknown>>();
@@ -147,23 +134,7 @@ function pagePropsFor(value: unknown): Record<string, unknown> {
     throw new Error("The Comms surface navigation is invalid.");
   }
 
-  if (["provider_list", "provider_new", "provider_show"].includes(props.surface.surfaceId)) {
-    if (typeof props.context.missionId !== "string") throw new Error("A mission is required.");
-    const context = { missionId: props.context.missionId };
-    const admitted = admitProviderSurface(
-      props.surface.surfaceId,
-      props.surface.dataContract.version,
-      { navigation, data },
-      context,
-    );
-    return { ...admitted, port: scopedPort(), context };
-  }
-
-  if (
-    ["transport_new", "routing_new", "ground_station_new", "ground_station_edit"].includes(
-      props.surface.surfaceId,
-    )
-  ) {
+  if (props.surface.surfaceId === "routing_new") {
     if (typeof props.context.missionId !== "string")
       throw new Error("A mission is required for a Communications form.");
     const form = admitFormSurface(

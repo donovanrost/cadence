@@ -2,7 +2,8 @@
 # Executes in the existing named Cadence server so its runtime receives the activation.
 Logger.configure(level: :warning)
 {:ok, hostname} = :inet.gethostname()
-peer = :"cadence@#{hostname}"
+# EARENDIL_CADENCE_NODE targets another worktree's server (its iex --sname); default `cadence`.
+peer = :"#{System.get_env("EARENDIL_CADENCE_NODE", "cadence")}@#{hostname}"
 true = Node.connect(peer)
 :ok = :rpc.call(peer, Phoenix.CodeReloader, :reload, [CadenceWeb.Endpoint], 120_000)
 

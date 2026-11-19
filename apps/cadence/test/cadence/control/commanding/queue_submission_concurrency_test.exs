@@ -85,7 +85,8 @@ defmodule Cadence.Control.Commanding.QueueSubmissionConcurrencyTest do
           from(row in OrganizationMembershipRow,
             where: row.organization_id == ^c.org and row.user_id == ^c.user.user_id
           ),
-          set: [role: "member"]
+          # Revoked while waiting (a plain member may queue since DECISIONS #62).
+          set: [lifecycle_state: "revoked"]
         )
       end)
       |> Task.await()

@@ -1,4 +1,7 @@
 import {
+  fixtureArrayAt,
+  fixtureRecordAt,
+  jsonFixture,
   fixtureRows,
   fixtureString,
   fixtureRecord,
@@ -76,4 +79,103 @@ void test("scheduling boundary applies to real Vue scripts and permits transport
   assert.equal(matches.length, 1);
   assert.equal(matches[0]?.ruleId, "scheduling-domain-api-only");
   assert.equal(basename(fixtureString(matches[0]?.file)), "OpsContactSchedule.vue");
+});
+
+// Typing plan §12B ratchet (director 11-13): a rule's not-yet-migrated ignores may only shrink.
+// The baseline lists the files still allowed; nothing may be added to a rule's ignores.
+void test("typing-migration ignore lists only shrink", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const baseline = jsonFixture(
+    await readFile(resolve(root, "ast-grep/migration-baselines.json"), "utf8"),
+  );
+  for (const rule of [
+    "error-code-compared-as-text",
+    "vocabulary-field-decoded-as-text",
+    "word-map-keyed-by-text",
+  ]) {
+    const text = await readFile(resolve(root, `ast-grep/rules/${rule}.yml`), "utf8");
+    const ignored = [...text.matchAll(/"(apps\/console\/src\/[^"*]+\.(?:ts|vue))"/g)].flatMap(
+      (m) => (m[1] ? [m[1]] : []),
+    );
+    const allowed = new Set(fixtureArrayAt(baseline, rule).map(fixtureString));
+    const added = ignored.filter((file) => !allowed.has(file));
+    assert.deepEqual(
+      added,
+      [],
+      `${rule}: these files were added to its ignores; migrate them instead`,
+    );
+    assert.ok(
+      ignored.length <= allowed.size,
+      `${rule}: ${ignored.length} ignored files exceed the baseline of ${allowed.size}`,
+    );
+  }
+});
+
+// Rule B (lead 11-15): a decoded token/string compared to a literal, whatever the field's name.
+void test("decoded-text comparisons only fall (rule B ratchet)", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const { countByFile, decodedTextCompared } = await import("./decoded-text-compared.mjs");
+  const baseline = fixtureRecordAt(
+    jsonFixture(await readFile(resolve(root, "ast-grep/migration-baselines.json"), "utf8")),
+    "decoded-text-compared",
+  );
+  /** @param {string} file */
+  const allowed = (file) => (file in baseline ? fixtureNumber(baseline[file]) : 0);
+  const counts = countByFile(decodedTextCompared(resolve(root, "apps/console/tsconfig.app.json")));
+  const over = Object.entries(counts)
+    .filter(([file, n]) => n > allowed(file))
+    .map(([file, n]) => `${file}: ${n} (baseline ${allowed(file)})`);
+  assert.deepEqual(over, [], "decode these fields with known/knownText instead of comparing text");
+});
+
+void test("rule B fires on a decoded token compared to a literal, free-text or not", async (t) => {
+  const { decodedTextCompared } = await import("./decoded-text-compared.mjs");
+  const directory = await mkdtemp(join(tmpdir(), "cadence-decoded-text-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  await writeFile(
+    join(directory, "tsconfig.json"),
+    JSON.stringify({ compilerOptions: { strict: true, noEmit: true }, include: ["*.ts"] }),
+  );
+  await writeFile(
+    join(directory, "case.ts"),
+    [
+      "type Reader<T> = { read(v: unknown): T };",
+      "declare const d: {",
+      "  token: Reader<string>;",
+      "  string: Reader<string>;",
+      "  nullable<T>(r: Reader<T>): Reader<T | null>;",
+      '  known<const T extends string>(v: readonly T[]): Reader<T | "unrecognized">;',
+      "  object<S>(s: S): Reader<{ [K in keyof S]: S[K] extends Reader<infer T> ? T : never }>;",
+      "};",
+      "type Decoded<R> = R extends Reader<infer T> ? T : never;",
+      "const reader = d.object({",
+      "  verdict: d.token,",
+      "  // free-text: claimed open, but branched on below",
+      "  action: d.nullable(d.string),",
+      '  kind: d.known(["a", "b"] as const),',
+      "  note: d.string,",
+      "});",
+      "declare const v: Decoded<typeof reader>;",
+      'export const a = v.verdict === "met";',
+      'export const b = v.kind === "a";',
+      "// compared-as-text: a field path, an open set by design",
+      'export const c = v.note === "x";',
+      "export function f() {",
+      "  switch (v.action) {",
+      '    case "retried":',
+      "      return 1;",
+      "  }",
+      "  return 0;",
+      "}",
+      "",
+    ].join("\n"),
+  );
+  const hits = decodedTextCompared(join(directory, "tsconfig.json"));
+  assert.deepEqual(
+    hits.map(({ field, literal, freeText }) => ({ field, literal, freeText })),
+    [
+      { field: "verdict", literal: "met", freeText: false },
+      { field: "action", literal: "retried", freeText: true },
+    ],
+  );
 });

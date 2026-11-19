@@ -26,12 +26,9 @@ const context: HostContext = {
 
 const surfaceIds = [
   "list",
-  "new",
   "profile_list",
-  "profile_new",
   "profile_show",
   "show",
-  "edit",
   "readiness",
   "routing",
   "commanding",
@@ -41,14 +38,9 @@ const surfaceIds = [
 
 const componentNames = [
   "SpacecraftListPage",
-  "SpacecraftNew",
   "SpacecraftTypeListPage",
-  "SpacecraftTypeNew",
   "SpacecraftTypeShow",
   "SpacecraftShow",
-  "SpacecraftEdit",
-  // New and edit are public aliases of the same host-owned vertical feature.
-  "SpacecraftIdentityForm",
   "SpacecraftReadiness",
   "SpacecraftRouting",
   "SpacecraftCommanding",

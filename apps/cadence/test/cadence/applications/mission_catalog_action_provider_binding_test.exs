@@ -6,8 +6,6 @@ defmodule Cadence.Applications.MissionCatalogActionProviderBindingTest do
   alias Cadence.Auth.Scope
 
   @expected [
-    {"mission_new", 1, "validate"},
-    {"mission_new", 1, "save"},
     {"mission_applications", 1, "install"},
     {"mission_applications", 1, "disable"},
     {"mission_applications", 1, "uninstall"},
@@ -21,7 +19,7 @@ defmodule Cadence.Applications.MissionCatalogActionProviderBindingTest do
     {"catalog_artifact_show", 1, "reimport"}
   ]
 
-  test "freezes the exact 13-row Mission Catalog surface/action ledger" do
+  test "freezes the exact 11-row Mission Catalog surface/action ledger" do
     definition_pairs =
       MissionCatalog.definition().surfaces
       |> Enum.flat_map(fn surface ->
@@ -31,7 +29,7 @@ defmodule Cadence.Applications.MissionCatalogActionProviderBindingTest do
     assert definition_pairs == @expected
     assert ActionProvider.surface_action_bindings() == @expected
     assert :ok = ActionProvider.validate_bindings(@expected)
-    assert length(Enum.uniq(@expected)) == 13
+    assert length(Enum.uniq(@expected)) == 11
   end
 
   test "rejects omitted, wrong-version, cross-surface, and undeclared bindings" do
@@ -39,7 +37,7 @@ defmodule Cadence.Applications.MissionCatalogActionProviderBindingTest do
       application_key: "mission_catalog",
       application_version: 1,
       action_id: "validate",
-      surface_id: "mission_new",
+      surface_id: "catalog_database_new",
       surface_version: 1,
       params: %{}
     }
@@ -47,7 +45,8 @@ defmodule Cadence.Applications.MissionCatalogActionProviderBindingTest do
     requests = [
       %{base | surface_id: nil, surface_version: nil},
       %{base | surface_version: 2},
-      %{base | action_id: "reimport", surface_id: "mission_new"},
+      %{base | action_id: "reimport", surface_id: "catalog_database_new"},
+      %{base | surface_id: "mission_new"},
       %{base | action_id: "save", surface_id: "catalog_artifact_show"},
       %{base | action_id: "not_declared"}
     ]

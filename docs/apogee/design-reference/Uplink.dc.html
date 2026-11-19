@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Uplink live · Cadence</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Saira:wght@400;500;600&amp;family=Saira+Condensed:wght@500;600;700&amp;family=Azeret+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#05070A}
+a{color:#E6EDF3}a:hover{color:#FFFFFF}
+.m{font-family:'Azeret Mono',ui-monospace,monospace}
+.n{font-family:Saira,sans-serif;font-variant-numeric:tabular-nums}
+.lbl{font:600 12px 'Saira Condensed',sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#7D8A99;margin:0}
+.pnl{position:relative;background:#0A0E13;border:1px solid #1C2530}
+.ph{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid #1C2530;flex-wrap:wrap}
+.ph .t{font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#C9D3DD;margin:0}
+.ph .i{font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.ph .r{margin-left:auto;font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.tag{display:inline-flex;align-items:center;gap:7px;height:24px;padding:0 9px;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;border:1px solid currentColor;white-space:nowrap}
+.b{height:32px;padding:0 12px;border:1px solid #2A3644;background:#0F141B;color:#E6EDF3;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;text-decoration:none}
+.b.pri{background:#E6EDF3;color:#05070A;border-color:#E6EDF3}
+.s-nom{width:8px;height:8px;background:#2FD08A;flex:none}
+.s-cau{width:10px;height:9px;background:#FFB020;clip-path:polygon(50% 0,100% 100%,0 100%);flex:none}
+.s-crit{width:8px;height:8px;background:#FF4D57;transform:rotate(45deg);flex:none}
+.s-stale{width:8px;height:8px;flex:none;box-sizing:border-box;border:1px solid #A497FF;background-image:repeating-linear-gradient(135deg,#A497FF 0 1.5px,transparent 1.5px 4px)}
+.s-off{width:8px;height:8px;flex:none;box-sizing:border-box;border:1px dashed #9DAAB8}
+.rail a{display:flex;align-items:center;gap:10px;height:38px;padding:0 12px;color:#9DAAB8;text-decoration:none;font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;border-left:2px solid transparent}
+.rail a:hover{color:#E6EDF3;background:#0F141B}
+.rail a.on{color:#E6EDF3;background:#0F141B;border-left-color:#E6EDF3}
+.rail .n{font:500 10px 'Azeret Mono',monospace;color:#7D8A99;width:16px}
+.rail .c{margin-left:auto;font:500 11px 'Azeret Mono',monospace;color:#7D8A99;letter-spacing:0}
+.cell{aspect-ratio:1;background:#164E37}
+.c-cau{background:#FFB020}
+.c-crit{background:#FF4D57;outline:1px solid #FF4D57;outline-offset:1.5px}
+.c-stale{background-color:#140F26;box-sizing:border-box;border:1px solid #A497FF;background-image:repeating-linear-gradient(135deg,#A497FF 0 1px,transparent 1px 3.5px)}
+.c-live{outline:1px solid #E6EDF3;outline-offset:1.5px}
+.ro{background:#0A0E13;padding:14px 16px;display:flex;flex-direction:column;gap:6px}
+.ro .v{font:500 30px Saira,sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-0.02em;line-height:1}
+.ro .s{font:400 12px 'Saira',sans-serif;color:#9DAAB8}
+
+.step{display:flex;align-items:center;gap:8px;height:52px;padding:0 14px;border-right:1px solid #1C2530;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#7D8A99}
+.step.on{color:#E6EDF3;background:#0F141B;box-shadow:inset 0 -2px 0 #E6EDF3}
+.pipe{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:1px;background:#1C2530;border:1px solid #1C2530}
+.pipe .ro{padding:14px 16px 16px}
+.pipe .bar{height:3px;background:#1C2530;margin-top:6px;position:relative}
+.pipe .bar i{position:absolute;left:0;top:0;bottom:0}
+.um{display:grid;grid-template-columns:repeat(50,minmax(0,1fr));gap:2px}
+.uc{aspect-ratio:1;box-sizing:border-box}
+.uc.v{background:#1B6E4B}
+.uc.v1{background:#2FD08A}
+.uc.e{background:#9DAAB8}
+.uc.r{background:#E6EDF3;outline:1px solid #E6EDF3;outline-offset:2px}
+.uc.q{border:1px solid #9DAAB8}
+.uc.g{border:1px solid #2A3644}
+.uc.f{background:#FF4D57;outline:1px solid #FF4D57;outline-offset:2px}
+.uc.n{background:#FFB020}
+.uc.x{border:1px dashed #7D8A99}
+.uc.s{border:1px solid #A497FF;background-image:repeating-linear-gradient(135deg,#A497FF 0 1px,transparent 1px 3.5px)}
+.uc.c{border:1px solid #FFB020}
+.lg{display:inline-flex;align-items:center;gap:6px;font:500 10px 'Azeret Mono',monospace;color:#9DAAB8;text-transform:uppercase}
+.lg .uc{width:10px;height:10px;aspect-ratio:auto}
+.ex{display:grid;grid-template-columns:14px minmax(0,1fr);gap:12px;padding:14px 16px;border-top:1px solid #1C2530}
+.ex:first-of-type{border-top:0}
+.gopt{display:flex;gap:12px;align-items:flex-start;padding:11px 12px;border:1px solid #2A3644;cursor:pointer}
+.gopt.on{border-color:#E6EDF3;background:rgba(230,237,243,.04)}
+.log{display:grid;grid-template-columns:76px 96px minmax(0,1fr);gap:10px;padding:6px 16px;font:500 11px 'Azeret Mono',monospace;color:#9DAAB8;border-top:1px solid #11161D}
+.go{color:#4FDB9E}
+.scr{flex:1;min-height:0;overflow:auto;scrollbar-width:thin;scrollbar-color:#2A3644 transparent}
+.pane{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.pane>.ph{flex:none}
+</style>
+</helmet>
+<div style="font-family: 'Saira', system-ui, sans-serif; color: #E6EDF3; height: 100vh; overflow: hidden; display: flex; flex-direction: column; background-color: #05070A; background-image: linear-gradient(rgba(230,237,243,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(230,237,243,.025) 1px, transparent 1px); background-size: 40px 40px">
+
+<header style="flex: none; display: flex; align-items: stretch; height: 52px; border-bottom: 1px solid #1C2530; background: #070A0E">
+<a href="CommandFlow.dc.html" aria-label="Back to commands" style="width: 52px; display: flex; align-items: center; justify-content: center; border-right: 1px solid #1C2530; color: #E6EDF3"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m15 6-6 6 6 6"></path></svg></a>
+<div style="display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 0 18px; border-right: 1px solid #1C2530"><span class="m" style="font-size: 11px; color: #7D8A99">REQ-0419 · HEATER_SET · GO BY MIRA K. 02:59Z</span><span style="font: 700 19px 'Saira Condensed'; letter-spacing: .14em; text-transform: uppercase">Wave 2 of 3 · live</span></div>
+<ol aria-label="Stations" style="list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap">
+<li class="step"><span class="m" style="color: #2FD08A">✓</span>01–04</li>
+<li class="step on"><span class="m">●</span>05 Radiate</li>
+<li class="step on"><span class="m">●</span>06 Acknowledge</li>
+<li class="step on"><span class="m">●</span>07 Verify</li>
+</ol>
+<div class="m" style="margin-left: auto; display: flex; align-items: center; gap: 20px; padding: 0 18px; font-size: 13px"><span><span style="color: #7D8A99">UTC</span> 04:31:12</span><span><span style="color: #7D8A99">NEXT AOS</span> T−00:07:48 <span style="color: #7D8A99">FBK</span></span></div>
+<div style="display: flex; align-items: center; gap: 8px; padding: 0 16px; border-left: 1px solid #1C2530"><button class="b">Pause</button><button class="b" style="color: #FF6B73; border-color: #FF4D57">Abort remaining</button></div>
+</header>
+
+<main style="flex: 1; min-height: 0; box-sizing: border-box; padding: 12px 14px; display: flex; flex-direction: column; gap: 12px">
+
+<section style="flex: none; display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; justify-content: space-between">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<p class="lbl" style="color: #E6EDF3">Battery heater setpoint · 5.0 → 8.0 °C</p>
+<h1 style="margin: 0; font: 600 28px 'Saira Condensed'; letter-spacing: .08em; text-transform: uppercase; line-height: 1"><span class="n">34</span> of <span class="n">96</span> verified <span style="color: #7D8A99">· 2 need you</span></h1>
+</div>
+<p class="m" style="margin: 0; font-size: 12px; color: #9DAAB8">WAVE 1 · 5/5 VERIFIED 03:41Z · WAVE 2 · 29/45 · WAVE 3 · 46 HELD AT GATE</p>
+</section>
+
+<section class="pipe" style="flex: none" aria-label="Wave 2 pipeline">
+<div class="ro"><span class="lbl">Queued for AOS</span><span class="v">10</span><span class="s">Next 4 at FBK 04:39Z</span><div class="bar"><i style="width: 22%; background: #7D8A99"></i></div></div>
+<div class="ro"><span class="lbl" style="color: #E6EDF3">Radiating</span><span class="v">1</span><span class="s m" style="font-size: 11px">EARENDIL-171 · AWA</span><div class="bar"><i style="width: 2%; background: #E6EDF3"></i></div></div>
+<div class="ro"><span class="lbl">Executed</span><span class="v">3</span><span class="s">Verifier window open</span><div class="bar"><i style="width: 7%; background: #9DAAB8"></i></div></div>
+<div class="ro"><span class="lbl" style="color: #4FDB9E">Verified</span><span class="v">29</span><span class="s">THERM.batt_setpoint = 8.0</span><div class="bar"><i style="width: 64%; background: #2FD08A"></i></div></div>
+<div class="ro" style="background: rgba(255,176,32,.05)"><span class="lbl" style="color: #FFC24D">No ACK · retry</span><span class="v">1</span><span class="s">Retry 1 of 3 queued</span><div class="bar"><i style="width: 2%; background: #FFB020"></i></div></div>
+<div class="ro" style="background: rgba(255,77,87,.06)"><span class="lbl" style="color: #FF6B73">Verify failed</span><span class="v">1</span><span class="s">Holds the wave 3 gate</span><div class="bar"><i style="width: 2%; background: #FF4D57"></i></div></div>
+</section>
+
+<div style="flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 12px">
+<div style="min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 12px">
+
+<section class="pnl" style="flex: none">
+<div class="ph"><span class="i">U1</span><h2 class="t">Targets · planes 03–04</h2><span class="r">SCID 101–200 · ONE CELL EACH</span></div>
+<div style="padding: 12px 16px; display: flex; flex-direction: column; gap: 6px">
+<div style="display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 8px 12px; align-items: center">
+<span class="m" style="font-size: 10px; color: #7D8A99">PLANE 03</span><div class="um"><sc-for list="{{p3}}" as="c" hint-placeholder-count="50"><span class="uc {{c}}"></span></sc-for></div>
+<span class="m" style="font-size: 10px; color: #7D8A99">PLANE 04</span><div class="um"><sc-for list="{{p4}}" as="c" hint-placeholder-count="50"><span class="uc {{c}}"></span></sc-for></div>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 8px 0 0 82px">
+<span class="lg"><span class="uc v1"></span>Verified · W1</span>
+<span class="lg"><span class="uc v"></span>Verified</span>
+<span class="lg"><span class="uc e"></span>Executed</span>
+<span class="lg"><span class="uc r"></span>Radiating</span>
+<span class="lg"><span class="uc q"></span>Queued</span>
+<span class="lg"><span class="uc g"></span>Wave 3 · held</span>
+<span class="lg"><span class="uc n"></span>No ACK</span>
+<span class="lg"><span class="uc f"></span>Failed</span>
+<span class="lg"><span class="uc x"></span>Excluded</span>
+</div>
+</div>
+</section>
+
+<section class="pnl" style="flex: none">
+<div class="ph"><span class="i">U2</span><h2 class="t">Verifier · THERM.batt_setpoint</h2><span class="r">34 STEPPED TO 8.0 · 1 DID NOT</span></div>
+<div style="padding: 8px 16px 6px">
+<svg viewBox="0 0 760 200" width="100%" style="display: block; height: 180px" aria-label="Setpoint over time for verified spacecraft, with EARENDIL-152 flat at 5.0">
+<path d="{{grid}}" stroke="#141B24" stroke-width="1" fill="none"></path>
+<line x1="44" x2="740" y1="{{y8}}" y2="{{y8}}" stroke="#4FDB9E" stroke-width="1" stroke-dasharray="3 4"></line>
+<text x="36" y="{{y8t}}" fill="#9DAAB8" font-family="Azeret Mono" font-size="10" text-anchor="end">8.0</text>
+<text x="36" y="{{y5t}}" fill="#9DAAB8" font-family="Azeret Mono" font-size="10" text-anchor="end">5.0</text>
+<path d="{{ok}}" stroke="#2FD08A" stroke-opacity=".55" stroke-width="1.2" fill="none"></path>
+<path d="{{bad}}" stroke="#FF4D57" stroke-width="2" fill="none"></path>
+<path d="{{badMark}}" fill="#FF4D57"></path>
+<text x="{{badLx}}" y="{{badLy}}" fill="#FF6B73" font-family="Azeret Mono" font-size="10">152 · EXECUTED 04:18Z · STILL 5.0</text>
+<line x1="{{nowX}}" x2="{{nowX}}" y1="10" y2="172" stroke="#E6EDF3" stroke-width="1"></line>
+<text x="{{nowX}}" y="190" fill="#E6EDF3" font-family="Azeret Mono" font-size="10" text-anchor="middle">NOW</text>
+<text x="44" y="190" fill="#7D8A99" font-family="Azeret Mono" font-size="10">03:00Z</text>
+<text x="{{x330}}" y="190" fill="#7D8A99" font-family="Azeret Mono" font-size="10" text-anchor="middle">03:30Z</text>
+<text x="{{x400}}" y="190" fill="#7D8A99" font-family="Azeret Mono" font-size="10" text-anchor="middle">04:00Z</text>
+<text x="740" y="190" fill="#7D8A99" font-family="Azeret Mono" font-size="10" text-anchor="end">05:00Z</text>
+</svg>
+</div>
+</section>
+
+<section class="pnl pane" style="flex: 1">
+<div class="ph"><span class="i">U3</span><h2 class="t">Event stream</h2><span class="r">NEWEST FIRST · ALL 96 IN THE REQUEST LOG</span></div>
+<div class="scr" style="padding: 4px 0 8px">
+<div class="log"><span style="color: #E6EDF3">04:31:08Z</span><span style="color: #E6EDF3">EARENDIL-171</span><span style="color: #E6EDF3">RADIATING · AWA · 19 B</span></div>
+<div class="log"><span>04:30:44Z</span><span>EARENDIL-168</span><span class="go">VERIFIED · 8.0 °C AT +22 s</span></div>
+<div class="log"><span>04:30:21Z</span><span>EARENDIL-168</span><span>EXECUTED · CMD COUNT 4412</span></div>
+<div class="log"><span>04:29:57Z</span><span>EARENDIL-165</span><span class="go">VERIFIED · 8.0 °C AT +31 s</span></div>
+<div class="log"><span style="color: #FF6B73">04:19:22Z</span><span style="color: #FF6B73">EARENDIL-152</span><span style="color: #FF6B73">VERIFY FAILED · READ 5.0, EXPECTED 8.0 ±0.1</span></div>
+<div class="log"><span style="color: #FFC24D">04:10:21Z</span><span style="color: #FFC24D">EARENDIL-127</span><span style="color: #FFC24D">NO ACK IN 30 s · RETRY QUEUED FBK 04:39Z</span></div>
+</div>
+</section>
+</div>
+
+<aside style="min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 12px">
+<section class="pnl pane" style="flex: 1">
+<div class="ph"><span class="i">N</span><h2 class="t">Needs you</h2><span class="r">2</span></div>
+<div class="scr">
+<div class="ex" style="background: rgba(255,77,87,.05)"><span class="s-crit" style="margin-top: 6px"></span><div style="display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; justify-content: space-between; gap: 8px; align-items: baseline"><a href="#" style="font: 600 16px 'Saira Condensed'; letter-spacing: .1em; text-decoration: none">EARENDIL-152</a><span class="tag" style="color: #FF6B73; height: 22px; font-size: 12px">Verify failed</span></div>
+<p style="margin: 0; font-size: 13px; line-height: 1.5; color: #C9D3DD">The command arrived and executed (counter +1), but the setpoint still reads 5.0 °C a minute later. The table write didn't stick.</p>
+<div style="display: flex; flex-wrap: wrap; gap: 6px"><button class="b">Re-send at 04:47Z AWA</button><button class="b">Open 152</button></div>
+</div></div>
+<div class="ex" style="background: rgba(255,176,32,.04)"><span class="s-cau" style="margin-top: 6px"></span><div style="display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; justify-content: space-between; gap: 8px; align-items: baseline"><a href="#" style="font: 600 16px 'Saira Condensed'; letter-spacing: .1em; text-decoration: none">EARENDIL-127</a><span class="tag" style="color: #FFC24D; height: 22px; font-size: 12px">No ACK</span></div>
+<p style="margin: 0; font-size: 13px; line-height: 1.5; color: #C9D3DD">Radiated through Svalbard, which has been degraded since 01:52Z. Cadence moved the retry to Fairbanks at 04:39Z. Nothing to do unless it fails again.</p>
+</div></div>
+</div>
+</section>
+
+<section class="pnl" style="flex: none">
+<div class="ph"><span class="i">G</span><h2 class="t">Wave 3 gate</h2><span class="r" style="color: #FFC24D">WILL HOLD</span></div>
+<div style="padding: 12px 16px; display: flex; flex-direction: column; gap: 8px">
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: #1C2530; border: 1px solid #1C2530">
+<div class="ro" style="padding: 10px 12px"><span class="lbl">Needs</span><span class="v" style="font-size: 24px">45 / 45</span><span class="s">verified in wave 2</span></div>
+<div class="ro" style="padding: 10px 12px"><span class="lbl">Best case</span><span class="v" style="font-size: 24px">44 / 45</span><span class="s">152 is failed</span></div>
+</div>
+<label class="gopt on"><input type="radio" name="g" checked style="accent-color: #E6EDF3; margin-top: 3px"><span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 600">Hold until 152 is resolved</span><span style="font-size: 13px; color: #9DAAB8">Default. Wave 3 keeps its slot until 05:30Z.</span></span></label>
+<label class="gopt"><input type="radio" name="g" style="accent-color: #E6EDF3; margin-top: 3px"><span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 600">Release wave 3 without 152</span><span style="font-size: 13px; color: #9DAAB8">Treats 152 as a one-off. Needs Mira's GO again.</span></span></label>
+<label class="gopt"><input type="radio" name="g" style="accent-color: #E6EDF3; margin-top: 3px"><span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 600">Stop after wave 2</span><span style="font-size: 13px; color: #9DAAB8">46 stay at 5.0 °C. The request stays open.</span></span></label>
+</div>
+</section>
+</aside>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+const EXCL = { 117: 'x', 144: 'x', 163: 's', 188: 'c' };
+const W1 = [101, 120, 139, 159, 179];
+let seed = 7;
+const rnd = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+const pool = [];
+for (let s = 101; s <= 200; s++) if (!EXCL[s] && W1.indexOf(s) < 0 && s !== 127 && s !== 152 && s !== 171) pool.push(s);
+for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); const t = pool[i]; pool[i] = pool[j]; pool[j] = t; }
+const st = {};
+W1.forEach((s) => { st[s] = 'v1'; });
+st[127] = 'n'; st[152] = 'f'; st[171] = 'r';
+const order = ['v', 'v', 'v', 'v', 'v', 'v', 'v', 'v', 'v', 'v', 'v', 'v', 'v', 'v', 'v', 'v', 'v', 'v', 'v', 'v', 'v', 'v', 'v', 'v', 'v', 'v', 'v', 'v', 'v', 'e', 'e', 'e', 'q', 'q', 'q', 'q', 'q', 'q', 'q', 'q', 'q', 'q'];
+const verified = [];
+pool.forEach((s, i) => { st[s] = i < order.length ? order[i] : 'g'; if (st[s] === 'v') verified.push(s); });
+const cell = (s) => EXCL[s] || st[s];
+const p3 = []; const p4 = [];
+for (let s = 101; s <= 150; s++) p3.push(cell(s));
+for (let s = 151; s <= 200; s++) p4.push(cell(s));
+const X0 = 44; const X1 = 740;
+const x = (min) => (X0 + (X1 - X0) * min / 120).toFixed(1);
+const y = (c) => (172 - (c - 4) / 5 * 150).toFixed(1);
+const now = 91;
+let ok = '';
+W1.forEach((s, i) => { const te = 12 + i * 6.5; ok += 'M' + X0 + ' ' + y(5) + 'H' + x(te) + 'V' + y(8) + 'H' + x(now); });
+verified.forEach((s, i) => { const te = 52 + i * (36 / verified.length) + (rnd() - 0.5) * 2; ok += 'M' + X0 + ' ' + y(5) + 'H' + x(te) + 'V' + y(8) + 'H' + x(now); });
+const tb = 78;
+const bx = Number(x(tb)); const by = Number(y(5));
+let grid = '';
+for (let m = 0; m <= 120; m += 30) grid += 'M' + x(m) + ' 10V172';
+grid += 'M' + X0 + ' ' + y(5) + 'H' + X1;
+return {
+p3: p3, p4: p4, grid: grid, ok: ok,
+bad: 'M' + X0 + ' ' + y(5) + 'H' + x(now),
+badMark: 'M' + bx + ' ' + (by - 6) + 'L' + (bx + 6) + ' ' + by + 'L' + bx + ' ' + (by + 6) + 'L' + (bx - 6) + ' ' + by + 'Z',
+badLx: (bx - 120).toFixed(0), badLy: (by + 22).toFixed(0),
+y8: y(8), y8t: (Number(y(8)) + 3).toFixed(1), y5t: (Number(y(5)) + 3).toFixed(1),
+nowX: x(now), x330: x(30), x400: x(60)
+};
+}
+}
+</script>
+</body>
+</html>

@@ -25,22 +25,33 @@ defmodule Cadence.ContactPlanning.FleetStartProjection do
       evidence: inputs.evidence,
       requirements: page(inputs.requirements, pages["requirements_page"], &requirement/1),
       templates: page(inputs.templates, pages["templates_page"], &template/1),
-      occurrence_count: inputs.templates |> Enum.map(&length(&1.occurrences)) |> Enum.sum(),
+      occurrence_count: inputs.templates |> Enum.map(&fan_out/1) |> Enum.sum(),
       eligible_occurrence_count:
         inputs.templates |> Enum.map(&eligible_count(&1, inputs.window)) |> Enum.sum()
     }
   end
 
+  # Occurrences × targeted spacecraft (a template fans out per spacecraft).
+  defp fan_out(t), do: length(t.occurrences) * length(t.spacecraft_ids)
+
   defp eligible_count(t, window) do
-    existing = MapSet.new(t.existing_occurrences, & &1.at)
+    # Days an older version's requirement still serves (kept) or closed (done) aren't eligible;
+    # its days this version regenerates are (DECISIONS #86).
+    existing =
+      for row <- t.existing_occurrences,
+          Map.get(row, :outcome) != "generate",
+          into: MapSet.new(),
+          do: {row.at, row.spacecraft_id}
 
-    Enum.count(t.occurrences, fn at ->
-      {starts, ends} = RequirementSchedule.window(t.version.schedule_document, at)
-
-      not MapSet.member?(existing, DateTime.to_unix(at, :microsecond)) and
+    for at <- t.occurrences,
+        {starts, ends} = RequirementSchedule.window(t.version.schedule_document, at),
         DateTime.before?(starts, window.horizon_end) and
-        DateTime.after?(ends, window.horizon_start)
-    end)
+          DateTime.after?(ends, window.horizon_start),
+        spacecraft_id <- t.spacecraft_ids,
+        not MapSet.member?(existing, {DateTime.to_unix(at, :microsecond), spacecraft_id}),
+        reduce: 0 do
+      count -> count + 1
+    end
   end
 
   defp page(entries, page, mapper) do
@@ -72,8 +83,11 @@ defmodule Cadence.ContactPlanning.FleetStartProjection do
       id: v.contact_requirement_template_id,
       version: v.version,
       content_sha256: v.content_sha256,
+      name: v.name,
+      target: v.target_document,
       spacecraft_id: v.spacecraft_id,
-      occurrence_count: length(t.occurrences),
+      spacecraft_count: length(t.spacecraft_ids),
+      occurrence_count: fan_out(t),
       maximum_occurrences: v.catch_up_policy_document["maximum_occurrences_per_run"],
       maximum_lookback_seconds: v.catch_up_policy_document["maximum_lookback_seconds"]
     }

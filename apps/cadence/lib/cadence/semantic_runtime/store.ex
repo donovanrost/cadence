@@ -145,6 +145,17 @@ defmodule Cadence.SemanticRuntime.Store do
     end)
   end
 
+  @doc """
+  Commits a monitoring seed on an empty start (`SemanticRuntime.seed_monitoring/2`), so the seeded
+  priors are in the log and a replay from genesis reproduces them. Nothing to commit for no
+  entries.
+  """
+  def seed(_spec, _key, writer, state, [], _plan), do: {:ok, %Result{}, state, writer}
+
+  def seed(spec, key, writer, state, entries, plan) when is_list(entries) do
+    evaluate(spec, key, writer, state, {:seed_monitoring, Enum.sort(entries)}, plan, 0)
+  end
+
   @doc "Evaluates and conditionally commits, recovering a missing suffix on ownership contention."
   def process(spec, key, writer, state, updates, plan, opts \\ []) do
     retries = if Keyword.get(opts, :reclaim?, true), do: 2, else: 0
@@ -443,6 +454,7 @@ defmodule Cadence.SemanticRuntime.Store do
   defp backfill_input_metadata(_row, _backfill?), do: :ok
 
   defp input_metadata({:updates, _}), do: %{input_kind: "updates"}
+  defp input_metadata({:seed_monitoring, _}), do: %{input_kind: "seed"}
 
   defp input_metadata({:timer, _scope, _algorithm, at, key}),
     do: %{
@@ -593,6 +605,9 @@ defmodule Cadence.SemanticRuntime.Store do
 
   defp replay({:timer, scope, algorithm_id, at, _timer_key}, state, plan),
     do: SemanticRuntime.timer(state, scope, algorithm_id, at, plan)
+
+  defp replay({:seed_monitoring, entries}, state, _plan),
+    do: {:ok, %Result{}, SemanticRuntime.seed_monitoring(state, entries)}
 
   defp replay(input, _state, _plan),
     do: {:error, {:semantic_runtime_commit_input_unsupported, input}}

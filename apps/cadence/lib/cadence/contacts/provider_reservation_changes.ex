@@ -3,6 +3,10 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
 
   import Ecto.Query
 
+  require Logger
+
+  alias Cadence.Contacts.ContactAction
+  alias Cadence.Contacts.ContactStore
   alias Cadence.Contacts.ContactStore.ScheduledContactRow
   alias Cadence.Contacts.ProviderChangeApproval
   alias Cadence.Contacts.ProviderReservation
@@ -32,10 +36,13 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
   alias Cadence.Repo
 
   @pending_states ~w(pending_approval acknowledgment_required policy_accepted)
+  # Who moved a contact's window when the provider's change took effect without an approval.
+  @window_actor %{"kind" => "system", "id" => "provider_change_observer"}
   @snapshot_fields ~w(
     provider_contact_ref provider_revision client_reference opportunity_ref spacecraft_ref
     ground_station_ref antenna_or_service_pool_ref service_profile_ref delivery_profile_ref
     starts_at ends_at status pass_phase delivery_state delivery_descriptor status_reason extensions
+    uplink
   )
 
   @spec observe(ProviderReservation.t(), map(), keyword()) ::
@@ -128,6 +135,7 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
            :ok <- require_hash(change_row, expected_hash),
            :ok <- maybe_require_decision_deadline(change_row, opts),
            {:ok, reservation_row} <- lock_reservation(change_row),
+           :ok <- maybe_require_pass_open(reservation_row, now, opts),
            :ok <- require_current_revision(change_row, reservation_row),
            :ok <- require_current_policy(change_row, reservation_row),
            :ok <- require_active_grant(reservation_row),
@@ -178,10 +186,11 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
       with {:ok, row} <- lock_change(organization_id, change_id),
            :ok <- require_hash(row, Keyword.get(opts, :proposal_hash)),
            :ok <- require_state(row, Keyword.fetch!(opts, :allowed_states)),
+           {:ok, reservation} <- lock_reservation(row),
+           :ok <- maybe_require_pass_open(reservation, now, opts),
            :ok <- maybe_require_actionable(row, opts),
            {:ok, _approval_row} <- maybe_insert_approval(Keyword.get(opts, :approval)),
            {:ok, updated} <- decide_change(row, state, actor, now, decision_patch),
-           {:ok, reservation} <- lock_reservation(updated),
            {:ok, _audit} <- append_audit(updated, reservation, actor, now) do
         ProviderReservationChangeRow.to_domain(updated)
       else
@@ -290,6 +299,7 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
       "status_reason" => present(response, previous, "status_reason"),
       "extensions" => snapshot_value(response, previous, "extensions", %{})
     }
+    |> put_uplink(present(response, previous, "uplink"))
     |> Map.take(@snapshot_fields)
     |> JsonDocument.encode()
   end
@@ -371,7 +381,7 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
               change_identity: change.change_identity
             )
 
-          {existing, row}
+          {existing, row, nil}
 
         row.provider_revision != change.from_provider_revision ->
           Repo.rollback(:provider_change_revision_superseded)
@@ -389,11 +399,15 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
             |> ProviderReservationRow.transition_changeset(reservation_transition_attrs(change))
             |> Repo.update!()
 
-          {persisted, updated}
+          {persisted, updated, align_contact_window(change, updated, persisted)}
       end
     end)
     |> case do
-      {:ok, {change_row, reservation_row}} ->
+      {:ok, {change_row, reservation_row, moved}} ->
+        # After the commit: the move's timeline event, then the scheduler re-plans start and stop
+        # on the new window.
+        if moved, do: announce_window_move(moved, reservation_row)
+
         {:ok, ProviderReservationChangeRow.to_domain(change_row),
          ProviderReservationRow.to_domain(reservation_row)}
 
@@ -418,6 +432,115 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
   end
 
   defp maybe_apply_policy(change, reservation, _opts), do: {:ok, change, reservation}
+
+  # Window truth (director 11-14): an observed change, or one the provider already made effective
+  # (acknowledgment_required), moves the reservation's accepted window above, and the pass's
+  # scheduled contact follows in the same transaction. Its window drives the runtime's start and
+  # stop and the release gate (CommandWindow). Until 11-14 only an approved change moved the
+  # contact (apply/4), so an effective shift left the runtime on the old window (003's 12:10:57Z
+  # pass closed its listener 30 s before the provider's LOS). A running contact moves too: its
+  # end is read live, so the scheduler stops it at the new LOS. An ended or canceled contact
+  # stays as it is.
+  defp align_contact_window(%{lifecycle_state: state}, reservation_row, change_row)
+       when state in [:observed, :acknowledgment_required] do
+    with {:ok, contact_row} <- lock_scheduled_contact(reservation_row),
+         true <- contact_row.lifecycle_state in ["scheduled", "realized"],
+         {:ok, window} <- snapshot_window(change_row),
+         false <- same_window?({contact_row.starts_at, contact_row.ends_at}, window),
+         {:ok, updated} <- update_contact(contact_row, change_row),
+         {:ok, revision} <-
+           append_revision(updated, change_row, @window_actor, DateTime.utc_now(), %{
+             "before" => window_document({contact_row.starts_at, contact_row.ends_at}),
+             "after" => window_document(window)
+           }) do
+      %{
+        contact: ScheduledContactRow.to_domain(updated),
+        before: {contact_row.starts_at, contact_row.ends_at},
+        after: window,
+        revision: revision.revision,
+        change_row: change_row
+      }
+    else
+      {:error, :scheduled_contact_not_found} -> nil
+      already_aligned_or_closed when is_boolean(already_aligned_or_closed) -> nil
+      {:error, reason} -> Repo.rollback(reason)
+    end
+  end
+
+  defp align_contact_window(_change, _reservation_row, _change_row), do: nil
+
+  # The move's mission event (api, ux U56): one per move, subject the scheduled contact. Its id is
+  # the contact's revision, so a retry records it once.
+  defp announce_window_move(moved, reservation_row) do
+    %{contact: contact, before: {from_start, from_end}, after: {to_start, to_end}} = moved
+    snapshot = JsonDocument.unwrap_value(moved.change_row.after_snapshot_document)
+
+    action =
+      ContactAction.new(%{
+        contact_action_id:
+          "contact_window_moved:#{contact.scheduled_contact_id}:#{moved.revision}",
+        organization_id: contact.organization_id,
+        mission_id: contact.mission_id,
+        scheduled_contact_id: contact.scheduled_contact_id,
+        realized_contact_id: nil,
+        action_kind: :contact_window_moved,
+        actor: @window_actor,
+        occurred_at: DateTime.utc_now(),
+        metadata: %{
+          "scheduled_contact_id" => contact.scheduled_contact_id,
+          "provider_reservation_id" => reservation_row.provider_reservation_id,
+          "provider_reservation_change_id" => moved.change_row.provider_reservation_change_id,
+          "spacecraft_id" => reservation_row.spacecraft_id,
+          "ground_station_ref" => snapshot["ground_station_ref"],
+          "provider_id" => reservation_row.provider_id,
+          # The sentence names the provider ('by Northlight'); nil reads 'by the provider'.
+          "provider_name" => provider_name(reservation_row),
+          "classification" => to_string(moved.change_row.classification),
+          "before" => window_document({from_start, from_end}),
+          "after" => window_document({to_start, to_end}),
+          "start_delta_s" => DateTime.diff(to_start, from_start),
+          "end_delta_s" => DateTime.diff(to_end, from_end)
+        }
+      })
+
+    case ContactStore.persist_action(action) do
+      {:ok, _action} -> :ok
+      {:error, reason} -> Logger.warning("contact_window_moved not recorded: #{inspect(reason)}")
+    end
+
+    ContactStore.notify_contact_changed(contact)
+  end
+
+  defp provider_name(reservation_row) do
+    case MissionProviders.fetch_provider_version(
+           reservation_row.organization_id,
+           reservation_row.mission_id,
+           reservation_row.provider_id,
+           reservation_row.provider_version
+         ) do
+      {:ok, provider} -> provider.display_name
+      {:error, _not_found} -> nil
+    end
+  end
+
+  defp snapshot_window(change_row) do
+    snapshot = JsonDocument.unwrap_value(change_row.after_snapshot_document)
+
+    with {:ok, starts_at} <- datetime(snapshot["starts_at"], :starts_at),
+         {:ok, ends_at} <- datetime(snapshot["ends_at"], :ends_at),
+         do: {:ok, {starts_at, ends_at}}
+  end
+
+  defp same_window?({starts_at, ends_at}, {to_starts_at, to_ends_at}),
+    do:
+      DateTime.compare(starts_at, to_starts_at) == :eq and
+        DateTime.compare(ends_at, to_ends_at) == :eq
+
+  defp window_document({starts_at, ends_at}),
+    do: %{
+      "starts_at" => DateTime.to_iso8601(starts_at),
+      "ends_at" => DateTime.to_iso8601(ends_at)
+    }
 
   defp reservation_transition_attrs(change) do
     attrs = %{
@@ -544,6 +667,20 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
     end
   end
 
+  # L14 (lead, ux U44): a change pending approval can't be decided once its pass has ended; it
+  # expired. Acknowledging what a provider already did stays possible.
+  defp maybe_require_pass_open(reservation_row, now, opts) do
+    if Keyword.get(opts, :refuse_after_pass_end?, false) and pass_ended?(reservation_row, now),
+      do: {:error, :provider_change_expired},
+      else: :ok
+  end
+
+  @doc "Whether a reservation's pass has ended at `now` (L14's expiry rule: its ends_at)."
+  def pass_ended?(%{ends_at: %DateTime{} = ends_at}, %DateTime{} = now),
+    do: DateTime.compare(ends_at, now) != :gt
+
+  def pass_ended?(_reservation, _now), do: false
+
   defp require_pre_realization(%ScheduledContactRow{
          lifecycle_state: "scheduled",
          realized_contact_id: nil
@@ -613,7 +750,7 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
     end
   end
 
-  defp append_revision(contact_row, change, actor, now) do
+  defp append_revision(contact_row, change, actor, now, reason \\ %{}) do
     contact = ScheduledContactRow.to_domain(contact_row)
 
     revision =
@@ -624,12 +761,16 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
         revision: contact.current_revision,
         provider_reservation_change_id: change.provider_reservation_change_id,
         snapshot_document: ScheduledContactRevisions.snapshot(contact),
-        reason_document: %{
-          "kind" => "provider_change",
-          "classification" => change.classification,
-          "proposal_hash" => change.proposal_hash,
-          "provider_revision" => change.provider_revision
-        },
+        reason_document:
+          Map.merge(
+            %{
+              "kind" => "provider_change",
+              "classification" => change.classification,
+              "proposal_hash" => change.proposal_hash,
+              "provider_revision" => change.provider_revision
+            },
+            reason
+          ),
         created_by: actor["id"] || actor[:id] || "cadence",
         created_at: now
       })
@@ -734,6 +875,11 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
       _error -> nil
     end
   end
+
+  # Only a booked uplink leg (#44) adds the key: snapshots without one must stay identical to
+  # those stored before uplink legs existed, or every reservation reads as provider-changed.
+  defp put_uplink(snapshot, nil), do: snapshot
+  defp put_uplink(snapshot, uplink), do: Map.put(snapshot, "uplink", uplink)
 
   defp present(response, previous, key) do
     if Map.has_key?(response, key), do: response[key], else: previous[key]

@@ -1,0 +1,216 @@
+/*
+ * Apogee design tokens: Tailwind v4 `@theme` block.
+ * Owner: ux. Source of truth for values; rationale lives in design-language.md.
+ * Drop this into the console app's main CSS after `@import "tailwindcss";`.
+ *
+ * Every value here is sampled from the canvas boards (docs/apogee/design-reference).
+ * The default Tailwind palette, radii and shadows are cleared on purpose, so an
+ * off-language class (`bg-blue-500`, `rounded-lg`, `shadow-md`) fails to compile into anything.
+ */
+
+@theme {
+  /* ---- reset the defaults we never want ---------------------------------- */
+  --color-*: initial;
+  --radius-*: initial;
+  --shadow-*: initial;
+  --font-*: initial;
+
+  /* ---- surfaces (darkest to lightest) ------------------------------------- */
+  --color-vacuum: #05070a; /* page background, plot wells, input wells */
+  --color-chrome: #070a0e; /* top bar and rail */
+  --color-panel: #0a0e13; /* every panel body */
+  --color-raised: #0f141b; /* buttons, hover/selected rows, emphasized panel */
+  --color-raised-hi: #161d26; /* selected result in the ⌘K palette */
+  --color-well: #05070a; /* alias of vacuum for text inputs, charts, lanes */
+  --color-cell-empty: #11161d; /* empty slot in a matrix / bar track */
+
+  /* ---- lines --------------------------------------------------------------- */
+  --color-hairline: #1c2530; /* panel borders, panel-header rule, 1px grid gaps */
+  --color-hairline-faint: #141b24; /* row dividers inside a panel, lane borders */
+  --color-line: #2a3644; /* control borders (button, input, chip, tag-toggle) */
+  --color-line-strong: #3a4654; /* scheduled-pass outline, kbd border, flow arrows */
+
+  /* ---- text ---------------------------------------------------------------- */
+  --color-readout: #e6edf3; /* primary text, live values; also the action color */
+  --color-bright: #ffffff; /* link hover only */
+  --color-text-2: #c9d3dd; /* panel titles, strong secondary */
+  --color-text-3: #9daab8; /* sentences, descriptions, secondary values */
+  --color-text-4: #7d8a99; /* labels, meta, timestamps. 5.5:1 on panel, 4.4:1 on hairline: never on --color-hairline fills */
+  --color-text-off: #4a5562; /* disabled / out-of-month days only. Fails AA: decoration only */
+
+  /* ---- action: "signal white" ---------------------------------------------- */
+  --color-action: #e6edf3; /* primary button fill, selection bar, in-contact ring, now-line */
+  --color-on-action: #05070a; /* text on an action fill */
+
+  /* ---- operational state (the only hues on screen) ------------------------- */
+  /* Each state has a FILL (shapes, bars, cells) and a TEXT tint (≥4.5:1 on panel). */
+  --color-crit: #ff4d57;
+  --color-crit-text: #ff6b73;
+  --color-crit-line: #6b2a30; /* destructive button border */
+  --color-crit-deep: #160a0c; /* destructive button fill */
+
+  --color-caution: #ffb020;
+  --color-caution-text: #ffc24d;
+
+  --color-stale: #a497ff;
+  --color-stale-text: #bdb3ff;
+  --color-stale-deep: #140f26; /* stale matrix cell base under the hatch */
+
+  --color-nominal: #2fd08a;
+  --color-nominal-text: #4fdb9e;
+  --color-nominal-dim: #1b6e4b; /* nominal bar / verified-in-bulk cell */
+  --color-nominal-bulk: #164e37; /* nominal matrix cell: drawn dim so problems stand out */
+
+  --color-off: #9daab8; /* "not set up": always drawn dashed, never filled */
+
+  /* ---- visualization-only ------------------------------------------------- */
+  --color-viz-earth: #0d1116;
+  --color-viz-earth-line: #2e3742;
+  --color-viz-night: #040506;
+  --color-viz-orbit: #2a323c;
+  --color-viz-umbra: #11161c;
+
+  /* ---- type ---------------------------------------------------------------- */
+  --font-display:
+    "Saira Condensed", "Arial Narrow", sans-serif; /* labels, headings, buttons, tags: ALWAYS uppercase */
+  --font-sans: "Saira", system-ui, sans-serif; /* sentences and every live number (tabular-nums) */
+  --font-mono:
+    "Azeret Mono", ui-monospace, monospace; /* literal ids, commands, timestamps, console meta */
+
+  /* size scale (px values from the boards; use with the role utilities in design-language.md §3) */
+  --text-2xs: 10px; /* chart axis ticks and bar labels ONLY */
+  --text-xs: 11px; /* mono meta, table headers */
+  --text-sm: 12px; /* labels, captions */
+  --text-md: 13px; /* buttons (compact), table cells, secondary sentences */
+  --text-base: 14px; /* body, panel titles, buttons (standard) */
+  --text-lg: 16px;
+  --text-xl: 20px; /* card/area headings */
+  --text-2xl: 24px; /* fact readouts, procedure names */
+  --text-3xl: 28px; /* page title */
+  --text-4xl: 36px; /* entity title (EARENDIL-312) */
+
+  --tracking-tight: -0.02em; /* big tabular readouts */
+  --tracking-id: 0.06em; /* entity titles */
+  --tracking-head: 0.08em; /* page titles */
+  --tracking-btn: 0.14em; /* compact buttons, table headers */
+  --tracking-tag: 0.16em; /* tags, rail items, standard buttons */
+  --tracking-title: 0.18em; /* panel titles */
+  --tracking-label: 0.2em; /* hud labels */
+  --tracking-brand: 0.36em; /* CADENCE wordmark */
+
+  /* ---- geometry ------------------------------------------------------------ */
+  --radius-none: 0; /* the only radius. Zero, everywhere. */
+
+  --spacing: 4px; /* Tailwind v4 spacing unit; boards use 2/4/6/8/10/12/14/16/18/20/24 */
+}
+
+/* Non-theme tokens (plain custom properties; patterns and fixed shell sizes). */
+:root {
+  --apogee-topbar-h: 52px;
+  --apogee-rail-w: 200px;
+  --apogee-grid:
+    linear-gradient(rgba(230, 237, 243, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(230, 237, 243, 0.025) 1px, transparent 1px);
+  --apogee-grid-size: 40px 40px;
+
+  /* hatches: stale outranks nominal; outage / maintenance bands on Gantt rows */
+  --apogee-hatch-stale: repeating-linear-gradient(135deg, #a497ff 0 1.5px, transparent 1.5px 4px);
+  --apogee-hatch-stale-cell: repeating-linear-gradient(
+    135deg,
+    #a497ff 0 1px,
+    transparent 1px 3.5px
+  );
+  --apogee-hatch-outage: repeating-linear-gradient(
+    135deg,
+    rgba(255, 77, 87, 0.28) 0 2px,
+    transparent 2px 6px
+  );
+  --apogee-hatch-maint: repeating-linear-gradient(
+    135deg,
+    rgba(255, 176, 32, 0.55) 0 2px,
+    transparent 2px 5px
+  );
+  --apogee-hatch-unusable: repeating-linear-gradient(135deg, #141b24 0 4px, transparent 4px 8px);
+
+  /* washes: tinted backgrounds behind a status-carrying element */
+  --apogee-wash-crit: rgba(255, 77, 87, 0.08);
+  --apogee-wash-caution: rgba(255, 176, 32, 0.06);
+  --apogee-wash-action: rgba(230, 237, 243, 0.04);
+  --apogee-wash-scheduled: rgba(230, 237, 243, 0.06);
+
+  /* keyboard focus: canvas defines none; ours is a white 2px outline, offset 2px (design-language.md §6) */
+  --apogee-focus: 2px solid #e6edf3;
+}
+
+/*
+ * ---- chart tokens (dashboards, K2) -------------------------------------------
+ * The ported uPlot engine (console features/dashboards/chart) reads these and throws if one is missing.
+ * Bases are RGB triplets so canvas code can compose alpha; change a base and every intensity follows.
+ * Values: ux screens/Dashboards.md "Chart tokens" (Apogee roles in the comments). Series colours never
+ * use status hues; the old teal current and violet compare are gone on purpose. Dark only, like the
+ * rest of this file.
+ */
+:root {
+  --chart-color-label: 157, 170, 184; /* text-3 */
+  --chart-color-muted: 125, 138, 153; /* text-4 */
+  --chart-color-tooltip-surface: 15, 20, 27; /* raised */
+  --chart-color-shadow: 0, 0, 0; /* black */
+  --chart-color-foreground: 230, 237, 243; /* readout */
+  --chart-color-border: 125, 138, 153; /* text-4 */
+  --chart-color-panel: 10, 14, 19; /* panel */
+  --chart-color-text: 230, 237, 243; /* readout */
+  --chart-color-text-strong: 255, 255, 255; /* bright */
+  --chart-color-text-secondary: 201, 211, 221; /* text-2 */
+  --chart-color-surface: 5, 7, 10; /* vacuum */
+  --chart-color-warning: 255, 176, 32; /* caution */
+  --chart-color-action: 230, 237, 243; /* readout */
+  --chart-color-success: 47, 208, 138; /* nominal */
+  --chart-color-revision: 157, 170, 184; /* text-3 */
+  --chart-color-critical: 255, 77, 87; /* crit */
+  --chart-color-current: 230, 237, 243; /* readout */
+  --chart-color-compare: 125, 138, 153; /* text-4 */
+  --chart-color-warning-surface: 31, 24, 9; /* caution over panel */
+  --chart-color-current-surface: 15, 20, 27; /* raised */
+  --chart-color-warning-text: 255, 194, 77; /* caution-text */
+  --chart-color-current-text: 230, 237, 243; /* readout */
+  --chart-color-retention-surface: 74, 85, 98; /* text-off */
+  --chart-color-stale-surface: 164, 151, 255; /* stale */
+  --chart-color-unknown-surface: 125, 138, 153; /* text-4 */
+  --chart-color-backfill: 157, 170, 184; /* text-3 */
+  --chart-color-caution: 255, 176, 32; /* caution */
+  --chart-color-selection: 230, 237, 243; /* readout */
+  --chart-color-highlight: 255, 255, 255; /* bright */
+  --chart-series-primary: var(--color-readout);
+  --chart-font: 11px var(--font-mono);
+
+  /* alpha variants (derived; same names the engine has always read) */
+  --chart-label-20: rgba(var(--chart-color-label), 0.2);
+  --chart-tooltip-surface-96: rgba(var(--chart-color-tooltip-surface), 0.96);
+  --chart-foreground-94: rgba(var(--chart-color-foreground), 0.94);
+  --chart-label-90: rgba(var(--chart-color-label), 0.9);
+  --chart-muted-62: rgba(var(--chart-color-muted), 0.62);
+  --chart-label-72: rgba(var(--chart-color-label), 0.72);
+  --chart-border-30: rgba(var(--chart-color-border), 0.3);
+  --chart-panel-98: rgba(var(--chart-color-panel), 0.98);
+  --chart-text-96: rgba(var(--chart-color-text), 0.96);
+  --chart-border-18: rgba(var(--chart-color-border), 0.18);
+  --chart-text-90: rgba(var(--chart-color-text), 0.9);
+  --chart-text-strong-98: rgba(var(--chart-color-text-strong), 0.98);
+  --chart-surface-96: rgba(var(--chart-color-surface), 0.96);
+  --chart-warning-90: rgba(var(--chart-color-warning), 0.9);
+  --chart-revision-88: rgba(var(--chart-color-revision), 0.88);
+  --chart-critical-90: rgba(var(--chart-color-critical), 0.9);
+  --chart-compare-90: rgba(var(--chart-color-compare), 0.9);
+  --chart-critical-95: rgba(var(--chart-color-critical), 0.95);
+  --chart-caution-95: rgba(var(--chart-color-caution), 0.95);
+  --chart-critical-82: rgba(var(--chart-color-critical), 0.82);
+  --chart-caution-82: rgba(var(--chart-color-caution), 0.82);
+  --chart-current-92: rgba(var(--chart-color-current), 0.92);
+  --chart-critical-88: rgba(var(--chart-color-critical), 0.88);
+  --chart-label-62: rgba(var(--chart-color-label), 0.62);
+  --chart-label-8: rgba(var(--chart-color-label), 0.08);
+  --chart-label-12: rgba(var(--chart-color-label), 0.12);
+  --chart-shadow-0: rgba(var(--chart-color-shadow), 0);
+  --chart-text-secondary-76: rgba(var(--chart-color-text-secondary), 0.76);
+  --chart-selection-14: rgba(var(--chart-color-selection), 0.14);
+}

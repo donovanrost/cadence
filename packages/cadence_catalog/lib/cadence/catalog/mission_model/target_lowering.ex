@@ -1,7 +1,14 @@
 defmodule Cadence.Catalog.MissionModel.TargetLowering do
   @moduledoc "Lowers resolved Mission Model declarations directly into runtime-plan documents."
 
-  alias Cadence.Catalog.MissionModel.{Canonical, Declaration, Diagnostic, Reference, Revision}
+  alias Cadence.Catalog.MissionModel.{
+    ArgumentCriteria,
+    Canonical,
+    Declaration,
+    Diagnostic,
+    Reference,
+    Revision
+  }
 
   @telemetry_runtime_contract "mission_model_telemetry_v1"
   @command_runtime_contract "mission_model_command_v1"
@@ -128,7 +135,7 @@ defmodule Cadence.Catalog.MissionModel.TargetLowering do
           size_bits: size_bits,
           data_type: data_type,
           byte_order: telemetry_byte_order(type),
-          engineering_unit: engineering_unit(parameter, index)
+          engineering_unit: engineering_unit(parameter, index) || engineering_unit(type, index)
         }
 
         {:cont, {:ok, [field | fields]}}
@@ -156,7 +163,9 @@ defmodule Cadence.Catalog.MissionModel.TargetLowering do
     with {:ok, encoding} <- referenced_declaration(command, nil, 0, :encoding, index),
          {:ok, arguments} <- command_arguments(command, index),
          {:ok, argument_specs} <- lower_argument_specs(arguments, index),
-         {:ok, encoding_steps} <- lower_encoding_steps(encoding, index) do
+         {:ok, encoding_steps} <- lower_encoding_steps(encoding, index),
+         {:ok, verifier_plans} <-
+           lower_verifiers(command, declarations, argument_specs, revision.declarations) do
       operational = value(command.definition, :operational_metadata, %{})
 
       runtime_definition =
@@ -188,7 +197,7 @@ defmodule Cadence.Catalog.MissionModel.TargetLowering do
        %{
          runtime_definition: runtime_definition,
          constraint_plans: lower_constraints(command, declarations),
-         verifier_plans: lower_verifiers(command, declarations),
+         verifier_plans: verifier_plans,
          operational_binding:
            document(%{
              command_id: command.semantic_id,
@@ -362,32 +371,49 @@ defmodule Cadence.Catalog.MissionModel.TargetLowering do
     end)
   end
 
-  defp lower_verifiers(command, declarations) do
+  # `model` is the whole revision: a verifier's subject is a telemetry parameter, outside the
+  # command target's own declarations.
+  defp lower_verifiers(command, declarations, argument_specs, model) do
     declarations
     |> owned_declarations(command, :command_verifier)
-    |> Enum.map(fn declaration ->
-      document(%{
-        command_id: command.semantic_id,
-        verifier_id: declaration.semantic_id,
-        name: declaration.name,
-        description: value(declaration.definition, :description),
-        phase: value(declaration.definition, :phase, :completion),
-        success_criteria:
-          resolve_criteria(
-            value(declaration.definition, :success_criteria),
-            declaration.references
-          ),
-        failure_criteria:
-          resolve_criteria(
-            value(declaration.definition, :failure_criteria),
-            declaration.references
-          ),
-        timeout_ms: value(declaration.definition, :timeout_ms),
-        delay_ms: value(declaration.definition, :delay_ms),
-        severity: value(declaration.definition, :severity),
-        metadata: value(declaration.definition, :metadata, %{})
-      })
+    |> Enum.reduce_while({:ok, []}, fn declaration, {:ok, plans} ->
+      bind = &ArgumentCriteria.bind(&1, argument_specs, model, declaration.semantic_id)
+
+      with {:ok, success} <-
+             bind.(
+               resolve_criteria(
+                 value(declaration.definition, :success_criteria),
+                 declaration.references
+               )
+             ),
+           {:ok, failure} <-
+             bind.(
+               resolve_criteria(
+                 value(declaration.definition, :failure_criteria),
+                 declaration.references
+               )
+             ) do
+        {:cont, {:ok, plans ++ [verifier_plan(command, declaration, success, failure)]}}
+      else
+        {:error, _reason} = error -> {:halt, error}
+      end
     end)
+  end
+
+  defp verifier_plan(command, declaration, success, failure) do
+    document(%{
+      command_id: command.semantic_id,
+      verifier_id: declaration.semantic_id,
+      name: declaration.name,
+      description: value(declaration.definition, :description),
+      phase: value(declaration.definition, :phase, :completion),
+      success_criteria: success,
+      failure_criteria: failure,
+      timeout_ms: value(declaration.definition, :timeout_ms),
+      delay_ms: value(declaration.definition, :delay_ms),
+      severity: value(declaration.definition, :severity),
+      metadata: value(declaration.definition, :metadata, %{})
+    })
   end
 
   defp owned_declarations(declarations, command, kind) do
@@ -503,8 +529,10 @@ defmodule Cadence.Catalog.MissionModel.TargetLowering do
     end)
   end
 
-  defp engineering_unit(parameter, index) do
-    with %Reference{} = reference <- Enum.find(parameter.references, &(&1.role == :unit)),
+  # A parameter's own unit wins; XTCE import attaches the unit to the parameter
+  # type instead, so callers fall back to the type's declaration.
+  defp engineering_unit(owner, index) do
+    with %Reference{} = reference <- Enum.find(owner.references, &(&1.role == :unit)),
          {:ok, unit} <- resolved(index, reference) do
       value(unit.definition, :symbol, unit.name)
     else

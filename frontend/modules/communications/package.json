@@ -4,10 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./mission-pages": "./src/mission-pages.ts",
-    "./provider-accounts": "./src/provider-accounts.ts",
     "./spacecraft-routing": "./src/spacecraft-routing.ts",
-    "./providers": "./src/providers.ts",
     "./form-surfaces": "./src/form-surfaces.ts",
     "./read-surfaces": "./src/read-surfaces.ts",
     ".": "./src/index.ts",

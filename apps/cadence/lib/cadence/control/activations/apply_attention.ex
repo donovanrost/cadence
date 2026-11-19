@@ -14,6 +14,7 @@ defmodule Cadence.Control.Activations.ApplyAttention do
 
   alias Cadence.Control.Activations.{ActivationExecutionRow, Description, ExecutionLock, Resume}
   alias Cadence.Management.Activations, as: ManagementActivations
+  alias Cadence.Management.Activations.Directory
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Repo
   alias Cadence.SpacecraftStore
@@ -127,6 +128,43 @@ defmodule Cadence.Control.Activations.ApplyAttention do
       since: since(row),
       raised_at: since(row)
     }
+    |> Map.merge(approval(row))
+  end
+
+  # U41's meta line, "Approved by Mira K. at 02:10Z" (fe-ops). A request approved by policy alone
+  # has no human decision: both null.
+  defp approval(row) do
+    case Directory.decisions(row.organization_id, row.mission_id, [row.activation_request_id]) do
+      %{} = decisions when map_size(decisions) == 1 ->
+        [decision] = Map.values(decisions)
+        name = decision.actor["display_name"] || decision.actor["name"]
+        %{approved_by: %{id: decision.actor_id, name: name}, approved_at: decision.decided_at}
+
+      _none ->
+        %{approved_by: nil, approved_at: nil}
+    end
+  end
+
+  @doc """
+  One execution in the console's words, for the L10 activation rows (api): `state`, `since`,
+  `error_code`, `error` (the same U41 sentence as the item) and `retryable`. A running execution
+  only gets an error and `retryable: true` once it has stalled.
+  """
+  @spec execution_view(map(), DateTime.t()) :: map()
+  def execution_view(execution, now \\ DateTime.utc_now()) do
+    error = unwrap(execution.error_document) || %{}
+    code = if execution.status == :failed, do: error["code"]
+    stalled? = execution.status == :in_progress and stuck?(execution, now)
+    shown? = execution.status == :failed or stalled?
+    ids = if shown?, do: describe(execution.activation_request_id).spacecraft_ids, else: []
+
+    %{
+      state: Atom.to_string(execution.status),
+      since: since(execution),
+      error_code: code,
+      error: if(shown?, do: error_sentence(execution.status, code, execution, ids)),
+      retryable: stalled? or (execution.status == :failed and Resume.retryable_code?(code))
+    }
   end
 
   defp describe(request_id) do
@@ -150,6 +188,9 @@ defmodule Cadence.Control.Activations.ApplyAttention do
 
   defp error_sentence(:failed, "approved_activation_content_mismatch", _row, _ids),
     do: "What would be applied now differs from what was approved, so it wasn't applied."
+
+  defp error_sentence(:failed, "mission_model_revision_not_in_catalog", _row, _ids),
+    do: "The catalog doesn't list the revision this request names, so it can't be applied."
 
   defp error_sentence(:failed, _code, _row, _ids), do: "Applying failed."
 

@@ -49,8 +49,10 @@ defmodule Cadence.Architecture.DependencyBoundary do
     "lib/cadence/contact_planning/contact_plans.ex",
     "lib/cadence/contact_planning/contact_requirement_templates.ex",
     "lib/cadence/contact_planning/contact_requirements.ex",
+    "lib/cadence/contact_planning/requirement_listing.ex",
     "lib/cadence/contact_planning/fleet_planning_policies.ex",
     "lib/cadence/contact_planning/fleet_planning_runs.ex",
+    "lib/cadence/contact_planning/repair_links.ex",
     "lib/cadence/contact_planning/fleet_start_inputs.ex",
     "lib/cadence/contact_planning/planner.ex"
   ]
@@ -59,6 +61,7 @@ defmodule Cadence.Architecture.DependencyBoundary do
                                 "lib/cadence/control/contacts.ex",
                                 "lib/cadence/control/contacts/",
                                 "lib/cadence/contact_planning/contact_plan_executions.ex",
+                                "lib/cadence/contact_planning/booking_outcomes.ex",
                                 "lib/cadence/contact_planning/fleet_automation_actions.ex"
                               ]
   @limits_context ["lib/cadence/limits.ex", "lib/cadence/limits/"]
@@ -119,6 +122,7 @@ defmodule Cadence.Architecture.DependencyBoundary do
        "lib/cadence/limits/store/"
      ]},
     {["lib/cadence/limits/"], @limits_context},
+    {["lib/cadence/alarms/"], ["lib/cadence/alarms/"]},
     {["lib/cadence/jobs/"], @jobs_context},
     {["lib/cadence/notifications/"], @notifications_context},
     {["lib/cadence/applications/"], @applications_context},

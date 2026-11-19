@@ -18,6 +18,7 @@ defmodule Cadence.Comms.GroundStationRow do
     field(:mission_id, :string)
     field(:lifecycle_state, :string)
     field(:display_name, :string)
+    field(:code, :string)
     field(:provider, :string)
     field(:region, :string)
     field(:metadata, :map, default: %{})
@@ -42,6 +43,7 @@ defmodule Cadence.Comms.GroundStationRow do
     |> validate_format(:ground_station_id, ~r/^[A-Za-z0-9][A-Za-z0-9_.:-]*$/)
     |> validate_length(:ground_station_id, min: 1, max: 120)
     |> validate_length(:display_name, min: 1, max: 200)
+    |> validate_format(:code, ~r/^[A-Z0-9]{2,8}$/)
     |> unique_constraint([:mission_id, :ground_station_id],
       name: :comms_ground_stations_scope_idx
     )
@@ -55,6 +57,7 @@ defmodule Cadence.Comms.GroundStationRow do
       mission_id: row.mission_id,
       lifecycle_state: row.lifecycle_state,
       display_name: row.display_name,
+      code: row.code,
       provider: row.provider,
       region: row.region,
       metadata: JsonDocument.unwrap_value(row.metadata)
@@ -68,6 +71,7 @@ defmodule Cadence.Comms.GroundStationRow do
       mission_id: ground_station.mission_id,
       lifecycle_state: Atom.to_string(ground_station.lifecycle_state),
       display_name: ground_station.display_name,
+      code: ground_station.code,
       provider: ground_station.provider,
       region: ground_station.region,
       metadata: JsonDocument.wrap_value(ground_station.metadata)
@@ -81,6 +85,7 @@ defmodule Cadence.Comms.GroundStationRow do
       :mission_id,
       :lifecycle_state,
       :display_name,
+      :code,
       :provider,
       :region,
       :metadata

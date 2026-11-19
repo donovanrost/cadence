@@ -155,7 +155,7 @@ defmodule Cadence.GroundNetworks.ProviderAccountGrantsTest do
              )
   end
 
-  test "revocation blocks new bindings while preserving historical grant reads", %{
+  test "revocation blocks new bindings, preserves historical reads, and still allows archive", %{
     scope: scope,
     account_version: account_version
   } do
@@ -213,6 +213,21 @@ defmodule Cadence.GroundNetworks.ProviderAccountGrantsTest do
                1,
                grant.provider_account_grant_id,
                1
+             )
+
+    # A revoked grant is the main reason to archive its Provider (L12 defect 1); a new active
+    # version still can't bind to it.
+    assert {:error, :provider_account_grant_revoked} =
+             MissionProviders.persist_provider(@organization_id, %{
+               provider
+               | version: provider.version + 1
+             })
+
+    assert {:ok, %{lifecycle_state: :archived}} =
+             MissionProviders.archive_provider(
+               @organization_id,
+               @mission_id,
+               provider.provider_id
              )
   end
 

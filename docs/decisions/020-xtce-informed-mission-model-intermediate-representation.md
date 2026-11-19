@@ -6,7 +6,7 @@ tags:
   [adr, architecture, xtce, catalog, telemetry, commanding, algorithms, monitoring]
 status: accepted
 created: 2026-08-11
-updated: 2026-08-21
+updated: 2026-11-15
 ---
 
 # ADR-020: XTCE-Informed Mission Model Intermediate Representation
@@ -262,6 +262,10 @@ A source file boundary is also not a `SpaceSystem` boundary. Several files may
 compose one system tree, and one file may declare multiple child systems.
 
 ### 3. `SpaceSystem` Is Not Deployment Inventory
+
+> Reaffirmed and made concrete by the 2026-11-15 addendum: spacecraft are references outside the
+> document, and revision pinning is set on the spacecraft profile.
+
 
 The Mission Model describes reusable meaning. It does not own the operational
 spacecraft inventory, onboard-node inventory, source endpoints, routes,
@@ -673,6 +677,132 @@ mandatory authoring experience.
 Rejected. The Mission Model can preserve and diagnose a construct before every
 runtime target can execute it. Versioned legalization provides an incremental
 path without overstating support.
+
+## Addendum 1: One Mission-Wide Model (2026-11-15, DECISIONS #92)
+
+### Status correction
+
+The "Implementation Status" above overstates what was built. As of 2026-11-15:
+
+- **Composition is not wired.** Each catalog import compiles only its own imported layer into an
+  isolated revision. `MissionModels.compose/4` has no caller, and no authored (augmentation) layer
+  is written by any product path. Implementation sequence steps 5 and 6 (governed parameter,
+  algorithm and monitoring augmentation layers) were not started.
+- **Limits and derived telemetry still run as separate definition families**, against sections 5
+  and 6:
+  - `governed_limit_definitions` and `governed_derived_telemetry_definitions`, with their own job
+    evaluators and their own point namespace;
+  - next to the model's live monitoring and algorithm plans.
+- **Calibrators are declared but not executed** (the telemetry target marks them unsupported).
+- **Deployment materializes the model per spacecraft.** Each spacecraft pins a catalog revision,
+  which pins an isolated model revision. Binding sets, fleet entries and configuration documents
+  then copy that choice per spacecraft.
+
+See `docs/apogee/domain/mission-model-intent-vs-impl.md` for the evidence.
+
+### Decisions
+
+1. **A mission is a lineage of immutable effective revisions.**
+   - Each effective revision composes the mission's imported layers and its governed authored
+     layers (section 9), recorded as a mission composition record.
+   - Imported layers **coexist**: a spacecraft is typically several `SpaceSystem`s (bus,
+     payload). Imports are mounted under subtrees, so two imports no longer collide at the root.
+2. **Spacecraft are references outside the document** (section 3).
+   - The IR never contains spacecraft instances.
+   - A spacecraft is a management-plane binding to one or more `SpaceSystem`s of an effective
+     revision, carrying only identity and deployment deltas.
+3. **Revision pinning stays, set on the spacecraft profile**, with the existing per-spacecraft
+   override.
+   - Staged rollouts move profiles or overrides between revisions N and N+1, which coexist
+     because revisions are immutable.
+   - The runtime must not need per-spacecraft copies of definitions to do this.
+4. **Cross-spacecraft derived parameters live on the mission-root `SpaceSystem`.**
+5. **Limits, derived telemetry and alarms become authored layers**, staged through change sets
+   and compiled into the monitoring and algorithm plans (sections 5, 6, 9).
+   - The side stores migrate once, with no dual-write.
+   - New limits do **not** backfill history.
+   - Acceptance: a reference left dangling by a rename is a **compile-time** error, not a limit
+     that silently stops evaluating.
+6. **Freeze.** No new features on the Limits and Derived Telemetry side stores, their
+   evaluators, or their change-set kinds (DECISIONS #77 stages 1–2; stage 3 is cancelled). They
+   keep working unchanged until phase 3 replaces them.
+
+### Change-set lanes: a limit fix is never blocked by an unrelated review (DECISIONS #93 c)
+
+**Today:**
+- A mission has exactly one active change set, open or in review (`ChangeSetStore`,
+  `@active_states`).
+- Staging into a set under review is refused (`:frozen_in_review`).
+
+So once limits and derived telemetry go through change sets, an operator fixing a wrong red limit
+would wait for whatever unrelated review is open (a catalog move, a routing change).
+
+**Decision: change sets run in lanes.**
+- A lane is a fixed set of change-set kinds.
+- Each mission has at most one active set **per lane**, and lanes never freeze or block each other.
+- Two lanes:
+  - **configuration**: spacecraft, profiles, overrides, catalogs, routing, framing; the existing
+    kinds;
+  - **monitoring**: monitoring policies (limits, alarm rules) and derived parameters, i.e. the
+    authored layers of phase 3.
+- Every kind belongs to exactly one lane, so two lanes never stage the same entity and need no
+  cross-lane overlap check. Within a lane the existing path-overlap rules apply unchanged.
+
+**Applying a set** keeps today's contract:
+- lock the mission head;
+- re-run the pipeline against live state;
+- write one ledger revision.
+
+Revisions from both lanes interleave in one mission ledger, ordered by the head lock. A lane's
+`base_revision_number` going stale because the *other* lane applied is not a conflict: the
+pipeline re-checks against live state, as it does today.
+
+**How a monitoring change reaches the fleet without moving pins:**
+- Profiles pin the **imported composition** (decision 3).
+- The mission's authored layers follow the lineage head.
+- The effective revision a spacecraft runs = its pinned imported composition + the mission's
+  current authored layers.
+- Applying a monitoring set therefore recompiles one effective revision per imported composition
+  in use (on dev, 2) and activates them in one generation. No pin moves, so the configuration lane
+  is never involved.
+
+**Approval of that generation:**
+- The monitoring set's own review (or 'direct' apply) is the approval of its authored layer.
+- The imported composition was already approved, so the effective revisions it introduces count as
+  approved for the model gate (#92 a).
+- The comparison still runs (monitoring changes are high-risk, so replay runs when the mission
+  has a corpus).
+
+**What a monitoring lane needs:**
+- the lane column on change sets;
+- the kind -> lane map;
+- the active-set uniqueness changed to (mission, lane);
+- the console's "open change set" read per lane.
+
+The other #93 conditions shape the same lane:
+- (a) relief (acknowledge, shelve) stays outside change sets;
+- (b) under 'direct' approval a monitoring set has a one-step 'Apply now' with an inline preview;
+- (d) editors show the live value and the staged one, with who staged it.
+
+### Phases
+
+| Phase | What |
+|---|---|
+| 0 | This addendum and the freeze |
+| 1 | Per-partition runtime identity and plan ids independent of the revision id (needs the semantic-runtime persistence decision) |
+| 2 | Composition: imports mounted under subtrees; the mission composition record that profiles pin; `compose/4` wired |
+| 3 | Limits, derived telemetry and alarms as authored layers via change sets; migrate the side stores |
+| 4 | Stop per-spacecraft materialization (binding sets, per-craft configuration copies) |
+| 5 | `SpaceSystem` binding: spacecraft and per-computer models |
+| 6 | Calibrations, context and change alarms, export |
+
+Correctness items that don't wait for a phase:
+- change-set catalog moves must not skip model approval and qualification;
+- calibrations not executed (first step: find which catalogs carry calibrators).
+
+Still open with the user:
+- whether limit and derived-telemetry changes go through change sets as the operator experience;
+- how per-spacecraft definition deltas are expressed.
 
 ## Implementation Sequence
 

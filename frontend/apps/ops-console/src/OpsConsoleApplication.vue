@@ -21,7 +21,6 @@ import { OPS_COMPONENTS } from "./ops-components";
 import { OPS_EVENT_BRIDGE, type OpsEventPayload } from "./ops-events";
 import { unwrapOpsConsoleResponse, type OpsConsolePresentation } from "./ops-console";
 import { reconcileOpsActionResult } from "./ops-action-results";
-import { CHART_RUNTIME_PORT } from "@cadence/dashboards-and-exploration/workspace";
 
 const props = defineProps<FullPageSurfaceProps>();
 const presentation = shallowRef<OpsConsolePresentation>();
@@ -74,15 +73,9 @@ if (fleetRunPort) provide(FLEET_RUN_PORT, fleetRunPort);
 
 const draftPreservingActions = new Set([
   "validate",
-  "validate-template",
-  "validate-settings",
-  "validate-request",
   "validate-fleet-run",
-  "validate-policy",
-  "validate-grant",
   "filter",
   "reset_filters",
-  "filter_dashboards",
   "search",
   "apply_timeline_filters",
   "clear_timeline_selection",
@@ -104,23 +97,6 @@ const actionListeners = computed(() =>
 );
 
 provide(OPS_EVENT_BRIDGE, props.bridge);
-// Compatibility transport only. Module-owned charts never discover the Ops
-// application's browser event bus or inherit its unrestricted action bridge.
-provide(CHART_RUNTIME_PORT, {
-  version: 1,
-  execute(action, payload) {
-    if (!props.surface.actions.includes(action)) return;
-    return executeAction(action, payload);
-  },
-  subscribe(topic, listener) {
-    const name = topic === "append" ? "tlm:append" : "tlm:select";
-    const receive = (event: Event) => {
-      if (event instanceof CustomEvent) listener(event.detail);
-    };
-    window.addEventListener(name, receive);
-    return () => window.removeEventListener(name, receive);
-  },
-});
 
 onMounted(() => {
   window.addEventListener("cadence:ops-event", onOpsEvent);
@@ -381,9 +357,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
       <component
         :is="OPS_COMPONENTS[presentation.component]"
         v-bind="
-          ['OpsConsoleLanding', 'OpsDashboardNew', 'OpsDashboardDirectory'].includes(
-            presentation.component,
-          )
+          presentation.component === 'OpsConsoleLanding'
             ? {
                 ...presentation.props,
                 organizationId: context.organizationId,

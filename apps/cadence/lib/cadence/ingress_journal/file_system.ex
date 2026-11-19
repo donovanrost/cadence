@@ -9,6 +9,19 @@ defmodule Cadence.IngressJournal.FileSystem do
 
   Consumer cursors are checkpointed independently. Segments are reclaimed only
   when every required cursor has durably advanced beyond the segment.
+
+  Each consumer has a READ position (in memory: where `next_entries/4` reads; every ack moves it)
+  and a durable RESUME point (domain's partial-frame fix, 11-15): a byte `resume` offset, where
+  the consumer's work is truly done, and its `boundary`, the greatest entry start <= `resume`. A
+  consumer holding a partial frame or packet acks the entries it has read with an earlier
+  `resume_offset:`; the checkpoint persists boundary and resume, trimming and reclaim go by the
+  boundary, and after a restart the read position is the boundary and `resume_offset/2` says how
+  many leading bytes of that entry are already done. Without `resume_offset:` the resume point
+  is the ack's end offset (boundary = resume = read position, as before).
+
+  `cursors.term` stays version 1: `cursors` holds the boundaries (an older reader resumes there,
+  re-reading at most a partial frame), and an optional `resume` map holds the resume points that
+  differ from them (absent: resume = boundary).
   """
 
   use GenServer
@@ -112,13 +125,22 @@ defmodule Cadence.IngressJournal.FileSystem do
     call_if_running(journal, {:next_entries, consumer, max_entries, max_bytes})
   end
 
-  @spec acknowledge(GenServer.server(), consumer() | [consumer()], non_neg_integer()) ::
+  @spec acknowledge(GenServer.server(), consumer() | [consumer()], non_neg_integer(), keyword()) ::
           :ok | {:error, term()}
-  def acknowledge(journal, consumers, end_offset)
-      when is_integer(end_offset) and end_offset >= 0 do
+  def acknowledge(journal, consumers, end_offset, opts \\ [])
+      when is_integer(end_offset) and end_offset >= 0 and is_list(opts) do
     consumers = if is_list(consumers), do: consumers, else: [consumers]
-    call_if_running(journal, {:acknowledge, consumers, end_offset})
+    call_if_running(journal, {:acknowledge, consumers, end_offset, opts[:resume_offset]})
   end
+
+  @doc """
+  The consumer's resume point: the byte offset its work is done to (see the moduledoc). After a
+  restart its reading starts at the entry holding it; the bytes of that entry before it are done.
+  """
+  @spec resume_offset(GenServer.server(), consumer()) ::
+          {:ok, non_neg_integer()} | {:error, term()}
+  def resume_offset(journal, consumer) when is_atom(consumer),
+    do: call_if_running(journal, {:resume_offset, consumer})
 
   @spec snapshot(GenServer.server()) :: {:ok, map()} | {:error, term()}
   def snapshot(journal), do: call_if_running(journal, :snapshot)
@@ -139,6 +161,199 @@ defmodule Cadence.IngressJournal.FileSystem do
     case GenServer.whereis(server) do
       nil -> {:error, :ingress_journal_not_running}
       pid -> {:ok, pid}
+    end
+  end
+
+  @doc """
+  The journal streams on disk under `base_path`, as their contexts (`mission_id`,
+  `realized_contact_id`, `path_id`, `provider_binding_id`), read from each stream's metadata
+  without opening it. Replay finds ended contacts with journals this way (DECISIONS #71).
+  """
+  @spec stored_streams(binary()) :: [map()]
+  def stored_streams(base_path) when is_binary(base_path) do
+    case File.ls(base_path) do
+      {:ok, names} ->
+        names
+        |> Enum.sort()
+        |> Enum.flat_map(&stored_stream(Path.join([base_path, &1, "stream.term"])))
+
+      {:error, _reason} ->
+        []
+    end
+  end
+
+  defp stored_stream(path) do
+    with {:ok, binary} <- File.read(path),
+         %{context: %{mission_id: _, realized_contact_id: _} = context} <-
+           :erlang.binary_to_term(binary, [:safe]) do
+      [context]
+    else
+      _other -> []
+    end
+  rescue
+    ArgumentError -> []
+  end
+
+  @doc """
+  Every stored stream under `base_path`: its directory, stream id and context (reclaim of
+  completed streams, #71 follow-up). A directory whose `stream.term` can't be read isn't listed.
+  """
+  @spec stored_stream_directories(binary()) :: [
+          %{directory: binary(), stream_id: binary(), context: map()}
+        ]
+  def stored_stream_directories(base_path) when is_binary(base_path) do
+    case File.ls(base_path) do
+      {:ok, names} ->
+        names
+        |> Enum.sort()
+        |> Enum.flat_map(&stored_stream_directory(base_path, &1))
+
+      {:error, _reason} ->
+        []
+    end
+  end
+
+  # The directory is named by its context's digest: a stream.term naming another context isn't
+  # this directory's (it never steers a reclaim). stream_id is the incarnation the record headers
+  # carry.
+  defp stored_stream_directory(base_path, name) do
+    directory = Path.join(base_path, name)
+
+    with {:ok, %{stream_id: stream_id, context: context}} <-
+           stored_stream_metadata(Path.join(directory, "stream.term")),
+         true <- stream_id(context) == name do
+      [%{directory: directory, stream_id: stream_id, context: context}]
+    else
+      _unreadable_or_foreign -> []
+    end
+  end
+
+  defp stored_stream_metadata(path) do
+    with {:ok, binary} <- File.read(path),
+         %{stream_id: stream_id, context: %{mission_id: _, realized_contact_id: _}} = metadata
+         when is_binary(stream_id) <- :erlang.binary_to_term(binary, [:safe]) do
+      {:ok, metadata}
+    else
+      _other -> :error
+    end
+  rescue
+    ArgumentError -> :error
+  end
+
+  @doc """
+  Whether a stored stream (not open by a journal) is drained ON DISK: its checkpoint has every
+  consumer (processing and archive) at its `next_offset`, and the segments, read without
+  modifying them, end exactly there with no torn tail. `bytes` is the directory's size.
+  """
+  @spec stored_stream_drain(binary(), binary()) ::
+          {:drained, non_neg_integer()} | {:not_drained, term(), non_neg_integer()}
+  def stored_stream_drain(directory, stream_id)
+      when is_binary(directory) and is_binary(stream_id) do
+    bytes = directory_bytes(directory)
+
+    with {:ok, checkpoint} <- load_checkpoint(directory, @default_consumers),
+         {:ok, tail} <- read_only_tail(directory, stream_id, checkpoint.next_offset) do
+      behind =
+        for {consumer, offset} <- checkpoint.cursors,
+            offset != tail or Map.fetch!(checkpoint.resume, consumer) != tail,
+            do: {consumer, offset}
+
+      cond do
+        behind != [] -> {:not_drained, {:cursors_behind, behind, tail}, bytes}
+        checkpoint.next_offset != tail -> {:not_drained, {:checkpoint_behind, tail}, bytes}
+        true -> {:drained, bytes}
+      end
+    else
+      {:error, reason} -> {:not_drained, reason, bytes}
+    end
+  end
+
+  defp read_only_tail(directory, stream_id, checkpoint_next_offset) do
+    case directory |> Path.join("segment-*.cij") |> Path.wildcard() |> Enum.sort() do
+      [] ->
+        {:ok, checkpoint_next_offset}
+
+      [first | _rest] = paths ->
+        segments_tail(paths, stream_id, segment_start_from_path(first))
+    end
+  end
+
+  defp segments_tail(paths, stream_id, start_offset) do
+    paths
+    |> Enum.reduce_while({:ok, start_offset, nil}, fn path, {:ok, offset, sequence} ->
+      case read_segment(path, stream_id, offset, sequence) do
+        {:ok, next_offset, next_sequence} -> {:cont, {:ok, next_offset, next_sequence}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, tail, _sequence} -> {:ok, tail}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp read_segment(path, stream_id, expected_offset, expected_sequence) do
+    with {:ok, file} <- :file.open(path, [:read, :binary, :raw]),
+         {:ok, file_size} <- :file.position(file, :eof) do
+      try do
+        case parse_records(
+               file,
+               file_size,
+               path,
+               stream_id,
+               expected_offset,
+               expected_sequence,
+               0,
+               []
+             ) do
+          {:error, reason} ->
+            {:error, reason}
+
+          {_entries, _valid_bytes, true} ->
+            {:error, {:torn_tail, path}}
+
+          {entries, _valid_bytes, false} ->
+            case List.last(entries) do
+              nil -> {:ok, expected_offset, expected_sequence}
+              last -> {:ok, last.end_offset, last.sequence + 1}
+            end
+        end
+      after
+        :file.close(file)
+      end
+    end
+  end
+
+  defp directory_bytes(directory) do
+    directory
+    |> Path.join("*")
+    |> Path.wildcard()
+    |> Enum.map(fn path ->
+      case File.stat(path) do
+        {:ok, %{size: size}} -> size
+        _gone -> 0
+      end
+    end)
+    |> Enum.sum()
+  end
+
+  @doc """
+  Removes a stored stream's directory, only if it is a direct child of `base_path` (a stored
+  `stream.term` must never steer the removal elsewhere).
+  """
+  @spec reclaim_stored_stream(binary(), binary()) :: :ok | {:error, term()}
+  def reclaim_stored_stream(base_path, directory)
+      when is_binary(base_path) and is_binary(directory) do
+    base = Path.expand(base_path)
+    target = Path.expand(directory)
+
+    if Path.dirname(target) == base and Path.basename(target) not in ["", ".", ".."] do
+      case File.rm_rf(target) do
+        {:ok, _removed} -> :ok
+        {:error, reason, path} -> {:error, {:reclaim_failed, path, reason}}
+      end
+    else
+      {:error, {:reclaim_outside_base_path, target}}
     end
   end
 
@@ -164,6 +379,12 @@ defmodule Cadence.IngressJournal.FileSystem do
 
   @impl true
   def init(opts) do
+    # A runtime stop (its supervisor's shutdown) must run terminate/2, which checkpoints the
+    # acknowledged cursors; otherwise acks since the last periodic checkpoint are lost and the next
+    # start replays them (39LEY, 11-14). A linked process's abnormal exit still stops the journal
+    # (handle_info {:EXIT, ...}).
+    Process.flag(:trap_exit, true)
+
     context = %{
       mission_id: Keyword.fetch!(opts, :mission_id),
       realized_contact_id: Keyword.fetch!(opts, :realized_contact_id),
@@ -219,9 +440,11 @@ defmodule Cadence.IngressJournal.FileSystem do
           ),
         capture_record_bytes: capture_record_bytes,
         checkpoint_interval_ms: checkpoint_interval_ms,
-        checkpoint_writer: Keyword.get(opts, :checkpoint_writer, &checkpoint_cursors/4),
+        checkpoint_writer: Keyword.get(opts, :checkpoint_writer, &checkpoint_cursors/5),
         consumers: MapSet.new(consumers),
         cursors: checkpoint.cursors,
+        boundaries: checkpoint.cursors,
+        resume: checkpoint.resume,
         durable_cursors: checkpoint.cursors,
         cursors_dirty?: false,
         checkpoint_in_flight: nil,
@@ -355,30 +578,47 @@ defmodule Cadence.IngressJournal.FileSystem do
     end
   end
 
-  def handle_call({:acknowledge, consumers, end_offset}, _from, state) do
-    case validate_acknowledgement(state, consumers, end_offset) do
-      :ok ->
-        cursors = Enum.reduce(consumers, state.cursors, &Map.put(&2, &1, end_offset))
-        {:reply, :ok, %{state | cursors: cursors, cursors_dirty?: true}}
+  def handle_call({:acknowledge, consumers, end_offset, resume_offset}, _from, state) do
+    with :ok <- validate_acknowledgement(state, consumers, end_offset),
+         {:ok, resume} <- validate_resume(state, consumers, end_offset, resume_offset) do
+      cursors = Enum.reduce(consumers, state.cursors, &Map.put(&2, &1, end_offset))
 
-      {:error, reason} ->
-        {:reply, {:error, reason}, state}
+      {boundaries, resumes} =
+        Enum.reduce(consumers, {state.boundaries, state.resume}, fn consumer, {bounds, rs} ->
+          {Map.put(bounds, consumer, boundary_for(state, consumer, resume)),
+           Map.put(rs, consumer, resume)}
+        end)
+
+      dirty? =
+        state.cursors_dirty? or boundaries != state.boundaries or resumes != state.resume
+
+      {:reply, :ok,
+       %{
+         state
+         | cursors: cursors,
+           boundaries: boundaries,
+           resume: resumes,
+           cursors_dirty?: dirty?
+       }}
+    else
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:resume_offset, consumer}, _from, state) do
+    case Map.fetch(state.resume, consumer) do
+      {:ok, resume} -> {:reply, {:ok, resume}, state}
+      :error -> {:reply, {:error, {:unknown_ingress_journal_consumer, consumer}}, state}
     end
   end
 
   def handle_call(:seal, _from, state) do
-    if Enum.all?(state.cursors, fn {_consumer, offset} -> offset == state.next_offset end) do
+    if drained?(state) do
       state = %{state | sealed?: true}
 
       with :ok <- cancel_checkpoint_worker(state.checkpoint_in_flight),
            :ok <- :file.datasync(state.active_file),
-           :ok <-
-             state.checkpoint_writer.(
-               state.stream_path,
-               state.cursors,
-               state.next_offset,
-               state.next_sequence
-             ) do
+           :ok <- write_checkpoint(state, state.boundaries, state.resume) do
         summary = %{
           stream_id: state.stream_id,
           tail: state.next_offset,
@@ -389,14 +629,14 @@ defmodule Cadence.IngressJournal.FileSystem do
          %{
            state
            | checkpoint_in_flight: nil,
-             durable_cursors: state.cursors,
+             durable_cursors: state.boundaries,
              cursors_dirty?: false
          }}
       else
         {:error, reason} -> {:reply, {:error, {:journal_seal_failed, reason}}, state}
       end
     else
-      {:reply, {:error, {:journal_not_drained, state.cursors, state.next_offset}}, state}
+      {:reply, {:error, {:journal_not_drained, state.resume, state.next_offset}}, state}
     end
   end
 
@@ -418,12 +658,17 @@ defmodule Cadence.IngressJournal.FileSystem do
         next_offset: state.next_offset,
         cursors: state.cursors,
         durable_cursors: state.durable_cursors,
+        resume_points:
+          Map.new(state.boundaries, fn {consumer, boundary} ->
+            {consumer, %{boundary: boundary, resume: Map.fetch!(state.resume, consumer)}}
+          end),
         checkpoint_in_flight?: not is_nil(state.checkpoint_in_flight),
         lag_bytes:
           Map.new(state.cursors, fn {consumer, cursor} ->
             {consumer, state.next_offset - cursor}
           end),
         minimum_cursor: min_cursor,
+        processing_backlog: processing_backlog(state),
         entry_count: :gb_trees.size(state.entries),
         segment_count: length(state.segments),
         appended_entries: state.appended_entries,
@@ -485,6 +730,12 @@ defmodule Cadence.IngressJournal.FileSystem do
 
   def handle_info({:DOWN, _monitor_ref, :process, _pid, _reason}, state), do: {:noreply, state}
 
+  # Trapping exits (init/1): a linked process ending normally changes nothing; any other exit stops
+  # the journal with that reason, as it did before it trapped exits. Its supervisor's own exit is
+  # handled by GenServer (terminate/2 runs).
+  def handle_info({:EXIT, _pid, :normal}, state), do: {:noreply, state}
+  def handle_info({:EXIT, _pid, reason}, state), do: {:stop, reason, state}
+
   @impl true
   def terminate(_reason, state) do
     cancel_checkpoint_worker(state.checkpoint_in_flight)
@@ -492,9 +743,10 @@ defmodule Cadence.IngressJournal.FileSystem do
     _ =
       checkpoint_cursors(
         state.stream_path,
-        state.cursors,
+        state.boundaries,
         state.next_offset,
-        state.next_sequence
+        state.next_sequence,
+        state.resume
       )
 
     _ = maybe_sync(state.active_file, state.durability)
@@ -687,15 +939,16 @@ defmodule Cadence.IngressJournal.FileSystem do
     started_at = System.monotonic_time()
     operation_ref = make_ref()
     parent = self()
-    cursors = state.cursors
-    stream_path = state.stream_path
-    next_offset = state.next_offset
-    next_sequence = state.next_sequence
+    cursors = state.boundaries
+    resume = state.resume
+
+    writer_state =
+      Map.take(state, [:checkpoint_writer, :stream_path, :next_offset, :next_sequence])
 
     {pid, monitor_ref} =
       spawn_monitor(fn ->
         checkpoint_started_at = System.monotonic_time()
-        result = state.checkpoint_writer.(stream_path, cursors, next_offset, next_sequence)
+        result = write_checkpoint(writer_state, cursors, resume)
 
         send(
           parent,
@@ -708,6 +961,7 @@ defmodule Cadence.IngressJournal.FileSystem do
       pid: pid,
       monitor_ref: monitor_ref,
       cursors: cursors,
+      resume: resume,
       started_at: started_at,
       queue_wait_us: queue_wait_us,
       queue_depth: queue_depth,
@@ -723,7 +977,10 @@ defmodule Cadence.IngressJournal.FileSystem do
     {next_state, reclaimed} =
       state
       |> Map.put(:durable_cursors, checkpoint.cursors)
-      |> Map.put(:cursors_dirty?, state.cursors != checkpoint.cursors)
+      |> Map.put(
+        :cursors_dirty?,
+        state.boundaries != checkpoint.cursors or state.resume != checkpoint.resume
+      )
       |> reclaim_segments()
 
     emit_checkpoint(
@@ -781,14 +1038,29 @@ defmodule Cadence.IngressJournal.FileSystem do
     )
   end
 
-  defp checkpoint_cursors(stream_path, cursors, next_offset, next_sequence) do
+  # An injected writer may take the resume points (arity 5) or not (arity 4, tests).
+  defp write_checkpoint(%{checkpoint_writer: writer} = state, boundaries, resume)
+       when is_function(writer, 5),
+       do: writer.(state.stream_path, boundaries, state.next_offset, state.next_sequence, resume)
+
+  defp write_checkpoint(%{checkpoint_writer: writer} = state, boundaries, _resume),
+    do: writer.(state.stream_path, boundaries, state.next_offset, state.next_sequence)
+
+  defp checkpoint_cursors(stream_path, cursors, next_offset, next_sequence, resume) do
+    # Only the resume points that differ from their boundary; none means the file is exactly the
+    # one older code writes.
+    differing =
+      for {consumer, r} <- resume, r != Map.get(cursors, consumer), into: %{}, do: {consumer, r}
+
     contents =
-      :erlang.term_to_binary(%{
+      %{
         version: 1,
         cursors: cursors,
         next_offset: next_offset,
         next_sequence: next_sequence
-      })
+      }
+      |> then(&if(differing == %{}, do: &1, else: Map.put(&1, :resume, differing)))
+      |> :erlang.term_to_binary()
 
     cursor_path = Path.join(stream_path, "cursors.term")
     DurableFile.replace(cursor_path, contents)
@@ -900,6 +1172,56 @@ defmodule Cadence.IngressJournal.FileSystem do
     end
   end
 
+  defp validate_resume(_state, _consumers, end_offset, nil), do: {:ok, end_offset}
+
+  defp validate_resume(state, [consumer], end_offset, resume) when is_integer(resume) do
+    current = Map.fetch!(state.resume, consumer)
+
+    cond do
+      resume > end_offset ->
+        {:error, {:ingress_journal_resume_beyond_ack, resume, end_offset}}
+
+      resume < current ->
+        {:error, {:ingress_journal_resume_regression, consumer, resume, current}}
+
+      true ->
+        {:ok, resume}
+    end
+  end
+
+  defp validate_resume(_state, consumers, _end_offset, resume) when is_integer(resume),
+    do: {:error, {:ingress_journal_resume_requires_one_consumer, consumers}}
+
+  defp validate_resume(_state, _consumers, _end_offset, resume),
+    do: {:error, {:invalid_ingress_journal_resume_offset, resume}}
+
+  # The greatest entry start <= resume, walking forward from the consumer's current boundary
+  # (only the entries since its last resume point).
+  defp boundary_for(state, consumer, resume) do
+    if valid_entry_boundary?(state, resume) do
+      resume
+    else
+      state.boundaries
+      |> Map.fetch!(consumer)
+      |> :gb_trees.iterator_from(state.entries)
+      |> floor_start(resume, Map.fetch!(state.boundaries, consumer))
+    end
+  end
+
+  defp floor_start(iterator, resume, best) do
+    case :gb_trees.next(iterator) do
+      {offset, _entry, next} when offset <= resume -> floor_start(next, resume, offset)
+      _past_or_end -> best
+    end
+  end
+
+  defp drained?(state) do
+    Enum.all?(state.consumers, fn consumer ->
+      Map.fetch!(state.cursors, consumer) == state.next_offset and
+        Map.fetch!(state.resume, consumer) == state.next_offset
+    end)
+  end
+
   defp valid_entry_boundary?(state, end_offset) do
     end_offset == 0 or end_offset == state.next_offset or
       :gb_trees.is_defined(end_offset, state.entries)
@@ -933,6 +1255,29 @@ defmodule Cadence.IngressJournal.FileSystem do
 
   defp minimum_cursor(cursors) do
     cursors |> Map.values() |> Enum.min(fn -> 0 end)
+  end
+
+  # What the processing consumer hasn't durably passed (DECISIONS #71): a restart resumes from
+  # the durable cursor, so that is where the not-yet-stored entries start.
+  defp processing_backlog(state) do
+    from =
+      [Map.get(state.durable_cursors, :processing), Map.get(state.cursors, :processing)]
+      |> Enum.reject(&is_nil/1)
+      |> Enum.min(fn -> state.next_offset end)
+
+    %{
+      from_offset: from,
+      to_offset: state.next_offset,
+      bytes: max(state.next_offset - from, 0),
+      entries: count_entries_from(:gb_trees.iterator_from(from, state.entries), 0)
+    }
+  end
+
+  defp count_entries_from(iterator, count) do
+    case :gb_trees.next(iterator) do
+      {_offset, _entry, next} -> count_entries_from(next, count + 1)
+      :none -> count
+    end
   end
 
   defp take_entries(iterator, max_entries, max_bytes, acc, count, bytes) do
@@ -1062,27 +1407,9 @@ defmodule Cadence.IngressJournal.FileSystem do
          {:ok, file_size} <- :file.position(file, :eof) do
       result =
         try do
-          {entries, valid_bytes, truncated?} =
-            parse_records(
-              file,
-              file_size,
-              path,
-              stream_id,
-              expected_offset,
-              expected_sequence,
-              0,
-              []
-            )
-
-          if truncated? do
-            with {:ok, _position} <- :file.position(file, valid_bytes),
-                 :ok <- :file.truncate(file),
-                 :ok <- :file.sync(file) do
-              {:ok, entries, valid_bytes, true}
-            end
-          else
-            {:ok, entries, valid_bytes, false}
-          end
+          file
+          |> parse_records(file_size, path, stream_id, expected_offset, expected_sequence, 0, [])
+          |> settle_parsed_segment(file)
         after
           :file.close(file)
         end
@@ -1090,6 +1417,19 @@ defmodule Cadence.IngressJournal.FileSystem do
       result
     end
   end
+
+  defp settle_parsed_segment({:error, reason}, _file), do: {:error, reason}
+
+  defp settle_parsed_segment({entries, valid_bytes, true}, file) do
+    with {:ok, _position} <- :file.position(file, valid_bytes),
+         :ok <- :file.truncate(file),
+         :ok <- :file.sync(file) do
+      {:ok, entries, valid_bytes, true}
+    end
+  end
+
+  defp settle_parsed_segment({entries, valid_bytes, false}, _file),
+    do: {:ok, entries, valid_bytes, false}
 
   defp parse_records(
          _file,
@@ -1184,8 +1524,8 @@ defmodule Cadence.IngressJournal.FileSystem do
     with {:ok, body} <- :file.pread(file, body_offset, record_body_bytes),
          <<metadata_binary::binary-size(^metadata_length), payload::binary-size(^payload_length)>> <-
            body,
-         {:ok, metadata} <- safe_metadata(metadata_binary),
          true <- :crypto.hash(:sha256, payload) == header.checksum,
+         {:ok, metadata} <- record_metadata(metadata_binary, context),
          {:ok, receipt_time} <- DateTime.from_unix(header.receipt_unix_us, :microsecond) do
       entry = %Entry{
         stream_id: context.stream_id,
@@ -1211,11 +1551,44 @@ defmodule Cadence.IngressJournal.FileSystem do
         [entry | context.entries]
       )
     else
-      _invalid -> invalid_record(context)
+      {:error, {:ingress_journal_metadata_undecodable, _path, _offset}} = undecodable ->
+        undecodable
+
+      _invalid ->
+        invalid_record(context)
     end
   end
 
   defp invalid_record(context), do: {Enum.reverse(context.entries), context.file_offset, true}
+
+  # A complete record whose payload checksum matches is intact: if its metadata won't decode,
+  # that is the VM (an atom whose module isn't loaded yet), not a torn write. Load the app's
+  # modules and retry once (as Terms.decode does, 98c8b5a6); if it still fails, recovery stops
+  # WITHOUT truncating, so the journal refuses to open and keeps every byte (api-ops, 11-14).
+  defp record_metadata(binary, context) do
+    case safe_metadata(binary) do
+      {:ok, metadata} ->
+        {:ok, metadata}
+
+      {:error, :invalid_metadata} ->
+        load_application_modules()
+
+        case safe_metadata(binary) do
+          {:ok, metadata} ->
+            {:ok, metadata}
+
+          {:error, :invalid_metadata} ->
+            {:error, {:ingress_journal_metadata_undecodable, context.path, context.file_offset}}
+        end
+    end
+  end
+
+  defp load_application_modules do
+    case :application.get_key(:cadence, :modules) do
+      {:ok, modules} -> Enum.each(modules, &Code.ensure_loaded/1)
+      :undefined -> :ok
+    end
+  end
 
   defp safe_metadata(binary) do
     case :erlang.binary_to_term(binary, [:safe]) do
@@ -1240,15 +1613,21 @@ defmodule Cadence.IngressJournal.FileSystem do
     with {:ok, binary} <- File.read(cursor_path),
          %{version: 1, cursors: stored} = checkpoint when is_map(stored) <-
            :erlang.binary_to_term(binary, [:safe]) do
+      cursors = Map.new(consumers, &{&1, Map.get(stored, &1, 0)})
+      stored_resume = Map.get(checkpoint, :resume, %{})
+
       {:ok,
        %{
-         cursors: Map.new(consumers, &{&1, Map.get(stored, &1, 0)}),
+         cursors: cursors,
+         # A resume point is never before its boundary (an older writer: equal).
+         resume: Map.new(cursors, fn {c, b} -> {c, max(Map.get(stored_resume, c, b), b)} end),
          next_offset: Map.get(checkpoint, :next_offset, 0),
          next_sequence: Map.get(checkpoint, :next_sequence, 0)
        }}
     else
       {:error, :enoent} ->
-        {:ok, %{cursors: Map.new(consumers, &{&1, 0}), next_offset: 0, next_sequence: 0}}
+        zero = Map.new(consumers, &{&1, 0})
+        {:ok, %{cursors: zero, resume: zero, next_offset: 0, next_sequence: 0}}
 
       _invalid ->
         {:error, :invalid_ingress_journal_cursor_checkpoint}

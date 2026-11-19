@@ -39,7 +39,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsoleTest do
              OpsConsole.load(
                scope(),
                HostContext.mission("mission-1"),
-               request("dashboard_settings", %{})
+               request("contact_plan_show", %{})
              )
   end
 

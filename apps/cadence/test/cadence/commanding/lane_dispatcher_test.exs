@@ -80,6 +80,116 @@ defmodule Cadence.Commanding.LaneDispatcherTest do
     assert Process.alive?(lane_dispatcher)
   end
 
+  test "#33: a refused or fail-closed head lets the lane go on; a busy uplink retries within a second" do
+    test_pid = self()
+
+    dispatch_fun =
+      dispatch_sequence([
+        {:ok, %{command_request_id: "command-1"}},
+        {:error, {:command_release_refused, "attempt-2", :cop1_not_initialized}},
+        {:error, :earlier_command_failed},
+        {:error, {:uplink_busy, :cop1_release_in_flight}},
+        {:ok, %{command_request_id: "command-4"}},
+        {:error, :command_queue_lane_empty}
+      ])
+
+    lane_dispatcher =
+      start_lane_dispatcher!(
+        dispatch_fun: fn org, mission, lane, released_by, opts ->
+          send(test_pid, :dispatch_attempt)
+          dispatch_fun.(org, mission, lane, released_by, opts)
+        end
+      )
+
+    # Released, refused, failed closed, then busy: quiescent, waiting on the uplink.
+    assert {:ok, %{released_count: 1, status: :waiting_for_release_target}} =
+             LaneDispatcher.drain(lane_dispatcher)
+
+    for _ <- 1..4, do: assert_receive(:dispatch_attempt)
+
+    # The busy retry fires on its own, well before the 60 s safety poll.
+    monitor = Process.monitor(lane_dispatcher)
+    assert_receive :dispatch_attempt, 2_000
+    assert_receive :dispatch_attempt, 2_000
+    assert_receive {:DOWN, ^monitor, :process, ^lane_dispatcher, :normal}, 2_000
+  end
+
+  test "#38: a lane waiting for its target's pass logs once at info; a refusal logs at warning" do
+    no_target = {:error, {:command_queue_lane_no_release_target, "endpoint-25", "mission"}}
+
+    dispatch_fun =
+      dispatch_sequence([
+        no_target,
+        no_target,
+        {:error,
+         {:command_release_refused, "attempt-1", {:release_path_not_target_spacecraft, "p"}}},
+        no_target
+      ])
+
+    lane_dispatcher = start_lane_dispatcher!(dispatch_fun: dispatch_fun)
+    # The test config logs at :warning; let the info lines through for this test.
+    previous = Logger.level()
+    Logger.configure(level: :info)
+    on_exit(fn -> Logger.configure(level: previous) end)
+
+    log =
+      ExUnit.CaptureLog.capture_log([level: :info], fn ->
+        # Waits twice (logged once), then a refusal, then waits again (still the same wait).
+        for _drain <- 1..3 do
+          assert {:ok, %{status: :waiting_for_release_target}} =
+                   LaneDispatcher.drain(lane_dispatcher)
+        end
+      end)
+
+    waits = Regex.scan(~r/waiting, no releasable uplink of endpoint-25/, log)
+    assert length(waits) == 1
+    assert log =~ "release attempt-1 refused before send"
+  end
+
+  test "#38: a lane logs each wait once (not_before, then each busy reason), not every retry" do
+    busy = {:error, {:uplink_busy, :cop1_awaiting_clcw}}
+    test_pid = self()
+
+    not_before = DateTime.add(DateTime.utc_now(), 50, :millisecond)
+
+    dispatch_fun =
+      dispatch_sequence([
+        {:error, {:command_queue_lane_waiting_for_not_before, "entry-1", not_before}},
+        busy,
+        busy,
+        busy,
+        {:error, {:uplink_busy, :cop1_release_in_flight}},
+        {:error, :command_queue_lane_empty}
+      ])
+
+    previous = Logger.level()
+    Logger.configure(level: :info)
+    on_exit(fn -> Logger.configure(level: previous) end)
+
+    log =
+      ExUnit.CaptureLog.capture_log([level: :info], fn ->
+        lane_dispatcher =
+          start_lane_dispatcher!(
+            dispatch_fun: fn org, mission, lane, released_by, opts ->
+              send(test_pid, :dispatch_attempt)
+              dispatch_fun.(org, mission, lane, released_by, opts)
+            end
+          )
+
+        monitor = Process.monitor(lane_dispatcher)
+
+        assert {:ok, %{status: :waiting_for_not_before}} = LaneDispatcher.drain(lane_dispatcher)
+
+        # The not_before timer, then the 500 ms retries, run on their own until the lane empties.
+        for _ <- 1..6, do: assert_receive(:dispatch_attempt, 2_000)
+        assert_receive {:DOWN, ^monitor, :process, ^lane_dispatcher, :normal}, 2_000
+      end)
+
+    assert log =~ "waiting for the head's not_before #{DateTime.to_iso8601(not_before)}"
+    assert length(Regex.scan(~r/waiting, uplink busy \(cop1_awaiting_clcw\)/, log)) == 1
+    assert length(Regex.scan(~r/waiting, uplink busy \(cop1_release_in_flight\)/, log)) == 1
+  end
+
   test "a recovering uplink session is a short wait, logged once at info, not a failure" do
     recovering = {:error, {:uplink_session_blocked, :protocol_recovery_required}}
     test_pid = self()
@@ -117,6 +227,7 @@ defmodule Cadence.Commanding.LaneDispatcherTest do
       end)
 
     assert length(Regex.scan(~r/uplink session recovering its protocol state/, log)) == 1
+    refute log =~ "dispatch failed"
   end
 
   test "an uplink session that never recovers falls back to the safety poll and warns once" do

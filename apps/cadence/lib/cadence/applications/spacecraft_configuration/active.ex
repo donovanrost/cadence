@@ -2,8 +2,8 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Active do
   @moduledoc "Reads immutable active spacecraft configurations, including the previous mission-wide basis."
 
   alias Cadence.Catalog
+  alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Catalog.SpacecraftConfigurationInput, as: ConfigurationInput
-  alias Cadence.Catalog.SpacecraftModelBindings
   alias Cadence.Governance
   alias Cadence.Reads.MissionModels.ActiveBasis
   alias Cadence.SourceEndpoints
@@ -40,12 +40,9 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Active do
       else: {:error, :spacecraft_source_limit_exceeded}
   end
 
-  defp entries(
-         _mission,
-         %{metadata: %{"spacecraft_configurations" => _} = metadata},
-         _binding_set
-       ),
-       do: SpacecraftModelBindings.entries(metadata)
+  defp entries(_mission, %{metadata: metadata}, _binding_set)
+       when is_map_key(metadata, "spacecraft_configurations") or is_map_key(metadata, "fleet"),
+       do: FleetSnapshot.entries(metadata)
 
   defp entries(_mission, %{metadata: metadata}, _binding_set)
        when not is_map_key(metadata, "mission_model"),

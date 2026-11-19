@@ -36,7 +36,6 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
   alias Cadence.Reads.{ApplicationReferences, ApplicationSurfaces}
   alias Cadence.Reads.Applications, as: ApplicationReads
   alias Cadence.Reads.ApplicationSurfaces.Comms, as: CommsSurface
-  alias Cadence.Reads.ApplicationSurfaces.CommsProviders
   alias Cadence.Reads.ApplicationSurfaces.ProviderRegistry
   alias Cadence.Repo
   alias Cadence.Runtime.MissionRuntimeSpec
@@ -457,46 +456,6 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
 
     assert {:error, :application_surface_bounds_exceeded} =
              CommsSurface.validate_bounded_payload(%{"unsupported" => self()})
-  end
-
-  test "provider queries keep subject and immutable account selection separate" do
-    scope = %Scope{
-      actor_kind: :user,
-      organization_id: @organization_id,
-      mission_id: @mission_id,
-      user: %{user_id: "surface-operator"},
-      organization_membership: %{lifecycle_state: :active}
-    }
-
-    assert {:error, :invalid_application_request} =
-             CommsProviders.load(
-               scope,
-               HostContext.mission(@mission_id),
-               %SurfaceQueryRequest{
-                 application_key: "comms",
-                 application_version: 1,
-                 surface_id: "provider_show",
-                 surface_version: 1,
-                 query_id: "cadence.comms.provider_show",
-                 query_version: 1,
-                 params: %{"provider_id" => "provider-1", "mode" => "edit"}
-               }
-             )
-
-    assert {:error, :invalid_application_request} =
-             CommsProviders.load(
-               scope,
-               HostContext.mission(@mission_id),
-               %SurfaceQueryRequest{
-                 application_key: "comms",
-                 application_version: 1,
-                 surface_id: "provider_list",
-                 surface_version: 1,
-                 query_id: "cadence.comms.provider_list",
-                 query_version: 1,
-                 params: %{"provider_account_id" => "account-1"}
-               }
-             )
   end
 
   test "rejects invalid detail IDs without fabricating a fallback segment" do

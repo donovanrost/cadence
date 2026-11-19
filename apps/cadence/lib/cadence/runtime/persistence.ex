@@ -16,7 +16,7 @@ defmodule Cadence.Runtime.Persistence do
   alias Cadence.Protocol.RecordArchive
   alias Cadence.Repo
   alias Cadence.SemanticObservations
-  alias Cadence.SemanticRuntime.Result
+  alias Cadence.SemanticRuntime.{AlarmRules, Result}
 
   alias Cadence.Runtime.{
     DownlinkRecords,
@@ -164,7 +164,8 @@ defmodule Cadence.Runtime.Persistence do
       raw_evidence: evidence,
       telemetry_samples: samples,
       semantic_result: result,
-      observation_context: MissionRuntimeSpec.observation_context(runtime_spec)
+      observation_context: MissionRuntimeSpec.observation_context(runtime_spec),
+      alarm_rules: AlarmRules.for_result(runtime_spec.runtime_plans, result)
     }
 
     case Storage.persist_prepared_results(policy.telemetry_storage, [prepared], recorded_at: at) do
@@ -503,6 +504,7 @@ defmodule Cadence.Runtime.Persistence do
                   telemetry_samples: telemetry_samples,
                   semantic_result: Map.get(processing_result, :semantic_result),
                   observation_context: Map.get(processing_result, :observation_context),
+                  alarm_rules: Map.get(processing_result, :alarm_rules, %{}),
                   runtime_spec: Map.get(processing_result, :runtime_spec)
                 }
                 | acc

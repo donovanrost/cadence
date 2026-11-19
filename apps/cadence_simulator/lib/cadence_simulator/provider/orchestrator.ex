@@ -8,8 +8,18 @@ defmodule CadenceSimulator.Provider.Orchestrator do
 
   use GenServer
 
+  require Logger
+
   alias CadenceSimulator.Provider
-  alias CadenceSimulator.Provider.{ContactLifecycle, ContactResults, Contacts, SpacecraftFrames}
+
+  alias CadenceSimulator.Provider.{
+    ContactLifecycle,
+    ContactResults,
+    Contacts,
+    SpacecraftFrames,
+    UplinkSessions
+  }
+
   alias CadenceSimulator.Providers.DatabaseDynamics
 
   @tick_ms 100
@@ -18,6 +28,10 @@ defmodule CadenceSimulator.Provider.Orchestrator do
   def start_link(opts) when is_list(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
+
+  @doc "The COP-1 peer serving an active contact's uplink leg, if any."
+  @spec uplink_session(binary()) :: pid() | nil
+  def uplink_session(contact_id), do: GenServer.call(__MODULE__, {:uplink_session, contact_id})
 
   @spec reconcile(DateTime.t()) :: :ok
   def reconcile(now \\ DateTime.utc_now()) do
@@ -31,6 +45,9 @@ defmodule CadenceSimulator.Provider.Orchestrator do
 
   @impl true
   def init(opts) do
+    # Uplink peers are linked to this process (DECISIONS #67): if it dies they go with it; a
+    # peer's own exit arrives as a message (its monitor cleans up).
+    Process.flag(:trap_exit, true)
     tick_ms = Keyword.get(opts, :tick_ms, @tick_ms)
     schedule_tick(tick_ms)
 
@@ -38,6 +55,7 @@ defmodule CadenceSimulator.Provider.Orchestrator do
      %{
        tick_ms: tick_ms,
        streams: %{},
+       uplinks: %{},
        provider_defaults: Keyword.get(opts, :provider_defaults, [])
      }}
   end
@@ -45,6 +63,10 @@ defmodule CadenceSimulator.Provider.Orchestrator do
   @impl true
   def handle_call({:reconcile, now}, _from, state) do
     {:reply, :ok, reconcile_all(state, now)}
+  end
+
+  def handle_call({:uplink_session, contact_id}, _from, state) do
+    {:reply, get_in(state.uplinks, [contact_id, :pid]), state}
   end
 
   def handle_call(:active_stream_count, _from, state) do
@@ -57,7 +79,16 @@ defmodule CadenceSimulator.Provider.Orchestrator do
     {:noreply, reconcile_all(state, DateTime.utc_now())}
   end
 
+  def handle_info({:EXIT, _pid, _reason}, state), do: {:noreply, state}
+
   def handle_info({:DOWN, reference, :process, pid, reason}, state) do
+    case UplinkSessions.down(state.uplinks, reference) do
+      {:ok, uplinks} -> {:noreply, %{state | uplinks: uplinks}}
+      :not_found -> stream_down(state, reference, pid, reason)
+    end
+  end
+
+  defp stream_down(state, reference, pid, reason) do
     case Enum.find(state.streams, fn {_id, stream} ->
            stream.pid == pid and stream.reference == reference
          end) do
@@ -82,16 +113,49 @@ defmodule CadenceSimulator.Provider.Orchestrator do
   end
 
   defp reconcile_reservations(state, now) do
-    Provider.list_reservations()
-    |> Enum.reduce(state, fn reservation, acc ->
-      reconcile_reservation_for_run(acc, reservation, now)
+    guarded(state, "reservations", fn ->
+      Enum.reduce(Provider.list_reservations(), state, &reconcile_reservation_step(&2, &1, now))
+    end)
+  end
+
+  defp reconcile_reservation_step(state, reservation, now) do
+    guarded(state, "reservation #{reservation["id"]}", fn ->
+      reconcile_reservation_for_run(state, reservation, now)
     end)
   end
 
   defp reconcile_contacts(state, now) do
-    Contacts.list_internal()
-    |> Enum.reduce(state, fn contact, acc -> reconcile_contact_for_run(acc, contact, now) end)
+    guarded(state, "contacts", fn ->
+      Enum.reduce(Contacts.list_internal(), state, &reconcile_contact_step(&2, &1, now))
+    end)
   end
+
+  defp reconcile_contact_step(state, contact, now) do
+    guarded(state, "contact #{contact["id"]}", fn ->
+      reconcile_contact_for_run(state, contact, now)
+    end)
+  end
+
+  # qa #46: the tick must outlive a failing call. A crash here restarts the Orchestrator
+  # with empty state, which orphans its streams and the uplink peers linked to it (the #38
+  # attestation_peer_mismatch). A step that exits (a call timeout) or raises (the Store's
+  # tables gone while it restarts) is skipped and retried on the next tick; the state from
+  # before the step is kept. Store reads and writes no longer go through a process, so
+  # they don't time out.
+  defp guarded(state, step, fun) do
+    fun.()
+  rescue
+    error in ArgumentError ->
+      skipped(step, Exception.message(error))
+      state
+  catch
+    :exit, reason ->
+      skipped(step, Exception.format_exit(reason))
+      state
+  end
+
+  defp skipped(step, reason),
+    do: Logger.warning("provider orchestrator skipped #{step} this tick: #{reason}")
 
   defp reconcile_contact_for_run(state, contact, now) do
     with false <- Contacts.terminal_status?(contact["status"]),
@@ -271,6 +335,8 @@ defmodule CadenceSimulator.Provider.Orchestrator do
     else
       case start_contact_stream(state, contact, run) do
         {:ok, state} ->
+          stream_pid = get_in(state.streams, [contact["id"], :pid])
+          state = %{state | uplinks: UplinkSessions.ensure(state.uplinks, contact, stream_pid)}
           delivery = Map.put(contact["delivery"], "status", "connected")
 
           {:ok, _updated} =
@@ -467,10 +533,32 @@ defmodule CadenceSimulator.Provider.Orchestrator do
     with {:ok, opts} <-
            stream_options(data_plane, reservation, run, state.provider_defaults),
          {:ok, pid} <- CadenceSimulator.start_simulator(opts) do
+      # Linked like uplink peers (DECISIONS #67): it can't outlive this process, and if a
+      # later step fails before the state keeps it, the sweep finds it (stop_untracked/1).
+      true = Process.link(pid)
       reference = Process.monitor(pid)
+      log_session_start(resource_type, reservation, run)
       stream = %{pid: pid, reference: reference, resource_type: resource_type}
       {:ok, %{state | streams: Map.put(state.streams, reservation["id"], stream)}}
     end
+  end
+
+  # 11-14 (003's pass looked 30 s late; it was a provider timing shift Cadence's contact didn't
+  # follow): say what a session started for, against which AOS and version, and how late.
+  defp log_session_start(resource_type, resource, run) do
+    now = DateTime.utc_now()
+
+    late =
+      case parse_time(resource["starts_at"]) do
+        {:ok, starts_at} -> DateTime.diff(now, starts_at, :millisecond) / 1000
+        _no_start -> nil
+      end
+
+    Logger.info(
+      "Session started for #{resource_type} #{resource["id"]}: AOS #{resource["starts_at"]}, " <>
+        "version #{resource["revision"] || resource["version"] || "?"}, " <>
+        "late by #{late || "?"} s, paused #{Map.get(run, "paused_duration_seconds", 0)} s"
+    )
   end
 
   defp stream_options(data_plane, reservation, run, provider_defaults) do
@@ -529,19 +617,61 @@ defmodule CadenceSimulator.Provider.Orchestrator do
   end
 
   defp stop_stream_with_stats(state, reservation_id) do
+    state = %{state | uplinks: UplinkSessions.stop(state.uplinks, reservation_id)}
+
     case Map.pop(state.streams, reservation_id) do
       {nil, _streams} ->
         {state, %{}}
 
       {%{pid: pid, reference: reference}, streams} ->
-        stats = if Process.alive?(pid), do: CadenceSimulator.simulator_stats(pid), else: %{}
+        stats = stream_stats(pid)
         Process.demonitor(reference, [:flush])
+        Process.unlink(pid)
         if Process.alive?(pid), do: CadenceSimulator.stop_simulator(pid)
         {%{state | streams: streams}, stats}
     end
   end
 
+  # A busy stream may not answer within the call timeout; its stats are only reporting.
+  defp stream_stats(pid) do
+    if Process.alive?(pid), do: CadenceSimulator.simulator_stats(pid), else: %{}
+  catch
+    :exit, _reason -> %{}
+  end
+
+  # When the active set can't be read, skip the sweep: an empty set would stop every stream.
   defp stop_orphaned_streams(state) do
+    stop_untracked(state)
+
+    case active_ids() do
+      {:ok, active_ids} -> stop_streams_except(state, active_ids)
+      :unavailable -> state
+    end
+  end
+
+  # Every stream and uplink peer this process starts is linked to it. One it no longer tracks
+  # was started by a step that then failed: guarded/3 kept the state from before the step,
+  # so the retry would run a second one. Stop it. Needs no Store read, so it always runs.
+  defp stop_untracked(state) do
+    tracked =
+      MapSet.new(Map.values(state.streams) ++ Map.values(state.uplinks), & &1.pid)
+
+    runtime_supervisor = Process.whereis(CadenceSimulator.RuntimeSupervisor)
+    {:links, links} = Process.info(self(), :links)
+
+    for pid <- links,
+        is_pid(pid),
+        not MapSet.member?(tracked, pid),
+        Process.info(pid, :parent) == {:parent, runtime_supervisor} do
+      Logger.warning("provider orchestrator stopped an untracked stream or peer #{inspect(pid)}")
+      Process.unlink(pid)
+      CadenceSimulator.stop_simulator(pid)
+    end
+
+    :ok
+  end
+
+  defp active_ids do
     active_reservation_ids =
       Provider.list_reservations(%{"status" => "active"})
       |> Enum.map(& &1["id"])
@@ -550,7 +680,19 @@ defmodule CadenceSimulator.Provider.Orchestrator do
       Contacts.list_internal(%{"status" => "active"})
       |> Enum.map(& &1["id"])
 
-    active_ids = MapSet.new(active_reservation_ids ++ active_contact_ids)
+    {:ok, MapSet.new(active_reservation_ids ++ active_contact_ids)}
+  rescue
+    error in ArgumentError ->
+      skipped("orphaned stream sweep", Exception.message(error))
+      :unavailable
+  catch
+    :exit, reason ->
+      skipped("orphaned stream sweep", Exception.format_exit(reason))
+      :unavailable
+  end
+
+  defp stop_streams_except(state, active_ids) do
+    state = %{state | uplinks: UplinkSessions.stop_except(state.uplinks, active_ids)}
 
     Enum.reduce(Map.keys(state.streams), state, fn reservation_id, acc ->
       if MapSet.member?(active_ids, reservation_id),

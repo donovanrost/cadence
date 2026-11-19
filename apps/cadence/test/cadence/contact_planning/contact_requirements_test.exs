@@ -3,7 +3,7 @@ defmodule Cadence.ContactPlanning.ContactRequirementsTest do
 
   alias Cadence.Accounts.{OrganizationMembership, User}
   alias Cadence.Auth.Scope
-  alias Cadence.ContactPlanning.ContactRequirements
+  alias Cadence.ContactPlanning.{ContactRequirements, ContactRequirementVersion}
   alias Cadence.Spacecraft
 
   @organization_id "org-contact-requirements"
@@ -206,6 +206,46 @@ defmodule Cadence.ContactPlanning.ContactRequirementsTest do
                @mission_id,
                requirement_attrs(%{spacecraft_id: "spacecraft-from-another-mission"})
              )
+  end
+
+  test "max_gap_seconds round-trips, out of range is a field error, and nil keeps the hash (#74)",
+       %{member_scope: member_scope} do
+    assert {:ok, requirement, version} =
+             ContactRequirements.create(
+               member_scope,
+               @mission_id,
+               requirement_attrs(%{max_gap_seconds: 3_600}),
+               now: @now
+             )
+
+    assert version.max_gap_seconds == 3_600
+
+    assert {:ok, stored} =
+             ContactRequirements.fetch_version(
+               @organization_id,
+               @mission_id,
+               requirement.contact_requirement_id,
+               1
+             )
+
+    assert stored.max_gap_seconds == 3_600
+    assert stored.content_sha256 == version.content_sha256
+
+    assert {:error,
+            {:contact_requirement_field_invalid, :max_gap_seconds,
+             "must be between 600 and 604800 seconds"}} =
+             ContactRequirements.create(
+               member_scope,
+               @mission_id,
+               requirement_attrs(%{max_gap_seconds: 300}),
+               now: @now
+             )
+
+    assert {:ok, _plain, plain} =
+             ContactRequirements.create(member_scope, @mission_id, requirement_attrs(), now: @now)
+
+    assert plain.max_gap_seconds == nil
+    refute Map.has_key?(ContactRequirementVersion.content_document(plain), "max_gap_seconds")
   end
 
   test "membership and organization scope protect writes and reads", %{

@@ -21,13 +21,15 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   alias Cadence.ActionRequests.ProviderRequest
   alias Cadence.Ingress.{RawEvidence, ReceiveBackpressure}
   alias Cadence.IngressJournal.FileSystem, as: IngressJournal
-  alias Cadence.ProviderAdapters.TCPSocket.{Instrumentation, Session}
+  alias Cadence.ProviderAdapters.TCPSocket.{IngressDrops, Instrumentation, Session}
 
   alias Cadence.Runtime.{
     IngressArchiveConsumer,
     IngressJournalConsumer,
     IngressPersistenceProjector,
     MissionRuntime,
+    ProcessNamespace,
+    ProfileAcceptor,
     ProviderIngressExecutor,
     TransportRecords
   }
@@ -43,6 +45,12 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
     recbuf: @tcp_socket_buffer
   ]
   @executor_high_watermark 8_192
+  # (ux U50) Default for quiet_connection_ms: our own connection read nothing for this long.
+  @quiet_connection_ms 30_000
+  # Re-registering after the acceptor died: the first retry is quick (after a kill the old
+  # listener may still be closing as we bind), later ones back off (api-ops, lead).
+  @reregister_first_retry_ms 250
+  @reregister_retry_ms 5_000
   @executor_low_watermark 2_048
   @executor_capacity_retry_ms 1_000
   @journal_capacity_retry_ms 25
@@ -72,9 +80,21 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   def uplink_session(provider_runtime), do: GenServer.call(provider_runtime, :uplink_session)
 
   @impl true
+  def drop_unverified_peer(provider_runtime, peer, reason),
+    do: GenServer.call(provider_runtime, {:drop_unverified_peer, peer, reason})
+
+  @impl true
   def snapshot(provider_runtime) do
     GenServer.call(provider_runtime, :snapshot)
   end
+
+  @doc """
+  A shared-listener adapter's refusal state (#87, ux U50), without the full snapshot:
+  `{:ok, %{connected?, refusals, second_connections_refused, peers_refused}}`. `refusals` is the
+  refusal window (nil until a refusal opens one).
+  """
+  @spec refusals(GenServer.server()) :: {:ok, map()}
+  def refusals(provider_runtime), do: GenServer.call(provider_runtime, :refusals)
 
   @impl true
   def quiesce(provider_runtime) do
@@ -108,6 +128,15 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       provider_binding_id: provider_binding_id,
       source_endpoint_ref: source_endpoint_ref,
       source_endpoint_spacecraft_id: Keyword.get(opts, :source_endpoint_spacecraft_id),
+      source_endpoint_spacecraft_scid: Keyword.get(opts, :source_endpoint_spacecraft_scid),
+      process_namespace: Keyword.get(opts, :process_namespace),
+      acceptor?: false,
+      peers_refused: 0,
+      last_peer_refused: nil,
+      refusals: nil,
+      second_connections_refused: 0,
+      connected_at: nil,
+      quiet_connection_ms: configuration.quiet_connection_ms,
       direction: direction,
       mode: configuration.mode,
       host: configuration.host,
@@ -141,14 +170,27 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
 
     base_state = Session.initialize(base_state, opts)
 
-    case ensure_ingress_dependencies(base_state) do
-      {:ok, base_state} ->
-        start_socket_provider(configuration, base_state, provider_binding_id)
+    with :ok <- validate_configuration(configuration, provider_binding_id) do
+      case ensure_ingress_dependencies(base_state) do
+        {:ok, base_state} ->
+          start_socket_provider(configuration, base_state, provider_binding_id)
 
-      {:error, reason} ->
-        {:stop, {:tcp_provider_missing_ingress_dependency, provider_binding_id, reason}}
+        {:error, reason} ->
+          {:stop, {:tcp_provider_missing_ingress_dependency, provider_binding_id, reason}}
+      end
     end
   end
+
+  # (api-ops) A profile's quiet_connection_ms must be a positive integer (a numeric string is
+  # coerced in normalize_configuration/1); anything else would never compare as quiet.
+  defp validate_configuration(%{quiet_connection_ms: ms}, _provider_binding_id)
+       when is_integer(ms) and ms > 0,
+       do: :ok
+
+  defp validate_configuration(%{quiet_connection_ms: ms}, provider_binding_id),
+    do:
+      {:stop,
+       {:tcp_provider_invalid_configuration, provider_binding_id, {:quiet_connection_ms, ms}}}
 
   defp start_socket_provider(%{mode: :connect} = configuration, base_state, provider_binding_id) do
     case connect_socket(configuration.host, configuration.port) do
@@ -164,6 +206,61 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
 
       {:error, reason} ->
         {:stop, {:tcp_provider_connect_failed, provider_binding_id, reason}}
+    end
+  end
+
+  # (#87) Downlink: register with the profile's acceptor instead of listening on its fixed port, so
+  # overlapping contacts on one profile coexist. Uplink keeps its own listener (stage 2).
+  defp start_socket_provider(
+         %{mode: :listen, shared_listener?: true} = configuration,
+         %{direction: :downlink} = base_state,
+         provider_binding_id
+       ) do
+    listen = %{
+      host: configuration.host,
+      port: configuration.port,
+      fallback_single_registration?: configuration.fallback_single_registration?
+    }
+
+    registration = %{
+      adapter: self(),
+      realized_contact_id: base_state.realized_contact_id,
+      path_id: base_state.path_id,
+      scid: base_state.source_endpoint_spacecraft_scid,
+      expected_peer_address: configuration.expected_peer_address,
+      frame_size: configuration.fixed_message_bytes
+    }
+
+    namespace = acceptor_namespace(base_state)
+
+    case ProfileAcceptor.register(
+           namespace,
+           base_state.mission_id,
+           provider_binding_id,
+           listen,
+           registration
+         ) do
+      {:ok, port, acceptor} ->
+        # If the acceptor dies, its listener closes but our socket (if any) lives on; register
+        # again so the next peer can reach us (handle_info :DOWN). We monitor the acceptor that
+        # took the registration: if it already died, :DOWN (:noproc) arrives at once.
+        state =
+          Map.merge(base_state, %{
+            acceptor?: true,
+            port: port,
+            acceptor_monitor_ref: Process.monitor(acceptor),
+            acceptor_registration: {listen, registration},
+            reregister_failures: 0
+          })
+
+        log_provider_started(state)
+        {:ok, state}
+
+      {:error, {:tcp_provider_listen_failed, _profile, _reason} = reason} ->
+        {:stop, reason}
+
+      {:error, reason} ->
+        {:stop, {:tcp_provider_listen_failed, provider_binding_id, reason}}
     end
   end
 
@@ -183,6 +280,37 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   @impl true
   def handle_call(:uplink_session, _from, state), do: {:reply, Session.handle(state), state}
 
+  # DECISIONS #67: qualification couldn't verify this connection's peer (a stray or unexpected
+  # peer took the listener). Drop it and keep accepting, so the attested peer can connect.
+  def handle_call(
+        {:drop_unverified_peer, peer, reason},
+        _from,
+        %{socket: socket, session_peer: peer} = state
+      )
+      when is_port(socket) and is_binary(peer) do
+    state =
+      Session.warn_peer(
+        state,
+        :dropped,
+        peer,
+        "TCP provider #{state.provider_binding_id} dropped unverified peer #{peer}: " <>
+          inspect(reason)
+      )
+
+    close_socket(socket)
+
+    {:reply, :ok,
+     state
+     |> Session.block(:unverified_peer_connected)
+     |> maybe_stop_socket_receiver()
+     |> Map.put(:socket, nil)
+     |> Map.put(:session_peer, nil)
+     |> maybe_schedule_accept_after_disconnect()}
+  end
+
+  def handle_call({:drop_unverified_peer, _peer, _reason}, _from, state),
+    do: {:reply, {:error, :peer_not_connected}, state}
+
   def handle_call(:quiesce, _from, %{lifecycle_status: :quiesced} = state) do
     {:reply, {:ok, quiescence_settlement(state)}, state}
   end
@@ -195,6 +323,17 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       {:error, reason, next_state} ->
         {:reply, {:error, reason}, next_state}
     end
+  end
+
+  def handle_call(:refusals, _from, state) do
+    {:reply,
+     {:ok,
+      %{
+        connected?: match?({:ok, _socket}, current_socket(state)),
+        refusals: state.refusals,
+        second_connections_refused: state.second_connections_refused,
+        peers_refused: state.peers_refused
+      }}, state}
   end
 
   def handle_call(:snapshot, _from, state) do
@@ -255,6 +394,10 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
         last_ingress_at: state.last_ingress_at,
         last_ingress_error: state.last_ingress_error,
         reads_paused?: state.reads_paused?,
+        shared_listener?: state.acceptor?,
+        peers_refused: state.peers_refused,
+        refusals: state.refusals,
+        second_connections_refused: state.second_connections_refused,
         ingress_journal: ingress_journal,
         ingress_journal_consumer: ingress_journal_consumer,
         ingress_archive_consumer: ingress_archive_consumer,
@@ -326,7 +469,58 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
     :ok
   end
 
+  # (#87) The profile acceptor identified this peer as ours: the same connected path as an accept,
+  # with the bytes it read to identify it handed to the receiver first.
   @impl true
+  def handle_info({:peer_accepted, socket, prefix, peer, read_at}, %{acceptor?: true} = state) do
+    case current_socket(state) do
+      {:ok, _existing_socket} ->
+        state =
+          Session.warn_peer(
+            state,
+            :refused,
+            peer,
+            "TCP provider #{state.provider_binding_id} refused a second connection from " <>
+              "#{peer}; #{state.session_peer} is connected"
+          )
+
+        :gen_tcp.close(socket)
+        {:noreply, refuse_second_connection(state, peer)}
+
+      {:error, :tcp_provider_not_connected} ->
+        {:noreply,
+         state
+         |> Map.put(:socket, socket)
+         |> Map.put(:connected_at, DateTime.utc_now())
+         |> Session.connected()
+         |> resolve_refusals()
+         |> start_socket_receiver!(socket, {prefix, read_at})}
+    end
+  end
+
+  def handle_info(
+        {:DOWN, ref, :process, _pid, reason},
+        %{acceptor?: true, acceptor_monitor_ref: ref} = state
+      ) do
+    Logger.warning(
+      "TCP provider #{state.provider_binding_id} lost its profile acceptor (#{inspect(reason)}); " <>
+        "registering again"
+    )
+
+    {:noreply, reregister(state)}
+  end
+
+  def handle_info({:peer_refused, peer, reason}, %{acceptor?: true} = state),
+    do: {:noreply, count_refusal(state, peer, reason)}
+
+  # (api-ops) Re-registration failed after the acceptor died: keep the live session, retry later.
+  # A stale retry once registered again is ignored (no second monitor).
+  def handle_info(:reregister, %{acceptor?: true, acceptor_monitor_ref: ref} = state)
+      when is_reference(ref),
+      do: {:noreply, state}
+
+  def handle_info(:reregister, %{acceptor?: true} = state), do: {:noreply, reregister(state)}
+
   def handle_info(
         {:accept_result, accept_ref, {:ok, socket, :ok}},
         %{accept_ref: accept_ref} = state
@@ -525,9 +719,49 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
         ),
       source_ref: Map.get(configuration, :source_ref, Map.get(configuration, "source_ref")),
       ingress_metadata:
-        Map.get(configuration, :ingress_metadata, Map.get(configuration, "ingress_metadata", %{}))
+        Map.get(configuration, :ingress_metadata, Map.get(configuration, "ingress_metadata", %{})),
+      # (#87) A listen-mode downlink shares one listener per profile when the profile says
+      # "listener" => "shared" (opt-in while profiles are moved over); the single-registration
+      # fallback is opt-in too.
+      shared_listener?:
+        Map.get(configuration, :listener, Map.get(configuration, "listener")) in [
+          :shared,
+          "shared"
+        ],
+      fallback_single_registration?:
+        Map.get(
+          configuration,
+          :fallback_single_registration,
+          Map.get(configuration, "fallback_single_registration", false)
+        ) == true,
+      expected_peer_address:
+        Map.get(
+          configuration,
+          :expected_peer_address,
+          Map.get(configuration, "expected_peer_address")
+        ),
+      # (ux U50) How long our own connection goes without reads before a second connection for
+      # this contact counts as a refusal (refuse_second_connection/2).
+      quiet_connection_ms:
+        configuration
+        |> Map.get(
+          :quiet_connection_ms,
+          Map.get(configuration, "quiet_connection_ms", @quiet_connection_ms)
+        )
+        |> coerce_integer()
+        # A key present with null means the default (api-ops): never fail a contact start on it.
+        |> Kernel.||(@quiet_connection_ms)
     }
   end
+
+  defp coerce_integer(value) when is_binary(value) do
+    case Integer.parse(String.trim(value)) do
+      {integer, ""} -> integer
+      _not_an_integer -> value
+    end
+  end
+
+  defp coerce_integer(value), do: value
 
   defp connect_socket(host, port) when is_binary(host) and is_integer(port) do
     :gen_tcp.connect(String.to_charlist(host), port, @tcp_opts)
@@ -627,7 +861,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
     )
   end
 
-  defp start_socket_receiver!(state, socket) do
+  defp start_socket_receiver!(state, socket, prefix \\ <<>>) do
     state = maybe_stop_socket_receiver(state)
     receiver_state = socket_receiver_state(state)
 
@@ -635,7 +869,9 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       spawn(fn ->
         receive do
           {:socket, receiver_socket} ->
-            socket_receiver_loop(%{receiver_state | socket: receiver_socket})
+            %{receiver_state | socket: receiver_socket}
+            |> receive_prefix(prefix)
+            |> socket_receiver_loop()
         end
       end)
 
@@ -650,6 +886,145 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
     }
   end
 
+  # The refusal window behind the listener_refusal Now item (ux U50): opened by a refusal,
+  # resolved 'accepted' when this contact's own peer connects; a refusal after that reopens it
+  # with a fresh count. Counted live (a restart starts it again).
+  # own_quiet_since (ux U50): set only for a second connection refused while our own connection
+  # was quiet, the time it last showed activity.
+  defp count_refusal(state, peer, reason, own_quiet_since \\ nil) do
+    now = DateTime.utc_now()
+
+    last = %{
+      peer: peer,
+      reason: refusal_reason(reason),
+      scid: refusal_scid(reason),
+      at: now,
+      own_quiet_since: own_quiet_since
+    }
+
+    refusals =
+      case state.refusals do
+        %{resolved: nil} = open -> %{open | count: open.count + 1, last_at: now, last: last}
+        _none_or_resolved -> %{count: 1, first_at: now, last_at: now, last: last, resolved: nil}
+      end
+
+    %{note_refused(state, peer, reason, now) | refusals: refusals}
+  end
+
+  defp note_refused(state, peer, reason, now) do
+    %{
+      state
+      | peers_refused: state.peers_refused + 1,
+        last_peer_refused: %{peer: peer, reason: inspect(reason), at: now}
+    }
+  end
+
+  # (ux U50) A second connection identified as this contact's. While our own connection is
+  # receiving it's a duplicate: counted (second_connections_refused, the pass's Technical
+  # details), no refusal window. If ours has gone quiet it's likely the provider reconnecting
+  # past a half-open socket while connected? still reads true: a normal refusal, so the
+  # listener_refusal item opens.
+  defp refuse_second_connection(state, peer) do
+    now = DateTime.utc_now()
+    state = %{state | second_connections_refused: state.second_connections_refused + 1}
+
+    case quiet_since(state, now) do
+      nil -> note_refused(state, peer, :second_connection, now)
+      since -> count_refusal(state, peer, :second_connection, since)
+    end
+  end
+
+  # When our own connection last showed activity, if that is quiet_connection_ms or longer ago;
+  # nil while it's active. Only reads count, so only a downlink can be quiet (an uplink-only
+  # connection has no reads); paused reads (#83 backpressure) are our silence, not the peer's.
+  defp quiet_since(%{direction: direction}, _now) when direction != :downlink, do: nil
+  defp quiet_since(%{reads_paused?: true}, _now), do: nil
+
+  defp quiet_since(state, now) do
+    case last_activity(state) do
+      nil -> nil
+      since -> if DateTime.diff(now, since, :millisecond) >= state.quiet_connection_ms, do: since
+    end
+  end
+
+  defp last_activity(%{connected_at: nil, last_ingress_at: at}), do: at
+  defp last_activity(%{connected_at: connected_at, last_ingress_at: nil}), do: connected_at
+
+  defp last_activity(%{connected_at: connected_at, last_ingress_at: at}),
+    do: Enum.max([connected_at, at], DateTime)
+
+  defp resolve_refusals(%{refusals: %{resolved: nil} = open} = state),
+    do: %{state | refusals: %{open | resolved: %{action: "accepted", at: DateTime.utc_now()}}}
+
+  defp resolve_refusals(state), do: state
+
+  defp refusal_reason({reason, _detail}) when is_atom(reason), do: Atom.to_string(reason)
+  defp refusal_reason(reason) when is_atom(reason), do: Atom.to_string(reason)
+  defp refusal_reason(_reason), do: "unknown"
+
+  defp refusal_scid({reason, scid}) when reason in [:unregistered_scid, :ambiguous_scid],
+    do: scid
+
+  defp refusal_scid(_reason), do: nil
+
+  defp reregister(state) do
+    {listen, registration} = state.acceptor_registration
+    namespace = acceptor_namespace(state)
+
+    case ProfileAcceptor.register(
+           namespace,
+           state.mission_id,
+           state.provider_binding_id,
+           listen,
+           registration
+         ) do
+      {:ok, _port, acceptor} ->
+        %{state | acceptor_monitor_ref: Process.monitor(acceptor), reregister_failures: 0}
+
+      {:error, error} ->
+        delay_ms =
+          if state.reregister_failures == 0,
+            do: @reregister_first_retry_ms,
+            else: @reregister_retry_ms
+
+        Logger.warning(
+          "TCP provider #{state.provider_binding_id} could not register with its profile " <>
+            "acceptor (#{inspect(error)}); keeping the session, retrying in #{delay_ms} ms"
+        )
+
+        Process.send_after(self(), :reregister, delay_ms)
+
+        %{
+          state
+          | acceptor_monitor_ref: nil,
+            reregister_failures: state.reregister_failures + 1
+        }
+    end
+  end
+
+  # The bytes the profile acceptor read to identify the peer (#87) are ingested first, as if this
+  # receiver had read them.
+  # Stamped with the time the acceptor read them (api-ops review), and counted as a receive.
+  defp receive_prefix(state, <<>>), do: state
+  defp receive_prefix(state, {<<>>, _read_at}), do: state
+
+  defp receive_prefix(%{ingress_journal_name: nil} = state, {prefix, read_at}) do
+    Instrumentation.record_receive(state, prefix, 0)
+    {next_state, batch_status} = consume_socket_data(state, prefix, read_at)
+    send(state.provider_pid, {:tcp_receiver_batch, self(), batch_status})
+    next_state
+  end
+
+  defp receive_prefix(state, {prefix, read_at}) do
+    Instrumentation.record_receive(state, prefix, 0)
+    capture_socket_data(state, prefix, read_at)
+  end
+
+  defp acceptor_namespace(%{process_namespace: %ProcessNamespace{} = namespace}),
+    do: namespace
+
+  defp acceptor_namespace(_state), do: ProcessNamespace.default()
+
   defp socket_receiver_state(state) do
     %{
       provider_pid: self(),
@@ -661,6 +1036,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       path_id: state.path_id,
       source_endpoint_ref: state.source_endpoint_ref,
       source_endpoint_spacecraft_id: state.source_endpoint_spacecraft_id,
+      # The frame-SCID cross-check's expected SCID, journaled with each entry (DECISIONS #102).
+      source_endpoint_spacecraft_scid: state.source_endpoint_spacecraft_scid,
       direction: state.direction,
       ingress_protocol_family: state.ingress_protocol_family,
       fixed_message_bytes: state.fixed_message_bytes,
@@ -794,6 +1171,9 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       provider_binding_id: state.provider_binding_id,
       source_endpoint_ref: state.source_endpoint_ref,
       spacecraft_id: state.source_endpoint_spacecraft_id,
+      # The pass's one spacecraft's SCID (nil when the path has none): the frame-SCID
+      # cross-check refuses frames with another (DECISIONS #102).
+      spacecraft_scid: state.source_endpoint_spacecraft_scid,
       protocol_family: state.ingress_protocol_family,
       direction: state.direction,
       source_ref: state.source_ref || state.provider_binding_id,
@@ -931,6 +1311,30 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
      }}
   end
 
+  # #38: CLCWs with no gateway to go to are dropped, with a rate-limited warning.
+  defp consume_socket_data(
+         %{
+           ingress_protocol_family: :cop1_clcw,
+           fixed_message_bytes: bytes,
+           ingress_transport_binding_id: nil
+         } = state,
+         data,
+         receipt_time
+       )
+       when is_integer(bytes) and bytes > 0 do
+    {messages, rest} = split_fixed_messages(state.receive_buffer <> data, bytes, [])
+    state = IngressDrops.note(state, :clcw_unlinked, length(messages), byte_size(data))
+
+    {%{state | receive_buffer: rest},
+     %{
+       bytes_received: byte_size(data),
+       read_count: 1,
+       message_count: 0,
+       last_ingress_at: receipt_time,
+       last_ingress_error: "missing_ingress_transport_binding_id"
+     }}
+  end
+
   defp consume_socket_data(
          %{ingress_protocol_family: :cop1_clcw, fixed_message_bytes: bytes} = state,
          data,
@@ -953,8 +1357,10 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
      }}
   end
 
+  # #38: bytes the binding can't decode are dropped (not buffered without bound), with a
+  # rate-limited warning.
   defp consume_socket_data(state, data, _receipt_time) do
-    {%{state | receive_buffer: state.receive_buffer <> data},
+    {IngressDrops.note(state, :undecoded, 1, byte_size(data)),
      %{
        bytes_received: byte_size(data),
        read_count: 1,
@@ -988,7 +1394,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
             Map.merge(state.ingress_metadata || %{}, %{
               "realized_contact_id" => state.realized_contact_id,
               "path_id" => state.path_id,
-              "provider_binding_id" => state.provider_binding_id
+              "provider_binding_id" => state.provider_binding_id,
+              "spacecraft_scid" => state.source_endpoint_spacecraft_scid
             })
         })
       end)
@@ -1001,13 +1408,6 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       {:error, reason} -> {0, inspect(reason)}
     end
   end
-
-  defp enqueue_transport_event_messages(
-         %{ingress_transport_binding_id: nil},
-         _messages,
-         _receipt_time
-       ),
-       do: {0, "missing_ingress_transport_binding_id"}
 
   defp enqueue_transport_event_messages(_state, [], _receipt_time), do: {0, nil}
 
@@ -1053,6 +1453,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
 
   defp socket_close_log_level(:closed), do: :info
   defp socket_close_log_level(_reason), do: :warning
+
+  defp maybe_schedule_accept_after_disconnect(%{acceptor?: true} = state), do: state
 
   defp maybe_schedule_accept_after_disconnect(
          %{lifecycle_status: :active, mode: :listen} = state
@@ -1142,7 +1544,13 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       status: :quiesced,
       provider_binding_id: state.provider_binding_id,
       socket_closed?: is_nil(state.socket),
-      listener_closed?: is_nil(state.listener),
+      listener_closed?: is_nil(state.listener) and not state.acceptor?,
+      peers_refused: state.peers_refused,
+      last_peer_refused: state.last_peer_refused,
+      refusals: state.refusals,
+      second_connections_refused: state.second_connections_refused,
+      shared_listener?: state.acceptor?,
+      connected?: is_port(state.socket),
       receiver_stopped?: is_nil(state.socket_receiver_pid)
     }
   end

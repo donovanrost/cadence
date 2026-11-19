@@ -1,6 +1,8 @@
 defmodule Cadence.Platform.DrainTest do
   use ExUnit.Case, async: false
 
+  @moduletag :ingest_journal_matrix
+
   alias Cadence.Control.Missions
   alias Cadence.Platform.Drain
   alias Cadence.Runtime.ProcessNamespace

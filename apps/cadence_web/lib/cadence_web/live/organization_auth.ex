@@ -21,7 +21,8 @@ defmodule CadenceWeb.OrganizationAuth do
              |> CadenceWeb.NotificationsBell.attach()}
 
           Scope.admin_mode?(scope) ->
-            {:halt, redirect(socket, to: "/admin")}
+            # L7: platform admin lives in the console (the legacy /admin only redirects there).
+            {:halt, redirect(socket, to: "/console/admin")}
 
           true ->
             {:halt, redirect(socket, to: "/no-organization")}

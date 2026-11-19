@@ -18,6 +18,8 @@ defmodule Cadence.Dashboards.DashboardShare do
     field(:runtime_context, :map, default: %{})
     field(:expires_at, :utc_datetime_usec)
     field(:revoked_at, :utc_datetime_usec)
+    # D20: who revoked it ("Revoked by Mira K."); null for shares revoked before.
+    field(:revoked_by, :string)
     timestamps()
   end
 
@@ -33,7 +35,8 @@ defmodule Cadence.Dashboards.DashboardShare do
       :data_visibility,
       :runtime_context,
       :expires_at,
-      :revoked_at
+      :revoked_at,
+      :revoked_by
     ])
     |> validate_required([
       :dashboard_share_id,

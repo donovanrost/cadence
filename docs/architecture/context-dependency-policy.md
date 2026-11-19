@@ -36,6 +36,7 @@ should use the callee context's public application service or value types.
 | --- | --- | --- |
 | Identity and tenancy | organizations, users, mission scope, spacecraft identity, authorization | Platform |
 | Catalog and activation | telemetry/command definitions, revisions, imports, governance, activation | Identity and tenancy; Platform |
+| Mission configuration | change sets, configuration revision ledger, `ConfigKind` contract (entity kinds live in their owning context and are registered by config) | Identity and tenancy; Catalog and activation (approval policy); Platform |
 | Comms configuration | spacecraft profiles, transports, routing rules, ground-station configuration, source endpoints | Identity and tenancy; Catalog and activation; Platform |
 | Ground-network provider integration | provider accounts, credentials, capabilities, opportunities, provider contacts, wire translation | Identity and tenancy; Comms configuration; Platform |
 | Contact planning | requirements, candidates, constraints, scoring, optimization, proposed plans | Identity and tenancy; Catalog and activation; Comms configuration; Ground-network provider integration; Platform |
@@ -64,6 +65,7 @@ are the working ownership map for refactors and future xref enforcement:
 | --- | --- |
 | Identity and tenancy | `Accounts`, `Auth`, `Missions`, `Organizations`, `Spacecraft*` |
 | Catalog and activation | `Catalog`, `Activations`, `Governance` |
+| Mission configuration | `Configuration` (facade: `Control.Configuration`, a composition root) |
 | Comms configuration | `Comms`, `SourceEndpoints` |
 | Ground-network provider integration | `GroundNetworks`, `ProviderAdapters` |
 | Contact planning | `ContactPlanning` |

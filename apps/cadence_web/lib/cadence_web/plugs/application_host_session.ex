@@ -1,44 +1,51 @@
 defmodule CadenceWeb.Plugs.ApplicationHostSession do
-  @moduledoc false
+  @moduledoc """
+  The bridge's host session check. A non-GET call must carry (`x-cadence-poc-session`) a host
+  session id this browser session was given by the legacy host or by the console's surface host;
+  the plug assigns which (`:application_host_origin`, `:legacy_host | :console`).
+  """
 
   import Plug.Conn
 
-  @session_key :application_host_session_id
+  alias CadenceWeb.ApplicationHostSessionState
+
+  @session_key ApplicationHostSessionState.session_key()
+  @origin_key :application_host_origin
   @session_header "x-cadence-poc-session"
   @problem_schema "cadence.application-host-problem.v1"
 
   def init(opts), do: opts
 
   def call(conn, _opts) do
-    case get_session(conn, @session_key) do
-      session_id when is_binary(session_id) and session_id != "" ->
-        validate_request_session(conn, session_id)
+    legacy_id = get_session(conn, @session_key)
 
-      _other ->
-        if conn.method == "GET" do
-          issue_session(conn)
-        else
-          invalid_session(conn)
-        end
+    cond do
+      conn.method == "GET" and is_binary(legacy_id) and legacy_id != "" ->
+        assign(conn, @session_key, legacy_id)
+
+      conn.method == "GET" ->
+        issue_session(conn)
+
+      true ->
+        validate_request_session(conn)
     end
   end
 
-  defp validate_request_session(%Plug.Conn{method: "GET"} = conn, session_id) do
-    assign(conn, @session_key, session_id)
-  end
-
-  defp validate_request_session(conn, session_id) do
-    case get_req_header(conn, @session_header) do
-      [^session_id] -> assign(conn, @session_key, session_id)
+  # A non-GET bridge call carries the host session id its catalog gave it: the legacy host's or
+  # the console's. Which one tells the bridge the call's origin (set here, never by the client).
+  defp validate_request_session(conn) do
+    with [header_id] <- get_req_header(conn, @session_header),
+         {:ok, origin} <- ApplicationHostSessionState.origin(conn, header_id) do
+      conn
+      |> assign(@session_key, header_id)
+      |> assign(@origin_key, origin)
+    else
       _other -> invalid_session(conn)
     end
   end
 
   defp issue_session(conn) do
-    session_id =
-      32
-      |> :crypto.strong_rand_bytes()
-      |> Base.url_encode64(padding: false)
+    session_id = ApplicationHostSessionState.mint_session_id()
 
     conn
     |> put_session(@session_key, session_id)

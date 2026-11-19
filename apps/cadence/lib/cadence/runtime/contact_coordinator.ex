@@ -388,7 +388,8 @@ defmodule Cadence.Runtime.ContactCoordinator do
            realized_contact_id: realized_contact.realized_contact_id,
            path: path,
            clock_mode: realized_contact.clock_mode,
-           initial_time: realized_contact.initial_time || DateTime.utc_now()},
+           initial_time: realized_contact.initial_time || DateTime.utc_now(),
+           intake?: realized_contact.intake?},
           id: {:path_runtime, realized_contact.realized_contact_id, path.path_id}
         )
 

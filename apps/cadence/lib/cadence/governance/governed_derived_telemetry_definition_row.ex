@@ -21,6 +21,9 @@ defmodule Cadence.Governance.GovernedDerivedTelemetryDefinitionRow do
     field(:version, :integer)
     field(:source_point_ids, {:array, :string}, default: [])
     field(:metadata, :map, default: %{})
+    # #77: retiring appends a final version marked retired; versions stay for history.
+    field(:retired_at, :utc_datetime_usec)
+    field(:retired_by, :string)
 
     timestamps()
   end

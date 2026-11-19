@@ -18,6 +18,20 @@ defmodule CadenceWeb.Assets.SpacecraftConfigurationBrowserTest do
     first = TestFixtures.persist_spacecraft!(mission, display_name: "KESTREL-01", scid: 1)
     second = TestFixtures.persist_spacecraft!(mission, display_name: "KESTREL-02", scid: 2)
 
+    # DECISIONS #109: change sets are the only writer of a spacecraft's switches, and a saved
+    # configuration takes them from the spacecraft (the form's switches are ignored). Set them here
+    # as a change set would, so the saved draft carries commanding on because the spacecraft does.
+    {:ok, _} =
+      Cadence.SpacecraftStore.put_switches(
+        org.organization_id,
+        mission.mission_id,
+        first.spacecraft_id,
+        %{
+          telemetry_enabled: false,
+          commanding_enabled: true
+        }
+      )
+
     revision =
       Fixtures.persist_qualified_revision!(org.organization_id, mission.mission_id,
         revision_label: "Flight 2026.9"
@@ -54,7 +68,9 @@ defmodule CadenceWeb.Assets.SpacecraftConfigurationBrowserTest do
     assert row.version == 1
     assert row.catalog_revision_id == revision.catalog_revision_id
     assert row.document["handled_apids"] == [42]
-    assert row.document["commanding_enabled"]
+    # From the spacecraft, not the form (#109).
+    assert row.document["commanding_enabled"] == true
+    assert row.document["telemetry_enabled"] == false
     assert row.document["protocol"] == nil
 
     assert Drafts.latest(org.organization_id, mission.mission_id, second.spacecraft_id) == nil

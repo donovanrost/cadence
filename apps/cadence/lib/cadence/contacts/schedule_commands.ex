@@ -3,14 +3,33 @@ defmodule Cadence.Contacts.ScheduleCommands do
   alias Cadence.Applications.JSONBoundary
   alias Cadence.Auth.Policy
   alias Cadence.ContactPlanning.OpportunityCapability
-  alias Cadence.Contacts.{ProviderBooking, ProviderScheduling, ScheduleCancellations}
+
+  alias Cadence.Contacts.{
+    ProviderBooking,
+    ProviderReservations,
+    ProviderScheduling,
+    ScheduleCancellations,
+    SingleBookings,
+    UplinkLegs
+  }
+
   alias Cadence.Missions
 
   @search_fields ~w(spacecraft_id route_key starts_at ends_at)
   @opportunity_max_age_seconds 900
 
   def execute(scope, mission, action, input) when action in ["search", "reserve", "cancel"] do
-    permission = if action == "cancel", do: :manage_missions, else: :operate_mission
+    # DECISIONS #78: the booker of a single booking may cancel it.
+    permission =
+      if action == "cancel",
+        do:
+          SingleBookings.cancel_permission(
+            scope.organization_id,
+            mission,
+            SingleBookings.cancel_target(input),
+            scope.user && scope.user.user_id
+          ),
+        else: :operate_mission
 
     with true <- scope.mission_id in [nil, mission],
          :ok <-
@@ -47,13 +66,15 @@ defmodule Cadence.Contacts.ScheduleCommands do
   end
 
   defp dispatch(scope, mission_id, "reserve", params) do
-    with {:ok, %{"token" => token}} <- exact_ids(params, ["token"]),
+    with {:ok, %{"token" => token}, note} <- reserve_input(params),
          {:ok, payload} <- verify_opportunity(token),
          :ok <- token_scope(payload, scope.organization_id, mission_id),
          :ok <- opportunity_current(payload),
          {:ok, route} <- token_route(payload, scope.organization_id, mission_id),
          :ok <- validate_token_route(route, payload["route"]),
          {:ok, attrs} <- reservation_attrs(payload, route),
+         attrs = put_uplink_leg(attrs, scope.organization_id, mission_id, route),
+         attrs = Map.put(attrs, "off_plan", off_plan(scope, note)),
          {:ok, booking} <-
            ProviderBooking.reserve(scope.organization_id, mission_id, route.provider_id, attrs) do
       {:ok, booking_result(booking)}
@@ -180,9 +201,9 @@ defmodule Cadence.Contacts.ScheduleCommands do
   defp opportunity_current(_), do: {:error, :opportunity_expired_or_unavailable}
 
   @doc false
-  def reservation_identity(scope, mission, %{"token" => token} = input)
-      when map_size(input) == 1 do
-    with {:ok, payload} <- verify_opportunity(token),
+  def reservation_identity(scope, mission, %{"token" => _token} = input) do
+    with {:ok, %{"token" => token}, _note} <- reserve_input(input),
+         {:ok, payload} <- verify_opportunity(token),
          :ok <- token_scope(payload, scope.organization_id, mission),
          :ok <- opportunity_current(payload),
          {:ok, route} <- token_route(payload, scope.organization_id, mission),
@@ -194,11 +215,50 @@ defmodule Cadence.Contacts.ScheduleCommands do
 
   def reservation_identity(_, _, _), do: {:error, :malformed_input}
 
+  # A reserve is `{token}` or `{token, note}` (the console's Book a pass, DECISIONS #78).
+  defp reserve_input(%{"token" => token, "note" => note} = params) when map_size(params) == 2 do
+    with {:ok, ids} <- exact_ids(%{"token" => token}, ["token"]),
+         true <- is_nil(note) or (is_binary(note) and String.length(note) <= 500) do
+      {:ok, ids, note && blank_nil(String.trim(note))}
+    else
+      _invalid -> {:error, :malformed_input}
+    end
+  end
+
+  defp reserve_input(params) do
+    with {:ok, ids} <- exact_ids(params, ["token"]), do: {:ok, ids, nil}
+  end
+
+  defp blank_nil(""), do: nil
+  defp blank_nil(text), do: text
+
+  # A booking made here belongs to no plan: who booked it, when, and why (DECISIONS #78).
+  defp off_plan(scope, note),
+    do: %{
+      "booked_by" => scope.user && %{"kind" => "user", "id" => scope.user.user_id},
+      "booked_at" => DateTime.to_iso8601(DateTime.utc_now()),
+      "note" => note
+    }
+
+  # A single booking asks for the uplink leg exactly as plan execution does (#44, DECISIONS #46).
+  defp put_uplink_leg(attrs, organization_id, mission_id, route) do
+    case UplinkLegs.for_booking(
+           organization_id,
+           mission_id,
+           route.spacecraft_id,
+           attrs["ground_station_ref"],
+           route.provider_id
+         ) do
+      nil -> attrs
+      leg -> Map.put(attrs, "uplink", leg)
+    end
+  end
+
   defp reservation_attrs(payload, route) do
     with %{"id" => opportunity_id} = opportunity when is_binary(opportunity_id) <-
            payload["opportunity"],
          true <- is_map(payload["route"]) do
-      suffix = stable_booking_suffix(payload)
+      suffix = booking_suffix(payload, route)
 
       {:ok,
        opportunity
@@ -319,13 +379,38 @@ defmodule Cadence.Contacts.ScheduleCommands do
         )
     }
 
-  defp stable_booking_suffix(payload) do
+  # The identity derives from the opportunity, so a retried reserve is idempotent. Once the
+  # booking at that identity has ended (canceled, rejected, failed), reserving the same slot is
+  # a new booking: the identity's next generation (qa #32). Generation 1 is the original.
+  @ended_states ~w(canceled rejected failed)a
+  @max_generations 50
+
+  defp booking_suffix(payload, route, generation \\ 1) do
+    suffix = stable_booking_suffix(payload, generation)
+
+    case ProviderReservations.fetch_by_idempotency_key(
+           payload["organization_id"],
+           payload["mission_id"],
+           route.provider_id,
+           "cadence:contact:#{suffix}"
+         ) do
+      {:ok, %{lifecycle_state: state}}
+      when state in @ended_states and generation < @max_generations ->
+        booking_suffix(payload, route, generation + 1)
+
+      _live_or_new ->
+        suffix
+    end
+  end
+
+  defp stable_booking_suffix(payload, generation) do
     [
       payload["organization_id"],
       payload["mission_id"],
       payload["route_key"],
       payload["opportunity"]["id"]
     ]
+    |> Kernel.++(if generation == 1, do: [], else: [Integer.to_string(generation)])
     |> Enum.join("|")
     |> then(&:crypto.hash(:sha256, &1))
     |> Base.url_encode64(padding: false)

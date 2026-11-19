@@ -24,6 +24,7 @@ defmodule Cadence.Catalog.Command.MatchCriteria do
           subject_ref: binary() | nil,
           comparison: comparison() | nil,
           value: term() | nil,
+          value_from_argument: binary() | nil,
           range_min: number() | nil,
           range_max: number() | nil,
           use_calibrated: boolean(),
@@ -39,6 +40,9 @@ defmodule Cadence.Catalog.Command.MatchCriteria do
     :subject_ref,
     :comparison,
     :value,
+    # An argument of the command (its id once lowered): the value it was sent with replaces
+    # `value` when the verifier instance is created (#38 verifier scope, SET_MODE).
+    :value_from_argument,
     :range_min,
     :range_max,
     :boolean_expression,
@@ -57,6 +61,7 @@ defmodule Cadence.Catalog.Command.MatchCriteria do
       subject_ref: Normalize.get(attrs, :subject_ref),
       comparison: Normalize.get(attrs, :comparison) |> normalize_comparison(),
       value: Normalize.get(attrs, :value),
+      value_from_argument: Normalize.get(attrs, :value_from_argument),
       range_min: Normalize.get(attrs, :range_min),
       range_max: Normalize.get(attrs, :range_max),
       use_calibrated: Normalize.get(attrs, :use_calibrated, true),

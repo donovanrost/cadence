@@ -27,6 +27,12 @@ defmodule Cadence.Comms.RoutingRuleRow do
     field(:role, :string)
     field(:enabled, :boolean, default: true)
     field(:materialized_link_assignment_id, :string)
+    field(:origin, :string, default: "legacy")
+    field(:profile_rule_id, :string)
+    field(:spacecraft_type_id, :string)
+    field(:spacecraft_type_version, :integer)
+    field(:ground_station_id, :string)
+    field(:leg_direction, :string)
     field(:metadata, :map, default: %{})
 
     timestamps()
@@ -77,6 +83,12 @@ defmodule Cadence.Comms.RoutingRuleRow do
       role: row.role,
       enabled?: row.enabled,
       materialized_link_assignment_id: row.materialized_link_assignment_id,
+      origin: row.origin,
+      profile_rule_id: row.profile_rule_id,
+      spacecraft_type_id: row.spacecraft_type_id,
+      spacecraft_type_version: row.spacecraft_type_version,
+      ground_station_id: row.ground_station_id,
+      leg_direction: row.leg_direction,
       metadata: JsonDocument.unwrap_value(row.metadata)
     })
   end
@@ -97,6 +109,12 @@ defmodule Cadence.Comms.RoutingRuleRow do
       role: Atom.to_string(routing_rule.role),
       enabled: routing_rule.enabled?,
       materialized_link_assignment_id: routing_rule.materialized_link_assignment_id,
+      origin: Atom.to_string(routing_rule.origin),
+      profile_rule_id: routing_rule.profile_rule_id,
+      spacecraft_type_id: routing_rule.spacecraft_type_id,
+      spacecraft_type_version: routing_rule.spacecraft_type_version,
+      ground_station_id: routing_rule.ground_station_id,
+      leg_direction: routing_rule.leg_direction,
       metadata: JsonDocument.wrap_value(routing_rule.metadata)
     }
   end
@@ -117,6 +135,12 @@ defmodule Cadence.Comms.RoutingRuleRow do
       :role,
       :enabled,
       :materialized_link_assignment_id,
+      :origin,
+      :profile_rule_id,
+      :spacecraft_type_id,
+      :spacecraft_type_version,
+      :ground_station_id,
+      :leg_direction,
       :metadata
     ]
   end

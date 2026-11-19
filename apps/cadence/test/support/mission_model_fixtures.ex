@@ -6,6 +6,7 @@ defmodule Cadence.MissionModelFixtures do
   alias Cadence.Control.MissionModelPromotion
   alias Cadence.Control.MissionRuntimeReconciler
   alias Cadence.Control.Missions, as: ControlMissions
+  alias Cadence.MissionModelApproval
   alias Cadence.Runtime.MissionRuntimeSpec
 
   def activate_imported_model!(organization_id, mission_id, result_document, opts \\ []) do
@@ -21,12 +22,7 @@ defmodule Cadence.MissionModelFixtures do
 
         :candidate ->
           {:ok, approved} =
-            Cadence.MissionModels.approve_revision(
-              organization_id,
-              mission_id,
-              revision_id,
-              %{"kind" => "test_fixture", "id" => "mission-model-fixture"}
-            )
+            MissionModelApproval.approve!(organization_id, mission_id, revision_id)
 
           approved
       end

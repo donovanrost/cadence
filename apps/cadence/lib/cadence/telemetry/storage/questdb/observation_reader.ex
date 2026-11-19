@@ -86,7 +86,7 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationReader do
       samples =
         physical_samples
         |> EffectiveSelection.selected_samples(
-          identity_states_for_point(mission_id, point_id, opts),
+          identity_states_for_point(mission_id, point_id, physical_samples, opts),
           opts
         )
         |> Enum.take(limit(opts))
@@ -437,7 +437,7 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationReader do
   defp replay_realm?("replay"), do: true
   defp replay_realm?(_realm), do: false
 
-  defp identity_states_for_point(mission_id, point_id, opts) do
+  defp identity_states_for_point(mission_id, point_id, physical_samples, opts) do
     case Keyword.fetch(opts, :identity_states) do
       {:ok, identity_states} when is_list(identity_states) ->
         identity_states
@@ -446,12 +446,15 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationReader do
         []
 
       :error ->
-        query_identity_states(mission_id, point_id, opts)
+        query_identity_states(mission_id, point_id, physical_samples, opts)
     end
   end
 
-  defp query_identity_states(mission_id, point_id, opts) do
-    ObservationIdentityStates.list_for_selection(mission_id,
+  # Only the fetched rows' identities: a sample's selection depends on its own identity's state
+  # alone, and loading the point's whole history was a full scan of the states table (29 s on
+  # the dev data, qa 11-14). A row without an identity id falls back to the full query.
+  defp query_identity_states(mission_id, point_id, physical_samples, opts) do
+    filters = [
       organization_id: Keyword.get(opts, :organization_id),
       point_id: point_id,
       spacecraft_id: Keyword.get(opts, :spacecraft_id),
@@ -459,8 +462,31 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationReader do
       replay_run_id: SourceFilters.replay_run_id(opts),
       data_source_id: Keyword.get(opts, :data_source_id),
       binding_id: SourceFilters.binding_id(opts)
-    )
+    ]
+
+    case sample_identity_ids(physical_samples) do
+      {:ok, ids} ->
+        ObservationIdentityStates.list_for_selection(
+          mission_id,
+          [observation_identity_ids: ids] ++ filters
+        )
+
+      :incomplete ->
+        ObservationIdentityStates.list_for_selection(mission_id, filters)
+    end
   end
+
+  defp sample_identity_ids(samples) do
+    ids = Enum.map(samples, &sample_identity_id/1)
+    if Enum.all?(ids, &(is_binary(&1) and &1 != "")), do: {:ok, ids}, else: :incomplete
+  end
+
+  defp sample_identity_id(%Sample{
+         provenance: %{"storage" => %{"observation_identity_id" => id}}
+       }),
+       do: id
+
+  defp sample_identity_id(_sample), do: nil
 
   defp symbol_opt(opts, key, default) do
     case Keyword.get(opts, key, default) do
@@ -607,8 +633,10 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationReader do
     end
   end
 
+  # QuestDB's millisecond unit is `T`; `ms` is not a SAMPLE BY unit and is
+  # silently read as one-second buckets.
   defp sample_by_bucket(opts) do
-    "#{bucket_width_ms(opts)}ms"
+    "#{bucket_width_ms(opts)}T"
   end
 
   defp bucket_end(nil, _bucket_width_ms), do: nil

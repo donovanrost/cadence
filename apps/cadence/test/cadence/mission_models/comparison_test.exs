@@ -5,6 +5,8 @@ defmodule Cadence.MissionModels.ComparisonTest do
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Auth.Scope
   alias Cadence.Catalog.MissionModel.{Declaration, Expression, Layer, Reference}
+  alias Cadence.MissionModelApproval
+  alias Cadence.MissionModelCatalogNaming
   alias Cadence.MissionModels
   alias Cadence.MissionModels.Comparison
   alias Cadence.Platform.ContentHash
@@ -29,23 +31,27 @@ defmodule Cadence.MissionModels.ComparisonTest do
 
     {layer, input_id} = algorithm_layer(organization_id, mission_id)
     assert {:ok, compilation} = MissionModels.compile_layers([layer])
+    MissionModelCatalogNaming.name!(organization_id, mission_id, compilation.revision.revision_id)
 
     assert {:ok, revision} =
-             MissionModels.approve_revision(
+             MissionModelApproval.approve!(
                organization_id,
                mission_id,
-               compilation.revision.revision_id,
-               %{"kind" => "user", "id" => "reviewer"}
+               compilation.revision.revision_id
              )
 
-    assert {:error, :mission_model_comparison_not_passed} =
-             MissionModels.request_promotion(
-               scope,
+    # Option C (director 11-15): with no qualification corpus replay doesn't run; the report
+    # passes and says so, for the approver to see.
+    assert {:ok, %{"status" => "passed", "risk" => "high", "replay" => replay}} =
+             Comparison.run(
+               organization_id,
                mission_id,
                revision.revision_id,
                binding_set.binding_set_id,
                binding_set.version
              )
+
+    assert %{"status" => "not_run", "reason" => "qualification_corpus_required"} = replay
 
     update = qualification_update(mission_id, input_id)
     expected_hash = semantic_result_hash(compilation.plans, [update])

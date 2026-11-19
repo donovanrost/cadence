@@ -44,6 +44,26 @@ defmodule Cadence.Auth.ServiceIdentityRow do
     |> unique_constraint([:token_digest], name: :service_identities_token_digest_idx)
   end
 
+  @doc "Replaces the identity's API token (rotation): the old token stops authenticating."
+  @spec rotate_changeset(struct(), binary()) :: Ecto.Changeset.t()
+  def rotate_changeset(%__MODULE__{} = row, api_token) when is_binary(api_token) do
+    metadata =
+      (JsonDocument.unwrap_value(row.metadata) || %{})
+      |> Map.put("key_rotated_at", DateTime.to_iso8601(DateTime.utc_now()))
+
+    row
+    |> change(
+      token_digest: digest_api_token(api_token),
+      token_hint: token_hint(api_token),
+      metadata: JsonDocument.wrap_value(metadata)
+    )
+    |> unique_constraint([:token_digest], name: :service_identities_token_digest_idx)
+  end
+
+  @doc "Disables the identity (revocation): its token stops authenticating."
+  @spec disable_changeset(struct()) :: Ecto.Changeset.t()
+  def disable_changeset(%__MODULE__{} = row), do: change(row, lifecycle_state: "disabled")
+
   @spec to_domain(struct()) :: ServiceIdentity.t()
   def to_domain(%__MODULE__{} = row) do
     ServiceIdentity.new(%{

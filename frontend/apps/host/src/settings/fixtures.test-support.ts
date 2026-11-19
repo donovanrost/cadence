@@ -14,7 +14,7 @@ export const settingsMetadata: readonly SettingsSectionDefinition[] = [
     version: 1,
     scopes: ["organization", "mission"],
     title: "Governance",
-    description: "How configuration changes become active.",
+    description: "Who has to agree before configuration changes and app activations take effect.",
     owner: { kind: "host", label: "Cadence" },
   },
   {

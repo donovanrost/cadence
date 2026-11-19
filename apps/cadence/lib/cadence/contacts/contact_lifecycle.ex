@@ -3,13 +3,23 @@ defmodule Cadence.Contacts.ContactLifecycle do
   Orchestrates contact reconciliation, runtime transitions, and operator actions.
   """
 
+  require Logger
+
   alias Cadence.Contacts.ContactAction
   alias Cadence.Contacts.ContactRuntimeConfig
+  alias Cadence.Contacts.ContactSettlement
+  alias Cadence.Contacts.ContactSettler
+  alias Cadence.Contacts.ContactStartFailure
   alias Cadence.Contacts.ContactStore
+  alias Cadence.Contacts.JournalReclaim
+  alias Cadence.Contacts.RealizationFailure
   alias Cadence.Contacts.RealizedContact
   alias Cadence.Contacts.ScheduledContact
   alias Cadence.Contacts.Validation
   alias Cadence.Control.Contacts, as: Runtime
+
+  # Who starts a scheduled pass on time (api U46 "started_by").
+  @scheduler %{"kind" => "system", "id" => "contact_scheduler"}
 
   @spec reconcile(DateTime.t()) :: {:ok, map()}
   def reconcile(%DateTime{} = reference_time) do
@@ -64,8 +74,19 @@ defmodule Cadence.Contacts.ContactLifecycle do
   end
 
   @spec start_realized(RealizedContact.t()) :: {:ok, pid()} | {:error, term()}
-  def start_realized(%RealizedContact{} = realized_contact) do
-    start_runtime_and_mark_active(realized_contact, %{started_at: DateTime.utc_now()})
+  def start_realized(%RealizedContact{} = realized_contact),
+    do: start_realized_by(realized_contact, nil)
+
+  @doc """
+  Starts the contact's runtime for `started_by` (api U46), who asked:
+  `%{"kind" => "user" | "service" | "system", "id" => id}`, recorded when the contact goes active.
+  """
+  @spec start_realized_by(RealizedContact.t(), map() | nil) :: {:ok, pid()} | {:error, term()}
+  def start_realized_by(%RealizedContact{} = realized_contact, started_by) do
+    start_runtime_and_mark_active(realized_contact, %{
+      started_at: DateTime.utc_now(),
+      started_by: started_by
+    })
   end
 
   @spec start_realized(binary(), binary()) :: {:ok, pid()} | {:error, term()}
@@ -77,13 +98,14 @@ defmodule Cadence.Contacts.ContactLifecycle do
     end
   end
 
-  @spec start_realized(binary(), binary(), binary()) :: {:ok, pid()} | {:error, term()}
-  def start_realized(organization_id, mission_id, realized_contact_id)
+  @spec start_realized(binary(), binary(), binary(), map() | nil) ::
+          {:ok, pid()} | {:error, term()}
+  def start_realized(organization_id, mission_id, realized_contact_id, started_by \\ nil)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(realized_contact_id) do
     with {:ok, %RealizedContact{} = realized_contact} <-
            ContactStore.fetch_realized(organization_id, mission_id, realized_contact_id) do
-      start_realized(realized_contact)
+      start_realized_by(realized_contact, started_by)
     end
   end
 
@@ -140,7 +162,11 @@ defmodule Cadence.Contacts.ContactLifecycle do
   end
 
   defp do_reconcile(mission_id, %DateTime{} = reference_time) do
-    restart_candidates = ContactStore.active_realized_to_restart(reference_time, mission_id)
+    # Running contacts whose runtime is gone, and in-window contacts that never started (ux U45:
+    # e.g. the station listener was still held by the previous pass on the same profile).
+    restart_candidates =
+      ContactStore.active_realized_to_restart(reference_time, mission_id) ++
+        ContactStore.defined_realized_to_start(reference_time, mission_id)
 
     {expired_scheduled_contact_ids, expiration_errors} =
       ContactStore.expired_scheduled(reference_time, mission_id)
@@ -158,9 +184,23 @@ defmodule Cadence.Contacts.ContactLifecycle do
       ContactStore.expired_active_realized(reference_time, mission_id)
       |> collect_reconcile_results(&complete_realized_for_reconcile(&1, reference_time))
 
+    :ok = close_never_started(mission_id, reference_time)
+
     {restarted_realized_contact_ids, restart_errors} =
       restart_candidates
       |> collect_reconcile_results(&restart_realized_for_reconcile(&1, reference_time))
+
+    {settling_realized_contact_ids, settle_errors} =
+      mission_id
+      |> ContactSettlement.sweep_candidates(running_realized_contact_ids(mission_id))
+      |> collect_reconcile_results(&settle_realized_for_reconcile/1)
+
+    {replaying_realized_contact_ids, replay_errors} =
+      mission_id
+      |> replay_candidates(reference_time)
+      |> collect_reconcile_results(&replay_realized_for_reconcile/1)
+
+    :ok = reclaim_journals(mission_id, reference_time)
 
     {:ok,
      %{
@@ -170,13 +210,146 @@ defmodule Cadence.Contacts.ContactLifecycle do
        realized_scheduled_contact_ids: Enum.reverse(realized_scheduled_contact_ids),
        completed_realized_contact_ids: Enum.reverse(completed_realized_contact_ids),
        restarted_realized_contact_ids: Enum.reverse(restarted_realized_contact_ids),
+       settling_realized_contact_ids: Enum.reverse(settling_realized_contact_ids),
+       replaying_realized_contact_ids: Enum.reverse(replaying_realized_contact_ids),
        errors:
          Enum.reverse(expiration_errors) ++
            Enum.reverse(scheduled_completion_errors) ++
            Enum.reverse(realization_errors) ++
-           Enum.reverse(completion_errors) ++ Enum.reverse(restart_errors)
+           Enum.reverse(completion_errors) ++
+           Enum.reverse(restart_errors) ++
+           Enum.reverse(settle_errors) ++ Enum.reverse(replay_errors)
      }}
   end
+
+  @window_grace_s 5 * 60
+  @hand_start_s 60 * 60
+
+  # The orphan sweep (director, lead 11-14): a realized contact still 'defined' after its window
+  # ended (plus a grace, so the in-window retry and its LOS edge aren't raced), or a hand start
+  # still 'defined' an hour after it was realized, will never start. It closes as :stopped with
+  # not_started {at, reason}, and a settlement that a replay never picks (no runtime ever ran, and
+  # inspected_at is set: ContactSettlement.uninspected). contact_start's missed item, keyed on
+  # start_failure, stays until marked seen.
+  defp close_never_started(mission_id, reference_time) do
+    now = DateTime.utc_now()
+
+    reference_time
+    |> DateTime.add(-@window_grace_s, :second)
+    |> ContactStore.never_started(
+      DateTime.add(reference_time, -@hand_start_s, :second),
+      mission_id
+    )
+    |> Enum.each(fn {contact, reason} -> close_never_started_contact(contact, reason, now) end)
+
+    :ok
+  rescue
+    exception ->
+      Logger.warning(
+        "never-started sweep failed for #{mission_id}: #{Exception.message(exception)}"
+      )
+
+      :ok
+  end
+
+  defp close_never_started_contact(%RealizedContact{} = contact, reason, now) do
+    at = DateTime.to_iso8601(now)
+
+    settlement =
+      contact.metadata
+      |> Map.get("settlement", %{})
+      |> Map.merge(%{
+        "state" => "settled",
+        "settled_at" => at,
+        "runtime" => "absent",
+        "inspected_at" => at
+      })
+
+    case ContactStore.update_realized_lifecycle(contact, :stopped, %{
+           "not_started" => %{"at" => at, "reason" => reason},
+           "settlement" => settlement
+         }) do
+      {:ok, _stopped} ->
+        Logger.info(
+          "closed never-started contact #{contact.realized_contact_id} " <>
+            "(#{contact.mission_id}, #{reason})"
+        )
+
+      {:error, error} ->
+        Logger.warning(
+          "could not close never-started contact #{contact.realized_contact_id}: #{inspect(error)}"
+        )
+    end
+  end
+
+  # DECISIONS #71 sweep: an ended contact with no settler gets one (idempotent), so a failed
+  # handoff or a lost settler is retried rather than leaving its runtime running.
+  defp settle_realized_for_reconcile(%RealizedContact{} = realized_contact) do
+    %{mission_id: mission_id, realized_contact_id: id} = realized_contact
+
+    if ContactSettler.settling?(mission_id, id) do
+      :skip
+    else
+      case ContactSettler.settle(realized_contact) do
+        :ok ->
+          {:ok, id}
+
+        {:error, reason} ->
+          {:error, reconcile_error(:realized_contact_settlement, realized_contact, reason)}
+      end
+    end
+  end
+
+  # #71 follow-up: a settled contact's journal stream leaves the disk after its retention, one
+  # per tick, never while a replay runs (JournalReclaim). It must never break the reconcile.
+  defp reclaim_journals(nil, _reference_time), do: :ok
+
+  defp reclaim_journals(mission_id, reference_time) do
+    if not ContactSettler.replaying?(mission_id),
+      do: JournalReclaim.run(mission_id, Enum.max([reference_time, DateTime.utc_now()], DateTime))
+
+    :ok
+  rescue
+    exception ->
+      Logger.warning("journal reclaim failed for #{mission_id}: #{Exception.message(exception)}")
+      :ok
+  end
+
+  # #71 follow-up: one replay per mission at a time, so a backlog of ended contacts drains in
+  # turn and doesn't swamp the TSDB as it comes back.
+  defp replay_candidates(nil, _reference_time), do: []
+
+  defp replay_candidates(mission_id, reference_time) do
+    if ContactSettler.replaying?(mission_id) do
+      []
+    else
+      mission_id
+      |> ContactSettlement.next_replay(
+        Runtime.journaled_realized_contact_ids(mission_id),
+        running_realized_contact_ids(mission_id),
+        Enum.max([reference_time, DateTime.utc_now()], DateTime)
+      )
+      |> List.wrap()
+    end
+  end
+
+  defp replay_realized_for_reconcile(%RealizedContact{} = realized_contact) do
+    case ContactSettler.replay(realized_contact) do
+      :ok ->
+        {:ok, realized_contact.realized_contact_id}
+
+      {:error, :replay_running} ->
+        :skip
+
+      {:error, reason} ->
+        {:error, reconcile_error(:realized_contact_replay, realized_contact, reason)}
+    end
+  end
+
+  defp running_realized_contact_ids(nil), do: []
+
+  defp running_realized_contact_ids(mission_id),
+    do: Runtime.running_realized_contact_ids(mission_id)
 
   defp collect_reconcile_results(contacts, action) do
     Enum.reduce(contacts, {[], []}, fn contact, {ids, errors} ->
@@ -232,12 +405,15 @@ defmodule Cadence.Contacts.ContactLifecycle do
            metadata: %{scheduler_realized?: true}
          ) do
       {:ok, %RealizedContact{} = realized_contact} ->
+        _ = RealizationFailure.realized(scheduled_contact, reference_time)
         {:ok, realized_contact.realized_contact_id}
 
       {:error, :scheduled_contact_already_realized} ->
         :skip
 
+      # U45 (lead 11-17, A): never silent. Recorded on the scheduled contact for contact_start.
       {:error, reason} ->
+        _ = RealizationFailure.after_error(scheduled_contact, reason, reference_time)
         {:error, reconcile_error(:scheduled_contact_realization, scheduled_contact, reason)}
     end
   end
@@ -267,7 +443,8 @@ defmodule Cadence.Contacts.ContactLifecycle do
     else
       case start_runtime_and_mark_active(realized_contact, %{
              reconciled_at: reference_time,
-             started_at: reference_time
+             started_at: reference_time,
+             started_by: @scheduler
            }) do
         {:ok, _pid} ->
           {:ok, realized_contact.realized_contact_id}
@@ -289,7 +466,8 @@ defmodule Cadence.Contacts.ContactLifecycle do
          {:ok, _pid} <-
            start_runtime_and_mark_active(persisted_realized_contact, %{
              activated_from_schedule: true,
-             started_at: transition_time
+             started_at: transition_time,
+             started_by: @scheduler
            }),
          {:ok, %RealizedContact{} = active_realized_contact} <-
            ContactStore.fetch_realized(
@@ -361,27 +539,51 @@ defmodule Cadence.Contacts.ContactLifecycle do
   defp start_runtime_and_mark_active(%RealizedContact{} = realized_contact, metadata_patch) do
     with {:ok, %RealizedContact{} = persisted_realized_contact} <-
            ensure_persisted_realized(realized_contact),
-         {:ok, pid} <- Runtime.start_realized_contact(persisted_realized_contact),
+         {:ok, pid} <- start_runtime(persisted_realized_contact),
          {:ok, _updated_realized_contact} <-
            ContactStore.update_realized_lifecycle(
              persisted_realized_contact,
              :active,
-             metadata_patch
+             persisted_realized_contact
+             |> start_patch(metadata_patch)
+             |> Map.merge(
+               ContactStartFailure.started(persisted_realized_contact, DateTime.utc_now())
+             )
            ) do
+      :ok = ContactStartFailure.announce_started(persisted_realized_contact)
       {:ok, pid}
     end
   end
 
+  # A contact already active keeps who started it (a release reaching a running pass isn't a start).
+  defp start_patch(%RealizedContact{lifecycle_state: :active}, patch),
+    do: Map.delete(patch, :started_by)
+
+  defp start_patch(%RealizedContact{}, %{started_by: nil} = patch),
+    do: Map.delete(patch, :started_by)
+
+  defp start_patch(%RealizedContact{}, patch), do: patch
+
+  # ux U45: a failed start is kept on the contact, so the reconcile retries it and Now shows it.
+  defp start_runtime(%RealizedContact{} = realized_contact) do
+    case Runtime.start_realized_contact(realized_contact) do
+      {:ok, pid} ->
+        {:ok, pid}
+
+      {:error, reason} ->
+        _recorded = ContactStartFailure.record(realized_contact, reason, DateTime.utc_now())
+        {:error, reason}
+    end
+  end
+
+  # DECISIONS #71: ending a contact records the end and hands its runtime to a settler; it never
+  # waits for the runtime to drain (a TSDB outage would hold every caller, the scheduler too).
   defp stop_realized_transition(%RealizedContact{} = realized_contact, metadata_patch) do
     with {:ok, %RealizedContact{} = persisted_realized_contact} <-
            ensure_persisted_realized(realized_contact),
          {:ok, %RealizedContact{} = stopped_realized_contact} <-
            mark_realized_stopped(persisted_realized_contact, metadata_patch),
-         :ok <-
-           Runtime.stop_realized_contact_sync(
-             stopped_realized_contact.mission_id,
-             stopped_realized_contact.realized_contact_id
-           ) do
+         :ok <- ContactSettler.settle(stopped_realized_contact) do
       {:ok, stopped_realized_contact}
     end
   end
@@ -394,7 +596,11 @@ defmodule Cadence.Contacts.ContactLifecycle do
        do: {:ok, realized_contact}
 
   defp mark_realized_stopped(%RealizedContact{} = realized_contact, metadata_patch) do
-    ContactStore.update_realized_lifecycle(realized_contact, :stopped, metadata_patch)
+    ContactStore.update_realized_lifecycle(
+      realized_contact,
+      :stopped,
+      Map.merge(metadata_patch, ContactSettlement.settling(DateTime.utc_now()))
+    )
   end
 
   defp complete_realized(%RealizedContact{} = realized_contact, metadata_patch) do
@@ -404,13 +610,9 @@ defmodule Cadence.Contacts.ContactLifecycle do
            ContactStore.update_realized_lifecycle(
              persisted_realized_contact,
              :completed,
-             metadata_patch
+             Map.merge(metadata_patch, ContactSettlement.settling(DateTime.utc_now()))
            ),
-         :ok <-
-           Runtime.stop_realized_contact_sync(
-             completed_realized_contact.mission_id,
-             completed_realized_contact.realized_contact_id
-           ) do
+         :ok <- ContactSettler.settle(completed_realized_contact) do
       {:ok, completed_realized_contact}
     end
   end
@@ -590,6 +792,8 @@ defmodule Cadence.Contacts.ContactLifecycle do
       canceled_from_schedule_action: true
     }
     |> maybe_put_reason(opts)
+    # The caller's details (a provider's cause and reason, ux U56) are kept with the cancel.
+    |> Map.merge(Keyword.get(opts, :metadata, %{}))
   end
 
   defp realized_cancellation_metadata(
@@ -626,9 +830,11 @@ defmodule Cadence.Contacts.ContactLifecycle do
       action_kind: :scheduled_contact_canceled,
       reason: Keyword.get(opts, :reason),
       actor: Keyword.get(opts, :actor, %{}),
-      metadata: %{
-        canceled_during_execution?: not is_nil(scheduled_contact.realized_contact_id)
-      },
+      metadata:
+        Map.merge(
+          %{canceled_during_execution?: not is_nil(scheduled_contact.realized_contact_id)},
+          Keyword.get(opts, :metadata, %{})
+        ),
       occurred_at: transition_time
     })
   end

@@ -12,7 +12,7 @@ if config_env() != :test do
   config :cadence_simulator,
     provider_http: [
       enabled: enabled?,
-      ip: {0, 0, 0, 0},
+      ip: {127, 0, 0, 1},
       port: System.get_env("CADENCE_SIMULATOR_PORT", "4101") |> String.to_integer()
     ],
     provider_store: [

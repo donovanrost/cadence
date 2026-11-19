@@ -94,9 +94,9 @@ defmodule Cadence.Commanding.ReleaseStore do
   end
 
   @doc """
-  Records a release refused before anything was sent (SAFETY #38: the contact, path or gateway
-  doesn't belong to the request's target spacecraft): the attempt fails and its request and
-  queue entry close, so the lane moves on instead of holding an uncertain release.
+  Records a release the uplink refused before sending anything (#33, e.g. an alerted COP-1
+  FOP): the attempt fails and its request and queue entry close, so the lane moves on and
+  stop-on-failure sees the failure.
   """
   def mark_failed(queue, request, attempt, reason) do
     with_claim(queue, request, attempt, fn queue_row, request_row, row ->

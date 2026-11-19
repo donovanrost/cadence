@@ -11,13 +11,14 @@ defmodule CadenceWeb.HostPageLiveTest do
     other_organization = TestFixtures.persist_org!()
     other_mission = TestFixtures.persist_mission!(other_organization)
     conn = TestFixtures.member_conn(user)
-    {:ok, view, _html} = live(conn, "/missions/#{mission.mission_id}")
-    target = "/missions/#{other_mission.mission_id}"
+    # §11c B: the mission home redirects to the console, so the socket starts on a kept page.
+    {:ok, view, _html} = live(conn, "/missions/#{mission.mission_id}/ops")
+    target = "/missions/#{other_mission.mission_id}/ops"
 
-    assert {:error, {:redirect, %{to: "/missions"}}} =
+    assert {:error, {:redirect, %{to: "/console/" <> _}}} =
              render_hook(view, "host:context", %{"path" => target})
 
-    assert {:error, {:redirect, %{to: "/missions"}}} = live(conn, target)
+    assert {:error, {:redirect, %{to: "/console/" <> _}}} = live(conn, target)
   end
 
   test "requesting context within a mission updates the frontend surface and bounded query" do
@@ -26,11 +27,10 @@ defmodule CadenceWeb.HostPageLiveTest do
     TestFixtures.grant_membership!(user, organization)
     mission = TestFixtures.persist_mission!(organization)
     conn = TestFixtures.member_conn(user)
-    {:ok, view, _html} = live(conn, "/missions/#{mission.mission_id}/comms/transports")
+    {:ok, view, _html} = live(conn, "/missions/#{mission.mission_id}/ops/timeline")
 
     render_hook(view, "host:context", %{
-      "path" =>
-        "/missions/#{mission.mission_id}/comms/transports/transport-1?application_key=forged"
+      "path" => "/missions/#{mission.mission_id}/ops/explore?application_key=forged"
     })
 
     snapshot = LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]
@@ -43,22 +43,19 @@ defmodule CadenceWeb.HostPageLiveTest do
     {conn, organization, mission} = navigation_fixture()
     second = TestFixtures.persist_mission!(organization)
     spacecraft = TestFixtures.persist_spacecraft!(mission)
-    {:ok, view, _html} = live(conn, "/")
+    # §11c A: "/" left the host (it redirects to the console), so navigation starts in a mission.
+    {:ok, view, _html} = live(conn, "/missions/#{second.mission_id}/ops/explore")
     pid = view.pid
 
     for {path, _variant, mission_id} <- [
-          {"/missions", "sidebar", nil},
-          {"/missions/#{mission.mission_id}", "mission_sidebar", mission.mission_id},
-          {"/missions/#{mission.mission_id}/comms", "mission_sidebar", mission.mission_id},
-          {"/missions/#{mission.mission_id}/applications", "mission_sidebar", mission.mission_id},
-          {"/missions/#{mission.mission_id}/spacecraft", "mission_sidebar", mission.mission_id},
-          {"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications",
+          # §11c B: the mission's setup pages redirect to the console; these stay in the host.
+          {"/missions/#{mission.mission_id}/ops", "ops", mission.mission_id},
+          {"/missions/#{mission.mission_id}/ops/timeline", "ops", mission.mission_id},
+          {"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}",
            "mission_sidebar", mission.mission_id},
-          {"/missions/#{mission.mission_id}/ops/dashboards", "ops", mission.mission_id},
+          {"/missions/#{mission.mission_id}/ops/explore", "ops", mission.mission_id},
           {"/missions/#{mission.mission_id}/ops/activations", "ops", mission.mission_id},
-          {"/missions", "sidebar", nil},
-          {"/missions/#{second.mission_id}/ops/dashboards", "ops", second.mission_id},
-          {"/", "sidebar", nil}
+          {"/missions/#{second.mission_id}/ops/explore", "ops", second.mission_id}
         ] do
       render_hook(view, "host:context", %{"path" => path})
       shell = LiveVue.Test.get_vue(view, id: "application-shell")
@@ -72,59 +69,13 @@ defmodule CadenceWeb.HostPageLiveTest do
     assert has_element?(view, "#application-shell")
   end
 
-  test "management actions follow the current page and cannot run after leaving it" do
-    {conn, organization, mission} = navigation_fixture()
-    second = TestFixtures.persist_mission!(organization)
-    {:ok, view, _html} = live(conn, "/missions/#{mission.mission_id}/applications")
-    pid = view.pid
-    render_hook(view, "host:context", %{"path" => "/missions/#{mission.mission_id}/spacecraft"})
-    refute has_element?(view, "#mission-applications-page-component")
-
-    render_hook(view, "host:manage", %{
-      "event" => "install",
-      "key" => "limits",
-      "path" => "/missions/#{mission.mission_id}/spacecraft"
-    })
-
-    refute installation(mission, "limits")
-
-    render_hook(view, "host:context", %{"path" => "/missions/#{second.mission_id}/applications"})
-    assert LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]["presentation"]
-
-    render_hook(view, "host:manage", %{
-      "event" => "install",
-      "key" => "limits",
-      "path" => "/missions/#{second.mission_id}/applications"
-    })
-
-    assert installation(second, "limits")
-    refute installation(mission, "limits")
-    assert view.pid == pid
-  end
-
-  test "management actions recheck a revoked browser session" do
-    {conn, _organization, mission} = navigation_fixture()
-    {:ok, view, _html} = live(conn, "/missions/#{mission.mission_id}/applications")
-    :ok = Cadence.Auth.revoke_user_session(Plug.Conn.get_session(conn, :user_session_token))
-
-    render_hook(view, "host:manage", %{
-      "event" => "install",
-      "key" => "limits",
-      "path" => "/missions/#{mission.mission_id}/applications"
-    })
-
-    assert_redirect(view, "/sign-in")
-    refute installation(mission, "limits")
-  end
-
   test "context requests cannot bypass organization or platform administrator policies" do
-    {conn, _organization, _mission} = navigation_fixture()
+    {conn, _organization, mission} = navigation_fixture()
 
-    for target <- [
-          "/provider-accounts",
-          "/admin"
-        ] do
-      {:ok, view, _html} = live(conn, "/")
+    # L7 moved /admin and L13 /provider-accounts to the console; data-operations/manage keeps the
+    # organization-admin policy. §11c A: "/" redirects to the console, so start on the mission.
+    for target <- ["/missions/#{mission.mission_id}/ops/data-operations/manage"] do
+      {:ok, view, _html} = live(conn, "/missions/#{mission.mission_id}/ops")
 
       assert {:error, {:redirect, %{to: "/"}}} =
                render_hook(view, "host:context", %{"path" => target})
@@ -135,7 +86,7 @@ defmodule CadenceWeb.HostPageLiveTest do
     {conn, organization, mission} = navigation_fixture()
     other = TestFixtures.persist_mission!(organization)
     spacecraft = TestFixtures.persist_spacecraft!(other)
-    {:ok, view, _html} = live(conn, "/missions/#{mission.mission_id}")
+    {:ok, view, _html} = live(conn, "/missions/#{mission.mission_id}/ops")
     fallback = "/missions/#{mission.mission_id}/spacecraft"
 
     assert {:error, {:redirect, %{to: ^fallback}}} =
@@ -145,19 +96,20 @@ defmodule CadenceWeb.HostPageLiveTest do
   end
 
   test "revoked browser sessions cannot keep navigating on an existing socket" do
-    {conn, _organization, _mission} = navigation_fixture()
-    {:ok, view, _html} = live(conn, "/")
+    {conn, _organization, mission} = navigation_fixture()
+    path = "/missions/#{mission.mission_id}/ops"
+    {:ok, view, _html} = live(conn, path)
     :ok = Cadence.Auth.revoke_user_session(Plug.Conn.get_session(conn, :user_session_token))
 
     assert {:error, {:redirect, %{to: "/sign-in"}}} =
-             render_hook(view, "host:context", %{"path" => "/missions"})
+             render_hook(view, "host:context", %{"path" => path})
   end
 
   test "query parameters cannot replace authorized path resources" do
     {conn, organization, mission} = navigation_fixture()
     other = TestFixtures.persist_mission!(organization)
-    {:ok, view, _html} = live(conn, "/missions")
-    path = "/missions/#{mission.mission_id}?mission_id=#{other.mission_id}&host_policy=admin"
+    {:ok, view, _html} = live(conn, "/missions/#{other.mission_id}/ops")
+    path = "/missions/#{mission.mission_id}/ops?mission_id=#{other.mission_id}&host_policy=admin"
     render_hook(view, "host:context", %{"path" => path})
     snapshot = LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]
     assert snapshot["context"]["mission"]["mission_id"] == mission.mission_id
@@ -165,8 +117,8 @@ defmodule CadenceWeb.HostPageLiveTest do
   end
 
   test "invalid context targets leave the authorized snapshot unchanged" do
-    {conn, _organization, _mission} = navigation_fixture()
-    {:ok, view, _html} = live(conn, "/missions")
+    {conn, _organization, mission} = navigation_fixture()
+    {:ok, view, _html} = live(conn, "/missions/#{mission.mission_id}/ops")
     initial = LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]
 
     for path <- [
@@ -184,34 +136,11 @@ defmodule CadenceWeb.HostPageLiveTest do
     end
   end
 
-  test "a delayed management action is rejected after switching missions" do
-    {conn, organization, mission} = navigation_fixture()
-    second = TestFixtures.persist_mission!(organization)
-    {:ok, view, _html} = live(conn, "/missions/#{mission.mission_id}/applications")
-    render_hook(view, "host:context", %{"path" => "/missions/#{second.mission_id}/applications"})
-
-    render_hook(view, "host:manage", %{
-      "event" => "install",
-      "key" => "limits",
-      "path" => "/missions/#{mission.mission_id}/applications"
-    })
-
-    refute installation(mission, "limits")
-    refute installation(second, "limits")
-  end
-
   defp navigation_fixture do
     user = TestFixtures.persist_user!()
     organization = TestFixtures.persist_org!()
     TestFixtures.grant_membership!(user, organization)
     mission = TestFixtures.persist_mission!(organization)
     {TestFixtures.member_conn(user), organization, mission}
-  end
-
-  defp installation(mission, key) do
-    Cadence.Repo.get_by(Cadence.Applications.ApplicationInstallations.InstallationRow,
-      mission_id: mission.mission_id,
-      application_key: key
-    )
   end
 end

@@ -73,15 +73,6 @@ defmodule Cadence.Dashboards do
   defdelegate dashboard_lifecycle_status(summary), to: Lifecycle, as: :status
   defdelegate dashboard_version_action(summary, version), to: Lifecycle, as: :version_action
 
-  def dashboard_runtime_invalidation_decisions(snapshot_or_recent_events, opts \\ []),
-    do: Diagnostics.runtime_invalidation_decisions(snapshot_or_recent_events, opts)
-
-  def record_dashboard_runtime_invalidation_decision(event, decision, opts \\ []),
-    do: Diagnostics.record_runtime_invalidation_decision(event, decision, opts)
-
-  def durable_dashboard_runtime_invalidation_decisions(opts \\ []),
-    do: Diagnostics.durable_runtime_invalidation_decisions(opts)
-
   defdelegate persist_document(organization_id, document), to: Documents, as: :persist
 
   def update_document(organization_id, mission_id, dashboard_id, document, opts \\ []),

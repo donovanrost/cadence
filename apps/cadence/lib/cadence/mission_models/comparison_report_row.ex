@@ -30,7 +30,12 @@ defmodule Cadence.MissionModels.ComparisonReportRow do
 
     %__MODULE__{}
     |> cast(attrs, Map.keys(attrs))
-    |> validate_required(Map.keys(attrs) -- [:baseline_revision_id])
+    # No baseline: a first comparison. No binding set: the mission has no configuration yet
+    # (both or neither, a database check).
+    |> validate_required(
+      Map.keys(attrs) -- [:baseline_revision_id, :binding_set_id, :binding_set_version]
+    )
+    |> check_constraint(:binding_set_id, name: :mission_model_comparison_reports_binding_set_pair)
     |> unique_constraint(
       [
         :organization_id,

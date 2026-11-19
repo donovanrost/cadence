@@ -6,6 +6,8 @@ defmodule CadenceWeb.ActivationApprovalsTest do
   alias Cadence.Catalog.MissionModel.Layer
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Management.Activations
+  alias Cadence.MissionModelApproval
+  alias Cadence.MissionModelCatalogNaming
   alias Cadence.MissionModels
   alias Cadence.Reads.ActivationApprovals
   alias Cadence.Runtime.Missions, as: RuntimeMissions
@@ -151,7 +153,8 @@ defmodule CadenceWeb.ActivationApprovalsTest do
     pending = request(context)
     {:ok, view, _} = live(context.conn, context.path)
     token = snapshot(view)["token"]
-    render_hook(view, "host:context", %{"path" => "/missions/#{context.mission.mission_id}"})
+    # §11c B redirects the mission home to the console; leave through the ops page instead.
+    render_hook(view, "host:context", %{"path" => "/missions/#{context.mission.mission_id}/ops"})
     render_hook(view, "host:context", %{"path" => context.path})
     refute snapshot(view)["token"] == token
     act(view, context.path, token, pending, "rejected")
@@ -169,7 +172,20 @@ defmodule CadenceWeb.ActivationApprovalsTest do
   end
 
   test "approved intent is reported separately when runtime application fails", context do
-    pending = request(context)
+    # An applicable request (approve refuses one that could never apply, Control.Activations
+    # preflight/2), whose apply then fails transiently AFTER the approval: the activation's own
+    # insert is interrupted, as a lost connection would.
+    pending = request(context, model: true)
+
+    Cadence.Repo.query!("""
+    CREATE FUNCTION pg_temp.interrupt_apply() RETURNS trigger AS $$
+    BEGIN RAISE EXCEPTION 'connection lost (injected)'; END $$ LANGUAGE plpgsql
+    """)
+
+    Cadence.Repo.query!("""
+    CREATE TRIGGER interrupt_apply BEFORE INSERT ON mission_binding_set_activations
+    FOR EACH ROW EXECUTE FUNCTION pg_temp.interrupt_apply()
+    """)
 
     assert {:ok, %{"decision" => "approved", "outcome" => "application_needs_review"}} =
              ControlActivations.review(
@@ -236,12 +252,17 @@ defmodule CadenceWeb.ActivationApprovalsTest do
 
         {:ok, compilation} = MissionModels.compile_layers([layer])
 
+        MissionModelCatalogNaming.name!(
+          context.org.organization_id,
+          context.mission.mission_id,
+          compilation.revision.revision_id
+        )
+
         {:ok, revision} =
-          MissionModels.approve_revision(
+          MissionModelApproval.approve!(
             context.org.organization_id,
             context.mission.mission_id,
-            compilation.revision.revision_id,
-            %{"kind" => "test_fixture", "id" => "review"}
+            compilation.revision.revision_id
           )
 
         MissionModels.request_promotion(

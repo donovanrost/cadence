@@ -113,10 +113,6 @@ defmodule Cadence.Applications.RegistryTest do
     assert definition.installable_scopes == [:mission]
 
     assert Enum.map(definition.actions, & &1.action_id) == [
-             "create_provider",
-             "validate_provider",
-             "sync_provider",
-             "archive_provider",
              "validate",
              "save"
            ]
@@ -140,20 +136,8 @@ defmodule Cadence.Applications.RegistryTest do
               {:trusted, "cadence.comms.ground_stations"}},
              {"ground_station", %{query_id: "cadence.comms.ground_station", version: 1},
               {:trusted, "cadence.comms.ground_station"}},
-             {"provider_list", %{query_id: "cadence.comms.provider_list", version: 1},
-              {:trusted, "cadence.comms.provider_list"}},
-             {"provider_new", %{query_id: "cadence.comms.provider_new", version: 1},
-              {:trusted, "cadence.comms.provider_new"}},
-             {"provider_show", %{query_id: "cadence.comms.provider_show", version: 1},
-              {:trusted, "cadence.comms.provider_show"}},
-             {"transport_new", %{query_id: "cadence.comms.transport_new", version: 1},
-              {:trusted, "cadence.comms.transport_new"}},
              {"routing_new", %{query_id: "cadence.comms.routing_new", version: 1},
-              {:trusted, "cadence.comms.routing_new"}},
-             {"ground_station_new", %{query_id: "cadence.comms.ground_station_new", version: 1},
-              {:trusted, "cadence.comms.ground_station_new"}},
-             {"ground_station_edit", %{query_id: "cadence.comms.ground_station_edit", version: 1},
-              {:trusted, "cadence.comms.ground_station_edit"}}
+              {:trusted, "cadence.comms.routing_new"}}
            ]
 
     assert {:ok, transport} = Registry.fetch_surface(definition, :mission, "transport")
@@ -179,12 +163,9 @@ defmodule Cadence.Applications.RegistryTest do
              version: 1
            }
 
-    assert {:ok, provider_show} = Registry.fetch_surface(definition, :mission, "provider_show")
-
-    assert provider_show.subject_contract == %{
-             schema_id: "cadence.comms.provider.subject",
-             version: 1
-           }
+    # L12: the mission providers surfaces went to the console (setup.stations.providers).
+    assert {:error, :unknown_surface} =
+             Registry.fetch_surface(definition, :mission, "provider_show")
   end
 
   test "available definitions are safe choices for a spacecraft profile" do

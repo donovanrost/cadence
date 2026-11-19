@@ -11,5 +11,3 @@
 [data-phx-teleported-src] {
   display: contents;
 }
-
-@import "@cadence/dashboards-and-exploration/workspace.css";

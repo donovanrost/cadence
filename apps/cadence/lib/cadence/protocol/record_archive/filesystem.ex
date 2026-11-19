@@ -10,6 +10,8 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
 
   import Ecto.Query
 
+  require Logger
+
   alias Ecto.Multi
 
   alias Cadence.Ids
@@ -212,16 +214,44 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
     case repo.transaction(fn ->
            rows
            |> Enum.chunk_every(1_000)
-           |> Enum.each(fn chunk ->
+           |> Enum.reduce(0, fn chunk, inserted ->
              case persist_index_rows(repo, chunk, opts) do
-               :ok -> :ok
+               {:ok, count} -> inserted + count
                {:error, reason} -> repo.rollback(reason)
              end
            end)
          end) do
-      {:ok, :ok} -> :ok
+      {:ok, 0} -> drop_unreferenced_object(object_key, opts)
+      {:ok, _inserted} -> :ok
       {:error, reason} -> {:error, reason}
     end
+  end
+
+  # Every record was already archived (a replay of frames archived before a stop): no index row
+  # points at this segment, so its object would be duplicate bytes nobody can reach (#71 follow-up).
+  defp drop_unreferenced_object(object_key, opts) do
+    case Keyword.fetch(opts, :base_path) do
+      {:ok, base_path} ->
+        path = Path.join(base_path, object_key)
+
+        case File.rm(path) do
+          :ok ->
+            :ok
+
+          {:error, :enoent} ->
+            :ok
+
+          {:error, reason} ->
+            Logger.warning(
+              "could not remove unreferenced archive segment #{path}: #{inspect(reason)}"
+            )
+        end
+
+      :error ->
+        :ok
+    end
+
+    :ok
   end
 
   defp persist_index_rows(repo, rows, opts) do
@@ -235,16 +265,25 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
            conflict_target: [:record_kind, :record_id]
          ) do
       {count, _rows} when count == length(rows) ->
-        :ok
+        {:ok, count}
 
-      {_count, _rows} ->
-        if archived_record_ids?(rows, opts) do
-          :ok
-        else
-          {:error, {:protocol_archive_record_identity_conflict, Enum.map(rows, & &1.record_id)}}
+      {count, _rows} ->
+        # Name only the records that really conflict (DECISIONS #88 quarantines exactly those).
+        case conflicting_rows(rows, opts) do
+          [] ->
+            {:ok, count}
+
+          conflicts ->
+            {:error,
+             {:protocol_archive_record_identity_conflict, Enum.map(conflicts, & &1.record_id)}}
         end
     end
   end
+
+  @doc "The record id an entry is indexed under (what an identity conflict names)."
+  @spec entry_index_record_id(map(), keyword()) :: binary()
+  def entry_index_record_id(entry, opts \\ []),
+    do: index_record_id(Map.fetch!(entry, "record_id"), archive_backend(opts))
 
   @spec store_segment_object(binary(), [map()], keyword()) ::
           {:ok, binary(), non_neg_integer()} | {:error, term()}
@@ -629,42 +668,97 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
     |> Keyword.delete(:module)
   end
 
-  defp archived_record_ids?(rows, opts) do
+  # A record whose id is already indexed was archived before when it is the same record and its
+  # segment object is on disk.
+  #
+  # A transfer frame's id is its journal position (stream, offset, length), which pins its bytes,
+  # so it is the same frame when its decoded identity columns agree. Its entry's provenance can
+  # legitimately differ: a replay may group the same journal records into different evidence than
+  # the run that archived them (evidence_id, evidence_sha256, receipt_time, the batch's metadata).
+  # 11-14: 008's pass, interrupted mid-batch, replayed into a permanent conflict that stalled the
+  # mission's ingest. The columns are compared, not a hash, so rows indexed before this change
+  # (whose content_sha256 hashes the whole entry) match too.
+  #
+  # A packet's id already digests its evidence, so a re-batched replay gives it a new id rather
+  # than a conflict; packets keep the whole-entry content check.
+  @frame_identity_columns [
+    :mission_id,
+    :spacecraft_id,
+    :protocol_family,
+    :direction,
+    :scid,
+    :vcid,
+    :map_id,
+    :frame_seq
+  ]
+
+  # A packet's record id is its journal position and bytes (#71 follow-up), so a re-batched replay
+  # sends the same id with different evidence fields; like a frame, it matches on its columns.
+  @packet_identity_columns [
+    :mission_id,
+    :spacecraft_id,
+    :protocol_family,
+    :direction,
+    :apid,
+    :packet_kind
+  ]
+
+  defp conflicting_rows(rows, opts) do
     archive_backend = archive_backend(opts)
     repo = repo(opts)
 
-    expected_pairs =
-      rows
-      |> Enum.map(&{&1.record_kind, &1.record_id, &1.content_sha256})
-      |> Enum.uniq()
+    expected = Map.new(rows, &{{&1.record_kind, &1.record_id}, &1})
+    record_kinds = expected |> Map.keys() |> Enum.map(&elem(&1, 0)) |> Enum.uniq()
+    record_ids = expected |> Map.keys() |> Enum.map(&elem(&1, 1)) |> Enum.uniq()
 
-    expected_set = MapSet.new(expected_pairs)
-    record_kinds = expected_pairs |> Enum.map(&elem(&1, 0)) |> Enum.uniq()
-    record_ids = expected_pairs |> Enum.map(&elem(&1, 1)) |> Enum.uniq()
-
-    found_rows =
+    found =
       ProtocolArchiveRecordEntryRow
       |> where(
         [row],
         row.archive_backend == ^archive_backend and row.record_kind in ^record_kinds and
           row.record_id in ^record_ids
       )
-      |> select([row], {row.record_kind, row.record_id, row.content_sha256, row.object_key})
+      |> select(
+        [row],
+        map(
+          row,
+          ^Enum.uniq(
+            [:record_kind, :record_id, :content_sha256, :object_key] ++
+              @frame_identity_columns ++ @packet_identity_columns
+          )
+        )
+      )
       |> repo.all()
+      |> Map.new(&{{&1.record_kind, &1.record_id}, &1})
 
-    found_pairs =
-      found_rows
-      |> Enum.map(fn {kind, id, hash, _key} -> {kind, id, hash} end)
-      |> Enum.filter(&MapSet.member?(expected_set, &1))
-      |> MapSet.new()
+    expected
+    |> Enum.reject(fn {key, row} ->
+      case Map.fetch(found, key) do
+        {:ok, existing} -> same_record?(row, existing) and segment_present?(existing, opts)
+        :error -> false
+      end
+    end)
+    |> Enum.map(&elem(&1, 1))
+    |> Enum.sort_by(&{&1.record_kind, &1.record_id})
+  end
 
-    MapSet.equal?(found_pairs, expected_set) and
-      Enum.all?(found_rows, fn {_kind, _id, _hash, key} ->
-        case Keyword.fetch(opts, :base_path) do
-          {:ok, base_path} -> File.regular?(Path.join(base_path, key))
-          :error -> true
-        end
-      end)
+  defp same_record?(%{record_kind: @transfer_frame_record_kind} = row, existing),
+    do: Map.take(row, @frame_identity_columns) == Map.take(existing, @frame_identity_columns)
+
+  # A legacy row without a content hash still isn't evidence it holds this packet.
+  defp same_record?(%{record_kind: @packet_record_kind} = row, existing),
+    do:
+      is_binary(existing.content_sha256) and
+        Map.take(row, @packet_identity_columns) == Map.take(existing, @packet_identity_columns)
+
+  defp same_record?(row, existing),
+    do: is_binary(existing.content_sha256) and existing.content_sha256 == row.content_sha256
+
+  defp segment_present?(%{object_key: object_key}, opts) do
+    case Keyword.fetch(opts, :base_path) do
+      {:ok, base_path} -> File.regular?(Path.join(base_path, object_key))
+      :error -> true
+    end
   end
 
   defp content_hash(entry) do
@@ -713,4 +807,19 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
   end
 
   defp repo(opts), do: Keyword.get(opts, :repo, Repo)
+
+  @doc false
+  @spec received_frames(binary(), [binary()]) :: %{binary() => non_neg_integer()}
+  def received_frames(mission_id, realized_contact_ids) do
+    ProtocolArchiveRecordEntryRow
+    |> where(
+      [e],
+      e.mission_id == ^mission_id and e.realized_contact_id in ^realized_contact_ids and
+        e.record_kind == "transfer_frame_record"
+    )
+    |> group_by([e], e.realized_contact_id)
+    |> select([e], {e.realized_contact_id, count(e.record_id)})
+    |> Cadence.Repo.all()
+    |> Map.new()
+  end
 end

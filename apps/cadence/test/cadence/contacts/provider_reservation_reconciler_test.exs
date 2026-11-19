@@ -108,7 +108,7 @@ defmodule Cadence.Contacts.ProviderReservationReconcilerTest do
 
     assert {:ok, %{processed: 1, converged: 1, errors: 0}} =
              reconcile(context,
-               now: DateTime.add(DateTime.utc_now(), 1, :second),
+               now: next_poll(),
                describe_response: {:ok, response}
              )
 
@@ -137,7 +137,7 @@ defmodule Cadence.Contacts.ProviderReservationReconcilerTest do
 
     assert {:ok, _summary} =
              reconcile(context,
-               now: DateTime.add(DateTime.utc_now(), 1, :second),
+               now: next_poll(),
                describe_response: {:ok, provider_response(reservation, attrs, "completed")}
              )
 
@@ -161,7 +161,7 @@ defmodule Cadence.Contacts.ProviderReservationReconcilerTest do
 
     assert {:ok, _summary} =
              reconcile(context,
-               now: DateTime.add(DateTime.utc_now(), 1, :second),
+               now: next_poll(),
                describe_response: {:ok, provider_response(reservation, attrs, "failed")}
              )
 
@@ -210,6 +210,32 @@ defmodule Cadence.Contacts.ProviderReservationReconcilerTest do
                backoff_ms: 60_000,
                describe_response: {:error, :still_offline}
              )
+  end
+
+  # 007 tonight (director 11-14): a lost lock race (the row changed between read and write) was
+  # recorded as a lifecycle failure. It's retried next cycle, with nothing recorded.
+  test "a lock conflict while applying the answer is retried, never recorded as a failure",
+       context do
+    {reservation, attrs} = pending_reservation(context)
+    response = provider_response(reservation, attrs, "confirmed")
+
+    assert {:ok, %{processed: 1, errors: 1}} =
+             reconcile(context,
+               describe_response: {:ok, response},
+               apply_provider_status: fn _org, _mission, _id, _response ->
+                 {:error, :provider_reservation_changed}
+               end
+             )
+
+    {:ok, unchanged} =
+      ProviderReservations.fetch(
+        context.organization_id,
+        context.mission_id,
+        reservation.provider_reservation_id
+      )
+
+    assert unchanged.lifecycle_state == :pending
+    assert unchanged.last_error_document == %{}
   end
 
   test "describe preserves a durable configuration failure for an unapproved descriptor",
@@ -295,6 +321,81 @@ defmodule Cadence.Contacts.ProviderReservationReconcilerTest do
 
     assert confirmed.lifecycle_state == :confirmed
   end
+
+  describe "poll cadence (domain 11-15, api-ops' review)" do
+    test "the reconciler's own changed write schedules the band; a row not yet due isn't read",
+         context do
+      {reservation, attrs} = pending_reservation(context)
+      now = DateTime.utc_now()
+      confirmed = [describe_response: {:ok, provider_response(reservation, attrs, "confirmed")}]
+
+      assert {:ok, %{processed: 1, errors: 0}} = reconcile(context, [now: now] ++ confirmed)
+
+      # Confirmed now, AOS 5 min out: the 5 s band, not due-now (condition A).
+      assert next_due_at(reservation) == DateTime.add(now, 5, :second)
+
+      assert {:ok, %{processed: 0}} =
+               reconcile(context, [now: DateTime.add(now, 4, :second)] ++ confirmed)
+
+      assert {:ok, %{processed: 1}} =
+               reconcile(context, [now: DateTime.add(now, 5, :second)] ++ confirmed)
+    end
+
+    test "a provider error schedules the band, never due-now", context do
+      {reservation, _attrs} = pending_reservation(context)
+      now = DateTime.utc_now()
+
+      assert {:ok, %{processed: 1, errors: 1}} =
+               reconcile(context,
+                 now: now,
+                 describe_response: {:error, ProviderError.unavailable(%{"reason" => "offline"})}
+               )
+
+      assert next_due_at(reservation) == DateTime.add(now, 5, :second)
+    end
+
+    test "another writer's change makes it due now", context do
+      {reservation, attrs} = pending_reservation(context)
+      now = DateTime.utc_now()
+      assert {:ok, %{processed: 1}} = reconcile(context, now: now)
+      assert %DateTime{} = next_due_at(reservation)
+
+      {:ok, current} =
+        ProviderReservations.fetch(
+          context.organization_id,
+          context.mission_id,
+          reservation.provider_reservation_id
+        )
+
+      assert {:ok, _confirmed} =
+               ProviderReservations.apply_provider_status(
+                 context.organization_id,
+                 context.mission_id,
+                 current.provider_reservation_id,
+                 provider_response(current, attrs, "confirmed")
+               )
+
+      assert next_due_at(reservation) == nil
+
+      # The race (api-ops): a schedule from the struct read before that write doesn't overwrite
+      # its due-now.
+      ProviderReservations.schedule_next_poll(current, DateTime.utc_now())
+      assert next_due_at(reservation) == nil
+    end
+  end
+
+  defp next_due_at(reservation) do
+    Cadence.Repo.one(
+      from(row in Cadence.Control.Contacts.Store.ProviderReservationRow,
+        where: row.provider_reservation_id == ^reservation.provider_reservation_id,
+        select: row.next_due_at
+      )
+    )
+  end
+
+  # The next poll of a pass 5 min out: past its 5 s band (domain 11-15; a reconcile schedules the
+  # reservation's next read by its distance to the pass).
+  defp next_poll, do: DateTime.add(DateTime.utc_now(), 6, :second)
 
   defp reconcile(context, opts) do
     ProviderReservationReconciler.reconcile_due(

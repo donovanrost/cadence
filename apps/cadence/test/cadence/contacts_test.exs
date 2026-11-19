@@ -1,6 +1,8 @@
 defmodule Cadence.ContactsTest do
   use Cadence.RuntimeCase, async: false
 
+  @moduletag :ingest_journal_matrix
+
   alias Cadence.Contacts.{
     Path,
     PathTemplate,

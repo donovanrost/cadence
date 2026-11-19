@@ -57,7 +57,10 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
   @spec prepare_and_activate!(binary(), keyword()) :: map()
   def prepare_and_activate!(app_root, opts \\ []) when is_binary(app_root) do
     sandbox_owner = Keyword.fetch!(opts, :sandbox_owner)
-    ops_surface = Keyword.get(opts, :ops_console_surface, "dashboard_directory")
+    ops_surface = Keyword.get(opts, :ops_console_surface, "commands")
+    # The console federation smoke adds its test-only surface_fixture application (the caller
+    # enables Cadence.Applications.FixtureContributors first): two builds, N-1 and N, that differ.
+    surface_fixture? = Keyword.get(opts, :surface_fixture, false)
     temp_root = temporary_root!()
 
     try do
@@ -111,78 +114,93 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
           Path.join(temp_root, "release-build-spacecraft")
         )
 
+      fixture_packages =
+        if surface_fixture?,
+          do: surface_fixture_packages!(node, temp_root),
+          else: %{n_minus_1: [], n: []}
+
       packages = %{
-        n_minus_1: [
-          package!(
-            node,
-            "comms-n-minus-1",
-            comms_build,
-            comms_metadata(:n_minus_1),
-            temp_root
-          ),
-          package!(
-            node,
-            "telemetry-decom-n-minus-1",
-            telemetry_build,
-            telemetry_metadata(:n_minus_1),
-            temp_root
-          ),
-          package!(
-            node,
-            "mission-catalog-n-minus-1",
-            mission_catalog_build,
-            mission_catalog_metadata(:n_minus_1),
-            temp_root
-          ),
-          package!(
-            node,
-            "ops-console-n-minus-1",
-            ops_console_build,
-            ops_console_metadata(:n_minus_1, ops_surface),
-            temp_root
-          ),
-          package!(
-            node,
-            "organization-admin-n-minus-1",
-            organization_admin_build,
-            organization_admin_metadata(:n_minus_1),
-            temp_root
-          ),
-          package!(
-            node,
-            "spacecraft-n-minus-1",
-            spacecraft_build,
-            spacecraft_metadata(:n_minus_1),
-            temp_root
-          )
-        ],
-        n: [
-          package!(node, "comms-n", comms_build, comms_metadata(:n), temp_root),
-          package!(node, "telemetry-decom-n", telemetry_build, telemetry_metadata(:n), temp_root),
-          package!(
-            node,
-            "mission-catalog-n",
-            mission_catalog_build,
-            mission_catalog_metadata(:n),
-            temp_root
-          ),
-          package!(
-            node,
-            "ops-console-n",
-            ops_console_build,
-            ops_console_metadata(:n, ops_surface),
-            temp_root
-          ),
-          package!(
-            node,
-            "organization-admin-n",
-            organization_admin_build,
-            organization_admin_metadata(:n),
-            temp_root
-          ),
-          package!(node, "spacecraft-n", spacecraft_build, spacecraft_metadata(:n), temp_root)
-        ]
+        n_minus_1:
+          [
+            package!(
+              node,
+              "comms-n-minus-1",
+              comms_build,
+              comms_metadata(:n_minus_1),
+              temp_root
+            ),
+            package!(
+              node,
+              "telemetry-decom-n-minus-1",
+              telemetry_build,
+              telemetry_metadata(:n_minus_1),
+              temp_root
+            ),
+            package!(
+              node,
+              "mission-catalog-n-minus-1",
+              mission_catalog_build,
+              mission_catalog_metadata(:n_minus_1),
+              temp_root
+            ),
+            package!(
+              node,
+              "ops-console-n-minus-1",
+              ops_console_build,
+              ops_console_metadata(:n_minus_1, ops_surface),
+              temp_root
+            ),
+            package!(
+              node,
+              "organization-admin-n-minus-1",
+              organization_admin_build,
+              organization_admin_metadata(:n_minus_1),
+              temp_root
+            ),
+            package!(
+              node,
+              "spacecraft-n-minus-1",
+              spacecraft_build,
+              spacecraft_metadata(:n_minus_1),
+              temp_root
+            )
+          ] ++ fixture_packages.n_minus_1,
+        n:
+          [
+            package!(node, "comms-n", comms_build, comms_metadata(:n), temp_root),
+            package!(
+              node,
+              "telemetry-decom-n",
+              telemetry_build,
+              telemetry_metadata(:n),
+              temp_root
+            ),
+            package!(
+              node,
+              "mission-catalog-n",
+              mission_catalog_build,
+              mission_catalog_metadata(:n),
+              temp_root
+            ),
+            package!(
+              node,
+              "ops-console-n",
+              ops_console_build,
+              ops_console_metadata(:n, ops_surface),
+              temp_root
+            ),
+            package!(
+              node,
+              "organization-admin-n",
+              organization_admin_build,
+              organization_admin_metadata(:n),
+              temp_root
+            ),
+            package!(node, "spacecraft-n", spacecraft_build, spacecraft_metadata(:n), temp_root)
+          ] ++ fixture_packages.n
       }
+
+      application_count = length(packages.n_minus_1)
 
       admitted =
         Map.new(packages, fn {slot, slot_packages} ->
@@ -206,7 +224,7 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
 
       assert %{
                "data" => %{
-                 "identityCount" => 6,
+                 "identityCount" => ^application_count,
                  "outcome" => "initial",
                  "sequence" => 1,
                  "status" => "activated"
@@ -216,7 +234,7 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
       assert {:ok, %{source: :database, entries: entries}} =
                ApplicationReleaseRegistry.snapshot(now: @activation_now)
 
-      assert length(entries) == 6
+      assert length(entries) == application_count
       assert_registry_paths!(entries, admitted.n_minus_1)
 
       accepted_snapshot = ApplicationReleaseRegistry.snapshot(now: @activation_now)
@@ -325,10 +343,65 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
     read_package!(output_directory)
   end
 
+  # A release build is a function of the committed frontend tree and node, so a clean tree reuses
+  # an earlier run's checked build (six remotes take about a minute; ApplicationReleaseRegistryTest
+  # timed out under load). A dirty frontend tree always rebuilds.
   defp build_release!(node, package_name, publication_directory, output_directory) do
     assert File.dir?(publication_directory),
            "real federation publication output is missing: #{publication_directory}"
 
+    case release_cache_directory(node, package_name) do
+      nil ->
+        run_release_build!(node, package_name, output_directory)
+
+      cached ->
+        unless File.dir?(cached), do: populate_release_cache!(node, package_name, cached)
+        cached
+    end
+  end
+
+  defp release_cache_directory(node, package_name) do
+    git = fn args -> System.cmd("git", args, cd: @repo_root, stderr_to_stdout: true) end
+
+    with {tree, 0} <- git.(["rev-parse", "HEAD:frontend"]),
+         {"", 0} <- git.(["status", "--porcelain", "--", "frontend"]),
+         {version, 0} <- System.cmd(node, ["--version"], stderr_to_stdout: true) do
+      key =
+        :sha256
+        |> :crypto.hash([
+          @repo_root,
+          0,
+          String.trim(tree),
+          0,
+          String.trim(version),
+          0,
+          package_name
+        ])
+        |> Base.encode16(case: :lower)
+        |> binary_part(0, 32)
+
+      # Release builds must write outside the repository (the release config refuses otherwise);
+      # the key includes the checkout, so worktrees never share a build.
+      Path.join([System.tmp_dir!(), "cadence-federation-release-cache", key])
+    else
+      _dirty_or_unknown -> nil
+    end
+  end
+
+  # Build and check into a staging directory, then rename it into place, so a concurrent run
+  # never reads a half-written build.
+  defp populate_release_cache!(node, package_name, cached) do
+    staging = "#{cached}.#{System.unique_integer([:positive])}.tmp"
+    File.mkdir_p!(Path.dirname(cached))
+    run_release_build!(node, package_name, staging)
+
+    case File.rename(staging, cached) do
+      :ok -> :ok
+      {:error, _already_populated} -> File.rm_rf!(staging)
+    end
+  end
+
+  defp run_release_build!(node, package_name, output_directory) do
     corepack = System.find_executable("corepack") || raise "corepack executable is required"
 
     env = [{"CADENCE_RELEASE_OUTPUT_DIR", output_directory}]
@@ -585,8 +658,8 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
     metadata(
       "mission_catalog",
       "cadence.mission-catalog",
-      "mission_list",
-      "cadence.mission_catalog.mission_list",
+      "mission_overview",
+      "cadence.mission_catalog.mission_overview",
       [],
       "cadence_mission_catalog",
       "federation-browser-mission-catalog-#{slot_name(slot)}",
@@ -595,7 +668,7 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
   end
 
   defp ops_console_metadata(slot, surface)
-       when surface in ["dashboard_directory", "contact_schedule"] do
+       when surface in ["commands", "contact_schedule"] do
     metadata(
       "ops_console",
       "cadence.ops_console",
@@ -608,13 +681,15 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
     )
   end
 
+  # §11c removed organization_home; organization_admin keeps only the user-scoped
+  # notifications_bell, which is the release's surface (no page of it is visited).
   defp organization_admin_metadata(slot) do
     metadata(
       "organization_admin",
       "cadence.organization-admin",
-      "organization_home",
-      "cadence.organization.home",
-      [],
+      "notifications_bell",
+      "cadence.organization.notifications_bell",
+      ["mark_notification_read"],
       "cadence_organization_admin",
       "federation-browser-organization-admin-#{slot_name(slot)}",
       released_at(slot)
@@ -693,6 +768,63 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
       nil -> nil
       %{publication: publication} -> snapshot_release(publication)
     end
+  end
+
+  # surface_fixture (test-only, the console federation smoke): built twice with distinct labels, so
+  # N-1 and N differ in content, and signed with this fixture's TEST key (the packager runs the
+  # release output check itself). It has no production publication output: production publication
+  # refuses any reference to it (production-publication-output-check.mjs).
+  defp surface_fixture_packages!(node, temp_root) do
+    Map.new([:n_minus_1, :n], fn slot ->
+      build =
+        build_fixture_release!(
+          node,
+          "@cadence/surface-fixture-plugin",
+          Path.join(temp_root, "release-build-surface-fixture-#{slot_name(slot)}"),
+          slot_name(slot)
+        )
+
+      {slot,
+       [
+         package!(
+           node,
+           "surface-fixture-#{slot_name(slot)}",
+           build,
+           surface_fixture_metadata(slot),
+           temp_root
+         )
+       ]}
+    end)
+  end
+
+  defp build_fixture_release!(node, package_name, output_directory, label) do
+    corepack = System.find_executable("corepack") || raise "corepack executable is required"
+
+    assert {_output, 0} =
+             System.cmd(corepack, ["pnpm", "--filter", package_name, "build:release"],
+               cd: Path.join(@repo_root, "frontend"),
+               env: [
+                 {"PATH", Path.dirname(node) <> ":" <> System.get_env("PATH", "")},
+                 {"CADENCE_RELEASE_OUTPUT_DIR", output_directory},
+                 {"CADENCE_FIXTURE_RELEASE_LABEL", label}
+               ],
+               stderr_to_stdout: true
+             )
+
+    output_directory
+  end
+
+  defp surface_fixture_metadata(slot) do
+    metadata(
+      "surface_fixture",
+      "cadence.surface-fixture",
+      "mission_surface",
+      "cadence.surface_fixture.mission",
+      ["record_nonce"],
+      "cadence_surface_fixture",
+      "federation-browser-surface-fixture-#{slot_name(slot)}",
+      released_at(slot)
+    )
   end
 
   defp release_ids(admitted) do
@@ -848,7 +980,7 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
     assert {:ok, %{source: :database, entries: entries}} =
              ApplicationReleaseRegistry.snapshot(now: @activation_now)
 
-    assert length(entries) == 6
+    assert length(entries) == length(current)
     :ok
   end
 

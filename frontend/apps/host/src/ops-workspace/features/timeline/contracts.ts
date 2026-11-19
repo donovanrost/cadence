@@ -144,7 +144,3 @@ export function timelineHref(missionId: string, query: Partial<TimelineQuery>): 
   }
   return `/missions/${encodeURIComponent(missionId)}/ops/timeline${params.size ? "?" + params.toString() : ""}`;
 }
-export const dashboardHref = (missionId: string, dashboardId: string) => {
-  if (!identity(missionId) || !identity(dashboardId)) throw Error("Invalid dashboard identity");
-  return `/missions/${encodeURIComponent(missionId)}/ops/dashboards/${encodeURIComponent(dashboardId)}`;
-};

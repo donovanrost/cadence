@@ -2,12 +2,10 @@ defmodule Cadence.Administration.OrganizationInvitationsTest do
   use Cadence.DataCase, async: false
   alias Cadence.Accounts
   alias Cadence.Accounts.{OrganizationInvitationRow, User, UserRow}
-  alias Cadence.Administration.{OrganizationInvitations, ServiceIdentityIssuance}
-  alias Cadence.Auth
+  alias Cadence.Administration.OrganizationInvitations
   alias Cadence.Auth.Scope
   alias Cadence.Organizations
   alias Cadence.Organizations.Organization
-  alias Cadence.Reads.Administration.OrganizationDetail
   alias Cadence.Test.AdministrationInvitationDeliveryProbe
 
   setup do
@@ -42,9 +40,6 @@ defmodule Cadence.Administration.OrganizationInvitationsTest do
   end
 
   test "reviewed role and platform eligibility apply on acceptance, not before", c do
-    assert {:ok, read} = OrganizationInvitations.load(c.scope, c.org.organization_id)
-    assert read["submitted"] == nil
-
     assert {:ok, receipt} =
              OrganizationInvitations.create(
                c.scope,
@@ -124,54 +119,6 @@ defmodule Cadence.Administration.OrganizationInvitationsTest do
     end
 
     assert length(Accounts.list_pending_invitations(c.org.organization_id)) == 1
-  end
-
-  test "persisted producer documents reach the real components and their submitted effects", c do
-    assert {:ok, detail} = OrganizationDetail.load(c.scope, c.org.organization_id)
-    assert {:ok, invite} = OrganizationInvitations.load(c.scope, c.org.organization_id)
-
-    probe =
-      Path.expand(
-        "../../../../../frontend/apps/host/src/administration/features/organization-detail/producer-consumer-probe.mjs",
-        __DIR__
-      )
-
-    {output, code} =
-      System.cmd(
-        "node",
-        [
-          probe,
-          Jason.encode!(%{detail: detail, invite: invite, recipient_email: c.recipient.email})
-        ],
-        stderr_to_stdout: true
-      )
-
-    assert code == 0, output
-    [_, encoded] = Regex.run(~r/ADMIN_DETAIL_INPUT=([A-Za-z0-9+\/=]+)/, output)
-    [issue, invitation] = encoded |> Base.decode64!() |> Jason.decode!()
-    assert issue["event"] == "issue_service_identity"
-
-    assert {:ok, identity} =
-             ServiceIdentityIssuance.issue(c.scope, c.org.organization_id, issue["input"])
-
-    assert {:ok, authenticated} = Auth.authenticate_api_token(identity["api_token"])
-    assert authenticated.organization_id == c.org.organization_id
-    assert authenticated.service_identity.capabilities == [:organization_admin]
-    assert invitation["event"] == "invite"
-
-    assert {:ok, receipt} =
-             OrganizationInvitations.create(c.scope, c.org.organization_id, invitation["input"])
-
-    assert receipt["delivery"] == "submitted"
-    assert {:ok, _} = Accounts.accept_invitation_as_user(c.recipient.user_id, receipt["id"])
-
-    assert {:ok, member} =
-             Accounts.fetch_user_membership(c.recipient.user_id, c.org.organization_id)
-
-    assert member.role == :organization_admin
-    assert {:ok, accepted} = Accounts.fetch_user(c.recipient.user_id)
-    assert Scope.platform_admin_eligible?(Scope.new(%{user: accepted}))
-    refute Scope.admin_mode?(Scope.new(%{user: accepted}))
   end
 
   defp input(email),

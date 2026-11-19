@@ -8,6 +8,7 @@ defmodule CadenceSimulator.Provider.Opportunities do
     OrbitReadiness,
     RouteProfiles,
     ServiceProfiles,
+    StationOutages,
     Store
   }
 
@@ -167,7 +168,7 @@ defmodule CadenceSimulator.Provider.Opportunities do
       "starts_at" => opportunity["starts_at"],
       "ends_at" => opportunity["ends_at"],
       "expires_at" => expires_at,
-      "availability" => "available",
+      "availability" => availability(run, opportunity),
       "synthetic" => true,
       "extensions" => %{
         "model" => opportunity["model"],
@@ -175,6 +176,16 @@ defmodule CadenceSimulator.Provider.Opportunities do
         "route_profile_ref" => route_profile && route_profile["id"]
       }
     }
+  end
+
+  defp availability(run, opportunity) do
+    {:ok, starts_at, _} = DateTime.from_iso8601(opportunity["starts_at"])
+    {:ok, ends_at, _} = DateTime.from_iso8601(opportunity["ends_at"])
+    faults = run["scenario_snapshot"]["fault_profile"]
+
+    if StationOutages.blocked?(faults, opportunity["ground_station_id"], starts_at, ends_at),
+      do: "unavailable",
+      else: "available"
   end
 
   defp public(opportunity), do: Map.drop(opportunity, ["run_id"])

@@ -61,11 +61,55 @@ defmodule Cadence.SpacecraftTypeStore do
     end
   end
 
+  @version_memo :cadence_spacecraft_type_version_memo
+
+  @doc """
+  Runs `fun` with profile versions memoized in this process (a configuration pipeline run). A
+  profile version is immutable once written, so each one is read once however many spacecraft
+  ask for it: a 499-spacecraft profile move read the same version six times per spacecraft
+  (director 11-14, step 4's preview). Only found versions are kept; the memo ends with `fun`.
+  """
+  @spec with_version_memo((-> result)) :: result when result: term()
+  def with_version_memo(fun) when is_function(fun, 0) do
+    case Process.get(@version_memo) do
+      nil ->
+        Process.put(@version_memo, %{})
+
+        try do
+          fun.()
+        after
+          Process.delete(@version_memo)
+        end
+
+      _already_memoizing ->
+        fun.()
+    end
+  end
+
   @spec fetch_spacecraft_type_version(binary(), binary(), binary(), pos_integer()) ::
           {:ok, SpacecraftType.t()} | {:error, term()}
   def fetch_spacecraft_type_version(organization_id, mission_id, spacecraft_type_id, version)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(spacecraft_type_id) and is_integer(version) and version > 0 do
+    key = {organization_id, mission_id, spacecraft_type_id, version}
+
+    case Process.get(@version_memo) do
+      %{^key => profile} ->
+        {:ok, profile}
+
+      memo when is_map(memo) ->
+        with {:ok, profile} = found <-
+               read_version(organization_id, mission_id, spacecraft_type_id, version) do
+          Process.put(@version_memo, Map.put(memo, key, profile))
+          found
+        end
+
+      nil ->
+        read_version(organization_id, mission_id, spacecraft_type_id, version)
+    end
+  end
+
+  defp read_version(organization_id, mission_id, spacecraft_type_id, version) do
     case Repo.get_by(SpacecraftTypeRow,
            organization_id: organization_id,
            mission_id: mission_id,
@@ -161,6 +205,24 @@ defmodule Cadence.SpacecraftTypeStore do
     |> order_by([row], desc: row.version)
     |> Repo.all()
     |> Enum.map(&SpacecraftTypeRow.to_domain/1)
+  end
+
+  @doc "Version history of one profile, newest first: `[%{version, created_at}]`."
+  @spec list_spacecraft_type_version_history(binary(), binary(), binary()) :: [
+          %{version: pos_integer(), created_at: DateTime.t()}
+        ]
+  def list_spacecraft_type_version_history(organization_id, mission_id, spacecraft_type_id)
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(spacecraft_type_id) do
+    SpacecraftTypeRow
+    |> where(
+      [row],
+      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+        row.spacecraft_type_id == ^spacecraft_type_id
+    )
+    |> order_by([row], desc: row.version)
+    |> select([row], %{version: row.version, created_at: row.inserted_at})
+    |> Repo.all()
   end
 
   defp latest_versioned_row(organization_id, mission_id, spacecraft_type_id) do

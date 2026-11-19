@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Add spacecraft · Setup · Cadence</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Saira:wght@400;500;600&amp;family=Saira+Condensed:wght@500;600;700&amp;family=Azeret+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#05070A}
+a{color:#E6EDF3}a:hover{color:#FFFFFF}
+.m{font-family:'Azeret Mono',ui-monospace,monospace}
+.n{font-family:Saira,sans-serif;font-variant-numeric:tabular-nums}
+.lbl{font:600 12px 'Saira Condensed',sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#7D8A99;margin:0}
+.pnl{background:#0A0E13;border:1px solid #1C2530}
+.ph{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid #1C2530;flex-wrap:wrap}
+.ph .t{font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#C9D3DD;margin:0}
+.ph .i{font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.ph .r{margin-left:auto;font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.tag{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:24px;min-width:64px;box-sizing:border-box;padding:0 9px;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;border:1px solid currentColor;white-space:nowrap}
+.b{height:36px;padding:0 14px;border:1px solid #2A3644;background:#0F141B;color:#E6EDF3;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;text-decoration:none}
+.b.pri{background:#E6EDF3;color:#05070A;border-color:#E6EDF3}
+.s-cau{width:10px;height:9px;background:#FFB020;clip-path:polygon(50% 0,100% 100%,0 100%);flex:none}
+.s-off{width:8px;height:8px;flex:none;box-sizing:border-box;border:1px dashed #9DAAB8}
+.step{display:flex;align-items:center;gap:10px;height:44px;padding:0 18px;border-right:1px solid #1C2530;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#7D8A99}
+.chip{display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 10px;border:1px solid #2A3644;background:#0F141B;font:500 12px 'Azeret Mono',monospace}
+.chip span{color:#7D8A99}
+.seg{height:34px;padding:0 14px;border:0;background:transparent;color:#9DAAB8;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;cursor:pointer}
+.seg.on{background:#E6EDF3;color:#05070A}
+.poll{display:grid;grid-template-columns:150px minmax(0,1fr) auto;gap:16px;align-items:center;padding:11px 16px;border-top:1px solid #1C2530}
+.th{font:600 12px 'Saira Condensed',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#7D8A99;text-align:left;padding:10px 12px;border-bottom:1px solid #1C2530;white-space:nowrap}
+.td{padding:9px 12px;border-bottom:1px solid #141B24;font-size:13px;white-space:nowrap}
+</style>
+</helmet>
+<div style="font-family: 'Saira', system-ui, sans-serif; color: #E6EDF3; min-height: 100vh; display: flex; flex-direction: column; background-color: #05070A; background-image: linear-gradient(rgba(230,237,243,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(230,237,243,.025) 1px, transparent 1px); background-size: 40px 40px">
+
+<header style="display: flex; flex-wrap: wrap; align-items: stretch; border-bottom: 1px solid #1C2530; background: #070A0E; min-height: 56px">
+<a href="Setup.dc.html" aria-label="Close and return to setup" style="width: 56px; display: flex; align-items: center; justify-content: center; border-right: 1px solid #1C2530"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></a>
+<div style="display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 0 20px; border-right: 1px solid #1C2530"><span class="m" style="font-size: 11px; color: #7D8A99">SETUP · EARENDIL · SPACECRAFT</span><span style="font: 700 20px 'Saira Condensed'; letter-spacing: .14em; text-transform: uppercase">Add spacecraft</span></div>
+<ol aria-label="Steps" style="list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap">
+<li class="step"><span class="m" style="color: #2FD08A">✓</span>01 Source</li>
+<li class="step"><span class="m" style="color: #2FD08A">✓</span>02 Identity</li>
+<li class="step"><span class="m" style="color: #2FD08A">✓</span>03 Orbit &amp; routing</li>
+<li class="step" aria-current="step" style="color: #E6EDF3; background: #0F141B; box-shadow: inset 0 -2px 0 #E6EDF3"><span class="m">●</span>04 Review</li>
+</ol>
+<div class="m" style="margin-left: auto; display: flex; align-items: center; gap: 22px; padding: 0 20px; font-size: 13px"><span><span style="color: #7D8A99">CONFIG</span> r5 → r6 draft</span></div>
+</header>
+
+<main style="flex: 1; box-sizing: border-box; padding: 20px 24px 28px; max-width: 1400px; width: 100%; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start">
+
+<div style="flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+
+<section class="pnl">
+<div class="ph"><span class="i">A1</span><h2 class="t">Source</h2><a href="#" class="r" style="color: #E6EDF3; text-decoration: none">CHANGE</a></div>
+<div style="padding: 14px 16px; display: flex; flex-wrap: wrap; gap: 16px; align-items: center">
+<div role="radiogroup" aria-label="Source type" style="display: flex; border: 1px solid #2A3644"><button class="seg" role="radio" aria-checked="false">From a profile</button><button class="seg on" role="radio" aria-checked="true">From a manifest</button></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span class="m" style="font-size: 14px">manifest_block2_batch1.csv</span><span style="font-size: 12px; color: #9DAAB8">50 rows · 6 columns mapped · uploaded by Donovan R.</span></div>
+<div style="display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto"><span class="chip"><span>name</span>Name</span><span class="chip"><span>scid</span>SCID</span><span class="chip"><span>norad</span>NORAD id</span><span class="chip"><span>plane</span>Plane</span><span class="chip"><span>slot</span>Slot</span><span class="chip"><span>profile</span>Profile</span></div>
+</div>
+</section>
+
+<section class="pnl">
+<div class="ph"><span class="i">A2</span><h2 class="t">Checks</h2><span class="r">4 PASSED · 1 NOTE</span></div>
+<div class="poll" style="border-top: 0"><span class="lbl" style="color: #C9D3DD">Identity</span><span style="font-size: 14px">50 names and SCIDs 501–550 are unique in this mission</span><span class="tag" style="color: #4FDB9E">Pass</span></div>
+<div class="poll"><span class="lbl" style="color: #C9D3DD">Profile</span><span style="font-size: 14px">All rows map to <b style="font-weight: 600">Earendil Block 2</b>, catalog v14, framing and limits inherited</span><span class="tag" style="color: #4FDB9E">Pass</span></div>
+<div class="poll"><span class="lbl" style="color: #C9D3DD">Routing</span><span style="font-size: 14px">Rule "Block 2 · all stations" generates 300 routes, 6 per spacecraft</span><span class="tag" style="color: #4FDB9E">Pass</span></div>
+<div class="poll"><span class="lbl" style="color: #C9D3DD">Orbit</span><span style="font-size: 14px">Planes 11 and 12 are new and will appear on the constellation view</span><span class="tag" style="color: #4FDB9E">Pass</span></div>
+<div class="poll" style="background: rgba(255,176,32,.04)"><span class="lbl" style="color: #FFC24D">NORAD id</span><span style="font-size: 14px">2 rows have no NORAD id yet. Optional now, needed for pass prediction from TLEs.</span><span class="tag" style="color: #FFC24D">Note</span></div>
+</section>
+
+<section class="pnl">
+<div class="ph"><span class="i">A3</span><h2 class="t">Batch preview</h2><span class="r">50 NEW · SHOWING 8</span></div>
+<div style="overflow-x: auto">
+<table style="width: 100%; border-collapse: collapse; min-width: 720px">
+<thead><tr><th class="th">Name</th><th class="th">SCID</th><th class="th">NORAD</th><th class="th">Plane · slot</th><th class="th">Profile</th><th class="th">Routes</th><th class="th">First state</th></tr></thead>
+<tbody>
+<sc-for list="{{rows}}" as="r" hint-placeholder-count="8">
+<tr style="background: {{r.bg}}">
+<td class="td" style="font-weight: 600">{{r.name}}</td>
+<td class="td m">{{r.scid}}</td>
+<td class="td m" style="color: {{r.nc}}">{{r.norad}}</td>
+<td class="td m">{{r.orbit}}</td>
+<td class="td">Earendil Block 2</td>
+<td class="td m">6</td>
+<td class="td"><span style="display: inline-flex; gap: 8px; align-items: center; color: #9DAAB8"><span class="s-off"></span>Awaiting first AOS</span></td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</div>
+<div style="padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px"><span style="font-size: 13px; color: #9DAAB8">42 more rows · EARENDIL-509 to EARENDIL-550</span><button class="b">Show all 50</button></div>
+</section>
+</div>
+
+<aside class="pnl" style="flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column">
+<div class="ph"><span class="i">A4</span><h2 class="t">What happens</h2></div>
+<div style="padding: 18px 16px; display: flex; flex-direction: column; gap: 16px">
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: #1C2530; border: 1px solid #1C2530">
+<div style="background: #0A0E13; padding: 10px; display: flex; flex-direction: column; gap: 4px"><span class="lbl">New SC</span><span class="n" style="font-size: 26px">50</span></div>
+<div style="background: #0A0E13; padding: 10px; display: flex; flex-direction: column; gap: 4px"><span class="lbl">Routes</span><span class="n" style="font-size: 26px">300</span></div>
+<div style="background: #0A0E13; padding: 10px; display: flex; flex-direction: column; gap: 4px"><span class="lbl">Fleet</span><span class="n" style="font-size: 26px">550</span></div>
+</div>
+<ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 14px; color: #C9D3DD">
+<li style="display: grid; grid-template-columns: 24px 1fr; gap: 6px"><span class="m" style="font-size: 11px; color: #7D8A99; padding-top: 3px">01</span><span>The batch joins the staged changes. Nothing is live yet.</span></li>
+<li style="display: grid; grid-template-columns: 24px 1fr; gap: 6px"><span class="m" style="font-size: 11px; color: #7D8A99; padding-top: 3px">02</span><span>Applying makes revision r6 and creates the spacecraft and routes together.</span></li>
+<li style="display: grid; grid-template-columns: 24px 1fr; gap: 6px"><span class="m" style="font-size: 11px; color: #7D8A99; padding-top: 3px">03</span><span>Each one shows as "awaiting first AOS" on the console until it's heard, never as nominal.</span></li>
+</ol>
+<div style="display: flex; flex-direction: column; gap: 8px; margin-top: 6px">
+<button class="b pri" style="height: 46px; font-size: 15px">Stage 50 spacecraft</button>
+<button class="b">Back to orbit &amp; routing</button>
+<a href="#" style="font-size: 13px; color: #9DAAB8; text-align: center">Download manifest template (.csv)</a>
+</div>
+</div>
+</aside>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1160}}'>
+class Component extends DCLogic {
+renderVals() {
+const rows = [];
+for (let i = 0; i < 8; i++) {
+const n = 501 + i;
+const missing = i === 3 || i === 6;
+rows.push({ name: 'EARENDIL-' + n, scid: String(n), norad: missing ? 'not set' : String(61240 + i), nc: missing ? '#FFC24D' : '#E6EDF3', orbit: 'P' + (i < 4 ? '11' : '12') + ' · ' + String((i % 4) * 2 + 1).padStart(2, '0'), bg: missing ? 'rgba(255,176,32,.04)' : 'transparent' });
+}
+return { rows: rows };
+}
+}
+</script>
+</body>
+</html>

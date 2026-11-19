@@ -90,6 +90,15 @@ defmodule Cadence.Applications.OpsConsole.Actions.HistoricalWorkflowRequest do
     end
   end
 
+  # Accepts platform-shared sources and bindings (organization_id / mission_id nil) on purpose:
+  # here they are only the READ input of a backfill, and both sides stay partitioned by the
+  # scope (director L2, traced 2026-11-13). The job's attrs carry scope.organization_id and the
+  # mission (attrs/8 below). The read filters on them: HistoricalSourceSamples.history_opts passes
+  # organization_id, and HistoryStore.sample_history_result/4 takes the mission, so
+  # Storage.QuestDB.ObservationReader filters "mission_id = ?" (observation_reader.ex:144) and
+  # "organization_id = ?" (:152), and HistoryStore.Postgres passes both to
+  # SampleRecords.list_samples (postgres.ex:30-32). The write uses the same attrs:
+  # WorkflowJobs.write_opts/2 sets organization_id from them for Storage.persist_samples/3.
   defp scoped?(resource, scope, mission),
     do:
       resource.organization_id in [nil, scope.organization_id] and

@@ -8,7 +8,13 @@ defmodule Cadence.Contacts.ProviderReservationReconciler do
 
   use GenServer
 
-  alias Cadence.Contacts.{ProviderClients.Registry, ProviderReservations}
+  alias Cadence.Contacts.{
+    ProviderClients.Registry,
+    ProviderReservation,
+    ProviderReservations,
+    ReservationContactRepair
+  }
+
   alias Cadence.GroundNetworks
 
   alias Cadence.GroundNetworks.{
@@ -45,13 +51,14 @@ defmodule Cadence.Contacts.ProviderReservationReconciler do
         organization_id,
         mission_id: Keyword.get(opts, :mission_id),
         due_before: due_before,
+        now: now,
         limit: Keyword.get(opts, :limit, 100)
       )
 
     results =
       reservations
       |> Task.async_stream(
-        &reconcile_one(&1, opts),
+        &reconcile_one(&1, Keyword.put(opts, :poll_now, now)),
         max_concurrency: Keyword.get(opts, :max_concurrency, @default_max_concurrency),
         ordered: false,
         timeout: :infinity
@@ -60,6 +67,14 @@ defmodule Cadence.Contacts.ProviderReservationReconciler do
         {:ok, result} -> result
         {:exit, reason} -> {:error, {:reconciliation_task_exit, reason}}
       end)
+
+    # The re-check (api-ops): a lost reservation whose contact release failed after its
+    # transition committed isn't polled again, so each cycle releases any still open.
+    :ok =
+      ReservationContactRepair.sweep(organization_id,
+        mission_id: Keyword.get(opts, :mission_id),
+        now: now
+      )
 
     {:ok, summarize(results)}
   end
@@ -113,6 +128,34 @@ defmodule Cadence.Contacts.ProviderReservationReconciler do
           | {:error, Cadence.Contacts.ProviderReservation.t(), term()}
           | {:error, term()}
   def reconcile_reservation(reservation, opts \\ []) do
+    reservation
+    |> read_and_apply(opts)
+    |> schedule_next_poll(Keyword.get_lazy(opts, :poll_now, &DateTime.utc_now/0))
+  end
+
+  # The next read by the band of the reservation as this read left it (api-ops: after the answer,
+  # so a move into the 30 min window polls at 5 s from this poll; on an error the band too, never
+  # due-now, so a provider outage isn't a hot poll). A lost lock race leaves it to the other
+  # writer, which made it due now.
+  defp schedule_next_poll({:error, _reservation, :provider_reservation_changed} = result, _now),
+    do: result
+
+  defp schedule_next_poll(result, now) do
+    case result do
+      {:ok, %ProviderReservation{} = updated} ->
+        ProviderReservations.schedule_next_poll(updated, now)
+
+      {:error, %ProviderReservation{} = read, _reason} ->
+        ProviderReservations.schedule_next_poll(read, now)
+
+      _no_reservation ->
+        :ok
+    end
+
+    result
+  end
+
+  defp read_and_apply(reservation, opts) do
     with {:ok, provider} <-
            GroundNetworks.fetch_provider_version(
              reservation.organization_id,
@@ -125,7 +168,7 @@ defmodule Cadence.Contacts.ProviderReservationReconciler do
          {:ok, response} <- fetch_provider_state(client, context, reservation, call_opts),
          {:ok, response} <- reservation_result(response),
          {:ok, updated} <-
-           ProviderReservations.apply_provider_status(
+           apply_status(opts).(
              reservation.organization_id,
              reservation.mission_id,
              reservation.provider_reservation_id,
@@ -133,13 +176,26 @@ defmodule Cadence.Contacts.ProviderReservationReconciler do
            ) do
       {:ok, updated}
     else
+      # Tagged so a caller decides from THIS read, not from the row's stored state (api-ops
+      # 11-14): an earlier configuration failure stays on the row through a later transient error.
       {:error, {:provider_configuration_failure, failed_reservation, reason}} ->
-        {:error, failed_reservation, reason}
+        {:error, failed_reservation, {:provider_configuration_failure, reason}}
+
+      # The row changed between read and write (another writer won the lock): not a failure of
+      # the booking. Retried next cycle, nothing recorded (director 11-14: 007's reservation was
+      # failed by exactly this).
+      {:error, :provider_reservation_changed} ->
+        {:error, reservation, :provider_reservation_changed}
 
       {:error, reason} ->
         record_reconciliation_error(reservation, reason)
     end
   end
+
+  # Tests replace it to reproduce a lost lock race (007, director 11-14), which needs a second
+  # writer at an exact instant.
+  defp apply_status(opts),
+    do: Keyword.get(opts, :apply_provider_status, &ProviderReservations.apply_provider_status/4)
 
   defp fetch_provider_state(client, context, reservation, opts) do
     call_opts = provider_call_opts(opts)

@@ -7,7 +7,7 @@ defmodule Cadence.CommandingDispatcherTest do
 
   alias Cadence.Catalog.Artifact
   alias Cadence.Commanding.{CommandRequest, Dispatcher, DispatchSupervisor, ProcessNamespace}
-  alias Cadence.Contacts.{ContactStore, Path, RealizedContact, TransportBinding}
+  alias Cadence.Contacts.{ContactStore, Path, RealizedContact, ScheduledContact, TransportBinding}
   alias Cadence.Control.ContactFactConsumer
   alias Cadence.Platform.EventBus
   alias Cadence.Repo
@@ -354,7 +354,27 @@ defmodule Cadence.CommandingDispatcherTest do
     persisted_request
   end
 
+  # The uplink contact realizes a scheduled pass that is on now: the lane releases by itself only
+  # into a scheduled pass inside its window (0ab24ce0b, director 11-14); a hand-started contact
+  # takes a command only when an operator names it.
   defp persist_active_uplink_contact(event_bus, dispatcher_scope, source_endpoint_ref) do
+    paths = [
+      Path.new(%{
+        path_id: "uplink-path-dispatcher",
+        direction: :uplink,
+        selection_role: :selected,
+        source_endpoint_ref: source_endpoint_ref,
+        transport_bindings: [
+          TransportBinding.new(%{
+            transport_binding_id: "uplink-gateway-dispatcher",
+            family_key: :uplink_gateway,
+            target_scope: :path,
+            configuration: %{"service_name" => "gateway", "scid" => 0}
+          })
+        ]
+      })
+    ]
+
     realized_contact =
       RealizedContact.new(%{
         realized_contact_id:
@@ -362,31 +382,38 @@ defmodule Cadence.CommandingDispatcherTest do
             Integer.to_string(System.unique_integer([:positive])),
         organization_id: dispatcher_scope.organization_id,
         mission_id: dispatcher_scope.mission_id,
+        scheduled_contact_id: persist_pass_on_now(dispatcher_scope, source_endpoint_ref, paths),
         source_endpoint_refs: [source_endpoint_ref],
         clock_mode: :replay,
         initial_time: DateTime.from_unix!(1_700_500_000, :second),
-        paths: [
-          Path.new(%{
-            path_id: "uplink-path-dispatcher",
-            direction: :uplink,
-            selection_role: :selected,
-            source_endpoint_ref: source_endpoint_ref,
-            transport_bindings: [
-              TransportBinding.new(%{
-                transport_binding_id: "uplink-gateway-dispatcher",
-                family_key: :uplink_gateway,
-                target_scope: :path,
-                configuration: %{"service_name" => "gateway", "scid" => 0}
-              })
-            ]
-          })
-        ]
+        paths: paths
       })
 
     assert {:ok, _persisted_realized_contact} =
              ContactStore.persist_realized(event_bus, realized_contact)
 
     realized_contact
+  end
+
+  defp persist_pass_on_now(dispatcher_scope, source_endpoint_ref, paths) do
+    now = DateTime.utc_now()
+
+    {:ok, scheduled} =
+      Cadence.Contacts.persist_scheduled_contact(
+        dispatcher_scope.organization_id,
+        ScheduledContact.new(%{
+          scheduled_contact_id:
+            "scheduled-dispatcher-#{dispatcher_scope.suffix}-" <>
+              Integer.to_string(System.unique_integer([:positive])),
+          mission_id: dispatcher_scope.mission_id,
+          source_endpoint_refs: [source_endpoint_ref],
+          starts_at: DateTime.add(now, -300),
+          ends_at: DateTime.add(now, 900),
+          paths: paths
+        })
+      )
+
+    scheduled.scheduled_contact_id
   end
 
   defp start_event_bus! do

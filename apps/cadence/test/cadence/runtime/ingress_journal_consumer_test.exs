@@ -371,7 +371,7 @@ defmodule Cadence.Runtime.IngressJournalConsumerTest do
 
   defp journal_proxy(journal, test, fail?) do
     receive do
-      {:"$gen_call", from, {:acknowledge, _, _}} when fail? ->
+      {:"$gen_call", from, {:acknowledge, _, _, _}} when fail? ->
         GenServer.reply(from, {:error, :injected_custody_failure})
         send(test, :ack_failed)
         journal_proxy(journal, test, false)
@@ -379,7 +379,7 @@ defmodule Cadence.Runtime.IngressJournalConsumerTest do
       {:"$gen_call", from, request} ->
         result = GenServer.call(journal, request)
         GenServer.reply(from, result)
-        if match?({:acknowledge, _, _}, request), do: send(test, :ack_retried)
+        if match?({:acknowledge, _, _, _}, request), do: send(test, :ack_retried)
         journal_proxy(journal, test, fail?)
     end
   end

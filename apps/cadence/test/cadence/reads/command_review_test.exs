@@ -43,6 +43,22 @@ defmodule Cadence.Reads.CommandReviewTest do
     assert actor == %{"actor_kind" => "user", "user_id" => c.user.user_id}
   end
 
+  test "a plain member (role member) may approve a single request (DECISIONS #62)" do
+    c = Fixtures.scope!(:member)
+    request = Fixtures.request!(c)
+
+    assert {:ok, data} = CommandReview.load(c.scope, c.mission, request.command_request_id)
+    assert data["can_decide"]
+
+    assert {:ok, %{"decision" => "approved", "actor_id" => actor_id}} =
+             RequestReview.decide(c.scope, c.mission, request.command_request_id, input(data))
+
+    assert actor_id == c.user.user_id
+
+    assert {:ok, %{lifecycle_state: :approved}} =
+             RequestStore.fetch_request(c.org, c.mission, request.command_request_id)
+  end
+
   test "a 2000-byte review reason survives persistence and history without truncation", c do
     reason = String.duplicate("é", 1000)
     assert byte_size(reason) == 2000
@@ -97,8 +113,9 @@ defmodule Cadence.Reads.CommandReviewTest do
     assert {:ok, data} = CommandReview.load(c.scope, c.mission, c.request.command_request_id)
     assert {:ok, %{can_review: true}} = CommandMonitor.load(c.scope, c.mission)
 
+    # Demotion to a plain member no longer denies (DECISIONS #62); revocation and a disabled
+    # account still do.
     for {schema, id, attrs} <- [
-          {OrganizationMembershipRow, c.member.organization_membership_id, [role: "member"]},
           {OrganizationMembershipRow, c.member.organization_membership_id,
            [lifecycle_state: "revoked"]},
           {UserRow, c.user.user_id, [lifecycle_state: "disabled"]}

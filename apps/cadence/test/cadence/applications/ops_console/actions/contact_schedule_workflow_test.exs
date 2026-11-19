@@ -56,7 +56,9 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactScheduleWorkflowTest do
 
         "/provider/v1/contacts" ->
           attrs = conn.body |> IO.iodata_to_binary() |> Jason.decode!()
-          response = contact(opportunity, attrs["client_reference"], "confirmed", 1)
+          # The provider issues a new contact for a second booking of the same slot.
+          id = if Process.get(:schedule_provider_contact), do: "provider-contact-two"
+          response = contact(opportunity, attrs["client_reference"], "confirmed", 1, id)
           Process.put(:schedule_provider_contact, response)
           response(conn, %{"data" => response})
 
@@ -100,6 +102,16 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactScheduleWorkflowTest do
 
     assert_receive {:http, :post, "/provider/v1/contacts/provider-contact-one/cancel"}
     refute_receive {:http, :post, "/provider/v1/contacts/provider-contact-one/cancel"}
+
+    # qa #32: reserving the slot again after the cancel is a new booking, not the canceled one.
+    assert {:ok, again} = execute(c, "reserve", %{"token" => o["token"]})
+    assert_receive {:http, :post, "/provider/v1/contacts"}
+    assert again["lifecycleState"] == "confirmed"
+    refute again["providerReservationId"] == first["providerReservationId"]
+    refute again["scheduledContactId"] == first["scheduledContactId"]
+    # ...and a retry of that reserve stays idempotent.
+    assert {:ok, ^again} = execute(c, "reserve", %{"token" => o["token"]})
+    refute_receive {:http, :post, "/provider/v1/contacts"}
   end
 
   test "stale route evidence and expired capabilities fail before provider traffic", c do
@@ -236,13 +248,13 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactScheduleWorkflowTest do
       "provider_contact_ref" => r.provider_contact_ref
     }
 
-  defp contact(o, client, status, revision),
+  defp contact(o, client, status, revision, id \\ nil),
     do:
       o
       |> Map.drop(["availability", "expires_at", "synthetic"])
       |> Map.merge(%{
-        "id" => "provider-contact-one",
-        "provider_contact_ref" => "provider-contact-one",
+        "id" => id || "provider-contact-one",
+        "provider_contact_ref" => id || "provider-contact-one",
         "opportunity_ref" => o["id"],
         "delivery_profile_ref" => "delivery-cadence",
         "client_reference" => client,

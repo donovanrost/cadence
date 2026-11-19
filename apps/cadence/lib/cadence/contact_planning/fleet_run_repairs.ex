@@ -27,13 +27,8 @@ defmodule Cadence.ContactPlanning.FleetRunRepairs do
            ),
          {:ok, _, policy} <-
            FleetPlanningPolicies.fetch_active(run.organization_id, run.mission_id),
-         items <-
-           ContactPlanExecutions.list(
-             run.organization_id,
-             run.mission_id,
-             source.plan.contact_plan_id,
-             source.plan_version.version
-           ),
+         # The whole repair chain's items (qa #30), so a change anywhere in it re-reviews.
+         items = source.chain.items,
          true <- length(items) <= 10_000 and length(source.locked_commitments) <= 10_000 do
       {:ok,
        %{

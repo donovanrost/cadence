@@ -80,13 +80,45 @@ defmodule Cadence.Applications.PacketBindings do
       )
       when is_binary(application_installation_id) and is_map(attrs) do
     with {:ok, %ApplicationInstallation{} = installation} <-
-           fetch_scoped_installation(current_scope, host_context, application_installation_id),
-         {:ok, input_definition} <- resolve_input_definition(installation, attrs),
+           fetch_scoped_installation(current_scope, host_context, application_installation_id) do
+      preview_installation(current_scope.organization_id, host_context, installation, attrs, nil)
+    end
+  end
+
+  @doc """
+  Re-points an existing packet input at its spacecraft's newly applied configuration (catalog,
+  APIDs, endpoint or switch) inside a change-set apply, from that catalog's telemetry projection
+  the apply already loaded (`Review.cached_inputs/3`): a Save does this through `replace/4`; the
+  apply didn't (11-15). The apply was authorized where it was submitted and holds the
+  configuration lock, so there is no caller scope here.
+  """
+  @spec resync(binary(), HostContext.t(), PacketBindingConfiguration.t(), map(), map()) ::
+          {:ok, PacketBindingConfiguration.t()} | {:error, term()}
+  def resync(organization_id, %HostContext{} = host_context, input, attrs, telemetry) do
+    with {:ok, installation} <-
+           ApplicationInstallations.fetch_installed_by_id(
+             organization_id,
+             input.application_installation_id
+           ),
+         {:ok, %{configuration: desired}} <-
+           preview_installation(organization_id, host_context, installation, attrs, telemetry) do
+      {:ok, locked_replace(desired, attrs)}
+    end
+  end
+
+  defp preview_installation(organization_id, host_context, installation, attrs, telemetry) do
+    with {:ok, input_definition} <- resolve_input_definition(installation, attrs),
          {:ok, existing} <-
            fetch_existing(installation.application_installation_id, input_definition),
          :ok <- validate_expected_version(existing, attrs),
          {:ok, bindings} <-
-           resolve_catalog_bindings(current_scope, host_context, input_definition, attrs),
+           resolve_catalog_bindings(
+             organization_id,
+             host_context,
+             input_definition,
+             attrs,
+             telemetry
+           ),
          :ok <- validate_cardinality(input_definition, bindings) do
       {:ok,
        %{
@@ -308,15 +340,15 @@ defmodule Cadence.Applications.PacketBindings do
   end
 
   defp resolve_catalog_bindings(
-         %Scope{organization_id: organization_id},
+         organization_id,
          %HostContext{mission_id: mission_id} = host_context,
          %PacketInputDefinition{} = input_definition,
-         attrs
+         attrs,
+         preloaded
        ) do
     with {:ok, catalog_revision_id} <- required_text(attrs, :catalog_revision_id),
-         {:ok, %Revision{} = revision} <-
-           Catalog.fetch_revision(organization_id, mission_id, catalog_revision_id),
-         {:ok, telemetry} <- TelemetryProjection.load(organization_id, mission_id, revision),
+         {:ok, revision, telemetry} <-
+           catalog_telemetry(organization_id, mission_id, catalog_revision_id, preloaded),
          {:ok, source_endpoint_ref} <-
            validate_source_endpoint(
              organization_id,
@@ -333,6 +365,23 @@ defmodule Cadence.Applications.PacketBindings do
         source_endpoint_ref,
         input_definition
       )
+    end
+  end
+
+  # The apply passes the projection it already loaded for this catalog; otherwise read it.
+  defp catalog_telemetry(
+         _org,
+         _mission,
+         id,
+         %{catalog_revision: %Revision{catalog_revision_id: id}} = t
+       ),
+       do: {:ok, t.catalog_revision, t}
+
+  defp catalog_telemetry(organization_id, mission_id, catalog_revision_id, _preloaded) do
+    with {:ok, %Revision{} = revision} <-
+           Catalog.fetch_revision(organization_id, mission_id, catalog_revision_id),
+         {:ok, telemetry} <- TelemetryProjection.load(organization_id, mission_id, revision) do
+      {:ok, revision, telemetry}
     end
   end
 

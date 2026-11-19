@@ -27,9 +27,15 @@ defmodule Cadence.MissionModels.TelemetryProjection do
          {:ok, %Revision{} = revision} <-
            MissionModels.fetch_revision(organization_id, mission_id, revision_id),
          {:ok, plans} <-
-           MissionModels.fetch_runtime_plans(organization_id, mission_id, revision_id),
-         {:ok, packet_definitions} <-
-           MissionModelPlanDecoder.telemetry_packet_definitions(plans) do
+           MissionModels.fetch_runtime_plans(organization_id, mission_id, revision_id) do
+      build(catalog_revision, revision, plans)
+    end
+  end
+
+  @doc "The projection from an already-read mission-model revision and its runtime plans."
+  @spec build(CatalogRevision.t(), Revision.t(), map()) :: {:ok, t()} | {:error, term()}
+  def build(%CatalogRevision{} = catalog_revision, %Revision{} = revision, plans) do
+    with {:ok, packet_definitions} <- MissionModelPlanDecoder.telemetry_packet_definitions(plans) do
       {:ok,
        %{
          catalog_revision: catalog_revision,

@@ -13,15 +13,16 @@ defmodule Cadence.Applications.OpsConsoleTest do
            |> Enum.map(&{&1.surface_id, &1.placement, &1.data_contract}) == [
              {"workspace", :application_workspace,
               %{query_id: "cadence.ops.workspace", version: 1}},
-             {"contact_requirement_list", :ops_workspace,
-              %{query_id: "cadence.ops.contact_requirement_list", version: 1}}
+             {"contact_schedule", :ops_workspace,
+              %{query_id: "cadence.ops.contact_schedule", version: 1}}
            ]
 
-    assert Enum.at(definition.surfaces, 1).actions == []
+    assert Enum.at(definition.surfaces, 1).actions == ["validate", "search", "reserve", "cancel"]
 
-    assert length(definition.surfaces) == 35
-    assert length(definition.actions) == 89
-    assert Enum.count(definition.surfaces, &(&1.placement == :ops_workspace)) == 34
+    assert length(definition.surfaces) == 18
+    # 34: the data operations surfaces declare no host actions (native path only).
+    assert length(definition.actions) == 34
+    assert Enum.count(definition.surfaces, &(&1.placement == :ops_workspace)) == 17
 
     assert Enum.uniq(Enum.map(definition.surfaces, & &1.surface_id)) ==
              Enum.map(definition.surfaces, & &1.surface_id)
@@ -32,7 +33,7 @@ defmodule Cadence.Applications.OpsConsoleTest do
   test "contributes exact release identity for each surface" do
     contributions = OpsConsole.release_contributions()
 
-    assert length(contributions) == 35
+    assert length(contributions) == 18
 
     assert Enum.take(contributions, 1) |> Enum.map(&ReleaseContribution.key/1) == [
              {"ops_console", 1, "workspace", 1}
@@ -60,11 +61,11 @@ defmodule Cadence.Applications.OpsConsoleTest do
              Cadence.Applications.Registry.fetch_surface(
                definition,
                :mission,
-               "dashboard_directory"
+               "commands"
              )
 
     assert surface.placement == :ops_workspace
-    assert surface.surface_id == "dashboard_directory"
+    assert surface.surface_id == "commands"
   end
 
   test "keeps query contributions and the action seam domain-owned" do
@@ -75,44 +76,6 @@ defmodule Cadence.Applications.OpsConsoleTest do
   end
 
   test "declares exact deep-route query identity and fail-closed interaction ledgers" do
-    assert OpsConsole.surface_query_contract("dashboard_show") ==
-             {:ok,
-              %{
-                subject_param: "dashboard_id",
-                query_params: [
-                  "dashboard_id",
-                  "panel",
-                  "activity_filter",
-                  "activity_event",
-                  "selected_publish_issue",
-                  "selected_time",
-                  "time_mode",
-                  "time_axis",
-                  "from",
-                  "to",
-                  "limit_mode",
-                  "replay_run_id",
-                  "selection_view",
-                  "selected_widget",
-                  "selected_target",
-                  "selected_id",
-                  "selected_placement",
-                  "selected_data_view",
-                  "selected_scope_kind",
-                  "selected_scope_id",
-                  "selected_resource_id",
-                  "selected_spacecraft_id",
-                  "selected_contact_id",
-                  "selected_transport_id",
-                  "selected_source_endpoint_id",
-                  "selected_ground_station_id",
-                  "selected_scope_link_id",
-                  "realm",
-                  "data_source_id",
-                  "source_binding_id"
-                ]
-              }}
-
     assert OpsConsole.surface_query_contract("fleet_planning") ==
              {:ok, %{subject_param: nil, query_params: ["page", "state"]}}
 
@@ -129,18 +92,11 @@ defmodule Cadence.Applications.OpsConsoleTest do
                 ]
               }}
 
-    assert OpsConsole.surface_query_contract("dashboard_editor") ==
-             {:ok, %{subject_param: "dashboard_id", query_params: ["dashboard_id"]}}
-
     assert OpsConsole.surface_query_contract("data_source_registration") ==
              {:ok, %{subject_param: nil, query_params: []}}
 
-    assert OpsConsole.deep_route_interaction_ledger()["dashboard_show"].host_actions == []
-
     assert Enum.all?(
              [
-               "dashboard_editor",
-               "dashboard_activity",
                "data_operations_manage",
                "data_source_registration",
                "data_source_settings"
@@ -184,21 +140,6 @@ defmodule Cadence.Applications.OpsConsoleTest do
            end) == [
              {"workspace", :overview, :mission, :application_workspace, "cadence.ops.workspace",
               []},
-             {"contact_requirement_list", :collection, :mission, :ops_workspace,
-              "cadence.ops.contact_requirement_list", []},
-             {"contact_requirement_new", :configuration, :mission, :ops_workspace,
-              "cadence.ops.contact_requirement_new", ["validate", "save"]},
-             {"contact_requirement_show", :subject_detail, :mission, :ops_workspace,
-              "cadence.ops.contact_requirement_show", ["plan", "create-plan"]},
-             {"contact_requirement_template", :configuration, :mission, :ops_workspace,
-              "cadence.ops.contact_requirement_template",
-              [
-                "validate-template",
-                "create-template",
-                "pause-template",
-                "activate-template",
-                "close-template"
-              ]},
              {"contact_schedule", :operations, :mission, :ops_workspace,
               "cadence.ops.contact_schedule", ["validate", "search", "reserve", "cancel"]},
              {"contact_plan_show", :subject_detail, :mission, :ops_workspace,
@@ -209,101 +150,21 @@ defmodule Cadence.Applications.OpsConsoleTest do
               ["approve-provider-change", "reject-provider-change", "acknowledge-provider-change"]},
              {"contact_record", :subject_detail, :mission, :ops_workspace,
               "cadence.ops.contact_record", []},
-             {"dashboard_directory", :collection, :mission, :ops_workspace,
-              "cadence.ops.dashboard_directory",
-              ["filter_dashboards", "toggle_dashboard_star", "restore_dashboard"]},
-             {"dashboard_show", :subject_detail, :mission, :ops_workspace,
-              "cadence.ops.dashboard_show", []},
-             {"dashboard_editor", :configuration, :mission, :ops_workspace,
-              "cadence.ops.dashboard_editor",
-              [
-                "layout_changed",
-                "validate_dashboard_section",
-                "save_dashboard_section",
-                "remove_dashboard_section",
-                "move_dashboard_section",
-                "preview_widget_binding",
-                "validate_widget",
-                "save_widget",
-                "remove_widget",
-                "rename",
-                "archive_dashboard",
-                "publish_dashboard",
-                "publish_dashboard_version",
-                "save_runtime_defaults",
-                "restore_version_as_draft",
-                "save_editor",
-                "review_editor",
-                "discard_editor",
-                "reload_editor"
-              ]},
-             {"dashboard_activity", :activity, :mission, :ops_workspace,
-              "cadence.ops.dashboard_activity", ["publish_version", "restore_version"]},
-             {"dashboard_new", :configuration, :mission, :ops_workspace,
-              "cadence.ops.dashboard_new", ["validate", "save"]},
-             {"dashboard_library", :collection, :mission, :ops_workspace,
-              "cadence.ops.dashboard_library",
-              ["stage-library-item", "create-library-item", "add-library-version"]},
-             {"dashboard_playlists", :collection, :mission, :ops_workspace,
-              "cadence.ops.dashboard_playlists", ["create-playlist"]},
-             {"dashboard_playlist_present", :operations, :mission, :ops_workspace,
-              "cadence.ops.dashboard_playlist_present", ["next-dashboard"]},
-             {"dashboard_settings", :configuration, :mission, :ops_workspace,
-              "cadence.ops.dashboard_settings",
-              [
-                "validate-settings",
-                "save-settings",
-                "create-share",
-                "revoke-share",
-                "create-snapshot",
-                "archive-dashboard"
-              ]},
-             {"dashboard_share", :subject_detail, :mission, :ops_workspace,
-              "cadence.ops.dashboard_share", []},
-             {"dashboard_snapshot", :subject_detail, :mission, :ops_workspace,
-              "cadence.ops.dashboard_snapshot", []},
-             {"dashboard_diagnostics", :activity, :mission, :ops_workspace,
-              "cadence.ops.dashboard_diagnostics", []},
              {"fleet_planning", :operations, :mission, :ops_workspace,
               "cadence.ops.fleet_planning", ["refresh-planning"]},
              {"fleet_planning_new", :configuration, :mission, :ops_workspace,
               "cadence.ops.fleet_planning_new", ["validate-fleet-run", "create-fleet-run"]},
-             {"fleet_planning_policy", :configuration, :mission, :ops_workspace,
-              "cadence.ops.fleet_planning_policy",
-              [
-                "validate-policy",
-                "save-policy",
-                "approve-policy",
-                "validate-grant",
-                "issue-grant",
-                "revoke-grant"
-              ]},
              {"fleet_planning_run", :subject_detail, :mission, :ops_workspace,
               "cadence.ops.fleet_planning_run", ["refresh-fleet-run", "repair-fleet-run"]},
              {"activation_requests", :operations, :mission, :ops_workspace,
               "cadence.ops.activation_requests", ["decide"]},
              {"commands", :operations, :mission, :ops_workspace, "cadence.ops.commands", []},
              {"telemetry_explore", :operations, :mission, :ops_workspace,
-              "cadence.ops.telemetry_explore",
-              ["apply_filters", "apply_question", "add_to_dashboard"]},
+              "cadence.ops.telemetry_explore", ["apply_filters", "apply_question"]},
              {"data_operations", :operations, :mission, :ops_workspace,
-              "cadence.ops.data_operations",
-              [
-                "validate-request",
-                "record-historical-workflow-request",
-                "transition-group",
-                "retry-group",
-                "request-correction"
-              ]},
+              "cadence.ops.data_operations", []},
              {"data_operations_manage", :operations, :mission, :ops_workspace,
-              "cadence.ops.data_operations_manage",
-              [
-                "validate-request",
-                "record-historical-workflow-request",
-                "transition-group",
-                "retry-group",
-                "request-correction"
-              ]},
+              "cadence.ops.data_operations_manage", []},
              {"data_sources", :configuration, :mission, :ops_workspace,
               "cadence.ops.data_sources",
               [

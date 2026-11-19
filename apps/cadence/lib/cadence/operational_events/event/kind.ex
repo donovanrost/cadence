@@ -3,9 +3,14 @@ defmodule Cadence.OperationalEvents.Event.Kind do
 
   @kinds [
     :activation_resumed,
+    :activation_superseded,
     :binding_set_activated,
     :catalog_revision_registered,
+    # Most of a pass's TM frames carried another SCID and were refused (DECISIONS #102).
+    :contact_scid_mismatch,
+    :contact_window_moved,
     :dashboard_archived,
+    :dashboard_config_changed,
     :dashboard_comparison_review_requested,
     :dashboard_comparison_review_resolved,
     :dashboard_health_snapshot_captured,
@@ -54,6 +59,9 @@ defmodule Cadence.OperationalEvents.Event.Kind do
     :source_watermark_changed,
     :source_watermark_observed,
     :source_watermark_retreated,
+    # ux U60 (domain storage-growth part 2): readers first; domain's writer emits them.
+    :source_watermark_settled,
+    :source_watermark_caught_up,
     :source_watermark_unknown,
     :telemetry_backfill_approved,
     :telemetry_backfill_completed,

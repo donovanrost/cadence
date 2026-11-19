@@ -1,6 +1,9 @@
 defmodule CadenceSimulator.IngressBenchmark.ValidatingSink do
   @moduledoc """
   Single-stream TCP sink that validates deterministic bytes at arbitrary reads.
+
+  `:port` may be 0 (the OS picks a free one); `:on_listen`, a 1-arity function, is called with
+  the bound port once the sink is listening, so a caller can connect without guessing or retrying.
   """
 
   alias CadenceSimulator.IngressBenchmark.{DeterministicPattern, Manifest, Preflight}
@@ -15,12 +18,24 @@ defmodule CadenceSimulator.IngressBenchmark.ValidatingSink do
            DeterministicPattern.new(config.seed, config.pattern_size_bytes, config.corpus_id),
          {:ok, listener} <- listen(opts) do
       try do
+        announce(listener, opts)
         accept_and_validate(listener, preflight, pattern, config, opts)
       after
         :gen_tcp.close(listener)
       end
     else
       {:error, reason} -> {:error, reason, failure_report(preflight, reason)}
+    end
+  end
+
+  defp announce(listener, opts) do
+    case Keyword.get(opts, :on_listen) do
+      on_listen when is_function(on_listen, 1) ->
+        {:ok, port} = :inet.port(listener)
+        on_listen.(port)
+
+      nil ->
+        :ok
     end
   end
 

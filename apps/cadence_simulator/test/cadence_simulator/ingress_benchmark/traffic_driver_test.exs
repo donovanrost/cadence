@@ -19,12 +19,7 @@ defmodule CadenceSimulator.IngressBenchmark.TrafficDriverTest do
 
   test "deterministic source and validating sink agree across arbitrary TCP reads" do
     preflight = preflight!()
-    port = unique_tcp_port()
-
-    sink_task =
-      Task.async(fn ->
-        ValidatingSink.run(preflight, host: "127.0.0.1", port: port, timeout_ms: 2_000)
-      end)
+    {sink_task, port} = start_sink(preflight)
 
     assert {:ok, source_report} =
              TrafficDriver.run(preflight,
@@ -46,19 +41,16 @@ defmodule CadenceSimulator.IngressBenchmark.TrafficDriverTest do
 
   test "validating sink reports the first corrupt byte" do
     preflight = preflight!()
-    port = unique_tcp_port()
-
-    sink_task =
-      Task.async(fn ->
-        ValidatingSink.run(preflight, host: "127.0.0.1", port: port, timeout_ms: 2_000)
-      end)
+    {sink_task, port} = start_sink(preflight)
 
     {:ok, pattern} = DeterministicPattern.new(381_746, 65_536)
     expected = DeterministicPattern.slice(pattern, 0, 100_000)
     <<first, rest::binary>> = expected
     corrupt = <<Bitwise.bxor(first, 0xFF), rest::binary>>
 
-    {:ok, socket} = connect(port)
+    {:ok, socket} =
+      :gen_tcp.connect(~c"127.0.0.1", port, [:binary, active: false, packet: :raw], 2_000)
+
     assert :ok = :gen_tcp.send(socket, corrupt)
     :ok = :gen_tcp.close(socket)
 
@@ -120,25 +112,24 @@ defmodule CadenceSimulator.IngressBenchmark.TrafficDriverTest do
     }
   end
 
-  defp connect(port, attempts \\ 20)
+  # The sink listens on port 0 and says which port it got, so there is no fixed-port collision
+  # and nothing connects before it listens (CI flake 11-16: a 200 ms retry window raced the
+  # sink's setup on a loaded runner).
+  defp start_sink(preflight) do
+    test = self()
+    ref = make_ref()
 
-  defp connect(port, attempts) when attempts > 0 do
-    case :gen_tcp.connect(~c"127.0.0.1", port, [:binary, active: false, packet: :raw]) do
-      {:ok, socket} ->
-        {:ok, socket}
+    sink_task =
+      Task.async(fn ->
+        ValidatingSink.run(preflight,
+          host: "127.0.0.1",
+          port: 0,
+          timeout_ms: 2_000,
+          on_listen: &send(test, {ref, &1})
+        )
+      end)
 
-      {:error, :econnrefused} ->
-        Process.sleep(10)
-        connect(port, attempts - 1)
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  defp connect(_port, 0), do: {:error, :connect_timeout}
-
-  defp unique_tcp_port do
-    45_000 + rem(System.unique_integer([:positive]), 10_000)
+    assert_receive {^ref, port}, 5_000
+    {sink_task, port}
   end
 end

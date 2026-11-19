@@ -316,6 +316,61 @@ defmodule Cadence.Runtime do
     end
   end
 
+  @doc """
+  Quiesces a realized contact's runtime and waits however long its drain takes (DECISIONS #71:
+  only a contact settler calls this, never the contact scheduler). `:ok` when it isn't running.
+  """
+  @spec quiesce_realized_contact(ProcessNamespace.t(), binary(), binary()) ::
+          :ok | {:error, term()}
+  def quiesce_realized_contact(
+        %ProcessNamespace{} = process_namespace \\ ProcessNamespace.default(),
+        mission_id,
+        realized_contact_id
+      )
+      when is_binary(mission_id) and is_binary(realized_contact_id),
+      do: quiesce_realized_contact_runtime(process_namespace, mission_id, realized_contact_id)
+
+  @doc """
+  Stops a realized contact's runtime without quiescing it (DECISIONS #71): its ingress journal
+  is durable and keeps what it hasn't stored. `:ok` when it isn't running.
+  """
+  @spec terminate_realized_contact(ProcessNamespace.t(), binary(), binary()) ::
+          :ok | {:error, term()}
+  def terminate_realized_contact(
+        %ProcessNamespace{} = process_namespace \\ ProcessNamespace.default(),
+        mission_id,
+        realized_contact_id
+      )
+      when is_binary(mission_id) and is_binary(realized_contact_id) do
+    case realized_contact_runtime(process_namespace, mission_id, realized_contact_id) do
+      {:ok, runtime} ->
+        stop_registered_child(
+          MissionRuntime.realized_contact_supervisor_name(process_namespace, mission_id),
+          runtime,
+          fn -> realized_contact_running?(process_namespace, mission_id, realized_contact_id) end,
+          :realized_contact_stop_timeout
+        )
+
+      {:error, :realized_contact_runtime_not_running} ->
+        :ok
+    end
+  end
+
+  @doc "The ids of the mission's realized contacts whose runtime is running."
+  @spec running_realized_contact_ids(ProcessNamespace.t(), binary()) :: [binary()]
+  def running_realized_contact_ids(
+        %ProcessNamespace{} = process_namespace \\ ProcessNamespace.default(),
+        mission_id
+      )
+      when is_binary(mission_id) do
+    process_namespace
+    |> Cluster.select([
+      {{{:realized_contact_runtime, mission_id, :"$1"}, :_, :_}, [], [:"$1"]}
+    ])
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
   @spec realized_contact_snapshot(binary(), binary()) :: {:ok, map()} | {:error, term()}
   def realized_contact_snapshot(mission_id, realized_contact_id)
       when is_binary(mission_id) and is_binary(realized_contact_id) do
@@ -628,7 +683,8 @@ defmodule Cadence.Runtime do
          realized_contact_id,
          realized_contact_runtime
        ) do
-    with :ok <- quiesce_realized_contact(process_namespace, mission_id, realized_contact_id) do
+    with :ok <-
+           quiesce_realized_contact_runtime(process_namespace, mission_id, realized_contact_id) do
       stop_registered_child(
         MissionRuntime.realized_contact_supervisor_name(process_namespace, mission_id),
         realized_contact_runtime,
@@ -655,7 +711,7 @@ defmodule Cadence.Runtime do
     end)
   end
 
-  defp quiesce_realized_contact(process_namespace, mission_id, realized_contact_id) do
+  defp quiesce_realized_contact_runtime(process_namespace, mission_id, realized_contact_id) do
     case realized_contact_coordinator(process_namespace, mission_id, realized_contact_id) do
       {:ok, coordinator} ->
         case ContactCoordinator.quiesce(coordinator) do
@@ -710,6 +766,12 @@ defmodule Cadence.Runtime do
         with :ok <- await_runtime_down(monitor_ref, timeout_reason) do
           await_runtime_unregistered(registered?, 500, timeout_reason)
         end
+
+      # Already exited (e.g. a contact settler stopped it first, DECISIONS #71): the caller's
+      # goal holds once it's unregistered.
+      {:error, :not_found} ->
+        Process.demonitor(monitor_ref, [:flush])
+        await_runtime_unregistered(registered?, 500, timeout_reason)
 
       {:error, _reason} = error ->
         Process.demonitor(monitor_ref, [:flush])

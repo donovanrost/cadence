@@ -7,6 +7,7 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
   """
 
   alias Cadence.ContactPlanning.{
+    ContactGaps,
     ContactOpportunitySnapshot,
     ContactRequirementVersion,
     FleetOptimizationResult,
@@ -47,7 +48,15 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
          {:ok, snapshots} <- normalize_snapshots(snapshots ++ locked_commitments, policy),
          {:ok, locked_ids} <-
            normalize_locked_ids(snapshots, locked_commitments, requested_locked_ids),
-         {:ok, initial} <- initialize(snapshots, requirements, policy, locked_ids, now) do
+         {:ok, initial} <-
+           initialize(
+             snapshots,
+             requirements,
+             policy,
+             locked_ids,
+             now,
+             Keyword.get(opts, :occupied, [])
+           ) do
       scarcity = scarcity(initial.feasible)
 
       state =
@@ -171,7 +180,7 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
       else: {:error, :fleet_optimizer_locked_snapshot_not_found}
   end
 
-  defp initialize(snapshots, requirements, policy, locked_ids, now) do
+  defp initialize(snapshots, requirements, policy, locked_ids, now, occupied) do
     initial = %{
       all: Map.new(snapshots, &{&1.contact_opportunity_snapshot_id, &1}),
       feasible: [],
@@ -186,7 +195,7 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
     snapshots
     |> Enum.reduce_while(
       {:ok, initial},
-      &initialize_snapshot(&1, &2, requirements, policy, locked_ids, now)
+      &initialize_snapshot(&1, &2, requirements, policy, locked_ids, now, occupied)
     )
     |> case do
       {:ok, state} -> {:ok, %{state | feasible: Enum.reverse(state.feasible)}}
@@ -194,7 +203,15 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
     end
   end
 
-  defp initialize_snapshot(snapshot, {:ok, state}, requirements, policy, locked_ids, now) do
+  defp initialize_snapshot(
+         snapshot,
+         {:ok, state},
+         requirements,
+         policy,
+         locked_ids,
+         now,
+         occupied
+       ) do
     requirement = requirements[snapshot_key(snapshot)]
     locked? = MapSet.member?(locked_ids, snapshot.contact_opportunity_snapshot_id)
 
@@ -212,9 +229,42 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
         {:cont, {:ok, add_locked_snapshot(state, snapshot)}}
 
       {requirement, false} ->
-        {:cont, {:ok, classify_snapshot(state, requirement, snapshot, policy, now)}}
+        case held_by_single_booking(snapshot, occupied) do
+          nil -> {:cont, {:ok, classify_snapshot(state, requirement, snapshot, policy, now)}}
+          failure -> {:cont, {:ok, put_ineligible(state, snapshot, [failure])}}
+        end
     end
   end
+
+  # DECISIONS #78: a live single booking is fixed occupancy. An opportunity overlapping one of the
+  # same spacecraft, or of another spacecraft on the same antenna, can't be planned.
+  defp held_by_single_booking(_snapshot, []), do: nil
+
+  defp held_by_single_booking(snapshot, occupied) do
+    spacecraft = (snapshot.route_binding_document || %{})["spacecraft_id"]
+    antenna = (snapshot.normalized_opportunity_document || %{})["antenna_or_service_pool_ref"]
+
+    occupied
+    |> Enum.filter(fn o ->
+      DateTime.before?(o.starts_at, snapshot.ends_at) and
+        DateTime.after?(o.ends_at, snapshot.starts_at)
+    end)
+    |> Enum.find_value(fn o ->
+      cond do
+        o.spacecraft_id == spacecraft -> held(o, "same_spacecraft")
+        is_binary(antenna) and o.antenna_ref == antenna -> held(o, "same_antenna")
+        true -> nil
+      end
+    end)
+  end
+
+  defp held(occupied, reason),
+    do: %{
+      "code" => "held_by_single_booking",
+      "message" => "A pass booked outside any plan holds this window.",
+      "reservation_id" => occupied.reservation_id,
+      "reason" => reason
+    }
 
   defp missing_requirement_failures(snapshot) do
     [
@@ -303,36 +353,48 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
 
         {snapshot, score, document}
       end)
-      |> Enum.sort_by(fn {snapshot, score, _document} ->
-        {-score, snapshot.starts_at, snapshot.contact_opportunity_snapshot_id}
-      end)
+      |> order_candidates(requirement, state.selected)
 
     [{snapshot, score, score_document} | _rest] = scored
     remaining = Enum.reject(candidates, &same_snapshot?(&1, snapshot))
     state = Map.update!(state, :greedy_evaluations, &(&1 + 1))
 
     state =
-      if coverage_satisfied?(requirement, state.selected, policy) do
-        put_decision(
-          state,
-          snapshot,
-          :displaced,
-          score,
-          score_document,
-          [],
-          "requirement_already_satisfied",
-          "A higher-ranked feasible selection already satisfies this Requirement."
-        )
-      else
-        allocate_candidate(
-          state,
-          requirement,
-          snapshot,
-          score,
-          score_document,
-          requirements,
-          policy
-        )
+      cond do
+        coverage_satisfied?(requirement, state.selected, policy) ->
+          put_decision(
+            state,
+            snapshot,
+            :displaced,
+            score,
+            score_document,
+            [],
+            "requirement_already_satisfied",
+            "A higher-ranked feasible selection already satisfies this Requirement."
+          )
+
+        extra_without_gap_gain?(requirement, snapshot, state.selected) ->
+          put_decision(
+            state,
+            snapshot,
+            :displaced,
+            score,
+            score_document,
+            [],
+            "does_not_shorten_gap",
+            "The contact count is met and this opportunity doesn't shorten the longest gap."
+          )
+
+        true ->
+          allocate_candidate(
+            state,
+            requirement,
+            snapshot,
+            score,
+            score_document,
+            requirements,
+            policy
+          )
       end
 
     allocate_candidates(
@@ -345,6 +407,50 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
       state
     )
   end
+
+  # Without a gap limit, the order is unchanged: score, then AOS, then id. With one (DECISIONS
+  # #74), the pick that leaves the requirement's shortest longest-gap comes first.
+  defp order_candidates(scored, %{max_gap_seconds: nil}, _selected),
+    do:
+      Enum.sort_by(scored, fn {snapshot, score, _document} ->
+        {-score, snapshot.starts_at, snapshot.contact_opportunity_snapshot_id}
+      end)
+
+  defp order_candidates(scored, requirement, selected) do
+    own = Enum.filter(selected, &same_requirement?(&1, requirement))
+
+    Enum.sort_by(scored, fn {snapshot, score, _document} ->
+      {requirement_gap(requirement, [snapshot | own]), -score, snapshot.starts_at,
+       snapshot.contact_opportunity_snapshot_id}
+    end)
+  end
+
+  # Past the contact count, a limited requirement takes a pick only if it shortens its gap.
+  defp extra_without_gap_gain?(%{max_gap_seconds: nil}, _snapshot, _selected), do: false
+
+  defp extra_without_gap_gain?(requirement, snapshot, selected) do
+    own = Enum.filter(selected, &same_requirement?(&1, requirement))
+
+    length(own) >= requirement.contact_count and
+      requirement_gap(requirement, [snapshot | own]) >= requirement_gap(requirement, own)
+  end
+
+  # DECISIONS #74: a score swap may not lengthen a limited requirement's longest gap.
+  defp gaps_not_longer?(touched, before, after_selection, requirements) do
+    touched
+    |> Enum.map(&requirements[snapshot_key(&1)])
+    |> Enum.uniq()
+    |> Enum.reject(&(is_nil(&1) or is_nil(&1.max_gap_seconds)))
+    |> Enum.all?(fn requirement ->
+      own = fn selection -> Enum.filter(selection, &same_requirement?(&1, requirement)) end
+
+      requirement_gap(requirement, own.(after_selection)) <=
+        requirement_gap(requirement, own.(before))
+    end)
+  end
+
+  defp requirement_gap(requirement, passes),
+    do: ContactGaps.longest(passes, requirement.earliest_start, requirement.latest_end).seconds
 
   defp allocate_candidate(
          state,
@@ -459,7 +565,9 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
                new_selected,
                requirements,
                policy
-             ) do
+             ),
+           true <-
+             gaps_not_longer?([current, candidate], state.selected, new_selected, requirements) do
         improved =
           state
           |> Map.put(:selected, new_selected)

@@ -628,13 +628,18 @@ defmodule Cadence.Telemetry.Storage do
     end
   end
 
+  # The batch's count and its first and last sample, not every sample id: the full list (~12 KB
+  # per write) went into both watermark tables and nothing read it (disk, 11-16; api, ux and
+  # dashboards confirmed no reader).
   defp telemetry_write_evidence_ref(envelopes) do
     first_envelope = List.first(envelopes)
+    last_envelope = List.last(envelopes)
 
     %{
       kind: "telemetry_storage_write",
       observation_count: length(envelopes),
-      sample_ids: Enum.map(envelopes, & &1.sample_id),
+      first_sample_id: first_envelope && first_envelope.sample_id,
+      last_sample_id: last_envelope && last_envelope.sample_id,
       replay_run_id: first_envelope && first_envelope.replay_run_id
     }
   end

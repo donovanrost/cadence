@@ -3,6 +3,7 @@ defmodule Cadence.Limits.Store do
 
   import Ecto.Query
 
+  alias Cadence.Alarms.Ground, as: AlarmGround
   alias Cadence.Limits.Event
   alias Cadence.Limits.Store.{LatestStateRow, LimitEventRow}
   alias Cadence.Repo
@@ -149,10 +150,17 @@ defmodule Cadence.Limits.Store do
       Enum.each(events, fn %Event{} = event ->
         %LatestStateRow{} |> LatestStateRow.changeset(event) |> Repo.insert!()
       end)
+
+      {:ok, changed} = AlarmGround.reconcile(Repo, mission_id, spacecraft_id, events)
+      changed
     end)
     |> case do
-      {:ok, _result} -> :ok
-      {:error, reason} -> {:error, reason}
+      {:ok, changed} ->
+        AlarmGround.notify(changed)
+        :ok
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

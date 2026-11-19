@@ -112,15 +112,17 @@ defmodule Cadence.GroundNetworks.MissionProviders do
     end
   end
 
-  @spec archive_provider(Scope.t() | binary(), binary(), binary()) ::
+  @spec archive_provider(Scope.t() | binary(), binary(), binary(), binary() | nil) ::
           {:ok, MissionProvider.t()} | {:error, term()}
-  def archive_provider(%Scope{} = current_scope, mission_id, provider_id) do
+  def archive_provider(scope_or_organization_id, mission_id, provider_id, reason \\ nil)
+
+  def archive_provider(%Scope{} = current_scope, mission_id, provider_id, reason) do
     with :ok <- authorize_mission_write(current_scope, mission_id) do
-      archive_provider(current_scope.organization_id, mission_id, provider_id)
+      archive_provider(current_scope.organization_id, mission_id, provider_id, reason)
     end
   end
 
-  def archive_provider(organization_id, mission_id, provider_id)
+  def archive_provider(organization_id, mission_id, provider_id, reason)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(provider_id) do
     with {:ok, %MissionProvider{} = provider} <-
            fetch_provider(organization_id, mission_id, provider_id) do
@@ -129,7 +131,9 @@ defmodule Cadence.GroundNetworks.MissionProviders do
         | version: provider.version + 1,
           lifecycle_state: :archived,
           metadata:
-            Map.put(provider.metadata, "archived_at", DateTime.utc_now() |> DateTime.to_iso8601())
+            provider.metadata
+            |> Map.put("archived_at", DateTime.utc_now() |> DateTime.to_iso8601())
+            |> then(&if(is_binary(reason), do: Map.put(&1, "archived_reason", reason), else: &1))
       }
 
       persist_provider(organization_id, archived)
@@ -249,6 +253,10 @@ defmodule Cadence.GroundNetworks.MissionProviders do
   end
 
   defp validate_account_binding(%MissionProvider{provider_account_id: nil}), do: :ok
+
+  # An archived version retires the Provider and binds nothing new, so it needn't re-prove a live
+  # grant: a revoked grant is the main reason to archive one. Bookings keep their pinned version.
+  defp validate_account_binding(%MissionProvider{lifecycle_state: :archived}), do: :ok
 
   defp validate_account_binding(%MissionProvider{} = provider) do
     with {:ok, account_version} <-

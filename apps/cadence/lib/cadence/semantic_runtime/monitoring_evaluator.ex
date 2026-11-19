@@ -1,6 +1,7 @@
 defmodule Cadence.SemanticRuntime.MonitoringEvaluator do
   @moduledoc "Pure monitoring policy evaluation with persistence and conformance counts."
 
+  alias Cadence.Catalog.MissionModel.Canonical
   alias Cadence.SemanticRuntime.{MonitoringPlan, MonitoringResult, Update}
 
   @severity_rank %{normal: 0, watch: 1, warning: 2, distress: 3, critical: 4, severe: 5}
@@ -26,6 +27,88 @@ defmodule Cadence.SemanticRuntime.MonitoringEvaluator do
 
     {result, next}
   end
+
+  @doc """
+  The rule behind an update's evaluated state, for the alarm hook (flight events):
+  `%{kind, id, label}`, or `nil` when no rule matched (or the policy is disabled, or the sample's
+  quality is bad). `context_name` is the result's `matched_context`.
+
+  Pure, with the same rule selection and matching as `evaluate/4`. It never feeds
+  `MonitoringResult`: partition replay verifies results by equality, so any new field there would
+  diverge every pre-deploy commit.
+
+    * `kind`: `comparison | range | enumerated | boolean | string`.
+    * `id`: a short content hash of the canonical rule, stable while the rule itself doesn't change
+      (across catalog revisions and reorderings).
+    * `label`: `"<context or default>#<index>"`, for display only.
+  """
+  @spec matched_rule(MonitoringPlan.t(), Update.t(), binary() | nil) :: map() | nil
+  def matched_rule(%MonitoringPlan{disabled: true}, _update, _context_name), do: nil
+
+  def matched_rule(_plan, %Update{quality: quality}, _context_name)
+      when quality in [:bad, :unknown],
+      do: nil
+
+  def matched_rule(%MonitoringPlan{} = plan, %Update{} = update, context_name) do
+    case rules_named(plan, context_name) do
+      {:ok, rules} -> best_match(rules, update, context_name)
+      :ambiguous -> nil
+    end
+  end
+
+  defp best_match(rules, update, context_name) do
+    rules
+    |> Enum.with_index()
+    |> Enum.filter(fn {rule, _index} -> rule_matches?(rule, update.value) end)
+    |> Enum.max_by(fn {rule, _index} -> Map.get(@severity_rank, severity(rule), 0) end, fn ->
+      nil
+    end)
+    |> case do
+      nil ->
+        nil
+
+      {rule, index} ->
+        %{
+          kind: rule |> value(:kind, :comparison) |> to_string(),
+          id: rule_id(rule),
+          label: "#{context_name || "default"}##{index}"
+        }
+    end
+  end
+
+  # `matched_context` is the matched context's name, `nil` for the defaults. An unnamed context
+  # also records `nil`, and two contexts can share a name: then which rules applied isn't
+  # knowable from the name, so say nothing (the hook falls back) rather than name a wrong rule.
+  defp rules_named(plan, nil) do
+    if Enum.any?(plan.contexts, &is_nil(value(&1, :name))),
+      do: :ambiguous,
+      else: {:ok, plan.default_rules}
+  end
+
+  defp rules_named(plan, context_name) do
+    case Enum.filter(plan.contexts, &(value(&1, :name) == context_name)) do
+      [context] -> {:ok, value(context, :rules, [])}
+      [] -> {:ok, plan.default_rules}
+      _same_name -> :ambiguous
+    end
+  end
+
+  defp severity(rule), do: rule |> value(:severity, :warning) |> normalize_atom()
+
+  defp rule_id(rule) do
+    "rule:" <> String.slice(Canonical.sha256(canonical(rule)), 0, 16)
+  end
+
+  # Keys and atoms as strings, so atom- and string-keyed copies of a rule hash alike.
+  defp canonical(%{} = map) when not is_struct(map),
+    do: map |> Enum.map(fn {k, v} -> {to_string(k), canonical(v)} end) |> Enum.sort()
+
+  defp canonical(list) when is_list(list), do: Enum.map(list, &canonical/1)
+
+  defp canonical(value) when is_atom(value) and not is_boolean(value) and not is_nil(value),
+    do: Atom.to_string(value)
+
+  defp canonical(value), do: value
 
   defp select_rules(plan, latest) do
     case Enum.find(plan.contexts, &criteria?(&1, latest)) do

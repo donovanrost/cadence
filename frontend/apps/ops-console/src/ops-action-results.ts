@@ -2,12 +2,7 @@ import type { OpsConsolePresentation } from "./ops-console";
 
 type JsonRecord = Record<string, unknown>;
 
-const validationActions = new Set([
-  "validate",
-  "validate-template",
-  "validate-settings",
-  "validate-request",
-]);
+const validationActions = new Set(["validate", "validate-template"]);
 
 export function reconcileOpsActionResult(
   presentation: OpsConsolePresentation,
@@ -34,8 +29,6 @@ export function reconcileOpsActionResult(
     case "timeline:apply_timeline_filters":
     case "timeline:clear_timeline_selection":
       return reconcileTimeline(presentation, patch);
-    case "dashboard_directory:filter_dashboards":
-      return reconcileDashboardDirectory(presentation, patch);
     case "contact_schedule:search":
       return reconcileContactSchedule(presentation, patch);
     default:
@@ -89,23 +82,6 @@ function reconcileTimeline(
       filters: { ...currentFilters, ...filters, values },
     },
     timeline_events: events,
-  });
-}
-
-function reconcileDashboardDirectory(
-  presentation: OpsConsolePresentation,
-  patch: JsonRecord,
-): OpsConsolePresentation {
-  const filters = requireRecord(patch.filters, "Phoenix returned invalid dashboard filters.");
-  const values = requireRecord(filters.values, "Phoenix returned invalid dashboard filter values.");
-  const dashboards = requireArray(
-    patch.dashboard_directory,
-    "Phoenix returned invalid dashboard rows.",
-  );
-
-  return withProps(presentation, {
-    filters: { ...filters, values },
-    dashboard_directory: dashboards,
   });
 }
 

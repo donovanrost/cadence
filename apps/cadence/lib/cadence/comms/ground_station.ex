@@ -16,6 +16,7 @@ defmodule Cadence.Comms.GroundStation do
           mission_id: binary(),
           lifecycle_state: lifecycle_state(),
           display_name: binary(),
+          code: binary() | nil,
           provider: binary() | nil,
           region: binary() | nil,
           metadata: map()
@@ -27,6 +28,7 @@ defmodule Cadence.Comms.GroundStation do
     :mission_id,
     :lifecycle_state,
     :display_name,
+    :code,
     :provider,
     :region,
     metadata: %{}
@@ -50,6 +52,7 @@ defmodule Cadence.Comms.GroundStation do
         |> Map.get(:lifecycle_state, Map.get(attrs, "lifecycle_state", :active))
         |> normalize_atom(@lifecycle_states, :lifecycle_state),
       display_name: Map.fetch!(attrs, :display_name),
+      code: Map.get(attrs, :code, Map.get(attrs, "code")),
       provider: Map.get(attrs, :provider, Map.get(attrs, "provider")),
       region: Map.get(attrs, :region, Map.get(attrs, "region")),
       metadata: Map.get(attrs, :metadata, Map.get(attrs, "metadata", %{}))

@@ -1,6 +1,10 @@
 defmodule Cadence.Management.DataSources.Store do
   @moduledoc """
   Persistence boundary for desired data-source definitions and bindings.
+
+  Boot (`ensure_default_managed_sources!/0`) inserts a default binding only when it's missing, so a
+  platform admin's switch survives a restart. The flip side: a code change to a default binding's
+  fields doesn't reach an existing database at boot; it needs a migration or an explicit switch.
   """
 
   import Ecto.Query
@@ -197,11 +201,11 @@ defmodule Cadence.Management.DataSources.Store do
          {:ok, operational_observables_data_source} <-
            persist_data_source(default_operational_observables_data_source()),
          {:ok, events_data_source} <- persist_data_source(default_events_data_source()),
-         {:ok, data_binding} <- persist_data_binding(default_flight_telemetry_binding()),
-         {:ok, limits_data_binding} <- persist_data_binding(default_flight_limits_binding()),
+         {:ok, data_binding} <- ensure_data_binding(default_flight_telemetry_binding()),
+         {:ok, limits_data_binding} <- ensure_data_binding(default_flight_limits_binding()),
          {:ok, operational_observables_binding} <-
-           persist_data_binding(default_flight_operational_observables_binding()),
-         {:ok, events_binding} <- persist_data_binding(default_flight_events_binding()) do
+           ensure_data_binding(default_flight_operational_observables_binding()),
+         {:ok, events_binding} <- ensure_data_binding(default_flight_events_binding()) do
       %{
         data_source: data_source,
         data_binding: data_binding,
@@ -239,6 +243,15 @@ defmodule Cadence.Management.DataSources.Store do
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  # Boot seeds a default binding only when it's missing. Re-persisting it at every start reverted a
+  # platform admin's switch of that binding to another platform-shared source (api-ops, 11-15).
+  defp ensure_data_binding(%DataBinding{binding_id: binding_id} = default) do
+    case fetch_data_binding(binding_id) do
+      {:ok, existing} -> {:ok, existing}
+      {:error, :data_binding_not_found} -> persist_data_binding(default)
     end
   end
 
@@ -637,10 +650,69 @@ defmodule Cadence.Management.DataSources.Store do
   end
 
   defp persist_data_binding_projection(%DataBinding{} = data_binding, opts) do
-    previous_row = Repo.get(DataBindingRow, data_binding.binding_id)
+    previous_row = previous_binding_row(data_binding.binding_id, opts)
     previous = previous_row && DataBindingRow.to_domain(previous_row)
     data_binding = prepare_data_binding_projection(data_binding, previous)
 
+    with :ok <- expected_source(previous, opts),
+         :ok <- platform_binding_invariant(previous, data_binding) do
+      persist_changed_data_binding(previous_row, previous, data_binding, opts)
+    end
+  end
+
+  # A switch made against what the operator saw (`expected_data_source_id:`) locks the row and
+  # refuses when someone else moved the binding since, so a stale confirmation can't overwrite it.
+  defp previous_binding_row(binding_id, opts) do
+    if Keyword.has_key?(opts, :expected_data_source_id) do
+      DataBindingRow
+      |> where([row], row.binding_id == ^binding_id)
+      |> lock("FOR UPDATE")
+      |> Repo.one()
+    else
+      Repo.get(DataBindingRow, binding_id)
+    end
+  end
+
+  defp expected_source(previous, opts) do
+    case Keyword.fetch(opts, :expected_data_source_id) do
+      :error ->
+        :ok
+
+      {:ok, expected}
+      when is_struct(previous, DataBinding) and previous.data_source_id == expected ->
+        :ok
+
+      {:ok, _stale} ->
+        {:error, {:binding_changed, previous && previous.data_source_id}}
+    end
+  end
+
+  # A platform-wide binding (no organization) serves every tenant that falls back to it, so it
+  # stays platform-wide and only ever points at a platform-shared source (DataSource.
+  # platform_shared?/1). Enforced here, at the one write path, whatever the caller: the console
+  # switch, a disable/enable/supersede with attrs, a smoke task given that binding id, or boot.
+  # A binding's organization never changes, in either direction: no organization takes over a
+  # platform binding, and no organization's binding becomes every tenant's fallback (api-ops).
+  defp platform_binding_invariant(
+         %DataBinding{organization_id: before},
+         %DataBinding{organization_id: now}
+       )
+       when before != now,
+       do: {:error, :platform_binding_scope_change}
+
+  defp platform_binding_invariant(_previous, %DataBinding{organization_id: nil} = binding) do
+    case fetch_data_source(binding.data_source_id) do
+      {:ok, source} ->
+        if DataSource.platform_shared?(source), do: :ok, else: {:error, :platform_target_required}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp platform_binding_invariant(_previous, _binding), do: :ok
+
+  defp persist_changed_data_binding(previous_row, previous, data_binding, opts) do
     if same_data_binding_projection?(previous, data_binding) do
       {:ok, previous, nil}
     else

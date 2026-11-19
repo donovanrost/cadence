@@ -97,6 +97,63 @@ defmodule Cadence.Limits.DefinitionLifecycle do
     end
   end
 
+  @doc """
+  Retires a definition's active limits (#77): a `retired` lifecycle event (and its
+  `limit_definition_retired` operational event) and the active projection row removed, so
+  evaluation stops reading it; the definition's versions stay. Facts are published only when
+  `publish_facts?` (a change set publishes after its commit). `{:ok, event}` or
+  `{:error, :active_limit_definition_not_found}`.
+  """
+  def record_definition_retirement(%Definition{} = definition, opts \\ []) when is_list(opts) do
+    opts = Keyword.put_new(opts, :event_bus, EventBus)
+    now = DateTime.utc_now()
+
+    attrs =
+      DefinitionLifecycleEvent.attrs_from_definition(
+        definition,
+        Keyword.merge(opts, event_type: :retired, reason: :definition_retired, active_to: now)
+      )
+
+    seed = DefinitionLifecycleEvent.new(attrs)
+
+    DefinitionLock.run(
+      seed.organization_id,
+      seed.mission_id,
+      seed.point_id,
+      seed.limit_set_name,
+      fn ->
+        case Repo.get(ActiveLimitDefinitionRow, seed.definition_activation_key) do
+          nil -> Repo.rollback(:active_limit_definition_not_found)
+          row -> retire!(attrs, row)
+        end
+      end
+    )
+    |> case do
+      {:ok, event} ->
+        maybe_publish_limit_definition(event, opts)
+        {:ok, event}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp retire!(attrs, %ActiveLimitDefinitionRow{} = row) do
+    event =
+      attrs
+      |> Map.merge(previous_attrs(ActiveLimitDefinitionRow.to_domain(row)))
+      |> DefinitionLifecycleEvent.new()
+
+    with {:ok, event_row} <- Repo.insert(LimitDefinitionLifecycleEventRow.changeset(event)),
+         lifecycle_event = LimitDefinitionLifecycleEventRow.to_domain(event_row),
+         {:ok, %OperationalEvent{}} <- persist_limit_definition_operational_event(lifecycle_event),
+         {:ok, _deleted} <- Repo.delete(row) do
+      lifecycle_event
+    else
+      {:error, reason} -> Repo.rollback(reason)
+    end
+  end
+
   @spec list_definition_lifecycle_events(binary() | nil, binary() | nil, keyword()) :: [
           DefinitionLifecycleEvent.t()
         ]

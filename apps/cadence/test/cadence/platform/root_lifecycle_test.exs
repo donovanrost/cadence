@@ -1,6 +1,8 @@
 defmodule Cadence.Platform.RootLifecycleTest do
   use Cadence.ProcessDataCase, async: false
 
+  @moduletag :ingest_journal_matrix
+
   alias Cadence.Commanding.{CommandQueueEntry, CommandQueueEntryRow, CommandRequest}
   alias Cadence.Commanding.{CommandRequestRow, Dispatcher, DispatchSupervisor}
   alias Cadence.Commanding.{ProcessNamespace, VerifierScheduler}

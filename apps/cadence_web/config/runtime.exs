@@ -32,6 +32,33 @@ if config_env() == :prod do
   end
 end
 
+# Provider HTTP calls refuse private and reserved networks (OutboundGuard). A deployment whose
+# provider legitimately lives on a private network (a lab's in-cluster simulator) names those
+# ranges explicitly: CADENCE_PROVIDER_OUTBOUND_ALLOW="10.43.0.0/16" (no range wider than /8 or
+# /32, never link-local or metadata space; validated at boot). There is no switch that turns the
+# check off.
+case System.get_env("CADENCE_PROVIDER_OUTBOUND_ALLOW") do
+  ranges when is_binary(ranges) and ranges != "" ->
+    config :cadence, :provider_outbound,
+      allow: ranges |> String.split(",", trim: true) |> Enum.map(&String.trim/1)
+
+  _unset ->
+    :ok
+end
+
+# Env-backed credentials, where an environment enables the local backend: the variable names a
+# tenant may use (EnvBackend). CADENCE_ENV_CREDENTIALS_ALLOW="EARENDIL_DEMO_PROVIDER_TOKEN,...";
+# each organization may also use its own CADENCE_TENANT_<ORG>_ prefix.
+case System.get_env("CADENCE_ENV_CREDENTIALS_ALLOW") do
+  names when is_binary(names) and names != "" ->
+    config :cadence, :env_credentials,
+      allow: names |> String.split(",", trim: true) |> Enum.map(&String.trim/1),
+      allow_prefixes: []
+
+  _unset ->
+    :ok
+end
+
 case System.get_env("OTEL_EXPORTER_OTLP_ENDPOINT") do
   endpoint when is_binary(endpoint) and endpoint != "" ->
     config :opentelemetry,
@@ -58,8 +85,9 @@ journal_enabled = System.get_env("CADENCE_INGRESS_JOURNAL_ENABLED")
 
 if config_env() == :prod or (is_binary(journal_path) and journal_path != "") or
      (is_binary(journal_enabled) and journal_enabled != "") do
+  # On unless a deployment turns it off (DECISIONS #95).
   enabled? =
-    case journal_enabled || "false" do
+    case journal_enabled || "true" do
       value when value in ["true", "1"] -> true
       value when value in ["false", "0"] -> false
       invalid -> raise "invalid CADENCE_INGRESS_JOURNAL_ENABLED: #{inspect(invalid)}"

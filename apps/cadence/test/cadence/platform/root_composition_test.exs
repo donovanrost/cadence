@@ -7,6 +7,15 @@ defmodule Cadence.Platform.RootCompositionTest do
   alias Cadence.Platform.RootComposition
   alias Cadence.Runtime.ProcessNamespace, as: RuntimeProcessNamespace
 
+  test "refuses Postgres current values without the Postgres packet record archive" do
+    assert_raise ArgumentError, ~r/needs the Postgres protocol record archive/, fn ->
+      RootComposition.new!(
+        record_archive_config: [module: Cadence.Protocol.RecordArchive.FileSystem],
+        current_value_store_config: [module: Cadence.Telemetry.CurrentValueStore.Postgres]
+      )
+    end
+  end
+
   test "two explicit compositions retain distinct process and storage ownership" do
     alpha = composition(:alpha)
     bravo = composition(:bravo)

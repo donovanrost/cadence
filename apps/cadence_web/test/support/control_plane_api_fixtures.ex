@@ -10,6 +10,8 @@ defmodule CadenceWeb.ControlPlaneApiFixtures do
   alias Cadence.Contacts.{Path, RealizedContact, ScheduledContact, TransportBinding}
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Limits.Definition, as: LimitDefinition
+  alias Cadence.MissionModelApproval
+  alias Cadence.MissionModelCatalogNaming
   alias Cadence.Missions.Mission
   alias Cadence.Organizations.Organization
   alias Cadence.SourceEndpoints.SourceEndpoint
@@ -91,13 +93,13 @@ defmodule CadenceWeb.ControlPlaneApiFixtures do
       })
 
     assert {:ok, compilation} = Cadence.MissionModels.compile_layers([layer])
+    MissionModelCatalogNaming.name!(organization_id, mission_id, compilation.revision.revision_id)
 
     assert {:ok, revision} =
-             Cadence.MissionModels.approve_revision(
+             MissionModelApproval.approve!(
                organization_id,
                mission_id,
-               compilation.revision.revision_id,
-               %{"kind" => "test_fixture", "id" => "control-plane-api"}
+               compilation.revision.revision_id
              )
 
     revision
@@ -135,7 +137,8 @@ defmodule CadenceWeb.ControlPlaneApiFixtures do
             name: "counter",
             offset_bits: 0,
             size_bits: 16,
-            data_type: :uint
+            data_type: :uint,
+            engineering_unit: "count"
           },
           %{
             field_id: "field-voltage",
@@ -270,7 +273,7 @@ defmodule CadenceWeb.ControlPlaneApiFixtures do
                 transport_binding_id: "uplink-gateway-commanding-api",
                 family_key: :uplink_gateway,
                 target_scope: :path,
-                # The release guard (#38) requires the gateway to name its spacecraft's SCID.
+                # The release guard (#38) matches this SCID to the target spacecraft's.
                 configuration: %{"service_name" => "gateway", "scid" => 31}
               })
             ]

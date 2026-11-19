@@ -173,7 +173,7 @@ defmodule Cadence.Governance.ScopedSettingsTest do
     current = ActivationPolicy.load(c.org, c.mission)
 
     assert {:error, :rolled_back} =
-             ActivationPolicy.with_lock(c.org, fn ->
+             ScopedSettings.with_lock(c.org, ActivationPolicy.section_id(), fn ->
                assert {:ok, _} =
                         ActivationPolicy.save(c.scope, c.mission, current.token, %{"value" => nil})
 

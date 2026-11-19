@@ -10,6 +10,8 @@ defmodule Cadence.ContactPlanning.AutomationGrantsTest do
     FleetPlanningPolicies
   }
 
+  alias Cadence.PolicyReviewer
+
   @organization_id "org-automation-grants"
   @mission_id "mission-automation-grants"
   @now ~U[2026-07-17 10:00:00.000000Z]
@@ -26,7 +28,7 @@ defmodule Cadence.ContactPlanning.AutomationGrantsTest do
 
     assert {:ok, _active, ^policy_version, _approval} =
              FleetPlanningPolicies.approve(
-               admin_scope,
+               PolicyReviewer.reviewer(admin_scope),
                @mission_id,
                policy.fleet_planning_policy_id,
                policy_version.version,
@@ -301,7 +303,7 @@ defmodule Cadence.ContactPlanning.AutomationGrantsTest do
 
     assert {:ok, _active, ^version_two, _approval} =
              FleetPlanningPolicies.approve(
-               context.admin_scope,
+               PolicyReviewer.reviewer(context.admin_scope),
                @mission_id,
                context.policy.fleet_planning_policy_id,
                version_two.version,
@@ -339,7 +341,7 @@ defmodule Cadence.ContactPlanning.AutomationGrantsTest do
 
     assert {:ok, _, _, _} =
              FleetPlanningPolicies.approve(
-               context.admin_scope,
+               PolicyReviewer.reviewer(context.admin_scope),
                @mission_id,
                expected.policy_id,
                2,

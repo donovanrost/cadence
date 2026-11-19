@@ -2,6 +2,7 @@ defmodule Cadence.GroundNetworks do
   @moduledoc "Mission-scoped provider control-plane context."
 
   alias Cadence.Auth.{Policy, Scope}
+  alias Cadence.Comms.StationAvailability.ProviderReports
   alias Cadence.Contacts.ProviderClients.Registry
   alias Cadence.Ids
 
@@ -158,7 +159,14 @@ defmodule Cadence.GroundNetworks do
          {:ok, spacecraft} <- client.list_spacecraft(context, %{}, call_opts),
          {:ok, ground_stations} <- client.list_ground_stations(context, %{}, call_opts),
          {:ok, service_profiles} <- client.list_service_profiles(context, %{}, call_opts),
-         {:ok, delivery_profiles} <- client.list_delivery_profiles(context, %{}, call_opts) do
+         {:ok, delivery_profiles} <- client.list_delivery_profiles(context, %{}, call_opts),
+         {:ok, _availability} <-
+           ProviderReports.sync(
+             provider.organization_id,
+             provider.mission_id,
+             provider.provider_id,
+             ground_stations
+           ) do
       sync_document =
         build_sync_document(
           spacecraft,
@@ -313,6 +321,15 @@ defmodule Cadence.GroundNetworks do
       "diagnostics" => profile.diagnostics
     }
   end
+
+  @doc """
+  Records a failed observation (`"control_plane"` or `"sync"`) the caller ended itself, such as a
+  call it stopped waiting for, the way a failed call records its own.
+  """
+  @spec record_provider_failure(MissionProvider.t(), binary(), term()) :: {:error, term()}
+  def record_provider_failure(%MissionProvider{} = provider, observation, reason)
+      when observation in ["control_plane", "sync"],
+      do: record_failure(provider, observation, reason, now([]))
 
   defp record_failure(provider, observation, reason, at) do
     metadata =

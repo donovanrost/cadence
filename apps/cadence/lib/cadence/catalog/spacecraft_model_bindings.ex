@@ -47,14 +47,19 @@ defmodule Cadence.Catalog.SpacecraftModelBindings do
     end
   end
 
-  def entries(%{"spacecraft_configurations" => entries, "spacecraft_configuration_version" => 1})
-      when is_map(entries) and map_size(entries) in 1..@max_fleet_spacecraft do
+  def entries(%{"spacecraft_configurations" => entries, "spacecraft_configuration_version" => 1}),
+    do: validate(entries)
+
+  def entries(_), do: {:error, :invalid_spacecraft_model_bindings}
+
+  @doc "Validates a fleet of entries (`spacecraft_id => entry`) within the fleet bounds."
+  def validate(entries) when is_map(entries) and map_size(entries) in 1..@max_fleet_spacecraft do
     if Enum.all?(entries, &valid_entry?/1) and unique_endpoints?(entries),
       do: {:ok, entries},
       else: {:error, :invalid_spacecraft_model_bindings}
   end
 
-  def entries(_), do: {:error, :invalid_spacecraft_model_bindings}
+  def validate(_entries), do: {:error, :invalid_spacecraft_model_bindings}
 
   def entry_for_source(metadata, source_endpoint_id) when is_binary(source_endpoint_id) do
     with {:ok, entries} <- entries(metadata) do

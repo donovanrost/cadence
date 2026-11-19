@@ -10,7 +10,7 @@ defmodule Cadence.Reads.MissionTimeline do
   alias Cadence.MissionEvents.Entry
   alias Cadence.OperationalEvents
   alias Cadence.Projections.MissionEvents, as: MissionEventProjection
-  alias Cadence.Reads.MissionEvents
+  alias Cadence.Reads.{ConfigRevisionEvents, MissionEvents, OffPlanBookingEvents}
   alias Cadence.SourceEndpoints
 
   @spec list_for_mission(binary(), binary(), keyword()) :: [Entry.t()]
@@ -19,7 +19,13 @@ defmodule Cadence.Reads.MissionTimeline do
     page_for_mission(organization_id, mission_id, opts).entries
   end
 
-  @doc "Reads a bounded portion of canonical history with a stable exclusive continuation."
+  @doc """
+  Reads a bounded portion of canonical history with a stable exclusive continuation.
+
+  `config_revisions: true` also merges applied configuration revisions
+  (`Cadence.Reads.ConfigRevisionEvents`; mission-wide, so not with a `spacecraft_id` filter).
+  `off_plan_bookings: true` merges off-plan bookings (`Cadence.Reads.OffPlanBookingEvents`, L15).
+  """
   def page_for_mission(organization_id, mission_id, opts \\ []) do
     limit = Keyword.get(opts, :limit, 100)
     source_limit = max(limit * 4, 1_000)
@@ -59,7 +65,11 @@ defmodule Cadence.Reads.MissionTimeline do
       )
 
     entries =
-      (operational_entries ++ overrides ++ projected)
+      (operational_entries ++
+         overrides ++
+         projected ++
+         config_revisions(organization_id, mission_id, opts) ++
+         off_plan_bookings(organization_id, mission_id, opts))
       |> Map.new(&{&1.mission_event_id, &1})
       |> Map.values()
 
@@ -85,6 +95,28 @@ defmodule Cadence.Reads.MissionTimeline do
       end
 
     %{entries: visible, next_cursor: next_cursor}
+  end
+
+  defp config_revisions(organization_id, mission_id, opts) do
+    if Keyword.get(opts, :config_revisions, false) and is_nil(Keyword.get(opts, :spacecraft_id)),
+      do:
+        ConfigRevisionEvents.entries(
+          organization_id,
+          mission_id,
+          Keyword.take(opts, [:from_occurred_at, :to_occurred_at])
+        ),
+      else: []
+  end
+
+  defp off_plan_bookings(organization_id, mission_id, opts) do
+    if Keyword.get(opts, :off_plan_bookings, false),
+      do:
+        OffPlanBookingEvents.entries(
+          organization_id,
+          mission_id,
+          Keyword.take(opts, [:from_occurred_at, :to_occurred_at])
+        ),
+      else: []
   end
 
   defp portion(entries, limit, to_cursor) do
@@ -163,7 +195,8 @@ defmodule Cadence.Reads.MissionTimeline do
       :severity,
       :cursor,
       :from_occurred_at,
-      :to_occurred_at
+      :to_occurred_at,
+      :exclude_housekeeping
     ])
     |> Keyword.put(:limit, source_limit)
     |> Keyword.put(:order, :desc)
@@ -171,7 +204,7 @@ defmodule Cadence.Reads.MissionTimeline do
 
   defp operational_read_opts(opts, source_limit) do
     opts
-    |> Keyword.take([:kind, :from_occurred_at, :to_occurred_at, :cursor])
+    |> Keyword.take([:kind, :from_occurred_at, :to_occurred_at, :cursor, :exclude_housekeeping])
     |> Keyword.put(:category, operational_categories(Keyword.get(opts, :category)))
     |> Keyword.put(:time_axis, :effective)
     |> Keyword.put(:limit, source_limit)
@@ -247,10 +280,11 @@ defmodule Cadence.Reads.MissionTimeline do
   defp atom_matches?(_value, nil), do: true
 
   defp atom_matches?(value, expected) do
-    Atom.to_string(value) in Enum.map(List.wrap(expected), &to_string/1)
+    to_string(value) in Enum.map(List.wrap(expected), &to_string/1)
   end
 
   defp value_matches?(_value, nil), do: true
+  defp value_matches?(value, expected) when is_list(expected), do: value in expected
   defp value_matches?(value, expected), do: value == expected
 
   defp after_or_at?(_occurred_at, nil), do: true

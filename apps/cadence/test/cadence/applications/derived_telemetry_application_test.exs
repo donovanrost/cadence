@@ -42,6 +42,7 @@ defmodule Cadence.Applications.DerivedTelemetryApplicationTest do
       surface_id: "manage",
       surface_version: 1,
       action_id: "save_definition",
+      origin: :console,
       params: %{
         "expected_version" => 0,
         "expected_definition_id" => nil,
@@ -94,6 +95,7 @@ defmodule Cadence.Applications.DerivedTelemetryApplicationTest do
       surface_id: "manage",
       surface_version: 1,
       action_id: "save_definition",
+      origin: :console,
       params: %{
         "point_id" => "DERIVED.unauthorized",
         "expression" => "HK.value * 2"
@@ -113,6 +115,7 @@ defmodule Cadence.Applications.DerivedTelemetryApplicationTest do
       surface_id: "manage",
       surface_version: 1,
       action_id: "save_definition",
+      origin: :console,
       params: %{"point_id" => "DERIVED.missing_expression", "expression" => ""}
     }
 
@@ -133,6 +136,7 @@ defmodule Cadence.Applications.DerivedTelemetryApplicationTest do
       surface_id: "manage",
       surface_version: 1,
       action_id: "save_definition",
+      origin: :console,
       params: %{
         "point_id" => "DERIVED.power",
         "expression" => "HK.voltage * 2",
@@ -205,6 +209,7 @@ defmodule Cadence.Applications.DerivedTelemetryApplicationTest do
       surface_id: "manage",
       surface_version: 1,
       action_id: "save_definition",
+      origin: :console,
       params: %{"point_id" => "DERIVED.power", "expression" => "HK.voltage * 2"}
     }
 

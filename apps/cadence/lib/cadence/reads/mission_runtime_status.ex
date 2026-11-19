@@ -16,4 +16,10 @@ defmodule Cadence.Reads.MissionRuntimeStatus do
   def status(organization_id, mission_id)
       when is_binary(organization_id) and is_binary(mission_id),
       do: MissionRuntimeStatus.status(mission_id)
+
+  @doc "What a spec mismatch failed to verify (the `mission_runtime` item's `reason_detail`)."
+  @spec reason_detail(binary(), binary()) :: String.t() | nil
+  def reason_detail(organization_id, mission_id)
+      when is_binary(organization_id) and is_binary(mission_id),
+      do: MissionRuntimeStatus.reason_detail(mission_id)
 end

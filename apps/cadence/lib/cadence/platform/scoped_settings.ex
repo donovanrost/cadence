@@ -1,5 +1,11 @@
 defmodule Cadence.Platform.ScopedSettings do
-  @moduledoc "Versioned storage for domain-owned organization defaults and mission overrides."
+  @moduledoc """
+  Versioned storage for domain-owned organization defaults and mission overrides.
+
+  A mission override stores only the paths it sets (per-field, BACKLOG §4): its effective value is
+  the organization's merged with them, so every other field follows the organization. `value`
+  nil inherits the whole section.
+  """
   import Ecto.Query
   alias Cadence.Ids
   alias Cadence.Platform.ContentHash
@@ -11,17 +17,47 @@ defmodule Cadence.Platform.ScopedSettings do
   # The organization and its missions share a section lock. Approval admission
   # uses this same lock so a setting cannot change during its durable effect.
   def with_lock(organization_id, section_id, operation) do
-    <<key::signed-64, _::binary>> =
-      :crypto.hash(:sha256, :erlang.term_to_binary({__MODULE__, organization_id, section_id}))
-
     case Repo.transaction(fn ->
-           SQL.query!(Repo, "SELECT pg_advisory_xact_lock($1::bigint)", [key])
+           :ok = section_lock(organization_id, section_id)
            rollback_error(operation.())
          end) do
       {:ok, result} -> result
       {:error, reason} -> {:error, reason}
     end
   end
+
+  @doc """
+  Runs `operation` in a transaction holding the section lock SHARED: readers that need the section
+  to stay stable don't block each other, while a write (`with_lock/3`, `save`) waits for them and,
+  once queued, holds back new readers. The activation policy's order against other locks is
+  `Cadence.Governance.ActivationLocks`'.
+  """
+  def with_shared_lock(organization_id, section_id, operation) do
+    case Repo.transaction(fn ->
+           :ok = section_lock(organization_id, section_id, :shared)
+           rollback_error(operation.())
+         end) do
+      {:ok, result} -> result
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Takes the section lock inside the caller's transaction, held to its end: `:exclusive` for a
+  write, `:shared` for a reader that needs the section stable. Never take it shared and then
+  exclusive in one transaction: two such upgraders deadlock.
+  """
+  @spec section_lock(binary(), binary(), :exclusive | :shared) :: :ok
+  def section_lock(organization_id, section_id, mode \\ :exclusive) do
+    <<key::signed-64, _::binary>> =
+      :crypto.hash(:sha256, :erlang.term_to_binary({__MODULE__, organization_id, section_id}))
+
+    SQL.query!(Repo, lock_sql(mode), [key])
+    :ok
+  end
+
+  defp lock_sql(:exclusive), do: "SELECT pg_advisory_xact_lock($1::bigint)"
+  defp lock_sql(:shared), do: "SELECT pg_advisory_xact_lock_shared($1::bigint)"
 
   defp rollback_error({:error, reason}), do: Repo.rollback(reason)
   defp rollback_error(result), do: result
@@ -67,12 +103,17 @@ defmodule Cadence.Platform.ScopedSettings do
         ),
       version: if(current, do: current.version, else: 0),
       saved: if(is_nil(mission_id), do: organization_value, else: saved),
-      effective: if(source == "overridden", do: saved, else: organization_value),
+      effective: effective(source, organization_value, saved),
       organization_default: organization_value,
       allow_override: allow_override,
       source: source
     }
   end
+
+  defp effective("overridden", organization_value, saved),
+    do: Map.merge(organization_value || %{}, saved)
+
+  defp effective(_source, organization_value, _saved), do: organization_value
 
   def save(organization_id, mission_id, section_id, default, expected_token, document, actor) do
     with_lock(organization_id, section_id, fn ->
@@ -118,10 +159,92 @@ defmodule Cadence.Platform.ScopedSettings do
         id: &1.revision_id,
         version: &1.version,
         actor: &1.actor_name,
-        saved_at: DateTime.to_iso8601(&1.inserted_at)
+        saved_at: DateTime.to_iso8601(&1.inserted_at),
+        migration: &1.document["migration"]
       }
     )
   end
+
+  @doc """
+  Every mission's current override that sets something (`value` not nil), for the per-field
+  migration: `[%{organization_id, mission_id, section_id, version, value}]`.
+  """
+  def mission_overrides do
+    from(row in RevisionRow,
+      where: like(row.scope_key, "mission:%"),
+      distinct: [row.organization_id, row.scope_key, row.section_id],
+      order_by: [
+        asc: row.organization_id,
+        asc: row.scope_key,
+        asc: row.section_id,
+        desc: row.version
+      ]
+    )
+    |> Repo.all()
+    |> Enum.filter(&is_map(&1.document["value"]))
+    |> Enum.map(
+      &%{
+        organization_id: &1.organization_id,
+        mission_id: String.replace_prefix(&1.scope_key, "mission:", ""),
+        section_id: &1.section_id,
+        version: &1.version,
+        value: &1.document["value"]
+      }
+    )
+  end
+
+  @doc """
+  Writes `document` as a mission override's next revision when its latest is still
+  `expected_version` (the per-field migration, which has no section default or token at hand);
+  else `{:error, :settings_changed}`.
+  """
+  def rewrite_override(organization_id, mission_id, section_id, expected_version, document, actor)
+      when is_binary(mission_id) do
+    key = scope_key(mission_id)
+
+    with_lock(organization_id, section_id, fn ->
+      latest =
+        from(row in RevisionRow,
+          where: row.organization_id == ^organization_id and row.scope_key == ^key,
+          where: row.section_id == ^section_id,
+          select: max(row.version)
+        )
+        |> Repo.one()
+
+      if latest == expected_version do
+        Repo.insert(
+          RevisionRow.changeset(%{
+            revision_id: Ids.new("settings_revision"),
+            organization_id: organization_id,
+            scope_key: key,
+            section_id: section_id,
+            version: expected_version + 1,
+            document: document,
+            actor_id: actor.id,
+            actor_name: actor.name
+          })
+        )
+      else
+        {:error, :settings_changed}
+      end
+    end)
+    |> ScopedReadUpdates.publish_result(:settings_changed, organization_id, mission_id)
+  end
+
+  @migration_note "Settings now follow the organization except the fields set for this mission."
+  @migration_governance "Approval settings stay set for this mission, even where they match " <>
+                          "the organization."
+
+  @doc """
+  The audit's words for a mission the per-field migration rewrote (ux), with the governance
+  sentence when it kept approval fields equal to the organization's.
+  """
+  def migration_note(governance_kept?),
+    do:
+      if(governance_kept?,
+        do: @migration_note <> " " <> @migration_governance,
+        else: @migration_note
+      )
 
   defp scope_key(nil), do: "organization"
   defp scope_key(mission_id), do: "mission:#{mission_id}"

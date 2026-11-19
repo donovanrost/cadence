@@ -157,7 +157,8 @@ defmodule CadenceWeb.OpsFleetWorkflowPage do
       surface_id: session.surface,
       surface_version: 1,
       action_id: event,
-      params: input
+      params: input,
+      origin: :legacy_host
     }
 
     FleetPlanning.execute(scope, HostContext.mission(mission), session.surface, request)

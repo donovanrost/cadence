@@ -15,7 +15,8 @@ defmodule CadenceSimulator.Provider.ApiRouter do
     Environment,
     EventDelivery,
     Opportunities,
-    ServiceProfiles
+    ServiceProfiles,
+    UplinkAttestation
   }
 
   alias CadenceSimulator.Provider.Store
@@ -137,6 +138,16 @@ defmodule CadenceSimulator.Provider.ApiRouter do
   post "/v1/contacts/:id/cancel" do
     with_environment(conn, fn conn, run ->
       respond(conn, Contacts.cancel(run, id, request_id: request_id(conn)))
+    end)
+  end
+
+  # Signed with the credential this request authenticated with (#44 D2).
+  post "/v1/contacts/:id/uplink-attestation" do
+    with_environment(conn, fn conn, run ->
+      respond(
+        conn,
+        UplinkAttestation.attest(run, id, conn.body_params, Auth.supplied_token(conn))
+      )
     end)
   end
 

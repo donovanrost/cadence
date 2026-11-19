@@ -105,14 +105,82 @@ defmodule Cadence.IngressJournal.Evidence do
          # frame with the first record's time (11-14 00:38–00:40Z, 8 frames per stamp).
          receipt_times: receipt_times(entries),
          source_ref: metadata_value(metadata, :source_ref),
-         metadata: Map.merge(ingress_metadata, journal_metadata)
+         metadata:
+           ingress_metadata |> Map.merge(contact_context(metadata)) |> Map.merge(journal_metadata)
        })}
     else
       {:error, {:unsupported_journal_protocol_family, protocol_family}}
     end
   end
 
+  @doc """
+  `raw_evidence` without its leading bytes before the absolute stream offset `offset`: after a
+  restart, the bytes of the resume entry the processing consumer had already decoded (the journal's
+  durable resume point, domain's partial-frame fix 11-15). Unchanged when `offset` isn't inside it.
+  """
+  @spec drop_before(RawEvidence.t(), non_neg_integer()) :: RawEvidence.t()
+  def drop_before(%RawEvidence{metadata: metadata} = raw_evidence, offset)
+      when is_integer(offset) do
+    start = metadata["journal_start_offset"]
+    finish = metadata["journal_end_offset"]
+
+    if is_integer(start) and is_integer(finish) and offset > start and offset < finish do
+      skip = offset - start
+      <<_done::binary-size(^skip), rest::binary>> = raw_evidence.raw
+
+      %{
+        raw_evidence
+        | evidence_id: Identity.evidence_id(metadata["journal_stream_id"], offset, finish),
+          raw: rest,
+          receipt_times: receipt_times_from(raw_evidence.receipt_times, offset),
+          metadata:
+            metadata
+            |> Map.put("journal_start_offset", offset)
+            |> Map.put("journal_resumed_from", start)
+            |> Map.put(
+              RawEvidence.receipt_times_key(),
+              RawEvidence.encode_receipt_times(
+                receipt_times_from(raw_evidence.receipt_times, offset)
+              )
+            )
+      }
+    else
+      raw_evidence
+    end
+  end
+
+  # The record covering `offset` keeps its time, starting at `offset`; later records unchanged.
+  defp receipt_times_from(times, offset) when is_list(times) do
+    {before, rest} = Enum.split_while(times, fn {start, _time} -> start < offset end)
+
+    case {List.last(before), rest} do
+      {nil, rest} -> rest
+      {{_start, time}, [{^offset, _} | _] = rest} when is_struct(time) -> rest
+      {{_start, time}, rest} -> [{offset, time} | rest]
+    end
+  end
+
+  defp receipt_times_from(times, _offset), do: times
+
   defp receipt_times(entries), do: Enum.map(entries, &{&1.start_offset, &1.receipt_time})
+
+  # The contact, path and binding the TCP receiver journals at the entry's top level, as the
+  # same string keys the journal-less path sets (tcp_socket.ex), so archive rows name their
+  # contact (qa issue 61: every archive row read NULL, and #88 quarantine items group by it).
+  defp contact_context(metadata) do
+    ids =
+      for key <- [:realized_contact_id, :path_id, :provider_binding_id],
+          value = metadata_value(metadata, key),
+          is_binary(value),
+          into: %{},
+          do: {Atom.to_string(key), value}
+
+    # The pass's one spacecraft's SCID, for the frame-SCID cross-check (DECISIONS #102).
+    case metadata_value(metadata, :spacecraft_scid) do
+      scid when is_integer(scid) -> Map.put(ids, "spacecraft_scid", scid)
+      _none -> ids
+    end
+  end
 
   defp validate_contiguous_entries([%Entry{}]), do: :ok
 

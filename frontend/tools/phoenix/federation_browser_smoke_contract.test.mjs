@@ -16,7 +16,7 @@ import {
   installDiagnostics,
   isDataUrl,
   isIgnoredFavicon,
-  matchesSignInNavigationRequest,
+  matchesSignInRequest,
   parseResponseBody,
   requirePostActionRefresh,
   reserveLoopbackPort,
@@ -3206,24 +3206,19 @@ void test("the Ops representative browser gate pins the scoped compatibility des
   const opsConfigEnd = source.indexOf("catalogPath:", opsConfigStart);
   assert.ok(opsConfigStart >= 0 && opsConfigEnd > opsConfigStart);
   const opsConfig = source.slice(opsConfigStart, opsConfigEnd);
-  assert.equal(
-    opsConfig.includes("document.querySelector('#dashboard-directory-destination-open')"),
-    true,
-  );
+  assert.equal(opsConfig.includes("document.querySelector('#commands-open-workspace')"), true);
   assert.equal(opsConfig.includes("destination.origin === location.origin"), true);
-  assert.equal(
-    opsConfig.includes("/missions/${encodeURIComponent(missionId)}/ops/dashboards"),
-    true,
-  );
-  assert.equal(opsConfig.includes("#ops-dashboards-page"), false);
+  assert.equal(opsConfig.includes("/missions/${encodeURIComponent(missionId)}/ops/commands"), true);
+  assert.equal(opsConfig.includes("#ops-commands-component"), false);
 });
 
 void test("the shared host body is read on the first load and reused by later 304 checks", async () => {
   const source = await readFile(new URL("./federation_browser_smoke.mjs", import.meta.url), "utf8");
-  const organizationStart = source.indexOf('applicationKey: "organization_admin"');
-  const missionStart = source.indexOf('applicationKey: "mission_catalog"', organizationStart);
-  assert.ok(organizationStart >= 0 && missionStart > organizationStart);
-  assert.match(source.slice(organizationStart, missionStart), /readPublishedHostBody: true/);
+  // The first representative (Mission Catalog, since §11c removed Organization Admin's page).
+  const missionStart = source.indexOf('applicationKey: "mission_catalog"');
+  const opsStart = source.indexOf('applicationKey: "ops_console"', missionStart);
+  assert.ok(missionStart >= 0 && opsStart > missionStart);
+  assert.match(source.slice(missionStart, opsStart), /readPublishedHostBody: true/);
 
   const commsStart = source.indexOf('queryId: "cadence.comms.overview"');
   const commsEnd = source.indexOf("});", commsStart);
@@ -3590,79 +3585,74 @@ void test("delayed websocket events without a request-boundary record fail close
   await diagnostics.dispose();
 });
 
-void test("authenticated navigation causality requires the exact sign-in pathname", () => {
-  const alternatePathOptions = { expectedOrigin: origin, pathname: "/sign-in-extra" };
-  const base = {
-    method: "POST",
-    resourceType: "Document",
-    frameId: "main-frame",
-    loaderId: "auth-loader",
-  };
+void test("the console sign-in request is the exact API POST, same-origin, as a fetch", () => {
+  const base = { method: "POST", resourceType: "Fetch" };
+  const api = "/api/console/v1/auth/sign-in";
 
   for (const [pathname, expected] of /** @type {const} */ ([
-    ["/sign-in", true],
-    ["/sign-in?return_to=%2Fmissions#form", true],
-    ["/sign-in/", false],
-    ["/sign-in-extra", false],
-    ["/sign-in/extra", false],
-    ["/users/log_in", false],
+    [api, true],
+    [`${api}?x=1`, true],
+    [`${api}/`, false],
+    [`${api}-extra`, false],
+    ["/sign-in", false],
+    ["/console/sign-in", false],
   ])) {
     assert.equal(
-      matchesSignInNavigationRequest(
-        { ...base, url: `${origin}${pathname}` },
-        { expectedOrigin: origin },
-      ),
+      matchesSignInRequest({ ...base, url: `${origin}${pathname}` }, { expectedOrigin: origin }),
       expected,
       `sign-in request pathname ${pathname} admission mismatch`,
     );
   }
   assert.equal(
-    matchesSignInNavigationRequest(
-      { ...base, url: "https://evil.example/sign-in" },
+    matchesSignInRequest(
+      { ...base, url: `https://evil.example${api}` },
       { expectedOrigin: origin },
     ),
     false,
-    "a cross-origin document POST must not bind authenticated navigation",
+    "a cross-origin POST must not count as the sign-in",
   );
   assert.equal(
-    matchesSignInNavigationRequest({ ...base, url: "not-a-url" }, { expectedOrigin: origin }),
-    false,
-    "malformed request URLs must fail closed",
-  );
-  assert.equal(
-    matchesSignInNavigationRequest({ ...base, url: `${origin}/sign-in` }, alternatePathOptions),
-    true,
-    "a caller-supplied pathname cannot redefine the literal sign-in path",
-  );
-  assert.equal(
-    matchesSignInNavigationRequest(
-      { ...base, url: `${origin}/sign-in-extra` },
-      alternatePathOptions,
+    matchesSignInRequest(
+      { ...base, method: "GET", url: `${origin}${api}` },
+      { expectedOrigin: origin },
     ),
     false,
-    "a caller-supplied alternate pathname cannot admit that request",
+    "only the POST signs in",
+  );
+  assert.equal(
+    matchesSignInRequest(
+      { ...base, resourceType: "Document", url: `${origin}${api}` },
+      { expectedOrigin: origin },
+    ),
+    false,
+    "the sign-in is an in-page fetch, not a navigation",
+  );
+  assert.equal(
+    matchesSignInRequest({ ...base, url: "not-a-url" }, { expectedOrigin: origin }),
+    false,
+    "malformed request URLs must fail closed",
   );
 });
 
 void test("sign-in URL validation allows only query/hash variation and runs before navigation", async () => {
   for (const url of /** @type {const} */ ([
-    `${origin}/sign-in`,
-    `${origin}/sign-in?return_to=%2Fmissions#form`,
+    `${origin}/console/sign-in`,
+    `${origin}/console/sign-in?return_to=%2Fmissions#form`,
   ])) {
-    assert.equal(assertSignInUrl(url, origin).pathname, "/sign-in");
+    assert.equal(assertSignInUrl(url, origin).pathname, "/console/sign-in");
   }
 
   for (const url of /** @type {const} */ ([
-    `${origin}/sign-in/`,
-    `${origin}/sign-in-extra`,
-    `${origin}/sign-in/extra`,
-    `${origin}/users/log_in`,
-    "https://evil.example/sign-in",
+    `${origin}/sign-in`,
+    `${origin}/console/sign-in/`,
+    `${origin}/console/sign-in-extra`,
+    `${origin}/console/sign-in/extra`,
+    "https://evil.example/console/sign-in",
     "not-a-url",
   ])) {
     assert.throws(
       () => assertSignInUrl(url, origin),
-      /exact \/sign-in pathname|escaped the expected origin|Invalid URL/,
+      /exact \/console\/sign-in pathname|escaped the expected origin|Invalid URL/,
       `invalid sign-in URL was accepted: ${url}`,
     );
   }
@@ -3684,7 +3674,7 @@ void test("sign-in URL validation allows only query/hash variation and runs befo
         "--telemetry-url",
         `${origin}/missions/mission-1/telemetry/federated`,
         "--login-url",
-        `${origin}/sign-in-extra`,
+        `${origin}/console/sign-in-extra`,
         "--login-email",
         "operator@example.test",
         "--mission-id",
@@ -3700,7 +3690,7 @@ void test("sign-in URL validation allows only query/hash variation and runs befo
       ],
       { secret: { password: "secret" } },
     ),
-    /exact \/sign-in pathname/,
+    /exact \/console\/sign-in pathname/,
   );
   assert.equal(clientAccessed, false, "invalid sign-in URL reached browser navigation");
 });

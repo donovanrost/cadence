@@ -12,7 +12,8 @@ defmodule Cadence.Commanding.ReleaseTargetGuard do
     it is the target's SCID. A binding without one is refused (`uplink_gateway_scid_unknown`),
     as is a target spacecraft without one (`release_target_scid_unknown`).
 
-  Anything that can't be resolved is refused (fail closed).
+  Anything that can't be resolved is refused (fail closed). An archived target spacecraft is
+  refused too (`spacecraft_archived`, L22): nothing is sent to a spacecraft nobody lists.
   """
 
   alias Cadence.Comms.RoutingRuleStore
@@ -27,6 +28,7 @@ defmodule Cadence.Commanding.ReleaseTargetGuard do
           | {:release_gateway_not_target_spacecraft, binary()}
           | {:uplink_gateway_scid_unknown, binary()}
           | {:release_target_scid_unknown, binary()}
+          | {:spacecraft_archived, binary()}
 
   @doc "The spacecraft a source endpoint belongs to."
   @spec target(binary(), binary(), binary()) :: {:ok, binary()} | {:error, reason()}
@@ -34,6 +36,24 @@ defmodule Cadence.Commanding.ReleaseTargetGuard do
     case SourceEndpoints.fetch_source_endpoint(org, mission, source_endpoint_ref) do
       {:ok, %{spacecraft_id: id}} when is_binary(id) -> {:ok, id}
       _unknown -> {:error, {:release_target_spacecraft_unknown, source_endpoint_ref}}
+    end
+  end
+
+  @doc "Refuses an archived target spacecraft (L22). An unknown one is left to the other checks."
+  @spec live(binary(), binary(), binary()) :: :ok | {:error, reason()}
+  def live(org, mission, target) do
+    case SpacecraftStore.fetch_spacecraft(org, mission, target) do
+      {:ok, %{lifecycle_state: :archived}} -> {:error, {:spacecraft_archived, target}}
+      _active_or_unknown -> :ok
+    end
+  end
+
+  @doc "`live/3` for the spacecraft of a request's source endpoint."
+  @spec live_request(binary(), binary(), binary()) :: :ok | {:error, reason()}
+  def live_request(org, mission, source_endpoint_ref) do
+    case target(org, mission, source_endpoint_ref) do
+      {:ok, target} -> live(org, mission, target)
+      {:error, _unknown} -> :ok
     end
   end
 
@@ -52,6 +72,7 @@ defmodule Cadence.Commanding.ReleaseTargetGuard do
           :ok | {:error, reason()}
   def check(org, mission, source_endpoint_ref, contact, path, binding) do
     with {:ok, target} <- target(org, mission, source_endpoint_ref),
+         :ok <- live(org, mission, target),
          :ok <- contact(org, mission, target, contact),
          :ok <- path(org, mission, target, path) do
       gateway(org, mission, target, binding)

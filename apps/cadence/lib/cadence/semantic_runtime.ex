@@ -28,6 +28,28 @@ defmodule Cadence.SemanticRuntime do
   @spec new() :: State.t()
   def new, do: %State{}
 
+  @doc """
+  Seeds monitoring policies' effective states on an empty start (director 11-15): each
+  `{scope, policy_id, effective_state}` becomes the policy's prior, with its counts at 0, so a
+  parameter that cleared while the partition was down clears its alarm on the first normal sample,
+  and one still in alarm doesn't raise again. A policy already in the state is left as it is.
+  """
+  @spec seed_monitoring(State.t(), [{Scope.t(), binary(), atom()}]) :: State.t()
+  def seed_monitoring(%State{} = state, entries) when is_list(entries) do
+    seeded =
+      Map.new(entries, fn {scope, policy_id, effective_state} ->
+        {Scope.state_key(scope, policy_id),
+         %{
+           effective_state: effective_state,
+           candidate_state: effective_state,
+           violation_count: 0,
+           conformance_count: 0
+         }}
+      end)
+
+    %State{state | monitoring_state: Map.merge(seeded, state.monitoring_state)}
+  end
+
   @spec process(State.t(), [Update.t()], plan()) :: {:ok, Result.t(), State.t()}
   def process(%State{} = state, updates, plan) when is_list(updates) and is_map(plan) do
     algorithms = Enum.map(Map.get(plan, :algorithms, []), &build_algorithm/1)
@@ -135,7 +157,8 @@ defmodule Cadence.SemanticRuntime do
   defp evaluate_algorithm(%AlgorithmPlan{} = algorithm, trigger, %State{} = state) do
     state_key = Scope.state_key(trigger.scope, algorithm.algorithm_id)
 
-    with {:ok, inputs} <- fetch_inputs(algorithm, trigger.scope, trigger.at, state.latest),
+    with {:ok, inputs, stale?} <-
+           fetch_inputs(algorithm, trigger.scope, trigger.at, state.latest),
          {:ok, outputs, algorithm_state} <-
            evaluate_outputs(
              algorithm,
@@ -143,7 +166,7 @@ defmodule Cadence.SemanticRuntime do
              Map.get(state.algorithm_state, state_key, %{}),
              trigger.at
            ) do
-      quality = worst_quality(Map.values(inputs))
+      quality = if stale?, do: :bad, else: worst_quality(Map.values(inputs))
       source_update_ids = Enum.map(Map.values(inputs), & &1.update_id)
 
       updates =
@@ -173,10 +196,11 @@ defmodule Cadence.SemanticRuntime do
       {:ok, updates,
        %State{state | algorithm_state: Map.put(state.algorithm_state, state_key, algorithm_state)}}
     else
-      :missing when algorithm.missing_input == :skip -> {:skip, state}
-      :stale when algorithm.missing_input == :skip -> {:skip, state}
-      :missing -> {:error, :missing_input}
-      :stale -> {:error, :stale_input}
+      # A missing input leaves nothing to compute, whatever the policy. Erroring here failed the
+      # whole evidence, so nothing committed, `latest` never filled, and the journal retried the
+      # batch forever: a wedge on every empty start (director 11-15).
+      :missing -> {:skip, state}
+      :stale -> {:skip, state}
       {:error, reason} -> {:error, reason}
     end
   end
@@ -256,12 +280,23 @@ defmodule Cadence.SemanticRuntime do
     end
   end
 
+  # `missing_input: :bad_quality` computes from stale inputs and marks the output `:bad`; `:skip`
+  # skips. A missing input skips under both.
   defp fetch_inputs(algorithm, scope, at, latest) do
     algorithm.input_parameter_ids
-    |> Enum.reduce_while({:ok, %{}}, fn parameter_id, {:ok, inputs} ->
+    |> Enum.reduce_while({:ok, %{}, false}, fn parameter_id, {:ok, inputs, stale?} ->
       case fetch_input(latest, scope, parameter_id, algorithm, at) do
-        {:ok, update} -> {:cont, {:ok, Map.put(inputs, parameter_id, update)}}
-        {:error, reason} -> {:halt, reason}
+        {:ok, update} ->
+          {:cont, {:ok, Map.put(inputs, parameter_id, update), stale?}}
+
+        {:error, :stale, update} when algorithm.missing_input == :bad_quality ->
+          {:cont, {:ok, Map.put(inputs, parameter_id, update), true}}
+
+        {:error, :stale, _update} ->
+          {:halt, :stale}
+
+        {:error, :missing} ->
+          {:halt, :missing}
       end
     end)
   end
@@ -274,7 +309,7 @@ defmodule Cadence.SemanticRuntime do
   end
 
   defp validate_input_age(algorithm, update, at) do
-    if stale?(algorithm, update, at), do: {:error, :stale}, else: {:ok, update}
+    if stale?(algorithm, update, at), do: {:error, :stale, update}, else: {:ok, update}
   end
 
   defp stale?(%AlgorithmPlan{maximum_age_ms: nil}, _update, _at), do: false

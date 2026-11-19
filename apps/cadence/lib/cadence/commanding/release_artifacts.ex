@@ -10,7 +10,8 @@ defmodule Cadence.Commanding.ReleaseArtifacts do
     CommandQueueEntry,
     CommandReleaseAttempt,
     CommandRequest,
-    CommandVerifierInstance
+    CommandVerifierInstance,
+    VerifierArguments
   }
 
   alias Cadence.Contacts.{Path, RealizedContact, TransportBinding}
@@ -102,16 +103,20 @@ defmodule Cadence.Commanding.ReleaseArtifacts do
           CommandRequest.t(),
           CommandReleaseAttempt.t(),
           [VerifierPlan.t()],
-          DateTime.t()
+          DateTime.t(),
+          [map()]
         ) :: [CommandVerifierInstance.t()]
   def verifier_instances(
         %CommandQueueEntry{} = queue_entry,
         %CommandRequest{} = command_request,
         %CommandReleaseAttempt{} = command_release_attempt,
         verifier_plans,
-        %DateTime{} = released_at
+        %DateTime{} = released_at,
+        argument_specs \\ []
       )
       when is_list(verifier_plans) do
+    arguments = VerifierArguments.values(command_request, argument_specs)
+
     Enum.map(verifier_plans, fn %VerifierPlan{} = verifier_plan ->
       CommandVerifierInstance.new(%{
         organization_id: queue_entry.organization_id,
@@ -126,8 +131,8 @@ defmodule Cadence.Commanding.ReleaseArtifacts do
         verifier_name: verifier_plan.name,
         phase: verifier_plan.phase,
         severity: verifier_plan.severity,
-        success_criteria: verifier_plan.success_criteria,
-        failure_criteria: verifier_plan.failure_criteria,
+        success_criteria: VerifierArguments.bind(verifier_plan.success_criteria, arguments),
+        failure_criteria: VerifierArguments.bind(verifier_plan.failure_criteria, arguments),
         # A verifier never matches what arrived before its command was released: with no plan
         # delay its window opens at the release (P9CS, 11-14: a pre-release burst read SCIENCE).
         delay_until: shift_time(released_at, verifier_plan.delay_ms || 0),

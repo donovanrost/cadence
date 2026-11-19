@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Compose command · Cadence</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Saira:wght@400;500;600&amp;family=Saira+Condensed:wght@500;600;700&amp;family=Azeret+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#05070A}
+a{color:#E6EDF3}a:hover{color:#FFFFFF}
+.m{font-family:'Azeret Mono',ui-monospace,monospace}
+.n{font-family:Saira,sans-serif;font-variant-numeric:tabular-nums}
+.lbl{font:600 12px 'Saira Condensed',sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#7D8A99;margin:0}
+.pnl{position:relative;background:#0A0E13;border:1px solid #1C2530}
+.ph{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid #1C2530;flex-wrap:wrap}
+.ph .t{font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#C9D3DD;margin:0}
+.ph .i{font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.ph .r{margin-left:auto;font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.tag{display:inline-flex;align-items:center;gap:7px;height:24px;padding:0 9px;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;border:1px solid currentColor;white-space:nowrap}
+.b{height:32px;padding:0 12px;border:1px solid #2A3644;background:#0F141B;color:#E6EDF3;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;text-decoration:none}
+.b.pri{background:#E6EDF3;color:#05070A;border-color:#E6EDF3}
+.s-nom{width:8px;height:8px;background:#2FD08A;flex:none}
+.s-cau{width:10px;height:9px;background:#FFB020;clip-path:polygon(50% 0,100% 100%,0 100%);flex:none}
+.s-crit{width:8px;height:8px;background:#FF4D57;transform:rotate(45deg);flex:none}
+.s-stale{width:8px;height:8px;flex:none;box-sizing:border-box;border:1px solid #A497FF;background-image:repeating-linear-gradient(135deg,#A497FF 0 1.5px,transparent 1.5px 4px)}
+.s-off{width:8px;height:8px;flex:none;box-sizing:border-box;border:1px dashed #9DAAB8}
+.rail a{display:flex;align-items:center;gap:10px;height:38px;padding:0 12px;color:#9DAAB8;text-decoration:none;font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;border-left:2px solid transparent}
+.rail a:hover{color:#E6EDF3;background:#0F141B}
+.rail a.on{color:#E6EDF3;background:#0F141B;border-left-color:#E6EDF3}
+.rail .n{font:500 10px 'Azeret Mono',monospace;color:#7D8A99;width:16px}
+.rail .c{margin-left:auto;font:500 11px 'Azeret Mono',monospace;color:#7D8A99;letter-spacing:0}
+.cell{aspect-ratio:1;background:#164E37}
+.c-cau{background:#FFB020}
+.c-crit{background:#FF4D57;outline:1px solid #FF4D57;outline-offset:1.5px}
+.c-stale{background-color:#140F26;box-sizing:border-box;border:1px solid #A497FF;background-image:repeating-linear-gradient(135deg,#A497FF 0 1px,transparent 1px 3.5px)}
+.c-live{outline:1px solid #E6EDF3;outline-offset:1.5px}
+.ro{background:#0A0E13;padding:14px 16px;display:flex;flex-direction:column;gap:6px}
+.ro .v{font:500 30px Saira,sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-0.02em;line-height:1}
+.ro .s{font:400 12px 'Saira',sans-serif;color:#9DAAB8}
+
+.step{display:flex;align-items:center;gap:8px;height:52px;padding:0 14px;border-right:1px solid #1C2530;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#7D8A99}
+.step.on{color:#E6EDF3;background:#0F141B;box-shadow:inset 0 -2px 0 #E6EDF3}
+.inp{display:flex;align-items:center;gap:10px;height:38px;padding:0 12px;border:1px solid #2A3644;background:#05070A}
+.inp input{flex:1;min-width:0;background:transparent;border:0;outline:none;color:#E6EDF3;font:500 14px 'Azeret Mono',monospace}
+.row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;align-items:center;width:100%;padding:10px 16px;border:0;border-top:1px solid #141B24;background:transparent;color:#E6EDF3;text-align:left;cursor:pointer;box-sizing:border-box}
+.row:hover{background:#0F141B}
+.row.on{background:#0F141B;box-shadow:inset 2px 0 0 #E6EDF3}
+.row .nm{font:600 13px 'Azeret Mono',monospace}
+.row .ds{grid-column:1/-1;font-size:12px;color:#7D8A99;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cl{font:600 11px 'Saira Condensed',sans-serif;letter-spacing:.16em;color:#7D8A99;border:1px solid #2A3644;padding:1px 6px;text-transform:uppercase}
+.cl.CRITICAL{color:#E6EDF3;border-color:#9DAAB8}
+.cl.HAZARDOUS{color:#05070A;background:#E6EDF3;border-color:#E6EDF3}
+.arg{display:grid;grid-template-columns:150px minmax(0,1fr);gap:8px 16px;align-items:center;padding:14px 0;border-top:1px solid #1C2530}
+.arg .k{font:600 13px 'Azeret Mono',monospace}
+.arg .ty{font:500 10px 'Azeret Mono',monospace;color:#7D8A99}
+.opt{height:34px;min-width:72px;padding:0 12px;border:1px solid #2A3644;background:#05070A;color:#9DAAB8;font:600 12px 'Azeret Mono',monospace;cursor:pointer}
+.opt.on{background:#E6EDF3;color:#05070A;border-color:#E6EDF3}
+.num{display:flex;align-items:center;height:34px;border:1px solid #2A3644;background:#05070A;width:150px}
+.num.bad{border-color:#FFB020}
+.num input{width:90px;background:transparent;border:0;outline:none;color:#E6EDF3;font:600 15px 'Azeret Mono',monospace;padding:0 10px}
+.num span{font:500 12px 'Azeret Mono',monospace;color:#7D8A99;padding-right:10px;margin-left:auto}
+.rng{position:relative;height:4px;background:#1C2530;flex:1;min-width:120px}
+.rng i{position:absolute;top:-4px;width:2px;height:12px;background:#E6EDF3}
+.stk{display:grid;grid-template-columns:28px minmax(0,1fr) auto auto;gap:12px;align-items:center;padding:10px 16px;border-top:1px solid #1C2530}
+.stk:first-of-type{border-top:0}
+.x{width:26px;height:26px;border:1px solid #2A3644;background:transparent;color:#9DAAB8;cursor:pointer;font:500 12px 'Azeret Mono',monospace}
+.tp{display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:9px 12px;border:1px solid #2A3644;background:#05070A;color:#E6EDF3;cursor:pointer;text-align:left}
+.tp.on{border-color:#E6EDF3;background:#0F141B;box-shadow:inset 0 -2px 0 #E6EDF3}
+.tp .a{font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase}
+.tp .s{font:500 10px 'Azeret Mono',monospace;color:#7D8A99}
+.mx{display:grid;grid-template-columns:repeat(50,minmax(0,1fr));gap:1px}
+.mc{aspect-ratio:1;background:#11161D}
+.mc.sel{background:#C9D3DD}
+.mc.w1{background:#FFFFFF;outline:1px solid #FFFFFF;outline-offset:1px}
+.mc.stale{background-color:#140F26;box-sizing:border-box;border:1px solid #A497FF}
+.mc.cau{background:#FFB020}
+.ck{display:grid;grid-template-columns:96px minmax(0,1fr) auto;gap:12px;align-items:center;padding:9px 16px;border-top:1px solid #1C2530;font-size:13px}
+.ck:first-of-type{border-top:0}
+.rel{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid #2A3644;background:transparent;color:#E6EDF3;cursor:pointer;text-align:left;width:100%;box-sizing:border-box}
+.rel.on{border-color:#E6EDF3;background:rgba(230,237,243,.04)}
+.rel .dot{width:10px;height:10px;border:1px solid #9DAAB8;margin-top:4px;flex:none;box-sizing:border-box}
+.rel.on .dot{background:#E6EDF3;border-color:#E6EDF3}
+.go{color:#4FDB9E}.hold{color:#FFC24D}.nogo{color:#FF6B73}
+.seg{display:inline-flex;border:1px solid #2A3644;margin-top:6px;width:max-content}
+.seg button{height:22px;padding:0 8px;border:0;background:transparent;color:#7D8A99;font:600 10px 'Saira Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase;cursor:pointer}
+.seg button.on{background:#E6EDF3;color:#05070A}
+.sr{display:grid;grid-template-columns:12px minmax(0,1fr) auto;gap:10px;align-items:center;padding:7px 16px;border-top:1px solid #141B24}
+.sr .nm{font:600 13px 'Azeret Mono',monospace}
+.sr .mt{font:500 10px 'Azeret Mono',monospace;color:#7D8A99}
+.tg{height:24px;padding:0 8px;border:1px solid #2A3644;background:transparent;color:#C9D3DD;font:600 11px 'Saira Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase;cursor:pointer}
+.tg.on{background:#E6EDF3;color:#05070A;border-color:#E6EDF3}
+.pk{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 4px 0 8px;border:1px solid #2A3644;background:#0F141B;font:500 11px 'Azeret Mono',monospace}
+.pk button{width:18px;height:18px;border:0;background:transparent;color:#7D8A99;cursor:pointer;font:500 10px 'Azeret Mono',monospace;padding:0}
+.mc{cursor:pointer}
+.pt{display:flex;align-items:center;gap:12px;padding:7px 16px;border-top:1px solid #141B24;font-size:13px}
+.pt .who{width:150px;flex:none;display:flex;align-items:center;gap:8px}
+.pt .cv{width:130px;flex:none}
+.pt .now{width:76px;flex:none;font:500 12px 'Azeret Mono',monospace;color:#9DAAB8;text-align:right}
+.pt .ctx{flex:1;min-width:0;font:500 11px 'Azeret Mono',monospace;color:#7D8A99;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cell2{display:flex;align-items:center;height:28px;border:1px solid #2A3644;background:#05070A}
+.cell2.bad{border-color:#FFB020}
+.cell2.inh input{color:#7D8A99}
+.cell2 input{width:80px;background:transparent;border:0;outline:none;color:#E6EDF3;font:600 13px 'Azeret Mono',monospace;padding:0 8px}
+.cell2 span{font:500 10px 'Azeret Mono',monospace;color:#7D8A99;margin-left:auto;padding-right:8px}
+.kbd{font:500 10px 'Azeret Mono',monospace;border:1px solid #3A4654;padding:1px 5px;color:#9DAAB8}
+.pane{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.pane .ph{flex:none}
+.scr{flex:1;min-height:0;overflow:auto;scrollbar-width:thin;scrollbar-color:#2A3644 transparent}
+.arg{grid-template-columns:130px minmax(0,1fr) auto;padding:9px 0;gap:6px 14px}
+.seg{margin-top:0}
+.tp{padding:7px 9px;min-width:0}
+.tp .s{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sk{display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 4px 0 10px;border:1px solid #2A3644;background:#0F141B;font:500 12px 'Azeret Mono',monospace;white-space:nowrap;min-width:0;max-width:520px}
+.sk b{font-weight:600}
+.sk .sa{color:#9DAAB8;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.sk button{width:22px;height:22px;border:0;background:transparent;color:#7D8A99;cursor:pointer;font:500 11px 'Azeret Mono',monospace;flex:none}
+.seg2{display:inline-flex;border:1px solid #2A3644}
+.seg2 button{height:32px;padding:0 12px;border:0;border-left:1px solid #2A3644;background:transparent;color:#9DAAB8;font:600 12px 'Saira Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;white-space:nowrap}
+.seg2 button:first-child{border-left:0}
+.seg2 button.on{background:#E6EDF3;color:#05070A}
+.ckx{font:600 11px 'Saira Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#7D8A99;white-space:nowrap}
+.ckx b{font-weight:700;margin-left:3px}
+.ckx.go b{color:#4FDB9E}.ckx.hold b{color:#FFC24D}
+</style>
+</helmet>
+<div style="font-family: 'Saira', system-ui, sans-serif; color: #E6EDF3; height: 100vh; overflow: hidden; display: flex; flex-direction: column; background-color: #05070A; background-image: linear-gradient(rgba(230,237,243,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(230,237,243,.025) 1px, transparent 1px); background-size: 40px 40px">
+
+<header style="flex: none; display: flex; align-items: stretch; height: 52px; border-bottom: 1px solid #1C2530; background: #070A0E">
+<a href="CommandFlow.dc.html" aria-label="Close" style="width: 52px; display: flex; align-items: center; justify-content: center; border-right: 1px solid #1C2530; color: #E6EDF3"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></a>
+<div style="display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 0 18px; border-right: 1px solid #1C2530"><span class="m" style="font-size: 11px; color: #7D8A99">REQ-0421 · DRAFT · DONOVAN R.</span><span style="font: 700 19px 'Saira Condensed'; letter-spacing: .14em; text-transform: uppercase">New command request</span></div>
+<ol aria-label="Stations" style="list-style: none; margin: 0; padding: 0; display: flex">
+<li class="step on"><span class="m">●</span>01 Compose</li>
+<li class="step"><span class="m">○</span>02 Check</li>
+<li class="step"><span class="m">○</span>03 Approve</li>
+<li class="step"><span class="m">○</span>04 Release</li>
+<li class="step" style="color: #3A4654">05 · 06 · 07</li>
+</ol>
+<div class="m" style="margin-left: auto; display: flex; align-items: center; gap: 20px; padding: 0 18px; font-size: 13px"><span><span style="color: #7D8A99">UTC</span> 02:52:06</span><span><span style="color: #7D8A99">MET</span> 412:07:24</span></div>
+</header>
+
+<main style="flex: 1; min-height: 0; display: grid; grid-template-columns: 300px minmax(0, 1fr) 420px; gap: 12px; padding: 12px 14px">
+
+<section class="pnl pane" aria-label="Command catalog">
+<div class="ph"><span class="i">A</span><h2 class="t">Catalog</h2><span class="r">v15 · 61 CMDS</span></div>
+<div style="flex: none; padding: 10px 14px">
+<label class="inp"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7D8A99" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Search commands</span><input value="{{q}}" onChange="{{onQ}}" placeholder="name, subsystem, verb…"></label>
+</div>
+<div class="scr" role="listbox" aria-label="Commands">
+<sc-for list="{{list}}" as="c" hint-placeholder-count="11">
+<button class="row {{c.on}}" onClick="{{c.pick}}" role="option"><span class="nm">{{c.id}}</span><span style="display: flex; gap: 6px; align-items: center"><span class="m" style="font-size: 10px; color: #7D8A99">{{c.sub}}</span><span class="cl {{c.cls}}">{{c.clsShort}}</span></span><span class="ds">{{c.desc}}</span></button>
+</sc-for>
+<sc-if value="{{noHits}}" hint-placeholder-val="{{false}}"><p style="margin: 0; padding: 16px; font-size: 13px; color: #7D8A99; border-top: 1px solid #141B24">No commands match "{{q}}".</p></sc-if>
+</div>
+<div class="m" style="flex: none; padding: 9px 14px; border-top: 1px solid #1C2530; font-size: 10px; color: #7D8A99; display: flex; gap: 10px"><span class="kbd">↑↓</span>SELECT<span class="kbd">↵</span>ADD TO STACK</div>
+</section>
+
+<div style="min-height: 0; display: flex; flex-direction: column; gap: 12px; min-width: 0">
+<section class="pnl" style="flex: none" aria-label="Command form">
+<div class="ph"><span class="i">B</span><h2 class="t">Command</h2><span class="r">{{sel.sub}} · OPCODE {{sel.op}} · VERIFY WITHIN {{sel.win}}</span></div>
+<div style="padding: 12px 18px 2px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap"><span class="m" style="font-size: 22px; font-weight: 600; letter-spacing: -.01em">{{sel.id}}</span><span class="cl {{sel.cls}}">{{sel.cls}}</span><span style="font-size: 13px; color: #9DAAB8">{{sel.desc}}</span></div>
+<div style="padding: 0 18px">
+<sc-for list="{{args}}" as="a" hint-placeholder-count="3">
+<div class="arg">
+<div style="display: flex; flex-direction: column; gap: 2px"><span class="k">{{a.k}}</span><span class="ty">{{a.ty}}</span></div>
+<div style="display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center">
+<sc-if value="{{a.isEnum}}" hint-placeholder-val="{{true}}">
+<sc-for list="{{a.opts}}" as="o" hint-placeholder-count="3"><button class="opt {{o.on}}" onClick="{{o.pick}}">{{o.v}}</button></sc-for>
+</sc-if>
+<sc-if value="{{a.isPer}}" hint-placeholder-val="{{false}}">
+<span class="m" style="font-size: 14px; font-weight: 600">{{a.perSummary}}</span><span class="m" style="font-size: 10px; color: {{a.msgColor}}">{{a.perMsg}}</span>
+</sc-if>
+<sc-if value="{{a.isAll}}" hint-placeholder-val="{{false}}">
+<label class="num {{a.bad}}"><input value="{{a.val}}" onChange="{{a.onInput}}" aria-label="{{a.k}}"><span>{{a.u}}</span></label>
+<div style="display: flex; align-items: center; gap: 8px; width: 170px"><span class="m" style="font-size: 10px; color: #7D8A99">{{a.min}}</span><div class="rng"><i style="left: {{a.pos}}%"></i></div><span class="m" style="font-size: 10px; color: #7D8A99">{{a.max}}</span></div>
+<span class="m" style="font-size: 10px; color: {{a.msgColor}}">{{a.msg}}</span>
+</sc-if>
+</div>
+<sc-if value="{{a.isNum}}" hint-placeholder-val="{{false}}"><span class="seg"><button class="{{a.allOn}}" onClick="{{a.setAll}}">Same for all</button><button class="{{a.perOn}}" onClick="{{a.setPer}}">Per target</button></span></sc-if>
+</div>
+</sc-for>
+<sc-if value="{{noArgs}}" hint-placeholder-val="{{false}}"><p class="m" style="margin: 0; padding: 12px 0; border-top: 1px solid #1C2530; font-size: 12px; color: #7D8A99">NO ARGUMENTS</p></sc-if>
+</div>
+<div style="display: flex; align-items: center; gap: 14px; padding: 10px 18px 12px; border-top: 1px solid #1C2530">
+<span class="lbl">Verifier</span><span class="m" style="font-size: 12px; color: #E6EDF3; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{verifier}}</span>
+<span class="m" style="font-size: 10px; color: {{formColor}}">{{formMsg}}</span>
+<button class="b pri" style="opacity: {{addOpacity}}" onClick="{{add}}">Add to stack <span class="kbd" style="color: #05070A; border-color: #05070A">↵</span></button>
+</div>
+</section>
+
+<section class="pnl pane" style="flex: 1" aria-label="Per-target values">
+<div class="ph"><span class="i">B2</span><h2 class="t">Per-target values</h2><span class="r">{{perHead}}</span></div>
+<sc-if value="{{hasPer}}" hint-placeholder-val="{{true}}">
+<div style="flex: none; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 16px; border-bottom: 1px solid #1C2530">
+<span class="lbl" style="margin-right: 4px">Fill</span>
+<button class="tg" onClick="{{fillForm}}">All from form · {{formVal}}</button>
+<button class="tg" onClick="{{fillDelta}}">Current + 2.0</button>
+<button class="tg {{csvOn}}" onClick="{{toggleCsv}}">Paste CSV</button>
+<button class="tg" onClick="{{clearPer}}">Clear</button>
+</div>
+<div class="pt" style="flex: none; border-top: 0; border-bottom: 1px solid #1C2530"><span class="who lbl">Target</span><sc-for list="{{perCols}}" as="h" hint-placeholder-count="1"><span class="cv lbl" style="color: #E6EDF3">{{h}}</span></sc-for><span class="now lbl">Now</span><span class="ctx lbl">Context</span></div>
+<div class="scr">
+<sc-if value="{{csvOpen}}" hint-placeholder-val="{{false}}">
+<div style="padding: 10px 16px; border-bottom: 1px solid #1C2530; display: flex; gap: 10px; align-items: flex-start">
+<textarea rows="4" value="{{csv}}" onChange="{{onCsv}}" aria-label="CSV of scid and value" style="flex: 1; background: #05070A; color: #E6EDF3; border: 1px solid #2A3644; font: 12px 'Azeret Mono'; padding: 8px; resize: none"></textarea>
+<div style="display: flex; flex-direction: column; gap: 6px; width: 150px"><button class="b pri" onClick="{{applyCsv}}">Apply</button><span class="m" style="font-size: 10px; color: #7D8A99">SCID OR NAME, THEN ONE COLUMN PER ARGUMENT</span></div>
+</div>
+</sc-if>
+<sc-for list="{{perRows}}" as="r" hint-placeholder-count="4">
+<div class="pt"><span class="who"><span class="{{r.shape}}"></span><span class="m" style="font-size: 12px; font-weight: 600">{{r.name}}</span></span>
+<sc-for list="{{r.cells}}" as="c" hint-placeholder-count="1"><span class="cv"><label class="cell2 {{c.cls}}"><input value="{{c.val}}" onChange="{{c.onInput}}" aria-label="{{c.aria}}"><span>{{c.u}}</span></label></span></sc-for>
+<span class="now">{{r.now}}</span><span class="ctx">{{r.ctx}}</span></div>
+</sc-for>
+</div>
+<p class="m" style="flex: none; margin: 0; padding: 8px 16px; border-top: 1px solid #1C2530; font-size: 10px; color: #7D8A99">{{perFoot}}</p>
+</sc-if>
+<sc-if value="{{noPer}}" hint-placeholder-val="{{false}}">
+<div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 24px; text-align: center">
+<span class="lbl" style="color: #C9D3DD">Every target gets the same values</span>
+<span style="font-size: 13px; color: #7D8A99; max-width: 380px">Switch a number argument to Per target to give each spacecraft its own value, typed here or pasted as CSV.</span>
+</div>
+</sc-if>
+</section>
+</div>
+
+<section class="pnl pane" aria-label="Targets">
+<div class="ph"><span class="i">D</span><h2 class="t">Targets</h2><span class="r">{{tgHead}}</span></div>
+<div style="flex: none; padding: 10px 14px 8px">
+<label class="inp"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7D8A99" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Find spacecraft</span><input value="{{tq}}" onChange="{{onTq}}" placeholder="name, SCID, plane 07, stale…"></label>
+</div>
+<div class="scr">
+<sc-if value="{{hasHits}}" hint-placeholder-val="{{true}}">
+<div class="m" style="display: flex; justify-content: space-between; align-items: center; padding: 6px 14px; font-size: 10px; color: #7D8A99; border-top: 1px solid #1C2530"><span>{{hitHead}}</span><button class="tg" onClick="{{addAll}}">Add all {{hitCount}}</button></div>
+<sc-for list="{{hits}}" as="h" hint-placeholder-count="4"><div class="sr"><span class="{{h.shape}}"></span><span style="display: flex; flex-direction: column; gap: 1px; min-width: 0"><span class="nm">{{h.name}}</span><span class="mt">{{h.meta}}</span></span><button class="tg {{h.on}}" onClick="{{h.toggle}}">{{h.btn}}</button></div></sc-for>
+</sc-if>
+<div style="padding: 10px 14px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; border-top: 1px solid #1C2530">
+<sc-for list="{{tgts}}" as="t" hint-placeholder-count="5"><button class="tp {{t.on}}" onClick="{{t.pick}}"><span class="a">{{t.label}}</span><span class="s">{{t.q}}</span></button></sc-for>
+</div>
+<sc-if value="{{isCustom}}" hint-placeholder-val="{{true}}">
+<div style="display: flex; flex-wrap: wrap; gap: 4px; padding: 0 14px 10px">
+<sc-for list="{{picked}}" as="k" hint-placeholder-count="4"><span class="pk">{{k.name}}<button aria-label="Remove" onClick="{{k.del}}">✕</button></span></sc-for>
+<span class="m" style="font-size: 10px; color: #7D8A99; align-self: center; padding-left: 4px">{{pickedMore}}</span>
+</div>
+</sc-if>
+<div style="padding: 10px 14px; display: flex; flex-direction: column; gap: 5px; border-top: 1px solid #1C2530">
+<div class="mx" aria-label="Fleet matrix, 10 planes by 50 slots">
+<sc-for list="{{cells}}" as="c" hint-placeholder-count="500"><span class="mc {{c.cls}}" onClick="{{c.toggle}}"></span></sc-for>
+</div>
+<div class="m" style="display: flex; justify-content: space-between; font-size: 9px; color: #7D8A99"><span>PLANE 01</span><span>CLICK A CELL TO ADD OR REMOVE</span><span>PLANE 10</span></div>
+</div>
+</div>
+<div style="flex: none; display: flex; align-items: center; gap: 14px; padding: 9px 14px; border-top: 1px solid #1C2530; font-size: 12px; color: #9DAAB8">
+<span><b class="n" style="font-size: 18px; color: #E6EDF3; font-weight: 500">{{ready}}</b> READY</span>
+<span style="display: flex; align-items: center; gap: 6px"><span class="s-stale"></span>{{nStale}} STALE</span>
+<span style="display: flex; align-items: center; gap: 6px"><span class="s-cau"></span>{{nCau}} SAFE MODE</span>
+<span class="m" style="margin-left: auto; font-size: 10px; color: #7D8A99">{{exclShort}}</span>
+</div>
+</section>
+</main>
+
+<footer style="flex: none; height: 64px; display: flex; align-items: stretch; border-top: 1px solid #1C2530; background: #070A0E">
+<div style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 0 16px; border-right: 1px solid #1C2530">
+<span class="lbl" style="flex: none">Stack · {{stackN}}</span>
+<div style="flex: 1; min-width: 0; display: flex; gap: 6px; overflow: hidden">
+<sc-for list="{{stack}}" as="s" hint-placeholder-count="1"><span class="sk"><span style="color: #7D8A99">{{s.n}}</span><b>{{s.id}}</b><span class="sa">{{s.args}}</span><button aria-label="Remove" onClick="{{s.del}}">✕</button></span></sc-for>
+<sc-if value="{{stackEmpty}}" hint-placeholder-val="{{false}}"><span style="font-size: 13px; color: #7D8A99">Empty. Pick a command and press Add to stack.</span></sc-if>
+</div>
+</div>
+<div style="flex: none; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-right: 1px solid #1C2530">
+<span class="lbl">Release</span>
+<div class="seg2"><sc-for list="{{rels}}" as="r" hint-placeholder-count="3"><button class="{{r.on}}" onClick="{{r.pick}}" title="{{r.sub}}">{{r.short}}</button></sc-for></div>
+</div>
+<div style="flex: none; display: flex; align-items: center; gap: 10px; padding: 0 16px; border-right: 1px solid #1C2530">
+<sc-for list="{{checks}}" as="k" hint-placeholder-count="4"><span class="ckx {{k.cls}}" title="{{k.v}}">{{k.k}} <b>{{k.s}}</b></span></sc-for>
+</div>
+<div style="flex: none; display: flex; align-items: center; gap: 12px; padding: 0 16px">
+<span class="m" style="font-size: 10px; color: #7D8A99; text-align: right; line-height: 1.4">NEXT: {{apprShort}}<br>NOTHING RADIATES WITHOUT A GO</span>
+<a href="Approve.dc.html" class="b pri" style="height: 42px; font-size: 14px; opacity: {{sendOpacity}}">{{sendLabel}}</a>
+</div>
+</footer>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+const ZONES = ['BATT', 'PROP', 'ST_HEAD'];
+const CAT = [
+{ id: 'HEATER_SET', sub: 'THERM', op: '0x4A1', cls: 'ROUTINE', win: '60 s', desc: 'Set a heater zone thermostat setpoint and hysteresis.', args: [{ k: 'zone', t: 'enum', o: ZONES, d: 'BATT' }, { k: 'setpoint_c', t: 'num', min: -20, max: 40, u: '°C', d: '8.0' }, { k: 'hysteresis_c', t: 'num', min: 0.5, max: 5, u: '°C', d: '1.0' }], ver: (v) => 'THERM.' + v.zone.toLowerCase() + '_setpoint = ' + v.setpoint_c + ' ±0.1 °C' },
+{ id: 'HEATER_ENABLE', sub: 'THERM', op: '0x4A0', cls: 'ROUTINE', win: '30 s', desc: 'Turn a heater zone on or off.', args: [{ k: 'zone', t: 'enum', o: ZONES, d: 'BATT' }, { k: 'state', t: 'enum', o: ['ON', 'OFF'], d: 'ON' }], ver: (v) => 'THERM.' + v.zone.toLowerCase() + '_enabled = ' + v.state },
+{ id: 'SET_ADCS_MODE', sub: 'ADCS', op: '0x210', cls: 'CRITICAL', win: '120 s', desc: 'Change the attitude control mode.', args: [{ k: 'mode', t: 'enum', o: ['SUN_POINT', 'NADIR', 'FINE_POINT', 'SAFE'], d: 'NADIR' }], ver: (v) => 'ADCS.mode = ' + v.mode },
+{ id: 'SET_POWER_MODE', sub: 'EPS', op: '0x301', cls: 'CRITICAL', win: '60 s', desc: 'Switch the electrical power mode and its load table.', args: [{ k: 'mode', t: 'enum', o: ['NOMINAL', 'LOW', 'SURVIVAL'], d: 'LOW' }], ver: (v) => 'EPS.power_mode = ' + v.mode },
+{ id: 'PAYLOAD_PAUSE', sub: 'PAYLOAD', op: '0x602', cls: 'ROUTINE', win: '30 s', desc: 'Pause payload operations and park the mirror.', args: [{ k: 'reason', t: 'enum', o: ['POWER', 'THERMAL', 'OPS'], d: 'OPS' }], ver: (v) => 'PL.state = PAUSED' },
+{ id: 'PAYLOAD_RESUME', sub: 'PAYLOAD', op: '0x603', cls: 'ROUTINE', win: '30 s', desc: 'Resume payload operations from pause.', args: [], ver: (v) => 'PL.state = ACTIVE' },
+{ id: 'TLM_SET_RATE', sub: 'C&DH', op: '0x112', cls: 'ROUTINE', win: '20 s', desc: 'Set the downlink rate of one telemetry packet.', args: [{ k: 'apid', t: 'num', min: 0, max: 2047, u: 'APID', d: '162', int: true }, { k: 'rate_hz', t: 'num', min: 0.1, max: 10, u: 'Hz', d: '1' }], ver: (v) => 'CDH.apid_' + v.apid + '_rate = ' + v.rate_hz + ' Hz' },
+{ id: 'TIME_SYNC', sub: 'C&DH', op: '0x101', cls: 'ROUTINE', win: '20 s', desc: 'Correlate the onboard clock to ground UTC.', args: [], ver: (v) => 'CDH.time_offset_ms < 5' },
+{ id: 'RESET_SUBSYS', sub: 'C&DH', op: '0x1F0', cls: 'HAZARDOUS', win: '180 s', desc: 'Power cycle one subsystem. Loses its volatile state.', args: [{ k: 'subsys', t: 'enum', o: ['ADCS', 'EPS', 'COMMS', 'PAYLOAD'], d: 'PAYLOAD' }], ver: (v) => v.subsys + '.boot_count +1' },
+{ id: 'FSW_LOAD_IMAGE', sub: 'FSW', op: '0x7E0', cls: 'HAZARDOUS', win: '600 s', desc: 'Load a flight software image into a boot slot.', args: [{ k: 'slot', t: 'enum', o: ['A', 'B'], d: 'B' }, { k: 'image', t: 'enum', o: ['fsw-3.2.1', 'fsw-3.2.0'], d: 'fsw-3.2.1' }], ver: (v) => 'FSW.slot_' + v.slot.toLowerCase() + '_crc = ' + v.image },
+{ id: 'NOOP', sub: 'C&DH', op: '0x100', cls: 'ROUTINE', win: '20 s', desc: 'Do nothing. Proves the uplink path end to end.', args: [], ver: (v) => 'CDH.cmd_accept_count +1' }
+];
+const SHORT = { ROUTINE: 'RTN', CRITICAL: 'CRIT', HAZARDOUS: 'HAZ' };
+const APPR = { ROUTINE: 'Second operator', CRITICAL: 'Second operator, on console', HAZARDOUS: 'Second operator and the flight director' };
+const STALE = [27, 163, 233, 377, 455];
+const SAFE = [46, 188, 402];
+const CRIT = [312];
+const range = (a, b) => { const r = []; for (let i = a; i <= b; i++) r.push(i); return r; };
+const TG = [
+{ id: 'p0304', label: 'Planes 03–04', q: 'profile=Block 1 · plane∈{03,04}', scids: range(101, 200) },
+{ id: 'fleet', label: 'Whole fleet', q: 'mission=Earendil', scids: range(1, 500) },
+{ id: 'p07', label: 'P07 power watch', q: 'group · 4 saved', scids: [309, 312, 314, 318] },
+{ id: 'one', label: 'EARENDIL-140', q: 'scid=140', scids: [140] }
+];
+const defaults = (c) => { const v = {}; c.args.forEach((a) => { v[a.k] = a.d; }); return v; };
+const pad = (s) => String(s).padStart(3, '0');
+const nameOf = (s) => 'EARENDIL-' + pad(s);
+const planeOf = (s) => Math.ceil(s / 50);
+const statusOf = (s) => STALE.indexOf(s) >= 0 ? ['s-stale', 'STALE 3h'] : SAFE.indexOf(s) >= 0 ? ['s-cau', 'SAFE MODE'] : CRIT.indexOf(s) >= 0 ? ['s-crit', 'VBAT RED'] : ['s-nom', 'NOMINAL'];
+const curSet = (s) => (s === 117 || s === 144) ? 6.0 : 5.0;
+const UMIN = { 117: 4.1, 144: 3.9, 152: 2.6, 171: 3.4 };
+const umbraMin = (s) => UMIN[s] !== undefined ? UMIN[s] : 2.4 + ((s * 53) % 31) / 10;
+const cycles = (s) => 9000 + (s * 131) % 4000;
+const isReady = (s) => STALE.indexOf(s) < 0 && SAFE.indexOf(s) < 0;
+const search = (raw) => {
+const q = raw.trim().toLowerCase();
+if (!q) return [];
+const all = range(1, 500);
+let m = q.match(/^(?:p|plane)\s*0?(\d{1,2})$/);
+if (m) return all.filter((s) => planeOf(s) === Number(m[1]));
+if (q === 'stale') return STALE.slice();
+if (q === 'safe' || q === 'safe mode') return SAFE.slice();
+if (/^\d+$/.test(q)) return all.filter((s) => pad(s).indexOf(q) >= 0);
+return all.filter((s) => nameOf(s).toLowerCase().indexOf(q) >= 0);
+};
+
+class Component extends DCLogic {
+constructor(props) {
+super(props);
+this.state = {
+q: '', sel: 'HEATER_SET', vals: defaults(CAT[0]), stack: [],
+tg: 'custom', custom: [117, 144, 152, 171], tq: '17', rel: 'aos',
+per: { setpoint_c: true },
+pv: { 117: { setpoint_c: '6.5' }, 144: { setpoint_c: '6.5' }, 152: { setpoint_c: '9.0' }, 171: { setpoint_c: '7.5' } },
+csvOpen: false, csv: 'scid,setpoint_c\n117,6.5\n144,6.5\n152,9.0\n171,7.5'
+};
+}
+renderVals() {
+const st = this.state;
+const q = st.q.trim().toLowerCase();
+const found = CAT.filter((c) => !q || (c.id + ' ' + c.sub + ' ' + c.desc).toLowerCase().indexOf(q) >= 0);
+const sel = CAT.find((c) => c.id === st.sel) || CAT[0];
+const vals = st.vals;
+const pickCmd = (c) => this.setState({ sel: c.id, vals: defaults(c), per: {} });
+const list = found.map((c) => ({ id: c.id, sub: c.sub, cls: c.cls, clsShort: SHORT[c.cls], desc: c.desc, on: c.id === sel.id ? 'on' : '', pick: () => pickCmd(c) }));
+
+// targets
+const preset = TG.find((t) => t.id === st.tg);
+const custom = st.tg === 'custom';
+const scids = custom ? st.custom : (preset || TG[0]).scids;
+const inT = {};
+scids.forEach((s) => { inT[s] = 1; });
+const setTargets = (arr) => this.setState({ tg: 'custom', custom: arr.slice().sort((a, b) => a - b) });
+const toggle = (s) => setTargets(inT[s] ? scids.filter((x) => x !== s) : scids.concat([s]));
+const readyList = scids.filter(isReady);
+const ready = readyList.length;
+const nStale = scids.filter((s) => STALE.indexOf(s) >= 0).length;
+const nCau = scids.filter((s) => SAFE.indexOf(s) >= 0).length;
+
+// per-target values
+const perKeys = sel.args.filter((a) => a.t === 'num' && st.per[a.k]).map((a) => a.k);
+const argDef = {};
+sel.args.forEach((a) => { argDef[a.k] = a; });
+const valid = (a, v) => { const x = Number(v); return String(v).trim() !== '' && isFinite(x) && x >= a.min && x <= a.max && (!a.int || Number.isInteger(x)); };
+const valOf = (s, k) => (st.pv[s] && st.pv[s][k] !== undefined) ? st.pv[s][k] : vals[k];
+const own = (s, k) => !!(st.pv[s] && st.pv[s][k] !== undefined);
+const setPv = (s, k, v) => { const pv = Object.assign({}, st.pv); pv[s] = Object.assign({}, pv[s] || {}, { [k]: v }); this.setState({ pv: pv }); };
+const badPer = {};
+perKeys.forEach((k) => { badPer[k] = readyList.filter((s) => !valid(argDef[k], valOf(s, k))).length; });
+
+let bad = 0;
+const args = sel.args.map((a) => {
+const v = vals[a.k];
+if (a.t === 'enum') {
+return { k: a.k, ty: 'ENUM · ' + a.o.length, isEnum: true, isNum: false, isAll: false, isPer: false, opts: a.o.map((o) => ({ v: o, on: o === v ? 'on' : '', pick: () => this.setState({ vals: Object.assign({}, vals, { [a.k]: o }) }) })) };
+}
+const isPer = !!st.per[a.k];
+const setAll = () => this.setState({ per: Object.assign({}, st.per, { [a.k]: false }) });
+const setPer = () => this.setState({ per: Object.assign({}, st.per, { [a.k]: true }) });
+const base = { k: a.k, ty: (a.int ? 'UINT16' : 'FLOAT32') + ' · ' + a.u, isEnum: false, isNum: true, isPer: isPer, isAll: !isPer, opts: [], u: a.u, min: a.min, max: a.max, allOn: isPer ? '' : 'on', perOn: isPer ? 'on' : '', setAll: setAll, setPer: setPer };
+if (isPer) {
+const nums = readyList.map((s) => Number(valOf(s, a.k))).filter((x) => isFinite(x));
+const distinct = {};
+readyList.forEach((s) => { distinct[valOf(s, a.k)] = 1; });
+const nd = Object.keys(distinct).length;
+const lo = nums.length ? Math.min.apply(null, nums) : 0;
+const hi = nums.length ? Math.max.apply(null, nums) : 0;
+bad += badPer[a.k];
+return Object.assign(base, {
+perSummary: nd <= 1 ? 'ALL ' + (readyList.length ? valOf(readyList[0], a.k) : v) + ' ' + a.u : nd + ' VALUES · ' + lo.toFixed(1) + ' TO ' + hi.toFixed(1) + ' ' + a.u,
+perMsg: badPer[a.k] ? badPer[a.k] + ' OUT OF RANGE ' + a.min + ' TO ' + a.max : 'SET IN PER-TARGET VALUES BELOW · ' + a.min + ' TO ' + a.max,
+msgColor: badPer[a.k] ? '#FFC24D' : '#7D8A99', val: v, bad: '', pos: '0', msg: '', onInput: () => {}
+});
+}
+const x = Number(v);
+const ok = valid(a, v);
+if (!ok) bad++;
+const pos = isFinite(x) ? Math.max(0, Math.min(100, (x - a.min) / (a.max - a.min) * 100)) : 0;
+const msg = ok ? 'IN RANGE · SENT TO ALL ' + ready + ' TARGET' + (ready === 1 ? '' : 'S') : 'OUT OF RANGE · ' + a.min + ' TO ' + a.max + (a.int ? ', WHOLE NUMBER' : '');
+return Object.assign(base, { val: v, pos: pos.toFixed(1), bad: ok ? '' : 'bad', msg: msg, msgColor: ok ? '#7D8A99' : '#FFC24D', perSummary: '', perMsg: '', onInput: (e) => this.setState({ vals: Object.assign({}, vals, { [a.k]: e.target.value }) }) });
+});
+let verifier = '—';
+const vshow = Object.assign({}, vals);
+perKeys.forEach((k) => { vshow[k] = '‹its value›'; });
+try { verifier = sel.ver(vshow); } catch (e) {}
+
+const SHOW = 8;
+const perRows = readyList.slice(0, SHOW).map((s) => {
+const sh = statusOf(s);
+const k0 = perKeys[0];
+return {
+name: nameOf(s), shape: sh[0],
+cells: perKeys.map((k) => { const v = valOf(s, k); return { val: v, u: argDef[k].u, aria: k + ' for ' + nameOf(s), cls: (valid(argDef[k], v) ? '' : 'bad') + (own(s, k) ? '' : ' inh'), onInput: (e) => setPv(s, k, e.target.value) }; }),
+now: k0 === 'setpoint_c' ? curSet(s).toFixed(1) + ' °C' : k0 === 'hysteresis_c' ? '1.0 °C' : '—',
+ctx: sel.sub === 'THERM' ? 'UMBRA MIN ' + umbraMin(s).toFixed(1) + ' °C · ' + cycles(s).toLocaleString('en-US') + ' CYC' : 'PLANE ' + String(planeOf(s)).padStart(2, '0') + ' · ' + sh[1]
+};
+});
+const more = readyList.length - SHOW;
+const totalBad = perKeys.reduce((n, k) => n + badPer[k], 0);
+const ownCount = readyList.filter((s) => perKeys.some((k) => own(s, k))).length;
+const fillAll = (fn) => { const pv = Object.assign({}, st.pv); readyList.forEach((s) => { const o = Object.assign({}, pv[s] || {}); perKeys.forEach((k) => { const v = fn(s, k); if (v !== null) o[k] = v; }); pv[s] = o; }); this.setState({ pv: pv }); };
+const applyCsv = () => {
+const lines = st.csv.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+if (!lines.length) return;
+const head = lines[0].split(/[,\t;]/).map((h) => h.trim());
+const pv = Object.assign({}, st.pv);
+const add = [];
+lines.slice(1).forEach((l) => {
+const cols = l.split(/[,\t;]/).map((c) => c.trim());
+const m = cols[0].match(/(\d+)\s*$/);
+if (!m) return;
+const s = Number(m[1]);
+add.push(s);
+const o = Object.assign({}, pv[s] || {});
+head.slice(1).forEach((h, i) => { if (cols[i + 1] !== undefined && cols[i + 1] !== '') o[h] = cols[i + 1]; });
+pv[s] = o;
+});
+const per = Object.assign({}, st.per);
+head.slice(1).forEach((h) => { per[h] = true; });
+const merged = scids.slice();
+add.forEach((s) => { if (merged.indexOf(s) < 0) merged.push(s); });
+this.setState({ pv: pv, per: per, csvOpen: false, tg: 'custom', custom: merged.sort((a, b) => a - b) });
+};
+
+const add = () => {
+if (bad || !ready) return;
+const snap = {};
+readyList.forEach((s) => { const o = {}; perKeys.forEach((k) => { o[k] = valOf(s, k); }); snap[s] = o; });
+this.setState({ stack: st.stack.concat([{ id: sel.id, cls: sel.cls, vals: Object.assign({}, vals), per: perKeys.slice(), n: ready, snap: snap }]) });
+};
+const stack = st.stack.map((s, i) => ({ n: String(i + 1).padStart(2, '0'), id: s.id, cls: s.cls, args: Object.keys(s.vals).map((k) => k + '=' + (s.per.indexOf(k) >= 0 ? '‹per target · ' + s.n + '›' : s.vals[k])).join(' '), del: () => this.setState({ stack: st.stack.filter((_, j) => j !== i) }) }));
+
+// search
+const hitList = search(st.tq);
+const hits = hitList.slice(0, 4).map((s) => { const sh = statusOf(s); const on = !!inT[s]; return { name: nameOf(s), shape: sh[0], meta: 'SCID ' + s + ' · PLANE ' + String(planeOf(s)).padStart(2, '0') + ' · ' + sh[1], on: on ? 'on' : '', btn: on ? 'Added' : 'Add', toggle: () => toggle(s) }; });
+const addAll = () => { const m = scids.slice(); hitList.forEach((s) => { if (m.indexOf(s) < 0) m.push(s); }); setTargets(m); };
+const picked = custom ? st.custom.slice(0, 12).map((s) => ({ name: nameOf(s), del: () => toggle(s) })) : [];
+
+const cells = [];
+for (let s = 1; s <= 500; s++) {
+let c = '';
+if (inT[s]) c = STALE.indexOf(s) >= 0 ? 'stale' : SAFE.indexOf(s) >= 0 ? 'cau' : 'sel';
+const sc = s;
+cells.push({ cls: c, toggle: () => toggle(sc) });
+}
+const tdefs = TG.slice();
+if (st.custom.length) tdefs.push({ id: 'custom', label: 'Picked · ' + st.custom.length, q: 'hand-picked', scids: st.custom });
+const tgts = tdefs.map((t) => ({ label: t.label, q: t.q, on: t.id === st.tg ? 'on' : '', pick: () => this.setState({ tg: t.id }) }));
+const excl = nStale + nCau;
+const exclNote = excl ? excl + ' excluded automatically. Stale spacecraft can’t be verified and safe mode rejects THERM commands.' : 'Every target is fresh and in a mode that accepts this stack.';
+
+const waves = ready >= 20;
+const relDefs = [
+{ id: 'waves', short: waves ? 'Waves 5·45·' + Math.max(0, ready - 50) : 'Waves', label: waves ? 'In waves · 5 → 45 → ' + Math.max(0, ready - 50) : 'In waves', sub: waves ? 'Canary first. Each wave waits until the last is fully verified.' : 'Needs at least 20 targets.' },
+{ id: 'aos', short: 'Next AOS', label: 'At each target’s next AOS', sub: 'Everything goes as soon as each spacecraft is in view.' },
+{ id: 'tag', short: 'Time-tag', label: 'Time-tagged', sub: 'Uplink now, execute onboard at a set time. Opens the time picker.' }
+];
+const rel = (!waves && st.rel === 'waves') ? 'aos' : st.rel;
+const rels = relDefs.map((r) => ({ short: r.short, label: r.label, sub: r.sub, on: r.id === rel ? 'on' : '', pick: () => this.setState({ rel: r.id }) }));
+
+const classes = st.stack.map((s) => s.cls);
+const top = classes.indexOf('HAZARDOUS') >= 0 ? 'HAZARDOUS' : classes.indexOf('CRITICAL') >= 0 ? 'CRITICAL' : 'ROUTINE';
+const empty = st.stack.length === 0;
+const perInStack = st.stack.some((s) => s.per.length);
+const checks = [
+{ k: 'Identity', v: scids.length + ' of ' + scids.length + ' resolve to a SCID and profile', s: 'GO', cls: 'go' },
+{ k: 'Catalog', v: 'v15 is loaded on every target profile', s: 'GO', cls: 'go' },
+{ k: 'Stack', v: empty ? 'Add at least one command' : st.stack.length + ' command' + (st.stack.length === 1 ? '' : 's') + (perInStack ? ', per-target values in range' : ', all arguments in range'), s: empty ? 'HOLD' : 'GO', cls: empty ? 'hold' : 'go' },
+{ k: 'Targets', v: excl ? ready + ' ready, ' + excl + ' excluded' : ready + ' ready', s: excl ? 'GO −' + excl : 'GO', cls: 'go' },
+];
+return {
+q: st.q, onQ: (e) => this.setState({ q: e.target.value }), list: list, noHits: found.length === 0,
+sel: { id: sel.id, sub: sel.sub, op: sel.op, cls: sel.cls, desc: sel.desc, win: sel.win, appr: APPR[sel.cls] },
+args: args, noArgs: sel.args.length === 0, verifier: verifier,
+add: add, addOpacity: (bad || !ready) ? '0.35' : '1', formMsg: bad ? 'FIX ' + bad + ' VALUE' + (bad > 1 ? 'S' : '') + ' TO ADD' : !ready ? 'PICK AT LEAST ONE TARGET' : 'READY · ' + ready + ' TARGET' + (ready === 1 ? '' : 'S'), formColor: (bad || !ready) ? '#FFC24D' : '#7D8A99',
+hasPer: perKeys.length > 0 && ready > 0, perCols: perKeys, perRows: perRows,
+perHead: perKeys.length ? ready + ' TARGETS · ' + ownCount + ' WITH OWN VALUES' : 'SAME FOR ALL',
+perFoot: (more > 0 ? '+' + more + ' MORE NOT SHOWN · PASTE CSV OR FILL TO SET THEM ALL · ' : '') + (totalBad ? totalBad + ' OUT OF RANGE · ' : '') + 'GRAY = INHERITS THE FORM VALUE',
+formVal: perKeys.length ? vals[perKeys[0]] : '',
+fillForm: () => fillAll((s, k) => vals[k]),
+fillDelta: () => fillAll((s, k) => k === 'setpoint_c' ? (curSet(s) + 2).toFixed(1) : null),
+clearPer: () => { const pv = Object.assign({}, st.pv); readyList.forEach((s) => { delete pv[s]; }); this.setState({ pv: pv }); },
+csvOpen: st.csvOpen, csvOn: st.csvOpen ? 'on' : '', toggleCsv: () => this.setState({ csvOpen: !st.csvOpen }), csv: st.csv, onCsv: (e) => this.setState({ csv: e.target.value }), applyCsv: applyCsv,
+stack: stack, stackEmpty: empty, stackCount: st.stack.length + ' CMD' + (st.stack.length === 1 ? '' : 'S'),
+tq: st.tq, onTq: (e) => this.setState({ tq: e.target.value }), hasHits: hitList.length > 0, hits: hits, hitCount: hitList.length, hitHead: hitList.length + ' MATCH' + (hitList.length === 1 ? '' : 'ES') + (hitList.length > 4 ? ' · SHOWING 4' : ''), addAll: addAll,
+isCustom: custom && st.custom.length > 0, picked: picked, pickedMore: custom && st.custom.length > 12 ? '+' + (st.custom.length - 12) + ' MORE' : '',
+tgHead: custom ? 'HAND-PICKED · ' + scids.length : 'LIVE QUERY',
+tgts: tgts, cells: cells, ready: ready, nStale: nStale, nCau: nCau, exclNote: exclNote,
+rels: rels, checks: checks, apprShort: APPR[top].toUpperCase(), noPer: !(perKeys.length > 0 && ready > 0), exclShort: excl ? excl + ' EXCLUDED AUTOMATICALLY' : '', stackN: st.stack.length,
+verdict: empty ? '1 HOLD' : 'ALL GO', verdictCls: empty ? 'hold' : 'go',
+sendLabel: empty ? 'Add a command to continue' : 'Request approval · ' + ready + ' target' + (ready === 1 ? '' : 's'), sendOpacity: empty ? '0.35' : '1'
+};
+}
+}
+</script>
+</body>
+</html>

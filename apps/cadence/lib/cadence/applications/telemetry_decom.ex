@@ -223,7 +223,45 @@ defmodule Cadence.Applications.TelemetryDecom do
     end
   end
 
+  @doc """
+  Records an already-validated configuration document as the spacecraft's stored config, without
+  re-validating it against its catalog: the change-set apply's `Review.compile` checks it in the same
+  transaction. Before 11-15 a change-set move left this row on the old catalog (001 on dev), which the
+  decom and packet-input surfaces and `Drafts.snapshot`'s overlay then acted on.
+  """
+  @spec project_configuration(binary(), binary(), binary(), map()) :: :ok | {:error, term()}
+  def project_configuration(organization_id, mission_id, spacecraft_id, document)
+      when is_map(document) do
+    attrs = %{
+      catalog_revision_id: document["catalog_revision_id"],
+      enabled: document["telemetry_enabled"]
+    }
+
+    # Parsed as configure/4 parses it, so the stored row is the same type either way (api-ops).
+    with {:ok, handled_apids} <- APIDSelection.parse(document["handled_apids"]),
+         {:ok, _binding} <-
+           store_config(organization_id, mission_id, spacecraft_id, attrs, %{
+             handled_apids: handled_apids,
+             source_endpoint_id: document["telemetry_source_endpoint_id"]
+           }) do
+      :ok
+    end
+  end
+
   defp upsert_config(organization_id, mission_id, spacecraft_id, attrs, config_inputs) do
+    case store_config(organization_id, mission_id, spacecraft_id, attrs, config_inputs) do
+      {:ok, binding} ->
+        {:ok,
+         binding
+         |> config_from_binding()
+         |> overlay_packet_binding_selection()}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp store_config(organization_id, mission_id, spacecraft_id, attrs, config_inputs) do
     existing =
       case ApplicationBindingStore.fetch(
              organization_id,
@@ -260,16 +298,7 @@ defmodule Cadence.Applications.TelemetryDecom do
         metadata: Map.get(attrs, :metadata, %{})
       })
 
-    case ApplicationBindingStore.upsert(config_to_binding(config)) do
-      {:ok, binding} ->
-        {:ok,
-         binding
-         |> config_from_binding()
-         |> overlay_packet_binding_selection()}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
+    ApplicationBindingStore.upsert(config_to_binding(config))
   end
 
   defp preserved_applied_stamp(
@@ -550,6 +579,7 @@ defmodule Cadence.Applications.TelemetryDecom do
         {:ok, %{config: config, activation_request: activation_request}}
       end
     end)
+    |> ScopedReadUpdates.publish_result(:activations_changed, organization_id, mission_id)
   end
 
   defp mission_model_revision_for_apply(
@@ -858,13 +888,17 @@ defmodule Cadence.Applications.TelemetryDecom do
   end
 
   @doc false
-  @spec compile_mission_contribution(binary(), binary(), [Config.t()]) ::
+  @spec compile_mission_contribution(binary(), binary(), [Config.t()], keyword()) ::
           {:ok, MissionBindingContribution.t()} | {:error, term()}
-  def compile_mission_contribution(organization_id, mission_id, configs)
+  def compile_mission_contribution(organization_id, mission_id, configs, opts \\ [])
       when is_binary(organization_id) and is_binary(mission_id) and is_list(configs) do
+    # `telemetry:` a projection the caller already loaded for these configs' catalog, so a
+    # fleet-wide compile reads and decodes it once, not once per spacecraft (step 4, 11-15).
+    preloaded = Keyword.get(opts, :telemetry)
+
     {capability_instances, rules, errors} =
       Enum.reduce(configs, {[], [], []}, fn config, {ci_acc, rule_acc, error_acc} ->
-        case fetch_telemetry_for_config(organization_id, mission_id, config) do
+        case telemetry_for_config(organization_id, mission_id, config, preloaded) do
           {:ok, telemetry} ->
             compilation = compile_runtime_artifacts(telemetry, config, 1)
 
@@ -904,6 +938,17 @@ defmodule Cadence.Applications.TelemetryDecom do
         {:error, {:config_compile_failed, errors}}
     end
   end
+
+  defp telemetry_for_config(
+         _organization_id,
+         _mission_id,
+         %Config{catalog_revision_id: id},
+         %{catalog_revision: %{catalog_revision_id: id}} = telemetry
+       ),
+       do: {:ok, telemetry}
+
+  defp telemetry_for_config(organization_id, mission_id, config, _preloaded),
+    do: fetch_telemetry_for_config(organization_id, mission_id, config)
 
   defp fetch_telemetry_for_config(organization_id, mission_id, %Config{} = config) do
     with {:ok, %Revision{} = revision} <-
@@ -1141,7 +1186,9 @@ defmodule Cadence.Applications.TelemetryDecom do
     end
   end
 
-  defp managed_runtime_source_endpoint?(%SourceEndpoint{} = endpoint) do
+  @doc false
+  # Also Readiness's rule for which endpoint carries a spacecraft's telemetry (L22).
+  def managed_runtime_source_endpoint?(%SourceEndpoint{} = endpoint) do
     endpoint.source_endpoint_id == runtime_source_endpoint_id(endpoint.spacecraft_id) or
       Map.get(endpoint.metadata, "managed_by") in [
         "spacecraft_application_binding",

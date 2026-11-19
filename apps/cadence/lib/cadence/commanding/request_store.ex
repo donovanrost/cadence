@@ -25,7 +25,8 @@ defmodule Cadence.Commanding.RequestStore do
           {:ok, CommandRequest.t()} | {:error, term()}
   def persist_request(organization_id, %CommandRequest{} = command_request)
       when is_binary(organization_id) do
-    with {:ok, scoped_request} <- put_organization_scope(command_request, organization_id),
+    with :ok <- refuse_group_marker(command_request),
+         {:ok, scoped_request} <- put_organization_scope(command_request, organization_id),
          {:ok, validated_request} <- RequestValidation.validate_and_enrich(scoped_request),
          {:ok, %CommandRequestRow{} = row} <-
            Repo.insert(CommandRequestRow.changeset(validated_request)) do
@@ -49,7 +50,8 @@ defmodule Cadence.Commanding.RequestStore do
         expected_target,
         before_insert
       ) do
-    with {:ok, scoped} <- put_organization_scope(request, organization_id) do
+    with :ok <- refuse_group_marker(request),
+         {:ok, scoped} <- put_organization_scope(request, organization_id) do
       RequestValidation.with_authoring_request(
         scoped,
         expected_basis,
@@ -69,6 +71,14 @@ defmodule Cadence.Commanding.RequestStore do
   end
 
   defp insert_reviewed(_, _, _), do: {:error, :command_authoring_preview_changed}
+
+  # Group membership is set only by group submission (`Groups.GroupStore.insert_members/1`). The row
+  # mirrors `metadata["group"]` into its group columns, so a standalone request naming a group in its
+  # metadata would join that group's members (four-eyes audit 11-17, P0).
+  defp refuse_group_marker(%{metadata: %{"group" => _marker}}),
+    do: {:error, :command_request_group_reserved}
+
+  defp refuse_group_marker(_request), do: :ok
 
   @spec fetch_request(binary(), binary(), binary()) ::
           {:ok, CommandRequest.t()} | {:error, term()}
@@ -111,6 +121,7 @@ defmodule Cadence.Commanding.RequestStore do
     Repo.transaction(fn ->
       with {:ok, %CommandRequestRow{} = request_row} <-
              lock_request_row(organization_id, mission_id, command_request_id),
+           :ok <- LifecyclePolicy.ensure_request_not_in_group(request_row),
            :ok <- ReviewPrecondition.check(request_row, opts),
            :ok <- LifecyclePolicy.ensure_request_pending_approval(request_row),
            :ok <- LifecyclePolicy.ensure_human_approval_actor(decided_by, command_request_id),

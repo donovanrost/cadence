@@ -165,9 +165,13 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
 
     assert pending_plan.lifecycle_state == :pending_approval
 
+    # Under 'independent' approval (the default) whoever wrote and submitted a plan can't approve
+    # it (director 11-15): a second administrator does.
+    reviewer = Cadence.PolicyReviewer.reviewer(scope)
+
     assert {:ok, approved_handoff} =
              ManagementContacts.approve_plan(
-               scope,
+               reviewer,
                setup.mission_id,
                plan.contact_plan_id,
                plan_version.version,
@@ -193,7 +197,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
 
     assert approved_plan.lifecycle_state == :approved
     assert approval.actor_kind == :user
-    assert approval.actor_id == scope.user.user_id
+    assert approval.actor_id == reviewer.user.user_id
 
     assert {:ok, execution} =
              ControlContacts.execute_approved_plan(
@@ -329,7 +333,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
                mission_id: setup.mission_id,
                backoff_ms: 0,
                credential_resolver: &resolve_provider_credential/1,
-               now: DateTime.add(DateTime.utc_now(), 1, :second)
+               now: due_read_at(confirmed_reservation)
              )
 
     assert {:ok, completed_reservation} =
@@ -473,7 +477,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
                mission_id: setup.mission_id,
                backoff_ms: 0,
                credential_resolver: &resolve_provider_credential/1,
-               now: DateTime.add(DateTime.utc_now(), 2, :second)
+               now: due_read_at(recovered_reservation)
              )
 
     assert [scheduled_contact] =
@@ -716,7 +720,9 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
 
     assert {:error, failed, reason} = reconcile_reservation(reservation)
     assert failed.lifecycle_state == :failed
-    assert reason == :delivery_descriptor_conflicts_with_transport
+    # Tagged by the reconciler (881e19e8c), so a caller decides from this read.
+    assert reason ==
+             {:provider_configuration_failure, :delivery_descriptor_conflicts_with_transport}
 
     change =
       setup
@@ -822,9 +828,10 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
                fleet_policy_attrs()
              )
 
+    # The policy's author can't decide it (approval sweep 11-15): a second administrator does.
     assert {:ok, _active_policy, ^policy_version, _approval} =
              FleetPlanningPolicies.approve(
-               scope,
+               Cadence.PolicyReviewer.reviewer(scope),
                setup.mission_id,
                policy.fleet_planning_policy_id,
                policy_version.version,

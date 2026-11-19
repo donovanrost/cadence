@@ -25,12 +25,9 @@ defmodule Cadence.Reads.ApplicationSurfaces.Spacecraft do
 
   @surface_queries %{
     "list" => "cadence.spacecraft.list",
-    "new" => "cadence.spacecraft.new",
     "profile_list" => "cadence.spacecraft.profiles",
-    "profile_new" => "cadence.spacecraft.profile.new",
     "profile_show" => "cadence.spacecraft.profile.show",
     "show" => "cadence.spacecraft.show",
-    "edit" => "cadence.spacecraft.edit",
     "readiness" => "cadence.spacecraft.readiness",
     "routing" => "cadence.spacecraft.routing",
     "commanding" => "cadence.spacecraft.commanding",
@@ -41,7 +38,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.Spacecraft do
   @mission_surfaces Map.keys(@surface_queries) --
                       [
                         "show",
-                        "edit",
                         "readiness",
                         "routing",
                         "commanding",
@@ -113,14 +109,8 @@ defmodule Cadence.Reads.ApplicationSurfaces.Spacecraft do
   defp dispatch_surface(scope, _host_context, mission, "list", params),
     do: Pages.load(scope, "spacecraft_list", mission.mission_id, params)
 
-  defp dispatch_surface(scope, _host_context, mission, "new", _params),
-    do: Pages.load(scope, "spacecraft_new", mission.mission_id, %{})
-
   defp dispatch_surface(scope, _host_context, mission, "profile_list", _params),
     do: Pages.load(scope, "profile_list", mission.mission_id, %{})
-
-  defp dispatch_surface(scope, _host_context, mission, "profile_new", params),
-    do: Pages.load(scope, "profile_new", mission.mission_id, params)
 
   defp dispatch_surface(scope, _host_context, mission, "profile_show", params),
     do: Pages.load(scope, "profile_show", mission.mission_id, params)
@@ -128,12 +118,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.Spacecraft do
   defp dispatch_surface(scope, host_context, mission, "show", _params),
     do:
       Pages.load(scope, "spacecraft_show", mission.mission_id, %{
-        "spacecraft_id" => host_context.spacecraft_id
-      })
-
-  defp dispatch_surface(scope, host_context, mission, "edit", _params),
-    do:
-      Pages.load(scope, "spacecraft_edit", mission.mission_id, %{
         "spacecraft_id" => host_context.spacecraft_id
       })
 
@@ -251,12 +235,9 @@ defmodule Cadence.Reads.ApplicationSurfaces.Spacecraft do
   defp mission_path_id(mission_id), do: "/missions/#{mission_id}"
 
   defp surface_label("list"), do: "Spacecraft"
-  defp surface_label("new"), do: "New Spacecraft"
   defp surface_label("profile_list"), do: "Profiles"
-  defp surface_label("profile_new"), do: "New Profile"
   defp surface_label("profile_show"), do: "Profile"
   defp surface_label("show"), do: "Overview"
-  defp surface_label("edit"), do: "Identity"
   defp surface_label("readiness"), do: "Readiness"
   defp surface_label("routing"), do: "Routing"
   defp surface_label("commanding"), do: "Commanding"

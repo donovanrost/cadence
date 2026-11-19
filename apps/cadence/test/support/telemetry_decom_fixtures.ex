@@ -5,19 +5,65 @@ defmodule Cadence.Applications.TelemetryDecomFixtures do
   alias Cadence.Auth.Scope
   alias Cadence.Catalog
   alias Cadence.Catalog.Artifact
+  alias Cadence.MissionModelApproval
   alias Cadence.Platform.ContentHash
   alias Cadence.Runtime.MissionModelPlanDecoder
   alias Cadence.SemanticRuntime
   alias Cadence.SemanticRuntime.{PlanDecoder, State, Update}
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
+  alias Cadence.TestSupport.CatalogTestActor
 
   def setup_spacecraft!(organization_id, mission_id) do
     Cadence.DataCase.persist_mission_scope(organization_id, mission_id)
     persist_spacecraft!(organization_id, mission_id, display_name: "Nova-1")
   end
 
-  def setup_imported_mission!(organization_id, mission_id) do
+  @doc """
+  A catalog the size of dev's (mission-earendil-demo, rev 4 / model 732618, 11-15): 10 packets with
+  dev's field counts (146 fields), 83 of them with limits, and 12 commands. A fleet-scale test on a
+  one-packet catalog proved nothing about step 4's apply (director, 11-15).
+  """
+  def dev_sized_yaml do
+    packets =
+      Enum.zip([
+        ~w(ADCS CCSDS_HDR COMM DEBUG EPS HK PAYLOAD SCIENCE_DATA STRESS_TEST THERM),
+        dev_sized_apids(),
+        [15, 7, 9, 5, 14, 10, 8, 3, 64, 11]
+      ])
+
+    {packet_yaml, _limited} =
+      Enum.map_reduce(packets, 0, fn {name, apid, fields}, limited ->
+        {items, limited} =
+          Enum.map_reduce(0..(fields - 1), limited, &dev_sized_item(name, &1, &2))
+
+        {"  - name: #{name}\n    apid: #{apid}\n    items:\n" <> Enum.join(items), limited}
+      end)
+
+    commands =
+      for i <- 1..12 do
+        "  - name: CMD_#{i}\n    opcode: #{i}\n    parameters:\n      - name: value\n" <>
+          "        data_type: uint\n        required: true\n        bit_offset: 0\n        bit_length: 8\n"
+      end
+
+    "packets:\n" <> Enum.join(packet_yaml) <> "commands:\n" <> Enum.join(commands)
+  end
+
+  defp dev_sized_item(packet, index, limited) do
+    limits =
+      if limited < 83,
+        do: "      limits:\n        yellow_high: 200\n        red_high: 250\n",
+        else: ""
+
+    {"      - name: #{String.downcase(packet)}_#{index}\n        data_type: uint\n" <>
+       "        bit_offset: #{rem(index, 8) * 8}\n        bit_size: 8\n" <>
+       String.replace(limits, "      ", "        "), limited + 1}
+  end
+
+  @doc "The apids `dev_sized_yaml/0` declares, in its packet order."
+  def dev_sized_apids, do: [30, 2, 40, 255, 20, 1, 50, 100, 101, 10]
+
+  def setup_imported_mission!(organization_id, mission_id, opts \\ []) do
     spacecraft = setup_spacecraft!(organization_id, mission_id)
 
     endpoint =
@@ -25,7 +71,7 @@ defmodule Cadence.Applications.TelemetryDecomFixtures do
         display_name: "Primary"
       )
 
-    revision = persist_imported_revision!(organization_id, mission_id)
+    revision = persist_imported_revision!(organization_id, mission_id, opts)
     {spacecraft, revision, endpoint}
   end
 
@@ -39,6 +85,21 @@ defmodule Cadence.Applications.TelemetryDecomFixtures do
 
     revision = persist_qualified_revision!(organization_id, mission_id)
     {spacecraft, revision, endpoint}
+  end
+
+  @doc """
+  The Telemetry and Commanding switches `document` asks for, set on the spacecraft as a change set
+  would (DECISIONS #109: change sets are their only writer, and a saved configuration takes them
+  from the spacecraft row). Call it before a `Drafts.save` that needs a switch on.
+  """
+  def change_set_switches!(organization_id, mission_id, spacecraft_id, document) do
+    {:ok, _spacecraft} =
+      Cadence.SpacecraftStore.put_switches(organization_id, mission_id, spacecraft_id, %{
+        telemetry_enabled: document["telemetry_enabled"] == true,
+        commanding_enabled: document["commanding_enabled"] == true
+      })
+
+    :ok
   end
 
   def persist_spacecraft!(organization_id, mission_id, opts) do
@@ -70,13 +131,23 @@ defmodule Cadence.Applications.TelemetryDecomFixtures do
     revision_label = Keyword.get(opts, :revision_label, "Rev 1")
     suffix = Integer.to_string(System.unique_integer([:positive]))
 
-    {:ok, database} =
-      Catalog.create_database(organization_id, mission_id, %{
-        name: "Bus " <> suffix,
-        slug: "bus-" <> suffix,
-        catalog_family: :combined,
-        default_importer_key: "cadence_yaml"
-      })
+    # catalog_database_id: import into an existing database (its next revision number).
+    database =
+      case Keyword.get(opts, :catalog_database_id) do
+        nil ->
+          {:ok, database} =
+            Catalog.create_database(organization_id, mission_id, %{
+              name: "Bus " <> suffix,
+              slug: "bus-" <> suffix,
+              catalog_family: :combined,
+              default_importer_key: "cadence_yaml"
+            })
+
+          database
+
+        id ->
+          %{catalog_database_id: id}
+      end
 
     yaml =
       Keyword.get(
@@ -113,13 +184,24 @@ defmodule Cadence.Applications.TelemetryDecomFixtures do
         database.catalog_database_id,
         artifact,
         "cadence_yaml",
-        metadata: %{"revision_label" => revision_label}
+        metadata: %{"revision_label" => revision_label},
+        requested_by: Keyword.get_lazy(opts, :requested_by, &CatalogTestActor.system/0)
       )
 
     {:ok, completed} = Catalog.execute_enqueued_run(run.import_run_id)
 
     {:ok, revision} =
       Catalog.fetch_revision_by_import_run(organization_id, mission_id, completed.import_run_id)
+
+    # Approved, as a catalog a test moves spacecraft onto would be (#92 a's gate); the gate's own
+    # tests pass `approve: false`.
+    if Keyword.get(opts, :approve, true),
+      do:
+        MissionModelApproval.approve!(
+          organization_id,
+          mission_id,
+          revision.mission_model_revision_id
+        )
 
     revision
   end
@@ -131,11 +213,10 @@ defmodule Cadence.Applications.TelemetryDecomFixtures do
 
   defp qualify_revision!(organization_id, mission_id, revision) do
     {:ok, _approved_model} =
-      Cadence.MissionModels.approve_revision(
+      MissionModelApproval.approve!(
         organization_id,
         mission_id,
-        revision.mission_model_revision_id,
-        %{"kind" => "test_fixture", "id" => "telemetry-decom"}
+        revision.mission_model_revision_id
       )
 
     {:ok, plans} =

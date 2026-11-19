@@ -2,6 +2,10 @@ import Config
 
 config :opentelemetry, traces_exporter: :none
 
+# Uplink sessions are qualified only by signed provider attestations (#44 D2); without
+# provider evidence a session stays blocked (fencing_unproven).
+config :cadence, :uplink_session_policy, Cadence.Control.UplinkSessionQualification
+
 config :logger, :default_formatter,
   metadata: [
     :request_id,
@@ -24,16 +28,73 @@ config :logger, :default_formatter,
     :error_class
   ]
 
+# os_mon runs for disksup only: the ingress journal reads its own disk on demand
+# (Cadence.IngressJournal.Volume, ux U66). No cpu/mem/os supervisors; its periodic check is
+# hourly and its almost-full alarm threshold is 100 %, so it never raises alarms of its own.
+config :os_mon,
+  start_cpu_sup: false,
+  start_memsup: false,
+  start_os_sup: false,
+  start_disksup: true,
+  disk_space_check_interval: 60,
+  disk_almost_full_threshold: 1.0
+
 config :cadence,
   activation_governance: [approval_required: true],
+  # Mission change-set kinds (Cadence.Platform.ConfigKind), see docs/apogee/domain/change-sets.md.
+  configuration_kinds: [
+    Cadence.Comms.ConfigKinds.GroundStation,
+    # Composition: provider-managed transports cross Ground Networks and Comms (comms parity 2).
+    Cadence.Management.ConfigKinds.Transport,
+    Cadence.Spacecraft.ConfigKinds.Spacecraft,
+    Cadence.Spacecraft.ConfigKinds.SpacecraftProfile,
+    Cadence.Spacecraft.ConfigKinds.SpacecraftOverride,
+    # App configuration through change sets (DECISIONS #77): derived telemetry points.
+    Cadence.Governance.DerivedTelemetryKind,
+    # ... and limit definitions (DECISIONS #77, stage 2).
+    Cadence.Control.LimitDefinitionKind,
+    # A spacecraft's own extra routes (DECISIONS #3 per-spacecraft overrides; profile-routing.md §2.2).
+    Cadence.Comms.ConfigKinds.SpacecraftRoute,
+    # Removing an older (legacy) per-spacecraft routing rule: delete only (director 11-16).
+    Cadence.Comms.ConfigKinds.LegacyRoutingRule,
+    # Derived: re-materializes profile routes after the ops above (finalize/3).
+    Cadence.Comms.ConfigKinds.SpacecraftRoutes,
+    # Derived: framing compatibility HOLDs when the profile becomes framing authority.
+    Cadence.Comms.ConfigKinds.FramingCompatibility,
+    # Derived: catalog compatibility HOLDs when spacecraft move to another catalog (#36/#65).
+    Cadence.Spacecraft.ConfigKinds.CatalogCompatibility,
+    # Derived: commanding and telemetry switch HOLDs (L22).
+    Cadence.Spacecraft.ConfigKinds.SwitchCompatibility,
+    # Derived: handled APIDs HOLDs (L22).
+    Cadence.Spacecraft.ConfigKinds.ApidCompatibility
+  ],
+  # Which spacecraft have had traffic, for the archive HOLD (#49/#50).
+  spacecraft_traffic: Cadence.Control.SpacecraftTraffic,
+  # Which other missions of the organization fly a SCID through a shared provider account, for
+  # the same-SCID HOLD (ux U81 §1).
+  scid_sharing: Cadence.Control.ScidSharing,
+  # What still uses a transport or ground station, for the archive refusal (ux U82).
+  config_users: Cadence.Control.ConfigUsers,
+  # The mission's catalog points for the derived_telemetry kind's checks (#77), configured so
+  # governance has no compile-time edge to projections.
+  derived_point_catalog: Cadence.Ops.PointCatalog,
+  # Catalog revision lookup for profile/override catalog changes (#36/#65), configured so the
+  # spacecraft kinds have no compile-time edge to the catalog context.
+  catalog_revisions: Cadence.Catalog,
+  # A catalog revision's APIDs, for profile/override handled_apids (L22), configured likewise.
+  catalog_apids: Cadence.MissionModels.CatalogApids,
+  # Builds runtime activations for profile-framed change-set applies (DECISIONS #36).
+  configuration_generation: Cadence.Control.ConfigurationGeneration,
   ecto_repos: [Cadence.Repo],
   start_background_jobs: true,
   background_jobs: [
     safety_poll_interval_ms: 60_000,
     max_concurrency: 4
   ],
+  # On by default (DECISIONS #95): received bytes are journaled before processing. The off path
+  # stays supported and tested (the :ingest_journal_matrix tag, CADENCE_TEST_INGRESS_JOURNAL=off).
   ingress_journal: [
-    enabled?: false,
+    enabled?: true,
     base_path: Path.expand("../../../var/ingress_journal", __DIR__),
     max_bytes: 8 * 1_024 * 1_024 * 1_024,
     segment_bytes: 256 * 1_024 * 1_024,

@@ -2,10 +2,18 @@ defmodule Cadence.Control.Contacts do
   @moduledoc "Control-plane executor for exact realized Contact runtime handoffs."
 
   alias Cadence.Auth.{Policy, Scope}
-  alias Cadence.ContactPlanning.{ContactPlanExecutionItem, ContactPlanExecutions}
+  alias Cadence.Comms.ListenClaims
+
+  alias Cadence.ContactPlanning.{
+    ConfirmationWindow,
+    ContactPlanExecutionItem,
+    ContactPlanExecutions,
+    FleetRunLock
+  }
 
   alias Cadence.Contacts.{
     ContactStore,
+    ListenerRefusalAttention,
     ProviderReservation,
     ProviderReservations,
     RealizedContact,
@@ -19,6 +27,7 @@ defmodule Cadence.Control.Contacts do
   alias Cadence.Runtime.Contacts, as: RuntimeContacts
   alias Cadence.Runtime.RealizedContactRuntimeSpec
   alias Cadence.SourceEndpoints
+  alias Cadence.SpacecraftStore
 
   @doc "Reviews a scoped provider reservation before resolving its uncertain outcome."
   def review_provider_reservation_resolution(%Scope{} = scope, mission, id) do
@@ -125,6 +134,67 @@ defmodule Cadence.Control.Contacts do
   def list_plan_execution(organization_id, mission_id, plan_id, version),
     do: ContactPlanExecutions.list(organization_id, mission_id, plan_id, version)
 
+  @doc """
+  A plan's lifecycle as operators see it (DECISIONS #52). An `executing` plan that no session
+  is executing reads by its unfinished items:
+
+  - `:interrupted` when any were never placed (`pending`/`requesting`). Execute resumes those
+    and only re-reads `uncertain` ones; it never re-sends them.
+  - `:unconfirmed` when an `uncertain` item (placed, provider hasn't answered) has waited past
+    the provider confirmation window, counted from placement (`started_at`, set when the item is
+    claimed just before the provider call), so later provider errors don't restart it. It needs
+    operator resolution, not Execute.
+  - `:executing` when every unfinished item is `uncertain` within the window. Nothing to
+    resume; the plan settles when the provider confirms.
+
+  A `partially_reserved` plan reads the same way when no session is executing it (U61, 11-16):
+  the execution projection writes `partially_reserved` as soon as one item is reserved, while the
+  rest may still be pending. A run that stopped after booking some passes then reads
+  `:interrupted`, not booked. With nothing unfinished it stays `:partially_reserved` (the
+  failed items have their own resolution).
+
+  Options: `:now`, `:confirmation_window_ms` (default from `:provider_confirmation_window_ms`).
+  """
+  @spec plan_state(binary(), binary(), binary(), atom(), keyword()) :: atom()
+  def plan_state(organization_id, mission_id, plan_id, lifecycle_state, opts \\ [])
+
+  def plan_state(organization_id, mission_id, plan_id, state, opts)
+      when state in [:executing, :partially_reserved] do
+    if FleetRunLock.key_held?(
+         ContactPlanExecutions.execution_key(organization_id, mission_id, plan_id)
+       ),
+       do: state,
+       else: unattended_state(organization_id, mission_id, plan_id, state, opts)
+  end
+
+  def plan_state(_organization_id, _mission_id, _plan_id, lifecycle_state, _opts),
+    do: lifecycle_state
+
+  defp unattended_state(organization_id, mission_id, plan_id, state, opts) do
+    unfinished =
+      organization_id
+      |> plan_items(mission_id, plan_id)
+      |> Enum.filter(&(&1.lifecycle_state in [:pending, :requesting, :uncertain]))
+
+    cond do
+      unfinished == [] and state == :partially_reserved -> :partially_reserved
+      unfinished == [] -> :interrupted
+      Enum.any?(unfinished, &(&1.lifecycle_state != :uncertain)) -> :interrupted
+      Enum.any?(unfinished, &ConfirmationWindow.overdue?(&1, opts)) -> :unconfirmed
+      true -> state
+    end
+  end
+
+  defp plan_items(organization_id, mission_id, plan_id) do
+    case ManagementContacts.fetch_approved_plan(organization_id, mission_id, plan_id) do
+      {:ok, approved} ->
+        list_plan_execution(organization_id, mission_id, plan_id, approved.contact_plan_version)
+
+      {:error, _reason} ->
+        []
+    end
+  end
+
   defdelegate list_plan_execution_page(organization_id, mission_id, plan_id, version, page),
     to: ContactPlanExecutions,
     as: :list_page
@@ -136,6 +206,24 @@ defmodule Cadence.Control.Contacts do
   defdelegate list_provider_reservations_page(org, mission, page),
     to: ProviderReservations,
     as: :list_mission_page
+
+  @doc "Per-spacecraft in-contact / next AOS / last LOS from booked reservations."
+  defdelegate contact_summary(org, mission, now),
+    to: ProviderReservations,
+    as: :contact_summary
+
+  @doc "Reservations overlapping a time window (console passes read)."
+  defdelegate list_provider_reservations_in_window(org, mission, from, to, opts \\ []),
+    to: ProviderReservations,
+    as: :list_in_window
+
+  @doc "Whether the booking's uplink leg was dropped by an accepted change (no command window)."
+  defdelegate uplink_leg_dropped?(reservation), to: Cadence.Contacts.UplinkLegs, as: :dropped?
+
+  @doc "Dropped uplink legs among the reservations, with when and why (api U46 reads)."
+  defdelegate uplink_drops(org, mission, reservation_ids),
+    to: Cadence.Contacts.UplinkLegs,
+    as: :drops
 
   @spec fetch_provider_reservation(binary(), binary(), binary()) ::
           {:ok, ProviderReservation.t()} | {:error, term()}
@@ -183,7 +271,23 @@ defmodule Cadence.Control.Contacts do
 
   @spec start_realized_contact(RealizedContact.t()) :: {:ok, pid()} | {:error, term()}
   def start_realized_contact(%RealizedContact{} = realized_contact) do
-    with {:ok, %RealizedContactRuntimeSpec{} = spec} <- runtime_spec(realized_contact) do
+    # SAFETY: a listen host:port is one mission's (ListenClaims). A pass whose pinned listener
+    # another mission also claims doesn't start, so neither mission's listener can take the
+    # other's peer (fail closed).
+    with :ok <- ListenClaims.check_paths(realized_contact.mission_id, realized_contact.paths),
+         {:ok, %RealizedContactRuntimeSpec{} = spec} <- runtime_spec(realized_contact) do
+      RuntimeContacts.start(spec)
+    end
+  end
+
+  @doc """
+  Starts an ended contact's runtime without intake, to store what its ingress journal kept
+  (DECISIONS #71 replay): journals, executor and projector only; no provider adapter or transport.
+  """
+  @spec start_replay(RealizedContact.t()) :: {:ok, pid()} | {:error, term()}
+  def start_replay(%RealizedContact{} = realized_contact) do
+    with {:ok, %RealizedContactRuntimeSpec{} = spec} <-
+           runtime_spec(realized_contact, intake?: false) do
       RuntimeContacts.start(spec)
     end
   end
@@ -196,6 +300,74 @@ defmodule Cadence.Control.Contacts do
   def stop_realized_contact_sync(mission_id, realized_contact_id),
     do: RuntimeContacts.stop_sync(mission_id, realized_contact_id)
 
+  @spec quiesce_realized_contact(binary(), binary()) :: :ok | {:error, term()}
+  def quiesce_realized_contact(mission_id, realized_contact_id),
+    do: RuntimeContacts.quiesce(mission_id, realized_contact_id)
+
+  @spec terminate_realized_contact(binary(), binary()) :: :ok | {:error, term()}
+  def terminate_realized_contact(mission_id, realized_contact_id),
+    do: RuntimeContacts.terminate(mission_id, realized_contact_id)
+
+  @spec realized_contact_journal_backlog(binary(), binary()) :: map()
+  def realized_contact_journal_backlog(mission_id, realized_contact_id),
+    do: RuntimeContacts.backlog(mission_id, realized_contact_id)
+
+  @spec realized_contact_incomplete_at_end(binary(), binary()) :: [map()]
+  def realized_contact_incomplete_at_end(mission_id, realized_contact_id),
+    do: RuntimeContacts.incomplete_at_end(mission_id, realized_contact_id)
+
+  @spec realized_contact_scid_checks(binary(), binary()) :: [map()]
+  def realized_contact_scid_checks(mission_id, realized_contact_id),
+    do: RuntimeContacts.scid_checks(mission_id, realized_contact_id)
+
+  @spec ingress_journal_enabled?() :: boolean()
+  def ingress_journal_enabled?, do: RuntimeContacts.journal_enabled?()
+
+  @spec journaled_realized_contact_ids(binary()) :: MapSet.t(binary())
+  def journaled_realized_contact_ids(mission_id), do: RuntimeContacts.journaled_ids(mission_id)
+
+  @spec stored_ingress_journals(binary()) :: [map()]
+  def stored_ingress_journals(mission_id), do: RuntimeContacts.stored_journals(mission_id)
+
+  @doc "The ingress journal's disk (Runtime.Contacts.journal_volume/1, ux U66)."
+  @spec ingress_journal_volume(keyword()) :: {:ok, map()} | :unknown
+  def ingress_journal_volume(opts \\ []), do: RuntimeContacts.journal_volume(opts)
+
+  @doc "The mission's shared-listener adapters and their refusals (Runtime.Contacts, ux U50)."
+  @spec listener_refusals(binary()) :: [map()]
+  def listener_refusals(mission_id), do: RuntimeContacts.listener_refusals(mission_id)
+
+  @spec listener_refusals(binary(), binary()) :: [map()]
+  def listener_refusals(mission_id, realized_contact_id),
+    do: RuntimeContacts.listener_refusals(mission_id, realized_contact_id)
+
+  @doc """
+  Second connections refused for a contact (ux U50 Technical details): live while it runs, else
+  what its settler recorded at LOS, else nil.
+  """
+  @spec second_connections_refused(binary(), binary(), binary()) :: non_neg_integer() | nil
+  def second_connections_refused(organization_id, mission_id, realized_contact_id),
+    do:
+      ListenerRefusalAttention.second_connections_refused(
+        organization_id,
+        mission_id,
+        realized_contact_id
+      )
+
+  @spec ingress_journal_open?(binary(), binary()) :: boolean()
+  def ingress_journal_open?(mission_id, realized_contact_id),
+    do: RuntimeContacts.journal_open?(mission_id, realized_contact_id)
+
+  @spec stored_ingress_journal_drain(map()) ::
+          {:drained, non_neg_integer()} | {:not_drained, term(), non_neg_integer()}
+  def stored_ingress_journal_drain(stream), do: RuntimeContacts.stored_journal_drain(stream)
+
+  @spec reclaim_stored_ingress_journal(map()) :: :ok | {:error, term()}
+  def reclaim_stored_ingress_journal(stream), do: RuntimeContacts.reclaim_stored_journal(stream)
+
+  @spec running_realized_contact_ids(binary()) :: [binary()]
+  def running_realized_contact_ids(mission_id), do: RuntimeContacts.running_ids(mission_id)
+
   @spec realized_contact_running?(binary(), binary()) :: boolean()
   def realized_contact_running?(mission_id, realized_contact_id),
     do: RuntimeContacts.running?(mission_id, realized_contact_id)
@@ -204,8 +376,9 @@ defmodule Cadence.Control.Contacts do
   def realized_contact_snapshot(mission_id, realized_contact_id),
     do: RuntimeContacts.snapshot(mission_id, realized_contact_id)
 
-  defp runtime_spec(realized_contact) do
+  defp runtime_spec(realized_contact, opts \\ []) do
     RealizedContactRuntimeSpec.new(%{
+      intake?: Keyword.get(opts, :intake?, true),
       runtime_spec_id: "realized_contact_runtime:#{realized_contact.realized_contact_id}",
       generation: 1,
       realized_contact_id: realized_contact.realized_contact_id,
@@ -231,10 +404,37 @@ defmodule Cadence.Control.Contacts do
     path
     |> Map.from_struct()
     |> Map.put(:source_endpoint_ref, source_endpoint_ref)
-    |> Map.put(
-      :source_endpoint_spacecraft_id,
+    |> put_spacecraft(
+      realized_contact,
       source_endpoint_spacecraft_id(realized_contact, source_endpoint_ref)
     )
+  end
+
+  # The path's spacecraft and its SCID (a profile acceptor routes a downlink peer by it, #87).
+  defp put_spacecraft(path, _realized_contact, nil),
+    do:
+      Map.merge(path, %{source_endpoint_spacecraft_id: nil, source_endpoint_spacecraft_scid: nil})
+
+  defp put_spacecraft(path, realized_contact, spacecraft_id) do
+    fetched =
+      case realized_contact.organization_id do
+        org when is_binary(org) and org != "" ->
+          SpacecraftStore.fetch_spacecraft(org, realized_contact.mission_id, spacecraft_id)
+
+        _none ->
+          SpacecraftStore.fetch_spacecraft(realized_contact.mission_id, spacecraft_id)
+      end
+
+    scid =
+      case fetched do
+        {:ok, %{scid: scid}} when is_integer(scid) -> scid
+        _unknown -> nil
+      end
+
+    Map.merge(path, %{
+      source_endpoint_spacecraft_id: spacecraft_id,
+      source_endpoint_spacecraft_scid: scid
+    })
   end
 
   defp effective_source_endpoint_ref(source_endpoint_ref, _contact_source_endpoint_refs)

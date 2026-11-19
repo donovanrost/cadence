@@ -7,6 +7,8 @@ defmodule Cadence.ContactPlanning.ContactRequirements do
 
   alias Cadence.Auth.{Policy, Scope}
 
+  alias Cadence.ContactPlanning.PlanUpdates
+
   alias Cadence.ContactPlanning.{
     ContactRequirement,
     ContactRequirementVersion
@@ -34,6 +36,7 @@ defmodule Cadence.ContactPlanning.ContactRequirements do
     :minimum_data_volume_bytes,
     :contact_count,
     :minimum_separation_seconds,
+    :max_gap_seconds,
     :priority,
     :provider_constraints_document,
     :station_constraints_document,
@@ -48,13 +51,19 @@ defmodule Cadence.ContactPlanning.ContactRequirements do
     :preferred_duration_seconds,
     :minimum_data_volume_bytes,
     :contact_count,
-    :minimum_separation_seconds
+    :minimum_separation_seconds,
+    :max_gap_seconds
   ]
 
   @spec create(Scope.t(), binary(), map(), keyword()) ::
           {:ok, ContactRequirement.t(), ContactRequirementVersion.t()} | {:error, term()}
-  def create(%Scope{} = current_scope, mission_id, attrs, opts \\ [])
-      when is_binary(mission_id) and is_map(attrs) and is_list(opts) do
+  def create(%Scope{} = current_scope, mission_id, attrs, opts \\ []) do
+    create_unpublished(current_scope, mission_id, attrs, opts)
+    |> PlanUpdates.published(current_scope.organization_id, mission_id)
+  end
+
+  defp create_unpublished(%Scope{} = current_scope, mission_id, attrs, opts)
+       when is_binary(mission_id) and is_map(attrs) and is_list(opts) do
     with {:ok, requirement, version} <- prepare_create(current_scope, mission_id, attrs, opts) do
       Multi.new()
       |> Multi.insert(:requirement, ContactRequirementRow.changeset(requirement))
@@ -116,10 +125,22 @@ defmodule Cadence.ContactPlanning.ContactRequirements do
         expected_version,
         attrs,
         opts \\ []
-      )
-      when is_binary(mission_id) and is_binary(requirement_id) and
-             is_integer(expected_version) and expected_version > 0 and is_map(attrs) and
-             is_list(opts) do
+      ) do
+    version_unpublished(current_scope, mission_id, requirement_id, expected_version, attrs, opts)
+    |> PlanUpdates.published(current_scope.organization_id, mission_id)
+  end
+
+  defp version_unpublished(
+         %Scope{} = current_scope,
+         mission_id,
+         requirement_id,
+         expected_version,
+         attrs,
+         opts
+       )
+       when is_binary(mission_id) and is_binary(requirement_id) and
+              is_integer(expected_version) and expected_version > 0 and is_map(attrs) and
+              is_list(opts) do
     now = now(opts)
 
     with :ok <- authorize_member(current_scope, mission_id),
@@ -144,6 +165,18 @@ defmodule Cadence.ContactPlanning.ContactRequirements do
   @spec close(Scope.t(), binary(), binary(), pos_integer(), binary(), keyword()) ::
           {:ok, ContactRequirement.t()} | {:error, term()}
   def close(current_scope, mission_id, requirement_id, expected_version, reason, opts \\ []) do
+    close_unpublished(current_scope, mission_id, requirement_id, expected_version, reason, opts)
+    |> PlanUpdates.published(current_scope.organization_id, mission_id)
+  end
+
+  defp close_unpublished(
+         current_scope,
+         mission_id,
+         requirement_id,
+         expected_version,
+         reason,
+         opts
+       ) do
     transition(
       current_scope,
       mission_id,
@@ -158,6 +191,18 @@ defmodule Cadence.ContactPlanning.ContactRequirements do
   @spec cancel(Scope.t(), binary(), binary(), pos_integer(), binary(), keyword()) ::
           {:ok, ContactRequirement.t()} | {:error, term()}
   def cancel(current_scope, mission_id, requirement_id, expected_version, reason, opts \\ []) do
+    cancel_unpublished(current_scope, mission_id, requirement_id, expected_version, reason, opts)
+    |> PlanUpdates.published(current_scope.organization_id, mission_id)
+  end
+
+  defp cancel_unpublished(
+         current_scope,
+         mission_id,
+         requirement_id,
+         expected_version,
+         reason,
+         opts
+       ) do
     transition(
       current_scope,
       mission_id,
@@ -233,6 +278,116 @@ defmodule Cadence.ContactPlanning.ContactRequirements do
       {ContactRequirementRow.to_domain(requirement),
        ContactRequirementVersionRow.to_domain(version)}
     end)
+  end
+
+  @doc """
+  What decides a template day (`TemplateDays`, DECISIONS #86), per requirement id:
+  `%{lifecycle_state, lifecycle_reason, current_version, earliest_start}` (state as stored).
+  `lock: true` share-locks the requirements.
+  """
+  @spec day_facts(binary(), binary(), [binary()], boolean()) :: %{binary() => map()}
+  def day_facts(_organization_id, _mission_id, [], _lock?), do: %{}
+
+  def day_facts(organization_id, mission_id, requirement_ids, lock?) do
+    query =
+      ContactRequirementRow
+      |> join(:inner, [r], v in ContactRequirementVersionRow,
+        on:
+          v.organization_id == r.organization_id and v.mission_id == r.mission_id and
+            v.contact_requirement_id == r.contact_requirement_id and
+            v.version == r.current_version
+      )
+      |> where(
+        [r],
+        r.organization_id == ^organization_id and r.mission_id == ^mission_id and
+          r.contact_requirement_id in ^requirement_ids
+      )
+      |> order_by([r], asc: r.contact_requirement_id)
+      |> select([r, v], %{
+        id: r.contact_requirement_id,
+        lifecycle_state: r.lifecycle_state,
+        lifecycle_reason: r.lifecycle_reason,
+        current_version: r.current_version,
+        earliest_start: v.earliest_start
+      })
+
+    query = if lock?, do: Ecto.Query.lock(query, [r], fragment("FOR SHARE OF ?", r)), else: query
+    query |> Repo.all() |> Map.new(&{&1.id, &1})
+  end
+
+  @doc """
+  Active requirements generated by template `template_id` whose window starts
+  after `starts_after`, at their current version (filtered in SQL on the generation
+  metadata, so it doesn't scan every requirement).
+  """
+  @spec list_generated(binary(), binary(), binary(), DateTime.t()) ::
+          [{ContactRequirement.t(), ContactRequirementVersion.t()}]
+  def list_generated(organization_id, mission_id, template_id, %DateTime{} = starts_after)
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(template_id) do
+    ContactRequirementRow
+    |> join(:inner, [requirement], version in ContactRequirementVersionRow,
+      on:
+        version.organization_id == requirement.organization_id and
+          version.mission_id == requirement.mission_id and
+          version.contact_requirement_id == requirement.contact_requirement_id and
+          version.version == requirement.current_version
+    )
+    |> where(
+      [requirement],
+      requirement.organization_id == ^organization_id and requirement.mission_id == ^mission_id
+    )
+    |> where([requirement], requirement.lifecycle_state == "active")
+    |> where([_requirement, version], version.earliest_start > ^starts_after)
+    |> where(
+      [_requirement, version],
+      fragment(
+        "?->'value'->'generation'->>'contact_requirement_template_id' = ?",
+        version.metadata,
+        ^template_id
+      )
+    )
+    |> select([requirement, version], {requirement, version})
+    |> Repo.all()
+    |> Enum.map(fn {requirement, version} ->
+      {ContactRequirementRow.to_domain(requirement),
+       ContactRequirementVersionRow.to_domain(version)}
+    end)
+  end
+
+  @doc "Requirements by id at their current version, in one query: `%{id => {requirement, version}}`."
+  @spec fetch_many(binary(), binary(), [binary()]) :: %{
+          binary() => {ContactRequirement.t(), ContactRequirementVersion.t()}
+        }
+  def fetch_many(_organization_id, _mission_id, []), do: %{}
+
+  def fetch_many(organization_id, mission_id, ids) do
+    ContactRequirementRow
+    |> join(:inner, [requirement], version in ContactRequirementVersionRow,
+      on:
+        version.organization_id == requirement.organization_id and
+          version.mission_id == requirement.mission_id and
+          version.contact_requirement_id == requirement.contact_requirement_id and
+          version.version == requirement.current_version
+    )
+    |> where(
+      [requirement],
+      requirement.organization_id == ^organization_id and requirement.mission_id == ^mission_id and
+        requirement.contact_requirement_id in ^ids
+    )
+    |> select([requirement, version], {requirement, version})
+    |> Repo.all()
+    |> Map.new(fn {requirement, version} ->
+      {requirement.contact_requirement_id,
+       {ContactRequirementRow.to_domain(requirement),
+        ContactRequirementVersionRow.to_domain(version)}}
+    end)
+  end
+
+  @doc "Locks a requirement row `FOR UPDATE` (inside a transaction) and returns it."
+  @spec lock(binary(), binary(), binary()) :: {:ok, ContactRequirement.t()} | {:error, term()}
+  def lock(organization_id, mission_id, requirement_id) do
+    with {:ok, row} <- lock_requirement(organization_id, mission_id, requirement_id),
+         do: {:ok, ContactRequirementRow.to_domain(row)}
   end
 
   @spec list_versions(binary(), binary(), binary()) :: [ContactRequirementVersion.t()]
@@ -498,8 +653,19 @@ defmodule Cadence.ContactPlanning.ContactRequirements do
          :ok <- validate_document(version.approval_policy_document, 8_192),
          :ok <- validate_document(version.metadata, 32_768),
          :ok <- validate_reference_constraints(version.provider_constraints_document),
-         :ok <- validate_reference_constraints(version.station_constraints_document) do
+         :ok <- validate_reference_constraints(version.station_constraints_document),
+         :ok <- validate_max_gap(version) do
       validate_approval_policy(version.approval_policy_document)
+    end
+  end
+
+  defp validate_max_gap(version) do
+    case ContactRequirementVersion.max_gap_error(version) do
+      :ok ->
+        :ok
+
+      {:error, message} ->
+        {:error, {:contact_requirement_field_invalid, :max_gap_seconds, message}}
     end
   end
 

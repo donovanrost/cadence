@@ -30,9 +30,9 @@ defmodule Cadence.Management.Providers do
   defdelegate version_provider(organization_id, mission_id, provider_id, attrs),
     to: MissionProviders
 
-  @spec archive_provider(Scope.t() | binary(), binary(), binary()) ::
+  @spec archive_provider(Scope.t() | binary(), binary(), binary(), binary() | nil) ::
           {:ok, MissionProvider.t()} | {:error, term()}
-  defdelegate archive_provider(scope_or_organization_id, mission_id, provider_id),
+  defdelegate archive_provider(scope_or_organization_id, mission_id, provider_id, reason \\ nil),
     to: MissionProviders
 
   @spec operational_configuration(binary(), binary(), binary()) ::

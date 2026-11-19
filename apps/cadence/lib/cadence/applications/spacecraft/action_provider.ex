@@ -4,21 +4,17 @@ defmodule Cadence.Applications.Spacecraft.ActionProvider do
   @behaviour Cadence.Applications.ActionProvider
 
   alias Cadence.Applications.ActionContractLedger
-  alias Cadence.Applications.{ActionDispatcher, ActionFailure, ActionRequest, HostContext}
+  alias Cadence.Applications.{ActionDispatcher, ActionRequest, HostContext}
   alias Cadence.Applications.TelemetryDecom.ActionProvider, as: DecomActions
   alias Cadence.Applications.TelemetryDecom.Config
   alias Cadence.Auth.Scope
   alias Cadence.Spacecraft, as: SpacecraftAsset
-  alias Cadence.Spacecraft.{Identity, ProfileCreation}
   alias Cadence.SpacecraftType, as: SpacecraftProfile
 
+  # Host-action sweep row 2: the new, profile_new and edit form surfaces are gone; spacecraft and
+  # profiles are written only through the console's change sets (Identity and ProfileCreation
+  # refuse a save too, for the native page).
   @surface_action_bindings [
-    {"new", 1, "validate"},
-    {"new", 1, "save"},
-    {"profile_new", 1, "validate"},
-    {"profile_new", 1, "save"},
-    {"edit", 1, "validate"},
-    {"edit", 1, "save"},
     {"applications", 1, "install"},
     {"applications", 1, "disable"},
     {"applications", 1, "uninstall"},
@@ -62,37 +58,6 @@ defmodule Cadence.Applications.Spacecraft.ActionProvider do
     with :ok <- ensure_surface_binding(request) do
       execute_action(scope, host_context, request)
     end
-  end
-
-  defp execute_action(
-         scope,
-         %HostContext{placement: :mission, mission_id: mission_id},
-         %ActionRequest{surface_id: "new", action_id: event, params: params}
-       )
-       when event in ["validate", "save"] do
-    identity_result(Identity.action(scope, mission_id, nil, event, params))
-  end
-
-  defp execute_action(
-         scope,
-         %HostContext{
-           placement: :spacecraft,
-           mission_id: mission_id,
-           spacecraft_id: spacecraft_id
-         },
-         %ActionRequest{surface_id: "edit", action_id: event, params: params}
-       )
-       when event in ["validate", "save"] do
-    identity_result(Identity.action(scope, mission_id, spacecraft_id, event, params))
-  end
-
-  defp execute_action(
-         scope,
-         %HostContext{placement: :mission, mission_id: mission_id},
-         %ActionRequest{surface_id: "profile_new", action_id: event, params: params}
-       )
-       when event in ["validate", "save"] do
-    identity_result(ProfileCreation.action(scope, mission_id, event, params))
   end
 
   defp execute_action(
@@ -155,13 +120,6 @@ defmodule Cadence.Applications.Spacecraft.ActionProvider do
       _other -> params
     end
   end
-
-  defp identity_result({:error, errors}) when is_map(errors) and not is_struct(errors) do
-    {field, messages} = errors |> Enum.sort() |> List.first()
-    {:error, %ActionFailure{code: "invalid_field", field: field, message: List.first(messages)}}
-  end
-
-  defp identity_result(result), do: result
 
   @impl true
   def configuration_reference(_request, _result), do: nil

@@ -57,6 +57,8 @@ export type ReservationDetail = Snapshot<{
     plan_version: number | null;
     requirement_id: string | null;
     requirement_version: number | null;
+    /** The console's requirement page, built by the server (director 11-15); absent elsewhere. */
+    requirement_console_href?: string | null;
     starts_at: string;
     ends_at: string;
     scheduled_contact_id: string;

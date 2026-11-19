@@ -420,6 +420,79 @@ defmodule Cadence.Contacts.ContactStore do
     end
   end
 
+  @doc """
+  Scheduled contacts' runs that were realized but never started, inside their window (ux U45):
+  the runtime start failed, e.g. the station listener was still held by the previous pass.
+  """
+  @spec defined_realized_to_start(DateTime.t(), binary() | nil) :: [RealizedContact.t()]
+  def defined_realized_to_start(%DateTime{} = reference_time, mission_id) do
+    RealizedContactRow
+    |> join(
+      :inner,
+      [realized_contact_row],
+      scheduled_contact_row in ScheduledContactRow,
+      on:
+        realized_contact_row.mission_id == scheduled_contact_row.mission_id and
+          realized_contact_row.scheduled_contact_id == scheduled_contact_row.scheduled_contact_id
+    )
+    |> where(
+      [realized_contact_row, scheduled_contact_row],
+      realized_contact_row.lifecycle_state == "defined" and
+        scheduled_contact_row.starts_at <= ^reference_time and
+        (is_nil(scheduled_contact_row.ends_at) or scheduled_contact_row.ends_at > ^reference_time)
+    )
+    |> maybe_filter_joined_realized_contacts_by_mission(mission_id)
+    |> order_by([realized_contact_row, _scheduled_contact_row],
+      asc: realized_contact_row.realized_at,
+      asc: realized_contact_row.realized_contact_id
+    )
+    |> select([realized_contact_row, _scheduled_contact_row], realized_contact_row)
+    |> Repo.all()
+    |> Enum.map(&RealizedContactRow.to_domain/1)
+  end
+
+  @doc """
+  Realized contacts still `defined` that will never start (the orphan sweep): a scheduled one
+  whose window ended before `window_ended_before`, and an unscheduled (hand-started) one realized
+  before `realized_before`. `[{contact, reason}]`, reason "window_ended" or "never_started".
+  """
+  @spec never_started(DateTime.t(), DateTime.t(), binary() | nil) :: [
+          {RealizedContact.t(), binary()}
+        ]
+  def never_started(%DateTime{} = window_ended_before, %DateTime{} = realized_before, mission_id) do
+    scheduled =
+      RealizedContactRow
+      |> join(:inner, [r], s in ScheduledContactRow,
+        on: r.mission_id == s.mission_id and r.scheduled_contact_id == s.scheduled_contact_id
+      )
+      |> where(
+        [r, s],
+        r.lifecycle_state == "defined" and not is_nil(s.ends_at) and
+          s.ends_at < ^window_ended_before
+      )
+      |> maybe_filter_joined_realized_contacts_by_mission(mission_id)
+      |> select([r, _s], r)
+      |> Repo.all()
+      |> Enum.map(&{RealizedContactRow.to_domain(&1), "window_ended"})
+
+    unscheduled =
+      RealizedContactRow
+      |> where(
+        [r],
+        r.lifecycle_state == "defined" and is_nil(r.scheduled_contact_id) and
+          r.realized_at < ^realized_before
+      )
+      |> then(fn query ->
+        if mission_id, do: where(query, [r], r.mission_id == ^mission_id), else: query
+      end)
+      |> Repo.all()
+      |> Enum.map(&{RealizedContactRow.to_domain(&1), "never_started"})
+
+    Enum.sort_by(scheduled ++ unscheduled, fn {contact, _reason} ->
+      contact.realized_contact_id
+    end)
+  end
+
   @spec due_scheduled(DateTime.t(), binary() | nil) :: [ScheduledContact.t()]
   def due_scheduled(%DateTime{} = reference_time, mission_id) do
     ScheduledContactRow

@@ -8,6 +8,7 @@ defmodule Cadence.Applications.Limits.ActionProvider do
   alias Cadence.Limits
   alias Cadence.Limits.Definition
   alias Cadence.Missions
+  alias Cadence.Platform.SaveTrail
 
   @impl true
   def application_key, do: "limits"
@@ -30,9 +31,10 @@ defmodule Cadence.Applications.Limits.ActionProvider do
           surface_version: 1,
           action_id: "save_limit_definition",
           params: params
-        }
+        } = request
       ) do
-    with {:ok, _} <- Missions.fetch_mission(scope.organization_id, mission_id),
+    with {:ok, via} <- ActionRequest.via(request),
+         {:ok, _} <- Missions.fetch_mission(scope.organization_id, mission_id),
          :ok <-
            Policy.authorize(scope, :operate_mission, %{
              organization_id: scope.organization_id,
@@ -51,7 +53,7 @@ defmodule Cadence.Applications.Limits.ActionProvider do
           point_id: point_id,
           limit_set_name: limit_set_name,
           thresholds: thresholds,
-          metadata: %{"application" => "limits"}
+          metadata: SaveTrail.put(%{"application" => "limits"}, Scope.audit_actor(scope), via)
         },
         reviewed
       )

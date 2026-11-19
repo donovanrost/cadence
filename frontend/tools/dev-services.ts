@@ -7,6 +7,7 @@ export const developmentPorts = Object.freeze({
   "organization-admin": 4178,
   spacecraft: 4179,
   "ops-console": 4180,
+  console: 5181,
 });
 export type DevelopmentService = keyof typeof developmentPorts;
 export function developmentOrigin(service: DevelopmentService) {

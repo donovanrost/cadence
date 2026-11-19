@@ -7,8 +7,7 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway.FOPIntegrationT
   alias CCSDS.Transport.COP1.CLCW
 
   test "initializes a full sliding window and uses one VC-scoped T1 timer" do
-    assert {:ok, initialized} =
-             UplinkGateway.init_transport(configuration(), execution_context())
+    initialized = initialized()
 
     assert initialized.state.cop1.state == :active
     assert initialized.state.cop1.sliding_window_width == 4
@@ -55,8 +54,7 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway.FOPIntegrationT
   end
 
   test "one T1 expiry retransmits the complete outstanding window and restarts one timer" do
-    assert {:ok, initialized} =
-             UplinkGateway.init_transport(configuration(), execution_context())
+    initialized = initialized()
 
     assert {:ok, transmitted} =
              UplinkGateway.handle_control_input(
@@ -92,12 +90,25 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway.FOPIntegrationT
     assert stale_vc.action_requests == []
   end
 
-  test "a FARM lockout fails the release in flight instead of crashing the gateway" do
-    {:ok, initialized} = UplinkGateway.init_transport(configuration(), execution_context())
+  test "#33: busy while a release is in flight; a lockout fails that release and the FOP refuses the next" do
+    initialized = initialized()
+    assert UplinkGateway.uplink_readiness(initialized.state) == :ok
 
     {:ok, transmitted} =
       UplinkGateway.handle_control_input(uplink_request(), initialized.state, execution_context())
 
+    # Busy: admission refuses before a second release is claimed (the FOP would refuse it).
+    assert UplinkGateway.uplink_readiness(transmitted.state) ==
+             {:error, {:uplink_busy, :cop1_release_in_flight}}
+
+    assert {:error, :cop1_window_full} =
+             UplinkGateway.handle_control_input(
+               uplink_request(),
+               transmitted.state,
+               execution_context()
+             )
+
+    # The FARM reports lockout: the release in flight fails, as a transport signal.
     {:ok, alerted} =
       UplinkGateway.handle_transport_event(
         %{kind: :cop1_clcw, clcw: CLCW.new(vcid: 0, report_value: 1, lockout: 1)},
@@ -110,12 +121,108 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway.FOPIntegrationT
     assert alerted.metadata[:command_release_attempt_id] == "release-1"
     assert alerted.state.cop1.state == :initial
 
+    # Broken, not busy: admission lets it through and the FOP refuses the release outright.
+    assert UplinkGateway.uplink_readiness(alerted.state) == :ok
+
     assert {:error, :cop1_not_initialized} =
              UplinkGateway.handle_control_input(
                uplink_request(),
                alerted.state,
                execution_context()
              )
+  end
+
+  test "#33: ready again once the release in flight completes" do
+    initialized = initialized()
+
+    {:ok, transmitted} =
+      UplinkGateway.handle_control_input(uplink_request(), initialized.state, execution_context())
+
+    {:ok, completed} =
+      UplinkGateway.handle_transport_event(
+        %{kind: :cop1_clcw, clcw: CLCW.new(vcid: 0, report_value: 4)},
+        transmitted.state,
+        execution_context()
+      )
+
+    assert completed.metadata[:signal_phase] == :completion
+    assert UplinkGateway.uplink_readiness(completed.state) == :ok
+  end
+
+  test "#59: the FOP initializes from the pass's first CLCW, never from an assumed 0" do
+    {:ok, fresh} = UplinkGateway.init_transport(first_clcw(), execution_context())
+
+    # Before the FARM reports: not initialized, and admission waits (busy) instead of failing.
+    assert fresh.state.cop1.state == :initial
+
+    assert UplinkGateway.uplink_readiness(fresh.state) ==
+             {:error, {:uplink_busy, :cop1_awaiting_clcw}}
+
+    # The spacecraft's FARM kept V(R) = 7 from earlier passes.
+    {:ok, ready} =
+      UplinkGateway.handle_transport_event(
+        %{kind: :cop1_clcw, clcw: CLCW.new(vcid: 0, report_value: 7)},
+        fresh.state,
+        execution_context()
+      )
+
+    assert ready.state.cop1.state == :active
+    assert ready.state.cop1.vs == 7 and ready.state.next_frame_seq == 7
+    assert UplinkGateway.uplink_readiness(ready.state) == :ok
+
+    {:ok, sent} =
+      UplinkGateway.handle_control_input(uplink_request(), ready.state, execution_context())
+
+    assert [7, 8, 9, 10] ==
+             sent.action_requests
+             |> Enum.filter(&match?(%UplinkRequest{}, &1))
+             |> Enum.map(& &1.first_frame_seq)
+
+    {:ok, done} =
+      UplinkGateway.handle_transport_event(
+        %{kind: :cop1_clcw, clcw: CLCW.new(vcid: 0, report_value: 11)},
+        sent.state,
+        execution_context()
+      )
+
+    assert done.metadata[:signal_phase] == :completion
+  end
+
+  test "#59: a first report showing lockout leaves the FOP alerted, so releases fail" do
+    {:ok, fresh} = UplinkGateway.init_transport(first_clcw(), execution_context())
+
+    {:ok, alerted} =
+      UplinkGateway.handle_transport_event(
+        %{kind: :cop1_clcw, clcw: CLCW.new(vcid: 0, report_value: 3, lockout: 1)},
+        fresh.state,
+        execution_context()
+      )
+
+    assert alerted.state.cop1.state == :initial
+    assert UplinkGateway.uplink_readiness(alerted.state) == :ok
+
+    assert {:error, :cop1_not_initialized} =
+             UplinkGateway.handle_control_input(
+               uplink_request(),
+               alerted.state,
+               execution_context()
+             )
+  end
+
+  defp first_clcw, do: Map.put(configuration(), "cop1_initialization", "first_clcw")
+
+  # A configured-initialization pass (initial V(S) 0) after the FARM's first report.
+  defp initialized do
+    {:ok, fresh} = UplinkGateway.init_transport(configuration(), execution_context())
+
+    {:ok, initialized} =
+      UplinkGateway.handle_transport_event(
+        %{kind: :cop1_clcw, clcw: CLCW.new(vcid: 0, report_value: 0)},
+        fresh.state,
+        execution_context()
+      )
+
+    initialized
   end
 
   defp configuration do

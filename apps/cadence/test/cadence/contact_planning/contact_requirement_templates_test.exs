@@ -7,8 +7,11 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplatesTest do
   alias Cadence.ContactPlanning.{
     ContactRequirements,
     ContactRequirementTemplates,
-    RequirementSchedule
+    RequirementSchedule,
+    TemplateSchema
   }
+
+  alias Cadence.Control.PlanningRequirements.Schema, as: RequirementSchema
 
   alias Cadence.Spacecraft
 
@@ -181,6 +184,57 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplatesTest do
     assert length(ContactRequirements.list(@organization_id, @mission_id)) == 3
   end
 
+  test "a template carries max_gap_seconds into the requirements it generates (#74)", context do
+    assert {:error, {:contact_requirement_field_invalid, :max_gap_seconds, message}} =
+             ContactRequirementTemplates.create(
+               context.admin_scope,
+               @mission_id,
+               template_attrs(%{
+                 requirement_document: requirement_document(%{"max_gap_seconds" => 3_600})
+               }),
+               now: @now
+             )
+
+    assert message == "must not be longer than the window"
+
+    assert {:ok, template, version} =
+             ContactRequirementTemplates.create(
+               context.admin_scope,
+               @mission_id,
+               template_attrs(%{
+                 requirement_document: requirement_document(%{"max_gap_seconds" => 900})
+               }),
+               now: @now
+             )
+
+    assert version.requirement_document["max_gap_seconds"] == 900
+
+    assert {:ok, [first | _]} =
+             ContactRequirementTemplates.materialize(
+               context.admin_scope,
+               @mission_id,
+               template.contact_requirement_template_id,
+               @now,
+               DateTime.add(@now, 3_600, :second),
+               now: @now
+             )
+
+    assert first.requirement_version.max_gap_seconds == 900
+
+    assert %{range: %{min: 600, max: 604_800}, unit: "s"} =
+             Enum.find(
+               TemplateSchema.fields(),
+               &(&1.path == "requirement.max_gap_seconds")
+             )
+
+    # The requirement form reuses the template's field rather than its own copy.
+    assert [_one] =
+             Enum.filter(
+               RequirementSchema.fields(),
+               &(&1.path == "max_gap_seconds")
+             )
+  end
+
   test "concurrent materialization converges on one occurrence and Requirement", context do
     attrs =
       template_attrs(%{
@@ -287,7 +341,8 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplatesTest do
                @mission_id,
                template.contact_requirement_template_id,
                @now,
-               DateTime.add(@now, 10_800, :second)
+               DateTime.add(@now, 10_800, :second),
+               now: @now
              )
 
     assert length(generated) == 2

@@ -24,6 +24,7 @@ defmodule Cadence.Management.Contacts.Store.FleetPlanningPolicyVersionRow do
     field(:content_sha256, :string)
     field(:created_by, :string)
     field(:created_at, :utc_datetime_usec)
+    field(:reason, :string)
   end
 
   @fields [
@@ -40,14 +41,15 @@ defmodule Cadence.Management.Contacts.Store.FleetPlanningPolicyVersionRow do
     :automation_repair_document,
     :content_sha256,
     :created_by,
-    :created_at
+    :created_at,
+    :reason
   ]
 
   @spec changeset(FleetPlanningPolicyVersion.t()) :: Ecto.Changeset.t()
   def changeset(%FleetPlanningPolicyVersion{} = version) do
     %__MODULE__{}
     |> cast(domain_attrs(version), @fields)
-    |> validate_required(@fields)
+    |> validate_required(@fields -- [:reason])
     |> validate_number(:version, greater_than: 0)
     |> validate_format(:content_sha256, ~r/\A[0-9a-f]{64}\z/)
     |> unique_constraint(
@@ -72,7 +74,8 @@ defmodule Cadence.Management.Contacts.Store.FleetPlanningPolicyVersionRow do
       automation_repair_document: JsonDocument.unwrap_value(row.automation_repair_document),
       content_sha256: row.content_sha256,
       created_by: row.created_by,
-      created_at: row.created_at
+      created_at: row.created_at,
+      reason: row.reason
     })
   end
 
@@ -91,7 +94,8 @@ defmodule Cadence.Management.Contacts.Store.FleetPlanningPolicyVersionRow do
       automation_repair_document: JsonDocument.wrap_value(version.automation_repair_document),
       content_sha256: version.content_sha256,
       created_by: version.created_by,
-      created_at: version.created_at
+      created_at: version.created_at,
+      reason: version.reason
     }
   end
 end

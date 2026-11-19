@@ -85,13 +85,13 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
              CadenceWeb.ApplicationHostCatalog.build(
                context.scope,
                mission_route_context,
-               catalog_opts ++ [application_key: "ops_console", surface_id: "dashboard_directory"]
+               catalog_opts ++ [application_key: "ops_console", surface_id: "commands"]
              ),
            "fixture mission catalog build failed after release activation"
 
     assert Enum.map(mission_catalog["applications"], & &1["applicationKey"]) == ["ops_console"]
 
-    assert [%{"surface" => %{"surfaceId" => "dashboard_directory"}}] =
+    assert [%{"surface" => %{"surfaceId" => "commands"}}] =
              mission_catalog["applications"]
 
     args = [
@@ -101,15 +101,13 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
       "--telemetry-url",
       "#{base_url}/missions/#{context.mission.mission_id}/spacecraft/#{context.spacecraft.spacecraft_id}/applications/telemetry_decom/packet_bindings/federated",
       "--mission-catalog-url",
-      "#{base_url}/applications/mission_catalog/mission_list/federated",
+      "#{base_url}/missions/#{context.mission.mission_id}/applications/mission_catalog/mission_overview/federated",
       "--ops-url",
-      "#{base_url}/missions/#{context.mission.mission_id}/applications/ops_console/dashboard_directory/federated",
-      "--organization-admin-url",
-      "#{base_url}/applications/organization_admin/organization_home/federated",
+      "#{base_url}/missions/#{context.mission.mission_id}/applications/ops_console/commands/federated",
       "--spacecraft-url",
       "#{base_url}/missions/#{context.mission.mission_id}/applications/spacecraft/list/federated",
       "--login-url",
-      "#{base_url}/sign-in",
+      "#{base_url}/console/sign-in",
       "--login-email",
       context.user.email,
       "--mission-id",
@@ -179,7 +177,8 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
            "production federation publication is missing #{inspect(missing)}; run mix test.browser.federation"
   end
 
-  defp persist_context! do
+  @doc "The federation smokes' fixture: org admin, mission, spacecraft, transport and packet model."
+  def persist_context! do
     user = TestFixtures.persist_user!()
     organization = TestFixtures.persist_org!(display_name: "Federation Browser Organization")
     membership = TestFixtures.grant_membership!(user, organization)

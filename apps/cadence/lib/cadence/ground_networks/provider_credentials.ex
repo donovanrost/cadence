@@ -1,5 +1,11 @@
 defmodule Cadence.GroundNetworks.ProviderCredentials do
-  @moduledoc "Organization and Provider Account-scoped credential lifecycle registry."
+  @moduledoc """
+  Organization and Provider Account-scoped credential lifecycle registry.
+
+  Changes (created, rotated, revoked, with the `:reason` given) and their failures are audited.
+  A routine resolve isn't: providers resolve on every call (about 12/s on :4011, qa #51), so it
+  only touches `last_resolved_at` at most every 300 s; a failing one is audited once per window.
+  """
 
   import Ecto.Query
 
@@ -7,10 +13,13 @@ defmodule Cadence.GroundNetworks.ProviderCredentials do
 
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.GroundNetworks.{ProviderAudit, ProviderAuditEntry, ProviderCredential}
+  alias Cadence.GroundNetworks.ProviderAudit.EntryRow, as: ProviderAuditEntryRow
   alias Cadence.GroundNetworks.ProviderCredentials.CredentialRow, as: ProviderCredentialRow
   alias Cadence.Repo
   alias Cadence.Secrets.{EnvBackend, ExternalBackend, ResolvedSecret, Resolver}
   alias Cadence.Secrets.ResolverConfiguration
+
+  @resolve_quiet_s 300
 
   @spec create(Scope.t() | binary(), binary(), map(), keyword()) ::
           {:ok, ProviderCredential.t()} | {:error, term()}
@@ -32,6 +41,7 @@ defmodule Cadence.GroundNetworks.ProviderCredentials do
       |> Map.put(:provider_account_id, provider_account_id)
 
     with {:ok, credential} <- build_credential(attrs),
+         :ok <- env_key_allowed(credential),
          {:ok, backend_metadata} <- maybe_mutate_backend(:create, credential, opts) do
       credential = maybe_put_backend_reference(credential, backend_metadata)
       audit_entry = audit_entry(credential, :created, :succeeded, backend_metadata, opts)
@@ -186,21 +196,44 @@ defmodule Cadence.GroundNetworks.ProviderCredentials do
   defp do_resolve(%ProviderCredential{} = credential, opts) do
     with :ok <- ensure_active(credential),
          {:ok, resolved} <- Resolver.resolve(credential, secret_opts(credential, opts)) do
-      updated = %ProviderCredential{credential | last_resolved_at: now(opts)}
-
-      backend_metadata = %{
-        backend_version: resolved.backend_version,
-        fingerprint: resolved.fingerprint,
-        expires_at: resolved.expires_at
-      }
-
-      case persist_mutation(credential, updated, :resolved, backend_metadata, opts) do
-        {:ok, _updated} -> {:ok, resolved}
-        {:error, reason} -> {:error, reason}
-      end
+      touch_resolved(credential, now(opts))
+      {:ok, resolved}
     else
-      {:error, reason} -> audit_failure(credential, :resolution_failed, reason, opts)
+      {:error, reason} -> audit_resolution_failure(credential, reason, opts)
     end
+  end
+
+  # One conditional UPDATE at most every @resolve_quiet_s per credential, not one per resolve.
+  defp touch_resolved(%ProviderCredential{last_resolved_at: last} = credential, now) do
+    cutoff = DateTime.add(now, -@resolve_quiet_s)
+
+    if is_nil(last) or DateTime.before?(last, cutoff) do
+      ProviderCredentialRow
+      |> where([row], row.provider_credential_ref == ^credential.provider_credential_ref)
+      |> where([row], is_nil(row.last_resolved_at) or row.last_resolved_at < ^cutoff)
+      |> Repo.update_all(set: [last_resolved_at: now])
+    end
+
+    :ok
+  end
+
+  # A backend that keeps failing is audited once per credential per @resolve_quiet_s.
+  defp audit_resolution_failure(credential, reason, opts) do
+    cutoff = DateTime.add(now(opts), -@resolve_quiet_s)
+
+    recent? =
+      ProviderAuditEntryRow
+      |> where(
+        [row],
+        row.organization_id == ^credential.organization_id and
+          row.action == "provider_credential.resolution_failed" and row.recorded_at > ^cutoff and
+          row.credential_ref == ^credential.provider_credential_ref
+      )
+      |> Repo.exists?()
+
+    if recent?,
+      do: {:error, reason},
+      else: audit_failure(credential, :resolution_failed, reason, opts)
   end
 
   defp persist_mutation(current, updated, operation, backend_metadata, opts) do
@@ -266,7 +299,8 @@ defmodule Cadence.GroundNetworks.ProviderCredentials do
       credential_backend_version: text_value(Map.get(backend_metadata, :backend_version)),
       source_document: %{
         "kind" => "provider_credential_registry",
-        "backend_type" => Atom.to_string(credential.backend_type)
+        "backend_type" => Atom.to_string(credential.backend_type),
+        "reason" => Keyword.get(opts, :reason)
       },
       actor_document: Keyword.get(opts, :actor, %{"kind" => "system"}),
       current_document: %{
@@ -325,6 +359,19 @@ defmodule Cadence.GroundNetworks.ProviderCredentials do
 
   defp maybe_filter_status(query, status) when is_binary(status),
     do: where(query, [row], row.status == ^status)
+
+  # An env-backed credential names a variable; only names this environment allows (EnvBackend).
+  defp env_key_allowed(%ProviderCredential{
+         backend_type: :env,
+         backend_key: key,
+         organization_id: organization_id
+       }) do
+    if EnvBackend.allowed_name?(key, organization_id),
+      do: :ok,
+      else: {:error, :env_credential_name_not_allowed}
+  end
+
+  defp env_key_allowed(%ProviderCredential{}), do: :ok
 
   defp build_credential(attrs) do
     {:ok, ProviderCredential.new(attrs)}

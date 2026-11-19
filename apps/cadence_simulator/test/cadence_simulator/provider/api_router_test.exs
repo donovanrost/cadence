@@ -84,8 +84,12 @@ defmodule CadenceSimulator.Provider.ApiRouterTest do
     services =
       request("/provider/v1/service-profiles", "provider-secret", context.environment_ref)
 
-    assert %{"data" => [%{"id" => "service-realtime-ttc-downlink"}]} =
-             Jason.decode!(services.resp_body)
+    assert %{
+             "data" => [
+               %{"id" => "service-realtime-ttc-downlink"},
+               %{"id" => "service-realtime-ttc-uplink", "direction" => "uplink"}
+             ]
+           } = Jason.decode!(services.resp_body)
 
     deliveries =
       request("/provider/v1/delivery-profiles", "provider-secret", context.environment_ref)

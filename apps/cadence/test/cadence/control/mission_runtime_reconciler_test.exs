@@ -7,7 +7,7 @@ defmodule Cadence.Control.MissionRuntimeReconcilerTest do
   alias Cadence.Catalog.MissionModel.Layer
   alias Cadence.Control.{MissionModelPromotion, MissionRuntimeReconciler, MissionRuntimeStatus}
   alias Cadence.MissionModels
-  alias Cadence.Platform.ContentHash
+  alias Cadence.Platform.{ContentHash, ScopedReadUpdates}
   alias Cadence.Runtime
   alias Cadence.Runtime.{MissionRuntimeSpec, Missions}
   alias Cadence.SemanticRuntime.RegisteredRegistry
@@ -188,6 +188,35 @@ defmodule Cadence.Control.MissionRuntimeReconcilerTest do
 
     assert %{state: "applied", applied_generation: 1, applied_at: %DateTime{}} =
              MissionRuntimeStatus.status(mission, later)
+  end
+
+  test "a generation step publishes attention_changed, so /counts' CONVERGING clears (lead)" do
+    suffix = System.unique_integer([:positive])
+    {org, mission} = {"org-runtime-step-#{suffix}", "mission-runtime-step-#{suffix}"}
+    persist_mission_scope(org, mission)
+    :ok = ScopedReadUpdates.subscribe(:attention_changed, org, mission)
+
+    state = fn desired, applied ->
+      %{
+        mission_id: mission,
+        desired_generation: desired,
+        applied_generation: applied,
+        last_error: nil,
+        failing_since: nil,
+        applied_at: ~U[2026-11-13 00:00:00Z]
+      }
+    end
+
+    assert :ok = MissionRuntimeStatus.record(state.(2, 1), nil)
+    assert_receive {:attention_changed, ^org, ^mission}
+
+    # Catching up: visibly "applied" before and after, but the generations moved.
+    assert :ok = MissionRuntimeStatus.record(state.(2, 2), nil)
+    assert_receive {:attention_changed, ^org, ^mission}
+
+    # An unchanged poll says nothing.
+    assert :ok = MissionRuntimeStatus.record(state.(2, 2), nil)
+    refute_receive {:attention_changed, _, _}, 50
   end
 
   test "a reconcile that raises is recorded and the reconciler keeps running" do

@@ -7,7 +7,14 @@ defmodule Cadence.Comms.TransportStore do
 
   alias Ecto.Changeset
 
-  alias Cadence.Comms.{ProviderTransportBasis, Transport, TransportKind, TransportRow}
+  alias Cadence.Comms.{
+    ListenClaims,
+    ProviderTransportBasis,
+    Transport,
+    TransportKind,
+    TransportRow
+  }
+
   alias Cadence.Comms.TransportKinds.TCPSocket
   alias Cadence.Contacts.ProfileStore
   alias Cadence.Listing
@@ -24,8 +31,21 @@ defmodule Cadence.Comms.TransportStore do
     with {:ok, scoped_transport} <- put_organization_scope(transport, organization_id),
          {:ok, _mission} <-
            Missions.fetch_mission(scoped_transport.organization_id, scoped_transport.mission_id),
-         {:ok, normalized_transport} <- normalize_transport(scoped_transport, opts),
-         {:ok, transport_with_provider} <- materialize_provider_profile(normalized_transport),
+         {:ok, normalized_transport} <- normalize_transport(scoped_transport, opts) do
+      # SAFETY: a listen host:port is one mission's (ListenClaims); fail closed at save.
+      ListenClaims.guard(
+        normalized_transport.mission_id,
+        claimed_configuration(normalized_transport),
+        fn -> insert_transport(normalized_transport) end
+      )
+    else
+      {:error, %Changeset{} = changeset} -> {:error, changeset}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp insert_transport(normalized_transport) do
+    with {:ok, transport_with_provider} <- materialize_provider_profile(normalized_transport),
          {:ok, _row} <-
            Repo.insert(TransportRow.changeset(transport_with_provider),
              on_conflict: :nothing,
@@ -42,6 +62,12 @@ defmodule Cadence.Comms.TransportStore do
       {:error, reason} -> {:error, reason}
     end
   end
+
+  # Only an active transport claims its listen endpoint; an archived one releases it.
+  defp claimed_configuration(%Transport{lifecycle_state: :active, configuration: config}),
+    do: config
+
+  defp claimed_configuration(%Transport{}), do: nil
 
   @spec fetch_transport(binary(), binary(), binary()) :: {:ok, Transport.t()} | {:error, term()}
   def fetch_transport(organization_id, mission_id, transport_id)
@@ -119,9 +145,12 @@ defmodule Cadence.Comms.TransportStore do
     end
   end
 
-  @spec list_transports(binary(), binary()) :: [Transport.t()]
-  def list_transports(organization_id, mission_id)
-      when is_binary(organization_id) and is_binary(mission_id) do
+  @doc "A mission's transports (latest versions); archived ones only with `include_archived: true` (U82)."
+  @spec list_transports(binary(), binary(), keyword()) :: [Transport.t()]
+  def list_transports(organization_id, mission_id, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    archived? = Keyword.get(opts, :include_archived, false)
+
     TransportRow
     |> where(
       [row],
@@ -131,8 +160,24 @@ defmodule Cadence.Comms.TransportStore do
     |> Repo.all()
     |> Enum.reduce(%{}, fn row, acc -> Map.put_new(acc, row.transport_id, row) end)
     |> Map.values()
-    |> Enum.reject(&(&1.lifecycle_state == "archived"))
+    |> Enum.reject(&(&1.lifecycle_state == "archived" and not archived?))
     |> Enum.sort_by(& &1.display_name)
+    |> Enum.map(&TransportRow.to_domain/1)
+  end
+
+  @doc "The latest version of each of `transport_ids` that isn't archived (the change-set kind's load)."
+  @spec latest_transports(binary(), binary(), [binary()]) :: [Transport.t()]
+  def latest_transports(organization_id, mission_id, transport_ids)
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(transport_ids) do
+    from(row in TransportRow,
+      where:
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.transport_id in ^transport_ids,
+      distinct: row.transport_id,
+      order_by: [asc: row.transport_id, desc: row.version]
+    )
+    |> Repo.all()
+    |> Enum.reject(&(&1.lifecycle_state == "archived"))
     |> Enum.map(&TransportRow.to_domain/1)
   end
 
@@ -219,9 +264,48 @@ defmodule Cadence.Comms.TransportStore do
               |> Map.put("archived_at", DateTime.utc_now())
         }
 
-      persist_transport(organization_id, archived)
+      # Archiving releases what the transport holds (lead 11-16): its materialized provider
+      # profile goes with it, in the same transaction, so its listen host:port is free again and no
+      # pass can start through it.
+      Repo.transaction(fn ->
+        archive_with_profile(organization_id, current_transport, archived)
+      end)
     end
   end
+
+  defp archive_with_profile(organization_id, current, archived) do
+    with {:ok, transport} <- persist_transport(organization_id, archived),
+         :ok <- retire_materialized_profile(current) do
+      transport
+    else
+      {:error, reason} -> Repo.rollback(reason)
+    end
+  end
+
+  defp retire_materialized_profile(%Transport{materialized_provider_profile_id: id} = transport)
+       when is_binary(id) and id != "" do
+    case ProfileStore.fetch_provider_profile(transport.organization_id, transport.mission_id, id) do
+      {:ok, profile} ->
+        if profile.metadata["materialized_from_transport_id"] == transport.transport_id,
+          do:
+            deleted(
+              ProfileStore.delete_provider_profile(
+                transport.organization_id,
+                transport.mission_id,
+                id
+              )
+            ),
+          else: :ok
+
+      {:error, _gone} ->
+        :ok
+    end
+  end
+
+  defp retire_materialized_profile(_transport), do: :ok
+
+  defp deleted({:ok, _profile}), do: :ok
+  defp deleted({:error, reason}), do: {:error, reason}
 
   defp normalize_transport(%Transport{lifecycle_state: :archived} = transport, _opts),
     do: {:ok, transport}
@@ -248,8 +332,24 @@ defmodule Cadence.Comms.TransportStore do
   end
 
   defp normalize_transport(%Transport{origin: :provider_managed} = transport, opts) do
+    with {:ok, %ProviderTransportBasis{} = provider} <- provider_transport_basis(opts) do
+      derive_provider_transport(transport, provider)
+    end
+  end
+
+  @doc """
+  A provider-managed transport as it would be stored, without storing it: the provider's
+  version, readiness and profiles checked, the configuration and direction derived from the
+  delivery profile, exact profile refs and the provider snapshot filled in. The change-set kind's
+  preview and an options read use it, so what they show is what an apply stores.
+  """
+  @spec derive_provider_transport(Transport.t(), ProviderTransportBasis.t()) ::
+          {:ok, Transport.t()} | {:error, term()}
+  def derive_provider_transport(
+        %Transport{origin: :provider_managed} = transport,
+        %ProviderTransportBasis{} = provider
+      ) do
     with {:ok, provider_id, provider_version} <- provider_reference(transport),
-         {:ok, %ProviderTransportBasis{} = provider} <- provider_transport_basis(opts),
          :ok <- require_provider_scope(transport, provider, provider_id),
          true <- provider.provider_version == provider_version,
          :ok <- require_validated_provider(provider),
@@ -258,13 +358,13 @@ defmodule Cadence.Comms.TransportStore do
          {:ok, delivery_profile} <-
            find_profile(provider, "delivery_profiles", transport.delivery_profile_ref),
          :ok <- require_profile_compatibility(service_profile, delivery_profile),
-         {:ok, configuration} <- TCPSocket.from_delivery_profile(delivery_profile) do
+         {:ok, configuration} <- delivery_configuration(delivery_profile) do
       {:ok,
        %Transport{
          transport
          | transport_kind: :tcp_socket,
            adapter_key: :tcp_socket,
-           direction_capability: :inbound,
+           direction_capability: provider_direction_capability(delivery_profile),
            configuration: configuration,
            mission_provider_id: provider.provider_id,
            mission_provider_version: provider.provider_version,
@@ -335,6 +435,7 @@ defmodule Cadence.Comms.TransportStore do
            Map.get(attrs, :direction_capability, transport.direction_capability),
          adapter_key: Map.get(attrs, :adapter_key, transport.adapter_key),
          configuration: Map.get(attrs, :configuration, transport.configuration),
+         ground_station_id: Map.get(attrs, :ground_station_id, transport.ground_station_id),
          mission_provider_id: Map.get(attrs, :mission_provider_id, transport.mission_provider_id),
          mission_provider_version:
            Map.get(attrs, :mission_provider_version, transport.mission_provider_version),
@@ -356,6 +457,13 @@ defmodule Cadence.Comms.TransportStore do
        do: {:ok, provider_id, provider_version}
 
   defp provider_reference(_transport), do: {:error, :mission_provider_reference_required}
+
+  defp delivery_configuration(delivery_profile) do
+    case TCPSocket.from_delivery_profile(delivery_profile) do
+      {:ok, configuration} -> {:ok, configuration}
+      {:error, message} -> {:error, {:provider_delivery_profile_unusable, message}}
+    end
+  end
 
   defp provider_transport_basis(opts) do
     case Keyword.fetch(opts, :provider_transport_basis) do
@@ -426,8 +534,7 @@ defmodule Cadence.Comms.TransportStore do
       delivery_profile["state"] != "ready" ->
         {:error, :provider_delivery_profile_not_ready}
 
-      service_profile["direction"] != "downlink" or
-          delivery_profile["direction"] != "downlink" ->
+      not supported_directions?(service_profile["direction"], delivery_profile["direction"]) ->
         {:error, :provider_profile_direction_not_supported}
 
       service_id not in supported_services ->
@@ -437,6 +544,18 @@ defmodule Cadence.Comms.TransportStore do
         :ok
     end
   end
+
+  # A downlink delivery carries TM to Cadence; an uplink delivery (#44) is where the provider
+  # connects to receive TC frames and return CLCWs.
+  defp supported_directions?("downlink", "downlink"), do: true
+
+  defp supported_directions?(service, "uplink") when service in ["uplink", "bidirectional"],
+    do: true
+
+  defp supported_directions?(_service, _delivery), do: false
+
+  defp provider_direction_capability(%{"direction" => "uplink"}), do: :outbound
+  defp provider_direction_capability(_delivery_profile), do: :inbound
 
   defp provider_snapshot(provider, service_profile, delivery_profile, configuration) do
     RedactedJson.sanitize(%{

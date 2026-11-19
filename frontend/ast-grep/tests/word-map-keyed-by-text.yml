@@ -1,0 +1,16 @@
+{
+  "id": "word-map-keyed-by-text",
+  "valid":
+    [
+      "const WORDS: Readonly<Record<Kind, string>> = { a: 'A', b: 'B' };",
+      "const out: Record<string, string> = {};",
+      "// keyed-by-text: HTTP header names, not a vocabulary\nconst headers: Record<string, string> = { accept: 'application/json' };",
+    ],
+  "invalid":
+    [
+      "const WORDS: Readonly<Record<string, string>> = { a: 'A' };",
+      "export const titles: Record<string, string> = { window: 'Window' };",
+      "// keyed-by-text: x\nconst WORDS: Record<string, string> = { a: 'A' };",
+      "const CAUSES: Readonly<Record<string, (p: string) => string>> = { failed: (p) => p };",
+    ],
+}

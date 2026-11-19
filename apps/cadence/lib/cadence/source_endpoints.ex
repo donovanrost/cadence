@@ -64,6 +64,15 @@ defmodule Cadence.SourceEndpoints do
     |> notify_configuration_change()
   end
 
+  @doc "The ids among `ids` that exist as the mission's source endpoints (one query)."
+  @spec existing_source_endpoint_ids(binary(), [binary()]) :: [binary()]
+  def existing_source_endpoint_ids(mission_id, ids) when is_binary(mission_id) and is_list(ids) do
+    SourceEndpointRow
+    |> where([row], row.mission_id == ^mission_id and row.source_endpoint_id in ^ids)
+    |> select([row], row.source_endpoint_id)
+    |> Repo.all()
+  end
+
   @spec fetch_source_endpoint(binary(), binary()) :: {:ok, SourceEndpoint.t()} | {:error, term()}
   def fetch_source_endpoint(mission_id, source_endpoint_id)
       when is_binary(mission_id) and is_binary(source_endpoint_id) do
@@ -486,7 +495,9 @@ defmodule Cadence.SourceEndpoints do
     end
   end
 
-  defp managed_source_endpoint_id(spacecraft_id), do: "spacecraft_runtime:" <> spacecraft_id
+  @doc "The id of the spacecraft's managed source endpoint, which every route materializes on."
+  @spec managed_source_endpoint_id(binary()) :: binary()
+  def managed_source_endpoint_id(spacecraft_id), do: "spacecraft_runtime:" <> spacecraft_id
 
   defp update_managed_source_endpoint(
          %SourceEndpointRow{} = row,

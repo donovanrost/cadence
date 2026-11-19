@@ -273,6 +273,16 @@ defmodule Cadence.Runtime.CapabilityRegistry do
     )
   end
 
+  @doc """
+  Whether the transport extension can take an uplink release now (#33): its optional
+  `uplink_readiness/1`, else `:ok`.
+  """
+  @spec transport_uplink_readiness(GenServer.server(), atom(), term()) :: :ok | {:error, term()}
+  def transport_uplink_readiness(server \\ __MODULE__, family_key, transport_state)
+      when is_atom(family_key) do
+    GenServer.call(server, {:transport_uplink_readiness, family_key, transport_state})
+  end
+
   @spec handle_transport_timer(atom(), binary(), term(), ExecutionContext.t()) ::
           {:ok, ExecutionResult.t()} | {:error, term()}
   def handle_transport_timer(
@@ -508,6 +518,18 @@ defmodule Cadence.Runtime.CapabilityRegistry do
       with {:ok, family_module} <- fetch_family_reply(state, family_key),
            :ok <- validate_transport_extension_family(family_module) do
         family_module.handle_control_input(control_input, transport_state, execution_context)
+      end
+
+    {:reply, reply, state}
+  end
+
+  def handle_call({:transport_uplink_readiness, family_key, transport_state}, _from, state) do
+    reply =
+      with {:ok, family_module} <- fetch_family_reply(state, family_key),
+           :ok <- validate_transport_extension_family(family_module) do
+        if function_exported?(family_module, :uplink_readiness, 1),
+          do: family_module.uplink_readiness(transport_state),
+          else: :ok
       end
 
     {:reply, reply, state}

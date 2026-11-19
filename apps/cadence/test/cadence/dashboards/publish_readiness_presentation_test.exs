@@ -171,4 +171,25 @@ defmodule Cadence.Dashboards.PublishReadinessPresentationTest do
     assert %{label: "Requested source products", value: "link_rf_metric_history"} in detail_rows
     assert %{label: "Requested product families", value: "link_rf"} in detail_rows
   end
+
+  test "editor issues name the failing placement, the code and the words (api D9)" do
+    validation =
+      %ValidationResult{}
+      |> ValidationResult.add_error(:unready_publish_source_request, %{
+        placement_id: "dash_widget_a1",
+        source_warning_code: :missing_source_binding
+      })
+      |> ValidationResult.add_error(:invalid_runtime_defaults, %{})
+
+    assert [
+             %{
+               placement_id: "dash_widget_a1",
+               code: :unready_publish_source_request,
+               message: message
+             },
+             %{placement_id: nil, code: :invalid_runtime_defaults, message: defaults}
+           ] = PublishReadinessPresentation.editor_issues(validation.errors)
+
+    assert is_binary(message) and is_binary(defaults)
+  end
 end

@@ -31,7 +31,8 @@ defmodule CadenceWeb.OpsLandingPageTest do
            }
 
     assert page(view)["can_administer"] == false
-    render_hook(view, "host:context", %{"path" => path(c) <> "/dashboards"})
+    # L8b: the legacy dashboard library is a redirect now; Explore is another live ops page.
+    render_hook(view, "host:context", %{"path" => path(c) <> "/explore"})
     assert page(view) == nil
     render_hook(view, "host:context", %{"path" => path(c)})
     assert page(view)["context"]["mission_id"] == c.mission.mission_id
@@ -42,11 +43,22 @@ defmodule CadenceWeb.OpsLandingPageTest do
     foreign_org = TestFixtures.persist_org!()
     foreign = TestFixtures.persist_mission!(foreign_org)
     destination = "/missions/#{foreign.mission_id}/ops"
-    assert {:error, {:redirect, %{to: "/missions"}}} = live(c.conn, destination)
+    assert {:error, {:redirect, %{to: "/console/" <> _}}} = live(c.conn, destination)
     {:ok, view, _} = live(c.conn, path(c))
 
-    assert {:error, {:redirect, %{to: "/missions"}}} =
+    assert {:error, {:redirect, %{to: "/console/" <> _}}} =
              render_hook(view, "host:context", %{"path" => destination})
+  end
+
+  test "the dashboards directory is no longer a client-side hop: it redirects to the console",
+       c do
+    {:ok, view, _} = live(c.conn, path(c))
+    render_hook(view, "host:context", %{"path" => path(c) <> "/dashboards"})
+    assert_reply(view, %{ok: false})
+    assert page(view)["context"]["mission_id"] == c.mission.mission_id
+
+    assert redirected_to(get(c.conn, path(c) <> "/dashboards"), 302) ==
+             "/console/#{c.org.slug}/#{c.mission.slug}/telemetry/dashboards"
   end
 
   test "anonymous entry and revoked refresh do not expose navigation", c do

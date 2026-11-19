@@ -3,6 +3,7 @@ defmodule Cadence.Telemetry.Storage.ObservationEnvelopeTest do
 
   alias Cadence.Telemetry.Sample
   alias Cadence.Telemetry.Storage.{ObservationEnvelope, WriteContext}
+  alias Cadence.Telemetry.Storage.QuestDB.{ObservationReader, ObservationRow}
 
   test "wraps a telemetry sample with tenant and data source context" do
     context = write_context()
@@ -159,6 +160,49 @@ defmodule Cadence.Telemetry.Storage.ObservationEnvelopeTest do
            }
   end
 
+  test "a sample read back from storage is written again without the reader's storage bookkeeping" do
+    read_back =
+      ObservationReader.sample_from_row(%{
+        "sample_id" => "sample-1",
+        "mission_id" => "mission-1",
+        "spacecraft_id" => "sc-1",
+        "point_id" => "HK.battery_voltage",
+        "point_name" => "Battery Voltage",
+        "packet_definition_id" => "packet-def-1",
+        "packet_definition_version" => 1,
+        "packet_id" => "packet-1",
+        "evidence_id" => "evidence-1",
+        "value_kind" => "double",
+        "value_double" => 12.34,
+        "raw_value_text" => "1234",
+        "quality_state" => "good",
+        "generation_time" => ~N[2026-06-16 12:00:00],
+        "receipt_time" => ~N[2026-06-16 12:00:01],
+        "provenance_json" => Jason.encode!(%{"semantic_id" => "semantic:parameter:1"}),
+        "realm" => "flight",
+        "data_source_id" => "ds-old",
+        "binding_id" => "binding-old",
+        "source_endpoint_id" => "station-old",
+        "observation_id" => "observation-old",
+        "observation_identity_id" => "identity-old",
+        "validity_state" => "canonical"
+      })
+
+    assert %{"observation_identity_id" => "identity-old"} = read_back.provenance["storage"]
+
+    assert {:ok, envelope} = ObservationEnvelope.from_sample(write_context(), read_back)
+    assert envelope.provenance == %{"semantic_id" => "semantic:parameter:1"}
+
+    stored = Jason.decode!(Enum.at(ObservationRow.params(envelope), provenance_index()))
+    assert stored == %{"semantic_id" => "semantic:parameter:1"}
+  end
+
+  test "an atom-keyed storage map is not stored either" do
+    sample = sample(provenance: %{storage: %{realm: "flight"}, semantic_id: "s-1"})
+    assert {:ok, envelope} = ObservationEnvelope.from_sample(write_context(), sample)
+    assert envelope.provenance == %{semantic_id: "s-1"}
+  end
+
   test "builds batches without dropping order" do
     context = write_context()
     first = sample(sample_id: "sample-1", raw_value: 1)
@@ -297,6 +341,9 @@ defmodule Cadence.Telemetry.Storage.ObservationEnvelopeTest do
 
     envelope.observation_identity_id
   end
+
+  defp provenance_index,
+    do: Enum.find_index(ObservationRow.columns(), &(&1 == :provenance_json))
 
   defp write_context(overrides \\ []) do
     {:ok, context} =

@@ -11,7 +11,12 @@ defmodule Cadence.MissionModelsTest do
   alias Cadence.Control.MissionRuntimeReconciler
   alias Cadence.Control.Missions
   alias Cadence.Management.Activations, as: ManagementActivations
+  alias Cadence.MissionModelApproval
+  alias Cadence.MissionModelCatalogNaming
   alias Cadence.MissionModels
+  alias Cadence.MissionModels.RevisionRow
+  alias Cadence.Persistence.JsonDocument
+  alias Cadence.Repo
   alias Cadence.Runtime
 
   @organization_id "org-mission-models"
@@ -119,13 +124,18 @@ defmodule Cadence.MissionModelsTest do
 
     assert {:ok, compilation} = MissionModels.compile_layers([layer])
 
+    MissionModelCatalogNaming.name!(
+      @organization_id,
+      mission_id,
+      compilation.revision.revision_id
+    )
+
+    # The decision itself is RevisionDecisionsTest's.
     assert {:ok, revision} =
-             MissionModels.approve_revision(
+             MissionModelApproval.approve!(
                @organization_id,
                mission_id,
-               compilation.revision.revision_id,
-               %{"kind" => "user", "id" => "reviewer-1"},
-               at: ~U[2026-08-11 11:00:00Z]
+               compilation.revision.revision_id
              )
 
     revision

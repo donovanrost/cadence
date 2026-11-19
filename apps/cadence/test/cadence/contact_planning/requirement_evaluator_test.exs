@@ -3,6 +3,7 @@ defmodule Cadence.ContactPlanning.RequirementEvaluatorTest do
 
   alias Cadence.ContactPlanning.{
     ContactOpportunitySnapshot,
+    ContactRequirements,
     ContactRequirementVersion,
     ContentHash,
     RequirementEvaluator
@@ -91,9 +92,110 @@ defmodule Cadence.ContactPlanning.RequirementEvaluatorTest do
              %{
                "code" => "provider_search_unavailable",
                "route_key" => "route-beta",
+               "route_keys" => ["route-beta"],
                "outcome" => "failed"
              }
            ]
+  end
+
+  describe "max_gap_seconds (DECISIONS #74)" do
+    test "a gap equal to the limit is met; one second over fails with the gap's facts" do
+      met = gap_requirement(24_600)
+
+      assert RequirementEvaluator.evaluate_selection(met, [snapshot(met, "a", 0, 600, 1)])[
+               "satisfied"
+             ]
+
+      over = gap_requirement(24_599)
+      evaluation = RequirementEvaluator.evaluate_selection(over, [snapshot(over, "a", 0, 600, 1)])
+
+      refute evaluation["satisfied"]
+
+      assert [failure] = evaluation["hard_failures"]
+
+      assert failure == %{
+               "code" => "max_gap_exceeded",
+               "message" => failure["message"],
+               "longest_gap_seconds" => 24_600,
+               "from" =>
+                 over.earliest_start
+                 |> DateTime.add(600)
+                 |> DateTime.truncate(:second)
+                 |> DateTime.to_iso8601(),
+               "to" => over.latest_end |> DateTime.truncate(:second) |> DateTime.to_iso8601(),
+               "max_gap_seconds" => 24_599
+             }
+    end
+
+    test "no limit adds nothing and keeps the content hash" do
+      plain = requirement(%{success_measure: :any_contact, minimum_data_volume_bytes: nil})
+
+      evaluation =
+        RequirementEvaluator.evaluate_selection(plain, [snapshot(plain, "a", 0, 600, 1)])
+
+      assert evaluation["satisfied"]
+      refute Map.has_key?(ContactRequirementVersion.content_document(plain), "max_gap_seconds")
+
+      assert ContactRequirementVersion.content_document(gap_requirement(3_600))["max_gap_seconds"] ==
+               3_600
+    end
+
+    test "the limit is 600 s to 7 days and no longer than the window" do
+      for {limit, message} <- [
+            {599, "must be between 600 and 604800 seconds"},
+            {25_201, "must not be longer than the window"}
+          ] do
+        assert {:error, {:contact_requirement_field_invalid, :max_gap_seconds, ^message}} =
+                 ContactRequirements.validate_content(gap_requirement(limit))
+      end
+
+      assert ContactRequirements.validate_content(gap_requirement(25_200)) == :ok
+      assert ContactRequirements.validate_content(gap_requirement(nil)) == :ok
+    end
+  end
+
+  describe "qa #26" do
+    test "failed searches on several routes are one failure naming the routes" do
+      requirement = requirement(%{})
+
+      evaluation =
+        RequirementEvaluator.evaluate_selection(
+          requirement,
+          [],
+          [
+            %{route_key: "route-alpha", outcome: :failed},
+            %{route_key: "route-beta", outcome: :not_ready}
+          ],
+          now: DateTime.add(requirement.earliest_start, -3600)
+        )
+
+      assert [
+               %{
+                 "code" => "provider_search_unavailable",
+                 "route_keys" => ["route-alpha", "route-beta"]
+               }
+             ] =
+               evaluation["search_failures"]
+    end
+
+    test "a window that has already passed says so, once, instead of search failures" do
+      requirement = requirement(%{})
+
+      evaluation =
+        RequirementEvaluator.evaluate_selection(
+          requirement,
+          [],
+          [
+            %{route_key: "route-alpha", outcome: :failed},
+            %{route_key: "route-beta", outcome: :failed}
+          ],
+          now: DateTime.add(requirement.latest_end, 60)
+        )
+
+      refute evaluation["satisfied"]
+      assert [%{"code" => "window_passed"}] = evaluation["hard_failures"]
+      assert evaluation["search_failures"] == []
+    end
   end
 
   test "missing optional capacity is a warning but does not make duration planning ineligible" do
@@ -117,6 +219,15 @@ defmodule Cadence.ContactPlanning.RequirementEvaluatorTest do
              "estimated_volume_unavailable"
            ]
   end
+
+  # The window is 7 h; one 10 min pass at its start leaves 6 h 50 min (24600 s) to its end.
+  defp gap_requirement(limit),
+    do:
+      requirement(%{
+        success_measure: :any_contact,
+        minimum_data_volume_bytes: nil,
+        max_gap_seconds: limit
+      })
 
   defp requirement(overrides \\ %{}) do
     ContactRequirementVersion.new(

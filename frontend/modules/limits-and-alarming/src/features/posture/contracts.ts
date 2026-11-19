@@ -35,11 +35,7 @@ export function admitDocument(v: unknown, expected?: unknown): PostureDocument |
   )
     return null;
   if (
-    !page(
-      v.states,
-      (x): x is State => state(x, v.links.self, v.context.mission_id),
-      v.links.self,
-    ) ||
+    !page(v.states, (x): x is State => state(x, v.links.self), v.links.self) ||
     new Set(v.states.items.map((x) => x.id)).size !== v.states.items.length ||
     new Set(v.spacecraft.items.map((x) => x.id)).size !== v.spacecraft.items.length
   )

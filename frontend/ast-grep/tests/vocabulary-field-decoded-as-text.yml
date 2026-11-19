@@ -1,0 +1,17 @@
+{
+  "id": "vocabulary-field-decoded-as-text",
+  "valid":
+    [
+      "const r = d.object({ state: d.known(['a', 'b']) });",
+      "const r = d.object({ name: d.string, id: d.token });",
+      "const r = d.object({\n  // free-text: the provider's own words\n  reason: d.nullable(d.string),\n});",
+      "const r = object({ status: oneOf(['ok', 'failed']) });",
+    ],
+  "invalid":
+    [
+      "const r = d.object({ state: d.token });",
+      "const r = object({ kind: string });",
+      "const r = d.object({ end_reason: d.nullable(d.token) });",
+      "const r = d.object({ severity: d.optional(d.nullable(d.string)) });",
+    ],
+}

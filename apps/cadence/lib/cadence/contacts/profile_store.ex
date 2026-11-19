@@ -7,10 +7,12 @@ defmodule Cadence.Contacts.ProfileStore do
 
   alias Ecto.Changeset
 
+  alias Cadence.Comms.ListenClaims
   alias Cadence.Contacts.ProfileStore.{ProviderProfileRow, TransportProfileRow}
   alias Cadence.Contacts.{ProviderProfile, TransportProfile}
   alias Cadence.Listing
   alias Cadence.Missions
+  alias Cadence.Persistence.JsonDocument
 
   alias Cadence.Repo
 
@@ -18,6 +20,13 @@ defmodule Cadence.Contacts.ProfileStore do
           {:ok, ProviderProfile.t()} | {:error, term()}
   def persist_provider_profile(organization_id, %ProviderProfile{} = provider_profile)
       when is_binary(organization_id) do
+    # SAFETY: a listen host:port is one mission's (ListenClaims); fail closed at save.
+    ListenClaims.guard(provider_profile.mission_id, claimed_configuration(provider_profile), fn ->
+      persist_scoped_provider_profile(organization_id, provider_profile)
+    end)
+  end
+
+  defp persist_scoped_provider_profile(organization_id, provider_profile) do
     with {:ok, scoped_provider_profile} <-
            put_organization_scope(provider_profile, organization_id),
          {:ok, _mission} <-
@@ -45,6 +54,18 @@ defmodule Cadence.Contacts.ProfileStore do
   @spec persist_provider_profile(ProviderProfile.t()) ::
           {:ok, ProviderProfile.t()} | {:error, term()}
   def persist_provider_profile(%ProviderProfile{} = provider_profile) do
+    ListenClaims.guard(provider_profile.mission_id, claimed_configuration(provider_profile), fn ->
+      insert_provider_profile(provider_profile)
+    end)
+  end
+
+  # Only an active profile claims its listen endpoint; a tombstone releases it.
+  defp claimed_configuration(%ProviderProfile{lifecycle_state: :active, configuration: config}),
+    do: config
+
+  defp claimed_configuration(%ProviderProfile{}), do: nil
+
+  defp insert_provider_profile(provider_profile) do
     case Repo.insert(ProviderProfileRow.changeset(provider_profile),
            on_conflict: :nothing,
            conflict_target: [:mission_id, :provider_profile_id, :version]
@@ -196,6 +217,39 @@ defmodule Cadence.Contacts.ProfileStore do
     |> order_by([row], desc: row.version)
     |> Repo.all()
     |> Enum.map(&ProviderProfileRow.to_domain/1)
+  end
+
+  @doc """
+  Other missions' provider profiles (any organization) that mention listen port `port`, each at
+  its LATEST version: `[%{lifecycle_state, configuration}]` for `Cadence.Comms.ListenClaims`,
+  which decides whether one still claims the port. A server-internal read: callers mustn't show
+  another mission's profile to a user.
+  """
+  @spec latest_provider_profiles_on_port(binary(), pos_integer()) :: [map()]
+  def latest_provider_profiles_on_port(mission_id, port)
+      when is_binary(mission_id) and is_integer(port) do
+    port_text = Integer.to_string(port)
+
+    candidates =
+      from(row in ProviderProfileRow,
+        where:
+          row.mission_id != ^mission_id and
+            fragment("(?->'value'->>'port') = ?", row.configuration, ^port_text),
+        select: %{mission_id: row.mission_id, provider_profile_id: row.provider_profile_id},
+        distinct: true
+      )
+
+    from(row in ProviderProfileRow,
+      join: candidate in subquery(candidates),
+      on:
+        candidate.mission_id == row.mission_id and
+          candidate.provider_profile_id == row.provider_profile_id,
+      distinct: [row.mission_id, row.provider_profile_id],
+      order_by: [row.mission_id, row.provider_profile_id, desc: row.version],
+      select: %{lifecycle_state: row.lifecycle_state, configuration: row.configuration}
+    )
+    |> Repo.all()
+    |> Enum.map(&%{&1 | configuration: JsonDocument.unwrap_value(&1.configuration)})
   end
 
   @spec version_provider_profile(binary(), binary(), binary(), map()) ::

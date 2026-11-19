@@ -24,6 +24,18 @@ defmodule Cadence.Protocol.TMFramePipeline do
   @spec stats(state()) :: map()
   def stats(state), do: Reassembly.stats(state)
 
+  @doc """
+  The frames each buffered partial packet came from, as `{scid, vcid, frame_seq}` (the resume
+  point after an incomplete packet, `TMFrameIngress.resume_offset/3`). Reads the reassembly's
+  buffers, which record their source frames.
+  """
+  @spec pending_source_frames(map()) :: [{non_neg_integer(), non_neg_integer(), term()}]
+  def pending_source_frames(%{packet_buffers_by_channel: buffers}) do
+    for {_key, entry} <- buffers, seq <- entry.source_frames, do: {entry.scid, entry.vcid, seq}
+  end
+
+  def pending_source_frames(_state), do: []
+
   @spec decode_sdu_octets(binary(), keyword(), state(), map()) ::
           {:ok, [SDUOctets.t()], binary(), state()} | {:error, term(), state()}
   def decode_sdu_octets(frame_bytes, codec_opts, state, ctx \\ %{})
@@ -38,16 +50,80 @@ defmodule Cadence.Protocol.TMFramePipeline do
           {:ok, [SDUOctets.t()], [map()], [map()], binary(), state()} | {:error, term(), state()}
   def decode_sdu_octets_detailed(frame_bytes, codec_opts, state, ctx \\ %{})
       when is_binary(frame_bytes) and is_list(codec_opts) and is_map(ctx) do
+    with {:ok, sdu_octets, frame_infos, anomalies, rest, next_state, _scid_check} <-
+           decode_sdu_octets_checked(frame_bytes, codec_opts, state, ctx) do
+      {:ok, sdu_octets, frame_infos, anomalies, rest, next_state}
+    end
+  end
+
+  @typedoc """
+  The frame-SCID cross-check's tally for one decode call (DECISIONS #102): `frames` passed the
+  codec's integrity checks, `refused` counts those whose SCID wasn't `expected_scid`, by SCID.
+  Nil when the context names no expected SCID.
+  """
+  @type scid_check ::
+          %{expected_scid: non_neg_integer(), frames: non_neg_integer(), refused: map()} | nil
+
+  @doc """
+  `decode_sdu_octets_detailed/4` plus the frame-SCID cross-check (DECISIONS #102). With
+  `ctx.expected_scid` (the pass's one spacecraft), a frame whose header SCID differs is refused
+  AFTER the codec's integrity checks (FECF where configured, version, length: a corrupt frame is
+  dropped there, never counted as another craft) and BEFORE reassembly: no SDU, no kept frame.
+  One `:scid_mismatch` anomaly per observed SCID per call, located at its first frame.
+  """
+  @spec decode_sdu_octets_checked(binary(), keyword(), state(), map()) ::
+          {:ok, [SDUOctets.t()], [map()], [map()], binary(), state(), scid_check()}
+          | {:error, term(), state()}
+  def decode_sdu_octets_checked(frame_bytes, codec_opts, state, ctx \\ %{})
+      when is_binary(frame_bytes) and is_list(codec_opts) and is_map(ctx) do
     with {:ok, frame_infos, decode_anomalies, rest} <-
            FrameCodec.decode_detailed(frame_bytes, codec_opts) do
+      {expected, context} = Map.pop(ctx, :expected_scid)
+
       context =
-        ctx
+        context
         |> Map.put_new(:direction, :downlink)
         |> Map.put_new(:sdu_kind_hint, :space_packet)
 
-      reduce_frames(frame_infos, decode_anomalies, rest, state, context)
+      {kept, mismatch_anomalies, scid_check} = check_scids(frame_infos, expected)
+
+      with {:ok, sdu_octets, kept_frames, anomalies, rest, next_state} <-
+             reduce_frames(kept, decode_anomalies ++ mismatch_anomalies, rest, state, context) do
+        {:ok, sdu_octets, kept_frames, anomalies, rest, next_state, scid_check}
+      end
     end
   end
+
+  defp check_scids(frame_infos, expected) when is_integer(expected) do
+    {kept, refused} = Enum.split_with(frame_infos, &(&1.frame.scid == expected))
+
+    anomalies =
+      refused
+      |> Enum.group_by(& &1.frame.scid)
+      |> Enum.sort_by(fn {scid, _frames} -> scid end)
+      |> Enum.map(fn {scid, [first | _] = frames} ->
+        %{
+          anomaly_kind: :scid_mismatch,
+          scid: scid,
+          vcid: first.frame.vcid,
+          map_id: first.frame.map_id,
+          frame_seq: first.frame.frame_seq,
+          raw_frame_offset_bytes: first.raw_frame_offset_bytes,
+          raw_frame_length_bytes: first.raw_frame_length_bytes,
+          metadata: %{expected_scid: expected, frames: length(frames)}
+        }
+      end)
+
+    check = %{
+      expected_scid: expected,
+      frames: length(frame_infos),
+      refused: Map.new(anomalies, &{&1.scid, &1.metadata.frames})
+    }
+
+    {kept, anomalies, check}
+  end
+
+  defp check_scids(frame_infos, _no_expected), do: {frame_infos, [], nil}
 
   @spec decode_space_packets(binary(), keyword(), state(), map()) ::
           {:ok, [binary()], binary(), state()} | {:error, term(), state()}
@@ -85,7 +161,7 @@ defmodule Cadence.Protocol.TMFramePipeline do
                                                                        {acc_sdu_octets,
                                                                         kept_frames, anomalies,
                                                                         current_state} ->
-      case Reassembly.ingest_detailed(frame_info.frame, ctx, current_state) do
+      case Reassembly.ingest_detailed(located_frame(frame_info), ctx, current_state) do
         {:ok, sdu_octets, reassembly_anomalies, next_state} ->
           {Enum.reverse(sdu_octets, acc_sdu_octets), [frame_info | kept_frames],
            reassembly_anomalies
@@ -114,6 +190,19 @@ defmodule Cadence.Protocol.TMFramePipeline do
       {:ok, Enum.reverse(sdu_octets), Enum.reverse(kept_frames), Enum.reverse(anomalies), rest,
        next_state}
     end)
+  end
+
+  # Reassembly builds an SDU's meta from the frame that completes it, so the completing frame's
+  # position within this decode call reaches the SDU (meta.raw_frame_offset_bytes): a packet's
+  # stable archive id is keyed on it (#71 follow-up). Only reassembly sees it.
+  defp located_frame(frame_info) do
+    frame = frame_info.frame
+
+    %{
+      frame
+      | meta:
+          Map.put(frame.meta || %{}, :raw_frame_offset_bytes, frame_info.raw_frame_offset_bytes)
+    }
   end
 
   defp locate_anomalies(anomalies, frame_info) do

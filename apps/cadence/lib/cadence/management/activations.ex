@@ -15,11 +15,12 @@ defmodule Cadence.Management.Activations do
     ActivationDecisionRow,
     ActivationRequest,
     ActivationRequestRow,
-    ApprovedActivation
+    ApprovedActivation,
+    Lifecycle
   }
 
   alias Cadence.Persistence.JsonDocument
-  alias Cadence.Platform.ContentHash
+  alias Cadence.Platform.ScopedReadUpdates
   alias Cadence.Repo
 
   @change_classes [
@@ -70,7 +71,13 @@ defmodule Cadence.Management.Activations do
           requested_at
         )
 
-      with :ok <- expected_policy(request.policy_document, opts), do: persist_request(request)
+      # The pending list refreshes on :activations_changed (api, L10). Inside a caller's
+      # transaction this is a no-op; those callers announce it after their commit.
+      with :ok <- expected_policy(request.policy_document, opts) do
+        request
+        |> persist_superseding()
+        |> ScopedReadUpdates.publish_result(:activations_changed, organization_id, mission_id)
+      end
     end
   end
 
@@ -79,6 +86,20 @@ defmodule Cadence.Management.Activations do
           | {:error, term()}
   def approve(%Scope{} = current_scope, request_id, reason, opts \\ []) do
     decide(current_scope, request_id, :approved, reason, opts)
+  end
+
+  @doc "The requester withdraws a pending request (L10). See `Activations.Lifecycle.withdraw/3`."
+  def withdraw(%Scope{} = scope, request_id, reason) do
+    scope
+    |> Lifecycle.withdraw(request_id, reason)
+    |> case do
+      {:ok, request, _decision} = result ->
+        ScopedReadUpdates.publish(:activations_changed, scope.organization_id, request.mission_id)
+        result
+
+      error ->
+        error
+    end
   end
 
   @spec reject(Scope.t(), binary(), binary(), keyword()) ::
@@ -210,7 +231,7 @@ defmodule Cadence.Management.Activations do
       mission_id: binding_set.mission_id,
       binding_set_id: binding_set.binding_set_id,
       binding_set_version: binding_set.version,
-      binding_set_content_sha256: ContentHash.term_sha256(binding_set),
+      binding_set_content_sha256: BindingSet.content_sha256(binding_set),
       change_class: change_class,
       state: request_state(approval_required?),
       requester_actor_kind: scope.actor_kind,
@@ -221,6 +242,92 @@ defmodule Cadence.Management.Activations do
       requested_at: requested_at,
       decided_at: decided_at(approval_required?, requested_at)
     })
+  end
+
+  @doc """
+  An activation request made by applying a change set (DECISIONS #35/#36). It is approved
+  only when the change set satisfied the activation policy: direct policy, or an independent
+  review recorded in `approvals` (`[%{"actor", "comment", "decided_at"}]` from the change-set
+  review, which `Cadence.Configuration` already checked was by none of its authors). The review
+  is recorded as the request's decision. Runs inside the caller's transaction and publishes
+  nothing.
+  """
+  @spec request_from_change_set(map()) :: {:ok, ActivationRequest.t()} | {:error, term()}
+  def request_from_change_set(%{
+        binding_set: %BindingSet{} = binding_set,
+        requester: %{"kind" => kind, "id" => id} = requester,
+        metadata: metadata,
+        approvals: approvals
+      }) do
+    policy = ActivationPolicy.evidence(binding_set.organization_id, binding_set.mission_id)
+    now = DateTime.utc_now()
+
+    with :ok <- change_set_approval(policy, approvals),
+         {:ok, request} <-
+           persist_request(
+             ActivationRequest.new(%{
+               organization_id: binding_set.organization_id,
+               mission_id: binding_set.mission_id,
+               binding_set_id: binding_set.binding_set_id,
+               binding_set_version: binding_set.version,
+               binding_set_content_sha256: BindingSet.content_sha256(binding_set),
+               change_class: :mission_data_plane,
+               state: :approved,
+               requester_actor_kind: if(kind == "service", do: :service, else: :user),
+               requester_actor_id: id,
+               requester_actor_document: requester,
+               policy_document: policy,
+               metadata: metadata,
+               requested_at: now,
+               decided_at: now
+             })
+           ),
+         :ok <- record_change_set_approvals(request, approvals) do
+      {:ok, request}
+    end
+  end
+
+  defp change_set_approval(%{"approval_required" => true}, [_ | _]), do: :ok
+
+  defp change_set_approval(%{"approval_required" => true}, _none),
+    do: {:error, :activation_approval_required}
+
+  defp change_set_approval(_policy, _approvals), do: :ok
+
+  defp record_change_set_approvals(request, approvals) do
+    Enum.reduce_while(approvals, :ok, fn %{"actor" => actor} = approval, :ok ->
+      decision =
+        ActivationDecision.new(%{
+          activation_request_id: request.activation_request_id,
+          organization_id: request.organization_id,
+          mission_id: request.mission_id,
+          decision: :approved,
+          actor_kind: :user,
+          actor_id: actor["id"],
+          actor_document: actor,
+          reason: approval["comment"],
+          decided_at: DateTime.utc_now()
+        })
+
+      case decision |> ActivationDecisionRow.changeset() |> Repo.insert() do
+        {:ok, _row} -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  # L10: a new request supersedes the older pending ones it replaces (Lifecycle), atomically.
+  defp persist_superseding(request) do
+    Repo.transaction(fn ->
+      case persist_request(request) do
+        {:ok, persisted} ->
+          _superseded = Lifecycle.supersede_older(persisted)
+          persisted
+
+        {:error, reason} ->
+          Repo.rollback(reason)
+      end
+    end)
   end
 
   defp persist_request(request) do
@@ -249,7 +356,7 @@ defmodule Cadence.Management.Activations do
   defp decided_at(false, requested_at), do: requested_at
 
   defp transact_decision(scope, request_id, decision, actor, reason, decided_at) do
-    ActivationPolicy.with_lock(scope.organization_id, fn ->
+    ActivationPolicy.with_stable_policy(scope.organization_id, fn ->
       {:ok, persist_decision(scope, request_id, decision, actor, reason, decided_at)}
     end)
   end
@@ -257,12 +364,7 @@ defmodule Cadence.Management.Activations do
   defp persist_decision(scope, request_id, decision, actor, reason, decided_at) do
     with {:ok, request_row} <- lock_pending_request(scope, request_id),
          :ok <- authorize_decision(scope, request_row),
-         :ok <-
-           ActivationPolicy.validate(
-             request_row.organization_id,
-             request_row.mission_id,
-             JsonDocument.unwrap_value(request_row.policy_document)
-           ),
+         :ok <- current_policy(decision, request_row),
          :ok <- distinct_approver(request_row, actor),
          {:ok, decision_row} <-
            insert_decision(request_row, request_id, decision, actor, reason, decided_at),
@@ -271,6 +373,17 @@ defmodule Cadence.Management.Activations do
     else
       {:error, error} -> Repo.rollback(error)
     end
+  end
+
+  # L10: reject never waits on the policy, so a request stuck under a changed one can go.
+  defp current_policy(:rejected, _request_row), do: :ok
+
+  defp current_policy(_decision, request_row) do
+    ActivationPolicy.validate(
+      request_row.organization_id,
+      request_row.mission_id,
+      JsonDocument.unwrap_value(request_row.policy_document)
+    )
   end
 
   defp authorize_decision(scope, request_row) do
@@ -304,14 +417,33 @@ defmodule Cadence.Management.Activations do
     |> Repo.update()
   end
 
-  defp lock_pending_request(%Scope{} = scope, request_id) do
+  @doc """
+  Whether `scope` may make `decision` on `request_id` now: the same checks a decision runs (a human
+  approver, pending, authorized, the current policy for an approval, a distinct approver), with
+  nothing recorded. Control's approve runs these BEFORE its apply preflight, so an authorization or
+  separation refusal keeps its precedence; the decision re-checks them under its lock.
+  """
+  @spec decidable(Scope.t(), binary(), :approved | :rejected) :: :ok | {:error, term()}
+  def decidable(%Scope{} = scope, request_id, decision) when decision in [:approved, :rejected] do
+    with {:ok, actor} <- human_approver(scope),
+         {:ok, row} <- pending_request(scope, request_id, false),
+         :ok <- authorize_decision(scope, row),
+         :ok <- current_policy(decision, row) do
+      distinct_approver(row, actor)
+    end
+  end
+
+  defp lock_pending_request(%Scope{} = scope, request_id),
+    do: pending_request(scope, request_id, true)
+
+  defp pending_request(%Scope{} = scope, request_id, lock?) do
     ActivationRequestRow
     |> where(
       [request],
       request.activation_request_id == ^request_id and
         request.organization_id == ^scope.organization_id
     )
-    |> lock("FOR UPDATE")
+    |> then(&if(lock?, do: lock(&1, "FOR UPDATE"), else: &1))
     |> Repo.one()
     |> case do
       nil -> {:error, :activation_request_not_found}

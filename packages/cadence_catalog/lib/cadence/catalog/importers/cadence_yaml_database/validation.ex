@@ -1,6 +1,7 @@
 defmodule Cadence.Catalog.Importers.CadenceYamlDatabase.Validation do
   @moduledoc false
 
+  alias Cadence.Catalog.Importers.CadenceYamlDatabase.ArgumentCriteria
   alias Cadence.Catalog.Source
 
   @supported_format_keys ["cadence_yaml_telemetry", "cadence_yaml"]
@@ -222,10 +223,10 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase.Validation do
   defp validate_command_verifiers(%{} = command) when not is_map_key(command, "verifiers"),
     do: :ok
 
-  defp validate_command_verifiers(%{"name" => command_name, "verifiers" => verifiers})
+  defp validate_command_verifiers(%{"name" => command_name, "verifiers" => verifiers} = command)
        when is_list(verifiers) do
     Enum.reduce_while(Enum.with_index(verifiers), :ok, fn {verifier, verifier_index}, :ok ->
-      case validate_command_verifier(command_name, verifier, verifier_index) do
+      case validate_command_verifier(command_name, verifier, verifier_index, command) do
         :ok -> {:cont, :ok}
         {:error, _reason} = error -> {:halt, error}
       end
@@ -238,15 +239,18 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase.Validation do
       "Command '#{command_name}' field 'verifiers' must be a list when present"}}
   end
 
-  defp validate_command_verifier(command_name, verifier, verifier_index) when is_map(verifier) do
+  defp validate_command_verifier(command_name, verifier, verifier_index, command)
+       when is_map(verifier) do
     with {:ok, _name} <- require_binary(verifier, "name", "verifier", verifier_index),
          {:ok, _timeout_ms} <- optional_integer(verifier, "timeout_ms"),
          {:ok, _delay_ms} <- optional_integer(verifier, "delay_ms"),
          :ok <- validate_command_verifier_phase(verifier),
          :ok <- validate_command_verifier_severity(verifier),
          :ok <- validate_command_match_criteria(verifier["success_criteria"], "success_criteria"),
-         :ok <- validate_command_match_criteria(verifier["failure_criteria"], "failure_criteria") do
-      :ok
+         :ok <- validate_command_match_criteria(verifier["failure_criteria"], "failure_criteria"),
+         :ok <-
+           ArgumentCriteria.validate(verifier["success_criteria"], command, "success_criteria") do
+      ArgumentCriteria.validate(verifier["failure_criteria"], command, "failure_criteria")
     else
       {:error, {:validation_error, reason}} ->
         {:error,
@@ -258,7 +262,7 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase.Validation do
     end
   end
 
-  defp validate_command_verifier(command_name, _verifier, verifier_index) do
+  defp validate_command_verifier(command_name, _verifier, verifier_index, _command) do
     {:error,
      {:validation_error,
       "Verifier at index #{verifier_index} in command '#{command_name}' must be a map"}}

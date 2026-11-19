@@ -2,7 +2,7 @@ defmodule Cadence.Dev.ReflectOrbital.Configuration do
   @moduledoc "Imports and assigns the demo command and telemetry database to the Earendil fleet."
   alias Cadence.Applications.SpacecraftConfiguration.Drafts
   alias Cadence.Catalog
-  alias Cadence.Catalog.Artifact
+  alias Cadence.Catalog.{Actor, Artifact}
   alias Cadence.Catalog.SpacecraftConfigurationInput
   alias Cadence.Contacts.ProviderScheduling
   alias Cadence.Dev.ReflectOrbital.Fixture, as: F
@@ -53,9 +53,68 @@ defmodule Cadence.Dev.ReflectOrbital.Configuration do
     %{mission: mission, revision: revision, apids: apids, fleet: fleet}
   end
 
+  @doc """
+  Imports the demo database as it reads now and returns its revision, without touching any
+  spacecraft configuration. For moving a fleet onto it with a change set (#65): the artifact id
+  is content-addressed, so this is a no-op returning the existing revision when nothing changed.
+  """
+  def import_revision(opts \\ []), do: import_database(opts)
+
+  # The legacy reference database has no verifiers, so commands would never read satisfied.
+  # The demo adds uplink verifiers to a few commands as it reads the file (#44); the reference
+  # file itself stays untouched. COP-1 completion means the spacecraft's FARM accepted the frame.
+  @verified_commands ~w(NOOP RESET_COUNTERS SET_MODE)
+  @verifiers """
+      verifiers:
+        - name: Uplink started
+          phase: start
+          timeout_ms: 30000
+          success_criteria:
+            criteria_type: comparison
+            subject_ref: transport:started
+            comparison: equal
+            value: true
+        - name: Accepted on board
+          phase: completion
+          timeout_ms: 30000
+          success_criteria:
+            criteria_type: comparison
+            subject_ref: transport:completed
+            comparison: equal
+            value: true
+  """
+
+  # SET_MODE also checks telemetry: the spacecraft's HK.sc_mode reads the mode it was sent
+  # (raw: sc_mode's state table makes the engineering value a label). Lets #38 verifier scope
+  # be tested live: only the target spacecraft's HK can satisfy it.
+  @mode_verifier """
+        - name: Mode applied
+          phase: completion
+          timeout_ms: 60000
+          success_criteria:
+            criteria_type: comparison
+            subject_ref: telemetry:HK.sc_mode
+            comparison: equal
+            value_from_argument: mode
+            use_calibrated: false
+  """
+
+  # Who imported the demo catalog (lead 11-14/11-17): the seed runs as no user or service
+  # identity, so it names itself as a system actor (a stable ref, never a person).
+  defp seed_actor, do: Actor.system("seed:reflect-orbital-v1", "Reflect Orbital demo seed")
+
+  defp with_demo_verifiers(source) do
+    Enum.reduce(@verified_commands, source, fn name, acc ->
+      line = "  - name: #{name}\n"
+      ^line = if String.contains?(acc, line), do: line, else: raise("#{name} not found")
+      verifiers = if name == "SET_MODE", do: @verifiers <> @mode_verifier, else: @verifiers
+      String.replace(acc, line, line <> verifiers, global: false)
+    end)
+  end
+
   defp import_database(opts) do
     id = "catalog-earendil-command-telemetry"
-    source = File.read!(F.database_path())
+    source = F.database_path() |> File.read!() |> with_demo_verifiers()
     digest = :crypto.hash(:sha256, source) |> Base.encode16(case: :lower)
 
     case Catalog.fetch_database(F.organization_id(), F.mission_id(), id) do
@@ -69,6 +128,7 @@ defmodule Cadence.Dev.ReflectOrbital.Configuration do
             name: "Demo Spacecraft — Command & Telemetry",
             catalog_family: :combined,
             default_importer_key: "cadence_yaml",
+            created_by: seed_actor(),
             description:
               "The repository's complete demo_spacecraft.yaml, assigned to the Earendil demonstration fleet.",
             metadata: F.metadata()
@@ -93,6 +153,7 @@ defmodule Cadence.Dev.ReflectOrbital.Configuration do
           format_key: "cadence_yaml",
           media_type: "application/yaml",
           source_artifact: source,
+          uploaded_by: seed_actor(),
           metadata:
             Map.put(
               F.metadata(),
@@ -107,7 +168,8 @@ defmodule Cadence.Dev.ReflectOrbital.Configuration do
           F.mission_id(),
           id,
           artifact,
-          "cadence_yaml"
+          "cadence_yaml",
+          requested_by: seed_actor()
         )
 
       await_import(run.import_run_id, 120)

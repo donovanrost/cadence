@@ -127,6 +127,9 @@ defmodule Cadence.Dashboards.SourceCredentialSecretCompatibilityTest do
   test "environment resolver accepts dashboard profile options without global state" do
     profiles = %{
       @credentials_ref => %{
+        # A configured profile names its organization: one without an owner serves
+        # only platform sources, so this organization's credential would be refused.
+        "organization_id" => @organization_id,
         "http_endpoint_env" => "CADENCE_TEST_BYO_HTTP_ENDPOINT",
         "username_env" => "CADENCE_TEST_BYO_USERNAME",
         "password_env" => "CADENCE_TEST_BYO_PASSWORD",

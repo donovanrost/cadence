@@ -10,7 +10,3 @@ export { default as CommsRoutingNew } from "./features/routing/CommsRoutingNew.v
 export { default as CommsGroundStationForm } from "./features/ground-stations/CommsGroundStationForm.vue";
 export { default as CommsGroundStationList } from "./features/ground-stations/CommsGroundStationList.vue";
 export { default as CommsGroundStationListPage } from "./features/ground-stations/CommsGroundStationListPage.vue";
-export { default as CommsProviderList } from "./features/providers/CommsProviderList.vue";
-export { default as CommsProviderTable } from "./features/providers/CommsProviderTable.vue";
-export { default as CommsProviderNew } from "./features/providers/CommsProviderNew.vue";
-export { default as CommsProviderShow } from "./features/providers/CommsProviderShow.vue";

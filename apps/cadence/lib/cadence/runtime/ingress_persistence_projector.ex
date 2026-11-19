@@ -19,6 +19,8 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
 
   @max_persist_batch_size 2_048
   @default_retry_delay_ms 100
+  # DECISIONS #71: a TSDB outage can last hours while an ended contact settles; back off.
+  @default_retry_max_ms 30_000
   @event_prefix [:cadence, :runtime, :ingress_persistence_projector]
 
   @type state :: %{
@@ -37,6 +39,8 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
           lifecycle_status: :active | :quiescing | :quiesced,
           quiesce_waiters: [GenServer.from()],
           retry_delay_ms: pos_integer(),
+          retry_max_ms: pos_integer(),
+          consecutive_failures: non_neg_integer(),
           enqueued_count: non_neg_integer(),
           persisted_count: non_neg_integer(),
           failed_count: non_neg_integer(),
@@ -146,6 +150,8 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
        lifecycle_status: :active,
        quiesce_waiters: [],
        retry_delay_ms: Keyword.get(opts, :retry_delay_ms, @default_retry_delay_ms),
+       retry_max_ms: Keyword.get_lazy(opts, :retry_max_ms, &configured_retry_max_ms/0),
+       consecutive_failures: 0,
        enqueued_count: 0,
        persisted_count: 0,
        failed_count: 0,
@@ -191,7 +197,8 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
         failed_count: state.failed_count,
         capacity_waiter_count: map_size(state.capacity_waiters),
         last_completed_at: state.last_completed_at,
-        last_error: state.last_error
+        last_error: state.last_error,
+        consecutive_failures: state.consecutive_failures
       }}, state}
   end
 
@@ -345,7 +352,8 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
             queue_depth: max(state.queue_depth - batch_size, 0),
             persisted_count: state.persisted_count + batch_size,
             last_completed_at: DateTime.utc_now(),
-            last_error: nil
+            last_error: nil,
+            consecutive_failures: 0
         }
 
         next_state
@@ -357,14 +365,27 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
           state
           | queue: :queue.in_r(batch, rest),
             failed_count: state.failed_count + 1,
+            consecutive_failures: state.consecutive_failures + 1,
             last_completed_at: DateTime.utc_now(),
             last_error: inspect(reason),
             processing?: true
         }
 
-        Process.send_after(self(), :process_queue, state.retry_delay_ms)
+        Process.send_after(self(), :process_queue, retry_delay(state))
         {:noreply, next_state}
     end
+  end
+
+  defp configured_retry_max_ms do
+    :cadence
+    |> Application.get_env(:ingress_persistence_projector, [])
+    |> Keyword.get(:retry_max_ms, @default_retry_max_ms)
+  end
+
+  # 100 ms, doubling per consecutive failure, at most `retry_max_ms`.
+  defp retry_delay(state) do
+    doublings = min(state.consecutive_failures, 16)
+    min(state.retry_delay_ms * Integer.pow(2, doublings), state.retry_max_ms)
   end
 
   defp continue_processing_queue(next_state) do
@@ -608,8 +629,12 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
       send(producer_pid, {:ingress_persistence_completed, self(), count})
     end)
 
-    Enum.each(batch.completions, fn {subscriber_pid, ref} ->
-      send(subscriber_pid, {:provider_ingress_persisted, self(), ref})
+    Enum.each(batch.completions, fn
+      {subscriber_pid, ref, %{} = progress} ->
+        send(subscriber_pid, {:provider_ingress_persisted, self(), ref, progress})
+
+      {subscriber_pid, ref} ->
+        send(subscriber_pid, {:provider_ingress_persisted, self(), ref})
     end)
   end
 

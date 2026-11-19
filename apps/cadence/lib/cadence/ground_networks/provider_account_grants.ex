@@ -52,7 +52,7 @@ defmodule Cadence.GroundNetworks.ProviderAccountGrants do
              provider_account_id,
              account_version_number
            ),
-         true <- account.lifecycle_state == :active,
+         :ok <- active_account(account),
          {:ok, grant} <-
            build_grant(organization_id, mission_id, account_version, attrs, actor, opts),
          true <-
@@ -75,6 +75,9 @@ defmodule Cadence.GroundNetworks.ProviderAccountGrants do
       {:error, reason} -> {:error, reason}
     end
   end
+
+  defp active_account(%{lifecycle_state: :active}), do: :ok
+  defp active_account(_account), do: {:error, :provider_account_archived}
 
   @spec revoke(Scope.t(), binary(), binary(), keyword()) ::
           {:ok, ProviderAccountGrant.t()} | {:error, term()}

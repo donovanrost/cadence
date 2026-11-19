@@ -4,6 +4,7 @@ defmodule CadenceWeb.OpsFleetDirectoryPageTest do
   alias Cadence.Auth.Scope
   alias Cadence.ContactPlanning.{ContactRequirements, FleetPlanningPolicies, FleetPlanningRuns}
   alias Cadence.FleetStartFixtures
+  alias Cadence.PolicyReviewer
   alias Cadence.Spacecraft
   alias CadenceWeb.TestFixtures
 
@@ -11,7 +12,7 @@ defmodule CadenceWeb.OpsFleetDirectoryPageTest do
               "../../../../frontend/modules/planning-and-contacts/src/features/fleet-planning/directory-contribution-check.mjs",
               __DIR__
             )
-  @start ~U[2026-07-17 04:00:00Z]
+  @start ~U[2030-07-17 04:00:00Z]
 
   setup do
     org = TestFixtures.persist_org!()
@@ -40,7 +41,7 @@ defmodule CadenceWeb.OpsFleetDirectoryPageTest do
 
     {:ok, _, _, _} =
       FleetPlanningPolicies.approve(
-        scope,
+        PolicyReviewer.reviewer(scope),
         mission.mission_id,
         policy.fleet_planning_policy_id,
         version.version,

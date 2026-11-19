@@ -21,7 +21,12 @@ defmodule Cadence.Control.ProcessNamespace do
     :mission_supervisor,
     :mission_recovery,
     :contact_fact_consumer,
-    :runtime_fact_consumer
+    :runtime_fact_consumer,
+    # Optional: a root that names it runs the pass-results close-out (S9). Roots built with
+    # `new!/1` (tests) don't unless they name one, so two roots never claim the same name.
+    pass_results_close_out: nil,
+    # Optional, likewise: a root that names it runs the semantic commit retirement (#94).
+    semantic_commit_retirement: nil
   ]
 
   @type t :: %__MODULE__{
@@ -30,7 +35,9 @@ defmodule Cadence.Control.ProcessNamespace do
           mission_supervisor: atom(),
           mission_recovery: atom(),
           contact_fact_consumer: atom(),
-          runtime_fact_consumer: atom()
+          runtime_fact_consumer: atom(),
+          pass_results_close_out: atom() | nil,
+          semantic_commit_retirement: atom() | nil
         }
 
   @spec default() :: t()
@@ -41,7 +48,9 @@ defmodule Cadence.Control.ProcessNamespace do
       mission_supervisor: Cadence.Control.MissionSupervisor,
       mission_recovery: Cadence.Control.MissionRecovery,
       contact_fact_consumer: Cadence.Control.ContactFactConsumer,
-      runtime_fact_consumer: Cadence.Control.RuntimeFactConsumer
+      runtime_fact_consumer: Cadence.Control.RuntimeFactConsumer,
+      pass_results_close_out: Cadence.Control.PassResultsCloseOut,
+      semantic_commit_retirement: Cadence.Control.SemanticCommitRetirement
     }
   end
 

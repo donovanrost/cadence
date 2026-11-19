@@ -4,22 +4,15 @@ defmodule CadenceWeb.DashboardExecutionDiagnosticsTest do
   alias Cadence.Auth.Scope
 
   alias Cadence.Dashboards.{
-    Diagnostics,
     DocumentCodec,
     Documents,
     ResolutionContext,
     RuntimeCache
   }
 
-  alias Cadence.Dashboards.RuntimeInvalidation.Event
   alias Cadence.Reads.Dashboards.ExecutionDiagnostics
   alias Cadence.Telemetry.{RuntimeHealth, Sample}
   alias CadenceWeb.TestFixtures
-
-  @checker Path.expand(
-             "../../../../frontend/modules/dashboards-and-exploration/src/features/execution-diagnostics/producer-contract-check.mjs",
-             __DIR__
-           )
 
   @fixture Path.expand(
              "../../../cadence/test/fixtures/dashboards/value_tile_latest.v1.json",
@@ -131,7 +124,7 @@ defmodule CadenceWeb.DashboardExecutionDiagnosticsTest do
     assert first.document_version == 1
 
     assert Enum.map(first.collections, & &1.id) ==
-             ~w(plan requests frames cache source_execution refresh invalidation)
+             ~w(plan requests frames cache source_execution)
 
     for id <- ~w(plan requests frames cache source_execution),
         do: assert(collection(first, id).rows != [])
@@ -151,7 +144,6 @@ defmodule CadenceWeb.DashboardExecutionDiagnosticsTest do
            ).status == "miss"
 
     assert {:ok, second} = load(c)
-    assert_consumer_accepts([first, second])
     assert Enum.any?(collection(second, "cache").rows, &(&1.status == "hit"))
     assert byte_size(Jason.encode!(second)) < 1_048_576
 
@@ -215,18 +207,8 @@ defmodule CadenceWeb.DashboardExecutionDiagnosticsTest do
     refute_received {:diagnostic_source, _, _, _}
   end
 
-  test "recorded decisions remain scoped, bounded and independently available when inspection fails",
-       c do
+  test "a failed inspection leaves every collection unavailable without running a source", c do
     publish(c)
-    for index <- 1..51, do: record(c.document, "decision-#{index}")
-
-    assert {:ok, foreign} =
-             Documents.persist(c.org.organization_id, %{
-               c.document
-               | dashboard_id: "other-dashboard"
-             })
-
-    record(foreign, "foreign-decision")
     opts = Keyword.put(c.opts, :resolution_context, :broken_runtime)
 
     assert {:ok, model} =
@@ -237,96 +219,12 @@ defmodule CadenceWeb.DashboardExecutionDiagnosticsTest do
                opts
              )
 
-    assert Enum.all?(
-             Enum.take(model.collections, 5),
-             &(&1.state == "unavailable" and &1.rows == [])
-           )
-
-    for id <- ~w(refresh invalidation) do
-      assert %{source: "durable", state: "ready", limited: true, rows: rows} =
-               collection(model, id)
-
-      assert length(rows) == 50
-      refute Enum.any?(rows, &(&1.identity == "foreign-decision"))
-    end
-
-    refute Jason.encode!(model) =~ "private-decision-secret"
-    assert_consumer_accepts([model])
+    assert Enum.all?(model.collections, &(&1.state == "unavailable" and &1.rows == []))
     refute_received {:diagnostic_source, _, _, _}
-  end
-
-  test "local fallback is labeled and a missing local runtime is unavailable, not an empty success",
-       c do
-    publish(c)
-    assert {:ok, model} = load(c)
-
-    assert %{source: "process_local", state: "ready", rows: []} =
-             collection(model, "invalidation")
-
-    opts = Keyword.put(c.opts, :runtime_health, :missing_diagnostic_health)
-
-    assert {:ok, model} =
-             ExecutionDiagnostics.load(
-               c.scope,
-               c.mission.mission_id,
-               c.document.dashboard_id,
-               opts
-             )
-
-    assert %{source: nil, state: "unavailable", rows: []} = collection(model, "invalidation")
-    assert collection(model, "plan").state == "ready"
-    assert_consumer_accepts([model])
-  end
-
-  test "populated local fallback excludes foreign and missing scope without exposing raw decisions",
-       c do
-    publish(c)
-
-    for {org, mission, dashboard} <- [
-          {c.org.organization_id, c.mission.mission_id, c.document.dashboard_id},
-          {"foreign-org", c.mission.mission_id, c.document.dashboard_id},
-          {c.org.organization_id, "foreign-mission", c.document.dashboard_id},
-          {c.org.organization_id, c.mission.mission_id, "foreign-dashboard"},
-          {nil, c.mission.mission_id, c.document.dashboard_id}
-        ] do
-      RuntimeHealth.execute(
-        c.health,
-        [:cadence, :dashboards, :runtime_invalidation, :decision],
-        %{invalidated_artifacts: 2},
-        %{
-          invalidation_event_id: "local-event",
-          organization_id: org,
-          mission_id: mission,
-          dashboard_id: dashboard,
-          boundary: :source_watermark_changed,
-          decision_status: :filtered,
-          refresh_allowed?: false,
-          refresh_reason: :stale_for_context,
-          decision: %{authorization: "local-private-secret", affected_placement_ids: ["battery"]}
-        }
-      )
-    end
-
-    assert {:ok, model} = load(c)
-    assert %{source: "process_local", rows: [row]} = collection(model, "invalidation")
-    assert Enum.find(row.details, &(&1.key == "invalidation_event_id")).value == "local-event"
-    refute Jason.encode!(model) =~ "local-private-secret"
-    assert_consumer_accepts([model])
   end
 
   defp load(c),
     do: ExecutionDiagnostics.load(c.scope, c.mission.mission_id, c.document.dashboard_id, c.opts)
-
-  defp assert_consumer_accepts(models) do
-    assert {output, 0} =
-             System.cmd(
-               System.find_executable("node"),
-               ["--no-warnings", @checker, Jason.encode!(models)],
-               stderr_to_stdout: true
-             )
-
-    assert output =~ "contract passed"
-  end
 
   defp publish(c) do
     assert {:ok, _} =
@@ -345,41 +243,5 @@ defmodule CadenceWeb.DashboardExecutionDiagnosticsTest do
     collection(model, "cache").rows
     |> Enum.find(fn row -> Enum.any?(row.details, &(&1.key == "layer" and &1.value == layer)) end)
     |> Map.fetch!(:identity)
-  end
-
-  defp record(document, id) do
-    event =
-      Event.new(
-        :source_watermark_changed,
-        [:source_result, :frame],
-        %{
-          organization_id: document.organization_id,
-          mission_id: document.mission_id,
-          logical_source: :telemetry
-        },
-        %{},
-        %{total: 2}
-      )
-
-    assert {:ok, _} =
-             Diagnostics.record_runtime_invalidation_decision(
-               event,
-               %{
-                 organization_id: document.organization_id,
-                 mission_id: document.mission_id,
-                 dashboard_id: document.dashboard_id,
-                 decision_status: :matched,
-                 matches?: true,
-                 dashboard_matches?: true,
-                 context_matches?: true,
-                 context_reason: :matched,
-                 refresh_allowed?: false,
-                 refresh_reason: :stale_for_context,
-                 affected_placement_count: 1,
-                 affected_placement_ids: ["battery"],
-                 authorization: "private-decision-secret"
-               },
-               decision_event_id: id
-             )
   end
 end

@@ -36,16 +36,12 @@ defmodule CadenceWeb.SpacecraftIdentityTest do
      path: "/missions/#{mission.mission_id}/spacecraft"}
   end
 
-  test "new and both identity routes produce valid host form contracts and scoped links", %{
+  # §11c B3: New spacecraft redirects to the console's Setup; identity and edit stay (L17).
+  test "both identity routes produce valid host form contracts and scoped links", %{
     conn: conn,
     mission: mission,
     path: path
   } do
-    {:ok, view, _} = live(conn, path <> "/new")
-    data = assert_form(view, "spacecraft_new", "assertNewIdentityForm")
-    assert data["form"]["actions"]["cancel"]["href"] == path
-    assert data["profile_options"]["empty_state"]["action"]["href"] == path <> "/profiles/new"
-    assert [%{"value" => "", "version" => nil}] = data["profile_options"]["options"]
     profile = TestFixtures.persist_spacecraft_profile!(mission)
 
     craft =
@@ -60,43 +56,14 @@ defmodule CadenceWeb.SpacecraftIdentityTest do
                | version: 2
              })
 
+    {:ok, view, _} = live(conn, path <> "/" <> craft.spacecraft_id <> "/identity")
+
     for suffix <- ["/identity", "/edit"] do
       render_hook(view, "host:context", %{"path" => path <> "/" <> craft.spacecraft_id <> suffix})
       data = assert_form(view, "spacecraft_edit", "assertEditIdentityForm")
       assert data["form"]["profile_version"] == 1
       assert Enum.map(data["profile_options"]["options"], & &1["version"]) == [nil, 1, 2]
     end
-  end
-
-  test "creation derives identity and scope server-side and pins the displayed version even if a newer release appears",
-       %{conn: conn, org: org, mission: mission, path: path} do
-    profile = TestFixtures.persist_spacecraft_profile!(mission)
-    {:ok, view, _} = live(conn, path <> "/new")
-    token = token(view)
-
-    assert {:ok, _} =
-             SpacecraftTypeStore.persist_spacecraft_type(org.organization_id, %{
-               profile
-               | version: 2
-             })
-
-    values =
-      values(%{
-        "spacecraft_type_id" => profile.spacecraft_type_id,
-        "spacecraft_type_version" => 1,
-        "spacecraft_id" => "forged",
-        "organization_id" => "forged",
-        "mission_id" => "forged",
-        "metadata" => %{"forged" => true}
-      })
-
-    act(view, path <> "/new", token, values)
-    act(view, path <> "/new", token, values)
-    assert [craft] = SpacecraftStore.list_spacecraft(org.organization_id, mission.mission_id)
-    refute craft.spacecraft_id == "forged"
-    assert craft.organization_id == org.organization_id
-    assert craft.spacecraft_type_version == 1
-    assert craft.metadata == %{}
   end
 
   test "reviewed framing links to Communications and private protocol records are not shared presets",
@@ -132,15 +99,14 @@ defmodule CadenceWeb.SpacecraftIdentityTest do
              path <> "/" <> craft.spacecraft_id <> "?section=communications"
 
     assert data["form"]["fields"]["spacecraft_type_id"]["value"] == profile.spacecraft_type_id
-    render_hook(view, "host:context", %{"path" => path <> "/new"})
-    new = assert_form(view, "spacecraft_new", "assertNewIdentityForm")
-    assert new["form"]["configuration_href"] == nil
-    assert [%{"value" => "", "version" => nil}] = new["profile_options"]["options"]
 
     assert Profiles.directory(mission)["presentation"]["card"] == nil
   end
 
-  test "identity edits preserve pins and permit explicit version changes or clearing", %{
+  # Host-action sweep row 2 (lead, director 11-16): the console's change sets are the only way to
+  # edit a spacecraft. The retained legacy edit page's save is refused with ux's words and
+  # nothing changes.
+  test "the legacy edit page's save is refused and changes nothing", %{
     conn: conn,
     org: org,
     mission: mission,
@@ -154,12 +120,6 @@ defmodule CadenceWeb.SpacecraftIdentityTest do
         spacecraft_type_version: 1
       )
 
-    assert {:ok, _} =
-             SpacecraftTypeStore.persist_spacecraft_type(org.organization_id, %{
-               profile
-               | version: 2
-             })
-
     edit_path = path <> "/" <> craft.spacecraft_id <> "/identity"
     {:ok, view, _} = live(conn, edit_path)
 
@@ -167,56 +127,18 @@ defmodule CadenceWeb.SpacecraftIdentityTest do
       view,
       edit_path,
       token(view),
-      values(%{
-        "display_name" => "Renamed",
-        "spacecraft_type_id" => profile.spacecraft_type_id,
-        "spacecraft_type_version" => 1
-      })
+      values(%{"display_name" => "Renamed", "spacecraft_type_id" => profile.spacecraft_type_id})
     )
 
-    assert {:ok, saved} =
+    assert {:ok, unchanged} =
              SpacecraftStore.fetch_spacecraft(
                org.organization_id,
                mission.mission_id,
                craft.spacecraft_id
              )
 
-    assert saved.display_name == "Renamed"
-    assert saved.spacecraft_type_version == 1
-    render_hook(view, "host:context", %{"path" => path})
-    render_hook(view, "host:context", %{"path" => edit_path})
-
-    act(
-      view,
-      edit_path,
-      token(view),
-      values(%{
-        "spacecraft_type_id" => profile.spacecraft_type_id,
-        "spacecraft_type_version" => 2
-      })
-    )
-
-    assert {:ok, upgraded} =
-             SpacecraftStore.fetch_spacecraft(
-               org.organization_id,
-               mission.mission_id,
-               craft.spacecraft_id
-             )
-
-    assert upgraded.spacecraft_type_version == 2
-    render_hook(view, "host:context", %{"path" => path})
-    render_hook(view, "host:context", %{"path" => edit_path})
-    act(view, edit_path, token(view), values())
-
-    assert {:ok, cleared} =
-             SpacecraftStore.fetch_spacecraft(
-               org.organization_id,
-               mission.mission_id,
-               craft.spacecraft_id
-             )
-
-    assert cleared.spacecraft_type_id == nil
-    assert cleared.spacecraft_type_version == nil
+    assert unchanged.display_name == craft.display_name
+    assert unchanged.spacecraft_type_version == 1
   end
 
   test "invalid fields, unavailable versions and another mission's profile cannot be persisted",
@@ -224,7 +146,9 @@ defmodule CadenceWeb.SpacecraftIdentityTest do
     other = TestFixtures.persist_mission!(org)
     foreign_profile = TestFixtures.persist_spacecraft_profile!(other)
     profile = TestFixtures.persist_spacecraft_profile!(mission)
-    {:ok, view, _} = live(conn, path <> "/new")
+    craft = TestFixtures.persist_spacecraft!(mission)
+    identity = path <> "/" <> craft.spacecraft_id <> "/identity"
+    {:ok, view, _} = live(conn, identity)
 
     for attrs <- [
           %{"display_name" => " "},
@@ -241,10 +165,15 @@ defmodule CadenceWeb.SpacecraftIdentityTest do
           %{"spacecraft_type_id" => profile.spacecraft_type_id, "spacecraft_type_version" => %{}},
           %{"spacecraft_type_id" => "", "spacecraft_type_version" => 1}
         ] do
-      act(view, path <> "/new", token(view), values(attrs))
+      act(view, identity, token(view), values(attrs))
     end
 
-    assert SpacecraftStore.list_spacecraft(org.organization_id, mission.mission_id) == []
+    assert {:ok, ^craft} =
+             SpacecraftStore.fetch_spacecraft(
+               org.organization_id,
+               mission.mission_id,
+               craft.spacecraft_id
+             )
   end
 
   test "page tokens rotate on navigation and stale actions cannot create or edit another resource",
@@ -283,34 +212,33 @@ defmodule CadenceWeb.SpacecraftIdentityTest do
     mission: mission,
     path: path
   } do
-    {:ok, view, _} = live(conn, path <> "/new")
+    craft = TestFixtures.persist_spacecraft!(mission)
+    identity = path <> "/" <> craft.spacecraft_id <> "/identity"
+    {:ok, view, _} = live(conn, identity)
     token = token(view)
     :ok = Cadence.Auth.revoke_user_session(get_session(conn, :user_session_token))
-    act(view, path <> "/new", token, values())
+    act(view, identity, token, values())
     assert_redirect(view, "/sign-in")
-    assert SpacecraftStore.list_spacecraft(org.organization_id, mission.mission_id) == []
+
+    assert {:ok, ^craft} =
+             SpacecraftStore.fetch_spacecraft(
+               org.organization_id,
+               mission.mission_id,
+               craft.spacecraft_id
+             )
   end
 
-  test "core and legacy action paths enforce bounds, uniqueness, scope and unchanged version pins",
+  test "a save is refused on the core and host action paths; validate still answers",
        %{scope: scope, org: org, mission: mission} do
-    profile = TestFixtures.persist_spacecraft_profile!(mission)
+    craft = TestFixtures.persist_spacecraft!(mission, scid: 0)
+    input = values(%{"display_name" => "Renamed", "scid" => "1023"})
 
-    craft =
-      TestFixtures.persist_spacecraft!(mission,
-        scid: 0,
-        spacecraft_type_id: profile.spacecraft_type_id,
-        spacecraft_type_version: 1
-      )
+    assert {:error, %{"display_name" => [message]}} =
+             Identity.action(scope, mission.mission_id, craft.spacecraft_id, "save", input)
 
-    assert {:ok, _} =
-             SpacecraftTypeStore.persist_spacecraft_type(org.organization_id, %{
-               profile
-               | version: 2
-             })
-
-    input =
-      values(%{"spacecraft_type_id" => profile.spacecraft_type_id, "scid" => "1023"})
-      |> Map.update!("spacecraft", &Map.delete(&1, "spacecraft_type_version"))
+    assert message ==
+             "Not saved: spacecraft are edited in the console now, where every change is " <>
+               "reviewed before it applies. Edit #{craft.display_name} in Setup › Spacecraft."
 
     request = %ActionRequest{
       application_key: "spacecraft",
@@ -321,28 +249,15 @@ defmodule CadenceWeb.SpacecraftIdentityTest do
       params: input
     }
 
-    assert {:ok, _} =
+    assert {:error, :unsupported_application_action} =
              ActionProvider.execute(
                scope,
-               HostContext.spacecraft(
-                 mission.mission_id,
-                 craft.spacecraft_id
-               ),
+               HostContext.spacecraft(mission.mission_id, craft.spacecraft_id),
                request
              )
 
-    assert {:ok, saved} =
-             SpacecraftStore.fetch_spacecraft(
-               org.organization_id,
-               mission.mission_id,
-               craft.spacecraft_id
-             )
-
-    assert saved.spacecraft_type_version == 1
-    assert saved.scid == 1023
-
-    assert {:error, %{"scid" => [_ | _]}} =
-             Identity.action(scope, mission.mission_id, nil, "save", values(%{"scid" => "1023"}))
+    assert {:ok, %{"valid" => true}} =
+             Identity.action(scope, mission.mission_id, craft.spacecraft_id, "validate", input)
 
     assert {:error, _} =
              Identity.action(
@@ -353,7 +268,15 @@ defmodule CadenceWeb.SpacecraftIdentityTest do
                values()
              )
 
-    assert length(SpacecraftStore.list_spacecraft(org.organization_id, mission.mission_id)) == 1
+    assert {:ok, unchanged} =
+             SpacecraftStore.fetch_spacecraft(
+               org.organization_id,
+               mission.mission_id,
+               craft.spacecraft_id
+             )
+
+    assert unchanged.display_name == craft.display_name
+    assert unchanged.scid == 0
   end
 
   defp values(attrs \\ %{}),

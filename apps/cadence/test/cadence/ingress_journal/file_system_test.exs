@@ -20,6 +20,9 @@ defmodule Cadence.IngressJournal.FileSystemTest do
           name: name,
           provider_binding_id: provider_binding_id,
           base_path: tmp_dir,
+          # Production's durability (fsync per append). config/test.exs uses :page_cache for the
+          # runtime, so these tests are where seal, torn-tail recovery and crash-before-checkpoint
+          # replay run under :sync (director's follow-up 4, 11-14; docs/apogee/plans/ingress-time-tags.md).
           durability: :sync,
           max_bytes: 4_096,
           segment_bytes: 512,
@@ -52,6 +55,168 @@ defmodule Cadence.IngressJournal.FileSystemTest do
 
     assert {:error, :ingress_journal_sealed} =
              FileSystem.append_stream(ctx.name, "later", DateTime.utc_now())
+  end
+
+  describe "stored streams: drained on disk, and reclaim (#71 follow-up)" do
+    @describetag :tmp_dir
+
+    test "a sealed stream is drained on disk and its directory can be reclaimed", ctx do
+      %{directory: directory, stream_id: stream_id} = stored!(ctx, [:processing, :archive])
+
+      assert {:drained, bytes} = FileSystem.stored_stream_drain(directory, stream_id)
+      assert bytes > 0
+      assert :ok = FileSystem.reclaim_stored_stream(ctx.tmp_dir, directory)
+      refute File.exists?(directory)
+      assert FileSystem.stored_stream_directories(ctx.tmp_dir) == []
+    end
+
+    test "an archive or processing cursor behind the tail is not drained", ctx do
+      for acked <- [[:processing], [:archive]] do
+        %{directory: directory, stream_id: stream_id} = stored!(ctx, acked)
+
+        assert {:not_drained, {:cursors_behind, [{_consumer, 0}], tail}, _bytes} =
+                 FileSystem.stored_stream_drain(directory, stream_id)
+
+        assert tail > 0
+        File.rm_rf!(directory)
+      end
+    end
+
+    test "a torn tail is not drained, and checking it leaves the bytes alone", ctx do
+      %{directory: directory, stream_id: stream_id} = stored!(ctx, [:processing, :archive])
+      [segment] = Path.wildcard(Path.join(directory, "segment-*.cij"))
+      File.write!(segment, "torn", [:append])
+      size = File.stat!(segment).size
+
+      assert {:not_drained, {:torn_tail, _path}, _bytes} =
+               FileSystem.stored_stream_drain(directory, stream_id)
+
+      assert File.stat!(segment).size == size
+    end
+
+    test "an unreadable stream.term isn't listed; a path outside the base is never removed",
+         ctx do
+      %{directory: directory} = stored!(ctx, [:processing, :archive])
+      File.write!(Path.join(directory, "stream.term"), "not a term")
+      assert FileSystem.stored_stream_directories(ctx.tmp_dir) == []
+
+      outside =
+        Path.join(System.tmp_dir!(), "cadence-reclaim-#{System.unique_integer([:positive])}")
+
+      File.mkdir_p!(outside)
+
+      for target <- [outside, Path.join(directory, "nested"), Path.join(ctx.tmp_dir, "..")] do
+        assert {:error, {:reclaim_outside_base_path, _}} =
+                 FileSystem.reclaim_stored_stream(ctx.tmp_dir, target)
+      end
+
+      assert File.dir?(outside)
+      File.rm_rf!(outside)
+    end
+  end
+
+  # A stream with one record, its given consumers acknowledged, stopped (terminate checkpoints).
+  defp stored!(ctx, acked) do
+    start_supervised!({FileSystem, ctx.opts})
+    assert {:ok, entry} = FileSystem.append(ctx.name, "captured", DateTime.utc_now())
+    for consumer <- acked, do: :ok = FileSystem.acknowledge(ctx.name, consumer, entry.end_offset)
+    :ok = stop_supervised({:ingress_journal, ctx.opts[:provider_binding_id]})
+    [stream] = FileSystem.stored_stream_directories(ctx.tmp_dir)
+    stream
+  end
+
+  @tag :tmp_dir
+  test "a runtime stop checkpoints the acknowledged cursors (#71 follow-up)", ctx do
+    start_supervised!({FileSystem, Keyword.put(ctx.opts, :checkpoint_interval_ms, 60_000)})
+    assert {:ok, entry} = FileSystem.append(ctx.name, "captured", DateTime.utc_now())
+    assert :ok = FileSystem.acknowledge(ctx.name, :processing, entry.end_offset)
+    assert {:ok, %{stream_path: stream_path}} = FileSystem.snapshot(ctx.name)
+
+    # No periodic checkpoint yet; the supervisor's shutdown must write it.
+    :ok = stop_supervised({:ingress_journal, ctx.opts[:provider_binding_id]})
+
+    checkpoint =
+      stream_path
+      |> Path.join("cursors.term")
+      |> File.read!()
+      |> :erlang.binary_to_term([:safe])
+
+    assert checkpoint.cursors.processing == entry.end_offset
+    assert checkpoint.cursors.archive == 0
+  end
+
+  @tag :tmp_dir
+  test "a periodic checkpoint still in flight at a stop can't overwrite the final one", ctx do
+    test_pid = self()
+
+    # The periodic writer stalls, then would write the cursors it was given (older than the
+    # final ones) if it were ever released (api-ops' ordering check).
+    stalling_writer = fn stream_path, cursors, next_offset, next_sequence ->
+      send(test_pid, {:checkpoint_in_flight, self()})
+
+      receive do
+        :release ->
+          File.write!(
+            Path.join(stream_path, "cursors.term"),
+            :erlang.term_to_binary(%{
+              version: 1,
+              cursors: cursors,
+              next_offset: next_offset,
+              next_sequence: next_sequence
+            })
+          )
+      end
+    end
+
+    opts = Keyword.merge(ctx.opts, checkpoint_interval_ms: 10, checkpoint_writer: stalling_writer)
+    start_supervised!({FileSystem, opts})
+    assert {:ok, first} = FileSystem.append(ctx.name, "first", DateTime.utc_now())
+    assert :ok = FileSystem.acknowledge(ctx.name, :processing, first.end_offset)
+    assert_receive {:checkpoint_in_flight, writer}
+
+    assert {:ok, second} = FileSystem.append(ctx.name, "second", DateTime.utc_now())
+    assert :ok = FileSystem.acknowledge(ctx.name, :processing, second.end_offset)
+    assert {:ok, %{stream_path: stream_path}} = FileSystem.snapshot(ctx.name)
+
+    :ok = stop_supervised({:ingress_journal, ctx.opts[:provider_binding_id]})
+    refute Process.alive?(writer)
+    send(writer, :release)
+
+    checkpoint =
+      stream_path
+      |> Path.join("cursors.term")
+      |> File.read!()
+      |> :erlang.binary_to_term([:safe])
+
+    assert checkpoint.cursors.processing == second.end_offset
+  end
+
+  @tag :tmp_dir
+  test "a linked process's crash still stops the journal; a normal exit doesn't", ctx do
+    journal = start_supervised!({FileSystem, ctx.opts}, restart: :temporary)
+    ref = Process.monitor(journal)
+
+    # No timing windows (flaky under load in the hook runs): each linked process is monitored,
+    # and the journal is synced with a call after the linked process is gone.
+    linked = fn reason ->
+      {pid, linked_ref} =
+        spawn_monitor(fn ->
+          Process.link(journal)
+          exit(reason)
+        end)
+
+      assert_receive {:DOWN, ^linked_ref, :process, ^pid, ^reason}, 5_000
+    end
+
+    linked.(:normal)
+    # The exit signal reached the journal before this call (it was sent before the DOWN above),
+    # so a reply means the journal handled it and kept running.
+    assert {:ok, _snapshot} = FileSystem.snapshot(ctx.name)
+    assert Process.alive?(journal)
+    refute_received {:DOWN, ^ref, :process, ^journal, _reason}
+
+    linked.(:writer_crashed)
+    assert_receive {:DOWN, ^ref, :process, ^journal, :writer_crashed}, 5_000
   end
 
   @tag :tmp_dir
@@ -353,6 +518,54 @@ defmodule Cadence.IngressJournal.FileSystemTest do
              FileSystem.append(ctx.name, <<3>>, DateTime.utc_now(), %{})
 
     assert next_entry.start_offset == second.end_offset
+  end
+
+  # DECISIONS #71: an ended contact's unstored telemetry is named by `unpersisted_journal`;
+  # nothing past the processing cursor is ever reclaimed, however far the archive got.
+  @tag :tmp_dir
+  test "never reclaims entries the processing consumer hasn't passed, and reports them", ctx do
+    opts = Keyword.merge(ctx.opts, segment_bytes: 100, checkpoint_interval_ms: 5)
+    start_supervised!({FileSystem, opts})
+
+    entries =
+      for byte <- 1..3 do
+        assert {:ok, entry} =
+                 FileSystem.append(ctx.name, :binary.copy(<<byte>>, 80), DateTime.utc_now(), %{})
+
+        entry
+      end
+
+    tail = List.last(entries).end_offset
+    assert :ok = FileSystem.acknowledge(ctx.name, :archive, tail)
+    Process.sleep(50)
+
+    assert {:ok, snapshot} = FileSystem.snapshot(ctx.name)
+    assert snapshot.reclaimed_segments == 0
+    assert snapshot.segment_count == 3
+    assert Enum.all?(entries, &File.exists?(&1.segment_path))
+
+    assert snapshot.processing_backlog == %{
+             from_offset: 0,
+             to_offset: tail,
+             bytes: tail,
+             entries: 3
+           }
+
+    # The backlog survives a restart; processing one entry shrinks it from the front.
+    assert :ok =
+             stop_supervised({:ingress_journal, Keyword.fetch!(ctx.opts, :provider_binding_id)})
+
+    start_supervised!({FileSystem, opts})
+    assert :ok = FileSystem.acknowledge(ctx.name, :processing, hd(entries).end_offset)
+
+    assert_eventually(fn ->
+      assert {:ok, recovered} = FileSystem.snapshot(ctx.name)
+      assert recovered.durable_cursors.processing == hd(entries).end_offset
+      assert recovered.processing_backlog.entries == 2
+      assert recovered.processing_backlog.bytes == tail - hd(entries).end_offset
+    end)
+
+    assert Enum.all?(tl(entries), &File.exists?(&1.segment_path))
   end
 
   @tag :tmp_dir

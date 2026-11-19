@@ -1,5 +1,8 @@
 defmodule Cadence.Applications.ConfigurationLock do
-  @moduledoc "Serializes mission application configuration reads and writes in one transaction."
+  @moduledoc """
+  Serializes mission application configuration reads and writes in one transaction. Its place in
+  the lock order (after the policy and generation locks) is `Cadence.Governance.ActivationLocks`'.
+  """
 
   alias Cadence.Repo
   alias Ecto.Adapters.SQL

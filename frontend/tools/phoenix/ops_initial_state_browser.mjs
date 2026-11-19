@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { chromium } from "playwright";
 import { readFile, writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
+import { signInThroughConsole } from "./console_sign_in.mjs";
 const [base, mission, user, out] = process.argv.slice(2);
 assert.ok(base && mission && user && out, "Expected endpoint, mission, user and output directory");
 const manifest = fixtureRecord(
@@ -41,15 +42,8 @@ page.on("response", (response) => {
 const prefix = base + "/missions/" + mission;
 const routes = [
   "/ops",
-  "/ops/dashboards",
-  "/ops/dashboards/new",
-  "/ops/dashboards/library",
-  "/ops/dashboards/playlists",
-  "/ops/dashboards/draft-dashboard",
-  "/ops/dashboards/draft-dashboard/edit",
-  "/ops/dashboards/draft-dashboard/settings",
-  "/ops/dashboards/draft-dashboard/activity",
-  "/ops/dashboards/draft-dashboard/diagnostics",
+  // L8a/L8b: every legacy dashboards page redirects to the console; L11 the data-sources pages;
+  // L1-L3 the planning policy and contact requirement pages (DECISIONS #79).
   "/ops/commands",
   "/ops/commands/new",
   "/ops/commands/stages",
@@ -59,27 +53,18 @@ const routes = [
   "/ops/timeline",
   "/ops/planning",
   "/ops/planning/new",
-  "/ops/planning/policy",
-  "/ops/requirements",
-  "/ops/requirements/new",
-  "/ops/requirement-templates",
   "/ops/contacts",
-  "/ops/data-sources",
-  "/ops/data-sources/registration/new",
   "/ops/data-operations",
   "/ops/data-operations/manage",
   "/ops/activations",
 ];
 try {
-  await page.goto(prefix + "/ops");
-  await page.waitForURL(base + "/sign-in");
-  await page.locator("#user_email").fill(user);
-  await page.locator("#user_password").fill(fixtureString(fixtureRecord(secret).password));
-  await page.locator("#sign-in-form").evaluate((f) => {
-    if (!(f instanceof HTMLFormElement)) throw Error("Expected sign-in form");
-    f.requestSubmit();
+  await signInThroughConsole(page, {
+    base,
+    email: user,
+    password: fixtureString(fixtureRecord(secret).password),
+    path: `/missions/${mission}/ops`,
   });
-  await page.waitForURL((url) => url.pathname !== "/sign-in");
   await page.waitForFunction(() => document.querySelector("[data-phx-main].phx-connected"));
   // Loading the Phoenix-digested entry must reuse the same hashed runtime and connection.
   const connection = await page.evaluateHandle(() =>
@@ -132,31 +117,6 @@ try {
     assert.equal(generic, false, route + " must have useful content or setup guidance");
     assert.equal(failure, null, route + " must render");
     assert.deepEqual(item.errors, [], route + " must not crash");
-    if (route === "/ops/dashboards") {
-      // The directory (rebuilt as a list in 56282f3e) renders each dashboard as
-      // li#dashboard-<id> whose name links to the dashboard itself; a draft opens there and
-      // edits in place (the publication-required guidance is checked on that route below).
-      assert.equal(
-        await page.locator("#dashboard-draft-dashboard a").first().getAttribute("href"),
-        "/missions/" + mission + "/ops/dashboards/draft-dashboard",
-      );
-    }
-    // Since the Ops dashboard overhaul (b7096924: live viewer with in-place editing; every save
-    // is current) a saved dashboard opens in the viewer, not behind publication guidance;
-    // PublicationRequired remains only on the diagnostics page.
-    if (route.endsWith("/draft-dashboard/diagnostics")) {
-      assert.equal(await page.locator("#dashboard-publication-required").count(), 1);
-      assert.equal(
-        await page.locator("#dashboard-publication-editor").getAttribute("href"),
-        "/missions/" + mission + "/ops/dashboards/draft-dashboard/edit",
-      );
-      await page.locator("#dashboard-publication-refresh").click();
-      await page.waitForFunction(() => {
-        const button = document.querySelector("#dashboard-publication-refresh");
-        return button instanceof HTMLButtonElement && !button.disabled;
-      });
-      assert.equal(await page.locator("#dashboard-publication-required").count(), 1);
-    }
   }
   console.log(
     "OPS_LIFECYCLE_AUDIT_OK " +

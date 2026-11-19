@@ -6,6 +6,7 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
   alias Cadence.Catalog.Artifact
   alias Cadence.MissionModels
   alias Cadence.Runtime.MissionModelPlanDecoder
+  alias Cadence.TestSupport.CatalogTestActor
 
   @organization_id "org-alpha"
   @mission_id "mission-alpha"
@@ -156,7 +157,8 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
                @organization_id,
                @mission_id,
                persisted_artifact.artifact_id,
-               "cadence_yaml"
+               "cadence_yaml",
+               CatalogTestActor.opts()
              )
 
     assert {:ok, queued_job} =
@@ -218,7 +220,8 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
                @organization_id,
                @mission_id,
                persisted_artifact.artifact_id,
-               "cadence_yaml"
+               "cadence_yaml",
+               CatalogTestActor.opts()
              )
 
     assert {:ok, queued_job} =

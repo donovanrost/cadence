@@ -32,6 +32,15 @@ defmodule Cadence.Organizations do
     end
   end
 
+  @spec fetch_organization_by_slug(binary()) ::
+          {:ok, Organization.t()} | {:error, :organization_not_found}
+  def fetch_organization_by_slug(slug) when is_binary(slug) do
+    case Repo.get_by(OrganizationRow, slug: slug) do
+      %OrganizationRow{} = row -> {:ok, OrganizationRow.to_domain(row)}
+      nil -> {:error, :organization_not_found}
+    end
+  end
+
   @doc "Inserts a newly generated organization without suppressing a conflicting identity."
   def create_organization(%Organization{} = organization) do
     case Repo.insert(OrganizationRow.changeset(organization)) do

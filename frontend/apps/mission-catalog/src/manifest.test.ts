@@ -11,14 +11,12 @@ describe("mission and catalog remote manifest", () => {
     expect(manifest.application).toMatchObject({
       applicationKey: "mission_catalog",
       version: 1,
-      installableScopes: ["organization", "mission"],
+      installableScopes: ["mission"],
     });
   });
 
   it("maps every Phoenix-facing page to a remote surface", () => {
     expect(pageSurfaces.map(({ surfaceId }) => surfaceId)).toEqual([
-      "mission_list",
-      "mission_new",
       "mission_overview",
       "mission_applications",
       "catalog_index",

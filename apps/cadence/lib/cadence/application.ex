@@ -7,6 +7,7 @@ defmodule Cadence.Application do
 
   alias Cadence.Accounts.EnvironmentAdminPolicy
   alias Cadence.Auth
+  alias Cadence.Contacts.ProviderClients.OutboundGuard
   alias Cadence.Control.DataSources.ManagedQuestDBProvisioningJobs
   alias Cadence.Control.DataSources.TSDBBackendLifecycleJobs
   alias Cadence.Jobs.Runner, as: JobRunner
@@ -18,6 +19,8 @@ defmodule Cadence.Application do
   @impl true
   def start(_type, _args) do
     Drain.reset()
+    # A malformed or too-wide provider outbound allowlist stops the node here, not on each call.
+    OutboundGuard.validate_config!()
     Cadence.Observability.setup_repo_tracing()
     root_composition = RootComposition.from_application()
 

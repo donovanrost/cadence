@@ -24,6 +24,7 @@ export type FleetStartEvidence = Snapshot<{
   policy_version: number;
   policy_sha256: string;
   input_sha256: string;
+  as_of: string;
 }>;
 export type FleetStartModel = Snapshot<{
   contract_version: 1;

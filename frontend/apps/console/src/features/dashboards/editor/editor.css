@@ -1,0 +1,15 @@
+/*
+ * GridStack while editing (dashboards editor only; loaded with its chunk). The vendor sheet
+ * positions items; the console only tints the placeholder and handles in Apogee tokens.
+ */
+@import "gridstack/dist/gridstack.min.css";
+@import "gridstack/dist/gridstack-extra.min.css";
+
+.dashboard-edit-grid .grid-stack-placeholder > .placeholder-content {
+  border: 1px dashed var(--color-line-strong);
+  background: var(--apogee-wash-scheduled);
+}
+
+.dashboard-edit-grid .ui-resizable-handle {
+  opacity: 0.6;
+}

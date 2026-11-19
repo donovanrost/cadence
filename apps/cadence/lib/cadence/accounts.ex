@@ -180,6 +180,63 @@ defmodule Cadence.Accounts do
     end)
   end
 
+  @doc "Active members with join time, for the organization people directory (no credentials)."
+  @spec list_member_directory(binary()) :: [map()]
+  def list_member_directory(organization_id) when is_binary(organization_id) do
+    OrganizationMembershipRow
+    |> join(:inner, [m], u in UserRow, on: m.user_id == u.user_id)
+    |> where([m, _u], m.organization_id == ^organization_id and m.lifecycle_state == "active")
+    |> order_by([m, u], asc: u.display_name, asc: u.email)
+    |> select([m, u], %{
+      user_id: u.user_id,
+      display_name: u.display_name,
+      email: u.email,
+      role: m.role,
+      capabilities: u.capabilities,
+      joined_at: m.inserted_at
+    })
+    |> Repo.all()
+  end
+
+  @doc """
+  Invitations with inviter names, newest first (no tokens): pending and unexpired, or with
+  `include_recent: true` also those decided or lapsed in the last 30 days, with their `status`.
+  """
+  @spec list_invitation_directory(binary(), keyword()) :: [map()]
+  def list_invitation_directory(organization_id, opts \\ []) when is_binary(organization_id) do
+    now = DateTime.utc_now()
+    # include_recent: also what was decided or lapsed in the last 30 days (the inviter sees
+    # "Declined"); without it, live pending invitations only (the already-invited check).
+    since = DateTime.add(now, -30, :day)
+
+    OrganizationInvitationRow
+    |> join(:left, [i], u in UserRow, on: i.invited_by_user_id == u.user_id)
+    |> where([i, _u], i.organization_id == ^organization_id)
+    |> then(fn query ->
+      if Keyword.get(opts, :include_recent, false),
+        do:
+          where(
+            query,
+            [i, _u],
+            (i.status == "pending" and i.expires_at > ^since) or
+              (i.status != "pending" and i.updated_at > ^since)
+          ),
+        else: where(query, [i, _u], i.status == "pending" and i.expires_at > ^now)
+    end)
+    |> order_by([i, _u], desc: i.inserted_at)
+    |> select([i, u], %{
+      id: i.organization_invitation_id,
+      email: i.email,
+      role: i.membership_role,
+      invited_by_name: u.display_name,
+      sent_at: i.inserted_at,
+      expires_at: i.expires_at,
+      status: i.status,
+      decided_at: i.updated_at
+    })
+    |> Repo.all()
+  end
+
   @doc "Bounded member facts for the platform organization detail; excludes credential columns."
   def page_organization_members(organization_id, after_id) do
     OrganizationMembershipRow
@@ -598,6 +655,25 @@ defmodule Cadence.Accounts do
         end
     end
   end
+
+  @doc false
+  # Shared with `Accounts.InvitationResponses` (L21 decline), so both paths lock and check alike.
+  def lock_pending_invitation(repo, invitation_id),
+    do: lock_pending_invitation_by_id(repo, invitation_id)
+
+  @doc false
+  def invitation_for_user?(%User{} = user, %OrganizationInvitation{} = invitation),
+    do: validate_email_match(user, invitation) == :ok
+
+  defdelegate decline_invitation_as_user(user_id, invitation_id),
+    to: Cadence.Accounts.InvitationResponses
+
+  defdelegate list_pending_invitations_for_user(user_id), to: Cadence.Accounts.InvitationResponses
+
+  @doc "What an emailed invitation token refers to, in any state (console L5)."
+  defdelegate inspect_invitation_token(token),
+    to: Cadence.Accounts.InvitationTokens,
+    as: :inspect_token
 
   defp validate_email_match(%User{email: user_email}, %OrganizationInvitation{email: inv_email}) do
     if User.normalize_email(user_email) == User.normalize_email(inv_email) do

@@ -107,3 +107,28 @@ void test("requires an exact host and allowed-remote publication root inventory"
     await rm(root, { recursive: true, force: true });
   }
 });
+
+void test("refuses a publication that contains or references the test-only surface fixture", async () => {
+  const root = await publicationFixture();
+  try {
+    await writeFile(
+      join(root, "host", "host.js"),
+      'export const remote = "cadence_surface_fixture";\n',
+    );
+    await assert.rejects(
+      () => validateProductionPublication(root),
+      /references the test-only surface fixture/,
+    );
+    await writeFile(join(root, "host", "host.js"), "export const host = true;\n");
+    await writeFile(
+      join(root, "telemetry-decom", "assets", "application.js"),
+      'export const key = "surface-fixture";\n',
+    );
+    await assert.rejects(
+      () => validateProductionPublication(root),
+      /references the test-only surface fixture/,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

@@ -15,6 +15,8 @@ defmodule Cadence.Management.Contacts.Store.ContactRequirementTemplateVersionRow
     field(:organization_id, :string)
     field(:mission_id, :string)
     field(:version, :integer)
+    field(:name, :string)
+    field(:target_document, :map)
     field(:spacecraft_id, :string)
     field(:schedule_document, :map)
     field(:requirement_document, :map)
@@ -30,6 +32,8 @@ defmodule Cadence.Management.Contacts.Store.ContactRequirementTemplateVersionRow
     :organization_id,
     :mission_id,
     :version,
+    :name,
+    :target_document,
     :spacecraft_id,
     :schedule_document,
     :requirement_document,
@@ -39,11 +43,13 @@ defmodule Cadence.Management.Contacts.Store.ContactRequirementTemplateVersionRow
     :created_at
   ]
 
+  @required @fields -- [:spacecraft_id]
+
   @spec changeset(ContactRequirementTemplateVersion.t()) :: Ecto.Changeset.t()
   def changeset(%ContactRequirementTemplateVersion{} = version) do
     %__MODULE__{}
     |> cast(domain_attrs(version), @fields)
-    |> validate_required(@fields)
+    |> validate_required(@required)
     |> validate_number(:version, greater_than: 0)
     |> validate_format(:content_sha256, ~r/\A[0-9a-f]{64}\z/)
     |> unique_constraint(
@@ -63,6 +69,8 @@ defmodule Cadence.Management.Contacts.Store.ContactRequirementTemplateVersionRow
       organization_id: row.organization_id,
       mission_id: row.mission_id,
       version: row.version,
+      name: row.name,
+      target_document: target_document(row),
       spacecraft_id: row.spacecraft_id,
       schedule_document: JsonDocument.unwrap_value(row.schedule_document),
       requirement_document: JsonDocument.unwrap_value(row.requirement_document),
@@ -73,6 +81,10 @@ defmodule Cadence.Management.Contacts.Store.ContactRequirementTemplateVersionRow
     })
   end
 
+  # Rows written before targets carry only spacecraft_id (the migration backfills them).
+  defp target_document(%__MODULE__{target_document: nil}), do: nil
+  defp target_document(row), do: JsonDocument.unwrap_value(row.target_document)
+
   defp domain_attrs(version) do
     %{
       contact_requirement_template_version_id: version.contact_requirement_template_version_id,
@@ -80,6 +92,8 @@ defmodule Cadence.Management.Contacts.Store.ContactRequirementTemplateVersionRow
       organization_id: version.organization_id,
       mission_id: version.mission_id,
       version: version.version,
+      name: version.name,
+      target_document: JsonDocument.wrap_value(version.target_document),
       spacecraft_id: version.spacecraft_id,
       schedule_document: JsonDocument.wrap_value(version.schedule_document),
       requirement_document: JsonDocument.wrap_value(version.requirement_document),

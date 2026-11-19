@@ -16,7 +16,8 @@ defmodule Cadence.Contacts.ScheduleOperations do
     ProviderReservations,
     ScheduleCancellations,
     ScheduleCommands,
-    ScheduleOperation
+    ScheduleOperation,
+    SingleBookings
   }
 
   alias Cadence.Control.Contacts
@@ -48,7 +49,7 @@ defmodule Cadence.Contacts.ScheduleOperations do
       )
       when map_size(request) == 3 and action in ["reserve", "cancel"] do
     result =
-      with :ok <- authorize(scope, mission, action),
+      with :ok <- authorize(scope, mission, action, input),
            {:ok, ^id} <- Ecto.UUID.cast(id),
            {:ok, input} <- admit_input(input) do
         # Replay precedes capability expiry: accepted intents remain recoverable.
@@ -212,7 +213,7 @@ defmodule Cadence.Contacts.ScheduleOperations do
 
   defp perform(row) do
     with {:ok, scope} <- current_scope(row),
-         :ok <- authorize(scope, row.mission_id, row.action) do
+         :ok <- authorize(scope, row.mission_id, row.action, row.input) do
       execute(scope, row.mission_id, row.action, row.input)
     else
       _ -> {:error, :forbidden}
@@ -226,13 +227,18 @@ defmodule Cadence.Contacts.ScheduleOperations do
   defp execute(scope, mission, action, input),
     do: ScheduleCommands.execute(scope, mission, action, input)
 
-  defp admit_input(%{"token" => token} = input) when map_size(input) == 1 do
-    if is_binary(token) and byte_size(token) in 1..8_192 and String.valid?(token),
-      do: {:ok, input},
-      else: {:error, :invalid_input}
+  defp admit_input(%{"token" => token} = input) when map_size(input) in [1, 2] do
+    note = Map.get(input, "note")
+
+    if is_binary(token) and byte_size(token) in 1..8_192 and String.valid?(token) and
+         (map_size(input) == 1 or (Map.has_key?(input, "note") and (is_nil(note) or text?(note)))),
+       do: {:ok, input},
+       else: {:error, :invalid_input}
   end
 
   defp admit_input(input), do: JSONBoundary.safe(input)
+
+  defp text?(note), do: is_binary(note) and String.valid?(note) and String.length(note) <= 500
 
   defp finish(row, result) do
     Repo.transaction(fn ->
@@ -270,6 +276,7 @@ defmodule Cadence.Contacts.ScheduleOperations do
               :provider_reservation_not_found,
               :opportunity_expired_or_unavailable,
               :invalid_opportunity_capability,
+              :expired_opportunity_capability,
               :opportunity_scope_mismatch,
               :route_changed,
               :provider_scheduling_route_not_ready
@@ -368,8 +375,19 @@ defmodule Cadence.Contacts.ScheduleOperations do
     end
   end
 
-  defp authorize(%Scope{user: %{lifecycle_state: :active}} = scope, mission, action) do
-    permission = if action == "cancel", do: :manage_missions, else: :operate_mission
+  defp authorize(scope, mission, action, input \\ nil)
+
+  defp authorize(%Scope{user: %{lifecycle_state: :active}} = scope, mission, action, input) do
+    permission =
+      if action == "cancel",
+        do:
+          SingleBookings.cancel_permission(
+            scope.organization_id,
+            mission,
+            SingleBookings.cancel_target(input),
+            scope.user.user_id
+          ),
+        else: :operate_mission
 
     if scope.mission_id in [nil, mission],
       do:
@@ -380,7 +398,7 @@ defmodule Cadence.Contacts.ScheduleOperations do
       else: {:error, :forbidden}
   end
 
-  defp authorize(_, _, _), do: {:error, :forbidden}
+  defp authorize(_, _, _, _), do: {:error, :forbidden}
 
   defp scoped(scope, mission),
     do:

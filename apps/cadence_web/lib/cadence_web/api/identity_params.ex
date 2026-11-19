@@ -7,25 +7,6 @@ defmodule CadenceWeb.API.IdentityParams do
   alias Cadence.Missions.Mission
   alias Cadence.Organizations.Organization
 
-  @spec durable_session(map()) :: {:ok, {binary(), binary()}} | {:error, term()}
-  def durable_session(params) when is_map(params) do
-    with {:ok, email} <- required_string(params, "email"),
-         {:ok, password} <- required_string(params, "password") do
-      {:ok, {email, password}}
-    end
-  end
-
-  @spec organization_invitation_acceptance(map()) ::
-          {:ok, %{display_name: binary(), password: binary()}} | {:error, term()}
-  def organization_invitation_acceptance(params) when is_map(params) do
-    with {:ok, display_name} <- required_string(params, "display_name"),
-         {:ok, password} <- required_string(params, "password"),
-         {:ok, password_confirmation} <- required_string(params, "password_confirmation"),
-         :ok <- validate_password_confirmation(password, password_confirmation) do
-      {:ok, %{display_name: display_name, password: password}}
-    end
-  end
-
   @spec organization(map()) :: {:ok, Organization.t()} | {:error, term()}
   def organization(params) when is_map(params) do
     with {:ok, slug} <- required_string(params, "slug"),

@@ -44,6 +44,11 @@ defmodule Cadence.Projections.DataSources.Health do
         }
 
   @default_max_age_ms 86_400_000
+  # Health a dashboard READ recorded (ExecutionMonitoring: a timeout, a recovery) only says how
+  # that read went. It stays fresh for minutes, not a day (qa/api-ops 11-14: one slow read left a
+  # 24 h setup blocker on Now, and every later save warned). Probes and connection tests keep the
+  # long window. Policy key :read_derived_max_age_ms overrides it.
+  @default_read_derived_max_age_ms 600_000
 
   @doc "Fetches one exact event in the mission, including organization-neutral events."
   def fetch_source_health_event(organization_id, mission_id, event_id) do
@@ -209,7 +214,7 @@ defmodule Cadence.Projections.DataSources.Health do
     now = Keyword.get_lazy(opts, :now, &DateTime.utc_now/0) |> DateTime.truncate(:microsecond)
     last_seen_at = status.last_seen_at || status.observed_at
     age_ms = last_seen_at && DateTime.diff(now, last_seen_at, :millisecond)
-    max_age_ms = max_age_ms(data_source, opts)
+    max_age_ms = status_max_age_ms(status, data_source, opts)
 
     if stale?(age_ms, max_age_ms) do
       %{
@@ -390,6 +395,34 @@ defmodule Cadence.Projections.DataSources.Health do
   end
 
   defp stale?(_age_ms, _max_age_ms), do: false
+
+  defp status_max_age_ms(%SourceHealthStatus{} = status, data_source, opts) do
+    max_age_ms = max_age_ms(data_source, opts)
+
+    if read_derived?(status) do
+      read_max_age_ms =
+        first_integer([
+          get_attr(source_health_freshness_policy(opts), :read_derived_max_age_ms),
+          @default_read_derived_max_age_ms
+        ])
+
+      min(max_age_ms, read_max_age_ms)
+    else
+      max_age_ms
+    end
+  end
+
+  # ExecutionMonitoring's payload (a dashboard read's outcome) carries the frame count and the
+  # circuit; a probe's or a connection test's doesn't.
+  @doc false
+  def read_derived?(%SourceHealthStatus{payload: %{} = payload}),
+    do:
+      Enum.any?(
+        [:returned_frame_count, "returned_frame_count", :circuit, "circuit"],
+        &Map.has_key?(payload, &1)
+      )
+
+  def read_derived?(_status), do: false
 
   defp max_age_ms(data_source, opts) do
     policy = source_health_freshness_policy(opts)

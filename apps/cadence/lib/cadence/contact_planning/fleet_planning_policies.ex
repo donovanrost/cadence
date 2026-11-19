@@ -13,6 +13,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningPolicies do
     FleetPlanningPolicyVersion
   }
 
+  alias Cadence.Governance.ActivationPolicy
   alias Cadence.Missions
 
   alias Cadence.Management.Contacts.Store.{
@@ -279,7 +280,8 @@ defmodule Cadence.ContactPlanning.FleetPlanningPolicies do
          :ok <- expected_version(row, expected),
          {:ok, current_row} <- fetch_version_row(row, row.current_version),
          current <- FleetPlanningPolicyVersionRow.to_domain(current_row),
-         merged <- merge_content(current, attrs),
+         # A version's reason is its own, never carried from the previous one.
+         merged <- current |> merge_content(attrs) |> Map.put(:reason, value(attrs, :reason, nil)),
          {:ok, next_version} <-
            build_version(
              merged,
@@ -347,12 +349,20 @@ defmodule Cadence.ContactPlanning.FleetPlanningPolicies do
   defp decide(_scope, _mission_id, _policy_id, _version, _hash, _decision, _reason, _opts),
     do: {:error, :invalid_fleet_planning_policy_decision}
 
+  # Whoever wrote a version doesn't decide it (approve or reject). It was only in the control
+  # wrapper (Control.PlanningPolicy); here every caller gets it (approval sweep, director 11-15).
+  defp not_author(%{created_by: author}, %{"user_id" => author}),
+    do: {:error, :reviewer_is_author}
+
+  defp not_author(_version_row, _actor), do: :ok
+
   defp decide_transaction(organization_id, context) do
     with {:ok, row} <-
            lock_policy(organization_id, context.mission_id, context.policy_id),
          :ok <- not_retired(row),
          :ok <- expected_version(row, context.expected_version),
          {:ok, version_row} <- fetch_version_row(row, context.expected_version),
+         :ok <- not_author(version_row, context.actor),
          :ok <- exact_hash(version_row, context.expected_hash),
          :ok <- undecided(row, context.expected_version),
          version <- FleetPlanningPolicyVersionRow.to_domain(version_row),
@@ -366,7 +376,14 @@ defmodule Cadence.ContactPlanning.FleetPlanningPolicies do
              context.now
            ),
          {:ok, approval_row} <-
-           Repo.insert(FleetPlanningPolicyApprovalRow.changeset(approval)),
+           approval
+           |> FleetPlanningPolicyApprovalRow.changeset()
+           # The approval policy in force at decision time (M2).
+           |> Ecto.Changeset.put_change(
+             :policy_document,
+             ActivationPolicy.evidence(organization_id, context.mission_id)
+           )
+           |> Repo.insert(),
          {:ok, updated} <-
            project_decision(
              row,

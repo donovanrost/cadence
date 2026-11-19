@@ -25,6 +25,24 @@ defmodule Cadence.Dashboards.DocumentStore.LifecycleEvents do
     |> Enum.map(&DashboardLifecycleEventRow.to_domain/1)
   end
 
+  @doc "A mission's lifecycle events of these types, newest first (the organization audit)."
+  @spec list_mission_lifecycle_events(binary(), binary(), [atom()], pos_integer()) ::
+          [LifecycleEvent.t()]
+  def list_mission_lifecycle_events(organization_id, mission_id, event_types, limit) do
+    types = Enum.map(event_types, &Atom.to_string/1)
+
+    DashboardLifecycleEventRow
+    |> where(
+      [row],
+      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+        row.event_type in ^types
+    )
+    |> order_by([row], desc: row.occurred_at, desc: row.dashboard_lifecycle_event_id)
+    |> limit(^limit)
+    |> Repo.all()
+    |> Enum.map(&DashboardLifecycleEventRow.to_domain/1)
+  end
+
   @spec fetch_lifecycle_event(binary(), binary(), binary()) ::
           {:ok, LifecycleEvent.t()} | {:error, :not_found}
   def fetch_lifecycle_event(organization_id, mission_id, dashboard_lifecycle_event_id)

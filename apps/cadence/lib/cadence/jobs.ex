@@ -235,6 +235,62 @@ defmodule Cadence.Jobs do
   def record_execution_result(%Job{} = job, {:ok, _result}), do: complete_job(job)
   def record_execution_result(%Job{} = job, {:error, reason}), do: fail_job(job, reason)
 
+  @doc """
+  Node-start recovery for jobs left :running (11-14). A job whose type is safe to run again
+  (`rerun_safe?.(job_type)`) goes back in the queue (requeued_after_restart). Any other becomes
+  outcome_unknown (node_stopped_while_running): never re-run on its own; an operator decides.
+  Returns `%{requeued: n, outcome_unknown: n}`.
+  """
+  @spec recover_running_jobs((atom() -> boolean())) :: %{
+          requeued: non_neg_integer(),
+          outcome_unknown: non_neg_integer()
+        }
+  def recover_running_jobs(rerun_safe?) when is_function(rerun_safe?, 1) do
+    running =
+      BackgroundJobRow
+      |> where([row], row.status == "running")
+      |> Repo.all()
+      |> Enum.map(&BackgroundJobRow.to_domain/1)
+
+    {safe, unsafe} = Enum.split_with(running, &rerun_safe?.(&1.job_type))
+
+    %{
+      requeued: set_recovered(safe, "queued", %{"reason" => "requeued_after_restart"}),
+      outcome_unknown:
+        set_recovered(unsafe, "outcome_unknown", %{
+          "reason" => "outcome_unknown",
+          "cause" => "node_stopped_while_running"
+        })
+    }
+  end
+
+  defp set_recovered([], _status, _reason), do: 0
+
+  defp set_recovered(jobs, status, reason) do
+    ids = Enum.map(jobs, & &1.job_id)
+    now = DateTime.utc_now()
+
+    # A requeued job starts afresh; an outcome_unknown one keeps when it started (the Now item
+    # shows it) and records when recovery found it.
+    set =
+      if status == "outcome_unknown",
+        do: [status: status, completed_at: now, failure_reason: %{"value" => reason}],
+        else: [
+          status: status,
+          started_at: nil,
+          completed_at: nil,
+          failure_reason: %{"value" => reason}
+        ]
+
+    {count, _rows} =
+      Repo.update_all(
+        from(row in BackgroundJobRow, where: row.job_id in ^ids and row.status == "running"),
+        set: set
+      )
+
+    count
+  end
+
   @spec requeue_running_jobs() :: non_neg_integer()
   def requeue_running_jobs do
     {count, _rows} =
@@ -256,6 +312,24 @@ defmodule Cadence.Jobs do
   def fail_worker_start(job_id, reason) when is_binary(job_id) do
     with {:ok, %Job{} = job} <- fetch_job(job_id) do
       fail_job(job, {:worker_start_failed, reason})
+    end
+  end
+
+  @doc """
+  Fails a job whose worker exited abnormally while it was still :running (`worker_exited` with
+  the exit reason). A job that already recorded its outcome is left as it is.
+  """
+  @spec fail_exited_worker(binary(), term()) :: {:ok, Job.t()} | :ok | {:error, term()}
+  def fail_exited_worker(job_id, exit_reason) when is_binary(job_id) do
+    case fetch_job(job_id) do
+      {:ok, %Job{status: :running} = job} ->
+        fail_job(job, {:worker_exited, inspect(exit_reason, limit: 20, printable_limit: 200)})
+
+      {:ok, %Job{}} ->
+        :ok
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

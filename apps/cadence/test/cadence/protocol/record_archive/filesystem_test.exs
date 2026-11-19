@@ -234,16 +234,20 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
 
     assert 2 == archive_entry_count(entries)
 
-    changed_bytes =
-      FileSystem.build_entries(%{raw_evidence | raw: <<9, 9, 9, 9>>}, [transfer_frame_record], [])
+    # A frame's id is its journal position, so another frame at that id differs in what it
+    # decodes to (here its frame sequence), which is a real conflict.
+    other_frame =
+      FileSystem.build_entries(raw_evidence, [%{transfer_frame_record | frame_seq: 18}], [])
 
     assert {:error, {:protocol_archive_record_identity_conflict, ["frame-idempotent"]}} =
-             FileSystem.persist_segment("changed-frame-bytes", changed_bytes,
+             FileSystem.persist_segment("changed-frame-bytes", other_frame,
                object_key: "mission-alpha/changed-frame-bytes.bin"
              )
 
+    # Likewise a packet's id hashes its bytes, so another packet at that id is another packet
+    # (here another APID): a real conflict.
     [frame, packet] = entries
-    changed = Map.put(packet, "packet_data_base64", Base.encode64(<<99, 99>>))
+    changed = Map.put(packet, "apid", 99)
 
     assert {:error, {:protocol_archive_record_identity_conflict, _ids}} =
              FileSystem.persist_segment("segment-collision", [frame, changed],
@@ -263,6 +267,142 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
              FileSystem.persist_segment("segment-legacy", entries,
                object_key: "mission-alpha/segment-legacy.bin"
              )
+  end
+
+  describe "a replay that groups the journal into different evidence (11-14, 008's pass)" do
+    test "re-archiving the same frames is idempotent: one index row per frame", %{
+      mission_id: mission_id
+    } do
+      # The run that archived them: one evidence over journal records 0..1.
+      first =
+        replay_evidence(mission_id, "0-2", ~U[2026-11-14 01:35:54.969000Z], %{"records" => 2})
+
+      frames = for seq <- 1..3, do: replay_frame(first, mission_id, seq)
+      archived = FileSystem.build_entries(first, frames, [])
+
+      assert :ok =
+               FileSystem.persist_segment("segment-run", archived,
+                 object_key: "#{mission_id}/segment-run.bin"
+               )
+
+      # After the restart: the same journal records, merged with more of them into one evidence:
+      # another evidence_id, evidence bytes, receipt time and batch metadata, the same frames.
+      replay =
+        replay_evidence(mission_id, "0-6", ~U[2026-11-14 01:44:37.000000Z], %{"records" => 6})
+
+      replayed =
+        FileSystem.build_entries(
+          replay,
+          Enum.map(
+            frames,
+            &%{&1 | evidence_id: replay.evidence_id, receipt_time: replay.receipt_time}
+          ),
+          []
+        )
+
+      assert :ok =
+               FileSystem.persist_segment("segment-replay", replayed,
+                 object_key: "#{mission_id}/segment-replay.bin"
+               )
+
+      assert 3 == archive_entry_count(replayed)
+
+      # The index keeps the original archive's rows.
+      for frame <- frames do
+        assert Repo.get!(
+                 ProtocolArchiveRecordEntryRow,
+                 "transfer_frame_record:" <> frame.frame_record_id
+               ).object_key ==
+                 "#{mission_id}/segment-run.bin"
+      end
+
+      # A different frame at one of those positions still conflicts.
+      [frame | _rest] = frames
+      wrong = FileSystem.build_entries(replay, [%{frame | scid: 99}], [])
+
+      assert {:error, {:protocol_archive_record_identity_conflict, [id]}} =
+               FileSystem.persist_segment("segment-wrong", wrong,
+                 object_key: "#{mission_id}/segment-wrong.bin"
+               )
+
+      assert id == frame.frame_record_id
+    end
+
+    test "re-archiving the same packets under other evidence is idempotent too", %{
+      mission_id: mission_id
+    } do
+      first =
+        replay_evidence(mission_id, "0-2", ~U[2026-11-14 01:35:54.969000Z], %{"records" => 2})
+
+      packets = for seq <- 1..3, do: replay_packet(first, mission_id, seq)
+
+      assert :ok =
+               FileSystem.persist_segment(
+                 "segment-packets-run",
+                 FileSystem.build_entries(first, [], packets),
+                 object_key: "#{mission_id}/segment-packets-run.bin"
+               )
+
+      replay =
+        replay_evidence(mission_id, "0-6", ~U[2026-11-14 01:44:37.000000Z], %{"records" => 6})
+
+      replayed =
+        Enum.map(
+          packets,
+          &%{&1 | evidence_id: replay.evidence_id, receipt_time: replay.receipt_time}
+        )
+
+      entries = FileSystem.build_entries(replay, [], replayed)
+
+      assert :ok =
+               FileSystem.persist_segment("segment-packets-replay", entries,
+                 object_key: "#{mission_id}/segment-packets-replay.bin"
+               )
+
+      assert 3 == archive_entry_count(entries)
+
+      # Another packet at one of those ids (another APID) still conflicts.
+      [packet | _rest] = packets
+      wrong = FileSystem.build_entries(replay, [], [%{packet | apid: 99}])
+
+      assert {:error, {:protocol_archive_record_identity_conflict, [id]}} =
+               FileSystem.persist_segment("segment-packets-wrong", wrong,
+                 object_key: "#{mission_id}/segment-packets-wrong.bin"
+               )
+
+      assert id == packet.packet_id
+    end
+
+    test "the writer's buffered flush clears instead of retrying forever", %{
+      mission_id: mission_id,
+      archive_policy: archive_policy
+    } do
+      first =
+        replay_evidence(mission_id, "0-2", ~U[2026-11-14 01:35:54.969000Z], %{"records" => 2})
+
+      frames = for seq <- 1..2, do: replay_frame(first, mission_id, seq)
+
+      assert :ok = RecordArchive.persist_records_many(archive_policy, [{first, frames, []}])
+      assert :ok = RecordArchive.flush(archive_policy, mission_id)
+
+      replay =
+        replay_evidence(mission_id, "0-6", ~U[2026-11-14 01:44:37.000000Z], %{"records" => 6})
+
+      replayed = Enum.map(frames, &%{&1 | evidence_id: replay.evidence_id})
+
+      assert :ok = RecordArchive.persist_records_many(archive_policy, [{replay, replayed, []}])
+      assert :ok = RecordArchive.flush(archive_policy, mission_id)
+
+      # The replay's segment indexed nothing new, so its object isn't left on disk (#71 follow-up):
+      # only the first run's segment remains.
+      assert [_only] = segment_objects(archive_policy, mission_id)
+    end
+  end
+
+  defp segment_objects(policy, mission_id) do
+    [Keyword.fetch!(policy.backend_opts, :base_path), mission_id, "**", "*.bin"]
+    |> Path.join()
+    |> Path.wildcard()
   end
 
   test "segment objects cannot be overwritten with different records", %{
@@ -402,7 +542,8 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
       assert %{queue_depth: 1} = RecordArchive.stats(policy, mission_id)
 
       Cadence.ProtocolArchiveFaultRepo.recover()
-      assert_receive {:archive_write_completed, {:ok, :ok}}, 2_000
+      # The transaction yields the number of index rows it inserted.
+      assert_receive {:archive_write_completed, {:ok, 1}}, 2_000
 
       assert %{queue_depth: 0, backpressured?: false, flushed_count: ^index} =
                RecordArchive.stats(policy, mission_id)
@@ -488,6 +629,54 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
     stats_after_flush = RecordArchive.stats(archive_policy, mission_id)
     assert stats_after_flush.queue_depth == 0
     assert stats_after_flush.flush_count == 1
+  end
+
+  defp replay_evidence(mission_id, range, receipt_time, metadata) do
+    RawEvidence.new(%{
+      evidence_id: "evidence-replay-" <> range,
+      mission_id: mission_id,
+      protocol_family: :tm,
+      direction: :downlink,
+      raw: :crypto.strong_rand_bytes(16),
+      receipt_time: receipt_time,
+      metadata: Map.put(metadata, "journal_range", range)
+    })
+  end
+
+  # A frame's id is its journal position: the same for the run and the replay.
+  defp replay_frame(evidence, mission_id, seq) do
+    TransferFrameRecord.new(%{
+      frame_record_id: "frame-stream-008-offset-#{seq * 1115}",
+      evidence_id: evidence.evidence_id,
+      mission_id: mission_id,
+      protocol_family: :tm,
+      direction: :downlink,
+      scid: 8,
+      vcid: 0,
+      frame_seq: seq,
+      raw_frame_offset_bytes: seq * 1115,
+      raw_frame_length_bytes: 1115,
+      payload_length_bytes: 1109,
+      first_header_pointer: 0,
+      quality: :good,
+      receipt_time: evidence.receipt_time
+    })
+  end
+
+  # A journaled packet's id is its journal position and bytes: the same for the run and the replay.
+  defp replay_packet(evidence, mission_id, seq) do
+    %PacketRecord{
+      packet_id: "packet-stream-008-frame-#{seq * 1115}",
+      evidence_id: evidence.evidence_id,
+      mission_id: mission_id,
+      protocol_family: :tm,
+      packet_kind: :space_packet,
+      apid: 100,
+      sequence_count: seq,
+      packet_data: <<seq>>,
+      receipt_time: evidence.receipt_time,
+      provenance: %{}
+    }
   end
 
   defp archive_entry_count(entries) when is_list(entries) do

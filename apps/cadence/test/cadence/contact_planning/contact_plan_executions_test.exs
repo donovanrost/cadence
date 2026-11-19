@@ -11,11 +11,17 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
     ContactPlanExecutions,
     ContactPlans,
     ContactRequirements,
+    FleetRunLock,
     Planner
   }
 
   alias Cadence.Control.Contacts, as: ControlContacts
+  alias Cadence.Control.Contacts.Store.ContactPlanExecutionItemRow
+  alias Cadence.Control.PlanConfirmation
+  alias Cadence.Control.Scheduling
   alias Cadence.Management.Contacts, as: ManagementContacts
+  alias Cadence.Management.Contacts.Store.ContactPlanRow
+  alias Cadence.Reads.PlanCoverageAttention
 
   alias Cadence.Contacts.{PathTemplate, ProviderBooking, ProviderReservations}
   alias Cadence.GroundNetworks
@@ -253,6 +259,169 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
     refute_received {:provider_mutation, _opportunity_ref}
   end
 
+  test "a booking the provider cancels later is lost and the plan becomes repairable (qa #22)",
+       context do
+    {:ok, %{plan: %{lifecycle_state: :reserved}, items: [lost | _]}} =
+      ContactPlanExecutions.execute(
+        context.member_scope,
+        context.mission_id,
+        context.plan.contact_plan_id,
+        now: DateTime.add(@now, 2, :second),
+        resolve_route: context.resolve_route,
+        reserve: successful_reserver(self())
+      )
+
+    {:ok, reservation} =
+      ProviderReservations.fetch(
+        context.organization_id,
+        context.mission_id,
+        lost.provider_reservation_id
+      )
+
+    canceled =
+      reservation.provider_confirmed_snapshot_document
+      |> Map.merge(%{
+        "id" => reservation.provider_contact_ref,
+        "provider_revision" => reservation.provider_revision + 1,
+        "status" => "canceled",
+        "provider_status" => "canceled",
+        "status_reason" => "station_unavailable"
+      })
+
+    assert {:ok, %{lifecycle_state: :canceled}} =
+             ProviderReservations.apply_provider_status(
+               context.organization_id,
+               context.mission_id,
+               reservation.provider_reservation_id,
+               canceled
+             )
+
+    items =
+      ContactPlanExecutions.list(
+        context.organization_id,
+        context.mission_id,
+        context.plan.contact_plan_id,
+        1
+      )
+
+    assert %{lifecycle_state: :failed, last_error_document: %{"code" => "booking_lost"}} =
+             Enum.find(
+               items,
+               &(&1.contact_plan_execution_item_id == lost.contact_plan_execution_item_id)
+             )
+
+    assert {:ok, %{lifecycle_state: :partially_reserved}, _version} =
+             ContactPlans.fetch(
+               context.organization_id,
+               context.mission_id,
+               context.plan.contact_plan_id
+             )
+  end
+
+  test "bookings the provider confirms after execution ends settle the plan (K2 Apply)",
+       context do
+    pending = fn organization_id, mission_id, provider_id, attrs, _opts ->
+      reserve_with_response(
+        organization_id,
+        mission_id,
+        provider_id,
+        attrs,
+        {:ok, provider_response(attrs, "pending")}
+      )
+    end
+
+    assert {:ok, %{plan: %{lifecycle_state: :executing}, items: items}} =
+             ContactPlanExecutions.execute(
+               context.member_scope,
+               context.mission_id,
+               context.plan.contact_plan_id,
+               now: DateTime.add(@now, 2, :second),
+               resolve_route: context.resolve_route,
+               reserve: pending
+             )
+
+    assert Enum.all?(items, &(&1.lifecycle_state == :uncertain))
+
+    # Re-reading uncertain items (Execute resumes, end-of-execution re-check) doesn't rewrite
+    # them, so the confirmation window (#52) still runs from when they went uncertain.
+    assert {:ok, %{items: reread}} =
+             ContactPlanExecutions.execute(
+               context.member_scope,
+               context.mission_id,
+               context.plan.contact_plan_id,
+               now: DateTime.add(@now, 60, :second),
+               resolve_route: context.resolve_route,
+               reserve: pending
+             )
+
+    assert Enum.map(reread, & &1.updated_at) == Enum.map(items, & &1.updated_at)
+
+    # U30: within the window nothing is unconfirmed; past it, plan detail names the passes.
+    unconfirmed =
+      &PlanConfirmation.unconfirmed(
+        context.organization_id,
+        context.mission_id,
+        context.plan.contact_plan_id,
+        now: DateTime.add(@now, &1, :minute),
+        window_ms: :timer.minutes(10)
+      )
+
+    assert unconfirmed.(1) == nil
+    assert %{window_ms: 600_000, booked: 0, passes: passes} = unconfirmed.(11)
+
+    assert Enum.sort(Enum.map(passes, & &1.snapshot_id)) ==
+             Enum.sort(Enum.map(items, & &1.contact_opportunity_snapshot_id))
+
+    assert Enum.all?(
+             passes,
+             &match?(
+               %{provider: %{id: id, name: "Ground Network Simulator"}, sent_at: %DateTime{}}
+               when is_binary(id),
+               &1
+             )
+           )
+
+    for item <- items do
+      {:ok, reservation} =
+        ProviderReservations.fetch(
+          context.organization_id,
+          context.mission_id,
+          item.provider_reservation_id
+        )
+
+      confirmed =
+        Map.merge(reservation.provider_confirmed_snapshot_document, %{
+          "id" => reservation.provider_contact_ref,
+          "provider_revision" => reservation.provider_revision + 1,
+          "status" => "confirmed",
+          "provider_status" => "confirmed"
+        })
+
+      assert {:ok, %{lifecycle_state: :confirmed}} =
+               ProviderReservations.apply_provider_status(
+                 context.organization_id,
+                 context.mission_id,
+                 reservation.provider_reservation_id,
+                 confirmed
+               )
+    end
+
+    assert ContactPlanExecutions.list(
+             context.organization_id,
+             context.mission_id,
+             context.plan.contact_plan_id,
+             1
+           )
+           |> Enum.all?(&(&1.lifecycle_state == :reserved))
+
+    assert {:ok, %{lifecycle_state: :reserved}, _version} =
+             ContactPlans.fetch(
+               context.organization_id,
+               context.mission_id,
+               context.plan.contact_plan_id
+             )
+  end
+
   test "mixed provider outcomes preserve committed capacity and project partial success",
        context do
     reserve = fn organization_id, mission_id, provider_id, attrs, _opts ->
@@ -339,6 +508,365 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
 
     assert Enum.all?(second.items, &(&1.lifecycle_state == :uncertain))
     refute_received {:provider_mutation, _opportunity_ref}
+  end
+
+  test "an unattended plan awaiting its provider reads executing, then unconfirmed past the window (DECISIONS #52)",
+       context do
+    assert {:ok, %{plan: %{lifecycle_state: :executing}, items: [_, _]}} =
+             execute(context, ambiguous_reserver(self()))
+
+    state = fn opts ->
+      Scheduling.plan_state(
+        context.organization_id,
+        context.mission_id,
+        context.plan.contact_plan_id,
+        :executing,
+        opts
+      )
+    end
+
+    # Items were placed at the execution's `now` (@now + 2 s); the window counts from there.
+    now = DateTime.add(@now, 3, :second)
+    assert state.(now: now) == :executing
+    assert state.(now: DateTime.add(now, 11, :minute)) == :unconfirmed
+
+    assert state.(now: DateTime.add(now, 2, :second), confirmation_window_ms: 1_000) ==
+             :unconfirmed
+  end
+
+  test "Execute on an interrupted plan resumes unplaced items and never re-sends uncertain ones (DECISIONS #52)",
+       context do
+    assert {:ok, %{items: items}} = execute(context, ambiguous_reserver(self()))
+    assert_received {:provider_mutation, _first}
+    assert_received {:provider_mutation, _second}
+
+    # The session died before placing one pass: it never left `pending`.
+    [_uncertain, unplaced] = items
+
+    ContactPlanExecutionItemRow
+    |> where([i], i.contact_plan_execution_item_id == ^unplaced.contact_plan_execution_item_id)
+    |> Repo.update_all(set: [lifecycle_state: "pending", provider_reservation_id: nil])
+
+    Repo.query!("DELETE FROM provider_reservations WHERE provider_reservation_id = $1", [
+      unplaced.provider_reservation_id
+    ])
+
+    assert Scheduling.plan_state(
+             context.organization_id,
+             context.mission_id,
+             context.plan.contact_plan_id,
+             :executing
+           ) == :interrupted
+
+    assert {:ok, %{items: resumed}} = execute(context, ambiguous_reserver(self()))
+
+    # Exactly one provider write: the unplaced pass. The uncertain one is only re-read.
+    assert_received {:provider_mutation, _unplaced}
+    refute_received {:provider_mutation, _uncertain}
+    assert Enum.all?(resumed, &(&1.lifecycle_state == :uncertain))
+  end
+
+  describe "api's booking findings (2026-11-13)" do
+    test "a provider that rejects by status keeps its reason on the item", context do
+      reserve = fn organization_id, mission_id, provider_id, attrs, _opts ->
+        response =
+          attrs
+          |> provider_response("rejected")
+          |> Map.put("status_reason", %{"category" => "no_capacity", "detail" => "antenna busy"})
+
+        reserve_with_response(organization_id, mission_id, provider_id, attrs, {:ok, response})
+      end
+
+      assert {:ok, result} = execute(context, reserve)
+
+      for item <- result.items do
+        assert item.lifecycle_state == :rejected
+
+        assert %{"reason" => %{"category" => "no_capacity", "detail" => "antenna busy"}} =
+                 item.last_error_document
+      end
+    end
+
+    test "an item another run moved on is skipped, never marked failed", context do
+      test_pid = self()
+
+      reserve = fn organization_id, mission_id, provider_id, attrs, _opts ->
+        send(test_pid, {:provider_mutation, attrs["opportunity_ref"]})
+
+        # As if a concurrent run had already booked every other pending item.
+        ContactPlanExecutionItemRow
+        |> Ecto.Query.where(
+          [row],
+          row.contact_plan_id == ^context.plan.contact_plan_id and
+            row.lifecycle_state == "pending"
+        )
+        |> Cadence.Repo.update_all(set: [lifecycle_state: "reserved"])
+
+        reserve_with_response(
+          organization_id,
+          mission_id,
+          provider_id,
+          attrs,
+          {:ok, provider_response(attrs, "confirmed")}
+        )
+      end
+
+      assert {:ok, result} = execute(context, reserve)
+
+      assert_received {:provider_mutation, _first}
+      refute_received {:provider_mutation, _second}
+      assert Enum.all?(result.items, &(&1.lifecycle_state == :reserved))
+    end
+
+    test "a provider configuration failure leaves the item placed, with its category", context do
+      reserve = fn organization_id, mission_id, provider_id, attrs, _opts ->
+        {:error, {:provider_reservation_not_confirmed, reservation}} =
+          reserve_with_response(
+            organization_id,
+            mission_id,
+            provider_id,
+            attrs,
+            {:error, ProviderError.ambiguous(%{"reason" => "connection_closed"})}
+          )
+
+        {:error,
+         {:provider_configuration_failure, reservation,
+          %{"reason" => %{"category" => "credentials_rejected", "detail" => "bad key"}}}}
+      end
+
+      assert {:ok, result} = execute(context, reserve)
+
+      for item <- result.items do
+        assert item.lifecycle_state == :failed
+        assert is_binary(item.provider_reservation_id)
+
+        assert item.last_error_document == %{
+                 "code" => "provider_configuration_failure",
+                 "reason" => %{"category" => "credentials_rejected", "detail" => "bad key"}
+               }
+      end
+
+      assert %{never_sent: 0} =
+               PlanConfirmation.execution(
+                 ContactPlanExecutions.list(
+                   context.organization_id,
+                   context.mission_id,
+                   context.plan.contact_plan_id,
+                   context.plan.approved_version || 1
+                 )
+               )
+    end
+
+    test "every execute path holds the plan's execution lock", context do
+      test_pid = self()
+
+      key =
+        ContactPlanExecutions.execution_key(
+          context.organization_id,
+          context.mission_id,
+          context.plan.contact_plan_id
+        )
+
+      holder =
+        spawn(fn ->
+          FleetRunLock.with_key(key, fn ->
+            send(test_pid, :held)
+
+            receive do
+              :release -> :ok
+            end
+          end)
+        end)
+
+      assert_receive :held, 5_000
+
+      assert {:error, :fleet_planning_run_busy} =
+               ControlContacts.execute_approved_plan(
+                 context.member_scope,
+                 context.mission_id,
+                 context.plan.contact_plan_id,
+                 reserve: successful_reserver(test_pid),
+                 resolve_route: context.resolve_route,
+                 now: DateTime.add(@now, 2, :second)
+               )
+
+      refute_received {:provider_mutation, _any}
+      send(holder, :release)
+    end
+  end
+
+  # The setup's plan: approved at @now + 1 s and accepted (items pending), never executed. Its
+  # passes are on 07-16; the requirement's window opens 21:00Z that day.
+  describe "U61 plan_coverage: a day whose booking hasn't started, or stopped (lead 11-16)" do
+    test "approve-plan without execute-plan: covered within the 2-minute grace, open after it",
+         context do
+      assert coverage(context, DateTime.add(@now, 60, :second)) == nil
+
+      assert %{
+               plan: %{state: "approved", revision: 1, approved_at: approved_at, booking: nil},
+               first_window_at: first,
+               severity: "caution",
+               p1: true
+             } = coverage(context, DateTime.add(@now, 4, :minute))
+
+      assert approved_at == context.plan.approved_at
+      assert first == DateTime.add(@now, 3_600, :second)
+    end
+
+    test "booking under way (its lock held) is covered; lock free with a pass never placed reopens",
+         context do
+      assert {:ok, %{items: [_uncertain, unplaced]}} =
+               execute(context, ambiguous_reserver(self()))
+
+      put_pending(unplaced)
+      now = DateTime.add(@now, 4, :minute)
+
+      with_execution_lock(context, fn -> assert coverage(context, now) == nil end)
+
+      assert %{
+               plan: %{
+                 state: "interrupted",
+                 approved_at: %DateTime{},
+                 booking: %{reserved: 0, total: 2, last_progress_at: %DateTime{}}
+               }
+             } = coverage(context, now)
+    end
+
+    test "a run that stopped after booking some passes reads interrupted, not partially reserved",
+         context do
+      assert {:ok, %{items: [_booked, other]}} = execute(context, successful_reserver(self()))
+      put_pending(other)
+      put_plan_state(context, "partially_reserved")
+      now = DateTime.add(@now, 4, :minute)
+
+      assert plan_state(context, :partially_reserved) == :interrupted
+
+      assert %{plan: %{state: "interrupted", booking: %{reserved: 1, total: 2}}} =
+               coverage(context, now)
+
+      # Every item finished (one rejected): it stays partially reserved, and the day is covered.
+      put_item_state(other, "rejected")
+      assert plan_state(context, :partially_reserved) == :partially_reserved
+      assert coverage(context, now) == nil
+    end
+
+    test "resolutions: booking started after the grace; a day that ends unbooked", context do
+      start = DateTime.add(@now, 5, :minute)
+      assert {:ok, _result} = execute(context, successful_reserver(self()), start)
+
+      assert [%{action: "booking_started", from_state: "approved", resolved_at: ^start}] =
+               resolved(
+                 context,
+                 DateTime.add(start, -30, :second),
+                 DateTime.add(start, 10, :second)
+               )
+
+      put_plan_state(context, "approved")
+      day_end = ~U[2026-07-17 00:00:00.000000Z]
+
+      assert [%{action: "day_ended", resolved_at: ^day_end, plan_revision: 1}] =
+               resolved(
+                 context,
+                 DateTime.add(day_end, -30, :second),
+                 DateTime.add(day_end, 10, :second)
+               )
+    end
+  end
+
+  defp coverage(context, now) do
+    context.organization_id
+    |> PlanCoverageAttention.items(context.mission_id, now: now)
+    |> Enum.find(&(&1.id == "2026-07-16"))
+  end
+
+  defp resolved(context, since, now) do
+    context.organization_id
+    |> PlanCoverageAttention.resolved_since(context.mission_id, since, now: now)
+    |> Enum.filter(&(&1.day == "2026-07-16"))
+  end
+
+  defp plan_state(context, state),
+    do:
+      Scheduling.plan_state(
+        context.organization_id,
+        context.mission_id,
+        context.plan.contact_plan_id,
+        state
+      )
+
+  defp put_pending(item) do
+    put_item_state(item, "pending", provider_reservation_id: nil)
+
+    Repo.query!("DELETE FROM provider_reservations WHERE provider_reservation_id = $1", [
+      item.provider_reservation_id
+    ])
+  end
+
+  defp put_item_state(item, state, extra \\ []) do
+    ContactPlanExecutionItemRow
+    |> where([i], i.contact_plan_execution_item_id == ^item.contact_plan_execution_item_id)
+    |> Repo.update_all(set: [lifecycle_state: state] ++ extra)
+  end
+
+  defp put_plan_state(context, state) do
+    ContactPlanRow
+    |> where([p], p.contact_plan_id == ^context.plan.contact_plan_id)
+    |> Repo.update_all(set: [lifecycle_state: state])
+  end
+
+  defp with_execution_lock(context, fun) do
+    test_pid = self()
+
+    key =
+      ContactPlanExecutions.execution_key(
+        context.organization_id,
+        context.mission_id,
+        context.plan.contact_plan_id
+      )
+
+    holder =
+      spawn(fn ->
+        FleetRunLock.with_key(key, fn ->
+          send(test_pid, :held)
+
+          receive do
+            :release -> :ok
+          end
+        end)
+      end)
+
+    assert_receive :held, 5_000
+
+    try do
+      fun.()
+    after
+      send(holder, :release)
+    end
+  end
+
+  defp execute(context, reserve, now \\ DateTime.add(@now, 2, :second)) do
+    ContactPlanExecutions.execute(
+      context.member_scope,
+      context.mission_id,
+      context.plan.contact_plan_id,
+      now: now,
+      resolve_route: context.resolve_route,
+      reserve: reserve
+    )
+  end
+
+  defp ambiguous_reserver(test_pid) do
+    fn organization_id, mission_id, provider_id, attrs, _opts ->
+      send(test_pid, {:provider_mutation, attrs["opportunity_ref"]})
+
+      reserve_with_response(
+        organization_id,
+        mission_id,
+        provider_id,
+        attrs,
+        {:error, ProviderError.ambiguous(%{"reason" => "connection_closed"})}
+      )
+    end
   end
 
   defp successful_reserver(test_pid) do

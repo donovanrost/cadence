@@ -1,23 +1,27 @@
 defmodule Cadence.Management.Commanding.SpacecraftCatalogs do
   @moduledoc "Target-specific model evidence and command compatibility for fleet authoring."
   alias Cadence.Catalog.Command.Compatibility, as: CommandCompatibility
-  alias Cadence.Catalog.SpacecraftModelBindings
+  alias Cadence.Catalog.FleetSnapshot
   alias Cadence.MissionModels
   alias Cadence.Reads.MissionModels.ActiveBasis
 
-  def load(
-        %{activation: %{metadata: %{"spacecraft_configurations" => _} = metadata}} = snapshot,
-        command_id
-      ) do
+  def load(%{activation: %{metadata: metadata}} = snapshot, command_id) do
+    if FleetSnapshot.fleet?(metadata),
+      do: load_fleet(snapshot, metadata, command_id),
+      else: {:ok, nil}
+  end
+
+  def load(_snapshot, _command_id), do: {:ok, nil}
+
+  defp load_fleet(snapshot, metadata, command_id) do
     reference =
       if command_id == "",
         do: nil,
         else: fingerprint(snapshot, command_id)
 
-    with {:ok, entries} <- SpacecraftModelBindings.entries(metadata) do
+    with {:ok, entries} <- FleetSnapshot.commanding_entries(metadata) do
       entries
       |> Enum.sort()
-      |> Enum.filter(fn {_id, entry} -> entry["commanding_enabled"] end)
       |> Enum.group_by(fn {_id, entry} -> entry["mission_model"] end)
       |> Enum.sort()
       |> Enum.reduce_while({:ok, []}, fn {_manifest, entries}, {:ok, bases} ->
@@ -25,8 +29,6 @@ defmodule Cadence.Management.Commanding.SpacecraftCatalogs do
       end)
     end
   end
-
-  def load(_snapshot, _command_id), do: {:ok, nil}
 
   defp append_target_basis(entries, bases, snapshot, command_id, reference) do
     sources = Enum.flat_map(entries, fn {_id, entry} -> entry["source_endpoint_ids"] end)

@@ -28,24 +28,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.MissionCatalogTest do
     %{scope: scope}
   end
 
-  test "loads the organization mission list through the generic dispatcher", %{scope: scope} do
-    {:ok, definition} = Registry.fetch_available("mission_catalog")
-    {:ok, surface} = Registry.fetch_surface(definition, :organization, "mission_list")
-
-    assert {:ok, %{"navigation" => navigation, "data" => data}} =
-             ApplicationSurfaces.load(
-               scope,
-               HostContext.organization(@organization_id),
-               "mission_catalog",
-               1,
-               surface
-             )
-
-    assert navigation["fallback_href"] == "/missions"
-    assert data["presentation"]["header"]["title"]["text"] == "Missions"
-    assert [%{"slug" => @mission_id}] = data["presentation"]["card"]["rows"]
-  end
-
   test "catalog index supplies the named breadcrumb contract without an installation", %{
     scope: scope
   } do
@@ -67,23 +49,9 @@ defmodule Cadence.Reads.ApplicationSurfaces.MissionCatalogTest do
     assert breadcrumbs["current"]["text"] == "Catalog"
   end
 
-  test "rejects a cross-organization organization surface", %{scope: scope} do
-    {:ok, definition} = Registry.fetch_available("mission_catalog")
-    {:ok, surface} = Registry.fetch_surface(definition, :organization, "mission_list")
-
-    assert {:error, :scope_mismatch} =
-             ApplicationSurfaces.load(
-               %{scope | organization_id: "other-organization"},
-               HostContext.organization(@organization_id),
-               "mission_catalog",
-               1,
-               surface
-             )
-  end
-
   test "derives installation policy from registered platform definitions", %{scope: scope} do
-    assert ApplicationSurfaces.organization_installation_exempt?("mission_catalog")
-    assert ApplicationSurfaces.installation_exempt?("mission_catalog", :organization)
+    refute ApplicationSurfaces.organization_installation_exempt?("mission_catalog")
+    refute ApplicationSurfaces.installation_exempt?("mission_catalog", :organization)
     assert ApplicationSurfaces.installation_exempt?("mission_catalog", :mission)
     assert ApplicationSurfaces.installation_exempt?("spacecraft", :spacecraft)
     assert ApplicationSurfaces.installation_exempt?("comms", :mission)

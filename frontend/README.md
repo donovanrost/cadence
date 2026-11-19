@@ -86,6 +86,7 @@ Each service fails if its port is occupied, so catalog URLs cannot silently drif
 | Organization Admin      | 4178 |
 | Spacecraft              | 4179 |
 | Ops Console             | 4180 |
+| Apogee console (SPA)    | 5181 |
 
 `build` emits independently deployable demo artifacts. `corepack pnpm build:publication` builds the Phoenix host plus the
 six approved first-party remotes into

@@ -7,7 +7,9 @@ defmodule CadenceSimulator.Provider.Contacts do
     Ids,
     Opportunities,
     ServiceProfiles,
-    Store
+    StationOutages,
+    Store,
+    UplinkLeg
   }
 
   @terminal_statuses ["rejected", "canceled", "completed", "failed"]
@@ -23,6 +25,7 @@ defmodule CadenceSimulator.Provider.Contacts do
     "run_id",
     "configuration_snapshot",
     "service_profile_snapshot",
+    "uplink_delivery_profile_snapshot",
     "delivery_profile_snapshot",
     "idempotency_key",
     "modification_history",
@@ -50,13 +53,13 @@ defmodule CadenceSimulator.Provider.Contacts do
          {:ok, delivery_profile} <-
            DeliveryProfiles.fetch_internal(run, request["delivery_profile_ref"]),
          :ok <- validate_delivery_profile(delivery_profile, service_profile),
+         {:ok, uplink} <- UplinkLeg.resolve(run, request["uplink"]),
          :ok <- validate_idempotency_key(run, idempotency_key) do
       create_or_recover(
         run,
         request,
         opportunity,
-        service_profile,
-        delivery_profile,
+        {service_profile, delivery_profile, uplink},
         idempotency_key,
         request_id
       )
@@ -162,8 +165,7 @@ defmodule CadenceSimulator.Provider.Contacts do
          run,
          request,
          opportunity,
-         service_profile,
-         delivery_profile,
+         {service_profile, delivery_profile, uplink},
          idempotency_key,
          request_id
        ) do
@@ -171,14 +173,15 @@ defmodule CadenceSimulator.Provider.Contacts do
       nil ->
         with :ok <- ensure_capacity(run, opportunity),
              contact <-
-               build_contact(
-                 run,
+               run
+               |> build_contact(
                  request,
                  opportunity,
                  service_profile,
                  delivery_profile,
                  idempotency_key
-               ),
+               )
+               |> with_uplink(uplink),
              {:ok, stored} <- ContactLifecycle.create(contact, request_id) do
           {:ok, public(stored)}
         end
@@ -201,7 +204,8 @@ defmodule CadenceSimulator.Provider.Contacts do
          idempotency_key
        ) do
     now = DateTime.utc_now() |> DateTime.to_iso8601()
-    rejected? = scheduling_rejected?(run, opportunity)
+    station_down? = station_unavailable?(run, opportunity)
+    rejected? = station_down? or scheduling_rejected?(run, opportunity)
 
     delivery =
       delivery_descriptor(delivery_profile, opportunity)
@@ -223,7 +227,7 @@ defmodule CadenceSimulator.Provider.Contacts do
       "status" => if(rejected?, do: "rejected", else: "pending"),
       "pass_phase" => "scheduled",
       "delivery" => delivery,
-      "status_reason" => if(rejected?, do: "simulated_scheduling_rejection", else: nil),
+      "status_reason" => rejection_reason(rejected?, station_down?),
       "tags" => request["tags"],
       "extensions" => %{
         "synthetic" => true,
@@ -238,6 +242,13 @@ defmodule CadenceSimulator.Provider.Contacts do
       "created_at" => now,
       "updated_at" => now
     }
+  end
+
+  defp with_uplink(contact, uplink) do
+    Map.merge(
+      contact,
+      UplinkLeg.contact_fields(uplink, contact["status"] == "rejected", contact["status_reason"])
+    )
   end
 
   defp delivery_descriptor(profile, opportunity) do
@@ -270,11 +281,10 @@ defmodule CadenceSimulator.Provider.Contacts do
 
   defp normalize_request(attrs) do
     with :ok <- require_text_fields(attrs, @required_request_keys),
-         {:ok, tags} <- tags(attrs["tags"]) do
-      {:ok,
-       attrs
-       |> Map.take(@required_request_keys)
-       |> Map.put("tags", tags)}
+         {:ok, tags} <- tags(attrs["tags"]),
+         {:ok, uplink} <- UplinkLeg.normalize(attrs) do
+      request = attrs |> Map.take(@required_request_keys) |> Map.put("tags", tags)
+      {:ok, if(uplink, do: Map.put(request, "uplink", uplink), else: request)}
     end
   end
 
@@ -547,6 +557,24 @@ defmodule CadenceSimulator.Provider.Contacts do
          {:ok, right_end, _offset} <- DateTime.from_iso8601(right["ends_at"]) do
       DateTime.compare(left_start, right_end) == :lt and
         DateTime.compare(left_end, right_start) == :gt
+    else
+      _error -> false
+    end
+  end
+
+  defp rejection_reason(false, _station_down?), do: nil
+  defp rejection_reason(true, true), do: "station_unavailable"
+  defp rejection_reason(true, false), do: "simulated_scheduling_rejection"
+
+  defp station_unavailable?(run, opportunity) do
+    with {:ok, starts_at, _offset} <- DateTime.from_iso8601(opportunity["starts_at"]),
+         {:ok, ends_at, _offset} <- DateTime.from_iso8601(opportunity["ends_at"]) do
+      StationOutages.blocked?(
+        run["scenario_snapshot"]["fault_profile"],
+        opportunity["ground_station_ref"],
+        starts_at,
+        ends_at
+      )
     else
       _error -> false
     end

@@ -5,27 +5,16 @@ import { fileURLToPath } from "node:url";
 import { expect, test } from "vite-plus/test";
 import * as planning from "./index";
 const features = {
-  "contact-requirements": [
-    "OpsContactRequirementList",
-    "OpsContactRequirementNew",
-    "OpsContactRequirementShow",
-    "OpsContactRequirementTemplate",
-  ],
   "contact-plans": ["OpsContactPlanShow"],
   "contact-scheduling": ["OpsContactSchedule", "OpsContactDetail", "OpsContactRecord"],
-  "fleet-planning": [
-    "OpsFleetPlanning",
-    "OpsFleetPlanningNew",
-    "OpsFleetPlanningRun",
-    "OpsFleetPlanningPolicy",
-  ],
+  "fleet-planning": ["OpsFleetPlanning", "OpsFleetPlanningNew", "OpsFleetPlanningRun"],
 } as const;
 const directory = dirname(fileURLToPath(import.meta.url));
 const legacy = import.meta.glob("../../../apps/ops-console/src/Ops{Contact,FleetPlanning}*.vue", {
   eager: true,
   import: "default",
 });
-test("all twelve legacy entries delegate to public domain-owned implementations", () => {
+test("all seven legacy entries delegate to public domain-owned implementations", () => {
   for (const [feature, names] of Object.entries(features))
     for (const name of names) {
       const path = "../../../apps/ops-console/src/" + name + ".vue";

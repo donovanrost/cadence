@@ -2,6 +2,10 @@ import Config
 
 config :cadence, :opportunity_capability_secret, "cadence-test-opportunity-capability-secret-2026"
 
+# No disksup under test: the host's own disk would raise the journal-disk item and start early
+# reclaims in every suite. Tests give the reading themselves (Cadence.IngressJournal.Volume).
+config :os_mon, start_disksup: false
+
 config :cadence, Cadence.Repo,
   username: "postgres",
   password: "postgres",
@@ -30,9 +34,11 @@ config :cadence, command_dispatcher: [enabled: false]
 config :cadence, command_verifier_scheduler: [enabled: false]
 config :cadence, password_hash_iterations: 1_000
 
+# The journal is on by default (DECISIONS #95, config.exs). CADENCE_TEST_INGRESS_JOURNAL=off runs the
+# suite with it off, the still-supported path; CI reruns the :ingest_journal_matrix tests that way.
 config :cadence,
   ingress_journal: [
-    enabled?: true,
+    enabled?: System.get_env("CADENCE_TEST_INGRESS_JOURNAL", "on") != "off",
     # base_path is per OS process and partition: set in runtime.exs (#50).
     max_bytes: 64 * 1_024 * 1_024,
     segment_bytes: 1 * 1_024 * 1_024,
@@ -52,7 +58,8 @@ config :cadence,
 
 config :cadence,
   telemetry_storage: [
-    writer: Cadence.Telemetry.Storage.Writers.PostgresReadModel,
+    # The Postgres read model, except while a test turns on an outage (DECISIONS #71).
+    writer: Cadence.OutageTelemetryWriter,
     organization_id: "org-test",
     realm: :flight,
     data_source_id: "managed_questdb_primary",
@@ -69,3 +76,28 @@ config :cadence, data_source_probe_scheduler: [enabled?: false]
 config :cadence, data_source_watermark_events: [enabled?: false]
 
 config :logger, level: :warning
+
+# Provider HTTP calls refuse private and reserved networks (OutboundGuard, api-ops 11-15); this
+# environment allows loopback only, for the local simulator. Production allows nothing extra.
+config :cadence, :provider_outbound,
+  allow: ["127.0.0.1/32", "::1/128"],
+  # The suite's fake provider hosts (*.test) resolve to loopback; answers are still checked.
+  resolver: {Cadence.TestSupport.ProviderHosts, :resolve}
+
+# Env-backed credentials (local only): variable names any organization may use here, beyond its
+# own CADENCE_TENANT_<ORG>_ prefix (EnvBackend, api-ops 11-15). Anything else is refused on save
+# and on resolve.
+config :cadence, :env_credentials,
+  allow: [
+    "EARENDIL_DEMO_PROVIDER_TOKEN",
+    "CADENCE_PROVIDER_ACCOUNT_TOKEN",
+    "PROVIDER_TEST_TOKEN",
+    "CADENCE_PROVIDER_TEST_TOKEN"
+  ],
+  allow_prefixes: ["CADENCE_TEST_"]
+
+# The console federation smoke's test-only application (Cadence.Applications.FixtureContributors;
+# never set in dev or prod, a guard test checks).
+config :cadence, :fixture_application_contributors, [
+  Cadence.TestSupport.SurfaceFixtureApplication
+]

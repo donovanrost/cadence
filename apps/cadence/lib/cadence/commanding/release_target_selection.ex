@@ -3,21 +3,23 @@ defmodule Cadence.Commanding.ReleaseTargetSelection do
   Selects eligible realized contacts, uplink paths, and transport bindings.
   """
 
-  alias Cadence.Commanding.{CommandRequest, ReleaseTargetGuard}
+  alias Cadence.Commanding.{CommandRequest, CommandWindow, ReleaseTargetGuard}
   alias Cadence.Contacts
   alias Cadence.Contacts.{Path, RealizedContact, TransportBinding}
 
-  @spec fetch_realized_contact(binary(), binary(), binary()) ::
+  @doc "The contact, if it may carry a release at `at` (`CommandWindow`: in its pass, uplink kept)."
+  @spec fetch_realized_contact(binary(), binary(), binary(), DateTime.t()) ::
           {:ok, RealizedContact.t()} | {:error, term()}
-  def fetch_realized_contact(organization_id, mission_id, realized_contact_id) do
+  def fetch_realized_contact(organization_id, mission_id, realized_contact_id, at) do
     with {:ok, %RealizedContact{} = realized_contact} <-
            Contacts.fetch_realized_contact(organization_id, mission_id, realized_contact_id),
-         :ok <- ensure_realized_contact_releasable(realized_contact) do
+         :ok <- ensure_realized_contact_releasable(realized_contact),
+         :ok <- CommandWindow.check(organization_id, mission_id, realized_contact, at) do
       {:ok, realized_contact}
     end
   end
 
-  @spec resolve_dispatch(binary(), binary(), CommandRequest.t()) ::
+  @spec resolve_dispatch(binary(), binary(), CommandRequest.t(), DateTime.t()) ::
           {:ok,
            %{
              realized_contact: RealizedContact.t(),
@@ -25,7 +27,7 @@ defmodule Cadence.Commanding.ReleaseTargetSelection do
              transport_binding: TransportBinding.t()
            }}
           | {:error, term()}
-  def resolve_dispatch(organization_id, mission_id, %CommandRequest{} = command_request) do
+  def resolve_dispatch(organization_id, mission_id, %CommandRequest{} = command_request, at) do
     # SAFETY #38 (DECISIONS #66): only the target spacecraft's own contacts are candidates.
     target =
       case ReleaseTargetGuard.target(
@@ -40,8 +42,12 @@ defmodule Cadence.Commanding.ReleaseTargetSelection do
     organization_id
     |> Contacts.list_realized_contacts(mission_id)
     |> Enum.filter(fn %RealizedContact{} = realized_contact ->
-      ensure_realized_contact_releasable(realized_contact) == :ok and target != nil and
-        ReleaseTargetGuard.contact(organization_id, mission_id, target, realized_contact) == :ok
+      # Director, 11-14: an armed group releases by itself only into a scheduled pass; a
+      # hand-started contact takes a command only when an operator names it.
+      realized_contact.scheduled_contact_id != nil and
+        ensure_realized_contact_releasable(realized_contact) == :ok and target != nil and
+        ReleaseTargetGuard.contact(organization_id, mission_id, target, realized_contact) == :ok and
+        CommandWindow.check(organization_id, mission_id, realized_contact, at) == :ok
     end)
     |> Enum.sort_by(&dispatch_contact_sort_key/1)
     |> Enum.reduce_while(

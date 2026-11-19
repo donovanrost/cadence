@@ -10,7 +10,7 @@ defmodule Cadence.Contacts.PathTemplateStore do
   alias Cadence.Comms.ConfigurationValidation
   alias Cadence.Contacts.Path
   alias Cadence.Contacts.PathTemplate
-  alias Cadence.Contacts.PathTemplateStore.PathTemplateRow
+  alias Cadence.Contacts.PathTemplateStore.{ArchivedProfile, PathTemplateRow}
   alias Cadence.Contacts.ProfileStore
   alias Cadence.Contacts.ProviderBinding
   alias Cadence.Contacts.ProviderProfile
@@ -268,6 +268,8 @@ defmodule Cadence.Contacts.PathTemplateStore do
   def resolve(%PathTemplate{} = path_template) do
     with {:ok, provider_bindings} <- resolve_provider_bindings(path_template),
          {:ok, transport_bindings} <- resolve_transport_bindings(path_template) do
+      provider_bindings = link_clcw_ingress(provider_bindings, transport_bindings)
+
       metadata =
         path_template.metadata
         |> Map.put("path_template_id", path_template.path_template_id)
@@ -286,6 +288,42 @@ defmodule Cadence.Contacts.PathTemplateStore do
        })}
     end
   end
+
+  # CLCWs arriving on a provider binding must reach FOP in the path's uplink gateway. A provider
+  # profile is shared by every route on its transport while gateways are per spacecraft, so the
+  # link is made here, per path: with exactly one gateway, a CLCW ingress binding that names
+  # none is pointed at it (#44).
+  defp link_clcw_ingress(provider_bindings, transport_bindings) do
+    case Enum.filter(transport_bindings, &(&1.family_key == :uplink_gateway)) do
+      [gateway] -> Enum.map(provider_bindings, &link_binding(&1, gateway.transport_binding_id))
+      _none_or_many -> provider_bindings
+    end
+  end
+
+  defp link_binding(%ProviderBinding{configuration: configuration} = binding, gateway_id) do
+    clcw? =
+      configuration_value(configuration, "ingress_protocol_family", :ingress_protocol_family) in [
+        "cop1_clcw",
+        :cop1_clcw
+      ]
+
+    linked? =
+      configuration_value(
+        configuration,
+        "ingress_transport_binding_id",
+        :ingress_transport_binding_id
+      ) not in [nil, ""]
+
+    if clcw? and not linked?,
+      do: %{
+        binding
+        | configuration: Map.put(configuration, "ingress_transport_binding_id", gateway_id)
+      },
+      else: binding
+  end
+
+  defp configuration_value(configuration, key, atom_key),
+    do: Map.get(configuration, key, Map.get(configuration, atom_key))
 
   defp validate(%PathTemplate{} = path_template) do
     with :ok <- ConfigurationValidation.mission_id(path_template.mission_id),
@@ -420,9 +458,45 @@ defmodule Cadence.Contacts.PathTemplateStore do
       "provider_profile_id",
       :contact_provider_profile_not_found,
       &fetch_provider_profile_for_scope/3,
-      &ProfileStore.fetch_provider_profile_version/4,
-      &ProfileStore.fetch_provider_profile_version/3
+      &live_provider_profile_version/4,
+      &live_provider_profile_version/3
     )
+  end
+
+  # A pinned profile version resolves only while the profile itself is live: once its latest
+  # version is deleted (e.g. its transport was archived, lead 11-16), no new path is built on it,
+  # and the refusal names that transport (ArchivedProfile, ux U45 transport_archived).
+  defp live_provider_profile_version(organization_id, mission_id, provider_profile_id, version) do
+    with {:ok, profile} <-
+           ProfileStore.fetch_provider_profile_version(
+             organization_id,
+             mission_id,
+             provider_profile_id,
+             version
+           ),
+         :ok <-
+           ArchivedProfile.live(
+             ProfileStore.fetch_provider_profile(
+               organization_id,
+               mission_id,
+               provider_profile_id
+             ),
+             profile
+           ) do
+      {:ok, profile}
+    end
+  end
+
+  defp live_provider_profile_version(mission_id, provider_profile_id, version) do
+    with {:ok, profile} <-
+           ProfileStore.fetch_provider_profile_version(mission_id, provider_profile_id, version),
+         :ok <-
+           ArchivedProfile.live(
+             ProfileStore.fetch_provider_profile(mission_id, provider_profile_id),
+             profile
+           ) do
+      {:ok, profile}
+    end
   end
 
   defp fetch_provider_profile_for_scope(organization_id, mission_id, provider_profile_id)

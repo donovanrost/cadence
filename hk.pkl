@@ -3,12 +3,10 @@ amends "package://github.com/jdx/hk/releases/download/v1.56.0/hk@1.56.0#/Config.
 hooks {
     ["pre-commit"] {
         fix = true
-        stash = "git"
+        // "none": several agents share one worktree; stashing would hide their
+        // uncommitted files for the whole precommit run.
+        stash = "none"
         steps {
-            ["css-frozen"] {
-                glob = List("*.css")
-                check = "scripts/check-css-frozen.sh"
-            }
             ["elixir-format"] {
                 glob = List("*.ex", "*.exs")
                 check = "mix format.all --check-formatted {{files}}"

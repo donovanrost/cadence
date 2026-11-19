@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Command palette · Cadence</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Saira:wght@400;500;600&amp;family=Saira+Condensed:wght@500;600;700&amp;family=Azeret+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#05070A}
+a{color:#E6EDF3}a:hover{color:#FFFFFF}
+.m{font-family:'Azeret Mono',ui-monospace,monospace}
+.n{font-family:Saira,sans-serif;font-variant-numeric:tabular-nums}
+.ghost{background:#0A0E13;border:1px solid #141B24}
+.res{display:grid;grid-template-columns:28px minmax(0,1fr) auto;align-items:center;gap:14px;width:100%;padding:9px 14px;border:0;border-left:2px solid transparent;background:transparent;color:#E6EDF3;font:14px 'Saira',sans-serif;text-align:left;cursor:pointer}
+.res:hover{background:#0F141B}
+.res.on{background:#161D26;border-left-color:#E6EDF3}
+.ico{width:28px;height:28px;border:1px solid #2A3644;display:flex;align-items:center;justify-content:center}
+.kbd{font:500 11px 'Azeret Mono',monospace;color:#9DAAB8;border:1px solid #2A3644;padding:2px 6px;background:#0A0E13}
+.grp{font:600 12px 'Saira Condensed',sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#7D8A99;padding:12px 16px 6px;margin:0;display:flex;gap:10px;align-items:center}
+.grp::after{content:"";flex:1;height:1px;background:#1C2530}
+</style>
+</helmet>
+<div style="width: 100%; height: 100vh; position: relative; overflow: hidden; font-family: 'Saira', system-ui, sans-serif; color: #E6EDF3; background-color: #05070A; background-image: linear-gradient(rgba(230,237,243,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(230,237,243,.025) 1px, transparent 1px); background-size: 40px 40px">
+
+<div aria-hidden="true" style="position: absolute; inset: 0; display: flex; flex-direction: column; opacity: .4">
+<div style="height: 52px; border-bottom: 1px solid #1C2530; background: #070A0E"></div>
+<div style="flex: 1; display: flex">
+<div style="width: 200px; border-right: 1px solid #1C2530; background: #070A0E"></div>
+<div style="flex: 1; padding: 24px; display: flex; flex-direction: column; gap: 16px">
+<div style="height: 70px; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 1px; background: #141B24"><div style="background: #0A0E13"></div><div style="background: #0A0E13"></div><div style="background: #0A0E13"></div><div style="background: #0A0E13"></div><div style="background: #0A0E13"></div><div style="background: #0A0E13"></div></div>
+<div style="display: flex; gap: 16px; flex: 1"><div class="ghost" style="flex: 1.3; display: flex; align-items: center; justify-content: center"><svg width="380" height="380" viewBox="0 0 380 380"><circle cx="190" cy="190" r="90" fill="#0D1116" stroke="#2E3742"></circle><ellipse cx="190" cy="190" rx="175" ry="50" fill="none" stroke="#2A323C" transform="rotate(-30 190 190)"></ellipse><ellipse cx="190" cy="190" rx="175" ry="50" fill="none" stroke="#2A323C" transform="rotate(30 190 190)"></ellipse><ellipse cx="190" cy="190" rx="175" ry="50" fill="none" stroke="#E6EDF3" transform="rotate(75 190 190)"></ellipse></svg></div><div class="ghost" style="flex: 1"></div></div>
+</div>
+</div>
+</div>
+<div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(3,5,8,.7)"></div>
+
+<div class="dlg" role="dialog" aria-modal="true" aria-label="Search and run commands" style="position: absolute; left: 50%; top: 96px; transform: translateX(-50%); width: 760px; background: #0A0E13; border: 1px solid #2A3644; box-shadow: 0 40px 100px rgba(0,0,0,.7); display: flex; flex-direction: column">
+
+<div class="m" style="display: flex; justify-content: space-between; padding: 8px 16px; font-size: 10px; color: #7D8A99; border-bottom: 1px solid #1C2530; letter-spacing: .08em"><span>CADENCE // QUERY</span><span>EARENDIL · 500 SC · 547 CMDS · 6 STATIONS</span></div>
+
+<label style="display: flex; align-items: center; gap: 14px; padding: 16px; border-bottom: 1px solid #1C2530">
+<span class="n" style="font-size: 20px; color: #E6EDF3">›</span>
+<span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Search</span>
+<input value="{{query}}" onChange="{{onQuery}}" placeholder="spacecraft, telemetry, commands, stations…" style="flex: 1; background: transparent; border: 0; outline: none; color: #E6EDF3; font: 500 22px 'Azeret Mono', monospace">
+<span class="kbd">ESC</span>
+</label>
+
+<div style="max-height: 520px; overflow-y: auto; padding: 4px 0 10px">
+<sc-for list="{{groups}}" as="g" hint-placeholder-count="3">
+<p class="grp">{{g.name}}</p>
+<sc-for list="{{g.items}}" as="r" hint-placeholder-count="2">
+<button class="res {{r.on}}">
+<span class="ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{{r.color}}" stroke-width="2" aria-hidden="true"><path d="{{r.icon}}"></path></svg></span>
+<span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span class="m" style="font-weight: 600; font-size: 14px">{{r.title}}</span><span style="font-size: 13px; color: #9DAAB8">{{r.sub}}</span></span>
+<span class="m" style="font-size: 11px; color: #7D8A99">{{r.hint}}</span>
+</button>
+</sc-for>
+</sc-for>
+<sc-if value="{{empty}}" hint-placeholder-val="{{false}}">
+<div style="padding: 40px 20px; text-align: center; display: flex; flex-direction: column; gap: 6px"><span style="font: 600 18px 'Saira Condensed'; letter-spacing: .16em; text-transform: uppercase">No matches</span><span style="font-size: 13px; color: #9DAAB8">Try a spacecraft number, a command like SET_ or a station code like FBK</span></div>
+</sc-if>
+</div>
+
+<div class="m" style="display: flex; flex-wrap: wrap; gap: 18px; align-items: center; padding: 10px 16px; border-top: 1px solid #1C2530; font-size: 11px; color: #9DAAB8; background: #070A0E">
+<span style="display: flex; gap: 6px; align-items: center"><span class="kbd">↑↓</span>MOVE</span>
+<span style="display: flex; gap: 6px; align-items: center"><span class="kbd">↵</span>OPEN</span>
+<span style="display: flex; gap: 6px; align-items: center"><span class="kbd">⌘↵</span>COMMAND IT</span>
+<span style="display: flex; gap: 6px; align-items: center; margin-left: auto"><span class="kbd">G N</span>NOW <span class="kbd">G C</span>CONTACTS <span class="kbd">[ ]</span>PREV/NEXT SC</span>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+constructor(props) {
+super(props);
+this.state = { query: '312' };
+}
+renderVals() {
+const sat = 'M4 10h5v4H4zM15 10h5v4h-5zM9 12h6M12 8v8';
+const wave = 'M3 17l5-6 4 4 8-9';
+const send = 'm5 12 14-8-4 16-3-6-7-2Z';
+const dish = 'M4 18a10 10 0 0 1 16 0M8 18a5 5 0 0 1 8 0';
+const page = 'M6 3h9l3 3v15H6zM9 11h6M9 15h6';
+const all = [
+{ group: 'Spacecraft', title: 'EARENDIL-312', sub: 'Critical · VBAT below limit · plane 07 · Earendil Block 1', hint: 'SCID 312', icon: sat, color: '#FF4D57', k: 'earendil-312 312 plane 7 block 1 battery' },
+{ group: 'Spacecraft', title: 'EARENDIL-047', sub: 'Critical · safe mode · AOS now at Awarua', hint: 'SCID 47', icon: sat, color: '#FF4D57', k: 'earendil-047 47 safe adcs' },
+{ group: 'Spacecraft', title: 'EARENDIL-118', sub: 'Nominal · AOS now at Svalbard', hint: 'SCID 118', icon: sat, color: '#2FD08A', k: 'earendil-118 118 svalbard svb' },
+{ group: 'Telemetry', title: '312 › VBAT', sub: '23.1 V · red limit 24.0 V · HK.battery_voltage', hint: 'PLOT', icon: wave, color: '#E6EDF3', k: '312 battery voltage vbat hk.battery_voltage power' },
+{ group: 'Telemetry', title: '312 › SA current', sub: '3.42 A · down 18% · EPS.sa_current', hint: 'PLOT', icon: wave, color: '#E6EDF3', k: '312 solar array current eps power' },
+{ group: 'Actions', title: 'Command EARENDIL-312…', sub: 'Open an uplink sequence with this target', hint: '⌘↵', icon: send, color: '#E6EDF3', k: '312 command send uplink' },
+{ group: 'Actions', title: 'Passes for EARENDIL-312', sub: 'Next AOS Fairbanks T−38m', hint: 'G C', icon: dish, color: '#E6EDF3', k: '312 contacts pass fairbanks fbk aos' },
+{ group: 'Commands', title: 'SET_ADCS_MODE', sub: 'Attitude control · mode, duration', hint: 'CATALOG', icon: send, color: '#E6EDF3', k: 'set_adcs_mode adcs attitude set_' },
+{ group: 'Commands', title: 'SET_POWER_MODE', sub: 'Power · mode', hint: 'CATALOG', icon: send, color: '#E6EDF3', k: 'set_power_mode power set_' },
+{ group: 'Stations', title: 'SVB · Svalbard', sub: 'Degraded downlink since 01:52Z · 1 AOS now', hint: 'STATION', icon: dish, color: '#FFB020', k: 'svalbard svb station ground' },
+{ group: 'Stations', title: 'FBK · Fairbanks', sub: 'Nominal · next AOS T−4m', hint: 'STATION', icon: dish, color: '#2FD08A', k: 'fairbanks fbk station ground' },
+{ group: 'Pages', title: 'Contacts', sub: 'Ground track and pass schedule', hint: 'G C', icon: page, color: '#9DAAB8', k: 'contacts page timeline passes' },
+{ group: 'Pages', title: 'Now', sub: 'Constellation status and action queue', hint: 'G N', icon: page, color: '#9DAAB8', k: 'now home fleet page' }
+];
+const q = (this.state.query || '').trim().toLowerCase();
+const hits = q ? all.filter((r) => (r.title + ' ' + r.sub + ' ' + r.k).toLowerCase().includes(q)) : all.filter((r) => r.group === 'Pages' || r.group === 'Spacecraft');
+const order = ['Spacecraft', 'Telemetry', 'Actions', 'Commands', 'Stations', 'Pages'];
+let first = true;
+const groups = order.map((name) => {
+const items = hits.filter((r) => r.group === name).map((r) => {
+const on = first ? 'on' : '';
+first = false;
+return Object.assign({}, r, { on: on });
+});
+return { name: name, items: items };
+}).filter((g) => g.items.length > 0);
+return {
+query: this.state.query,
+onQuery: (e) => this.setState({ query: e.target.value }),
+groups: groups,
+empty: hits.length === 0
+};
+}
+}
+</script>
+</body>
+</html>

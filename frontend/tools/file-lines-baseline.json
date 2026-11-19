@@ -1,0 +1,94 @@
+{
+  "packages/plugin-sdk/src/release-catalog.ts": {
+    "lines": 1806,
+    "owner": "legacy (#80): frozen, leaves with its row"
+  },
+  "apps/host/src/shell/ApplicationHost.vue": {
+    "lines": 1105,
+    "owner": "legacy (#80): frozen, leaves with its row"
+  },
+  "modules/commanding/src/features/workspace/useCommandWorkspace.ts": {
+    "lines": 761,
+    "owner": "legacy (#80): frozen, leaves with its row"
+  },
+  "modules/communications/src/features/transports/CommsTransportNew.vue": {
+    "lines": 749,
+    "owner": "legacy (#80): frozen, leaves with its row"
+  },
+  "modules/telemetry-decom/src/features/configuration/ConfigurationPanel.vue": {
+    "lines": 694,
+    "owner": "legacy (#80): frozen, leaves with its row"
+  },
+  "modules/data-operations/src/features/historical-workflows/NativeHistoricalWorkflows.vue": {
+    "lines": 672,
+    "owner": "legacy (#80): frozen, leaves with its row"
+  },
+  "modules/commanding/src/features/command-authoring/CommandAuthoring.vue": {
+    "lines": 553,
+    "owner": "legacy (#80): frozen, leaves with its row"
+  },
+  "modules/planning-and-contacts/src/features/contact-scheduling/OpsContactSchedule.vue": {
+    "lines": 539,
+    "owner": "legacy (#80): frozen, leaves with its row"
+  },
+  "packages/plugin-sdk/src/host/http-host-bridge.ts": {
+    "lines": 534,
+    "owner": "legacy (#80): frozen, leaves with its row"
+  },
+  "apps/host/src/http-host-bridge.ts": {
+    "lines": 529,
+    "owner": "legacy (#80): frozen, leaves with its row"
+  },
+  "apps/host/src/shell/BrowserHost.vue": {
+    "lines": 515,
+    "owner": "legacy (#80): frozen, leaves with its row"
+  },
+  "apps/storybook/src/CommandWorkspaceExample.vue": {
+    "lines": 509,
+    "owner": "legacy (#80): frozen, leaves with its row"
+  },
+  "modules/telemetry-decom/src/features/configuration/contracts.ts": {
+    "lines": 506,
+    "owner": "legacy (#80): frozen, leaves with its row"
+  },
+  "modules/data-operations/src/features/historical-workflows/native-contract.ts": {
+    "lines": 500,
+    "owner": "legacy (#80): frozen, leaves with its row"
+  },
+  "modules/commanding/src/features/stage-workbench/StageWorkbench.vue": {
+    "lines": 478,
+    "owner": "legacy (#80): frozen, leaves with its row"
+  },
+  "modules/planning-and-contacts/src/features/fleet-planning/OpsFleetPlanningRun.vue": {
+    "lines": 474,
+    "owner": "legacy (#80): frozen, leaves with its row"
+  },
+  "modules/derived-telemetry/src/features/definitions/DefinitionsPanel.vue": {
+    "lines": 471,
+    "owner": "legacy (#80): frozen, leaves with its row"
+  },
+  "modules/telemetry-decom/src/features/packet-bindings/PacketBindingsPanel.vue": {
+    "lines": 467,
+    "owner": "legacy (#80): frozen, leaves with its row"
+  },
+  "packages/plugin-sdk/src/bridge.ts": {
+    "lines": 418,
+    "owner": "legacy (#80): frozen, leaves with its row"
+  },
+  "modules/dashboards-and-exploration/src/features/exploration/ExplorationPanel.vue": {
+    "lines": 411,
+    "owner": "legacy (#80): frozen, leaves with its row"
+  },
+  "modules/telemetry-decom/src/features/packet-bindings/state.ts": {
+    "lines": 407,
+    "owner": "legacy (#80): frozen, leaves with its row"
+  },
+  "apps/host/src/mission-and-spacecraft/features/profile-creation/SpacecraftTypeNew.vue": {
+    "lines": 405,
+    "owner": "dashboards (deleted by host cleanup a)"
+  },
+  "apps/host/src/phoenix-catalog-client.ts": {
+    "lines": 403,
+    "owner": "legacy (#80): frozen, leaves with its row"
+  }
+}

@@ -77,7 +77,7 @@ defmodule CadenceWeb.OpsCommandReviewPageTest do
     assert RequestStore.list_approvals(c.org, c.mission, []) == []
   end
 
-  test "persisted role revocation is enforced after mounting the review", c do
+  test "a reviewer demoted to member keeps review access (DECISIONS #62)", c do
     {:ok, view, _} = live(TestFixtures.member_conn(c.user), c.path)
     p = page(view)
 
@@ -85,21 +85,19 @@ defmodule CadenceWeb.OpsCommandReviewPageTest do
     |> Ecto.Changeset.change(role: "member")
     |> Repo.update!()
 
-    assert %{"ok" => true, "snapshot" => %{"status" => "rejected"}} =
-             action(view, c.path, p, input(p))
-
-    assert %{"ok" => true, "snapshot" => %{"status" => "unavailable"}} = read(view, c.path, p)
+    assert %{"ok" => true, "snapshot" => %{"status" => "ready"}} = read(view, c.path, p)
     assert RequestStore.list_approvals(c.org, c.mission, []) == []
   end
 
-  test "anonymous users redirect and members cannot read privileged request arguments", c do
+  test "anonymous users redirect and plain members can read privileged request arguments (#62)",
+       c do
     assert {:error, {:redirect, %{to: "/sign-in"}}} = live(build_conn(), c.path)
     user = TestFixtures.persist_user!()
     {:ok, org} = Cadence.Organizations.fetch_organization(c.org)
     TestFixtures.grant_membership!(user, org)
     {:ok, view, _} = live(TestFixtures.member_conn(user), c.path)
-    assert page(view)["status"] == "unavailable"
-    refute Map.has_key?(page(view), "data")
+    assert page(view)["status"] == "ready"
+    assert Map.has_key?(page(view), "data")
   end
 
   defp page(view),

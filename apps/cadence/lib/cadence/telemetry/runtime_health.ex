@@ -51,8 +51,7 @@ defmodule Cadence.Telemetry.RuntimeHealth do
     [:cadence, :runtime, :ingress_persistence_projector, :capacity_waiter_registered],
     [:cadence, :runtime, :ingress_persistence_projector, :capacity_waiter_released],
     Profiler.ingress_result_event(),
-    RuntimeInvalidation.telemetry_event(),
-    RuntimeInvalidation.decision_telemetry_event()
+    RuntimeInvalidation.telemetry_event()
   ]
 
   @type source ::

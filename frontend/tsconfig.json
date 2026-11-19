@@ -5,6 +5,9 @@
       "path": "./apps/comms-overview"
     },
     {
+      "path": "./apps/console"
+    },
+    {
       "path": "./apps/contract-probe"
     },
     {
@@ -24,6 +27,9 @@
     },
     {
       "path": "./apps/storybook"
+    },
+    {
+      "path": "./apps/surface-fixture"
     },
     {
       "path": "./apps/telemetry-decom"
@@ -51,6 +57,9 @@
     },
     {
       "path": "./modules/telemetry-decom"
+    },
+    {
+      "path": "./packages/apogee-ui"
     },
     {
       "path": "./packages/plugin-sdk"

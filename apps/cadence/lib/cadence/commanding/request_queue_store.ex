@@ -32,6 +32,7 @@ defmodule Cadence.Commanding.RequestQueueStore do
              is_binary(command_request_id) and is_map(enqueued_by) and is_list(opts) do
     Repo.transaction(fn ->
       with {:ok, request_row} <- lock_request(organization_id, mission_id, command_request_id),
+           :ok <- LifecyclePolicy.ensure_request_not_in_group(request_row),
            :ok <- LifecyclePolicy.ensure_request_queueable(request_row),
            :ok <- LifecyclePolicy.ensure_request_not_expired(request_row),
            :ok <-
@@ -203,6 +204,22 @@ defmodule Cadence.Commanding.RequestQueueStore do
       %CommandQueueEntryRow{} ->
         {:error, {:command_queue_lane_release_pending, queue_lane_key}}
     end
+  end
+
+  @doc "`[{organization_id, mission_id, queue_lane_key}]` of the requests' queue entries."
+  @spec lanes_for_requests([binary()]) :: [{binary(), binary(), binary()}]
+  def lanes_for_requests([]), do: []
+
+  def lanes_for_requests(command_request_ids) when is_list(command_request_ids) do
+    import Ecto.Query, only: [from: 2]
+
+    Repo.all(
+      from(q in CommandQueueEntryRow,
+        where: q.command_request_id in ^command_request_ids,
+        distinct: true,
+        select: {q.organization_id, q.mission_id, q.queue_lane_key}
+      )
+    )
   end
 
   @spec ensure_entry_is_next_release_candidate(struct(), DateTime.t()) ::

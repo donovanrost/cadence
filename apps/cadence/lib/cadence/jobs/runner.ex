@@ -37,11 +37,30 @@ defmodule Cadence.Jobs.Runner do
       {:ok, %Job{status: :running} = job} ->
         Jobs.record_execution_result(job, safe_dispatch(runner, job))
 
+      # Not ours to run (finished, requeued, or never claimed): record nothing, so its outcome
+      # stays the one its run recorded.
       {:ok, %Job{} = job} ->
-        Jobs.record_execution_result(job, {:error, {:job_not_running, job.status}})
+        {:error, {:job_not_running, job.status}}
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  @doc """
+  Whether a job of this type may run again after the node stopped while it was running. Only
+  when its handler module says so (`rerun_safe?/1`, next to its reasoning); false otherwise,
+  including for a new job type, a function handler or an unknown type (Jobs recovery, 11-14).
+  """
+  @spec rerun_safe?(t(), atom()) :: boolean()
+  def rerun_safe?(%__MODULE__{handlers: handlers}, job_type) do
+    case Map.fetch(handlers, job_type) do
+      {:ok, {module, _function}} when is_atom(module) ->
+        Code.ensure_loaded?(module) and function_exported?(module, :rerun_safe?, 1) and
+          module.rerun_safe?(job_type) == true
+
+      _other ->
+        false
     end
   end
 

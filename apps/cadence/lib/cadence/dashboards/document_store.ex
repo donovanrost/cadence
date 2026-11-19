@@ -31,13 +31,17 @@ defmodule Cadence.Dashboards.DocumentStore do
   alias Cadence.Repo
 
   @spec persist_document(binary(), Document.t()) :: {:ok, Document.t()} | {:error, term()}
-  def persist_document(organization_id, %Document{} = document) when is_binary(organization_id) do
+  # `opts`: `:created_by`, the actor of the first version (else the document's metadata
+  # `created_by`, which clone and import set), so "Created by" reads a name (dashboards, qa smoke).
+  def persist_document(organization_id, %Document{} = document, opts \\ [])
+      when is_binary(organization_id) do
     with {:ok, scoped_document} <- put_organization_scope(document, organization_id),
          {:ok, _mission} <-
            Missions.fetch_mission(scoped_document.organization_id, scoped_document.mission_id),
          :ok <- validate_document(scoped_document),
          versioned_document <- ensure_initial_version(scoped_document),
-         {:ok, document} <- insert_document_with_version(versioned_document) do
+         {:ok, document} <-
+           insert_document_with_version(versioned_document, creator(versioned_document, opts)) do
       invalidate_dashboard_runtime(document, :created)
       {:ok, document}
     else
@@ -549,11 +553,16 @@ defmodule Cadence.Dashboards.DocumentStore do
     |> Kernel.+(1)
   end
 
-  defp insert_document_with_version(%Document{} = versioned_document) do
+  defp creator(%Document{metadata: metadata}, opts) do
+    Keyword.get(opts, :created_by) ||
+      (is_map(metadata) && (metadata["created_by"] || metadata[:created_by])) || nil
+  end
+
+  defp insert_document_with_version(%Document{} = versioned_document, created_by) do
     Repo.transaction(fn ->
       with {:ok, %OpsDashboardRow{} = row} <-
              Repo.insert(OpsDashboardRow.document_changeset(versioned_document)),
-           {:ok, %Version{}} <- insert_version(versioned_document) do
+           {:ok, %Version{}} <- insert_version(versioned_document, created_by: created_by) do
         OpsDashboardRow.to_document(row)
       else
         {:error, reason} -> Repo.rollback(reason)
@@ -668,7 +677,7 @@ defmodule Cadence.Dashboards.DocumentStore do
     end)
   end
 
-  defp insert_version(%Document{} = document, opts \\ []) do
+  defp insert_version(%Document{} = document, opts) do
     version = %Version{
       organization_id: document.organization_id,
       mission_id: document.mission_id,
@@ -748,6 +757,11 @@ defmodule Cadence.Dashboards.DocumentStore do
 
   @spec list_lifecycle_events(binary(), binary(), binary()) :: [LifecycleEvent.t()]
   defdelegate list_lifecycle_events(organization_id, mission_id, dashboard_id),
+    to: LifecycleEvents
+
+  @spec list_mission_lifecycle_events(binary(), binary(), [atom()], pos_integer()) ::
+          [LifecycleEvent.t()]
+  defdelegate list_mission_lifecycle_events(organization_id, mission_id, event_types, limit),
     to: LifecycleEvents
 
   @spec fetch_lifecycle_event(binary(), binary(), binary()) ::

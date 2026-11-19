@@ -131,6 +131,100 @@ defmodule Cadence.Protocol.TMFrameIngressTest do
     assert packet.provenance.generation_time_source == :onboard
   end
 
+  test "a replay that batches the journal differently gives its packets the same ids (#71)" do
+    bytes = Enum.map_join(0..7, &frame(100 + &1))
+    whole = journal_evidence(bytes, 0, "evidence-whole")
+    {:ok, once, <<>>, _pipeline, _continuity} = process(whole, initial_state())
+
+    {first_half, second_half} = String.split_at(bytes, 4 * 14)
+    first = journal_evidence(first_half, 0, "evidence-first")
+    {:ok, a, rest, pipeline, continuity} = process(first, initial_state())
+    second = journal_evidence(second_half, 4 * 14, "evidence-second")
+    {:ok, b, <<>>, _pipeline, _continuity} = process(second, {pipeline, continuity, rest})
+
+    ids = Enum.map(once.packet_records, & &1.packet_id)
+    assert length(Enum.uniq(ids)) == 8
+    assert ids == Enum.map(a.packet_records ++ b.packet_records, & &1.packet_id)
+
+    refute Enum.any?(
+             once.packet_records,
+             &Map.has_key?(&1.provenance.tm.metadata, :raw_frame_offset_bytes)
+           )
+
+    # Without a journal stream there is no position: the evidence-scoped id, as before.
+    unjournaled = %{whole | metadata: %{frame_size: 14, ocf_length: 0}}
+    {:ok, plain, _rest, _pipeline, _continuity} = process(unjournaled, initial_state())
+    refute Enum.map(plain.packet_records, & &1.packet_id) == ids
+  end
+
+  # director 11-15: the processing ack ran past a partial frame or packet held in memory.
+  describe "resume_offset" do
+    test "an evidence ending mid-frame resumes at that frame's start" do
+      bytes = frame(1) <> frame(2)
+      {first, second} = String.split_at(bytes, 20)
+
+      {:ok, a, rest, pipeline, continuity} =
+        process(journal_evidence(first, 0, "e1"), initial_state())
+
+      assert byte_size(rest) == 6
+      assert a.resume_offset == 14
+
+      {:ok, b, <<>>, _pipeline, _continuity} =
+        process(journal_evidence(second, 20, "e2"), {pipeline, continuity, rest})
+
+      assert b.resume_offset == 28
+      assert length(a.packet_records ++ b.packet_records) == 2
+    end
+
+    test "a frame holding only the start of a packet resumes at that frame until it completes" do
+      # A packet with 10 data bytes: its header and 2 bytes in frame 1, the other 8 in frame 2.
+      packet = <<0::3, 0::1, 0::1, 42::11, 3::2, 7::14, 9::16>> <> :binary.copy(<<7>>, 10)
+      <<head::binary-size(8), tail::binary-size(8)>> = packet
+
+      {:ok, a, <<>>, pipeline, continuity} =
+        process(journal_evidence(raw_frame(1, 0, head), 0, "e1"), initial_state())
+
+      assert a.packet_records == []
+      assert a.resume_offset == 0
+
+      {:ok, b, <<>>, _pipeline, continuity} =
+        process(
+          journal_evidence(raw_frame(2, 2047, tail), 14, "e2"),
+          {pipeline, continuity, <<>>}
+        )
+
+      assert [_packet] = b.packet_records
+      assert b.resume_offset == 28
+      assert continuity.pending_frame_offsets == %{}
+    end
+
+    test "without journal offsets there is no resume point" do
+      {result, _state} = decode(frame(1), %{}, initial_state())
+      assert result.resume_offset == nil
+    end
+  end
+
+  defp raw_frame(count, fhp, payload) when byte_size(payload) == 8 do
+    <<0::2, 11::10, 2::3, 0::1, count::8, count::8, 0::1, 0::1, 0::1, 3::2, fhp::11,
+      payload::binary>>
+  end
+
+  defp journal_evidence(bytes, offset, evidence_id) do
+    RawEvidence.new(%{
+      evidence_id: evidence_id,
+      mission_id: "mission",
+      source_endpoint_ref: "endpoint",
+      protocol_family: :tm,
+      raw: bytes,
+      receipt_time: ~U[2026-11-14 01:35:54Z],
+      metadata:
+        Map.merge(%{frame_size: 14, ocf_length: 0}, metadata("j", "s", offset, byte_size(bytes)))
+    })
+  end
+
+  defp process(evidence, {pipeline, continuity, remainder}),
+    do: TMFrameIngress.process(evidence, pipeline, continuity, remainder)
+
   defp initial_state do
     {:ok, pipeline} = TMFrameIngress.init()
     {pipeline, %{}, <<>>}

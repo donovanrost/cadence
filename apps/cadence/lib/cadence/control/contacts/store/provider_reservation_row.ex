@@ -56,6 +56,9 @@ defmodule Cadence.Control.Contacts.Store.ProviderReservationRow do
     field(:operator_review_document, :map, default: %{})
     field(:attempt_count, :integer, default: 0)
     field(:last_reconciled_at, :utc_datetime_usec)
+    # When the reconciler reads it next (domain 11-15): row-only, not on the domain struct, so a
+    # poll's scheduling write never trips the stale check in ProviderReservations.transition.
+    field(:next_due_at, :utc_datetime_usec)
     field(:metadata, :map, default: %{})
 
     field(:resolution_evidence, :map, default: %{})
@@ -170,10 +173,33 @@ defmodule Cadence.Control.Contacts.Store.ProviderReservationRow do
     ])
     |> validate_number(:provider_revision, greater_than: 0)
     |> validate_number(:attempt_count, greater_than_or_equal_to: 0)
+    # Any write makes it due now: an operator action, a cancel, an accepted window move. The
+    # reconciler's own poll then schedules the next read from the band (ProviderReservations.
+    # schedule_next_poll/3), so its writes never pin the row at due-now (api-ops' condition A).
+    |> put_change(:next_due_at, nil)
+    |> put_accepted_window()
+    |> validate_time_range()
     |> unique_constraint([:mission_id, :provider_contact_ref],
       name: :provider_reservations_provider_ref_idx
     )
   end
+
+  # The window columns are the pass Cadence accepted: they follow the accepted snapshot whenever it
+  # changes (approve, policy accept, observed or acknowledged, the first provider confirmation), so
+  # occupancy and the pass reads see a provider's move. A change pending approval doesn't move them.
+  defp put_accepted_window(changeset) do
+    with {:ok, document} <- fetch_change(changeset, :cadence_accepted_snapshot_document),
+         %{} = snapshot <- JsonDocument.unwrap_value(document),
+         {:ok, starts_at} <- snapshot_time(snapshot["starts_at"]),
+         {:ok, ends_at} <- snapshot_time(snapshot["ends_at"]) do
+      change(changeset, starts_at: starts_at, ends_at: ends_at)
+    else
+      _no_window -> changeset
+    end
+  end
+
+  defp snapshot_time(nil), do: :error
+  defp snapshot_time(value), do: Ecto.Type.cast(:utc_datetime_usec, value)
 
   @spec to_domain(struct()) :: ProviderReservation.t()
   def to_domain(%__MODULE__{} = row) do

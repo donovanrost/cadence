@@ -38,6 +38,7 @@ defmodule Cadence.GroundNetworks.ProviderContact do
           pass_phase: atom(),
           delivery: DeliveryDescriptor.t(),
           status_reason: binary() | nil,
+          uplink: map() | nil,
           tags: map(),
           extensions: map(),
           evidence: map()
@@ -60,6 +61,7 @@ defmodule Cadence.GroundNetworks.ProviderContact do
     :pass_phase,
     :delivery,
     :status_reason,
+    :uplink,
     tags: %{},
     extensions: %{},
     evidence: %{}
@@ -89,7 +91,8 @@ defmodule Cadence.GroundNetworks.ProviderContact do
          {:ok, delivery} <- DeliveryDescriptor.from_external(contact["delivery"]),
          {:ok, status_reason} <- Validation.optional_string(contact, "status_reason"),
          {:ok, tags} <- Validation.object(contact, "tags"),
-         {:ok, extensions} <- Validation.object(contact, "extensions") do
+         {:ok, extensions} <- Validation.object(contact, "extensions"),
+         {:ok, uplink} <- uplink(contact["uplink"]) do
       {:ok,
        %__MODULE__{
          id: id,
@@ -110,6 +113,7 @@ defmodule Cadence.GroundNetworks.ProviderContact do
          status_reason: status_reason,
          tags: tags,
          extensions: extensions,
+         uplink: uplink,
          evidence: contact
        }}
     else
@@ -119,6 +123,21 @@ defmodule Cadence.GroundNetworks.ProviderContact do
   end
 
   def from_external(_contact), do: Validation.malformed(:contact)
+
+  # The optional uplink leg (#44): the provider says whether it booked it.
+  defp uplink(nil), do: {:ok, nil}
+
+  defp uplink(%{"status" => status} = leg) when status in ["included", "rejected"] do
+    {:ok,
+     %{
+       "status" => status,
+       "status_reason" => leg["status_reason"],
+       "service_profile_ref" => leg["service_profile_ref"],
+       "delivery_profile_ref" => leg["delivery_profile_ref"]
+     }}
+  end
+
+  defp uplink(_leg), do: Validation.malformed("uplink")
 
   @spec to_reservation_result(t()) :: map()
   def to_reservation_result(%__MODULE__{} = contact) do
@@ -143,5 +162,6 @@ defmodule Cadence.GroundNetworks.ProviderContact do
       "extensions" => contact.extensions,
       "provider_evidence" => contact.evidence
     }
+    |> then(&if(contact.uplink, do: Map.put(&1, "uplink", contact.uplink), else: &1))
   end
 end

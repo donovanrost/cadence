@@ -6,6 +6,7 @@ defmodule Cadence.Limits do
 
   import Ecto.Query
 
+  alias Cadence.Alarms.Ground, as: AlarmGround
   alias Ecto.Changeset
   alias Ecto.Multi
 
@@ -14,6 +15,7 @@ defmodule Cadence.Limits do
   alias Cadence.Limits.{
     Definition,
     DefinitionLifecycle,
+    DefinitionLifecycleEvent,
     Definitions,
     Evaluator,
     Event,
@@ -54,7 +56,44 @@ defmodule Cadence.Limits do
 
   defdelegate limit_definitions_page(org, mission, opts \\ []), to: Definitions, as: :page
 
+  defdelegate limit_definition_id(point, set), to: Definitions, as: :definition_id
+
   defdelegate limit_definition_history(org, mission, id, page), to: Definitions, as: :history
+
+  @doc "The mission's live (active) limit definitions (#77's limit_definition kind)."
+  def active_limit_definitions(org, mission),
+    do: DefinitionLifecycle.list_active_definitions(org, mission, [])
+
+  @doc """
+  Retires a definition's limits (#77): evaluation stops, its versions stay. `publish_facts?:
+  false` defers the announcement (a change set announces after its commit).
+  """
+  def retire_limit_definition(org, mission, %Definition{} = definition, opts \\ []),
+    do:
+      DefinitionLifecycle.record_definition_retirement(
+        %{definition | mission_id: mission},
+        Keyword.put(opts, :organization_id, org)
+      )
+
+  @doc """
+  Announces the current lifecycle of these definitions (their latest event's facts), after a
+  change set that changed them has committed. Previews and discarded change sets never get here.
+  """
+  def announce_limit_definitions(org, mission, definitions) do
+    for %Definition{} = definition <- definitions do
+      key =
+        %{definition | mission_id: mission}
+        |> DefinitionLifecycleEvent.attrs_from_definition(organization_id: org)
+        |> DefinitionLifecycleEvent.definition_activation_key()
+
+      case DefinitionLifecycle.fetch_latest_definition_lifecycle_event(org, mission, key) do
+        {:ok, event} -> Facts.publish(EventBus, event)
+        {:error, _none} -> :ok
+      end
+    end
+
+    :ok
+  end
 
   @spec list_limit_definitions(binary()) :: [Definition.t()]
   def list_limit_definitions(mission_id) when is_binary(mission_id) do
@@ -195,7 +234,10 @@ defmodule Cadence.Limits do
              :telemetry_limit_evaluation,
              mission_id,
              persisted_run.limit_run_id,
-             %{"limit_run_id" => persisted_run.limit_run_id}
+             Map.merge(
+               %{"limit_run_id" => persisted_run.limit_run_id},
+               definition_facts(active_limit_definitions(mission_id))
+             )
            ) do
         {:ok, _job} ->
           {:ok, persisted_run}
@@ -236,6 +278,13 @@ defmodule Cadence.Limits do
       execute_run(run, Keyword.merge(opts_from_run(run), opts))
     end
   end
+
+  # Facts the job carries for its words when its outcome is unknown (ux U54): the checked point
+  # when there's exactly one definition, else how many (the run evaluates the active ones).
+  defp definition_facts([%Definition{point_id: point_id}]) when is_binary(point_id),
+    do: %{"definition_name" => point_id}
+
+  defp definition_facts(definitions), do: %{"definition_count" => length(definitions)}
 
   defp build_run(mission_id, opts) do
     Run.new(%{
@@ -388,10 +437,14 @@ defmodule Cadence.Limits do
     |> Multi.run(:latest_limit_states, fn repo, _changes ->
       persist_latest_states(repo, limit_events)
     end)
+    |> Multi.run(:alarm_episodes, fn repo, _changes ->
+      AlarmGround.observe(repo, run.mission_id, limit_events)
+    end)
     |> Repo.transaction()
     |> case do
-      {:ok, _changes} ->
+      {:ok, changes} ->
         Enum.each(limit_events, &Facts.publish(event_bus, &1))
+        AlarmGround.notify(changes.alarm_episodes)
         {:ok, run}
 
       {:error, _operation, %Changeset{} = changeset, _changes_so_far} ->

@@ -34,6 +34,7 @@ defmodule Cadence.Contacts.ProviderBooking do
     "spacecraft_ref",
     "service_profile_ref",
     "delivery_profile_ref",
+    "uplink",
     "client_reference",
     "tags"
   ]
@@ -107,7 +108,7 @@ defmodule Cadence.Contacts.ProviderBooking do
           complete_cancellation(reservation, response)
 
         {:error, reason} ->
-          persist_saga_error(reservation, reason, error_lifecycle(reason))
+          cancel_failed(reservation, reason)
       end
     end
   end
@@ -133,14 +134,19 @@ defmodule Cadence.Contacts.ProviderBooking do
   end
 
   defp submit_reservation(reservation, context, client, _attrs, opts) do
-    provider_attrs = %{
-      "opportunity_ref" => reservation.provider_opportunity_ref,
-      "spacecraft_ref" => reservation.provider_spacecraft_ref,
-      "service_profile_ref" => reservation.service_profile_ref["id"],
-      "delivery_profile_ref" => reservation.delivery_profile_ref["id"],
-      "client_reference" => reservation.idempotency_key,
-      "tags" => %{"cadence_mission_ref" => reservation.mission_id}
-    }
+    provider_attrs =
+      %{
+        "opportunity_ref" => reservation.provider_opportunity_ref,
+        "spacecraft_ref" => reservation.provider_spacecraft_ref,
+        "service_profile_ref" => reservation.service_profile_ref["id"],
+        "delivery_profile_ref" => reservation.delivery_profile_ref["id"],
+        "client_reference" => reservation.idempotency_key,
+        "tags" => %{"cadence_mission_ref" => reservation.mission_id}
+      }
+      |> put_present(
+        "uplink",
+        get_in(reservation.request_document, ["provider_request", "uplink"])
+      )
 
     call_opts =
       opts
@@ -193,7 +199,8 @@ defmodule Cadence.Contacts.ProviderBooking do
          {:ok, provider_profile_version} <-
            required_positive_integer(string_attrs, "provider_profile_version"),
          {:ok, source_endpoint_refs} <- required_binary_list(string_attrs, "source_endpoint_refs"),
-         {:ok, path_template_ids} <- required_binary_list(string_attrs, "path_template_ids") do
+         {:ok, path_template_ids} <- required_binary_list(string_attrs, "path_template_ids"),
+         {:ok, uplink} <- uplink_leg(string_attrs["uplink"]) do
       scheduled_contact_id =
         string_attrs["scheduled_contact_id"] || Ids.new("scheduled_contact")
 
@@ -203,33 +210,36 @@ defmodule Cadence.Contacts.ProviderBooking do
       idempotency_key =
         string_attrs["idempotency_key"] || "cadence:#{scheduled_contact_id}"
 
-      request_document = %{
-        "provider_request" =>
-          %{
-            "opportunity_ref" => opportunity_ref,
-            "spacecraft_ref" => provider_spacecraft_ref,
-            "service_profile_ref" => service_profile_ref["id"],
-            "delivery_profile_ref" => delivery_profile_ref["id"],
-            "client_reference" => idempotency_key,
-            "tags" => %{"cadence_mission_ref" => mission_id}
-          }
-          |> Map.take(@provider_request_fields),
-        "routing" => %{
-          "routing_rule_id" => string_attrs["routing_rule_id"],
-          "source_endpoint_refs" => source_endpoint_refs,
-          "path_template_refs" => path_template_refs(string_attrs, path_template_ids)
-        },
-        "bindings" => %{
-          "provider_ref" => %{"id" => provider.provider_id, "version" => provider.version},
-          "transport_ref" => %{"id" => transport_id, "version" => transport_version},
-          "service_profile_ref" => service_profile_ref,
-          "delivery_profile_ref" => delivery_profile_ref,
-          "runtime_provider_profile_ref" => %{
-            "id" => provider_profile_id,
-            "version" => provider_profile_version
+      request_document =
+        %{
+          "provider_request" =>
+            %{
+              "opportunity_ref" => opportunity_ref,
+              "spacecraft_ref" => provider_spacecraft_ref,
+              "service_profile_ref" => service_profile_ref["id"],
+              "delivery_profile_ref" => delivery_profile_ref["id"],
+              "client_reference" => idempotency_key,
+              "tags" => %{"cadence_mission_ref" => mission_id}
+            }
+            |> put_present("uplink", uplink && provider_uplink(uplink))
+            |> Map.take(@provider_request_fields),
+          "routing" => %{
+            "routing_rule_id" => string_attrs["routing_rule_id"],
+            "source_endpoint_refs" => source_endpoint_refs,
+            "path_template_refs" => path_template_refs(string_attrs, path_template_ids)
+          },
+          "bindings" => %{
+            "provider_ref" => %{"id" => provider.provider_id, "version" => provider.version},
+            "transport_ref" => %{"id" => transport_id, "version" => transport_version},
+            "service_profile_ref" => service_profile_ref,
+            "delivery_profile_ref" => delivery_profile_ref,
+            "runtime_provider_profile_ref" => %{
+              "id" => provider_profile_id,
+              "version" => provider_profile_version
+            }
           }
         }
-      }
+        |> put_present("uplink", uplink)
 
       {:ok,
        ProviderReservation.new(%{
@@ -263,35 +273,43 @@ defmodule Cadence.Contacts.ProviderBooking do
          path_template_ids: path_template_ids,
          starts_at: starts_at,
          ends_at: ends_at,
-         requested_snapshot_document: %{
-           "provider_contact_ref" => nil,
-           "provider_revision" => 1,
-           "client_reference" => idempotency_key,
-           "opportunity_ref" => opportunity_ref,
-           "spacecraft_ref" => provider_spacecraft_ref,
-           "ground_station_ref" => string_attrs["ground_station_ref"],
-           "antenna_or_service_pool_ref" => string_attrs["antenna_or_service_pool_ref"],
-           "service_profile_ref" => service_profile_ref["id"],
-           "delivery_profile_ref" => delivery_profile_ref["id"],
-           "starts_at" => DateTime.to_iso8601(starts_at),
-           "ends_at" => DateTime.to_iso8601(ends_at),
-           "status" => "requesting",
-           "pass_phase" => "scheduled",
-           "delivery_state" => "pending",
-           "delivery_descriptor" => %{},
-           "status_reason" => nil,
-           "extensions" => %{}
-         },
+         requested_snapshot_document:
+           %{
+             "provider_contact_ref" => nil,
+             "provider_revision" => 1,
+             "client_reference" => idempotency_key,
+             "opportunity_ref" => opportunity_ref,
+             "spacecraft_ref" => provider_spacecraft_ref,
+             "ground_station_ref" => string_attrs["ground_station_ref"],
+             "antenna_or_service_pool_ref" => string_attrs["antenna_or_service_pool_ref"],
+             "service_profile_ref" => service_profile_ref["id"],
+             "delivery_profile_ref" => delivery_profile_ref["id"],
+             "starts_at" => DateTime.to_iso8601(starts_at),
+             "ends_at" => DateTime.to_iso8601(ends_at),
+             "status" => "requesting",
+             "pass_phase" => "scheduled",
+             "delivery_state" => "pending",
+             "delivery_descriptor" => %{},
+             "status_reason" => nil,
+             "extensions" => %{}
+           }
+           |> put_present(
+             "uplink",
+             uplink && Map.put(provider_uplink(uplink), "status", "requested")
+           ),
          request_document: request_document,
-         metadata: %{
-           "ground_station_ref" => string_attrs["ground_station_ref"],
-           "antenna_or_service_pool_ref" => string_attrs["antenna_or_service_pool_ref"],
-           "provider_display_name" => provider.display_name,
-           "transport_display_name" => string_attrs["transport_display_name"],
-           "service_display_name" => string_attrs["service_display_name"],
-           "delivery_display_name" => string_attrs["delivery_display_name"],
-           "delivery_operator_summary" => string_attrs["delivery_operator_summary"]
-         }
+         metadata:
+           %{
+             "ground_station_ref" => string_attrs["ground_station_ref"],
+             "antenna_or_service_pool_ref" => string_attrs["antenna_or_service_pool_ref"],
+             "provider_display_name" => provider.display_name,
+             "transport_display_name" => string_attrs["transport_display_name"],
+             "service_display_name" => string_attrs["service_display_name"],
+             "delivery_display_name" => string_attrs["delivery_display_name"],
+             "delivery_operator_summary" => string_attrs["delivery_operator_summary"]
+           }
+           # DECISIONS #78: a booking made outside any plan says who booked it and why.
+           |> put_present("off_plan", string_attrs["off_plan"])
        })}
     end
   rescue
@@ -311,6 +329,44 @@ defmodule Cadence.Contacts.ProviderBooking do
 
     {:ok, %{provider_reservation: reservation, scheduled_contact: scheduled_contact}}
   end
+
+  # A failed cancel leaves the booking as it was (api-ops, D2 Release): the provider still has
+  # it. Never the booking path's rejected/failed, which read as a lost booking.
+  defp cancel_failed(reservation, reason) do
+    error_document = %{
+      "action" => "cancel",
+      "outcome" => cancel_outcome(reason),
+      "reason" => encode_error(reason),
+      "recorded_at" => DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+
+    case ProviderReservations.cancel_failed(reservation, error_document) do
+      {:ok, updated} ->
+        {:error, {:provider_reservation_not_confirmed, updated}}
+
+      {:error, persistence_reason} ->
+        {:error, {:provider_saga_persistence_failed, reason, persistence_reason}}
+    end
+  end
+
+  # "not_sent"/"refused": the cancel didn't happen, the booking stands. "unknown": it may have
+  # (the provider may already have dropped it on not_found), the reconciler settles it.
+  defp cancel_outcome(%ProviderError{category: :provider_unavailable}), do: "not_sent"
+
+  defp cancel_outcome(%ProviderError{category: category})
+       when category in [
+              :invalid_request,
+              :authentication_failed,
+              :authorization_failed,
+              :unsupported_capability,
+              :conflict,
+              :no_capacity,
+              :provider_not_ready,
+              :rate_limited
+            ],
+       do: "refused"
+
+  defp cancel_outcome(_reason), do: "unknown"
 
   defp persist_saga_error(reservation, reason, lifecycle_state) do
     error_document = %{
@@ -492,6 +548,38 @@ defmodule Cadence.Contacts.ProviderBooking do
       _other -> Enum.map(path_template_ids, &%{"path_template_id" => &1, "version" => 1})
     end
   end
+
+  # The uplink leg (#44, DECISIONS #46): the outbound route's provider profiles go to the
+  # provider; the route and its uplink path stay in the request document for scheduling.
+  defp uplink_leg(nil), do: {:ok, nil}
+
+  defp uplink_leg(%{} = leg) do
+    leg = stringify_keys(leg)
+
+    with {:ok, service} <- exact_profile_ref(leg, "service_profile_ref"),
+         {:ok, delivery} <- exact_profile_ref(leg, "delivery_profile_ref"),
+         {:ok, template_id} <- required_binary(leg, "path_template_id"),
+         {:ok, template_version} <- required_positive_integer(leg, "path_template_version") do
+      {:ok,
+       Map.merge(leg, %{
+         "service_profile_ref" => service,
+         "delivery_profile_ref" => delivery,
+         "path_template_id" => template_id,
+         "path_template_version" => template_version
+       })}
+    end
+  end
+
+  defp uplink_leg(_leg), do: {:error, {:invalid_provider_booking_field, "uplink"}}
+
+  defp provider_uplink(leg),
+    do: %{
+      "service_profile_ref" => leg["service_profile_ref"]["id"],
+      "delivery_profile_ref" => leg["delivery_profile_ref"]["id"]
+    }
+
+  defp put_present(map, _key, nil), do: map
+  defp put_present(map, key, value), do: Map.put(map, key, value)
 
   defp stringify_keys(map) do
     Map.new(map, fn {key, value} -> {to_string(key), value} end)

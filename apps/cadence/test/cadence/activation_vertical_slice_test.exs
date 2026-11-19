@@ -10,6 +10,8 @@ defmodule Cadence.ActivationVerticalSliceTest do
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Control.MissionRuntimeReconciler
   alias Cadence.Management.Activations, as: ManagementActivations
+  alias Cadence.MissionModelApproval
+  alias Cadence.MissionModelCatalogNaming
   alias Cadence.MissionModels
   alias Cadence.Projections.ActivationStatus
   alias Cadence.Runtime
@@ -187,13 +189,13 @@ defmodule Cadence.ActivationVerticalSliceTest do
       })
 
     assert {:ok, compilation} = MissionModels.compile_layers([layer])
+    MissionModelCatalogNaming.name!(organization_id, mission_id, compilation.revision.revision_id)
 
     assert {:ok, revision} =
-             MissionModels.approve_revision(
+             MissionModelApproval.approve!(
                organization_id,
                mission_id,
-               compilation.revision.revision_id,
-               %{"kind" => "test_fixture", "id" => "activation-vertical-slice"}
+               compilation.revision.revision_id
              )
 
     revision

@@ -18,6 +18,8 @@ defmodule CadenceWeb.OpsPlanReviewPageTest do
     user = TestFixtures.persist_user!()
     membership = TestFixtures.grant_membership!(user, org, role: :organization_admin)
     mission = TestFixtures.persist_mission!(org)
+    # One administrator submits and approves here, which only 'direct' approval allows.
+    CadenceWeb.ContactPlanningFixtures.approve_directly!(org, user, membership, mission)
 
     scope =
       Scope.new(%{
@@ -238,7 +240,7 @@ defmodule CadenceWeb.OpsPlanReviewPageTest do
     assert_reply(view, %{ok: false})
 
     render_hook(view, "host:context", %{
-      "path" => "/missions/#{c.mission.mission_id}/ops/requirements"
+      "path" => "/missions/#{c.mission.mission_id}/ops/planning"
     })
 
     assert_reply(view, %{ok: true})

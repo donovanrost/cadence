@@ -8,7 +8,9 @@ defmodule Cadence.Control.MissionModelPromotion do
   drift before handing a complete specification to the data plane.
   """
 
-  alias Cadence.Control.SpacecraftModelBindings
+  alias Cadence.Catalog
+  alias Cadence.Catalog.FleetSnapshot
+  alias Cadence.Control.{ModelApprovalGate, SpacecraftModelBindings}
 
   alias Cadence.Activations.BindingSetActivation
   alias Cadence.Catalog.MissionModel.{Revision, RuntimePlan}
@@ -18,20 +20,28 @@ defmodule Cadence.Control.MissionModelPromotion do
   @targets [:telemetry, :algorithm, :monitoring, :command]
 
   @doc false
-  def validate_activation_metadata(
-        organization_id,
-        mission_id,
-        _binding_set,
-        %{"spacecraft_configurations" => _} = metadata
-      ) do
-    SpacecraftModelBindings.validate(
-      organization_id,
-      mission_id,
-      metadata
-    )
+  def validate_activation_metadata(organization_id, mission_id, binding_set, metadata) do
+    if FleetSnapshot.fleet?(metadata),
+      do: validate_fleet(organization_id, mission_id, binding_set, metadata),
+      else: validate_model_metadata(organization_id, mission_id, binding_set, metadata)
   end
 
-  def validate_activation_metadata(organization_id, mission_id, binding_set, metadata) do
+  # The fleet branch checked each spacecraft's catalog and model but never approval or
+  # qualification (#92 a, director 11-15); a revision it introduces now needs both.
+  defp validate_fleet(organization_id, mission_id, binding_set, metadata) do
+    with :ok <- SpacecraftModelBindings.validate(organization_id, mission_id, metadata),
+         {:ok, entries} <- FleetSnapshot.entries(metadata) do
+      ModelApprovalGate.check(
+        organization_id,
+        mission_id,
+        entries,
+        ModelApprovalGate.running_entries(organization_id, mission_id),
+        binding_set
+      )
+    end
+  end
+
+  defp validate_model_metadata(organization_id, mission_id, binding_set, metadata) do
     case value(metadata, :mission_model) do
       nil ->
         {:error, :mission_model_activation_manifest_required}
@@ -73,6 +83,12 @@ defmodule Cadence.Control.MissionModelPromotion do
                  mission_id,
                  value(manifest, :revision_id)
                ),
+             :ok <-
+               Catalog.require_named_model_revision(
+                 organization_id,
+                 mission_id,
+                 revision.revision_id
+               ),
              {:ok, plans} <-
                MissionModels.fetch_runtime_plans(
                  organization_id,
@@ -103,12 +119,13 @@ defmodule Cadence.Control.MissionModelPromotion do
              optional(:runtime_plans) => %{atom() => RuntimePlan.t()}
            }}
           | {:error, term()}
-  def runtime_basis(
-        %BindingSetActivation{metadata: %{"spacecraft_configurations" => _}} = activation
-      ),
-      do: SpacecraftModelBindings.runtime_basis(activation)
-
   def runtime_basis(%BindingSetActivation{} = activation) do
+    if FleetSnapshot.fleet?(activation.metadata),
+      do: SpacecraftModelBindings.runtime_basis(activation),
+      else: model_runtime_basis(activation)
+  end
+
+  defp model_runtime_basis(%BindingSetActivation{} = activation) do
     case value(activation.metadata, :mission_model) do
       nil ->
         {:error, :mission_model_activation_manifest_required}
@@ -160,12 +177,13 @@ defmodule Cadence.Control.MissionModelPromotion do
   def runtime_basis(_, _, _), do: {:error, :invalid_mission_model_activation_manifest}
 
   @doc false
-  def command_authoring_basis(
-        %BindingSetActivation{metadata: %{"spacecraft_configurations" => _}} = activation
-      ),
-      do: SpacecraftModelBindings.command_basis(activation, nil)
-
   def command_authoring_basis(%BindingSetActivation{} = activation) do
+    if FleetSnapshot.fleet?(activation.metadata),
+      do: SpacecraftModelBindings.command_basis(activation, nil),
+      else: model_command_authoring_basis(activation)
+  end
+
+  defp model_command_authoring_basis(%BindingSetActivation{} = activation) do
     MissionModels.command_authoring_basis(
       activation.organization_id,
       activation.mission_id,

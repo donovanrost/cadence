@@ -8,9 +8,12 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovalsTest do
     ContactPlanApprovals,
     ContactPlans,
     ContactRequirements,
-    Planner
+    Planner,
+    PlanSubmissions
   }
 
+  alias Cadence.Governance.ActivationPolicy
+  alias Cadence.Management.Contacts.Store.ContactPlanApprovalRow
   alias Cadence.Spacecraft
 
   @organization_id "org-contact-plan-approvals"
@@ -119,6 +122,135 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovalsTest do
     assert {:error, :contact_plan_not_pending_approval} = approve(context)
   end
 
+  test "acknowledgements on a fully satisfied plan are rejected, not stored", context do
+    assert {:error, {:contact_plan_exceptions_unknown, [id]}} =
+             ContactPlanApprovals.approve(
+               context.admin_scope,
+               @mission_id,
+               context.plan.contact_plan_id,
+               context.plan.current_version,
+               context.plan_version.content_sha256,
+               "Reviewed provider, station, policy, and expiry",
+               now: DateTime.add(@now, 2, :second),
+               resolve_route: route_resolver(),
+               acknowledged_exceptions: [
+                 %{
+                   requirement_id: context.requirement.contact_requirement_id,
+                   reason: "Nothing is unmet here"
+                 }
+               ]
+             )
+
+    assert id == context.requirement.contact_requirement_id
+  end
+
+  describe "acknowledged exceptions (DECISIONS #28)" do
+    setup context do
+      # A second requirement whose window is searched but left unselected.
+      assert {:ok, gap, gap_version} =
+               ContactRequirements.create(
+                 context.member_scope,
+                 @mission_id,
+                 requirement_attrs(),
+                 now: @now
+               )
+
+      assert {:ok, gap_planning} =
+               Planner.run(
+                 context.member_scope,
+                 @mission_id,
+                 gap.contact_requirement_id,
+                 gap_version.version,
+                 now: @now,
+                 list_routes: fn _, _, _ -> {:ok, %{routes: [route()], findings: []}} end,
+                 search_opportunities: fn _, _, _, _, _ ->
+                   {:ok, %{opportunities: [opportunity(%{"id" => "opportunity-gap"})]}}
+                 end
+               )
+
+      assert {:ok, plan, plan_version} =
+               ContactPlans.create(
+                 context.member_scope,
+                 @mission_id,
+                 %{
+                   planning_run_ids: [
+                     context.snapshot.contact_planning_run_id,
+                     gap_planning.run.contact_planning_run_id
+                   ],
+                   selected_snapshot_ids: [context.snapshot.contact_opportunity_snapshot_id],
+                   rationale: "Accept the gap for the second requirement"
+                 },
+                 now: @now
+               )
+
+      assert {:ok, pending} =
+               ContactPlans.submit(
+                 context.member_scope,
+                 @mission_id,
+                 plan.contact_plan_id,
+                 plan.current_version,
+                 "Ready for administrator review",
+                 now: DateTime.add(@now, 1, :second)
+               )
+
+      %{gap: gap, gap_plan: pending, gap_version: plan_version}
+    end
+
+    test "an unsatisfied plan is refused without acknowledgements", context do
+      assert {:error, :contact_plan_not_satisfied} = approve_gap(context, nil)
+    end
+
+    test "every unsatisfied requirement must be acknowledged with a reason", context do
+      assert {:error, {:contact_plan_exception_invalid, _}} =
+               approve_gap(context, [
+                 %{requirement_id: context.gap.contact_requirement_id, reason: "short"}
+               ])
+
+      assert {:error, {:contact_plan_exceptions_unknown, ["nope"]}} =
+               approve_gap(context, [
+                 %{
+                   requirement_id: context.gap.contact_requirement_id,
+                   reason: "Weather window next pass"
+                 },
+                 %{requirement_id: "nope", reason: "Not part of this plan at all"}
+               ])
+    end
+
+    test "duplicate acknowledgements for one requirement are invalid", context do
+      ack = %{
+        requirement_id: context.gap.contact_requirement_id,
+        reason: "Weather window next pass"
+      }
+
+      assert {:error, {:contact_plan_exception_invalid, id}} = approve_gap(context, [ack, ack])
+      assert id == context.gap.contact_requirement_id
+    end
+
+    test "acknowledged gaps are approved and audited on the approval", context do
+      reason = "Recorder margin allows one missed pass"
+
+      assert {:ok, plan, _version, approval} =
+               approve_gap(context, [
+                 %{"requirement_id" => context.gap.contact_requirement_id, "reason" => reason}
+               ])
+
+      assert plan.lifecycle_state == :approved
+
+      assert [
+               %{
+                 "contact_requirement_id" => gap_id,
+                 "contact_requirement_version" => 1,
+                 "reason" => ^reason
+               }
+             ] = approval.exceptions
+
+      assert gap_id == context.gap.contact_requirement_id
+
+      assert [%{exceptions: [_]}] =
+               ContactPlanApprovals.list(@organization_id, @mission_id, plan.contact_plan_id)
+    end
+  end
+
   test "concurrent approval attempts serialize to one exact decision", context do
     results =
       1..2
@@ -205,6 +337,89 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovalsTest do
                now: DateTime.add(@now, 18_001, :second),
                resolve_route: route_resolver()
              )
+  end
+
+  describe "no self-approval under 'independent' approval (director 11-15)" do
+    setup context do
+      %{admin_plan: admin_plan(context)}
+    end
+
+    test "the administrator who wrote and submitted a version can't approve it", context do
+      assert {:error, :contact_plan_self_approval_forbidden} =
+               approve_as(context.admin_scope, context.admin_plan)
+
+      assert {:ok, plan, _version} =
+               ContactPlans.fetch(
+                 @organization_id,
+                 @mission_id,
+                 context.admin_plan.plan.contact_plan_id
+               )
+
+      assert plan.lifecycle_state == :pending_approval
+    end
+
+    test "another administrator approves it; the approval and the submit record the policy",
+         context do
+      assert {:ok, plan, _version, _approval} =
+               approve_as(other_admin_scope(context), context.admin_plan)
+
+      assert plan.lifecycle_state == :approved
+      # M2: the approval policy in force at decision time, on the approval and on the submit.
+      policy = ActivationPolicy.evidence(@organization_id, @mission_id)
+      assert policy["separation_of_duties"] == true
+      assert [^policy] = policy_documents(ContactPlanApprovalRow, plan.contact_plan_id)
+
+      # A submission records it too (under 'direct' an admin's submit also approves).
+      assert {:ok, submission} =
+               PlanSubmissions.record(%{
+                 organization_id: @organization_id,
+                 mission_id: @mission_id,
+                 contact_plan_id: plan.contact_plan_id,
+                 contact_plan_version: plan.current_version,
+                 actor_document: %{"kind" => "user", "id" => "admin-submitter"}
+               })
+
+      assert submission.policy_document == policy
+    end
+
+    test "the requester may still send it back", context do
+      assert {:ok, plan, _version, _decision} =
+               ContactPlanApprovals.reject(
+                 context.admin_scope,
+                 @mission_id,
+                 context.admin_plan.plan.contact_plan_id,
+                 context.admin_plan.plan.current_version,
+                 context.admin_plan.version.content_sha256,
+                 "Not this window after all",
+                 now: DateTime.add(@now, 2, :second)
+               )
+
+      # A send back returns it to draft for a new version.
+      assert plan.lifecycle_state == :draft
+    end
+
+    test "under 'direct' approval the same administrator may approve", context do
+      policy = ActivationPolicy.load(@organization_id, @mission_id)
+
+      assert {:ok, _saved} =
+               ActivationPolicy.save(context.admin_scope, @mission_id, policy.token, %{
+                 "value" => %{"approval_requirement" => "direct"}
+               })
+
+      assert {:ok, plan, _version, _approval} =
+               approve_as(context.admin_scope, context.admin_plan)
+
+      assert plan.lifecycle_state == :approved
+
+      assert [%{"separation_of_duties" => false}] =
+               policy_documents(ContactPlanApprovalRow, plan.contact_plan_id)
+    end
+  end
+
+  defp policy_documents(schema, plan_id) do
+    Cadence.Repo.all(
+      from(row in schema, where: row.contact_plan_id == ^plan_id, select: row.policy_document)
+    )
   end
 
   test "approval records immutable route bindings without invoking Control", context do
@@ -314,6 +529,97 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovalsTest do
     assert version_two.content_sha256 != version.content_sha256
   end
 
+  # A plan an administrator wrote and submitted, from the same planning snapshot; the setup's own
+  # plan (a member's) is sent back first, so only this one is pending.
+  defp admin_plan(context) do
+    assert {:ok, _rejected, _version, _decision} =
+             ContactPlanApprovals.reject(
+               context.admin_scope,
+               @mission_id,
+               context.plan.contact_plan_id,
+               context.plan.current_version,
+               context.plan_version.content_sha256,
+               "Replaced by the administrator's own plan",
+               now: DateTime.add(@now, 1, :second)
+             )
+
+    assert {:ok, plan, version} =
+             ContactPlans.create(
+               context.admin_scope,
+               @mission_id,
+               %{
+                 planning_run_ids: [context.snapshot.contact_planning_run_id],
+                 selected_snapshot_ids: [context.snapshot.contact_opportunity_snapshot_id],
+                 rationale: "The administrator's own plan"
+               },
+               now: DateTime.add(@now, 1, :second)
+             )
+
+    assert {:ok, pending} =
+             ContactPlans.submit(
+               context.admin_scope,
+               @mission_id,
+               plan.contact_plan_id,
+               plan.current_version,
+               "Ready",
+               now: DateTime.add(@now, 1, :second)
+             )
+
+    %{plan: pending, version: version}
+  end
+
+  defp approve_as(scope, %{plan: plan, version: version}) do
+    ContactPlanApprovals.approve(
+      scope,
+      @mission_id,
+      plan.contact_plan_id,
+      plan.current_version,
+      version.content_sha256,
+      "Reviewed provider, station, policy, and expiry",
+      now: DateTime.add(@now, 2, :second),
+      resolve_route: route_resolver()
+    )
+  end
+
+  defp other_admin_scope(context) do
+    scope = context.admin_scope
+    user = %{scope.user | user_id: "contact-plan-approval-second-admin"}
+    membership = %{scope.organization_membership | user_id: user.user_id}
+    %{scope | user: user, organization_membership: membership}
+  end
+
+  # U76 (lead 11-17; P3: blank is none): an approval's note is optional and recorded as NULL.
+  for {label, note} <- [{"no note", nil}, {"a whitespace-only note", "   "}] do
+    test "U76: an approval with #{label} records NULL, never a canned text", context do
+      assert {:ok, _plan, _version, approval} = approve(context, unquote(note))
+      assert approval.reason == nil
+
+      assert [%{reason: nil}] =
+               Cadence.Repo.all(
+                 from(row in Cadence.Management.Contacts.Store.ContactPlanApprovalRow,
+                   where: row.contact_plan_id == ^context.plan.contact_plan_id,
+                   select: %{reason: row.reason}
+                 )
+               )
+    end
+  end
+
+  test "U76: a rejection still needs its reason; a blank one records nothing", context do
+    assert {:error, :contact_plan_decision_reason_required} =
+             ContactPlanApprovals.reject(
+               context.admin_scope,
+               @mission_id,
+               context.plan.contact_plan_id,
+               1,
+               context.plan_version.content_sha256,
+               "   ",
+               now: DateTime.add(@now, 2, :second)
+             )
+
+    assert ContactPlanApprovals.list(@organization_id, @mission_id, context.plan.contact_plan_id) ==
+             []
+  end
+
   defp approve(context) do
     ContactPlanApprovals.approve(
       context.admin_scope,
@@ -324,6 +630,33 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovalsTest do
       "Reviewed provider, station, policy, and expiry",
       now: DateTime.add(@now, 2, :second),
       resolve_route: route_resolver()
+    )
+  end
+
+  defp approve(context, note) do
+    ContactPlanApprovals.approve(
+      context.admin_scope,
+      @mission_id,
+      context.plan.contact_plan_id,
+      context.plan.current_version,
+      context.plan_version.content_sha256,
+      note,
+      now: DateTime.add(@now, 2, :second),
+      resolve_route: route_resolver()
+    )
+  end
+
+  defp approve_gap(context, acknowledged) do
+    ContactPlanApprovals.approve(
+      context.admin_scope,
+      @mission_id,
+      context.gap_plan.contact_plan_id,
+      context.gap_plan.current_version,
+      context.gap_version.content_sha256,
+      "Reviewed provider, station, policy, and expiry",
+      now: DateTime.add(@now, 2, :second),
+      resolve_route: route_resolver(),
+      acknowledged_exceptions: acknowledged
     )
   end
 

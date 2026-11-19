@@ -4,18 +4,6 @@ defmodule Cadence.Administration.OrganizationCreation do
   alias Cadence.Organizations
   alias Cadence.Organizations.Organization
 
-  def load(scope) do
-    with {:ok, user} <- Access.authorize(scope) do
-      {:ok,
-       %{
-         "version" => 1,
-         "user_id" => user.user_id,
-         "observed_at" => DateTime.to_iso8601(DateTime.utc_now()),
-         "created" => nil
-       }}
-    end
-  end
-
   def create(scope, params) do
     with {:ok, _user} <- Access.authorize(scope),
          {:ok, attrs} <- validate(params) do

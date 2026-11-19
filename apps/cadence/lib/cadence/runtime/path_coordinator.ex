@@ -51,7 +51,8 @@ defmodule Cadence.Runtime.PathCoordinator do
           lifecycle_status: :active | :quiescing | :quiesced,
           quiescence_settlement: map() | nil,
           provider_bindings: %{required(binary()) => ProviderBindingSpec.t()},
-          transport_bindings: %{required(binary()) => TransportBindingSpec.t()}
+          transport_bindings: %{required(binary()) => TransportBindingSpec.t()},
+          intake?: boolean()
         }
 
   def start_link(opts) when is_list(opts) do
@@ -166,12 +167,13 @@ defmodule Cadence.Runtime.PathCoordinator do
       lifecycle_status: :active,
       quiescence_settlement: nil,
       provider_bindings: Map.new(path.provider_bindings, &{&1.provider_binding_id, &1}),
-      transport_bindings: Map.new(path.transport_bindings, &{&1.transport_binding_id, &1})
+      transport_bindings: Map.new(path.transport_bindings, &{&1.transport_binding_id, &1}),
+      intake?: Keyword.get(opts, :intake?, true)
     }
 
     case start_provider_runtimes(state) do
       :ok ->
-        case start_transport_runtimes(state) do
+        case maybe_start_transport_runtimes(state) do
           :ok -> {:ok, state}
           {:error, reason} -> {:stop, reason}
         end
@@ -190,8 +192,8 @@ defmodule Cadence.Runtime.PathCoordinator do
     state = %{state | lifecycle_status: :quiescing}
 
     reply =
-      with {:ok, transport_runtimes} <- quiesce_transport_runtimes(state),
-           {:ok, provider_runtimes} <- quiesce_provider_runtimes(state),
+      with {:ok, transport_runtimes} <- intake(state, &quiesce_transport_runtimes/1),
+           {:ok, provider_runtimes} <- intake(state, &quiesce_provider_runtimes/1),
            {:ok, journal_consumers} <- quiesce_ingress_journal_consumers(state),
            {:ok, archive_consumers} <- quiesce_ingress_archive_consumers(state),
            {:ok, ingress_executors} <- quiesce_ingress_executors(state),
@@ -342,10 +344,7 @@ defmodule Cadence.Runtime.PathCoordinator do
              maybe_start_provider_ingress_journal_consumer(state, provider_binding),
            {:ok, _archive_consumer} <-
              maybe_start_provider_ingress_archive_consumer(state, provider_binding),
-           {:ok, provider_module} <-
-             Cadence.ProviderAdapters.Registry.fetch_module(provider_binding.adapter_key),
-           {:ok, _provider_runtime} <-
-             start_provider_runtime(state, provider_binding, provider_module) do
+           {:ok, _provider_runtime} <- maybe_start_provider_runtime(state, provider_binding) do
         {:cont, :ok}
       else
         {:error, reason} ->
@@ -353,6 +352,23 @@ defmodule Cadence.Runtime.PathCoordinator do
       end
     end)
   end
+
+  # A replay runtime (intake?: false) starts the journal and its drain, never the adapter or
+  # transports that would take new data (DECISIONS #71).
+  defp maybe_start_provider_runtime(%{intake?: false}, _provider_binding), do: {:ok, nil}
+
+  defp maybe_start_provider_runtime(state, provider_binding) do
+    with {:ok, provider_module} <-
+           Cadence.ProviderAdapters.Registry.fetch_module(provider_binding.adapter_key) do
+      start_provider_runtime(state, provider_binding, provider_module)
+    end
+  end
+
+  defp maybe_start_transport_runtimes(%{intake?: false}), do: :ok
+  defp maybe_start_transport_runtimes(state), do: start_transport_runtimes(state)
+
+  defp intake(%{intake?: false}, _quiesce), do: {:ok, []}
+  defp intake(state, quiesce), do: quiesce.(state)
 
   defp maybe_start_provider_ingress_journal(state, %ProviderBindingSpec{} = provider_binding) do
     if journaled_provider?(state, provider_binding) do
@@ -552,6 +568,7 @@ defmodule Cadence.Runtime.PathCoordinator do
         process_namespace: state.process_namespace,
         source_endpoint_ref: state.path.source_endpoint_ref,
         source_endpoint_spacecraft_id: state.path.source_endpoint_spacecraft_id,
+        source_endpoint_spacecraft_scid: state.path.source_endpoint_spacecraft_scid,
         direction: state.path.direction,
         ingress_executor_name:
           MissionRuntime.provider_ingress_executor_name(

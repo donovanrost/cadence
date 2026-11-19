@@ -6,8 +6,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
   alias Cadence.Applications.{HostContext, JSONBoundary, SurfaceQueryRequest}
   alias Cadence.Applications.OpsConsole, as: OpsDefinition
   alias Cadence.Auth.{Policy, Scope}
-  alias Cadence.ContactPlanning.ContactRequirements
-  alias Cadence.Dashboards.PlaylistInput
   alias Cadence.Reads.ActivationApprovals
   alias Cadence.Reads.ApplicationSurfaces.OpsConsole.Presentation
 
@@ -15,21 +13,13 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
     ContactDetail,
     ContactPlanShow,
     ContactRecord,
-    ContactRequirementList,
-    ContactRequirementNew,
-    ContactRequirementShow,
     ContactSchedule,
     FleetDirectory,
-    FleetPolicy,
     FleetRun,
-    FleetStart,
-    RequirementTemplates
+    FleetStart
   }
 
   alias Cadence.Reads.CommandMonitor
-  alias Cadence.Reads.Dashboards.Activity
-  alias Cadence.Reads.Dashboards.Creation
-  alias Cadence.Reads.Dashboards.Directory
   alias Cadence.Reads.LimitAlarmConditions
   alias Cadence.Reads.OpsWorkspace.Landing
 
@@ -38,18 +28,9 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
   @surface_version 1
   @exploration_query_keys ~w(point_id spacecraft_id scope_kind scope_id time_mode time_axis from to replay_run_id order limit selection_view data_view validity_state realm logical_source data_source_id source_binding_id source_dashboard_id sample_id selected_time question limit_mode)
   @subject_param_keys %{
-    "contact_requirement_show" => "contact_requirement_id",
     "contact_plan_show" => "contact_plan_id",
     "contact_detail" => "provider_reservation_id",
     "contact_record" => "contact_id",
-    "dashboard_settings" => "dashboard_id",
-    "dashboard_show" => "dashboard_id",
-    "dashboard_editor" => "dashboard_id",
-    "dashboard_activity" => "dashboard_id",
-    "dashboard_share" => "share_id",
-    "dashboard_snapshot" => "snapshot_id",
-    "dashboard_diagnostics" => "dashboard_id",
-    "dashboard_playlist_present" => "playlist_id",
     "fleet_planning_run" => "fleet_planning_run_id"
   }
 
@@ -132,13 +113,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
     end
   end
 
-  defp validate_params(%{id: "contact_requirement_list"}, params) do
-    case ContactRequirementList.admit_query(Map.delete(params, "mission_id")) do
-      {:ok, _} -> :ok
-      {:error, _} = error -> error
-    end
-  end
-
   defp validate_params(%{id: "fleet_planning"}, params) do
     case FleetDirectory.admit_query(Map.delete(params, "mission_id")) do
       {:ok, _} -> :ok
@@ -174,13 +148,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
     end
   end
 
-  defp validate_params(%{id: "contact_requirement_show"}, params) do
-    case ContactRequirementShow.admit_query(Map.delete(params, "mission_id")) do
-      {:ok, _} -> :ok
-      {:error, _} = error -> error
-    end
-  end
-
   defp validate_params(%{id: "fleet_planning_run"}, params) do
     case FleetRun.admit_query(Map.delete(params, "mission_id")) do
       {:ok, _} -> :ok
@@ -193,36 +160,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
          key in ~w(mission_id category kind severity spacecraft_id from to event_id source_dashboard_id before_at before_id) and
            is_binary(value) and byte_size(value) <= 512
        end), do: :ok, else: {:error, :unsupported_application_surface_query}
-  end
-
-  defp validate_params(%{id: surface_id} = spec, params)
-       when surface_id in ~w(dashboard_show dashboard_editor dashboard_library dashboard_playlists dashboard_activity dashboard_playlist_present) do
-    keys = ["mission_id" | Map.get(spec, :query_params, [])]
-
-    with true <-
-           Enum.all?(params, fn {key, value} ->
-             key in keys and value != "" and exploration_value?(value) and
-               (key not in ~w(mission_id dashboard_id playlist_id) or value not in [".", ".."])
-           end),
-         :ok <- validate_subject_param(surface_id, params),
-         :ok <- validate_dashboard_destination(surface_id, params) do
-      :ok
-    else
-      _ -> {:error, :invalid_application_surface_query}
-    end
-  end
-
-  defp validate_params(%{id: "dashboard_directory"}, params) do
-    case Directory.filters(Map.delete(params, "mission_id")) do
-      {:ok, _} -> :ok
-      _ -> {:error, :invalid_application_surface_query}
-    end
-  end
-
-  defp validate_params(%{id: "dashboard_new"}, params) do
-    if Enum.all?(params, fn {key, value} ->
-         key in ~w(mission_id mode source_dashboard_id) and exploration_value?(value)
-       end), do: :ok, else: {:error, :invalid_application_surface_query}
   end
 
   defp validate_params(spec, params) do
@@ -285,22 +222,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
     end
   end
 
-  defp validate_dashboard_destination("dashboard_activity", params) do
-    case Activity.admit(Map.take(params, ~w(version selected_publish_issue))) do
-      {:ok, _} -> :ok
-      _ -> {:error, :invalid_application_surface_query}
-    end
-  end
-
-  defp validate_dashboard_destination("dashboard_playlist_present", params) do
-    case PlaylistInput.position(Map.take(params, ~w(index)), 100, false) do
-      {:ok, _, _} -> :ok
-      _ -> {:error, :invalid_application_surface_query}
-    end
-  end
-
-  defp validate_dashboard_destination(_, _), do: :ok
-
   defp validate_subject_param(surface_id, params) do
     key = Map.get(@subject_param_keys, surface_id)
 
@@ -320,17 +241,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
   defp validate_scope_mission(%Scope{mission_id: nil}, _mission_id), do: :ok
   defp validate_scope_mission(%Scope{mission_id: mission_id}, mission_id), do: :ok
   defp validate_scope_mission(%Scope{}, _mission_id), do: {:error, :scope_mismatch}
-
-  defp validate_subject("contact_requirement_show", organization_id, mission_id, params) do
-    case ContactRequirements.fetch(
-           organization_id,
-           mission_id,
-           params["contact_requirement_id"]
-         ) do
-      {:ok, _requirement, _version} -> :ok
-      _ -> {:error, :subject_not_found}
-    end
-  end
 
   defp validate_subject("contact_plan_show", organization_id, mission_id, params) do
     case Cadence.Management.Contacts.fetch_plan(
@@ -361,45 +271,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
       _missing -> {:error, :subject_not_found}
     end
   end
-
-  defp validate_subject(surface_id, organization_id, mission_id, params)
-       when surface_id in [
-              "dashboard_settings",
-              "dashboard_diagnostics",
-              "dashboard_show",
-              "dashboard_editor",
-              "dashboard_activity"
-            ] do
-    fetch_subject(Cadence.Dashboards, :fetch_document, [
-      organization_id,
-      mission_id,
-      params["dashboard_id"]
-    ])
-  end
-
-  defp validate_subject("dashboard_share", organization_id, mission_id, params),
-    do:
-      fetch_subject(Cadence.Dashboards.Management, :fetch_active_share, [
-        organization_id,
-        mission_id,
-        params["share_id"]
-      ])
-
-  defp validate_subject("dashboard_snapshot", organization_id, mission_id, params),
-    do:
-      fetch_subject(Cadence.Dashboards.Management, :fetch_snapshot, [
-        organization_id,
-        mission_id,
-        params["snapshot_id"]
-      ])
-
-  defp validate_subject("dashboard_playlist_present", organization_id, mission_id, params),
-    do:
-      fetch_subject(Cadence.Dashboards.Management, :fetch_playlist, [
-        organization_id,
-        mission_id,
-        params["playlist_id"]
-      ])
 
   defp validate_subject("fleet_planning_run", organization_id, mission_id, params),
     do:
@@ -458,27 +329,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
   defp dispatch("timeline", scope, mission, params), do: timeline(scope, mission, params)
   defp dispatch("commands", scope, mission, params), do: commands(scope, mission, params)
 
-  defp dispatch("dashboard_directory", scope, mission, params),
-    do: dashboard_directory(scope, mission, params)
-
-  defp dispatch(surface_id, _scope, mission, params)
-       when surface_id in ~w(dashboard_show dashboard_editor),
-       do:
-         envelope("OpsDashboardShow", %{
-           "mission_id" => mission.mission_id,
-           "dashboard_id" => params["dashboard_id"],
-           "mode" => if(surface_id == "dashboard_show", do: "view", else: "edit"),
-           "query" => Map.drop(params, ~w(mission_id dashboard_id))
-         })
-
-  defp dispatch("dashboard_activity", _scope, mission, params),
-    do:
-      envelope("OpsDashboardActivitySurface", %{
-        "mission_id" => mission.mission_id,
-        "dashboard_id" => params["dashboard_id"],
-        "query" => Map.take(params, ~w(version selected_publish_issue))
-      })
-
   defp dispatch("data_sources", scope, mission, params),
     do: envelope("OpsDataSources", Presentation.data_sources(scope, mission, params, :reader))
 
@@ -503,16 +353,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
       {:error, _reason} -> throw(:activation_inbox_unavailable)
     end
   end
-
-  defp dispatch("contact_requirement_list", scope, mission, params) do
-    case ContactRequirementList.load(scope, mission, params) do
-      {:ok, model} -> envelope("OpsContactRequirementList", model)
-      {:error, _} -> throw(:requirement_list_unavailable)
-    end
-  end
-
-  defp dispatch("contact_requirement_new", scope, mission, _params),
-    do: envelope("OpsContactRequirementNew", ContactRequirementNew.load(scope, mission))
 
   defp dispatch("contact_schedule", scope, mission, params) do
     case ContactSchedule.load(scope, mission, params) do
@@ -542,16 +382,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
     end
   end
 
-  defp dispatch("contact_requirement_show", scope, mission, params) do
-    case ContactRequirementShow.load(scope, mission, params) do
-      {:ok, model} -> envelope("OpsContactRequirementShow", model)
-      {:error, _} -> throw(:requirement_detail_unavailable)
-    end
-  end
-
-  defp dispatch("contact_requirement_template", scope, mission, _params),
-    do: envelope("OpsContactRequirementTemplate", RequirementTemplates.load(scope, mission))
-
   defp dispatch("fleet_planning", scope, mission, params) do
     case FleetDirectory.load(scope, mission, params) do
       {:ok, model} -> envelope("OpsFleetPlanning", model)
@@ -570,29 +400,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
     case FleetRun.load(scope, mission, params) do
       {:ok, model} -> envelope("OpsFleetPlanningRun", model)
       {:error, _} -> throw(:fleet_run_unavailable)
-    end
-  end
-
-  defp dispatch("fleet_planning_policy", scope, mission, _params),
-    do: envelope("OpsFleetPlanningPolicy", FleetPolicy.load(scope, mission))
-
-  defp dispatch("dashboard_new", scope, mission, params) do
-    case Creation.load(scope, mission.mission_id, Map.delete(params, "mission_id")) do
-      {:ok, model} ->
-        envelope("OpsDashboardNew", %{
-          "model" => %{
-            "version" => 1,
-            "context" => %{
-              "organization_id" => scope.organization_id,
-              "mission_id" => mission.mission_id
-            },
-            "mode" => model.mode,
-            "source_dashboard_id" => model.source && model.source.id
-          }
-        })
-
-      _ ->
-        throw(:dashboard_creation_unavailable)
     end
   end
 
@@ -623,29 +430,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
     envelope(component_name(surface_id), props)
   end
 
-  defp generic_props(surface_id, page, _params)
-       when surface_id in ~w(dashboard_library dashboard_playlists),
-       do: %{"mission_id" => page["mission_id"], "query" => %{}}
-
-  defp generic_props("dashboard_playlist_present", page, params),
-    do: %{
-      "mission_id" => page["mission_id"],
-      "playlist_id" => params["playlist_id"],
-      "query" => Map.take(params, ~w(index))
-    }
-
-  defp generic_props("dashboard_settings", page, params),
-    do: %{"mission_id" => page["mission_id"], "dashboard_id" => params["dashboard_id"]}
-
-  defp generic_props("dashboard_share", page, params),
-    do: %{"mission_id" => page["mission_id"], "share_id" => params["share_id"]}
-
-  defp generic_props("dashboard_snapshot", page, params),
-    do: %{"mission_id" => page["mission_id"], "snapshot_id" => params["snapshot_id"]}
-
-  defp generic_props("dashboard_diagnostics", page, params),
-    do: %{"mission_id" => page["mission_id"], "dashboard_id" => params["dashboard_id"]}
-
   defp generic_props("telemetry_explore", page, params), do: telemetry_props(page, params)
   defp generic_props("data_operations", page, _params), do: data_operations_props(page)
 
@@ -674,25 +458,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
     })
   end
 
-  defp dashboard_directory(scope, mission, params) do
-    case Directory.load(scope, mission.mission_id, Map.delete(params, "mission_id")) do
-      {:ok, model} ->
-        envelope("OpsDashboardDirectory", %{
-          "model" => %{
-            "version" => 2,
-            "context" => %{
-              "organization_id" => scope.organization_id,
-              "mission_id" => mission.mission_id
-            },
-            "filters" => model.filters
-          }
-        })
-
-      _ ->
-        throw(:dashboard_directory_unavailable)
-    end
-  end
-
   defp page(id, title, mission, params),
     do: %{
       "id" => id,
@@ -707,30 +472,13 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
       "subject" => Map.values(params) |> Enum.find(&is_binary/1)
     }
 
-  defp component_name("contact_requirement_list"), do: "OpsContactRequirementList"
   defp component_name("workspace"), do: "OpsConsoleLanding"
-  defp component_name("contact_requirement_new"), do: "OpsContactRequirementNew"
-  defp component_name("contact_requirement_show"), do: "OpsContactRequirementShow"
-  defp component_name("contact_requirement_template"), do: "OpsContactRequirementTemplate"
   defp component_name("contact_schedule"), do: "OpsContactSchedule"
   defp component_name("contact_plan_show"), do: "OpsContactPlanShow"
   defp component_name("contact_detail"), do: "OpsContactDetail"
   defp component_name("contact_record"), do: "OpsContactRecord"
-  defp component_name("dashboard_directory"), do: "OpsDashboardDirectory"
-  defp component_name("dashboard_show"), do: "OpsDashboardShow"
-  defp component_name("dashboard_editor"), do: "OpsDashboardShow"
-  defp component_name("dashboard_activity"), do: "OpsDashboardActivitySurface"
-  defp component_name("dashboard_new"), do: "OpsDashboardNew"
-  defp component_name("dashboard_library"), do: "OpsDashboardLibrary"
-  defp component_name("dashboard_playlists"), do: "OpsDashboardPlaylists"
-  defp component_name("dashboard_playlist_present"), do: "OpsDashboardPlaylistPresent"
-  defp component_name("dashboard_settings"), do: "OpsDashboardSettings"
-  defp component_name("dashboard_share"), do: "OpsDashboardShare"
-  defp component_name("dashboard_snapshot"), do: "OpsDashboardSnapshot"
-  defp component_name("dashboard_diagnostics"), do: "OpsDashboardDiagnostics"
   defp component_name("fleet_planning"), do: "OpsFleetPlanning"
   defp component_name("fleet_planning_new"), do: "OpsFleetPlanningNew"
-  defp component_name("fleet_planning_policy"), do: "OpsFleetPlanningPolicy"
   defp component_name("fleet_planning_run"), do: "OpsFleetPlanningRun"
   defp component_name("activation_requests"), do: "OpsActivationRequests"
   defp component_name("commands"), do: "OpsCommands"

@@ -9,6 +9,10 @@ defmodule Cadence.ContactPlanning.FleetPlanningPoliciesTest do
     FleetPlanningPolicyDocument
   }
 
+  alias Cadence.Governance.ActivationPolicy
+  alias Cadence.Management.Contacts.Store.FleetPlanningPolicyApprovalRow
+  alias Cadence.PolicyReviewer
+
   @organization_id "org-fleet-planning-policy"
   @mission_id "mission-fleet-planning-policy"
   @now ~U[2026-07-17 02:00:00.000000Z]
@@ -82,7 +86,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningPoliciesTest do
 
     assert {:error, :stale_fleet_planning_policy_hash} =
              FleetPlanningPolicies.approve(
-               context.admin_scope,
+               PolicyReviewer.reviewer(context.admin_scope),
                @mission_id,
                policy.fleet_planning_policy_id,
                1,
@@ -92,7 +96,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningPoliciesTest do
 
     assert {:ok, active, ^version, approval} =
              FleetPlanningPolicies.approve(
-               context.admin_scope,
+               PolicyReviewer.reviewer(context.admin_scope),
                @mission_id,
                policy.fleet_planning_policy_id,
                1,
@@ -104,7 +108,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningPoliciesTest do
     assert active.lifecycle_state == :active
     assert active.active_version == 1
     assert approval.decision == :approved
-    assert approval.actor_user_id == context.admin_scope.user.user_id
+    assert approval.actor_user_id == PolicyReviewer.reviewer(context.admin_scope).user.user_id
     assert approval.actor_document["display_name"] == "Fleet Policy organization_admin"
 
     assert {:ok, ^active, ^version} =
@@ -115,6 +119,17 @@ defmodule Cadence.ContactPlanning.FleetPlanningPoliciesTest do
                @organization_id,
                @mission_id,
                policy.fleet_planning_policy_id
+             )
+
+    # M2: the approval policy in force at decision time is on the decision row.
+    expected = ActivationPolicy.evidence(@organization_id, @mission_id)
+
+    assert [^expected] =
+             Cadence.Repo.all(
+               from(row in FleetPlanningPolicyApprovalRow,
+                 where: row.fleet_planning_policy_id == ^policy.fleet_planning_policy_id,
+                 select: row.policy_document
+               )
              )
   end
 
@@ -129,7 +144,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningPoliciesTest do
 
     assert {:ok, active_one, ^version_one, _approval} =
              FleetPlanningPolicies.approve(
-               context.admin_scope,
+               PolicyReviewer.reviewer(context.admin_scope),
                @mission_id,
                policy.fleet_planning_policy_id,
                1,
@@ -170,7 +185,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningPoliciesTest do
 
     assert {:error, :stale_fleet_planning_policy_version} =
              FleetPlanningPolicies.approve(
-               context.admin_scope,
+               PolicyReviewer.reviewer(context.admin_scope),
                @mission_id,
                policy.fleet_planning_policy_id,
                1,
@@ -180,7 +195,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningPoliciesTest do
 
     assert {:ok, active_two, ^version_two, _approval} =
              FleetPlanningPolicies.approve(
-               context.admin_scope,
+               PolicyReviewer.reviewer(context.admin_scope),
                @mission_id,
                policy.fleet_planning_policy_id,
                2,
@@ -190,6 +205,34 @@ defmodule Cadence.ContactPlanning.FleetPlanningPoliciesTest do
 
     assert active_two.active_version == 2
     assert active_one.fleet_planning_policy_id == active_two.fleet_planning_policy_id
+  end
+
+  # The approval sweep (11-15): the check was only in Control.PlanningPolicy, so any other caller
+  # of the domain function could approve its own version.
+  test "whoever wrote a version can't approve or reject it", context do
+    assert {:ok, policy, version} =
+             FleetPlanningPolicies.create(
+               context.admin_scope,
+               @mission_id,
+               policy_attrs(),
+               now: @now
+             )
+
+    args = [@mission_id, policy.fleet_planning_policy_id, 1, version.content_sha256, "Mine"]
+
+    assert {:error, :reviewer_is_author} =
+             apply(FleetPlanningPolicies, :approve, [context.admin_scope | args])
+
+    assert {:error, :reviewer_is_author} =
+             apply(FleetPlanningPolicies, :reject, [context.admin_scope | args])
+
+    assert {:ok, %{active_version: nil}, _version} =
+             FleetPlanningPolicies.fetch(@organization_id, @mission_id)
+
+    assert {:ok, _policy, _version, _approval} =
+             apply(FleetPlanningPolicies, :approve, [
+               PolicyReviewer.reviewer(context.admin_scope) | args
+             ])
   end
 
   test "concurrent decisions serialize and only one exact version wins", context do
@@ -207,7 +250,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningPoliciesTest do
         fn
           :approved ->
             FleetPlanningPolicies.approve(
-              context.admin_scope,
+              PolicyReviewer.reviewer(context.admin_scope),
               @mission_id,
               policy.fleet_planning_policy_id,
               1,
@@ -217,7 +260,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningPoliciesTest do
 
           :rejected ->
             FleetPlanningPolicies.reject(
-              context.admin_scope,
+              PolicyReviewer.reviewer(context.admin_scope),
               @mission_id,
               policy.fleet_planning_policy_id,
               1,
@@ -249,7 +292,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningPoliciesTest do
 
     assert {:ok, _active, ^version, _approval} =
              FleetPlanningPolicies.approve(
-               context.admin_scope,
+               PolicyReviewer.reviewer(context.admin_scope),
                @mission_id,
                policy.fleet_planning_policy_id,
                1,

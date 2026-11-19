@@ -113,7 +113,18 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
       max_delivered_batch_bytes: 0,
       failed_count: 0,
       last_completed_at: nil,
-      last_error: nil
+      last_error: nil,
+      # The journal's durable resume point when it lies inside the first entry read after a start
+      # (bytes already decoded before a restart; dropped once), then nil.
+      resume_slice: :unread,
+      # Never ack a resume point below the journal's durable one (api-ops: a regression error
+      # would retry forever); raised by each ack.
+      resume_floor: 0,
+      last_incomplete: nil,
+      incomplete_at_end: %{frame_bytes: 0, packet_octets: 0, journal_bytes: 0},
+      # The frame-SCID cross-check's running tally for this stream (DECISIONS #102): nil until a
+      # batch reports one (no expected SCID: never).
+      scid_check: nil
     }
 
     send(self(), :consume)
@@ -174,7 +185,9 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
         retry_delay_ms: state.retry_delay_ms,
         phase: if(state.in_flight, do: state.in_flight.phase, else: :idle),
         last_completed_at: state.last_completed_at,
-        last_error: state.last_error
+        last_error: state.last_error,
+        incomplete_at_end: state.incomplete_at_end,
+        scid_check: state.scid_check
       }}, state}
   end
 
@@ -219,6 +232,24 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
   def handle_info({:retry, _stale_ref}, state), do: {:noreply, state}
 
   def handle_info(
+        {:provider_ingress_persisted, _projector_pid, ref, %{} = progress},
+        %{in_flight: %{ref: ref, phase: :processing} = batch} = state
+      ) do
+    batch =
+      Map.merge(batch, %{
+        phase: :acknowledge,
+        resume: Map.get(progress, :resume_offset),
+        incomplete: Map.get(progress, :incomplete),
+        scid_check: Map.get(progress, :scid_check)
+      })
+
+    acknowledge_batch(%{state | in_flight: batch})
+  end
+
+  def handle_info({:provider_ingress_persisted, _projector_pid, _stale_ref, _resume}, state),
+    do: {:noreply, state}
+
+  def handle_info(
         {:provider_ingress_persisted, _projector_pid, ref},
         %{in_flight: %{ref: ref, phase: :processing} = batch} = state
       ) do
@@ -253,9 +284,10 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
       ref: nil
     }
 
-    state = %{state | in_flight: batch}
+    state = %{state | in_flight: batch} |> load_resume_slice()
 
     with {:ok, raw_evidence} <- Evidence.from_contiguous_entries(entries),
+         raw_evidence = slice(raw_evidence, state.resume_slice),
          ref <- make_ref(),
          :ok <-
            ProviderIngressExecutor.enqueue_telemetry(state.executor_name, raw_evidence,
@@ -307,7 +339,14 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
   end
 
   defp acknowledge_batch(%{in_flight: batch} = state) do
-    case FileSystem.acknowledge(state.journal_name, :processing, batch.last.end_offset) do
+    # Acked through the batch's end, durable only to where the stream may resume: the start of a
+    # frame or packet still incomplete (domain's partial-frame fix, 11-15).
+    case FileSystem.acknowledge(
+           state.journal_name,
+           :processing,
+           batch.last.end_offset,
+           resume_offset: batch_resume(batch, state.resume_floor)
+         ) do
       :ok ->
         send(self(), :consume)
 
@@ -315,6 +354,10 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
          %{
            state
            | in_flight: nil,
+             resume_slice: nil,
+             resume_floor: batch_resume(batch, state.resume_floor) || batch.last.end_offset,
+             last_incomplete: Map.get(batch, :incomplete),
+             scid_check: add_scid_check(state.scid_check, Map.get(batch, :scid_check)),
              acknowledged_batches: state.acknowledged_batches + 1,
              acknowledged_entries: state.acknowledged_entries + batch.entry_count,
              acknowledged_bytes: state.acknowledged_bytes + batch.byte_count,
@@ -367,6 +410,7 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
   end
 
   defp settle_or_schedule(%{lifecycle_status: :quiescing} = state) do
+    state = give_up_incomplete(state)
     settlement = quiescence_settlement(state)
     Enum.each(state.quiesce_waiters, &GenServer.reply(&1, {:ok, settlement}))
 
@@ -389,8 +433,84 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
       provider_binding_id: state.provider_binding_id,
       acknowledged_batches: state.acknowledged_batches,
       acknowledged_entries: state.acknowledged_entries,
-      acknowledged_bytes: state.acknowledged_bytes
+      acknowledged_bytes: state.acknowledged_bytes,
+      incomplete_at_end: state.incomplete_at_end,
+      scid_check: state.scid_check
     }
+  end
+
+  # Adds one batch's frame-SCID tally to the stream's (DECISIONS #102).
+  defp add_scid_check(total, nil), do: total
+  defp add_scid_check(nil, batch), do: batch
+
+  defp add_scid_check(total, batch),
+    do: %{
+      expected_scid: batch.expected_scid,
+      spacecraft_id: Map.get(batch, :spacecraft_id),
+      frames: total.frames + batch.frames,
+      refused: Map.merge(total.refused, batch.refused, fn _scid, a, b -> a + b end)
+    }
+
+  # The batch's resume point, never below the floor; nil (resume = end) when it reported none.
+  defp batch_resume(%{last: %{end_offset: end_offset}} = batch, floor) do
+    case Map.get(batch, :resume) do
+      resume when is_integer(resume) and resume <= end_offset -> max(resume, floor)
+      _none -> nil
+    end
+  end
+
+  defp load_resume_slice(%{resume_slice: :unread} = state) do
+    case FileSystem.resume_offset(state.journal_name, :processing) do
+      {:ok, offset} -> %{state | resume_slice: offset, resume_floor: offset}
+      {:error, _reason} -> %{state | resume_slice: nil}
+    end
+  end
+
+  defp load_resume_slice(state), do: state
+
+  defp slice(raw_evidence, offset) when is_integer(offset),
+    do: Evidence.drop_before(raw_evidence, offset)
+
+  defp slice(raw_evidence, nil), do: raw_evidence
+
+  # At the stream's end a frame or packet still incomplete never will be: give it up so the stream
+  # drains (seal and reclaim wait for resume == read position), and count it: the partial frame's
+  # bytes and the partial packets' octets, as the last decode reported them. It acks the READ
+  # position, never the tail: bytes appended since the last read are read next (api-ops).
+  defp give_up_incomplete(state) do
+    with {:ok, %{cursors: %{processing: read}, resume_points: %{processing: %{resume: resume}}}}
+         when resume < read <- journal_snapshot(state.journal_name),
+         :ok <- FileSystem.acknowledge(state.journal_name, :processing, read, resume_offset: read) do
+      incomplete = state.last_incomplete || %{frame_bytes: read - resume, packet_octets: 0}
+
+      Logger.warning(
+        "Ingress journal processing gave up an incomplete end: " <>
+          "#{incomplete.frame_bytes} bytes of a frame, #{incomplete.packet_octets} of a packet",
+        mission_id: state.mission_id,
+        realized_contact_id: state.realized_contact_id,
+        path_id: state.path_id
+      )
+
+      %{
+        state
+        | resume_floor: read,
+          incomplete_at_end: %{
+            frame_bytes: state.incomplete_at_end.frame_bytes + incomplete.frame_bytes,
+            packet_octets: state.incomplete_at_end.packet_octets + incomplete.packet_octets,
+            journal_bytes: state.incomplete_at_end.journal_bytes + read - resume
+          }
+      }
+    else
+      _complete -> state
+    end
+  end
+
+  defp journal_snapshot(journal) do
+    case FileSystem.snapshot(journal) do
+      {:ok, snapshot} -> {:ok, snapshot}
+      %{} = snapshot -> {:ok, snapshot}
+      other -> other
+    end
   end
 
   defp schedule_consume(interval_ms), do: Process.send_after(self(), :consume, interval_ms)

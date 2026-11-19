@@ -20,12 +20,6 @@ defmodule Cadence.Applications.OpsConsole.Actions.FleetPlanningTest do
              {"fleet_planning", "refresh-planning"},
              {"fleet_planning_new", "validate-fleet-run"},
              {"fleet_planning_new", "create-fleet-run"},
-             {"fleet_planning_policy", "validate-policy"},
-             {"fleet_planning_policy", "save-policy"},
-             {"fleet_planning_policy", "approve-policy"},
-             {"fleet_planning_policy", "validate-grant"},
-             {"fleet_planning_policy", "issue-grant"},
-             {"fleet_planning_policy", "revoke-grant"},
              {"fleet_planning_run", "refresh-fleet-run"},
              {"fleet_planning_run", "repair-fleet-run"}
            ]
@@ -52,34 +46,6 @@ defmodule Cadence.Applications.OpsConsole.Actions.FleetPlanningTest do
                  "horizon_end" => "2026-09-05T01:00:00Z",
                  "include_recurring" => false
                }
-             })
-  end
-
-  test "validates policy and grant forms without persisting them", %{scope: scope} do
-    assert {:ok, %{"actionId" => "validate-policy", "valid" => true}} =
-             execute(scope, "fleet_planning_policy", "validate-policy", %{
-               "policy" => policy_params(),
-               "edit_reference" => edit_reference()
-             })
-
-    assert {:ok, %{"actionId" => "validate-grant", "valid" => true}} =
-             execute(scope, "fleet_planning_policy", "validate-grant", %{
-               "grant" => %{
-                 "service_identity_id" => "service-1",
-                 "maximum_horizon_duration" => "24h",
-                 "maximum_contacts" => "10",
-                 "maximum_execution_concurrency" => "2",
-                 "valid_days" => "7",
-                 "approval_reason" => "bounded operations"
-               }
-             })
-  end
-
-  test "rejects malformed policy validation input", %{scope: scope} do
-    assert {:error, :invalid_fleet_policy_form} =
-             execute(scope, "fleet_planning_policy", "validate-policy", %{
-               "policy" => Map.put(policy_params(), "max_contacts", "not-an-integer"),
-               "edit_reference" => edit_reference()
              })
   end
 
@@ -156,34 +122,5 @@ defmodule Cadence.Applications.OpsConsole.Actions.FleetPlanningTest do
       organization: organization,
       organization_membership: membership
     })
-  end
-
-  defp edit_reference,
-    do: %{
-      "contract_version" => 1,
-      "organization_id" => @organization_id,
-      "mission_id" => @mission_id,
-      "base" => nil
-    }
-
-  defp policy_params do
-    %{
-      "max_horizon_duration" => "24h",
-      "requirement_concurrency" => "2",
-      "provider_search_concurrency" => "2",
-      "reuse_freshness_seconds" => "60",
-      "max_contacts" => "10",
-      "max_estimated_cost_micros" => "1000",
-      "currency" => "USD",
-      "critical_contact_reserve" => "0",
-      "automation_mode" => "advisory",
-      "execution_concurrency" => "1",
-      "max_repair_attempts" => "0",
-      "repair_horizon_duration" => "24h",
-      "automatic_submission" => "false",
-      "distinct_provider_required" => "false",
-      "distinct_station_required" => "false",
-      "distinct_service_pool_required" => "false"
-    }
   end
 end

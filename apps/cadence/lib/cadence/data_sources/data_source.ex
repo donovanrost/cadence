@@ -79,6 +79,35 @@ defmodule Cadence.DataSources.DataSource do
   def active?(%__MODULE__{status: :active}), do: true
   def active?(%__MODULE__{}), do: false
 
+  @doc """
+  A platform-shared source: no organization, no mission, `:shared`. The only kind a platform-wide
+  binding (one with no organization) may point at, since every tenant that falls back to that
+  binding reads and writes through it (api-ops' sweep, 11-15). A `:shared` source that carries an
+  organization is shared only within that organization.
+  """
+  @spec platform_shared?(t()) :: boolean()
+  def platform_shared?(%__MODULE__{organization_id: nil, mission_id: nil} = source),
+    do: isolation_level(source) == :shared
+
+  def platform_shared?(%__MODULE__{}), do: false
+
+  @doc """
+  Whether Cadence provisions, reconciles and deprovisions this source's TSDB backend: only a
+  bring-your-own TSDB with its own (org- or mission-isolated) backend. A Cadence-managed source is
+  provisioned automatically (`:byo_tsdb_backend_required`); a customer-owned BYO database is used
+  as is (`:dedicated_tsdb_backend_required`).
+  """
+  @spec tsdb_backend_lifecycle(t()) ::
+          :ok | {:error, :byo_tsdb_backend_required | :dedicated_tsdb_backend_required}
+  def tsdb_backend_lifecycle(%__MODULE__{kind: :byo_tsdb, isolation_level: isolation_level})
+      when isolation_level in [:org_isolated, :mission_isolated],
+      do: :ok
+
+  def tsdb_backend_lifecycle(%__MODULE__{kind: :byo_tsdb}),
+    do: {:error, :dedicated_tsdb_backend_required}
+
+  def tsdb_backend_lifecycle(%__MODULE__{}), do: {:error, :byo_tsdb_backend_required}
+
   @spec isolation_profile(t()) :: isolation_profile()
   def isolation_profile(%__MODULE__{} = data_source) do
     %{

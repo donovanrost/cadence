@@ -13,6 +13,8 @@ defmodule Cadence.Dashboards.Sources.Events.ContactIntervals do
     ScopeContext
   }
 
+  alias Cadence.Reads.{ContactStations, OperationalState}
+
   def contact_interval_frame(
         %PlannedSourceRequest{} = request,
         source_binding,
@@ -22,15 +24,18 @@ defmodule Cadence.Dashboards.Sources.Events.ContactIntervals do
         limit
       ) do
     contact_opts = contact_opts(request, source_binding, limit)
+    scope = interval_scope(request, organization_id, mission_id, opts)
 
     contacts =
       contact_intervals(request, organization_id, mission_id, contact_opts, opts)
       |> Enum.filter(fn interval ->
         interval_overlaps_request?(interval, request) and
-          interval_matches_scope?(interval, request)
+          interval_matches_scope?(interval, scope)
       end)
       |> Enum.sort_by(&interval_sort_key/1)
       |> Enum.take(limit)
+
+    stations = ContactStations.column(organization_id, mission_id, contacts)
 
     %Frame{
       frame_id: "#{request.request_id}:contact_intervals",
@@ -45,10 +50,33 @@ defmodule Cadence.Dashboards.Sources.Events.ContactIntervals do
         %Field{name: "status", kind: :enum, values: Enum.map(contacts, & &1.status)},
         %Field{name: "label", kind: :string, values: Enum.map(contacts, & &1.label)},
         %Field{name: "contact_id", kind: :string, values: Enum.map(contacts, & &1.contact_id)},
+        %Field{name: "station", kind: :string, values: stations},
         %Field{
           name: "source_event_id",
           kind: :string,
-          values: Enum.map(contacts, &contact_interval_source_event_id/1)
+          values: Enum.map(contacts, &source_event_id/1)
+        },
+        # A realized contact that closed without starting (dashboards, ux 11-14): drawn at its
+        # scheduled window, dashed, 'didn't start'. nil for scheduled rows and open contacts.
+        %Field{
+          name: "started",
+          kind: :boolean,
+          values: Enum.map(contacts, &Map.get(&1, :started))
+        },
+        %Field{
+          name: "close_reason",
+          kind: :string,
+          values: Enum.map(contacts, &Map.get(&1, :close_reason))
+        },
+        %Field{
+          name: "scheduled_starts_at",
+          kind: :time,
+          values: Enum.map(contacts, &Map.get(&1, :scheduled_starts_at))
+        },
+        %Field{
+          name: "scheduled_ends_at",
+          kind: :time,
+          values: Enum.map(contacts, &Map.get(&1, :scheduled_ends_at))
         }
       ],
       meta:
@@ -70,11 +98,7 @@ defmodule Cadence.Dashboards.Sources.Events.ContactIntervals do
     }
   end
 
-  defp contact_interval_source_event_id(interval) do
-    interval
-    |> get_attr(:source)
-    |> get_attr(:source_event_id)
-  end
+  defp source_event_id(interval), do: interval |> get_attr(:source) |> get_attr(:source_event_id)
 
   defp contact_intervals(
          %PlannedSourceRequest{} = request,
@@ -94,11 +118,14 @@ defmodule Cadence.Dashboards.Sources.Events.ContactIntervals do
       scheduled_fun = Keyword.get(funs, :scheduled_contacts_fun, &default_scheduled_contacts/3)
       realized_fun = Keyword.get(funs, :realized_contacts_fun, &default_realized_contacts/3)
 
+      fetch_scheduled =
+        Keyword.get(funs, :scheduled_contact_fun, &default_fetch_scheduled_contact/3)
+
       scheduled_fun.(organization_id, mission_id, opts)
       |> Enum.map(&scheduled_contact_interval/1)
       |> Kernel.++(
         realized_fun.(organization_id, mission_id, opts)
-        |> Enum.map(&realized_contact_interval/1)
+        |> Enum.map(&realized_contact_interval(&1, organization_id, fetch_scheduled))
       )
     end
   end
@@ -299,20 +326,68 @@ defmodule Cadence.Dashboards.Sources.Events.ContactIntervals do
       get_attr(get_attr(event, :scope), key)
   end
 
-  defp realized_contact_interval(contact) do
-    starts_at = contact.realized_at || contact.initial_time
-
+  defp realized_contact_interval(contact, organization_id, fetch_scheduled) do
     %{
       kind: :realized_contact,
       contact_id: contact.realized_contact_id,
-      starts_at: starts_at,
+      starts_at: contact.realized_at || contact.initial_time,
       ends_at: contact_end_time(contact.metadata),
       status: contact.lifecycle_state,
       label: contact_label(:realized_contact, contact.realized_contact_id, contact),
       source_endpoint_refs: contact.source_endpoint_refs,
-      source: contact
+      source: contact,
+      started: started(contact),
+      close_reason: nil,
+      scheduled_starts_at: nil,
+      scheduled_ends_at: nil
     }
+    |> never_started(contact, organization_id, fetch_scheduled)
   end
+
+  # True once it went active (metadata.started_at is set then and only then); false only for a
+  # contact closed without starting (the orphan sweep's not_started, or any closed state with no
+  # started_at); nil while it's open and hasn't reached AOS (armed, pre-AOS).
+  defp started(contact) do
+    cond do
+      get_attr(contact.metadata, :started_at) != nil -> true
+      contact.lifecycle_state in [:stopped, :completed] -> false
+      true -> nil
+    end
+  end
+
+  # A never-started contact is drawn at the pass it belonged to: its scheduled contact's window.
+  # A hand start has none, so it keeps its realized span, to the close.
+  defp never_started(%{started: false} = interval, contact, organization_id, fetch_scheduled) do
+    not_started = get_attr(contact.metadata, :not_started)
+
+    interval = %{
+      interval
+      | close_reason: get_attr(not_started, :reason),
+        ends_at: interval.ends_at || normalize_datetime(get_attr(not_started, :at))
+    }
+
+    case scheduled_window(contact, organization_id, fetch_scheduled) do
+      {:ok, %{starts_at: starts_at, ends_at: ends_at}} ->
+        %{
+          interval
+          | starts_at: starts_at,
+            ends_at: ends_at,
+            scheduled_starts_at: starts_at,
+            scheduled_ends_at: ends_at
+        }
+
+      _no_schedule ->
+        interval
+    end
+  end
+
+  defp never_started(interval, _contact, _organization_id, _fetch_scheduled), do: interval
+
+  defp scheduled_window(%{scheduled_contact_id: id} = contact, organization_id, fetch_scheduled)
+       when is_binary(id),
+       do: fetch_scheduled.(organization_id, contact.mission_id, id)
+
+  defp scheduled_window(_contact, _organization_id, _fetch_scheduled), do: :none
 
   defp contact_label(kind, contact_id, contact) do
     case get_attr(contact, :provider_contact_ref) do
@@ -340,15 +415,53 @@ defmodule Cadence.Dashboards.Sources.Events.ContactIntervals do
 
   defp contact_end_time(_metadata), do: nil
 
-  defp interval_matches_scope?(interval, %PlannedSourceRequest{} = request) do
-    if ScopeContext.primary_kind(request.scope_context) in [:source_endpoint, "source_endpoint"] do
-      ids = ScopeContext.primary_ids(request.scope_context)
+  # The widget's scope, in the precedence mission events use (maybe_put_scope_filters/2): a
+  # spacecraft keeps the contacts of its source endpoints (contacts carry endpoint refs, not a
+  # spacecraft); a contact keeps that contact, a realized one also by the scheduled contact it
+  # realizes; a source endpoint keeps its contacts; a mission keeps all. Until 11-14 only a
+  # source-endpoint scope filtered, so a widget fixed to one spacecraft drew every spacecraft's
+  # contact bands (dashboards, qa's overlay check).
+  defp interval_scope(%PlannedSourceRequest{scope_context: context}, org, mission, funs) do
+    spacecraft_ids = ScopeContext.scope_ids(context, :spacecraft)
+    contact_ids = ScopeContext.scope_ids(context, :contact)
 
-      ids == [] or
-        not MapSet.disjoint?(MapSet.new(interval.source_endpoint_refs), MapSet.new(ids))
-    else
-      true
+    cond do
+      spacecraft_ids != [] ->
+        {:source_endpoints, spacecraft_endpoints(org, mission, spacecraft_ids, funs)}
+
+      contact_ids != [] ->
+        {:contacts, MapSet.new(contact_ids)}
+
+      ScopeContext.primary_kind(context) in [:source_endpoint, "source_endpoint"] and
+          ScopeContext.primary_ids(context) != [] ->
+        {:source_endpoints, MapSet.new(ScopeContext.primary_ids(context))}
+
+      true ->
+        :all
     end
+  end
+
+  defp spacecraft_endpoints(org, mission, spacecraft_ids, funs) do
+    endpoints_fun = Keyword.get(funs, :source_endpoints_fun, &default_source_endpoints/2)
+    wanted = MapSet.new(spacecraft_ids)
+
+    for endpoint <- endpoints_fun.(org, mission),
+        MapSet.member?(wanted, get_attr(endpoint, :spacecraft_id)),
+        into: MapSet.new(),
+        do: get_attr(endpoint, :source_endpoint_id)
+  end
+
+  defp default_source_endpoints(org, mission),
+    do: OperationalState.list_source_endpoints(org, mission)
+
+  defp interval_matches_scope?(_interval, :all), do: true
+
+  defp interval_matches_scope?(interval, {:source_endpoints, ids}),
+    do: not MapSet.disjoint?(MapSet.new(interval.source_endpoint_refs || []), ids)
+
+  defp interval_matches_scope?(interval, {:contacts, ids}) do
+    MapSet.member?(ids, interval.contact_id) or
+      MapSet.member?(ids, get_attr(interval.source, :scheduled_contact_id))
   end
 
   defp interval_overlaps_request?(%{starts_at: nil}, %PlannedSourceRequest{}), do: false

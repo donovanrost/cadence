@@ -67,6 +67,7 @@ defmodule Cadence.GroundNetworks.ProviderAudit do
     |> maybe_filter(:provider_reservation_id, Keyword.get(opts, :provider_reservation_id))
     |> maybe_filter(:provider_change_id, Keyword.get(opts, :provider_change_id))
     |> maybe_filter(:correlation_id, Keyword.get(opts, :correlation_id))
+    |> maybe_actions(Keyword.get(opts, :actions))
     |> order_by([row], desc: row.recorded_at, desc: row.provider_audit_entry_id)
     |> limit(^limit)
     |> Repo.all()
@@ -157,6 +158,13 @@ defmodule Cadence.GroundNetworks.ProviderAudit do
       }
     })
   end
+
+  # `actions:` an exact list (the organization audit reads account changes, not the much larger
+  # stream of credential resolutions and provider events).
+  defp maybe_actions(query, nil), do: query
+
+  defp maybe_actions(query, actions) when is_list(actions),
+    do: where(query, [row], row.action in ^actions)
 
   defp maybe_filter(query, _field, nil), do: query
 

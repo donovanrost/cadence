@@ -4,6 +4,7 @@ defmodule Cadence.Governance.DerivedDefinitions do
   alias Cadence.DerivedTelemetry.Definition
   alias Cadence.Governance.GovernedDerivedTelemetryDefinitionRow, as: Row
   alias Cadence.Missions
+  alias Cadence.Platform.SaveTrail
   alias Cadence.Repo
   alias Ecto.Adapters.SQL
 
@@ -29,25 +30,63 @@ defmodule Cadence.Governance.DerivedDefinitions do
 
   def append(_, _, _, _), do: {:error, :derived_definition_review_required}
 
+  # Live definitions only: a retired one (its latest version retired) is left out (#77).
   def list(mission),
     do:
-      latest(nil, mission)
+      live(nil, mission)
       |> Repo.all()
       |> Enum.map(&Row.to_domain/1)
       |> Enum.sort_by(& &1.point_id)
 
   def list(org, mission),
     do:
-      latest(org, mission)
+      live(org, mission)
       |> Repo.all()
       |> Enum.map(&Row.to_domain/1)
       |> Enum.sort_by(& &1.point_id)
+
+  @doc """
+  Retires a live definition (#77): appends a final version marked retired, so its history stays.
+  `{:ok, definition}` or `{:error, :derived_definition_not_found}`.
+  """
+  def retire(org, mission, id, actor_id) do
+    with {:ok, current} <- fetch_live(org, mission, id) do
+      transaction(org, mission, current.point_id, fn ->
+        retire_locked(org, mission, id, actor_id)
+      end)
+    end
+  end
+
+  @doc "Whether any version, live or retired, uses `point_id` (a create can't reuse one)."
+  def point_used?(org, mission, point_id),
+    do: Repo.exists?(scoped(org, mission) |> where([d], d.point_id == ^point_id))
+
+  defp fetch_live(org, mission, id) do
+    case live(org, mission) |> where([d], d.derived_definition_id == ^id) |> Repo.one() do
+      nil -> {:error, :derived_definition_not_found}
+      row -> {:ok, row}
+    end
+  end
+
+  defp retire_locked(org, mission, id, actor_id) do
+    with {:ok, current} <- fetch_live(org, mission, id) do
+      %{Row.to_domain(current) | version: current.version + 1}
+      |> Row.changeset()
+      |> Ecto.Changeset.put_change(:retired_at, DateTime.utc_now())
+      |> Ecto.Changeset.put_change(:retired_by, actor_id)
+      |> Repo.insert()
+      |> case do
+        {:ok, row} -> {:ok, Row.to_domain(row)}
+        {:error, reason} -> {:error, reason}
+      end
+    end
+  end
 
   def page(org, mission, opts) do
     search = Keyword.get(opts, :search, "") |> String.downcase()
 
     query =
-      from(d in subquery(latest(org, mission)),
+      from(d in live(org, mission),
         where:
           fragment("strpos(lower(?), ?) > 0", d.point_id, ^search) or
             fragment("strpos(lower(?), ?) > 0", d.point_name, ^search)
@@ -131,6 +170,9 @@ defmodule Cadence.Governance.DerivedDefinitions do
     %{items: items, total_count: total, page: page}
   end
 
+  defp live(org, mission),
+    do: from(d in subquery(latest(org, mission)), where: is_nil(d.retired_at))
+
   defp latest(org, mission),
     do:
       scoped(org, mission)
@@ -145,11 +187,19 @@ defmodule Cadence.Governance.DerivedDefinitions do
   defp existing_result(org, definition) do
     with {:ok, stored} <-
            fetch(org, definition.mission_id, definition.derived_definition_id, definition.version) do
-      if Jason.encode!(Map.from_struct(stored)) == Jason.encode!(Map.from_struct(definition)),
+      if content(stored) == content(definition),
         do: {:ok, stored},
         else: {:error, :derived_definition_version_conflict}
     end
   end
+
+  # The save trail (who, via which path) isn't content: the same version saved again by someone
+  # else, or through another path, is the same version (SaveTrail).
+  defp content(%Definition{} = definition),
+    do:
+      Jason.encode!(
+        Map.from_struct(%{definition | metadata: SaveTrail.without(definition.metadata)})
+      )
 
   defp transaction(org, mission, point, operation) do
     <<key::signed-64, _::binary>> =

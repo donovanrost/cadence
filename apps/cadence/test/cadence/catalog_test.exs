@@ -25,6 +25,7 @@ defmodule Cadence.CatalogTest do
 
   alias Cadence.Missions.Mission
   alias Cadence.Platform.EventBus
+  alias Cadence.TestSupport.CatalogTestActor
 
   setup do
     suffix = System.unique_integer([:positive])
@@ -117,7 +118,10 @@ defmodule Cadence.CatalogTest do
                mission_id(),
                persisted_artifact.artifact_id,
                "fake_tm_json",
-               catalog_opts(importer_opts, importer_version: 2)
+               catalog_opts(importer_opts,
+                 importer_version: 2,
+                 requested_by: CatalogTestActor.system()
+               )
              )
 
     assert {:ok, queued_job} =
@@ -320,6 +324,37 @@ defmodule Cadence.CatalogTest do
                revision.mission_model_revision_id
 
       assert operational_event.causality.import_run_id == completed_run.import_run_id
+
+      # Director 11-14: running the same import run again (a node stopped mid-run, or a retry)
+      # finds the revision it made: the run stays completed with the same revision, with no
+      # second revision or operational event. The fact is published again (domain: one that was
+      # lost between commit and publish is recovered; its consumer is idempotent).
+      assert {:ok, %{status: :completed} = rerun} =
+               Catalog.execute_enqueued_run(
+                 completed_run.import_run_id,
+                 Keyword.put(importer_opts, :event_bus, event_bus)
+               )
+
+      assert rerun.result_document["catalog_revision"]["catalog_revision_id"] == revision_id
+
+      assert [%{catalog_revision_id: ^revision_id}] =
+               Catalog.list_revisions(
+                 organization_id(),
+                 mission_id(),
+                 database.catalog_database_id
+               )
+
+      assert [_one] =
+               Cadence.OperationalEvents.list_events(organization_id(), mission_id(),
+                 category: :catalog,
+                 kind: :catalog_revision_registered,
+                 source_record_kind: :catalog_revision,
+                 source_record_id: revision_id
+               )
+
+      assert_receive {:"$gen_cast",
+                      {:cadence_fact, {:cadence, :catalog, :facts},
+                       %{catalog_revision_id: ^revision_id}}}
     end
 
     test "successful revision import invalidates matching dashboard runtime caches", %{
@@ -389,7 +424,7 @@ defmodule Cadence.CatalogTest do
                  database.catalog_database_id,
                  artifact,
                  "fake_tm_json",
-                 importer_opts
+                 CatalogTestActor.opts(importer_opts)
                )
 
       assert {:ok, job} = Cadence.Jobs.fetch_job_for_run(:catalog_import_run, run.import_run_id)
@@ -439,7 +474,10 @@ defmodule Cadence.CatalogTest do
                  database.catalog_database_id,
                  artifact,
                  "fake_tm_json",
-                 catalog_opts(importer_opts, metadata: %{"revision_label" => "Bad"})
+                 catalog_opts(importer_opts,
+                   metadata: %{"revision_label" => "Bad"},
+                   requested_by: CatalogTestActor.system()
+                 )
                )
 
       assert [] =

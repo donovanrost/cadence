@@ -1,0 +1,291 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "AddSpacecraft.dc.html": {
+      "expand": "fill",
+      "h": 1160,
+      "title": "S2 \u00b7 Add spacecraft",
+      "w": 1440,
+      "x": 3040,
+      "y": 6400
+    },
+    "Approve.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "title": "C1 \u00b7 Second operator review",
+      "w": 1440,
+      "x": 3040,
+      "y": 9900
+    },
+    "Catalog.dc.html": {
+      "expand": "fill",
+      "h": 1200,
+      "title": "S3 \u00b7 Import a command and telemetry database",
+      "w": 1440,
+      "x": 0,
+      "y": 8100
+    },
+    "Command.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "title": "J3 \u00b7 Command a group",
+      "w": 1440,
+      "x": 3040,
+      "y": 3000
+    },
+    "CommandFlow.dc.html": {
+      "expand": "fill",
+      "h": 1500,
+      "title": "Commanding journeys",
+      "w": 1440,
+      "x": 0,
+      "y": 9900
+    },
+    "Compose.dc.html": {
+      "h": 900,
+      "is_interactive": true,
+      "title": "C1 \u00b7 Compose: find targets, set values",
+      "w": 1440,
+      "x": 1520,
+      "y": 9900
+    },
+    "Contacts.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "title": "J4 \u00b7 Plan contacts",
+      "w": 1440,
+      "x": 0,
+      "y": 4600
+    },
+    "Fonts.dc.html": {
+      "expand": "fill",
+      "h": 1900,
+      "title": "Type study: font comparison",
+      "w": 1440,
+      "x": 3040,
+      "y": 0
+    },
+    "Investigate.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "title": "J2 \u00b7 Respond to an alarm",
+      "w": 1440,
+      "x": 1520,
+      "y": 3000
+    },
+    "Journeys.dc.html": {
+      "expand": "fill",
+      "h": 1200,
+      "title": "Operator journeys",
+      "w": 1440,
+      "x": 1520,
+      "y": 0
+    },
+    "Main.dc.html": {
+      "expand": "fill",
+      "h": 2600,
+      "title": "Design language: Apogee",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "Mobile.dc.html": {
+      "h": 844,
+      "title": "J6 \u00b7 On call, from a phone",
+      "w": 390,
+      "x": 3040,
+      "y": 4600
+    },
+    "Now.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "title": "J1 \u00b7 Start of shift: Now",
+      "w": 1440,
+      "x": 0,
+      "y": 3000
+    },
+    "Palette.dc.html": {
+      "h": 900,
+      "is_interactive": true,
+      "title": "J5 \u00b7 Find anything (\u2318K)",
+      "w": 1440,
+      "x": 1520,
+      "y": 4600
+    },
+    "People.dc.html": {
+      "expand": "fill",
+      "h": 1100,
+      "title": "S5 \u00b7 People and access",
+      "w": 1440,
+      "x": 3040,
+      "y": 8100
+    },
+    "Profile.dc.html": {
+      "expand": "fill",
+      "h": 1200,
+      "title": "S4 \u00b7 Profile configuration",
+      "w": 1440,
+      "x": 1520,
+      "y": 8100
+    },
+    "Setup.dc.html": {
+      "expand": "fill",
+      "h": 1160,
+      "title": "S1 \u00b7 Mission readiness",
+      "w": 1440,
+      "x": 1520,
+      "y": 6400
+    },
+    "SetupJourneys.dc.html": {
+      "expand": "fill",
+      "h": 1320,
+      "title": "Setup journeys",
+      "w": 1440,
+      "x": 0,
+      "y": 6400
+    },
+    "TimePicker.dc.html": {
+      "h": 1080,
+      "is_interactive": true,
+      "title": "Component \u00b7 Date and time picker",
+      "w": 1440,
+      "x": 4560,
+      "y": 0
+    },
+    "Uplink.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "title": "C1 \u00b7 Uplink and verify, live",
+      "w": 1440,
+      "x": 4560,
+      "y": 9900
+    },
+    "ScheduleFlow.dc.html": {
+      "x": 0,
+      "y": 12000,
+      "w": 1440,
+      "h": 1500,
+      "title": "Scheduling journeys",
+      "expand": "fill"
+    },
+    "SchedulePlan.dc.html": {
+      "x": 1520,
+      "y": 12000,
+      "w": 1440,
+      "h": 900,
+      "title": "K1 \u00b7 Plan tomorrow",
+      "is_interactive": true
+    },
+    "Replan.dc.html": {
+      "x": 3040,
+      "y": 12000,
+      "w": 1440,
+      "h": 900,
+      "title": "K2 \u00b7 A station goes down",
+      "expand": "fill"
+    },
+    "PassReview.dc.html": {
+      "x": 4560,
+      "y": 12000,
+      "w": 1440,
+      "h": 1500,
+      "title": "K3 \u00b7 Planned vs flown",
+      "expand": "fill"
+    },
+    "PassPrediction.dc.html": {
+      "x": 1520,
+      "y": 13020,
+      "w": 1440,
+      "h": 900,
+      "title": "K0 \u00b7 Where passes come from"
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-10-23T02:20:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "notes": {
+    "t1": {
+      "kind": "title1",
+      "maxW": 6000,
+      "text": "Apogee: a mission-control language for Cadence",
+      "w": 240,
+      "x": 0,
+      "y": -320
+    },
+    "t2": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "The operator's shift, redesigned",
+      "w": 240,
+      "x": 0,
+      "y": 2720
+    },
+    "t3": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "Planning, navigation and on call",
+      "w": 240,
+      "x": 0,
+      "y": 4320
+    },
+    "t4": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "Setup: the ground segment behind the console",
+      "w": 240,
+      "x": 0,
+      "y": 6120
+    },
+    "t5": {
+      "kind": "title1",
+      "maxW": 6000,
+      "text": "Commanding, end to end",
+      "w": 240,
+      "x": 0,
+      "y": 9620
+    },
+    "t6": {
+      "kind": "title1",
+      "maxW": 6000,
+      "text": "Contact scheduling, end to end",
+      "w": 240,
+      "x": 0,
+      "y": 11720
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Journeys.dc.html",
+    "Now.dc.html",
+    "Investigate.dc.html",
+    "Command.dc.html",
+    "Contacts.dc.html",
+    "Palette.dc.html",
+    "Mobile.dc.html",
+    "Fonts.dc.html",
+    "SetupJourneys.dc.html",
+    "Setup.dc.html",
+    "AddSpacecraft.dc.html",
+    "Catalog.dc.html",
+    "Profile.dc.html",
+    "People.dc.html",
+    "TimePicker.dc.html",
+    "CommandFlow.dc.html",
+    "Compose.dc.html",
+    "Approve.dc.html",
+    "Uplink.dc.html",
+    "ScheduleFlow.dc.html",
+    "SchedulePlan.dc.html",
+    "Replan.dc.html",
+    "PassReview.dc.html",
+    "PassPrediction.dc.html"
+  ],
+  "pages": [],
+  "title": "Cadence redesign"
+}

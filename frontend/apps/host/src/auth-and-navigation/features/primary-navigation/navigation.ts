@@ -1,5 +1,4 @@
 import type { readNavigationContext } from "./contracts";
-import { canAdminister } from "../../shared/navigation";
 export function navigation(
   context: NonNullable<ReturnType<typeof readNavigationContext>>,
   mission: boolean,
@@ -14,31 +13,9 @@ export function navigation(
     active: context.nav_item === key,
   });
   if (!mission || !context.mission) {
-    if (context.nav_context === "admin")
-      return [
-        item("admin_dashboard", "Dashboard", "/admin", "hero-chart-bar-square"),
-        item(
-          "admin_organizations",
-          "Organizations",
-          "/admin/organizations",
-          "hero-building-office",
-        ),
-        item("admin_runtime", "Runtime", "/admin/runtime", "hero-signal"),
-      ];
     return [
       item("organization_home", "Home", "/", "hero-home"),
       item("missions", "Missions", "/missions", "hero-rocket-launch"),
-      ...(canAdminister(context)
-        ? [
-            item(
-              "provider_accounts",
-              "Provider Accounts",
-              "/provider-accounts",
-              "hero-globe-alt",
-              "provider-accounts-nav-link",
-            ),
-          ]
-        : []),
     ];
   }
   const root = `/missions/${encodeURIComponent(context.mission.mission_id)}`;

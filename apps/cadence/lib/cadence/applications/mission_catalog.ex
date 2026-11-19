@@ -94,26 +94,6 @@ defmodule Cadence.Applications.MissionCatalog do
 
   @surface_specs [
     %{
-      id: "mission_list",
-      purpose: :overview,
-      scope: :organization,
-      label: "Missions",
-      order: 10,
-      query_id: "cadence.mission_catalog.mission_list",
-      fallback_path: "/missions",
-      exposed_module: "./MissionList"
-    },
-    %{
-      id: "mission_new",
-      purpose: :configuration,
-      scope: :organization,
-      label: "New mission",
-      order: 20,
-      query_id: "cadence.mission_catalog.mission_new",
-      fallback_path: "/missions/new",
-      exposed_module: "./MissionNew"
-    },
-    %{
       id: "mission_overview",
       purpose: :overview,
       scope: :mission,
@@ -196,7 +176,6 @@ defmodule Cadence.Applications.MissionCatalog do
   ]
 
   @surface_actions %{
-    "mission_new" => ["validate", "save"],
     "mission_applications" => ["install", "disable", "uninstall"],
     "catalog_database_new" => ["validate", "save", "cancel-upload"],
     "catalog_database_show" => ["toggle-revision-form", "validate", "save", "cancel-upload"],
@@ -274,7 +253,7 @@ defmodule Cadence.Applications.MissionCatalog do
       trust: :first_party,
       installation_policy: :platform,
       availability: :available,
-      installable_scopes: [:organization, :mission],
+      installable_scopes: [:mission],
       actions: Map.values(@action_specs),
       surfaces: Enum.map(@surface_specs, &surface/1)
     }

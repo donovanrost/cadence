@@ -8,7 +8,7 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
   alias CadenceWeb.{ApplicationHostCatalog, TestFixtures}
 
   @now "2026-09-03T12:00:00Z"
-  @comms_surfaces ~w(overview validation transports transport routing routing_detail ground_stations ground_station provider_list provider_new provider_show)
+  @comms_surfaces ~w(overview validation transports transport routing routing_detail ground_stations ground_station)
 
   test "serializes tagged organization, user, and admin scope documents without mission ids" do
     scope = %Scope{organization_id: "org-1", actor_kind: :user, user: %{id: "user-1"}}
@@ -30,94 +30,6 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
              mission: nil,
              spacecraft: nil
            }) == %{"scope" => "admin"}
-  end
-
-  test "builds a positive organization host catalog without a mission route context" do
-    scope = %Scope{actor_kind: :user, organization_id: "org-1"}
-
-    route_context = %{
-      host_context: HostContext.organization("org-1"),
-      mission: nil,
-      spacecraft: nil
-    }
-
-    assert {:ok, catalog} =
-             ApplicationHostCatalog.build(
-               scope,
-               route_context,
-               session_id: "catalog-session",
-               csrf_token: "catalog-csrf",
-               bridge_base_url: ApplicationHostCatalog.bridge_base_path(route_context),
-               manifest_url: fn path -> "https://example.test" <> path end,
-               now: @now
-             )
-
-    assert catalog["session"]["bridgeBaseUrl"] == "/api/cadence/application-host/v1"
-    assert catalog["session"]["context"]["scope"] == "organization"
-    assert catalog["session"]["context"]["organizationId"] == "org-1"
-    assert catalog["session"]["context"]["missionId"] == nil
-    assert catalog["session"]["context"]["spacecraftId"] == nil
-  end
-
-  test "includes every organization-installation-exempt first-party application without installing it" do
-    scope = %Scope{actor_kind: :user, organization_id: "org-1"}
-
-    route_context = %{
-      host_context: HostContext.organization("org-1"),
-      mission: nil,
-      spacecraft: nil
-    }
-
-    assert {:ok, catalog} =
-             ApplicationHostCatalog.build(
-               scope,
-               route_context,
-               session_id: "catalog-session",
-               csrf_token: "catalog-csrf",
-               bridge_base_url: ApplicationHostCatalog.bridge_base_path(route_context),
-               manifest_url: fn path -> "https://example.test" <> path end,
-               now: @now
-             )
-
-    assert Enum.sort(Enum.map(catalog["applications"], & &1["applicationKey"])) ==
-             ["mission_catalog", "organization_admin"]
-
-    for application_key <- ["mission_catalog", "organization_admin"] do
-      assert {:error, :application_installation_scope_required} =
-               ApplicationInstallations.fetch_installed(
-                 scope,
-                 HostContext.organization("org-1"),
-                 application_key
-               )
-    end
-  end
-
-  test "admits each organization-installation-exempt application without an installation row" do
-    scope = %Scope{actor_kind: :user, organization_id: "org-1"}
-
-    route_context = %{
-      host_context: HostContext.organization("org-1"),
-      mission: nil,
-      spacecraft: nil
-    }
-
-    for {application_key, surface_id} <- [
-          {"mission_catalog", "mission_list"},
-          {"organization_admin", "organization_home"}
-        ] do
-      assert {:ok, admission} =
-               ApplicationHostCatalog.admit_application(
-                 scope,
-                 route_context,
-                 application_key,
-                 surface_id,
-                 now: @now
-               )
-
-      assert admission.definition.application_key == application_key
-      assert admission.surface.surface_id == surface_id
-      assert admission.installation == nil
-    end
   end
 
   test "passes explicit validated time to release lookup boundaries", %{conn: _conn} do

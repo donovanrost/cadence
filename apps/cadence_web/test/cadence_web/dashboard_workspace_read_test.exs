@@ -19,10 +19,6 @@ defmodule CadenceWeb.DashboardWorkspaceReadTest do
              "../../../cadence/test/fixtures/dashboards/value_tile_latest.v1.json",
              __DIR__
            )
-  @checker Path.expand(
-             "../../../../frontend/modules/dashboards-and-exploration/src/features/workspace/producer-contract-check.mjs",
-             __DIR__
-           )
 
   setup do
     org = TestFixtures.persist_org!()
@@ -129,15 +125,6 @@ defmodule CadenceWeb.DashboardWorkspaceReadTest do
            end)
 
     refute Jason.encode!(view) =~ "must-not-leak"
-
-    assert {output, 0} =
-             System.cmd(
-               System.find_executable("node"),
-               ["--no-warnings", @checker, Jason.encode!([draft, view])],
-               stderr_to_stdout: true
-             )
-
-    assert output =~ "contract passed"
   end
 
   test "draft edits cannot replace the published viewer version", c do

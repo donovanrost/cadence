@@ -5,6 +5,8 @@ defmodule Cadence.Management.Commanding.RequestAuthoring do
   alias Cadence.Management.Commanding.ArgumentDocument
   alias Cadence.Management.Commanding.{AuthoringCatalog, AuthoringInput, ReviewAccess}
 
+  # todo(authz): Cedar should decide who may author and request each command (any mission
+  # operator today, DECISIONS #62), e.g. by significance, hazard or target.
   defdelegate authorize(scope, mission_id), to: ReviewAccess
 
   def load(scope, mission_id, params) do

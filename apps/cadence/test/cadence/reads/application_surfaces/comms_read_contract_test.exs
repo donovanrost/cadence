@@ -168,12 +168,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.CommsReadContractTest do
 
   test "real scoped setup forms satisfy their feature consumers", context do
     for {surface, feature, validator, params} <- [
-          {"transport_new", "transports", "readForm", %{}},
-          {"routing_new", "routing", "readForm",
-           %{"spacecraft_id" => context.rule.spacecraft_id}},
-          {"ground_station_new", "ground-stations", "readForm", %{}},
-          {"ground_station_edit", "ground-stations", "readEditForm",
-           %{"ground_station_id" => context.station.ground_station_id}}
+          {"routing_new", "routing", "readForm", %{"spacecraft_id" => context.rule.spacecraft_id}}
         ] do
       payload = load!(context.scope, surface, params)
       data = get_in(payload, ["trusted_surface", "data"]) || payload["data"]
@@ -256,8 +251,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.CommsReadContractTest do
           {"transports", %{"application_key" => "comms"}},
           {"transport", %{"transport_id" => "missing-transport"}},
           {"routing_detail", %{"routing_rule_id" => "missing-rule"}},
-          {"ground_station", %{"ground_station_id" => "../another-station"}},
-          {"ground_station_edit", %{"ground_station_id" => "missing-station"}}
+          {"ground_station", %{"ground_station_id" => "../another-station"}}
         ] do
       assert {:error, _} = Pages.load(context.scope, @mission, page, params)
     end
@@ -296,10 +290,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.CommsReadContractTest do
       {"transport", %{"transport_id" => context.transport.transport_id}},
       {"routing_detail", %{"routing_rule_id" => context.rule.routing_rule_id}},
       {"ground_station", %{"ground_station_id" => context.station.ground_station_id}},
-      {"transport_new", %{}},
-      {"routing_new", %{}},
-      {"ground_station_new", %{}},
-      {"ground_station_edit", %{"ground_station_id" => context.station.ground_station_id}}
+      {"routing_new", %{}}
     ]
   end
 

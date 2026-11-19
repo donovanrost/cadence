@@ -2,14 +2,17 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
   use Cadence.RuntimeCase, async: false
 
   alias Cadence.Activations.SpacecraftConfiguration, as: ConfigurationActivation
-  alias Cadence.Applications.TelemetryDecom
+  alias Cadence.Applications.{ActionRequest, HostContext, TelemetryDecom}
+  alias Cadence.Applications.TelemetryDecom.ActionProvider, as: DecomActions
+  alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Control.Activations, as: ControlActivations
+  alias Cadence.Control.ModelApprovalGate
   alias Cadence.Control.SpacecraftConfiguration
   alias Cadence.Control.SpacecraftModelBindings
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Activations, as: ManagementActivations
-  alias Cadence.MissionModels
-  alias Cadence.MissionModels.{ComparisonReportRow, QualificationCaseRow}
+  alias Cadence.MissionModelApproval
+  alias Cadence.MissionModels.{ComparisonReportRow, QualificationCaseRow, RevisionRow}
   alias Cadence.Platform.ContentHash
   alias Cadence.Reads.Catalog.{Databases, Revisions}
   alias Cadence.Reads.Spacecraft.Configuration, as: ConfigurationRead
@@ -29,6 +32,7 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
   alias Cadence.Catalog.SpacecraftConfigurationInput, as: ConfigurationInput
 
   alias Cadence.{Activations, Governance}
+  alias Cadence.TestSupport.CatalogTestActor
 
   setup do
     org = "org-spacecraft-activation"
@@ -150,10 +154,13 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
                }
              )
 
+    # The control plane hands TelemetryDecom the admitted entries (it can't read stored fleets).
+    {:ok, entries} = FleetSnapshot.entries(activation.metadata)
+
     assert :ok =
              TelemetryDecom.activation_applied(
                active.binding_set,
-               activation.metadata
+               %{"spacecraft_configuration_version" => 1, "spacecraft_configurations" => entries}
              )
 
     {:ok, first_config} =
@@ -195,6 +202,35 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
                active.binding_set.version,
                binding_set_content_sha256: activation.binding_set_content_sha256
              )
+
+    # Sweep row 6 (rule (b)): the direct host writes are refused server-side too, before review,
+    # and write nothing; only request_activation was gated before.
+    host = HostContext.spacecraft(c.mission.mission_id, c.first.spacecraft_id)
+
+    {:ok, before} =
+      TelemetryDecom.fetch_config(c.org, c.mission.mission_id, c.first.spacecraft_id)
+
+    for {surface, action} <- [
+          {"manage", "save_configuration"},
+          {"manage", "disable"},
+          {"packet_bindings", "save_packet_bindings"}
+        ] do
+      request = %ActionRequest{
+        application_key: "telemetry_decom",
+        application_version: 1,
+        surface_id: surface,
+        surface_version: 1,
+        action_id: action,
+        params: %{}
+      }
+
+      assert {:error, :spacecraft_configuration_review_required} =
+               DecomActions.execute(c.scope, host, request),
+             action
+    end
+
+    assert {:ok, ^before} =
+             TelemetryDecom.fetch_config(c.org, c.mission.mission_id, c.first.spacecraft_id)
 
     assert {:error, :invalid_spacecraft_model_bindings} =
              ConfigurationActivation.admit(%{
@@ -313,9 +349,22 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
                  c.scope,
                  c.mission.mission_id,
                  current.spacecraft_id,
+                 "validate",
+                 input
+               )
+
+      # Host-action sweep row 2: a save is refused (the console's change sets edit spacecraft);
+      # the governed-pin rule below is checked through validate, which still applies it.
+      assert {:error, %{"display_name" => [refused]}} =
+               Identity.action(
+                 c.scope,
+                 c.mission.mission_id,
+                 current.spacecraft_id,
                  "save",
                  input
                )
+
+      assert refused =~ "Setup › Spacecraft"
 
       legacy_input = Map.update!(input, "spacecraft", &Map.delete(&1, "spacecraft_type_version"))
 
@@ -338,7 +387,7 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
                  c.scope,
                  c.mission.mission_id,
                  current.spacecraft_id,
-                 "save",
+                 "validate",
                  Map.update!(input, "spacecraft", &Map.merge(&1, replacement))
                )
 
@@ -346,12 +395,16 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
 
       if pinned do
         assert {:error, %{"spacecraft_type_id" => [_]}} =
-                 Identity.action(c.scope, c.mission.mission_id, nil, "save", input)
+                 Identity.action(c.scope, c.mission.mission_id, nil, "validate", input)
       end
     end
   end
 
-  test "one operator activates an imported catalog without model approval or replay, using current settings",
+  # Under DECISIONS #92 a the property is: with the `direct` activation policy, ONE operator's
+  # single submit activates a spacecraft onto an imported catalog whose model is approved: no
+  # separate approval step, no qualification, no replay, the current settings. An imported model
+  # that isn't approved is refused on this path (the next test), not activated.
+  test "one operator activates an approved imported catalog directly: no separate approval step, qualification or replay",
        c do
     save(c, c.first, c.revision)
     policy = ActivationPolicy.load(c.org, c.mission.mission_id)
@@ -365,6 +418,14 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
              )
 
     {:ok, page} = ConfigurationRead.load(c.scope, c.mission, c.first.spacecraft_id, "changes")
+
+    # Before the submit: the model is approved by the fixture, and the baseline #92 a compares it
+    # against is the revision this spacecraft runs in the active generation (nil with none).
+    model_id = c.revision.mission_model_revision_id
+    approval = fn -> model_approval(c, model_id) end
+    approved_before = approval.()
+    assert approved_before.status == "approved"
+    baseline = running_model(c, c.first.spacecraft_id)
 
     assert {:error, :activation_policy_changed} =
              SpacecraftConfiguration.submit(
@@ -391,40 +452,77 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
     assert source_model(spec, c.endpoint.source_endpoint_id).mission_model_revision_id ==
              c.revision.mission_model_revision_id
 
-    assert {:ok, %{status: :candidate}} =
-             MissionModels.fetch_revision(
-               c.org,
+    # The activation approved nothing (the approval is the fixture's, unchanged) and the gate
+    # ran its one comparison of the introduced model against the baseline; no qualification.
+    assert approval.() == approved_before
+
+    scoped = fn schema ->
+      from(row in schema,
+        where: row.organization_id == ^c.org and row.mission_id == ^c.mission.mission_id
+      )
+    end
+
+    assert [report] = Repo.all(scoped.(ComparisonReportRow))
+    assert report.status == :passed
+    assert report.candidate_revision_id == model_id
+    assert report.baseline_revision_id == baseline
+    refute Repo.exists?(scoped.(QualificationCaseRow))
+  end
+
+  test "the same direct activation onto an imported catalog whose model isn't approved is held, not activated",
+       c do
+    unapproved =
+      Fixtures.persist_imported_revision!(c.org, c.mission.mission_id,
+        revision_label: "Unapproved",
+        approve: false
+      )
+
+    save(c, c.first, unapproved)
+    policy = ActivationPolicy.load(c.org, c.mission.mission_id)
+
+    assert {:ok, _} =
+             ActivationPolicy.save(
+               c.scope,
                c.mission.mission_id,
-               c.revision.mission_model_revision_id
+               policy.token,
+               %{"value" => %{"approval_requirement" => "direct"}}
              )
 
-    for schema <- [ComparisonReportRow, QualificationCaseRow] do
-      refute Repo.exists?(
-               from(row in schema,
-                 where: row.organization_id == ^c.org and row.mission_id == ^c.mission.mission_id
-               )
-             )
-    end
+    {:ok, page} = ConfigurationRead.load(c.scope, c.mission, c.first.spacecraft_id, "changes")
+    model_id = unapproved.mission_model_revision_id
+
+    # #92 a's gate refuses the generation (mission_model_revision_not_approved); the direct
+    # path reports any execution refusal as needing review, and nothing is activated.
+    assert ModelApprovalGate.unapproved(c.org, c.mission.mission_id, [model_id]) == [model_id]
+    assert {:ok, %{"outcome" => "application_needs_review"}} = submit_direct(c, page)
+    refute running_on?(c, model_id)
+
+    MissionModelApproval.approve!(c.org, c.mission.mission_id, model_id)
+    {:ok, page} = ConfigurationRead.load(c.scope, c.mission, c.first.spacecraft_id, "changes")
+    assert {:ok, %{state: "active"}} = submit_direct(c, page)
+    assert running_on?(c, model_id)
   end
 
   test "activation still requires the exact artifacts stored during import", c do
     save(c, c.first, c.revision)
     assert {:ok, request} = review(c, c.first)
-    entry = request.metadata["spacecraft_configurations"][c.first.spacecraft_id]
+    assert {:ok, entry} = FleetSnapshot.entry(request.metadata, c.first.spacecraft_id)
     refute Map.has_key?(entry, "mission_model_comparison")
     assert :ok = SpacecraftModelBindings.validate(c.org, c.mission.mission_id, request.metadata)
 
+    # Tamper with the entries in their inline (v1) form; validation applies to both forms.
+    {:ok, entries} = FleetSnapshot.entries(request.metadata)
+    inline = %{"spacecraft_configuration_version" => 1, "spacecraft_configurations" => entries}
     path = ["spacecraft_configurations", c.first.spacecraft_id, "mission_model"]
 
-    wrong_revision =
-      put_in(request.metadata, path ++ ["content_sha256"], String.duplicate("0", 64))
+    wrong_revision = put_in(inline, path ++ ["content_sha256"], String.duplicate("0", 64))
 
     assert {:error, {:mission_model_manifest_mismatch, :revision_content}} =
              SpacecraftModelBindings.validate(c.org, c.mission.mission_id, wrong_revision)
 
     wrong_plan =
       put_in(
-        request.metadata,
+        inline,
         path ++ ["plans", "command", "content_sha256"],
         String.duplicate("0", 64)
       )
@@ -515,6 +613,7 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
         c.revision.catalog_database_id,
         artifact,
         "cadence_yaml",
+        requested_by: CatalogTestActor.system(),
         metadata: %{"revision_label" => "Next imported revision"}
       )
 
@@ -586,6 +685,48 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
     end
   end
 
+  defp model_approval(c, model_id) do
+    RevisionRow
+    |> Repo.get_by!(mission_id: c.mission.mission_id, revision_id: model_id)
+    |> Map.take([:status, :approved_at, :approved_by])
+  end
+
+  # The revision #92 a's gate treats as a spacecraft's baseline: the one it runs in the active
+  # generation (a legacy activation's mission-wide entry counts for every spacecraft), else nil.
+  defp running_model(c, spacecraft_id) do
+    running = ModelApprovalGate.running_entries(c.org, c.mission.mission_id)
+
+    case running[spacecraft_id] || running["__mission__"] do
+      %{"mission_model" => %{"revision_id" => id}} -> id
+      _none -> nil
+    end
+  end
+
+  # Whether the first spacecraft's source runs `model_id` in the applied generation.
+  defp running_on?(c, model_id) do
+    case RuntimeMissions.applied_spec(c.mission.mission_id) do
+      {:ok, spec} ->
+        case source_model(spec, c.endpoint.source_endpoint_id) do
+          %{mission_model_revision_id: ^model_id} -> true
+          _other -> false
+        end
+
+      _none ->
+        false
+    end
+  end
+
+  defp submit_direct(c, page) do
+    SpacecraftConfiguration.submit(
+      c.scope,
+      c.mission.mission_id,
+      c.first.spacecraft_id,
+      page.token,
+      page.approval.token,
+      :activate
+    )
+  end
+
   defp save(c, spacecraft, revision, overrides \\ %{}) do
     {:ok, spacecraft} =
       SpacecraftStore.fetch_spacecraft(c.org, c.mission.mission_id, spacecraft.spacecraft_id)
@@ -600,13 +741,23 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
         "handled_apids" => [42]
     }
 
+    document = Map.merge(document, overrides)
+
+    :ok =
+      Fixtures.change_set_switches!(
+        c.org,
+        c.mission.mission_id,
+        spacecraft.spacecraft_id,
+        document
+      )
+
     assert {:ok, row} =
              ConfigurationDrafts.save(
                c.scope,
                c.mission.mission_id,
                spacecraft.spacecraft_id,
                snapshot.token,
-               Map.merge(document, overrides)
+               document
              )
 
     row

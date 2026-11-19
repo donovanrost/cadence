@@ -2,11 +2,9 @@ defmodule CadenceWeb.SpacecraftPage do
   @moduledoc "Host composition for core spacecraft browsing and scoped identity forms."
 
   alias Cadence.Reads.Spacecraft.Pages
-  alias Cadence.Spacecraft.{Identity, ProfileCreation}
+  alias Cadence.Spacecraft.Identity
 
   @identity_routes [
-    "/missions/:mission_id/spacecraft/profiles/new",
-    "/missions/:mission_id/spacecraft/new",
     "/missions/:mission_id/spacecraft/:spacecraft_id/edit",
     "/missions/:mission_id/spacecraft/:spacecraft_id/identity"
   ]
@@ -14,18 +12,10 @@ defmodule CadenceWeb.SpacecraftPage do
   @routes %{
     "/missions/:mission_id/spacecraft/:spacecraft_id" =>
       {"spacecraft_configuration", ["spacecraft_id", "section"]},
-    "/missions/:mission_id/spacecraft/:spacecraft_id/readiness" =>
-      {"spacecraft_readiness", ["spacecraft_id"]},
-    "/missions/:mission_id/spacecraft/profiles/new" => {"profile_new", []},
-    "/missions/:mission_id/spacecraft/new" => {"spacecraft_new", []},
     "/missions/:mission_id/spacecraft/:spacecraft_id/edit" =>
       {"spacecraft_edit", ["spacecraft_id"]},
     "/missions/:mission_id/spacecraft/:spacecraft_id/identity" =>
-      {"spacecraft_edit", ["spacecraft_id"]},
-    "/missions/:mission_id/spacecraft" =>
-      {"spacecraft_list", ~w(q sort dir page pageSize filter)},
-    "/missions/:mission_id/spacecraft/profiles" => {"profile_list", []},
-    "/missions/:mission_id/spacecraft/profiles/:profile_id" => {"profile_show", ["profile_id"]}
+      {"spacecraft_edit", ["spacecraft_id"]}
   }
 
   def load(scope, %{route: route, params: params}) do
@@ -90,9 +80,6 @@ defmodule CadenceWeb.SpacecraftPage do
   rescue
     _exception -> %{status: "unavailable", errors: %{}}
   end
-
-  defp execute(scope, %{page: "profile_new"} = session, event, input),
-    do: ProfileCreation.action(scope, session.mission_id, event, input)
 
   defp execute(scope, session, event, input),
     do: Identity.action(scope, session.mission_id, session.spacecraft_id, event, input)

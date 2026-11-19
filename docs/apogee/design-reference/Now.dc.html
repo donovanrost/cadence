@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Now · Earendil · Cadence</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Saira:wght@400;500;600&amp;family=Saira+Condensed:wght@500;600;700&amp;family=Azeret+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#05070A}
+a{color:#E6EDF3}a:hover{color:#FFFFFF}
+.m{font-family:'Azeret Mono',ui-monospace,monospace}
+.n{font-family:Saira,sans-serif;font-variant-numeric:tabular-nums}
+.lbl{font:600 12px 'Saira Condensed',sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#7D8A99;margin:0}
+.pnl{position:relative;background:#0A0E13;border:1px solid #1C2530}
+.ph{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid #1C2530;flex-wrap:wrap}
+.ph .t{font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#C9D3DD;margin:0}
+.ph .i{font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.ph .r{margin-left:auto;font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.tag{display:inline-flex;align-items:center;gap:7px;height:24px;padding:0 9px;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;border:1px solid currentColor;white-space:nowrap}
+.b{height:32px;padding:0 12px;border:1px solid #2A3644;background:#0F141B;color:#E6EDF3;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;text-decoration:none}
+.b.pri{background:#E6EDF3;color:#05070A;border-color:#E6EDF3}
+.s-nom{width:8px;height:8px;background:#2FD08A;flex:none}
+.s-cau{width:10px;height:9px;background:#FFB020;clip-path:polygon(50% 0,100% 100%,0 100%);flex:none}
+.s-crit{width:8px;height:8px;background:#FF4D57;transform:rotate(45deg);flex:none}
+.s-stale{width:8px;height:8px;flex:none;box-sizing:border-box;border:1px solid #A497FF;background-image:repeating-linear-gradient(135deg,#A497FF 0 1.5px,transparent 1.5px 4px)}
+.s-off{width:8px;height:8px;flex:none;box-sizing:border-box;border:1px dashed #9DAAB8}
+.rail a{display:flex;align-items:center;gap:10px;height:38px;padding:0 12px;color:#9DAAB8;text-decoration:none;font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;border-left:2px solid transparent}
+.rail a:hover{color:#E6EDF3;background:#0F141B}
+.rail a.on{color:#E6EDF3;background:#0F141B;border-left-color:#E6EDF3}
+.rail .n{font:500 10px 'Azeret Mono',monospace;color:#7D8A99;width:16px}
+.rail .c{margin-left:auto;font:500 11px 'Azeret Mono',monospace;color:#7D8A99;letter-spacing:0}
+.cell{aspect-ratio:1;background:#164E37}
+.c-cau{background:#FFB020}
+.c-crit{background:#FF4D57;outline:1px solid #FF4D57;outline-offset:1.5px}
+.c-stale{background-color:#140F26;box-sizing:border-box;border:1px solid #A497FF;background-image:repeating-linear-gradient(135deg,#A497FF 0 1px,transparent 1px 3.5px)}
+.c-live{outline:1px solid #E6EDF3;outline-offset:1.5px}
+.q{display:grid;grid-template-columns:28px 12px minmax(0,1fr) auto;gap:10px;align-items:start;padding:12px 16px;border-top:1px solid #1C2530}
+.q:first-of-type{border-top:0}
+.bar{position:absolute;top:5px;bottom:5px;font:500 10px 'Azeret Mono',monospace;display:flex;align-items:center;padding:0 5px;overflow:hidden;white-space:nowrap}
+.k-sched{border:1px solid #3A4654;background:rgba(230,237,243,.06);color:#C9D3DD}
+.k-live{background:#E6EDF3;color:#05070A;font-weight:600}
+.k-conf{border:1px dashed #FFB020;color:#FFC24D;background:rgba(255,176,32,.06)}
+.ro{background:#0A0E13;padding:14px 16px;display:flex;flex-direction:column;gap:6px}
+.ro .v{font:500 30px Saira,sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-0.02em;line-height:1}
+.ro .s{font:400 12px 'Saira',sans-serif;color:#9DAAB8}
+.scr{flex:1;min-height:0;overflow:auto;scrollbar-width:thin;scrollbar-color:#2A3644 transparent}
+.pane{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.pane>.ph{flex:none}
+.ro{padding:10px 14px;gap:4px}
+.ro .v{font-size:26px}
+.rail{overflow:auto}
+</style>
+</helmet>
+<div style="font-family: 'Saira', system-ui, sans-serif; color: #E6EDF3; height: 100vh; overflow: hidden; display: flex; flex-direction: column; background-color: #05070A; background-image: linear-gradient(rgba(230,237,243,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(230,237,243,.025) 1px, transparent 1px); background-size: 40px 40px">
+
+<header style="display: flex; flex-wrap: wrap; align-items: stretch; border-bottom: 1px solid #1C2530; background: #070A0E; min-height: 52px">
+<div style="display: flex; align-items: center; gap: 12px; padding: 0 18px; border-right: 1px solid #1C2530">
+<svg width="20" height="20" viewBox="0 0 30 30" aria-hidden="true"><path d="M15 2 28 15 15 28 2 15Z" fill="none" stroke="#E6EDF3" stroke-width="2"></path><path d="M15 9 21 15 15 21 9 15Z" fill="#E6EDF3"></path></svg>
+<span style="font: 700 16px 'Saira Condensed'; letter-spacing: .36em">CADENCE</span>
+</div>
+<button style="display: flex; align-items: center; gap: 10px; padding: 0 18px; border: 0; border-right: 1px solid #1C2530; background: transparent; color: #E6EDF3; cursor: pointer; font: 600 14px 'Saira Condensed'; letter-spacing: .16em; text-transform: uppercase"><span style="color: #7D8A99">Reflect Orbital /</span>Earendil<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#7D8A99" stroke-width="3" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+<button style="flex: 1 1 240px; display: flex; align-items: center; gap: 10px; padding: 0 18px; border: 0; border-right: 1px solid #1C2530; background: transparent; color: #7D8A99; cursor: pointer; font: 400 14px 'Saira'; text-align: left"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7D8A99" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg><span style="flex: 1">Spacecraft, telemetry, commands…</span><span class="m" style="font-size: 11px; border: 1px solid #2A3644; padding: 1px 6px">⌘K</span></button>
+<div style="display: flex; align-items: center; padding: 0 18px; border-right: 1px solid #1C2530"><span class="tag" style="color: #FF6B73"><span class="s-crit"></span>Fleet · attention</span></div>
+<div class="m" style="display: flex; align-items: center; gap: 22px; padding: 0 18px; font-size: 13px">
+<span><span style="color: #7D8A99">AOS</span> <span style="color: #E6EDF3">T−00:04:12</span> <span style="color: #7D8A99">118·SVB</span></span>
+<span><span style="color: #7D8A99">UTC</span> 02:41:17</span>
+<span><span style="color: #7D8A99">MET</span> 412:07:14</span>
+</div>
+<button aria-label="Account menu for Donovan" style="width: 52px; border: 0; border-left: 1px solid #1C2530; background: transparent; color: #E6EDF3; font: 600 14px 'Saira Condensed'; letter-spacing: .1em; cursor: pointer">DR</button>
+</header>
+
+<div style="display: flex; flex: 1; min-height: 0">
+<nav class="rail" aria-label="Main" style="flex: 0 0 200px; box-sizing: border-box; padding: 14px 0; border-right: 1px solid #1C2530; display: flex; flex-direction: column; gap: 2px; background: #070A0E">
+<a href="#" class="on"><span class="n">01</span>Now</a>
+<a href="#"><span class="n">02</span>Fleet<span class="c">500</span></a>
+<a href="#"><span class="n">03</span>Alarms<span class="c" style="color: #FF6B73">17</span></a>
+<a href="Command.dc.html"><span class="n">04</span>Commands<span class="c">23</span></a>
+<a href="Contacts.dc.html"><span class="n">05</span>Contacts<span class="c" style="color: #E6EDF3">7 AOS</span></a>
+<a href="#"><span class="n">06</span>Telemetry</a>
+<a href="#"><span class="n">07</span>Timeline</a>
+<div style="height: 1px; background: #1C2530; margin: 12px 0"></div>
+<a href="#"><span class="n">··</span>Setup</a>
+<a href="#"><span class="n">··</span>Organization</a>
+</nav>
+
+<main style="flex: 1; min-width: 0; min-height: 0; overflow: hidden; box-sizing: border-box; padding: 14px 20px; display: flex; flex-direction: column; gap: 12px">
+
+<section style="flex: none; display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; justify-content: space-between">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<p class="lbl" style="color: #E6EDF3">Earendil · constellation status</p>
+<h1 style="margin: 0; font: 600 28px 'Saira Condensed'; letter-spacing: .08em; text-transform: uppercase; line-height: 1">3 spacecraft need you</h1>
+</div>
+<p class="m" style="margin: 0; font-size: 12px; color: #9DAAB8">TLM FRESH 488/500 · LAST PKT 2s · SVALBARD DEGRADED SINCE 01:52Z</p>
+</section>
+
+<section style="flex: none; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 1px; background: #1C2530; border: 1px solid #1C2530">
+<div class="ro"><span class="lbl">Nominal</span><span class="v">471<span style="font-size: 14px; color: #7D8A99">/500</span></span><span class="s">fresh and in limits</span></div>
+<div class="ro" style="box-shadow: inset 0 2px 0 #FFB020"><span class="lbl">Caution</span><span class="v" style="color: #FFC24D">14</span><span class="s">trending to limits</span></div>
+<div class="ro" style="box-shadow: inset 0 2px 0 #FF4D57"><span class="lbl">Critical</span><span class="v" style="color: #FF6B73">3</span><span class="s">+1 in the last hour</span></div>
+<div class="ro" style="box-shadow: inset 0 2px 0 #A497FF"><span class="lbl">Stale</span><span class="v" style="color: #BDB3FF">12</span><span class="s">no TLM over 15 min</span></div>
+<div class="ro" style="box-shadow: inset 0 2px 0 #E6EDF3"><span class="lbl">In contact</span><span class="v" style="color: #E6EDF3">7</span><span class="s">41 passes next 2 h</span></div>
+<div class="ro"><span class="lbl">Uplinks queued</span><span class="v">23</span><span class="s" style="color: #FFC24D">2 await your GO</span></div>
+</section>
+
+<div style="flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 12px">
+
+<section class="pnl pane">
+<div class="ph"><span class="i">A1</span><h2 class="t">Constellation</h2><span class="r">10 PLANES · SSO 97.6° · 550 KM</span></div>
+<div style="position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 6px">
+<svg viewBox="0 0 560 480" style="width: 100%; height: 100%; display: block" role="img" aria-label="Constellation view: 10 orbital planes around Earth, 500 spacecraft colored by state, 3 critical spacecraft labeled">
+<path d="{{backOrbits}}" fill="none" stroke="#2A323C" stroke-width="1" opacity=".5"></path>
+<path d="{{selBack}}" fill="none" stroke="#E6EDF3" stroke-width="1" opacity=".5"></path>
+<path d="{{backDots}}" fill="#4A5562" opacity=".6"></path>
+<circle cx="280" cy="240" r="124" fill="#0D1116" stroke="#2E3742"></circle>
+<ellipse cx="280" cy="240" rx="124" ry="32" fill="none" stroke="#1C232C"></ellipse>
+<ellipse cx="280" cy="240" rx="124" ry="78" fill="none" stroke="#161C23"></ellipse>
+<ellipse cx="280" cy="240" rx="42" ry="124" fill="none" stroke="#1C232C"></ellipse>
+<ellipse cx="280" cy="240" rx="88" ry="124" fill="none" stroke="#161C23"></ellipse>
+<path d="M280 116 A124 124 0 0 1 280 364 A70 124 0 0 0 280 116Z" fill="#040506" opacity=".75"></path>
+<path d="{{frontOrbits}}" fill="none" stroke="#2A323C" stroke-width="1"></path>
+<path d="{{selFront}}" fill="none" stroke="#E6EDF3" stroke-width="1.5"></path>
+<path d="{{nomDots}}" fill="#2FD08A" opacity=".55"></path>
+<path d="{{staleDots}}" fill="#A497FF"></path>
+<path d="{{cauDots}}" fill="#FFB020"></path>
+<path d="{{liveDots}}" fill="#E6EDF3"></path>
+<path d="{{critDots}}" fill="#FF4D57"></path>
+<path d="{{critRings}}" fill="none" stroke="#FF4D57" stroke-width="1"></path>
+<text x="{{k0.tx}}" y="{{k0.ty}}" fill="#FF6B73" font-family="Azeret Mono" font-size="11" text-anchor="{{k0.anchor}}">{{k0.label}}</text>
+<text x="{{k1.tx}}" y="{{k1.ty}}" fill="#FF6B73" font-family="Azeret Mono" font-size="11" text-anchor="{{k1.anchor}}">{{k1.label}}</text>
+<text x="{{k2.tx}}" y="{{k2.ty}}" fill="#FF6B73" font-family="Azeret Mono" font-size="11" text-anchor="{{k2.anchor}}">{{k2.label}}</text>
+</svg>
+<div class="m" style="position: absolute; left: 16px; bottom: 12px; display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: #9DAAB8">
+<span style="display: flex; gap: 8px; align-items: center"><span style="width: 14px; height: 1px; background: #E6EDF3"></span>PLANE 7 SELECTED</span>
+<span style="display: flex; gap: 8px; align-items: center"><span style="width: 14px; height: 8px; background: #040506; border: 1px solid #2E3742"></span>EARTH NIGHT SIDE</span>
+</div>
+<div style="position: absolute; right: 12px; bottom: 12px; display: flex; gap: 6px">
+<button class="b">Planes</button><button class="b" style="color: #9DAAB8">Ground track</button>
+</div>
+</div>
+</section>
+
+<section class="pnl pane">
+<div class="ph"><span class="i">A2</span><h2 class="t">Action queue</h2><span class="r">6 OPEN · SORTED BY URGENCY</span></div>
+<div class="scr">
+<div class="q"><span class="m" style="font-size: 11px; color: #FF6B73; padding-top: 2px">P1</span><span class="s-crit" style="margin-top: 6px"></span><div style="display: flex; flex-direction: column; gap: 3px; min-width: 0"><a href="Investigate.dc.html" style="font-weight: 600; font-size: 14px; text-decoration: none">EARENDIL-312 · VBAT below limit</a><span style="font-size: 13px; color: #9DAAB8">23.1 V vs 24.0 V, falling 0.4 V per orbit</span><span class="m" style="font-size: 11px; color: #7D8A99">T+6m · AOS FAIRBANKS T−38m</span></div><a href="Investigate.dc.html" class="b pri">Engage</a></div>
+<div class="q"><span class="m" style="font-size: 11px; color: #FF6B73; padding-top: 2px">P1</span><span class="s-crit" style="margin-top: 6px"></span><div style="display: flex; flex-direction: column; gap: 3px; min-width: 0"><a href="#" style="font-weight: 600; font-size: 14px; text-decoration: none">EARENDIL-047 · Safe mode</a><span style="font-size: 13px; color: #9DAAB8">Reaction wheel 2 over speed</span><span class="m" style="font-size: 11px; color: #E6EDF3">IN CONTACT · AWARUA · LOS T−03:20</span></div><button class="b">Engage</button></div>
+<div class="q"><span class="m" style="font-size: 11px; color: #FF6B73; padding-top: 2px">P1</span><span class="s-crit" style="margin-top: 6px"></span><div style="display: flex; flex-direction: column; gap: 3px; min-width: 0"><a href="#" style="font-weight: 600; font-size: 14px; text-decoration: none">EARENDIL-389 · Missed pass</a><span style="font-size: 13px; color: #9DAAB8">No downlink during scheduled Fairbanks pass</span><span class="m" style="font-size: 11px; color: #7D8A99">T+42m · NO PASS FOR 5h 40m</span></div><button class="b">Engage</button></div>
+<div class="q"><span class="m" style="font-size: 11px; color: #FFC24D; padding-top: 2px">P2</span><span class="s-cau" style="margin-top: 5px"></span><div style="display: flex; flex-direction: column; gap: 3px; min-width: 0"><span style="font-weight: 600; font-size: 14px">GO poll · SET_ADCS_MODE × 40</span><span style="font-size: 13px; color: #9DAAB8">Mira K. · planes 3 and 4 · fine pointing</span><span class="m" style="font-size: 11px; color: #7D8A99">UPLINKS AT EACH NEXT AOS</span></div><button class="b">Review</button></div>
+<div class="q"><span class="m" style="font-size: 11px; color: #BDB3FF; padding-top: 2px">P2</span><span class="s-stale" style="margin-top: 5px"></span><div style="display: flex; flex-direction: column; gap: 3px; min-width: 0"><span style="font-weight: 600; font-size: 14px">4 in plane 2 stale</span><span style="font-size: 13px; color: #9DAAB8">All last heard via Svalbard, now degraded. Likely ground, not flight.</span><span class="m" style="font-size: 11px; color: #7D8A99">SINCE 01:52Z</span></div><button class="b">Station</button></div>
+<div class="q"><span class="m" style="font-size: 11px; color: #9DAAB8; padding-top: 2px">P3</span><span class="s-off" style="margin-top: 5px"></span><div style="display: flex; flex-direction: column; gap: 3px; min-width: 0"><span style="font-weight: 600; font-size: 14px">Limits &amp; Alarming not installed</span><span style="font-size: 13px; color: #9DAAB8">Ground limit checks are off. Alarms above come from flight events.</span></div><button class="b">Install</button></div>
+</div>
+</section>
+</div>
+
+<div style="flex: none; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px">
+<section class="pnl" style="min-width: 0; display: flex; flex-direction: column">
+<div class="ph"><span class="i">A3</span><h2 class="t">Fleet matrix</h2><span class="r">ROW = PLANE · 50 SLOTS</span></div>
+<div style="padding: 12px 16px; display: flex; flex-direction: column; gap: 3px" aria-hidden="true">
+<sc-for list="{{planes}}" as="p" hint-placeholder-count="10">
+<div style="display: flex; gap: 10px; align-items: center">
+<span class="m" style="width: 24px; font-size: 10px; color: {{p.lc}}; flex: none">{{p.label}}</span>
+<div style="flex: 1; display: grid; grid-template-columns: repeat(50, minmax(0, 1fr)); gap: 2px">
+<sc-for list="{{p.cells}}" as="c" hint-placeholder-count="50">
+<span class="cell {{c.cls}}" title="{{c.title}}"></span>
+</sc-for>
+</div>
+</div>
+</sc-for>
+</div>
+</section>
+
+<section class="pnl" style="min-width: 0; display: flex; flex-direction: column">
+<div class="ph"><span class="i">A4</span><h2 class="t">Passes · next 2 h</h2><a href="Contacts.dc.html" class="r" style="color: #E6EDF3; text-decoration: none">OPEN CONTACTS →</a></div>
+<div style="padding: 12px 16px 14px; overflow-x: auto">
+<div style="min-width: 520px; display: flex; flex-direction: column; gap: 3px">
+<sc-for list="{{stations}}" as="s" hint-placeholder-count="5">
+<div style="display: flex; align-items: center">
+<span class="m" style="width: 52px; font-size: 11px; color: {{s.c}}; flex: none">{{s.code}}</span>
+<div style="flex: 1; position: relative; height: 28px; background: #05070A; border: 1px solid #141B24">
+<sc-for list="{{s.passes}}" as="b" hint-placeholder-count="3">
+<span class="bar {{b.cls}}" style="left: {{b.left}}%; width: {{b.width}}%">{{b.label}}</span>
+</sc-for>
+<span style="position: absolute; left: 11.7%; top: -3px; bottom: -3px; width: 1px; background: #E6EDF3"></span>
+</div>
+</div>
+</sc-for>
+<div style="display: flex; margin-left: 52px; height: 8px; background-image: repeating-linear-gradient(90deg, #2A3644 0 1px, transparent 1px 25%), repeating-linear-gradient(90deg, #1C2530 0 1px, transparent 1px 4.1667%)"></div>
+<div class="m" style="display: flex; margin-left: 52px; justify-content: space-between; font-size: 10px; color: #7D8A99"><span>02:00Z</span><span>02:30</span><span>03:00</span><span>03:30</span><span>04:00</span></div>
+</div>
+</div>
+</section>
+</div>
+
+</main>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+const crit = [46, 311, 388];
+const cau = [9, 61, 102, 147, 166, 220, 247, 298, 308, 313, 317, 342, 419, 466];
+const stale = [72, 73, 74, 75, 140, 201, 256, 402, 403, 404, 405, 477];
+const live = [23, 117, 160, 233, 290, 431, 455];
+const cx = 280, cy = 240, R = 124, rx = 236, ry = 64;
+const f = (n) => n.toFixed(1);
+const dot = (x, y, r) => 'M' + f(x - r) + ' ' + f(y) + 'a' + r + ' ' + r + ' 0 1 0 ' + (2 * r) + ' 0a' + r + ' ' + r + ' 0 1 0 ' + (-2 * r) + ' 0';
+let backOrbits = '', frontOrbits = '', selBack = '', selFront = '', backDots = '';
+const dots = { nom: '', cau: '', crit: '', stale: '', live: '' };
+let critRings = '';
+const callouts = [];
+for (let p = 0; p < 10; p++) {
+const a = (p * 18 - 81) * Math.PI / 180;
+const ca = Math.cos(a), sa = Math.sin(a);
+const pt = (t) => { const x0 = rx * Math.cos(t), y0 = ry * Math.sin(t); return [cx + x0 * ca - y0 * sa, cy + x0 * sa + y0 * ca]; };
+let back = '', front = '';
+for (let k = 0; k <= 60; k++) { const q = pt(Math.PI + k / 60 * Math.PI); back += (k ? 'L' : 'M') + f(q[0]) + ' ' + f(q[1]); }
+for (let k = 0; k <= 60; k++) { const q = pt(k / 60 * Math.PI); front += (k ? 'L' : 'M') + f(q[0]) + ' ' + f(q[1]); }
+if (p === 6) { selBack = back; selFront = front; } else { backOrbits += back; frontOrbits += front; }
+for (let j = 0; j < 50; j++) {
+const i = p * 50 + j;
+const t = 2 * Math.PI * j / 50 + p * 0.31;
+const q = pt(t);
+const isBack = Math.sin(t) < 0;
+const hidden = isBack && Math.hypot(q[0] - cx, q[1] - cy) < R + 2;
+if (hidden) continue;
+const kind = crit.includes(i) ? 'crit' : live.includes(i) ? 'live' : cau.includes(i) ? 'cau' : stale.includes(i) ? 'stale' : 'nom';
+if (isBack && kind === 'nom') { backDots += dot(q[0], q[1], 1.6); continue; }
+dots[kind] += dot(q[0], q[1], kind === 'crit' ? 3.5 : kind === 'nom' ? 1.8 : 2.6);
+if (kind === 'crit') {
+critRings += 'M' + f(q[0]) + ' ' + f(q[1] - 9) + 'L' + f(q[0] + 9) + ' ' + f(q[1]) + 'L' + f(q[0]) + ' ' + f(q[1] + 9) + 'L' + f(q[0] - 9) + ' ' + f(q[1]) + 'Z';
+const right = q[0] > cx;
+const lx = q[0] + (right ? 30 : -30), ly = q[1] - 20;
+critRings += 'M' + f(q[0] + (right ? 7 : -7)) + ' ' + f(q[1] - 5) + 'L' + f(lx) + ' ' + f(ly);
+callouts.push({ tx: f(lx + (right ? 4 : -4)), ty: f(ly - 4), anchor: right ? 'start' : 'end', label: 'EARENDIL-' + String(i + 1).padStart(3, '0') });
+}
+}
+}
+const none = { tx: '-100', ty: '-100', anchor: 'start', label: '' };
+const planes = [];
+for (let p = 0; p < 10; p++) {
+const cells = [];
+for (let j = 0; j < 50; j++) {
+const i = p * 50 + j;
+let cls = crit.includes(i) ? 'c-crit' : cau.includes(i) ? 'c-cau' : stale.includes(i) ? 'c-stale' : '';
+if (live.includes(i)) cls += ' c-live';
+cells.push({ cls: cls, title: 'EARENDIL-' + String(i + 1).padStart(3, '0') });
+}
+planes.push({ label: 'P' + String(p + 1).padStart(2, '0'), lc: p === 6 ? '#E6EDF3' : '#7D8A99', cells: cells });
+}
+const stations = [
+{ code: 'SVB', c: '#FFC24D', passes: [{ left: 6, width: 9, label: '118 AOS', cls: 'k-live' }, { left: 22, width: 8, label: '073', cls: 'k-conf' }, { left: 44, width: 9, label: '251', cls: 'k-sched' }, { left: 70, width: 10, label: '404', cls: 'k-sched' }] },
+{ code: 'FBK', c: '#7D8A99', passes: [{ left: 15, width: 8, label: '208', cls: 'k-sched' }, { left: 32, width: 8, label: '312', cls: 'k-sched' }, { left: 62, width: 9, label: '389', cls: 'k-sched' }, { left: 84, width: 9, label: '301', cls: 'k-sched' }] },
+{ code: 'AWA', c: '#7D8A99', passes: [{ left: 2, width: 12, label: '047 AOS', cls: 'k-live' }, { left: 30, width: 9, label: '160', cls: 'k-sched' }, { left: 55, width: 8, label: '455', cls: 'k-sched' }] },
+{ code: 'PUQ', c: '#7D8A99', passes: [{ left: 8, width: 10, label: '233 AOS', cls: 'k-live' }, { left: 48, width: 11, label: '290', cls: 'k-sched' }, { left: 76, width: 9, label: '012', cls: 'k-sched' }] },
+{ code: 'HBK', c: '#7D8A99', passes: [{ left: 18, width: 9, label: '431', cls: 'k-sched' }, { left: 40, width: 9, label: '342', cls: 'k-sched' }, { left: 66, width: 12, label: '466', cls: 'k-sched' }] }
+];
+return {
+backOrbits: backOrbits, frontOrbits: frontOrbits, selBack: selBack, selFront: selFront, backDots: backDots,
+nomDots: dots.nom, cauDots: dots.cau, critDots: dots.crit, staleDots: dots.stale, liveDots: dots.live, critRings: critRings,
+k0: callouts[0] || none, k1: callouts[1] || none, k2: callouts[2] || none,
+planes: planes, stations: stations
+};
+}
+}
+</script>
+</body>
+</html>

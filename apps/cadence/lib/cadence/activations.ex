@@ -10,7 +10,6 @@ defmodule Cadence.Activations do
 
   import Ecto.Query
 
-  alias Ecto.Adapters.SQL
   alias Ecto.Changeset
   alias Ecto.Multi
 
@@ -23,6 +22,7 @@ defmodule Cadence.Activations do
   alias Cadence.Activations.Facts
 
   alias Cadence.Governance
+  alias Cadence.Governance.ActivationLocks
   alias Cadence.Missions
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
@@ -71,7 +71,8 @@ defmodule Cadence.Activations do
           metadata: Keyword.get(opts, :metadata, %{}),
           activated_at: Keyword.get(opts, :activated_at, DateTime.utc_now())
         },
-        Keyword.get(opts, :event_bus, EventBus)
+        Keyword.get(opts, :event_bus, EventBus),
+        Keyword.get(opts, :publish, true)
       )
     end
   end
@@ -86,7 +87,10 @@ defmodule Cadence.Activations do
         |> where(
           [row],
           fragment("octet_length(?::text)", row.metadata) <= 65_536 or
-            (fragment("? #>> '{value,spacecraft_configuration_version}'", row.metadata) == "1" and
+            (fragment("? #>> '{value,spacecraft_configuration_version}'", row.metadata) in [
+               "1",
+               "2"
+             ] and
                fragment("octet_length(?::text)", row.metadata) <=
                  ^SpacecraftModelBindings.max_metadata_bytes())
         )
@@ -250,7 +254,22 @@ defmodule Cadence.Activations do
     )
   end
 
-  defp persist_activation(attrs, event_bus) do
+  @doc """
+  Publishes an activation's facts and read updates. Callers that persisted it with
+  `publish: false` inside their own transaction call this after their commit.
+  """
+  @spec publish_activation(BindingSetActivation.t(), module()) :: :ok
+  def publish_activation(%BindingSetActivation{} = activation, event_bus \\ EventBus) do
+    Facts.publish(event_bus, activation)
+
+    for event <- [:commanding_changed, :spacecraft_configuration_changed] do
+      ScopedReadUpdates.publish(event, activation.organization_id, activation.mission_id)
+    end
+
+    :ok
+  end
+
+  defp persist_activation(attrs, event_bus, publish? \\ true) do
     Multi.new()
     |> Multi.run(:approval_admission, fn _repo, _changes ->
       ApprovalAdmission.lock_and_admit(attrs)
@@ -270,12 +289,14 @@ defmodule Cadence.Activations do
     |> Multi.run(:operational_event, fn repo, %{activation_record: activation_record} ->
       maybe_persist_activation_operational_event(repo, activation_record)
     end)
-    |> Repo.transaction()
+    # Admitting a fleet locks and re-checks every reviewed spacecraft (up to the review batch);
+    # the default 15 s transaction timeout is too short at fleet scale.
+    |> Repo.transaction(timeout: 120_000)
     |> case do
       {:ok, %{activation_record: %{row: activation_row, inserted?: inserted?}}} ->
         activation = BindingSetActivationRow.to_domain(activation_row)
 
-        if inserted? do
+        if inserted? and publish? do
           Facts.publish(event_bus, activation)
 
           ScopedReadUpdates.publish_result(
@@ -286,7 +307,7 @@ defmodule Cadence.Activations do
           )
         end
 
-        if inserted?,
+        if inserted? and publish?,
           do:
             ScopedReadUpdates.publish_result(
               {:ok, activation},
@@ -349,12 +370,9 @@ defmodule Cadence.Activations do
   defp maybe_persist_activation_operational_event(_repo, %{inserted?: false}),
     do: {:ok, :unchanged}
 
-  defp acquire_generation_lock(repo, mission_id) do
-    case SQL.query(repo, "SELECT pg_advisory_xact_lock(hashtext($1))", [mission_id]) do
-      {:ok, _result} -> {:ok, :locked}
-      {:error, reason} -> {:error, reason}
-    end
-  end
+  # The lock order (policy, generation, configuration) is Governance.ActivationLocks'.
+  defp acquire_generation_lock(repo, mission_id),
+    do: ActivationLocks.generation(repo, mission_id)
 
   defp next_generation(repo, mission_id) do
     BindingSetActivationRow

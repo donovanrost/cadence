@@ -15,7 +15,7 @@ defmodule Cadence.Management.Activations.ActivationDecisionRow do
     field(:activation_request_id, :string)
     field(:organization_id, :string)
     field(:mission_id, :string)
-    field(:decision, Ecto.Enum, values: [:approved, :rejected])
+    field(:decision, Ecto.Enum, values: [:approved, :rejected, :withdrawn])
     field(:actor_kind, Ecto.Enum, values: [:user])
     field(:actor_id, :string)
     field(:actor_document, :map, default: %{})

@@ -186,12 +186,16 @@ defmodule Cadence.Protocol.RecordArchive.Postgres do
   @impl true
   def reset_stats(_mission_id, backend_opts) when is_list(backend_opts), do: :ok
 
+  # Idempotent, like raw evidence and anomalies: a batch whose telemetry write failed after
+  # these committed is retried whole (DECISIONS #71, a TSDB outage).
   defp add_packet_record_inserts(%Multi{} = multi, packet_records) do
     Enum.reduce(packet_records, multi, fn %PacketRecord{} = packet_record, %Multi{} = acc ->
       Multi.insert(
         acc,
         {:packet_record, packet_record.packet_id},
-        PacketRecordRow.changeset(packet_record)
+        PacketRecordRow.changeset(packet_record),
+        on_conflict: :nothing,
+        conflict_target: [:packet_id]
       )
     end)
   end
@@ -201,7 +205,9 @@ defmodule Cadence.Protocol.RecordArchive.Postgres do
       Multi.insert(
         acc,
         {:transfer_frame_record, frame_record.frame_record_id},
-        TransferFrameRecordRow.changeset(frame_record)
+        TransferFrameRecordRow.changeset(frame_record),
+        on_conflict: :nothing,
+        conflict_target: [:frame_record_id]
       )
     end)
   end

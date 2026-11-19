@@ -13,14 +13,16 @@ defmodule Cadence.ContactPlanning.ContactPlanApproval do
           contact_plan_version: pos_integer(),
           decision: :approved | :rejected,
           content_sha256: binary(),
-          reason: binary(),
+          # A rejection's reason; an approval's optional note (NULL when none, U76).
+          reason: binary() | nil,
           actor_kind: :user | :service,
           actor_id: binary(),
           actor_document: map(),
           automation_grant_id: binary() | nil,
           automation_grant_content_sha256: binary() | nil,
           decided_at: DateTime.t(),
-          inserted_at: DateTime.t() | nil
+          inserted_at: DateTime.t() | nil,
+          exceptions: [map()]
         }
 
   defstruct [
@@ -38,7 +40,10 @@ defmodule Cadence.ContactPlanning.ContactPlanApproval do
     :automation_grant_id,
     :automation_grant_content_sha256,
     :decided_at,
-    :inserted_at
+    :inserted_at,
+    # Acknowledged unsatisfied requirements (DECISIONS #28):
+    # [%{"contact_requirement_id", "contact_requirement_version", "reason"}]
+    exceptions: []
   ]
 
   @spec new(map()) :: t()
@@ -52,7 +57,7 @@ defmodule Cadence.ContactPlanning.ContactPlanApproval do
       contact_plan_version: positive(value(attrs, :contact_plan_version), :contact_plan_version),
       decision: normalize_decision(value(attrs, :decision)),
       content_sha256: required(attrs, :content_sha256),
-      reason: required(attrs, :reason),
+      reason: optional_string(value(attrs, :reason)),
       actor_kind: normalize_actor_kind(value(attrs, :actor_kind, :user)),
       actor_id: required(attrs, :actor_id),
       actor_document: document(value(attrs, :actor_document), :actor_document),
@@ -60,7 +65,8 @@ defmodule Cadence.ContactPlanning.ContactPlanApproval do
       automation_grant_content_sha256:
         optional_string(value(attrs, :automation_grant_content_sha256)),
       decided_at: datetime(value(attrs, :decided_at, DateTime.utc_now()), :decided_at),
-      inserted_at: value(attrs, :inserted_at)
+      inserted_at: value(attrs, :inserted_at),
+      exceptions: value(attrs, :exceptions, []) || []
     }
     |> validate_automation_shape()
   end

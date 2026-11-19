@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cadence setup journeys</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Saira:wght@400;500;600&amp;family=Saira+Condensed:wght@500;600;700&amp;family=Azeret+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#05070A}
+a{color:#E6EDF3}a:hover{color:#FFFFFF}
+.m{font-family:'Azeret Mono',ui-monospace,monospace}
+.lbl{font:600 12px 'Saira Condensed',sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#7D8A99;margin:0}
+.pnl{background:#0A0E13;border:1px solid #1C2530}
+.ph{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid #1C2530}
+.ph .i{font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.ph .t{font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#C9D3DD}
+.ph .r{margin-left:auto;font:500 11px 'Azeret Mono',monospace;color:#9DAAB8}
+.step{display:grid;grid-template-columns:24px minmax(0,1fr);gap:8px;font-size:14px;line-height:1.45}
+.step b{font:500 11px 'Azeret Mono',monospace;color:#9DAAB8;padding-top:3px}
+.ref{font:500 11px 'Azeret Mono',monospace;color:#9DAAB8;border:1px solid #2A3644;padding:0 5px}
+.go{font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;text-decoration:none;margin-top:auto}
+.who{font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+</style>
+</helmet>
+<div style="font-family: 'Saira', system-ui, sans-serif; color: #E6EDF3; min-height: 100vh; box-sizing: border-box; padding: 64px 24px 80px; background-color: #05070A; background-image: linear-gradient(rgba(230,237,243,.03) 1px, transparent 1px), linear-gradient(90deg, rgba(230,237,243,.03) 1px, transparent 1px); background-size: 40px 40px">
+<div style="max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 36px">
+
+<header style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 32px; align-items: flex-end">
+<div style="display: flex; flex-direction: column; gap: 14px; max-width: 800px">
+<p class="lbl">Setup · the ground segment behind the console</p>
+<h1 style="margin: 0; font: 700 60px/0.95 'Saira Condensed'; letter-spacing: .04em; text-transform: uppercase">Configure the fleet, not each spacecraft</h1>
+<p style="margin: 0; font-size: 17px; color: #9DAAB8; line-height: 1.55">Setup is used by mission engineers and admins, weekly or monthly, not every shift. It lives behind an OPS / SETUP switch in the top bar, so it never crowds the console. The jobs are rarer but riskier, so every change is staged, diffed and applied as a revision.</p>
+</div>
+<span style="font-size: 13px; color: #9DAAB8"><span class="ref">#12</span> = UX review finding fixed</span>
+</header>
+
+<section style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1px; background: #1C2530; border: 1px solid #1C2530">
+<div style="background: #0A0E13; padding: 20px; display: flex; flex-direction: column; gap: 8px"><span style="font: 600 19px 'Saira Condensed'; letter-spacing: .12em; text-transform: uppercase">Groups, not units</span><span style="font-size: 14px; color: #9DAAB8; line-height: 1.5">Profiles hold the configuration. Spacecraft inherit it and only overrides are shown.</span></div>
+<div style="background: #0A0E13; padding: 20px; display: flex; flex-direction: column; gap: 8px"><span style="font: 600 19px 'Saira Condensed'; letter-spacing: .12em; text-transform: uppercase">Stage, diff, apply</span><span style="font-size: 14px; color: #9DAAB8; line-height: 1.5">Edits collect as staged changes. Nothing reaches the fleet until you review the diff and apply it.</span></div>
+<div style="background: #0A0E13; padding: 20px; display: flex; flex-direction: column; gap: 8px"><span style="font: 600 19px 'Saira Condensed'; letter-spacing: .12em; text-transform: uppercase">One revision number</span><span style="font-size: 14px; color: #9DAAB8; line-height: 1.5">Every apply makes a revision, r1 to r6, with who, when and why. Roll back from history.</span></div>
+<div style="background: #0A0E13; padding: 20px; display: flex; flex-direction: column; gap: 8px"><span style="font: 600 19px 'Saira Condensed'; letter-spacing: .12em; text-transform: uppercase">Optional is not a warning</span><span style="font-size: 14px; color: #9DAAB8; line-height: 1.5">Readiness separates blockers from suggestions and groups 1,000 identical findings into one line.</span></div>
+</section>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px">
+
+<article class="pnl" style="display: flex; flex-direction: column">
+<div class="ph"><span class="i">S1</span><span class="t">Is the mission ready?</span><span class="r">AFTER ANY CHANGE</span></div>
+<div style="padding: 18px 16px; display: flex; flex-direction: column; gap: 14px; flex: 1">
+<span class="who">MISSION ENGINEER · BEFORE A CAMPAIGN</span>
+<p style="margin: 0; font-size: 14px; color: #9DAAB8; line-height: 1.5"><b style="color: #FF6B73; font-weight: 600">Today:</b> READY on one page, 1,001 warnings on another, a setup checklist that never goes away. <span class="ref">#2</span> <span class="ref">#7</span></p>
+<div style="display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #1C2530; padding-top: 14px">
+<div class="step"><b>01</b><span>One readiness verdict per area: fleet, catalog, comms, stations, data, apps.</span></div>
+<div class="step"><b>02</b><span>Blockers first, then suggestions grouped by cause, never by spacecraft.</span></div>
+<div class="step"><b>03</b><span>Each finding links to the profile or rule that fixes all of them.</span></div>
+</div>
+<a href="Setup.dc.html" class="go">Open readiness →</a>
+</div>
+</article>
+
+<article class="pnl" style="display: flex; flex-direction: column">
+<div class="ph"><span class="i">S2</span><span class="t">Add spacecraft</span><span class="r">1 OR 50 · SAME FLOW</span></div>
+<div style="padding: 18px 16px; display: flex; flex-direction: column; gap: 14px; flex: 1">
+<span class="who">MISSION ENGINEER · NEW LAUNCH BATCH</span>
+<p style="margin: 0; font-size: 14px; color: #9DAAB8; line-height: 1.5"><b style="color: #FF6B73; font-weight: 600">Today:</b> one at a time, no profile picker, routing and framing set per spacecraft. <span class="ref">#12</span></p>
+<div style="display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #1C2530; padding-top: 14px">
+<div class="step"><b>01</b><span>Pick a profile, then a count and naming pattern, or drop in a manifest CSV.</span></div>
+<div class="step"><b>02</b><span>Cadence proposes SCIDs, planes and routes, and checks for clashes.</span></div>
+<div class="step"><b>03</b><span>Review the batch as a table, then stage it as one change.</span></div>
+</div>
+<a href="AddSpacecraft.dc.html" class="go">Open add spacecraft →</a>
+</div>
+</article>
+
+<article class="pnl" style="display: flex; flex-direction: column">
+<div class="ph"><span class="i">S3</span><span class="t">Import a database</span><span class="r">KNOW THE BLAST RADIUS</span></div>
+<div style="padding: 18px 16px; display: flex; flex-direction: column; gap: 14px; flex: 1">
+<span class="who">FLIGHT SOFTWARE · NEW FSW RELEASE</span>
+<p style="margin: 0; font-size: 14px; color: #9DAAB8; line-height: 1.5"><b style="color: #FF6B73; font-weight: 600">Today:</b> 547 declarations, no view of what changed or what it breaks.</p>
+<div style="display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #1C2530; padding-top: 14px">
+<div class="step"><b>01</b><span>Drop an XTCE or CSV export. Cadence parses and validates it.</span></div>
+<div class="step"><b>02</b><span>See a diff against the live catalog: added, changed, removed.</span></div>
+<div class="step"><b>03</b><span>See impact: procedures, queued uplinks, limits and dashboards that use what changed.</span></div>
+</div>
+<a href="Catalog.dc.html" class="go">Open catalog import →</a>
+</div>
+</article>
+
+<article class="pnl" style="display: flex; flex-direction: column">
+<div class="ph"><span class="i">S4</span><span class="t">Change configuration</span><span class="r">EDIT ONCE, APPLY TO 500</span></div>
+<div style="padding: 18px 16px; display: flex; flex-direction: column; gap: 14px; flex: 1">
+<span class="who">MISSION ENGINEER · ROUTING, FRAMING, LIMITS</span>
+<p style="margin: 0; font-size: 14px; color: #9DAAB8; line-height: 1.5"><b style="color: #FF6B73; font-weight: 600">Today:</b> 1,000 routing rules all named "Fairbanks (Demo) — candidate", raw profile ids, "Active r5" vs "Generation 4". <span class="ref">#12</span> <span class="ref">#16</span> <span class="ref">#26</span></p>
+<div style="display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #1C2530; padding-top: 14px">
+<div class="step"><b>01</b><span>Open the profile. Every section shows what inherits it.</span></div>
+<div class="step"><b>02</b><span>Overrides are the exception and listed by spacecraft.</span></div>
+<div class="step"><b>03</b><span>Stage, review the per-spacecraft effect, apply as r6.</span></div>
+</div>
+<a href="Profile.dc.html" class="go">Open profile →</a>
+</div>
+</article>
+
+<article class="pnl" style="display: flex; flex-direction: column">
+<div class="ph"><span class="i">S5</span><span class="t">People and access</span><span class="r">ORG ADMIN</span></div>
+<div style="padding: 18px 16px; display: flex; flex-direction: column; gap: 14px; flex: 1">
+<span class="who">ORG ADMIN · NEW OPERATOR JOINS</span>
+<p style="margin: 0; font-size: 14px; color: #9DAAB8; line-height: 1.5"><b style="color: #FF6B73; font-weight: 600">Today:</b> members and invitations only in platform admin, no profile or password page. <span class="ref">#18</span></p>
+<div style="display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #1C2530; padding-top: 14px">
+<div class="step"><b>01</b><span>Invite by email with a console role and mission scope.</span></div>
+<div class="step"><b>02</b><span>See who can command, who can give a second GO, and who is on shift.</span></div>
+<div class="step"><b>03</b><span>Service identities and keys live beside people, with last use.</span></div>
+</div>
+<a href="People.dc.html" class="go">Open people and access →</a>
+</div>
+</article>
+
+<article class="pnl" style="display: flex; flex-direction: column">
+<div class="ph"><span class="i">NAV</span><span class="t">Setup navigation</span><span class="r">FIXES #8</span></div>
+<div style="padding: 18px 16px; display: flex; flex-direction: column; gap: 8px; font: 600 14px 'Saira Condensed'; letter-spacing: .16em; text-transform: uppercase">
+<span class="lbl">Mission</span>
+<span>01 Readiness · 02 Spacecraft · 03 Profiles</span>
+<span>04 Catalog · 05 Comms &amp; routing · 06 Ground stations</span>
+<span>07 Data sources · 08 Apps</span>
+<span class="lbl" style="margin-top: 10px">Organization</span>
+<span>People &amp; access · Missions · Settings · Audit log</span>
+<span class="lbl" style="margin-top: 10px">Always visible</span>
+<span style="color: #9DAAB8">Staged changes bar · revision number · OPS / SETUP switch</span>
+</div>
+</article>
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1320}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

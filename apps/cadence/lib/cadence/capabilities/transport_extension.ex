@@ -22,5 +22,8 @@ defmodule Cadence.Capabilities.TransportExtension do
   @callback restore_checkpoint(map(), term(), ExecutionContext.t()) ::
               {:ok, ExecutionResult.t()} | {:error, term()}
 
-  @optional_callbacks export_checkpoint: 2, restore_checkpoint: 3
+  @doc "Whether the extension can take an uplink release now (#33); `:ok` when not implemented."
+  @callback uplink_readiness(term()) :: :ok | {:error, term()}
+
+  @optional_callbacks export_checkpoint: 2, restore_checkpoint: 3, uplink_readiness: 1
 end

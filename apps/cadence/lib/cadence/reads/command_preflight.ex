@@ -1,0 +1,304 @@
+defmodule Cadence.Reads.CommandPreflight do
+  @moduledoc """
+  The GO / NO-GO poll for a command-group draft (M18, docs/apogee/domain/group-requests.md §5).
+  Read-only: it runs the same unlocked validation submit uses and adds the
+  facts only reads can see (other work on the same lanes, each target's next
+  booked contact).
+
+  Each check is `%{key, result: :go | :hold | :no_go, per_target, evidence}`.
+  The server computes facts and the UI writes the sentences. Checks the
+  backend can't compute (plan impact, umbra margin) are absent, never `:go`.
+  """
+
+  alias Cadence.Commanding
+  alias Cadence.Commanding.Groups.{CommandGroup, GroupStore, Validation}
+  alias Cadence.Comms.UplinkResolution
+  alias Cadence.Reads.{CommandGroups, Passes}
+  alias Cadence.Reads.CommandPreflight.{ResolvedArguments, VerifierGroups}
+
+  @contact_horizon_s 6 * 3_600
+  # DECISIONS #60: HOLDs the submitter may acknowledge with a note. Every other HOLD is hard.
+  @ackable_holds [:conflicts]
+  @open_queue_states [:pending, :release_pending]
+
+  @doc """
+  Runs the poll for a draft. Option `:exclude_request_ids` leaves those
+  requests out of `conflicts` (review passes the group's own members).
+  """
+  @spec run(binary(), binary(), map(), map(), keyword()) :: {:ok, map()} | {:error, term()}
+  def run(organization_id, mission_id, requested_by, draft, opts \\ []) do
+    draft = %{
+      draft
+      | targets: UplinkResolution.annotate(organization_id, mission_id, draft.targets)
+    }
+
+    case Validation.validate(organization_id, mission_id, requested_by, draft) do
+      {:ok, validated} ->
+        {:ok, result(organization_id, mission_id, draft, validated, opts)}
+
+      {:error, {:command_group_too_large, evidence}} ->
+        {:ok,
+         %{
+           valid?: false,
+           digest: nil,
+           policy: nil,
+           targets: [],
+           members: 0,
+           checks: [check(:size, :no_go, [], evidence)]
+         }}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Re-runs preflight on a submitted group for review (Approve A2), adding a
+  `changed_since_submit` check that HOLDs when the validated result no longer
+  matches what the requester submitted (catalog, targets or values changed).
+  """
+  @spec review(binary(), binary(), CommandGroup.t()) ::
+          {:ok, map()} | {:error, term()}
+  def review(organization_id, mission_id, group) do
+    draft = CommandGroups.draft_of(group)
+
+    own =
+      organization_id
+      |> GroupStore.members(mission_id, group.command_group_id)
+      |> Enum.map(& &1.command_request_id)
+
+    with {:ok, preflight} <-
+           run(organization_id, mission_id, group.requested_by, draft, exclude_request_ids: own) do
+      changed? = preflight.digest != group.preflight["digest"]
+      drift = check(:changed_since_submit, if(changed?, do: :hold, else: :go), [], %{})
+      {:ok, %{preflight | checks: preflight.checks ++ [drift]}}
+    end
+  end
+
+  defp result(org, mission, draft, validated, opts) do
+    lanes = validated.targets |> Enum.map(& &1.source_endpoint_id) |> Enum.reject(&is_nil/1)
+
+    checks = [
+      identity_check(validated),
+      catalog_check(validated),
+      check(
+        :size,
+        :go,
+        [],
+        Map.merge(Validation.bounds(), %{
+          targets: length(draft.targets),
+          commands: length(draft.commands)
+        })
+      ),
+      conflicts_check(
+        org,
+        mission,
+        lanes,
+        MapSet.new(Keyword.get(opts, :exclude_request_ids, []))
+      ),
+      contact_check(org, mission, draft, validated.targets),
+      two_person_check(validated.policy)
+    ]
+
+    # U51: each target's catalog revision, and where targets differ in what verifies a command.
+    revisions = VerifierGroups.catalog_revisions(org, mission, validated.members)
+    by_index = Map.new(validated.targets, &{&1.index, &1})
+
+    %{
+      valid?: validated.valid?,
+      digest: validated.digest,
+      snapshot: validated.snapshot,
+      policy: validated.policy,
+      targets:
+        Enum.map(validated.targets, &Map.put(&1, :catalog_revision, Map.get(revisions, &1.index))),
+      commands:
+        draft.commands
+        |> VerifierGroups.commands(validated.members, by_index, revisions)
+        |> with_resolved(
+          ResolvedArguments.for_preflight(org, mission, validated.members, by_index)
+        ),
+      members: length(validated.members),
+      checks: checks
+    }
+  end
+
+  # U68 R1: where the server's values differ from what was entered, per stacked command.
+  defp with_resolved(commands, resolved),
+    do: Enum.map(commands, &Map.put(&1, :resolved_arguments, Map.get(resolved, &1.position, [])))
+
+  defp identity_check(%{identity_failures: []}), do: check(:identity, :go, [], %{})
+
+  defp identity_check(%{identity_failures: failures}) do
+    # `routes` names the competing (or missing) uplink routes for profile routing links.
+    per_target =
+      Enum.map(failures, fn failure ->
+        %{
+          spacecraft_id: failure.spacecraft_id,
+          result: :no_go,
+          reason: failure.failure,
+          routes: Map.get(failure, :failure_detail, [])
+        }
+      end)
+
+    check(:identity, :no_go, per_target, %{count: length(failures)})
+  end
+
+  defp catalog_check(%{catalog_failures: []}), do: check(:catalog, :go, [], %{})
+
+  defp catalog_check(%{catalog_failures: failures}) do
+    per_target =
+      failures
+      |> Enum.group_by(& &1.spacecraft_id)
+      |> Enum.map(fn {id, rows} ->
+        %{
+          spacecraft_id: id,
+          result: :no_go,
+          reason:
+            Enum.map(
+              rows,
+              &%{position: &1.position, command_id: &1.command_id, reason: reason_key(&1.reason)}
+            )
+        }
+      end)
+
+    check(:catalog, :no_go, per_target, %{count: length(failures)})
+  end
+
+  # Open work already on the targets' lanes: queued or releasing entries, plus requests
+  # waiting for approval.
+  defp conflicts_check(_org, _mission, [], _own), do: check(:conflicts, :go, [], %{count: 0})
+
+  defp conflicts_check(org, mission, lanes, own) do
+    lane_set = MapSet.new(lanes)
+
+    queued =
+      org
+      |> Commanding.list_command_queue_entries(mission)
+      |> Enum.filter(
+        &(&1.lifecycle_state in @open_queue_states and MapSet.member?(lane_set, &1.queue_lane_key))
+      )
+
+    pending =
+      org
+      |> Commanding.list_command_requests(mission)
+      |> Enum.filter(
+        &(&1.lifecycle_state == :approval_pending and
+            MapSet.member?(lane_set, &1.source_endpoint_ref))
+      )
+
+    ids =
+      (Enum.map(queued, & &1.command_request_id) ++ Enum.map(pending, & &1.command_request_id))
+      |> Enum.reject(&MapSet.member?(own, &1))
+
+    result = if ids == [], do: :go, else: :hold
+    ids = ids |> Enum.uniq() |> Enum.sort()
+    check(:conflicts, result, [], %{count: length(ids), command_request_ids: ids})
+  end
+
+  # A commandable contact: a confirmed or active booking whose uplink leg the provider confirmed
+  # (it carries the command window), overlapping the release window [not_before or now,
+  # expires_at or +6 h] (qa #35: the window ignored not_before).
+  defp contact_check(org, mission, draft, targets) do
+    now = DateTime.utc_now()
+    from = later(Map.get(draft, :not_before), now)
+    until = Map.get(draft, :expires_at) || DateTime.add(from, @contact_horizon_s)
+    until = if DateTime.compare(until, from) == :gt, do: until, else: DateTime.add(from, 60)
+
+    next =
+      org
+      |> Passes.load(mission, from, until, %{states: ["confirmed", "active"]})
+      |> Map.fetch!(:passes)
+      |> Enum.filter(&(&1.uplink_confirmed == true and DateTime.compare(&1.ends_at, from) == :gt))
+      |> Enum.group_by(& &1.spacecraft_id)
+      |> Map.new(fn {id, [first | _]} ->
+        {id,
+         %{
+           station_code: first.station.code || first.station.ref,
+           aos: first.starts_at,
+           los: first.ends_at
+         }}
+      end)
+
+    per_target =
+      Enum.map(targets, fn target ->
+        contact = Map.get(next, target.spacecraft_id)
+
+        %{
+          spacecraft_id: target.spacecraft_id,
+          result: if(contact, do: :go, else: :hold),
+          reason: if(contact, do: nil, else: :no_commandable_contact),
+          next_contact: contact
+        }
+      end)
+
+    result = if Enum.all?(per_target, &(&1.result == :go)), do: :go, else: :hold
+    check(:contact, result, per_target, %{from: from, until: until})
+  end
+
+  defp later(nil, now), do: now
+  defp later(%DateTime{} = at, now), do: if(DateTime.compare(at, now) == :gt, do: at, else: now)
+
+  # Not a HOLD (DECISIONS #60/#61): it never blocks submit, and the second GO is what satisfies it.
+  # Until then it reads `second_go` ("needs a second GO"), never `go`.
+  defp two_person_check(%{second_go_required: false}),
+    do: check(:two_person, :go, [], %{reasons: []})
+
+  defp two_person_check(%{reasons: reasons}),
+    do: check(:two_person, :second_go, [], %{reasons: reasons})
+
+  defp check(key, result, per_target, evidence) do
+    hold? = result == :hold
+
+    %{
+      key: key,
+      result: result,
+      per_target: per_target,
+      evidence: evidence,
+      ackable: if(hold?, do: key in @ackable_holds),
+      hold_basis: if(hold?, do: hold_basis(key, per_target, evidence))
+    }
+  end
+
+  # The HOLD's facts, so an acknowledgement can't carry over to a changed HOLD (#60). Time-only
+  # evidence (the contact window) is left out of the hash.
+  defp hold_basis(key, per_target, evidence) do
+    {key, per_target, Map.drop(evidence, [:from, :until])}
+    |> :erlang.term_to_binary()
+    |> then(&:crypto.hash(:sha256, &1))
+    |> Base.encode16(case: :lower)
+    |> binary_part(0, 32)
+  end
+
+  @doc """
+  DECISIONS #60/#61: the HOLDs of `preflight` that `acks` (`[%{key, hold_basis, note}]`) don't
+  satisfy, and the acks that do. An ack counts only for a current, acknowledgeable HOLD with the
+  same `hold_basis`; hard HOLDs must clear. With several acks for one key, the first whose basis
+  matches wins (list carried acks first so an unchanged HOLD isn't acknowledged twice).
+  """
+  @spec holds(map(), [map()]) :: %{unsatisfied: [map()], accepted: [map()]}
+  def holds(%{checks: checks}, acks) do
+    by_key = Enum.group_by(acks, &to_string(&1.key))
+
+    Enum.reduce(checks, %{unsatisfied: [], accepted: []}, fn
+      %{result: :hold} = check, acc ->
+        ack =
+          by_key
+          |> Map.get(Atom.to_string(check.key), [])
+          |> Enum.find(&(&1.hold_basis == check.hold_basis))
+
+        if check.ackable && ack,
+          do: %{acc | accepted: acc.accepted ++ [Map.put(ack, :evidence, check.evidence)]},
+          else: %{
+            acc
+            | unsatisfied: acc.unsatisfied ++ [Map.take(check, [:key, :ackable, :hold_basis])]
+          }
+
+      _check, acc ->
+        acc
+    end)
+  end
+
+  defp reason_key({key, _detail}) when is_atom(key), do: key
+  defp reason_key(key) when is_atom(key), do: key
+  defp reason_key(_other), do: :invalid
+end

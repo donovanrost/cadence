@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { chromium } from "playwright";
 import { createInterface } from "node:readline";
 import { fixtureRecord, fixtureString } from "../../test-support/json-fixture.ts";
+import { signInThroughConsole } from "./console_sign_in.mjs";
 
 const [base, mission, user, first, second, revision, out] = process.argv.slice(2);
 assert.ok(base && mission && user && first && second && revision && out);
@@ -27,13 +28,12 @@ const errors = [];
 page.on("pageerror", (error) => errors.push(error.message));
 const path = `/missions/${mission}/spacecraft/${first}`;
 try {
-  await page.goto(`${base}${path}`);
-  await page.waitForURL(`${base}/sign-in`);
-  await page.locator("#user_email").fill(user);
-  await page.locator("#user_password").fill(fixtureString(fixtureRecord(secret).password));
-  await page.locator('#sign-in-form button[type="submit"]').click();
-  await page.waitForURL((url) => url.pathname !== "/sign-in");
-  await page.goto(`${base}${path}`);
+  await signInThroughConsole(page, {
+    base,
+    email: user,
+    password: fixtureString(fixtureRecord(secret).password),
+    path,
+  });
   await page.locator("#spacecraft-configuration-workspace").waitFor();
   assert.equal(await page.locator("h1").count(), 1);
   const shell = await page.locator("#application-shell").elementHandle();
@@ -51,10 +51,8 @@ try {
     await page.getByRole("button", { name: /Commanding Build and validate/ }).click();
     await page.getByRole("checkbox", { name: "Enable Commanding", exact: true }).check();
     await page.getByRole("button", { name: "Done", exact: true }).click();
-    await page.getByRole("link", { name: "Mission catalog", exact: true }).click();
-    await page.waitForURL(`${base}/missions/${mission}/catalog`);
-    await page.getByText("No active or saved spacecraft configurations", { exact: true }).waitFor();
-    await page.goBack();
+    // §11c(B): the mission catalog pages are the console's now (B6), so the smoke stays on the
+    // spacecraft's own sections.
     await page.locator("#spacecraft-save-draft").waitFor();
     assert.equal(
       await page
@@ -79,32 +77,6 @@ try {
     await page.locator("#spacecraft-submit-review").click();
     await page.getByText("Awaiting review", { exact: true }).waitFor();
     await page.screenshot({ path: `${out}/changes-desktop.png`, animations: "disabled" });
-    await page
-      .locator(`a[href="/missions/${mission}/catalog/revisions/${revision}"]`)
-      .first()
-      .click();
-    await page.locator(`#catalog-spacecraft-usage-${first}`).waitFor();
-    assert.equal(
-      await page.locator(`#catalog-spacecraft-usage-${first} td`).first().innerText(),
-      "Saved configuration",
-    );
-    await page.locator(`a[href="/missions/${mission}/catalog"]`).first().click();
-    const usage = page.locator('#catalog-databases-table a[id$="-usage"]');
-    await page
-      .getByRole("link", { name: "Saved configuration on 1 spacecraft", exact: true })
-      .waitFor();
-    await usage.click();
-    await page.locator("#catalog-spacecraft-usage-summary").waitFor();
-    assert.equal(
-      await page.locator("#catalog-spacecraft-usage-summary").innerText(),
-      "Saved configuration on 1 spacecraft",
-    );
-    await page.getByRole("link", { name: "View revision", exact: true }).click();
-    await page
-      .locator("#catalog-spacecraft-usage")
-      .getByRole("link", { name: "Review changes for KESTREL-01" })
-      .click();
-    await page.getByText("Awaiting review", { exact: true }).waitFor();
     assert.equal(
       await shell.evaluate(
         (node) => node.isConnected && node === document.querySelector("#application-shell"),

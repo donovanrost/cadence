@@ -18,6 +18,8 @@ defmodule Cadence.Governance.PacketDefinitionFieldRow do
     field(:data_type, :string)
     field(:byte_order, :string)
     field(:engineering_unit, :string)
+    field(:parameter_id, :string)
+    field(:qualified_name, :string)
 
     timestamps()
   end
@@ -45,7 +47,9 @@ defmodule Cadence.Governance.PacketDefinitionFieldRow do
         size_bits: field_definition.size_bits,
         data_type: Atom.to_string(field_definition.data_type),
         byte_order: Atom.to_string(field_definition.byte_order),
-        engineering_unit: field_definition.engineering_unit
+        engineering_unit: field_definition.engineering_unit,
+        parameter_id: field_definition.parameter_id,
+        qualified_name: field_definition.qualified_name
       },
       all_fields()
     )
@@ -65,7 +69,9 @@ defmodule Cadence.Governance.PacketDefinitionFieldRow do
       :size_bits,
       :data_type,
       :byte_order,
-      :engineering_unit
+      :engineering_unit,
+      :parameter_id,
+      :qualified_name
     ]
   end
 end

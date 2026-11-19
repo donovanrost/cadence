@@ -8,27 +8,21 @@ import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
 import type { Component } from "vue";
 import SpacecraftApplicationsPage from "./SpacecraftApplicationsPage.vue";
 import SpacecraftCommanding from "./SpacecraftCommanding.vue";
-import SpacecraftEdit from "./SpacecraftEdit.vue";
 import SpacecraftListPage from "./SpacecraftListPage.vue";
-import SpacecraftNew from "./SpacecraftNew.vue";
 import SpacecraftReadiness from "./SpacecraftReadiness.vue";
 import SpacecraftRouting from "./SpacecraftRouting.vue";
 import SpacecraftShow from "./SpacecraftShow.vue";
 import SpacecraftTelemetryDecom from "./SpacecraftTelemetryDecom.vue";
 import SpacecraftTypeListPage from "./SpacecraftTypeListPage.vue";
-import SpacecraftTypeNew from "./SpacecraftTypeNew.vue";
 import SpacecraftTypeShow from "./SpacecraftTypeShow.vue";
 
 const props = defineProps<FullPageSurfaceProps>();
 
 const surfaceComponents: Record<string, Component> = {
   list: SpacecraftListPage,
-  new: SpacecraftNew,
   profile_list: SpacecraftTypeListPage,
-  profile_new: SpacecraftTypeNew,
   profile_show: SpacecraftTypeShow,
   show: SpacecraftShow,
-  edit: SpacecraftEdit,
   readiness: SpacecraftReadiness,
   routing: SpacecraftRouting,
   commanding: SpacecraftCommanding,
@@ -37,9 +31,6 @@ const surfaceComponents: Record<string, Component> = {
 };
 
 const actionBindings: Record<string, Record<string, string>> = {
-  new: { validate: "validate", save: "save" },
-  profile_new: { validate: "validate", save: "save" },
-  edit: { validate: "validate", save: "save" },
   applications: { install: "install", disable: "disable", uninstall: "uninstall" },
   telemetry_decom: {
     save_catalog_revision: "save_configuration",

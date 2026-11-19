@@ -4,6 +4,7 @@ defmodule Cadence.Contacts.ProviderBookingTest do
   alias Cadence.Management.Transports
 
   alias Cadence.Comms.Transport
+  alias Cadence.Contacts.PassReleaseAttention
   alias Cadence.Contacts.{PathTemplate, ProviderBooking, ProviderReservations}
   alias Cadence.GroundNetworks
   alias Cadence.GroundNetworks.{MissionProvider, ProviderError}
@@ -289,6 +290,69 @@ defmodule Cadence.Contacts.ProviderBookingTest do
              )
 
     assert scheduled_contact.lifecycle_state == :scheduled
+  end
+
+  test "a refused cancellation leaves the booking as it was: confirmed, with the error, never lost",
+       context do
+    attrs = booking_attrs(context)
+    assert {:ok, booking} = reserve(context, attrs)
+    id = booking.provider_reservation.provider_reservation_id
+    before = booking.provider_reservation.lifecycle_state
+
+    refused = %ProviderError{category: :conflict, detail: "too late to cancel", retryable: false}
+
+    assert {:error, {:provider_reservation_not_confirmed, kept}} =
+             ProviderBooking.cancel(
+               context.organization_id,
+               context.mission_id,
+               id,
+               client: FakeProviderClient,
+               cancel_response: {:error, refused}
+             )
+
+    assert kept.lifecycle_state == before
+    assert kept.last_error_document["action"] == "cancel"
+    assert kept.last_error_document["outcome"] == "refused"
+    refute Map.has_key?(kept.metadata || %{}, "cancel_initiator")
+
+    assert {:ok, %{lifecycle_state: ^before}} =
+             ProviderReservations.fetch(context.organization_id, context.mission_id, id)
+
+    assert {:ok, %{lifecycle_state: :scheduled}} =
+             Cadence.Contacts.fetch_scheduled_contact(
+               context.organization_id,
+               context.mission_id,
+               booking.scheduled_contact.scheduled_contact_id
+             )
+
+    # The pass_release attention item stays open while the booking stands...
+    since = DateTime.add(DateTime.utc_now(), -60)
+
+    assert [
+             %{
+               source: "pass_release",
+               id: ^id,
+               conflict: "cancel_failed",
+               reason: "refused",
+               provider_message: "too late to cancel"
+             }
+           ] = PassReleaseAttention.items(context.organization_id, context.mission_id)
+
+    # ...and resolves once a later cancel goes through.
+    assert {:ok, _canceled} =
+             ProviderBooking.cancel(context.organization_id, context.mission_id, id,
+               client: FakeProviderClient,
+               cancel_response: {:ok, provider_response(attrs, "canceled")}
+             )
+
+    assert PassReleaseAttention.items(context.organization_id, context.mission_id) == []
+
+    assert [%{id: ^id, action: "canceled"}] =
+             PassReleaseAttention.resolved_since(
+               context.organization_id,
+               context.mission_id,
+               since
+             )
   end
 
   defp reserve(context, attrs, opts \\ []) do

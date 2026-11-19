@@ -19,10 +19,6 @@ defmodule CadenceWeb.DashboardLibraryTest do
              "../../../cadence/test/fixtures/dashboards/value_tile_latest.v1.json",
              __DIR__
            )
-  @renderer Path.expand(
-              "../../../../frontend/modules/dashboards-and-exploration/src/features/library/producer-render-check.mjs",
-              __DIR__
-            )
 
   setup do
     org = TestFixtures.persist_org!()
@@ -60,8 +56,9 @@ defmodule CadenceWeb.DashboardLibraryTest do
     }
   end
 
-  test "real producer metadata, definitions and consumers render in Vue", c do
-    {:ok, empty} = Library.load(c.scope, c.mission.mission_id)
+  # L8b: the legacy library feature's producer render check went with the page.
+  test "the library reads empty, a selected item with its target, and a historical version", c do
+    {:ok, _empty} = Library.load(c.scope, c.mission.mission_id)
     {:ok, item} = execute(c, "create_item", creation(c))
 
     {:ok, _} =
@@ -72,25 +69,14 @@ defmodule CadenceWeb.DashboardLibraryTest do
         "expected_version" => 1
       })
 
-    {:ok, selected} =
+    {:ok, _selected} =
       Library.load(c.scope, c.mission.mission_id, %{
         "item_id" => item.item_id,
         "target_id" => c.document.dashboard_id
       })
 
-    {:ok, historical} =
+    {:ok, _historical} =
       Library.load(c.scope, c.mission.mission_id, %{"item_id" => item.item_id, "version" => "1"})
-
-    node =
-      System.find_executable("node") ||
-        flunk("Node is required for the library producer contract")
-
-    {output, status} =
-      System.cmd(node, ["--no-warnings", @renderer, Jason.encode!([empty, selected, historical])],
-        stderr_to_stdout: true
-      )
-
-    assert status == 0, output
   end
 
   test "consumer and target pages are bounded and exclude foreign and archived documents", c do
@@ -170,7 +156,7 @@ defmodule CadenceWeb.DashboardLibraryTest do
     assert Jason.decode!(model.selected.widget_json) == Jason.decode!(c.json)
   end
 
-  test "adding an exact pin changes only the draft and consumers do not auto-upgrade", c do
+  test "adding an exact pin saves a current version and consumers do not auto-upgrade", c do
     {:ok, item} = execute(c, "create_item", creation(c))
 
     {:ok, _} =
@@ -214,7 +200,9 @@ defmodule CadenceWeb.DashboardLibraryTest do
     {:ok, published} =
       Documents.fetch_published(c.org.organization_id, c.mission.mission_id, dashboard)
 
-    assert published.placements == c.document.placements
+    # Q1 (#76): adding a pin saves a version, and every saved version is current.
+    assert Document.version(published) == 2
+    assert Enum.any?(published.placements, &(&1.placement_id == pin))
     {:ok, saved} = Documents.fetch(c.org.organization_id, c.mission.mission_id, dashboard)
     assert Document.version(saved) == 2
     assert hd(saved.placements) == hd(c.document.placements)

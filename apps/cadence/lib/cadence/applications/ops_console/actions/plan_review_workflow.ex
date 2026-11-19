@@ -15,6 +15,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.PlanReviewWorkflow do
     contact_plan_requirement_changed contact_plan_requirement_version_not_found
     contact_plan_version_not_found contact_plan_decision_reason_required)a
 
+  @superseded ~w(contact_plan_superseded)a
+
   def actions, do: @actions
 
   def execute(scope, mission, action, input, detail) when action in @actions do
@@ -31,7 +33,11 @@ defmodule Cadence.Applications.OpsConsole.Actions.PlanReviewWorkflow do
        })}
     else
       {:error, :forbidden} -> {:rejected, ["forbidden"]}
+      # Under 'independent' approval the requester can't approve their own plan (director 11-15).
+      {:error, :contact_plan_self_approval_forbidden} -> {:rejected, ["forbidden"]}
       {:error, reason} when reason in @no_effect -> {:rejected, ["review_changed"]}
+      # A newer version overtook it (ContactPlans): nothing was approved or booked.
+      {:error, {reason, _detail}} when reason in @superseded -> {:rejected, ["review_changed"]}
       # Approval and execution can fail after committing work. An unclassified
       # error is not a promise that no governed effect occurred.
       _ -> {:error, :unconfirmed}

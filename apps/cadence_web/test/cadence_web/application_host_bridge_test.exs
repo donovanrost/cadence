@@ -106,7 +106,7 @@ defmodule CadenceWeb.ApplicationHostBridgeTest do
              ApplicationHostBridge.action(%Scope{}, %{}, params, "bridge-test-key")
   end
 
-  test "rejects mismatched action scopes except for bounded Mission Catalog organization actions" do
+  test "rejects mismatched action scopes" do
     third_party = %ApplicationDefinition{
       application_key: "third_party",
       version: 1,
@@ -143,43 +143,39 @@ defmodule CadenceWeb.ApplicationHostBridgeTest do
              mission_action
            )
 
-    assert ApplicationHostBridge.action_scope_compatible?(
+    refute ApplicationHostBridge.action_scope_compatible?(
              %ApplicationDefinition{third_party | application_key: "mission_catalog"},
              organization_surface,
              %ActionDefinition{mission_action | action_id: "save"}
            )
   end
 
-  test "admits only validate and save mission actions on the Spacecraft edit surface" do
+  # Host-action sweep row 2: the Spacecraft form surfaces (new, profile_new, edit) and their
+  # validate/save actions are gone; the console's change sets edit spacecraft.
+  test "Spacecraft declares no form surface and no mission-scope action" do
     definition = Spacecraft.definition()
-    edit_surface = Enum.find(definition.surfaces, &(&1.surface_id == "edit"))
+    surface_ids = Enum.map(definition.surfaces, & &1.surface_id)
 
-    assert %SurfaceDefinition{surface_id: "edit", scope: :spacecraft} = edit_surface
+    for form <- ~w(new profile_new edit), do: refute(form in surface_ids)
 
-    for action_id <- ["validate", "save"] do
-      assert {:ok, %ActionDefinition{scope: :mission} = action} =
-               ApplicationDefinition.fetch_action(definition, action_id)
+    for action_id <- ~w(validate save),
+        do: assert({:error, _} = ApplicationDefinition.fetch_action(definition, action_id))
 
-      assert ApplicationHostBridge.action_scope_compatible?(
-               definition,
-               edit_surface,
-               action
-             )
-    end
+    refute Enum.any?(definition.actions, &(&1.scope == :mission))
   end
 
   test "rejects a mission action on a different Spacecraft surface" do
     definition = Spacecraft.definition()
     show_surface = Enum.find(definition.surfaces, &(&1.surface_id == "show"))
-    {:ok, validate_action} = ApplicationDefinition.fetch_action(definition, "validate")
+    {:ok, install} = ApplicationDefinition.fetch_action(definition, "install")
+    mission_action = %ActionDefinition{install | action_id: "probe", scope: :mission}
 
     assert %SurfaceDefinition{surface_id: "show", scope: :spacecraft} = show_surface
-    assert validate_action.scope == :mission
 
     refute ApplicationHostBridge.action_scope_compatible?(
              definition,
              show_surface,
-             validate_action
+             mission_action
            )
   end
 
@@ -292,43 +288,6 @@ defmodule CadenceWeb.ApplicationHostBridgeTest do
     assert ApplicationHostBridge.host_dom_id(:organization) == "organization-application-host"
     assert ApplicationHostBridge.host_dom_id(:user) == "user-application-host"
     assert ApplicationHostBridge.host_dom_id(:admin) == "admin-application-host"
-  end
-
-  test "returns deep trusted organization forms through the complete host envelope" do
-    user = TestFixtures.persist_user!()
-    organization = TestFixtures.persist_org!()
-
-    membership =
-      TestFixtures.grant_membership!(user, organization, role: :organization_admin)
-
-    scope =
-      Scope.new(%{
-        user: user,
-        organization_id: organization.organization_id,
-        organization: organization,
-        organization_membership: membership
-      })
-
-    route_context = %{
-      host_context: HostContext.organization(organization.organization_id),
-      mission: nil,
-      spacecraft: nil
-    }
-
-    params = %{
-      "applicationKey" => "organization_admin",
-      "applicationVersion" => 1,
-      "surfaceId" => "provider_account_new",
-      "surfaceVersion" => 1,
-      "queryId" => "cadence.organization.provider_accounts.new",
-      "queryVersion" => 1,
-      "params" => %{}
-    }
-
-    assert {:ok, %{"trusted_surface" => %{"form" => form}}} =
-             ApplicationHostBridge.query(scope, route_context, params, now: @now)
-
-    assert form["id"] == "provider-account-form"
   end
 
   defp installed_telemetry_context do

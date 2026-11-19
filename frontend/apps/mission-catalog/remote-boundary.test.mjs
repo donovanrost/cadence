@@ -5,9 +5,6 @@ import test from "node:test";
 
 const root = new URL("./src/", import.meta.url);
 const requiredPages = [
-  "MissionList.vue",
-  "MissionTable.vue",
-  "MissionNew.vue",
   "MissionOverview.vue",
   "MissionApplications.vue",
   "MissionApplicationsPage.vue",
@@ -53,12 +50,7 @@ void test("mission remote entries retain public compatibility adapters for core 
     assert.match(adapter, /from "@cadence\/plugin-host\/catalog"/);
     assert.doesNotMatch(adapter, /<template>|defineProps|defineEmits/);
   }
-  for (const page of [
-    "MissionList.vue",
-    "MissionTable.vue",
-    "MissionNew.vue",
-    "MissionOverview.vue",
-  ]) {
+  for (const page of ["MissionOverview.vue"]) {
     const adapter = await readFile(new URL(page, root), "utf8");
     assert.match(adapter, /from "@cadence\/plugin-host\/missions"/);
     assert.doesNotMatch(adapter, /<template>|defineProps|defineEmits/);

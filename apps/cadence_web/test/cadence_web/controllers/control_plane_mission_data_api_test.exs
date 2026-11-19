@@ -361,9 +361,8 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
              ]
            } = json_response(command_requests_conn, 200)
 
-    # The request was made by the service identity. Approval is a human decision, and the
-    # approver is always the authenticated actor (DECISIONS #30), so the service can't approve
-    # through REST, not even by naming a user.
+    # Approval is a human decision and the approver is the authenticated actor (DECISIONS #30),
+    # so the service identity can't approve through REST.
     service_approval_conn =
       conn
       |> authorize(api_token)
@@ -653,6 +652,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
         "spacecraft" => %{
           "spacecraft_id" => "spacecraft-commanding-001",
           "display_name" => "SC-CMD-001",
+          # The release guard (#38) matches the gateway's SCID to the target's.
           "scid" => 31
         }
       })
@@ -821,11 +821,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
       |> authorize(api_token)
       |> post(
         "/api/organizations/#{organization_id}/missions/#{mission_id}/command_queue_entries/#{noop_queue_entry_id}/release",
-        %{
-          "release_attempt" => %{
-            "realized_contact_id" => realized_contact.realized_contact_id
-          }
-        }
+        %{"release_attempt" => %{"realized_contact_id" => realized_contact.realized_contact_id}}
       )
 
     assert %{
@@ -894,11 +890,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
       |> authorize(api_token)
       |> post(
         "/api/organizations/#{organization_id}/missions/#{mission_id}/command_queue_entries/#{staged_queue_entry_id}/release",
-        %{
-          "release_attempt" => %{
-            "realized_contact_id" => realized_contact.realized_contact_id
-          }
-        }
+        %{"release_attempt" => %{"realized_contact_id" => realized_contact.realized_contact_id}}
       )
 
     assert %{

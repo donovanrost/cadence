@@ -10,6 +10,9 @@ defmodule CadenceWeb.Application do
     children = [
       {Phoenix.PubSub, name: CadenceWeb.PubSub},
       CadenceWeb.FrontendReleasePublication.Janitor,
+      CadenceWeb.Console.LimitTransitions,
+      {Task.Supervisor, name: CadenceWeb.Console.TaskSupervisor},
+      CadenceWeb.Console.ContactChanges,
       CadenceWeb.Endpoint
     ]
 

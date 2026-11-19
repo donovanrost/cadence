@@ -107,7 +107,7 @@ test("rejects foreign scope, contradictory counts, substituted evidence and wron
     (x: AlarmDocument) =>
       (required(x.states.items[0]).evidence_href = required(
         x.states.items[0],
-      ).evidence_href.replace("sample-25", "sample-26")),
+      ).evidence_href.replace("points=HK.voltage", "points=HK.current")),
     (x: AlarmDocument) =>
       (x.states.previous_href = required(x.states.previous_href).replace(
         "severity=all",

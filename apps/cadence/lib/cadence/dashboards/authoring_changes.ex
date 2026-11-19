@@ -1,6 +1,13 @@
 defmodule Cadence.Dashboards.AuthoringChanges do
   @moduledoc "Pure document transformations for already admitted authoring commands; no persistence."
-  alias Cadence.Dashboards.{AuthoringDefaults, AuthoringWidget, Document, Section}
+  alias Cadence.Dashboards.{
+    AuthoringDefaults,
+    AuthoringWidget,
+    Document,
+    LibraryLifecycle,
+    Placement,
+    Section
+  }
 
   def apply(document, "rename", fields),
     do:
@@ -12,11 +19,18 @@ defmodule Cadence.Dashboards.AuthoringChanges do
        }, %{}}
 
   def apply(document, "add_section", fields) do
-    if length(document.sections) < 64 do
-      section = section(Cadence.Ids.new("dash_section"), fields)
-      {:ok, Document.put_section(document, section), %{section_id: section.section_id}}
-    else
-      {:error, :capacity}
+    id = fields["section_id"] || Cadence.Ids.new("dash_section")
+
+    cond do
+      length(document.sections) >= 64 ->
+        {:error, :capacity}
+
+      Enum.any?(document.sections, &(&1.section_id == id)) ->
+        {:error, :duplicate_id}
+
+      true ->
+        section = section(id, fields)
+        {:ok, Document.put_section(document, section), %{section_id: section.section_id}}
     end
   end
 
@@ -44,10 +58,46 @@ defmodule Cadence.Dashboards.AuthoringChanges do
   end
 
   def apply(document, "add_widget", fields) do
-    if length(document.placements) < 1024 do
-      put_widget(document, fields, nil)
-    else
-      {:error, :capacity}
+    id = fields["placement_id"]
+
+    cond do
+      length(document.placements) >= 1024 -> {:error, :capacity}
+      id && Enum.any?(document.placements, &(&1.placement_id == id)) -> {:error, :duplicate_id}
+      true -> put_widget(document, fields, nil)
+    end
+  end
+
+  # A reference to a live library item's version, not a copy, so the item's use count stays true.
+  def apply(document, "add_library_widget", fields) do
+    id = fields["placement_id"]
+
+    cond do
+      length(document.placements) >= 1024 ->
+        {:error, :capacity}
+
+      Enum.any?(document.placements, &(&1.placement_id == id)) ->
+        {:error, :duplicate_id}
+
+      true ->
+        with :ok <- optional_section(document, fields["section_id"]),
+             :ok <-
+               LibraryLifecycle.version_available(
+                 document.organization_id,
+                 document.mission_id,
+                 fields["library_item_id"],
+                 fields["version"]
+               ) do
+          placement = %Placement{
+            placement_id: id,
+            section_id: if(fields["section_id"] == "", do: nil, else: fields["section_id"]),
+            content_kind: :library,
+            library_widget_id: fields["library_item_id"],
+            library_version: fields["version"],
+            layout: %{x: nil, y: nil, w: min(4, document.grid.columns), h: 2}
+          }
+
+          {:ok, Document.put_placement(document, placement), %{placement_id: id}}
+        end
     end
   end
 
@@ -85,6 +135,12 @@ defmodule Cadence.Dashboards.AuthoringChanges do
     with :ok <- optional_section(document, input["fields"]["section_id"]),
          {:ok, widget} <-
            AuthoringWidget.build(document, input["fields"], input["observables"], existing) do
+      # A new widget keeps a client-chosen id when it named one (#76: deterministic replay).
+      widget =
+        if is_nil(existing) and is_binary(input["placement_id"]),
+          do: %{widget | placement_id: input["placement_id"]},
+          else: widget
+
       {:ok, Document.put_placement(document, widget), %{placement_id: widget.placement_id}}
     end
   end

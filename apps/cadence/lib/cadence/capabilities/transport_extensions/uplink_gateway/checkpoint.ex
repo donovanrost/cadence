@@ -7,7 +7,12 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway.Checkpoint do
 
   @dynamic_fields ~w(next_frame_seq packet_sequence_counts cop1 accepted_uplink_count
     started_uplink_count completed_uplink_count last_release_attempt_id last_command_request_id
-    last_command_name last_signal_phase last_signal_at last_control_at active_releases)a
+    last_command_name last_signal_phase last_signal_at last_control_at active_releases
+    cop1_awaiting_clcw cop1_started_at cop1_clcw_at)a
+
+  # Added after version-1 checkpoints were written (#38, #59 follow-up): an older checkpoint
+  # takes them from the fresh state rather than failing restoration.
+  @observed_fields [:cop1_started_at, :cop1_clcw_at]
 
   def export(state, _context) do
     with :ok <- validate(state, state), {:ok, data} <- Data.encode(state) do
@@ -20,7 +25,9 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway.Checkpoint do
         fresh,
         _context
       ) do
-    with {:ok, state} <- Data.decode(data), :ok <- validate(state, fresh) do
+    with {:ok, decoded} <- Data.decode(data),
+         state = Map.merge(Map.take(fresh, @observed_fields), decoded),
+         :ok <- validate(state, fresh) do
       {:ok, ExecutionResult.new(%{state: state})}
     end
   end

@@ -112,7 +112,6 @@ defmodule CadenceWeb.MixProject do
     "browser_test/cadence_web/assets/federation_browser_smoke_test.exs",
     "test/cadence_web/ops_contact_scheduling_page_test.exs",
     "browser_test/cadence_web/assets/command_workspace_browser_test.exs",
-    "browser_test/cadence_web/assets/admin_mode_browser_smoke_test.exs",
     "browser_test/cadence_web/assets/spacecraft_configuration_browser_test.exs",
     "browser_test/cadence_web/assets/settings_browser_test.exs"
   ]

@@ -113,7 +113,8 @@ defmodule CadenceWeb.OpsCommandQueuePageTest do
     assert current["data"]["model"]["availability"] == "queued"
   end
 
-  test "retained tokens, changed paths and revoked manager rights cannot queue", c do
+  test "retained tokens and changed paths cannot queue; demotion to member keeps access (#62)",
+       c do
     {:ok, view, _} = live(TestFixtures.member_conn(c.user), c.path)
     p = page(view)
     input = %{"expected_queue" => p["data"]["preview"]["token"]}
@@ -124,18 +125,19 @@ defmodule CadenceWeb.OpsCommandQueuePageTest do
     |> Ecto.Changeset.change(role: "member")
     |> Repo.update!()
 
-    assert %{"snapshot" => %{"status" => "rejected"}} = action(view, c.path, p, input)
-    assert %{"snapshot" => %{"status" => "unavailable"}} = read(view, c.path, p)
+    # Any mission operator may queue (DECISIONS #62); revocation is covered by
+    # QueueSubmissionConcurrencyTest.
+    assert %{"snapshot" => %{"status" => "ready"}} = read(view, c.path, p)
     refute Repo.exists?(from(row in CommandQueueEntryRow, where: row.mission_id == ^c.mission))
   end
 
-  test "anonymous visitors redirect and ordinary members cannot read command queue details", c do
+  test "anonymous visitors redirect and plain members can read command queue details (#62)", c do
     assert {:error, {:redirect, %{to: "/sign-in"}}} = live(build_conn(), c.path)
     member = TestFixtures.persist_user!()
     TestFixtures.grant_membership!(member, c.org)
     {:ok, view, _} = live(TestFixtures.member_conn(member), c.path)
-    assert page(view)["status"] == "unavailable"
-    refute Map.has_key?(page(view), "data")
+    assert page(view)["status"] == "ready"
+    assert Map.has_key?(page(view), "data")
   end
 
   defp unconfirm(view) do

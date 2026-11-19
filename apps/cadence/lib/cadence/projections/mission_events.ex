@@ -412,6 +412,15 @@ defmodule Cadence.Projections.MissionEvents do
     end
   end
 
+  @doc """
+  Whether a run of this job type is safe to run again after the node stopped mid-run (Jobs
+  recovery, 11-14): yes. The rebuild reads Postgres only and replaces the mission's rows in one
+  transaction (delete, then insert on_conflict replace on deterministic mission_event ids).
+  """
+  @spec rerun_safe?(atom()) :: boolean()
+  def rerun_safe?(:mission_event_rebuild), do: true
+  def rerun_safe?(_job_type), do: false
+
   @doc false
   @spec execute_enqueued_run(binary()) :: {:ok, Run.t()} | {:error, term()}
   def execute_enqueued_run(rebuild_run_id) when is_binary(rebuild_run_id) do
@@ -640,9 +649,11 @@ defmodule Cadence.Projections.MissionEvents do
 
   defp contact_action_title(:scheduled_contact_canceled), do: "Scheduled Contact Canceled"
   defp contact_action_title(:realized_contact_ended_early), do: "Realized Contact Ended Early"
+  defp contact_action_title(:contact_window_moved), do: "Contact Window Moved"
 
   defp contact_action_status(:scheduled_contact_canceled), do: "canceled"
   defp contact_action_status(:realized_contact_ended_early), do: "ended_early"
+  defp contact_action_status(:contact_window_moved), do: "moved"
 
   defp contact_action_subject_kind(%ContactAction{realized_contact_id: realized_contact_id})
        when is_binary(realized_contact_id),

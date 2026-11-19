@@ -8,14 +8,16 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
   alias Cadence.ContactPlanning.{
     ContactPlanExecutionItem,
     ContentHash,
-    Planner
+    FleetRunLock,
+    Planner,
+    PlanUpdates
   }
 
   alias Cadence.Management.Contacts, as: ManagementContacts
   alias Cadence.Management.Contacts.ApprovedContactPlan
 
   alias Cadence.Contacts.{ProviderBooking, ProviderReservation, ProviderReservations}
-  alias Cadence.Contacts.ProviderScheduling
+  alias Cadence.Contacts.{ProviderScheduling, UplinkLegs}
 
   alias Cadence.Control.Contacts.Store.ContactPlanExecutionItemRow
 
@@ -65,6 +67,19 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
           {:ok, %{plan: struct(), items: [ContactPlanExecutionItem.t()]}} | {:error, term()}
   def execute(%Scope{} = current_scope, mission_id, plan_id, opts \\ [])
       when is_binary(mission_id) and is_binary(plan_id) and is_list(opts) do
+    # Every path (console, automation, legacy) runs under the plan's execution lock, so two
+    # runs never claim the same items (api 2026-11-13). Re-entrant for a caller holding it.
+    FleetRunLock.with_key(execution_key(current_scope.organization_id, mission_id, plan_id), fn ->
+      execute_locked(current_scope, mission_id, plan_id, opts)
+    end)
+  end
+
+  @doc "The advisory lock key a plan's execution holds (`Control.Scheduling` reads it too)."
+  @spec execution_key(binary(), binary(), binary()) :: [binary()]
+  def execution_key(organization_id, mission_id, plan_id),
+    do: ["cadence.contact_plan.execute", organization_id, mission_id, plan_id]
+
+  defp execute_locked(current_scope, mission_id, plan_id, opts) do
     with :ok <- authorize_execution(current_scope, mission_id, opts),
          {:ok, plan} <- begin_execution(current_scope.organization_id, mission_id, plan_id, opts),
          items <-
@@ -75,6 +90,9 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
              plan.approved_version
            ),
          _processed <- process_items(items, opts),
+         # A booking confirmed while its item was being written settles here; one confirmed
+         # later settles through BookingOutcomes.booking_settled/2.
+         _settled <- settle_uncertain(current_scope.organization_id, mission_id, plan, opts),
          {:ok, projected_plan, projected_items} <-
            project_plan(
              current_scope.organization_id,
@@ -98,6 +116,20 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
     |> order_by([item], asc: item.inserted_at, asc: item.contact_plan_execution_item_id)
     |> Repo.all()
     |> Enum.map(&ContactPlanExecutionItemRow.to_domain/1)
+  end
+
+  @doc "One execution item, scoped to its mission."
+  @spec fetch_item(binary(), binary(), binary()) ::
+          {:ok, ContactPlanExecutionItem.t()} | {:error, :contact_plan_execution_item_not_found}
+  def fetch_item(organization_id, mission_id, item_id) do
+    case Repo.get_by(ContactPlanExecutionItemRow,
+           organization_id: organization_id,
+           mission_id: mission_id,
+           contact_plan_execution_item_id: item_id
+         ) do
+      nil -> {:error, :contact_plan_execution_item_not_found}
+      row -> {:ok, ContactPlanExecutionItemRow.to_domain(row)}
+    end
   end
 
   @doc "Keeps execution claims stable through a short reviewed repair transaction."
@@ -177,12 +209,17 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
            {:ok, route} <- resolve_exact_route(snapshot, opts) do
         reserve(claimed, snapshot, route, opts)
       else
+        # Someone else moved the item on since it was read: theirs to finish, never ours to fail.
+        {:error, :contact_plan_execution_item_not_processable} -> fetch_item_state(item)
         {:error, reason} -> finish_without_reservation(item, :failed, reason, opts)
       end
     else
       {:ok, item}
     end
   end
+
+  defp fetch_item_state(item),
+    do: fetch_item(item.organization_id, item.mission_id, item.contact_plan_execution_item_id)
 
   defp process_items(items, opts) do
     items
@@ -296,6 +333,17 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
       {:error, {:provider_reservation_not_confirmed, %ProviderReservation{} = reservation}} ->
         finish_with_reservation(item, reservation, opts)
 
+      # The provider was called and refused on configuration: the item is placed (it has its
+      # reservation) and keeps the category, instead of a generic never-sent failure (api).
+      {:error, {:provider_configuration_failure, %ProviderReservation{} = reservation, reason}} ->
+        finish_item(
+          item,
+          :failed,
+          reservation.provider_reservation_id,
+          Map.put(safe_error(:provider_configuration_failure), "reason", safe_reason(reason)),
+          opts
+        )
+
       {:error, reason} ->
         finish_without_reservation(item, :failed, reason, opts)
 
@@ -337,11 +385,27 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
       "contact_requirement_version" => snapshot.contact_requirement_version,
       "contact_plan_id" => item.contact_plan_id,
       "contact_plan_version" => item.contact_plan_version,
-      "contact_opportunity_snapshot_id" => item.contact_opportunity_snapshot_id
+      "contact_opportunity_snapshot_id" => item.contact_opportunity_snapshot_id,
+      "uplink" =>
+        UplinkLegs.for_booking(
+          item.organization_id,
+          item.mission_id,
+          route.spacecraft_id,
+          opportunity["ground_station_ref"],
+          route.provider_id
+        )
     }
   end
 
-  defp finish_with_reservation(item, reservation, opts) do
+  defp settle_uncertain(organization_id, mission_id, plan, opts) do
+    organization_id
+    |> list(mission_id, plan.contact_plan_id, plan.approved_version)
+    |> Enum.filter(&(&1.lifecycle_state == :uncertain))
+    |> Enum.each(&process_item(&1, opts))
+  end
+
+  @doc false
+  def finish_with_reservation(item, reservation, opts) do
     case exact_reservation_binding(item, reservation) do
       :ok ->
         {state, error} = execution_outcome(reservation)
@@ -378,7 +442,8 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
     finish_item(item, state, item.provider_reservation_id, safe_error(reason), opts)
   end
 
-  defp finish_item(item, state, provider_reservation_id, error, opts) do
+  @doc false
+  def finish_item(item, state, provider_reservation_id, error, opts) do
     now = now(opts)
 
     case Repo.get(ContactPlanExecutionItemRow, item.contact_plan_execution_item_id) do
@@ -397,13 +462,26 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
         })
         |> Repo.update()
         |> case do
-          {:ok, updated} -> {:ok, ContactPlanExecutionItemRow.to_domain(updated)}
-          {:error, reason} -> {:error, reason}
+          {:ok, updated} ->
+            {:ok, announce_uncertain(row, ContactPlanExecutionItemRow.to_domain(updated))}
+
+          {:error, reason} ->
+            {:error, reason}
         end
     end
   end
 
-  defp project_plan(organization_id, mission_id, plan_id, plan_version, opts) do
+  # S10: a plan can turn unconfirmed by time alone; tell the console when it does.
+  defp announce_uncertain(%{lifecycle_state: before}, %{lifecycle_state: :uncertain} = item)
+       when before != "uncertain" and not is_nil(item.started_at) do
+    PlanUpdates.when_unconfirmed(item.organization_id, item.mission_id, item.started_at)
+    item
+  end
+
+  defp announce_uncertain(_row, item), do: item
+
+  @doc false
+  def project_plan(organization_id, mission_id, plan_id, plan_version, opts) do
     items = list(organization_id, mission_id, plan_id, plan_version)
     state = projection_state(items)
 
@@ -472,7 +550,32 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
 
   defp safe_error(reason) when is_atom(reason), do: %{"code" => Atom.to_string(reason)}
   defp safe_error({reason, _detail}) when is_atom(reason), do: %{"code" => Atom.to_string(reason)}
+
+  defp safe_error({reason, _first, _second}) when is_atom(reason),
+    do: %{"code" => Atom.to_string(reason)}
+
   defp safe_error(_reason), do: %{"code" => "provider_booking_failed"}
+
+  # A provider reason's category and detail only (no evidence blobs or terms).
+  defp safe_reason(%{} = reason) do
+    reason = Map.get(reason, "reason", Map.get(reason, :reason, reason))
+
+    if is_map(reason),
+      do: %{
+        "category" => text(reason["category"] || reason[:category]),
+        "detail" => text(reason["detail"] || reason[:detail])
+      },
+      else: %{"category" => nil, "detail" => nil}
+  end
+
+  defp safe_reason(reason) when is_atom(reason),
+    do: %{"category" => Atom.to_string(reason), "detail" => nil}
+
+  defp safe_reason(_reason), do: %{"category" => nil, "detail" => nil}
+
+  defp text(value) when is_binary(value), do: String.slice(value, 0, 500)
+  defp text(value) when is_atom(value) and not is_nil(value), do: Atom.to_string(value)
+  defp text(_value), do: nil
 
   defp normalize_transaction({:ok, result}), do: {:ok, result}
   defp normalize_transaction({:error, reason}), do: {:error, reason}

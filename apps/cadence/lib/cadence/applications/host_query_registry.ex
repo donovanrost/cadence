@@ -1,6 +1,7 @@
 defmodule Cadence.Applications.HostQueryRegistry do
   @moduledoc "Bounded, identity-bound registry for compatibility host queries."
 
+  alias Cadence.Applications.FixtureContributors
   alias Cadence.Applications.JSONBoundary
   alias Cadence.Reads.ApplicationSurfaces.ProviderRegistry, as: SurfaceProviderRegistry
 
@@ -10,7 +11,8 @@ defmodule Cadence.Applications.HostQueryRegistry do
   @type provider_key :: {binary(), binary()}
 
   @spec providers() :: %{optional(provider_key()) => module()}
-  def providers, do: providers(@contributors)
+  def providers,
+    do: providers(@contributors ++ FixtureContributors.exporting(:host_query_providers, 0))
 
   @doc false
   @spec providers([module()]) :: %{optional(provider_key()) => module()}

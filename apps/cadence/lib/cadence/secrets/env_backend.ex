@@ -1,5 +1,25 @@
 defmodule Cadence.Secrets.EnvBackend do
-  @moduledoc "Local-only environment-backed secret resolver."
+  @moduledoc """
+  Local-only environment-backed secret resolver.
+
+  Provider credentials use it only where the environment enables local credentials
+  (`allow_env_secret_backend?`); data sources use it only where a deployment configures
+  `CADENCE_DATA_SOURCE_CREDENTIAL_ENV_PROFILES` (that configuration is their gate).
+
+  Even then, what a TENANT names is scoped to its organization (api-ops' security sweep, api's
+  review, 11-15), checked on save and again before anything is read:
+
+  - A variable a tenant names (a provider credential's key, a data-source descriptor's `*_env`
+    fields) must be listed in `config :cadence, :env_credentials, allow: [names]` (the operator's
+    explicit names), start with one of its `allow_prefixes` (operator-wide), or start with the
+    organization's own prefix `CADENCE_TENANT_<ORG>_` (`tenant_prefix/1`), so one tenant can't
+    read the platform's secrets or another tenant's.
+  - A configured material profile (`env_material_profiles`) is the operator's: a profile with
+    `organization_id`/`organization_ids` serves only those organizations; one without serves only
+    platform sources (no organization). A tenant can't select another organization's profile.
+
+  Errors carry a variable's name at most, never its value.
+  """
 
   @behaviour Cadence.Secrets.Backend
 
@@ -12,16 +32,89 @@ defmodule Cadence.Secrets.EnvBackend do
 
   @profile_metadata_keys [:material_env_profile, :material_profile]
 
+  @tenant_prefix "CADENCE_TENANT_"
+
   @impl true
   def capabilities(_opts), do: [:resolve]
+
+  @doc "The variable prefix an organization's own credentials use: `CADENCE_TENANT_<ORG>_`."
+  @spec tenant_prefix(binary()) :: binary()
+  def tenant_prefix(organization_id) when is_binary(organization_id) and organization_id != "" do
+    token =
+      organization_id
+      |> String.upcase()
+      |> String.replace(~r/[^A-Z0-9]/, "_")
+
+    @tenant_prefix <> token <> "_"
+  end
+
+  @doc """
+  Whether `organization_id` (nil for a platform record) may name `env_var` as a credential: an
+  operator-listed name or prefix (`config :cadence, :env_credentials`; `opts` override, for
+  tests), or the organization's own `tenant_prefix/1`.
+  """
+  @spec allowed_name?(term(), binary() | nil, keyword()) :: boolean()
+  def allowed_name?(env_var, organization_id, opts \\ [])
+
+  def allowed_name?(env_var, organization_id, opts) when is_binary(env_var) and env_var != "" do
+    config = Application.get_env(:cadence, :env_credentials, [])
+    names = Keyword.get(opts, :env_allow, Keyword.get(config, :allow, []))
+    prefixes = Keyword.get(opts, :env_allow_prefixes, Keyword.get(config, :allow_prefixes, []))
+
+    env_var in names or Enum.any?(prefixes, &String.starts_with?(env_var, &1)) or
+      (is_binary(organization_id) and organization_id != "" and
+         String.starts_with?(env_var, tenant_prefix(organization_id)) and
+         byte_size(env_var) > byte_size(tenant_prefix(organization_id)))
+  end
+
+  def allowed_name?(_env_var, _organization_id, _opts), do: false
+
+  @doc """
+  Whether a descriptor of `organization_id` may use the configured material profile `key`. A key
+  that names no configured profile isn't a profile selection (`true`; any inline names are
+  checked on their own).
+  """
+  @spec profile_allowed?(term(), binary() | nil, keyword()) :: boolean()
+  def profile_allowed?(key, organization_id, opts \\ [])
+
+  def profile_allowed?(key, organization_id, opts) when is_binary(key) and key != "" do
+    case map_value(configured_profiles(opts), key) do
+      nil -> true
+      profile when is_map(profile) -> profile_owner?(profile, organization_id)
+      _invalid -> false
+    end
+  end
+
+  def profile_allowed?(_key, _organization_id, _opts), do: true
+
+  defp profile_owner?(profile, organization_id) do
+    owners =
+      List.wrap(map_value(profile, :organization_id)) ++
+        List.wrap(map_value(profile, :organization_ids))
+
+    case owners do
+      [] -> is_nil(organization_id)
+      owners -> is_binary(organization_id) and organization_id in owners
+    end
+  end
+
+  defp configured_profiles(opts) do
+    Keyword.get(opts, :env_material_profiles) ||
+      :cadence
+      |> Application.get_env(:data_source_credentials, [])
+      |> Keyword.get(:env_material_profiles, %{})
+  end
 
   @impl true
   @spec resolve(struct() | map(), keyword()) :: {:ok, map()} | {:error, term()}
   def resolve(descriptor, opts \\ []) when is_map(descriptor) and is_list(opts) do
     with :ok <- require_local_mode(opts) do
       case descriptor_value(descriptor, :backend_key) do
-        env_var when is_binary(env_var) and env_var != "" -> resolve_provider_env(env_var, opts)
-        _missing -> resolve_profile(descriptor, opts)
+        env_var when is_binary(env_var) and env_var != "" ->
+          resolve_provider_env(env_var, descriptor_value(descriptor, :organization_id), opts)
+
+        _missing ->
+          resolve_profile(descriptor, opts)
       end
     end
   end
@@ -32,10 +125,13 @@ defmodule Cadence.Secrets.EnvBackend do
       else: {:error, :env_secret_backend_local_only}
   end
 
-  defp resolve_provider_env(env_var, opts) do
+  defp resolve_provider_env(env_var, organization_id, opts) do
     env_reader = Keyword.get(opts, :env_reader, &System.get_env/1)
 
-    case read_env(env_reader, env_var) do
+    case allowed_name?(env_var, organization_id, opts) && read_env(env_reader, env_var) do
+      false ->
+        {:error, :env_credential_name_not_allowed}
+
       value when is_binary(value) and value != "" ->
         {:ok,
          %{
@@ -58,16 +154,21 @@ defmodule Cadence.Secrets.EnvBackend do
   end
 
   defp fetch_profile(profile_key, descriptor, opts) do
-    profiles =
-      Keyword.get(opts, :env_material_profiles) ||
-        :cadence
-        |> Application.get_env(:data_source_credentials, [])
-        |> Keyword.get(:env_material_profiles, %{})
+    organization_id = descriptor_value(descriptor, :organization_id)
 
-    case map_value(profiles, profile_key) do
-      nil -> fetch_inline_profile(profile_key, descriptor)
-      profile when is_map(profile) -> {:ok, profile}
-      profile -> {:error, {:invalid_env_material_profile, profile}}
+    case map_value(configured_profiles(opts), profile_key) do
+      nil ->
+        profile_key
+        |> fetch_inline_profile(descriptor)
+        |> inline_names_allowed(organization_id, opts)
+
+      profile when is_map(profile) ->
+        if profile_owner?(profile, organization_id),
+          do: {:ok, profile},
+          else: {:error, :env_material_profile_not_allowed}
+
+      profile ->
+        {:error, {:invalid_env_material_profile, profile}}
     end
   end
 
@@ -85,6 +186,17 @@ defmodule Cadence.Secrets.EnvBackend do
       profile -> {:ok, profile}
     end
   end
+
+  # An inline profile comes from the tenant's own descriptor: every variable it names must be one
+  # this organization may use, before any is read. (Inline profiles carry only @material_env_keys;
+  # if they ever take headers_env, its names must be checked here too.)
+  defp inline_names_allowed({:ok, profile}, organization_id, opts) do
+    if Enum.all?(Map.values(profile), &allowed_name?(&1, organization_id, opts)),
+      do: {:ok, profile},
+      else: {:error, :env_credential_name_not_allowed}
+  end
+
+  defp inline_names_allowed(error, _organization_id, _opts), do: error
 
   defp normalize_profile_keys(profile) do
     Enum.reduce(profile, %{}, fn {key, value}, acc ->

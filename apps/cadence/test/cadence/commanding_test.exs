@@ -1,6 +1,8 @@
 defmodule Cadence.CommandingTest do
   use Cadence.ConfigCase, async: false
 
+  @moduletag :ingest_journal_matrix
+
   import Ecto.Query
 
   alias Cadence.Jobs.Runner, as: JobRunner
@@ -16,6 +18,7 @@ defmodule Cadence.CommandingTest do
     CommandQueueEntryRow,
     CommandReleaseAttempt,
     CommandRequest,
+    CommandRequestRow,
     CommandStage,
     CommandVerifierInstance,
     ReleaseStore,
@@ -25,7 +28,16 @@ defmodule Cadence.CommandingTest do
     StagedCommandItem
   }
 
-  alias Cadence.Contacts.{Path, ProviderBinding, RealizedContact, TransportBinding}
+  alias Cadence.Commanding.Groups.{CommandGroup, GroupStore}
+
+  alias Cadence.Contacts.{
+    Path,
+    ProviderBinding,
+    RealizedContact,
+    ScheduledContact,
+    TransportBinding
+  }
+
   alias Cadence.Management.Commanding, as: ManagementCommanding
   alias Cadence.OperationalEvents
   alias Cadence.Repo
@@ -119,6 +131,52 @@ defmodule Cadence.CommandingTest do
     assert listed_item.staged_command_item_id == persisted_item.staged_command_item_id
     assert listed_item.argument_values == %{"mode" => 3}
     assert listed_item.priority == 1
+  end
+
+  test "a staged item whose metadata names a command group submits as a non-member (P0 pin)",
+       %{source_endpoint: source_endpoint, command_model: command_model} do
+    {:ok, stage} =
+      ManagementCommanding.persist_command_stage(
+        @organization_id,
+        CommandStage.new(%{
+          mission_id: @mission_id,
+          stage_name: "Forged group",
+          owner: %{"user_id" => "user-456"},
+          visibility: :shared
+        })
+      )
+
+    group = %{"id" => "command-group-forged", "target_index" => 0, "position" => 0}
+
+    {:ok, item} =
+      ManagementCommanding.persist_staged_command_item(
+        @organization_id,
+        StagedCommandItem.new(%{
+          mission_id: @mission_id,
+          command_stage_id: stage.command_stage_id,
+          source_endpoint_ref: source_endpoint.source_endpoint_id,
+          mission_model_revision_id: command_model.revision_id,
+          command_id: fetch_command_id(command_model, "SET_MODE"),
+          argument_values: %{"mode" => 1},
+          priority: 2,
+          item_order: 0,
+          metadata: %{"group" => group}
+        })
+      )
+
+    assert {:ok, [request]} =
+             ManagementCommanding.submit_staged_command_items(
+               @organization_id,
+               @mission_id,
+               stage.command_stage_id,
+               [item.staged_command_item_id],
+               %{"user_id" => "user-789"}
+             )
+
+    row = Repo.get!(CommandRequestRow, request.command_request_id)
+    assert row.command_group_id == nil
+    refute Map.has_key?(request.metadata, "group")
+    assert request.metadata["stage_item_metadata"] == %{"group" => group}
   end
 
   test "submits staged command items into approval-pending command requests when review is required",
@@ -1360,7 +1418,8 @@ defmodule Cadence.CommandingTest do
                ReleaseTargetSelection.resolve_dispatch(
                  @organization_id,
                  @mission_id,
-                 CommandRequest.new(Map.from_struct(c.request))
+                 CommandRequest.new(Map.from_struct(c.request)),
+                 DateTime.utc_now()
                )
 
       # Even named explicitly, bravo's pass refuses alpha's command before anything is sent.
@@ -1393,17 +1452,63 @@ defmodule Cadence.CommandingTest do
     end
 
     test "with both spacecraft's passes active, the lane picks the target's own", c do
-      _bravo = uplink_contact_38([c.bravo], nil)
-      alpha = uplink_contact_38([c.alpha], c.alpha)
+      _bravo = uplink_contact_38([c.bravo], nil, %{"scid" => 0}, now_window())
+      alpha = uplink_contact_38([c.alpha], c.alpha, %{"scid" => 0}, now_window())
 
       assert {:ok, %{realized_contact: %{realized_contact_id: id}}} =
                ReleaseTargetSelection.resolve_dispatch(
                  @organization_id,
                  @mission_id,
-                 CommandRequest.new(Map.from_struct(c.request))
+                 CommandRequest.new(Map.from_struct(c.request)),
+                 DateTime.utc_now()
                )
 
       assert id == alpha.realized_contact_id
+    end
+
+    test "an armed lane releases only into a scheduled pass inside its window (director, 11-14)",
+         c do
+      request = CommandRequest.new(Map.from_struct(c.request))
+      now = DateTime.utc_now()
+
+      # A hand-started contact of the target: the lane never picks it by itself.
+      _hand_started = uplink_contact_38([c.alpha], c.alpha)
+
+      assert {:error, {:command_queue_lane_no_release_target, _, _}} =
+               ReleaseTargetSelection.resolve_dispatch(
+                 @organization_id,
+                 @mission_id,
+                 request,
+                 now
+               )
+
+      # A scheduled pass that has ended (its runtime still up, as tonight's stale ones were).
+      _ended =
+        uplink_contact_38([c.alpha], c.alpha, %{"scid" => 0}, {
+          DateTime.add(now, -900),
+          DateTime.add(now, -300)
+        })
+
+      assert {:error, {:command_queue_lane_no_release_target, _, _}} =
+               ReleaseTargetSelection.resolve_dispatch(
+                 @organization_id,
+                 @mission_id,
+                 request,
+                 now
+               )
+
+      # The target's pass that is on now is the one.
+      on_now = uplink_contact_38([c.alpha], c.alpha, %{"scid" => 0}, now_window())
+
+      assert {:ok, %{realized_contact: %{realized_contact_id: id}}} =
+               ReleaseTargetSelection.resolve_dispatch(
+                 @organization_id,
+                 @mission_id,
+                 request,
+                 now
+               )
+
+      assert id == on_now.realized_contact_id
     end
 
     test "a gateway that doesn't name a SCID is refused, never sent", c do
@@ -1465,32 +1570,44 @@ defmodule Cadence.CommandingTest do
     end
   end
 
-  defp uplink_contact_38(contact_endpoints, path_endpoint, gateway_config \\ %{"scid" => 0}) do
+  defp now_window,
+    do: {DateTime.add(DateTime.utc_now(), -300), DateTime.add(DateTime.utc_now(), 900)}
+
+  # `window` {starts_at, ends_at}: the contact realizes a scheduled pass; nil: started by hand.
+  defp uplink_contact_38(
+         contact_endpoints,
+         path_endpoint,
+         gateway_config \\ %{"scid" => 0},
+         window \\ nil
+       ) do
+    paths = [
+      Path.new(%{
+        path_id: "uplink-path-alpha",
+        direction: :uplink,
+        selection_role: :selected,
+        source_endpoint_ref: path_endpoint,
+        transport_bindings: [
+          TransportBinding.new(%{
+            transport_binding_id: "uplink-gateway-alpha",
+            family_key: :uplink_gateway,
+            target_scope: :path,
+            configuration: Map.put(gateway_config, "service_name", "gateway")
+          })
+        ]
+      })
+    ]
+
     contact =
       RealizedContact.new(%{
         realized_contact_id:
           "realized-contact-38-" <> Integer.to_string(System.unique_integer([:positive])),
         organization_id: @organization_id,
         mission_id: @mission_id,
+        scheduled_contact_id: scheduled_38(contact_endpoints, paths, window),
         source_endpoint_refs: contact_endpoints,
         clock_mode: :replay,
         initial_time: DateTime.from_unix!(1_700_400_000, :second),
-        paths: [
-          Path.new(%{
-            path_id: "uplink-path-alpha",
-            direction: :uplink,
-            selection_role: :selected,
-            source_endpoint_ref: path_endpoint,
-            transport_bindings: [
-              TransportBinding.new(%{
-                transport_binding_id: "uplink-gateway-alpha",
-                family_key: :uplink_gateway,
-                target_scope: :path,
-                configuration: Map.put(gateway_config, "service_name", "gateway")
-              })
-            ]
-          })
-        ]
+        paths: paths
       })
 
     assert {:ok, _} = Cadence.Contacts.persist_realized_contact(@organization_id, contact)
@@ -1503,6 +1620,27 @@ defmodule Cadence.CommandingTest do
              )
 
     contact
+  end
+
+  defp scheduled_38(_endpoints, _paths, nil), do: nil
+
+  defp scheduled_38(endpoints, paths, {starts_at, ends_at}) do
+    id = "scheduled-38-" <> Integer.to_string(System.unique_integer([:positive]))
+
+    {:ok, _scheduled} =
+      Cadence.Contacts.persist_scheduled_contact(
+        @organization_id,
+        ScheduledContact.new(%{
+          scheduled_contact_id: id,
+          mission_id: @mission_id,
+          source_endpoint_refs: endpoints,
+          starts_at: starts_at,
+          ends_at: ends_at,
+          paths: paths
+        })
+      )
+
+    id
   end
 
   defp release_38(c, contact),
@@ -1520,6 +1658,181 @@ defmodule Cadence.CommandingTest do
     TransportActionRequestRow
     |> where([row], row.command_release_attempt_id == ^attempt_id)
     |> Repo.aggregate(:count)
+  end
+
+  describe "#33 COP-1 releases" do
+    setup %{source_endpoint: source_endpoint, command_model: command_model} do
+      requests =
+        for n <- 1..3 do
+          request = persist_burst_request(command_model, source_endpoint)
+
+          {:ok, %{queue_entry: entry}} =
+            Cadence.Commanding.enqueue_command_request(
+              @organization_id,
+              @mission_id,
+              request.command_request_id,
+              %{"user_id" => "queue-33-#{n}"}
+            )
+
+          %{request: request, entry: entry}
+        end
+
+      contact =
+        persist_active_uplink_contact(source_endpoint.source_endpoint_id, %{
+          "service_name" => "cop1",
+          "cop1_mode" => "fop",
+          "cop1_timeout_ms" => 5_000,
+          "cop1_max_retransmit" => 2
+        })
+
+      %{members: requests, contact: contact}
+    end
+
+    test "back-to-back releases wait while one is in flight, then go in order", c do
+      [first, second, third] = c.members
+
+      assert {:ok, %{release_attempt: _}} = release_33(c, first)
+
+      # Busy: refused before any attempt is claimed; the request stays queued.
+      assert {:error, {:uplink_busy, :cop1_release_in_flight}} = release_33(c, second)
+      assert attempts_33(second) == []
+
+      assert {:ok, []} = clcw_33(c, CLCW.new(vcid: 0, report_value: 1))
+      assert {:ok, %{release_attempt: _}} = release_33(c, second)
+      assert {:error, {:uplink_busy, :cop1_release_in_flight}} = release_33(c, third)
+
+      assert {:ok, []} = clcw_33(c, CLCW.new(vcid: 0, report_value: 2))
+      assert {:ok, %{release_attempt: _}} = release_33(c, third)
+
+      assert Enum.map(c.members, &request_33(&1).lifecycle_state) == [
+               :released,
+               :released,
+               :released
+             ]
+    end
+
+    test "a lockout fails the member in flight and the group's later members fail closed", c do
+      [first, second, third] = c.members
+      group_33(c.members)
+
+      assert {:ok, %{release_attempt: _}} = release_33(c, first)
+
+      # The FARM reports lockout: the FOP alerts; the release's transport verifier fails now.
+      assert {:ok, []} = clcw_33(c, CLCW.new(vcid: 0, report_value: 1, lockout: 1))
+      assert request_33(first).verification_state == :failed
+
+      assert {:error, :earlier_command_failed} = release_33(c, second)
+      assert {:error, :earlier_command_failed} = release_33(c, third)
+
+      for member <- [second, third] do
+        assert %{lifecycle_state: :canceled} = request_33(member)
+        assert attempts_33(member) == []
+      end
+    end
+
+    test "an alerted FOP refuses a release outright: release_failed, not uncertain", c do
+      [first, second, _third] = c.members
+
+      assert {:ok, %{release_attempt: _}} = release_33(c, first)
+      assert {:ok, []} = clcw_33(c, CLCW.new(vcid: 0, report_value: 1, lockout: 1))
+
+      # Not a group, so no Halt: the release itself is refused and fails.
+      assert {:error, {:command_release_refused, _attempt_id, :cop1_not_initialized}} =
+               release_33(c, second)
+
+      assert [%{lifecycle_state: :release_failed}] = attempts_33(second)
+      assert %{lifecycle_state: :canceled} = request_33(second)
+    end
+  end
+
+  defp persist_burst_request(command_model, source_endpoint) do
+    {:ok, request} =
+      Cadence.Commanding.persist_command_request(
+        @organization_id,
+        CommandRequest.new(%{
+          mission_id: @mission_id,
+          source_endpoint_ref: source_endpoint.source_endpoint_id,
+          mission_model_revision_id: command_model.revision_id,
+          command_id: fetch_command_id(command_model, "TRANSMIT_BURST"),
+          requested_by: %{"user_id" => "requester-33"}
+        })
+      )
+
+    request
+  end
+
+  defp release_33(c, member),
+    do:
+      Cadence.Commanding.release_command_queue_entry(
+        @organization_id,
+        @mission_id,
+        member.entry.command_queue_entry_id,
+        c.contact.realized_contact_id,
+        %{"user_id" => "release-33"},
+        attempted_at: DateTime.from_unix!(1_700_400_000, :second)
+      )
+
+  defp clcw_33(c, clcw),
+    do:
+      Cadence.handle_path_transport_event(
+        @organization_id,
+        @mission_id,
+        c.contact.realized_contact_id,
+        "uplink-path-alpha",
+        "uplink-gateway-alpha",
+        %{kind: :cop1_clcw, clcw: clcw},
+        []
+      )
+
+  defp request_33(member) do
+    {:ok, request} =
+      Cadence.Commanding.fetch_command_request(
+        @organization_id,
+        @mission_id,
+        member.request.command_request_id
+      )
+
+    request
+  end
+
+  defp attempts_33(member) do
+    @organization_id
+    |> Cadence.Commanding.list_command_release_attempts(@mission_id)
+    |> Enum.filter(&(&1.command_request_id == member.request.command_request_id))
+  end
+
+  # One group, one target, in queue order (stop-on-failure applies per target).
+  defp group_33(members) do
+    # The group row too, armed (`:queued`): a member releases only while its group is (P0).
+    {:ok, _group} =
+      GroupStore.insert_group(
+        CommandGroup.new(%{
+          command_group_id: "command-group-33",
+          organization_id: @organization_id,
+          mission_id: @mission_id,
+          state: :queued,
+          title: "COP-1 lockout",
+          requested_by: %{"actor_kind" => "user", "user_id" => "requester"},
+          requested_at: DateTime.utc_now(),
+          resolved_at: DateTime.utc_now(),
+          member_count: length(members)
+        })
+      )
+
+    members
+    |> Enum.with_index()
+    |> Enum.each(fn {member, position} ->
+      Repo.update_all(
+        from(r in Cadence.Commanding.CommandRequestRow,
+          where: r.command_request_id == ^member.request.command_request_id
+        ),
+        set: [
+          command_group_id: "command-group-33",
+          group_target_index: 0,
+          group_position: position
+        ]
+      )
+    end)
   end
 
   defp persist_source_endpoint do

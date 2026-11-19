@@ -19,6 +19,8 @@ defmodule Cadence.GroundNetworks.ProviderEventProcessorTest do
     ProviderEventProcessor
   }
 
+  alias Cadence.GroundNetworks.ProviderAudit.EntryRow, as: ProviderAuditEntryRow
+  alias Cadence.GroundNetworks.ProviderEventInbox.InboxRow
   alias Cadence.TestSupport.FakeProviderClient
 
   setup do
@@ -63,6 +65,32 @@ defmodule Cadence.GroundNetworks.ProviderEventProcessorTest do
 
     assert reconciled.attempt_count == context.reservation.attempt_count + 1
     assert %DateTime{} = reconciled.last_reconciled_at
+  end
+
+  test "a pushed event reads the provider at once, whatever the poll band (lead 11-15)",
+       context do
+    now = ~U[2026-07-15 12:00:00.000000Z]
+
+    # The reconciler won't read this booking for another 10 min.
+    {1, _} =
+      from(row in Cadence.Control.Contacts.Store.ProviderReservationRow,
+        where: row.provider_reservation_id == ^context.reservation.provider_reservation_id
+      )
+      |> Repo.update_all(set: [next_due_at: DateTime.add(now, 600, :second)])
+
+    assert {:ok, _entry} = ingest_contact_event(context, "event-not-due", now)
+
+    assert {:ok, %{claimed: 1, processed: 1}} =
+             ProviderEventProcessor.process_once(processor_opts(context, now))
+
+    assert {:ok, read} =
+             ProviderReservations.fetch(
+               context.organization_id,
+               context.mission_id,
+               context.reservation.provider_reservation_id
+             )
+
+    assert read.attempt_count == context.reservation.attempt_count + 1
   end
 
   test "restart after domain commit reclaims processing and converges", context do
@@ -190,6 +218,184 @@ defmodule Cadence.GroundNetworks.ProviderEventProcessorTest do
     assert processed.mission_id == nil
   end
 
+  describe "retry bounds (director 11-14: 22 events retried every second for six hours)" do
+    test "a recorded configuration failure is processed, never re-queued", context do
+      now = ~U[2026-07-15 12:00:00.000000Z]
+      assert {:ok, entry} = ingest_contact_event(context, "event-config-failure", now)
+      conflicting = [describe_response: {:ok, conflicting_response(context.reservation)}]
+
+      assert {:ok, %{claimed: 1, processed: 1, retried: 0}} =
+               ProviderEventProcessor.process_once(processor_opts(context, now, conflicting))
+
+      assert {:ok, %{processing_state: :processed}} =
+               ProviderEventInbox.fetch(context.organization_id, entry.provider_event_inbox_id)
+
+      assert {:ok, failed} =
+               ProviderReservations.fetch(
+                 context.organization_id,
+                 context.mission_id,
+                 context.reservation.provider_reservation_id
+               )
+
+      assert ProviderReservations.configuration_failure?(failed)
+
+      # Tonight's shape: the same event, N ticks later. Nothing is claimed again.
+      for tick <- 1..30 do
+        at = DateTime.add(now, tick, :second)
+
+        assert {:ok, %{claimed: 0}} =
+                 ProviderEventProcessor.process_once(processor_opts(context, at, conflicting))
+      end
+
+      assert audit_actions(context, "event-config-failure") == ["provider_event.processed"]
+    end
+
+    test "a later transient read on a booking failed by configuration still retries", context do
+      now = ~U[2026-07-15 12:00:00.000000Z]
+      conflicting = [describe_response: {:ok, conflicting_response(context.reservation)}]
+      assert {:ok, _first} = ingest_contact_event(context, "event-config-first", now)
+
+      assert {:ok, %{processed: 1}} =
+               ProviderEventProcessor.process_once(processor_opts(context, now, conflicting))
+
+      # The row keeps its configuration failure; this read fails for another reason. The event
+      # is decided by this read (api-ops 11-14), not by what the row already says.
+      at = DateTime.add(now, 1, :second)
+      assert {:ok, entry} = ingest_contact_event(context, "event-transient-after", at)
+      failing = [describe_response: {:error, :provider_unavailable}]
+
+      assert {:ok, %{claimed: 1, processed: 0, retried: 1}} =
+               ProviderEventProcessor.process_once(processor_opts(context, at, failing))
+
+      assert {:ok, %{processing_state: :received}} =
+               ProviderEventInbox.fetch(context.organization_id, entry.provider_event_inbox_id)
+    end
+
+    test "a failing event backs off exponentially and is quarantined at the cap", context do
+      now = ~U[2026-07-15 12:00:00.000000Z]
+      assert {:ok, entry} = ingest_contact_event(context, "event-transient", now)
+      failing = [describe_response: {:error, :provider_unavailable}, max_attempts: 4]
+
+      # One tick a second for a minute: claims at 0, 2, 6 and 14 s (2 s doubling), then
+      # quarantined on the 4th failure.
+      claimed_at =
+        for tick <- 0..60,
+            at = DateTime.add(now, tick, :second),
+            {:ok, %{claimed: 1}} <-
+              [ProviderEventProcessor.process_once(processor_opts(context, at, failing))],
+            do: tick
+
+      assert claimed_at == [0, 2, 6, 14]
+
+      assert {:ok, quarantined} =
+               ProviderEventInbox.fetch(context.organization_id, entry.provider_event_inbox_id)
+
+      assert quarantined.processing_state == :quarantined
+      assert quarantined.attempt_count == 4
+      assert %{"reason" => %{"code" => "retry_exhausted"}} = quarantined.error_document
+
+      assert audit_actions(context, "event-transient") ==
+               List.duplicate("provider_event.processing_retry_scheduled", 3) ++
+                 ["provider_event.quarantined"]
+
+      # An operator's reprocess is a fresh run: claimed at once, with the count started over.
+      admin_scope = user_scope(context, :organization_admin)
+
+      assert {:ok, %{attempt_count: 0, processing_state: :reprocessing}} =
+               ProviderEventInbox.reprocess(admin_scope, entry.provider_event_inbox_id, now: now)
+
+      assert {:ok, %{claimed: 1, processed: 1}} =
+               ProviderEventProcessor.process_once(
+                 processor_opts(context, DateTime.add(now, 61, :second))
+               )
+    end
+
+    test "an event already past the cap is quarantined at its next claim, without a read",
+         context do
+      now = ~U[2026-07-15 12:00:00.000000Z]
+      assert {:ok, received} = ingest_contact_event(context, "event-past-cap", now)
+      assert {:ok, processing} = ingest_contact_event(context, "event-crashed", now)
+
+      # Tonight's 22 rows: thousands of attempts, last tried a second ago; one of them left
+      # 'processing' by a crashed task (api-ops).
+      past_cap!(received, "received", DateTime.add(now, -1, :second))
+      past_cap!(processing, "processing", DateTime.add(now, -61, :second))
+      test_pid = self()
+
+      opts = fn at ->
+        processor_opts(context, at, on_describe: fn ref -> send(test_pid, {:described, ref}) end)
+      end
+
+      # The crashed one is stale at once; the received one waits out the capped backoff.
+      assert {:ok, %{claimed: 1, quarantined: 1}} =
+               ProviderEventProcessor.process_once(opts.(now))
+
+      assert {:ok, %{claimed: 0}} =
+               ProviderEventProcessor.process_once(opts.(DateTime.add(now, 298, :second)))
+
+      assert {:ok, %{claimed: 1, quarantined: 1}} =
+               ProviderEventProcessor.process_once(opts.(DateTime.add(now, 300, :second)))
+
+      refute_received {:described, _ref}
+
+      for entry <- [received, processing] do
+        assert {:ok, %{processing_state: :quarantined, error_document: error}} =
+                 ProviderEventInbox.fetch(context.organization_id, entry.provider_event_inbox_id)
+
+        assert %{"reason" => %{"code" => "retry_exhausted"}} = error
+      end
+
+      assert audit_actions(context, "event-past-cap") == ["provider_event.quarantined"]
+    end
+  end
+
+  defp past_cap!(entry, state, last_attempted_at) do
+    {1, _} =
+      from(row in InboxRow, where: row.provider_event_inbox_id == ^entry.provider_event_inbox_id)
+      |> Repo.update_all(
+        set: [
+          processing_state: state,
+          attempt_count: 13_450,
+          last_attempted_at: last_attempted_at
+        ]
+      )
+  end
+
+  defp audit_actions(context, provider_event_id) do
+    from(row in ProviderAuditEntryRow,
+      where:
+        row.organization_id == ^context.organization_id and
+          row.provider_event_id == ^provider_event_id and
+          like(row.action, "provider_event.%") and
+          row.action != "provider_event.received",
+      order_by: [asc: row.inserted_at, asc: row.provider_audit_entry_id],
+      select: row.action
+    )
+    |> Repo.all()
+  end
+
+  defp conflicting_response(reservation) do
+    reservation
+    |> provider_response()
+    |> Map.merge(%{"status" => "confirmed", "provider_status" => "confirmed"})
+    |> Map.put("delivery_descriptor", %{
+      "status" => "ready",
+      "direction" => "downlink",
+      "delivery_kind" => "realtime_stream",
+      "mode" => "provider_connects",
+      "protocol" => "tcp",
+      "endpoint_ref" => "unapproved-endpoint",
+      "framing" => %{"family" => "ccsds_tm", "mode" => "fixed_size", "frame_bytes" => 1115},
+      "allowed_source_refs" => [reservation.provider_spacecraft_ref],
+      "activation_window" => %{
+        "starts_at" => DateTime.to_iso8601(reservation.starts_at),
+        "ends_at" => DateTime.to_iso8601(reservation.ends_at)
+      },
+      "credential_ref" => nil,
+      "diagnostics" => %{}
+    })
+  end
+
   defp ingest_contact_event(context, event_id, now) do
     poll_opts = [
       accounts: [{context.account, context.account_version}],
@@ -240,7 +446,8 @@ defmodule Cadence.GroundNetworks.ProviderEventProcessorTest do
       describe_response: {:ok, provider_response(context.reservation)},
       now: now,
       worker_ref: "processor-test"
-    ] ++ extra
+    ]
+    |> Keyword.merge(extra)
   end
 
   defp provider_response(reservation) do

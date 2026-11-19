@@ -8,8 +8,10 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Writer do
 
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Persistence.OrganizationScope
+  alias Cadence.Platform.ScopedReadUpdates
   alias Cadence.Protocol.{PacketRecord, TransferFrameRecord}
-  alias Cadence.Protocol.RecordArchive.FileSystem
+  alias Cadence.Protocol.RecordArchive.{FileSystem, Quarantine}
+  alias Cadence.Protocol.RecordArchive.FileSystem.PoisonIsolation
   alias Cadence.Repo
 
   @default_flush_interval_ms 250
@@ -309,23 +311,32 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Writer do
 
             {:ok, next_state}
 
-          {:error, reason} ->
-            next_state =
-              state
-              |> update_in(
-                [:retry_counts],
-                &Map.update(&1, mission_id, 1, fn count -> count + 1 end)
-              )
-              |> update_in([:metrics, mission_id], fn metrics ->
-                metrics
-                |> ensure_metrics()
-                |> Map.update!(:flush_failure_count, &(&1 + 1))
-                |> Map.put(:last_flush_error, inspect(reason))
-              end)
+          {:error, reason, quarantined} ->
+            state
+            |> drop_quarantined(mission_id, quarantined)
+            |> failed_flush(mission_id, reason)
 
-            {:error, reason, next_state}
+          {:error, reason} ->
+            failed_flush(state, mission_id, reason)
         end
     end
+  end
+
+  defp failed_flush(state, mission_id, reason) do
+    next_state =
+      state
+      |> update_in(
+        [:retry_counts],
+        &Map.update(&1, mission_id, 1, fn count -> count + 1 end)
+      )
+      |> update_in([:metrics, mission_id], fn metrics ->
+        metrics
+        |> ensure_metrics()
+        |> Map.update!(:flush_failure_count, &(&1 + 1))
+        |> Map.put(:last_flush_error, inspect(reason))
+      end)
+
+    {:error, reason, next_state}
   end
 
   defp persist_entries(state, mission_id, entries) do
@@ -334,17 +345,28 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Writer do
     segment_id = Map.fetch!(state.segment_ids, mission_id)
     organization_id = OrganizationScope.organization_id_for_mission(mission_id)
 
-    with {:ok, object_key, segment_size_bytes} <-
-           FileSystem.store_segment_object(segment_id, entries, base_path: state.base_path),
-         :ok <-
-           FileSystem.persist_segment(segment_id, entries,
-             base_path: state.base_path,
-             object_key: object_key,
-             organization_id: organization_id,
-             archive_backend: state.archive_backend,
-             repo: state.repo
-           ) do
-      {:ok, segment_size_bytes}
+    opts = [
+      base_path: state.base_path,
+      organization_id: organization_id,
+      archive_backend: state.archive_backend,
+      repo: state.repo
+    ]
+
+    # DECISIONS #88: entries that can never be indexed are quarantined and the rest flushes, so
+    # the mission's storage goes on (their own samples included); anything else stays transient.
+    quarantine = &Quarantine.put(mission_id, organization_id, &1, DateTime.utc_now())
+
+    case PoisonIsolation.persist(segment_id, entries, opts, quarantine) do
+      {:ok, %{size_bytes: size_bytes, quarantined: quarantined}} ->
+        announce_quarantine(organization_id, mission_id, quarantined)
+        {:ok, size_bytes}
+
+      {:error, reason, quarantined} ->
+        announce_quarantine(organization_id, mission_id, quarantined)
+        {:error, reason, quarantined}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   rescue
     exception in [DBConnection.ConnectionError, Postgrex.Error] ->
@@ -352,6 +374,32 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Writer do
       # use the same retry path as an explicit persistence error; never report
       # archival success or restart the writer after an unavailable database.
       {:error, {:archive_database_error, Exception.message(exception)}}
+  end
+
+  defp announce_quarantine(_organization_id, _mission_id, []), do: :ok
+
+  defp announce_quarantine(organization_id, mission_id, quarantined) do
+    Logger.warning(
+      "protocol record archive quarantined #{length(quarantined)} entries for #{mission_id}"
+    )
+
+    ScopedReadUpdates.publish(:attention_changed, organization_id, mission_id)
+  end
+
+  # A flush that ended transient after quarantining some entries: they leave the buffer, and the
+  # retry takes a fresh segment id (the retained one held them), so every retry makes progress.
+  defp drop_quarantined(state, mission_id, quarantined) do
+    gone = MapSet.new(quarantined, &{&1.entry["record_kind"], &1.entry["record_id"]})
+
+    queue =
+      state.buffers
+      |> Map.fetch!(mission_id)
+      |> :queue.filter(&(not MapSet.member?(gone, {&1["record_kind"], &1["record_id"]})))
+
+    state
+    |> put_in([:buffers, mission_id], queue)
+    |> put_in([:buffer_sizes, mission_id], :queue.len(queue))
+    |> update_in([:segment_ids], &Map.delete(&1, mission_id))
   end
 
   defp cancel_flush_timer(state, mission_id) do

@@ -461,7 +461,7 @@ void test("credential failure output is redacted and the password has no argv or
         "--telemetry-url",
         "http://127.0.0.1:43721/telemetry",
         "--login-url",
-        "http://127.0.0.1:43721/sign-in",
+        "http://127.0.0.1:43721/console/sign-in",
         "--login-email",
         "operator@example.test",
         "--mission-id",

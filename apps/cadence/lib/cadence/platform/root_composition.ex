@@ -120,6 +120,12 @@ defmodule Cadence.Platform.RootComposition do
         |> RecordArchive.policy()
       end)
 
+    :ok =
+      ensure_current_values_have_packet_records!(
+        current_value_store_policy,
+        record_archive_policy
+      )
+
     runtime_persistence_policy =
       Keyword.get_lazy(opts, :runtime_persistence_policy, fn ->
         Persistence.policy(
@@ -366,6 +372,12 @@ defmodule Cadence.Platform.RootComposition do
 
     captured_opts = [
       runtime_cluster: Application.get_env(:cadence, :runtime_cluster),
+      uplink_session_policy:
+        Application.get_env(
+          :cadence,
+          :uplink_session_policy,
+          Cadence.Runtime.SessionQualification
+        ),
       event_bus: event_bus,
       event_bus_child_opts: Application.get_env(:cadence, :event_bus, []),
       ingress_archive_config: Application.get_env(:cadence, :ingress_archive, []),
@@ -526,4 +538,21 @@ defmodule Cadence.Platform.RootComposition do
     [Cadence.Observability.mission_health_sampler_child_spec()]
     |> Enum.reject(&is_nil/1)
   end
+
+  # Postgres latest values reference `protocol_packet_records`, which only the Postgres record
+  # archive writes. Any other pairing fails every latest-value upsert at runtime with a
+  # foreign-key violation (qa #36 gate), so refuse it at boot.
+  defp ensure_current_values_have_packet_records!(
+         %{backend: Cadence.Telemetry.CurrentValueStore.Postgres},
+         %{backend: backend}
+       )
+       when backend != Cadence.Protocol.RecordArchive.Postgres do
+    raise ArgumentError,
+          "the Postgres telemetry current value store needs the Postgres protocol record " <>
+            "archive (got #{inspect(backend)}): latest values reference protocol_packet_records. " <>
+            "Use the ETS current value store, or set protocol_record_archive to " <>
+            "Cadence.Protocol.RecordArchive.Postgres."
+  end
+
+  defp ensure_current_values_have_packet_records!(_current_values, _record_archive), do: :ok
 end

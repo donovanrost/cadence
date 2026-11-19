@@ -20,6 +20,7 @@ defmodule Cadence.ContactPlanning.FleetAutomationTest do
   alias Cadence.Contacts.{ProviderReservation, ProviderReservations}
   alias Cadence.GroundNetworks
   alias Cadence.GroundNetworks.MissionProvider
+  alias Cadence.PolicyReviewer
   alias Cadence.Spacecraft
 
   @organization_id "org-fleet-automation"
@@ -87,7 +88,7 @@ defmodule Cadence.ContactPlanning.FleetAutomationTest do
 
     assert {:ok, _active, ^policy_version, _approval} =
              FleetPlanningPolicies.approve(
-               admin_scope,
+               PolicyReviewer.reviewer(admin_scope),
                @mission_id,
                policy.fleet_planning_policy_id,
                policy_version.version,

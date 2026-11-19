@@ -1,0 +1,4 @@
+@import "tailwindcss";
+@import "@cadence/apogee-ui/apogee.css";
+/* Tailwind does not scan workspace packages under node_modules by itself. */
+@source "../../../../packages/apogee-ui/src";

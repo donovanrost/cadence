@@ -7,6 +7,8 @@ defmodule Cadence.Management.Commanding.RequestReview do
   defdelegate authorize(scope, mission), to: ReviewAccess
   defdelegate review_token(request), to: ReviewPrecondition, as: :digest
 
+  # todo(authz): Cedar should decide who may approve or reject this request (any mission
+  # operator today, DECISIONS #62, minus self-approval), e.g. by hazard or subsystem.
   def decide(scope, mission, request, input) do
     with {:ok, fresh, _} <- ReviewAccess.authorize(scope, mission),
          {:ok, _} <- Ids.path_segment(request),
@@ -74,6 +76,12 @@ defmodule Cadence.Management.Commanding.RequestReview do
 
   defp receipt({:error, {:command_request_self_approval_not_allowed, _}}),
     do: {:rejected, "A different person must review this request."}
+
+  # ux U87.
+  defp receipt({:error, :command_request_in_group}),
+    do:
+      {:rejected,
+       "This command is part of a command group. Approve it with the group's GO/NO-GO."}
 
   defp receipt({:error, _}),
     do: {:rejected, "The decision was not saved. Reload before reviewing."}

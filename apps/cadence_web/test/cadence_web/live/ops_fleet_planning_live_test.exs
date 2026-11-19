@@ -36,19 +36,6 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
 
     assert_workflow(new_run, "planning.fleet-start", mission, %{})
 
-    {:ok, policy, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/planning/policy")
-
-    assert_workflow(policy, "planning.fleet-policy", mission, %{})
-
-    {:ok, templates, _html} =
-      live(conn, ~p"/missions/#{mission.mission_id}/ops/requirement-templates")
-
-    assert_workflow(templates, "planning.requirement-templates", mission, %{})
-    page = LiveVue.Test.get_vue(templates, id: "application-shell").props["snapshot"]["ops_page"]
-    assert page["status"] == "ready"
-    assert page["data"]["model"]["can_manage"]
-    assert page["data"]["model"]["templates"]["entries"] == []
-
     {:ok, run, _html} =
       live(conn, ~p"/missions/#{mission.mission_id}/ops/planning/runs/run-1")
 

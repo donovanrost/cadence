@@ -403,6 +403,10 @@ defmodule Cadence.Commanding.StageStore do
     end)
   end
 
+  # The third CommandRequestRow insert besides RequestStore's two: it doesn't refuse a group
+  # marker because build_stage_request builds the metadata server-side and nests the item's own
+  # metadata under "stage_item_metadata", so a top-level "group" can't arrive (four-eyes P0;
+  # pinned in commanding_test).
   defp insert_submission(stage_row, item_ids, validated_requests) do
     multi =
       validated_requests

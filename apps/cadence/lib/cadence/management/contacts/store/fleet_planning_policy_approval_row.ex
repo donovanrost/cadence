@@ -21,6 +21,8 @@ defmodule Cadence.Management.Contacts.Store.FleetPlanningPolicyApprovalRow do
     field(:reason, :string)
     field(:actor_user_id, :string)
     field(:actor_document, :map)
+    # The approval policy in force at decision time (M2); NULL on rows decided before it.
+    field(:policy_document, :map)
     field(:decided_at, :utc_datetime_usec)
 
     timestamps(updated_at: false)

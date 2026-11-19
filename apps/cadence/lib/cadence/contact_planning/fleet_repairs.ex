@@ -10,15 +10,17 @@ defmodule Cadence.ContactPlanning.FleetRepairs do
   alias Cadence.Auth.Scope
 
   alias Cadence.ContactPlanning.{
-    ContactPlanExecutions,
     ContactPlans,
     FleetPlanner,
     FleetPlanningPolicies,
     FleetPlanningRun,
-    FleetPlanningRuns
+    FleetPlanningRuns,
+    RepairChain,
+    RepairPairing
   }
 
-  @locked_execution_states [:reserved, :uncertain, :requesting]
+  alias Cadence.Contacts.SingleBookings
+
   @repairable_plan_states [:executing, :partially_reserved, :failed]
 
   @type source :: %{
@@ -26,6 +28,8 @@ defmodule Cadence.ContactPlanning.FleetRepairs do
           required(:plan) => struct(),
           required(:plan_version) => struct(),
           required(:locked_commitments) => [struct()],
+          required(:chain) => RepairChain.t(),
+          required(:covered) => %{binary() => binary()},
           required(:repair_attempt) => pos_integer()
         }
 
@@ -111,46 +115,102 @@ defmodule Cadence.ContactPlanning.FleetRepairs do
     end
   end
 
+  @doc "The attempt number a repair of `run`'s chain would be (1 for a first repair; U76's header)."
+  @spec next_attempt(binary(), binary(), struct()) :: {:ok, pos_integer()} | {:error, term()}
+  def next_attempt(organization_id, mission_id, run),
+    do: repair_attempt(organization_id, mission_id, run)
+
   @spec source(binary(), binary(), binary(), binary(), pos_integer()) ::
           {:ok, source()} | {:error, term()}
   def source(organization_id, mission_id, run_id, plan_id, plan_version) do
     with {:ok, run} <- FleetPlanningRuns.fetch(organization_id, mission_id, run_id),
          {:ok, plan, current_version} <- ContactPlans.fetch(organization_id, mission_id, plan_id),
          :ok <- exact_source(run, plan, current_version, plan_version),
-         :ok <- repairable_plan(plan),
+         {:ok, chain} <- RepairChain.load(organization_id, mission_id, plan_id),
+         :ok <- repairable(plan, chain),
          {:ok, attempt} <- repair_attempt(organization_id, mission_id, run),
-         locked <- source_locked_commitments(plan, current_version) do
+         covered = covered_by_single_bookings(organization_id, mission_id, run, chain),
+         locked <- source_locked_commitments(plan, chain, covered) do
       {:ok,
        %{
          run: run,
          plan: plan,
          plan_version: current_version,
          locked_commitments: locked,
+         chain: chain,
+         covered: covered,
          repair_attempt: attempt
        }}
     end
   end
 
-  defp source_locked_commitments(plan, version) do
-    execution_locked_ids =
+  # qa #30: the day's current bookings across the repair chain (root plan plus applied
+  # repairs) are locked, so bookings an earlier repair made aren't re-sent, and a pass whose
+  # booking was lost is re-planned even when a later plan had locked it.
+  # Also kept (review R3): a pass a chain version locks that no item in the chain booked, so
+  # nothing says it was lost (a lock carried from elsewhere). A locked pass whose booking is in
+  # the chain follows that booking: live stays locked, lost is re-planned.
+  # DECISIONS #56: a lost booking a live single booking covers is held like a current
+  # booking, so the planner counts its need as met and doesn't book it again. Its snapshot can
+  # only be held when the source plan selected it (the planner validates locks against it).
+  defp source_locked_commitments(plan, chain, covered) do
+    selected =
       plan.organization_id
-      |> ContactPlanExecutions.list(plan.mission_id, plan.contact_plan_id, version.version)
-      |> Enum.filter(&(&1.lifecycle_state in @locked_execution_states))
-      |> Enum.map(& &1.contact_opportunity_snapshot_id)
+      |> ContactPlans.selected_snapshots(
+        plan.mission_id,
+        plan.contact_plan_id,
+        chain.versions[plan.contact_plan_id]
+      )
+      |> MapSet.new(& &1.contact_opportunity_snapshot_id)
 
-    locked_ids =
-      version.locked_snapshot_ids
-      |> Enum.concat(execution_locked_ids)
-      |> MapSet.new()
+    covered_items =
+      Enum.filter(
+        chain.items,
+        &(Map.has_key?(covered, RepairChain.lost_key(&1)) and
+            MapSet.member?(selected, &1.contact_opportunity_snapshot_id))
+      )
 
-    plan.organization_id
-    |> ContactPlans.selected_snapshots(
-      plan.mission_id,
-      plan.contact_plan_id,
-      version.version
-    )
-    |> Enum.filter(&MapSet.member?(locked_ids, &1.contact_opportunity_snapshot_id))
+    live =
+      chain
+      |> RepairChain.live_items()
+      |> Enum.concat(covered_items)
+      |> MapSet.new(&{&1.contact_plan_id, &1.contact_opportunity_snapshot_id})
+
+    booked = MapSet.new(chain.items, & &1.contact_opportunity_snapshot_id)
+
+    chain.plans
+    |> Enum.flat_map(fn plan_id ->
+      version = chain.versions[plan_id]
+      held = held_locks(plan, plan_id, version, booked)
+
+      plan.organization_id
+      |> ContactPlans.selected_snapshots(plan.mission_id, plan_id, version)
+      |> Enum.filter(fn snapshot ->
+        id = snapshot.contact_opportunity_snapshot_id
+        MapSet.member?(live, {plan_id, id}) or MapSet.member?(held, id)
+      end)
+    end)
+    |> Enum.uniq_by(& &1.contact_opportunity_snapshot_id)
     |> Enum.sort_by(&{&1.starts_at, &1.contact_opportunity_snapshot_id})
+  end
+
+  defp covered_by_single_bookings(organization_id, mission_id, run, chain) do
+    case SingleBookings.live(organization_id, mission_id, run.horizon_start, run.horizon_end) do
+      [] ->
+        %{}
+
+      singles ->
+        chain
+        |> RepairChain.lost_booking_inputs(organization_id, mission_id)
+        |> RepairPairing.cover(singles)
+    end
+  end
+
+  defp held_locks(plan, plan_id, version, booked) do
+    case ContactPlans.fetch_version(plan.organization_id, plan.mission_id, plan_id, version) do
+      {:ok, %{locked_snapshot_ids: ids}} -> ids |> MapSet.new() |> MapSet.difference(booked)
+      _missing -> MapSet.new()
+    end
   end
 
   defp exact_source(run, plan, current_version, requested_version) do
@@ -170,8 +230,15 @@ defmodule Cadence.ContactPlanning.FleetRepairs do
     end
   end
 
-  defp repairable_plan(%{lifecycle_state: state}) when state in @repairable_plan_states, do: :ok
-  defp repairable_plan(_plan), do: {:error, :fleet_repair_source_plan_not_repairable}
+  # A day is repairable while its chain has lost bookings, whatever the head plan reads.
+  defp repairable(%{lifecycle_state: state}, _chain) when state in @repairable_plan_states,
+    do: :ok
+
+  defp repairable(_plan, chain) do
+    if RepairChain.lost_bookings(chain) == [],
+      do: {:error, :fleet_repair_source_plan_not_repairable},
+      else: :ok
+  end
 
   defp repair_attempt(organization_id, mission_id, run) do
     repair_depth(organization_id, mission_id, run, 1, MapSet.new())
@@ -230,9 +297,24 @@ defmodule Cadence.ContactPlanning.FleetRepairs do
     |> Map.put(:source_contact_plan_id, source_plan_id)
     |> Map.put(:source_contact_plan_version, source_plan_version)
     |> Map.put(:requirement_refs, requirements)
+    |> Map.put(
+      :occupied_document,
+      SingleBookings.occupancy_document(
+        source.plan.organization_id,
+        source.plan.mission_id,
+        attrs
+      )
+    )
     |> Map.put(:repair_input_document, %{
       "repair_attempt" => source.repair_attempt,
       "source_plan_content_sha256" => source.plan_version.content_sha256,
+      # qa #30: what this repair replaces, paired with its new passes at materialization.
+      # Lost bookings a single booking covers (#56) are recorded apart and aren't replaced.
+      "lost_bookings" =>
+        source.chain
+        |> RepairChain.lost_booking_inputs(source.plan.organization_id, source.plan.mission_id)
+        |> Enum.reject(&Map.has_key?(source.covered, &1["key"])),
+      "covered" => source.covered,
       "locked_commitments" =>
         Enum.map(source.locked_commitments, fn snapshot ->
           %{

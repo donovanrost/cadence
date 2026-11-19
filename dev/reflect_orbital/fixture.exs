@@ -11,6 +11,9 @@ defmodule Cadence.Dev.ReflectOrbital.Fixture do
   def scenario_id, do: "scenario-earendil-demo-v1"
   def run_id, do: "run-earendil-demo-v1"
   def service_id, do: "service-realtime-ttc-downlink"
+  # The simulator's built-in uplink TT&C service and its TC frame size (#44).
+  def uplink_service_id, do: "service-realtime-ttc-uplink"
+  def tc_frame_size, do: 32
   def frame_size, do: 1115
 
   def database_path,
@@ -75,6 +78,22 @@ defmodule Cadence.Dev.ReflectOrbital.Fixture do
     end)
   end
 
+  # Short station codes for console rows (ground_station `code`, ^[A-Z0-9]{2,8}$).
+  @station_codes %{
+    "earendil-svalbard" => "SVA",
+    "earendil-troll" => "TRL",
+    "earendil-fairbanks" => "FAI",
+    "earendil-kiruna" => "KIR",
+    "earendil-hawaii" => "HAW",
+    "earendil-santiago" => "SCL",
+    "earendil-punta-arenas" => "PUQ",
+    "earendil-hartebeesthoek" => "HBK",
+    "earendil-perth" => "PER",
+    "earendil-invercargill" => "INV"
+  }
+
+  def station_code(site_id), do: Map.fetch!(@station_codes, site_id)
+
   def sites do
     [
       {"svalbard", "Svalbard", "Norway / Arctic", 78.23, 15.41, 6},
@@ -98,6 +117,7 @@ defmodule Cadence.Dev.ReflectOrbital.Fixture do
         "longitude_deg" => longitude,
         "antenna_count" => antennas,
         "ingress_port" => 42_100 + index,
+        "uplink_port" => 42_200 + index,
         "synthetic" => true
       }
     end)
@@ -130,6 +150,28 @@ defmodule Cadence.Dev.ReflectOrbital.Fixture do
           Map.new(spacecraft(), &{&1.display_name, %{"scid" => &1.scid, "vcid" => 0}})
       },
       "fault_profile" => %{}
+    }
+  end
+
+  # Cadence listens on the site's uplink port; the provider connects, takes TC frames and
+  # answers with CLCWs (#44).
+  def uplink_delivery(site) do
+    %{
+      "display_name" => "Cadence → #{site["name"]} uplink",
+      "client_reference" => "#{site["id"]}:uplink",
+      "direction" => "uplink",
+      "delivery_kind" => "realtime_stream",
+      "target" => %{
+        "protocol" => "tcp",
+        "mode" => "provider_connects",
+        "host" => ingress_host(),
+        "port" => site["uplink_port"]
+      },
+      "framing" => %{
+        "family" => "ccsds_tc",
+        "mode" => "fixed_size",
+        "frame_bytes" => tc_frame_size()
+      }
     }
   end
 

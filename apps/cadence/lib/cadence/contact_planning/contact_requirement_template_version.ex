@@ -1,7 +1,14 @@
 defmodule Cadence.ContactPlanning.ContactRequirementTemplateVersion do
-  @moduledoc "Immutable schedule and Requirement content for one recurring template version."
+  @moduledoc """
+  Immutable schedule and Requirement content for one recurring template version.
 
-  alias Cadence.ContactPlanning.{ContentHash, RequirementSchedule}
+  `target_document` says which spacecraft it applies to (`TemplateTargets`);
+  `name` is versioned so renames are audited. `spacecraft_id` is legacy: it is
+  set only for a single-spacecraft target, for readers that predate targets.
+  Attrs with only `spacecraft_id` get that single-spacecraft target.
+  """
+
+  alias Cadence.ContactPlanning.{ContentHash, RequirementSchedule, TemplateTargets}
   alias Cadence.Ids
   alias Cadence.Persistence.JsonDocument
 
@@ -11,7 +18,9 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplateVersion do
           organization_id: binary(),
           mission_id: binary(),
           version: pos_integer(),
-          spacecraft_id: binary(),
+          name: binary(),
+          target_document: map(),
+          spacecraft_id: binary() | nil,
           schedule_document: map(),
           requirement_document: map(),
           catch_up_policy_document: map(),
@@ -26,6 +35,8 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplateVersion do
     :organization_id,
     :mission_id,
     :version,
+    :name,
+    :target_document,
     :spacecraft_id,
     :schedule_document,
     :requirement_document,
@@ -37,6 +48,8 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplateVersion do
 
   @spec new(map()) :: t()
   def new(attrs) when is_map(attrs) do
+    target = target(attrs)
+
     template =
       %__MODULE__{
         contact_requirement_template_version_id:
@@ -49,7 +62,9 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplateVersion do
         organization_id: required(attrs, :organization_id),
         mission_id: required(attrs, :mission_id),
         version: positive(value(attrs, :version, 1), :version),
-        spacecraft_id: required(attrs, :spacecraft_id),
+        name: name(value(attrs, :name)),
+        target_document: target,
+        spacecraft_id: TemplateTargets.single(target),
         schedule_document:
           attrs
           |> value(:schedule_document)
@@ -73,6 +88,8 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplateVersion do
   @spec content_document(t()) :: map()
   def content_document(%__MODULE__{} = version) do
     %{
+      "name" => version.name,
+      "target" => version.target_document,
       "spacecraft_id" => version.spacecraft_id,
       "schedule" => version.schedule_document,
       "requirement" => version.requirement_document,
@@ -83,6 +100,25 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplateVersion do
   @spec content_sha256(t()) :: binary()
   def content_sha256(%__MODULE__{} = version),
     do: version |> content_document() |> ContentHash.sha256()
+
+  defp target(attrs) do
+    case value(attrs, :target_document) do
+      nil -> attrs |> required(:spacecraft_id) |> TemplateTargets.spacecraft()
+      target -> TemplateTargets.normalize!(target)
+    end
+  end
+
+  defp name(nil), do: "Recurring requirement"
+
+  defp name(name) when is_binary(name) do
+    trimmed = String.trim(name)
+
+    if String.length(trimmed) in 1..120,
+      do: trimmed,
+      else: raise(ArgumentError, "name must be 1 to 120 characters")
+  end
+
+  defp name(_name), do: raise(ArgumentError, "name must be text")
 
   defp normalize_catch_up_policy(policy) when is_map(policy) do
     policy = JsonDocument.encode(policy)

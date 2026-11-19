@@ -18,6 +18,9 @@ defmodule Cadence.Dashboards.DashboardSnapshot do
     field(:data_semantics, :string)
     field(:data_visibility, :string, default: "authorized_runtime_data")
     field(:document, :map)
+    # Q6: a deleted snapshot leaves a tombstone, so its link says it was deleted.
+    field(:deleted_at, :utc_datetime_usec)
+    field(:deleted_by, :string)
     timestamps()
   end
 

@@ -8,6 +8,7 @@ defmodule CadenceWeb.Assets.SettingsBrowserTest do
   alias Cadence.Catalog.SpacecraftConfigurationInput
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Commanding.WorkspaceSettings
+  alias Cadence.Management.ConsoleSettings
   alias Cadence.Runtime.Missions
   alias CadenceWeb.Assets.DashboardRenderedViewportRunner, as: Runner
   alias CadenceWeb.TestFixtures
@@ -52,7 +53,7 @@ defmodule CadenceWeb.Assets.SettingsBrowserTest do
     File.mkdir_p!(out)
     port = Runner.start_browser_endpoint_on_ephemeral_port!(c.sandbox_owner)
 
-    {output, status} =
+    run_phase = fn phase ->
       Runner.run_dashboard_viewport_smoke(
         [
           Path.expand("../../../../../frontend/tools/phoenix/settings_browser.mjs", __DIR__),
@@ -62,12 +63,46 @@ defmodule CadenceWeb.Assets.SettingsBrowserTest do
           reviewer.email,
           first.spacecraft_id,
           second.spacecraft_id,
-          out
+          out,
+          phase
         ],
         stdin: Jason.encode!(%{password: TestFixtures.default_password()}) <> "\n",
-        timeout: 270_000
+        timeout: 135_000
       )
+    end
 
+    # §11c(B) moved the mission settings page to the console too: the mission's settings are set
+    # through the domain API the console's Setup › Settings uses.
+    for {section, values} <- [
+          {"cadence.governance", %{"approval_requirement" => "direct"}},
+          {"commanding.defaults", %{"shelf" => "minimized"}}
+        ] do
+      assert {:ok, %{state: :active}} =
+               ConsoleSettings.save(
+                 scope,
+                 mission.mission_id,
+                 section,
+                 values,
+                 nil
+               )
+    end
+
+    {output, status} = run_phase.("mission")
+    assert status == 0, output
+    assert output =~ "SETTINGS_MISSION_PHASE_OK"
+
+    # Then the organization requires independent approval with no mission override (§11c(A)
+    # moved the organization settings page to the console).
+    assert {:ok, %{state: :active}} =
+             ConsoleSettings.save(
+               scope,
+               nil,
+               "cadence.governance",
+               %{"allow_override" => false},
+               nil
+             )
+
+    {output, status} = run_phase.("enforced")
     assert status == 0, output
     assert output =~ "SETTINGS_BROWSER_OK"
     assert {:ok, %{generation: 2}} = Missions.applied_spec(mission.mission_id)

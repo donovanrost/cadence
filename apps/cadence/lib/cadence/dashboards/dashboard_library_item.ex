@@ -16,6 +16,9 @@ defmodule Cadence.Dashboards.DashboardLibraryItem do
     field(:latest_version, :integer, default: 1)
     field(:created_by, :string)
     field(:updated_by, :string)
+    # Q10: retired, never deleted (old dashboard versions still place its versions).
+    field(:retired_at, :utc_datetime_usec)
+    field(:retired_by, :string)
     timestamps()
   end
 

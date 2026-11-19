@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Approve command · Cadence</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Saira:wght@400;500;600&amp;family=Saira+Condensed:wght@500;600;700&amp;family=Azeret+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#05070A}
+a{color:#E6EDF3}a:hover{color:#FFFFFF}
+.m{font-family:'Azeret Mono',ui-monospace,monospace}
+.n{font-family:Saira,sans-serif;font-variant-numeric:tabular-nums}
+.lbl{font:600 12px 'Saira Condensed',sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#7D8A99;margin:0}
+.pnl{position:relative;background:#0A0E13;border:1px solid #1C2530}
+.ph{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid #1C2530;flex-wrap:wrap}
+.ph .t{font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#C9D3DD;margin:0}
+.ph .i{font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.ph .r{margin-left:auto;font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.tag{display:inline-flex;align-items:center;gap:7px;height:24px;padding:0 9px;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;border:1px solid currentColor;white-space:nowrap}
+.b{height:32px;padding:0 12px;border:1px solid #2A3644;background:#0F141B;color:#E6EDF3;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;text-decoration:none}
+.b.pri{background:#E6EDF3;color:#05070A;border-color:#E6EDF3}
+.s-nom{width:8px;height:8px;background:#2FD08A;flex:none}
+.s-cau{width:10px;height:9px;background:#FFB020;clip-path:polygon(50% 0,100% 100%,0 100%);flex:none}
+.s-crit{width:8px;height:8px;background:#FF4D57;transform:rotate(45deg);flex:none}
+.s-stale{width:8px;height:8px;flex:none;box-sizing:border-box;border:1px solid #A497FF;background-image:repeating-linear-gradient(135deg,#A497FF 0 1.5px,transparent 1.5px 4px)}
+.s-off{width:8px;height:8px;flex:none;box-sizing:border-box;border:1px dashed #9DAAB8}
+.rail a{display:flex;align-items:center;gap:10px;height:38px;padding:0 12px;color:#9DAAB8;text-decoration:none;font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;border-left:2px solid transparent}
+.rail a:hover{color:#E6EDF3;background:#0F141B}
+.rail a.on{color:#E6EDF3;background:#0F141B;border-left-color:#E6EDF3}
+.rail .n{font:500 10px 'Azeret Mono',monospace;color:#7D8A99;width:16px}
+.rail .c{margin-left:auto;font:500 11px 'Azeret Mono',monospace;color:#7D8A99;letter-spacing:0}
+.cell{aspect-ratio:1;background:#164E37}
+.c-cau{background:#FFB020}
+.c-crit{background:#FF4D57;outline:1px solid #FF4D57;outline-offset:1.5px}
+.c-stale{background-color:#140F26;box-sizing:border-box;border:1px solid #A497FF;background-image:repeating-linear-gradient(135deg,#A497FF 0 1px,transparent 1px 3.5px)}
+.c-live{outline:1px solid #E6EDF3;outline-offset:1.5px}
+.ro{background:#0A0E13;padding:14px 16px;display:flex;flex-direction:column;gap:6px}
+.ro .v{font:500 30px Saira,sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-0.02em;line-height:1}
+.ro .s{font:400 12px 'Saira',sans-serif;color:#9DAAB8}
+
+.step{display:flex;align-items:center;gap:8px;height:52px;padding:0 14px;border-right:1px solid #1C2530;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#7D8A99}
+.step.on{color:#E6EDF3;background:#0F141B;box-shadow:inset 0 -2px 0 #E6EDF3}
+.qi{display:flex;flex-direction:column;gap:5px;padding:12px 16px;border-top:1px solid #1C2530;text-decoration:none;color:#E6EDF3}
+.qi:first-of-type{border-top:0}
+.qi.on{background:#0F141B;box-shadow:inset 2px 0 0 #E6EDF3}
+.qi .t1{display:flex;justify-content:space-between;gap:8px;font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.qi .t2{font:600 13px 'Azeret Mono',monospace}
+.qi .t3{font-size:13px;color:#9DAAB8}
+.cl{font:600 11px 'Saira Condensed',sans-serif;letter-spacing:.16em;color:#7D8A99;border:1px solid #2A3644;padding:1px 6px;text-transform:uppercase}
+.cl.HAZARDOUS{color:#05070A;background:#E6EDF3;border-color:#E6EDF3}
+.by{display:flex;flex-direction:column;border:1px solid #2A3644;min-width:0}
+.by .h{font:600 15px 'Azeret Mono',monospace;padding:8px 0;text-align:center;letter-spacing:.04em}
+.by .f{font:600 10px 'Saira Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#7D8A99;padding:5px 6px;border-top:1px solid #2A3644;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.by .v{font:500 10px 'Azeret Mono',monospace;color:#C9D3DD;padding:0 6px 6px;text-align:center;white-space:nowrap}
+.ck{display:grid;grid-template-columns:120px minmax(0,1fr) auto;gap:14px;align-items:center;padding:10px 16px;border-top:1px solid #1C2530;font-size:14px}
+.ck:first-of-type{border-top:0}
+.go{color:#4FDB9E}.hold{color:#FFC24D}
+.wv{display:grid;grid-template-columns:150px minmax(0,1fr) 130px;gap:14px;align-items:center}
+.lane{position:relative;height:30px;background:#05070A;border:1px solid #141B24}
+.lane .u{position:absolute;top:0;bottom:0;background-image:repeating-linear-gradient(135deg,#141B24 0 4px,transparent 4px 8px)}
+.lane .w{position:absolute;top:4px;bottom:4px;font:600 10px 'Azeret Mono',monospace;display:flex;align-items:center;padding-left:6px;white-space:nowrap;overflow:hidden}
+.opt{display:flex;gap:12px;align-items:flex-start;padding:12px;border:1px solid #2A3644;cursor:pointer}
+.opt.on{border-color:#E6EDF3;background:rgba(230,237,243,.04)}
+.ev{display:grid;grid-template-columns:72px minmax(0,1fr);gap:10px;padding:7px 0;font-size:13px;color:#9DAAB8}
+.hist{display:flex;align-items:flex-end;gap:3px;height:70px}
+.hist span{flex:1;background:#2A3644}
+.scr{flex:1;min-height:0;overflow:auto;scrollbar-width:thin;scrollbar-color:#2A3644 transparent}
+.pane{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.pane>.ph{flex:none}
+</style>
+</helmet>
+<div style="font-family: 'Saira', system-ui, sans-serif; color: #E6EDF3; height: 100vh; overflow: hidden; display: flex; flex-direction: column; background-color: #05070A; background-image: linear-gradient(rgba(230,237,243,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(230,237,243,.025) 1px, transparent 1px); background-size: 40px 40px">
+
+<header style="flex: none; display: flex; align-items: stretch; border-bottom: 1px solid #1C2530; background: #070A0E">
+<a href="Compose.dc.html" aria-label="Back" style="width: 52px; display: flex; align-items: center; justify-content: center; border-right: 1px solid #1C2530; color: #E6EDF3"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m15 6-6 6 6 6"></path></svg></a>
+<div style="display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 0 18px; border-right: 1px solid #1C2530"><span class="m" style="font-size: 11px; color: #7D8A99">APPROVALS · SIGNED IN AS MIRA K.</span><span style="font: 700 19px 'Saira Condensed'; letter-spacing: .14em; text-transform: uppercase">Review REQ-0419</span></div>
+<ol aria-label="Stations" style="list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap">
+<li class="step"><span class="m" style="color: #2FD08A">✓</span>01 Compose</li>
+<li class="step"><span class="m" style="color: #2FD08A">✓</span>02 Check</li>
+<li class="step on"><span class="m">●</span>03 Approve</li>
+<li class="step"><span class="m">○</span>04 Release</li>
+<li class="step" style="color: #3A4654">05 · 06 · 07</li>
+</ol>
+<div class="m" style="margin-left: auto; display: flex; align-items: center; gap: 20px; padding: 0 18px; font-size: 13px"><span><span style="color: #7D8A99">UTC</span> 02:58:41</span><span><span style="color: #7D8A99">WAVE 1 AOS</span> T−00:11:19</span></div>
+</header>
+
+<main style="flex: 1; min-height: 0; box-sizing: border-box; padding: 12px 14px; display: grid; grid-template-columns: 280px minmax(0, 1fr) 360px; gap: 12px">
+
+<aside class="pnl pane">
+<div class="ph"><span class="i">Q</span><h2 class="t">Waiting on you</h2><span class="r">3</span></div>
+<div class="scr">
+<a href="#" class="qi on"><span class="t1"><span>REQ-0419 · DONOVAN R.</span><span style="color: #E6EDF3">6m</span></span><span class="t2">HEATER_SET</span><span class="t3">98 spacecraft · planes 03–04 · 3 waves</span></a>
+<a href="#" class="qi"><span class="t1"><span>REQ-0417 · ANA P.</span><span>22m</span></span><span class="t2">TLM_SET_RATE</span><span class="t3">EARENDIL-140 · 1 command</span></a>
+<a href="#" class="qi"><span class="t1"><span>REQ-0414 · OWEN L.</span><span>1h04</span></span><span class="t2" style="display: flex; gap: 8px; align-items: center">FSW_LOAD_IMAGE <span class="cl HAZARDOUS">HAZ</span></span><span class="t3">5 canary spacecraft · you and the flight director</span></a>
+<div style="padding: 12px 16px; border-top: 1px solid #1C2530; display: flex; flex-direction: column; gap: 4px; opacity: .55">
+<span class="m" style="font-size: 11px; color: #7D8A99">REQ-0418 · YOURS</span>
+<span style="font-size: 13px; color: #9DAAB8">You can't approve your own request. Waiting on Ana or Owen.</span>
+</div>
+</div>
+</aside>
+
+<div class="scr" style="min-width: 0; display: flex; flex-direction: column; gap: 12px">
+
+<section class="pnl">
+<div style="padding: 18px 20px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: baseline"><h1 style="margin: 0; font: 600 30px 'Saira Condensed'; letter-spacing: .06em; text-transform: uppercase">Raise the battery heater setpoint, planes 03–04</h1><span class="cl">ROUTINE</span></div>
+<p style="margin: 0; font-size: 15px; line-height: 1.55; color: #C9D3DD; max-width: 820px">"Eclipse season starts 2 Nov. Last season the longest umbra pulled BATT down to 3.1 °C on this plane pair. A setpoint of 8.0 keeps us 4 °C clear of the cell limit." <span class="m" style="font-size: 12px; color: #7D8A99">· DONOVAN R. · 02:52Z</span></p>
+</div>
+</section>
+
+<div style="display: flex; flex-wrap: wrap; gap: 16px">
+<section class="pnl" style="flex: 1 1 340px; min-width: 0">
+<div class="ph"><span class="i">A1</span><h2 class="t">What changes</h2><span class="r">THERM.batt_setpoint</span></div>
+<div style="padding: 16px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: baseline; gap: 14px"><span class="n" style="font-size: 40px; color: #9DAAB8">5.0</span><span class="m" style="color: #7D8A99">→</span><span class="n" style="font-size: 40px">8.0</span><span class="m" style="font-size: 13px; color: #7D8A99">°C · ON 98 SPACECRAFT</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<span class="lbl">Current value across the 98</span>
+<div class="hist"><span style="height: 4%"></span><span style="height: 4%"></span><span style="height: 100%; background: #9DAAB8"></span><span style="height: 4%"></span><span style="height: 6%; background: #FFB020"></span><span style="height: 4%"></span><span style="height: 4%"></span><span style="height: 4%"></span><span style="height: 4%"></span><span style="height: 4%"></span></div>
+<div class="m" style="display: flex; justify-content: space-between; font-size: 10px; color: #7D8A99"><span>3.0</span><span>5.0 · 96</span><span>6.0 · 2</span><span>8.0 °C</span></div>
+</div>
+<p style="margin: 0; display: flex; gap: 10px; align-items: flex-start; font-size: 13px; color: #C9D3DD; padding: 10px 12px; background: rgba(255,176,32,.05); border: 1px solid rgba(255,176,32,.35)"><span class="s-cau" style="margin-top: 4px"></span><span><b class="m" style="font-weight: 600">EARENDIL-117</b> and <b class="m" style="font-weight: 600">-144</b> were hand-set to 6.0 °C on 14 Sep (REQ-0302). This overwrites that.</span></p>
+</div>
+</section>
+
+<section class="pnl" style="flex: 1 1 340px; min-width: 0">
+<div class="ph"><span class="i">A2</span><h2 class="t">Re-checked at review</h2><span class="r go">6 GO</span></div>
+<div class="ck"><span class="lbl" style="color: #C9D3DD">Identity</span><span style="color: #9DAAB8">98 SCIDs resolve, Block 1 profile r6</span><span class="tag go" style="height: 22px; font-size: 12px">GO</span></div>
+<div class="ck"><span class="lbl" style="color: #C9D3DD">Catalog</span><span style="color: #9DAAB8">HEATER_SET v15, opcode 0x4A1</span><span class="tag go" style="height: 22px; font-size: 12px">GO</span></div>
+<div class="ck"><span class="lbl" style="color: #C9D3DD">Constraint</span><span style="color: #9DAAB8">BATT temp above −5 °C on all 98</span><span class="tag go" style="height: 22px; font-size: 12px">GO</span></div>
+<div class="ck"><span class="lbl" style="color: #C9D3DD">Power</span><span style="color: #9DAAB8">+1.2 W mean. Lowest SoC at umbra exit 64%</span><span class="tag go" style="height: 22px; font-size: 12px">GO</span></div>
+<div class="ck"><span class="lbl" style="color: #C9D3DD">Conflicts</span><span style="color: #9DAAB8">Nothing else queued on these targets</span><span class="tag go" style="height: 22px; font-size: 12px">GO</span></div>
+<div class="ck"><span class="lbl" style="color: #C9D3DD">Excluded</span><span style="color: #9DAAB8"><span class="m">163</span> stale · <span class="m">188</span> safe mode</span><span class="tag go" style="height: 22px; font-size: 12px">GO −2</span></div>
+</section>
+</div>
+
+<section class="pnl">
+<div class="ph"><span class="i">A3</span><h2 class="t">What will radiate</h2><span class="r">19 BYTES · CCSDS TC · SAME FOR ALL 98 EXCEPT SEQ AND CRC</span></div>
+<div style="padding: 16px; overflow-x: auto">
+<div style="display: grid; grid-template-columns: 2fr 2fr 2fr 2fr 1fr 4fr 4fr 2fr; gap: 4px; min-width: 820px">
+<div class="by"><span class="h">18 A1</span><span class="f">Ver · type · APID</span><span class="v">TC · 0x0A1</span></div>
+<div class="by"><span class="h" style="color: #9DAAB8">C0 ··</span><span class="f">Seq</span><span class="v">PER TARGET</span></div>
+<div class="by"><span class="h">00 0C</span><span class="f">Length</span><span class="v">13 − 1</span></div>
+<div class="by" style="border-color: #9DAAB8"><span class="h">04 A1</span><span class="f" style="color: #C9D3DD">Opcode</span><span class="v">HEATER_SET</span></div>
+<div class="by" style="border-color: #9DAAB8"><span class="h">00</span><span class="f" style="color: #C9D3DD">zone</span><span class="v">BATT</span></div>
+<div class="by" style="border-color: #E6EDF3; background: rgba(230,237,243,.04)"><span class="h">41 00 00 00</span><span class="f" style="color: #E6EDF3">setpoint_c</span><span class="v" style="color: #E6EDF3">8.0 F32</span></div>
+<div class="by" style="border-color: #9DAAB8"><span class="h">3F 80 00 00</span><span class="f" style="color: #C9D3DD">hysteresis_c</span><span class="v">1.0 F32</span></div>
+<div class="by"><span class="h" style="color: #9DAAB8">·· ··</span><span class="f">CRC-16</span><span class="v">PER TARGET</span></div>
+</div>
+</div>
+</section>
+
+<section class="pnl">
+<div class="ph"><span class="i">A4</span><h2 class="t">Release plan</h2><span class="r">IN WAVES · EACH GATE NEEDS 100% VERIFIED</span></div>
+<div style="padding: 14px 16px; overflow-x: auto">
+<div style="min-width: 680px; display: flex; flex-direction: column; gap: 6px">
+<div class="wv"><span style="display: flex; flex-direction: column"><span style="font: 600 15px 'Saira Condensed'; letter-spacing: .12em; text-transform: uppercase">Wave 1 · canary</span><span class="m" style="font-size: 10px; color: #7D8A99">5 · ONE PER 20 SLOTS</span></span><div class="lane"><span class="u" style="left: 8%; width: 9%"></span><span class="u" style="left: 47%; width: 9%"></span><span class="w" style="left: 3%; width: 13%; background: #E6EDF3; color: #05070A">5 AT AOS</span></div><span class="m" style="font-size: 12px; color: #9DAAB8; text-align: right"><span style="color: #E6EDF3">03:10Z</span> → 03:42Z</span></div>
+<div class="wv"><span style="display: flex; flex-direction: column"><span style="font: 600 15px 'Saira Condensed'; letter-spacing: .12em; text-transform: uppercase">Wave 2</span><span class="m" style="font-size: 10px; color: #7D8A99">45</span></span><div class="lane"><span class="u" style="left: 8%; width: 9%"></span><span class="u" style="left: 47%; width: 9%"></span><span class="w" style="left: 19%; width: 26%; border: 1px solid #3A4654; background: rgba(230,237,243,.06); color: #C9D3DD">45 · GATED ON WAVE 1</span></div><span class="m" style="font-size: 12px; color: #9DAAB8; text-align: right"><span style="color: #E6EDF3">03:50Z</span> → 05:20Z</span></div>
+<div class="wv"><span style="display: flex; flex-direction: column"><span style="font: 600 15px 'Saira Condensed'; letter-spacing: .12em; text-transform: uppercase">Wave 3</span><span class="m" style="font-size: 10px; color: #7D8A99">46 · 48 MINUS 117, 144</span></span><div class="lane"><span class="u" style="left: 8%; width: 9%"></span><span class="u" style="left: 47%; width: 9%"></span><span class="w" style="left: 58%; width: 38%; border: 1px solid #3A4654; background: rgba(230,237,243,.06); color: #C9D3DD">46 · GATED ON WAVE 2</span></div><span class="m" style="font-size: 12px; color: #9DAAB8; text-align: right"><span style="color: #E6EDF3">05:30Z</span> → 07:40Z</span></div>
+<div class="wv"><span></span><div class="m" style="display: flex; justify-content: space-between; font-size: 10px; color: #7D8A99; border-top: 1px solid #2A3644; padding-top: 4px"><span>03:00Z</span><span>04:00Z</span><span>05:00Z</span><span>06:00Z</span><span>07:00Z</span><span>08:00Z</span></div><span class="m" style="font-size: 10px; color: #7D8A99; text-align: right">HATCH = UMBRA</span></div>
+</div>
+</div>
+</section>
+</div>
+
+<aside class="pnl pane">
+<div class="ph"><span class="i">D</span><h2 class="t">Your call</h2></div>
+<div class="scr" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 14px">
+<fieldset style="border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px">
+<legend class="lbl" style="margin-bottom: 10px">Decision</legend>
+<label class="opt"><input type="radio" name="d" style="accent-color: #E6EDF3; margin-top: 3px"><span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 600">GO as requested</span><span style="font-size: 13px; color: #9DAAB8">All 98, including 117 and 144</span></span></label>
+<label class="opt on"><input type="radio" name="d" checked style="accent-color: #E6EDF3; margin-top: 3px"><span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 600">GO, excluding 117 and 144</span><span style="font-size: 13px; color: #9DAAB8">96 targets. Donovan gets a follow-up for the two.</span></span></label>
+<label class="opt"><input type="radio" name="d" style="accent-color: #E6EDF3; margin-top: 3px"><span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 600">Send back</span><span style="font-size: 13px; color: #9DAAB8">Returns to Compose with your note</span></span></label>
+<label class="opt"><input type="radio" name="d" style="accent-color: #E6EDF3; margin-top: 3px"><span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 600">NO-GO</span><span style="font-size: 13px; color: #9DAAB8">Closes the request and logs why</span></span></label>
+</fieldset>
+<label style="display: flex; flex-direction: column; gap: 8px"><span class="lbl">Note to Donovan</span>
+<textarea rows="3" style="background: #05070A; color: #E6EDF3; border: 1px solid #2A3644; font: 14px 'Saira'; padding: 10px; resize: vertical">117 and 144 were set to 6.0 on purpose for the cell-aging study. Check with Priya before touching them.</textarea></label>
+<div style="border-top: 1px solid #1C2530; padding-top: 12px">
+<p class="lbl" style="margin-bottom: 6px">Request log</p>
+<div class="ev"><span class="m" style="font-size: 11px">02:52:06Z</span><span>Drafted by Donovan R. in Compose</span></div>
+<div class="ev"><span class="m" style="font-size: 11px">02:52:31Z</span><span>Checks passed, 2 targets excluded</span></div>
+<div class="ev"><span class="m" style="font-size: 11px">02:52:33Z</span><span>Sent to on-shift operators</span></div>
+<div class="ev"><span class="m" style="font-size: 11px; color: #E6EDF3">02:58:41Z</span><span style="color: #E6EDF3">Opened by Mira K.</span></div>
+</div>
+</div>
+<div style="flex: none; padding: 12px 16px; border-top: 1px solid #1C2530; display: flex; flex-direction: column; gap: 8px">
+<a href="Uplink.dc.html" class="b pri" style="height: 48px; font-size: 16px">Sign GO · 96 targets</a>
+<span class="m" style="font-size: 10px; color: #7D8A99; text-align: center">RE-AUTHENTICATES · ABORT STAYS OPEN TO BOTH OF YOU</span>
+</div>
+</aside>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

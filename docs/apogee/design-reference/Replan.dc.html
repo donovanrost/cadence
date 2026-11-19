@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Re-plan · Cadence</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Saira:wght@400;500;600&amp;family=Saira+Condensed:wght@500;600;700&amp;family=Azeret+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#05070A}
+a{color:#E6EDF3}a:hover{color:#FFFFFF}
+.m{font-family:'Azeret Mono',ui-monospace,monospace}
+.n{font-family:Saira,sans-serif;font-variant-numeric:tabular-nums}
+.lbl{font:600 12px 'Saira Condensed',sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#7D8A99;margin:0}
+.pnl{position:relative;background:#0A0E13;border:1px solid #1C2530}
+.ph{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid #1C2530;flex-wrap:wrap}
+.ph .t{font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#C9D3DD;margin:0}
+.ph .i{font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.ph .r{margin-left:auto;font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.tag{display:inline-flex;align-items:center;gap:7px;height:24px;padding:0 9px;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;border:1px solid currentColor;white-space:nowrap}
+.b{height:32px;padding:0 12px;border:1px solid #2A3644;background:#0F141B;color:#E6EDF3;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;text-decoration:none}
+.b.pri{background:#E6EDF3;color:#05070A;border-color:#E6EDF3}
+.s-nom{width:8px;height:8px;background:#2FD08A;flex:none}
+.s-cau{width:10px;height:9px;background:#FFB020;clip-path:polygon(50% 0,100% 100%,0 100%);flex:none}
+.s-crit{width:8px;height:8px;background:#FF4D57;transform:rotate(45deg);flex:none}
+.s-stale{width:8px;height:8px;flex:none;box-sizing:border-box;border:1px solid #A497FF;background-image:repeating-linear-gradient(135deg,#A497FF 0 1.5px,transparent 1.5px 4px)}
+.s-off{width:8px;height:8px;flex:none;box-sizing:border-box;border:1px dashed #9DAAB8}
+.rail a{display:flex;align-items:center;gap:10px;height:38px;padding:0 12px;color:#9DAAB8;text-decoration:none;font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;border-left:2px solid transparent}
+.rail a:hover{color:#E6EDF3;background:#0F141B}
+.rail a.on{color:#E6EDF3;background:#0F141B;border-left-color:#E6EDF3}
+.rail .n{font:500 10px 'Azeret Mono',monospace;color:#7D8A99;width:16px}
+.rail .c{margin-left:auto;font:500 11px 'Azeret Mono',monospace;color:#7D8A99;letter-spacing:0}
+.cell{aspect-ratio:1;background:#164E37}
+.c-cau{background:#FFB020}
+.c-crit{background:#FF4D57;outline:1px solid #FF4D57;outline-offset:1.5px}
+.c-stale{background-color:#140F26;box-sizing:border-box;border:1px solid #A497FF;background-image:repeating-linear-gradient(135deg,#A497FF 0 1px,transparent 1px 3.5px)}
+.c-live{outline:1px solid #E6EDF3;outline-offset:1.5px}
+.ro{background:#0A0E13;padding:14px 16px;display:flex;flex-direction:column;gap:6px}
+.ro .v{font:500 30px Saira,sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-0.02em;line-height:1}
+.ro .s{font:400 12px 'Saira',sans-serif;color:#9DAAB8}
+
+.pane{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.pane>.ph{flex:none}
+.scr{flex:1;min-height:0;overflow:auto;scrollbar-width:thin;scrollbar-color:#2A3644 transparent}
+.step{display:flex;align-items:center;gap:8px;height:52px;padding:0 14px;border-right:1px solid #1C2530;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#7D8A99}
+.step.on{color:#E6EDF3;background:#0F141B;box-shadow:inset 0 -2px 0 #E6EDF3}
+.inp{display:flex;align-items:center;gap:10px;height:36px;padding:0 12px;border:1px solid #2A3644;background:#05070A}
+.inp input{flex:1;min-width:0;background:transparent;border:0;outline:none;color:#E6EDF3;font:500 14px 'Azeret Mono',monospace}
+.dm{display:grid;grid-template-columns:12px minmax(0,1fr);gap:10px;width:100%;padding:10px 14px;border:0;border-top:1px solid #141B24;background:transparent;color:#E6EDF3;text-align:left;cursor:pointer;box-sizing:border-box}
+.dm:hover{background:#0F141B}
+.dm.on{background:#0F141B;box-shadow:inset 2px 0 0 #E6EDF3}
+.lg{display:inline-flex;align-items:center;gap:6px;font:500 10px 'Azeret Mono',monospace;color:#9DAAB8;text-transform:uppercase}
+.lg i{display:inline-block;width:14px;height:8px;box-sizing:border-box}
+.mtk,.mt{background-image:repeating-linear-gradient(135deg,rgba(255,176,32,.55) 0 2px,transparent 2px 5px);border:1px solid rgba(255,176,32,.7)}
+.mt{position:absolute;height:14px;box-sizing:border-box;pointer-events:none}
+.rl{height:22px;display:flex;align-items:center;justify-content:space-between;font:500 11px 'Azeret Mono',monospace;border-bottom:1px solid transparent}
+.rl .rs{font-size:9px;color:#7D8A99}
+.hr{position:absolute;top:2px;font-size:10px;color:#7D8A99;transform:translateX(-50%)}
+.mk{position:absolute;height:16px;min-width:5px;border:0;padding:0;cursor:pointer;box-sizing:border-box;background:transparent}
+.mk.own{background:#E6EDF3}
+.mk.new{background:#E6EDF3;box-shadow:0 0 0 2px #05070A,0 0 0 3px #E6EDF3}
+.mk.opp{border:1px dashed #E6EDF3;background:rgba(230,237,243,.06)}
+.mk.opp.clash{border-color:#FFB020}
+.mk.bad{background:#FFB020}
+.mk.on{outline:2px solid #E6EDF3;outline-offset:3px}
+.rc{display:flex;flex-direction:column;gap:2px;padding:6px 10px;border:1px solid #2A3644;min-width:130px}
+.rc b{font-size:14px;font-weight:600}
+.rc.hold{border-color:rgba(255,176,32,.6);background:rgba(255,176,32,.05)}
+.rc.hold b{color:#FFC24D}
+.rc.go b{color:#4FDB9E}
+.cb{position:absolute;top:10px;height:16px;background:#E6EDF3;min-width:4px}
+.cb.up{box-shadow:inset 0 3px 0 #05070A}
+.gp{position:absolute;top:0;height:36px;background:linear-gradient(#3A4654,#3A4654) center/100% 1px no-repeat;display:flex;justify-content:center}
+.gp.long{background-image:linear-gradient(#FFB020,#FFB020);background-size:100% 2px}
+.gp span{font:500 10px 'Azeret Mono',monospace;color:#7D8A99;line-height:1;margin-top:-2px;background:#0A0E13;padding:0 4px;height:10px}
+.gp.long span{color:#FFC24D}
+.kvs{display:grid;grid-template-columns:76px minmax(0,1fr);gap:6px 10px;font-size:13px;color:#C9D3DD}
+.kvs>span:nth-child(odd){font:600 11px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#7D8A99;padding-top:2px}
+.alt{display:flex;align-items:center;gap:8px;padding:8px 16px 8px 0;border-top:1px solid #141B24}
+.alt:first-of-type{border-top:0}
+.alt.on{background:#0F141B;box-shadow:inset 2px 0 0 #E6EDF3}
+.alt-b{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;padding:2px 0 2px 16px;border:0;background:transparent;color:#E6EDF3;text-align:left;cursor:pointer}
+.tg{height:26px;padding:0 10px;border:1px solid #2A3644;background:transparent;color:#C9D3DD;font:600 11px 'Saira Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase;cursor:pointer}
+.ft{display:flex;flex-direction:column;justify-content:center;gap:2px;padding:0 18px;border-right:1px solid #1C2530}
+.ft b{font-size:20px;font-weight:500}
+.go{color:#4FDB9E}.hold{color:#FFC24D}
+.ri{display:flex;flex-direction:column;gap:3px;font-size:12px;color:#9DAAB8;line-height:1.5;padding:8px 10px;border:1px solid #1C2530;background:#05070A}
+.outb{position:absolute;left:0;box-sizing:border-box;border:1px solid rgba(255,77,87,.7);background-image:repeating-linear-gradient(135deg,rgba(255,77,87,.28) 0 2px,transparent 2px 6px);display:flex;align-items:center;justify-content:center}
+.outb span{font-size:10px;color:#FF6B73;background:#0A0E13;padding:2px 6px}
+.lg i.ob{border:1px solid rgba(255,77,87,.7);background-image:repeating-linear-gradient(135deg,rgba(255,77,87,.4) 0 2px,transparent 2px 4px)}
+.nr{display:grid;grid-template-columns:12px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 16px;border-top:1px solid #141B24}
+.lbl{display:block}
+</style>
+</helmet>
+
+<div style="font-family: 'Saira', system-ui, sans-serif; color: #E6EDF3; height: 100vh; overflow: hidden; display: flex; flex-direction: column; background-color: #05070A; background-image: linear-gradient(rgba(230,237,243,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(230,237,243,.025) 1px, transparent 1px); background-size: 40px 40px">
+
+<header style="flex: none; display: flex; align-items: stretch; height: 52px; border-bottom: 1px solid #1C2530; background: #070A0E">
+<a href="Contacts.dc.html" aria-label="Close" style="width: 52px; display: flex; align-items: center; justify-content: center; border-right: 1px solid #1C2530; color: #E6EDF3"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></a>
+<div style="display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 0 18px; border-right: 1px solid #1C2530"><span class="m" style="font-size: 11px; color: #7D8A99">RE-PLAN · LIVE PLAN R41 · 02:45–10:45Z</span><span style="font: 700 19px 'Saira Condensed'; letter-spacing: .14em; text-transform: uppercase">Svalbard outage</span></div>
+<ol aria-label="Stations" style="list-style: none; margin: 0; padding: 0; display: flex">
+<li class="step"><span class="m" style="color: #2FD08A">✓</span>01 Impact</li>
+<li class="step on"><span class="m">●</span>02 Proposal</li>
+<li class="step"><span class="m">○</span>03 Apply</li>
+</ol>
+<div class="m" style="margin-left: auto; display: flex; align-items: center; gap: 20px; padding: 0 18px; font-size: 13px"><span><span style="color: #7D8A99">UTC</span> 02:46:20</span><span><span style="color: #7D8A99">FIRST HIT PASS</span> <span style="color: #FF6B73">T−00:00:58</span></span></div>
+</header>
+
+<main style="flex: 1; min-height: 0; display: grid; grid-template-columns: 290px minmax(0, 1fr) 360px; gap: 12px; padding: 12px 14px">
+
+<section class="pnl pane" aria-label="Impact">
+<div class="ph"><span class="i">A</span><h2 class="t">Impact</h2></div>
+<div class="scr">
+<div style="padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; background: rgba(255,77,87,.05); border-bottom: 1px solid #1C2530">
+<div style="display: flex; justify-content: space-between; align-items: center"><span style="font: 600 18px 'Saira Condensed'; letter-spacing: .12em">SVB · SVALBARD</span><span class="tag" style="color: #FF6B73; height: 22px; font-size: 12px"><span class="s-crit"></span>Down</span></div>
+<p style="margin: 0; font-size: 13px; line-height: 1.5; color: #C9D3DD">Northlight reported an antenna drive fault at 01:52Z. Their ETA is 06:30Z and isn't confirmed.</p>
+<div class="m" style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; font-size: 11px; color: #9DAAB8"><span style="display: flex; gap: 6px; align-items: center"><span class="s-crit"></span>SVB-1</span><span style="display: flex; gap: 6px; align-items: center"><span class="s-crit"></span>SVB-2</span><span style="display: flex; gap: 6px; align-items: center"><span class="s-crit"></span>SVB-3</span><span style="display: flex; gap: 6px; align-items: center"><span class="s-crit"></span>SVB-4</span></div>
+</div>
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: #1C2530; border-bottom: 1px solid #1C2530">
+<div class="ro"><span class="lbl">Passes hit</span><span class="v" style="font-size: 26px">{{nAff}}</span></div>
+<div class="ro"><span class="lbl">Spacecraft</span><span class="v" style="font-size: 26px">{{nSc}}</span></div>
+<div class="ro"><span class="lbl">Downlink</span><span class="v" style="font-size: 26px">7.8<span style="font-size: 13px; color: #7D8A99"> GB</span></span></div>
+<div class="ro"><span class="lbl">Uplinks</span><span class="v" style="font-size: 26px">6</span></div>
+</div>
+<div style="padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+<span class="lbl">Rides on these passes</span>
+<div class="ri"><span class="m" style="font-weight: 600">REQ-0419</span><span>2 queued uplinks follow their passes when you apply. Waves and gates don't change.</span></div>
+<div class="ri"><span class="m" style="font-weight: 600">PLAN · COASTAL SWEEP 14</span><span>3 image downlinks slip by up to 24 min. The data stays onboard.</span></div>
+</div>
+</div>
+</section>
+
+<div style="min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 12px">
+<section class="pnl" style="flex: none">
+<div class="ph"><span class="i">B1</span><h2 class="t">Live plan · r41</h2><span class="r">{{nAff}} PASSES ON A DOWN STATION</span></div>
+<div style="padding: 10px 16px 8px; display: grid; grid-template-columns: 64px minmax(0, 1fr); column-gap: 10px">
+<div><sc-for list="{{rows}}" as="r" hint-placeholder-count="10"><span class="rl" style="color: {{r.c}}">{{r.id}}</span></sc-for></div>
+<svg viewBox="0 0 480 220" preserveAspectRatio="none" style="width: 100%; height: {{gh}}px; display: block" aria-label="Live plan with passes on Svalbard marked">
+<path d="{{rowsL}}" stroke="#141B24" fill="none" vector-effect="non-scaling-stroke"></path>
+<path d="{{grid}}" stroke="#11161D" fill="none" vector-effect="non-scaling-stroke"></path>
+<path d="{{before}}" fill="#2A3644"></path>
+<path d="{{hit}}" fill="rgba(255,77,87,.18)" stroke="#FF4D57" stroke-width="1" vector-effect="non-scaling-stroke"></path>
+</svg>
+<span></span>
+<div style="position: relative; height: 16px"><sc-for list="{{hours}}" as="h" hint-placeholder-count="8"><span class="m hr" style="left: {{h.left}}%">{{h.t}}</span></sc-for></div>
+</div>
+</section>
+<section class="pnl" style="flex: none">
+<div class="ph"><span class="i">B2</span><h2 class="t">Proposed · r42</h2><span class="r">{{nMoved}} MOVED · {{nDrop}} DROPPED · {{nOpen}} NEED YOU</span></div>
+<div style="padding: 10px 16px 8px; display: grid; grid-template-columns: 64px minmax(0, 1fr); column-gap: 10px">
+<div><sc-for list="{{rows}}" as="r" hint-placeholder-count="10"><span class="rl" style="color: {{r.c}}">{{r.id}}</span></sc-for></div>
+<div style="position: relative; height: {{gh}}px">
+<svg viewBox="0 0 480 220" preserveAspectRatio="none" style="position: absolute; inset: 0; width: 100%; height: 100%; display: block" aria-label="Proposed plan with moved passes highlighted">
+<path d="{{rowsL}}" stroke="#141B24" fill="none" vector-effect="non-scaling-stroke"></path>
+<path d="{{grid}}" stroke="#11161D" fill="none" vector-effect="non-scaling-stroke"></path>
+<path d="{{after}}" fill="#2A3644"></path>
+<path d="{{mv}}" fill="#E6EDF3"></path>
+</svg>
+<div class="outb" style="top: 133px; height: 86px; width: {{outW}}%"><span class="m">OUTAGE · PROVIDER ETA 06:30Z</span></div>
+</div>
+<span></span>
+<div style="position: relative; height: 16px"><sc-for list="{{hours}}" as="h" hint-placeholder-count="8"><span class="m hr" style="left: {{h.left}}%">{{h.t}}</span></sc-for></div>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 0 16px 10px 90px">
+<span class="lg"><i style="background: #2A3644"></i>Unchanged</span>
+<span class="lg"><i style="background: #E6EDF3"></i>Moved here</span>
+<span class="lg"><i class="ob"></i>Station down</span>
+</div>
+</section>
+</div>
+
+<section class="pnl pane" aria-label="Changes">
+<div class="ph"><span class="i">C</span><h2 class="t">Changes</h2><span class="r">{{pctMoved}}% MOVED AUTOMATICALLY</span></div>
+<div style="flex: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: #1C2530; border-bottom: 1px solid #1C2530">
+<div class="ro" style="padding: 10px 12px"><span class="lbl">Moved</span><span class="v" style="font-size: 24px">{{nMoved}}</span><span class="s">to FBK, INU, KIR</span></div>
+<div class="ro" style="padding: 10px 12px"><span class="lbl">Dropped</span><span class="v" style="font-size: 24px">{{nDrop}}</span><span class="s">rule still met</span></div>
+<div class="ro" style="padding: 10px 12px; box-shadow: inset 0 2px 0 #FFB020"><span class="lbl" style="color: #FFC24D">Need you</span><span class="v" style="font-size: 24px">{{nOpen}}</span><span class="s">{{nBelow}} break the rule</span></div>
+</div>
+<div class="scr">
+<p class="lbl" style="padding: 10px 16px 4px">Need you</p>
+<sc-for list="{{openRows}}" as="o" hint-placeholder-count="9">
+<div class="nr"><span class="{{o.shape}}" style="margin-top: 5px"></span><div style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span class="m" style="font-size: 12px; font-weight: 600">{{o.sc}} <span style="color: #7D8A99; font-weight: 500">{{o.when}}</span></span><span class="m" style="font-size: 10px"><span class="{{o.cls}}">{{o.fix}}</span></span></div><button class="tg">{{o.act}}</button></div>
+</sc-for>
+<p class="lbl" style="padding: 14px 16px 4px">Sample of moves</p>
+<sc-for list="{{movedRows}}" as="m" hint-placeholder-count="4">
+<div class="nr" style="grid-template-columns: minmax(0, 1fr) auto"><div style="display: flex; flex-direction: column; gap: 2px"><span class="m" style="font-size: 12px; font-weight: 600">{{m.sc}}</span><span class="m" style="font-size: 10px; color: #9DAAB8">{{m.from}} → <span style="color: #E6EDF3">{{m.to}}</span></span></div><span class="m" style="font-size: 10px; color: #7D8A99">{{m.off}}</span></div>
+</sc-for>
+</div>
+<div style="flex: none; padding: 12px 16px; border-top: 1px solid #1C2530; display: flex; flex-direction: column; gap: 6px">
+<span class="lbl">Provider requests</span>
+<span class="m" style="font-size: 11px; color: #C9D3DD; line-height: 1.7">CANCEL {{nAff}} · NORTHLIGHT · 22 INSIDE 2 h ARE BILLED<br>BOOK {{nMoved}} · NORTHLIGHT FBK, INU, KIR<br>BUY 1 · AUSTRAL NET AWA-2</span>
+</div>
+</section>
+</main>
+
+<footer style="flex: none; height: 64px; display: flex; align-items: stretch; border-top: 1px solid #1C2530; background: #070A0E">
+<div class="ft"><span class="lbl">Revision</span><b class="n">r41 → r42</b></div>
+<div class="ft"><span class="lbl">Passes</span><b class="n">−{{nDrop}}</b></div>
+<div class="ft"><span class="lbl">Cost today</span><b class="n">+$3.2k</b></div>
+<div class="ft"><span class="lbl">Rule met</span><b class="n hold">497 / 500</b></div>
+<div style="margin-left: auto; display: flex; align-items: center; gap: 10px; padding: 0 16px">
+<button class="b" style="height: 42px">Wait for provider ETA</button>
+<a href="#" class="b pri" style="height: 42px; font-size: 14px">Apply r42 · send {{nReq}} requests</a>
+</div>
+</footer>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+const ROWS = ['FBK-1', 'FBK-2', 'INU-1', 'INU-2', 'KIR-1', 'KIR-2', 'SVB-1', 'SVB-2', 'SVB-3', 'SVB-4'];
+const T0 = 165, T1 = 645, OUT = 390;
+const RH = 22;
+const nm = (s) => 'EARENDIL-' + String(s).padStart(3, '0');
+const hm = (m) => String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(Math.round(m % 60)).padStart(2, '0');
+const PLAN = (() => {
+let seed = 5;
+const rnd = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+const live = [];
+ROWS.forEach((r, ri) => {
+const svb = r.indexOf('SVB') === 0;
+let t = T0 + rnd() * 8;
+while (t < T1 - 8) {
+const d = Math.round((7 + rnd() * 5) * 2) / 2;
+live.push({ row: ri, s: t, e: t + d, sc: 1 + Math.floor(rnd() * 500), svb: svb });
+t += d + (svb ? 2 + rnd() * 5 : 6 + rnd() * 16);
+}
+});
+const affected = live.filter((p) => p.svb && p.s < OUT);
+const busy = {};
+live.forEach((p) => { if (!p.svb) (busy[p.row] = busy[p.row] || []).push([p.s, p.e]); });
+const moved = [], dropped = [], open = [];
+affected.forEach((p, i) => {
+let done = false;
+for (let off = 0; off <= 24 && !done; off += 3) {
+for (const sign of [1, -1]) {
+const s = p.s + sign * off, e = s + (p.e - p.s);
+if (s < T0) continue;
+for (let r = 0; r < 6 && !done; r++) {
+if ((busy[r] || []).every((x) => e + 2 <= x[0] || s - 2 >= x[1])) { busy[r].push([s, e]); moved.push({ from: p, row: r, s: s, e: e, sc: p.sc, off: sign * off }); done = true; }
+}
+if (done) break;
+}
+}
+if (!done) { if (i % 3) dropped.push(p); else open.push(p); }
+});
+return { live: live, affected: affected, moved: moved, dropped: dropped, open: open };
+})();
+class Component extends DCLogic {
+renderVals() {
+const x = (m) => (m - T0).toFixed(1);
+const rect = (r, s, e) => 'M' + x(s) + ' ' + (r * RH + 5) + 'h' + (e - s).toFixed(1) + 'v12h' + (s - e).toFixed(1) + 'Z';
+let before = '', hit = '', after = '', mv = '', grid = '', rowsL = '';
+PLAN.live.forEach((p) => { const a = p.svb && p.s < OUT; if (a) hit += rect(p.row, p.s, p.e); else before += rect(p.row, p.s, p.e); if (!a) after += rect(p.row, p.s, p.e); });
+PLAN.moved.forEach((m) => { mv += rect(m.row, m.s, m.e); });
+for (let h = 180; h <= 645; h += 60) grid += 'M' + x(h) + ' 0V' + (ROWS.length * RH);
+for (let r = 0; r <= ROWS.length; r++) rowsL += 'M0 ' + (r * RH) + 'H480';
+const outBand = 'M0 ' + (6 * RH) + 'H' + x(OUT) + 'V' + (10 * RH) + 'H0Z';
+const hours = [];
+for (let h = 180; h <= 600; h += 60) hours.push({ t: hm(h) + 'Z', left: ((h - T0) / 480 * 100).toFixed(2) });
+const pickSc = (arr, n) => arr.slice(0, n);
+const movedRows = pickSc(PLAN.moved.filter((m) => m.off !== 0), 4).map((m) => ({ sc: nm(m.sc), from: ROWS[m.from.row] + ' ' + hm(m.from.s), to: ROWS[m.row] + ' ' + hm(m.s), off: (m.off > 0 ? '+' : '') + m.off + ' MIN' }));
+const GAPS = ['10h20', '10h45', '11h05'];
+const openRows = PLAN.open.map((p, i) => {
+const n = PLAN.open.length;
+const hold = i >= n - 3;
+const fix = i === 0 ? 'Buy AWA-2 ' + hm(p.s + 41) + 'Z · Austral Net · $99' : hold ? 'No window before 10:45Z · gap ' + GAPS[i - (n - 3)] + ' > 10h00' : 'Next free pass ' + hm(p.s + 70 + i * 9) + 'Z · rule still met';
+return { sc: nm(p.sc), when: ROWS[p.row] + ' ' + hm(p.s) + 'Z', fix: fix, cls: hold ? 'hold' : 'go', act: i === 0 ? 'Buy' : hold ? 'Ask provider' : 'Accept', shape: hold ? 's-cau' : 's-nom' };
+});
+const ov = Math.min(3, PLAN.open.length);
+return {
+before: before, hit: hit, after: after, mv: mv, grid: grid, rowsL: rowsL, outBand: outBand, hours: hours,
+rows: ROWS.map((r) => ({ id: r, c: r.indexOf('SVB') === 0 ? '#FF6B73' : '#9DAAB8' })), gh: ROWS.length * RH,
+nAff: PLAN.affected.length, nMoved: PLAN.moved.length, nDrop: PLAN.dropped.length, nOpen: PLAN.open.length,
+nSc: new Set(PLAN.affected.map((p) => p.sc)).size,
+movedRows: movedRows, openRows: openRows, nBelow: ov,
+nReq: PLAN.affected.length + PLAN.moved.length + 1,
+outW: ((OUT - T0) / 480 * 100).toFixed(2),
+pctMoved: Math.round(PLAN.moved.length / PLAN.affected.length * 100)
+};
+}
+}
+
+</script>
+</body>
+</html>

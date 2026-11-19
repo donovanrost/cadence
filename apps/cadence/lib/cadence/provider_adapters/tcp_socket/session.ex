@@ -24,7 +24,6 @@ defmodule Cadence.ProviderAdapters.TCPSocket.Session do
 
   def connected(state) do
     block(state, :connection_replaced)
-    state = Map.put(state, :session_peer, peer(Map.get(state, :socket)))
 
     basis = %{
       adapter_key: :tcp_socket,
@@ -32,8 +31,11 @@ defmodule Cadence.ProviderAdapters.TCPSocket.Session do
       contact_id: state.realized_contact_id,
       path_id: state.path_id,
       binding_id: state.provider_binding_id,
-      configuration_sha256: state.session_configuration_sha256
+      configuration_sha256: state.session_configuration_sha256,
+      peer: peer(Map.get(state, :socket))
     }
+
+    state = Map.put(state, :session_peer, basis.peer)
 
     case SessionReadiness.register_provider(state.session_gate, state.session_resource, basis) do
       {:ok, handle} ->
@@ -44,9 +46,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket.Session do
     end
   end
 
-  @doc "The address of a socket's far end, `ip:port` (nil when unknown)."
-  def peer_of(socket), do: peer(socket)
-
+  # The connected peer's address, so qualification can bind provider evidence to this exact
+  # connection (#44 D2).
   defp peer(socket) when is_port(socket) do
     case :inet.peername(socket) do
       {:ok, {ip, port}} -> "#{:inet.ntoa(ip)}:#{port}"
@@ -56,11 +57,14 @@ defmodule Cadence.ProviderAdapters.TCPSocket.Session do
 
   defp peer(_socket), do: nil
 
+  @doc "The address of a socket's far end, `ip:port` (nil when unknown)."
+  def peer_of(socket), do: peer(socket)
+
   @peer_warning_ms 60_000
 
   @doc """
-  Logs a warning of `kind` about `peer`, at most once a minute per kind and peer IP,
-  so a stray peer reconnecting every second doesn't flood the log.
+  Logs a warning of `kind` about `peer`, at most once a minute per kind and peer IP
+  (DECISIONS #67), so a stray reconnecting every second doesn't flood the log.
   """
   def warn_peer(state, kind, peer, message) do
     ip = {kind, peer |> to_string() |> String.split(":") |> List.first()}

@@ -46,6 +46,7 @@ export function startReviewFixture(
       policy_version: required(model.policy).version,
       policy_sha256: required(model.policy).content_sha256,
       input_sha256: "b".repeat(64),
+      as_of: "2026-11-09T18:00:00Z",
     },
     requirements: {
       page: requirements_page,

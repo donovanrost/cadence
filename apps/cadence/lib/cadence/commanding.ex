@@ -5,9 +5,12 @@ defmodule Cadence.Commanding do
   release attempts.
   """
 
+  require Logger
+
   alias Ecto.Multi
 
   alias Cadence.Commanding.{
+    Cancellation,
     CommandApproval,
     CommandQueueEntry,
     CommandQueueEntryRow,
@@ -20,6 +23,7 @@ defmodule Cadence.Commanding do
     ConstraintEvaluation,
     Dispatcher,
     DispatchSupervisor,
+    Groups,
     LifecyclePolicy,
     ProcessNamespace,
     ReleaseArtifacts,
@@ -35,6 +39,7 @@ defmodule Cadence.Commanding do
     StageStore,
     VerifierScheduler,
     VerifierStore,
+    VerifierTransportSignals,
     VerifierWorkflow
   }
 
@@ -59,10 +64,11 @@ defmodule Cadence.Commanding do
 
   defp publish_verifier_changes({:ok, instances} = result) when is_list(instances) do
     instances
-    |> Enum.map(&{&1.organization_id, &1.mission_id})
-    |> Enum.uniq()
-    |> Enum.each(fn {org, mission} ->
+    |> Enum.group_by(&{&1.organization_id, &1.mission_id}, & &1.command_request_id)
+    |> Enum.each(fn {{org, mission}, request_ids} ->
       ReadUpdates.publish_result(result, :commanding_changed, org, mission)
+      # A verification outcome can fail a group member or finish its group (DECISIONS #51).
+      Groups.Timeline.settle_requests(org, mission, Enum.uniq(request_ids))
     end)
 
     result
@@ -130,7 +136,8 @@ defmodule Cadence.Commanding do
           CommandRequestRow.to_domain(request),
           completed,
           basis.verifier_plans,
-          at
+          at,
+          basis.runtime_definition.argument_specs
         )
 
       attempt
@@ -398,6 +405,12 @@ defmodule Cadence.Commanding do
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(queue_lane_key) and
              is_map(released_by) and is_list(opts) do
     attempted_at = Keyword.get(opts, :attempted_at, DateTime.utc_now())
+    :ok = expire_lane(organization_id, mission_id, queue_lane_key, attempted_at)
+    dispatch_lane_head(organization_id, mission_id, queue_lane_key, released_by, opts)
+  end
+
+  defp dispatch_lane_head(organization_id, mission_id, queue_lane_key, released_by, opts) do
+    attempted_at = Keyword.get(opts, :attempted_at, DateTime.utc_now())
 
     with :ok <-
            RequestQueueStore.ensure_lane_not_in_flight(
@@ -427,10 +440,11 @@ defmodule Cadence.Commanding do
            ReleaseTargetSelection.resolve_dispatch(
              organization_id,
              mission_id,
-             CommandRequestRow.to_domain(request_row)
+             CommandRequestRow.to_domain(request_row),
+             attempted_at
            ) do
-      release_command_queue_entry(
-        organization_id,
+      organization_id
+      |> release_command_queue_entry(
         mission_id,
         queue_entry_row.command_queue_entry_id,
         realized_contact.realized_contact_id,
@@ -440,6 +454,15 @@ defmodule Cadence.Commanding do
         transport_binding_id: transport_binding.transport_binding_id,
         process_namespace: process_namespace(opts)
       )
+      |> case do
+        # The head failed closed; the lane's next entry may still release in this contact.
+        {:error, reason}
+        when reason in [:release_basis_changed, :earlier_command_failed, :spacecraft_archived] ->
+          dispatch_lane_head(organization_id, mission_id, queue_lane_key, released_by, opts)
+
+        result ->
+          result
+      end
     end
   end
 
@@ -518,6 +541,17 @@ defmodule Cadence.Commanding do
     )
   end
 
+  # Who a release that starts its contact names as the starter (api U46 "started_by").
+  defp starter(%{"user_id" => id}) when is_binary(id), do: %{"kind" => "user", "id" => id}
+
+  defp starter(%{"service_identity_id" => id}) when is_binary(id),
+    do: %{"kind" => "service", "id" => id}
+
+  # The lane dispatcher (an armed group releasing by itself).
+  defp starter(%{"service" => id}) when is_binary(id), do: %{"kind" => "service", "id" => id}
+
+  defp starter(_released_by), do: %{"kind" => "system", "id" => "command_release"}
+
   # SAFETY (#38): a telemetry verifier reads only its command's target spacecraft.
   defp verifier_target_spacecraft(organization_id, mission_id, source_endpoint_ref)
        when is_binary(source_endpoint_ref) do
@@ -575,6 +609,13 @@ defmodule Cadence.Commanding do
          end) do
       {:ok, {:ok, verifier_instances}} ->
         VerifierScheduler.notify_verifier_instances_changed(verifier_instances, process_namespace)
+
+        kick_lanes_after_transport(
+          transport_capability_records,
+          transport_action_requests,
+          process_namespace
+        )
+
         {:ok, verifier_instances}
 
       {:ok, result} ->
@@ -608,6 +649,20 @@ defmodule Cadence.Commanding do
       end,
       &VerifierStore.apply_updates(repo, &1)
     )
+  end
+
+  # #33: a COP-1 release ended (completion or transport failure), so the uplink can take the
+  # lane's next member now: kick its lane instead of waiting for the busy retry.
+  defp kick_lanes_after_transport(records, action_requests, process_namespace) do
+    records
+    |> VerifierTransportSignals.build(action_requests)
+    |> Enum.filter(&(&1.phase in [:completion, :failure]))
+    |> Enum.map(& &1.command_request_id)
+    |> Enum.uniq()
+    |> RequestQueueStore.lanes_for_requests()
+    |> Enum.each(fn {organization_id, mission_id, lane} ->
+      maybe_schedule_queue_lane_dispatch(process_namespace, organization_id, mission_id, lane)
+    end)
   end
 
   @spec command_verifier_timeout_projection() :: [CommandVerifierInstance.t()]
@@ -698,14 +753,23 @@ defmodule Cadence.Commanding do
              queue_entry_row.command_request_id
            ),
          :ok <- LifecyclePolicy.ensure_request_releasable(request_row),
+         :ok <- group_armed(organization_id, mission_id, request_row),
+         :ok <- group_still_going(organization_id, mission_id, request_row),
+         :ok <- target_live(organization_id, mission_id, request_row),
          {:ok, %RealizedContact{} = realized_contact} <-
            ReleaseTargetSelection.fetch_realized_contact(
              organization_id,
              mission_id,
-             realized_contact_id
+             realized_contact_id,
+             attempted_at
            ),
          {:ok, _pid} <-
-           Contacts.start_realized_contact(organization_id, mission_id, realized_contact_id),
+           Contacts.start_realized_contact(
+             organization_id,
+             mission_id,
+             realized_contact_id,
+             starter(released_by)
+           ),
          {:ok,
           %{path: %Path{} = path, transport_binding: %TransportBinding{} = transport_binding}} <-
            ReleaseTargetSelection.resolve(
@@ -713,14 +777,7 @@ defmodule Cadence.Commanding do
              CommandRequestRow.to_domain(request_row),
              opts
            ),
-         {:ok, request_basis} <-
-           RequestValidation.resolve_basis(
-             organization_id,
-             mission_id,
-             request_row.mission_model_revision_id,
-             request_row.command_id,
-             request_row.source_endpoint_ref
-           ),
+         {:ok, request_basis} <- release_basis(organization_id, mission_id, request_row),
          :ok <-
            ConstraintEvaluation.validate(
              organization_id,
@@ -732,7 +789,7 @@ defmodule Cadence.Commanding do
              request_basis.runtime_definition,
              JsonDocument.unwrap_value(request_row.resolved_argument_values_document)
            ) do
-      execute_release_attempt(%{
+      %{
         organization_id: organization_id,
         mission_id: mission_id,
         queue_entry_row: queue_entry_row,
@@ -746,7 +803,13 @@ defmodule Cadence.Commanding do
         attempted_at: attempted_at,
         metadata: Keyword.get(opts, :metadata, %{}),
         process_namespace: process_namespace(opts)
-      })
+      }
+      |> execute_release_attempt()
+      |> tap(fn _result ->
+        Groups.Timeline.settle_requests(organization_id, mission_id, [
+          request_row.command_request_id
+        ])
+      end)
     else
       {:error, reason} ->
         {:error, reason}
@@ -757,6 +820,140 @@ defmodule Cadence.Commanding do
   rescue
     error in [ArgumentError] ->
       {:error, {:command_release_encoding_failed, Exception.message(error)}}
+  end
+
+  @doc """
+  The expiry sweep (run on the dispatcher's reconcile): cancels unstarted work past
+  `expires_at` with reason `expired` and publishes read updates for each mission touched.
+  """
+  @spec expire_due_requests() :: :ok
+  def expire_due_requests do
+    Enum.each(Cancellation.expire_due(), fn {{org, mission}, _count} ->
+      ReadUpdates.publish(:commanding_changed, org, mission)
+    end)
+
+    # Also on the reconcile: the group timeline's safety net for outcomes no hook saw (#51).
+    _written = Groups.Timeline.settle_open()
+    :ok
+  end
+
+  # Expired members end `expired` at dispatch instead of waiting for the sweep.
+  defp expire_lane(organization_id, mission_id, queue_lane_key, now) do
+    case Cancellation.expire_lane(organization_id, mission_id, queue_lane_key, now) do
+      [] -> :ok
+      _canceled -> ReadUpdates.publish(:commanding_changed, organization_id, mission_id)
+    end
+
+    :ok
+  end
+
+  # A queued request whose model revision is no longer active can never release. Fail it
+  # closed (canceled, `release_basis_changed`) instead of holding its lane forever.
+  defp release_basis(organization_id, mission_id, request_row) do
+    case RequestValidation.resolve_basis(
+           organization_id,
+           mission_id,
+           request_row.mission_model_revision_id,
+           request_row.command_id,
+           request_row.source_endpoint_ref
+         ) do
+      {:error, {:mission_model_revision_mismatch, _requested, _active}} ->
+        fail_closed(organization_id, mission_id, request_row)
+
+      {:error, {:mission_model_revision_not_active, _requested}} ->
+        fail_closed(organization_id, mission_id, request_row)
+
+      result ->
+        result
+    end
+  end
+
+  # A group member releases only while its group is armed (`:queued`: its GO was given, or it
+  # needed none), judged from the server's group row, never from request or queue metadata. A
+  # member that reached the queue any other way is refused and left as it is, so nothing goes out
+  # that its group's decision didn't send (four-eyes audit 11-17, P0, defence in depth).
+  defp group_armed(_organization_id, _mission_id, %CommandRequestRow{command_group_id: nil}),
+    do: :ok
+
+  defp group_armed(organization_id, mission_id, %CommandRequestRow{command_group_id: group_id}) do
+    case Groups.GroupStore.fetch(organization_id, mission_id, group_id) do
+      {:ok, %{state: :queued}} ->
+        :ok
+
+      {:ok, %{state: state}} ->
+        Logger.error(
+          "command release refused: a member of command group #{group_id} is queued but the " <>
+            "group is #{state}",
+          mission_id: mission_id
+        )
+
+        {:error, :command_group_not_armed}
+
+      {:error, reason} ->
+        Logger.error(
+          "command release refused: a member of command group #{group_id} is queued but the " <>
+            "group can't be read: #{inspect(reason)}",
+          mission_id: mission_id
+        )
+
+        {:error, :command_group_not_armed}
+    end
+  end
+
+  # Stop on failure per target (DECISIONS #31): a group member doesn't release after an
+  # earlier member of its target failed.
+  defp group_still_going(organization_id, mission_id, request_row) do
+    case Groups.Halt.earlier_failure(request_row) do
+      nil ->
+        :ok
+
+      failed_id ->
+        fail_closed(
+          organization_id,
+          mission_id,
+          request_row,
+          "earlier_command_failed: " <> failed_id
+        )
+
+        {:error, :earlier_command_failed}
+    end
+  end
+
+  # L22: an archived spacecraft is never sent to; a request queued before the archive fails
+  # closed instead of holding its lane.
+  defp target_live(organization_id, mission_id, request_row) do
+    case ReleaseTargetGuard.live_request(
+           organization_id,
+           mission_id,
+           request_row.source_endpoint_ref
+         ) do
+      :ok ->
+        :ok
+
+      {:error, {:spacecraft_archived, _id}} ->
+        fail_closed(organization_id, mission_id, request_row, "spacecraft_archived")
+        {:error, :spacecraft_archived}
+    end
+  end
+
+  defp fail_closed(organization_id, mission_id, request_row) do
+    fail_closed(organization_id, mission_id, request_row, "release_basis_changed")
+    {:error, :release_basis_changed}
+  end
+
+  defp fail_closed(organization_id, mission_id, request_row, reason) do
+    {:ok, _outcome} =
+      Repo.transaction(fn ->
+        Cancellation.fail_closed(
+          organization_id,
+          mission_id,
+          request_row.command_request_id,
+          reason
+        )
+      end)
+
+    ReadUpdates.publish(:commanding_changed, organization_id, mission_id)
+    Groups.Timeline.settle_requests(organization_id, mission_id, [request_row.command_request_id])
   end
 
   defp execute_release_attempt(release_context) when is_map(release_context) do
@@ -824,7 +1021,7 @@ defmodule Cadence.Commanding do
                release_context.queue_entry_row,
                release_context.request_row,
                persisted_attempt,
-               release_context.request_basis.verifier_plans,
+               release_context.request_basis,
                release_context.attempted_at,
                release_context.process_namespace
              ) do
@@ -833,9 +1030,15 @@ defmodule Cadence.Commanding do
         end
 
       {:error, reason} ->
-        retain_uncertain_release(release_context, persisted_attempt, reason)
+        if refused_before_send?(reason),
+          do: fail_refused_release(release_context, persisted_attempt, reason),
+          else: retain_uncertain_release(release_context, persisted_attempt, reason)
     end
   end
+
+  # #33: the uplink refused the release before sending anything, so the outcome is known:
+  # an alerted or disabled COP-1 FOP. Fail it (not uncertain), so stop-on-failure fires.
+  defp refused_before_send?(reason), do: reason in [:cop1_not_initialized, :cop1_disabled]
 
   defp fail_refused_release(context, attempt, reason) do
     case ReleaseStore.mark_failed(context.queue_entry_row, context.request_row, attempt, reason) do
@@ -847,6 +1050,10 @@ defmodule Cadence.Commanding do
           request_row.organization_id,
           request_row.mission_id
         )
+
+        Groups.Timeline.settle_requests(request_row.organization_id, request_row.mission_id, [
+          request_row.command_request_id
+        ])
 
         {:error, {:command_release_refused, attempt.command_release_attempt_id, reason}}
 
@@ -907,7 +1114,7 @@ defmodule Cadence.Commanding do
          %CommandQueueEntryRow{} = queue_entry_row,
          %CommandRequestRow{} = request_row,
          %CommandReleaseAttempt{} = command_release_attempt,
-         verifier_plans,
+         %{verifier_plans: verifier_plans} = request_basis,
          %DateTime{} = attempted_at,
          %ProcessNamespace{} = process_namespace
        )
@@ -937,7 +1144,8 @@ defmodule Cadence.Commanding do
             CommandRequestRow.to_domain(current_request),
             completed_release_attempt,
             verifier_plans,
-            attempted_at
+            attempted_at,
+            request_basis.runtime_definition.argument_specs
           )
 
         release_attempt_row

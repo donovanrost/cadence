@@ -96,6 +96,7 @@ defmodule Cadence.Dashboards.Sources.EventsTest do
           }
         ),
         scheduled_contacts_fun: scheduled_contacts_fun,
+        source_endpoints_fun: &sc1_endpoints/2,
         realized_contacts_fun: realized_contacts_fun,
         mission_events_fun: mission_events_fun,
         source_binding: source_binding()
@@ -120,7 +121,12 @@ defmodule Cadence.Dashboards.Sources.EventsTest do
                kind: :string,
                values: ["contact-scheduled-1", "contact-realized-1"]
              },
-             %Field{name: "source_event_id", kind: :string, values: [nil, nil]}
+             %Field{name: "station", kind: :string, values: [nil, nil]},
+             %Field{name: "source_event_id", kind: :string, values: [nil, nil]},
+             %Field{name: "started", kind: :boolean, values: [nil, nil]},
+             %Field{name: "close_reason", kind: :string, values: [nil, nil]},
+             %Field{name: "scheduled_starts_at", kind: :time, values: [nil, nil]},
+             %Field{name: "scheduled_ends_at", kind: :time, values: [nil, nil]}
            ] = contacts.fields
 
     assert contacts.meta.family == :contacts
@@ -323,6 +329,7 @@ defmodule Cadence.Dashboards.Sources.EventsTest do
           }
         ),
         contact_operational_events_fun: contact_operational_events_fun,
+        source_endpoints_fun: &sc1_endpoints/2,
         scheduled_contacts_fun: fn _organization_id, _mission_id, _opts ->
           flunk("replay contact intervals should not read scheduled contacts")
         end,
@@ -390,6 +397,87 @@ defmodule Cadence.Dashboards.Sources.EventsTest do
     assert warning.code == :unsupported_sampling
     assert result.meta.degraded?
   end
+
+  # dashboards, qa's overlay check (11-14): contact bands follow the widget's scope.
+  describe "contact interval scope" do
+    test "a spacecraft scope keeps only that spacecraft's contacts" do
+      frame = contact_frame(primary: %{kind: "spacecraft", mode: "one", ids: ["sc-1"]})
+      assert ids(frame) == ["sched-a", "real-a"]
+    end
+
+    test "a contact scope keeps that contact and the realized contact of it" do
+      frame = contact_frame(primary: %{kind: "contact", mode: "one", ids: ["sched-b"]})
+      assert ids(frame) == ["sched-b", "real-b"]
+    end
+
+    test "a mission scope keeps every contact" do
+      frame = contact_frame(primary: %{kind: "mission", mode: "one", ids: ["mission-1"]})
+      assert Enum.sort(ids(frame)) == ["real-a", "real-b", "sched-a", "sched-b"]
+    end
+  end
+
+  defp contact_frame(scope) do
+    start = ~U[2026-06-17 12:01:00Z]
+
+    scheduled = fn org, mission, _opts ->
+      for {id, endpoint} <- [{"sched-a", "endpoint-a"}, {"sched-b", "endpoint-b"}] do
+        ScheduledContact.new(%{
+          scheduled_contact_id: id,
+          organization_id: org,
+          mission_id: mission,
+          source_endpoint_refs: [endpoint],
+          starts_at: start,
+          ends_at: DateTime.add(start, 300)
+        })
+      end
+    end
+
+    realized = fn org, mission, _opts ->
+      for {id, scheduled_id, endpoint} <- [
+            {"real-a", "sched-a", "endpoint-a"},
+            {"real-b", "sched-b", "endpoint-b"}
+          ] do
+        RealizedContact.new(%{
+          realized_contact_id: id,
+          scheduled_contact_id: scheduled_id,
+          organization_id: org,
+          mission_id: mission,
+          source_endpoint_refs: [endpoint],
+          realized_at: DateTime.add(start, 60),
+          lifecycle_state: :active
+        })
+      end
+    end
+
+    endpoints = fn _org, _mission ->
+      [
+        %{source_endpoint_id: "endpoint-a", spacecraft_id: "sc-1"},
+        %{source_endpoint_id: "endpoint-b", spacecraft_id: "sc-2"}
+      ]
+    end
+
+    %SourceResult{frames: [frame]} =
+      Events.resolve(
+        source_request(
+          scope_context:
+            Map.new([{:organization_id, "org-1"}, {:mission_id, "mission-1"}] ++ scope),
+          time_context: %{
+            axis: :receipt_time,
+            from: ~U[2026-06-17 12:00:00Z],
+            to: ~U[2026-06-17 12:10:00Z]
+          },
+          sampling: %{mode: :event_history, products: [:contact_intervals], limit: 25}
+        ),
+        scheduled_contacts_fun: scheduled,
+        realized_contacts_fun: realized,
+        source_endpoints_fun: endpoints,
+        source_binding: source_binding()
+      )
+
+    frame
+  end
+
+  defp ids(frame), do: Enum.find(frame.fields, &(&1.name == "contact_id")).values
 
   test "maps contact primary scope to contact reader filters" do
     parent = self()
@@ -1293,6 +1381,10 @@ defmodule Cadence.Dashboards.Sources.EventsTest do
   defp assert_data_link(links, target, target_id) do
     assert Enum.any?(links, &match?(%DataLink{target: ^target, target_id: ^target_id}, &1))
   end
+
+  # The default request is scoped to spacecraft sc-1, whose source endpoint is endpoint-a.
+  defp sc1_endpoints(_organization_id, _mission_id),
+    do: [%{source_endpoint_id: "endpoint-a", spacecraft_id: "sc-1"}]
 
   defp source_request(overrides) do
     attrs =

@@ -286,8 +286,28 @@ defmodule CadenceSimulator.Provider.ContactChanges do
       |> maybe_put_capacity(Keyword.get(opts, :estimated_capacity_bytes))
       |> maybe_put_counteroffer(Keyword.get(opts, :counteroffer))
 
-    Map.put(changes, "extensions", extensions)
+    changes
+    |> Map.put("extensions", extensions)
+    |> follow_activation_window(contact)
   end
+
+  # A provider that moves a pass delivers for the pass it moved: the delivery activation window
+  # keeps its 30 s margin around the new AOS and LOS (as `Contacts` builds it at booking).
+  defp follow_activation_window(
+         changes,
+         %{"delivery" => %{"activation_window" => %{}} = delivery} = contact
+       )
+       when is_map_key(changes, "starts_at") or is_map_key(changes, "ends_at") do
+    window = %{
+      "starts_at" => shift_time(changes["starts_at"] || contact["starts_at"], -30),
+      "ends_at" => shift_time(changes["ends_at"] || contact["ends_at"], 30)
+    }
+
+    delivery = Map.get(changes, "delivery", delivery)
+    Map.put(changes, "delivery", Map.put(delivery, "activation_window", window))
+  end
+
+  defp follow_activation_window(changes, _contact), do: changes
 
   defp persist(contact, changes, evidence, action, opts) do
     history_entry = %{

@@ -41,7 +41,7 @@ defmodule Cadence.ContactPlanning.OpportunityCapabilityTest do
 
     Process.sleep(1_100)
 
-    assert {:error, :invalid_opportunity_capability} =
+    assert {:error, :expired_opportunity_capability} =
              OpportunityCapability.verify(token, max_age: 0)
   end
 end

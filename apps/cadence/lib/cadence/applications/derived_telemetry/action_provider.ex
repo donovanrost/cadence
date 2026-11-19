@@ -6,6 +6,7 @@ defmodule Cadence.Applications.DerivedTelemetry.ActionProvider do
   alias Cadence.DerivedTelemetry.Definition
   alias Cadence.Governance
   alias Cadence.Missions
+  alias Cadence.Platform.SaveTrail
 
   @impl true
   def application_key, do: "derived_telemetry"
@@ -21,9 +22,10 @@ defmodule Cadence.Applications.DerivedTelemetry.ActionProvider do
           surface_version: 1,
           action_id: "save_definition",
           params: params
-        }
+        } = request
       ) do
-    with {:ok, _} <- Missions.fetch_mission(scope.organization_id, mission),
+    with {:ok, via} <- ActionRequest.via(request),
+         {:ok, _} <- Missions.fetch_mission(scope.organization_id, mission),
          :ok <-
            Policy.authorize(scope, :operate_mission, %{
              organization_id: scope.organization_id,
@@ -42,12 +44,20 @@ defmodule Cadence.Applications.DerivedTelemetry.ActionProvider do
                point_name: name,
                expression: expression,
                expected_definition_id: id,
-               metadata: %{"application" => "derived_telemetry"}
+               metadata:
+                 SaveTrail.put(
+                   %{"application" => "derived_telemetry"},
+                   Scope.audit_actor(scope),
+                   via
+                 )
              },
              version
            ) do
       {:ok, definition}
     else
+      {:error, :action_origin_required} = error ->
+        error
+
       {:error, :derived_definition_version_conflict} ->
         failure(
           "review_conflict",

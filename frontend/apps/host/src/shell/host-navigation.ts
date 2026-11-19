@@ -5,14 +5,6 @@ import { routeLayer } from "@cadence/plugin-sdk/routes";
 type CatalogRoute = (typeof routes)[number];
 function normalizeHostRoute(route: CatalogRoute) {
   switch (route.kind) {
-    case "application_management":
-      if (route.scope === "mission" || route.scope === "spacecraft")
-        return { ...route, kind: "application_management" as const, scope: route.scope };
-      break;
-    case "mission":
-      if (route.missionPage)
-        return { ...route, kind: "mission" as const, missionPage: route.missionPage };
-      break;
     case "spacecraft":
       if (route.spacecraftPage)
         return { ...route, kind: "spacecraft" as const, spacecraftPage: route.spacecraftPage };
@@ -20,34 +12,6 @@ function normalizeHostRoute(route: CatalogRoute) {
     case "catalog":
       if (route.catalogPage)
         return { ...route, kind: "catalog" as const, catalogPage: route.catalogPage };
-      break;
-    case "administration":
-      if (route.administrationPage)
-        return {
-          ...route,
-          kind: "administration" as const,
-          administrationPage: route.administrationPage,
-        };
-      break;
-    case "platform_administration":
-      if (route.administrationPage)
-        return {
-          ...route,
-          kind: "platform_administration" as const,
-          administrationPage: route.administrationPage,
-        };
-      break;
-    case "organization_module":
-      if (route.contribution)
-        return { ...route, kind: "organization_module" as const, contribution: route.contribution };
-      break;
-    case "mission_module":
-      if (route.contribution)
-        return { ...route, kind: "mission_module" as const, contribution: route.contribution };
-      break;
-    case "spacecraft_module":
-      if (route.contribution)
-        return { ...route, kind: "spacecraft_module" as const, contribution: route.contribution };
       break;
     case "ops_module":
       if (route.contribution)
@@ -57,14 +21,8 @@ function normalizeHostRoute(route: CatalogRoute) {
       if (route.workspacePage === "landing" || route.workspacePage === "timeline")
         return { ...route, kind: "ops_workspace" as const, workspacePage: route.workspacePage };
       break;
-    case "settings":
-      return { ...route, kind: "settings" as const };
-    case "notifications":
-      return { ...route, kind: "notifications" as const };
     case "activation_approvals":
       return { ...route, kind: "activation_approvals" as const };
-    case "administration_diagnostics":
-      return { ...route, kind: "administration_diagnostics" as const };
   }
   return { ...route, kind: "unavailable" as const };
 }

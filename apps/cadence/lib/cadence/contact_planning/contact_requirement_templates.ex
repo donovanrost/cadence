@@ -7,13 +7,18 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
 
   alias Cadence.Auth.{Policy, Scope}
 
+  alias Cadence.ContactPlanning.PlanUpdates
+
   alias Cadence.ContactPlanning.{
     ContactRequirementOccurrence,
     ContactRequirements,
     ContactRequirementTemplate,
     ContactRequirementTemplateVersion,
     ContactRequirementVersion,
-    RequirementSchedule
+    RequirementSchedule,
+    TemplateDays,
+    TemplateSupersession,
+    TemplateTargets
   }
 
   alias Cadence.Missions
@@ -25,15 +30,19 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
   }
 
   alias Cadence.Repo
-  alias Cadence.SpacecraftStore
 
   @document_limit 64 * 1_024
 
   @spec create(Scope.t(), binary(), map(), keyword()) ::
           {:ok, ContactRequirementTemplate.t(), ContactRequirementTemplateVersion.t()}
           | {:error, term()}
-  def create(%Scope{} = current_scope, mission_id, attrs, opts \\ [])
-      when is_binary(mission_id) and is_map(attrs) and is_list(opts) do
+  def create(%Scope{} = current_scope, mission_id, attrs, opts \\ []) do
+    create_unpublished(current_scope, mission_id, attrs, opts)
+    |> PlanUpdates.published(current_scope.organization_id, mission_id)
+  end
+
+  defp create_unpublished(%Scope{} = current_scope, mission_id, attrs, opts)
+       when is_binary(mission_id) and is_map(attrs) and is_list(opts) do
     with {:ok, template, version} <- prepare_create(current_scope, mission_id, attrs, opts) do
       Multi.new()
       |> Multi.insert(:template, ContactRequirementTemplateRow.changeset(template))
@@ -95,9 +104,21 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
         expected_version,
         attrs,
         opts \\ []
-      )
-      when is_binary(mission_id) and is_binary(template_id) and is_integer(expected_version) and
-             expected_version > 0 and is_map(attrs) and is_list(opts) do
+      ) do
+    version_unpublished(current_scope, mission_id, template_id, expected_version, attrs, opts)
+    |> PlanUpdates.published(current_scope.organization_id, mission_id)
+  end
+
+  defp version_unpublished(
+         %Scope{} = current_scope,
+         mission_id,
+         template_id,
+         expected_version,
+         attrs,
+         opts
+       )
+       when is_binary(mission_id) and is_binary(template_id) and is_integer(expected_version) and
+              expected_version > 0 and is_map(attrs) and is_list(opts) do
     now = now(opts)
 
     with :ok <- authorize_admin(current_scope, mission_id),
@@ -120,18 +141,33 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
   @spec activate(Scope.t(), binary(), binary(), pos_integer(), binary(), keyword()) ::
           {:ok, ContactRequirementTemplate.t()} | {:error, term()}
   def activate(scope, mission_id, template_id, expected_version, reason, opts \\ []) do
+    activate_unpublished(scope, mission_id, template_id, expected_version, reason, opts)
+    |> PlanUpdates.published(scope.organization_id, mission_id)
+  end
+
+  defp activate_unpublished(scope, mission_id, template_id, expected_version, reason, opts) do
     transition(scope, mission_id, template_id, expected_version, :active, reason, opts)
   end
 
   @spec pause(Scope.t(), binary(), binary(), pos_integer(), binary(), keyword()) ::
           {:ok, ContactRequirementTemplate.t()} | {:error, term()}
   def pause(scope, mission_id, template_id, expected_version, reason, opts \\ []) do
+    pause_unpublished(scope, mission_id, template_id, expected_version, reason, opts)
+    |> PlanUpdates.published(scope.organization_id, mission_id)
+  end
+
+  defp pause_unpublished(scope, mission_id, template_id, expected_version, reason, opts) do
     transition(scope, mission_id, template_id, expected_version, :paused, reason, opts)
   end
 
   @spec close(Scope.t(), binary(), binary(), pos_integer(), binary(), keyword()) ::
           {:ok, ContactRequirementTemplate.t()} | {:error, term()}
   def close(scope, mission_id, template_id, expected_version, reason, opts \\ []) do
+    close_unpublished(scope, mission_id, template_id, expected_version, reason, opts)
+    |> PlanUpdates.published(scope.organization_id, mission_id)
+  end
+
+  defp close_unpublished(scope, mission_id, template_id, expected_version, reason, opts) do
     transition(scope, mission_id, template_id, expected_version, :closed, reason, opts)
   end
 
@@ -208,6 +244,55 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
     |> Enum.map(&ContactRequirementOccurrenceRow.to_domain/1)
   end
 
+  @doc """
+  The generated occurrence rows of `template_id` below version `below_version` for the given
+  instants and spacecraft (`TemplateDays`, DECISIONS #86). `lock: true` share-locks them.
+  """
+  @spec older_occurrence_rows(
+          binary(),
+          binary(),
+          binary(),
+          pos_integer(),
+          [DateTime.t()],
+          [
+            binary()
+          ],
+          boolean()
+        ) :: [struct()]
+  def older_occurrence_rows(org, mission, template_id, below_version, ats, spacecraft_ids, lock?) do
+    query =
+      where(
+        ContactRequirementOccurrenceRow,
+        [o],
+        o.organization_id == ^org and o.mission_id == ^mission and
+          o.contact_requirement_template_id == ^template_id and
+          o.contact_requirement_template_version < ^below_version and
+          o.generation_state == "generated" and o.occurrence_at in ^ats and
+          o.spacecraft_id in ^spacecraft_ids
+      )
+
+    query = if lock?, do: lock(query, "FOR SHARE"), else: query
+    Repo.all(query)
+  end
+
+  @doc """
+  `[{occurrence_at, spacecraft_id}]` of `template_id`'s generated occurrences at or after `since`,
+  any version (U48 edit dry run, `TemplateDayReview`), at most `fan_out_limit/0`.
+  """
+  @spec generated_days(binary(), binary(), binary(), DateTime.t()) :: [{DateTime.t(), binary()}]
+  def generated_days(org, mission, template_id, %DateTime{} = since) do
+    from(o in ContactRequirementOccurrenceRow,
+      where:
+        o.organization_id == ^org and o.mission_id == ^mission and
+          o.contact_requirement_template_id == ^template_id and
+          o.generation_state == "generated" and o.occurrence_at >= ^since,
+      distinct: true,
+      select: {o.occurrence_at, o.spacecraft_id},
+      limit: ^fan_out_limit()
+    )
+    |> Repo.all()
+  end
+
   @spec materialize(
           Scope.t(),
           binary(),
@@ -228,17 +313,63 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
          {:ok, template, version} <-
            fetch(current_scope.organization_id, mission_id, template_id),
          :ok <- active_template(template),
-         {:ok, actor_id} <- actor_id(current_scope) do
-      occurrences =
-        version
-        |> due_occurrences(from, until, opts)
-        |> Enum.map(&materialize_occurrence(current_scope, version, &1, actor_id, now(opts)))
+         {:ok, actor_id} <- actor_id(current_scope),
+         targets = targets(version, mission_id, opts),
+         now = now(opts),
+         {due, _capped} = capped_occurrences(version, from, until, now),
+         :ok <- fan_out_bound(length(due) * length(targets)) do
+      results =
+        for occurrence_at <- due, spacecraft_id <- targets do
+          materialize_occurrence(
+            current_scope,
+            version,
+            occurrence_at,
+            spacecraft_id,
+            actor_id,
+            now
+          )
+        end
 
-      case Enum.find(occurrences, &match?({:error, _}, &1)) do
-        nil -> {:ok, Enum.map(occurrences, fn {:ok, result} -> result end)}
-        {:error, reason} -> {:error, reason}
+      case Enum.find(results, &match?({:error, _}, &1)) do
+        nil ->
+          # Only the occurrences this run generated: each cancelled slot has its replacement.
+          maybe_supersede(current_scope, version, targets, now, due, opts)
+          {:ok, Enum.map(results, fn {:ok, result} -> result end)}
+
+        {:error, reason} ->
+          {:error, reason}
       end
     end
+  end
+
+  defp maybe_supersede(scope, version, targets, now, occurrences, opts) do
+    if Keyword.get(opts, :supersede, true),
+      do: TemplateSupersession.supersede(scope, version, targets, now, occurrences)
+  end
+
+  # A reviewed fleet start passes the spacecraft it reviewed; otherwise resolve them now.
+  defp targets(version, mission_id, opts) do
+    Keyword.get_lazy(opts, :targets, fn ->
+      TemplateTargets.resolve(version.organization_id, mission_id, version.target_document)
+    end)
+  end
+
+  # 2,000 spacecraft (the runtime target) × 3 contacts/day × a 7-day horizon = 42,000.
+  @default_fan_out_limit 50_000
+
+  @doc """
+  Spacecraft × occurrences one template materialization (and one fleet start,
+  summed over templates) may generate; over it fails instead of truncating.
+  Config `:cadence, :template_fan_out_limit` (default 50,000).
+  """
+  @spec fan_out_limit() :: pos_integer()
+  def fan_out_limit,
+    do: Application.get_env(:cadence, :template_fan_out_limit, @default_fan_out_limit)
+
+  defp fan_out_bound(count) do
+    if count > fan_out_limit(),
+      do: {:error, {:template_fan_out_exceeded, count}},
+      else: :ok
   end
 
   @spec materialize_active(
@@ -290,66 +421,120 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
   end
 
   @doc "Pure occurrence review using the same catch-up bounds as materialization."
-  def preview_occurrences(version, from, until),
-    do: due_occurrences(version, from, until, limit: 10_001)
+  def preview_occurrences(version, from, until, now \\ DateTime.utc_now()),
+    do: version |> capped_occurrences(from, until, now) |> elem(0)
 
-  defp due_occurrences(version, from, until, opts) do
+  @doc """
+  Pure: what a run at `now` generates for `version` over `from..until`, as
+  `{occurrences, capped}`. Occurrences are earliest first, at most the catch-up policy's
+  `maximum_occurrences_per_run`; `capped` is `%{limit: n, last_at: the last one kept}` when that
+  cap cut the range short, else nil.
+
+  `maximum_lookback_seconds` bounds how far into the PAST a catch-up reaches, measured from `now`;
+  the future part of the range is always in scope, up to the cap (lead, 11-14). It was measured
+  back from `until`, so a horizon longer than the lookback generated only its last part.
+  """
+  @spec capped_occurrences(map(), DateTime.t(), DateTime.t(), DateTime.t()) ::
+          {[DateTime.t()], %{limit: pos_integer(), last_at: DateTime.t()} | nil}
+  def capped_occurrences(version, from, until, now) do
     policy = version.catch_up_policy_document
-    configured_limit = policy["maximum_occurrences_per_run"]
-    requested_limit = Keyword.get(opts, :limit, configured_limit)
-    limit = requested_limit |> max(1) |> min(configured_limit)
-    earliest = DateTime.add(until, -policy["maximum_lookback_seconds"], :second)
+    limit = max(policy["maximum_occurrences_per_run"], 1)
+    earliest = DateTime.add(now, -policy["maximum_lookback_seconds"], :second)
     effective_from = if DateTime.before?(from, earliest), do: earliest, else: from
 
-    RequirementSchedule.occurrences_between(
-      version.schedule_document,
-      effective_from,
-      until,
-      limit
-    )
+    version.schedule_document
+    |> RequirementSchedule.occurrences_between(effective_from, until, limit + 1)
+    |> Enum.split(limit)
+    |> case do
+      {kept, []} -> {kept, nil}
+      {kept, _beyond} -> {kept, %{limit: limit, last_at: List.last(kept)}}
+    end
   end
 
-  defp materialize_occurrence(scope, version, occurrence_at, actor_id, now) do
+  defp materialize_occurrence(scope, version, occurrence_at, spacecraft_id, actor_id, now) do
     Repo.transaction(fn ->
-      candidate =
-        ContactRequirementOccurrence.new(%{
-          organization_id: version.organization_id,
-          mission_id: version.mission_id,
-          contact_requirement_template_id: version.contact_requirement_template_id,
-          contact_requirement_template_version: version.version,
-          occurrence_at: occurrence_at,
-          generation_state: :materializing,
-          materialized_by: actor_id,
-          materialized_at: now
-        })
-
-      {:ok, _candidate_row} =
-        candidate
-        |> ContactRequirementOccurrenceRow.changeset()
-        |> Repo.insert(
-          on_conflict: :nothing,
-          conflict_target: [
-            :organization_id,
-            :mission_id,
-            :contact_requirement_template_id,
-            :contact_requirement_template_version,
-            :occurrence_at
-          ]
-        )
-
-      row = fetch_occurrence_row!(version, occurrence_at)
-
-      if row.contact_requirement_occurrence_id == candidate.contact_requirement_occurrence_id do
-        create_generated_requirement(scope, version, row, occurrence_at, now)
-      else
-        existing_materialization(row)
+      # DECISIONS #86: one requirement per template day. A day an older version already serves
+      # (planned, started) or an operator closed stays as it is; this version generates nothing.
+      case day_served_by_older_version(version, occurrence_at, spacecraft_id, now) do
+        nil -> insert_occurrence(scope, version, occurrence_at, spacecraft_id, actor_id, now)
+        older -> existing_materialization(older)
       end
     end)
     |> normalize_materialization_result()
   end
 
+  # The older version's occurrence when the day is kept or done and this version hasn't
+  # generated it already; nil when this version should generate (or already did).
+  defp day_served_by_older_version(version, occurrence_at, spacecraft_id, now) do
+    own =
+      Repo.get_by(ContactRequirementOccurrenceRow,
+        organization_id: version.organization_id,
+        mission_id: version.mission_id,
+        contact_requirement_template_id: version.contact_requirement_template_id,
+        contact_requirement_template_version: version.version,
+        occurrence_at: occurrence_at,
+        spacecraft_id: spacecraft_id
+      )
+
+    with nil <- own,
+         %{} = days <-
+           TemplateDays.classify(
+             version.organization_id,
+             version.mission_id,
+             version.contact_requirement_template_id,
+             version.version,
+             [{occurrence_at, spacecraft_id}],
+             now: now,
+             lock: true
+           ),
+         %{outcome: outcome, prior: %{occurrence: older}} when outcome in [:kept, :done] <-
+           days[TemplateDays.key(occurrence_at, spacecraft_id)] do
+      older
+    else
+      _generate -> nil
+    end
+  end
+
+  defp insert_occurrence(scope, version, occurrence_at, spacecraft_id, actor_id, now) do
+    candidate =
+      ContactRequirementOccurrence.new(%{
+        organization_id: version.organization_id,
+        mission_id: version.mission_id,
+        contact_requirement_template_id: version.contact_requirement_template_id,
+        contact_requirement_template_version: version.version,
+        spacecraft_id: spacecraft_id,
+        occurrence_at: occurrence_at,
+        generation_state: :materializing,
+        materialized_by: actor_id,
+        materialized_at: now
+      })
+
+    {:ok, _candidate_row} =
+      candidate
+      |> ContactRequirementOccurrenceRow.changeset()
+      |> Repo.insert(
+        on_conflict: :nothing,
+        conflict_target: [
+          :organization_id,
+          :mission_id,
+          :contact_requirement_template_id,
+          :contact_requirement_template_version,
+          :occurrence_at,
+          :spacecraft_id
+        ]
+      )
+
+    row = fetch_occurrence_row!(version, occurrence_at, spacecraft_id)
+
+    if row.contact_requirement_occurrence_id == candidate.contact_requirement_occurrence_id do
+      create_generated_requirement(scope, version, row, occurrence_at, now)
+    else
+      existing_materialization(row)
+    end
+  end
+
   defp create_generated_requirement(scope, version, row, occurrence_at, now) do
-    attrs = generated_requirement_attrs(version, occurrence_at)
+    attrs = generated_requirement_attrs(version, occurrence_at, row.spacecraft_id)
 
     case ContactRequirements.create(scope, version.mission_id, attrs, now: now) do
       {:ok, requirement, requirement_version} ->
@@ -408,7 +593,7 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
   defp existing_materialization(_row),
     do: Repo.rollback(:contact_requirement_occurrence_not_converged)
 
-  defp generated_requirement_attrs(version, occurrence_at) do
+  defp generated_requirement_attrs(version, occurrence_at, spacecraft_id) do
     {earliest_start, latest_end} =
       RequirementSchedule.window(version.schedule_document, occurrence_at)
 
@@ -423,7 +608,7 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
       })
 
     version.requirement_document
-    |> Map.put("spacecraft_id", version.spacecraft_id)
+    |> Map.put("spacecraft_id", spacecraft_id)
     |> Map.put("earliest_start", earliest_start)
     |> Map.put("latest_end", latest_end)
     |> Map.put("metadata", metadata)
@@ -466,7 +651,16 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
   end
 
   defp merge_version_attrs(current, attrs) do
+    # A legacy edit giving only spacecraft_id retargets to that one spacecraft.
+    current =
+      if match?({:ok, _}, fetch_value(attrs, :spacecraft_id)) and
+           fetch_value(attrs, :target_document) == :error,
+         do: %{current | target_document: nil},
+         else: current
+
     fields = [
+      :name,
+      :target_document,
       :spacecraft_id,
       :schedule_document,
       :requirement_document,
@@ -519,7 +713,7 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
       |> DateTime.from_iso8601()
       |> then(fn {:ok, timestamp, _offset} -> timestamp end)
 
-    attrs = generated_requirement_attrs(version, occurrence)
+    attrs = generated_requirement_attrs(version, occurrence, validation_spacecraft(version))
 
     {:ok,
      ContactRequirementVersion.new(
@@ -542,15 +736,27 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
       else: {:error, :contact_requirement_template_document_too_large}
   end
 
+  # Legacy single-spacecraft templates keep their old error; targets report the unknown ids.
   defp validate_spacecraft(version) do
-    case SpacecraftStore.fetch_spacecraft(
+    case TemplateTargets.validate(
            version.organization_id,
            version.mission_id,
-           version.spacecraft_id
+           version.target_document
          ) do
-      {:ok, _spacecraft} -> :ok
-      {:error, _reason} -> {:error, :contact_requirement_template_spacecraft_not_found}
+      {:error, {:template_target_unknown_spacecraft, _ids}}
+      when is_binary(version.spacecraft_id) ->
+        {:error, :contact_requirement_template_spacecraft_not_found}
+
+      result ->
+        result
     end
+  end
+
+  # The content check builds one sample requirement; its spacecraft doesn't affect the content rules.
+  defp validation_spacecraft(version) do
+    version.spacecraft_id ||
+      List.first(Map.get(version.target_document, "spacecraft_ids", [])) ||
+      "template_validation"
   end
 
   defp transition(
@@ -655,14 +861,15 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
     |> Repo.update()
   end
 
-  defp fetch_occurrence_row!(version, occurrence_at) do
+  defp fetch_occurrence_row!(version, occurrence_at, spacecraft_id) do
     Repo.get_by!(
       ContactRequirementOccurrenceRow,
       organization_id: version.organization_id,
       mission_id: version.mission_id,
       contact_requirement_template_id: version.contact_requirement_template_id,
       contact_requirement_template_version: version.version,
-      occurrence_at: occurrence_at
+      occurrence_at: occurrence_at,
+      spacecraft_id: spacecraft_id
     )
   end
 

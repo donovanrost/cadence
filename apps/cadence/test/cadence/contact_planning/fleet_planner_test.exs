@@ -12,7 +12,9 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
     FleetPlanner,
     FleetPlanningPolicies,
     FleetPlanningRuns,
-    FleetRepairs
+    FleetRepairs,
+    RepairChain,
+    RepairLinks
   }
 
   alias Cadence.Control.Contacts, as: ControlContacts
@@ -23,6 +25,8 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
   alias Cadence.Control.Contacts.Store.ContactPlanExecutionItemRow
   alias Cadence.Management.Contacts.Store.ContactPlanRow
 
+  alias Cadence.PolicyReviewer
+  alias Cadence.Reads.RepairDiff
   alias Cadence.Repo
   alias Cadence.Spacecraft
 
@@ -54,7 +58,7 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
 
     assert {:ok, _active, ^policy_version, _approval} =
              FleetPlanningPolicies.approve(
-               admin_scope,
+               PolicyReviewer.reviewer(admin_scope),
                @mission_id,
                policy.fleet_planning_policy_id,
                policy_version.version,
@@ -479,6 +483,213 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
 
     refute hd(repair_items).contact_opportunity_snapshot_id ==
              locked_snapshot.contact_opportunity_snapshot_id
+
+    second_repair_from_the_chain(context, source, repaired, hd(repair_items), locked_snapshot)
+  end
+
+  test "a live single booking covering a lost pass is held, recorded as covered and not booked again (DECISIONS #56)",
+       context do
+    _alpha = create_requirement!(context.member_scope, "alpha")
+    _beta = create_requirement!(context.member_scope, "beta")
+
+    assert {:ok, source} =
+             FleetPlanner.plan(context.member_scope, @mission_id, run_attrs(),
+               materialize_templates: false,
+               now: @now,
+               list_routes: &list_routes/3,
+               search_opportunities: &search_opportunities/5
+             )
+
+    assert {:ok, _pending} =
+             ContactPlans.submit(
+               context.member_scope,
+               @mission_id,
+               source.plan.contact_plan_id,
+               source.plan_version.version,
+               "Single booking covers a lost pass",
+               now: @now
+             )
+
+    resolve_route = fn _org, _mission, spacecraft_id, _route_key ->
+      {:ok, route(String.replace_prefix(spacecraft_id, "spacecraft-", ""))}
+    end
+
+    assert {:ok, handoff} =
+             ManagementContacts.approve_plan(
+               context.admin_scope,
+               @mission_id,
+               source.plan.contact_plan_id,
+               source.plan_version.version,
+               source.plan_version.content_sha256,
+               "Approve",
+               now: DateTime.add(@now, 1, :second),
+               resolve_route: resolve_route
+             )
+
+    assert :ok = ControlContacts.accept_approved_plan(handoff)
+
+    {:ok, approved, _version} =
+      ManagementContacts.fetch_plan(@organization_id, @mission_id, source.plan.contact_plan_id)
+
+    snapshots =
+      ContactPlans.bookable_snapshots(
+        @organization_id,
+        @mission_id,
+        source.plan.contact_plan_id,
+        source.plan_version.version
+      )
+
+    alpha =
+      Enum.find(
+        snapshots,
+        &(&1.route_binding_document["spacecraft_id"] == spacecraft_id("alpha"))
+      )
+
+    beta =
+      Enum.find(snapshots, &(&1.route_binding_document["spacecraft_id"] == spacecraft_id("beta")))
+
+    mark_execution_item!(approved, alpha, :reserved)
+    mark_execution_item!(approved, beta, :rejected)
+    mark_plan_partially_reserved!(approved)
+
+    # Beta's pass was rebooked on its own (actions/reserve): a live reservation in no plan.
+    single = insert_single_booking!(spacecraft_id("beta"), beta.starts_at, beta.ends_at)
+
+    assert {:ok, repaired} =
+             FleetRepairs.repair(
+               context.member_scope,
+               @mission_id,
+               source.run.fleet_planning_run_id,
+               source.plan.contact_plan_id,
+               source.plan_version.version,
+               run_attrs(),
+               now: DateTime.add(@now, 2, :second),
+               list_routes: &list_routes/3,
+               search_opportunities: &search_opportunities/5
+             )
+
+    # Both held, nothing new to book: beta's need is met by the single booking.
+    assert Enum.sort(repaired.plan_version.locked_snapshot_ids) ==
+             Enum.sort([
+               alpha.contact_opportunity_snapshot_id,
+               beta.contact_opportunity_snapshot_id
+             ])
+
+    # Selected passes are the new ones (locked ones are listed apart): none.
+    assert repaired.plan_version.selected_snapshot_ids == []
+
+    {:ok, run} =
+      FleetPlanningRuns.fetch(@organization_id, @mission_id, repaired.run.fleet_planning_run_id)
+
+    assert [{_beta_key, ^single}] = Map.to_list(run.input_document["repair"]["covered"])
+    assert run.input_document["repair"]["lost_bookings"] == []
+    assert %{"covered" => %{} = covered} = run.result_summary_document
+    assert Map.values(covered) == [single]
+
+    # The review shows it as covered by a single booking, not as kept.
+    review = RepairChain.review_passes(run)
+
+    diff =
+      RepairDiff.diff(
+        review.before,
+        review.after,
+        %{},
+        review.locked,
+        review.covered
+      )
+
+    assert [%{covered_by: ^single}] = diff.covered
+    assert diff.totals.kept == 1 and diff.totals.added == 0 and diff.totals.moved == 0
+  end
+
+  # A live booking that no plan made (a single booking), overlapping `starts_at..ends_at`.
+  defp insert_single_booking!(spacecraft_id, starts_at, ends_at) do
+    id = "provider_reservation_single_#{System.unique_integer([:positive])}"
+
+    Repo.query!(
+      """
+      INSERT INTO provider_reservations (provider_reservation_id, organization_id, mission_id,
+        provider_profile_id, provider_profile_version, scheduled_contact_id,
+        provider_opportunity_ref, idempotency_key, lifecycle_state, spacecraft_id,
+        provider_spacecraft_ref, starts_at, ends_at, inserted_at, updated_at)
+      VALUES ($1, $2, $3, 'profile', 1, $4, 'opportunity-single', $5, 'confirmed', $6, 'SC',
+        $7, $8, now(), now())
+      """,
+      [
+        id,
+        @organization_id,
+        @mission_id,
+        "scheduled_contact_" <> id,
+        "cadence:contact:" <> id,
+        spacecraft_id,
+        DateTime.to_naive(starts_at),
+        DateTime.to_naive(ends_at)
+      ]
+    )
+
+    id
+  end
+
+  # qa #30: the repair persisted which lost booking its new pass replaces; once a booking the
+  # source still held is lost too, the next repair starts from the chain head, keeps the first
+  # repair's booking and only replaces the newly lost one.
+  defp second_repair_from_the_chain(context, source, repaired, replacement, alpha) do
+    {:ok, run} =
+      FleetPlanningRuns.fetch(@organization_id, @mission_id, repaired.run.fleet_planning_run_id)
+
+    assert [{replacement_id, _lost}] = Map.to_list(run.result_summary_document["replaces"])
+    assert replacement_id == replacement.contact_opportunity_snapshot_id
+
+    # A repair applied before pairings were persisted gets the same pairing from the backfill.
+    replaces = run.result_summary_document["replaces"]
+    :ok = RepairLinks.put_replaces(run.fleet_planning_run_id, %{})
+    assert RepairChain.backfill(@organization_id, @mission_id) == [run.fleet_planning_run_id]
+
+    assert {:ok, %{result_summary_document: %{"replaces" => ^replaces}}} =
+             FleetPlanningRuns.fetch(@organization_id, @mission_id, run.fleet_planning_run_id)
+
+    {:ok, repair_plan, _} =
+      ManagementContacts.fetch_plan(@organization_id, @mission_id, repaired.plan.contact_plan_id)
+
+    {:ok, source_plan, _} =
+      ManagementContacts.fetch_plan(@organization_id, @mission_id, source.plan.contact_plan_id)
+
+    mark_execution_item!(
+      repair_plan,
+      %{contact_opportunity_snapshot_id: replacement_id},
+      :reserved
+    )
+
+    mark_execution_item!(source_plan, alpha, :rejected)
+
+    {:ok, chain} = RepairChain.load(@organization_id, @mission_id, source.plan.contact_plan_id)
+    assert chain.head == repaired.plan.contact_plan_id
+    alpha_id = alpha.contact_opportunity_snapshot_id
+    assert [%{contact_opportunity_snapshot_id: ^alpha_id}] = RepairChain.lost_bookings(chain)
+
+    # The first repair's pass replaced beta's lost booking; the passes read names it.
+    repaired_plan_id = repaired.plan.contact_plan_id
+
+    assert [%{plan_id: ^repaired_plan_id}] =
+             @organization_id
+             |> RepairChain.replacements_for(@mission_id, [source.plan.contact_plan_id])
+             |> Map.values()
+
+    assert {:ok, second} =
+             FleetRepairs.repair(
+               context.member_scope,
+               @mission_id,
+               repaired.run.fleet_planning_run_id,
+               repaired.plan.contact_plan_id,
+               repaired.plan_version.version,
+               run_attrs(),
+               now: DateTime.add(@now, 5, :second),
+               list_routes: &list_routes/3,
+               search_opportunities: &search_opportunities/5
+             )
+
+    assert second.plan_version.locked_snapshot_ids == [replacement_id]
+    assert length(second.plan_version.selected_snapshot_ids) == 1
   end
 
   defp create_requirement!(scope, suffix) do

@@ -28,8 +28,17 @@ defmodule Cadence.Comms.RoutingRule do
           role: role(),
           enabled?: boolean(),
           materialized_link_assignment_id: binary() | nil,
+          origin: origin(),
+          profile_rule_id: binary() | nil,
+          spacecraft_type_id: binary() | nil,
+          spacecraft_type_version: pos_integer() | nil,
+          ground_station_id: binary() | nil,
+          leg_direction: binary() | nil,
           metadata: map()
         }
+
+  @typedoc "Where a route comes from: a profile rule, a spacecraft-local rule, or pre-profile data."
+  @type origin :: :legacy | :profile | :spacecraft
 
   defstruct [
     :routing_rule_id,
@@ -45,11 +54,18 @@ defmodule Cadence.Comms.RoutingRule do
     :provider_path_ref,
     :role,
     :materialized_link_assignment_id,
+    :profile_rule_id,
+    :spacecraft_type_id,
+    :spacecraft_type_version,
+    :ground_station_id,
+    :leg_direction,
+    origin: :legacy,
     enabled?: true,
     metadata: %{}
   ]
 
   @directions [:inbound, :outbound, :bidirectional]
+  @origins [:legacy, :profile, :spacecraft]
   @roles [:primary, :candidate, :contributing]
   @lifecycle_states [:active, :archived]
 
@@ -96,6 +112,17 @@ defmodule Cadence.Comms.RoutingRule do
           :materialized_link_assignment_id,
           Map.get(attrs, "materialized_link_assignment_id")
         ),
+      origin:
+        attrs
+        |> Map.get(:origin, Map.get(attrs, "origin", :legacy))
+        |> normalize_atom(@origins, :origin),
+      profile_rule_id: Map.get(attrs, :profile_rule_id, Map.get(attrs, "profile_rule_id")),
+      spacecraft_type_id:
+        Map.get(attrs, :spacecraft_type_id, Map.get(attrs, "spacecraft_type_id")),
+      spacecraft_type_version:
+        Map.get(attrs, :spacecraft_type_version, Map.get(attrs, "spacecraft_type_version")),
+      ground_station_id: Map.get(attrs, :ground_station_id, Map.get(attrs, "ground_station_id")),
+      leg_direction: Map.get(attrs, :leg_direction, Map.get(attrs, "leg_direction")),
       metadata: Map.get(attrs, :metadata, Map.get(attrs, "metadata", %{}))
     }
   end

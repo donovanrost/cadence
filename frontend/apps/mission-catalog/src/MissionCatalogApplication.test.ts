@@ -43,8 +43,6 @@ function bridgeFor(query: HostBridge["query"], execute: HostBridge["execute"] = 
 describe("Mission and catalog federated application adapter", () => {
   it("mounts every published surface and uses its declared Phoenix query", async () => {
     const componentNames = [
-      "MissionList",
-      "MissionNew",
       "MissionOverview",
       "MissionApplicationsPage",
       "CatalogIndex",

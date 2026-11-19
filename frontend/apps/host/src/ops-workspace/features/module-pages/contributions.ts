@@ -20,34 +20,6 @@ export const opsPages = createPageRegistry<OpsPageContribution<Component>>("ops.
     import("@cadence/limits-and-alarming/alarm-conditions").then(
       (module) => module.alarmConditionsContribution,
     ),
-  "data-operations.sources": async () => {
-    const module = await import("@cadence/data-operations/data-sources");
-    const entry = module.sourceContributions.find((item) => item.id === "data-operations.sources");
-    if (!entry) throw Error("Missing compiled page contribution.");
-    return entry;
-  },
-  "data-operations.source": async () => {
-    const module = await import("@cadence/data-operations/data-sources");
-    const entry = module.sourceContributions.find((item) => item.id === "data-operations.source");
-    if (!entry) throw Error("Missing compiled page contribution.");
-    return entry;
-  },
-  "data-operations.source-registration": async () => {
-    const module = await import("@cadence/data-operations/data-sources");
-    const entry = module.sourceContributions.find(
-      (item) => item.id === "data-operations.source-registration",
-    );
-    if (!entry) throw Error("Missing compiled page contribution.");
-    return entry;
-  },
-  "data-operations.source-settings": async () => {
-    const module = await import("@cadence/data-operations/data-sources");
-    const entry = module.sourceContributions.find(
-      (item) => item.id === "data-operations.source-settings",
-    );
-    if (!entry) throw Error("Missing compiled page contribution.");
-    return entry;
-  },
   "data-operations.history": () =>
     import("@cadence/data-operations/historical-workflows").then(
       (module) => module.historicalWorkflowsContribution,
@@ -71,26 +43,6 @@ export const opsPages = createPageRegistry<OpsPageContribution<Component>>("ops.
   "planning.plan-review": () =>
     import("@cadence/planning-and-contacts/contact-plans").then(
       (module) => module.planReviewContribution,
-    ),
-  "planning.requirement-templates": () =>
-    import("@cadence/planning-and-contacts/contact-requirements").then(
-      (module) => module.requirementTemplateContribution,
-    ),
-  "planning.requirement-declaration": () =>
-    import("@cadence/planning-and-contacts/contact-requirements").then(
-      (module) => module.requirementDeclarationContribution,
-    ),
-  "planning.requirement-directory": () =>
-    import("@cadence/planning-and-contacts/contact-requirements").then(
-      (module) => module.requirementDirectoryContribution,
-    ),
-  "planning.requirement-review": () =>
-    import("@cadence/planning-and-contacts/contact-requirements").then(
-      (module) => module.requirementReviewContribution,
-    ),
-  "planning.fleet-policy": () =>
-    import("@cadence/planning-and-contacts/fleet-planning").then(
-      (module) => module.fleetPolicyContribution,
     ),
   "planning.fleet-start": () =>
     import("@cadence/planning-and-contacts/fleet-planning").then(
@@ -121,49 +73,5 @@ export const opsPages = createPageRegistry<OpsPageContribution<Component>>("ops.
   "dashboards.exploration": () =>
     import("@cadence/dashboards-and-exploration/exploration").then(
       (module) => module.explorationContribution,
-    ),
-  "dashboards.execution-diagnostics": () =>
-    import("@cadence/dashboards-and-exploration/execution-diagnostics").then(
-      (module) => module.executionDiagnosticsContribution,
-    ),
-  "dashboards.directory": () =>
-    import("@cadence/dashboards-and-exploration/directory").then(
-      (module) => module.directoryContribution,
-    ),
-  "dashboards.creation": () =>
-    import("@cadence/dashboards-and-exploration/creation").then(
-      (module) => module.creationContribution,
-    ),
-  "dashboards.workspace": () =>
-    import("@cadence/dashboards-and-exploration/workspace").then(
-      (module) => module.dashboardContribution,
-    ),
-  "dashboards.activity": () =>
-    import("@cadence/dashboards-and-exploration/activity").then(
-      (module) => module.activityContribution,
-    ),
-  "dashboards.settings": () =>
-    import("@cadence/dashboards-and-exploration/settings").then(
-      (module) => module.settingsContribution,
-    ),
-  "dashboards.share": () =>
-    import("@cadence/dashboards-and-exploration/sharing").then(
-      (module) => module.shareContribution,
-    ),
-  "dashboards.snapshot": () =>
-    import("@cadence/dashboards-and-exploration/sharing").then(
-      (module) => module.snapshotContribution,
-    ),
-  "dashboards.library": () =>
-    import("@cadence/dashboards-and-exploration/library").then(
-      (module) => module.libraryContribution,
-    ),
-  "dashboards.playlists": () =>
-    import("@cadence/dashboards-and-exploration/playlists").then(
-      (module) => module.playlistsContribution,
-    ),
-  "dashboards.playlist-present": () =>
-    import("@cadence/dashboards-and-exploration/playlists").then(
-      (module) => module.playlistPresentationContribution,
     ),
 });

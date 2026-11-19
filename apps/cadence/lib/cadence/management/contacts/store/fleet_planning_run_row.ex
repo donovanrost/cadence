@@ -36,6 +36,8 @@ defmodule Cadence.Management.Contacts.Store.FleetPlanningRunRow do
     field(:triggered_by, :string)
     field(:started_at, :utc_datetime_usec)
     field(:completed_at, :utc_datetime_usec)
+    # Console operation journal (DECISIONS #27); written only via operation_changeset/2.
+    field(:operation_id, :string)
 
     timestamps()
   end
@@ -113,6 +115,16 @@ defmodule Cadence.Management.Contacts.Store.FleetPlanningRunRow do
   end
 
   @spec to_domain(struct()) :: FleetPlanningRun.t()
+  @doc false
+  def operation_changeset(%__MODULE__{} = row, operation_id) when is_binary(operation_id) do
+    row
+    |> change(operation_id: operation_id)
+    |> validate_length(:operation_id, min: 1, max: 120)
+    |> unique_constraint([:mission_id, :operation_id],
+      name: :fleet_planning_runs_mission_operation_id_index
+    )
+  end
+
   def to_domain(%__MODULE__{} = row) do
     FleetPlanningRun.new(%{
       fleet_planning_run_id: row.fleet_planning_run_id,

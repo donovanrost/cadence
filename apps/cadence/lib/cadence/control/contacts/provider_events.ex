@@ -33,6 +33,14 @@ defmodule Cadence.Control.Contacts.ProviderEvents do
       when reason in [:provider_reservation_not_found, :provider_event_correlation_ambiguous] ->
         {:quarantine, reason}
 
+      # The event asked for an authoritative read, and it happened: the provider's answer failed
+      # Cadence's check, and that's recorded on the reservation (failed, provisional, polled by
+      # the reconciler until its pass ends). The event is done, processed with that resolution; a
+      # retry would read the same answer forever (director 11-14), and quarantine would ask an
+      # operator to act on an event when the problem is the booking's configuration.
+      {:error, %ProviderReservation{} = reservation, {:provider_configuration_failure, _reason}} ->
+        {:ok, resolution(reservation)}
+
       {:error, %ProviderReservation{}, reason} ->
         {:retry, reason}
 

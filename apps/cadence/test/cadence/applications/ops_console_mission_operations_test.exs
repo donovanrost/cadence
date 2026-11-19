@@ -5,64 +5,47 @@ defmodule Cadence.Applications.OpsConsoleMissionOperationsTest do
   alias Cadence.Applications.OpsConsole.Actions.MissionOperations
   alias Cadence.Auth.{Scope, ServiceIdentity}
 
-  @workflow_keys ~w(
-    workflow run_id realm data_source_id source_binding_id observable_id point_id point_ids
-    source_from source_to dashboard_id dashboard_version dashboard_time_mode
-    dashboard_replay_run_id dashboard_data_view dashboard_limit_mode
-    comparison_review_request_event_id comparison_review_request_kind comparison_review_open_count
-    comparison_review_open_placement_ids comparison_review_workflow_kind
-    comparison_review_workflow_action comparison_review_workflow_selection_kind
-    comparison_review_workflow_selection_count comparison_review_primary_data_view
-    comparison_review_compare_data_view comparison_review_scope_kind comparison_review_scope_ids
-    comparison_review_contact_ids comparison_review_resource_ids comparison_review_transport_ids
-    comparison_review_source_endpoint_ids comparison_review_ground_station_ids
-    comparison_review_scope_link_ids reason confirmed
+  @data_operation_actions ~w(
+    validate-request record-historical-workflow-request transition-group retry-group
+    request-correction
   )
 
-  test "declares only the completed mission host bindings" do
-    assert MissionOperations.bindings() == [
-             {"activation_requests", "decide"},
-             {"data_operations", "validate-request"},
-             {"data_operations", "record-historical-workflow-request"},
-             {"data_operations", "transition-group"},
-             {"data_operations", "retry-group"},
-             {"data_operations", "request-correction"},
-             {"data_operations_manage", "validate-request"},
-             {"data_operations_manage", "record-historical-workflow-request"},
-             {"data_operations_manage", "transition-group"},
-             {"data_operations_manage", "retry-group"},
-             {"data_operations_manage", "request-correction"}
-           ]
+  test "declares only the activation decision; the data operations surfaces bind nothing" do
+    assert MissionOperations.bindings() == [{"activation_requests", "decide"}]
   end
 
-  test "returns validation errors for empty workflow fields without claiming they are valid" do
-    request = %ActionRequest{
-      application_key: "ops_console",
-      application_version: 1,
-      action_id: "validate-request",
-      surface_id: "data_operations",
-      surface_version: 1,
-      params: %{"historical_workflow_request" => Map.new(@workflow_keys, &{&1, ""})}
-    }
+  # The data operations workflow decisions go through the native path (reason, evidence, lock);
+  # the host action endpoint refuses every one, on both surfaces, whatever the input.
+  test "refuses every data operations action on both surfaces" do
+    for surface_id <- ~w(data_operations data_operations_manage),
+        action_id <- @data_operation_actions do
+      request = %ActionRequest{
+        application_key: "ops_console",
+        application_version: 1,
+        action_id: action_id,
+        surface_id: surface_id,
+        surface_version: 1,
+        params: %{"group-id" => "group-1", "stage" => "approved"}
+      }
 
-    assert {:ok, %{"valid" => false, "errors" => [%{field: "workflow", code: "unsupported"}]}} =
-             MissionOperations.execute(
-               scope(),
-               HostContext.mission("mission-1"),
-               "data_operations",
-               request
-             )
+      assert {:error, :unsupported_application_action} =
+               MissionOperations.execute(
+                 scope(),
+                 HostContext.mission("mission-1"),
+                 surface_id,
+                 request
+               ),
+             "#{surface_id} #{action_id}"
+    end
   end
 
   test "rejects a host context from the wrong mission" do
-    request = valid_request()
-
     assert {:error, :forbidden} =
              MissionOperations.execute(
                scope(),
                HostContext.mission("mission-2"),
-               "data_operations",
-               request
+               "activation_requests",
+               decide_request()
              )
   end
 
@@ -71,7 +54,7 @@ defmodule Cadence.Applications.OpsConsoleMissionOperationsTest do
              MissionOperations.execute(
                scope(),
                HostContext.mission("mission-1"),
-               "data_operations",
+               "activation_requests",
                %ActionRequest{
                  application_key: "ops_console",
                  application_version: 1,
@@ -82,32 +65,28 @@ defmodule Cadence.Applications.OpsConsoleMissionOperationsTest do
   end
 
   test "rejects malformed JSON input" do
-    request = %ActionRequest{
-      application_key: "ops_console",
-      application_version: 1,
-      action_id: "validate-request",
-      surface_id: "data_operations",
-      surface_version: 1,
-      params: %{"historical_workflow_request" => %{"workflow" => self()}}
-    }
+    request = %{decide_request() | params: %{"activation_decision" => %{"reason" => self()}}}
 
     assert {:error, :unsupported} =
              MissionOperations.execute(
                scope(),
                HostContext.mission("mission-1"),
-               "data_operations",
+               "activation_requests",
                request
              )
   end
 
-  defp valid_request do
+  defp decide_request do
     %ActionRequest{
       application_key: "ops_console",
       application_version: 1,
-      action_id: "validate-request",
-      surface_id: "data_operations",
+      action_id: "decide",
+      surface_id: "activation_requests",
       surface_version: 1,
-      params: %{"historical_workflow_request" => Map.new(@workflow_keys, &{&1, ""})}
+      params: %{
+        "activation_decision" => %{"request_id" => "request-1", "reason" => "Checked"},
+        "decision" => "approved"
+      }
     }
   end
 

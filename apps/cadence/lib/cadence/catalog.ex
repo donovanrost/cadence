@@ -9,6 +9,7 @@ defmodule Cadence.Catalog do
   alias Ecto.Changeset
 
   alias Cadence.Catalog.{
+    Actor,
     Artifact,
     ArtifactRow,
     Database,
@@ -19,6 +20,7 @@ defmodule Cadence.Catalog do
     ImportResult,
     ImportRun,
     ImportRunRow,
+    ModelImporters,
     Registry,
     Revision,
     RevisionRow,
@@ -179,7 +181,9 @@ defmodule Cadence.Catalog do
   def start_import_run(organization_id, mission_id, artifact_id, importer_key, opts \\ [])
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(artifact_id) and
              is_binary(importer_key) and is_list(opts) do
-    with {:ok, %Artifact{} = artifact} <- fetch_artifact(organization_id, mission_id, artifact_id),
+    # An import names who ran it (lead 11-17): a revision's importer is what the model gate reads.
+    with :ok <- Actor.recorded(Keyword.get(opts, :requested_by)),
+         {:ok, %Artifact{} = artifact} <- fetch_artifact(organization_id, mission_id, artifact_id),
          {:ok, %{module: importer_module, descriptor: descriptor}} <-
            Registry.fetch_importer(
              importer_key,
@@ -221,6 +225,17 @@ defmodule Cadence.Catalog do
       end
     end
   end
+
+  @doc """
+  Whether a run of this job type is safe to run again after the node stopped mid-run (Jobs
+  recovery, 11-14): yes, since the revision fix (domain reviewed). The importer re-parses the
+  artifact content already stored; the mission-model writes are content-addressed and
+  on_conflict :nothing; a revision import finds the revision this run already made (looked up
+  again under the catalog_databases lock) and only republishes its cache-invalidation fact.
+  """
+  @spec rerun_safe?(atom()) :: boolean()
+  def rerun_safe?(:catalog_import_run), do: true
+  def rerun_safe?(_job_type), do: false
 
   @doc false
   @spec execute_enqueued_run(binary(), keyword()) :: {:ok, ImportRun.t()} | {:error, term()}
@@ -305,6 +320,57 @@ defmodule Cadence.Catalog do
     |> Enum.reduce(%{}, fn %ImportRun{catalog_database_id: catalog_database_id} = run, acc ->
       Map.put_new(acc, catalog_database_id, run)
     end)
+  end
+
+  @doc "Who imported a mission-model revision; see `Cadence.Catalog.ModelImporters`."
+  @spec model_importers(binary(), binary(), binary()) :: [binary()]
+  defdelegate model_importers(organization_id, mission_id, mission_model_revision_id),
+    to: ModelImporters,
+    as: :list
+
+  @doc "`:ok` when a catalog revision names the mission-model revision; see `ModelRevisionNaming`."
+  defdelegate require_named_model_revision(
+                organization_id,
+                mission_id,
+                mission_model_revision_id
+              ),
+              to: Cadence.Catalog.ModelRevisionNaming,
+              as: :require_named
+
+  @doc """
+  The mission-model revision produced by the catalog revision just before the one that produced
+  `mission_model_revision_id` in the same catalog database, or nil (a first import). The default
+  baseline a model approval compares against (#92 a).
+  """
+  @spec previous_model_revision(binary(), binary(), binary()) :: binary() | nil
+  def previous_model_revision(organization_id, mission_id, mission_model_revision_id) do
+    scoped =
+      where(
+        RevisionRow,
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id
+      )
+
+    with %{catalog_database_id: database, revision_number: number} <-
+           scoped
+           |> where([row], row.mission_model_revision_id == ^mission_model_revision_id)
+           |> order_by([row], asc: row.revision_number)
+           |> limit(1)
+           |> Repo.one() do
+      scoped
+      # A catalog revision that didn't change the model (nil or this same revision) isn't a
+      # baseline: comparing against itself reads as 'nothing changed' (api-ops).
+      |> where(
+        [row],
+        row.catalog_database_id == ^database and row.revision_number < ^number and
+          not is_nil(row.mission_model_revision_id) and
+          row.mission_model_revision_id != ^mission_model_revision_id
+      )
+      |> order_by([row], desc: row.revision_number)
+      |> limit(1)
+      |> select([row], row.mission_model_revision_id)
+      |> Repo.one()
+    end
   end
 
   @spec fetch_revision(binary(), binary(), binary()) :: {:ok, Revision.t()} | {:error, term()}
@@ -400,7 +466,8 @@ defmodule Cadence.Catalog do
       )
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(catalog_database_id) and is_binary(importer_key) and is_list(opts) do
-    with {:ok, %Database{} = database} <-
+    with :ok <- Actor.recorded(Keyword.get(opts, :requested_by)),
+         {:ok, %Database{} = database} <-
            fetch_database(organization_id, mission_id, catalog_database_id),
          artifact <- %Artifact{artifact | catalog_database_id: catalog_database_id},
          :ok <-
@@ -470,7 +537,27 @@ defmodule Cadence.Catalog do
 
   defp create_revision_run?(%ImportRun{}), do: false
 
+  # Idempotent (director 11-14): a rerun of the same import run finds the revision it already
+  # made instead of inserting a second (which the unique index on import_run_id refused, failing
+  # a completed run). The revision and its operational event commit together; the fact is
+  # published after the commit.
   defp create_revision_from_completed_run(%ImportRun{} = run, event_bus) do
+    case fetch_revision_by_import_run(run.organization_id, run.mission_id, run.import_run_id) do
+      # Published again (domain): a node that stopped between the commit and the publish lost
+      # the fact; its one consumer is an idempotent dashboard cache invalidation.
+      {:ok, %Revision{} = revision} ->
+        Facts.publish(event_bus, revision)
+        {:ok, revision}
+
+      {:error, :catalog_revision_not_found} ->
+        with {:ok, revision} <- insert_revision_from_completed_run(run) do
+          Facts.publish(event_bus, revision)
+          {:ok, revision}
+        end
+    end
+  end
+
+  defp insert_revision_from_completed_run(%ImportRun{} = run) do
     with {:ok, %Artifact{} = artifact} <-
            fetch_artifact(run.organization_id, run.mission_id, run.artifact_id),
          {:ok, %Database{} = database} <-
@@ -480,15 +567,11 @@ defmodule Cadence.Catalog do
            |> metadata_value("mission_model")
            |> metadata_value("revision_id"),
          :ok <- ensure_revision_basis(mission_model_revision_id),
-         revision_number <- next_revision_number(run.catalog_database_id),
-         revision_label <- revision_label(run, revision_number),
-         revision <-
-           Revision.new(%{
+         attrs <-
+           %{
              organization_id: run.organization_id,
              mission_id: run.mission_id,
              catalog_database_id: run.catalog_database_id,
-             revision_number: revision_number,
-             revision_label: revision_label,
              catalog_family: database.catalog_family,
              artifact_id: artifact.artifact_id,
              import_run_id: run.import_run_id,
@@ -505,20 +588,60 @@ defmodule Cadence.Catalog do
                "source_artifact_name" => artifact.artifact_name,
                "importer_key" => run.importer_key
              }
-           }),
-         {:ok, %RevisionRow{} = row} <-
-           Repo.insert(RevisionRow.changeset(revision)),
-         revision = RevisionRow.to_domain(row),
-         {:ok, %OperationalEvent{}} <-
-           revision
-           |> OperationalEvent.from_catalog_revision(row.inserted_at)
-           |> then(&OperationalEvents.persist_event(Repo, &1)) do
-      Facts.publish(event_bus, revision)
+           },
+         {:ok, revision} <- persist_revision(run, attrs) do
       {:ok, revision}
     else
       {:error, %Changeset{} = changeset} -> {:error, changeset}
       {:error, reason} -> {:error, reason}
     end
+  end
+
+  # The database row is locked while the next number and label are chosen (domain): two runs
+  # on one database at once take turns instead of one failing on the unique
+  # (catalog_database_id, revision_number) index.
+  defp persist_revision(%ImportRun{} = run, attrs) do
+    Repo.transaction(fn ->
+      _locked = lock_database(run.catalog_database_id)
+
+      # Under the lock, again (domain): two reruns of the same import run at once both miss the
+      # check before the lock; the second must find the first's revision, not insert another.
+      case fetch_revision_by_import_run(run.organization_id, run.mission_id, run.import_run_id) do
+        {:ok, %Revision{} = existing} -> existing
+        {:error, :catalog_revision_not_found} -> insert_locked_revision(run, attrs)
+      end
+    end)
+  end
+
+  defp insert_locked_revision(%ImportRun{} = run, attrs) do
+    revision_number = next_revision_number(run.catalog_database_id)
+
+    revision =
+      attrs
+      |> Map.merge(%{
+        revision_number: revision_number,
+        revision_label: revision_label(run, revision_number)
+      })
+      |> Revision.new()
+
+    with {:ok, %RevisionRow{} = row} <- Repo.insert(RevisionRow.changeset(revision)),
+         revision = RevisionRow.to_domain(row),
+         {:ok, %OperationalEvent{}} <-
+           revision
+           |> OperationalEvent.from_catalog_revision(row.inserted_at)
+           |> then(&OperationalEvents.persist_event(Repo, &1)) do
+      revision
+    else
+      {:error, reason} -> Repo.rollback(reason)
+    end
+  end
+
+  defp lock_database(catalog_database_id) do
+    from(row in DatabaseRow,
+      where: row.catalog_database_id == ^catalog_database_id,
+      lock: "FOR UPDATE"
+    )
+    |> Repo.one()
   end
 
   defp ensure_revision_basis(revision_id) when is_binary(revision_id) and revision_id != "",

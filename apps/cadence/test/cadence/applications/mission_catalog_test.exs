@@ -8,11 +8,9 @@ defmodule Cadence.Applications.MissionCatalogTest do
 
     assert :ok = ApplicationDefinition.validate(definition)
     assert definition.application_key == "mission_catalog"
-    assert definition.installable_scopes == [:organization, :mission]
+    assert definition.installable_scopes == [:mission]
 
     assert Enum.map(definition.surfaces, & &1.surface_id) == [
-             "mission_list",
-             "mission_new",
              "mission_overview",
              "mission_applications",
              "catalog_index",
@@ -42,7 +40,7 @@ defmodule Cadence.Applications.MissionCatalogTest do
   end
 
   test "registers every surface query and interactive action contract" do
-    assert length(MissionCatalog.surface_query_contributions()) == 10
+    assert length(MissionCatalog.surface_query_contributions()) == 8
 
     assert Enum.map(MissionCatalog.surface_query_contributions(), & &1.query_id) ==
              Enum.map(

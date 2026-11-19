@@ -3,7 +3,79 @@ defmodule Cadence.SpacecraftStoreTest do
 
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
+  alias Cadence.Spacecraft.ConfigKinds.SpacecraftOverride
   alias Cadence.SpacecraftType
+
+  # qa #43, #49: a 500-spacecraft fleet exceeds one fetch batch; callers that can see the whole
+  # fleet fetch in batches, and nothing is truncated.
+  test "fetches any number of spacecraft in bounded batches" do
+    org = "org-batches-#{System.unique_integer([:positive])}"
+    mission = "mission-batches-#{System.unique_integer([:positive])}"
+    persist_mission_scope(org, mission)
+    count = Cadence.SpacecraftStore.max_batch_size() + 50
+
+    ids =
+      for n <- 1..count do
+        id = "sc-batch-#{n}"
+
+        {:ok, _} =
+          Cadence.SpacecraftStore.persist_spacecraft(
+            org,
+            Spacecraft.new(%{
+              spacecraft_id: id,
+              organization_id: org,
+              mission_id: mission,
+              display_name: "SC #{n}"
+            })
+          )
+
+        id
+      end
+
+    assert {:error, :batch_bounds_exceeded} =
+             Cadence.SpacecraftStore.fetch_spacecrafts(org, mission, ids)
+
+    assert {:ok, found} = Cadence.SpacecraftStore.fetch_spacecrafts_in_batches(org, mission, ids)
+    assert map_size(found) == count
+
+    # The override kind loaded only the first 100 before (#49 sweep).
+    assert map_size(SpacecraftOverride.load(org, mission, ids)) ==
+             count
+  end
+
+  # A profile rollout moves its spacecraft in one statement. An id that no longer exists (archived
+  # or deleted since the rollout listed it) is absent from the result, and the rollout refuses
+  # with :spacecraft_not_found instead of raising (api-ops).
+  test "set_profile_version moves the spacecraft it finds and leaves a missing id out" do
+    org = "org-profile-version-#{System.unique_integer([:positive])}"
+    mission = "mission-profile-version-#{System.unique_integer([:positive])}"
+    persist_mission_scope(org, mission)
+
+    for id <- ["sc-a", "sc-b"] do
+      {:ok, _} =
+        Cadence.SpacecraftStore.persist_spacecraft(
+          org,
+          Spacecraft.new(%{
+            spacecraft_id: id,
+            organization_id: org,
+            mission_id: mission,
+            display_name: id
+          })
+        )
+    end
+
+    assert {:ok, stored} =
+             Cadence.SpacecraftStore.set_profile_version(
+               org,
+               mission,
+               ["sc-a", "sc-b", "sc-gone"],
+               7
+             )
+
+    assert Map.keys(stored) |> Enum.sort() == ["sc-a", "sc-b"]
+    assert stored["sc-a"].spacecraft_type_version == 7
+    assert {:ok, %{}} = Cadence.SpacecraftStore.set_profile_version(org, mission, [], 7)
+  end
 
   test "persists and lists mission-owned spacecraft" do
     persist_mission_scope("org-spacecraft", "mission-spacecraft")

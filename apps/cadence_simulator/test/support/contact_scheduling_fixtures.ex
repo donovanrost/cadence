@@ -21,6 +21,7 @@ defmodule CadenceSimulator.ContactSchedulingFixtures do
   }
 
   alias Cadence.Contacts.ProviderClients.SimulatorHTTP
+  alias Cadence.Control.Contacts.Store.ProviderReservationRow
   alias Cadence.GroundNetworks
   alias Cadence.Management.Transports
 
@@ -589,22 +590,25 @@ defmodule CadenceSimulator.ContactSchedulingFixtures do
   def assert_reconciler_restart_preserves_single_contact(setup, reservation) do
     name = {:global, {__MODULE__, setup.suffix}}
 
-    child =
+    child = fn now ->
       {ProviderReservationReconciler,
        name: name,
        safety_poll_interval_ms: 60_000,
        backoff_ms: 0,
        mission_id: setup.mission_id,
        credential_resolver: &resolve_provider_credential/1,
-       now: DateTime.add(DateTime.utc_now(), 10, :second)}
+       now: now}
+    end
 
-    start_supervised!(child)
+    start_supervised!(child.(due_read_at(reservation, 10)))
 
     assert {:ok, %{processed: 1, converged: 1, errors: 0}} =
              ProviderReservationReconciler.reconcile_now(name)
 
+    # A restart keeps the row's schedule (next_due_at, 8e98f6f40): the restarted reconciler reads
+    # it once that read is due, and still keeps one contact.
     assert :ok = stop_supervised(ProviderReservationReconciler)
-    start_supervised!(child)
+    start_supervised!(child.(due_read_at(reservation)))
 
     assert {:ok, %{processed: 1, converged: 1, errors: 0}} =
              ProviderReservationReconciler.reconcile_now(name)
@@ -618,6 +622,24 @@ defmodule CadenceSimulator.ContactSchedulingFixtures do
              ProviderReservations.list_for_mission(setup.organization_id, setup.mission_id)
 
     assert persisted_reservation.provider_contact_ref == reservation.provider_contact_ref
+  end
+
+  @doc """
+  A clock for the reconciler's next read of `reservation` that finds it due: at least `min_s`
+  from now, and past the read the reconciler scheduled (`next_due_at`, by the reservation's band
+  to the pass, 8e98f6f40). A reconciler read skips a reservation before that.
+  """
+  def due_read_at(reservation, min_s \\ 1) do
+    floor = DateTime.add(DateTime.utc_now(), min_s, :second)
+
+    case Cadence.Repo.get_by!(ProviderReservationRow,
+           organization_id: reservation.organization_id,
+           mission_id: reservation.mission_id,
+           provider_reservation_id: reservation.provider_reservation_id
+         ).next_due_at do
+      nil -> floor
+      next_due_at -> Enum.max([floor, DateTime.add(next_due_at, 1, :second)], DateTime)
+    end
   end
 
   def admin_post!(url, body) do

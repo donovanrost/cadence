@@ -7,6 +7,8 @@ defmodule Cadence.Management.Commanding.StageAccess do
   alias Cadence.Platform.ScopedReadUpdates, as: ReadUpdates
   alias Cadence.Repo
 
+  # todo(authz): Cedar should decide who may stage, edit and share command stages (any mission
+  # operator today, DECISIONS #62).
   defdelegate authorize(scope, mission), to: ReviewAccess
 
   # Visibility is applied in SQL before paging, including for organization admins.

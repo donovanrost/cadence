@@ -1,10 +1,11 @@
 defmodule CadenceWeb.DashboardAuthoringDraftTestSupport do
   @moduledoc false
-  # A persisted dashboard with its author's staging transaction open.
+  # A persisted dashboard and its author's scope, for the console's dashboard API tests. Authoring
+  # is stateless (StatelessAuthoring): the legacy page's server-held draft went with L8a.
 
   import ExUnit.Assertions
   alias Cadence.Auth.Scope
-  alias Cadence.Dashboards.{AuthoringDraft, Document, DocumentCodec, Documents}
+  alias Cadence.Dashboards.{DocumentCodec, Documents}
   alias CadenceWeb.TestFixtures
 
   @fixture Path.expand(
@@ -45,18 +46,8 @@ defmodule CadenceWeb.DashboardAuthoringDraftTestSupport do
     }
 
     assert {:ok, document} = Documents.persist(org.organization_id, document)
-    assert {:ok, draft} = AuthoringDraft.open(scope, mission.mission_id, document.dashboard_id)
-    %{org: org, user: user, mission: mission, scope: scope, document: document, draft: draft}
+    %{org: org, user: user, mission: mission, scope: scope, document: document}
   end
-
-  def control(draft),
-    do: %{
-      "expected_version" => Document.version(draft.baseline),
-      "expected_revision" => draft.revision
-    }
-
-  def stage(c, draft, event, fields),
-    do: AuthoringDraft.stage(c.scope, draft, event, Map.merge(fields, control(draft)))
 
   def versions(c),
     do:

@@ -13,6 +13,7 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
   alias Cadence.Control.Activations
   alias Cadence.Control.MissionModelPromotion
   alias Cadence.Control.MissionRuntime
+  alias Cadence.Control.MissionRuntimeReconciler.AdmissionLog
   alias Cadence.Control.MissionRuntimeStatus
   alias Cadence.Control.ProcessNamespace
   alias Cadence.Governance
@@ -174,13 +175,29 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
     {:noreply, schedule_safety_poll(state)}
   end
 
+  # The status debounce passed (U91): record again so the newly visible item is announced at
+  # once, not at the next 30 s poll. Nothing else changes.
+  def handle_info(:runtime_status_check, state) do
+    :ok = MissionRuntimeStatus.record(state, nil)
+    {:noreply, state}
+  end
+
   # Every reconcile records the mission's runtime status (MissionRuntimeStatus), so /counts and
-  # the attention read never call this process.
+  # the attention read never call this process; and says, once, when admission starts failing,
+  # changes reason or recovers (11-17: it failed for minutes with nothing logged).
   defp reconcile_and_record(state) do
     {reply, next} = reconcile_state(state)
     :ok = MissionRuntimeStatus.record(next, desired_activation(state, next))
+    :ok = AdmissionLog.transition(state, next)
+    maybe_check_status(state, next)
     {reply, next}
   end
+
+  defp maybe_check_status(%{failing_since: nil}, %{failing_since: %DateTime{}}),
+    do:
+      Process.send_after(self(), :runtime_status_check, MissionRuntimeStatus.debounce_ms() + 500)
+
+  defp maybe_check_status(_state, _next), do: :ok
 
   # The activation's time and change set, read only when the desired generation is new.
   defp desired_activation(%{desired_generation: generation}, %{desired_generation: generation})

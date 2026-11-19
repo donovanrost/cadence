@@ -5,7 +5,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.TrustedSurfaceContractTest do
   alias Cadence.Applications.OpsConsole.ActionProvider, as: OpsActionProvider
   alias Cadence.Auth.Scope
   alias Cadence.ContactPlanning.FleetPlanningRuns
-  alias Cadence.Reads.ApplicationSurfaces.{Comms, CommsProviders, OpsConsole}
+  alias Cadence.Reads.ApplicationSurfaces.{Comms, OpsConsole}
 
   @organization_id "org-trusted-surface-contract"
   @mission_id "mission-trusted-surface-contract"
@@ -170,12 +170,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.TrustedSurfaceContractTest do
              "entries" => []
            }
 
-    requirements =
-      surface_props(context, "contact_requirement_list", "OpsContactRequirementList")
-
-    assert Map.has_key?(requirements["page"]["header"], "create_action")
-    assert Map.has_key?(requirements["page"], "journey_steps")
-
     %{"schedule" => contacts} = surface_props(context, "contact_schedule", "OpsContactSchedule")
     assert contacts["contract_version"] == 1
     assert contacts["context"]["mission_id"] == @mission_id
@@ -194,10 +188,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.TrustedSurfaceContractTest do
       for {surface, component} <- [
             {"fleet_planning", "OpsFleetPlanning"},
             {"fleet_planning_new", "OpsFleetPlanningNew"},
-            {"fleet_planning_policy", "OpsFleetPlanningPolicy"},
-            {"contact_requirement_list", "OpsContactRequirementList"},
-            {"contact_requirement_new", "OpsContactRequirementNew"},
-            {"contact_requirement_template", "OpsContactRequirementTemplate"},
             {"contact_schedule", "OpsContactSchedule"}
           ] do
         %{component: component, props: surface_props(context, surface, component)}
@@ -229,8 +219,8 @@ defmodule Cadence.Reads.ApplicationSurfaces.TrustedSurfaceContractTest do
              OpsConsole.load(c.scope, host, query)
 
     window = %{
-      "horizon_start" => "2026-07-17T04:00:00.000Z",
-      "horizon_end" => "2026-07-17T08:00:00.000Z",
+      "horizon_start" => "2030-07-17T04:00:00.000Z",
+      "horizon_end" => "2030-07-17T08:00:00.000Z",
       "include_recurring" => false
     }
 
@@ -311,7 +301,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.TrustedSurfaceContractTest do
                request("ops_console", "data_source_registration")
              )
 
-    for surface_id <- ~w(transport_new ground_station_new) do
+    for surface_id <- ~w(routing_new) do
       result =
         Comms.load(
           context.scope,
@@ -322,20 +312,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.TrustedSurfaceContractTest do
       assert match?({:ok, _payload}, result),
              "expected #{surface_id} to fit the trusted output boundary"
     end
-  end
-
-  test "provider creation represents an empty grant set as an actionable state", context do
-    assert {:ok, %{"data" => data}} =
-             CommsProviders.load(
-               context.scope,
-               context.host_context,
-               request("comms", "provider_new")
-             )
-
-    assert data["accounts"]["empty"]
-    assert data["accounts"]["selected"] == nil
-    assert data["accounts"]["empty_state"]["action"]["href"] == "/provider-accounts"
-    assert data["form"]["fields"]["provider_account_grant_id"]["value"] == ""
   end
 
   defp request(application_key, surface_id) do

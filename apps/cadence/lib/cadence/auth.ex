@@ -228,6 +228,31 @@ defmodule Cadence.Auth do
     |> Enum.map(&ServiceIdentityRow.to_domain/1)
   end
 
+  @doc "Active service identities with key creation time (no token material), by name."
+  @spec list_service_identity_directory(binary()) :: [map()]
+  def list_service_identity_directory(organization_id) when is_binary(organization_id) do
+    ServiceIdentityRow
+    |> where([r], r.organization_id == ^organization_id and r.lifecycle_state == "active")
+    |> order_by([r], asc: r.display_name)
+    |> select([r], %{
+      id: r.service_identity_id,
+      name: r.display_name,
+      mission_id: r.mission_id,
+      capabilities: r.capabilities,
+      # Rotation records its time (ServiceIdentityKeys); otherwise the key is the original.
+      key_created_at:
+        type(
+          fragment(
+            "coalesce((?->'value'->>'key_rotated_at')::timestamp, ?)",
+            r.metadata,
+            r.inserted_at
+          ),
+          :utc_datetime_usec
+        )
+    })
+    |> Repo.all()
+  end
+
   @doc "Bounded organization identity facts; token digests and metadata are not selected."
   def page_organization_service_identities(organization_id, after_id) do
     query =

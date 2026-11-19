@@ -57,6 +57,16 @@ defmodule Cadence.Contacts.Scheduler do
     notify_server(server, {:contact_changed, mission_id})
   end
 
+  @doc """
+  Reconciles the mission now, so a pass that couldn't start (ux U45) is retried as soon as
+  what blocked it is gone: called when an ended contact's runtime has stopped, which frees its
+  station listener for the next pass on the same provider profile.
+  """
+  @spec retry_starts(binary(), keyword()) :: :ok
+  def retry_starts(mission_id, opts \\ []) when is_binary(mission_id) and is_list(opts) do
+    notify_contact_change(mission_id, {:retry_starts, mission_id}, opts)
+  end
+
   @spec snapshot(GenServer.server()) :: map()
   def snapshot(server \\ __MODULE__) do
     GenServer.call(server, :snapshot)
@@ -161,6 +171,14 @@ defmodule Cadence.Contacts.Scheduler do
       {:noreply, state}
     end
   end
+
+  def handle_cast({:retry_starts, mission_id}, %{auto_schedule?: true} = state) do
+    if owns_mission?(state, mission_id),
+      do: {:noreply, reconcile_mission(state, mission_id)},
+      else: {:noreply, state}
+  end
+
+  def handle_cast({:retry_starts, _mission_id}, state), do: {:noreply, state}
 
   def handle_cast({:scheduled_contact_changed, %ScheduledContact{} = scheduled_contact}, state) do
     if owns_mission?(state, scheduled_contact.mission_id) do

@@ -39,27 +39,6 @@ const response = {
   },
 };
 
-const dashboardResponse = {
-  queryVersion: 1,
-  presentation: {
-    component: "OpsDashboardDirectory",
-    props: {
-      model: {
-        version: 2,
-        context: { organization_id: "org-1", mission_id: "mission-1" },
-        filters: {
-          query: "Flight",
-          tags: ["thermal"],
-          starred: false,
-          archived: true,
-          sort: "name",
-          page: 2,
-        },
-      },
-    },
-  },
-};
-
 const telemetrySelectField = (key: string) => ({
   id: `explore_${key}`,
   name: `explore[${key}]`,
@@ -188,44 +167,6 @@ const telemetryResponse = {
 const expectedSurfaceTable = [
   ["workspace", "overview", "mission", "application_workspace", "cadence.ops.workspace", []],
   [
-    "contact_requirement_list",
-    "collection",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.contact_requirement_list",
-    [],
-  ],
-  [
-    "contact_requirement_new",
-    "configuration",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.contact_requirement_new",
-    ["validate", "save"],
-  ],
-  [
-    "contact_requirement_show",
-    "subject_detail",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.contact_requirement_show",
-    ["plan", "create-plan"],
-  ],
-  [
-    "contact_requirement_template",
-    "configuration",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.contact_requirement_template",
-    [
-      "validate-template",
-      "create-template",
-      "pause-template",
-      "activate-template",
-      "close-template",
-    ],
-  ],
-  [
     "contact_schedule",
     "operations",
     "mission",
@@ -258,129 +199,6 @@ const expectedSurfaceTable = [
     [],
   ],
   [
-    "dashboard_directory",
-    "collection",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.dashboard_directory",
-    ["filter_dashboards", "toggle_dashboard_star", "restore_dashboard"],
-  ],
-  [
-    "dashboard_show",
-    "subject_detail",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.dashboard_show",
-    [],
-  ],
-  [
-    "dashboard_editor",
-    "configuration",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.dashboard_editor",
-    [
-      "layout_changed",
-      "validate_dashboard_section",
-      "save_dashboard_section",
-      "remove_dashboard_section",
-      "move_dashboard_section",
-      "preview_widget_binding",
-      "validate_widget",
-      "save_widget",
-      "remove_widget",
-      "rename",
-      "archive_dashboard",
-      "publish_dashboard",
-      "publish_dashboard_version",
-      "save_runtime_defaults",
-      "restore_version_as_draft",
-      "save_editor",
-      "review_editor",
-      "discard_editor",
-      "reload_editor",
-    ],
-  ],
-  [
-    "dashboard_activity",
-    "activity",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.dashboard_activity",
-    ["publish_version", "restore_version"],
-  ],
-  [
-    "dashboard_new",
-    "configuration",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.dashboard_new",
-    ["validate", "save"],
-  ],
-  [
-    "dashboard_library",
-    "collection",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.dashboard_library",
-    ["stage-library-item", "create-library-item", "add-library-version"],
-  ],
-  [
-    "dashboard_playlists",
-    "collection",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.dashboard_playlists",
-    ["create-playlist"],
-  ],
-  [
-    "dashboard_playlist_present",
-    "operations",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.dashboard_playlist_present",
-    ["next-dashboard"],
-  ],
-  [
-    "dashboard_settings",
-    "configuration",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.dashboard_settings",
-    [
-      "validate-settings",
-      "save-settings",
-      "create-share",
-      "revoke-share",
-      "create-snapshot",
-      "archive-dashboard",
-    ],
-  ],
-  [
-    "dashboard_share",
-    "subject_detail",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.dashboard_share",
-    [],
-  ],
-  [
-    "dashboard_snapshot",
-    "subject_detail",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.dashboard_snapshot",
-    [],
-  ],
-  [
-    "dashboard_diagnostics",
-    "activity",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.dashboard_diagnostics",
-    [],
-  ],
-  [
     "fleet_planning",
     "operations",
     "mission",
@@ -395,21 +213,6 @@ const expectedSurfaceTable = [
     "ops_workspace",
     "cadence.ops.fleet_planning_new",
     ["validate-fleet-run", "create-fleet-run"],
-  ],
-  [
-    "fleet_planning_policy",
-    "configuration",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.fleet_planning_policy",
-    [
-      "validate-policy",
-      "save-policy",
-      "approve-policy",
-      "validate-grant",
-      "issue-grant",
-      "revoke-grant",
-    ],
   ],
   [
     "fleet_planning_run",
@@ -434,35 +237,16 @@ const expectedSurfaceTable = [
     "mission",
     "ops_workspace",
     "cadence.ops.telemetry_explore",
-    ["apply_filters", "apply_question", "add_to_dashboard"],
+    ["apply_filters", "apply_question"],
   ],
-  [
-    "data_operations",
-    "operations",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.data_operations",
-    [
-      "validate-request",
-      "record-historical-workflow-request",
-      "transition-group",
-      "retry-group",
-      "request-correction",
-    ],
-  ],
+  ["data_operations", "operations", "mission", "ops_workspace", "cadence.ops.data_operations", []],
   [
     "data_operations_manage",
     "operations",
     "mission",
     "ops_workspace",
     "cadence.ops.data_operations_manage",
-    [
-      "validate-request",
-      "record-historical-workflow-request",
-      "transition-group",
-      "retry-group",
-      "request-correction",
-    ],
+    [],
   ],
   [
     "data_sources",
@@ -635,107 +419,6 @@ describe("Ops Console federated application", () => {
     wrapper.unmount();
   });
 
-  it("binds creation destinations to the host identity and drops them when the context changes", async () => {
-    const model = {
-      version: 1,
-      context: { organization_id: "org-1", mission_id: "mission-1" },
-      mode: "clone",
-      source_dashboard_id: "source-1",
-    };
-    const query = vi.fn<TestQuery>().mockResolvedValue({
-      queryVersion: 1,
-      presentation: { component: "OpsDashboardNew", props: { model } },
-    });
-    const baseProps = propsFor(query);
-    const surface = required(
-      surfaceContracts.find((candidate) => candidate.surfaceId === "dashboard_new"),
-    );
-    const wrapper = mount(OpsConsoleApplication, {
-      props: { ...baseProps, surface, application: { ...baseProps.application, surface } },
-    });
-    await flushPromises();
-    expect(wrapper.get("#dashboard-creation-destination-open").attributes("href")).toBe(
-      "/missions/mission-1/ops/dashboards/new?mode=clone&source_dashboard_id=source-1",
-    );
-    await wrapper.setProps({ context: { ...context, missionId: "mission-2" } });
-    expect(wrapper.find("#dashboard-creation-destination-open").exists()).toBe(false);
-    wrapper.unmount();
-  });
-
-  it("does not accept response-supplied context for a foreign creation destination", async () => {
-    const query = vi.fn<TestQuery>().mockResolvedValue({
-      queryVersion: 1,
-      presentation: {
-        component: "OpsDashboardNew",
-        props: {
-          organizationId: "foreign",
-          missionId: "foreign",
-          model: {
-            version: 1,
-            context: { organization_id: "foreign", mission_id: "foreign" },
-            mode: "new",
-            source_dashboard_id: null,
-          },
-        },
-      },
-    });
-    const baseProps = propsFor(query);
-    const surface = required(
-      surfaceContracts.find((candidate) => candidate.surfaceId === "dashboard_new"),
-    );
-    const wrapper = mount(OpsConsoleApplication, {
-      props: { ...baseProps, surface, application: { ...baseProps.application, surface } },
-    });
-    await flushPromises();
-    expect(wrapper.find("#dashboard-creation-destination-open").exists()).toBe(false);
-    expect(wrapper.find("#dashboard-creation-destination [role=status]").exists()).toBe(true);
-    wrapper.unmount();
-  });
-
-  it("preserves directory filters through the owner and removes destinations on host context change", async () => {
-    const query = vi.fn<TestQuery>().mockResolvedValue(dashboardResponse);
-    const baseProps = propsFor(query);
-    const surface = required(
-      surfaceContracts.find((candidate) => candidate.surfaceId === "dashboard_directory"),
-    );
-    const wrapper = mount(OpsConsoleApplication, {
-      props: { ...baseProps, surface, application: { ...baseProps.application, surface } },
-    });
-    await flushPromises();
-    expect(wrapper.get("#dashboard-directory-destination-open").attributes("href")).toBe(
-      "/missions/mission-1/ops/dashboards?query=Flight&tags=thermal&archived=true&sort=name&page=2",
-    );
-    expect(wrapper.findAll("form")).toHaveLength(0);
-    await wrapper.setProps({ context: { ...context, missionId: "mission-2" } });
-    expect(wrapper.find("#dashboard-directory-destination-open").exists()).toBe(false);
-    wrapper.unmount();
-  });
-
-  it("does not let a directory response override the actual host context", async () => {
-    const model = {
-      ...dashboardResponse.presentation.props.model,
-      context: { organization_id: "foreign", mission_id: "foreign" },
-    };
-    const query = vi.fn<TestQuery>().mockResolvedValue({
-      ...dashboardResponse,
-      presentation: {
-        component: "OpsDashboardDirectory",
-        props: { model, organizationId: "foreign", missionId: "foreign" },
-      },
-    });
-    const baseProps = propsFor(query);
-    const surface = required(
-      surfaceContracts.find((candidate) => candidate.surfaceId === "dashboard_directory"),
-    );
-    const wrapper = mount(OpsConsoleApplication, {
-      props: { ...baseProps, surface, application: { ...baseProps.application, surface } },
-    });
-    await flushPromises();
-    expect(wrapper.find("#dashboard-directory-destination-open").exists()).toBe(false);
-    expect(wrapper.find("#dashboard-directory-destination [role=status]").exists()).toBe(true);
-    wrapper.unmount();
-  });
-
   it("links the legacy telemetry contract to the canonical host page without containment", async () => {
     const query = vi.fn<TestQuery>().mockResolvedValue({
       ...telemetryResponse,
@@ -828,13 +511,13 @@ describe("Ops Console federated application", () => {
       result: {},
     });
     const wrapper = mount(OpsConsoleApplication, {
-      props: propsFor(query, execute, "dashboard_directory"),
+      props: propsFor(query, execute, "activation_requests"),
     });
     await flushPromises();
 
     window.dispatchEvent(
       new CustomEvent("cadence:ops-event", {
-        detail: { eventName: "toggle_dashboard_star", payload: { dashboard_id: "dashboard-1" } },
+        detail: { eventName: "decide", payload: { request_id: "request-1" } },
       }),
     );
     await flushPromises();
@@ -842,10 +525,10 @@ describe("Ops Console federated application", () => {
     expect(execute).toHaveBeenCalledWith({
       applicationKey: "ops_console",
       applicationVersion: 1,
-      surfaceId: "dashboard_directory",
+      surfaceId: "activation_requests",
       surfaceVersion: 1,
-      actionId: "toggle_dashboard_star",
-      input: { dashboard_id: "dashboard-1" },
+      actionId: "decide",
+      input: { request_id: "request-1" },
       context,
     });
     expect(wrapper.find("#ops-console-action-notice").exists()).toBe(true);
@@ -860,13 +543,13 @@ describe("Ops Console federated application", () => {
       result: { status: "completed" },
     });
     const wrapper = mount(OpsConsoleApplication, {
-      props: propsFor(query, execute, "dashboard_directory"),
+      props: propsFor(query, execute, "activation_requests"),
     });
     await flushPromises();
 
     window.dispatchEvent(
       new CustomEvent("cadence:ops-event", {
-        detail: { eventName: "toggle_dashboard_star", payload: { dashboard_id: "dashboard-1" } },
+        detail: { eventName: "decide", payload: { request_id: "request-1" } },
       }),
     );
     await flushPromises();
@@ -876,7 +559,7 @@ describe("Ops Console federated application", () => {
     wrapper.unmount();
   });
 
-  it("forwards a visible dashboard action from the federated surface", async () => {
+  it("forwards a visible action from the federated surface", async () => {
     const query = vi.fn<TestQuery>().mockResolvedValue(response);
     const execute = vi.fn<TestExecute>().mockResolvedValue({
       receiptId: "receipt-layout",
@@ -884,13 +567,13 @@ describe("Ops Console federated application", () => {
       result: { status: "completed" },
     });
     const wrapper = mount(OpsConsoleApplication, {
-      props: propsFor(query, execute, "dashboard_directory"),
+      props: propsFor(query, execute, "activation_requests"),
     });
     await flushPromises();
 
     window.dispatchEvent(
       new CustomEvent("cadence:ops-event", {
-        detail: { eventName: "toggle_dashboard_star", payload: { dashboard_id: "dashboard-1" } },
+        detail: { eventName: "decide", payload: { request_id: "request-1" } },
       }),
     );
     await flushPromises();
@@ -909,22 +592,7 @@ describe("Ops Console federated application", () => {
       "OpsContactDetail",
       "OpsContactPlanShow",
       "OpsContactRecord",
-      "OpsContactRequirementList",
-      "OpsContactRequirementNew",
-      "OpsContactRequirementShow",
-      "OpsContactRequirementTemplate",
       "OpsContactSchedule",
-      "OpsDashboardActivitySurface",
-      "OpsDashboardDiagnostics",
-      "OpsDashboardDirectory",
-      "OpsDashboardLibrary",
-      "OpsDashboardNew",
-      "OpsDashboardPlaylistPresent",
-      "OpsDashboardPlaylists",
-      "OpsDashboardSettings",
-      "OpsDashboardShare",
-      "OpsDashboardShow",
-      "OpsDashboardSnapshot",
       "OpsDataOperations",
       "OpsDataOperationsManage",
       "OpsDataSourceRegistration",
@@ -932,7 +600,6 @@ describe("Ops Console federated application", () => {
       "OpsDataSources",
       "OpsFleetPlanning",
       "OpsFleetPlanningNew",
-      "OpsFleetPlanningPolicy",
       "OpsFleetPlanningRun",
       "OpsTelemetryExplore",
       "OpsTimeline",
@@ -955,10 +622,6 @@ describe("Ops Console federated application", () => {
         ),
       ).toThrow("presentation component is invalid");
     }
-    expect(routeQueryContracts.dashboard_playlist_present).toEqual({
-      subjectParam: "playlist_id",
-      queryParams: ["playlist_id", "index"],
-    });
   });
 
   it("publishes the exact first-party mission identity", () => {
@@ -966,49 +629,27 @@ describe("Ops Console federated application", () => {
     expect(manifest.application).toMatchObject({ applicationKey: "ops_console", version: 1 });
     expect(manifest.application.installableScopes).toEqual(["mission"]);
     expect(manifest.surfaces).toEqual(surfaceContracts);
-    expect(surfaceContracts).toHaveLength(35);
-    expect(new Set(surfaceContracts.map((surface) => surface.surfaceId)).size).toBe(35);
-    expect(surfaceContracts.flatMap((surface) => surface.actions)).toHaveLength(108);
+    expect(surfaceContracts).toHaveLength(18);
+    expect(new Set(surfaceContracts.map((surface) => surface.surfaceId)).size).toBe(18);
+    // The data-operations surfaces declare no host actions (their native page does the work).
+    expect(surfaceContracts.flatMap((surface) => surface.actions)).toHaveLength(45);
     expect(
       new Set(
         surfaceContracts.flatMap((surface) =>
           surface.actions.map((action) => `${surface.surfaceId}:${action}`),
         ),
       ).size,
-    ).toBe(108);
-    expect(new Set(surfaceContracts.flatMap((surface) => surface.actions)).size).toBe(89);
+    ).toBe(45);
+    expect(new Set(surfaceContracts.flatMap((surface) => surface.actions)).size).toBe(34);
     expect(
       surfaceContracts.slice(2).every((surface) => {
-        const componentName =
-          surface.surfaceId === "dashboard_editor"
-            ? "OpsDashboardShow"
-            : surface.surfaceId === "dashboard_activity"
-              ? "OpsDashboardActivitySurface"
-              : `Ops${surface.surfaceId.replace(/(^|_)(\w)/g, (_: string, _prefix: string, letter: string) => letter.toUpperCase())}`;
+        const componentName = `Ops${surface.surfaceId.replace(/(^|_)(\w)/g, (_: string, _prefix: string, letter: string) => letter.toUpperCase())}`;
         return Boolean(OPS_COMPONENTS[componentName]);
       }),
     ).toBe(true);
   });
 
   it("publishes exact deep-route subject and query contracts", () => {
-    expect(routeQueryContracts.dashboard_directory.queryParams).toEqual([
-      "query",
-      "tags",
-      "starred",
-      "archived",
-      "sort",
-      "page",
-      "lifecycle",
-      "tag",
-    ]);
-    expect(routeQueryContracts.dashboard_new.queryParams).toEqual(["mode", "source_dashboard_id"]);
-    expect(routeQueryContracts.dashboard_show.subjectParam).toBe("dashboard_id");
-    expect(routeQueryContracts.dashboard_editor.queryParams).toEqual(["dashboard_id"]);
-    expect(routeQueryContracts.dashboard_activity.queryParams).toEqual([
-      "dashboard_id",
-      "version",
-      "selected_publish_issue",
-    ]);
     expect(routeQueryContracts.data_source_registration).toEqual({
       subjectParam: null,
       queryParams: [],
@@ -1016,9 +657,6 @@ describe("Ops Console federated application", () => {
     expect(routeQueryContracts.data_operations_manage.queryParams).toEqual(["group"]);
 
     for (const surfaceId of [
-      "dashboard_show",
-      "dashboard_editor",
-      "dashboard_activity",
       "data_source_registration",
       "data_source_settings",
       "data_operations_manage",

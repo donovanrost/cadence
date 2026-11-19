@@ -20,6 +20,12 @@ defmodule Cadence.SpacecraftStore.SpacecraftRow do
     field(:spacecraft_type_id, :string)
     field(:spacecraft_type_version, :integer)
     field(:metadata, :map, default: %{})
+    field(:lifecycle_state, :string, default: "active")
+    field(:archived_at, :utc_datetime_usec)
+    field(:archived_by, :map)
+    # L22: change-set switches; nil means "as the spacecraft's configuration has it".
+    field(:commanding_enabled, :boolean)
+    field(:telemetry_enabled, :boolean)
 
     timestamps()
   end
@@ -64,8 +70,32 @@ defmodule Cadence.SpacecraftStore.SpacecraftRow do
       scid: row.scid,
       spacecraft_type_id: row.spacecraft_type_id,
       spacecraft_type_version: row.spacecraft_type_version,
-      metadata: JsonDocument.unwrap_value(row.metadata)
+      metadata: JsonDocument.unwrap_value(row.metadata),
+      lifecycle_state: row.lifecycle_state,
+      archived_at: row.archived_at,
+      archived_by: row.archived_by,
+      commanding_enabled: row.commanding_enabled,
+      telemetry_enabled: row.telemetry_enabled
     })
+  end
+
+  @doc """
+  Sets the commanding and telemetry switches (L22). Only the change-set kind writes them, so the
+  identity update above never clears one.
+  """
+  @spec switches_changeset(struct(), map()) :: Ecto.Changeset.t()
+  def switches_changeset(%__MODULE__{} = row, switches) do
+    cast(row, switches, [:commanding_enabled, :telemetry_enabled])
+  end
+
+  @doc "Archives the spacecraft (#49/#50): it leaves lists, the fleet and planning targets."
+  @spec archive_changeset(struct(), map()) :: Ecto.Changeset.t()
+  def archive_changeset(%__MODULE__{} = row, actor) do
+    change(row,
+      lifecycle_state: "archived",
+      archived_at: DateTime.utc_now(),
+      archived_by: actor
+    )
   end
 
   defp domain_attrs(%Spacecraft{} = spacecraft) do

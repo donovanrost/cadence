@@ -20,6 +20,9 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
 
   @tcp_opts [:binary, packet: 0, active: false, nodelay: true]
   @default_reconnect_interval_ms 250
+  # A spacecraft reports its CLCW continuously (in every downlink frame's OCF), so one lost
+  # report can't strand the ground's FOP for a whole pass (#38, DECISIONS #59 follow-up).
+  @default_clcw_report_interval_ms 1_000
 
   defstruct [
     :host,
@@ -30,6 +33,8 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
     :socket,
     :reconnect_interval_ms,
     :connect_timer_ref,
+    :clcw_report_interval_ms,
+    :clcw_timer_ref,
     :clcw_injector,
     :command_target,
     :segment_header_flag,
@@ -80,6 +85,8 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
         runtime_resolver: Keyword.get(opts, :runtime_resolver),
         reconnect_interval_ms:
           Keyword.get(opts, :reconnect_interval_ms, @default_reconnect_interval_ms),
+        clcw_report_interval_ms:
+          Keyword.get(opts, :clcw_report_interval_ms, @default_clcw_report_interval_ms),
         clcw_injector: build_clcw_injector(opts),
         command_target: Keyword.get(opts, :command_target),
         segment_header_flag: Keyword.get(opts, :segment_header_flag, 0),
@@ -101,6 +108,7 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
        host: state.host,
        port: state.port,
        connected?: is_port(state.socket),
+       local_address: local_address(state.socket),
        tc_frame_size: state.tc_frame_size,
        fecf: state.fecf,
        tc_frame_count: state.tc_frame_count,
@@ -125,6 +133,13 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
   def handle_info(:connect, state) do
     {:noreply, %{state | connect_timer_ref: nil} |> connect_or_schedule()}
   end
+
+  def handle_info({:report_clcw, ref}, %{clcw_timer_ref: ref, socket: socket} = state)
+      when is_port(socket) do
+    {:noreply, state |> report_current_clcw() |> schedule_clcw_report()}
+  end
+
+  def handle_info({:report_clcw, _stale}, state), do: {:noreply, state}
 
   def handle_info({:tcp, socket, data}, %{socket: socket} = state) when is_binary(data) do
     next_state =
@@ -174,7 +189,10 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
     case :gen_tcp.connect(String.to_charlist(state.host), state.port, @tcp_opts) do
       {:ok, socket} ->
         :ok = :inet.setopts(socket, active: :once)
+
         %{state | socket: socket, last_error: nil}
+        |> report_current_clcw()
+        |> schedule_clcw_report()
 
       {:error, reason} ->
         Logger.warning(
@@ -277,6 +295,32 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
     end
   end
 
+  # A spacecraft reports its CLCW continuously (in the TM OCF), so a fresh connection gets the
+  # FARM's current report at once and the ground FOP can initialize V(S) from it instead of
+  # assuming 0 (Cadence DECISIONS #59). Overrides apply as to any other report.
+  defp report_current_clcw(state) do
+    farm =
+      case Map.fetch(state.farm_by_vcid, 0) do
+        {:ok, farm} ->
+          farm
+
+        :error ->
+          {:ok, farm} = FARM.new(Map.put(state.farm_config, :vcid, 0))
+          farm
+      end
+
+    clcw = farm |> FARM.clcw() |> maybe_apply_injector(state.clcw_injector, state.tc_frame_count)
+
+    with {:ok, binary} <- CLCW.encode(clcw),
+         :ok <- :gen_tcp.send(state.socket, binary) do
+      %{state | clcw_count: state.clcw_count + 1, last_clcw_report_value: clcw.report_value}
+    else
+      {:error, reason} ->
+        Logger.warning("COP-1 loopback failed to report its CLCW: #{inspect(reason)}")
+        %{state | last_error: inspect(reason)}
+    end
+  end
+
   defp maybe_apply_injector(%CLCW{} = clcw, %CLCWInjector{} = injector, step) do
     CLCWInjector.apply(injector, clcw, step)
   end
@@ -325,6 +369,16 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
       state
     end
   end
+
+  # The peer's own socket address: what the far end sees as this connection's peer (#44).
+  defp local_address(socket) when is_port(socket) do
+    case :inet.sockname(socket) do
+      {:ok, {ip, port}} -> "#{:inet.ntoa(ip)}:#{port}"
+      _error -> nil
+    end
+  end
+
+  defp local_address(_socket), do: nil
 
   defp farm_snapshots(farm_by_vcid) do
     Map.new(farm_by_vcid, fn {vcid, farm} ->
@@ -413,10 +467,20 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
     end
   end
 
+  defp schedule_clcw_report(%{clcw_report_interval_ms: interval} = state)
+       when is_integer(interval) and interval > 0 do
+    ref = make_ref()
+    Process.send_after(self(), {:report_clcw, ref}, interval)
+    %{state | clcw_timer_ref: ref}
+  end
+
+  defp schedule_clcw_report(state), do: state
+
   defp reset_connection_state(state) do
     %{
       state
       | socket: nil,
+        clcw_timer_ref: nil,
         receive_buffer: <<>>,
         tc_reassembly: %{state.tc_reassembly | buffers: %{}}
     }

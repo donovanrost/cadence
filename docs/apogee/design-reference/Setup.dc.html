@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Readiness · Setup · Cadence</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Saira:wght@400;500;600&amp;family=Saira+Condensed:wght@500;600;700&amp;family=Azeret+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#05070A}
+a{color:#E6EDF3}a:hover{color:#FFFFFF}
+.m{font-family:'Azeret Mono',ui-monospace,monospace}
+.n{font-family:Saira,sans-serif;font-variant-numeric:tabular-nums}
+.lbl{font:600 12px 'Saira Condensed',sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#7D8A99;margin:0}
+.pnl{background:#0A0E13;border:1px solid #1C2530}
+.ph{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid #1C2530;flex-wrap:wrap}
+.ph .t{font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#C9D3DD;margin:0}
+.ph .i{font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.ph .r{margin-left:auto;font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.tag{display:inline-flex;align-items:center;gap:7px;height:24px;padding:0 9px;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;border:1px solid currentColor;white-space:nowrap}
+.b{height:32px;padding:0 12px;border:1px solid #2A3644;background:#0F141B;color:#E6EDF3;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;text-decoration:none}
+.b.pri{background:#E6EDF3;color:#05070A;border-color:#E6EDF3}
+.s-nom{width:8px;height:8px;background:#2FD08A;flex:none}
+.s-cau{width:10px;height:9px;background:#FFB020;clip-path:polygon(50% 0,100% 100%,0 100%);flex:none}
+.s-stale{width:8px;height:8px;flex:none;box-sizing:border-box;border:1px solid #A497FF;background-image:repeating-linear-gradient(135deg,#A497FF 0 1.5px,transparent 1.5px 4px)}
+.s-off{width:8px;height:8px;flex:none;box-sizing:border-box;border:1px dashed #9DAAB8}
+.rail a{display:flex;align-items:center;gap:10px;height:36px;padding:0 12px;color:#9DAAB8;text-decoration:none;font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;border-left:2px solid transparent}
+.rail a:hover{color:#E6EDF3;background:#0F141B}
+.rail a.on{color:#E6EDF3;background:#0F141B;border-left-color:#E6EDF3}
+.rail .x{font:500 10px 'Azeret Mono',monospace;color:#7D8A99;width:16px}
+.rail .c{margin-left:auto;font:500 11px 'Azeret Mono',monospace;color:#7D8A99;letter-spacing:0}
+.rail .g{font:600 11px 'Saira Condensed',sans-serif;letter-spacing:.22em;text-transform:uppercase;color:#7D8A99;padding:14px 14px 6px}
+.mode{display:flex;align-items:center;border:1px solid #2A3644}
+.mode a,.mode span{height:30px;padding:0 12px;display:flex;align-items:center;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.18em;text-transform:uppercase;text-decoration:none;color:#9DAAB8}
+.mode .on{background:#E6EDF3;color:#05070A}
+.area{background:#0A0E13;padding:16px;display:flex;flex-direction:column;gap:10px}
+.area .h{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.area .nm{font:600 17px 'Saira Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase}
+.area .d{font-size:13px;color:#9DAAB8;line-height:1.45}
+.f{display:grid;grid-template-columns:14px minmax(0,1fr) auto;gap:12px;align-items:start;padding:14px 16px;border-top:1px solid #1C2530}
+.ev{display:grid;grid-template-columns:44px 132px minmax(0,1fr);gap:12px;padding:10px 16px;border-top:1px solid #1C2530;font-size:13px;align-items:baseline}
+</style>
+</helmet>
+<div style="font-family: 'Saira', system-ui, sans-serif; color: #E6EDF3; min-height: 100vh; display: flex; flex-direction: column; background-color: #05070A; background-image: linear-gradient(rgba(230,237,243,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(230,237,243,.025) 1px, transparent 1px); background-size: 40px 40px">
+
+<header style="display: flex; flex-wrap: wrap; align-items: stretch; border-bottom: 1px solid #1C2530; background: #070A0E; min-height: 52px">
+<div style="display: flex; align-items: center; gap: 12px; padding: 0 18px; border-right: 1px solid #1C2530">
+<svg width="20" height="20" viewBox="0 0 30 30" aria-hidden="true"><path d="M15 2 28 15 15 28 2 15Z" fill="none" stroke="#E6EDF3" stroke-width="2"></path><path d="M15 9 21 15 15 21 9 15Z" fill="#E6EDF3"></path></svg>
+<span style="font: 700 16px 'Saira Condensed'; letter-spacing: .36em">CADENCE</span>
+</div>
+<button style="display: flex; align-items: center; gap: 10px; padding: 0 18px; border: 0; border-right: 1px solid #1C2530; background: transparent; color: #E6EDF3; cursor: pointer; font: 600 14px 'Saira Condensed'; letter-spacing: .16em; text-transform: uppercase"><span style="color: #7D8A99">Reflect Orbital /</span>Earendil</button>
+<div style="display: flex; align-items: center; padding: 0 18px; border-right: 1px solid #1C2530"><nav class="mode" aria-label="Mode"><a href="Now.dc.html">Ops</a><span class="on" aria-current="page">Setup</span></nav></div>
+<button style="flex: 1 1 240px; display: flex; align-items: center; gap: 10px; padding: 0 18px; border: 0; border-right: 1px solid #1C2530; background: transparent; color: #7D8A99; cursor: pointer; font: 400 14px 'Saira'; text-align: left"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7D8A99" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg><span style="flex: 1">Spacecraft, profiles, commands, settings…</span><span class="m" style="font-size: 11px; border: 1px solid #2A3644; padding: 1px 6px">⌘K</span></button>
+<div class="m" style="display: flex; align-items: center; gap: 22px; padding: 0 18px; font-size: 13px"><span><span style="color: #7D8A99">CONFIG</span> r5</span><span><span style="color: #7D8A99">UTC</span> 03:46:20</span></div>
+<button aria-label="Account menu for Donovan" style="width: 52px; border: 0; border-left: 1px solid #1C2530; background: transparent; color: #E6EDF3; font: 600 14px 'Saira Condensed'; letter-spacing: .1em; cursor: pointer">DR</button>
+</header>
+
+<div style="display: flex; flex-wrap: wrap; flex: 1">
+<nav class="rail" aria-label="Setup" style="flex: 0 0 220px; box-sizing: border-box; padding: 6px 0 14px; border-right: 1px solid #1C2530; display: flex; flex-direction: column; background: #070A0E">
+<span class="g">Mission</span>
+<a href="#" class="on"><span class="x">01</span>Readiness</a>
+<a href="#"><span class="x">02</span>Spacecraft<span class="c">500</span></a>
+<a href="Profile.dc.html"><span class="x">03</span>Profiles<span class="c">2</span></a>
+<a href="Catalog.dc.html"><span class="x">04</span>Catalog<span class="c">v14</span></a>
+<a href="#"><span class="x">05</span>Comms &amp; routing</a>
+<a href="#"><span class="x">06</span>Ground stations<span class="c">6</span></a>
+<a href="#"><span class="x">07</span>Data sources<span class="c">4</span></a>
+<a href="#"><span class="x">08</span>Apps</a>
+<span class="g">Organization</span>
+<a href="People.dc.html"><span class="x">··</span>People &amp; access</a>
+<a href="#"><span class="x">··</span>Missions</a>
+<a href="#"><span class="x">··</span>Settings</a>
+<a href="#"><span class="x">··</span>Audit log</a>
+</nav>
+
+<div style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column">
+<main style="flex: 1; box-sizing: border-box; padding: 20px 24px 24px; display: flex; flex-direction: column; gap: 16px">
+
+<section style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; justify-content: space-between">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<p class="lbl">Earendil · mission readiness</p>
+<div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap"><h1 style="margin: 0; font: 600 36px 'Saira Condensed'; letter-spacing: .08em; text-transform: uppercase">Ready for operations</h1><span class="tag" style="color: #4FDB9E"><span class="s-nom"></span>0 blockers</span></div>
+<span style="font-size: 14px; color: #9DAAB8">3 suggestions, 1 caution · configuration r5 applied 2026-10-19 02:29Z by Donovan R.</span>
+</div>
+<div style="display: flex; gap: 8px"><a href="AddSpacecraft.dc.html" class="b">Add spacecraft</a><a href="Catalog.dc.html" class="b">Import catalog</a></div>
+</section>
+
+<section style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1px; background: #1C2530; border: 1px solid #1C2530">
+<div class="area"><div class="h"><span class="nm">Fleet</span><span class="tag" style="color: #4FDB9E; height: 22px"><span class="s-nom"></span>Ready</span></div><span class="n" style="font-size: 28px">500 <span style="font-size: 14px; color: #7D8A99">spacecraft</span></span><span class="d">2 profiles · every spacecraft has a SCID, a profile and a route</span></div>
+<div class="area"><div class="h"><span class="nm">Catalog</span><span class="tag" style="color: #4FDB9E; height: 22px"><span class="s-nom"></span>Ready</span></div><span class="n" style="font-size: 28px">v14 <span style="font-size: 14px; color: #7D8A99">547 declarations</span></span><span class="d">v15 import staged, not applied · 2 profiles use v14</span></div>
+<div class="area"><div class="h"><span class="nm">Comms &amp; routing</span><span class="tag" style="color: #4FDB9E; height: 22px"><span class="s-nom"></span>Ready</span></div><span class="n" style="font-size: 28px">2 <span style="font-size: 14px; color: #7D8A99">rules · 3,000 routes</span></span><span class="d">Routes are generated from profile rules, not edited one by one</span></div>
+<div class="area" style="box-shadow: inset 0 2px 0 #FFB020"><div class="h"><span class="nm">Ground stations</span><span class="tag" style="color: #FFC24D; height: 22px"><span class="s-cau"></span>Caution</span></div><span class="n" style="font-size: 28px">6 <span style="font-size: 14px; color: #7D8A99">stations · 9 antennas</span></span><span class="d">Svalbard downlink degraded since 01:52Z</span></div>
+<div class="area" style="box-shadow: inset 0 2px 0 #A497FF"><div class="h"><span class="nm">Data sources</span><span class="tag" style="color: #BDB3FF; height: 22px"><span class="s-stale"></span>1 stale</span></div><span class="n" style="font-size: 28px">4 <span style="font-size: 14px; color: #7D8A99">sources</span></span><span class="d">Flight events last received 47m ago, expected every 5m</span></div>
+<div class="area" style="box-shadow: inset 0 2px 0 #4A5562"><div class="h"><span class="nm">Apps</span><span class="tag" style="color: #9DAAB8; height: 22px"><span class="s-off"></span>1 not set up</span></div><span class="n" style="font-size: 28px">5 <span style="font-size: 14px; color: #7D8A99">of 6 installed</span></span><span class="d">Limits &amp; Alarming is not installed, so ground limit checks are off</span></div>
+</section>
+
+<div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start">
+<section class="pnl" style="flex: 999 1 560px; min-width: 0">
+<div class="ph"><span class="i">R1</span><h2 class="t">Findings</h2><span class="r">GROUPED BY CAUSE · 3,006 ITEMS → 4 LINES</span></div>
+<div style="padding: 12px 16px; display: flex; gap: 10px; align-items: center; background: rgba(47,208,138,.04)"><span class="s-nom"></span><span style="font-size: 14px">No blockers. Nothing stops commanding or contacts.</span></div>
+<div class="f"><span class="s-cau" style="margin-top: 5px"></span><div style="display: flex; flex-direction: column; gap: 4px"><span style="font-weight: 600; font-size: 15px">Svalbard downlink degraded</span><span style="font-size: 13px; color: #9DAAB8">4 spacecraft in plane 02 went stale on their last Svalbard pass. Consider moving their next passes to Inuvik.</span></div><button class="b">Open station</button></div>
+<div class="f"><span class="s-stale" style="margin-top: 5px"></span><div style="display: flex; flex-direction: column; gap: 4px"><span style="font-weight: 600; font-size: 15px">Flight events source is late</span><span style="font-size: 13px; color: #9DAAB8">Last batch 47m ago. Timeline and alarms from flight events may be incomplete.</span></div><button class="b">Open source</button></div>
+<div class="f"><span class="s-off" style="margin-top: 5px"></span><div style="display: flex; flex-direction: column; gap: 4px"><span style="font-weight: 600; font-size: 15px">Limits &amp; Alarming not installed</span><span style="font-size: 13px; color: #9DAAB8">Ops shows this on Now and Alarms instead of implying everything is clean.</span></div><button class="b">Install</button></div>
+<div class="f"><span style="width: 10px; height: 2px; background: #7D8A99; margin-top: 9px"></span><div style="display: flex; flex-direction: column; gap: 4px"><span style="font-weight: 600; font-size: 15px; color: #C9D3DD">Optional · 3,000 routes use default protocol behavior</span><span style="font-size: 13px; color: #9DAAB8">This is a suggestion, not a warning. Change it once on the profile rule if you need it.</span></div><a href="Profile.dc.html" class="b">Edit rule</a></div>
+</section>
+
+<section class="pnl" style="flex: 1 1 340px; min-width: 0">
+<div class="ph"><span class="i">R2</span><h2 class="t">Revisions</h2><a href="#" class="r" style="color: #E6EDF3; text-decoration: none">AUDIT LOG →</a></div>
+<div class="ev"><span class="m" style="font-size: 12px">r5</span><span class="m" style="font-size: 11px; color: #7D8A99">10-19 02:29Z</span><span>Block 1 framing: CCSDS TM to 1,115 bytes · Donovan R.</span></div>
+<div class="ev"><span class="m" style="font-size: 12px">r4</span><span class="m" style="font-size: 11px; color: #7D8A99">10-14 18:02Z</span><span>Catalog v14 applied to Block 1 and Block 2 · Mira K.</span></div>
+<div class="ev"><span class="m" style="font-size: 12px">r3</span><span class="m" style="font-size: 11px; color: #7D8A99">10-09 11:47Z</span><span>Added Hartebeesthoek ground station · Donovan R.</span></div>
+<div class="ev"><span class="m" style="font-size: 12px">r2</span><span class="m" style="font-size: 11px; color: #7D8A99">10-02 09:15Z</span><span>500 spacecraft created from Block 1 manifest · Donovan R.</span></div>
+<div style="padding: 10px 16px; border-top: 1px solid #1C2530"><button class="b">Compare revisions</button></div>
+</section>
+</div>
+</main>
+
+<div style="position: sticky; bottom: 0; display: flex; flex-wrap: wrap; gap: 16px; align-items: center; padding: 12px 24px; background: #0F141B; border-top: 1px solid #2A3644">
+<span class="m" style="font-size: 12px; color: #9DAAB8">STAGED · NOT APPLIED</span>
+<span style="font-size: 14px"><b style="font-weight: 600">2 changes:</b> 50 new spacecraft (Block 2), catalog v15 import</span>
+<span style="margin-left: auto; display: flex; gap: 8px"><button class="b">Discard</button><button class="b pri">Review &amp; apply as r6</button></span>
+</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1160}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

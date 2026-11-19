@@ -7,6 +7,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
   """
 
   alias Cadence.Applications.{ActionRequest, HostContext, JSONBoundary}
+  alias Cadence.Applications.OpsConsole.Actions.PlatformBindings
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Control.DataSources, as: DataSourceControl
   alias Cadence.Control.ManagedResources
@@ -15,6 +16,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
   alias Cadence.Jobs
   alias Cadence.Jobs.Job
   alias Cadence.Management.DataSources
+  alias Cadence.Secrets.EnvBackend
 
   @surface_ids ["data_sources", "data_source_registration", "data_source_settings"]
   @surface_version 1
@@ -45,6 +47,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
     "retry-deployment-run",
     "requeue-deployment-run"
   ]
+
+  @shared_switch_keys ["reason", "expected_affected_missions", "expected_live_passes_total"]
 
   @source_fields [
     "data_source_id",
@@ -277,7 +281,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
   defp normalize_register_source(params) do
     with :ok <- exact_keys(params, ["source"], ["mission_id"]),
          {:ok, source_params} <- fetch_map(params, "source"),
-         :ok <- exact_keys(source_params, @source_fields, []),
+         # display_name: optional (console L11); the legacy page doesn't send it.
+         :ok <- exact_keys(source_params, @source_fields, ["display_name"]),
          {:ok, attrs} <- parse_source(source_params) do
       {:ok, %{source: attrs}}
     end
@@ -286,10 +291,22 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
   defp normalize_change_binding(params) do
     with :ok <- exact_keys(params, ["binding"], ["mission_id"]),
          {:ok, binding_params} <- fetch_map(params, "binding"),
-         :ok <- exact_keys(binding_params, ["binding_id", "data_source_id"], []),
+         :ok <-
+           exact_keys(
+             binding_params,
+             ["binding_id", "data_source_id", "expected_data_source_id"],
+             @shared_switch_keys
+           ),
          {:ok, binding_id} <- required_text(binding_params, "binding_id"),
-         {:ok, data_source_id} <- required_text(binding_params, "data_source_id") do
-      {:ok, %{binding_id: binding_id, data_source_id: data_source_id}}
+         {:ok, data_source_id} <- required_text(binding_params, "data_source_id"),
+         {:ok, expected} <- required_text(binding_params, "expected_data_source_id") do
+      {:ok,
+       %{
+         binding_id: binding_id,
+         data_source_id: data_source_id,
+         expected_data_source_id: expected,
+         shared_switch: Map.take(binding_params, @shared_switch_keys)
+       }}
     end
   end
 
@@ -366,7 +383,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
          {:ok, credential_provider} <- optional_text(params, "credential_provider"),
          {:ok, endpoint_ref} <- optional_text(params, "endpoint_ref"),
          {:ok, material_env_profile} <- optional_text(params, "material_env_profile"),
-         {:ok, http_endpoint_env} <- optional_text(params, "http_endpoint_env") do
+         {:ok, http_endpoint_env} <- optional_text(params, "http_endpoint_env"),
+         {:ok, display_name} <- optional_text(params, "display_name") do
       {:ok,
        %{
          data_source_id: data_source_id,
@@ -380,6 +398,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
          material_env_profile: material_env_profile,
          http_endpoint_env: http_endpoint_env,
          storage: storage,
+         display_name: display_name,
          adapter_definition: adapter_definition
        }}
     end
@@ -452,9 +471,16 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
          scope,
          host_context,
          %ActionRequest{action_id: "change-binding"} = request,
-         %{binding_id: binding_id, data_source_id: data_source_id}
+         %{binding_id: binding_id, data_source_id: data_source_id} = params
        ) do
-    change_binding(scope, host_context, request, binding_id, data_source_id)
+    change_binding(
+      scope,
+      host_context,
+      request,
+      binding_id,
+      {params.expected_data_source_id, data_source_id},
+      Map.get(params, :shared_switch, %{})
+    )
   end
 
   defp dispatch(
@@ -504,8 +530,29 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
     # persist_data_source upserts by id: registering an existing id (a platform-shared source's,
     # or another organization's) would overwrite it.
     with :ok <- new_source_id(attrs.data_source_id),
+         :ok <- env_scope(attrs, organization_id),
          :ok <- maybe_register_credentials(attrs, organization_id, mission_id, payload, scope) do
       DataSources.persist_data_source(source, actor_id: actor_id(scope), payload: payload)
+    end
+  end
+
+  # What the source names for the env backend is scoped to its organization (EnvBackend): an
+  # endpoint variable it may use, and no other organization's configured material profile. Said
+  # on save, not at the first probe.
+  defp env_scope(attrs, organization_id) do
+    cond do
+      is_binary(attrs.http_endpoint_env) and
+          not EnvBackend.allowed_name?(attrs.http_endpoint_env, organization_id) ->
+        {:error, :env_credential_name_not_allowed}
+
+      not EnvBackend.profile_allowed?(attrs.material_env_profile, organization_id) ->
+        {:error, :env_material_profile_not_allowed}
+
+      not EnvBackend.profile_allowed?(attrs.credentials_ref, organization_id) ->
+        {:error, :env_material_profile_not_allowed}
+
+      true ->
+        :ok
     end
   end
 
@@ -557,25 +604,65 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
          %HostContext{mission_id: mission_id},
          request,
          binding_id,
-         data_source_id
+         {expected, data_source_id},
+         shared_switch
        ) do
     organization_id = scope.organization_id
 
     with {:ok, binding} <- scoped_binding(organization_id, mission_id, binding_id),
          :ok <- writable(scope, binding),
+         :ok <- expected_source?(binding, expected),
          :ok <- different_source?(binding, data_source_id),
          {:ok, source} <- scoped_source(organization_id, mission_id, data_source_id),
-         :ok <- compatible_source?(source, binding) do
-      DataSources.persist_data_binding(
-        %DataBinding{binding | data_source_id: data_source_id},
-        actor_id: actor_id(scope),
-        payload:
-          Map.merge(action_payload(request), %{
-            "previous_data_source_id" => binding.data_source_id,
-            "current_data_source_id" => data_source_id
-          })
-      )
+         :ok <- compatible_source?(source, binding),
+         :ok <- shared_target?(source, binding) do
+      if PlatformBindings.shared?(binding),
+        do: switch_shared_binding(scope, request, binding, source, shared_switch),
+        else: persist_switch(scope, request, binding, data_source_id, %{})
     end
+  end
+
+  # DECISIONS #90 / ux U53: a platform-wide binding moves every mission that reads it. The
+  # server recounts the blast radius, requires the reason, records both in the binding's event
+  # and the platform audit, and refuses when the radius changed under the confirmation.
+  defp switch_shared_binding(scope, request, binding, source, shared_switch) do
+    with {:ok, checked} <- PlatformBindings.check_switch(binding, shared_switch) do
+      from = PlatformBindings.source_ref(binding.data_source_id)
+      to = PlatformBindings.source_ref(source)
+      extra = PlatformBindings.payload(from, to, checked.reason, checked.radius)
+
+      with {:ok, persisted} <-
+             persist_switch(scope, request, binding, source.data_source_id, extra) do
+        :ok = PlatformBindings.audit(persisted, from, to, checked, actor_id(scope))
+
+        {:ok,
+         %{
+           binding: persisted,
+           recorded: %{
+             affected_missions: checked.radius.affected_missions,
+             live_passes_total: checked.radius.live_passes.total
+           }
+         }}
+      end
+    end
+  end
+
+  # The write re-checks the binding still points where this switch was read (expected_data_source_id,
+  # under a row lock), so a switch made between the read and the write is refused, not overwritten.
+  defp persist_switch(scope, request, %DataBinding{} = binding, data_source_id, extra) do
+    DataSources.persist_data_binding(
+      %DataBinding{binding | data_source_id: data_source_id},
+      expected_data_source_id: binding.data_source_id,
+      actor_id: actor_id(scope),
+      payload:
+        request
+        |> action_payload()
+        |> Map.merge(%{
+          "previous_data_source_id" => binding.data_source_id,
+          "current_data_source_id" => data_source_id
+        })
+        |> Map.merge(extra)
+    )
   end
 
   defp source_action(scope, %HostContext{mission_id: mission_id}, request, data_source_id) do
@@ -678,13 +765,20 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
          credentials_ref
        ) do
     with {:ok, source} <- scoped_source(scope.organization_id, mission_id, data_source_id),
-         :ok <- writable(scope, source),
-         :ok <- credential_belongs_to_source?(source, credentials_ref),
-         {:ok, reference, event} <-
+         :ok <- writable(scope, source) do
+      if source.credentials_ref == credentials_ref,
+        do: rotate_current_reference(scope, mission_id, request, source),
+        else: rotate_to_new_reference(scope, mission_id, request, source, credentials_ref)
+    end
+  end
+
+  # The same reference: its material was rotated behind it, so it gets a new version.
+  defp rotate_current_reference(scope, mission_id, request, source) do
+    with {:ok, reference, event} <-
            DataSources.rotate_credential_reference(
-             credentials_ref,
+             source.credentials_ref,
              %{
-               data_source_id: data_source_id,
+               data_source_id: source.data_source_id,
                organization_id: scope.organization_id,
                mission_id: mission_id,
                payload: action_payload(request)
@@ -693,6 +787,62 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
            ) do
       {:ok, %{reference: reference, event: event}}
     end
+  end
+
+  # A new reference (L11 W5, 'rotates to that reference'; qa (B)): registered like a source's
+  # first one, from the current reference's provider and material metadata, then the source
+  # points at it. The old reference stays as it was.
+  defp rotate_to_new_reference(scope, mission_id, request, source, credentials_ref) do
+    attrs = rotation_attrs(source, credentials_ref)
+    payload = action_payload(request)
+
+    with :ok <-
+           maybe_register_credentials(attrs, scope.organization_id, mission_id, payload, scope),
+         {:ok, reference} <- DataSources.fetch_credential_reference(credentials_ref),
+         :ok <- reference_scope(reference, scope.organization_id, mission_id, source),
+         {:ok, persisted} <-
+           DataSources.persist_data_source(%DataSource{source | credentials_ref: credentials_ref},
+             actor_id: actor_id(scope),
+             payload: payload
+           ) do
+      {:ok, %{source: persisted, reference: reference}}
+    end
+  end
+
+  defp rotation_attrs(%DataSource{} = source, credentials_ref) do
+    current =
+      case source.credentials_ref &&
+             DataSources.fetch_credential_reference(source.credentials_ref) do
+        {:ok, reference} -> reference
+        _none -> nil
+      end
+
+    metadata = (current && current.metadata) || %{}
+    source_metadata = source.metadata || %{}
+
+    %{
+      credentials_ref: credentials_ref,
+      data_source_id: source.data_source_id,
+      owner: source.owner,
+      kind: source.kind,
+      credential_provider: current && current.provider,
+      storage: metadata_text(source_metadata, :storage),
+      endpoint_ref: metadata_text(metadata, :endpoint_ref),
+      material_env_profile: metadata_text(metadata, :material_env_profile),
+      http_endpoint_env: metadata_text(metadata, :http_endpoint_env)
+    }
+  end
+
+  defp metadata_text(metadata, key) when is_map(metadata) and is_atom(key),
+    do: Map.get(metadata, key) || Map.get(metadata, Atom.to_string(key))
+
+  # A reference that already exists must be this source's, in this mission and organization.
+  defp reference_scope(reference, organization_id, mission_id, source) do
+    if reference.data_source_id in [nil, source.data_source_id] and
+         reference.organization_id in [nil, organization_id] and
+         reference.mission_id in [nil, mission_id],
+       do: :ok,
+       else: {:error, :credential_reference_in_use}
   end
 
   defp deployment_action(scope, %HostContext{mission_id: mission_id}, request, job_id) do
@@ -763,10 +913,39 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
     end
   end
 
+  # The switch was confirmed against the binding's source at the time; another switch since then
+  # refuses it (the console sends what its sheet showed).
+  defp expected_source?(%DataBinding{data_source_id: expected}, expected), do: :ok
+
+  defp expected_source?(%DataBinding{data_source_id: current}, _stale),
+    do: {:error, {:binding_changed, current}}
+
   defp different_source?(%DataBinding{data_source_id: data_source_id}, data_source_id),
     do: {:error, :same_data_source}
 
   defp different_source?(%DataBinding{}, _data_source_id), do: :ok
+
+  # A platform-wide binding serves every tenant that falls back to it, so it may only point at a
+  # platform-shared source: switching it to one organization's own source would send every other
+  # tenant's data there (api-ops' sweep, 11-15). Platform-shared means no organization, no mission
+  # AND :shared isolation (domain: a :shared source may still carry an organization). A mission's
+  # own binding may use either.
+  defp shared_target?(%DataSource{} = source, %DataBinding{} = binding) do
+    cond do
+      not PlatformBindings.shared?(binding) -> :ok
+      platform_source?(source) -> :ok
+      true -> {:error, :platform_target_required}
+    end
+  end
+
+  defp platform_source?(%DataSource{
+         organization_id: nil,
+         mission_id: nil,
+         isolation_level: :shared
+       }),
+       do: true
+
+  defp platform_source?(%DataSource{}), do: false
 
   defp compatible_source?(%DataSource{} = source, %DataBinding{} = binding) do
     if DataSource.active?(source) and
@@ -776,15 +955,6 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
       {:error, :incompatible_data_source}
     end
   end
-
-  defp credential_belongs_to_source?(
-         %DataSource{credentials_ref: credentials_ref},
-         credentials_ref
-       ),
-       do: :ok
-
-  defp credential_belongs_to_source?(_source, _credentials_ref),
-    do: {:error, :scope_mismatch}
 
   defp scoped_job?(organization_id, mission_id, %Job{} = job) do
     payload_organization_id = payload_value(job.payload, :organization_id)
@@ -815,7 +985,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
           registered_by: "ops_console_data_sources_action",
           logical_source: attrs.logical_source,
           endpoint_ref: attrs.endpoint_ref,
-          material_env_profile: attrs.material_env_profile
+          material_env_profile: attrs.material_env_profile,
+          display_name: Map.get(attrs, :display_name)
         })
     }
   end

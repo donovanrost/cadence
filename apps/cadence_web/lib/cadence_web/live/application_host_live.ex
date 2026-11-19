@@ -153,7 +153,8 @@ defmodule CadenceWeb.ApplicationHostLive do
            application_key: socket.assigns.application_definition.application_key,
            application_version: socket.assigns.application_definition.version,
            action_id: action_id,
-           params: action_params
+           params: action_params,
+           origin: :legacy_host
          },
          {:ok, result} <-
            ActionDispatcher.dispatch(

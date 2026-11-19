@@ -1,0 +1,100 @@
+/*
+ * Dashboards chart chrome (ported engine, features/dashboards/chart). The engine builds these
+ * DOM nodes itself, so they're styled here instead of with utilities. Colors come from the
+ * Apogee tokens only (ux screens/Dashboards.md "Chart grammar"): no glow, no radius, no
+ * hue except operational state. Loaded only with the dashboards route chunk.
+ */
+@import "uplot/dist/uPlot.min.css";
+
+.cadence-time-series-chart {
+  overflow: hidden;
+  color: var(--color-readout);
+}
+
+.cadence-time-series-chart .uplot {
+  overflow: hidden;
+  font-family: var(--font-mono);
+}
+
+.cadence-time-series-chart .u-select {
+  background: var(--apogee-wash-scheduled);
+  border: 1px solid var(--color-line);
+}
+
+.cadence-time-series-chart .telemetry-chart-legend {
+  border-top: 1px solid var(--color-hairline-faint);
+  background: var(--color-panel);
+  color: var(--color-text-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+/* Live edge: the now-line. White when receiving, stale/caution when the stream isn't. */
+.telemetry-chart-live-edge {
+  position: absolute;
+  z-index: 5;
+  overflow: visible;
+  color: var(--color-readout);
+  pointer-events: none;
+}
+
+.telemetry-chart-live-edge[hidden] {
+  display: none;
+}
+
+.telemetry-chart-live-edge-wash,
+.telemetry-chart-live-edge-line,
+.telemetry-chart-live-edge-beacon,
+.telemetry-chart-live-edge-label {
+  position: absolute;
+  pointer-events: none;
+}
+
+.telemetry-chart-live-edge-wash {
+  inset: 0 0 0 auto;
+  width: 1.75rem;
+  background: linear-gradient(90deg, transparent, var(--apogee-wash-action));
+}
+
+.telemetry-chart-live-edge-line {
+  inset: 0 0 0 auto;
+  width: 1px;
+  background: currentColor;
+}
+
+.telemetry-chart-live-edge-beacon {
+  top: 0.3rem;
+  right: -0.16rem;
+  width: 0.36rem;
+  height: 0.36rem;
+  border: 1px solid currentColor;
+  background: var(--color-panel);
+}
+
+.telemetry-chart-live-edge-label {
+  top: 0.18rem;
+  right: 0.55rem;
+  color: currentColor;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-btn);
+  line-height: 1;
+}
+
+.telemetry-chart-live-edge[data-live-stream-state="connecting"] {
+  color: var(--color-text-4);
+}
+
+.telemetry-chart-live-edge[data-live-stream-state="paused"],
+.telemetry-chart-live-edge[data-live-stream-state="delayed"] {
+  color: var(--color-stale-text);
+}
+
+.telemetry-chart-live-edge[data-live-stream-state="degraded"] {
+  color: var(--color-caution-text);
+}
+
+.telemetry-chart-live-edge[data-live-stream-state="paused"] .telemetry-chart-live-edge-beacon,
+.telemetry-chart-live-edge[data-live-stream-state="degraded"] .telemetry-chart-live-edge-beacon {
+  background: currentColor;
+}

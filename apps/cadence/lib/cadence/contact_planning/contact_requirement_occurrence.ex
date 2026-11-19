@@ -1,5 +1,8 @@
 defmodule Cadence.ContactPlanning.ContactRequirementOccurrence do
-  @moduledoc "Durable exactly-once generation evidence for one template occurrence."
+  @moduledoc """
+  Durable exactly-once generation evidence for one template occurrence for one
+  targeted spacecraft (a template fans out per spacecraft it targets).
+  """
 
   alias Cadence.Ids
   alias Cadence.Persistence.JsonDocument
@@ -14,6 +17,7 @@ defmodule Cadence.ContactPlanning.ContactRequirementOccurrence do
           mission_id: binary(),
           contact_requirement_template_id: binary(),
           contact_requirement_template_version: pos_integer(),
+          spacecraft_id: binary(),
           occurrence_at: DateTime.t(),
           generation_state: generation_state(),
           generated_contact_requirement_id: binary() | nil,
@@ -31,6 +35,7 @@ defmodule Cadence.ContactPlanning.ContactRequirementOccurrence do
     :mission_id,
     :contact_requirement_template_id,
     :contact_requirement_template_version,
+    :spacecraft_id,
     :occurrence_at,
     :generation_state,
     :generated_contact_requirement_id,
@@ -59,6 +64,7 @@ defmodule Cadence.ContactPlanning.ContactRequirementOccurrence do
           value(attrs, :contact_requirement_template_version),
           :contact_requirement_template_version
         ),
+      spacecraft_id: required(attrs, :spacecraft_id),
       occurrence_at: datetime(value(attrs, :occurrence_at), :occurrence_at),
       generation_state:
         attrs

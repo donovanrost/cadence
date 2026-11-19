@@ -225,6 +225,30 @@ test("reservation links retain the plan and requirement versions actually booked
   wrapper.unmount();
 });
 
+test("the requirement link uses the server's console href when it sends one", () => {
+  const detail = reservationFixture();
+  Object.assign(detail.reservation, {
+    requirement_id: "requirement-one",
+    requirement_version: 2,
+    requirement_console_href:
+      "/console/ops/mission-one/setup/contact-planning/requirements/requirement-one",
+  });
+  expect(admitReservation(detail, detail.context)).not.toBeNull();
+  const wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/contacts/:provider_reservation_id").stage(
+      OpsContactDetail,
+    ),
+    { props: { detail } },
+  );
+  expect(wrapper.get("#reservation-requirement").attributes("href")).toBe(
+    "/console/ops/mission-one/setup/contact-planning/requirements/requirement-one",
+  );
+  wrapper.unmount();
+  const foreign = reservationFixture();
+  Object.assign(foreign.reservation, { requirement_console_href: "https://evil.example/x" });
+  expect(admitReservation(foreign, foreign.context)).toBeNull();
+});
+
 test("a receipt cannot stand in for a missing reviewed provider change", () => {
   const detail = reservationFixture();
   detail.selected = null;

@@ -5,7 +5,9 @@ defmodule Cadence.Jobs.Job do
 
   alias Cadence.Ids
 
-  @type status :: :queued | :running | :completed | :failed
+  # outcome_unknown: a job whose real outcome was lost (it ran before the 11-14 jobs fix, or was
+  # left :running at a node stop and isn't safe to run again). Never retried automatically.
+  @type status :: :queued | :running | :completed | :failed | :outcome_unknown
   @type job_type ::
           :contact_schedule_operation
           | :replay_telemetry_scope

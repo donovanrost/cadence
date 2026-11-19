@@ -29,6 +29,17 @@ defmodule CadenceSimulator.Provider.ContactLifecycleTest do
     assert changed["revision"] == 2
     assert {:ok, internal} = Contacts.fetch_internal(contact["id"])
 
+    # The delivery window moves with the pass, keeping its 30 s margin (lead, L14 re-land).
+    shifted = fn value, seconds ->
+      {:ok, time, _} = DateTime.from_iso8601(value)
+      time |> DateTime.add(seconds) |> DateTime.to_iso8601()
+    end
+
+    assert internal["delivery"]["activation_window"] == %{
+             "starts_at" => shifted.(contact["starts_at"], 60 - 30),
+             "ends_at" => shifted.(contact["ends_at"], 60 + 30)
+           }
+
     assert [history] = internal["modification_history"]
     assert history["from_revision"] == 1
     assert history["to_revision"] == 2

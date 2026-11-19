@@ -56,6 +56,7 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
                 activation_request_id: nil,
                 organization_id: nil,
                 source_runtime_bases: nil,
+                source_framing: nil,
                 registered_execution_basis: nil,
                 metadata: %{}
               ]
@@ -116,7 +117,7 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
 
   @spec content_sha256(BindingSet.t()) :: binary()
   def content_sha256(%BindingSet{} = binding_set) do
-    ContentHash.term_sha256(binding_set)
+    BindingSet.content_sha256(binding_set)
   end
 
   @spec identity(t()) :: {binary(), pos_integer(), binary()}
@@ -151,7 +152,8 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
            spec
            | mission_model_revision_id: basis.mission_model_revision_id,
              mission_model_content_sha256: basis.mission_model_content_sha256,
-             runtime_plans: basis.runtime_plans
+             runtime_plans: basis.runtime_plans,
+             source_framing: Map.get(basis, :framing)
          }}
 
       :error ->

@@ -3,6 +3,7 @@ defmodule Cadence.Dashboards.SettingsAuthoring do
   alias Cadence.Dashboards.{
     Authoring,
     AuthoringInput,
+    CurrentVersions,
     Document,
     Documents,
     Management,
@@ -72,7 +73,8 @@ defmodule Cadence.Dashboards.SettingsAuthoring do
         metadata: metadata
     }
 
-    Documents.update(scope.organization_id, row.mission_id, row.dashboard_id, next,
+    # Q1 (#76): a settings save is a version like any other, so it becomes current at once.
+    CurrentVersions.save(scope.organization_id, row.mission_id, row.dashboard_id, next,
       expected_version: row.latest_version,
       expected_revision: row.lock_version,
       created_by: scope.user.user_id,
@@ -116,7 +118,8 @@ defmodule Cadence.Dashboards.SettingsAuthoring do
         scope.organization_id,
         row.mission_id,
         row.dashboard_id,
-        fields["share_id"]
+        fields["share_id"],
+        scope.user.user_id
       )
 
   defp receipt(row, event, resource) do

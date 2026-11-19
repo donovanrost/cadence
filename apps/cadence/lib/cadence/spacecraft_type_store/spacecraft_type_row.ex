@@ -25,6 +25,9 @@ defmodule Cadence.SpacecraftTypeStore.SpacecraftTypeRow do
     field(:frame_parameters, :map, default: %{})
     field(:applications, :map, default: %{})
     field(:metadata, :map, default: %{})
+    field(:catalog_revision_id, :string)
+    field(:handled_apids, {:array, :integer})
+    field(:routing_rules, {:array, :map}, default: [])
 
     timestamps()
   end
@@ -69,7 +72,10 @@ defmodule Cadence.SpacecraftTypeStore.SpacecraftTypeRow do
       packet_protocol: row.packet_protocol,
       frame_parameters: JsonDocument.unwrap_value(row.frame_parameters),
       applications: JsonDocument.unwrap_value(row.applications),
-      metadata: JsonDocument.unwrap_value(row.metadata)
+      metadata: JsonDocument.unwrap_value(row.metadata),
+      catalog_revision_id: row.catalog_revision_id,
+      handled_apids: row.handled_apids,
+      routing_rules: row.routing_rules || []
     })
   end
 
@@ -86,7 +92,10 @@ defmodule Cadence.SpacecraftTypeStore.SpacecraftTypeRow do
       packet_protocol: Atom.to_string(type.packet_protocol),
       frame_parameters: JsonDocument.wrap_value(type.frame_parameters),
       applications: JsonDocument.wrap_value(type.applications),
-      metadata: JsonDocument.wrap_value(type.metadata)
+      metadata: JsonDocument.wrap_value(type.metadata),
+      catalog_revision_id: type.catalog_revision_id,
+      handled_apids: type.handled_apids,
+      routing_rules: type.routing_rules
     }
   end
 
@@ -98,6 +107,9 @@ defmodule Cadence.SpacecraftTypeStore.SpacecraftTypeRow do
       :version,
       :lifecycle_state,
       :display_name,
+      :catalog_revision_id,
+      :handled_apids,
+      :routing_rules,
       :downlink_protocol,
       :uplink_protocol,
       :packet_protocol,

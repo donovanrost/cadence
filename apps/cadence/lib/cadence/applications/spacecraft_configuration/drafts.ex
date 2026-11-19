@@ -14,6 +14,7 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Drafts do
   alias Cadence.Applications.SpacecraftConfiguration.ApplicationInputs,
     as: ConfigurationApplications
 
+  alias Cadence.Applications.SpacecraftConfiguration.CatalogAuthority
   alias Cadence.Applications.SpacecraftConfiguration.RevisionRow, as: ConfigurationRevisionRow
   alias Cadence.Catalog.SpacecraftConfigurationInput, as: ConfigurationInput
 
@@ -101,6 +102,97 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Drafts do
       select: row
     )
     |> Repo.all()
+  end
+
+  @doc """
+  A new configuration revision that only moves the catalog (DECISIONS #65), written by a
+  change-set apply for the running configuration `running_id`. Refused while the spacecraft has
+  a newer configuration that isn't active yet (`:spacecraft_configuration_pending`): applying
+  would activate it unreviewed, and superseding it would bury it.
+  """
+  @spec derive_catalog(binary(), binary(), binary(), binary(), binary()) ::
+          {:ok, struct()} | {:error, term()}
+  def derive_catalog(organization_id, mission_id, running_id, catalog_revision_id, actor_id),
+    do:
+      derive(
+        organization_id,
+        mission_id,
+        running_id,
+        %{"catalog_revision_id" => catalog_revision_id},
+        actor_id
+      )
+
+  @doc """
+  The running configuration with `changes` (document keys: the catalog, the switches) as the
+  spacecraft's next configuration revision, for a change-set apply (#36/#65, L22). Refused when a
+  newer configuration than the running one exists.
+  """
+  def derive(organization_id, mission_id, running_id, changes, actor_id) when is_map(changes) do
+    with {:ok, running} <- fetch(organization_id, mission_id, running_id),
+         %{configuration_revision_id: ^running_id} = latest <-
+           latest(organization_id, mission_id, running.spacecraft_id) ||
+             {:error, :spacecraft_configuration_not_found} do
+      document = Map.merge(running.document, changes)
+
+      # The stored decom config follows, as a Save's does (ApplicationInputs.persist); its basis
+      # changes with it, so the caller re-stamps the new revisions (restamp_bases/2).
+      with :ok <-
+             TelemetryDecom.project_configuration(
+               organization_id,
+               mission_id,
+               running.spacecraft_id,
+               document
+             ) do
+        insert_derived(organization_id, mission_id, running, latest, document, actor_id)
+      end
+    else
+      {:error, reason} -> {:error, reason}
+      _newer -> {:error, :spacecraft_configuration_pending}
+    end
+  end
+
+  defp insert_derived(organization_id, mission_id, running, latest, document, actor_id) do
+    catalog_revision_id = document["catalog_revision_id"]
+
+    Repo.insert(
+      ConfigurationRevisionRow.changeset(%{
+        configuration_revision_id: Ids.new("spacecraft_configuration"),
+        organization_id: organization_id,
+        mission_id: mission_id,
+        spacecraft_id: running.spacecraft_id,
+        version: latest.version + 1,
+        catalog_revision_id: catalog_revision_id,
+        document: document,
+        content_sha256: ContentHash.term_sha256(document),
+        application_basis: running.application_basis,
+        created_by: actor_id
+      })
+    )
+  end
+
+  @doc """
+  Stamps revisions `derive/5` just wrote with their spacecraft's current application basis (one read
+  of the bases, one update), after the projection changed it. Without it the post-activation check
+  (`TelemetryDecom`'s applied ids) would see every moved spacecraft as changed elsewhere.
+  """
+  def restamp_bases(_mission, []), do: :ok
+
+  def restamp_bases(mission, rows) when is_list(rows) do
+    bases = ConfigurationApplications.bases(mission, Enum.map(rows, & &1.spacecraft_id))
+
+    Repo.query!(
+      """
+      UPDATE spacecraft_configuration_revisions AS r SET application_basis = v.basis
+      FROM unnest($1::text[], $2::text[]) AS v(id, basis)
+      WHERE r.configuration_revision_id = v.id
+      """,
+      [
+        Enum.map(rows, & &1.configuration_revision_id),
+        Enum.map(rows, &Map.fetch!(bases, &1.spacecraft_id))
+      ]
+    )
+
+    :ok
   end
 
   def fetch(organization_id, mission_id, id) do
@@ -207,7 +299,11 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Drafts do
   end
 
   defp validate_references(mission, spacecraft, document) do
-    with :ok <- validate_catalog(mission, document["catalog_revision_id"]) do
+    with :ok <- validate_catalog(mission, document["catalog_revision_id"]),
+         # DECISIONS #65: a profile catalog is set through change sets only.
+         :ok <- CatalogAuthority.check(mission, spacecraft, document["catalog_revision_id"]),
+         # L22: switches a change set has set are written through change sets only.
+         :ok <- CatalogAuthority.switches_check(spacecraft, document) do
       validate_source(mission, spacecraft, document["telemetry_source_endpoint_id"])
     end
   end
@@ -230,15 +326,30 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Drafts do
     end
   end
 
+  # Change sets are the ONLY writer of a craft's Telemetry and Commanding switches (DECISIONS #109):
+  # a saved configuration takes the spacecraft's values (unset reads off) and ignores switch input.
+  # CatalogAuthority.switches_check stays as the backstop at review.
+  defp change_set_switches(document, spacecraft) do
+    document
+    |> Map.put("telemetry_enabled", Map.get(spacecraft, :telemetry_enabled) == true)
+    |> Map.put("commanding_enabled", Map.get(spacecraft, :commanding_enabled) == true)
+  end
+
   defp save_locked(scope, mission, spacecraft, expected_token, document) do
     mission_id = mission.mission_id
     spacecraft_id = spacecraft.spacecraft_id
     current = snapshot(mission, spacecraft)
+    # The row as it is under the configuration lock, not the authorize read before it: a change
+    # set that set a switch in between is what this save stores, and what its checks compare with.
+    {:ok, locked} =
+      SpacecraftStore.fetch_spacecraft(mission.organization_id, mission_id, spacecraft_id)
+
+    document = change_set_switches(document, locked)
 
     with :ok <- exact_token(current.token, expected_token),
-         :ok <- validate_references(mission, spacecraft, document),
+         :ok <- validate_references(mission, locked, document),
          {:ok, document} <-
-           ConfigurationApplications.persist(scope, mission, spacecraft, document) do
+           ConfigurationApplications.persist(scope, mission, locked, document) do
       updated = snapshot(mission, spacecraft)
 
       Repo.insert(

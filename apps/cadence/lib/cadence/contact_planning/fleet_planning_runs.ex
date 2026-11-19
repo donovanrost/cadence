@@ -5,6 +5,8 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
 
   alias Cadence.Auth.{Policy, Scope}
 
+  alias Cadence.ContactPlanning.PlanUpdates
+
   alias Cadence.ContactPlanning.{
     ContactRequirements,
     FleetPlanningDecision,
@@ -28,8 +30,13 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
 
   @spec create(Scope.t(), binary(), map(), keyword()) ::
           {:ok, FleetPlanningRun.t(), [FleetPlanningRunRequirementRef.t()]} | {:error, term()}
-  def create(%Scope{} = scope, mission_id, attrs, _opts \\ [])
-      when is_binary(mission_id) and is_map(attrs) do
+  def create(%Scope{} = scope, mission_id, attrs, opts \\ []) do
+    create_unpublished(scope, mission_id, attrs, opts)
+    |> PlanUpdates.published(scope.organization_id, mission_id)
+  end
+
+  defp create_unpublished(%Scope{} = scope, mission_id, attrs, _opts)
+       when is_binary(mission_id) and is_map(attrs) do
     with :ok <- authorize_member(scope, mission_id),
          {:ok, _policy, policy_version} <-
            FleetPlanningPolicies.fetch_active(scope.organization_id, mission_id),
@@ -74,6 +81,42 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
     end
   end
 
+  @doc """
+  Records the console operation that created a run (DECISIONS #27). Returns
+  `{:error, :operation_already_claimed}` when another run in the mission holds
+  the same `operation_id`.
+  """
+  @spec claim_operation(binary(), binary(), binary(), binary()) ::
+          :ok | {:error, :operation_already_claimed | term()}
+  def claim_operation(organization_id, mission_id, run_id, operation_id) do
+    with %FleetPlanningRunRow{} = row <-
+           Repo.get_by(FleetPlanningRunRow,
+             organization_id: organization_id,
+             mission_id: mission_id,
+             fleet_planning_run_id: run_id
+           ) || {:error, :fleet_planning_run_not_found},
+         {:ok, _row} <-
+           row |> FleetPlanningRunRow.operation_changeset(operation_id) |> Repo.update() do
+      :ok
+    else
+      {:error, %Ecto.Changeset{}} -> {:error, :operation_already_claimed}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  @spec fetch_by_operation(binary(), binary(), binary()) ::
+          {:ok, FleetPlanningRun.t()} | {:error, :fleet_planning_run_not_found}
+  def fetch_by_operation(organization_id, mission_id, operation_id) do
+    case Repo.get_by(FleetPlanningRunRow,
+           organization_id: organization_id,
+           mission_id: mission_id,
+           operation_id: operation_id
+         ) do
+      nil -> {:error, :fleet_planning_run_not_found}
+      row -> {:ok, FleetPlanningRunRow.to_domain(row)}
+    end
+  end
+
   @doc "Locks a scoped run for a short database-only reviewed decision."
   def fetch_locked(organization_id, mission_id, run_id) do
     if Repo.in_transaction?() do
@@ -84,6 +127,32 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
     else
       {:error, :fleet_run_transaction_required}
     end
+  end
+
+  @doc """
+  Repair runs that proposed the given plans: `%{candidate_plan_id => %{run_id, plan: %{id,
+  version}}}`, where `plan` is the plan being repaired (console: a draft that is a repair
+  proposal says so).
+  """
+  @spec repairs_for(binary(), binary(), [binary()]) :: %{binary() => map()}
+  def repairs_for(_organization_id, _mission_id, []), do: %{}
+
+  def repairs_for(organization_id, mission_id, plan_ids) do
+    FleetPlanningRunRow
+    |> where(
+      [run],
+      run.organization_id == ^organization_id and run.mission_id == ^mission_id and
+        run.candidate_contact_plan_id in ^plan_ids and not is_nil(run.source_contact_plan_id)
+    )
+    |> select(
+      [run],
+      {run.candidate_contact_plan_id, run.fleet_planning_run_id, run.source_contact_plan_id,
+       run.source_contact_plan_version}
+    )
+    |> Repo.all()
+    |> Map.new(fn {candidate, run_id, source, version} ->
+      {candidate, %{run_id: run_id, plan: %{id: source, version: version}}}
+    end)
   end
 
   @spec list(binary(), binary(), keyword()) :: [FleetPlanningRun.t()]
@@ -201,8 +270,21 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
         next_phase,
         attrs \\ %{},
         opts \\ []
-      )
-      when is_atom(expected_phase) and is_atom(next_phase) and is_map(attrs) do
+      ) do
+    advance_phase_unpublished(scope, mission_id, run_id, expected_phase, next_phase, attrs, opts)
+    |> PlanUpdates.published(scope.organization_id, mission_id)
+  end
+
+  defp advance_phase_unpublished(
+         %Scope{} = scope,
+         mission_id,
+         run_id,
+         expected_phase,
+         next_phase,
+         attrs,
+         opts
+       )
+       when is_atom(expected_phase) and is_atom(next_phase) and is_map(attrs) do
     now = now(opts)
 
     with :ok <- authorize_member(scope, mission_id),
@@ -222,6 +304,11 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
   @spec cancel(Scope.t(), binary(), binary(), binary(), keyword()) ::
           {:ok, FleetPlanningRun.t()} | {:error, term()}
   def cancel(%Scope{} = scope, mission_id, run_id, reason, opts \\ []) do
+    cancel_unpublished(scope, mission_id, run_id, reason, opts)
+    |> PlanUpdates.published(scope.organization_id, mission_id)
+  end
+
+  defp cancel_unpublished(%Scope{} = scope, mission_id, run_id, reason, opts) do
     reason = reason |> to_string() |> String.trim()
     now = now(opts)
 
@@ -233,15 +320,20 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
 
   @spec fail(Scope.t(), binary(), binary(), atom(), map(), keyword()) ::
           {:ok, FleetPlanningRun.t()} | {:error, term()}
-  def fail(
-        %Scope{} = scope,
-        mission_id,
-        run_id,
-        expected_phase,
-        failure_document,
-        opts \\ []
-      )
-      when is_atom(expected_phase) and is_map(failure_document) and is_list(opts) do
+  def fail(%Scope{} = scope, mission_id, run_id, expected_phase, failure_document, opts \\ []) do
+    fail_unpublished(scope, mission_id, run_id, expected_phase, failure_document, opts)
+    |> PlanUpdates.published(scope.organization_id, mission_id)
+  end
+
+  defp fail_unpublished(
+         %Scope{} = scope,
+         mission_id,
+         run_id,
+         expected_phase,
+         failure_document,
+         opts
+       )
+       when is_atom(expected_phase) and is_map(failure_document) and is_list(opts) do
     now = now(opts)
 
     with :ok <- authorize_member(scope, mission_id),
@@ -393,7 +485,9 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
               "requirement_count" => length(refs),
               "policy_content_sha256" => policy.content_sha256,
               "template_materialization" => value(attrs, :template_materialization_document, %{}),
-              "repair" => value(attrs, :repair_input_document, %{})
+              "repair" => value(attrs, :repair_input_document, %{}),
+              # DECISIONS #78: live single bookings the run plans around (from its starter).
+              "occupied" => value(attrs, :occupied_document, [])
             },
             attrs
           ),

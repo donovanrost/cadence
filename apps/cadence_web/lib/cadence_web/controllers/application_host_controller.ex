@@ -19,8 +19,6 @@ defmodule CadenceWeb.ApplicationHostController do
 
   @problem_schema "cadence.application-host-problem.v1"
   @json_content_type "application/json; charset=utf-8"
-  @host_context_key :application_host_context
-  @host_mission_key :application_host_mission_id
 
   @spec federated(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def federated(conn, %{"application_key" => application_key} = params) do
@@ -71,10 +69,20 @@ defmodule CadenceWeb.ApplicationHostController do
       |> put_resp_header("cache-control", "no-store")
       |> json(catalog)
     else
-      {:error, reason} -> catalog_problem(conn, reason)
+      {:error, reason} -> catalog_problem(conn, catalog_reason(reason, params))
       _other -> catalog_problem(conn, :application_catalog_unavailable)
     end
   end
+
+  # §11c A + L13: no application has an organization-scope surface any more, so an organization
+  # catalog is empty. Say that, not mission_not_found; the route stays until a later #80 shrink.
+  defp catalog_reason(:application_catalog_unavailable, params) do
+    if requested_scope(params) == "organization",
+      do: :no_organization_applications,
+      else: :application_catalog_unavailable
+  end
+
+  defp catalog_reason(reason, _params), do: reason
 
   @spec query(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def query(conn, params) when is_map(params) do
@@ -145,7 +153,8 @@ defmodule CadenceWeb.ApplicationHostController do
              route_context,
              params,
              idempotency_key,
-             now: now
+             now: now,
+             origin: conn.assigns[:application_host_origin]
            ),
          {:ok, {_disposition, response}} <-
            ApplicationActionIdempotency.run(
@@ -214,8 +223,12 @@ defmodule CadenceWeb.ApplicationHostController do
     %{status: 200, content_type: @json_content_type, body: Jason.encode!(response)}
   end
 
+  # Inside the idempotency closure a failed action's problem is DATA: the ledger stores it and
+  # send_action_response sends it, once. Sending it here as well wrote a second response on the
+  # same keep-alive connection, which the browser read as its next request's answer (#230).
   defp action_problem_response(conn, reason) do
     conn
+    |> put_private(:application_host_problem_as_data, true)
     |> action_problem_conn(reason)
     |> stored_response()
   end
@@ -256,6 +269,8 @@ defmodule CadenceWeb.ApplicationHostController do
 
   defp action_problem_conn(conn, reason), do: bridge_problem(conn, reason)
 
+  # Stores status, content type and body only: a header a problem sets inside the action
+  # closure (e.g. retry-after) would be dropped from the stored and replayed response (api-ops).
   defp stored_response(conn) do
     %{
       status: conn.status,
@@ -529,8 +544,7 @@ defmodule CadenceWeb.ApplicationHostController do
     expected = ApplicationHostCatalog.scope_document(current_scope, route_context)
     expected_mission_id = route_context.host_context.mission_id
 
-    if get_session(conn, @host_context_key) == expected and
-         get_session(conn, @host_mission_key) == expected_mission_id do
+    if CadenceWeb.ApplicationHostSessionState.pinned?(conn, expected, expected_mission_id) do
       :ok
     else
       {:invalid_scope, :host_session_mismatch}
@@ -538,17 +552,11 @@ defmodule CadenceWeb.ApplicationHostController do
   end
 
   defp put_host_session(conn, current_scope, route_context) do
-    conn =
-      put_session(
-        conn,
-        @host_context_key,
-        ApplicationHostCatalog.scope_document(current_scope, route_context)
-      )
-
-    case route_context.host_context.mission_id do
-      mission_id when is_binary(mission_id) -> put_session(conn, @host_mission_key, mission_id)
-      _generic -> delete_session(conn, @host_mission_key)
-    end
+    CadenceWeb.ApplicationHostSessionState.pin_scope(
+      conn,
+      ApplicationHostCatalog.scope_document(current_scope, route_context),
+      route_context.host_context.mission_id
+    )
   end
 
   defp requested_scope(%{"host_scope" => scope}) when is_binary(scope), do: scope
@@ -866,20 +874,49 @@ defmodule CadenceWeb.ApplicationHostController do
     )
   end
 
+  defp catalog_problem(conn, :no_organization_applications) do
+    problem(
+      conn,
+      :not_found,
+      "no_organization_applications",
+      "No applications are installed at the organization level."
+    )
+  end
+
   defp catalog_problem(conn, _reason),
     do: problem(conn, :not_found, "mission_not_found", mission_not_found_message())
 
   defp not_found_html(conn) do
     conn
     |> put_flash(:error, "Application not found.")
-    |> redirect(to: "/missions")
+    |> redirect(
+      to:
+        CadenceWeb.ConsolePaths.organization(
+          conn.assigns.current_scope && conn.assigns.current_scope.organization_id,
+          "/org/missions"
+        )
+    )
+  end
+
+  defp problem(
+         %Plug.Conn{private: %{application_host_problem_as_data: true}} = conn,
+         status,
+         code,
+         message
+       ) do
+    conn
+    |> put_resp_content_type("application/json")
+    |> resp(status, Jason.encode!(problem_body(code, message)))
   end
 
   defp problem(conn, status, code, message) do
     conn
     |> put_status(status)
-    |> json(%{"schema" => @problem_schema, "code" => code, "message" => message})
+    |> json(problem_body(code, message))
   end
+
+  defp problem_body(code, message),
+    do: %{"schema" => @problem_schema, "code" => code, "message" => message}
 
   defp invalid_scope_message, do: "The requested application scope is invalid."
 

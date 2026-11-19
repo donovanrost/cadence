@@ -1,0 +1,28 @@
+{
+  "id": "word-map-keyed-by-text",
+  "language": "TypeScript",
+  "severity": "error",
+  "message": "A word map keyed by text: key it by the vocabulary's union (Record<Union, …>) so a renamed or misspelled key is a compile error (typing plan §12B, rule A). Not a word map (headers, a query-param bag, keyboard keys)? Put `// keyed-by-text: <why>` on the line above.",
+  "rule":
+    {
+      "kind": "variable_declarator",
+      "all":
+        [
+          { "has": { "field": "type", "regex": "Record<\\s*string\\s*," } },
+          { "has": { "field": "value", "kind": "object", "has": { "kind": "pair" } } },
+          {
+            "not":
+              {
+                "inside":
+                  {
+                    "any": [{ "kind": "lexical_declaration" }, { "kind": "export_statement" }],
+                    "follows": { "kind": "comment", "regex": "keyed-by-text:\\s*\\S.{8,}" },
+                    "stopBy": "end",
+                  },
+              },
+          },
+        ],
+    },
+  "files": ["apps/console/src/**"],
+  "ignores": ["**/*.test.ts", "ast-grep/fixtures/**"],
+}

@@ -5,13 +5,15 @@ defmodule Cadence.Commanding.LaneDispatcher do
 
   require Logger
 
+  alias Cadence.Commanding.LaneDispatcher.Summary
   alias Cadence.Commanding.ProcessNamespace
   alias Cadence.Control.Commanding
 
   @default_safety_poll_interval_ms 60_000
-  # A session that just attached finishes protocol recovery about a second later: the lane
-  # retries at this cadence, for at most session_recovery_wait_ms, before the safety poll.
-  @session_recovery_retry_ms 500
+  # #33: the uplink is busy with a COP-1 release in flight; retry soon (completion also kicks).
+  @uplink_busy_retry_ms 500
+  # An uplink session that just attached recovers its protocol state before it qualifies
+  # (about a second); past this it falls back to the safety poll so a stuck one doesn't spin.
   @default_session_recovery_wait_ms 30_000
   @event_prefix [:cadence, :commanding, :lane_dispatcher]
 
@@ -49,6 +51,19 @@ defmodule Cadence.Commanding.LaneDispatcher do
       pid when is_pid(pid) -> drain_pid(pid)
       nil -> {:error, :noproc}
     end
+  end
+
+  @doc """
+  What the lane last saw and when it dispatches next (#38), for operators: `last_result`
+  (`%{result, at}` or nil before its first dispatch), `next_dispatch` (`%{reason, at}` or nil)
+  and the wait it last logged. `{:error, :busy}` when the lane is mid-dispatch past `timeout`.
+  """
+  @spec status(GenServer.server(), timeout()) :: {:ok, map()} | {:error, :busy | :noproc}
+  def status(server, timeout \\ 1_000) do
+    GenServer.call(server, :status, timeout)
+  catch
+    :exit, {:timeout, _} -> {:error, :busy}
+    :exit, _ -> {:error, :noproc}
   end
 
   @spec dispatch_now(GenServer.server()) ::
@@ -89,14 +104,15 @@ defmodule Cadence.Commanding.LaneDispatcher do
       queue_lane_key: Keyword.fetch!(opts, :queue_lane_key),
       safety_poll_interval_ms:
         Keyword.get(opts, :safety_poll_interval_ms, @default_safety_poll_interval_ms),
+      session_recovery_wait_ms:
+        Keyword.get(opts, :session_recovery_wait_ms, @default_session_recovery_wait_ms),
       reference_time_fun: Keyword.get(opts, :reference_time_fun, &DateTime.utc_now/0),
       dispatch_fun: Keyword.get(opts, :dispatch_fun, &Commanding.dispatch_queue_lane/5),
       run_on_boot?: Keyword.get(opts, :run_on_boot?, true),
-      session_recovery_wait_ms:
-        Keyword.get(opts, :session_recovery_wait_ms, @default_session_recovery_wait_ms),
       dispatch_timer: nil,
-      # {:waiting | :stalled, since} while the uplink session recovers, so each is logged once.
-      session_recovery: nil,
+      last_result: nil,
+      # What the lane last waited on, so a wait is logged once, not every poll.
+      waiting: nil,
       released_by:
         Keyword.get_lazy(opts, :released_by, fn ->
           %{
@@ -121,6 +137,17 @@ defmodule Cadence.Commanding.LaneDispatcher do
   end
 
   @impl true
+  def handle_call(:status, _from, state) do
+    next =
+      case state.dispatch_timer do
+        %{reason: reason, at: at} -> %{reason: reason, at: at}
+        nil -> nil
+      end
+
+    {:reply,
+     {:ok, %{last_result: state.last_result, next_dispatch: next, waiting: state.waiting}}, state}
+  end
+
   def handle_call(:drain, _from, state) do
     state = cancel_dispatch_timer(state)
 
@@ -163,22 +190,26 @@ defmodule Cadence.Commanding.LaneDispatcher do
     attempted_at = state.reference_time_fun.()
 
     emit(:dispatch_attempt, state, %{count: 1}, %{reason: reason})
-    {recovery, state} = Map.get_and_update!(state, :session_recovery, &{&1, nil})
 
-    case state.dispatch_fun.(
-           state.organization_id,
-           state.mission_id,
-           state.queue_lane_key,
-           state.released_by,
-           attempted_at: attempted_at
-         ) do
+    result =
+      state.dispatch_fun.(
+        state.organization_id,
+        state.mission_id,
+        state.queue_lane_key,
+        state.released_by,
+        attempted_at: attempted_at
+      )
+
+    state = %{state | last_result: %{result: Summary.result(result), at: attempted_at}}
+
+    case result do
       {:ok, _release_result} ->
         emit(:dispatch_result, state, %{count: 1}, %{result: :released})
-        drain_available(state, :continuation, released_count + 1)
+        drain_available(%{state | waiting: nil}, :continuation, released_count + 1)
 
       {:error, :command_queue_lane_empty} ->
         emit(:dispatch_result, state, %{count: 1}, %{result: :empty})
-        {:stop, quiescence_summary(:empty, released_count), state}
+        {:stop, Summary.quiescence(:empty, released_count), %{state | waiting: nil}}
 
       {:error, {:command_queue_lane_waiting_for_not_before, _, %DateTime{} = next_not_before}} =
           _result ->
@@ -189,78 +220,129 @@ defmodule Cadence.Commanding.LaneDispatcher do
           next_not_before: next_not_before
         })
 
-        state = schedule_dispatch(state, delay_ms, :not_before)
+        state =
+          state
+          |> waiting({:not_before, next_not_before}, fn ->
+            "command lane #{state.queue_lane_key}: waiting for the head's not_before " <>
+              DateTime.to_iso8601(next_not_before)
+          end)
+          |> schedule_dispatch(delay_ms, :not_before)
 
-        {:quiescent, quiescence_summary(:waiting_for_not_before, released_count, next_not_before),
+        {:quiescent, Summary.quiescence(:waiting_for_not_before, released_count, next_not_before),
          state}
 
-      {:error, {:command_queue_lane_no_release_target, _source_endpoint_ref, _mission_id}} =
+      {:error, {:uplink_busy, _busy} = wait} ->
+        state = uplink_wait(state, wait, attempted_at)
+        {:quiescent, Summary.quiescence(:waiting_for_release_target, released_count), state}
+
+      # The uplink refused it before sending (#33): it failed and closed; go on to the next,
+      # so stop-on-failure settles the rest of a group now.
+      {:error, {:command_release_refused, attempt_id, reason}} ->
+        emit(:dispatch_result, state, %{count: 1}, %{result: :release_refused})
+
+        Logger.warning(
+          "command lane #{state.queue_lane_key}: release #{attempt_id} refused before send: " <>
+            inspect(reason)
+        )
+
+        drain_available(state, :continuation, released_count)
+
+      # The head was failed closed (stop-on-failure, or a basis that can't release): its entry
+      # is closed, so the lane moves on instead of waiting for the safety poll.
+      {:error, reason} when reason in [:earlier_command_failed, :release_basis_changed] ->
+        emit(:dispatch_result, state, %{count: 1}, %{result: reason})
+        drain_available(state, :continuation, released_count)
+
+      {:error, {:command_queue_lane_no_release_target, source_endpoint_ref, _mission_id}} =
           _result ->
         emit(:dispatch_result, state, %{count: 1}, %{result: :no_release_target})
-        state = schedule_dispatch(state, state.safety_poll_interval_ms, :safety)
 
-        {:quiescent, quiescence_summary(:waiting_for_release_target, released_count), state}
+        state =
+          state
+          |> waiting(:no_release_target, fn ->
+            "command lane #{state.queue_lane_key}: waiting, no releasable uplink of " <>
+              "#{source_endpoint_ref}'s spacecraft (no active pass of its own, or not qualified)"
+          end)
+          |> schedule_dispatch(state.safety_poll_interval_ms, :safety)
+
+        {:quiescent, Summary.quiescence(:waiting_for_release_target, released_count), state}
 
       {:error, reason} ->
-        failed_or_waiting(state, reason, released_count, {recovery, attempted_at})
+        failed_or_waiting(state, reason, released_count, attempted_at)
     end
   end
 
-  # Expected right after a session attaches, not a failure: retried every 500 ms and logged
-  # once at info. Past session_recovery_wait_ms it falls back to the safety poll and warns once,
-  # so a session that never recovers doesn't spin.
   defp failed_or_waiting(
          state,
-         {:uplink_session_blocked, :protocol_recovery_required},
+         {:uplink_session_blocked, :protocol_recovery_required} = wait,
          released_count,
-         {recovery, attempted_at}
+         attempted_at
        ) do
-    emit(:dispatch_result, state, %{count: 1}, %{result: :session_recovering})
-    since = recovery_since(recovery, attempted_at)
-
-    state =
-      if datetime_diff_ms(attempted_at, since) < state.session_recovery_wait_ms do
-        state
-        |> log_recovery(recovery, {:waiting, since}, :info, fn ->
-          "command lane #{state.queue_lane_key}: waiting, uplink session recovering its " <>
-            "protocol state; retrying every #{@session_recovery_retry_ms}ms"
-        end)
-        |> schedule_dispatch(@session_recovery_retry_ms, :session_recovery)
-      else
-        state
-        |> log_recovery(recovery, {:stalled, since}, :warning, fn ->
-          "command lane #{state.queue_lane_key}: uplink session still recovering after " <>
-            "#{div(state.session_recovery_wait_ms, 1_000)}s; retrying on the safety poll"
-        end)
-        |> schedule_dispatch(state.safety_poll_interval_ms, :safety)
-      end
-
-    {:quiescent, quiescence_summary(:waiting_for_release_target, released_count), state}
+    state = uplink_wait(state, wait, attempted_at)
+    {:quiescent, Summary.quiescence(:waiting_for_release_target, released_count), state}
   end
 
-  defp failed_or_waiting(state, reason, released_count, _recovery) do
+  defp failed_or_waiting(state, reason, released_count, _attempted_at) do
     emit(:dispatch_result, state, %{count: 1}, %{result: :error})
+    Logger.warning("command lane #{state.queue_lane_key}: dispatch failed: #{inspect(reason)}")
     state = schedule_dispatch(state, state.safety_poll_interval_ms, :safety)
     {:error, %{released_count: released_count, reason: reason}, state}
   end
 
-  defp recovery_since({_phase, since}, _attempted_at), do: since
-  defp recovery_since(nil, attempted_at), do: attempted_at
+  defp uplink_wait(state, {:uplink_busy, busy}, _attempted_at) do
+    emit(:dispatch_result, state, %{count: 1}, %{result: :uplink_busy})
 
-  defp log_recovery(state, recovery, recovery, _level, _message),
-    do: %{state | session_recovery: recovery}
-
-  defp log_recovery(state, _previous, recovery, level, message) do
-    Logger.log(level, message.())
-    %{state | session_recovery: recovery}
+    state
+    |> waiting({:uplink_busy, busy}, fn ->
+      "command lane #{state.queue_lane_key}: waiting, uplink busy (#{busy}); " <>
+        "retrying every #{@uplink_busy_retry_ms}ms"
+    end)
+    |> schedule_dispatch(@uplink_busy_retry_ms, :uplink_busy)
   end
 
-  defp quiescence_summary(status, released_count, next_not_before \\ nil) do
-    %{
-      released_count: released_count,
-      status: status,
-      next_not_before: next_not_before
-    }
+  # Expected before qualification, not a failure (023 and 001, 11-11): retried like a busy
+  # uplink until the session recovers, logged once at info.
+  defp uplink_wait(state, {:uplink_session_blocked, :protocol_recovery_required}, attempted_at) do
+    emit(:dispatch_result, state, %{count: 1}, %{result: :session_recovering})
+    session_recovering(state, attempted_at)
+  end
+
+  defp session_recovering(state, attempted_at) do
+    since =
+      case state.waiting do
+        {:session_recovery, since} -> since
+        {:session_recovery_stalled, since} -> since
+        _other -> attempted_at
+      end
+
+    if datetime_diff_ms(attempted_at, since) < state.session_recovery_wait_ms do
+      state
+      |> waiting({:session_recovery, since}, fn ->
+        "command lane #{state.queue_lane_key}: waiting, uplink session recovering its " <>
+          "protocol state; retrying every #{@uplink_busy_retry_ms}ms"
+      end)
+      |> schedule_dispatch(@uplink_busy_retry_ms, :session_recovery)
+    else
+      state
+      |> waiting(
+        {:session_recovery_stalled, since},
+        fn ->
+          "command lane #{state.queue_lane_key}: uplink session still recovering after " <>
+            "#{div(state.session_recovery_wait_ms, 1_000)}s; retrying on the safety poll"
+        end,
+        :warning
+      )
+      |> schedule_dispatch(state.safety_poll_interval_ms, :safety)
+    end
+  end
+
+  # Logs a wait when the lane starts waiting on it (not on every poll), at info by default.
+  defp waiting(state, kind, message, level \\ :info)
+  defp waiting(%{waiting: kind} = state, kind, _message, _level), do: state
+
+  defp waiting(state, kind, message, level) do
+    Logger.log(level, message.())
+    %{state | waiting: kind}
   end
 
   defp schedule_dispatch(state, delay_ms, reason) when is_integer(delay_ms) and delay_ms >= 0 do
@@ -270,7 +352,8 @@ defmodule Cadence.Commanding.LaneDispatcher do
 
     emit(:timer_scheduled, state, %{count: 1, delay_ms: delay_ms}, %{reason: reason})
 
-    %{state | dispatch_timer: %{ref: ref, token: token}}
+    at = DateTime.add(state.reference_time_fun.(), delay_ms, :millisecond)
+    %{state | dispatch_timer: %{ref: ref, token: token, reason: reason, at: at}}
   end
 
   defp cancel_dispatch_timer(%{dispatch_timer: nil} = state), do: state

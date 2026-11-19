@@ -1,7 +1,11 @@
 defmodule Cadence.ContactPlanning.RequirementEvaluator do
   @moduledoc "Pure, deterministic Contact Requirement opportunity and coverage evaluation."
 
-  alias Cadence.ContactPlanning.{ContactOpportunitySnapshot, ContactRequirementVersion}
+  alias Cadence.ContactPlanning.{
+    ContactGaps,
+    ContactOpportunitySnapshot,
+    ContactRequirementVersion
+  }
 
   @spec evaluate_opportunity(ContactRequirementVersion.t(), map(), map(), keyword()) :: map()
   def evaluate_opportunity(
@@ -62,6 +66,16 @@ defmodule Cadence.ContactPlanning.RequirementEvaluator do
           "Ground station is outside this Requirement's allowed set."
         ),
         failure(
+          station_unavailable?(
+            opportunity,
+            starts_at,
+            ends_at,
+            Keyword.get(opts, :unavailable_windows, %{})
+          ),
+          "station_unavailable",
+          "Ground station has an outage or maintenance window over this opportunity."
+        ),
+        failure(
           requirement.success_measure == :minimum_data_volume and
             is_nil(estimated_volume_bytes),
           "estimated_volume_unknown",
@@ -107,12 +121,50 @@ defmodule Cadence.ContactPlanning.RequirementEvaluator do
     }
   end
 
-  @spec evaluate_selection(ContactRequirementVersion.t(), [ContactOpportunitySnapshot.t()], [
-          map()
-        ]) ::
-          map()
-  def evaluate_selection(%ContactRequirementVersion{} = requirement, snapshots, searches \\ [])
+  @spec evaluate_selection(
+          ContactRequirementVersion.t(),
+          [ContactOpportunitySnapshot.t()],
+          [map()],
+          keyword()
+        ) :: map()
+  def evaluate_selection(
+        %ContactRequirementVersion{} = requirement,
+        snapshots,
+        searches \\ [],
+        opts \\ []
+      )
       when is_list(snapshots) and is_list(searches) do
+    now = Keyword.get(opts, :now, DateTime.utc_now())
+
+    if snapshots == [] and passed?(requirement, now),
+      do: passed_window(requirement),
+      else: selection(requirement, snapshots, searches)
+  end
+
+  # A window that has already passed can't be planned or searched (qa #26): one plain reason
+  # instead of "contact count not met" plus a search failure per route.
+  defp passed?(%{latest_end: %DateTime{} = latest_end}, now),
+    do: not DateTime.after?(latest_end, now)
+
+  defp passed?(_requirement, _now), do: false
+
+  defp passed_window(requirement) do
+    %{
+      "satisfied" => false,
+      "hard_failures" => [
+        %{"code" => "window_passed", "message" => "This window has already passed."}
+      ],
+      "search_failures" => [],
+      "facts" => %{
+        "selected_count" => 0,
+        "eligible_count" => 0,
+        "required_contact_count" => requirement.contact_count,
+        "aggregate_duration_seconds" => 0
+      }
+    }
+  end
+
+  defp selection(requirement, snapshots, searches) do
     ordered = Enum.sort_by(snapshots, & &1.starts_at, DateTime)
     eligible = Enum.filter(ordered, & &1.eligible)
     durations = Enum.map(eligible, &DateTime.diff(&1.ends_at, &1.starts_at, :second))
@@ -142,17 +194,26 @@ defmodule Cadence.ContactPlanning.RequirementEvaluator do
       ]
       |> Enum.reject(&is_nil/1)
       |> Kernel.++(separation_failures)
+      |> Kernel.++(max_gap_failures(requirement, eligible))
 
+    # One failure per requirement, naming the routes whose search failed (qa #26).
     search_failures =
       searches
       |> Enum.filter(&(search_value(&1, :outcome) in [:failed, :not_ready]))
-      |> Enum.map(fn search ->
-        %{
-          "code" => "provider_search_unavailable",
-          "route_key" => search_value(search, :route_key),
-          "outcome" => search_value(search, :outcome) |> to_string()
-        }
-      end)
+      |> case do
+        [] ->
+          []
+
+        failed ->
+          [
+            %{
+              "code" => "provider_search_unavailable",
+              "route_key" => search_value(hd(failed), :route_key),
+              "route_keys" => failed |> Enum.map(&search_value(&1, :route_key)) |> Enum.uniq(),
+              "outcome" => search_value(hd(failed), :outcome) |> to_string()
+            }
+          ]
+      end
 
     %{
       "satisfied" => hard_failures == [] and eligible != [],
@@ -196,6 +257,29 @@ defmodule Cadence.ContactPlanning.RequirementEvaluator do
   defp warning(condition, code, message), do: failure(condition, code, message)
   defp selection_failure(condition, code, message), do: failure(condition, code, message)
 
+  # DECISIONS #74: the longest stretch of the window without one of the requirement's eligible
+  # selected passes (`ContactGaps`, edges included) may not exceed `max_gap_seconds`.
+  defp max_gap_failures(%{max_gap_seconds: nil}, _eligible), do: []
+
+  defp max_gap_failures(%{max_gap_seconds: limit} = requirement, eligible) do
+    gap = ContactGaps.longest(eligible, requirement.earliest_start, requirement.latest_end)
+
+    if gap.seconds > limit do
+      [
+        %{
+          "code" => "max_gap_exceeded",
+          "message" => "The selection leaves a longer stretch without a contact than allowed.",
+          "longest_gap_seconds" => gap.seconds,
+          "from" => DateTime.to_iso8601(gap.from),
+          "to" => DateTime.to_iso8601(gap.to),
+          "max_gap_seconds" => limit
+        }
+      ]
+    else
+      []
+    end
+  end
+
   defp separation_failures([_one_or_none], _minimum), do: []
   defp separation_failures([], _minimum), do: []
 
@@ -228,5 +312,16 @@ defmodule Cadence.ContactPlanning.RequirementEvaluator do
 
   defp search_value(search, key) do
     Map.get(search, key, Map.get(search, Atom.to_string(key)))
+  end
+
+  # S7: `unavailable_windows` is `%{station_id => [%{starts_at, ends_at | nil}]}` (outage and
+  # maintenance windows, from `Cadence.Comms.StationAvailability.blocking_windows/4`).
+  defp station_unavailable?(opportunity, starts_at, ends_at, windows) do
+    windows
+    |> Map.get(opportunity["ground_station_ref"], [])
+    |> Enum.any?(fn window ->
+      DateTime.before?(window.starts_at, ends_at) and
+        (is_nil(window.ends_at) or DateTime.after?(window.ends_at, starts_at))
+    end)
   end
 end

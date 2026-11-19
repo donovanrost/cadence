@@ -11,7 +11,8 @@ defmodule Cadence.Reads.Dashboards.SharedViews do
     Resolution,
     ResolutionContext,
     RuntimeComposition,
-    SharedViewContext
+    SharedViewContext,
+    TimeRange
   }
 
   alias Cadence.Missions
@@ -24,7 +25,8 @@ defmodule Cadence.Reads.Dashboards.SharedViews do
          {:ok, record, document} <- fetch(scope.organization_id, mission, kind, id),
          true <- AuthoringInput.id?(record.dashboard_id),
          true <- record.data_visibility in ~w(definition_only authorized_runtime_data),
-         {:ok, runtime} <- SharedViewContext.admit(record.runtime_context, mission),
+         {:ok, context} <- effective_context(kind, record, Keyword.get(opts, :runtime)),
+         {:ok, runtime} <- SharedViewContext.admit(context, mission),
          {:ok, definition} <-
            definition(document, scope.organization_id, mission, record.dashboard_id),
          {:ok, canvas} <- canvas(document, record.data_visibility, runtime, kind, opts) do
@@ -41,17 +43,96 @@ defmodule Cadence.Reads.Dashboards.SharedViews do
          created_at: DateTime.to_iso8601(record.inserted_at),
          expires_at: expiration(kind, record),
          loaded_at: DateTime.to_iso8601(DateTime.utc_now()),
-         runtime_context: record.runtime_context,
+         runtime_context: context,
          definition: definition,
          canvas: canvas
        }}
     else
+      {:error, :dashboard_snapshot_deleted} -> {:error, :snapshot_deleted}
+      {:error, {:invalid, _fields}} = invalid -> invalid
       _ -> {:error, :unavailable}
     end
   rescue
     _ -> {:error, :unavailable}
   catch
     _, _ -> {:error, :unavailable}
+  end
+
+  # D20: a share is live with the viewer's range; a snapshot stays frozen. The viewer's
+  # spacecraft applies only to a share that isn't scoped itself, so a scoped share can't be
+  # widened. A replay share keeps its replay.
+  defp effective_context(:share, record, %{} = runtime) do
+    with {:ok, override} <- viewer_runtime(runtime) do
+      {:ok, merge_viewer(record.runtime_context || %{}, override)}
+    end
+  end
+
+  defp effective_context(_kind, record, _runtime), do: {:ok, record.runtime_context}
+
+  defp viewer_runtime(runtime) do
+    with [] <- Map.keys(runtime) -- ~w(from to spacecraft_id),
+         {:ok, range} <- viewer_range(runtime["from"], runtime["to"]),
+         {:ok, spacecraft} <- viewer_spacecraft(runtime["spacecraft_id"]) do
+      {:ok, Map.merge(range, spacecraft)}
+    else
+      {:error, _invalid} = error -> error
+      _extra -> {:error, {:invalid, %{"runtime" => "Send from, to and spacecraft_id only"}}}
+    end
+  end
+
+  defp viewer_range(nil, nil), do: {:ok, %{}}
+
+  # D5-style bounds: absolute ISO 8601, or relative ('now-6h' / 'now'). A sliding range is
+  # resolved at this load ("the last 6 hours" ending now); the console's refresh keeps it sliding.
+  defp viewer_range(from, to) when is_binary(from) and is_binary(to) do
+    case TimeRange.resolve(from, to, DateTime.utc_now()) do
+      {:ok, {:sliding, seconds}} ->
+        now = DateTime.utc_now() |> DateTime.truncate(:second)
+        {:ok, range(DateTime.add(now, -seconds), now)}
+
+      {:ok, {:absolute, a, b}} ->
+        {:ok, range(a, b)}
+
+      {:error, :window_too_large} ->
+        {:error, {:invalid, %{"runtime.from" => "Choose a range of at most 24 hours"}}}
+
+      {:error, _invalid} ->
+        {:error, {:invalid, %{"runtime.to" => "Choose a start before the end"}}}
+    end
+  end
+
+  defp viewer_range(_from, _to),
+    do: {:error, {:invalid, %{"runtime.from" => "Send both from and to, or neither"}}}
+
+  defp range(from, to),
+    do: %{"from" => DateTime.to_iso8601(from), "to" => DateTime.to_iso8601(to)}
+
+  defp viewer_spacecraft(nil), do: {:ok, %{}}
+
+  defp viewer_spacecraft(id) do
+    if AuthoringInput.id?(id),
+      do: {:ok, %{"spacecraft_id" => id}},
+      else: {:error, {:invalid, %{"runtime.spacecraft_id" => "Choose a spacecraft or none"}}}
+  end
+
+  defp merge_viewer(context, override) do
+    context
+    |> merge_range(Map.take(override, ~w(from to)))
+    |> merge_spacecraft(override["spacecraft_id"])
+  end
+
+  defp merge_range(context, range) when map_size(range) == 0, do: context
+  defp merge_range(%{"time_mode" => "replay_run"} = context, _range), do: context
+
+  defp merge_range(context, range),
+    do: context |> Map.merge(range) |> Map.put("time_mode", "range")
+
+  defp merge_spacecraft(context, nil), do: context
+
+  defp merge_spacecraft(context, id) do
+    if Enum.any?(~w(spacecraft_id scope_kind scope_id), &Map.has_key?(context, &1)),
+      do: context,
+      else: Map.put(context, "spacecraft_id", id)
   end
 
   defp authorize(%Scope{actor_kind: :user, user: %{user_id: user}} = scope, mission) do

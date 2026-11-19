@@ -7,10 +7,13 @@ defmodule Cadence.ContactPlanning.ContactPlans do
 
   alias Cadence.Auth.{Policy, Scope}
 
+  alias Cadence.ContactPlanning.PlanUpdates
+
   alias Cadence.ContactPlanning.{
     AutomationGrants,
     ContactPlan,
     ContactPlanVersion,
+    PlanSupersession,
     PolicyNarrowing,
     RequirementEvaluator
   }
@@ -36,8 +39,13 @@ defmodule Cadence.ContactPlanning.ContactPlans do
 
   @spec create(Scope.t(), binary(), map(), keyword()) ::
           {:ok, ContactPlan.t(), ContactPlanVersion.t()} | {:error, term()}
-  def create(%Scope{} = current_scope, mission_id, attrs, opts \\ [])
-      when is_binary(mission_id) and is_map(attrs) and is_list(opts) do
+  def create(%Scope{} = current_scope, mission_id, attrs, opts \\ []) do
+    create_unpublished(current_scope, mission_id, attrs, opts)
+    |> PlanUpdates.published(current_scope.organization_id, mission_id)
+  end
+
+  defp create_unpublished(%Scope{} = current_scope, mission_id, attrs, opts)
+       when is_binary(mission_id) and is_map(attrs) and is_list(opts) do
     now = now(opts)
 
     with :ok <- authorize_member(current_scope, mission_id),
@@ -68,16 +76,21 @@ defmodule Cadence.ContactPlanning.ContactPlans do
 
   @spec version(Scope.t(), binary(), binary(), pos_integer(), map(), keyword()) ::
           {:ok, ContactPlan.t(), ContactPlanVersion.t()} | {:error, term()}
-  def version(
-        %Scope{} = current_scope,
-        mission_id,
-        plan_id,
-        expected_version,
-        attrs,
-        opts \\ []
-      )
-      when is_binary(mission_id) and is_binary(plan_id) and is_integer(expected_version) and
-             expected_version > 0 and is_map(attrs) and is_list(opts) do
+  def version(%Scope{} = current_scope, mission_id, plan_id, expected_version, attrs, opts \\ []) do
+    version_unpublished(current_scope, mission_id, plan_id, expected_version, attrs, opts)
+    |> PlanUpdates.published(current_scope.organization_id, mission_id)
+  end
+
+  defp version_unpublished(
+         %Scope{} = current_scope,
+         mission_id,
+         plan_id,
+         expected_version,
+         attrs,
+         opts
+       )
+       when is_binary(mission_id) and is_binary(plan_id) and is_integer(expected_version) and
+              expected_version > 0 and is_map(attrs) and is_list(opts) do
     now = now(opts)
 
     with :ok <- authorize_member(current_scope, mission_id),
@@ -100,9 +113,82 @@ defmodule Cadence.ContactPlanning.ContactPlans do
     error in ArgumentError -> {:error, {:invalid_contact_plan, error.message}}
   end
 
+  @taken_up ~w(pending_approval approved executing partially_reserved reserved)
+
+  @doc """
+  The ids among `requirement_ids` that a plan in pending_approval or later
+  has taken up (template supersession keeps those). `except_plan_id:` leaves
+  one plan out. `lock: true` share-locks **every** plan referencing them, with
+  no state filter in the query, and filters the states afterwards. A submit
+  in flight holds its plan `FOR UPDATE`, so the lock waits for it and then
+  sees its committed state (domain CP3 re-review A). Take it before locking
+  the requirements: plans first, everywhere (B).
+  """
+  @spec requirements_taken_up(binary(), binary(), [binary()], keyword()) :: MapSet.t()
+  def requirements_taken_up(organization_id, mission_id, requirement_ids, opts \\ []) do
+    except = Keyword.get(opts, :except_plan_id)
+
+    organization_id
+    |> referencing_plans(mission_id, requirement_ids, Keyword.get(opts, :lock, false))
+    |> Enum.filter(fn {_requirement_id, plan_id, state} ->
+      state in @taken_up and plan_id != except
+    end)
+    |> MapSet.new(&elem(&1, 0))
+  end
+
+  @doc "Share-locks the plans referencing `requirement_ids` (plans before requirements)."
+  @spec lock_referencing_plans(binary(), binary(), [binary()]) :: :ok
+  def lock_referencing_plans(organization_id, mission_id, requirement_ids) do
+    _ = referencing_plans(organization_id, mission_id, requirement_ids, true)
+    :ok
+  end
+
+  @doc """
+  For batch reads: `%{requirement_id => [plan_id]}` of the plans in pending_approval or later
+  that took each requirement up (unlocked).
+  """
+  @spec requirement_uptake(binary(), binary(), [binary()]) :: %{binary() => [binary()]}
+  def requirement_uptake(organization_id, mission_id, requirement_ids) do
+    organization_id
+    |> referencing_plans(mission_id, requirement_ids, false)
+    |> Enum.filter(fn {_requirement_id, _plan_id, state} -> state in @taken_up end)
+    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+  end
+
+  defp referencing_plans(_organization_id, _mission_id, [], _lock?), do: []
+
+  defp referencing_plans(organization_id, mission_id, requirement_ids, lock?) do
+    query =
+      ContactPlanRequirementRefRow
+      |> join(:inner, [ref], plan in ContactPlanRow,
+        on:
+          plan.organization_id == ref.organization_id and plan.mission_id == ref.mission_id and
+            plan.contact_plan_id == ref.contact_plan_id
+      )
+      |> where(
+        [ref, _plan],
+        ref.organization_id == ^organization_id and ref.mission_id == ^mission_id and
+          ref.contact_requirement_id in ^requirement_ids
+      )
+      # A stable order, so concurrent lockers take the plans in the same order.
+      |> order_by([_ref, plan], asc: plan.contact_plan_id)
+      |> select(
+        [ref, plan],
+        {ref.contact_requirement_id, plan.contact_plan_id, plan.lifecycle_state}
+      )
+
+    query = if lock?, do: lock(query, [_ref, plan], fragment("FOR SHARE OF ?", plan)), else: query
+    Repo.all(query)
+  end
+
   @spec submit(Scope.t(), binary(), binary(), pos_integer(), binary(), keyword()) ::
           {:ok, ContactPlan.t()} | {:error, term()}
   def submit(current_scope, mission_id, plan_id, expected_version, reason, opts \\ []) do
+    submit_unpublished(current_scope, mission_id, plan_id, expected_version, reason, opts)
+    |> PlanUpdates.published(current_scope.organization_id, mission_id)
+  end
+
+  defp submit_unpublished(current_scope, mission_id, plan_id, expected_version, reason, opts) do
     transition_to_pending(
       current_scope,
       mission_id,
@@ -131,6 +217,43 @@ defmodule Cadence.ContactPlanning.ContactPlans do
           {:ok, ContactPlanRow.to_domain(row), version}
         end
     end
+  end
+
+  @doc """
+  Records the console operation acting on a plan (DECISIONS #27). The latest
+  console operation wins; `{:error, :operation_already_claimed}` when another
+  plan in the mission holds the same `operation_id`.
+  """
+  @spec claim_operation(binary(), binary(), binary(), binary()) ::
+          :ok | {:error, :operation_already_claimed | :contact_plan_not_found}
+  def claim_operation(organization_id, mission_id, plan_id, operation_id) do
+    case Repo.get_by(ContactPlanRow,
+           organization_id: organization_id,
+           mission_id: mission_id,
+           contact_plan_id: plan_id
+         ) do
+      nil ->
+        {:error, :contact_plan_not_found}
+
+      row ->
+        case row |> ContactPlanRow.operation_changeset(operation_id) |> Repo.update() do
+          {:ok, _row} -> :ok
+          {:error, _changeset} -> {:error, :operation_already_claimed}
+        end
+    end
+  end
+
+  @doc "The plan id whose latest console operation is `operation_id`, if any."
+  @spec plan_id_for_operation(binary(), binary(), binary()) :: binary() | nil
+  def plan_id_for_operation(organization_id, mission_id, operation_id) do
+    ContactPlanRow
+    |> where(
+      [row],
+      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+        row.operation_id == ^operation_id
+    )
+    |> select([row], row.contact_plan_id)
+    |> Repo.one()
   end
 
   @doc "Locks the current scoped Plan while claiming a database-only reviewed operation."
@@ -332,6 +455,16 @@ defmodule Cadence.ContactPlanning.ContactPlans do
   @spec start_execution_projection(binary(), binary(), binary(), DateTime.t()) ::
           {:ok, ContactPlan.t()} | {:error, term()}
   def start_execution_projection(organization_id, mission_id, plan_id, %DateTime{} = now) do
+    start_execution_projection_unpublished(organization_id, mission_id, plan_id, now)
+    |> PlanUpdates.published(organization_id, mission_id)
+  end
+
+  defp start_execution_projection_unpublished(
+         organization_id,
+         mission_id,
+         plan_id,
+         %DateTime{} = now
+       ) do
     Repo.transaction(fn ->
       case lock_plan(organization_id, mission_id, plan_id) do
         {:ok, %ContactPlanRow{lifecycle_state: "reserved"} = row} ->
@@ -370,6 +503,27 @@ defmodule Cadence.ContactPlanning.ContactPlans do
         reason,
         %DateTime{} = now
       ) do
+    update_execution_projection_unpublished(
+      organization_id,
+      mission_id,
+      plan_id,
+      plan_version,
+      state,
+      reason,
+      now
+    )
+    |> PlanUpdates.published(organization_id, mission_id)
+  end
+
+  defp update_execution_projection_unpublished(
+         organization_id,
+         mission_id,
+         plan_id,
+         plan_version,
+         state,
+         reason,
+         %DateTime{} = now
+       ) do
     Repo.transaction(fn ->
       with {:ok, row} <- lock_plan(organization_id, mission_id, plan_id),
            true <- row.approved_version == plan_version,
@@ -630,10 +784,30 @@ defmodule Cadence.ContactPlanning.ContactPlans do
          :ok <- draft_plan(row),
          :ok <- expected_version(row, expected_version),
          :ok <- undecided_version(row),
+         :ok <- not_superseded(row),
          {:ok, updated} <- update_pending_plan(row, reason, actor_id, now) do
       ContactPlanRow.to_domain(updated)
     else
       {:error, error} -> Repo.rollback(error)
+    end
+  end
+
+  # U27, under the plan lock, for every caller (console, ops console, automation): a draft that
+  # newer requirement or template versions overtook can't be submitted.
+  defp not_superseded(row) do
+    plan = ContactPlanRow.to_domain(row)
+
+    with {:ok, version} <-
+           fetch_version(
+             row.organization_id,
+             row.mission_id,
+             row.contact_plan_id,
+             row.current_version
+           ) do
+      case PlanSupersession.check(row.organization_id, row.mission_id, plan, version) do
+        nil -> :ok
+        superseded -> {:error, {:contact_plan_superseded, superseded}}
+      end
     end
   end
 

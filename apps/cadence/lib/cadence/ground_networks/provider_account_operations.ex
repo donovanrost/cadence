@@ -32,7 +32,7 @@ defmodule Cadence.GroundNetworks.ProviderAccountOperations do
     end
   end
 
-  defp provider_account_action(scope, "revoke_provider_credential", account_id, _params) do
+  defp provider_account_action(scope, "revoke_provider_credential", account_id, params) do
     with {:ok, _account, version} <-
            ProviderAccounts.fetch(scope, account_id),
          {:ok, _result} <-
@@ -40,6 +40,16 @@ defmodule Cadence.GroundNetworks.ProviderAccountOperations do
              scope,
              account_id,
              version.credential_ref,
+             Keyword.put(provider_account_opts(), :reason, optional_text(value(params, "reason")))
+           ),
+         # The account's own status follows its active credential, or every reader of the
+         # account (lists, PA1) keeps showing a revoked credential as active.
+         {:ok, _account} <-
+           ProviderAccounts.update_operational_state(
+             scope.organization_id,
+             account_id,
+             %{credential_status: :revoked},
+             actor_document(scope),
              provider_account_opts()
            ) do
       {:ok, %{completed: true}}
@@ -72,7 +82,7 @@ defmodule Cadence.GroundNetworks.ProviderAccountOperations do
       ControlProviders.revoke_account_grant(
         scope,
         grant_id,
-        "Revoked by organization administrator"
+        optional_text(value(params, "reason")) || "Revoked by organization administrator"
       )
     else
       false ->
@@ -103,6 +113,13 @@ defmodule Cadence.GroundNetworks.ProviderAccountOperations do
         {:error, reason}
     end
   end
+
+  defp actor_document(%Scope{user: %{user_id: user_id}}), do: %{"kind" => "user", "id" => user_id}
+
+  defp actor_document(%Scope{service_identity: %{service_identity_id: id}}),
+    do: %{"kind" => "service", "id" => id}
+
+  defp actor_document(_scope), do: %{"kind" => "system"}
 
   defp provider_account_opts,
     do: Application.get_env(:cadence_web, :provider_account_live_opts, [])
@@ -186,6 +203,7 @@ defmodule Cadence.GroundNetworks.ProviderAccountOperations do
   defp atom_key("allowed_stations"), do: :allowed_stations
   defp atom_key("max_quota"), do: :max_quota
   defp atom_key("grant_reason"), do: :grant_reason
+  defp atom_key("reason"), do: :reason
   defp atom_key("email"), do: :email
   defp atom_key("membership_role"), do: :membership_role
   defp atom_key("grant_platform_admin"), do: :grant_platform_admin

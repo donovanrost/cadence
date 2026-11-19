@@ -79,7 +79,7 @@ defmodule CadenceWeb.DashboardSettingsTest do
              )
   end
 
-  test "persisted settings saves retain publication, widgets and metadata with actor attribution",
+  test "persisted settings saves publish, and retain widgets and metadata with actor attribution",
        c do
     {:ok, _} =
       Documents.publish(
@@ -99,7 +99,8 @@ defmodule CadenceWeb.DashboardSettingsTest do
     assert after_save.description == "Updated description"
     assert after_save.tags == ["power", "ops"]
     assert Jason.decode!(after_save.defaults_json) == %{"extension" => %{"retained" => true}}
-    assert after_save.published_version == 1
+    # Q1 (#76): a settings save is a version like any other, current at once.
+    assert after_save.published_version == 2
 
     {:ok, saved} =
       Documents.fetch(c.org.organization_id, c.mission.mission_id, c.document.dashboard_id)
@@ -124,7 +125,7 @@ defmodule CadenceWeb.DashboardSettingsTest do
         c.document.dashboard_id
       )
 
-    assert published.name == c.document.name
+    assert published.name == "Power settings"
   end
 
   test "all commands require exact bounded inputs and observed revisions", c do
@@ -214,7 +215,8 @@ defmodule CadenceWeb.DashboardSettingsTest do
     assert snapshot.data_semantics == "definition_at_version_current_data"
     assert snapshot.data_visibility == "definition_only"
     model = read(c)
-    assert model.published_version == nil
+    # The settings save published version 2 (Q1, #76); the snapshot stays at version 1.
+    assert model.published_version == 2
     assert [%{document_version: 1}] = model.snapshots.rows
     refute Map.has_key?(hd(model.snapshots.rows), :document)
     refute Map.has_key?(hd(model.snapshots.rows), :runtime_context)
@@ -320,9 +322,8 @@ defmodule CadenceWeb.DashboardSettingsTest do
     assert Document.version(c.document) == 1
   end
 
-  test "bounded metadata pages round-trip through the real frontend consumer", c do
-    empty = read(c)
-
+  # L8b: the legacy settings feature's producer check (the frontend consumer) went with the page.
+  test "bounded metadata pages, expiry and archive read back", c do
     populate_metadata(c)
 
     {:ok, other} =
@@ -372,29 +373,7 @@ defmodule CadenceWeb.DashboardSettingsTest do
              "expired"
 
     assert {:ok, _} = execute(c, "archive_dashboard", %{})
-    archived = read(c)
-
-    renderer =
-      Path.expand(
-        "../../../../frontend/modules/dashboards-and-exploration/src/features/settings/producer-contract-check.mjs",
-        __DIR__
-      )
-
-    node =
-      System.find_executable("node") || flunk("Node is required for settings producer contracts")
-
-    {output, status} =
-      System.cmd(
-        node,
-        [
-          "--no-warnings",
-          renderer,
-          Jason.encode!([empty, first, second, expired_page, archived])
-        ],
-        stderr_to_stdout: true
-      )
-
-    assert status == 0, output
+    assert read(c).lifecycle == "archived"
   end
 
   test "oversized deployment metadata is unavailable rather than an unbounded payload", c do

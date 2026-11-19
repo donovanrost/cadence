@@ -1,0 +1,52 @@
+dumped 2026-11-12T00:10:52Z
+== mission_binding_set_activations
+-[ RECORD 1 ]--------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+activation_id              | activation_ccxol52jpu_17V1V
+mission_id                 | mission-earendil-demo
+binding_set_id             | mission_applications:mission-earendil-demo
+binding_set_version        | 3
+metadata                   | {"value": {"fleet": {"count": 500, "sha256": "fb8267a4851439f239379c042f08414920585ecfcf96e16acc37fdf095a77eb4", "mission_id": "mission-earendil-demo"}, "change_set": {"id": "change_set_ccxol52jpu_13751", "revision": 9, "spacecraft_ids": ["spacecraft-earendil-001"]}, "configuration_review": null, "spacecraft_configuration_version": 2}}
+activated_at               | 2026-11-11 21:57:39.735219
+inserted_at                | 2026-11-11 21:57:40.540009
+organization_id            | org-reflect-orbital-demo
+generation                 | 8
+binding_set_content_sha256 | fa87fa89ce3eaef6952c548315799df0eeedcf42ac2c0448c954c85789a6ae9c
+activation_request_id      | activation_request_ccxol52jpu_17QMA
+
+== mission_active_binding_sets
+-[ RECORD 1 ]--------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+mission_id                 | mission-earendil-demo
+activation_id              | activation_ccxol52jpu_17V1V
+binding_set_id             | mission_applications:mission-earendil-demo
+binding_set_version        | 3
+metadata                   | {"value": {"fleet": {"count": 500, "sha256": "fb8267a4851439f239379c042f08414920585ecfcf96e16acc37fdf095a77eb4", "mission_id": "mission-earendil-demo"}, "change_set": {"id": "change_set_ccxol52jpu_13751", "revision": 9, "spacecraft_ids": ["spacecraft-earendil-001"]}, "configuration_review": null, "spacecraft_configuration_version": 2}}
+activated_at               | 2026-11-11 21:57:39.735219
+inserted_at                | 2026-11-08 22:27:46.544769
+organization_id            | org-reflect-orbital-demo
+generation                 | 8
+binding_set_content_sha256 | fa87fa89ce3eaef6952c548315799df0eeedcf42ac2c0448c954c85789a6ae9c
+activation_request_id      | activation_request_ccxol52jpu_17QMA
+
+== activation_executions (gen 8: none expected)
+(0 rows)
+
+== activation_requests (added after api-ops review, 2026-11-12T00:17:30Z)
+-[ RECORD 1 ]--------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+activation_request_id      | activation_request_ccxol52jpu_17QMA
+organization_id            | org-reflect-orbital-demo
+mission_id                 | mission-earendil-demo
+binding_set_id             | mission_applications:mission-earendil-demo
+binding_set_version        | 3
+binding_set_content_sha256 | fa87fa89ce3eaef6952c548315799df0eeedcf42ac2c0448c954c85789a6ae9c
+change_class               | mission_data_plane
+state                      | approved
+requester_actor_kind       | user
+requester_actor_id         | user_lbaulnjzha_C
+requester_actor_document   | {"value": {"id": "user_lbaulnjzha_C", "kind": "user", "name": "QA Org Admin"}}
+policy_document            | {"value": {"policy": "scoped_activation_approvals_v1", "settings_token": "af12d1279a1bbbb1c750db60ef26d4e5054b1b04ff602ee06d5ef1beec507e4f", "approval_required": false, "separation_of_duties": false, "required_human_approvals": 0}}
+requested_at               | 2026-11-11 21:57:38.965228
+decided_at                 | 2026-11-11 21:57:38.965228
+inserted_at                | 2026-11-11 21:57:39.332997
+updated_at                 | 2026-11-11 21:57:39.332997
+metadata                   | {"value": {"fleet": {"count": 500, "sha256": "fb8267a4851439f239379c042f08414920585ecfcf96e16acc37fdf095a77eb4", "mission_id": "mission-earendil-demo"}, "change_set": {"id": "change_set_ccxol52jpu_13751", "revision": 9, "spacecraft_ids": ["spacecraft-earendil-001"]}, "configuration_review": null, "spacecraft_configuration_version": 2}}
+

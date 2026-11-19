@@ -12,16 +12,15 @@ defmodule Cadence.Control.Activations do
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Applications.TelemetryDecom
   alias Cadence.Auth.Scope
+  alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Control.Activations.{ActivationExecution, ActivationExecutionRow, ExecutionLock}
+  alias Cadence.Control.Activations.{Approval, Preflight}
   alias Cadence.Control.Activations.Resume
   alias Cadence.Control.Activations.Review
-  alias Cadence.Control.MissionModelPromotion
   alias Cadence.Control.MissionRuntimeReconciler
   alias Cadence.Control.Missions, as: ControlMissions
   alias Cadence.Governance
-  alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.Management.Activations.ApprovedActivation
-  alias Cadence.Platform.ContentHash
   alias Cadence.Repo
   alias Cadence.Runtime.MissionRuntimeSpec
 
@@ -69,12 +68,20 @@ defmodule Cadence.Control.Activations do
   @doc "Reviews one mission-bound activation request through the host's human approval workflow."
   def review(%Scope{} = scope, mission_id, input), do: Review.decide(scope, mission_id, input)
 
+  @doc """
+  Approves `request_id` only if its apply could run; otherwise nothing is recorded and the request
+  stays pending. Every approve path goes through here (director 11-17): `Cadence.Control.Activations.Approval`.
+  """
+  @spec approve(Scope.t(), binary(), binary(), keyword()) ::
+          {:ok, term(), term(), term()} | {:error, term()}
+  def approve(%Scope{} = scope, request_id, reason, opts \\ []),
+    do: Approval.approve(scope, request_id, reason, opts)
+
   @spec approve_and_execute(Scope.t(), binary(), binary(), keyword()) ::
           {:ok, ActivationExecution.t()} | {:error, term()}
   def approve_and_execute(%Scope{} = current_scope, request_id, reason, opts \\ []) do
-    with {:ok, _request, _decision, approved} <-
-           ManagementActivations.approve(current_scope, request_id, reason, opts) do
-      execute(approved, opts)
+    with {:ok, _request, _decision, approved} <- approve(current_scope, request_id, reason, opts) do
+      execute(approved, Keyword.delete(opts, :checks))
     end
   end
 
@@ -134,13 +141,11 @@ defmodule Cadence.Control.Activations do
                approved_activation.binding_set_id,
                approved_activation.binding_set_version
              ),
-           :ok <- exact_approved_content(approved_activation, binding_set),
            :ok <-
-             MissionModelPromotion.validate_activation_metadata(
-               approved_activation.organization_id,
-               approved_activation.mission_id,
+             Preflight.run_checks(
+               approved_activation,
                binding_set,
-               approved_activation.metadata
+               [executing?: true] ++ opts
              ),
            {:ok, %BindingSetActivation{} = activation} <-
              execute_activation(
@@ -154,7 +159,11 @@ defmodule Cadence.Control.Activations do
                )
                |> Keyword.put(:metadata, approved_activation.metadata)
              ),
-           :ok <- TelemetryDecom.activation_applied(binding_set, approved_activation.metadata) do
+           :ok <-
+             TelemetryDecom.activation_applied(
+               binding_set,
+               applied_metadata(approved_activation.metadata)
+             ) do
         complete_execution(execution_row, activation, now(opts))
       end
 
@@ -256,13 +265,12 @@ defmodule Cadence.Control.Activations do
   defp error_code({reason, _detail}) when is_atom(reason), do: Atom.to_string(reason)
   defp error_code(_reason), do: nil
 
-  defp exact_approved_content(approved_activation, binding_set) do
-    if ContentHash.term_sha256(binding_set) == approved_activation.binding_set_content_sha256 do
-      :ok
-    else
-      {:error, :approved_activation_content_mismatch}
-    end
-  end
+  @doc "Whether an approval of `request` could apply: `Cadence.Control.Activations.Preflight.run/2`."
+  @spec preflight(map(), keyword()) :: :ok | {:error, term()}
+  def preflight(request, opts \\ []), do: Preflight.run(request, opts)
+
+  @doc "The deterministic checks both an apply and an approval run: `Cadence.Control.Activations.Preflight.checks/0`."
+  def deterministic_check_list, do: Preflight.checks()
 
   defp executor_actor(opts) do
     Keyword.get(opts, :executor_actor_document, %{
@@ -291,4 +299,17 @@ defmodule Cadence.Control.Activations do
       opts
     )
   end
+
+  # TelemetryDecom runs in the data plane and can't read stored fleets; hand it the entries.
+  defp applied_metadata(%{"spacecraft_configuration_version" => 2} = metadata) do
+    case FleetSnapshot.entries(metadata) do
+      {:ok, entries} ->
+        %{"spacecraft_configuration_version" => 1, "spacecraft_configurations" => entries}
+
+      {:error, _reason} ->
+        metadata
+    end
+  end
+
+  defp applied_metadata(metadata), do: metadata
 end

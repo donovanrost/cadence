@@ -1,0 +1,16 @@
+{
+  "extends": ["@vue/tsconfig/tsconfig.dom.json", "../../tsconfig.strict.json"],
+  "include": ["src/**/*.ts", "src/**/*.vue", "vite.config.ts"],
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["vite/client", "vite-plus/test", "node"],
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true
+  },
+  "vueCompilerOptions": {
+    "checkUnknownComponents": true
+  }
+}

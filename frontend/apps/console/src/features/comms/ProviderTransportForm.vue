@@ -1,0 +1,131 @@
+<script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
+import { computed, ref, watch } from "vue";
+import { useRouter, type RouteLocationRaw } from "vue-router";
+import { isKnown, useRemoteQuery } from "@/api";
+import { failureOutcome, refreshConfigState, stageChange } from "@/features/changes/index.ts";
+import { ApButton, ApCallout, ApField, ApSelect } from "@/ui";
+import { fetchProviderOptions, type ProviderErrorPath } from "./provider-options.ts";
+import ProviderTransportPreview from "./ProviderTransportPreview.vue";
+import { blockedReason, formFromDocument, providerOp } from "./provider-transport.ts";
+
+/**
+ * A provider-managed transport (comms parity 2): name, then provider → service → delivery, each
+ * narrowing the next (api's provider-options read over domain's derive/3), with the settings
+ * Cadence will derive shown before staging. Stages through the change set (transport kind).
+ */
+const props = defineProps<{
+  missionId: MissionId;
+  entityId: string | null;
+  document: Readonly<Record<string, unknown>>;
+  done: RouteLocationRaw;
+}>();
+const router = useRouter();
+const start = formFromDocument(props.document);
+const name = ref(start.name);
+const providerId = ref(start.providerId);
+const serviceId = ref(start.serviceId);
+const deliveryId = ref(start.deliveryId);
+// A changed choice clears the ones that depended on it.
+watch(providerId, () => ((serviceId.value = ""), (deliveryId.value = "")));
+watch(serviceId, () => (deliveryId.value = ""));
+const options = useRemoteQuery(
+  () => ({
+    missionId: props.missionId,
+    providerId: providerId.value || null,
+    serviceProfileId: serviceId.value || null,
+    deliveryProfileId: deliveryId.value || null,
+  }),
+  fetchProviderOptions,
+);
+const ready = computed(() =>
+  options.state.value.status === "ready" ? options.state.value.value : null,
+);
+const asOptions = (list: readonly { id: string; name: string }[] | undefined) =>
+  (list ?? []).map((c) => ({ value: c.id, label: c.name }));
+/** derive's refusal on a field, or null. */
+const fieldError = (path: ProviderErrorPath) =>
+  ready.value?.errors.find((e) => e.path !== null && isKnown(e.path) && e.path === path)?.message ??
+  null;
+const general = computed(() => ready.value?.errors.filter((e) => e.path === null) ?? []);
+const form = computed(() => ({
+  name: name.value,
+  providerId: providerId.value,
+  serviceId: serviceId.value,
+  deliveryId: deliveryId.value,
+}));
+const blocked = computed(() => blockedReason(form.value, ready.value));
+const busy = ref(false);
+const failure = ref<string | null>(null);
+
+async function stage() {
+  const opts = ready.value;
+  if (blocked.value !== null || !opts || busy.value) return;
+  const op = providerOp(props.entityId, props.document, form.value, opts);
+  if (!op) return void (failure.value = "Those choices are no longer on offer. Choose again.");
+  if (op.changes?.length === 0) return void (failure.value = "Nothing changed yet.");
+  busy.value = true;
+  failure.value = null;
+  try {
+    const summary = props.entityId
+      ? `${form.value.name.trim()} · provider settings`
+      : `Add transport ${form.value.name.trim()}`;
+    const result = await stageChange(props.missionId, {
+      summary,
+      source: { surface: "transports" },
+      ops: [op],
+    });
+    if (!result.ok) return void (failure.value = failureOutcome(result.error, "staged").sentence);
+    refreshConfigState(props.missionId);
+    await router.push(props.done);
+  } finally {
+    busy.value = false;
+  }
+}
+</script>
+
+<template>
+  <form class="flex flex-col gap-4" @submit.prevent="stage">
+    <ApField v-model="name" label="Name" required />
+    <ApSelect
+      v-model="providerId"
+      label="Provider"
+      placeholder="Choose…"
+      required
+      :options="asOptions(ready?.providers)"
+      :error="fieldError('mission_provider_id') ?? fieldError('mission_provider_version')"
+    />
+    <ApSelect
+      v-model="serviceId"
+      label="Service profile"
+      placeholder="Choose…"
+      required
+      :disabled="!providerId"
+      :options="asOptions(ready?.services)"
+      :error="fieldError('service_profile_ref')"
+    />
+    <ApSelect
+      v-model="deliveryId"
+      label="Delivery profile"
+      placeholder="Choose…"
+      required
+      :disabled="!serviceId"
+      :options="asOptions(ready?.deliveries)"
+      :error="fieldError('delivery_profile_ref')"
+    />
+    <ApCallout v-for="(e, i) in general" :key="i" tone="caution">{{ e.message }}</ApCallout>
+    <ProviderTransportPreview v-if="ready?.preview" :preview="ready.preview" />
+    <ApCallout v-if="failure" tone="caution">{{ failure }}</ApCallout>
+    <div class="flex flex-wrap gap-2">
+      <ApButton
+        type="submit"
+        variant="primary"
+        :disabled="blocked !== null || busy"
+        :disabled-reason="busy ? 'Staging…' : (blocked ?? '')"
+        >Stage change</ApButton
+      >
+      <ApButton :to="done">Cancel</ApButton>
+    </div>
+    <p class="m-0 text-sm text-text-3">Nothing is live until the change set is applied.</p>
+  </form>
+</template>

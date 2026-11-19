@@ -2,19 +2,20 @@ defmodule Cadence.ObservabilityTest do
   use Cadence.UnitCase, async: true
 
   alias Cadence.Observability
-  alias Cadence.Observability.AsyncContext
+  alias Cadence.Observability.{AsyncContext, RepoTracing}
   alias OpenTelemetry.{Span, Tracer}
 
   test "traces repository queries without capturing SQL statements" do
-    handler_function = &OpentelemetryEcto.handle_event/4
-
-    handler =
-      [:cadence, :repo, :query]
-      |> :telemetry.list_handlers()
-      |> Enum.find(&(&1.function == handler_function))
+    handlers = :telemetry.list_handlers([:cadence, :repo, :query])
+    ours = &RepoTracing.handle_event/4
+    library = &OpentelemetryEcto.handle_event/4
+    handler = Enum.find(handlers, &(&1.function == ours))
 
     assert handler
     assert handler.config[:db_statement] == :disabled
+
+    # OpentelemetryEcto's own handler (whole-dictionary context lookup) isn't attached as well.
+    refute Enum.any?(handlers, &(&1.function == library))
   end
 
   test "propagates an explicit parent context across a process boundary" do

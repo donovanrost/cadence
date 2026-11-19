@@ -24,6 +24,7 @@ defmodule Cadence.Comms.TransportRow do
     field(:direction_capability, :string)
     field(:adapter_key, :string)
     field(:configuration, :map, default: %{})
+    field(:ground_station_id, :string)
     field(:mission_provider_id, :string)
     field(:mission_provider_version, :integer)
     field(:service_profile_ref, :map)
@@ -78,6 +79,7 @@ defmodule Cadence.Comms.TransportRow do
       direction_capability: row.direction_capability,
       adapter_key: row.adapter_key,
       configuration: JsonDocument.unwrap_value(row.configuration),
+      ground_station_id: row.ground_station_id,
       mission_provider_id: row.mission_provider_id,
       mission_provider_version: row.mission_provider_version,
       service_profile_ref: JsonDocument.unwrap_value(row.service_profile_ref),
@@ -102,6 +104,7 @@ defmodule Cadence.Comms.TransportRow do
       direction_capability: Atom.to_string(transport.direction_capability),
       adapter_key: Atom.to_string(transport.adapter_key),
       configuration: JsonDocument.wrap_value(transport.configuration),
+      ground_station_id: transport.ground_station_id,
       mission_provider_id: transport.mission_provider_id,
       mission_provider_version: transport.mission_provider_version,
       service_profile_ref: maybe_wrap(transport.service_profile_ref),
@@ -129,6 +132,7 @@ defmodule Cadence.Comms.TransportRow do
       :direction_capability,
       :adapter_key,
       :configuration,
+      :ground_station_id,
       :mission_provider_id,
       :mission_provider_version,
       :service_profile_ref,

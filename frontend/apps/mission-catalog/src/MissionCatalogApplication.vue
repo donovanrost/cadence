@@ -13,15 +13,11 @@ import CatalogImportRunShow from "./CatalogImportRunShow.vue";
 import CatalogIndex from "./CatalogIndex.vue";
 import CatalogRevisionShow from "./CatalogRevisionShow.vue";
 import MissionApplicationsPage from "./MissionApplicationsPage.vue";
-import MissionList from "./MissionList.vue";
-import MissionNew from "./MissionNew.vue";
 import MissionOverview from "./MissionOverview.vue";
 
 const props = defineProps<FullPageSurfaceProps>();
 
 const surfaceComponents: Record<string, Component> = {
-  mission_list: MissionList,
-  mission_new: MissionNew,
   mission_overview: MissionOverview,
   mission_applications: MissionApplicationsPage,
   catalog_index: CatalogIndex,
@@ -33,7 +29,6 @@ const surfaceComponents: Record<string, Component> = {
 };
 
 const actionBindings: Record<string, Record<string, string>> = {
-  mission_new: { validate: "validate", save: "save" },
   mission_applications: { install: "install", disable: "disable", uninstall: "uninstall" },
   catalog_database_new: {
     validate: "validate",

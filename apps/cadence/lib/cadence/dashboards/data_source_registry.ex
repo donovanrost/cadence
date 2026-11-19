@@ -325,6 +325,8 @@ defmodule Cadence.Dashboards.DataSourceRegistry do
              source_health: Map.get(candidate, :source_health),
              source_health_reason: Map.get(candidate, :source_health_reason),
              source_health_freshness: Map.get(candidate, :source_health_freshness),
+             source_health_observed_at: Map.get(candidate, :source_health_observed_at),
+             reasons: Map.get(candidate, :reasons, []),
              connection_test_result: Map.get(candidate, :connection_test_result),
              connection_test_kind: Map.get(candidate, :connection_test_kind),
              connection_test_message: Map.get(candidate, :connection_test_message),
@@ -922,12 +924,20 @@ defmodule Cadence.Dashboards.DataSourceRegistry do
       details:
         details
         |> Map.put(:source_request_id, request.request_id)
+        |> Map.put(:placement_ids, request_placement_ids(request))
         |> SourceActions.put_source_request_context(request)
         |> SourceActions.put_source_warning_actions()
         |> put_telemetry_warning_actions(links),
       links: links
     }
   end
+
+  # The widgets a source request feeds (lead 11-14: the save sheet counts them per source).
+  defp request_placement_ids(%PlannedSourceRequest{consumers: consumers}) when is_list(consumers),
+    do:
+      consumers |> Enum.map(&Map.get(&1, :placement_id)) |> Enum.reject(&is_nil/1) |> Enum.uniq()
+
+  defp request_placement_ids(_request), do: []
 
   defp put_telemetry_warning_actions(details, links) do
     actions =
