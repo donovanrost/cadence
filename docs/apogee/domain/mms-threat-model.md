@@ -34,7 +34,7 @@ it lands. Until ca-security's checklist lands, reviews use ca-security's six poi
 | Console upload, `console/catalog_import_controller.ex` → `Catalog.Upload.import_revision` | `operate_mission` | `Actor.from_scope` |
 | Console reimport, `console/catalog_controller.ex:58` → `Catalog.Reimport.execute` | `operate_mission` | `Actor.from_scope` |
 | Host page and mission-catalog action (`host_page_live.ex:445`, `mission_catalog/action_provider.ex:125`) → `Reimport.execute` | `operate_mission` | `Actor.from_scope` |
-| REST `POST …/catalog_import_runs` (`catalog_import_run_controller.ex:28`) → `Catalog.start_import_run` | `manage_mission` (= operate) | `ControlPlaneAccess.actor_document` |
+| REST `POST …/catalog_import_runs` (`catalog_import_run_controller.ex:28`) → `Catalog.start_import_run` | `manage_mission`: platform admin, organization admin, or that mission's admin (`policy.ex:204-225`). REST bearers are always services, so in practice a service holding `mission_admin` for the mission or `organization_admin` | `ControlPlaneAccess.actor_document` |
 | Seed (`dev/reflect_orbital/configuration.exs:104`) | n/a | `Actor.system("seed:…")` |
 
 `Catalog.start_import_run`/`start_revision_import` refuse a run with no recorded actor (`Actor.recorded/1`).
@@ -230,8 +230,9 @@ dev reset recreates them, DECISIONS #112).
     - no same-SCID HOLD: `scid_shared_in_organization` lives only in the change-set kinds
       (`spacecraft/config_kinds/scid_holds.ex`);
     - no actor recorded.
-  - `authorize_mission` is `:manage_mission` = `operate_mission`, so any operator, or a service bound to
-    the mission, can do it.
+  - `authorize_mission` is `:manage_mission`: platform admin, organization admin, or that mission's admin
+    (`policy.ex:204-225`). REST bearers are always services, so in practice it's a service identity
+    holding `mission_admin` for the mission, or `organization_admin` (ca-security 11-19). Not any operator.
   - Fix: route REST creation through a change set like the console, or retire the route with #122's
     legacy writes. Until then, mark it `# todo(authz):`.
 - **SC-3 (low; correctness): a REST create that conflicts answers 201 with data that wasn't stored.**
