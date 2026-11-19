@@ -2317,14 +2317,16 @@ change set like any override. There's no separate routes editor.
         so nothing was applied and the change set stays in review. Approve it once the hold clears; the checks show
         it. Your approval wasn't recorded." The holds show in the checks, not in the line. After it, Approve is disabled
         with the up-front reason until a reload shows the hold cleared.
-      - 409 `preview_failed` (Cadence couldn't run the checks: a database or connection error): "Not approved: Cadence
-        couldn't run the checks, so nothing was applied and the change set stays in review. Try again; if it keeps
-        happening, tell the team that runs Cadence for you. Your approval wasn't recorded." Unlike U95's usual rule,
-        Approve stays enabled after it, because trying again is the fix. The cause goes in Technical details, never
-        in the line.
-      - Send back meeting `preview_failed` (only if send back runs the checks; ca-engineer to confirm, else this line
-        goes): "Not sent back: Cadence couldn't run the checks, so nothing changed. Try again; if it keeps happening,
-        tell the team that runs Cadence for you."
+      - 503 `preview_failed` (Cadence couldn't run the checks: a database or connection error, a server fault):
+        "Not approved: Cadence couldn't run the checks, so nothing was applied and the change set stays in review.
+        Try again; if it keeps happening, tell the team that runs Cadence for you. Your approval wasn't recorded."
+        Unlike U95's usual rule, Approve stays enabled after it, because trying again is the fix. The cause goes in
+        Technical details, never in the line. Send back doesn't run the checks, so it never meets this.
+      - K3's submit meeting 503 `preview_failed` (it used to fall to a generic 422), opened by the act the button
+        named: `Apply as r5` "Not applied: Cadence couldn't run the checks, so nothing changed. Try again; if it
+        keeps happening, tell the team that runs Cadence for you."; `Request review` "Not sent for review: Cadence
+        couldn't run the checks, so nothing changed. Try again; …" (same ending). The button stays enabled; the Why
+        and the hold acknowledgement stay filled.
     - Read fields (api v3.2, final): the button is `Stage batch <next_batch> of <batches_total>`; progress is
       routes_converted of routes_total. No per-craft "in batch 3" line. An author with no name: drop the name
       ("Batch 3 is already staged." / "Staged earlier."), never the id.
