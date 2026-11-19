@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
-import { computed, ref } from "vue";
+import { computed, nextTick, ref, useId } from "vue";
 import { describeApiError, isError, useRemoteQuery } from "@/api/index.ts";
 import {
   formatDuration,
+  plural,
   useNow,
   ApButton,
   ApCallout,
@@ -137,6 +138,9 @@ async function book() {
   booking.value = false;
   if (r.ok) {
     result.value = { reserve: r.value, offer: o };
+    // a11y A5 (#243): the focused Book button goes with the offer's form; land on the outcome.
+    await nextTick();
+    outcomeEl.value?.focus();
     return;
   }
   const e = r.error;
@@ -158,6 +162,21 @@ function showPass() {
 const outcome = computed(() =>
   result.value ? outcomeWords(result.value.reserve, result.value.offer) : null,
 );
+const outcomeEl = ref<HTMLElement | null>(null);
+/**
+ * a11y B6 (#243): a search's result, said politely from a line that is always there (cleared while
+ * searching, so the same result is said again): how many offers, or why there are none.
+ */
+const searchSaid = computed(() => {
+  const s = search.value;
+  if (searching.value || !s) return "";
+  return s.offers.length > 0
+    ? plural(s.offers.length, "offer", "offers")
+    : emptyWords(s, viaWords(routeData.value?.routes ?? [], routeKeys.value));
+});
+/** a11y A7 (#243): a blocked offer stays focusable and is described by its reason. */
+const reasonPrefix = useId();
+const reasonId = (token: string) => `${reasonPrefix}-${token}`;
 </script>
 
 <template>
@@ -196,6 +215,7 @@ const outcome = computed(() =>
     >
     <!-- a11y B6 (#243): a failed search or a refused book is an alert, whatever its tone. -->
     <ApCallout v-if="searchError" tone="caution" role="alert">{{ searchError }}</ApCallout>
+    <p class="sr-only" role="status">{{ searchSaid }}</p>
     <template v-if="search">
       <p v-for="nr in search.not_ready" :key="nr.code" class="m-0 text-sm text-caution-text">
         {{ nr.message }}
@@ -213,10 +233,12 @@ const outcome = computed(() =>
         <li v-for="o in search.offers" :key="o.token" class="border-t border-hairline py-2">
           <button
             type="button"
-            class="flex w-full cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 border-0 bg-transparent p-0 text-left disabled:cursor-not-allowed disabled:opacity-60"
-            :disabled="offerBlocked(o, now) !== null || result !== null"
+            class="flex w-full cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 border-0 bg-transparent p-0 text-left disabled:cursor-not-allowed disabled:opacity-60 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
+            :disabled="result !== null"
+            :aria-disabled="offerBlocked(o, now) !== null ? 'true' : undefined"
+            :aria-describedby="offerBlocked(o, now) !== null ? reasonId(o.token) : undefined"
             :aria-pressed="chosen?.token === o.token"
-            @click="chosen = o"
+            @click="offerBlocked(o, now) === null && (chosen = o)"
           >
             <span class="font-mono text-readout">{{ stationWords(o) }}</span>
             <span class="text-text-3">{{ providerWords(o) }}</span>
@@ -236,7 +258,11 @@ const outcome = computed(() =>
               >{{ expiryWords(o, now).text }}</span
             >
           </button>
-          <p v-if="offerBlocked(o, now)" class="m-0 pt-1 text-sm text-text-3">
+          <p
+            v-if="offerBlocked(o, now)"
+            :id="reasonId(o.token)"
+            class="m-0 pt-1 text-sm text-text-3"
+          >
             {{ offerBlocked(o, now) }}
           </p>
           <div v-if="chosen?.token === o.token && !result" class="flex flex-col gap-2 pt-2">
@@ -247,7 +273,7 @@ const outcome = computed(() =>
               <ApButton
                 variant="primary"
                 :disabled="booking || offerBlocked(o, now) !== null"
-                disabled-reason="Booking…"
+                :disabled-reason="booking ? 'Booking…' : (offerBlocked(o, now) ?? '')"
                 @click="run(book)()"
                 >{{ unclear ? "Try again" : "Book this pass" }}</ApButton
               >
@@ -266,12 +292,11 @@ const outcome = computed(() =>
         More offers than fit; narrow the window or the routes.
       </p>
     </template>
-    <ApCallout
-      v-if="outcome"
-      :tone="outcome.tone"
-      :role="outcome.tone === 'nominal' || outcome.tone === 'info' ? 'status' : 'alert'"
-      >{{ outcome.text }}</ApCallout
-    >
+    <div v-if="outcome" ref="outcomeEl" tabindex="-1" class="outline-none">
+      <ApCallout :tone="outcome.tone" :role="outcome.failed ? 'alert' : 'status'">{{
+        outcome.text
+      }}</ApCallout>
+    </div>
     <template #footer>
       <ApButton variant="ghost" @click="sheet?.close()">Close</ApButton>
       <ApButton v-if="result?.reserve.pass" variant="primary" @click="showPass"

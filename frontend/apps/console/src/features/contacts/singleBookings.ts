@@ -162,29 +162,35 @@ export function confirmLine(
   return `Book ${spacecraft} · ${where} ${windowWords(o)} with ${providerWords(o)}${direction === "uplink" ? ", with an uplink" : ""}.`;
 }
 
-/** Outcome sentences (ux Contacts.md § Book a pass, Outcomes). */
+/**
+ * Outcome sentences (ux Contacts.md § Book a pass, Outcomes). `failed` (a11y B6, #243): the person
+ * has something to act on (unconfirmed or rejected), so it's announced as an alert; else a status.
+ */
 export function outcomeWords(
   r: Reserve,
   o: Offer,
-): Readonly<{ tone: "nominal" | "info" | "caution" | "crit"; text: string }> {
+): Readonly<{ tone: "nominal" | "info" | "caution" | "crit"; text: string; failed: boolean }> {
   const who = providerWords(o);
   const where = `${o.station.code ?? o.station.name ?? "the station"} ${formatHourMinute(new Date(o.starts_at))}`;
   switch (r.outcome) {
     case "confirmed":
       return {
         tone: "nominal",
+        failed: false,
         text: `Booked. ${who} confirmed ${where}${r.provider_reference ? ` (ref ${r.provider_reference})` : ""}.`,
       };
     case "requested":
-      return { tone: "info", text: `Requested. Waiting for ${who} to confirm.` };
+      return { tone: "info", failed: false, text: `Requested. Waiting for ${who} to confirm.` };
     case "unconfirmed":
       return {
         tone: "caution",
+        failed: true,
         text: `${who} didn't say whether it's booked. It's marked unconfirmed; resolve it on the pass.`,
       };
     case "rejected":
       return {
         tone: "crit",
+        failed: true,
         text: `${who} rejected it: ${reasonWords(r.reason).text}.`,
       };
   }

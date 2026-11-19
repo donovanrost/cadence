@@ -33,24 +33,26 @@ const busy = ref(false);
 /** a11y A7 (#243): which act runs, for its buttons' disabled reason. */
 const acting = ref<"acknowledge" | "resolve">("acknowledge");
 const busyWord = computed(() => (acting.value === "resolve" ? "Resolving…" : "Acknowledging…"));
-const notice = ref<{ tone: "caution" | "info"; text: string } | null>(null);
+/** `failed` (a11y B6, #243): a refusal or an unclear save is an alert; a result a status. */
+const notice = ref<{ tone: "caution" | "info"; text: string; failed: boolean } | null>(null);
 
 function settle(o: AttentionOutcome, done: string): boolean {
   if (o.status === "done") {
-    notice.value = { tone: "info", text: done };
+    notice.value = { tone: "info", text: done, failed: false };
     emit("changed");
     return true;
   }
   if (o.status === "unclear") {
     notice.value = {
       tone: "caution",
+      failed: true,
       text: "No answer from the server, so it may or may not have saved. Reload the pass to check.",
     };
     emit("changed");
     return false;
   }
   const w = attentionErrorWords(o.error);
-  notice.value = { tone: "caution", text: w.text };
+  notice.value = { tone: "caution", text: w.text, failed: true };
   if (w.refresh) emit("changed");
   return false;
 }
@@ -143,12 +145,9 @@ async function resolve() {
       </div>
     </ApCallout>
     <!-- a11y B6 (#243): a result (info) is a status; a refusal (caution) is an alert. -->
-    <ApCallout
-      v-if="notice"
-      :tone="notice.tone"
-      :role="notice.tone === 'info' ? 'status' : 'alert'"
-      >{{ notice.text }}</ApCallout
-    >
+    <ApCallout v-if="notice" :tone="notice.tone" :role="notice.failed ? 'alert' : 'status'">{{
+      notice.text
+    }}</ApCallout>
     <dialog
       ref="dialog"
       :aria-labelledby="titleId"

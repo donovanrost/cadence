@@ -92,8 +92,15 @@ describe("Book a pass words (ux Contacts.md § Book a pass)", () => {
       outcomeWords(reserve({ outcome: "rejected", reason: "no_capacity" }), offer("a")),
     ).toEqual({
       tone: "crit",
+      failed: true,
       text: "Northlight rejected it: the station has no capacity then.",
     });
+    // a11y B6 (#243): unconfirmed and rejected are the person's to act on (alerts); the rest aren't.
+    expect(
+      (["confirmed", "requested", "unconfirmed", "rejected"] satisfies Reserve["outcome"][]).map(
+        (outcome) => outcomeWords(reserve({ outcome }), offer("a")).failed,
+      ),
+    ).toEqual([false, false, true, true]);
     expect(
       offPlanLine(
         {
@@ -138,7 +145,7 @@ describe("BookPassSheet", () => {
       reply({
         spacecraft: { id: "sc-1", name: "EARENDIL-001", scid: 1 },
         window: { from: "2026-11-13T03:00:00Z", to: "2026-11-14T03:00:00Z" },
-        offers: [offer("a")],
+        offers: [offer("a"), offer("b", { availability: "unavailable" })],
         hidden: { no_uplink_route: 2 },
         not_ready: [],
         truncated: false,
@@ -159,6 +166,14 @@ describe("BookPassSheet", () => {
       ?.trigger("click");
     await flushPromises();
     expect(w.text()).toContain("2 stations hidden: no uplink route to EARENDIL-001.");
+    // a11y B6 (#243): the search's result is said from a line that's always there.
+    expect(w.get('p.sr-only[role="status"]').text()).toBe("2 offers");
+    // a11y A7 (#243): a blocked offer stays focusable and is described by its reason.
+    const blocked = w.findAll('ul[aria-label="Offers"] button').at(1);
+    expect(blocked?.attributes("disabled")).toBeUndefined();
+    expect(blocked?.attributes("aria-disabled")).toBe("true");
+    const reason = document.getElementById(blocked?.attributes("aria-describedby") ?? "");
+    expect(reason?.textContent?.trim()).toBe("Northlight reports this window as unavailable.");
     await w
       .get('button[aria-pressed="false"].w-full, ul[aria-label="Offers"] button')
       .trigger("click");
@@ -172,6 +187,8 @@ describe("BookPassSheet", () => {
     const sent: unknown = typeof init?.body === "string" ? JSON.parse(init.body) : null;
     expect(sent).toEqual({ token: "tok-a", note: "Gap after LOS" });
     expect(w.text()).toContain("Requested. Waiting for Northlight to confirm.");
+    // a11y A5 (#243): the Book button went with the offer's form; focus lands on the outcome.
+    expect(document.activeElement?.textContent).toContain("Requested.");
     // a11y B6 (#243): a result is a status; a refusal or failure is an alert.
     const said = w.findAll('[role="status"]').find((e) => e.text().includes("Requested."));
     expect(said?.exists()).toBe(true);
