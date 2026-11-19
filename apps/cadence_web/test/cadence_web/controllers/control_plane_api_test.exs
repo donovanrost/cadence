@@ -464,6 +464,19 @@ defmodule CadenceWeb.ControlPlaneApiTest do
              }
            } = json_response(spacecraft_conn, 200)
 
+    # #328: the REST create is gone. A POST answers 404 and persists nothing.
+    removed_conn =
+      conn
+      |> authorize(api_token)
+      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/spacecraft", %{
+        "spacecraft" => %{"spacecraft_id" => "spacecraft-002", "display_name" => "SC-002"}
+      })
+
+    assert removed_conn.status == 404
+
+    assert {:error, :spacecraft_not_found} =
+             Cadence.SpacecraftStore.fetch_spacecraft(mission_id, "spacecraft-002")
+
     packet_definition_conn =
       conn
       |> authorize(api_token)
