@@ -231,7 +231,10 @@ part 2, the 001 repair, the gap fixes) sat still for ~3 h 20 min under a hold wi
   under 16 AND fewer than 2 heavy jobs run team-wide; one heavy job per agent at a time. A heavy job run outside the
   gate is a rule break. Never set the HEAVY_GATE_* variables (devops' tests only), HEAVY_GATE_HELD included. Exit 75
   means it waited 30 min and ran NOTHING: report it to lead, don't retry in a loop. qa takes the slot lock
-  (`--slot-begin '<what>'` / `--slot-end`) for its slots and hold windows; everyone else waits. Single targeted test
+  (`--slot-begin '<what>'` / `--slot-end`) for its slots and hold windows; everyone else waits. **Holds:** while a hold is active, a new
+  heavy job exits 75 at once, except a job of qa while qa holds the slot lock: that one runs through the hold, still
+  subject to load, memory and swap, and is logged in `heavy-gate.d/hold.log` as RAN-THROUGH (lead, 11-19, for the reset's
+  quiet window; laptop 2's gate is unchanged). Single targeted test
   files can run without it. Never leave watchers, dev servers or feeds running that you aren't using (qa owns the one
   shared dev stack).
 - Conventional commit messages (`feat(console): …`, `feat(api): …`) with the Co-Authored-By trailer.
