@@ -8,7 +8,7 @@ defmodule CadenceWeb.Console.UplinkReadinessAPITest do
   alias Cadence.Contacts.ContactStore.ScheduledContactRow
   alias Cadence.Contacts.ScheduledContact
   alias Cadence.Control.Contacts.Store.ProviderReservationRow
-  alias Cadence.Control.UplinkReadiness
+  alias Cadence.Control.{UplinkQualification, UplinkReadiness}
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Repo
   alias CadenceWeb.TestFixtures
@@ -37,6 +37,7 @@ defmodule CadenceWeb.Console.UplinkReadinessAPITest do
     UplinkReadiness.create_table()
     key = {mission.mission_id, "realized-#{reservation.provider_reservation_id}", "path", "gw"}
     on_exit(fn -> :ets.delete(UplinkReadiness.table(), {:session, key}) end)
+    pause_qualifier()
 
     %{
       org: org,
@@ -49,6 +50,31 @@ defmodule CadenceWeb.Console.UplinkReadinessAPITest do
       key: key,
       base: "/api/console/v1/missions/#{mission.mission_id}"
     }
+  end
+
+  # #421: the node-wide UplinkQualification forgets, every 15 s, each readiness entry without a live
+  # UplinkSessions session (UplinkQualification.run/1, its keys-minus-live sweep; intended: the
+  # readiness view holds a pass only while its session runs). These tests write entries by hand,
+  # with no session, so a tick between two reads deleted one (:182's pass read read nil). The
+  # qualifier is paused for each test and resumed on exit, which ExUnit runs even when the test
+  # fails. Nothing here waits on a tick. Recover's requalify would call the paused qualifier, but
+  # every Recover case here stops before it (unrecoverable, not blocked, actor, unknown pass).
+  defp pause_qualifier do
+    case Process.whereis(UplinkQualification) do
+      nil ->
+        :ok
+
+      qualifier ->
+        :sys.suspend(qualifier)
+        on_exit(fn -> resume(qualifier) end)
+    end
+  end
+
+  defp resume(qualifier) do
+    :sys.resume(qualifier)
+  catch
+    # Already resumed, or gone (the supervisor restarted it, so it isn't suspended).
+    :exit, _reason -> :ok
   end
 
   defp live!(c, state, reason) do
@@ -196,6 +222,10 @@ defmodule CadenceWeb.Console.UplinkReadinessAPITest do
              }
            } =
              get_data(c, "/command-groups/#{group_id}")
+
+    # #421: a qualifier tick here deleted the hand-written entry before the pass read; paused, the
+    # tick waits until the test ends.
+    if qualifier = Process.whereis(UplinkQualification), do: send(qualifier, :tick)
 
     assert %{"uplink_readiness" => %{"reason" => "provider_conflict"}} =
              get_data(c, "/passes/#{c.reservation.provider_reservation_id}")
