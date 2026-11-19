@@ -359,13 +359,19 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
   end
 
   defp configure(c, catalog) do
+    # DECISIONS #109: the switches live on the spacecraft row, written as a change set would; a
+    # saved configuration takes them from there. Left off, the generation binds no packet.
+    :ok =
+      Fixtures.change_set_switches!(c.org, c.mission.mission_id, c.craft.spacecraft_id, %{
+        "telemetry_enabled" => true,
+        "commanding_enabled" => true
+      })
+
     current = Drafts.snapshot(c.mission, c.craft)
 
     document =
       Map.merge(SpacecraftConfigurationInput.empty(), %{
         "catalog_revision_id" => catalog,
-        "telemetry_enabled" => true,
-        "commanding_enabled" => true,
         "handled_apids" => [42]
       })
 
