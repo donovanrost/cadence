@@ -311,15 +311,7 @@ defmodule CadenceWeb.Console.ContactPlanApproveTest do
       # Move the plan's passes two days back, so its day (the window's UTC date) has ended.
       past = DateTime.utc_now() |> DateTime.add(-2 * 86_400) |> DateTime.truncate(:microsecond)
 
-      %{"passes" => passes} = get_as(c, c.admin, "/#{plan_id}")["data"]
-      ids = Enum.map(passes, & &1["snapshot_id"])
-
-      Repo.update_all(
-        from(s in ContactOpportunitySnapshotRow,
-          where: s.contact_opportunity_snapshot_id in ^ids
-        ),
-        set: [starts_at: past, ends_at: DateTime.add(past, 600)]
-      )
+      move_back!(c, plan_id, past)
 
       day = past |> DateTime.to_date() |> Date.to_iso8601()
       # The approve's own run has ended; drop its progress so only a new run would show.
@@ -330,6 +322,20 @@ defmodule CadenceWeb.Console.ContactPlanApproveTest do
                json_response(conn, 409)["error"]
 
       refute_receive {:scheduling_progress, %{kind: :execute, id: ^plan_id}}, 200
+
+      # Which refusal wins (api): a plan that isn't waiting to execute also hears the day, not
+      # plan_not_resumable, once its day has ended.
+      pending = member_plan(c)
+      submit!(c, c.member, pending, "op-day-pending")
+      move_back!(c, pending, past)
+
+      assert %{"code" => "contact_plan_day_ended"} =
+               c
+               |> post_as(c.admin, pending, "execute", %{})
+               |> json_response(409)
+               |> Map.fetch!("error")
+
+      assert plan_state(c, pending) == "pending_approval"
     end
   end
 
@@ -419,6 +425,16 @@ defmodule CadenceWeb.Console.ContactPlanApproveTest do
     |> where([a], a.organization_id == ^c.org.organization_id and a.contact_plan_id == ^plan_id)
     |> select([a], a.policy_document)
     |> Repo.one()
+  end
+
+  defp move_back!(c, plan_id, %DateTime{} = to) do
+    %{"passes" => passes} = get_as(c, c.admin, "/#{plan_id}")["data"]
+    ids = Enum.map(passes, & &1["snapshot_id"])
+
+    Repo.update_all(
+      from(s in ContactOpportunitySnapshotRow, where: s.contact_opportunity_snapshot_id in ^ids),
+      set: [starts_at: to, ends_at: DateTime.add(to, 600)]
+    )
   end
 
   defp drain_progress(plan_id) do
