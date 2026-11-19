@@ -10,6 +10,7 @@ defmodule CadenceWeb.Activations.ApproveOutcome do
 
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Control.Activations.ActivationExecution
+  alias Cadence.Platform.ExitShape
 
   @typedoc "The closed set the answer's `outcome` takes."
   @type outcome :: binary()
@@ -41,8 +42,8 @@ defmodule CadenceWeb.Activations.ApproveOutcome do
   rescue
     exception -> {:error, Exception.message(exception)}
   catch
-    :exit, reason -> {:error, "exit: " <> inspect(reason)}
-    :throw, value -> {:error, "throw: " <> inspect(value)}
+    :exit, reason -> {:error, "exit: " <> ExitShape.describe(reason)}
+    :throw, value -> {:error, "throw: " <> ExitShape.describe(value)}
   end
 
   # The cause's first line only: a database error's later lines can carry row values.

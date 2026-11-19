@@ -14,6 +14,7 @@ defmodule Cadence.Control.ActivationRequests do
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.Management.Activations.Directory
+  alias Cadence.Platform.ExitShape
   alias Cadence.Platform.ScopedReadUpdates
 
   require Logger
@@ -144,8 +145,8 @@ defmodule Cadence.Control.ActivationRequests do
   rescue
     _error -> {:error, :activation_execution_raised}
   catch
-    :exit, reason -> exited(approved, "exit: " <> inspect(reason))
-    :throw, value -> exited(approved, "throw: " <> inspect(value))
+    :exit, reason -> exited(approved, "exit: " <> ExitShape.describe(reason))
+    :throw, value -> exited(approved, "throw: " <> ExitShape.describe(value))
   end
 
   defp exited(approved, cause) do

@@ -54,15 +54,19 @@ defmodule CadenceWeb.Activations.ApproveOutcomeTest do
       capture_log(fn ->
         assert {nil, "needs_review"} =
                  ApproveOutcome.after_approval(:approved, "request-4", fn _ ->
-                   exit({:timeout, {GenServer, :call, [:pool]}})
+                   exit({:timeout, {GenServer, :call, [:pool, %{token: "secret-arg"}, 5_000]}})
                  end)
 
         assert {nil, "needs_review"} =
                  ApproveOutcome.after_approval(:approved, "request-5", fn _ -> throw(:stop) end)
       end)
 
+    # Only the exit's shape is logged, never the call's arguments (ca-security, api-ops).
     assert log =~
-             "activation request request-4: approved, but its apply didn't run: exit: {:timeout"
+             "activation request request-4: approved, but its apply didn't run: " <>
+               "exit: :timeout in GenServer.call"
+
+    refute log =~ "secret-arg"
 
     assert log =~ "activation request request-5: approved, but its apply didn't run: throw: :stop"
   end

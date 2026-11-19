@@ -219,11 +219,17 @@ defmodule CadenceWeb.Console.ActivationRequestAPITest do
                    c.mission.mission_id,
                    id,
                    %{"reason" => "Reviewed exact basis"},
-                   execute: fn _approved -> exit({:timeout, {GenServer, :call, [:pool]}}) end
+                   execute: fn _approved ->
+                     exit({:timeout, {GenServer, :call, [:pool, %{token: "secret-arg"}, 5_000]}})
+                   end
                  )
       end)
 
-    assert log =~ "activation request #{id}: approved, but its apply didn't finish: exit:"
+    assert log =~
+             "activation request #{id}: approved, but its apply didn't finish: " <>
+               "exit: :timeout in GenServer.call"
+
+    refute log =~ "secret-arg"
     assert {:ok, %{state: :approved}} = Activations.fetch(approver, id)
   end
 
