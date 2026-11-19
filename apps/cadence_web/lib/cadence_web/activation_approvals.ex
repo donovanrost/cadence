@@ -93,5 +93,9 @@ defmodule CadenceWeb.ActivationApprovals do
        when code in [:activation_self_approval_forbidden, :activation_approver_authors_unknown],
        do: {:error, code}
 
+  # #236 (#434): authors unknown with the spacecraft id list; worded by code alone here too.
+  defp without_details({:error, {:activation_approver_authors_unknown, ids}}) when is_list(ids),
+    do: {:error, :activation_approver_authors_unknown}
+
   defp without_details(result), do: result
 end

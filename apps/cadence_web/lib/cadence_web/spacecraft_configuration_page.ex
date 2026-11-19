@@ -146,8 +146,13 @@ defmodule CadenceWeb.SpacecraftConfigurationPage do
   defp message({:activation_self_approval_forbidden, _via}),
     do: "A different person must review this configuration."
 
-  defp message({:activation_approver_authors_unknown, _service}),
+  defp message({:activation_approver_authors_unknown, %{service: _service}}),
     do: "No one can approve this yet: Cadence can't tell who requested it."
+
+  # #236 (#434): the configuration's authors couldn't be read (a spacecraft id list); U94's line.
+  defp message({:activation_approver_authors_unknown, ids}) when is_list(ids),
+    do:
+      "Not approved: Cadence can't tell who saved this configuration, so it can't check that you weren't one of them."
 
   defp message(:spacecraft_catalog_required),
     do: "Choose a catalog before submitting this configuration."

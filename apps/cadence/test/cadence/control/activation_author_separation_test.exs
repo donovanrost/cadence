@@ -8,6 +8,8 @@ defmodule Cadence.Control.ActivationAuthorSeparationTest do
   """
   use Cadence.RuntimeCase, async: false
 
+  import Ecto.Query
+
   alias Cadence.Applications.SpacecraftConfiguration.{
     Active,
     Authors,
@@ -17,6 +19,8 @@ defmodule Cadence.Control.ActivationAuthorSeparationTest do
   }
 
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
+  alias Cadence.Auth
+  alias Cadence.Auth.{ServiceAccountableRow, ServiceIdentity}
   alias Cadence.Catalog.SpacecraftConfigurationInput
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Governance.ActivationPolicy
@@ -198,6 +202,77 @@ defmodule Cadence.Control.ActivationAuthorSeparationTest do
 
     # Active.load's own read(s) plus Authors' two, whatever the fleet size.
     assert queries <= 4
+  end
+
+  describe "#280: a version saved under a service identity's id (a change set's applier)" do
+    # Drafts.derive writes the change set applier's id as `created_by`, and that can be a service
+    # identity's (api-ops' cross-PR item on #435). Here B's saved version is re-stamped as if a
+    # service had applied it: the stand-in for derive's write, on the test database only.
+    setup c do
+      save(c, c.b, c.craft, [42])
+
+      %{
+        service: issue_service!(c, "Config applier", c.a),
+        revision_id: latest_revision_id(c)
+      }
+    end
+
+    test "the service's accountable person (its issuer) can't approve; someone else can", c do
+      restamp!(c.revision_id, c.service.service_identity_id)
+      {:ok, request} = submit(c, c.b, [c.craft])
+      id = c.craft.spacecraft_id
+
+      assert {:error, {:activation_approver_authored_content, [^id]}} = approve(c.a, request)
+      assert {:ok, _request, _decision, _approved} = approve(c.c, request)
+    end
+
+    test "a service with nobody on record refuses everyone, naming the service", c do
+      legacy = c.service.service_identity_id
+
+      Repo.delete_all(
+        from(row in ServiceAccountableRow, where: row.service_identity_id == ^legacy)
+      )
+
+      restamp!(c.revision_id, legacy)
+      {:ok, request} = submit(c, c.b, [c.craft])
+
+      for approver <- [c.a, c.c] do
+        assert {:error,
+                {:activation_approver_authors_unknown,
+                 %{service: %{id: ^legacy, name: "Config applier"}}}} = approve(approver, request)
+      end
+    end
+  end
+
+  defp issue_service!(c, name, issued_by) do
+    identity =
+      ServiceIdentity.new(%{
+        organization_id: c.org,
+        mission_id: c.mission.mission_id,
+        display_name: name,
+        capabilities: [:mission_admin]
+      })
+
+    {:ok, %{service_identity: service}} = Auth.issue_service_identity(identity, issued_by)
+    service
+  end
+
+  defp latest_revision_id(c) do
+    craft = c.craft.spacecraft_id
+
+    from(row in RevisionRow,
+      where: row.spacecraft_id == ^craft,
+      order_by: [desc: row.version],
+      limit: 1,
+      select: row.configuration_revision_id
+    )
+    |> Repo.one!()
+  end
+
+  defp restamp!(revision_id, by) do
+    {1, _} =
+      from(row in RevisionRow, where: row.configuration_revision_id == ^revision_id)
+      |> Repo.update_all(set: [created_by: by])
   end
 
   defp count_queries(fun) do

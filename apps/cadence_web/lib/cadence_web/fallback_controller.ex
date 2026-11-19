@@ -220,8 +220,11 @@ defmodule CadenceWeb.FallbackController do
   def call(conn, {:error, {:activation_self_approval_forbidden, %{}}}),
     do: call(conn, {:error, :activation_self_approval_forbidden})
 
-  def call(conn, {:error, {:activation_approver_authors_unknown, %{}}}),
-    do: error_response(conn, :forbidden, "activation_approver_authors_unknown")
+  # #280's service form and #236's spacecraft-list form (#434): one code; REST activations carry
+  # no details.
+  def call(conn, {:error, {:activation_approver_authors_unknown, details}})
+      when is_map(details) or is_list(details),
+      do: error_response(conn, :forbidden, "activation_approver_authors_unknown")
 
   def call(conn, {:error, %Changeset{} = changeset}) do
     conn

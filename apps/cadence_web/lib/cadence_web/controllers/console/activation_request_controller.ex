@@ -58,7 +58,16 @@ defmodule CadenceWeb.Console.ActivationRequestController do
   defp error(conn, :self_approval_forbidden),
     do: Problem.respond(conn, :self_approval_forbidden, %{via_service: nil})
 
-  defp error(conn, {reason, details})
+  # #236 (#434): the configuration's authors couldn't be read. One wire code with #280's: U100's
+  # details.service is null here (api 11-19), never the raw id list.
+  defp error(conn, {:activation_approver_authors_unknown, ids}) when is_list(ids),
+    do:
+      Problem.respond(conn, :activation_approver_authors_unknown, %{
+        spacecraft_ids: ids,
+        service: nil
+      })
+
+  defp error(conn, {reason, %{} = details})
        when reason in [:self_approval_forbidden, :activation_approver_authors_unknown],
        do: Problem.respond(conn, reason, details)
 
