@@ -71,7 +71,7 @@ STAGED · NOT APPLIED   2 changes: 50 new spacecraft (Block 2), catalog rev 15 �
 lbl "EARENDIL · STAGED CHANGES"
 h1 "Apply r6 · 2 changes"                                  base r5 · staged 14:02Z–14:40Z
 ┌ K1 Changes (flex 999) ─────────────────────────────┐ ┌ K3 Apply (aside, sticky) ───────┐
-│ ▸ 50 new spacecraft (Block 2)       Donovan R. [×] │ │ tiles: Changes 2 · SC 549 · Routes +300
+│ ▸ 50 new spacecraft (Block 2)       Mira K.    [×] │ │ tiles: Changes 2 · SC 549 · Routes +300
 │   diff: table of the 50 + routes                   │ │ Readiness after: 0 blockers (=) │
 │ ▸ Catalog rev 15 → Block 2 · 50 SC  Mira K.    [×] │ │ Why (required textarea)         │
 ├ K2 Checks (GO / NO-GO poll) ───────────────────────┤ │ [Apply as r6]  (commit, 46px)   │
@@ -146,7 +146,7 @@ h1 "Apply r6 · 2 changes"                                  base r5 · staged 14
   truncates with title) · Changes (`2 · 50 spacecraft, catalog`) · Kind tag (`Rollback of r5` when
   applicable). Current revision row has a white left inset bar + `LIVE` tag (readout outline).
   Select two (checkbox column) → `Compare r4 ↔ r6`.
-- **Revision detail** `M/setup/revisions/6` (the route takes the bare number; the visible text stays `r6`): header `r6 · applied 2026-11-08 14:52Z by Donovan R.`
+- **Revision detail** `M/setup/revisions/6` (the route takes the bare number; the visible text stays `r6`): header `r6 · applied 2026-11-08 14:52Z by Mira K.`
   + why as a `text-3` sentence; its changes (same diff rows as K1, read-only); approver if reviewed;
   `Roll back to r5` (secondary, danger tone only in its confirm) → stages a reverting change set and
   opens the review page with the summary `Roll back r6 (2 changes)`. Disabled with reason when the
@@ -154,7 +154,7 @@ h1 "Apply r6 · 2 changes"                                  base r5 · staged 14
 - **Compare** `M/setup/revisions/r4...r6`: combined diff grouped by entity.
 - Readiness R2 (Setup board) shows the last 4 revisions in its `ev` row style, plus `Compare
   revisions` and `AUDIT LOG →`.
-- Ops surfaces: Timeline event `Config r6 applied · 2 changes · Donovan R.` (neutral mark);
+- Ops surfaces: Timeline event `Config r6 applied · 2 changes · Mira K.` (neutral mark);
   spacecraft Configuration tab shows `config r6` with "changed in r6" markers on fields.
 
 ## 5. Permissions (capabilities from session bootstrap, DECISIONS #2)

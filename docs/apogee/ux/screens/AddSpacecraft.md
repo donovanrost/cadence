@@ -27,7 +27,7 @@ Panel A1 `Source`. `choice` segmented radiogroup: `From a profile │ From a man
   → Setup › Profiles (opens in place of the flow, draft kept).
 - **From a manifest:** drop zone (`Drop a manifest CSV, or choose a file`) + `Download manifest
   template (.csv)`. After upload: file name (mono), `50 rows · 6 columns mapped · uploaded by
-  Donovan R.`, and column-mapping chips `name→Name`, `scid→SCID`, `norad→NORAD id`, `plane→Plane`,
+  Mira K.`, and column-mapping chips `name→Name`, `scid→SCID`, `norad→NORAD id`, `plane→Plane`,
   `slot→Slot`, `profile→Profile`. Unmapped columns show as dashed chips with a select to map or
   ignore. Required: name, scid (or generate), profile (or a default picked here).
 - Next: `Continue to identity` (primary, commit size). Disabled with reason until a profile or a

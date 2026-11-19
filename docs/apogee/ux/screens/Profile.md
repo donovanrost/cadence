@@ -41,7 +41,7 @@ subline: 500 spacecraft inherit this profile · 3 override it · catalog rev 14 
 │ ...       │ └──────────────────────────────────────┘ └──────────────────────────────────────┘
 ```
 - **Subline** (14px `text-3`, counts bold readout): inherit count, override count (link → Overrides),
-  catalog, last change (`in r5` with change sets; `v4 · 10-19 02:29Z by Donovan R.` in v1).
+  catalog, last change (`in r5` with change sets; `v4 · 10-19 02:29Z by Mira K.` in v1).
 - **Local nav** (`local`): links 13px display, left 1px hairline; active 2px white left border +
   readout. `Overrides · 3` carries its count. Sticky within the page. Each section is its own route;
   the board's stacked view is the Framing route showing Framing + summaries of Routing + Overrides
