@@ -73,6 +73,7 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
          saved_version: current.row && current.row.version,
          document: current.document,
          external_changes: current.external_changes,
+         switches: switches(mission, id),
          active:
            active_entry &&
              %{
@@ -134,6 +135,21 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
        }}
     end
   end
+
+  # DECISIONS #109: change sets are the only writer of both switches; read off the spacecraft row
+  # under the configuration lock. `set` false: no change set has set it (the value reads off).
+  # `revision` (the change-set revision that last set it) isn't stored yet: null.
+  defp switches(mission, id) do
+    {:ok, craft} =
+      SpacecraftStore.fetch_spacecraft(mission.organization_id, mission.mission_id, id)
+
+    %{
+      telemetry_enabled: switch(craft.telemetry_enabled),
+      commanding_enabled: switch(craft.commanding_enabled)
+    }
+  end
+
+  defp switch(value), do: %{value: value == true, set: is_boolean(value), revision: nil}
 
   defp presets(mission) do
     SpacecraftTypeStore.list_spacecraft_types(mission.organization_id, mission.mission_id)

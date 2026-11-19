@@ -32,8 +32,20 @@ that fails or stalls shows on Now).
 - `decision`: the latest human decision, `{state: approved | rejected | withdrawn, by {kind, id,
   name}, at, reason}`, or null. A request approved by policy alone (no reviewer) is `approved`
   with a null decision. A superseded one has no decision (the system did it).
+  - **From the dev reset (DECISIONS #112, P3 step 3; it rides the dev reset slot, ~11-21):** every
+    decision is recorded, including one no second person was needed for. A request activated
+    directly under a `direct` policy is `approved` with `decision: {state: not_required, by` (the
+    submitter)`, at, reason: null, source, subject, separated_from, admin_mode}`, never a null
+    decision. Every decision gains `source {kind: change_set_review | spacecraft_configuration |
+    …, id}` (read `kind` as open text), `subject {kind, id, version, digest}`, `separated_from`
+    (actor ids) and `admin_mode` (boolean), and `reason` may be null (approve comments are
+    optional). Until the reset, read these keys as optional and a null decision as today's
+    policy-only form.
 - `execution`: null until an apply starts, then `{state: in_progress | succeeded | failed, since,
-  error_code, error, retryable}`.
+  finished_at, error_code, error, retryable}`.
+  - `finished_at` (ux #227, added 11-18; read it as optional): when the apply succeeded or failed;
+    null while it runs, including after a resume until it finishes again. It's never the
+    decision's time: a held apply that resumes later reads its own finish time.
   - `error_code` (closed set): `activation_execution_interrupted |
     spacecraft_configuration_review_stale | approved_activation_content_mismatch`, or another
     domain code (word it as the generic failure). It's null unless `failed`.

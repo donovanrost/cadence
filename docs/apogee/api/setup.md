@@ -247,6 +247,97 @@ by its catalog revision ("catalog rev 4"); the model revision id is Technical de
   domain 71ce7d850) is retroactive: `decision.retroactive: true`, and the audit line reads
   "(retroactive; comparison passed against rev 3; replay not run)".
 
+## Spacecraft configuration workspace ((B), owner: api)
+
+A spacecraft's configuration in the console (director 11-17; ux U94): the host's workspace, over
+the same read model, Drafts and `Control.SpacecraftConfiguration`. Base:
+`/api/console/v1/missions/:mission_id/spacecraft/:spacecraft_id/configuration/workspace`.
+Approve and reject stay on L10 (activation requests of kind `spacecraft_configuration`).
+
+**DECISIONS #109.** Change sets are the only writer of a spacecraft's Telemetry and Commanding
+switches. The editable `document` never carries them; they're read-only in `switches`.
+
+### `GET …/workspace?section=overview|catalog|communications|changes`
+
+`{data: snapshot}`. `section` defaults to `overview`; anything else is `422 invalid_params
+{section}`.
+
+- `spacecraft_id`, `name`, `scid` (nullable), `section`.
+- `token`: opaque; send it back on save and submit.
+- `saved_version`: per craft (1, 2…); null when never saved (the document is derived).
+- `document`: `{catalog_revision_id|null, telemetry_source_endpoint_id|null, handled_apids: [int],
+  protocol: {downlink, uplink, frame_size, secondary_header_length, insert_zone_length,
+  ocf_length, truncated_primary_header} | null}`. No switch keys.
+- `external_changes`: bool.
+- `switches`: `{telemetry_enabled: SWITCH, commanding_enabled: SWITCH}`, where SWITCH is `{value:
+  bool, set: bool, revision: int|null}`. `set` false means no change set has set it (the value
+  reads false). `revision` is the change-set revision that last set it; it's null until it's
+  stored (null reads "set through Setup, Changes").
+- `active`: `{version, generation, document}` (the same document shape), or null when nothing runs
+  for the craft.
+- `review`: `{id, state: approval_pending|approved|rejected|withdrawn|superseded|stale|active,
+  requester_id, version|null}` or null. From the dev reset (DECISIONS #112) it also carries the
+  decision record's `subject`, `separated_from`, `admin_mode` and `applied_by`. Read them as
+  optional until then.
+- `approval`: `{requirement: direct|independent, policy_token, source:
+  organization|inherited|overridden|enforced, can_request, can_review}`. Send `policy_token` back
+  on submit.
+- `catalogs` (≤100): `{id, name, label, number, declarations, packets, commands}`, where `number`
+  is the catalog revision number (U65's "catalog rev 14").
+- `fleet` (≤100, this craft first): `{id, name, scid, active_catalog_id, has_changes}`, plus
+  `fleet_total`.
+- `sources`: `{id, name}` (this craft's packet sources). `presets`: `{id, version, name,
+  protocol}` (profiles' framing).
+
+### `PUT …/workspace/draft` `{token, document}`
+
+Saves a draft; the active configuration stays in use. Answers the fresh snapshot (a new token).
+`?section=` works as on GET.
+
+- A switch key anywhere in `document`: `422 invalid_params`, message "Not saved: Telemetry and
+  Commanding are changed with a change set, not in a spacecraft's configuration.", with
+  `details["document.telemetry_enabled"]` / `details["document.commanding_enabled"]`: "Change this
+  with a change set, from the spacecraft's Operation panel." Nothing is saved. (Drafts.save also
+  ignores switch input, as the domain's backstop.)
+- A malformed document: `422 invalid_params {document}`.
+
+### `POST …/workspace/submit` `{token, policy_token, intent: review|activate}`
+
+- `review`: `{state: approval_pending, request_id}`. It lists on L10.
+- `activate` (a direct mission): `{state: active, execution_id}`, or `{state: needs_review}` when it
+  was approved but the application couldn't be confirmed.
+- A bad `intent`, or a missing token: `422 invalid_params`.
+
+### `GET …/workspace/catalogs/:catalog_revision_id/packets`
+
+`{data: {catalog_id, packets: [{apid, name, definitions}]}}` (≤2048). An unknown catalog
+revision: `404 catalog_revision_not_found`.
+
+### Errors (the console envelope; messages are ux's U94 words on these routes only)
+
+The messages name the spacecraft and the catalog revision ("catalog rev 14"), never an id ("this
+spacecraft" / "that catalog revision" when it can't be known). The host's page keeps its own copy.
+Someone outside the mission's organization gets `404 mission_not_found` on every route (the
+console's mission scope), so the mission's existence doesn't leak.
+
+| Code | Status | When |
+|---|---|---|
+| `spacecraft_configuration_changed` | 409 | The token is stale (save) |
+| `spacecraft_configuration_review_unavailable` | 409 | Submit before a save, or with external changes |
+| `spacecraft_configuration_review_stale` | 409 | The active fleet configuration moved |
+| `activation_policy_changed` | 409 | The policy changed since the snapshot |
+| `spacecraft_switch_set_by_change_set` | 409 | (submit) A change set turned a switch on or off after the draft was saved; save again |
+| `spacecraft_catalog_set_by_profile` | 409 | The catalog is the profile's (a change set sets it) |
+| `spacecraft_catalog_required` | 422 | Submit with no catalog |
+| `spacecraft_packet_inputs_required` | 422 | Telemetry on without a source and packets |
+| `spacecraft_catalog_unavailable` | 422 | The catalog revision isn't this mission's |
+| `spacecraft_packet_input_unavailable` | 422 | The source isn't this craft's |
+| `spacecraft_source_limit_exceeded` | 422 | Too many sources |
+| `mission_model_revision_not_approved` | 409 | The catalog's model isn't approved (U65) |
+| `activation_self_approval_forbidden` | 403 | (L10 approve) A different person must review |
+| `forbidden` | 403 | No operate access |
+| `spacecraft_not_found` | 404 | |
+
 ## `GET /api/console/v1/missions/:mission_id/readiness`
 
 The shape is setup-shapes.md §R, with **singular** verdict keys (agreed with fe-setup). Refetch on

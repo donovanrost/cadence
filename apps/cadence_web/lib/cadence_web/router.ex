@@ -1063,6 +1063,32 @@ defmodule CadenceWeb.Router do
       post("/routes/legacy-conversion", LegacyConversionController, :stage)
       get("/spacecraft/:spacecraft_id/uplink", SpacecraftUplinkController, :show)
       get("/spacecraft/:spacecraft_id/configuration", SpacecraftConfigController, :show)
+
+      # (B) a spacecraft's configuration workspace (owner: api). Contract: docs/apogee/api/setup.md
+      get(
+        "/spacecraft/:spacecraft_id/configuration/workspace",
+        SpacecraftWorkspaceController,
+        :show
+      )
+
+      put(
+        "/spacecraft/:spacecraft_id/configuration/workspace/draft",
+        SpacecraftWorkspaceController,
+        :save_draft
+      )
+
+      post(
+        "/spacecraft/:spacecraft_id/configuration/workspace/submit",
+        SpacecraftWorkspaceController,
+        :submit
+      )
+
+      get(
+        "/spacecraft/:spacecraft_id/configuration/workspace/catalogs/:catalog_revision_id/packets",
+        SpacecraftWorkspaceController,
+        :packets
+      )
+
       # L19 spacecraft-scope apps (owner: api).
       get("/spacecraft/:spacecraft_id/apps", SpacecraftAppController, :index)
       post("/spacecraft/:spacecraft_id/apps/:key/install", SpacecraftAppController, :install)

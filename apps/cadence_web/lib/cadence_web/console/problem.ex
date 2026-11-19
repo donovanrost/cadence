@@ -262,7 +262,30 @@ defmodule CadenceWeb.Console.Problem do
     window_not_found: {404, "Availability window not found."},
     window_overlaps: {409, "That window overlaps another of the same kind at this station."},
     window_cleared: {409, "That window is already cleared."},
-    invalid_window: {422, "The window is invalid (kind, start, or end before start)."}
+    invalid_window: {422, "The window is invalid (kind, start, or end before start)."},
+    # (B) a spacecraft's configuration workspace (the host's words; ux re-words).
+    spacecraft_configuration_changed:
+      {409,
+       "This spacecraft changed since you started editing. Compare the latest saved configuration before saving again."},
+    spacecraft_configuration_review_stale:
+      {409, "The active fleet configuration changed. Review the latest state and submit again."},
+    spacecraft_configuration_review_unavailable:
+      {409, "Save your current configuration and resolve external changes before submitting it."},
+    spacecraft_switch_set_by_change_set:
+      {409, "A change set changed Telemetry or Commanding since this was saved. Save it again."},
+    spacecraft_catalog_set_by_profile:
+      {409, "This spacecraft's catalog is set by its profile, through a change set."},
+    spacecraft_catalog_required: {422, "Choose a catalog before submitting this configuration."},
+    spacecraft_catalog_unavailable:
+      {422, "That catalog revision isn't available on this mission."},
+    spacecraft_packet_inputs_required:
+      {422, "Connect a packet source and select packets for Telemetry Decom."},
+    spacecraft_packet_input_unavailable: {422, "That packet source isn't this spacecraft's."},
+    spacecraft_source_limit_exceeded: {422, "Too many packet sources for one spacecraft."},
+    mission_model_revision_not_approved:
+      {409, "Not applied: the catalog revision isn't approved yet."},
+    activation_self_approval_forbidden:
+      {403, "A different person must review this configuration."}
   }
 
   @doc "Sends the error envelope for a known reason atom and halts."
