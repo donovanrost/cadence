@@ -10,7 +10,14 @@ import {
   spacecraftDocument,
   withPinnedProfile,
 } from "./edit.ts";
-import { operationRows, switchHelp } from "./operation.ts";
+import {
+  offConsequence,
+  operationRows,
+  stagedSwitch,
+  switchHelp,
+  switchOp,
+  switchSummary,
+} from "./operation.ts";
 
 /** Fixtures: api setup.md "Spacecraft edits" (8243895f1). */
 function detail(extra: Record<string, unknown> = {}): SpacecraftDetail {
@@ -52,7 +59,7 @@ function profileField(options: readonly { value: string; label: string }[]) {
 }
 
 describe("spacecraft edits (L17)", () => {
-  it("prefills from the detail, switches included", () => {
+  it("prefills from the detail; the switches are the Operation panel's, not the form's (#309)", () => {
     expect(
       spacecraftDocument(detail({ commanding_enabled: true, telemetry_enabled: null })),
     ).toEqual({
@@ -60,9 +67,15 @@ describe("spacecraft edits (L17)", () => {
       scid: 312,
       spacecraft_type_id: "p-1",
       spacecraft_type_version: 3,
-      commanding_enabled: true,
-      telemetry_enabled: null,
     });
+    const field = (path: string) => ({ ...profileField([]), path });
+    const schema = {
+      kind: "spacecraft",
+      fields: [field("display_name"), field("commanding_enabled"), field("telemetry_enabled")],
+    };
+    expect(withPinnedProfile(detail({ profile: null }))(schema).fields.map((f) => f.path)).toEqual([
+      "display_name",
+    ]);
   });
 
   it("stages a version change with its profile; leaves other changes alone", () => {
@@ -150,5 +163,49 @@ describe("spacecraft edits (L17)", () => {
     expect(unset?.sentence).toBe(
       "No active configuration covers EARENDIL-312 yet, so this isn't set.",
     );
+  });
+});
+
+describe("U40 switches on the Operation panel (#309)", () => {
+  it("words the Changes line and what turning off stops", () => {
+    expect(switchSummary("EARENDIL-312", "commanding_enabled", false)).toBe(
+      "EARENDIL-312 · turn commanding off",
+    );
+    expect(switchSummary("EARENDIL-312", "telemetry_enabled", true)).toBe(
+      "EARENDIL-312 · turn telemetry on",
+    );
+    expect(offConsequence("EARENDIL-312", "commanding_enabled")).toBe(
+      "Turning commanding off stops new requests and releases for EARENDIL-312.",
+    );
+    expect(offConsequence("EARENDIL-312", "telemetry_enabled")).toBe(
+      "No live values, alarms or new history from EARENDIL-312 until it's turned on again.",
+    );
+  });
+
+  it("stages the spacecraft kind's switch path, and reads the staged target from the open set", () => {
+    expect(switchOp("sc-1", "commanding_enabled", false)).toEqual({
+      kind: "spacecraft",
+      action: "update",
+      entity_id: "sc-1",
+      changes: [{ path: "commanding_enabled", value: false }],
+    });
+    const set = {
+      changes: [
+        {
+          ops: [
+            {
+              kind: "spacecraft",
+              entity_id: "sc-1",
+              paths: ["commanding_enabled"],
+              payload: { changes: [{ path: "commanding_enabled", value: false }] },
+            },
+          ],
+        },
+      ],
+    };
+    expect(stagedSwitch(set, "sc-1", "commanding_enabled")).toBe(false);
+    expect(stagedSwitch(set, "sc-1", "telemetry_enabled")).toBeNull();
+    expect(stagedSwitch(set, "sc-2", "commanding_enabled")).toBeNull();
+    expect(stagedSwitch(null, "sc-1", "commanding_enabled")).toBeNull();
   });
 });

@@ -1,4 +1,4 @@
-import type { KindSchema } from "@/features/changes/index.ts";
+import type { KindSchema, StageOp } from "@/features/changes/index.ts";
 import type { SpacecraftDetail } from "./detail.ts";
 
 /** One U40 Operation row: the switch's running value (null: no active configuration says). */
@@ -48,4 +48,70 @@ export function operationRows(d: SpacecraftDetail): readonly OperationRow[] {
 /** A switch's help as the spacecraft kind's schema serves it (ux U40 text, api L17); null until read. */
 export function switchHelp(schema: KindSchema | null, key: OperationRow["key"]): string | null {
   return schema?.fields.find((f) => f.path === key)?.help ?? null;
+}
+
+export type SwitchKey = OperationRow["key"];
+const NOUN = {
+  commanding_enabled: "commanding",
+  telemetry_enabled: "telemetry",
+} as const satisfies Record<SwitchKey, string>;
+
+/** U40's Changes line: "EARENDIL-312 · turn commanding off". */
+export const switchSummary = (name: string, key: SwitchKey, on: boolean): string =>
+  `${name} · turn ${NOUN[key]} ${on ? "on" : "off"}`;
+
+/** U40: the off sheet's title and the consequence it states before anything is staged (#309). */
+export const offTitle = (name: string, key: SwitchKey): string =>
+  `Turn ${NOUN[key]} off for ${name}?`;
+export const offConsequence = (name: string, key: SwitchKey): string =>
+  key === "commanding_enabled"
+    ? `Turning commanding off stops new requests and releases for ${name}.`
+    : `No live values, alarms or new history from ${name} until it's turned on again.`;
+
+/** The staged change: the spacecraft kind's switch path, as the Edit form stages it (L17). */
+export const switchOp = (spacecraftId: string, key: SwitchKey, on: boolean): StageOp => ({
+  kind: "spacecraft",
+  action: "update",
+  entity_id: spacecraftId,
+  changes: [{ path: key, value: on }],
+});
+
+/**
+ * The switch value the open set stages for this spacecraft, or null when it stages none. Read
+ * from its ops' `payload.changes` (the server's staged value), never inferred.
+ */
+/** The parts of a change set this reads (a ChangeSet fits). */
+type StagedOps = Readonly<{
+  changes: readonly Readonly<{
+    ops: readonly Readonly<{
+      kind: unknown;
+      entity_id: string | null;
+      paths: readonly string[];
+      payload: unknown;
+    }>[];
+  }>[];
+}>;
+export function stagedSwitch(
+  set: StagedOps | null | undefined,
+  spacecraftId: string,
+  key: SwitchKey,
+): boolean | null {
+  for (const change of set?.changes ?? [])
+    for (const op of change.ops) {
+      if (op.kind !== "spacecraft" || op.entity_id !== spacecraftId || !op.paths.includes(key))
+        continue;
+      const value = changeValue(op.payload, key);
+      if (typeof value === "boolean") return value;
+    }
+  return null;
+}
+
+function changeValue(payload: unknown, path: string): unknown {
+  if (typeof payload !== "object" || payload === null || !("changes" in payload)) return undefined;
+  const changes = payload.changes;
+  if (!Array.isArray(changes)) return undefined;
+  for (const c of changes as unknown[])
+    if (typeof c === "object" && c !== null && "path" in c && c.path === path && "value" in c)
+      return c.value;
+  return undefined;
 }
