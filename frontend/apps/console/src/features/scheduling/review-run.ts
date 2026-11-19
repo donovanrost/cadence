@@ -96,7 +96,7 @@ const after = (
 function approved(value: ApproveResult, version: number, passes: number): ReviewOutcome {
   if (!isKnown(value.outcome) || value.outcome !== "approved")
     return after(version, "caution", noApprovalLine(version));
-  // U61/U97: passes left out because they had already started are counted from the answer.
+  // U61/U97: passes left out because their booking window had closed are counted from the answer.
   const expired = value.expired;
   const text = expired && expired.count > 0 ? partialApproval(expired) : approvedLine(passes);
   return after(version, "nominal", text, { expired });

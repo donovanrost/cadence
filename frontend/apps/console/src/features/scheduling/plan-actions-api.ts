@@ -17,7 +17,7 @@ const submitReader = d.object({
   outcome: d.knownText(["pending_approval", "executing", "replayed"] as const),
   /** #257: the original answer to a repeated operation_id (U97: shown as this one's result). */
   replayed: d.optional(d.boolean),
-  /** U61: passes left out because they had already started; absent on older servers. */
+  /** U61: passes left out because their booking window had closed (#273); absent on older servers. */
   expired: (value: unknown, path?: string) =>
     value === undefined ? null : expiredReader(value, path),
 });

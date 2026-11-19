@@ -217,7 +217,7 @@ export const errorCodes = [
   "draft_not_interrupted",
   "contact_plan_version_already_decided",
   // U61 day-plan lifecycle (api): another plan covers the day; a newer plan replaced this one
-  // (not U27's plan_superseded); every pass had already started.
+  // (not U27's plan_superseded); every pass's booking window had closed (#273).
   "contact_plan_day_already_planned",
   "contact_plan_replaced",
   "contact_plan_all_opportunities_expired",

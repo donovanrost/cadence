@@ -11,7 +11,7 @@ import {
 
 /**
  * U61 on K1: the plan that replaced this one (with Open), and after an approval that left passes
- * out because they had already started, those passes under `Show N` (U97: the review's own line
+ * out because their booking window had closed (#273), those passes under `Show N` (U97: the review's own line
  * says the partial result once).
  */
 const props = defineProps<{
