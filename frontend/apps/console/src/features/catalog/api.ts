@@ -1,6 +1,6 @@
 import type { MissionId } from "@/api/index.ts";
 import { actor, decoders, request, type ApiResult, type Decoded, type Reader } from "@/api";
-import { formatCount } from "@/ui";
+import { formatCount, formatShort } from "@/ui";
 
 /**
  * Catalog index. Requested shape: docs/apogee/plans/setup-shapes.md §C1; the final contract
@@ -59,6 +59,16 @@ const revision = object({
 export const importStatuses = ["running", "succeeded", "failed"] as const;
 export type ImportStatus = (typeof importStatuses)[number];
 
+/**
+ * #146 (mms-engineer #365, U103): who started a run. `name` is null for anyone the server won't
+ * name (not a member of the mission's organization, gone, or no display name); never an email.
+ */
+const requester = object({
+  kind: decoders.knownText(["user", "service", "system"] as const),
+  name: nullable(string),
+});
+export type Requester = Decoded<typeof requester>;
+
 /** One import run row (the index's; the artifact page lists the same rows, api L18). */
 export const importRunRow = object({
   id: token,
@@ -68,6 +78,8 @@ export const importRunRow = object({
   revision_number: nullable(count),
   started_at: timestamp,
   completed_at: nullable(timestamp),
+  /** Optional: absent on a server before #365, which reads as the time alone. */
+  requested_by: optional(nullable(requester)),
 });
 
 const database = object({
@@ -99,6 +111,18 @@ export function fetchCatalogIndex(
     catalogIndexReader,
     { signal },
   );
+}
+
+/**
+ * U103's Started cell: "11-19 05:40Z by Mira K."; Cadence itself reads "by Cadence". A service,
+ * a person the server doesn't name, a kind the console doesn't know, or no record: the time alone.
+ */
+export function startedLine(run: Pick<ImportRun, "started_at" | "requested_by">): string {
+  const at = formatShort(new Date(run.started_at));
+  const by = run.requested_by;
+  if (by?.kind === "user" && by.name !== null) return `${at} by ${by.name}`;
+  if (by?.kind === "system") return `${at} by Cadence`;
+  return at;
 }
 
 /** "547 declarations · 212 commands · 335 telemetry points · applied to 500 spacecraft". */

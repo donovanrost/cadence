@@ -72,6 +72,16 @@ export const modelRevisionReader = d.object({
       number: d.integer,
       label: d.nullable(d.string),
       database_id: d.token,
+      /**
+       * #195 (mms-engineer #365, U102): the run that made it, and its breaking count against the
+       * revision before it in its database (null: not known; base null: the first revision).
+       * Optional: absent on a server before #365 (`revisionBreaking` reads that as not known).
+       */
+      import_run_id: d.optional(d.token),
+      breaking: d.optional(d.nullable(d.integer)),
+      breaking_base: d.optional(
+        d.nullable(d.object({ catalog_revision_id: d.token, revision: d.integer })),
+      ),
     }),
   ),
   decision: d.nullable(
