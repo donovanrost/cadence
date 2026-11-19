@@ -36,6 +36,71 @@ The director is the session that hired you. Pane IDs are herdr pane IDs.
 
 Live pane IDs are in `docs/apogee/ROSTER.md` (written by the director after hiring).
 
+## Squads (director, 2026-11-19; approved by the user)
+
+The team works in domain squads. The board's **Squad** field holds each issue's squad. Legacy-page retirement
+(E3) is done by the squad that owns the page's domain; the release lead keeps the E3 order. The Roster above
+records who was hired for what; for ownership and review, this section wins.
+
+| Squad | Domains (board labels) | Epics | Squad lead | Members |
+| --- | --- | --- | --- | --- |
+| Commanding & Approvals | commanding, approvals, identity | E1 #207, #201 (per-kind policies), #220 (offboarding) | api-ops | api; new: security engineer (also security lead), UX designer, engineer |
+| Mission Model & Spacecraft | mission-model, spacecraft, applications | E2 #208, E4 #210 | fe-setup | new: security engineer, UX designer, engineer |
+| Telemetry & Data | telemetry, data-management | E6-E9 #212-#215 | domain | staffed when laptop 3 arrives |
+| Displays & Alarms | dashboards, alarms | E10 #216, dashboards | dashboards | staffed when laptop 3 arrives |
+| Ground & Comms | comms, contacts, providers | E5 #211 | fe-ops | staffed when laptop 3 arrives |
+| Platform | platform, tooling, CI, release, console kit | E11-E13 #217-#219, E3 #209 coordination | lead (release lead) | devops, qa |
+
+### Owned paths
+
+A path belongs to the squad that owns its domain. Shared layers (the web controllers and console API under
+`apps/cadence_web/lib/cadence_web/`, the read models under `apps/cadence/lib/cadence/reads/`, the console's
+`frontend/apps/console/src/features/`, and tests) follow the domain they serve: the file or folder name says
+which. Anything not listed is Platform's. Where it isn't clear, the release lead decides and records it here.
+
+| Squad | Backend (`apps/cadence/lib/cadence/`) | Web and console | Other |
+| --- | --- | --- | --- |
+| Commanding & Approvals | `commanding*`, `governance*`, `action_requests/`, `accounts*`, `auth*`, `organizations*`, `capabilities/`, `administration/`, `secrets/` | console features `commands/`, `review/`, `resolutions/`, `people/`, `account/`, `auth/`, `admin/`, `audit/`, `settings/` (approval settings); web: command, approval, session and admin controllers | `docs/apogee/api/commanding.md` |
+| Mission Model & Spacecraft | `mission_models*`, `catalog*`, `spacecraft*`, `spacecraft_type*`, `spacecraft_store*`, `configuration/`, `activations*`, `applications/`, `application_dispatch/`, `extensions/`, `extension_catalog.ex` | console features `spacecraft/`, `profiles/`, `catalog/`, `activations/`, `changes/`, `readiness/`, `apps/`, `fleet/`; `frontend/apps/spacecraft`, `frontend/apps/mission-catalog`; web: application host, release and surface code | seeds `dev/apogee_qa_mission.exs`, `dev/reflect_orbital/` (not `dev/chaos/`) |
+| Telemetry & Data | `telemetry/`, `ingress*`, `ingress_journal/`, `ingress_archive*`, `semantic_observations*`, `semantic_runtime*`, `replay*`, `protocol/`, `data_sources/`, `source_endpoints*`, `projections/`, `persistence/`, `derived_telemetry*`, `runtime*`, `cfdp/` | console features `telemetry/`, `investigate/`, `sources/`, `timeline/`; `frontend/apps/telemetry-decom` | `packages/ccsds`, `packages/xtce`, QuestDB migrations |
+| Displays & Alarms | `dashboards*`, `alarms/`, `limits*`, `notifications*`, `ops/` | console features `dashboards/`, `alarms/`, `now/`; `frontend/apps/ops-console` | |
+| Ground & Comms | `comms/`, `contacts*`, `contact_planning/`, `ground_networks*`, `provider_adapters*`, `jobs*` | console features `comms/`, `contacts/`, `planning/`, `scheduling/`, `replan/`, `stations/`, `providers/`; `frontend/apps/comms-overview` | `apps/cadence_simulator/` |
+| Platform | `platform/`, `architecture/`, `observability*`, `missions*`, `operational_events*`, `mission_events/`, `listing.ex`, `ids.ex`, `repo.ex`, `application.ex`, `dev_profile.ex`, `smoke/`, `control/`, `management/` (cross-domain routing; changes need the owning squad's review too) | the console shell, router, API client and kit (`frontend/apps/console/src/{shell,router,api,live}`, `features/kit/`, `features/palette/`, `features/mobile/`, `features/missions/`); `frontend/packages/*`; `frontend/apps/host`, `storybook`, `surface-fixture`, `contract-probe`; `frontend/tools/` | `.github/`, `config/`, `mix.exs`, `mix.lock`, `mise.toml`, `scripts/`, `docs/apogee/TEAM.md` and `qa/`; `dev/` scripts not listed above |
+
+**Shared files** (`router.ex`, `application.ex`, the root and app `mix.exs`/`mix.lock`, `config/*.exs`, the console's
+route list): any squad may change its own lines. The release lead reviews any change to them and settles
+conflicts. `dev/chaos/` is the user's lab: no squad edits it.
+
+### Roles
+
+- **Director:** priorities, milestones, and the high-stakes gates: pins, data drops, approval-policy changes, and anything outward-facing.
+- **Release lead (lead):** merges into develop, the order changes land in, cross-squad integration, release to `main`, and the squad leads' daily sync.
+- **UX lead (ux):** the design system and wording rules. Squad designers work to them, and ux reviews cross-squad UI.
+- **Security lead:** the first security engineer hired (Commanding & Approvals). Also owns the rules every squad's security engineer applies.
+- **Squad lead:** a working engineer. Sets the squad's order inside the milestones, reports to the director and syncs with the release lead.
+- **Squad UX designer:** the squad's console flows and words.
+- **Squad security engineer:** threat-models the squad's features. A required reviewer on any change that touches permissions, approvals, secrets, the network or tenant boundaries.
+- **Squad engineers:** build, test and open PRs.
+
+### Review rules
+
+- **Every PR:** reviewed by a different agent in the owning squad, recorded on the PR. We share one GitHub account, so the review is a comment review headed with the reviewer's agent name and verdict.
+- **Another squad's code:** a PR that touches it is also reviewed by that squad.
+- **Security-sensitive changes** (see the security engineer above): the squad's security engineer also reviews.
+- **Merging:** only the release lead or the director merges, after green CI. Nobody pushes to or force-pushes `develop` or `main`.
+- **Landing:** qa lands merged develop SHAs on the laptop-1 dev stack, fast-forward only, in qa slots.
+
+### Machines
+
+| Machine | Runs |
+| --- | --- |
+| Laptop 1 | The shared dev stack (develop, :4011, simulator, Postgres, QuestDB); the director, release lead, qa, devops, ux; current squad leads until they move |
+| Laptop 2 | Commanding & Approvals, and Mission Model & Spacecraft. Each has its own worktrees, its own test Postgres and its own heavy gate |
+| Laptop 3 (coming) | Telemetry & Data, Displays & Alarms, and Ground & Comms |
+
+Each agent on a worker machine works in its own worktree off develop; nobody shares a working copy. The
+laptop-1 stack stays the integration environment, run by qa.
+
 ## Communicating (herdr)
 
 Send a teammate a message with (`herdr` may not be on PATH in agent shells; use `$HERDR_BIN_PATH`):
@@ -178,10 +243,10 @@ docs stay the record, linked from issues.
 Once `ui/apogee-spa` has merged into `develop` and qa's dev stack runs develop:
 - Every piece of work is a feature branch off `develop`, linked to its issue. Agents push their OWN feature
   branches and open PRs into `develop`. Never push to or force-push `develop` or `main`.
-- A PR merges only after CI passes AND a different agent reviews it, with the review recorded in the PR (we
-  share one GitHub account, so the record names the reviewing agent). Only lead or the director presses merge.
-- The restart chain picks only MERGED develop commits, by SHA; qa logs the PR number with each pick. Trial
-  picks, dries and the #108 struct-hash check stay.
+- A PR merges only after CI passes AND the reviews in Squads › Review rules are recorded in the PR (we
+  share one GitHub account, so the record names the reviewing agent). Only the release lead or the director presses merge.
+- qa lands only MERGED develop commits, fast-forward only (`git merge --ff-only <sha>` on the local
+  `live/develop`), and logs the PR numbers with each landing. Dries and the #108 struct-hash check stay.
 - Until the cut-over, the rules in Git above stand (the director pushes; nothing is picked onto the frozen tip
   during the freeze).
 
