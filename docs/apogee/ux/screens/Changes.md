@@ -219,12 +219,13 @@ Ask an org admin to make changes." Never hide the data, only the controls.
 Change sets are live, so the v1 seam (DECISIONS #1, U2: no staged bar, direct v1 CTAs) is gone. Stage points stage
 into the mission's change set; there's no v1 binding left.
 
-## 7. The monitoring lane (proposal, U108)
+## 7. The monitoring lane (U108)
 Limits, derived points and alarm rules are staged in a second lane, **Monitoring**, beside **Configuration**
 (ADR-020 addendum, DECISIONS #93). Each lane has its own open set, staged bar line, review page
-(`M/setup/changes/monitoring`) and freeze, and neither freezes the other. Under "Applies without approval" the
-monitoring editors apply in one step (`Apply now`, inline preview), with no trip here. U108 has the words, the
-checks and the open questions for domain.
+(`M/setup/changes/monitoring`), and neither freezes the other. A set in review no longer pauses its lane's staging
+(only its own points are blocked), which changes §2's *In review* state for both lanes. Revisions share one
+sequence. Under "Applies without approval" the monitoring editors apply in one step (`Apply now`, inline preview),
+with no trip here. U108 has the words and the checks.
 
 ## Questions for domain (model must answer these for the UX to hold)
 1. One open change set per mission, shared by all authors? (UX assumes yes.)
