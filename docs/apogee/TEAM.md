@@ -168,8 +168,8 @@ Send a teammate a message with (`herdr` may not be on PATH in agent shells; use 
 - Elixir: compile every project with warnings as errors: `MIX_ENV=test mix workspace.run -t compile --order postorder --early-stop --env-var MIX_ENV=test -- --force --warnings-as-errors` at the repo root (the CI command; a plain `mix compile` at the root builds only the workspace app, not cadence, cadence_web, the simulator or the packages); `mix credo --strict` at the repo root (don't add violations),
   `mix format`, per-app tests (`cd apps/cadence_web && mix test`).
 - Elixir, before opening a backend PR, also run the CI jobs that a plain suite misses (all gated, on your own test partition):
-  - `mix format --check-formatted` at the repo root;
-  - `MIX_ENV=test mix workspace.run -t hex.audit` at the repo root (a new advisory fails CI even when nothing changed);
+  - `mix format.all --check-formatted` at the repo root (CI's form; a plain root `mix format` covers only the root files);
+  - `mix hex.audit` and `MIX_ENV=test mix workspace.run -t hex.audit --order postorder` at the repo root (both, as CI; a new advisory fails CI even when nothing changed);
   - the ingest journal-off matrix: `cd apps/cadence && CADENCE_TEST_INGRESS_JOURNAL=off mix test --only ingest_journal_matrix`;
   - the simulator suite: `cd apps/cadence_simulator && mix test`, with the same `MIX_TEST_PARTITION`;
   - `mix test.planes` at the repo root;
@@ -223,7 +223,7 @@ part 2, the 001 repair, the gap fixes) sat still for ~3 h 20 min under a hold wi
 - Checks to run before committing:
   - Docs only: none.
   - Frontend: typecheck + lint (+ tests) for the console app (see `docs/apogee/ARCHITECTURE.md`).
-  - Elixir (api only): `mix format`, the all-projects compile above (or `mix compile --force --warnings-as-errors` inside each app you touched), `mix credo --strict` on touched
+  - Elixir: `mix format`, the all-projects compile above (or `mix compile --force --warnings-as-errors` inside each app you touched), `mix credo --strict` on touched
     files, and the tests for the touched area. Every engineer runs the Elixir tests for their own work, in their own worktree, through their machine's heavy gate. On laptop 1, use your claimed partition (claimed in qa's runbook register; domain uses `MIX_TEST_PARTITION=12`, api-ops `3`). On a worker machine, use that machine's own test Postgres and the partitions devops set up there (laptop 2's register is `~/projects/cadence/test-partitions.md` on laptop 2: 10-19 Mission Model & Spacecraft, 20-29 Commanding & Approvals). Disk floors are the same on every machine: below 25 GiB free, no new builds, suites or installs; at 22 GiB, tell the director at once (dashboards still never runs Elixir: lead, 11-17). **Side worktrees (director, 2026-11-19):** on laptop 1, side worktrees with build output are the main background disk growth (devops, 11-19: up to 1.5 GB an hour). Keep one reusable side worktree per agent and switch it between branches. Remove a side worktree the day its PR lands on the qa stack, unless you name a follow-up that needs it: check its content against develop first (`git diff`, not only `git cherry`, because of squash merges), save anything worth keeping as a patch, then `git worktree remove` from the shared tree, never `rm -rf`, and only outside qa slots and holds. Never remove another agent's worktree. devops posts a worktree survey daily at 14:00Z, and lead chases owners from it. qa runs the dev server against the dev database.
 - **Heavy jobs go through the team gate (director, 2026-11-17):** `var/heavy-gate.sh --agent <you> -- <command>`
   (status: `var/heavy-gate.sh --status`). Heavy = full suites, test directories, hooked commits, builds, vue-tsc /
