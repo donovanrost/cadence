@@ -339,6 +339,28 @@ this one.
 Owners if approved: api-ops (writer, reader, migration, backfill path), domain (review; the
 provenance contract in the mission model), qa (the slot for D).
 
+## Rollout and rollback (director, 11-17: option A, roll forward)
+
+- **Order:** the QuestDB migration runs BEFORE the restart onto B. qa's pre-flight runs
+  `mix cadence.questdb.migrate --check` from the new build's tree. Exit 0 is schema current; exit 1
+  means migrate first; exit 2 means the schema is unreadable. The new reader selects the new
+  columns, and line-protocol writes would otherwise create them with the wrong types.
+- **Rollback:** after B lands, a code rollback past B is a last resort. Rows written after B and
+  read by pre-B code show only the residual (for packet rows, only `storage`). A pre-B write-back
+  would re-persist that reduced map. So if a rollback ever happens: **no Data operations writes**
+  (legacy `/ops/data-operations` requests, backfill, late-data accept) until rolled forward, and qa
+  checks that no such job is queued or running before the rollback restart. Why roll forward: dev
+  only, no production, the rows keep their provenance in the columns, and the one harmful path is
+  the parked legacy page.
+- **For L16** (domain's assessment): any rebuilt write-back must write the B columns from the
+  struct, never re-persist a decoded map, so this gap can't recur.
+- **Readers of provenance keys,** for qa's post-check on a B-written row:
+  - the external telemetry API (`GET …/telemetry/points/:id/{latest,history}`, `data[].provenance`)
+    is the only consumer that reads the keys; it returns the whole map;
+  - the write-back path (backfill / late data, legacy page) copies it;
+  - dashboards, point history, verifier series, limits recompute and Investigate read values,
+    columns and `storage` only, so a read of each checks that the rebuild didn't break them.
+
 ## DECISIONS draft (for the director; the user signs off)
 
 > **Telemetry provenance storage.** Each stored observation's provenance (which mission model

@@ -15,6 +15,7 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationProvenance do
   Rows written before the columns existed have them null (flags false) and decode as before.
   """
 
+  alias Cadence.Catalog.TelemetryBinding
   alias Cadence.Telemetry.Storage.ObservationEnvelope
 
   @symbol_keys [
@@ -88,19 +89,6 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationProvenance do
   end
 
   @doc """
-  The binding rule id the mission model gives a spacecraft's managed runtime endpoint for one
-  producer (packet type) in one revision.
-  """
-  # Stand-in for domain's Cadence.Catalog.binding_rule_id/3 (same format: TelemetryDecom's
-  # capability instance id + ":rule" for a `spacecraft_runtime:` source); B swaps to it before
-  # hand-off.
-  @spec binding_rule_id(binary(), binary(), binary()) :: binary()
-  def binding_rule_id(revision_id, spacecraft_id, producer_id)
-      when is_binary(revision_id) and is_binary(spacecraft_id) and is_binary(producer_id) do
-    "mission_model_telemetry:#{revision_id}:spacecraft_runtime:#{spacecraft_id}:#{producer_id}:rule"
-  end
-
-  @doc """
   A term in the form a row stores as JSON: string keys, atoms as strings, timestamps as ISO 8601,
   tuples as lists.
   """
@@ -143,15 +131,18 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationProvenance do
 
   defp take_identity_ref(provenance), do: {nil, provenance}
 
-  # Stored only when it differs from the model's id for this row (a decom config that names another
-  # source endpoint), so nothing is ever lost.
+  # Stored only when it differs from the model's id for this row: a decom config that names another
+  # source endpoint, or a rule built under a revision other than the activation's that the row
+  # records. Nothing is ever lost. The id comes from `Cadence.Catalog.binding_rule_id/3`'s pure
+  # module (the data plane may not call the management facade); its arguments must be binaries,
+  # which the patterns and guards here ensure.
   defp take_binding_rule(
          %{"binding_rule_id" => rule_id} = provenance,
          %{"mission_model_revision_id" => revision_id, "producer_id" => producer_id},
          %ObservationEnvelope{spacecraft_id: spacecraft_id}
        )
        when is_binary(rule_id) and is_binary(spacecraft_id) do
-    if rule_id == binding_rule_id(revision_id, spacecraft_id, producer_id) do
+    if rule_id == TelemetryBinding.binding_rule_id(revision_id, spacecraft_id, producer_id) do
       {true, Map.delete(provenance, "binding_rule_id")}
     else
       {false, provenance}
@@ -196,7 +187,7 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationProvenance do
     Map.put(
       provenance,
       "binding_rule_id",
-      binding_rule_id(revision_id, spacecraft_id, producer_id)
+      TelemetryBinding.binding_rule_id(revision_id, spacecraft_id, producer_id)
     )
   end
 

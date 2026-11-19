@@ -6,6 +6,7 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationProvenanceTest do
   """
   use Cadence.UnitCase, async: true
 
+  alias Cadence.Catalog
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Telemetry.Sample
   alias Cadence.Telemetry.Storage.{ObservationEnvelope, WriteContext}
@@ -47,6 +48,30 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationProvenanceTest do
       assert row["binding_rule_derived"] == false
       assert Jason.decode!(row["provenance_json"]) == %{"binding_rule_id" => rule_id}
       assert rebuilt(row)["binding_rule_id"] == rule_id
+    end
+
+    test "keeps a binding rule id built under another revision than the row's activation" do
+      # The row records the activation's revision; the decom config's rule may name an older one.
+      rule_id = Catalog.binding_rule_id("mission_model_revision:older", "sc-1", @container)
+      envelope = envelope(packet_sample(provenance: %{binding_rule_id: rule_id}))
+      row = stored_row(envelope)
+
+      assert row["mission_model_revision_id"] == @revision
+      assert row["binding_rule_derived"] == false
+      assert Jason.decode!(row["provenance_json"]) == %{"binding_rule_id" => rule_id}
+      assert rebuilt(row)["binding_rule_id"] == rule_id
+    end
+
+    test "keeps a binding rule id when a part the model needs isn't text" do
+      rule_id = Catalog.binding_rule_id(@revision, "sc-1", @container)
+
+      envelope =
+        envelope(packet_sample(provenance: %{binding_rule_id: rule_id, producer_id: nil}))
+
+      row = stored_row(envelope)
+
+      assert row["binding_rule_derived"] == false
+      assert Jason.decode!(row["provenance_json"])["binding_rule_id"] == rule_id
     end
 
     test "keeps packet refs that differ from the row's own columns" do
@@ -143,7 +168,7 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationProvenanceTest do
         %{
           evidence_id: "evidence-1",
           packet_id: "packet-1",
-          binding_rule_id: ObservationProvenance.binding_rule_id(@revision, "sc-1", @container),
+          binding_rule_id: Catalog.binding_rule_id(@revision, "sc-1", @container),
           semantic_id: "semantic:parameter:battery_voltage",
           qualified_name: "/parameters/battery_voltage",
           producer_kind: :container,

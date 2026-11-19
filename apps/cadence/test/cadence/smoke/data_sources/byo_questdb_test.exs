@@ -56,7 +56,7 @@ defmodule Cadence.Smoke.DataSources.BYOQuestDBTest do
     assert result.http_endpoint == @http_endpoint
     assert result.source_health == :healthy
     assert result.returned_frame_count == 1
-    assert length(result.applied_migrations) == 4
+    assert length(result.applied_migrations) == 12
 
     received = received_execs([])
 

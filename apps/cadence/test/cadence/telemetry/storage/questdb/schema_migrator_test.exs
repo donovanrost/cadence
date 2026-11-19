@@ -25,13 +25,8 @@ defmodule Cadence.Telemetry.Storage.QuestDB.SchemaMigratorTest do
                name: "add_telemetry_observation_identity_id",
                sql: observation_identity_sql,
                checksum: observation_identity_checksum
-             },
-             %{
-               version: "20261117000000",
-               name: "add_telemetry_observation_provenance_columns",
-               sql: provenance_sql,
-               checksum: provenance_checksum
              }
+             | provenance_migrations
            ] = migrations
 
     assert create_sql =~ "CREATE TABLE IF NOT EXISTS telemetry_observations"
@@ -50,24 +45,28 @@ defmodule Cadence.Telemetry.Storage.QuestDB.SchemaMigratorTest do
 
     assert is_binary(observation_identity_checksum)
 
-    # DECISIONS #103: one additive statement; CAPACITY per the design's tenant-mix sizing.
-    assert provenance_sql =~ "ALTER TABLE telemetry_observations ADD COLUMN IF NOT EXISTS"
-
-    for column <- [
-          "mission_model_revision_id SYMBOL CAPACITY 16384 CACHE",
-          "runtime_plan_id SYMBOL CAPACITY 32768 CACHE",
-          "producer_kind SYMBOL CAPACITY 256 CACHE",
-          "producer_id SYMBOL CAPACITY 16384 CACHE",
-          "semantic_id SYMBOL CAPACITY 262144 NOCACHE",
-          "qualified_name SYMBOL CAPACITY 262144 NOCACHE",
-          "identity_ref VARCHAR",
-          "binding_rule_derived BOOLEAN",
-          "packet_refs_derived BOOLEAN"
-        ],
-        do: assert(provenance_sql =~ column)
-
-    assert is_binary(provenance_checksum)
+    # DECISIONS #103: one column per file (QuestDB refuses a multi-column ADD COLUMN on a WAL
+    # table), CAPACITY per the design's tenant-mix sizing.
+    assert Enum.map(
+             provenance_migrations,
+             &{&1.version, &1.sql |> String.split("\n") |> List.last()}
+           ) ==
+             [
+               {"20261117000000",
+                add_column("mission_model_revision_id SYMBOL CAPACITY 16384 CACHE")},
+               {"20261117000001", add_column("runtime_plan_id SYMBOL CAPACITY 32768 CACHE")},
+               {"20261117000002", add_column("producer_kind SYMBOL CAPACITY 256 CACHE")},
+               {"20261117000003", add_column("producer_id SYMBOL CAPACITY 16384 CACHE")},
+               {"20261117000004", add_column("semantic_id SYMBOL CAPACITY 262144 NOCACHE")},
+               {"20261117000005", add_column("qualified_name SYMBOL CAPACITY 262144 NOCACHE")},
+               {"20261117000006", add_column("identity_ref VARCHAR")},
+               {"20261117000007", add_column("binding_rule_derived BOOLEAN")},
+               {"20261117000008", add_column("packet_refs_derived BOOLEAN")}
+             ]
   end
+
+  defp add_column(definition),
+    do: "ALTER TABLE telemetry_observations ADD COLUMN IF NOT EXISTS #{definition};"
 
   test "migration plan sorts files by version and ignores non-migration sql files" do
     migrations_path = temp_migrations_path()
