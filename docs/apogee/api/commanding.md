@@ -655,8 +655,19 @@ used to succeed is now refused.
 | `POST /command_queue_entries/:id/release` | `409 command_group_not_armed` | The entry is a group member and its group isn't armed (`queued`, after its GO), judged from the server's group row. Nothing was released. | Give the group its GO; its release goes through the group. |
 | `POST /command_requests` | `422 command_request_group_reserved` | The request's `metadata` names a group (`metadata["group"]`). Nothing was created. | Submit the group: `POST /api/console/v1/missions/:mission_id/command-groups`. Drop group keys from a standalone request's `metadata`. |
 
-The `message` is ux U87's words: "This command is part of a command group. Approve it with the
-group's GO/NO-GO.", "A command joins a command group only when the group is submitted." and
-"This command's group hasn't been given its GO, so it can't be sent." Membership is read from the
+The `message` is ux U87's words (amended, #121), worded by the act tried; the codes are the same
+for every act:
+
+| Act | `message` |
+| --- | --- |
+| approve (`409 command_request_in_group`) | "This command is part of a command group. Approve it with the group's GO/NO-GO." |
+| reject (`409 command_request_in_group`) | "This command is part of a command group. Reject it with the group's NO-GO." |
+| enqueue (`409 command_request_in_group`) | "This command is part of a command group. Its group's GO queues it." |
+| create (`422 command_request_group_reserved`) | "Not created: this request names a command group. A group's commands are submitted with the group." |
+| release (`409 command_group_not_armed`) | "This command's group hasn't been given its GO, so it can't be sent." |
+
+Until #121 every `command_request_in_group` carried the approve sentence, and the create carried
+"A command joins a command group only when the group is submitted." The legacy ops review page
+(approve and reject) and ops queue page (enqueue) show the same words. Membership is read from the
 server's group records, never from a caller's metadata. Requests outside any group are unchanged. The console's named release already refused an unarmed group (`command_group_not_armed`
 under `refused`, in the release section above).

@@ -131,6 +131,26 @@ defmodule CadenceWeb.OpsCommandQueuePageTest do
     refute Repo.exists?(from(row in CommandQueueEntryRow, where: row.mission_id == ^c.mission))
   end
 
+  test "queueing a command-group member is refused in the enqueue words (U87 amended, #121)", c do
+    {:ok, view, _} = live(TestFixtures.member_conn(c.user), c.path)
+    p = page(view)
+
+    # Group membership is written only by a group submission; set straight in the table here.
+    {1, _} =
+      Repo.update_all(from(row in CommandRequestRow, where: row.command_request_id == ^c.request),
+        set: [command_group_id: "command_group_p0", group_target_index: 0, group_position: 0]
+      )
+
+    assert %{
+             "snapshot" => %{
+               "status" => "rejected",
+               "feedback" => "This command is part of a command group. Its group's GO queues it."
+             }
+           } = action(view, c.path, p, %{"expected_queue" => p["data"]["preview"]["token"]})
+
+    refute Repo.exists?(from(row in CommandQueueEntryRow, where: row.mission_id == ^c.mission))
+  end
+
   test "anonymous visitors redirect and plain members can read command queue details (#62)", c do
     assert {:error, {:redirect, %{to: "/sign-in"}}} = live(build_conn(), c.path)
     member = TestFixtures.persist_user!()
