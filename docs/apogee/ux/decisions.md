@@ -3059,7 +3059,7 @@ Communications, Changes) for ux's look.
     (#109). api's labels and values (sent as text; a missing value is `Not set`):
     - `catalog_revision_id` → `Catalog revision`, "catalog rev 14" (U65).
     - `telemetry_source_endpoint_id` → `Packet source`, the source's name (never an id, U25).
-    - `handled_apids` → `Decoded APIDs`, the APIDs comma-separated up to 8, else "14 APIDs"; none: `None`.
+    - `handled_apids` → `Handled APIDs` (U40's name, as the workspace has it), the APIDs comma-separated up to 8, else "14 APIDs"; none: `None`.
     - `protocol.downlink` / `.uplink` → `Downlink protocol` / `Uplink protocol` (TM, AOS, USLP, TC);
       `frame_size` → `Frame size`, `secondary_header_length` → `Secondary header`, `insert_zone_length` →
       `Insert zone`, `ocf_length` → `OCF` (each "1,115 bytes"); `truncated_primary_header` → `Truncated primary
@@ -3072,7 +3072,7 @@ Communications, Changes) for ux's look.
     is never the only way past a craft the approver can't see.
     - Heading `What changes · 312 spacecraft` (one craft: `What changes`, and the panel reads as above).
     - Summary, from the groups' counts, each only when nonzero: "300 spacecraft change: Catalog revision (300),
-      Decoded APIDs (12)." / "12 have no changes." / "5 start for the first time."
+      Handled APIDs (12)." / "12 have no changes." / "5 start for the first time."
     - Crit, fleet form: "Telemetry is off for 3 of the 312 spacecraft, so once this is active they start but
       decode nothing: no live values, alarms or history. Turn telemetry on with a change set first." with `Open
       Operation`.
