@@ -48,9 +48,9 @@ These have the same cause on several screens, so each is one item, fixed once.
 | C7 | § C1 sort: breaking → removed → changed → added. | `DiffPanel.vue:12` puts breaking first only | console | 3 |
 | C8 | § C3 change-set summary `Roll out rev 15 to Earendil Block 1 · 3 breaking`. | `RolloutPanel.vue:100` "Roll out rev 15 for …" | console | 4 |
 | C9 | U102: no shorthand. | `RevisionsPanel.vue:63` Used by "500 SC" (U102 fixes the C3 cards; this column was missed) | console | 4 |
-| C10 | § B parsing status is mono `PARSING · 1.8 MB · 00:04` plus live progress. | `ImportVerdict.vue:26` an info callout, "Parsing and validating… This page updates when it finishes." | ux to rule | 3 |
-| C11 | § C stat strip: one `Declarations` tile only when the per-kind counts are missing; Unchanged "of 547 declarations". | `DiffStrip.vue:14,29` always a single Declarations tile, captioned "read from this file"; "of N commands and telemetry" | ux to rule | 3 |
-| C12 | U90: a decided panel uses the short "not compared: no earlier configuration". | `approval/ApprovalPanel.vue:77` keeps the full callout | ux to rule | 4 |
+| C10 | § B parsing status is mono `PARSING · 1.8 MB · 00:04` plus live progress. | `ImportVerdict.vue:26` an info callout, "Parsing and validating… This page updates when it finishes." | console (ux ruled, §10) | 3 |
+| C11 | § C stat strip: one `Declarations` tile only when the per-kind counts are missing; Unchanged "of 547 declarations". | `DiffStrip.vue:14,29` always a single Declarations tile, captioned "read from this file"; "of N commands and telemetry" | console when the read has per-kind counts, else spec (ux ruled, §10) | 3 |
+| C12 | U90: a decided panel uses the short "not compared: no earlier configuration". | `approval/ApprovalPanel.vue:77` keeps the full callout | console (ux ruled, §10) | 4 |
 | C13 | § C breadcrumb `CATALOG / IMPORT rev 15`; verdict on the file line; C1 shows the first 9 then `Show all`; U65's panel "above C1"; route `M/setup/catalog/:databaseId`. | Built differently and deliberately: `Catalog / <file name>`; a verdict callout (U99 builds on it); every row with a "Showing the first N…" footer; the revision page has no diff (U102); `?database=` | spec | 4 |
 
 **B. The console does it; no spec covers it** (write into `Catalog.md`)
@@ -82,7 +82,7 @@ These have the same cause on several screens, so each is one item, fixed once.
 | P4 | States: a read-only line says who can edit. | None in `ProfileScreen.vue` | console | 3 |
 | P5 | P1 header meta `INHERITED BY 500 · 1 EDIT STAGED`; subline "3 override it" links to Overrides. | `SchemaSectionPanel.vue:31` no staged count; `present.ts:10` plain "3 overrides" | console | 3 |
 | P6 | P3 meta "3 OF 500 DIFFER FROM THE PROFILE"; empty is a nominal callout; redundant rows "Same as the profile now · Reset to inherit". | `OverridesPanel.vue:36,49`; `OverridesList.vue:79` | console | 4 |
-| P7 | P2 disabled rule dimmed with `DISABLED`; Limits links to the Limits app; the list's Protocols column reads `CCSDS TM / TC`. | `RuleBlock.vue:33` a sentence; `LimitsNotice.vue:12` links "Apps"; `api.ts:97` "TM ↓ · TC ↑" | ux to rule | 4 |
+| P7 | P2 disabled rule dimmed with `DISABLED`; Limits links to the Limits app; the list's Protocols column reads `CCSDS TM / TC`. | `RuleBlock.vue:33` a sentence; `LimitsNotice.vue:12` links "Apps"; `api.ts:97` "TM ↓ · TC ↑" | console (ux ruled, §10) | 4 |
 | P8 | P1 `RUNTIME` chip; header `[History]` plus a `…/history` route. | "Cancels queued commands" (P3 uses it too); History is a section tab | spec | 4 |
 
 **B. No spec covers it**
@@ -104,7 +104,7 @@ These have the same cause on several screens, so each is one item, fixed once.
 
 | # | Spec or U-entry | Console | Side | Rank |
 |---|---|---|---|---|
-| S1 | U40: turning a switch off opens a short sheet that states the consequence ("Turning commanding off stops new requests and releases for EARENDIL-312…"), and the switch shows `STAGED · APPLIES WITH r7` until applied. | `OperationPanel.vue:39-41` shows On / Off / Not set tags only. Its comment says switches are staged through the Edit form (`edit.ts:14-15`), which is a deliberate placement. But no consequence sheet or line exists anywhere in `spacecraft/`, and the panel has no staged tag. | console (the consequence and staged state); ux to rule (panel vs Edit form) | 1 |
+| S1 | U40: turning a switch off opens a short sheet that states the consequence ("Turning commanding off stops new requests and releases for EARENDIL-312…"), and the switch shows `STAGED · APPLIES WITH r7` until applied. | `OperationPanel.vue:39-41` shows On / Off / Not set tags only. Its comment says switches are staged through the Edit form (`edit.ts:14-15`), which is a deliberate placement. But no consequence sheet or line exists anywhere in `spacecraft/`, and the panel has no staged tag. | console (ux ruled, §10: staged on the Operation panel) | 1 |
 | S2 | U25: "Deleted …" only where the server says so. | "Deleted profile" whenever the profile name is null (`SpacecraftTable.vue:51`, `SpacecraftPanels.vue:30`, `edit.ts:34`). Right only if api confirms a null name always means deleted. | console (unless api confirms) | 1 |
 | S3 | U3's word for this severity is `Not set up`. | `detail.ts:176` maps `not_set_up` to "Note" | console | 1 |
 | S4 | The commit is disabled with "Fix N NO-GO checks first". | `StageBatchButton.vue:36` "Fix the NO-GO checks first. <row problem>" | console | 1 |
@@ -112,7 +112,7 @@ These have the same cause on several screens, so each is one item, fixed once.
 | S6 | U6: local section nav, plus Configuration and Overrides panels. | `SpacecraftPanels.vue` D1–D5 with neither (Configuration waits on U94's workspace route) | console | 3 |
 | S7 | A2 has a Routing row; the Profile row names the catalog rev. A3 has Profile and Routes columns. Step 01 cards show `catalog rev 14`. A4 tile is `Routes 300`. | `checks.ts` has no Routing row; `BatchPreview.vue:13-20` has neither column and adds "Check"; `ProfilePicker.vue:40`; `SummaryAside.vue:39` "Routing rules — added later" | console | 3 |
 | S8 | The step 03 primary is `Review batch`; the step 01 manifest has a drop zone and mapping chips. | "Continue to review"; a native file input and "N of 6 fields mapped" | console | 4 |
-| S9 | Manifest cells are edited inline in step 02; the next free SCID comes from the server. | "fix them in the file and choose it again" (`StepIdentity.vue:37`); computed in the browser (`AddSpacecraftScreen.vue:37`) | ux to rule | 3 |
+| S9 | Manifest cells are edited inline in step 02; the next free SCID comes from the server. | "fix them in the file and choose it again" (`StepIdentity.vue:37`); computed in the browser (`AddSpacecraftScreen.vue:37`) | console for the SCID; spec for inline edit (ux ruled, §10) | 3 |
 | S10 | Step 03 is a transports checklist; after commit, `?created=`; checks come from `batch:validate`. | Built differently and deliberately: a summary of the profile's rules; Changes; browser checks plus the server's dry run | spec | 4 |
 
 **B. No spec covers it** (the Spacecraft directory and detail have no spec of their own)
@@ -130,8 +130,8 @@ These have the same cause on several screens, so each is one item, fixed once.
 | # | Spec | Console | Side | Rank |
 |---|---|---|---|---|
 | R1 | Option words, never enum values. | `RecentChangeRow.vue:21` shows the raw kind (X3) | console | 1 |
-| R2 | R2 is left out when there's no feed. | `RecentChangesPanel.vue:27` "Recent changes couldn't be read" | ux to rule (it's honest, and U86 favours saying so) | 3 |
-| R3 | The fix action is `Edit rule`, etc. | `present.ts:123` "Open routing" | ux to rule | 4 |
+| R2 | R2 is left out when there's no feed. | `RecentChangesPanel.vue:27` "Recent changes couldn't be read" | both, by cause (ux ruled, §10) | 3 |
+| R3 | The fix action is `Edit rule`, etc. | `present.ts:123` "Open routing" | console (ux ruled, §10) | 4 |
 | R4 | Only Optional titles carry a prefix; R2's meta is `AUDIT LOG →`. | Every title is prefixed ("Blocker · …"); "All revisions →" | spec | 4 |
 
 **B. No spec covers it:** "Readiness not available"; "Readiness checks not available yet" with `Check again`;
@@ -146,13 +146,13 @@ planning", "Open changes", "Open app" and Install on optional findings (`present
 |---|---|---|---|---|
 | K1 | **Four-eyes** (§3, designers §4): the reviewer differs from every author, and a stager never sees an Approve they can't use. | `ChangeSetBoard.vue:29-30` shows the review panel to anyone with `config.review`, authors included. The server refuses ("You staged part of this set, so you can't approve it…", `actions.ts:114`), so it's safe, but the person sees an Approve that can't work. | console ✕ | 1 |
 | K2 | "Any NO-GO disables Apply with the reason"; without the apply capability, say who can apply. | `ApplyAside.vue:75` "A NO-GO check blocks apply. Fix it first." (no reason); `:70` "You can stage changes but not apply them." (no who) | console ✕ | 1 |
-| K3 | Refusals open with the act ("Not applied:", U63, U65). | `actions.ts:272` "Nothing was applied. …" (U20's older "Nothing was staged." form) | ux to rule ✕ | 1 |
+| K3 | Refusals open with the act ("Not applied:", U63, U65). | `actions.ts:272` "Nothing was applied. …" (U20's older "Nothing was staged." form) | console ✕ (ux ruled, §10) | 1 |
 | K4 | U93: "r1 is saved · 2 changes…" in the nominal tone. | `nothingRunning.ts:13` "r1 is saved, 2 changes." in info (`ChangesOutcome.vue:36`) | console | 4 |
 | K5 | §3 hold checkbox "I've read the 2 holds"; outcome action `View r6`. | "I've read the holds" (`ApplyAside.vue:122`); `View revisions` goes to the list (`ChangesOutcome.vue:59`) | console ✕ | 3 |
 | K6 | §2 bar states: a conflict ("1 change conflicts with r6" / `Review conflicts`), awaiting review, and no apply capability (`Review changes`). | `StagedBarView.vue:47-61` has only "r6 in review · staging is paused" + `Open review` | console ✕ | 3 |
 | K7 | §3 expanded row shows the diff (`path − old + new`, the per-spacecraft effect). | The raw op line (X3) | console ✕ | 3 |
 | K8 | §4 kind tag `Rollback of r5` only when it applies. | Always a kind: `Rollback to r4` / `Baseline` / `Change set` / "Legacy activation" (X2) | console ✕ | 4 |
-| K9 | §3 K2 checks are Conflicts · Readiness · In flight · Compatibility; K3 tiles are "Changes · SC · Routes" plus a readiness line; only Send back needs a comment; K1 `×` "Withdraw from r6". | Validation · Conflicts · Compatibility; `Changes` / `Authors` tiles; Approve also needs a comment ("Add a comment first. It's recorded with your decision."); the word `Withdraw` | ux to rule ✕ | 3 |
+| K9 | §3 K2 checks are Conflicts · Readiness · In flight · Compatibility; K3 tiles are "Changes · SC · Routes" plus a readiness line; only Send back needs a comment; K1 `×` "Withdraw from r6". | Validation · Conflicts · Compatibility; `Changes` / `Authors` tiles; Approve also needs a comment ("Add a comment first. It's recorded with your decision."); the word `Withdraw` | console mostly ✕ (ux ruled, §10) | 3 |
 | K10 | §2 bar `Discard all`; §3 K2 conflicts `Rebase` / `Remove`; §4 header; §6 v1 seam; §3's U38 reason words. | Deliberately changed: no Discard all (K1's header is the only discard); `Keep 1,115` / `Take 1,200`; U89's header; the seam is gone; U91 | spec ✕ | 4 |
 
 **B. No spec covers it:** the outcomes ("N spacecraft staged. They're created when this change set is applied as r6.",
@@ -169,7 +169,7 @@ state; Compare's "Nothing differs"; the older-format revision header.
 
 | # | Spec or U-entry | Console | Side | Rank |
 |---|---|---|---|---|
-| V1 | **U94's approve refusals**, `activation_self_approval_forbidden` (requester / author by `details.rule`) and `activation_approver_authored_content`; U95's "Your approval wasn't recorded."; U100's `via_service` and `…_authors_unknown`; the up-front `cannot_approve_because`. | None are in the console. Only the old `self_approval_forbidden`, "You requested this. Someone else approves it." (`api.ts:319-320`). `approveRefusal.ts:132` handles 409s only. | console ✕ | 1 |
+| V1 | **U94's approve refusals**, `activation_self_approval_forbidden` and `activation_approver_authored_content` (as amended by #292); U95's "Your approval wasn't recorded."; U100's `via_service` and `…_authors_unknown`; the up-front `cannot_approve_because`. | None are in the console. Only the old `self_approval_forbidden`, "You requested this. Someone else approves it." (`api.ts:319-320`). `approveRefusal.ts:132` handles 409s only. | lands with the #236, #240, #275 and #280 builds (none on develop yet), not a console bug today (ca-ux). Check it when they land. ✕ | 1 |
 | V2 | U20, U94: `needs_review` is "approved, but Cadence couldn't confirm it was applied yet". | `api.ts:163-166` "Approved, but it didn't apply. …"; "Approved and applied." for any result that isn't a failure (`:168`) | console ✕ | 1 |
 | V3 | U94: a decided request shows the muted line "What changes is shown only while a request waits…" with `Open configuration`. | `ActivationScreen.vue:79` hides the panel with no line | console ✕ | 3 |
 | V4 | U41, U65: decisions read "by X at 11-13 02:20Z". | `api.ts:303` "Approved by X on 11-13 02:20Z" | console ✕ | 4 |
@@ -186,7 +186,7 @@ was requested. Reject it, …".
 |---|---|---|---|---|
 | A1 | Not installed offers `Install` to admins only. | Everyone gets an `Install in Apps` link (`AppSurfaceNotice.vue:21`) | console | 3 |
 | A2 | The spacecraft breadcrumb names the craft. | The raw id (X1, `AppSurfaceScreen.vue:129`) | console | 1 |
-| A3 | Only the caution line "Waiting for activation approval…". | Also a nominal "Activation requested. It applies once it's approved." (`saveOutcome.ts:30`) | ux to rule | 4 |
+| A3 | Only the caution line "Waiting for activation approval…". | Also a nominal "Activation requested. It applies once it's approved." (`saveOutcome.ts:30`) | console (ux ruled, §10) | 4 |
 
 **B. No spec covers it:** "N of M installed"; "This app or page doesn't exist on Earendil." and "… has no pages to
 set up here."; "Leave this page? Changes you haven't saved here will be lost."; "This page lost its connection to the
@@ -194,8 +194,26 @@ app…" (`hostBridge.ts:17-21`).
 
 ## 9. What happens next
 
-- **fe-setup:** turns the console items into board items. Rank 1 first. K1, K2 and V1–V2 are cross-squad: copy ca-ux,
-  and for Activations, the Commanding & Approvals owner.
-- **ux:** rules the "ux to rule" batch: C10–C12, P7, S1 (placement), S9, R2–R3, K3, K9, A3.
+- **fe-setup:** turns the console items into board items. Rank 1 first. K1, K2 and V2 are cross-squad: copy ca-ux,
+  and for Activations, the Commanding & Approvals owner. V1 isn't a new item: it lands with #236, #240, #275 and
+  #280.
+- **ux:** ruled the batch on 11-19 (§10). Those fixes go to fe-setup with the other console items.
+- **ca-ux:** writes §7's "no spec covers it" words as a U94 amendment.
 - **mms-ux:** spec items become small docs PRs per spec, and the "no spec covers it" lists are written into each
   spec. Catalog is first, since its U-entries are freshest.
+
+## 10. ux's rulings on the batch (11-19)
+
+| # | Ruling |
+|---|---|
+| C10 | The spec's mono line `PARSING · 1.8 MB · 00:04` with live progress, not a callout (callouts are for messages). "This page updates when it finishes." stays as a `text-3` line under it. |
+| C11 | Per-kind tiles when the read carries per-kind counts; the single Declarations tile only when it doesn't (U20). Unchanged reads "of 547 declarations" (U23 unit). If the read never has per-kind counts, the console is right and the spec changes. |
+| C12 | A decided panel uses U90's short form. |
+| P7 | A `DISABLED` tag (off, mark + word), with the console's sentence kept as the row's secondary line. Limits links to the Limits app by name. Protocols reads `CCSDS TM / TC` (no arrows). |
+| S1 | Switches are staged on the Operation panel (U40; U94's workspace says Open Operation, where they're staged). The Edit form's switch path goes, or links to the panel. The consequence sheet and `STAGED · APPLIES WITH r7` are console gaps. |
+| S9 | The next free SCID comes from the server (a browser guess can collide, U20). Inline manifest edit is later: the console's "fix them in the file and choose it again" stands, and the spec says so. |
+| R2 | By cause. With no feed by design, R2 is left out (spec): "couldn't be read" would be untrue. With a feed whose read failed, the console's line (U86). |
+| R3 | The action names what it opens: `Edit rule <name>` when the finding has one rule to deep-link, else `Open routing`. |
+| K3 | "Not applied:" opens it (U63, U65); "Nothing was applied." is the old form. |
+| K9 | Checks: the console lists the checks the server runs. If the server runs Readiness or In flight checks the console doesn't show, that's a console gap; otherwise the spec changes. Tiles: the spec's Changes · SC · Routes plus the readiness line, with Authors moved to a meta line (four-eyes needs it, not a tile). Comment: optional on Approve, required only for Send back; if the server requires one on approve, that's an api item. Withdraw: the `×` stays as the visual, with the accessible name and tooltip "Withdraw <change> from r6" (B7). |
+| A3 | One line. Drop the nominal "Activation requested…"; the caution "Waiting for activation approval…" is the save's outcome, announced as status (B6). |
