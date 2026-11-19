@@ -80,6 +80,11 @@ describe("#233 limits, read from allowed_values and can_inherit (ux U96)", () =>
       unread,
     ]);
   });
+  it("the approval setting with allowed_values null fails closed the same way (ca-security C1)", () => {
+    const f = approval({ allowed_values: null }, "independent");
+    expect([readOnly(f), canInherit(f), disabledValues([f])]).toEqual([true, false, {}]);
+    expect(readOnlyHint(f)).toMatch(/^Cadence couldn't read who may change this setting/);
+  });
   it("a mission admin may only tighten: Applies without approval is shown disabled", () => {
     const f = approval({ allowed_values: ["independent"], can_inherit: true });
     expect(disabledValues([f])).toEqual({ approval_requirement: ["direct"] });

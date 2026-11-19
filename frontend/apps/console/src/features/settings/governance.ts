@@ -16,11 +16,12 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 const optionText = (v: unknown) => (typeof v === "string" ? v : JSON.stringify(v));
 
 /**
- * The approval setting's allowed_values is missing from the read (#233 always sends it), so the
+ * The approval setting's allowed_values is missing or null in the read (#233 always sends it), so the
  * console can't tell what this viewer may choose. ca-security C1: it fails closed (read-only, no
  * Reset to inherited) rather than offer 'direct'. Presentation only; the server still refuses.
  */
-const limitsUnread = (f: SettingsField) => isApproval(f) && f.allowed_values === undefined;
+const limitsUnread = (f: SettingsField) =>
+  isApproval(f) && (f.allowed_values === undefined || f.allowed_values === null);
 
 /** ux U96 (U86): what the console can't read, with its way out; for the approval setting with its limits missing. */
 const UNREAD_LINE =
