@@ -32,6 +32,9 @@ defmodule CadenceWeb.Console.ContactPlanSubmitTest do
   defp submit(c, user, plan_id, body),
     do: user |> TestFixtures.member_conn() |> post("#{c.base}/#{plan_id}/submit", body)
 
+  defp approve(c, user, plan_id, body),
+    do: user |> TestFixtures.member_conn() |> post("#{c.base}/#{plan_id}/approve", body)
+
   test "a member's submit asks for approval and replays by operation id", c do
     fixture =
       ContactPlanningFixtures.plan_fixture(c.org, c.member, c.member_membership, c.mission)
@@ -47,8 +50,12 @@ defmodule CadenceWeb.Console.ContactPlanSubmitTest do
              "outcome" => "pending_approval"
            } = first
 
+    assert %{"version" => 1, "replayed" => false} = first
+
+    # #257: the same request again gets the original answer, flagged.
     replay = json_response(submit(c, c.member, plan_id, body), 200)["data"]
-    assert %{"state" => "pending_approval", "outcome" => "replayed"} = replay
+    assert Map.delete(replay, "replayed") == Map.delete(first, "replayed")
+    assert replay["replayed"] == true
   end
 
   test "under 'independent' approval an admin's own submit waits for a second approver", c do
@@ -61,15 +68,26 @@ defmodule CadenceWeb.Console.ContactPlanSubmitTest do
              json_response(conn, 200)["data"]
   end
 
-  test "under 'direct' approval an admin's submit approves and executes off the request", c do
+  test "under 'direct' an admin's submit only submits; their own approve executes off the request",
+       c do
     approve_directly!(c)
     fixture = ContactPlanningFixtures.plan_fixture(c.org, c.admin, c.admin_membership, c.mission)
     plan_id = fixture.plan.contact_plan_id
     :ok = SchedulingRunner.subscribe(c.mission.mission_id)
 
+    # #257 (breaking under 'direct'): submit no longer approves.
     conn = submit(c, c.admin, plan_id, %{"expected_version" => 1, "operation_id" => "op-admin"})
+    assert %{"state" => "pending_approval"} = json_response(conn, 200)["data"]
 
-    assert %{"state" => "executing", "outcome" => "executing"} = json_response(conn, 202)["data"]
+    assert [] =
+             Cadence.ContactPlanning.ContactPlanApprovals.list(
+               c.org.organization_id,
+               c.mission.mission_id,
+               plan_id
+             )
+
+    conn = approve(c, c.admin, plan_id, %{"expected_version" => 1, "operation_id" => "op-ok"})
+    assert %{"state" => "executing", "outcome" => "approved"} = json_response(conn, 202)["data"]
     assert_receive {:scheduling_progress, %{kind: :execute, id: ^plan_id, state: :running}}, 5_000
     # The fixture route isn't bookable, so execution ends failed, but off the request.
     assert_receive {:scheduling_progress, %{kind: :execute, id: ^plan_id, state: final}}, 30_000
@@ -92,7 +110,11 @@ defmodule CadenceWeb.Console.ContactPlanSubmitTest do
     plan_id = fixture.plan.contact_plan_id
     requirement_id = fixture.requirement.contact_requirement_id
 
+    # Submitting doesn't check coverage; approving does (#257: submit only submits).
     conn = submit(c, c.admin, plan_id, %{"expected_version" => 1, "operation_id" => "op-gap"})
+    assert json_response(conn, 200)
+
+    conn = approve(c, c.admin, plan_id, %{"expected_version" => 1, "operation_id" => "op-gap-a"})
     error = json_response(conn, 422)["error"]
 
     # An empty plan is never approvable (only gaps can be acknowledged), so this stays not ready.
@@ -102,7 +124,7 @@ defmodule CadenceWeb.Console.ContactPlanSubmitTest do
     acks = [%{"requirement_id" => requirement_id, "reason" => "Accept the gap this pass"}]
 
     conn =
-      submit(c, c.admin, plan_id, %{
+      approve(c, c.admin, plan_id, %{
         "expected_version" => 1,
         "operation_id" => "op-gap-2",
         "acknowledgements" => acks

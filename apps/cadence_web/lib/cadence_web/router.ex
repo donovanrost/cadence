@@ -1151,6 +1151,7 @@ defmodule CadenceWeb.Router do
       post("/contact-plans/:plan_id/versions", ContactPlanController, :edit)
       get("/contact-plans/:plan_id/alternatives", ContactPlanController, :alternatives)
       post("/contact-plans/:plan_id/submit", ContactPlanController, :submit)
+      post("/contact-plans/:plan_id/approve", ContactPlanReviewController, :approve)
       post("/contact-plans/:plan_id/reject", ContactPlanReviewController, :reject)
       get("/contact-planning/policy", ContactPlanningController, :policy)
       post("/contact-planning/policy", ContactPlanningController, :save_policy)

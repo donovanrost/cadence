@@ -92,19 +92,25 @@ defmodule CadenceWeb.Console.ContactPlanNotesTest do
     end
   end
 
-  # Under 'direct' approval an admin's submit approves (and executes off the request; P2: under
-  # 'independent', the default, it would wait for a second approver); the execution's end is
-  # awaited so nothing outlives the test.
+  # Under 'direct' approval an admin may approve their own submit (#257: submit, then approve,
+  # which executes off the request); the execution's end is awaited so nothing outlives the test.
   defp approve(c, extra) do
     ContactPlanningFixtures.approve_directly!(c.org, c.admin, c.admin_membership, c.mission)
     fixture = ContactPlanningFixtures.plan_fixture(c.org, c.admin, c.admin_membership, c.mission)
     plan_id = fixture.plan.contact_plan_id
     :ok = SchedulingRunner.subscribe(c.mission.mission_id)
 
-    body = Map.merge(%{"expected_version" => 1, "operation_id" => "op-#{plan_id}"}, extra)
+    submit_body = %{"expected_version" => 1, "operation_id" => "op-#{plan_id}"}
+    assert c |> submit(c.admin, plan_id, submit_body) |> json_response(200)
 
-    assert %{"state" => "executing"} =
-             c |> submit(c.admin, plan_id, body) |> json_response(202) |> Map.fetch!("data")
+    body = Map.merge(%{"expected_version" => 1, "operation_id" => "op-approve-#{plan_id}"}, extra)
+
+    assert %{"state" => "executing", "outcome" => "approved"} =
+             c.admin
+             |> TestFixtures.member_conn()
+             |> post("#{c.base}/#{plan_id}/approve", body)
+             |> json_response(202)
+             |> Map.fetch!("data")
 
     assert_receive {:scheduling_progress, %{kind: :execute, id: ^plan_id, state: final}}
                    when final in [:finished, :failed],

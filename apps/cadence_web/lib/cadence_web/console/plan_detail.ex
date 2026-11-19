@@ -27,7 +27,15 @@ defmodule CadenceWeb.Console.PlanDetail do
       :repair,
       PlanRepairHeader.for_plan(org_id(conn), mission_id(conn), plan.id, DateTime.utc_now())
     )
+    |> Map.put(:approval_setting, approval_setting(conn))
   end
+
+  @doc """
+  #257: the mission's approval setting at read time, `"direct"` or `"independent"`, on the plan
+  detail and the plans list rows, so the console offers the right act.
+  """
+  @spec approval_setting(Plug.Conn.t()) :: binary()
+  def approval_setting(conn), do: Scheduling.approval_setting(org_id(conn), mission_id(conn))
 
   # K1 8e: passes[].booking, null for a pass the approved version doesn't book (or before approval).
   defp with_bookings(%{passes: passes} = plan, bookings) when is_list(passes),
