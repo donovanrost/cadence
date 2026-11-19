@@ -3380,11 +3380,13 @@ groups, provider changes, qualification cases (no service authors them).
   - `{id, name}` (a service whose accountable people aren't recorded; under an automation grant it can be the approving
     service): "Not approved: Nightly planner has no one recorded as accountable for it, so this can't be approved yet.
     Your approval wasn't recorded. An org admin records who's accountable in People › Service identities."
-  - null (no service involved), or absent (an older server): the kind's own authors-unknown line: U94's for activations ("Not approved: Cadence can't tell who
+  - null (no service involved), or absent (an older server): the kind's own authors-unknown line (in #280 only
+    activations can send null, via #236; the others are kept for safety and won't show today): U94's for activations ("Not approved: Cadence can't tell who
     saved this configuration…"). Kinds that had none get the same form: "Not approved: Cadence can't tell who made
     this plan, so it can't check that you weren't one of them. Your approval wasn't recorded. Send it back so it can
     be submitted again; if it keeps happening, tell the team that runs Cadence for you." (revision: "who imported this
-    revision" … "Reject it so it can be imported again"; command request: "who sent this command request" … "Reject
+    revision" … "Reject it; a corrected catalog imported again becomes a new revision." since re-importing the same
+    file returns the same revision (mms-ux's #119 entry); command request: "who sent this command request" … "Reject
     it so it can be sent again").
   - REST command requests carry no details (that envelope has none): the server's message, still a refusal.
   - Up front (the approval read's `cannot_decide` `authors_unknown`, with `service` when known): Approve is disabled
