@@ -10,7 +10,8 @@ import { abortGroup, type Group } from "../groups/show.ts";
  * started ones keep running. Reason required, audited. U20 outcomes.
  */
 const props = defineProps<{ group: Group }>();
-const emit = defineEmits<{ done: [] }>();
+/** `done` carries the result's words: the panel goes once the group can't abort, so the view says it. */
+const emit = defineEmits<{ done: [result: string] }>();
 const scope = useMissionScope();
 /**
  * The kit's in-place confirm (design-language §7, fe-ops' OK): it opens on 'Why abort' (the
@@ -20,7 +21,7 @@ const scope = useMissionScope();
 const open = ref(false);
 const reason = ref("");
 const busy = ref(false);
-/** `failed` (a11y B6, ux #414): refused or unclear is an alert; aborted a status. */
+/** `failed` (a11y B6, ux #414): refused or unclear, always an alert here (aborted goes up). */
 const outcome = shallowRef<{
   tone: "crit" | "caution" | "nominal";
   text: string;
@@ -34,13 +35,12 @@ async function run() {
     const r = await abortGroup(scope.value.mission.id, props.group.id, reason.value.trim());
     if (r.status === "done") {
       const res = r.value.events.find((e) => e.kind === "aborted")?.payload;
-      outcome.value = {
-        tone: "nominal",
-        failed: false,
-        text: `Aborted: ${res?.canceled ?? 0} canceled, ${res?.already_started?.length ?? 0} already started and still running.`,
-      };
       open.value = false;
-      emit("done");
+      // a11y B6/A5 (#243, ux #425): said by UplinkView's status line, which outlives this panel.
+      emit(
+        "done",
+        `Aborted: ${res?.canceled ?? 0} canceled, ${res?.already_started?.length ?? 0} already started and still running.`,
+      );
     } else if (r.status === "rejected")
       outcome.value = {
         tone: "crit",

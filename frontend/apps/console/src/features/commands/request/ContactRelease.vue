@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
-import { computed, ref } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { plural, useNow, ApButton, ApCallout, ApTag } from "@/ui";
 import ConfirmDialog from "../compose/ConfirmDialog.vue";
 import { fetchGroups } from "../groups/api.ts";
@@ -58,6 +58,24 @@ const busy = ref(false);
 const lines = ref<readonly string[]>([]);
 /** a11y B6 (#243): all released is a status; any refused or failed request makes it an alert. */
 const linesFailed = ref(false);
+/**
+ * a11y B6/A5 (#243, ca-ux, ux B4): the result stays after the callout goes (a clean release empties
+ * armed on the refetch). Focus follows to it only if it was in the callout when it went (the
+ * Release button, after the confirm); a partial release keeps the callout, so focus stays.
+ */
+const shown = computed(() => contact.value !== null && armed.value.length > 0);
+const calloutEl = ref<HTMLElement | null>(null);
+const statusEl = ref<HTMLElement | null>(null);
+const alertEl = ref<HTMLElement | null>(null);
+watch(
+  shown,
+  async (now, was) => {
+    if (now || !was || !calloutEl.value?.contains(document.activeElement)) return;
+    await nextTick();
+    (linesFailed.value ? alertEl.value : statusEl.value)?.focus();
+  },
+  { flush: "pre" },
+);
 async function release() {
   const c = contact.value;
   if (!c || busy.value || !(await dialog.value?.ask())) return;
@@ -95,33 +113,37 @@ async function release() {
 </script>
 
 <template>
-  <ApCallout v-if="contact && armed.length" tone="caution">
-    <span class="flex flex-wrap items-center gap-2">
-      <ApTag state="caution" label="Not a booked pass" />
-      <span>
-        Armed commands don't go to this contact on their own. Release them here only if you mean to.
+  <div v-if="shown" ref="calloutEl">
+    <ApCallout tone="caution">
+      <span class="flex flex-wrap items-center gap-2">
+        <ApTag state="caution" label="Not a booked pass" />
+        <span>
+          Armed commands don't go to this contact on their own. Release them here only if you mean
+          to.
+        </span>
       </span>
-    </span>
-    <p v-if="!canRelease" class="m-0 text-sm text-text-3">{{ NO_ACCESS_RELEASE }}</p>
-    <p v-if="busy" class="m-0 text-sm text-text-2">Releasing…</p>
-    <!-- a11y B6 (#243, ca-ux): two regions that are always there, so the role never changes
-         with the content: all released is a status, anything else an alert. -->
-    <div role="status" class="flex flex-col">
-      <template v-if="!linesFailed">
-        <p v-for="(line, i) in lines" :key="i" class="m-0 text-sm text-text-2">{{ line }}</p>
+      <p v-if="!canRelease" class="m-0 text-sm text-text-3">{{ NO_ACCESS_RELEASE }}</p>
+      <p v-if="busy" class="m-0 text-sm text-text-2">Releasing…</p>
+      <template v-if="canRelease" #action>
+        <ApButton size="compact" :disabled="busy" disabled-reason="Releasing…" @click="release"
+          >Release commands…</ApButton
+        >
       </template>
-    </div>
-    <div role="alert" class="flex flex-col">
-      <template v-if="linesFailed">
-        <p v-for="(line, i) in lines" :key="i" class="m-0 text-sm text-text-2">{{ line }}</p>
-      </template>
-    </div>
-    <template v-if="canRelease" #action>
-      <ApButton size="compact" :disabled="busy" disabled-reason="Releasing…" @click="release"
-        >Release commands…</ApButton
-      >
+    </ApCallout>
+  </div>
+  <!-- a11y B6 (#243, ca-ux): two regions that are always there (outside the callout, which goes
+       once nothing is armed), so the role never changes with the content and the last result
+       stays until the next release: all released is a status, anything else an alert. -->
+  <div ref="statusEl" role="status" tabindex="-1" class="flex flex-col outline-none">
+    <template v-if="!linesFailed">
+      <p v-for="(line, i) in lines" :key="i" class="m-0 text-sm text-text-2">{{ line }}</p>
     </template>
-  </ApCallout>
+  </div>
+  <div ref="alertEl" role="alert" tabindex="-1" class="flex flex-col outline-none">
+    <template v-if="linesFailed">
+      <p v-for="(line, i) in lines" :key="i" class="m-0 text-sm text-text-2">{{ line }}</p>
+    </template>
+  </div>
   <ConfirmDialog
     ref="dialog"
     question="Release into a contact that isn't a booked pass?"
