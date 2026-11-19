@@ -48,4 +48,22 @@ defmodule CadenceWeb.Activations.ApproveOutcomeTest do
     assert log =~ "activation request request-3: approved, but its apply didn't run: apply broke"
     refute log =~ "secret-row"
   end
+
+  test "an apply that exits or throws needs review, the cause logged" do
+    log =
+      capture_log(fn ->
+        assert {nil, "needs_review"} =
+                 ApproveOutcome.after_approval(:approved, "request-4", fn _ ->
+                   exit({:timeout, {GenServer, :call, [:pool]}})
+                 end)
+
+        assert {nil, "needs_review"} =
+                 ApproveOutcome.after_approval(:approved, "request-5", fn _ -> throw(:stop) end)
+      end)
+
+    assert log =~
+             "activation request request-4: approved, but its apply didn't run: exit: {:timeout"
+
+    assert log =~ "activation request request-5: approved, but its apply didn't run: throw: :stop"
+  end
 end

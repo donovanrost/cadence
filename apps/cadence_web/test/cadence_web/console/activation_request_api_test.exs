@@ -2,9 +2,12 @@ defmodule CadenceWeb.Console.ActivationRequestAPITest do
   @moduledoc "§11 L10: console activation approvals (list, show, approve, reject, resume)."
   use CadenceWeb.ConnCase, async: false
 
+  import ExUnit.CaptureLog
+
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Auth.Scope
   alias Cadence.Catalog.MissionModel.Layer
+  alias Cadence.Control.ActivationRequests
   alias Cadence.Management.Activations
   alias CadenceWeb.TestFixtures
 
@@ -201,6 +204,28 @@ defmodule CadenceWeb.Console.ActivationRequestAPITest do
 
   defp get_conn(user, path), do: user |> TestFixtures.member_conn() |> get(path)
   defp post_conn(user, path, body), do: user |> TestFixtures.member_conn() |> post(path, body)
+
+  # #263 (ca-security, api-ops): an apply that exits after the approval commits (a pool or
+  # GenServer timeout) reads needs_review, never a 500 for a recorded approval; the cause is logged.
+  test "an apply that exits after the approval is recorded reads needs_review", c do
+    id = applicable_request(c).activation_request_id
+    approver = %{c.scope | user: c.approver}
+
+    log =
+      capture_log(fn ->
+        assert {:ok, %{outcome: "needs_review"}} =
+                 ActivationRequests.approve(
+                   approver,
+                   c.mission.mission_id,
+                   id,
+                   %{"reason" => "Reviewed exact basis"},
+                   execute: fn _approved -> exit({:timeout, {GenServer, :call, [:pool]}}) end
+                 )
+      end)
+
+    assert log =~ "activation request #{id}: approved, but its apply didn't finish: exit:"
+    assert {:ok, %{state: :approved}} = Activations.fetch(approver, id)
+  end
 
   defp applicable_request(c) do
     binding =

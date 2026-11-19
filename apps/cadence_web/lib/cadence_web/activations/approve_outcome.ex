@@ -34,10 +34,15 @@ defmodule CadenceWeb.Activations.ApproveOutcome do
     end
   end
 
+  # An exit (a pool or GenServer timeout, noproc, a linked exit) or a throw is caught too: the
+  # approval is committed, so nothing after it may fail the answer (ca-security, api-ops).
   defp run(execute, approved) do
     execute.(approved)
   rescue
     exception -> {:error, Exception.message(exception)}
+  catch
+    :exit, reason -> {:error, "exit: " <> inspect(reason)}
+    :throw, value -> {:error, "throw: " <> inspect(value)}
   end
 
   # The cause's first line only: a database error's later lines can carry row values.
