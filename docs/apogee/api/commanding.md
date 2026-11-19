@@ -666,12 +666,12 @@ used to succeed is now refused.
 The `message` is ux U87's words: "This command is part of a command group. Approve it with the
 group's GO/NO-GO.", "A command joins a command group only when the group is submitted." and
 "This command's group hasn't been given its GO, so it can't be sent." Membership is read from the
-server's group records, never from a caller's metadata.
+server's group records, never from a caller's metadata. Requests outside any group are unchanged. The console's named release already refused an unarmed group (`command_group_not_armed`
+under `refused`, in the release section above).
 
 **Service requesters (#280, ux U100).** A request made through a service identity counts as made by
 the people accountable for it (its issuer and rotators, and anyone an org admin records). Approving
 it as one of them is refused with the same reason as approving your own,
-`command_request_self_approval_not_allowed`. Before, a service requester has no `user_id`, so
+`command_request_self_approval_not_allowed`. Before, a service requester had no `user_id`, so
 that check passed. This REST envelope carries no `details`, so the service isn't named here; the
-console's refusals name it (`details.via_service`). Requests outside any group are unchanged. The console's named release already refused an unarmed group (`command_group_not_armed`
-under `refused`, in the release section above).
+console's refusals name it (`details.via_service`).

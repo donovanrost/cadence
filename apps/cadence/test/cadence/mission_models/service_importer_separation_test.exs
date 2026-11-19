@@ -15,7 +15,7 @@ defmodule Cadence.MissionModels.ServiceImporterSeparationTest do
   alias Cadence.Auth.{Scope, ServiceAccountableRow, ServiceIdentity}
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.MissionModels
-  alias Cadence.MissionModels.Comparison
+  alias Cadence.MissionModels.{Comparison, RevisionRow}
   alias Cadence.Reads.MissionModelApprovals
 
   setup do
@@ -69,6 +69,9 @@ defmodule Cadence.MissionModels.ServiceImporterSeparationTest do
             }} = MissionModelApprovals.read(c.issuer, c.mid, c.model)
 
     assert {:ok, %{status: :approved}} = approve(scope(c.organization, "admin-c"), c, report)
+
+    # A service import is still a recorded importer (mms-engineer's review of #435).
+    assert Repo.get!(RevisionRow, c.model).approved_by["value"]["importer_recorded"] == true
   end
 
   test "with nobody on record for the service, nobody can approve it", c do

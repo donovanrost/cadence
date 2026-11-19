@@ -47,25 +47,29 @@ defmodule Cadence.MissionModels.RevisionDecisions do
   approval itself runs, so the approval read and C3 (#119) call it rather than repeat it, and
   #280's service accountability changes it in this one place.
 
-  `{:ok, %{policy, importers}}` returns the policy in force and the recorded importers, which
-  approval writes into its evidence. Under 'independent' an importer gets `{:refused, refusal}`.
+  `{:ok, %{policy, importers, recorded}}` returns the policy in force, the recorded importers
+  (people), and whether any importer is on record at all, a service included (#280), which
+  approval writes into its evidence as `importer_recorded`. Under 'independent' an importer gets `{:refused, refusal}`.
   Authorization, status and plan readiness are separate checks.
   """
   @spec separation(binary(), binary(), binary(), binary() | nil) ::
-          {:ok, %{policy: map(), importers: [binary()]}} | {:refused, refusal()}
+          {:ok, %{policy: map(), importers: [binary()], recorded: boolean()}}
+          | {:refused, refusal()}
   def separation(organization_id, mission_id, revision_id, person_id)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(revision_id) do
     policy = ActivationPolicy.evidence(organization_id, mission_id)
     importers = Catalog.model_importers(organization_id, mission_id, revision_id)
+    # #280: importers as actors, services included (mms-engineer's review: a service import is
+    # still a recorded importer).
+    actors = Catalog.model_import_actors(organization_id, mission_id, revision_id)
+    checked = %{policy: policy, importers: importers, recorded: actors != []}
 
     if policy["separation_of_duties"] == true do
-      # #280: every importer counts as people: a service importer is its issuer and rotators
+      # Every importer counts as people: a service importer is its issuer and rotators
       # (`Governance.Accountability`), and a service nobody is accountable for refuses everyone.
-      actors = Catalog.model_import_actors(organization_id, mission_id, revision_id)
-
       case separate(organization_id, person_id, actors) do
         :ok ->
-          {:ok, %{policy: policy, importers: importers}}
+          {:ok, checked}
 
         {:error, {:self, via}} ->
           {:refused, %{reason: :self, via_service: via, service: nil}}
@@ -74,7 +78,7 @@ defmodule Cadence.MissionModels.RevisionDecisions do
           {:refused, %{reason: :authors_unknown, via_service: nil, service: svc}}
       end
     else
-      {:ok, %{policy: policy, importers: importers}}
+      {:ok, checked}
     end
   end
 
@@ -112,14 +116,14 @@ defmodule Cadence.MissionModels.RevisionDecisions do
          :ok <- require_ready_plans(organization_id, mission_id, revision_id),
          {:ok, comparison} <- Comparison.fetch(organization_id, mission_id, comparison_report_id),
          :ok <- passed_for(comparison, revision_id),
-         {:ok, %{policy: policy, importers: importers}} <- independent(row, actor) do
+         {:ok, %{policy: policy, recorded: recorded}} <- independent(row, actor) do
       evidence =
         Map.merge(actor, %{
           # The approval policy in force at decision time (M2, director 11-18).
           "policy" => policy,
           "comparison_report_id" => comparison_report_id,
           "replay" => get_in(comparison, ["replay", "status"]),
-          "importer_recorded" => importers != [],
+          "importer_recorded" => recorded,
           # Approved after it already ran (the pre-gate revisions, lead 11-15): the caller says so
           # (ModelApprovalGate.running?/3), and the audit tells it.
           "retroactive" => Keyword.get(opts, :retroactive, false) == true
