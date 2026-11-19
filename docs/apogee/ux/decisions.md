@@ -4134,8 +4134,8 @@ in use) still hold. Domain's answers on #438 (11-19) settled the model points.
     14:02Z). Change them in that staged change, or ask whoever staged them to withdraw it."
   - **A point in a set under review** (the one block review leaves, domain #438 2): disabled the same way with
     "BATT_V's limits are in a change set under review (staged by Mira K. at 14:02Z). You can change them once it's
-    applied or sent back." The refusal opens "Not staged:" or "Not applied:". Only that point is blocked; every
-    other point stays editable.
+    applied or sent back." Without a name: "(staged at 14:02Z)". The refusal opens "Not staged:" or "Not
+    applied:". Only that point is blocked; every other point stays editable.
   - With you as the stager, the editor opens your staged values instead, so neither shows to you.
 - **Apply now, when monitoring changes apply without approval (U64 2).** The editor's primary is `Apply now`. It
   makes a one-change set from your edit and applies it at once; others' staged monitoring changes stay staged,
@@ -4165,12 +4165,18 @@ in use) still hold. Domain's answers on #438 (11-19) settled the model points.
   - **Review page:** `M/setup/changes` (Configuration) and `M/setup/changes/monitoring`. A tab pair at the top
     reads `Configuration · 2` / `Monitoring · 1`. The page and its h1 name the lane: "Apply monitoring changes · 1
     change". Sets of that lane in review are listed above the open set, one line each: "In review · 3 changes ·
-    sent by Mira K. at 14:02Z" plus `Open review`.
+    sent for review by Mira K. at 14:02Z" (no name: "sent for review at 14:02Z") plus `Open review`.
   - **Review no longer pauses staging.** Sending a set for review leaves its lane open, and new edits start the
     lane's next set. The uniqueness is (mission, lane) over open sets only, so this holds for Configuration too:
     Changes.md §2's *In review* state ("r6 in review · staging is paused") becomes "1 set in review" with
     `Open review`. frozen_in_review then fires only for a point in a set under review, with the words above. Stage
     points elsewhere aren't disabled for review any more.
+  - **Built configuration-lane screens this touches** (mms-ux; fe-setup cards them, words as above):
+    - the staged bar's in-review state (Changes.md §2, `StagedBarView`, "r6 in review · staging is paused");
+    - the frozen_in_review refusal, now only for a point in a set under review;
+    - every Stage disabled up front while a set is in review: the switches, C3, the profile editors, KindEditor;
+    - U79's conversion batch, which wants its set alone. **[domain]** Does conversion_in_progress still hold
+      while a conversion set is in review?
 - **Checks (K2) on the monitoring lane.**
   - **Compiles** ("Every limit, derived point and alarm rule compiles against the live model"): NO-GO. Each
     failure names the definition, then what it refers to. Dangling reference: "BATT_HEALTH uses BATT_SOC_PCT,
@@ -4180,14 +4186,16 @@ in use) still hold. Domain's answers on #438 (11-19) settled the model points.
     drifted) is a NO-GO on whichever set causes the drift, until someone confirms or retires the mission's limit:
     "BATT_V's catalog limits changed in catalog rev 5 after this mission replaced them. Confirm the mission's
     limits again or retire them in Monitoring." plus `Open in Monitoring`. In Monitoring, that row's editor offers
-    `Confirm replacement`, a monitoring change like any other.
+    `Confirm replacement`, a monitoring change like any other. A catalog rollout causes it on the configuration
+    lane, so it shows in C3's dry run (U102) too, as the dangling reference does.
   - U43's limit_alarm_active and U42's derived_point_in_use, unchanged.
 - **Across the lanes.** The lanes never freeze each other, but they compile together. A configuration set that would
   leave a monitoring definition dangling gets a NO-GO on the configuration lane, and in C3's dry run (U102) too, so
   a catalog rollout that would fail at review can't be staged from the catalog page: "Catalog rev 5 removes BATT_V,
   which 2 limits and 1 derived point use. Retire or change them in monitoring changes first." The names go behind
   `Show all`, as U42 lists them. The fix goes through the monitoring lane, which the configuration set's review
-  doesn't block. It's the only cross-lane check: the lanes never stage the same thing.
+  doesn't block. These are the two cross-lane checks: a dangling reference and a drifted replacement (above). The
+  lanes never stage the same thing, so there's no overlap check.
 - **Revisions.** One sequence: a monitoring apply takes the mission's next revision number (r6 configuration, r7
   monitoring), ordered by when each applies. The Revisions list tags it `Monitoring`, Timeline reads `Config r7
   applied · Monitoring · 1 change · Mira K.`, and roll back works as for any revision.
