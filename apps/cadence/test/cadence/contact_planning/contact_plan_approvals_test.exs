@@ -14,6 +14,7 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovalsTest do
 
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Contacts.Store.ContactPlanApprovalRow
+  alias Cadence.Persistence.JsonDocument
   alias Cadence.Spacecraft
 
   @organization_id "org-contact-plan-approvals"
@@ -118,7 +119,7 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovalsTest do
                )
              )
 
-    assert Cadence.Persistence.JsonDocument.unwrap_value(stored_actor) == approval.actor_document
+    assert JsonDocument.unwrap_value(stored_actor) == approval.actor_document
 
     assert approval.actor_kind == :user
     assert approval.actor_id == context.admin_scope.user.user_id

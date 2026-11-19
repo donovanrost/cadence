@@ -11,6 +11,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningPoliciesTest do
 
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Contacts.Store.FleetPlanningPolicyApprovalRow
+  alias Cadence.Persistence.JsonDocument
   alias Cadence.PolicyReviewer
 
   @organization_id "org-fleet-planning-policy"
@@ -143,7 +144,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningPoliciesTest do
                )
              )
 
-    assert Cadence.Persistence.JsonDocument.unwrap_value(stored_actor) == %{
+    assert JsonDocument.unwrap_value(stored_actor) == %{
              "kind" => "user",
              "user_id" => reviewer.user_id,
              "display_name" => reviewer.display_name
