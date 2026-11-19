@@ -97,10 +97,16 @@ defmodule Cadence.Contacts.IngressBackpressureAttentionTest do
     assert %{rising: true, ratio: grown} = usage(ctx, namespace)
     assert grown > first
 
-    # Unchanged fill: not rising. 96_415 bytes rounds down to 0.9641, which once read 'rising'
-    # forever (the exact ratio was compared with the rounded one, #390).
+    # Unchanged fill: not rising. #393: a fill whose ratio rounds down (96_415 -> 0.9641) once read
+    # 'rising' forever (the exact ratio was compared with the rounded one). Make sure this fill
+    # rounds down (domain), so the step keeps covering that whatever the journal's overhead.
+    steady = rounds_down!(journal, ctx, namespace)
+    assert steady.used_bytes / steady.capacity_bytes > steady.ratio
+    assert steady.ratio >= grown
+
     :ok = BackpressureMonitor.sample_now(namespace)
-    assert %{rising: false, ratio: ^grown} = usage(ctx, namespace)
+    assert %{rising: false, ratio: ratio} = usage(ctx, namespace)
+    assert ratio == steady.ratio
   end
 
   # qa's restart 1 dry run: a journal that has stopped can still be listed by the registry for a
@@ -213,9 +219,36 @@ defmodule Cadence.Contacts.IngressBackpressureAttentionTest do
 
     start_supervised!({Registry, keys: :unique, name: __MODULE__.Registry})
 
-    start_supervised!({BackpressureMonitor, process_namespace: namespace, interval_ms: 3_600_000})
+    monitor =
+      start_supervised!(
+        {BackpressureMonitor, process_namespace: namespace, interval_ms: 3_600_000}
+      )
+
+    # The monitor doesn't trap exits, so its terminate/2 (which detaches) doesn't run when the
+    # test stops it; detach here so no handler outlives the test (devops).
+    on_exit(fn -> :telemetry.detach({BackpressureMonitor, monitor}) end)
 
     namespace
+  end
+
+  # Grows the fill one small append at a time (1 byte plus the journal's framing), sampling each
+  # time, until its exact ratio is above the stored, rounded one; most fills already are. The
+  # caller asserts on the ratio the monitor actually stored (domain).
+  defp rounds_down!(journal, ctx, namespace, tries \\ 20) do
+    usage = usage(ctx, namespace)
+
+    cond do
+      usage.used_bytes / usage.capacity_bytes > usage.ratio ->
+        usage
+
+      tries == 0 ->
+        flunk("no fill that rounds down after 20 one-byte appends")
+
+      true ->
+        append!(journal, 1)
+        :ok = BackpressureMonitor.sample_now(namespace)
+        rounds_down!(journal, ctx, namespace, tries - 1)
+    end
   end
 
   defp usage(ctx, namespace) do
