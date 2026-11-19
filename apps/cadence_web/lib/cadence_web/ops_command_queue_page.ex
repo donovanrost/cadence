@@ -157,8 +157,9 @@ defmodule CadenceWeb.OpsCommandQueuePage do
   defp feedback(:approved_command_basis_changed),
     do: "The approved command changed. Refresh and review it again."
 
+  # ux U87 (amended, #121): this page only queues, so the words name queueing.
   defp feedback(:command_request_in_group),
-    do: "This command is part of a command group. Approve it with the group's GO/NO-GO."
+    do: "This command is part of a command group. Its group's GO queues it."
 
   defp feedback(:command_queue_changed),
     do: "The reviewed request changed. Refresh and review it again."
