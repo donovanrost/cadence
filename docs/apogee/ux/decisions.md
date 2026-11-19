@@ -2884,8 +2884,14 @@ and should never fire; when it does, something went round the product. NO-GO, se
   - The counts come from the 409's `submitted_member_count` and `current_member_count`; without both, the bracket
     is left out.
 - **After it:** the panel stays open, `GO` disabled with this line as its A6 reason, and `NO-GO` is the way out.
-- **Not up front:** the group read has no `members_changed` flag; since this should never fire, none is needed
-  now. If one is added (api-ops offers it as an 11-18 follow-up), GO is disabled before a click with the same line.
+- **Up front** (#120, ca-ux 11-19; it was "Not up front" until the read had a flag): the group read carries
+  `members_changed` (true / false) with `submitted_member_count` and `current_member_count` (both or neither, as on
+  the 409). When it's true, `GO` and `GO excluding…` are disabled before a click, with the line as their A6 reason,
+  less "Not released:" since nothing was tried: "This group's commands changed after it was submitted (12 then, 13
+  now), so it isn't what was reviewed. Give it NO-GO and submit the commands again. Tell the team that runs Cadence
+  for you: a group shouldn't change after it's submitted." `NO-GO`, send back and abort stay. Without the counts the
+  bracket goes. When the flag is missing (an older server) the console blocks nothing up front and the 409 stays the
+  backstop; it never guesses from its own member list (U20).
 - **Nowhere else:** it isn't on Now or in the audit by itself; only at GO.
 
 ### U91 · The runtime can't verify its configuration: telemetry, passes and who fixes it (11-17 Earendil incident; amends U38) (api / domain / api-ops / fe-ops)
