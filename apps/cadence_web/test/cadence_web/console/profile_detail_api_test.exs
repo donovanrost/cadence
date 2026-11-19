@@ -42,4 +42,30 @@ defmodule CadenceWeb.Console.ProfileDetailAPITest do
     assert %{"data" => %{"profile" => %{"catalog_revision" => nil}}} =
              read.(without.spacecraft_type_id)
   end
+
+  # The profile's catalog_revision_id has no foreign key: an id naming none of this mission's
+  # catalog revisions (another mission's, or one left over after a reset) keeps its id and reads
+  # number and label null, as the profile list does; the console reads it as unnumbered.
+  test "an id naming none of the mission's catalog revisions reads number and label null" do
+    user = TestFixtures.persist_user!()
+    org = TestFixtures.persist_org!()
+    TestFixtures.grant_membership!(user, org, role: :organization_admin)
+    mission = TestFixtures.persist_mission!(org)
+    other = TestFixtures.persist_mission!(org)
+
+    elsewhere =
+      CatalogFixtures.persist_imported_revision!(org.organization_id, other.mission_id)
+
+    profile =
+      TestFixtures.persist_spacecraft_profile!(mission,
+        catalog_revision_id: elsewhere.catalog_revision_id
+      )
+
+    path = "/api/console/v1/missions/#{mission.mission_id}/profiles/#{profile.spacecraft_type_id}"
+
+    assert %{"data" => %{"profile" => %{"catalog_revision" => catalog}}} =
+             user |> TestFixtures.member_conn() |> get(path) |> json_response(200)
+
+    assert catalog == %{"id" => elsewhere.catalog_revision_id, "number" => nil, "label" => nil}
+  end
 end
