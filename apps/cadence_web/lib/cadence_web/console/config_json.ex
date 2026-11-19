@@ -40,6 +40,8 @@ defmodule CadenceWeb.Console.ConfigJSON do
     op_not_found: 404,
     mission_not_found: 404,
     apply_interrupted: 503,
+    # #262: Cadence couldn't run the checks (submit or approve); nothing was applied, retry may work.
+    preview_failed: 503,
     invalid_rollback_target: 422,
     nothing_to_roll_back: 422,
     rollback_unknown_kind: 422,
@@ -87,6 +89,9 @@ defmodule CadenceWeb.Console.ConfigJSON do
     op_not_found: "Change not found.",
     mission_not_found: "Mission not found.",
     apply_interrupted: "The apply was interrupted and did not take effect. Try again.",
+    preview_failed:
+      "Cadence couldn't run the checks, so nothing changed. Try again; if it keeps happening, " <>
+        "tell the team that runs Cadence for you.",
     invalid_rollback_target: "Choose a revision from r1 up to the one before the current one.",
     nothing_to_roll_back: "Nothing differs from that revision.",
     rollback_unknown_kind: "A revision in that range has changes this version can't undo.",
@@ -103,6 +108,15 @@ defmodule CadenceWeb.Console.ConfigJSON do
       "The open change set has other changes; apply or discard them first.",
     nothing_to_convert: "There are no older routes left to convert."
   }
+
+  @approve_holds_blocking "Not approved: a blocking hold stands, so nothing was applied and the " <>
+                            "change set stays in review. Your approval wasn't recorded. Approve " <>
+                            "it once the hold clears; the checks show it."
+
+  @approve_preview_failed "Not approved: Cadence couldn't run the checks, so nothing was applied " <>
+                            "and the change set stays in review. Your approval wasn't recorded. " <>
+                            "Try again; if it keeps happening, tell the team that runs Cadence " <>
+                            "for you."
 
   @doc "Deep-encodes a facade value for JSON."
   @spec encode(term()) :: term()
@@ -184,6 +198,21 @@ defmodule CadenceWeb.Console.ConfigJSON do
   def error(conn, {:open_change_set_not_empty, change_set_id}) when is_binary(change_set_id),
     do: respond(conn, :open_change_set_not_empty, %{change_set_id: change_set_id})
 
+  # #262 (ux U79, amended in #374): an approve refused by a blocking hold that appeared after the
+  # submit, in approve's own words; the preview stays the details, so the checks show the hold.
+  def error(conn, {:holds_blocking, preview}) when is_map(preview) do
+    if approving?(conn),
+      do: respond_raw(conn, 409, "holds_blocking", @approve_holds_blocking, encode(preview)),
+      else: respond(conn, :holds_blocking, encode(preview))
+  end
+
+  # #262: never the cause (a database error's text) on the wire; Submission logs it.
+  def error(conn, {:preview_failed, _cause}) do
+    if approving?(conn),
+      do: respond_raw(conn, 503, "preview_failed", @approve_preview_failed, nil),
+      else: respond(conn, :preview_failed, nil)
+  end
+
   def error(conn, {tag, details}) when is_map_key(@status, tag),
     do: respond(conn, tag, encode(details))
 
@@ -194,6 +223,9 @@ defmodule CadenceWeb.Console.ConfigJSON do
 
   def error(conn, _unknown),
     do: respond_raw(conn, 422, "unprocessable", "The request could not be completed.", nil)
+
+  # Only an approve reaches these two from review: send back runs no checks.
+  defp approving?(conn), do: conn.private[:phoenix_action] == :review
 
   defp respond(conn, tag, details),
     do:

@@ -44,11 +44,11 @@ ISO-8601, revision numbers are integers (render them as `rN`), and actors are `{
 
 | Status | Codes |
 | --- | --- |
-| 409 | `holds_blocking` (details = the preview), `catalog_command_in_flight` (details = `{command_request_ids}`), `frozen_in_review`, `change_set_changed`, `path_already_staged` (details = `{change_id, author, kind, entity_id, path, value}`), `reviewer_is_author`, `activation_policy_changed`, `entity_gone`, `in_use` (details = `{entity, uses}`: an archive of a transport or station still in use, at stage, submit or review; [setup.md](setup.md)), `conversion_in_progress` (details = `{change_set_id, batch \| null}`: a legacy route conversion batch is staged, so nothing else can be staged until it's applied or discarded; TEMPORARY, [setup.md](setup.md)), `conversion_already_staged`, `open_change_set_not_empty` (the conversion's own) |
+| 409 | `holds_blocking` (details = the preview; at submit, and at approve when a blocking item appeared after the submit (#262)), `catalog_command_in_flight` (details = `{command_request_ids}`), `frozen_in_review`, `change_set_changed`, `path_already_staged` (details = `{change_id, author, kind, entity_id, path, value}`), `reviewer_is_author`, `activation_policy_changed`, `entity_gone`, `in_use` (details = `{entity, uses}`: an archive of a transport or station still in use, at stage, submit or review; [setup.md](setup.md)), `conversion_in_progress` (details = `{change_set_id, batch \| null}`: a legacy route conversion batch is staged, so nothing else can be staged until it's applied or discarded; TEMPORARY, [setup.md](setup.md)), `conversion_already_staged`, `open_change_set_not_empty` (the conversion's own) |
 | 422 | `invalid_op` (details = `{index, errors: [{path, message}]}`), `reason_required`, `comment_required`, `nothing_staged`, `not_in_review`, `checks_failed` and `holds_not_acknowledged` (details = the preview), `invalid_range`, `invalid_params` (malformed body; details keyed by field), `nothing_to_convert` (the conversion's) |
 | 403 | `forbidden` |
 | 404 | `change_set_not_found`, `revision_not_found`, `change_not_found`, `op_not_found`, `mission_not_found` |
-| 503 | `apply_interrupted` (submit/approve: nothing changed; safe to retry) |
+| 503 | `apply_interrupted` (submit/approve: nothing changed; safe to retry), `preview_failed` (submit/approve: Cadence couldn't run the checks, a database or connection error; nothing changed, the set keeps its state, safe to retry; details null, the cause is only in the server log; #262: was a 500 at approve and the generic `422 unprocessable` at submit) |
 
 ## Live (on `mission:<id>`)
 
@@ -142,7 +142,9 @@ order, so a SCID repeated **within the batch** fails validation for the later op
   doesn't let it apply.
 
 Submitting while a blocking item stands answers `409 holds_blocking` with the preview as
-`details` (show the blocking items: "can't apply yet"). If a command starts during the apply
+`details` (show the blocking items: "can't apply yet"). Approving does too, when a blocking item
+appeared after the submit (approve re-runs the checks); the set stays `in_review`, nothing is
+recorded, and it can be approved once the item clears (#262; ux U79, amended in #374, words it). If a command starts during the apply
 itself, nothing is applied and the answer is `409 catalog_command_in_flight` with `details:
 {command_request_ids}`; submit again when it finishes. An unknown revision is a validation error
 ("That catalog revision doesn't exist").
