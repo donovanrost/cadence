@@ -4073,3 +4073,17 @@ Not a crit: nothing is wrong, a person's call may simply be out of date.
 - **"The newer revision isn't used" holds for every kind only once #369 is fixed as widened** (domain 11-19): an
   exclusion leaves out every sample of the identity; a promote keeps its `canonical_*` columns, which today a newer
   revision moves. U106 isn't built before #369 lands.
+
+### U107 · Now: a row's buttons carry the row's title in their names (#243 B7, audit N5) (fe-ops)
+Now's per-row buttons (`Review`, `Open pass`, `Details`, `Mark as seen`, `Acknowledge…`, `Retry storing`,
+`Retry…`, `Close without retry…`, `Discard…`, `Book 40 passes` and the rest) repeat on every row, so a screen reader
+hears "Discard, Discard, Discard" (a11y B7). Every row title is already worded here and already names what the row
+is about, so the name reuses it; no short noun is invented per kind.
+- **The accessible name:** the visible label without its trailing "…", a comma, then the row's title with each
+  " · " read as ", ". "Discard, EARENDIL-001, SNTG 00:13Z pass, 3 connections refused"; "Book 40 passes, Plan for
+  11-16 is approved but booking hasn't started"; "Open, 3 spacecraft, below red limit".
+- The label comes first, so what's spoken starts with what's seen (WCAG 2.5.3). It's long, but exact: two rows
+  about the same spacecraft still differ.
+- Built once in the panel from the row's title, not per row kind, so a new kind gets it for free.
+- A row without a title (none today) uses its kind and position, as B7 says: "Discard, row 3".
+- Sheets the buttons open keep their own titles (A2); this is only the button's name.
