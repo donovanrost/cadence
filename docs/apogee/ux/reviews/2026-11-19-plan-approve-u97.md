@@ -94,4 +94,9 @@ follow-up PR. #273 tracks finding 1.
   `plan_not_found` and `duplicate_operation`, all ending "Your approval wasn't recorded."; the unclear approve (one
   act and single); submit's `plan_changed` opening "Not sent:". Exact words: U97 after ux's PR.
 - Kit: a refusal of the person's own act is `role="alert"` whatever its tone; `ApCallout` gets an explicit role that
-  wins over its tone default (Platform's kit; ux sent it to lead).
+  wins over its tone default. That's Platform card #276 (dashboards builds it); the outcome-role rules are a11y B6
+  (#274).
+- Finding 4's final line is U97's, not the suggestion above: "Not sent: R41 changed after you opened it. Reload to
+  see it, then send it again."
+- The fixes for A-D, #273 and finding 4 are fe-ops' commit 3998afed1 on `fe-ops/257-words`, in U97's words as merged
+  in #274.
