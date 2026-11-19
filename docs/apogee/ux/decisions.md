@@ -3559,8 +3559,11 @@ occurs.
   - Both revisions link: `Open rev 4 of Bus catalog` beside the callout. This run's own rev 1 is the page's
     subject.
   - Runs table: the normal tag for a new revision, plus `Same as Bus catalog rev 4` (info).
-  - Data (mms-engineer to confirm): the run's own `revision` is set, which tells this case from a same-database match
-    (where it's null); `matched_revision.database {id, name|null}`.
+  - Data (mms-engineer): the run's own `revision` is set in this case and null in a same-database match; that's the
+    tell, with no extra flag. `matched_revision.revision.database {id, name|null}` names the database of the catalog
+    revision the model is first recorded under (U65), which here is the other database's. Decisions belong to the
+    one model revision, so both catalog revisions always show the same status, and deciding through either decides
+    both.
 - **A source file whose content matched** (U103's source-file page): a file uploaded with content that matches a
   revision in the same database has a valid run and no revision of its own. So "Revisions from this file" doesn't
   show its usual empty state ("No revisions yet. An import of this file becomes a revision once it's valid.",
