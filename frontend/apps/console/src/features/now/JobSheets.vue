@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
-import { computed, ref } from "vue";
+import { computed, ref, useId } from "vue";
 import { describeApiError, isError, type ApiError } from "@/api/index.ts";
 import { ApButton, ApSheet, ApTextarea } from "@/ui";
 import type { Attention } from "./attention.ts";
@@ -19,7 +19,12 @@ import {
  * checked it didn't happen; Cancel takes the default focus. Close without retry: a required note
  * for the audit. Both answer with the item, which the row or block takes at once.
  */
-const props = defineProps<{ missionId: MissionId }>();
+const props = defineProps<{
+  missionId: MissionId;
+  /** a11y A5 (#243): where focus goes when the row (the opener) resolved and is gone. */
+  returnFocus?: (() => HTMLElement | null) | undefined;
+}>();
+const closeConsequence = useId();
 const emit = defineEmits<{ done: [item: Attention | null] }>();
 
 const retrySheet = ref<InstanceType<typeof ApSheet> | null>(null);
@@ -78,19 +83,21 @@ defineExpose({ openRetry, openClose });
 </script>
 
 <template>
-  <ApSheet ref="retrySheet" title="Retry this job?" width="narrow">
+  <!-- a11y A1: a danger sheet opens on its safe button (Cancel, first in the footer). -->
+  <ApSheet ref="retrySheet" title="Retry this job?" width="narrow" :return-focus="returnFocus">
     <p class="m-0 font-semibold text-readout">{{ noun }}</p>
     <p v-if="target" class="m-0 text-md text-text-2">{{ retryBody(target) }}</p>
     <label v-if="target" class="flex items-start gap-2 text-md text-text-2">
       <input
         v-model="checked"
         type="checkbox"
+        aria-required="true"
         class="mt-1 accent-[var(--color-readout)] [color-scheme:dark]"
       />
       {{ retryCheck(target) }}
     </label>
     <ApTextarea v-model="note" label="Note" :rows="2" :maxlength="200" />
-    <p v-if="error" class="m-0 text-sm text-crit-text">{{ error }}</p>
+    <p v-if="error" role="alert" class="m-0 text-sm text-crit-text">{{ error }}</p>
     <template #footer>
       <ApButton variant="ghost" @click="retrySheet?.close()">Cancel</ApButton>
       <ApButton
@@ -102,12 +109,19 @@ defineExpose({ openRetry, openClose });
       >
     </template>
   </ApSheet>
-  <!-- a11y A1: a danger sheet opens on its safe button (Cancel, first in the footer). -->
-  <ApSheet ref="closeSheet" title="Close without retrying?" width="narrow">
+  <!-- a11y A1: a required field opens with focus on it; the sentence describes the sheet. -->
+  <ApSheet
+    ref="closeSheet"
+    title="Close without retrying?"
+    width="narrow"
+    initial-focus="textarea"
+    :described-by="closeConsequence"
+    :return-focus="returnFocus"
+  >
     <p class="m-0 font-semibold text-readout">{{ noun }}</p>
-    <p class="m-0 text-md text-text-2">{{ CLOSE_BODY }}</p>
+    <p :id="closeConsequence" class="m-0 text-md text-text-2">{{ CLOSE_BODY }}</p>
     <ApTextarea v-model="note" label="What did you find?" required :maxlength="200" />
-    <p v-if="error" class="m-0 text-sm text-crit-text">{{ error }}</p>
+    <p v-if="error" role="alert" class="m-0 text-sm text-crit-text">{{ error }}</p>
     <template #footer>
       <ApButton variant="ghost" @click="closeSheet?.close()">Cancel</ApButton>
       <ApButton

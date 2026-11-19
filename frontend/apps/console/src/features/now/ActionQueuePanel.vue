@@ -16,7 +16,7 @@ import { QUEUE_CAP } from "./queueCap.ts";
 import { useFreshFlash } from "./useFreshFlash.ts";
 import { jobOffers } from "./jobs.ts";
 import { useQueueCommand, type RetryOutcome } from "./useQueueCommand.ts";
-import { landFocus } from "./landFocus.ts";
+import { landFocus, landingFor } from "./landFocus.ts";
 import { useMissionScope } from "@/shell/index.ts";
 import { useCommandAccess } from "@/features/commands/index.ts";
 
@@ -174,6 +174,7 @@ function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Recor
                 size="compact"
                 variant="secondary"
                 :disabled="command.running.value.has(item.key)"
+                :disabled-reason="command.busyWord(item)"
                 @click="command.run(item)"
                 >{{ item.command.label }}</ApButton
               >
@@ -219,6 +220,7 @@ function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Recor
                 size="compact"
                 variant="danger"
                 :disabled="command.running.value.has(item.key)"
+                :disabled-reason="command.busyWord(item)"
                 @click="openDiscard(item)"
                 >Discard…</ApButton
               >
@@ -232,17 +234,20 @@ function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Recor
     <JobSheets
       ref="jobSheets"
       :mission-id="scope.mission.id"
+      :return-focus="() => deciding && landingFor(list, deciding.key)"
       @done="(item) => deciding && discarded(deciding, item)"
     />
     <StuckSheet
       ref="stuckSheet"
       :mission-id="scope.mission.id"
       :can-ack="access.abort"
+      :return-focus="() => acking && landingFor(list, acking.key)"
       @done="(item) => acking && discarded(acking, item)"
     />
     <DiscardSheet
       ref="discardSheet"
       :mission-id="scope.mission.id"
+      :return-focus="() => discarding && landingFor(list, discarding.key)"
       @done="(item) => discarding && discarded(discarding, item)"
     />
   </ApPanel>

@@ -219,6 +219,8 @@ describe("StuckSheet", () => {
       "Technical details",
     ].map((s) => text.indexOf(s));
     expect(order.every((n, i) => n >= 0 && (i === 0 || n > (order[i - 1] ?? -1)))).toBe(true);
+    // a11y A1 (#243): acknowledging opens on its Note.
+    expect(document.activeElement?.tagName).toBe("TEXTAREA");
     await w.get("textarea").setValue("told domain at 03:18Z");
     await w
       .findAll("button")
@@ -249,7 +251,7 @@ describe("StuckSheet", () => {
       .find((b) => b.text() === "Acknowledge")
       ?.trigger("click");
     await flushPromises();
-    expect(w.text()).toContain("Keep the note to 500 characters.");
+    expect(w.get('[role="alert"]').text()).toBe("Keep the note to 500 characters.");
     w.unmount();
     const viewer = mountSheet(false);
     // oxlint-disable-next-line typescript/no-unsafe-call, typescript/no-unsafe-member-access -- vue-tsc checks the exposed open().

@@ -1,9 +1,12 @@
-import { describe, expect, it } from "vite-plus/test";
+import { flushPromises, mount } from "@vue/test-utils";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { missionId as missionIdReader } from "@/api/index.ts";
+import JobSheets from "./JobSheets.vue";
 import type { ResolutionAction } from "./attention.ts";
 import { decode } from "@/api/index.ts";
 import { actionQueueReader, presentQueue } from "./actionQueue.ts";
 import { resolvedWords } from "./attention.ts";
-import { jobTechnical, retryBody, retryCheck } from "./jobs.ts";
+import { CLOSE_BODY, jobTechnical, retryBody, retryCheck } from "./jobs.ts";
 import { NO_ACCESS_JOB } from "./jobs.ts";
 
 const NOW = new Date("2026-11-14T03:16:00Z");
@@ -192,5 +195,46 @@ describe("job_outcome_unknown on Now (ux U54)", () => {
     expect(said("closed", "Northlight shows it booked.")).toBe(
       "Closed without retry by Mira K. at 03:20Z: “Northlight shows it booked.”",
     );
+  });
+});
+
+// a11y A1/B6 (#243): a required field opens with focus on it, the sentence describes the sheet,
+// and a refusal inside it is an alert.
+describe("Close without retry sheet a11y (#243)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    document.body.innerHTML = "";
+  });
+  it("opens on its field, described by its sentence; a 403 is an alert", async () => {
+    const target = rowOf()?.job;
+    if (!target) throw new Error("no job");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ error: { code: "forbidden", message: "No." } }), {
+          status: 403,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+    const w = mount(JobSheets, {
+      props: { missionId: missionIdReader("m") },
+      attachTo: document.body,
+    });
+    // oxlint-disable-next-line typescript/no-unsafe-call, typescript/no-unsafe-member-access -- vue-tsc checks the exposed open(); the lint type service can't resolve SFC instances.
+    w.vm.openClose(target);
+    await flushPromises();
+    const dialog = w.get("dialog[open]");
+    expect(document.activeElement?.tagName).toBe("TEXTAREA");
+    const described = dialog.attributes("aria-describedby") ?? "";
+    expect(document.getElementById(described)?.textContent).toBe(CLOSE_BODY);
+    await dialog.get("textarea").setValue("checked the buffer");
+    await dialog
+      .findAll("button")
+      .find((b) => b.text() === "Close")
+      ?.trigger("click");
+    await flushPromises();
+    expect(dialog.get('[role="alert"]').text()).toBe(NO_ACCESS_JOB);
+    w.unmount();
   });
 });

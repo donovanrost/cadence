@@ -217,15 +217,19 @@ export function useQueueCommand(
     }
   }
 
+  /** While a row's command runs: what it's doing, also its disabled buttons' reason (a11y A7). */
+  function busyWord(item: QueueItem): string {
+    return item.command?.kind === "book"
+      ? "Starting booking…"
+      : item.command?.kind !== "seen"
+        ? "Retrying…"
+        : item.command.targets[0]?.source === "ingress_backpressure"
+          ? "Acknowledging…"
+          : "Marking…";
+  }
+
   function sentenceFor(item: QueueItem, canRun: boolean): string {
-    if (running.value.has(item.key))
-      return item.command?.kind === "book"
-        ? "Starting booking…"
-        : item.command?.kind !== "seen"
-          ? "Retrying…"
-          : item.command.targets[0]?.source === "ingress_backpressure"
-            ? "Acknowledging…"
-            : "Marking…";
+    if (running.value.has(item.key)) return busyWord(item);
     const base =
       item.command && !canRun
         ? `${item.sentence} ${noAccessText(item.command.kind, item.command.targets)}`
@@ -236,5 +240,5 @@ export function useQueueCommand(
     return note ? `${base} ${note}` : base;
   }
 
-  return { running, run, sentenceFor, said };
+  return { running, run, sentenceFor, busyWord, said };
 }
