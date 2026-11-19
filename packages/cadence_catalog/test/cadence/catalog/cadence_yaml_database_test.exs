@@ -174,4 +174,32 @@ defmodule Cadence.Catalog.CadenceYamlDatabaseTest do
              {:error,
               {:validation_error, "Command 'INVALID' APID must be between 0 and 2047, got 2048"}}
   end
+
+  # #119 canary (fe-setup): the same database from another artifact, run and file name is the
+  # same layer, so a per-import fact added to the layer's source, metadata or provenance fails.
+  test "the same database from another artifact, run and file name is the same layer" do
+    source = fn artifact_id, name ->
+      Source.new(%{
+        artifact_id: artifact_id,
+        organization_id: "org-alpha",
+        mission_id: "mission-alpha",
+        catalog_family: :combined,
+        artifact_name: name,
+        format_key: "cadence_yaml",
+        media_type: "application/yaml",
+        source_artifact: @database
+      })
+    end
+
+    layer = fn source, run_id ->
+      assert {:ok, %{bundle: %{declaration_layers: [layer]}}} =
+               CadenceYamlDatabase.import(source, %{import_run_id: run_id})
+
+      layer
+    end
+
+    first = layer.(source.("artifact-1", "simulator.yaml"), "run-1")
+    again = layer.(source.("artifact-2", "renamed.yaml"), "run-2")
+    assert again.layer_id == first.layer_id
+  end
 end

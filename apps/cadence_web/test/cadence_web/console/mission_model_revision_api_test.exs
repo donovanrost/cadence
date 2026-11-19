@@ -7,7 +7,7 @@ defmodule CadenceWeb.Console.MissionModelRevisionAPITest do
   use CadenceWeb.ConnCase, async: false
 
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
-  alias Cadence.TestSupport.CatalogTestActor
+  alias Cadence.Catalog.MissionModel.Layer
   alias CadenceWeb.Console.Problem
   alias CadenceWeb.TestFixtures
 
@@ -80,18 +80,17 @@ defmodule CadenceWeb.Console.MissionModelRevisionAPITest do
   end
 
   test "U88: a model revision no catalog revision names can't be approved; Reject stays", c do
-    # A second run of the file makes its own model revision and no catalog revision (domain).
-    {:ok, run} =
-      Cadence.Catalog.start_import_run(
-        c.org.organization_id,
-        c.mission.mission_id,
-        c.artifact_id,
-        "cadence_yaml",
-        requested_by: CatalogTestActor.system()
-      )
+    # A model revision no catalog revision names. Since #119 a second run of the same file
+    # matches the named revision, so this one is compiled directly from a layer.
+    layer =
+      Layer.new(%{
+        organization_id: c.org.organization_id,
+        mission_id: c.mission.mission_id,
+        name: "unnamed fixture model",
+        declarations: [%{kind: :space_system, qualified_name: "/"}]
+      })
 
-    {:ok, %{result_document: %{"mission_model" => %{"revision_id" => orphan}}}} =
-      Cadence.Catalog.execute_enqueued_run(run.import_run_id)
+    {:ok, %{revision: %{revision_id: orphan}}} = Cadence.MissionModels.compile_layers([layer])
 
     read =
       c

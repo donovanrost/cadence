@@ -20,8 +20,8 @@ defmodule Cadence.Catalog.ImportExecution do
   def persist(organization_id, import_run_id, %ImportResult{} = import_result)
       when is_binary(organization_id) and is_binary(import_run_id) do
     with :ok <- require_declaration_layers(import_result),
-         {:ok, mission_model_result} <-
-           MissionModels.compile_layers(import_result.bundle.declaration_layers) do
+         {:ok, mission_model_result, stored} <-
+           MissionModels.compile_and_store(import_result.bundle.declaration_layers) do
       {:ok,
        %{
          imported_definition_count: import_result.imported_definition_count,
@@ -30,7 +30,7 @@ defmodule Cadence.Catalog.ImportExecution do
          result_document:
            import_result.metadata
            |> Map.put("import_run_id", import_run_id)
-           |> Map.put("mission_model", mission_model_document(mission_model_result))
+           |> Map.put("mission_model", mission_model_document(mission_model_result, stored))
        }}
     end
   end
@@ -71,9 +71,13 @@ defmodule Cadence.Catalog.ImportExecution do
     end)
   end
 
-  defp mission_model_document(%MissionModelCompilerResult{} = result) do
+  # `matched_existing` (#119, mms-security (c)): identical content matched a revision that was
+  # already stored, with its status at import time, so the run never reads as a new revision.
+  # `nil` when this run created the revision.
+  defp mission_model_document(%MissionModelCompilerResult{} = result, stored) do
     %{
       "revision_id" => result.revision.revision_id,
+      "matched_existing" => matched_existing(stored),
       "content_sha256" => result.revision.content_sha256,
       "layer_ids" => result.revision.layer_ids,
       "declaration_count" => map_size(result.revision.declarations),
@@ -90,6 +94,11 @@ defmodule Cadence.Catalog.ImportExecution do
         end)
     }
   end
+
+  defp matched_existing(%{matched_existing: true, revision_id: id, status: status}),
+    do: %{"revision_id" => id, "status" => status}
+
+  defp matched_existing(%{matched_existing: false}), do: nil
 
   defp atom_string(nil), do: nil
   defp atom_string(value), do: Atom.to_string(value)

@@ -336,6 +336,8 @@ defmodule Cadence.CatalogTest do
                )
 
       assert rerun.result_document["catalog_revision"]["catalog_revision_id"] == revision_id
+      # #119: the model it compiled on its first pass is its own, not a match.
+      assert rerun.result_document["mission_model"]["matched_existing"] == nil
 
       assert [%{catalog_revision_id: ^revision_id}] =
                Catalog.list_revisions(

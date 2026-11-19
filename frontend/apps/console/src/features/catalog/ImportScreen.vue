@@ -9,7 +9,7 @@ import ImportRunBody from "./ImportRunBody.vue";
 import UploadPanel from "./UploadPanel.vue";
 import { fetchCatalogIndex } from "./api.ts";
 import { fetchImporters } from "./upload.ts";
-import { fetchImportRun } from "./importRun.ts";
+import { fetchImportRun, sameDatabaseMatch } from "./importRun.ts";
 
 /** S3 · Catalog import: validation + diagnostics (+ diff when the server has one). */
 const route = useRoute("setup.catalog.import");
@@ -44,6 +44,9 @@ const title = computed(() => {
   const rev = s.value.revision;
   const base = s.value.base_revision;
   if (rev && base) return `Catalog rev ${base.number} → rev ${rev.number}`;
+  // #119 U99: a matched run reads as the revision it matched, never "rev N → rev N+1".
+  const matched = sameDatabaseMatch(s.value)?.revision;
+  if (matched) return `Catalog rev ${matched.number}`;
   return rev ? `Catalog rev ${rev.number}` : "Catalog import";
 });
 const crumbs = computed((): readonly ApCrumb[] => [

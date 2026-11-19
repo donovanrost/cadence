@@ -31,6 +31,12 @@ defmodule Cadence.Catalog.MissionModel.Layer do
   ]
   defstruct @enforce_keys ++ [:organization_id, source: %{}, declarations: [], metadata: %{}]
 
+  # The layer id and content hash basis (#166). Bump on any change to what it hashes.
+  # `content_sha256` stays bare hex, not #166's "v<n>:" form: it is copied out as an identity into
+  # activation manifests, runtime plans and command requests, whose readers check 64-hex. The
+  # version is inside the hash, so no two bases can compare equal (#166 rule 4 as amended by domain 11-19).
+  @basis_version 1
+
   @spec new(map()) :: t()
   def new(attrs) when is_map(attrs) do
     declarations = attrs |> value(:declarations, []) |> Enum.map(&build_declaration/1)
@@ -41,19 +47,23 @@ defmodule Cadence.Catalog.MissionModel.Layer do
     source = value(attrs, :source, %{})
     metadata = value(attrs, :metadata, %{})
 
-    basis = %{
-      mission_id: mission_id,
-      layer_kind: layer_kind,
-      version: version,
-      name: name,
-      source: source,
-      declarations: declarations,
-      metadata: metadata
-    }
+    organization_id = value(attrs, :organization_id)
+
+    basis =
+      {:mission_model_layer, @basis_version,
+       %{
+         organization_id: organization_id,
+         mission_id: mission_id,
+         layer_kind: layer_kind,
+         version: version,
+         source: content_source(source),
+         declarations: Enum.map(declarations, &Declaration.hash_basis/1),
+         metadata: content_metadata(metadata)
+       }}
 
     %__MODULE__{
-      layer_id: value(attrs, :layer_id, Canonical.content_id("mission_model_layer", basis)),
-      organization_id: value(attrs, :organization_id),
+      layer_id: value(attrs, :layer_id, Canonical.basis_content_id("mission_model_layer", basis)),
+      organization_id: organization_id,
       mission_id: mission_id,
       layer_kind: layer_kind,
       status: attrs |> value(:status, :candidate) |> normalize_status(),
@@ -61,9 +71,23 @@ defmodule Cadence.Catalog.MissionModel.Layer do
       name: name,
       source: source,
       declarations: declarations,
-      content_sha256: value(attrs, :content_sha256, Canonical.sha256(basis)),
+      content_sha256: value(attrs, :content_sha256, Canonical.basis_sha256(basis)),
       metadata: metadata
     }
+  end
+
+  # The source keys that describe the content (#119). The rest, the artifact and the import run,
+  # are per-import facts kept on the layer as provenance, never hashed; so is the layer's `name`
+  # (the uploaded file's name). Missing keys hash as nil.
+  @content_source_keys ~w(format_key importer_key importer_version namespace format_version)a
+
+  # Source diagnostics are derived from the content (as the revision's diagnostics are, which its
+  # basis leaves out) and are struct-shaped maps, so they stay out of the hash (domain, #119).
+  defp content_metadata(metadata),
+    do: Map.drop(metadata, ["source_diagnostics", :source_diagnostics])
+
+  defp content_source(source) do
+    Map.new(@content_source_keys, &{&1, value(source, &1)})
   end
 
   defp build_declaration(%Declaration{} = declaration), do: declaration

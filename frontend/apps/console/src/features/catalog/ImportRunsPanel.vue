@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ApPanel, ApTable, ApTag, formatShort, plural, type ApColumn, type OpState } from "@/ui";
 import type { ImportRun, ImportStatus } from "./api.ts";
+import { matchTag, sameAsTag } from "./matchedWords.ts";
 
 /** Recent import runs; each links to its validation + diff page. */
 defineProps<{ runs: readonly ImportRun[] }>();
@@ -21,6 +22,19 @@ function status(s: ImportStatus): { state: OpState; label: string } {
     case "failed":
       return { state: "crit", label: "Failed" };
   }
+}
+
+/**
+ * #119 U99 (mms-ux's rule): a run with a match and no revision of its own matched in this
+ * database ("Matches rev 4", never "Valid"); one that made its own revision and matched is the
+ * other-database case (its tag plus "Same as Bus catalog rev 4").
+ */
+function tags(run: ImportRun) {
+  const m = run.matched;
+  if (!m) return [status(run.status)];
+  if (run.revision_number === null) return [matchTag(m)];
+  const same = sameAsTag(m);
+  return same ? [status(run.status), same] : [status(run.status)];
 }
 
 function diagnostics(run: ImportRun): string {
@@ -46,7 +60,10 @@ function diagnostics(run: ImportRun): string {
           >rev {{ row.revision_number }}</span
         >
       </template>
-      <template #cell-status="{ row }"><ApTag v-bind="status(row.status)" /></template>
+      <template #cell-status="{ row }"
+        ><span class="flex flex-wrap gap-1"
+          ><ApTag v-for="t in tags(row)" :key="t.label" v-bind="t" /></span
+      ></template>
       <template #cell-diagnostics="{ row }">
         <span :class="row.diagnostic_counts.error > 0 ? 'text-crit-text' : 'text-text-3'">{{
           diagnostics(row)

@@ -192,6 +192,29 @@ defmodule Cadence.Catalog.Xtce13ImporterTest do
 
   defp diagnostic?(plan, code), do: Enum.any?(plan.diagnostics, &(&1.code == code))
 
+  # #119 canary (fe-setup): identity is content only. Importing the same document again, from
+  # another artifact, run and file name, must give the same layer (and so the same revision), so
+  # a per-import fact added to the layer's source, metadata or provenance fails here.
+  test "the same document from another artifact, run and file name is the same layer" do
+    first = layer!(source(xtce_document()), "import-xtce-1")
+
+    again =
+      layer!(
+        %{source(xtce_document()) | artifact_id: "artifact-other", artifact_name: "renamed.xml"},
+        "import-xtce-2"
+      )
+
+    assert again.layer_id == first.layer_id
+    assert again.content_sha256 == first.content_sha256
+  end
+
+  defp layer!(source, run_id) do
+    assert {:ok, %{bundle: %{declaration_layers: [layer]}}} =
+             Xtce13.import(source, %{import_run_id: run_id})
+
+    layer
+  end
+
   defp source(xml) do
     Source.new(%{
       artifact_id: "artifact-xtce",

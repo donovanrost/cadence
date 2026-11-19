@@ -17,6 +17,24 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
   alias Cadence.Runtime.{MissionCoordinator, MissionModelPlanDecoder, MissionRuntimeSpec}
   alias Cadence.Telemetry.PacketDefinition
 
+  # Different content from the fixture's default catalog: since #119 identical content is the
+  # SAME model revision, so an import meant to be unapproved must differ.
+  @changed_catalog """
+  packets:
+    - name: HEALTH
+      apid: 42
+      items:
+        - name: mode
+          data_type: uint
+          bit_offset: 0
+          bit_size: 8
+        - name: spare
+          data_type: uint
+          bit_offset: 8
+          bit_size: 8
+  commands: []
+  """
+
   setup do
     org = "org-catalog-gen-#{System.unique_integer([:positive])}"
     mid = "mission-catalog-gen-#{System.unique_integer([:positive])}"
@@ -191,7 +209,8 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
     rev3 =
       Fixtures.persist_imported_revision!(c.org, c.mission.mission_id,
         revision_label: "Rev 3",
-        approve: false
+        approve: false,
+        yaml: @changed_catalog
       )
 
     profile = profile!(c, c.rev1)
@@ -239,7 +258,8 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
     rev3 =
       Fixtures.persist_imported_revision!(c.org, c.mission.mission_id,
         revision_label: "Rev 3",
-        approve: false
+        approve: false,
+        yaml: @changed_catalog
       )
 
     result = try_configure(c.scope, c.mission, c.craft, rev3.catalog_revision_id)

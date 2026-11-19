@@ -127,6 +127,21 @@ defmodule Cadence.Applications.TelemetryDecomFixtures do
     persisted
   end
 
+  @doc "The catalog `persist_imported_revision!/3` imports unless given `:yaml` (#119: same bytes)."
+  def default_catalog_yaml do
+    """
+    packets:
+      - name: HEALTH
+        apid: 42
+        items:
+          - name: mode
+            data_type: uint
+            bit_offset: 0
+            bit_size: 8
+    commands: []
+    """
+  end
+
   def persist_imported_revision!(organization_id, mission_id, opts \\ []) do
     revision_label = Keyword.get(opts, :revision_label, "Rev 1")
     suffix = Integer.to_string(System.unique_integer([:positive]))
@@ -149,29 +164,14 @@ defmodule Cadence.Applications.TelemetryDecomFixtures do
           %{catalog_database_id: id}
       end
 
-    yaml =
-      Keyword.get(
-        opts,
-        :yaml,
-        """
-        packets:
-          - name: HEALTH
-            apid: 42
-            items:
-              - name: mode
-                data_type: uint
-                bit_offset: 0
-                bit_size: 8
-        commands: []
-        """
-      )
+    yaml = Keyword.get_lazy(opts, :yaml, &default_catalog_yaml/0)
 
     artifact =
       Artifact.new(%{
         mission_id: mission_id,
         catalog_database_id: database.catalog_database_id,
         catalog_family: :combined,
-        artifact_name: "bus.yaml",
+        artifact_name: Keyword.get(opts, :artifact_name, "bus.yaml"),
         format_key: "cadence_yaml",
         media_type: "application/yaml",
         source_artifact: yaml

@@ -1,5 +1,6 @@
 import type { MissionId } from "@/api/index.ts";
 import { decoders, request, type ApiResult, type Decoded, type Reader } from "@/api";
+import { matchedRevisionReader, type MatchedRevision } from "./matchedRevision.ts";
 
 /** Contract: docs/apogee/api/setup.md (C3) = setup-shapes.md §C3 + declaration_count. */
 const { array, boolean, integer, nullable, object, oneOf, optional, string, timestamp, token } =
@@ -66,12 +67,31 @@ export const importRunReader = object({
     }),
     20000,
   ),
-  revision: nullable(object({ id: token, number: count, label: nullable(string) })),
+  revision: nullable(
+    object({
+      id: token,
+      number: count,
+      label: nullable(string),
+      /** #119 U99: this revision's database ("of Payload catalog"); name null when it's gone. */
+      database: optional(nullable(object({ id: token, name: nullable(string) }))),
+    }),
+  ),
   base_revision: nullable(object({ id: token, number: count })),
   diff: nullable(diff),
+  /** #119 U99: the existing revision this run's content matched; null when it made a new one. */
+  matched_revision: optional(nullable(matchedRevisionReader)),
 });
 
 export type ImportRunDetail = Decoded<typeof importRunReader>;
+
+/**
+ * #119 U99: the match when this run made NO revision of its own (its content matches one this
+ * catalog database already has). A run into another database makes its own rev and is shown as a
+ * new revision (`revision` set), so it returns null.
+ */
+export function sameDatabaseMatch(run: ImportRunDetail): MatchedRevision | null {
+  return run.revision === null ? (run.matched_revision ?? null) : null;
+}
 export type Diagnostic = ImportRunDetail["diagnostics"][number];
 
 export function fetchImportRun(

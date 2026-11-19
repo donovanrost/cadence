@@ -2,7 +2,8 @@
 import { computed, ref } from "vue";
 import { ApButton, ApCallout, plural } from "@/ui";
 import DiagnosticsPanel from "./DiagnosticsPanel.vue";
-import { severityCounts, type ImportRunDetail } from "./importRun.ts";
+import MatchedVerdict from "./MatchedVerdict.vue";
+import { sameDatabaseMatch, severityCounts, type ImportRunDetail } from "./importRun.ts";
 
 /**
  * The run's verdict (Catalog.md § C): failed → crit + the Diagnostics table; valid with warnings →
@@ -11,6 +12,12 @@ import { severityCounts, type ImportRunDetail } from "./importRun.ts";
 const props = defineProps<{ run: ImportRunDetail }>();
 const counts = computed(() => severityCounts(props.run.diagnostics));
 const open = ref(false);
+/** #119 U99: content that matched an existing revision; its verdict replaces the clean line. */
+const match = computed(() => props.run.matched_revision ?? null);
+/** Set when this run made its own revision in another database (U99's other-database case). */
+const own = computed(() =>
+  sameDatabaseMatch(props.run) ? undefined : (props.run.revision ?? undefined),
+);
 const issues = computed(() =>
   [
     counts.value.error > 0 ? plural(counts.value.error, "error") : null,
@@ -42,5 +49,6 @@ const issues = computed(() =>
     </ApCallout>
     <DiagnosticsPanel v-if="open" :diagnostics="run.diagnostics" index="C4" />
   </template>
-  <ApCallout v-else tone="nominal">Parsed and validated, no schema errors.</ApCallout>
+  <ApCallout v-else-if="!match" tone="nominal">Parsed and validated, no schema errors.</ApCallout>
+  <MatchedVerdict v-if="match && run.status === 'succeeded'" :match="match" :own="own" />
 </template>

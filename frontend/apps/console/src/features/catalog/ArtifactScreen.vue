@@ -90,7 +90,13 @@ async function again() {
             ><ApButton size="compact" @click="toRun(failure.runId)">Open it</ApButton></template
           >
         </ApCallout>
-        <ArtifactRevisions :revisions="value.revisions" />
+        <ArtifactRevisions
+          :revisions="value.revisions"
+          :match="
+            value.import_runs.find((r) => r.matched && r.revision_number === null)?.matched ??
+            undefined
+          "
+        />
         <ImportRunsPanel :runs="value.import_runs" />
         <ApPanel index="F3" title="Technical details">
           <ApKeyValue :items="details(value.artifact)" :columns="2">

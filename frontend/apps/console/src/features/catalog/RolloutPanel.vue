@@ -27,8 +27,11 @@ import { useRolloutDryRun } from "./useRolloutDryRun.ts";
 /** C3 Roll out to (Catalog.md, #65): stage this revision by profile or on a few spacecraft. */
 const props = defineProps<{
   revision: Readonly<{ id: string; number: number }>;
-  /** Breaking changes in the diff; staging needs them checked (no C2 fixes yet). */
-  breaking: number;
+  /**
+   * Breaking changes in the diff; staging needs them checked (no C2 fixes yet). Null when this
+   * page doesn't know (a matched revision, #119): never shown or sent as 0 (U20, U102's fallback).
+   */
+  breaking: number | null;
 }>();
 const router = useRouter();
 const scope = useMissionScope();
@@ -83,7 +86,9 @@ const blocked = computed((): string | null => {
   // qa #50: a set that moves nobody isn't worth staging.
   if (rolloutMoves(d.preview, props.revision.id) === 0)
     return `Nothing to stage: no spacecraft would move to rev ${props.revision.number}.`;
-  if (props.breaking > 0 && !acknowledged.value)
+  if (props.breaking === null && !acknowledged.value)
+    return `Check rev ${props.revision.number}'s diff first.`;
+  if (props.breaking !== null && props.breaking > 0 && !acknowledged.value)
     return `Check the ${plural(props.breaking, "breaking change")} first.`;
   return null;
 });
@@ -95,7 +100,8 @@ async function stage() {
   busy.value = true;
   failure.value = null;
   try {
-    const breaking = props.breaking > 0 ? ` · ${props.breaking} breaking` : "";
+    const breaking =
+      props.breaking !== null && props.breaking > 0 ? ` · ${props.breaking} breaking` : "";
     const r = await stageChange(missionId.value, {
       summary: `${label.value.replace(/^Stage /, "Roll out ")}${breaking}`,
       source: { surface: "catalog_rollout" },
@@ -124,7 +130,7 @@ async function stage() {
       />
       <RolloutDryRun :dry-run="dryRun" :revision="revision" :from="from" :unprofiled="unprofiled" />
       <RolloutBreaking
-        v-if="breaking > 0"
+        v-if="breaking === null || breaking > 0"
         v-model="acknowledged"
         :revision-number="revision.number"
         :breaking="breaking"

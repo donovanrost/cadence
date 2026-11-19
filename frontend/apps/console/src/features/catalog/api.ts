@@ -1,6 +1,7 @@
 import type { MissionId } from "@/api/index.ts";
 import { actor, decoders, request, type ApiResult, type Decoded, type Reader } from "@/api";
 import { formatCount } from "@/ui";
+import { runMatchReader } from "./matchedRevision.ts";
 
 /**
  * Catalog index. Requested shape: docs/apogee/plans/setup-shapes.md §C1; the final contract
@@ -68,6 +69,8 @@ export const importRunRow = object({
   revision_number: nullable(count),
   started_at: timestamp,
   completed_at: nullable(timestamp),
+  /** #119 U99: the revision this run's content matched (its tag); null when it made its own. */
+  matched: optional(nullable(runMatchReader)),
 });
 
 const database = object({
