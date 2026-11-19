@@ -44,15 +44,21 @@ const results = computed(() =>
     : [],
 );
 const full = computed(() => model.value.length >= props.limit);
-/** B6: a search that finds nothing, or fails, says so (results alone would be silent). */
-const outcome = computed(() => {
+/**
+ * B6: a search that finds nothing, or fails, says so (results alone would be silent). No match is
+ * a result, read politely; a failed search after the person typed is an alert (ux, #461).
+ */
+const noMatch = computed(() => {
   const s = search.state.value;
-  if (key.value === null) return "";
-  if (s.status === "failed") return "Couldn't search points. Change the search to try again.";
-  return s.status === "ready" && results.value.length === 0
+  return key.value !== null && s.status === "ready" && results.value.length === 0
     ? `No points to add match “${q.value.trim()}”.`
     : "";
 });
+const failed = computed(() =>
+  key.value !== null && search.state.value.status === "failed"
+    ? "Couldn't search points. Change the search to try again."
+    : "",
+);
 /**
  * A5: the picked result leaves the list; focus goes to the next one, else the one before, else
  * the search.
@@ -94,7 +100,8 @@ async function add(id: string, index: number) {
       :disabled="full"
       :hint="full ? `This widget takes up to ${limit}.` : 'Type at least 2 characters.'"
     />
-    <p aria-live="polite" class="m-0 text-sm text-text-3">{{ outcome }}</p>
+    <p aria-live="polite" class="m-0 text-sm text-text-3">{{ noMatch }}</p>
+    <p role="alert" class="m-0 text-sm text-caution-text">{{ failed }}</p>
     <ul v-if="results.length" class="m-0 flex max-h-56 list-none flex-col overflow-auto p-0">
       <li v-for="(o, index) in results" :key="o.id">
         <ApButton

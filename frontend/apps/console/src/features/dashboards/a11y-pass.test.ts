@@ -44,7 +44,7 @@ describe("in-place Remove section confirm (A1, A5)", () => {
   const section = { id: "s1", title: "Power", description: "", collapsed_by_default: false };
   it("opens on Cancel, never on Remove, and Cancel returns focus to the ⋯", async () => {
     const w = mount(EditSectionHead, {
-      props: { section, count: 2, first: true, last: true },
+      props: { section, count: 2, first: true, last: true, position: 1 },
       attachTo: document.body,
     });
     const trigger = w.get('button[aria-label^="More actions for section"]');

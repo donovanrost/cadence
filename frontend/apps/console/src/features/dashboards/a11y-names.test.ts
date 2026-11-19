@@ -11,13 +11,14 @@ afterEach(() => {
 });
 
 describe("section heading controls name their section (B7)", () => {
-  const head = (title: string) =>
+  const head = (title: string, position = 1) =>
     mount(EditSectionHead, {
       props: {
         section: { id: "s1", title, description: "", collapsed_by_default: false },
         count: 0,
         first: true,
         last: true,
+        position,
       },
     });
   const labels = (w: ReturnType<typeof head>) =>
@@ -32,8 +33,14 @@ describe("section heading controls name their section (B7)", () => {
       ]),
     );
   });
-  it("reads an untitled section as Untitled section", () => {
-    expect(labels(head(""))).toContain("Edit section Untitled section");
+  it("reads an untitled section by its place, so two untitled sections differ", () => {
+    expect(labels(head("", 2))).toEqual(
+      expect.arrayContaining([
+        "Edit section Untitled section 2",
+        "More actions for section Untitled section 2",
+      ]),
+    );
+    expect(labels(head("", 3))).toContain("Edit section Untitled section 3");
   });
 });
 

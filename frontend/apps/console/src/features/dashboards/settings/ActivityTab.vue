@@ -69,7 +69,7 @@ const hasMore = computed(() => cursor.value !== null);
           <ApButton size="compact" :disabled="loading" disabled-reason="Loading…" @click="loadOlder"
             >Older</ApButton
           >
-          <p aria-live="polite" class="m-0 text-sm text-caution-text">
+          <p role="alert" class="m-0 text-sm text-caution-text">
             {{ olderFailed ? "Couldn't load older activity. Try Older again." : "" }}
           </p>
         </div>

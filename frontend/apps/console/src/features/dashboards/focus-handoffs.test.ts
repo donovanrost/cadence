@@ -60,6 +60,7 @@ describe("Library Delete refused as in use", () => {
     expect(button("Delete")).toBeUndefined();
     const line = document.querySelector("[data-retire-used]");
     expect(line?.textContent).toContain("Used in 1 dashboard: Ops wall.");
+    expect(line?.getAttribute("role")).toBe("alert");
     expect(document.activeElement).toBe(line);
   });
 });

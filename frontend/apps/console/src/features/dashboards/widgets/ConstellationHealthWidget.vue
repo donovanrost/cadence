@@ -2,16 +2,12 @@
 import { computed } from "vue";
 import { ApStatusMark, stateTextClass } from "@/ui";
 import type { WorkspacePlacement } from "../model/snapshot.ts";
-import {
-  constellation,
-  limitLabel,
-  limitMark,
-  type HealthCell,
-  widgetTitle,
-} from "../model/widget-data.ts";
+import { constellation, limitLabel, limitMark, type HealthCell } from "../model/widget-data.ts";
+import { useWidgetName } from "./widget-name.ts";
 
 /** Worst limit state per spacecraft. Counts lead, so the problems read first. */
 const props = defineProps<{ placement: WorkspacePlacement }>();
+const name = useWidgetName(() => props.placement);
 const cells = computed(() => constellation(props.placement));
 const order: readonly HealthCell["state"][] = ["red", "yellow", "blue", "no_data", "green"];
 const counts = computed(() =>
@@ -27,7 +23,7 @@ const counts = computed(() =>
     class="flex h-full min-h-0 flex-col gap-3 overflow-auto px-3 py-2"
     role="region"
     tabindex="0"
-    :aria-label="widgetTitle(placement)"
+    :aria-label="name"
   >
     <ul class="flex flex-wrap gap-4 text-xs">
       <li v-for="{ state, count } in counts" :key="state" class="flex items-center gap-1.5">

@@ -35,25 +35,43 @@ export function frameRows(frame: WorkspaceFrame): Row[] {
   );
 }
 
-/** A widget's name for its heading and labels (B7): its title, else Untitled widget. */
-export const widgetTitle = (placement: WorkspacePlacement): string =>
-  placement.status === "ready" ? placement.widget.title || "Untitled widget" : "Unavailable widget";
+/**
+ * A widget's name for its heading and labels (B7): its title, else "Untitled widget N", N its
+ * place in reading order within its section (ux #461), so two untitled widgets don't share a name.
+ */
+export const widgetTitle = (placement: WorkspacePlacement, position?: number): string =>
+  placement.status === "ready"
+    ? placement.widget.title || untitled("widget", position)
+    : "Unavailable widget";
 
-/** A lane of the state timeline as a sentence (B5): its states, from when, and the one now. */
-export function laneSentence(
-  label: string,
-  segments: readonly Readonly<{ state: string; limit: LimitState | null; from: number }>[],
-): string {
-  const words = (s: (typeof segments)[number]) =>
-    `${s.state}${s.limit ? ` (${limitLabel[s.limit]})` : ""}`;
+/** "Untitled widget 3", "Untitled section 2"; without a position, just the kind. */
+export const untitled = (kind: "widget" | "section", position?: number): string =>
+  position === undefined ? `Untitled ${kind}` : `Untitled ${kind} ${position}`;
+
+type LaneSegment = Readonly<{ state: string; limit: LimitState | null; from: number }>;
+const limitWords = (s: LaneSegment) => (s.limit ? limitLabel[s.limit].toLowerCase() : null);
+
+/**
+ * A lane of the state timeline as a sentence (B5): its states, from when, and the last one in the
+ * window. "Last", not "now": the window may end before the present (U20, ux #461).
+ */
+export function laneSentence(label: string, segments: readonly LaneSegment[]): string {
+  const words = (s: LaneSegment) => `${s.state}${s.limit ? ` (${limitWords(s)})` : ""}`;
   const first = segments[0];
   const last = segments.at(-1);
   if (!first || !last) return `${label}: no states.`;
   const n = segments.length;
   return n === 1
-    ? `${label}: ${words(last)} since ${formatTime(first.from)}.`
-    : `${label}: ${n} states since ${formatTime(first.from)}, now ${words(last)}.`;
+    ? `${label}: ${words(last)} from ${formatTime(first.from)}.`
+    : `${label}: ${n} states from ${formatTime(first.from)}, last ${words(last)}.`;
 }
+
+/**
+ * One segment as text for the lane's screen-reader list (B5): the lane image's segments are
+ * presentational, so each state and when it started is said here, not only in the hover title.
+ */
+export const segmentLine = (s: LaneSegment): string =>
+  `${s.state}${s.limit ? `, ${limitWords(s)},` : ""} from ${formatTime(s.from)}`;
 
 export const primaryFrames = (placement: WorkspacePlacement) =>
   placement.frames.filter((frame) => frame.role === "primary");

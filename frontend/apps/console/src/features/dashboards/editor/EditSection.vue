@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, onUpdated, ref } from "vue";
 import { ApButton, ApPanel } from "@/ui";
 import type { WorkspacePlacement, WorkspaceSnapshot } from "../model/snapshot.ts";
 import WidgetBody from "../widgets/WidgetBody.vue";
+import { untitled } from "../model/widget-data.ts";
 import { BoardGrid } from "./board-grid.ts";
 import { keyboardLayout, positionText } from "./keyboard-layout.ts";
 import type { LayoutEdit, OutlinePlacement } from "./contracts.ts";
@@ -48,8 +49,20 @@ function onHandleKey(p: OutlinePlacement, event: KeyboardEvent) {
   emit("layout", [edit]);
   announcement.value = `${nameOf(p)}: ${positionText(edit)}.`;
 }
-/** B7: an untitled widget's controls still name what they act on. */
-const nameOf = (p: OutlinePlacement) => p.title || "Untitled widget";
+/**
+ * B7: an untitled widget's controls still name what they act on, with its place in the section in
+ * reading order ("Untitled widget 3"), as the viewer names it.
+ */
+const positions = computed(
+  () =>
+    new Map(
+      [...props.placements]
+        .sort((a, b) => readingOrder(a) - readingOrder(b))
+        .map((p, i) => [p.id, i + 1]),
+    ),
+);
+const readingOrder = (p: OutlinePlacement) => (p.layout.y ?? 1e6) * 1000 + (p.layout.x ?? 0);
+const nameOf = (p: OutlinePlacement) => p.title || untitled("widget", positions.value.get(p.id));
 </script>
 
 <template>
@@ -106,6 +119,7 @@ const nameOf = (p: OutlinePlacement) => p.title || "Untitled widget";
           <WidgetBody
             v-if="preview"
             :placement="preview"
+            :name="nameOf(p)"
             :context="snapshot.context"
             :now="Date.now()"
             :group="`edit-${snapshot.dashboard_id}`"

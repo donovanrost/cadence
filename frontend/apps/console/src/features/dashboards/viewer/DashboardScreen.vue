@@ -144,9 +144,10 @@ function onMenu(
       return snapshotSheet.value?.open();
     case "export":
       // A plain download (the server records the export); ux's toast waits for a kit toast. B6:
-      // until then, a screen reader hears that it started.
+      // until then, a screen reader hears that it started. Only that: the console can't see
+      // whether the browser saves the file (U20), nor its name (the server sets it).
       download(exportUrl({ missionId: missionId.value, dashboardId: dashboardId.value }));
-      return announcePolite("Export started: the dashboard's file is downloading.");
+      return announcePolite("Export started.");
     case "settings":
     case "activity":
       return router.push({

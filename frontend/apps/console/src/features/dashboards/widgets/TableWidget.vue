@@ -2,12 +2,13 @@
 import { computed } from "vue";
 import { ApStatusMark, stateTextClass } from "@/ui";
 import type { WorkspacePlacement } from "../model/snapshot.ts";
-import { limitLabel, limitMark, table, widgetTitle } from "../model/widget-data.ts";
+import { limitLabel, limitMark, table } from "../model/widget-data.ts";
+import { useWidgetName } from "./widget-name.ts";
 
 /** Data table / status matrix. Limit-state cells carry their mark, not just a tint. */
 const props = defineProps<{ placement: WorkspacePlacement }>();
 const data = computed(() => table(props.placement));
-const name = computed(() => widgetTitle(props.placement));
+const name = useWidgetName(() => props.placement);
 </script>
 
 <template>

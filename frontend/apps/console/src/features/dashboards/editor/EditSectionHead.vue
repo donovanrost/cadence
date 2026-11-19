@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 import { ApButton, ApInlineConfirm } from "@/ui";
 import MoreMenu from "../viewer/MoreMenu.vue";
+import { untitled } from "../model/widget-data.ts";
 import type { Command, Outline } from "./contracts.ts";
 
 /**
@@ -11,11 +12,18 @@ import type { Command, Outline } from "./contracts.ts";
  */
 type Section = Outline["sections"][number];
 type Action = "up" | "down" | "remove";
-const props = defineProps<{ section: Section; count: number; first: boolean; last: boolean }>();
+const props = defineProps<{
+  section: Section;
+  count: number;
+  first: boolean;
+  last: boolean;
+  /** Its place among the sections, from 1: names an untitled section (B7, "Untitled section 2"). */
+  position: number;
+}>();
 const emit = defineEmits<{ addWidget: []; edit: []; stage: [command: Command] }>();
 const confirming = ref(false);
 /** B7: the heading's buttons name their section. */
-const name = computed(() => props.section.title || "Untitled section");
+const name = computed(() => props.section.title || untitled("section", props.position));
 const items = computed(() => [
   {
     id: "up" as const,

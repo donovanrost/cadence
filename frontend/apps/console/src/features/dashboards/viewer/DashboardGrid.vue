@@ -74,13 +74,14 @@ const cell = (p: WorkspacePlacement) => ({
         class="grid grid-cols-1 gap-3 md:grid-cols-[repeat(var(--cols),minmax(0,1fr))] md:auto-rows-[var(--row)]"
       >
         <div
-          v-for="p in s.placements"
+          v-for="(p, i) in s.placements"
           :key="p.id"
           class="min-h-[240px] md:min-h-0 md:[grid-column:var(--col)] md:[grid-row:var(--rows)]"
           :style="cell(p)"
         >
           <WidgetPanel
             :placement="p"
+            :position="i + 1"
             :context="snapshot.context"
             :now="now.getTime()"
             :group="snapshot.dashboard_id"

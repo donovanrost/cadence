@@ -41,7 +41,8 @@ describe("Activity › Older", () => {
       attachTo: document.body,
     });
     await flushPromises();
-    const live = () => document.querySelector('[aria-live="polite"]')?.textContent?.trim();
+    // B6: a failed Older after the person asked for it is an alert, in a line that's always there.
+    const live = () => document.querySelector('[role="alert"]')?.textContent?.trim();
     expect(live()).toBe("");
 
     older()?.focus();

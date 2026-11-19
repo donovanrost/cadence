@@ -24,6 +24,8 @@ afterEach(() => {
 });
 const live = (w: { find: (s: string) => { text: () => string } }) =>
   w.find('[aria-live="polite"]').text();
+const alertLine = (w: { find: (s: string) => { text: () => string } }) =>
+  w.find('[role="alert"]').text();
 const typeSearch = async (
   w: { find: (s: string) => { setValue: (v: string) => Promise<void> } },
   text: string,
@@ -65,14 +67,17 @@ describe("points picker (ObservablePicker)", () => {
     expect(document.activeElement?.textContent).toContain("a.v");
   });
 
-  it("says a search with no match, and a failed one", async () => {
+  it("says a search with no match politely, and a failed one as an alert (B6)", async () => {
     api.points = { ok: true, value: { observables: [] } };
     w = picker();
+    expect(alertLine(w)).toBe("");
     await typeSearch(w, "zz");
     expect(live(w)).toBe("No points to add match “zz”.");
+    expect(alertLine(w)).toBe("");
     api.points = { ok: false, error: { kind: "network", message: "offline" } };
     await typeSearch(w, "zzz");
-    expect(live(w)).toBe("Couldn't search points. Change the search to try again.");
+    expect(alertLine(w)).toBe("Couldn't search points. Change the search to try again.");
+    expect(live(w)).toBe("");
   });
 });
 
