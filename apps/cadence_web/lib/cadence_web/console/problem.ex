@@ -209,6 +209,9 @@ defmodule CadenceWeb.Console.Problem do
       {404, "That group of spacecraft isn't in this request."},
     not_pending: {409, "That request has already been decided."},
     self_approval_forbidden: {403, "You can't approve your own request."},
+    activation_approver_authored_content:
+      {403,
+       "Not approved: you saved part of what this request activates, so another person approves it. Your approval wasn't recorded."},
     not_requester: {403, "Only the person who requested it can withdraw it."},
     activation_policy_changed:
       {409, "The activation policy changed since this was requested. Request it again."},
