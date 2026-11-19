@@ -1,8 +1,12 @@
+import { guardReadOnly } from "../support/read-only.ts";
 import { expectAccessible } from "../support/accessibility.ts";
 import { missionPath, openConsole } from "../support/console.ts";
 import { holdViewRecords } from "../support/dashboards.ts";
 import { expect, test } from "../support/fixtures.ts";
 import { DEV_ONLY, waitForScreen } from "../support/keyboard.ts";
+
+// qa's :4011 condition: only reads reach the server (support/read-only.ts).
+test.beforeEach(({ page }) => guardReadOnly(page));
 
 // #245 per-screen a11y pass: Present, read-only. It opens the first playlist's Present from the
 // keyboard, checks one h1 and axe, and leaves with Esc; focus returns to that playlist's Present

@@ -1,3 +1,4 @@
+import { guardReadOnly } from "../support/read-only.ts";
 import { onPhone } from "../support/a11y-projects.ts";
 import { authorControl } from "../support/a11y-author.ts";
 import { expectAccessible } from "../support/accessibility.ts";
@@ -7,6 +8,9 @@ import { expect, test } from "../support/fixtures.ts";
 import type { Page } from "@playwright/test";
 import { DEV_ONLY, expectKeyboardPass, waitForScreen } from "../support/keyboard.ts";
 import { expectSheetChecks } from "../support/sheet.ts";
+
+// qa's :4011 condition: only reads reach the server (support/read-only.ts).
+test.beforeEach(({ page }) => guardReadOnly(page));
 
 // #245 per-screen a11y pass: a dashboard's viewer, Kiosk and edit mode, read-only on real data.
 // The mission's first dashboard is opened from the directory; its view record is held in the

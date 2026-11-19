@@ -1,9 +1,13 @@
+import { guardReadOnly } from "../support/read-only.ts";
 import { a11yPersona } from "../support/a11y-projects.ts";
 import { expectAccessible } from "../support/accessibility.ts";
 import { openConsole } from "../support/console.ts";
 import { firstDashboardPath, holdViewRecords } from "../support/dashboards.ts";
 import { expect, test } from "../support/fixtures.ts";
 import { DEV_ONLY, expectKeyboardPass, waitForScreen } from "../support/keyboard.ts";
+
+// qa's :4011 condition: only reads reach the server (support/read-only.ts).
+test.beforeEach(({ page }) => guardReadOnly(page));
 
 // #245 per-screen a11y pass: a dashboard's Settings, every tab the persona has (an author:
 // General, Sharing, Activity, Diagnostics; anyone else: Activity and Diagnostics). Read-only:

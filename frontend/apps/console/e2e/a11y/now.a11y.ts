@@ -1,9 +1,13 @@
+import { guardReadOnly } from "../support/read-only.ts";
 import { onPhone } from "../support/a11y-projects.ts";
 import { expectAccessible } from "../support/accessibility.ts";
 import { missionPath, openConsole } from "../support/console.ts";
 import { expect, test } from "../support/fixtures.ts";
 import { DEV_ONLY, expectKeyboardPass, waitForScreen } from "../support/keyboard.ts";
 import { expectSheetChecks } from "../support/sheet.ts";
+
+// qa's :4011 condition: only reads reach the server (support/read-only.ts).
+test.beforeEach(({ page }) => guardReadOnly(page));
 
 // #189 per-screen a11y pass, the example each owner copies (#241). It runs in the four a11y
 // projects (1440 and 390, admin and member), read-only on real data: it loads, Tabs, opens and

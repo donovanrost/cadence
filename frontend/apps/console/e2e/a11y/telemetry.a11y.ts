@@ -1,7 +1,11 @@
+import { guardReadOnly } from "../support/read-only.ts";
 import { expectAccessible } from "../support/accessibility.ts";
 import { missionPath, openConsole } from "../support/console.ts";
 import { test } from "../support/fixtures.ts";
 import { DEV_ONLY, expectKeyboardPass, waitForScreen } from "../support/keyboard.ts";
+
+// qa's :4011 condition: only reads reach the server (support/read-only.ts).
+test.beforeEach(({ page }) => guardReadOnly(page));
 
 // #245 per-screen a11y pass: Telemetry › Explore, read-only (loads and Tabs; the points search
 // is a POST read, but nothing here types into it).

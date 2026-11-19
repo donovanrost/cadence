@@ -1,3 +1,4 @@
+import { guardReadOnly } from "../support/read-only.ts";
 import { authorControl } from "../support/a11y-author.ts";
 import { expectAccessible } from "../support/accessibility.ts";
 import { missionPath, openConsole } from "../support/console.ts";
@@ -5,6 +6,9 @@ import { firstRowLink } from "../support/dashboards.ts";
 import { test } from "../support/fixtures.ts";
 import { DEV_ONLY, expectKeyboardPass, waitForScreen } from "../support/keyboard.ts";
 import { expectSheetChecks } from "../support/sheet.ts";
+
+// qa's :4011 condition: only reads reach the server (support/read-only.ts).
+test.beforeEach(({ page }) => guardReadOnly(page));
 
 // #245 per-screen a11y pass: Dashboards' directory, Library and Playlists, read-only on real data
 // (loads, Tabs, opens and closes sheets with Esc; never acts). Checklist: docs/apogee/ux/a11y-checklist.md.

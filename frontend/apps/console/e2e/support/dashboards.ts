@@ -4,12 +4,15 @@ import { waitForScreen } from "./keyboard.ts";
 
 /**
  * Opening a dashboard records a view (`POST …/dashboards/:id/views`). The a11y passes are
- * read-only on real data, so the page's view record is answered here and never reaches the server.
+ * read-only on real data, so the view record is aborted at the route and never reaches the
+ * server (the viewer doesn't wait on it). Registered after guardReadOnly, so it logs the same way.
  */
 export async function holdViewRecords(page: Page): Promise<void> {
-  await page.route(/\/dashboards\/[^/]+\/views$/, (route) =>
-    route.request().method() === "POST" ? route.fulfill({ status: 204 }) : route.fallback(),
-  );
+  await page.route(/\/dashboards\/[^/]+\/views$/, async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    console.log(`a11y read-only: blocked POST ${new URL(route.request().url()).pathname}`);
+    return route.abort("aborted");
+  });
 }
 
 /** A list screen's first row link in <main>'s table, or null when the list is empty. */
