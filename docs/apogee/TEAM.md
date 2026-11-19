@@ -123,7 +123,7 @@ conflicts. `dev/chaos/` is the user's lab: no squad edits it.
 | Laptop 2 | Commanding & Approvals, and Mission Model & Spacecraft. Each has its own worktrees, its own test Postgres and its own heavy gate |
 | Laptop 3 (coming) | Telemetry & Data, Displays & Alarms, and Ground & Comms |
 
-Laptop 2's agents are addressed as `donovans-macbook-pro-1/NAME` in hc (for example `hc send donovans-macbook-pro-1/ca-security "..."`). They push their own branches only once GitHub is logged in on laptop 2. Each agent on a worker machine works in its own worktree off develop; nobody shares a working copy. The
+Laptop 2's agents are addressed as `donovans-macbook-pro-1/NAME` in hc (for example `hc send donovans-macbook-pro-1/ca-security "..."`). Since 11-19 they push their own branches and open PRs. Their token can't edit the project board yet (no project scope), so their squad lead moves their cards. Each agent on a worker machine works in its own worktree off develop; nobody shares a working copy. The
 laptop-1 stack stays the integration environment, run by qa.
 
 ## Communicating (herdr)
