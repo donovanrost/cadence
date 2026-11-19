@@ -1,4 +1,4 @@
-import type { SpacecraftRow } from "../api.ts";
+import type { ServerScids, SpacecraftRow } from "../api.ts";
 import type { ManifestRow } from "./manifest.ts";
 import { expandName, type NamingPattern } from "./naming.ts";
 
@@ -59,11 +59,21 @@ export function manifestRows(rows: readonly ManifestRow[]): readonly ProposedSpa
 }
 
 /** Smallest SCID above every SCID already in the mission (the server re-checks at review). */
-export function nextFreeScid(existing: readonly SpacecraftRow[]): number {
-  return existing.reduce(
+/**
+ * The SCID to suggest. S9 (#313, U20): the server's when it sends one (null: none is free). Without
+ * it, the old guess from the directory, which can't see archived or staged SCIDs, never past
+ * MAX_SCID.
+ */
+export function nextFreeScid(
+  existing: readonly SpacecraftRow[],
+  server: ServerScids | null = null,
+): number | null {
+  if (server) return server.next;
+  const guess = existing.reduce(
     (max, row) => (row.scid !== null && row.scid >= max ? row.scid + 1 : max),
     1,
   );
+  return guess > MAX_SCID ? null : guess;
 }
 
 export type ClashReport = Readonly<{
@@ -73,13 +83,18 @@ export type ClashReport = Readonly<{
   missingNorad: number;
 }>;
 
-/** Adds clash problems: names and SCIDs unique within the batch and against the mission. */
+/**
+ * Adds clash problems: names and SCIDs unique within the batch and against the mission. S9 (#313):
+ * `inUse` is the server's SCIDs in use; one with no live craft in the directory (archived, or
+ * staged) can't be named, so it reads as the server's own stage-time words.
+ */
 export function checkClashes(
   proposed: readonly ProposedSpacecraft[],
   existing: readonly SpacecraftRow[],
+  inUse: readonly number[] = [],
 ): ClashReport {
   const takenNames = new Map(existing.map((row) => [row.name.toLowerCase(), row.name]));
-  const takenScids = new Map<number, string>();
+  const takenScids = new Map<number, string | null>(inUse.map((scid) => [scid, null]));
   for (const row of existing) if (row.scid !== null) takenScids.set(row.scid, row.name);
   const seenNames = new Map<string, number>();
   const seenScids = new Map<number, number>();
@@ -100,6 +115,8 @@ export function checkClashes(
     if (row.scid !== null) {
       const scidOwner = takenScids.get(row.scid);
       if (scidOwner) problems.push(`SCID ${row.scid} is already ${scidOwner}`);
+      else if (scidOwner === null)
+        problems.push(`SCID ${row.scid} is already used in this mission`);
       if ((seenScids.get(row.scid) ?? 0) > 1)
         problems.push(`SCID ${row.scid} repeats in this batch`);
     }

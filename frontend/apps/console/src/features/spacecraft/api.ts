@@ -14,7 +14,7 @@ import {
  * The Setup spacecraft directory.
  * Contract: docs/apogee/api/setup.md, `GET /api/console/v1/missions/:mission_id/spacecraft`.
  */
-const { array, boolean, integer, nullable, object, string, timestamp, token } = decoders;
+const { array, boolean, integer, nullable, object, optional, string, timestamp, token } = decoders;
 
 export type ProfileRef = Readonly<{ id: string; name: string | null; version: number }>;
 
@@ -37,9 +37,18 @@ export type SpacecraftRow = Readonly<{
 export type TelemetryFreshness = "ok" | "degraded";
 export const telemetryFreshness = (value: unknown): TelemetryFreshness =>
   value === "degraded" ? "degraded" : "ok";
+/**
+ * S9 (#313, U20): the server's SCIDs for adding spacecraft. `inUse` is every SCID taken in the
+ * mission (live, archived, and staged in its active change set), sorted; `next` is the lowest free
+ * one in 1..1023, null when none is.
+ */
+export type ServerScids = Readonly<{ next: number | null; inUse: readonly number[] }>;
+
 export type SpacecraftDirectory = Readonly<{
   spacecraft: readonly SpacecraftRow[];
   telemetry: TelemetryFreshness;
+  /** null when the server doesn't send them (before #313 S9's server half): the console guesses. */
+  scids: ServerScids | null;
 }>;
 
 const profileRef = object({ id: token, name: nullable(string), version: integer });
@@ -83,10 +92,30 @@ const directoryRow: Reader<SpacecraftRow> = (value, path = "") => {
   };
 };
 
-export const directoryReader: Reader<SpacecraftDirectory> = object({
+const scidValue: Reader<number> = (value, path = "") => {
+  const n = integer(value, path);
+  if (n < 0 || n > 1023) throw new decoders.DecodeError(path, "SCID from 0 to 1023");
+  return n;
+};
+const directoryFields = object({
   spacecraft: array(directoryRow, 20_000),
   telemetry: telemetryFreshness,
+  next_free_scid: optional(nullable(scidValue)),
+  scids_in_use: optional(array(scidValue, 1024)),
 });
+
+export const directoryReader: Reader<SpacecraftDirectory> = (value, path = "") => {
+  const raw = directoryFields(value, path);
+  return {
+    spacecraft: raw.spacecraft,
+    telemetry: raw.telemetry,
+    // Readers first: without the list the console keeps its own guess; with it, the server's next.
+    scids:
+      raw.scids_in_use === undefined
+        ? null
+        : { next: raw.next_free_scid ?? null, inUse: raw.scids_in_use },
+  };
+};
 
 export function fetchSpacecraftDirectory(
   missionId: MissionId,
