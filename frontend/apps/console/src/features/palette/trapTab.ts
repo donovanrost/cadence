@@ -30,8 +30,10 @@ export function trapTab(root: HTMLElement | null, event: KeyboardEvent): void {
  * Listens on the document while the sheet is mounted (capture), not on the sheet: once a focused
  * control removes itself, keydown no longer starts inside the sheet (dashboards, #458).
  */
-export function useTabTrap(root: Readonly<Ref<HTMLElement | null>>): void {
-  const onKey = (event: KeyboardEvent) => trapTab(root.value, event);
+export function useTabTrap(root: Readonly<Ref<HTMLElement | null>>, onEscape?: () => void): void {
+  // Esc closes from anywhere while the sheet is up, focus on <body> included (dashboards #458).
+  const onKey = (event: KeyboardEvent) =>
+    event.key === "Escape" && onEscape ? onEscape() : trapTab(root.value, event);
   onMounted(() => document.addEventListener("keydown", onKey, true));
   onBeforeUnmount(() => document.removeEventListener("keydown", onKey, true));
 }
