@@ -43,14 +43,22 @@ watch(
   async () => {
     const g = retrying.value;
     if (g === null || props.sources[g] === "loading") return;
-    const back = props.groups.some((v) => v.group === g);
-    if (!back && props.sources[g] !== "failed") return;
+    // Settled one way or another: never pull focus later (ux, dashboards #492).
     retrying.value = null;
+    const back = props.groups.some((v) => v.group === g);
+    const failedAgain = props.sources[g] === "failed";
     await nextTick();
     if (document.activeElement !== document.body) return;
-    root.value
-      ?.querySelector<HTMLElement>(back ? `[data-heading="${g}"]` : `[data-retry="${g}"]`)
-      ?.focus();
+    const el = root.value;
+    // Back with rows → its heading; failed again → its Try again; back empty → the first heading,
+    // else the search field (ux #492).
+    const target = back
+      ? el?.querySelector<HTMLElement>(`[data-heading="${g}"]`)
+      : failedAgain
+        ? el?.querySelector<HTMLElement>(`[data-retry="${g}"]`)
+        : (el?.querySelector<HTMLElement>("[data-heading]") ??
+          el?.closest('[role="dialog"]')?.querySelector<HTMLElement>('input[type="search"]'));
+    target?.focus();
   },
 );
 </script>
@@ -75,7 +83,13 @@ watch(
       class="flex min-h-14 items-center gap-3 border-b border-hairline px-4"
     >
       <span class="flex-1 text-md text-text-2">{{ g }} couldn't load.</span>
-      <ApButton variant="ghost" size="compact" :data-retry="g" @click="retry(g)"
+      <!-- B7 (ux #492): named with its group. -->
+      <ApButton
+        variant="ghost"
+        size="compact"
+        :data-retry="g"
+        :aria-label="`Try again, ${g}`"
+        @click="retry(g)"
         >Try again</ApButton
       >
     </div>
@@ -104,6 +118,7 @@ watch(
         class="min-h-12 w-full cursor-pointer border-0 bg-transparent px-4 text-left font-mono text-xs text-text-3 uppercase"
         :aria-expanded="expanded.has(g.group)"
         :aria-controls="`${listId}-${g.group}`"
+        :aria-label="`${expanded.has(g.group) ? `Show first ${PER_GROUP}` : `Show all ${g.items.length + g.more}`}, ${g.group}`"
         @click="toggle(g.group)"
       >
         {{

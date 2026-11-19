@@ -76,6 +76,41 @@ describe("Try again", () => {
     w.unmount();
   });
 
+  it("back with no rows: focus goes to the search field, and nothing pulls it later", async () => {
+    const dialog = document.createElement("div");
+    dialog.setAttribute("role", "dialog");
+    const search = document.createElement("input");
+    search.type = "search";
+    dialog.append(search);
+    document.body.append(dialog);
+    const w = mount(MobileSearchResults, {
+      props: { ...base, groups: [], sources: failed },
+      attachTo: dialog,
+    });
+    await w.get('[data-retry="Spacecraft"]').trigger("click");
+    await w.setProps({ sources: { Spacecraft: "loading" } });
+    await w.setProps({ sources: { Spacecraft: "ready" }, groups: [] });
+    await flushPromises();
+    expect(document.activeElement).toBe(search);
+    // A later search that brings the group back doesn't move focus (retrying was cleared).
+    const other = document.createElement("button");
+    document.body.append(other);
+    other.focus();
+    await w.setProps({ groups: [view(2, 0)] });
+    await flushPromises();
+    expect(document.activeElement).toBe(other);
+    w.unmount();
+  });
+
+  it("names Try again and the toggle with their group (B7)", () => {
+    const w = mount(MobileSearchResults, {
+      props: { ...base, groups: [view(5, 4)], sources: { Alarms: "failed" as const } },
+    });
+    expect(w.get('[data-retry="Alarms"]').attributes("aria-label")).toBe("Try again, Alarms");
+    const toggle = w.findAll("button").find((b) => b.text() === "Show all 9");
+    expect(toggle?.attributes("aria-label")).toBe("Show all 9, Spacecraft");
+  });
+
   it("leaves focus alone when the person moved on while it loaded (B4)", async () => {
     const w = mount(MobileSearchResults, {
       props: { ...base, groups: [], sources: failed },

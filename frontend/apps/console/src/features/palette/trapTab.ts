@@ -31,9 +31,15 @@ export function trapTab(root: HTMLElement | null, event: KeyboardEvent): void {
  * control removes itself, keydown no longer starts inside the sheet (dashboards, #458).
  */
 export function useTabTrap(root: Readonly<Ref<HTMLElement | null>>, onEscape?: () => void): void {
-  // Esc closes from anywhere while the sheet is up, focus on <body> included (dashboards #458).
-  const onKey = (event: KeyboardEvent) =>
-    event.key === "Escape" && onEscape ? onEscape() : trapTab(root.value, event);
+  // Esc closes from anywhere while the sheet is up, focus on <body> included (dashboards #458),
+  // but not while an IME is composing: Esc there cancels the composition (dashboards #492).
+  const onKey = (event: KeyboardEvent) => {
+    if (event.key === "Escape" && onEscape) {
+      if (!event.isComposing) onEscape();
+      return;
+    }
+    trapTab(root.value, event);
+  };
   onMounted(() => document.addEventListener("keydown", onKey, true));
   onBeforeUnmount(() => document.removeEventListener("keydown", onKey, true));
 }

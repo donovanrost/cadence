@@ -98,6 +98,11 @@ describe("useTabTrap on a mounted sheet", () => {
     const w = mount(Closing, { attachTo: document.body });
     document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     expect(closed).toBe(1);
+    // Not while an IME is composing (dashboards #492).
+    document.body.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, isComposing: true }),
+    );
+    expect(closed).toBe(1);
     w.unmount();
   });
 
