@@ -159,6 +159,18 @@ export const changeSet = object({
   ),
   failure: nullable(raw),
   applied_revision: nullable(revisionNumber),
+  /**
+   * api changes.md §Permissions: whether this viewer may review (approve or send back), the
+   * server's own reviewer_is_author test computed up front. Absent on an older server.
+   */
+  viewer: optional(
+    nullable(
+      object({
+        can_review: boolean,
+        review_blocked_reason: optional(nullable(decoders.knownText(["reviewer_is_author"]))),
+      }),
+    ),
+  ),
 });
 
 export const configCapabilities = [
