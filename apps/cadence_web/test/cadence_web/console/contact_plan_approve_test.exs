@@ -11,7 +11,7 @@ defmodule CadenceWeb.Console.ContactPlanApproveTest do
 
   import Ecto.Query
 
-  alias Cadence.ContactPlanning.ContactPlanApprovals
+  alias Cadence.ContactPlanning.{ContactPlanApprovals, PlanOperations}
   alias Cadence.Management.Contacts.Store.ContactPlanApprovalRow
   alias Cadence.Repo
   alias CadenceWeb.Console.SchedulingRunner
@@ -247,6 +247,32 @@ defmodule CadenceWeb.Console.ContactPlanApproveTest do
     end
   end
 
+  describe "who may approve, and operation ids across plans (api-ops' review)" do
+    test "a member's approve is 403 forbidden and records neither an approval nor an operation",
+         c do
+      plan_id = member_plan(c)
+      submit!(c, c.member, plan_id, "op-member")
+
+      conn = post_as(c, c.member, plan_id, "approve", %{"operation_id" => "op-member-approve"})
+
+      assert %{"code" => "forbidden"} = json_response(conn, 403)["error"]
+      assert approvals(c, plan_id) == []
+      assert operations(c, "op-member-approve") == []
+      assert plan_state(c, plan_id) == "pending_approval"
+    end
+
+    test "an operation id already used on another plan is 409 operation_conflict", c do
+      first = member_plan(c)
+      second = member_plan(c)
+      submit!(c, c.member, first, "op-shared")
+
+      conn = post_as(c, c.member, second, "submit", %{"operation_id" => "op-shared"})
+
+      assert %{"code" => "operation_conflict"} = json_response(conn, 409)["error"]
+      assert [%{contact_plan_id: ^first}] = operations(c, "op-shared")
+    end
+  end
+
   describe "params" do
     test "submit refuses a decision_note (422): approving is its own action", c do
       plan_id = member_plan(c)
@@ -314,6 +340,16 @@ defmodule CadenceWeb.Console.ContactPlanApproveTest do
 
   defp current_version(c, plan_id), do: get_as(c, c.admin, "/#{plan_id}")["data"]["version"]
   defp plan_state(c, plan_id), do: get_as(c, c.admin, "/#{plan_id}")["data"]["state"]
+
+  defp operations(c, operation_id) do
+    PlanOperations
+    |> where(
+      [o],
+      o.organization_id == ^c.org.organization_id and o.mission_id == ^c.mission.mission_id and
+        o.operation_id == ^operation_id
+    )
+    |> Repo.all()
+  end
 
   defp approvals(c, plan_id),
     do: ContactPlanApprovals.list(c.org.organization_id, c.mission.mission_id, plan_id)
