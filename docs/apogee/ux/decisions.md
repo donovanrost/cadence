@@ -3231,7 +3231,7 @@ are api's, switched on with `knownErrorCode`.
   try again or tell the team that runs Cadence for you." The UI never tells an approver something happened when it
   didn't.
 - **One act under "Applies without approval"** (ux's call for the director, 11-19). The API stays split. When the read
-  says `separation_required: false` and the viewer is an org admin, a draft or sent-back plan gets ONE action, `Approve
+  says `approval_setting: "direct"` and the viewer is an org admin, a draft or sent-back plan gets ONE action, `Approve
   and book N passes` (sheet title `Approve and book the plan`): the console calls submit, then approve with the
   version it saw, and both are recorded.
   - Confirm body: "This sends R41 and approves it, and booking starts for its 40 passes." Muted (`text-3`) line under
@@ -3246,11 +3246,11 @@ are api's, switched on with `knownErrorCode`.
     opens awaiting approval with `Approve and book the plan` to try again; after a self-approval refusal (the setting
     changed to "Needs a second person's approval") Approve is disabled with its A6 reason instead.
   - The approve's 403 stays the backstop: the setting can change between the read and the click.
-- **Everyone else** (members, and admins under "Needs a second person's approval", `separation_required: true`):
+- **Everyone else** (members, and admins under "Needs a second person's approval", `approval_setting: "independent"`):
   `Request approval` (sent back `Submit the plan again`; Re-plan `Request approval for the proposal`, confirm "This
   sends the proposal for approval; another org admin approves it before anything is booked."). An org admin opening a
   plan that awaits approval gets `Approve and book the plan`, which calls approve only. Without
-  `separation_required` in the read, the console offers `Request approval` to everyone and never guesses.
+  `approval_setting` in the read, the console offers `Request approval` to everyone and never guesses.
 - **Approve refusals:**
   - 403 `contact_plan_self_approval_forbidden`, `because: "submitted"`: "Not approved: you submitted this plan, so
     another org admin approves it. Your approval wasn't recorded and nothing was booked." `because: "edited"` (api: the
