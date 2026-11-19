@@ -3530,8 +3530,10 @@ occurs.
   revision, so the old advice leads nowhere. The rest of U65's confirm is unchanged.
 - **Missing parts (U20, U29):** `decision` null shows neither who nor when ("Rev 4 was approved." / "which was
   rejected"). `by.name` null with a time drops only the name ("Rev 4 was approved at 11-15 09:12Z."), never "by
-  Unknown" and never an id. No reason: drop the quote. `revision` null reads as the unnumbered case, without
-  `Open the revision`. The words key on `status`; `decision` only supplies who, when and why. An unnumbered revision (U65): "This file matches a catalog revision that
+  Unknown" and never an id. No reason: drop the quote. A reason that doesn't end in . ! or ? gets a full stop after
+  its closing quote (“Wrong FSW build”.); the person's own text inside the quotes is never changed. `revision` null
+  reads as the unnumbered case, and keeps `Open the revision` (as built, #325): it opens the model revision's page,
+  where U88 already says why it can't be approved and offers Reject. The words key on `status`; `decision` only supplies who, when and why. An unnumbered revision (U65): "This file matches a catalog revision that
   already exists…" with `Open the revision`. A status this console doesn't know: only the first sentence, "This
   file matches catalog rev 4, so no new revision was created.", with the status in Technical details. It's never
   mapped onto a known case.
@@ -3572,8 +3574,9 @@ occurs.
   `import_runs[].matched`.
 - **Import runs table:** the Status tag reads `Matches rev 4` (info). For a rejected match it reads
   `Matches rejected rev 4` (caution, mark + word). Never `Succeeded`, which would imply a new revision.
-- **Technical details** (closed): the run's result as sent (`matched existing · rejected`) and the mission model
-  revision id.
+- **Technical details** (a plain panel, like the console's other Technical details panels; the kit has no collapsed
+  state, mms-engineer): the run's result as sent (`matched existing · rejected`) and the mission model revision id
+  (`model_revision_id`, never in a sentence).
 - **Security (mms-security, confirmed 11-19):**
   - Matching is only within the mission and organization (mms-engineer: identical bytes in another mission get their
     own revision). The decider's name and reason shown here are on rev 4's page already (U65's decided line).
