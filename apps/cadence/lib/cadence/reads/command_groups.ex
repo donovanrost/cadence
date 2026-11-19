@@ -18,7 +18,7 @@ defmodule Cadence.Reads.CommandGroups do
   stage of its first unfinished member, or of its last member when all are finished.
   """
 
-  alias Cadence.Commanding.Groups.{CommandGroup, GroupStore}
+  alias Cadence.Commanding.Groups.{CommandGroup, GroupStore, MemberCheck}
   alias Cadence.Reads.{CommandCatalog, Commands}
   alias Cadence.Reads.CommandGroups.{Expiry, ReleaseRefusals, VerifyTimes}
   alias Cadence.Reads.CommandPreflight.{ResolvedArguments, VerifierGroups}
@@ -146,7 +146,9 @@ defmodule Cadence.Reads.CommandGroups do
          verifier_groups: VerifierGroups.for_group(org, mission, group, members),
          # U68 R1: where the server's values differ from what was entered.
          resolved_arguments: ResolvedArguments.for_group(org, mission, group, members)
-       })}
+       })
+       # #120 (ux U92 "Up front"): the GO refusal's own member test, from the rows loaded above.
+       |> Map.merge(MemberCheck.read_fields(group, members))}
     end
   end
 
