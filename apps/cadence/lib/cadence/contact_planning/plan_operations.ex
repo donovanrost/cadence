@@ -8,13 +8,16 @@ defmodule Cadence.ContactPlanning.PlanOperations do
   never runs the action twice; any other request on a known operation id is refused.
 
   Normalized request: integers as given, the note trimmed (blank is none), acknowledgements
-  sorted by requirement id with each reason trimmed.
+  sorted by requirement id with each reason trimmed. The digest is a SHA-256 of a canonical JSON
+  list (fixed positions, no maps), so it stays stable across OTP and library versions; a golden
+  test pins it (DECISIONS #108: a stored hash that is recomputed).
   """
 
   use Ecto.Schema
 
   import Ecto.Query
 
+  alias Cadence.Auth.Scope
   alias Cadence.Repo
 
   @primary_key {:contact_plan_operation_id, :string, autogenerate: false}
@@ -85,16 +88,30 @@ defmodule Cadence.ContactPlanning.PlanOperations do
     end
   end
 
+  @doc """
+  The acting person or service identity's id, the actor an operation belongs to. Fails closed:
+  a scope with neither is refused (`{:error, :forbidden}`), never pooled under a shared id that
+  could replay someone else's answer.
+  """
+  @spec actor_id(Scope.t()) :: {:ok, binary()} | {:error, :forbidden}
+  def actor_id(%Scope{user: %{user_id: id}}) when is_binary(id), do: {:ok, id}
+
+  def actor_id(%Scope{service_identity: %{service_identity_id: id}}) when is_binary(id),
+    do: {:ok, id}
+
+  def actor_id(_scope), do: {:error, :forbidden}
+
   @doc "The normalized request's digest (see the moduledoc)."
   @spec digest(action(), request()) :: binary()
   def digest(action, request) do
     acknowledgements =
       (request[:acknowledgements] || [])
-      |> Enum.map(&%{"requirement_id" => &1.requirement_id, "reason" => trim(&1.reason)})
-      |> Enum.sort_by(& &1["requirement_id"])
+      |> Enum.map(&[&1.requirement_id, trim(&1.reason)])
+      |> Enum.sort()
 
-    [Atom.to_string(action), request.expected_version, trim(request[:note]), acknowledgements]
-    |> :erlang.term_to_binary([:deterministic])
+    # Canonical JSON: a list by position (version 1 of this layout), no maps, no key order.
+    [1, Atom.to_string(action), request.expected_version, trim(request[:note]), acknowledgements]
+    |> Jason.encode!()
     |> then(&:crypto.hash(:sha256, &1))
     |> Base.encode16(case: :lower)
   end

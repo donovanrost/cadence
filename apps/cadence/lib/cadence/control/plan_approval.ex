@@ -66,7 +66,8 @@ defmodule Cadence.Control.PlanApproval do
            acknowledged_exceptions: params[:acknowledgements] || []
          ) do
       {:error, :contact_plan_self_approval_forbidden} ->
-        {:error, {:contact_plan_self_approval_forbidden, because(plan, actor_id(scope))}}
+        {:error,
+         {:contact_plan_self_approval_forbidden, because(plan, PlanOperations.actor_id(scope))}}
 
       other ->
         other
@@ -74,37 +75,45 @@ defmodule Cadence.Control.PlanApproval do
   end
 
   # 'submitted' wins when the approver both submitted and wrote the version (domain 11-19:
-  # 'edited' is the author of the version being approved).
-  defp because(%ContactPlan{lifecycle_changed_by: actor_id}, actor_id), do: :submitted
+  # 'edited' is the author of the version being approved). This mirrors the two requesters that
+  # ContactPlanApprovals.separate_approver/5 refuses (the plan's lifecycle_changed_by and the
+  # version's created_by); keep the two in step if that check gains a cause.
+  defp because(%ContactPlan{lifecycle_changed_by: actor_id}, {:ok, actor_id}), do: :submitted
   defp because(_plan, _actor_id), do: :edited
 
   defp operation(scope, mission_id, plan_id, params) do
-    case PlanOperations.check(
-           scope.organization_id,
-           mission_id,
-           params.operation_id,
-           plan_id,
-           :approve,
-           actor_id(scope),
-           params
-         ) do
-      :new -> :new
-      {:replay, answer} -> {:replay, answer}
-      :duplicate_operation -> {:error, :duplicate_operation}
-      :operation_conflict -> {:error, :operation_already_claimed}
+    with {:ok, actor_id} <- PlanOperations.actor_id(scope) do
+      case PlanOperations.check(
+             scope.organization_id,
+             mission_id,
+             params.operation_id,
+             plan_id,
+             :approve,
+             actor_id,
+             params
+           ) do
+        :new -> :new
+        {:replay, answer} -> {:replay, answer}
+        :duplicate_operation -> {:error, :duplicate_operation}
+        :operation_conflict -> {:error, :operation_already_claimed}
+      end
     end
   end
 
-  defp attrs(scope, mission_id, plan_id, params),
-    do: %{
+  # Reached only after operation/4 accepted the actor, so actor_id/1 is {:ok, id} here.
+  defp attrs(scope, mission_id, plan_id, params) do
+    {:ok, actor_id} = PlanOperations.actor_id(scope)
+
+    %{
       organization_id: scope.organization_id,
       mission_id: mission_id,
       operation_id: params.operation_id,
       contact_plan_id: plan_id,
       action: :approve,
-      actor_id: actor_id(scope),
+      actor_id: actor_id,
       request: params
     }
+  end
 
   defp body(plan_id, version),
     do: %{
@@ -116,8 +125,4 @@ defmodule Cadence.Control.PlanApproval do
 
   defp expected(version, version), do: :ok
   defp expected(_current, _expected), do: {:error, :contact_plan_version_changed}
-
-  defp actor_id(%Scope{user: %{user_id: id}}), do: id
-  defp actor_id(%Scope{service_identity: %{service_identity_id: id}}), do: id
-  defp actor_id(_scope), do: "unknown"
 end

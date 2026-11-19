@@ -84,32 +84,38 @@ defmodule Cadence.Control.PlanResubmission do
   end
 
   defp operation(scope, mission_id, plan_id, params) do
-    case PlanOperations.check(
-           scope.organization_id,
-           mission_id,
-           params.operation_id,
-           plan_id,
-           :submit,
-           actor(scope)["id"],
-           params
-         ) do
-      :new -> :new
-      {:replay, answer} -> {:replay, answer}
-      :duplicate_operation -> {:error, :duplicate_operation}
-      :operation_conflict -> {:error, :operation_already_claimed}
+    with {:ok, actor_id} <- PlanOperations.actor_id(scope) do
+      case PlanOperations.check(
+             scope.organization_id,
+             mission_id,
+             params.operation_id,
+             plan_id,
+             :submit,
+             actor_id,
+             params
+           ) do
+        :new -> :new
+        {:replay, answer} -> {:replay, answer}
+        :duplicate_operation -> {:error, :duplicate_operation}
+        :operation_conflict -> {:error, :operation_already_claimed}
+      end
     end
   end
 
-  defp operation_attrs(scope, mission_id, plan_id, params),
-    do: %{
+  # Reached only after operation/4 accepted the actor, so actor_id/1 is {:ok, id} here.
+  defp operation_attrs(scope, mission_id, plan_id, params) do
+    {:ok, actor_id} = PlanOperations.actor_id(scope)
+
+    %{
       organization_id: scope.organization_id,
       mission_id: mission_id,
       operation_id: params.operation_id,
       contact_plan_id: plan_id,
       action: :submit,
-      actor_id: actor(scope)["id"],
+      actor_id: actor_id,
       request: params
     }
+  end
 
   defp body(plan, version),
     do: %{
