@@ -145,6 +145,36 @@ defmodule Cadence.Governance.ApprovalPolicyChangesTest do
     assert unchanged?(c)
   end
 
+  # #429 (domain's #403 note 1): ScopedSettings.save/8 is the other public writer. A save of a
+  # rule-guarded section that passes no `check:` would run no who-may-change rule at all, so it is
+  # refused before the lock and writes nothing. ActivationPolicy.save/4 always passes its check.
+  test "a raw settings save of the approval setting's section without a check is refused", c do
+    assert ScopedSettings.rule_guarded?(ActivationPolicy.section_id())
+    current = ActivationPolicy.load(c.org, c.mission)
+
+    for opts <- [[], [audit: fn _current -> %{} end]] do
+      assert {:error, :settings_check_required} =
+               ScopedSettings.save(
+                 c.org,
+                 c.mission,
+                 ActivationPolicy.section_id(),
+                 %{
+                   "value" => %{"approval_requirement" => "independent"},
+                   "allow_override" => true
+                 },
+                 current.token,
+                 %{"value" => %{"approval_requirement" => "direct"}},
+                 %{id: "raw-writer", name: "Raw writer"},
+                 opts
+               )
+    end
+
+    assert unchanged?(c)
+
+    # A section without a who-may-change rule saves as before, with or without a check.
+    refute ScopedSettings.rule_guarded?("commanding.defaults")
+  end
+
   # ca-security's third loosening path (director 11-19): clearing a mission's own 'independent'
   # while the organization's default is 'direct' makes the mission inherit 'direct'. The check
   # compares the EFFECTIVE setting before and after, so a clear that loosens is an organization
