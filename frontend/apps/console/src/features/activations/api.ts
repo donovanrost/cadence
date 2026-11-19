@@ -12,7 +12,7 @@ import {
 } from "@/api";
 import { failureOutcome, type HeaderPart } from "@/features/changes/index.ts";
 import { configurationChangesField } from "./configurationChanges.ts";
-import { formatShort, type OpState } from "@/ui";
+import { formatHourMinute, formatShort, type OpState } from "@/ui";
 
 /**
  * L10 app activation approvals (api activations.md, be59d4f32): a save that needs
@@ -153,19 +153,55 @@ export function mayDecide(r: ActivationRequest, viewer: Viewer): boolean {
   return r.can_decide && !isRequester(r, viewer);
 }
 
-/** After a decision: what happened, in one line. */
-export function decidedLine(
-  verb: Verb,
-  r: Decoded<typeof decided>,
-): { tone: "nominal" | "caution"; text: string } {
-  if (verb === "reject") return { tone: "nominal", text: "Rejected. Nothing changes." };
-  if (verb === "withdraw") return { tone: "nominal", text: "Withdrawn. Nothing changes." };
-  if (r.outcome === "needs_review" || r.request.execution?.state === "failed")
+/**
+ * What a decision did, in one line. `failed` (a11y B6): a failure or an unconfirmed apply is an
+ * alert; the rest a status.
+ */
+export type DecidedNote = Readonly<{
+  tone: "nominal" | "info" | "caution" | "crit";
+  text: string;
+  failed: boolean;
+}>;
+
+/**
+ * After a decision: what happened, from the answer only (#319; U94/U95 'After Approve', ca-ux
+ * 11-19; U20). Never "applied" because nothing failed: an approve says applied only when the answer
+ * says `applied` and the execution `succeeded`.
+ */
+export function decidedLine(verb: Verb, r: Decoded<typeof decided>): DecidedNote {
+  if (verb === "reject")
+    return { tone: "nominal", text: "Rejected. Nothing changes.", failed: false };
+  if (verb === "withdraw")
+    return { tone: "nominal", text: "Withdrawn. Nothing changes.", failed: false };
+  const ex = r.request.execution;
+  if (ex?.state === "failed")
+    return {
+      tone: "crit",
+      text: `Approved, but it didn't apply. ${applySentence(ex)}`,
+      failed: true,
+    };
+  // No "yet": it pairs a finished attempt with waiting (ux). U41's sentence only when the execution
+  // says why (an error or a code); its no-code fallback, "Applying failed.", would claim a failure
+  // (ca-ux, #419).
+  if (r.outcome === "needs_review") {
+    const why = ex && (ex.error || ex.error_code) ? ` ${applySentence(ex)}` : "";
     return {
       tone: "caution",
-      text: `Approved, but it didn't apply. ${applySentence(r.request.execution)}`,
+      text: `Approved, but Cadence couldn't confirm that it applied.${why}`,
+      failed: true,
     };
-  return { tone: "nominal", text: "Approved and applied." };
+  }
+  if (ex?.state === "in_progress")
+    return { tone: "info", text: "Approved. It's applying now.", failed: false };
+  if (r.outcome === "applied" && ex?.state === "succeeded") {
+    const at = ex.finished_at ? ` at ${formatHourMinute(new Date(ex.finished_at))}` : "";
+    return { tone: "nominal", text: `Approved and applied${at}.`, failed: false };
+  }
+  return {
+    tone: "info",
+    text: "Approved. Cadence hasn't confirmed that it applied yet. Reload to see it.",
+    failed: false,
+  };
 }
 
 /** Retry apply (resume addition): re-runs a failed or stalled apply; every step is safe to repeat. */

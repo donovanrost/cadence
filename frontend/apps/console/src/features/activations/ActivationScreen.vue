@@ -17,7 +17,7 @@ import ActivationApply from "./ActivationApply.vue";
 import ActivationDecide from "./ActivationDecide.vue";
 import ActivationOutcome from "./ActivationOutcome.vue";
 import ChangesPanel from "./ChangesPanel.vue";
-import { fetchActivation, requestedLine, stateTag } from "./api.ts";
+import { fetchActivation, requestedLine, stateTag, type DecidedNote } from "./api.ts";
 
 /** L10 review page: what an app activation applies, who asked, and the second person's decision. */
 const props = defineProps<{ requestId: string }>();
@@ -35,12 +35,12 @@ const viewer = computed(() => ({
   userId: session.user.id,
   orgAdmin: canAdministerOrganization(session, scope.value.organization),
 }));
-const note = ref<{ tone: "nominal" | "caution"; text: string } | null>(null);
+const note = ref<DecidedNote | null>(null);
 const crumbs: readonly ApCrumb[] = [
   { label: "Changes", to: { name: "setup.changes" } },
   { label: "Activation" },
 ];
-function decided(n: { tone: "nominal" | "caution"; text: string }) {
+function decided(n: DecidedNote) {
   note.value = n;
   page.refetch();
 }
@@ -58,7 +58,10 @@ function decided(n: { tone: "nominal" | "caution"; text: string }) {
         >
           <ApTag :state="stateTag(value).state" :label="stateTag(value).label" />
         </ApPageHeader>
-        <ApCallout v-if="note" :tone="note.tone">{{ note.text }}</ApCallout>
+        <!-- a11y B6: a failed or unconfirmed apply is an alert; the rest a status (#319). -->
+        <ApCallout v-if="note" :tone="note.tone" :role="note.failed ? 'alert' : 'status'">{{
+          note.text
+        }}</ApCallout>
         <ActivationApply
           v-else
           :request-key="key"
