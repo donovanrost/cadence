@@ -35,4 +35,25 @@ describe("SchemaForm notes (a kind's form rules; U83)", () => {
     expect(noted.text()).toContain(line);
     expect(mount(SchemaForm, { props }).text()).not.toContain(line);
   });
+
+  // #243 (mms-ux, fe-setup): the note is read with its field (the field's hint, aria-describedby)
+  // and said once from a status line, since it appears while focus is on the control.
+  it("ties the note to its field and says it from a status line", () => {
+    const line = "This transport will stop sharing its listener.";
+    const w = mount(SchemaForm, {
+      props: {
+        schema,
+        errors: {},
+        modelValue: { "configuration.mode": "connect" },
+        notes: { "configuration.mode": line },
+      },
+      attachTo: document.body,
+    });
+    const control = w.get("select, button[role='combobox'], [aria-describedby]");
+    const ids = (control.attributes("aria-describedby") ?? "").split(" ").filter(Boolean);
+    const described = ids.map((id) => document.getElementById(id)?.textContent ?? "").join(" ");
+    expect(described).toContain(line);
+    expect(w.get('p.sr-only[role="status"]').text()).toBe(line);
+    w.unmount();
+  });
 });
