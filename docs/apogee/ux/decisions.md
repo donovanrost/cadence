@@ -3231,7 +3231,7 @@ settings. Console only; amends U36. Every approve refusal says why and that the 
 are api's, switched on with `knownErrorCode`.
 
 - **Success only from the answer (U20):** "Approved. Booking 40 passes." only on the 202 with `outcome: "approved"`.
-  When the answer lists expired passes, the success line is U36's partial line with the answer's counts: "Approved.
+  When the answer lists expired passes, the success line is U61's partial line with the answer's counts: "Approved.
   Booking 37 passes; 3 had already started, so they weren't booked." The callout below keeps only its list
   (`Show 3`), so the screen says it once (#257 check, ca-ux and fe-ops).
   Any other success answer: "Cadence didn't record an approval for R41. Reload to see the plan; if it's still waiting,
@@ -3258,7 +3258,14 @@ are api's, switched on with `knownErrorCode`.
     reason>. It's waiting for approval." The reason is the refusal's first sentence after "Not approved:", with
     "R41" as "it" and without its ending (e.g. `forbidden`: "…not approved: only an org admin approves contact
     plans."). Example: "R41 was sent for approval, but not
-    approved: it changed after you opened it, so it isn't what you reviewed. It's waiting for approval." The plan then
+    approved: it changed after you opened it, so it isn't what you reviewed. It's waiting for approval."
+    Where the rule doesn't read right, the reason is given explicitly (ca-ux's review):
+    - `plan_not_ready` with conflicts: "2 of its passes conflict with other bookings"; unmet only: "it isn't ready:
+      10 spacecraft aren't covered".
+    - `plan_superseded`: "it's superseded by newer contact rules".
+    - `duplicate_operation`: "Cadence matched it to an earlier, different request".
+    - `plan_not_found`: "R41 was sent for approval, but Cadence can't find it any more. Reload to see 11-16's plans."
+      (no "It's waiting for approval"). The plan then
     opens awaiting approval with `Approve and book the plan` to try again; after a self-approval refusal (the setting
     changed to "Needs a second person's approval") Approve is disabled with its A6 reason instead. The typed note stays in
     the field for the retry.
@@ -3296,7 +3303,8 @@ are api's, switched on with `knownErrorCode`.
     unmet only, "Not approved: R41 isn't ready to approve: 10 spacecraft aren't covered. Your approval wasn't
     recorded. Reload to see the gaps." With neither count, "Not approved: R41 isn't ready to approve. Your approval
     wasn't recorded. Reload to see what's missing."
-  - No clear answer (a network failure or timeout; it may have been recorded): "Cadence didn't give a clear answer, so
+  - No clear answer (a network failure, a timeout, a 5xx or an answer the console can't read; it may have been
+    recorded): "Cadence didn't give a clear answer, so
     your approval may not have been recorded. Reload to see the plan before you try again."
   - 422 `invalid_params` on `decision_note`: the server's field message ("Keep the note under 2,000 characters.") under
     the note.
@@ -3324,14 +3332,17 @@ are api's, switched on with `knownErrorCode`.
   plan read says why, as #240 did for Activations; then "You drafted this version of the plan, so another org admin
   approves it." shows before the press.
 
-
 ### U98 · Can't view: a 403 on a read (#272, mms-ux; the pattern for every squad) (api / every squad)
 Someone in the mission without the read right opens a page (outsiders get 404 and never learn it exists). Nothing they
 asked to change was refused, so the line has no "Not saved:" style opener and never says "change".
 
-- **Line:** "You can't view <object>. Ask a mission admin or an org admin for access." First case (#272, the spacecraft
+- **Line:** "You can't view <object>. Ask a mission admin or an org admin for access." A nameless object reads "this
+  <thing>": "You can't view this spacecraft's configuration…", never "Unknown spacecraft's" (mms-ux's review). First case (#272, the spacecraft
   configuration workspace and its packet choices, one line on both routes): "You can't view EARENDIL-004's
   configuration. Ask a mission admin or an org admin for access."
-- **Where:** in place of the content, as the page's empty state (`role="status"`; the person didn't act, B6). The
+- **Where:** in place of the content the read would fill, the page or a panel, as its empty state (`role="status"`;
+  the person didn't act, B6). Packet choices load inside the workspace, so the line takes that list's place, and any
+  act that needs it is disabled with its reason (A6). The
   object is named as the page names it, never by id (U25).
-- **Not this:** a 403 on a write keeps its act's opener ("Not saved:", "Not approved:" …).
+- **Not this:** a 403 on a write keeps its act's opener ("Not saved:", "Not approved:" …), and a 403 with a known
+  specific code keeps that code's line; U98 is for the generic `forbidden` on a read.
