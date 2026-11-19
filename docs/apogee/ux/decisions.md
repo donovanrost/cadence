@@ -3755,15 +3755,18 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
 "Waiting for approval" (P5). Shape: mms-security's, agreed with api 11-19; codes switched on with `knownErrorCode`.
 
 - **States** (`State` column; mark + word, B2): `PROPOSED` (caution), `ACTIVE` (nominal), `REJECTED` (off),
-  `REVOKED` (off), `EXPIRED` (stale). `expired` is derived on read and means two things; the row says which:
+  `REVOKED` (off), `WITHDRAWN` (off), `EXPIRED` (stale). `expired` is derived on read and means two things; the row says which:
   - a proposal undecided past `proposal_expires_at` (72 h): "Proposed by Mira K. at 11-19 06:40Z; no one decided it
     in time." Told apart by `approved_at` being null.
   - an active grant past `valid_until`: today's line.
   - A proposed row: `Valid until` reads "30 days from approval" (from `validity_seconds`; `valid_from` and
     `valid_until` are null until approval), and the state line "Proposed by Mira K. at 11-19 06:40Z · decide by
     11-22 06:40Z".
-  - A rejected row: "Rejected by Ana R. at 11-19 06:52Z: <reason>" (needs `rejected_by`, `rejected_at` and the
-    reason in the read).
+  - A rejected row (`rejected_by`, `rejected_at`, `rejection_reason`, together or none): "Rejected by Ana R. at 11-19
+    06:52Z: <reason>". Without them: "Rejected."
+  - A withdrawn row (a widening proposal ended because its grant was revoked; `withdrawn_by`, `withdrawn_at`):
+    "Withdrawn when Ana R. revoked the grant it would replace, at 11-19 07:05Z." Without them: "Withdrawn: the grant
+    it would replace was revoked."
 - **The sheet** (`Grant automation…`):
   - Under "Needs a second person's approval": title `Propose a grant`, commit `Propose grant`, muted line above the
     footer: "It takes effect once another org admin approves it. Until then Nightly planner can't act under it."
@@ -3803,7 +3806,8 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
     `expired`: "Not approved: no one decided this grant in time, so it expired. Your approval wasn't recorded.
     Propose it again."; `rejected`: "Not approved: this grant was already rejected, so your approval wasn't
     recorded. Reload to see it."; `active`: "…was already approved…"; `revoked`: "Not approved: this grant was
-    revoked, so your approval wasn't recorded. Reload to see it."
+    revoked, so your approval wasn't recorded. Reload to see it."; `withdrawn`: "Not approved: this proposal was
+    withdrawn when the grant it would replace was revoked, so your approval wasn't recorded. Reload to see it."
   - 409 `approval_policy_changed` (`kind: "automation_grants"`; until #201, api's interim name): "Not approved: the
     mission's approval setting changed after this grant was proposed. Your approval wasn't recorded. Propose it
     again."
@@ -3821,21 +3825,27 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
   U100's automation line, by the service's act (plan: "Not drafted automatically:", submit: "Not submitted
   automatically:", approve: "Not approved automatically:") then by state: `proposed` "Nightly planner's grant isn't
   approved yet."; `rejected` "Nightly planner's grant was rejected."; `expired` "no one approved Nightly planner's
-  grant in time." The existing `automation_grant_revoked`, `automation_grant_expired` and
+  grant in time."; `withdrawn` "Nightly planner's grant was withdrawn." The existing `automation_grant_revoked`, `automation_grant_expired` and
   `automation_grant_not_yet_valid` keep their lines.
 - **Narrow** (`Narrow…` on an active grant; one person, at once): sheet title `Narrow the grant`, commit `Narrow`,
   muted line "It takes effect at once. Narrowing only takes access away, so no approval is needed." After the answer:
   "Narrowed. Nightly planner can now <what's left>." A change that isn't strictly narrower is refused, 422
-  `automation_grant_not_narrower` (`fields`, the widening ones, named by the sheet's labels): "Not narrowed: this
+  `automation_grant_not_narrower` (`fields`, the widening ones, named by the sheet's labels: `allowed_actions` Can,
+  `maximum_horizon_seconds` Plans ahead up to, `maximum_contacts` Contacts per plan, at most,
+  `maximum_execution_concurrency` At once, at most, `validity_seconds` Valid for; an unknown field by its code in
+  Technical details only): "Not narrowed: this
   change gives Nightly planner more than it has now (Contacts per plan, at most), so it needs approval. Propose it as
   a new grant instead." Without `fields`, the same without the bracket. The console offers only narrower values in the sheet, so this is the backstop.
 - **Revoke** stays one act, at once, with a reason, even while a widening of the same grant is proposed. If one is,
-  the revoke sheet adds: "This also ends the proposal waiting for approval." (if the server ends it; api confirms).
+  the revoke sheet adds: "This also withdraws the proposal waiting for approval, so it can't switch automation
+  back on later." (A widening proposal records `replaces_grant_id`; revoking that grant withdraws it in the same
+  transaction.)
 - **Widening** (more actions, more services, longer validity) is a new proposal, worded as the sheet above.
 - **Audit** (who and when as one event, U29): "Proposed a grant for Nightly planner", "Approved Mira K.'s grant for
   Nightly planner", "Rejected Mira K.'s grant for Nightly planner: <reason>", "Revoked the grant for Nightly planner:
   <reason>", "Narrowed the grant for Nightly planner: <what changed>", "The proposed grant for Nightly planner
-  expired; no one decided it in time."
+  expired; no one decided it in time.", "Withdrew the proposed grant for Nightly planner when revoking the grant it
+  would replace"
 - **Not here:** whether a grant approved under "Applies without approval" keeps working after the mission moves to
   "Needs a second person's approval" (#283's open question 1, the director's call); widening who may propose or
   approve to mission admins (open question 2).
