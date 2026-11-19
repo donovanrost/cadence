@@ -145,15 +145,24 @@ function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Recor
           >
             <!-- U66: a sentence with links (the buffer disk's holders). -->
             <template v-if="item.sentenceParts" #sentence>
-              <template v-for="(part, n) in item.sentenceParts" :key="n">
-                <template v-if="typeof part === 'string'">{{ part }}</template>
-                <RouterLink
-                  v-else-if="'to' in part"
-                  :to="part.to"
-                  class="text-readout underline hover:text-bright"
-                  >{{ part.text }}</RouterLink
-                >
-                <span v-else class="whitespace-nowrap">{{ part.text }}</span>
+              <template v-if="command.running.value.has(item.key)">{{
+                command.busyWord(item)
+              }}</template>
+              <template v-else>
+                <template v-for="(part, n) in item.sentenceParts" :key="n">
+                  <template v-if="typeof part === 'string'">{{ part }}</template>
+                  <RouterLink
+                    v-else-if="'to' in part"
+                    :to="part.to"
+                    class="text-readout underline hover:text-bright"
+                    >{{ part.text }}</RouterLink
+                  >
+                  <span v-else class="whitespace-nowrap">{{ part.text }}</span>
+                </template>
+                <!-- #243 (dashboards): the outcome's note and who may act follow a linked sentence too. -->
+                <template v-if="command.tailFor(item, access.abort)">{{
+                  ` ${command.tailFor(item, access.abort)}`
+                }}</template>
               </template>
             </template>
             <template #title>

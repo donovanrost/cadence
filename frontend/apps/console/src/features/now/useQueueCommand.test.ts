@@ -163,6 +163,10 @@ describe("Book on Now's plan_coverage item (#268)", () => {
       status: "",
       alert: "Not booked: 11-16 has ended, so R41 can't be booked any more.",
     });
+    // #243 (dashboards): the same note follows a linked sentence (U66 parts) through tailFor.
+    expect(command.tailFor(row, true)).toBe(
+      "Not booked: 11-16 has ended, so R41 can't be booked any more.",
+    );
 
     vi.stubGlobal(
       "fetch",
