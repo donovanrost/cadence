@@ -2764,6 +2764,10 @@ the fix (with the P0 result); the console's disable is its reader.
   `command_request_in_group`; #121, ca-ux 11-19): "This command is part of a command group. Its group's GO queues it."
   It replaces the approve line the enqueue reused, which named the wrong act; a correctness fix, so it may change
   although the legacy ops page renders it.
+- **Any other standalone action on a group member** (REST `409 command_request_in_group`; the fallback when the
+  action is none of approve, reject or enqueue; unreachable today; #121, ca-security's review, ca-ux 11-19): "This
+  command is part of a command group. Use its group instead." It names no act, so a future caller never gets
+  another act's instruction.
 - **Standalone create naming a group** (REST): "Not created: this request names a command group. A group's commands
   are submitted with the group."
 - **Not here:** the group's own GO/NO-GO is unchanged; this only closes the standalone way round it.
@@ -2884,8 +2888,19 @@ and should never fire; when it does, something went round the product. NO-GO, se
   - The counts come from the 409's `submitted_member_count` and `current_member_count`; without both, the bracket
     is left out.
 - **After it:** the panel stays open, `GO` disabled with this line as its A6 reason, and `NO-GO` is the way out.
-- **Not up front:** the group read has no `members_changed` flag; since this should never fire, none is needed
-  now. If one is added (api-ops offers it as an 11-18 follow-up), GO is disabled before a click with the same line.
+- **Up front** (#120, ca-ux 11-19; it was "Not up front" until the read had a flag): the group read carries
+  `members_changed` (true / false) with `submitted_member_count` and `current_member_count` (both or neither, as on
+  the 409). When it's true, `GO` and `GO excluding…` are disabled before a click, with the line as their A6 reason,
+  less "Not released:" since nothing was tried: "This group's commands changed after it was submitted (12 then, 13
+  now), so it isn't what was reviewed. Give it NO-GO and submit the commands again. Tell the team that runs Cadence
+  for you: a group shouldn't change after it's submitted." The reason sits muted under the GO buttons and as their
+  description. U92's line has no "nothing was released" ending to drop. `NO-GO`, send back and abort stay enabled.
+  Without the counts the bracket goes.
+  - The read computes the flag with the same function as the GO refusal (api-ops), so the two never disagree. It
+    compares counts, not which commands, so the words say only that the commands changed.
+  - When the flag is missing (an older server, or a decided group: the server sends the three fields only while the
+    group awaits a decision), the console blocks nothing up front and the 409 stays the backstop; it never guesses
+    from its own member list (U20).
 - **Nowhere else:** it isn't on Now or in the audit by itself; only at GO.
 
 ### U91 · The runtime can't verify its configuration: telemetry, passes and who fixes it (11-17 Earendil incident; amends U38) (api / domain / api-ops / fe-ops)
