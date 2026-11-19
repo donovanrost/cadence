@@ -174,11 +174,16 @@ const serverNoteError = computed(() => {
 const refusal = computed((): Readonly<{ text: string; code: string | null }> | null => {
   const e = error.value;
   if (!e || serverNoteError.value) return null;
-  const who = { version: props.plan.version, userId: props.userId, day: props.day ?? "" };
+  const who = {
+    version: props.plan.version,
+    userId: props.userId,
+    day: props.day ?? "",
+    unmet: props.plan.unmet,
+  };
   if (props.act === "approve") return approveRefusal(e, who);
   if (e.kind === "conflict" && isError(e, "plan_changed"))
     return {
-      text: "The plan changed since you opened this. Close it and review again.",
+      text: `Not sent: R${props.plan.version} changed after you opened it. Reload to see it, then send it again.`,
       code: null,
     };
   return { text: submitRefusalText(e, who), code: null };

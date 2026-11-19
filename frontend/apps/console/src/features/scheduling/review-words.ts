@@ -41,7 +41,13 @@ export type Refusal = Readonly<{
   /** No clear answer: the approval may or may not have been recorded (qa #19). */
   unclear: boolean;
 }>;
-type Who = Readonly<{ version: number; userId: string; day: string }>;
+type Who = Readonly<{
+  version: number;
+  userId: string;
+  day: string;
+  /** The plan's unmet requirements, to count acknowledgements_required's gaps by spacecraft (U23). */
+  unmet?: readonly Readonly<{ requirement_id: string; spacecraft_id: string | null }>[] | undefined;
+}>;
 
 const person = d.nullable(
   d.object({ id: d.optional(d.nullable(d.string)), name: d.nullable(d.string) }),
@@ -51,6 +57,13 @@ const notPendingDetails = d.object({
   state: d.optional(d.nullable(planState)),
   decided_by: d.optional(person),
   decided_at: d.optional(d.nullable(d.timestamp)),
+});
+const missingDetails = d.object({ missing: d.optional(d.array(d.string, 5_000)) });
+const notReadyDetails = d.object({
+  unmet: d.optional(d.array(d.object({ spacecraft_id: d.optional(d.nullable(d.string)) }), 5_000)),
+  conflicts: d.optional(
+    d.array(d.object({ snapshot_ids: d.optional(d.array(d.string, 5_000)) }), 5_000),
+  ),
 });
 const submittedDetails = d.object({
   submitted_by: d.optional(person),
@@ -71,7 +84,6 @@ export function selfBecause(error: ApiError): Because | null {
 export const selfReason = (because: Because) => `${upper(SELF[because])}.`;
 
 const upper = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 const firstSentence = (s: string) => s.split(/(?<=\.)\s/)[0]?.replace(/\.$/, "") ?? s;
 
 const refusal = (
@@ -107,10 +119,12 @@ function decided(error: ApiError, w: Who, r: string): Refusal {
 /** U97: an approve refusal (the sheet's line, and the reason for the one act's partial line). */
 export function approveRefusal(error: ApiError, w: Who): Refusal {
   const r = `R${w.version}`;
-  if (outcomeUnknown(error)) {
-    const text = planErrorText(error);
-    return refusal(text, lower(firstSentence(text)), { unclear: true });
-  }
+  if (outcomeUnknown(error))
+    return refusal(
+      "Cadence didn't give a clear answer, so your approval may not have been recorded. Reload to see the plan before you try again.",
+      "Cadence didn't give a clear answer about the approval",
+      { unclear: true },
+    );
   const because = selfBecause(error);
   if (because)
     return refusal(
@@ -131,10 +145,14 @@ export function approveRefusal(error: ApiError, w: Who): Refusal {
     );
   if (isError(error, "plan_not_found"))
     return refusal(
-      `Not approved: Cadence can't find this plan any more. Reload to see ${dayLabel(w.day)}'s plans.`,
+      `Not approved: Cadence can't find this plan any more, so your approval wasn't recorded. Reload to see ${dayLabel(w.day)}'s plans.`,
       "Cadence can't find this plan any more",
     );
-  if (isError(error, "duplicate_operation")) return duplicate;
+  if (isError(error, "duplicate_operation"))
+    return refusal(
+      "Not approved: Cadence matched this to an earlier, different request, so your approval wasn't recorded. Reload and try again.",
+      "Cadence matched it to an earlier, different request",
+    );
   // U61's own lines (day already planned, replaced, all expired) already open "Not approved:".
   const lifecycle = lifecycleRefusal(error);
   if (lifecycle) {
@@ -142,16 +160,23 @@ export function approveRefusal(error: ApiError, w: Who): Refusal {
     return refusal(lifecycle.text, firstSentence(rest).replaceAll(r, "it"));
   }
   const code = knownErrorCode(error);
-  if (code === "plan_superseded") {
-    // U36's line (the console's words), opening "Not approved:".
-    const text = planErrorText(error);
-    return refusal(`Not approved: ${lower(text)}`, lower(firstSentence(text)));
+  if (code === "plan_superseded")
+    return refusal(
+      `Not approved: contact rules changed after ${r} was drafted, so it's superseded and can't be booked. Your approval wasn't recorded. Draft the day again.`,
+      "it's superseded by newer contact rules",
+    );
+  if (code === "acknowledgements_required") {
+    const gaps = gapCount(error, w);
+    if (gaps > 0) {
+      const need = `${plural(gaps, "gap")} ${gaps === 1 ? "needs" : "need"} a reason first`;
+      return refusal(
+        `Not approved: ${need}. Your approval wasn't recorded. Give a reason for each, then approve.`,
+        need,
+      );
+    }
   }
-  if (
-    code === "plan_not_ready" ||
-    code === "acknowledgements_required" ||
-    code === "invalid_params"
-  ) {
+  if (code === "plan_not_ready") return notReady(error, r);
+  if (code === "invalid_params") {
     // The server's own message: its case is kept (dashboards' review).
     const text = planErrorText(error);
     return refusal(`Not approved: ${text}`, firstSentence(text));
@@ -160,6 +185,40 @@ export function approveRefusal(error: ApiError, w: Who): Refusal {
     "Not approved: Cadence refused this approval. Your approval wasn't recorded.",
     "Cadence refused this approval",
     { code: codeOf(error) },
+  );
+}
+
+/** U23: gaps are uncovered spacecraft, so the missing requirements count by their spacecraft. */
+function gapCount(error: ApiError, w: Who): number {
+  const missing = new Set(detailsOf(error, missingDetails)?.missing ?? []);
+  const unmet = w.unmet ?? [];
+  const of = (list: typeof unmet) => new Set(list.map((u) => u.spacecraft_id ?? "—")).size;
+  return of(unmet.filter((u) => missing.has(u.requirement_id))) || of(unmet) || missing.size;
+}
+
+/** U97: plan_not_ready by what blocks it: conflicting passes, else uncovered spacecraft. */
+function notReady(error: ApiError, r: string): Refusal {
+  const x = detailsOf(error, notReadyDetails);
+  const passes = new Set((x?.conflicts ?? []).flatMap((c) => c.snapshot_ids ?? [])).size;
+  if (passes > 0) {
+    const verb = passes === 1 ? "conflicts" : "conflict";
+    return refusal(
+      `Not approved: ${passes} of ${r}'s passes ${verb} with other bookings, so it can't be booked. Your approval wasn't recorded. Send it back so it can be planned again.`,
+      `${passes} of its passes ${verb} with other bookings`,
+    );
+  }
+  const craft = new Set((x?.unmet ?? []).flatMap((u) => (u.spacecraft_id ? [u.spacecraft_id] : [])))
+    .size;
+  if (craft > 0) {
+    const uncovered = `${plural(craft, "spacecraft", "spacecraft")} ${craft === 1 ? "isn't" : "aren't"} covered`;
+    return refusal(
+      `Not approved: ${r} isn't ready to approve: ${uncovered}. Your approval wasn't recorded. Reload to see the gaps.`,
+      `it isn't ready: ${uncovered}`,
+    );
+  }
+  return refusal(
+    `Not approved: ${r} isn't ready to approve. Your approval wasn't recorded. Reload to see what's missing.`,
+    "it isn't ready to approve",
   );
 }
 
@@ -192,6 +251,12 @@ export const notConfirmedLine = (version: number) =>
 /** U20: a success answer that isn't outcome approved. */
 export const noApprovalLine = (version: number) =>
   `Cadence didn't record an approval for R${version}. Reload to see the plan; if it's still waiting, try again or tell the team that runs Cadence for you.`;
+/** The one act: the submit landed and the approve found no plan (U97: no "It's waiting"). */
+export const sentNotFoundLine = (version: number, day: string) =>
+  `R${version} was sent for approval, but Cadence can't find it any more. Reload to see ${dayLabel(day)}'s plans.`;
+/** The one act: the submit landed and the approve's answer wasn't clear (U97). */
+export const sentUnclearLine = (version: number) =>
+  `R${version} was sent for approval, but Cadence didn't give a clear answer about the approval. Reload to see whether it was recorded before you try again.`;
 /** The one act: the submit landed and the approve was refused (U97). */
 export const sentNotApprovedLine = (version: number, reason: string) =>
   `R${version} was sent for approval, but not approved: ${reason}. It's waiting for approval.`;

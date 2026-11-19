@@ -72,14 +72,14 @@ describe("approve refusals (U97)", () => {
       text: "Not approved: another plan already covers this day.",
       reason: "another plan already covers this day",
     });
-    const notReady: ApiError = {
+    const invalid: ApiError = {
       kind: "invalid",
-      code: "plan_not_ready",
-      message: "KSAT window W-12 has 2 conflicts.",
+      code: "invalid_params",
+      message: "Keep the note under 2,000 characters.",
       details: null,
     };
-    expect(approveRefusal(notReady, who).text).toBe(
-      "Not approved: KSAT window W-12 has 2 conflicts.",
+    expect(approveRefusal(invalid, who).text).toBe(
+      "Not approved: Keep the note under 2,000 characters.",
     );
   });
 
@@ -89,12 +89,21 @@ describe("approve refusals (U97)", () => {
     );
     expect(
       approveRefusal({ kind: "not_found", code: "plan_not_found", message: "" }, who).text,
-    ).toBe("Not approved: Cadence can't find this plan any more. Reload to see 11-16's plans.");
+    ).toBe(
+      "Not approved: Cadence can't find this plan any more, so your approval wasn't recorded. Reload to see 11-16's plans.",
+    );
     expect(approveRefusal(forbidden("forbidden"), who).text).toBe(
       "Not approved: only an org admin approves contact plans. Your approval wasn't recorded.",
     );
-    expect(approveRefusal(conflict("plan_superseded"), who).text).toMatch(
-      /^Not approved: contact rules changed/,
+    expect(approveRefusal(conflict("plan_superseded"), who)).toMatchObject({
+      text: "Not approved: contact rules changed after R41 was drafted, so it's superseded and can't be booked. Your approval wasn't recorded. Draft the day again.",
+      reason: "it's superseded by newer contact rules",
+    });
+    expect(approveRefusal(conflict("duplicate_operation", { plan_id: "p" }), who).text).toBe(
+      "Not approved: Cadence matched this to an earlier, different request, so your approval wasn't recorded. Reload and try again.",
+    );
+    expect(approveRefusal({ kind: "unavailable", status: 502, message: "" }, who).text).toBe(
+      "Cadence didn't give a clear answer, so your approval may not have been recorded. Reload to see the plan before you try again.",
     );
     expect(approveRefusal(conflict("plan_frozen_by_moon"), who)).toMatchObject({
       text: "Not approved: Cadence refused this approval. Your approval wasn't recorded.",
@@ -102,6 +111,51 @@ describe("approve refusals (U97)", () => {
     });
     expect(approveRefusal({ kind: "unavailable", status: 503, message: "" }, who).unclear).toBe(
       true,
+    );
+  });
+});
+
+describe("not ready, gaps and partial approval (U97, ux's #257 check)", () => {
+  const notReady = (details: unknown): ApiError => ({
+    kind: "invalid",
+    code: "plan_not_ready",
+    message: "x",
+    details,
+  });
+  it("says what blocks the plan: conflicting passes, else uncovered spacecraft, else neither", () => {
+    const conflicts = [{ snapshot_ids: ["a", "b"] }, { snapshot_ids: ["b"] }];
+    expect(
+      approveRefusal(notReady({ conflicts, unmet: [{ spacecraft_id: "sc1" }] }), who),
+    ).toMatchObject({
+      text: "Not approved: 2 of R41's passes conflict with other bookings, so it can't be booked. Your approval wasn't recorded. Send it back so it can be planned again.",
+      reason: "2 of its passes conflict with other bookings",
+    });
+    const unmet = [{ spacecraft_id: "sc1" }, { spacecraft_id: "sc1" }, { spacecraft_id: "sc2" }];
+    expect(approveRefusal(notReady({ conflicts: [], unmet }), who).text).toBe(
+      "Not approved: R41 isn't ready to approve: 2 spacecraft aren't covered. Your approval wasn't recorded. Reload to see the gaps.",
+    );
+    expect(approveRefusal(notReady(null), who).text).toBe(
+      "Not approved: R41 isn't ready to approve. Your approval wasn't recorded. Reload to see what's missing.",
+    );
+  });
+  it("counts the gaps that need a reason by spacecraft (U23)", () => {
+    const unmet = [
+      { requirement_id: "r1", spacecraft_id: "sc1" },
+      { requirement_id: "r2", spacecraft_id: "sc1" },
+      { requirement_id: "r3", spacecraft_id: "sc2" },
+      { requirement_id: "r4", spacecraft_id: "sc3" },
+    ];
+    const ack = (missing: string[]): ApiError => ({
+      kind: "invalid",
+      code: "acknowledgements_required",
+      message: "x",
+      details: { missing },
+    });
+    expect(approveRefusal(ack(["r1", "r2", "r3"]), { ...who, unmet }).text).toBe(
+      "Not approved: 2 gaps need a reason first. Your approval wasn't recorded. Give a reason for each, then approve.",
+    );
+    expect(approveRefusal(ack(["r4"]), { ...who, unmet }).text).toMatch(
+      /^Not approved: 1 gap needs/,
     );
   });
 });
@@ -200,6 +254,25 @@ describe("runReview (#257)", () => {
     });
   });
 
+  it("the one act's partial line uses U97's explicit reasons", async () => {
+    submit.mockResolvedValue(submitted(42));
+    approve.mockResolvedValue({
+      ok: false,
+      error: conflict("duplicate_operation", { plan_id: "p" }),
+    });
+    expect(await runReview(ctx(), "submit_approve", plan, [])).toMatchObject({
+      text: "R42 was sent for approval, but not approved: Cadence matched it to an earlier, different request. It's waiting for approval.",
+    });
+    approve.mockResolvedValue({
+      ok: false,
+      error: { kind: "not_found", code: "plan_not_found", message: "" },
+    });
+    expect(await runReview(ctx(), "submit_approve", plan, [])).toMatchObject({
+      tone: "crit",
+      text: "R42 was sent for approval, but Cadence can't find it any more. Reload to see 11-16's plans.",
+    });
+  });
+
   it("a refused submit approves nothing; an unclear approve says so", async () => {
     submit.mockResolvedValue({ ok: false, error: conflict("plan_already_submitted") });
     expect(await runReview(ctx(), "submit_approve", plan, [])).toMatchObject({ kind: "refused" });
@@ -211,7 +284,22 @@ describe("runReview (#257)", () => {
     });
     const unclear = await runReview(ctx(), "submit_approve", plan, []);
     expect(unclear).toMatchObject({ kind: "after", tone: "caution" });
-    expect(unclear.kind === "after" && unclear.text).toMatch(/^Cadence didn't get a clear answer/);
+    expect(unclear.kind === "after" && unclear.text).toBe(
+      "R42 was sent for approval, but Cadence didn't give a clear answer about the approval. Reload to see whether it was recorded before you try again.",
+    );
+  });
+
+  it("counts the passes an approval left out from the answer (U61, #273)", async () => {
+    const expired = { count: 3, reservable_count: 9, items: [] };
+    approve.mockResolvedValue({
+      ok: true,
+      value: { ...approvedAnswer("approved").value, expired },
+    });
+    expect(await runReview(ctx(), "approve", plan, [])).toMatchObject({
+      tone: "nominal",
+      text: "Approved. Booking 9 passes; 3 had already started, so they weren't booked.",
+      expired,
+    });
   });
 
   it("says Approved only on outcome approved, a replay included (U20)", async () => {

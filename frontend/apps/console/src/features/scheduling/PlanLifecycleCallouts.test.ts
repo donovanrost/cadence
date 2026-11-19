@@ -37,7 +37,7 @@ describe("U61 lifecycle callouts on K1", () => {
     expect(open.attributes("href")).toBe("/plan?day=2026-11-16&plan=contact_plan_44");
   });
 
-  it("says what an approval left out, and lists those passes under Show N", async () => {
+  it("lists what an approval left out under Show N; the review's line says it once (U97)", async () => {
     const w = await render(null, {
       count: 2,
       reservable_count: 1476,
@@ -50,9 +50,8 @@ describe("U61 lifecycle callouts on K1", () => {
         { spacecraft: null, station: null, aos: "2026-11-16T00:20:00Z" },
       ],
     });
-    expect(w.text()).toContain(
-      "Approved. Booking 1,476 passes; 2 had already started, so they weren't booked.",
-    );
+    expect(w.text()).not.toContain("Approved.");
+    expect(w.text()).toContain("Show 2");
     expect(w.text()).not.toContain("EARENDIL-001");
     const toggle = w.findAll("button").find((b) => b.text() === "Show 2");
     expect(toggle).toBeDefined();

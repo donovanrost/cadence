@@ -3,7 +3,6 @@ import { computed, ref } from "vue";
 import { ApButton, ApCallout, useNow } from "@/ui";
 import {
   expiredLine,
-  partialApproval,
   planOfDayRoute,
   supersededByLine,
   type Expired,
@@ -12,7 +11,8 @@ import {
 
 /**
  * U61 on K1: the plan that replaced this one (with Open), and after an approval that left passes
- * out because they had already started, the partial result with those passes under `Show N`.
+ * out because they had already started, those passes under `Show N` (U97: the review's own line
+ * says the partial result once).
  */
 const props = defineProps<{
   day: string;
@@ -41,7 +41,6 @@ const expiredLines = computed(() =>
   <ApCallout v-if="expired && expired.count > 0" tone="info">
     <span class="flex flex-col gap-1">
       <span class="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <span>{{ partialApproval(expired) }}</span>
         <ApButton
           v-if="expiredLines.length > 0"
           variant="ghost"

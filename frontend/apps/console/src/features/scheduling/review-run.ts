@@ -1,5 +1,5 @@
-import { isKnown, type ApiError, type MissionId } from "@/api";
-import type { Expired } from "./lifecycle.ts";
+import { isError, isKnown, type ApiError, type MissionId } from "@/api";
+import { partialApproval, type Expired } from "./lifecycle.ts";
 import {
   approvePlan,
   submitPlan,
@@ -13,6 +13,8 @@ import {
   notConfirmedLine,
   SENT,
   sentNotApprovedLine,
+  sentNotFoundLine,
+  sentUnclearLine,
   type Because,
 } from "./review-words.ts";
 
@@ -57,7 +59,13 @@ export function reviewOps(newId: () => string = () => crypto.randomUUID()) {
   };
 }
 
-type Plan = Readonly<{ id: string; version: number; counts: Readonly<{ passes: number }> }>;
+type Plan = Readonly<{
+  id: string;
+  version: number;
+  counts: Readonly<{ passes: number }>;
+  /** For acknowledgements_required's gap count (U23). */
+  unmet?: readonly Readonly<{ requirement_id: string; spacecraft_id: string | null }>[];
+}>;
 type Context = Readonly<{
   missionId: MissionId;
   ops: (key: string) => Ids;
@@ -83,9 +91,12 @@ const after = (
 
 /** U20: "Approved" only on outcome approved (a replay shows the original answer's result). */
 function approved(value: ApproveResult, version: number, passes: number): ReviewOutcome {
-  return isKnown(value.outcome) && value.outcome === "approved"
-    ? after(version, "nominal", approvedLine(passes), { expired: value.expired })
-    : after(version, "caution", noApprovalLine(version));
+  if (!isKnown(value.outcome) || value.outcome !== "approved")
+    return after(version, "caution", noApprovalLine(version));
+  // U61/U97: passes left out because they had already started are counted from the answer.
+  const expired = value.expired;
+  const text = expired && expired.count > 0 ? partialApproval(expired) : approvedLine(passes);
+  return after(version, "nominal", text, { expired });
 }
 
 export async function runReview(
@@ -97,7 +108,7 @@ export async function runReview(
 ): Promise<ReviewOutcome> {
   const ids = ctx.ops(JSON.stringify([act, plan.id, plan.version, acks, note ?? ""]));
   const ref = { id: plan.id, version: plan.version };
-  const who = { userId: ctx.userId, day: ctx.day };
+  const who = { userId: ctx.userId, day: ctx.day, unmet: plan.unmet };
   if (act === "approve") {
     const a = await approvePlan(ctx.missionId, ref, ids.approve, acks, note);
     if (a.ok) return approved(a.value, plan.version, plan.counts.passes);
@@ -126,8 +137,10 @@ export async function runReview(
   if (a.ok) return approved(a.value, version, plan.counts.passes);
   const why = approveRefusal(a.error, { version, ...who });
   const keepNote = note ?? null;
+  if (isError(a.error, "plan_not_found"))
+    return after(version, "crit", sentNotFoundLine(version, ctx.day), { keepNote });
   return why.unclear
-    ? after(version, "caution", why.text, { keepNote })
+    ? after(version, "caution", sentUnclearLine(version), { keepNote })
     : after(version, "crit", sentNotApprovedLine(version, why.reason), {
         because: why.because,
         keepNote,
