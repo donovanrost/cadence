@@ -32,27 +32,63 @@ const request: ActivationRequest = {
 };
 
 describe("app activation approvals (L10)", () => {
-  it("says what an approve did, including an apply that failed", () => {
-    expect(decidedLine("approve", { request, outcome: "applied" })).toEqual({
+  // #319 (U94/U95 'After Approve', ca-ux; U20): the line comes from the answer, one per branch.
+  const exec = (state: "in_progress" | "succeeded" | "failed", finished_at?: string) => ({
+    state,
+    since: undefined,
+    finished_at,
+    error_code: undefined,
+    retryable: undefined,
+    error: null,
+  });
+  const approve = (
+    execution: ReturnType<typeof exec> | null,
+    outcome: "applied" | "needs_review" | undefined,
+  ) => decidedLine("approve", { request: { ...request, execution }, outcome });
+
+  it("a failed apply: crit, with U41's sentence (no code reads as the generic failure)", () => {
+    expect(approve(exec("failed"), "needs_review")).toEqual({
+      tone: "crit",
+      text: "Approved, but it didn't apply. Applying failed.",
+      failed: true,
+    });
+  });
+
+  it("needs_review without a failure: couldn't confirm, never 'didn't apply'", () => {
+    expect(approve(exec("in_progress"), "needs_review")).toEqual({
+      tone: "caution",
+      text: "Approved, but Cadence couldn't confirm that it applied. Applying failed.",
+      failed: true,
+    });
+  });
+
+  it("still applying: says so, as a status", () => {
+    expect(approve(exec("in_progress"), undefined)).toEqual({
+      tone: "info",
+      text: "Approved. It's applying now.",
+      failed: false,
+    });
+  });
+
+  it("applied only when the answer says applied and the apply succeeded, with its time", () => {
+    expect(approve(exec("succeeded"), "applied")).toEqual({
       tone: "nominal",
       text: "Approved and applied.",
+      failed: false,
     });
-    // U41: no sentence and no known code reads as the generic failure.
-    const failed = {
-      ...request,
-      execution: {
-        state: "failed" as const,
-        since: undefined,
-        finished_at: undefined,
-        error_code: undefined,
-        retryable: undefined,
-        error: null,
-      },
+    expect(approve(exec("succeeded", "2026-11-19T03:46:12Z"), "applied").text).toBe(
+      "Approved and applied at 03:46Z.",
+    );
+  });
+
+  it("anything else claims nothing: no execution, or applied without a succeeded apply", () => {
+    const neutral = {
+      tone: "info",
+      text: "Approved. Cadence hasn't confirmed that it applied yet. Reload to see it.",
+      failed: false,
     };
-    expect(decidedLine("approve", { request: failed, outcome: "needs_review" })).toEqual({
-      tone: "caution",
-      text: "Approved, but it didn't apply. Applying failed.",
-    });
+    expect(approve(null, "applied")).toEqual(neutral);
+    expect(approve(null, undefined)).toEqual(neutral);
     expect(decidedLine("reject", { request, outcome: undefined }).text).toBe(
       "Rejected. Nothing changes.",
     );

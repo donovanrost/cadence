@@ -12,6 +12,7 @@ import {
   isRequester as requestedBy,
   mayDecide,
   type ActivationDetail,
+  type DecidedNote,
   type DetailKey,
   type Verb,
   type Viewer,
@@ -26,7 +27,7 @@ const props = defineProps<{
   /** Its reading-order index: R3 under #235's What changes panel. */
   index: string;
 }>();
-const emit = defineEmits<{ decided: [note: { tone: "nominal" | "caution"; text: string }] }>();
+const emit = defineEmits<{ decided: [note: DecidedNote] }>();
 const isRequester = computed(() => requestedBy(props.request, props.viewer));
 /** Approve/reject through the one gate; Withdraw only once domain has it. */
 const canAct = computed(

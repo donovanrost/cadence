@@ -7,13 +7,14 @@ import {
   resume,
   resumeFailure,
   type ActivationDetail,
+  type DecidedNote,
   type DetailKey,
 } from "./api.ts";
 
 /** U41: an approved activation that didn't apply: why, since when, and Retry apply or the next step. */
 const props = defineProps<{ requestKey: DetailKey; request: ActivationDetail }>();
 const emit = defineEmits<{
-  resumed: [note: { tone: "nominal" | "caution"; text: string }];
+  resumed: [note: DecidedNote];
   refused: [];
 }>();
 const line = computed(() => notApplied(props.request));
