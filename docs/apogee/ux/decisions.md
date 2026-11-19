@@ -3770,7 +3770,8 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
 - **The sheet** (`Grant automation…`):
   - Under "Needs a second person's approval": title `Propose a grant`, commit `Propose grant`, muted line above the
     footer: "It takes effect once another org admin approves it. Until then Nightly planner can't act under it."
-    After a `proposed` answer: "Proposed. It takes effect when another org admin approves it, by 11-22 06:40Z."
+    After a `proposed` answer: "Proposed. It takes effect once another org admin approves it. If no one decides by
+    11-22 06:40Z, it expires."
   - Under "Applies without approval": title `Grant automation`, commit `Grant`, muted line "It takes effect at once.
     No second person's approval is needed, as this mission's setting allows." After an `active` answer: "Granted.
     Nightly planner can act under it until 12-19 06:40Z."
@@ -3778,7 +3779,7 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
     says what happened.
   - Any other answer (U20): "Cadence didn't confirm the grant. Reload to see it."
 - **Waiting for approval** (panel on a proposed grant): "Proposed by Mira K. at 11-19 06:40Z: <reason>. It takes
-  effect when another org admin approves it, by 11-22 06:40Z." Actions `Approve grant for Nightly planner` and
+  effect once another org admin approves it. If no one decides by 11-22 06:40Z, it expires." Actions `Approve grant for Nightly planner` and
   `Reject…`. Reject needs a reason: up front "Give a reason first." (A7); the 422 `invalid_params` field message
   (`Say why.`) shows under the field.
   - **Up front (A6) from `viewer_can_decide` and `cannot_decide_because`, never computed in the console** (#233's
@@ -3807,16 +3808,16 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
     "…already rejected by…"; the viewer: "You already approved this grant at 11-19 06:52Z. Reload to see it." (with
     the date, since a 72 h proposal spans days) Without them, by state:
     `expired`: "Not approved: no one decided this grant in time, so it expired. Your approval wasn't recorded.
-    Propose it again."; `rejected`: "Not approved: this grant was already rejected, so your approval wasn't
+    It has to be proposed again."; `rejected`: "Not approved: this grant was already rejected, so your approval wasn't
     recorded. Reload to see it."; `active`: "…was already approved…"; `revoked`: "Not approved: this grant was
     revoked, so your approval wasn't recorded. Reload to see it."; `withdrawn`: "Not approved: this proposal was
     withdrawn when the grant it would replace was revoked, so your approval wasn't recorded. Reload to see it."
   - 409 `approval_policy_changed` (`kind: "automation_grants"`; until #201, api's interim name): "Not approved: the
-    mission's approval setting changed after this grant was proposed. Your approval wasn't recorded. Propose it
-    again."
+    mission's approval setting changed after this grant was proposed. Your approval wasn't recorded. It has to
+    be proposed again."
   - 403 `authenticated_user_required` (a service, even one with organization_admin; REST or backstop; the code U104
     uses): "Not
-    approved: only a person can approve a grant, not a service identity." For propose: "Not proposed: only a person
+    approved: only a person can approve a grant, not a service identity. Your approval wasn't recorded." For propose: "Not proposed: only a person
     can propose a grant, not a service identity."
   - Replays (approve, reject and narrow take an `operation_id`, as #257's plans): the same id and body returns the
     original answer with `replayed: true`, shown as this one's result. 409 `duplicate_operation`: "Not approved:
@@ -3844,15 +3845,18 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
   back on later." (A widening proposal records `replaces_grant_id`; revoking that grant withdraws it in the same
   transaction.)
 - **Widening** (more actions, more services, longer validity) is a new proposal, worded as the sheet above.
-- **Audit** (who and when as one event, U29): "Proposed a grant for Nightly planner", "Approved Mira K.'s grant for
+- **Audit** (who and when as one event, U29): "Proposed a grant for Nightly planner", "Granted Nightly planner
+  automation (no approval needed under this mission's setting)" for a grant that takes effect at once, "Approved Mira K.'s grant for
   Nightly planner", "Rejected Mira K.'s grant for Nightly planner: <reason>", "Revoked the grant for Nightly planner:
   <reason>", "Narrowed the grant for Nightly planner: <what changed>", "The proposed grant for Nightly planner
-  expired; no one decided it in time.", "Withdrew the proposed grant for Nightly planner when revoking the grant it
-  would replace"
+  expired; no one decided it in time.", "Withdrew the proposed grant for Nightly planner, when revoking the grant it
+  would replace" (the actor and time lead, U29)
 - **A nameless service** (`grantee` or `service` with a null `name`, as U100/#287): the name drops, never an id (U25;
-  the id goes in Technical details). "Nightly planner" becomes "the service this grant is for", e.g. "You're
-  accountable for the service this grant is for, so another org admin approves it." and "Not submitted
-  automatically: the grant for this service isn't approved yet." Sheets and rows already name the service from the
+  the id goes in Technical details). "Nightly planner" becomes "the service identity this grant is for": "You're
+  accountable for the service identity this grant is for, so another org admin approves it."; "The service identity
+  this grant is for has no one recorded as accountable for it…"; the sheet's "Until then the service identity can't
+  act under it."; "Not submitted automatically: the service identity's grant isn't approved yet."; the action reads
+  `Approve grant`. Sheets and rows already name the service from the
   grant's own read; a null name there reads "Unknown service identity" (U25).
 - **Not here:** whether a grant approved under "Applies without approval" keeps working after the mission moves to
   "Needs a second person's approval" (#283's open question 1, the director's call); widening who may propose or
