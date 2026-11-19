@@ -3802,21 +3802,24 @@ read, the dry run).
     nothing earlier to compare it with and can't tell what it breaks. Check what uses its commands and points
     before you stage." The acknowledgment checkbox reads "I've checked what rev 1 changes". There's no
     `Open its import`, since its diff has nothing to compare.
-  - The diff couldn't be read (`breaking_base` set, `breaking` null), and on a server without these fields:
-    "This page can't show whether rev 4 breaks anything in use. Check its import's diff before you stage." with
-    `Open its import` only when `import_run_id` is there, and the acknowledgment checkbox "I've checked rev 4's
-    diff". (U86: say what the console can't read.)
-  - **The import page's C3 follows the same three cases**, from its own fields, and is never 0 breaking for an
+  - The diff couldn't be read (`breaking_base` set, `breaking` null): the uncompared line below, with no link.
+    Its import has the same base and diff, so its page can't count either, and `Open its import` would lead to a
+    page that says the same (mms-engineer, #386).
+  - A server without these fields: "This page can't show whether rev 4 breaks anything in use. Check its import's
+    diff before you stage." with `Open its import` only when `import_run_id` is there, and the acknowledgment
+    checkbox "I've checked rev 4's diff". (U86: say what the console can't read.)
+  - **The import page's C3 follows the same cases**, from its own fields, and is never 0 breaking for an
     unknown count (U20: 0 would claim nothing breaks):
     - `diff.summary.breaking` an integer: the count, as above.
     - `base_revision` null with `diff` null: a first revision, the words above.
     - `base_revision` set with `diff` null, or `diff.summary.breaking` null: the import page's own line, since
-      the person is already on the import whose diff couldn't be read: "Cadence couldn't compare rev 4 with rev 3,
+      the person is already on the import whose diff couldn't be read (a revision's page uses it too, above):
+      "Cadence couldn't compare rev 4 with rev 3,
       so this page can't show whether it breaks anything in use. Check what uses its commands and points before you
       stage." No link. The checkbox reads "I've checked what rev 4 changes".
   - **Stage's disabled reason** (A6) mirrors the checkbox that's still unticked: "Check the breaking change
-    first." / "Check the 3 breaking changes first."; a first revision, and the import page's uncompared line:
-    "Check what rev 4 changes first."; a revision page that can't read the diff: "Check rev 4's diff first." C3
+    first." / "Check the 3 breaking changes first."; a first revision, and the uncompared line on either page:
+    "Check what rev 4 changes first."; a server without the fields: "Check rev 4's diff first." C3
     always has a number: catalog revisions are always numbered, and a model revision without one has no C3 (see
     above), so these lines have no "this catalog revision" form.
 - **The dry run, in the person's words:**
