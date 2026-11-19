@@ -3969,6 +3969,9 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
     - `not_admin`: no actions; the panel's line ends "Org admins approve grants."
     - `not_proposed`: no panel (the row's state says why).
     - `not_a_person`: never shown in the console (a service can't sign in); as `not_admin` if it is.
+    - `policy_changed` (#497: the mission's approval setting changed since the proposal, so approving would answer
+      the 409 below): "The mission's approval setting changed after this grant was proposed, so it can't be approved.
+      It has to be proposed again." Reject stays, so the proposal can be cleared.
     - A reason the console doesn't know: "You can't approve this grant, so another org admin approves it." with the
       code in Technical details.
 - **Approve refusals** (nothing recorded; each says "Your approval wasn't recorded." after the why, U95):
