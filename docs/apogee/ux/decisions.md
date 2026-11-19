@@ -3772,13 +3772,18 @@ read, the dry run).
     nothing earlier to compare it with and can't tell what it breaks. Check what uses its commands and points
     before you stage." The acknowledgment checkbox reads "I've checked what rev 1 changes". There's no
     `Open its import`, since its diff has nothing to compare.
-  - The diff couldn't be read (`breaking_base` set, `breaking` null), and until the read carries these fields:
+  - The diff couldn't be read (`breaking_base` set, `breaking` null), and on a server without these fields:
     "This page can't show whether rev 4 breaks anything in use. Check its import's diff before you stage." with
-    `Open its import`, and the acknowledgment checkbox "I've checked rev 4's diff". (U86: say what the console
-    can't read.)
-  - **The import page's C3 follows the same three cases**, from its own fields: `diff.summary.breaking` is the
-    count; `base_revision` null with `diff` null is a first revision; `base_revision` set with `diff` null is a diff
-    it can't read, which gets the fallback above and is never 0 breaking (U20: 0 would claim nothing breaks).
+    `Open its import` only when `import_run_id` is there, and the acknowledgment checkbox "I've checked rev 4's
+    diff". (U86: say what the console can't read.)
+  - **The import page's C3 follows the same three cases**, from its own fields, and is never 0 breaking for an
+    unknown count (U20: 0 would claim nothing breaks):
+    - `diff.summary.breaking` an integer: the count, as above.
+    - `base_revision` null with `diff` null: a first revision, the words above.
+    - `base_revision` set with `diff` null, or `diff.summary.breaking` null: the import page's own line, since
+      the person is already on the import whose diff couldn't be read: "Cadence couldn't compare rev 4 with rev 3,
+      so this page can't show whether it breaks anything in use. Check what uses its commands and points before you
+      stage." No link. The checkbox reads "I've checked what rev 4 changes".
 - **The dry run, in the person's words:**
   - While it runs: `CHECKING…` (as C3). Stage's disabled reason is "Checking what this moves…", not "Waiting for
     the dry run.".
