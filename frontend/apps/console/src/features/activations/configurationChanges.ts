@@ -76,6 +76,9 @@ const craftRef = d.object({
 export type CraftRef = Decoded<typeof craftRef>;
 /** A craft's name, or "Unknown spacecraft" when the server couldn't name it (U25: never the id). */
 export const craftName = (s: Readonly<{ name: string | null }>) => s.name ?? "Unknown spacecraft";
+/** Inside a sentence (U98, mms-ux): a nameless craft is "this spacecraft". */
+export const craftInSentence = (s: Readonly<{ name: string | null }>) =>
+  s.name ?? "this spacecraft";
 /** A packet source the server couldn't name (U25: never the id). */
 export const UNKNOWN_SOURCE = "Unknown packet source";
 

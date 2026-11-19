@@ -6,7 +6,12 @@ import type {
   ChangeRow,
   ConfigurationChanges,
 } from "./configurationChanges.ts";
-import { changeFields, craftName, UNKNOWN_SOURCE } from "./configurationChanges.ts";
+import {
+  changeFields,
+  craftInSentence,
+  craftName,
+  UNKNOWN_SOURCE,
+} from "./configurationChanges.ts";
 
 /** ux U94 (#235): the What changes panel's words. Values are never ids (U25). */
 export const FIELD_LABELS: Readonly<Record<ChangeField, string>> = {
@@ -177,7 +182,7 @@ export function telemetryOffLine(
   const they = off === 1 ? "it starts but decodes" : "they start but decode";
   const line = isFleet(c)
     ? `Telemetry is off for ${formatCount(off)} of the ${total} spacecraft, so once this is active ${they} nothing: ${OFF_TAIL}`
-    : `Telemetry is off for ${c.groups.items[0]?.spacecraft[0] ? craftName(c.groups.items[0].spacecraft[0]) : "this spacecraft"}, so once this is active it starts but decodes nothing: ${OFF_TAIL}`;
+    : `Telemetry is off for ${c.groups.items[0]?.spacecraft[0] ? craftInSentence(c.groups.items[0].spacecraft[0]) : "this spacecraft"}, so once this is active it starts but decodes nothing: ${OFF_TAIL}`;
   const unknown =
     unseen === 0
       ? ""
@@ -209,7 +214,7 @@ export const showAllLabel = (g: ChangeGroup) =>
 /** U90/U94's first-start line, for a group of one or many. */
 export const firstStartLine = (g: ChangeGroup) =>
   g.count === 1 && g.spacecraft[0]
-    ? `Nothing is active for ${craftName(g.spacecraft[0])} yet, so every setting is new.`
+    ? `Nothing is active for ${craftInSentence(g.spacecraft[0])} yet, so every setting is new.`
     : "Nothing is active for these spacecraft yet, so every setting is new.";
 
 /**
@@ -219,7 +224,7 @@ export const firstStartLine = (g: ChangeGroup) =>
  */
 export const noChangesLine = (g: ChangeGroup, fleet: boolean) =>
   !fleet && g.spacecraft[0]
-    ? `Nothing changes for ${craftName(g.spacecraft[0])}: this configuration matches what's active.`
+    ? `Nothing changes for ${craftInSentence(g.spacecraft[0])}: this configuration matches what's active.`
     : `No changes on ${formatCount(g.count)} spacecraft: ${namesLine(g)}.`;
 
 /**

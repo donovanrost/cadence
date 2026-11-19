@@ -111,6 +111,19 @@ describe("#235 what a spacecraft configuration request changes", () => {
     expect(c.groups.unshown).toEqual([]);
     expect(groupHeading(g)).toContain("Unknown spacecraft");
     expect(groupHeading(g)).not.toContain("sc_9");
+    // Inside a sentence it's "this spacecraft" (U98, mms-ux).
+    const fresh = read({
+      groups: [group({ rows: [catalogRow], spacecraft: [nameless], first_start: true })],
+      total: 1,
+    }).groups.items[0];
+    expect(fresh && firstStartLine(fresh)).toBe(
+      "Nothing is active for this spacecraft yet, so every setting is new.",
+    );
+    const same = read({ groups: [group({ rows: [], spacecraft: [nameless] })], total: 1 }).groups
+      .items[0];
+    expect(same && noChangesLine(same)).toBe(
+      "Nothing changes for this spacecraft: this configuration matches what's active.",
+    );
 
     const names = groupNamesReader({ spacecraft: [craft(1), nameless], next_offset: null });
     expect(names.spacecraft.map((s) => s.name)).toEqual(["EARENDIL-001", null]);
