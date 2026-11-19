@@ -4024,6 +4024,20 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
   Technical details only): "Not narrowed: this
   change gives Nightly planner more than it has now (Contacts per plan, at most), so it needs approval. Propose it as
   a new grant instead." Without `fields`, the same without the bracket. The console offers only narrower values in the sheet, so this is the backstop.
+  - Nothing changed (422 `automation_grant_narrow_unchanged`, #497): "Not narrowed: these values are the ones the
+    grant has now, so nothing changed. Choose less than it allows, or cancel." Up front (A6/A7), `Narrow` is disabled
+    until a value is narrower, with the reason "Choose less than the grant allows now."; the 422 is the backstop.
+- **Access the person doesn't hold** (403 `automation_grant_capability_required`, #497; #281's rule: whoever proposes,
+  grants or approves must hold every capability the grant gives; no `details`). **Unreachable today:** an org admin
+  holds every capability a grant can give; the lines are for when that changes. By the act:
+  - Propose: "Not proposed: this grant would let Nightly planner do something you can't do yourself, so you can't
+    propose it. Ask an org admin who can do everything it allows to propose it."
+  - Grant (under "Applies without approval"): "Not granted: this grant would let Nightly planner do something you
+    can't do yourself, so you can't grant it. Ask an org admin who can do everything it allows to grant it."
+  - Approve: "Not approved: this grant lets Nightly planner do something you can't do yourself, so you can't approve
+    it. An org admin who can do everything it allows approves it. Your approval wasn't recorded."
+  - No list of what's beyond them: the 403 carries none (U20), so the lines don't name it. With no name, "the service
+    identity this grant is for" replaces "Nightly planner".
 - **Revoke** stays one act, at once, with a reason, even while a widening of the same grant is proposed. If one is,
   the revoke sheet adds: "This also withdraws the proposal waiting for approval, so it can't switch automation
   back on later." (A widening proposal records `replaces_grant_id`; revoking that grant withdraws it in the same
