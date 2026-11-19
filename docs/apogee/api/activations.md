@@ -58,12 +58,16 @@ that fails or stalls shows on Now).
     can be approved.").
 - `can_decide`: pending, you may approve (`activations.approve`), and you didn't request it.
 - `spacecraft` and `spacecraft_total` (detail only; #235, lead 11-18): a spacecraft configuration
-  request's reviewed craft, `[{id, name}]` (at most 100, in the request's order) and their count,
-  on every state; both `null` for other kinds.
+  request's reviewed craft, `[{id, name | null}]` (at most 100, in the request's order) and their
+  count, on every state; both `null` for other kinds. A `name` is `null` when the craft can't be
+  looked up (it's no longer in the mission, or the lookup failed): keep the row and read it as an
+  unnamed craft ("Unknown spacecraft", as the profile's extra routes do), never the id (U25).
 - `configuration_changes` (detail only; #235, lead's final shape 11-18): what a PENDING spacecraft
   configuration request changes, grouped by identical change; `null` for other kinds and once
   decided (after an apply, what runs is its content). `{groups: [{rows: [{field, label, before,
-  after}], first_start, telemetry_enabled, count, spacecraft: [{spacecraft_id, name}]}], total}`.
+  after}], first_start, telemetry_enabled, count, spacecraft: [{spacecraft_id, name | null}]}],
+  total}`. Every spacecraft `name` here (and on the names page below) is `null` when the lookup
+  misses, as for `spacecraft` above.
   - A group is the craft whose `rows`, `first_start` and `telemetry_enabled` are equal; every
     group is sent. Changed groups come first, in the request's order; the no-change group (`rows:
     []`) last. `spacecraft` names at most 100; `count` is exact. `total` counts every reviewed
@@ -71,7 +75,8 @@ that fails or stalls shows on Now).
     request is stale) is in `total` but in no group.
   - `rows` compare the reviewed version with what runs now. `first_start`: nothing is active for
     the craft, so every set field is a row with `before: null`. Fields, in this order:
-    `catalog_revision {id, number|null}`, `telemetry_source {id, name}`, `handled_apids [int]`,
+    `catalog_revision {id, number|null}`, `telemetry_source {id, name|null}` (`name` is `null` when
+    the source's name can't be looked up for the mission), `handled_apids [int]`,
     `downlink`, `uplink` (the protocol word), `frame_size`, `secondary_header_length`,
     `insert_zone_length`, `ocf_length` (int), `truncated_primary_header` (bool); a missing value
     is `null` ("Not set"). `label` is the fallback word. The switches are never rows (#109);
@@ -88,7 +93,7 @@ that fails or stalls shows on Now).
   binding set, the spacecraft, up to 5 named then "and N more", and the content hash), `comparison:
   {report_id, label} | null` (decom's mission-model comparison), `configuration_changes` (above)
   and `permissions` (as above).
-- `GET /:id/configuration-changes?group=N&offset=K` → `{spacecraft: [{spacecraft_id, name}],
+- `GET /:id/configuration-changes?group=N&offset=K` → `{spacecraft: [{spacecraft_id, name | null}],
   next_offset}`: 100 names of the group at index `N` of `configuration_changes.groups` (as the
   detail sent them), from `offset` (default 0); `next_offset` is null on the last page. `404
   configuration_changes_group_not_found` for a group the request doesn't have (or a request that
