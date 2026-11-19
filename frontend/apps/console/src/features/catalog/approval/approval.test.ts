@@ -1,6 +1,6 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vite-plus/test";
-import { decode, missionId } from "@/api/index.ts";
+import { decode, missionId, type ApiError } from "@/api/index.ts";
 import { modelRevisionReader } from "./api.ts";
 import ApprovalPanel from "./ApprovalPanel.vue";
 import { approvalTag, decisionFailure, kindWord, sectionLine } from "./words.ts";
@@ -133,15 +133,92 @@ describe("U65 words", () => {
     const refusal = (code: string) =>
       decisionFailure({ kind: "conflict", code, message: "x", details: null }, 3);
     expect(refusal("mission_model_comparison_not_passed").text).toBe(
-      "Not approved: the comparison with rev 3 didn't pass.",
+      "Not approved: the comparison with rev 3 didn't pass. Your approval wasn't recorded.",
     );
     expect(refusal("mission_model_decision_reason_too_long").text).toBe(
       "Keep the reason under 2,000 characters.",
     );
     expect(refusal("mission_model_comparison_mismatch")).toEqual({
-      text: "Not approved: the comparison is out of date. Run it again.",
+      text: "Not approved: the comparison is out of date. Your approval wasn't recorded. Run it again.",
       runAgain: true,
     });
+  });
+});
+
+/** #312 (audit C1, C2): each refusal opens with its act; reject has its own lines. */
+describe("approve and reject refusals open with their act (#312)", () => {
+  const conflict = (code: string): ApiError => ({
+    kind: "conflict",
+    code,
+    message: "x",
+    details: null,
+  });
+  const forbidden: ApiError = { kind: "forbidden", code: "forbidden", message: "No." };
+
+  it("approve: an org-admin refusal, and a code it doesn't word, with the code for Technical details", () => {
+    expect(decisionFailure(forbidden, 3, "approve")).toEqual({
+      text: "Not approved: only an org admin can approve this. Your approval wasn't recorded.",
+      runAgain: false,
+    });
+    expect(decisionFailure(conflict("quorum_reached"), 3, "approve")).toEqual({
+      text: "Not approved: Cadence refused this approval. Your approval wasn't recorded.",
+      runAgain: false,
+      code: "quorum_reached",
+    });
+  });
+
+  it("reject: its own lines, never approve's", () => {
+    const reject = (e: ApiError) => decisionFailure(e, 3, "reject").text;
+    expect(reject(conflict("mission_model_revision_not_approvable"))).toBe(
+      "Not rejected: this revision was already approved, rejected or replaced, so nothing changed.",
+    );
+    expect(reject(conflict("human_mission_model_approver_required"))).toBe(
+      "Not rejected: only a person can reject a catalog revision, not a service identity. Nothing changed.",
+    );
+    expect(reject(forbidden)).toBe(
+      "Not rejected: only an org admin can reject this. Nothing changed.",
+    );
+    // Approve-only refusals (the comparison, the catalog) fall to reject's fallback, with the code.
+    expect(decisionFailure(conflict("mission_model_comparison_not_passed"), 3, "reject")).toEqual({
+      text: "Not rejected: Cadence refused this rejection, so nothing changed.",
+      runAgain: false,
+      code: "mission_model_comparison_not_passed",
+    });
+    for (const code of [
+      "mission_model_revision_not_approvable",
+      "mission_model_comparison_mismatch",
+      "mission_model_revision_not_in_catalog",
+    ])
+      expect(reject(conflict(code))).not.toMatch(/^Not approved/);
+  });
+
+  it("every approve refusal says the approval wasn't recorded (U95, #375); reject lines end 'nothing changed'", () => {
+    const codes = [
+      "mission_model_revision_not_in_catalog",
+      "mission_model_self_approval_forbidden",
+      "mission_model_comparison_not_passed",
+      "mission_model_comparison_mismatch",
+      "mission_model_runtime_plans_not_ready",
+      "mission_model_revision_not_approvable",
+      "human_mission_model_approver_required",
+      "quorum_reached",
+    ];
+    for (const code of codes)
+      expect(decisionFailure(conflict(code), 3, "approve").text).toMatch(
+        /[Yy]our approval wasn't recorded\./,
+      );
+    expect(decisionFailure(forbidden, 3, "approve").text).toMatch(
+      /Your approval wasn't recorded\.$/,
+    );
+    for (const e of [...codes.map(conflict), forbidden])
+      expect(decisionFailure(e, 3, "reject").text).toMatch(/[Nn]othing changed\.$/);
+  });
+
+  it("the reason lines are the same for both acts", () => {
+    for (const act of ["approve", "reject"] as const)
+      expect(decisionFailure(conflict("mission_model_decision_reason_required"), 3, act).text).toBe(
+        "Give a reason first.",
+      );
   });
 });
 
@@ -195,7 +272,7 @@ describe("a revision the catalog doesn't list (U88)", () => {
         null,
       ),
     ).toEqual({
-      text: "Not approved: the catalog doesn't list this revision. To approve it, import its file as a new catalog revision.",
+      text: "Not approved: the catalog doesn't list this revision. Your approval wasn't recorded. To approve it, import its file as a new catalog revision.",
       runAgain: false,
       openCatalog: true,
     });

@@ -124,6 +124,10 @@ function runAgain() {
       />
       <ApCallout v-if="panelFailure" tone="crit"
         >{{ panelFailure.text }}
+        <details v-if="panelFailure.code" class="mt-1 text-sm">
+          <summary class="ap-label cursor-pointer">Technical details</summary>
+          <p class="m-0 mt-1 font-mono text-xs text-text-3">{{ panelFailure.code }}</p>
+        </details>
         <template v-if="panelFailure.runAgain" #action
           ><ApButton size="compact" @click="runAgain">Run comparison</ApButton></template
         >
@@ -139,6 +143,7 @@ function runAgain() {
       :rev="rev"
       :busy="act.busy.value === 'reject'"
       :error="act.failure.value?.from === 'reject' ? act.failure.value.text : null"
+      :error-code="act.failure.value?.from === 'reject' ? (act.failure.value.code ?? null) : null"
       @reject="reject"
     />
   </ApPanel>
