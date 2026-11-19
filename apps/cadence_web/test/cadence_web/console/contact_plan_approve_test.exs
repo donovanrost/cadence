@@ -12,7 +12,7 @@ defmodule CadenceWeb.Console.ContactPlanApproveTest do
   import Ecto.Query
 
   alias Cadence.ContactPlanning.{ContactPlanApprovals, PlanOperations}
-  alias Cadence.Management.Contacts.Store.ContactPlanApprovalRow
+  alias Cadence.Management.Contacts.Store.{ContactOpportunitySnapshotRow, ContactPlanApprovalRow}
   alias Cadence.Repo
   alias CadenceWeb.Console.SchedulingRunner
   alias CadenceWeb.{ContactPlanningFixtures, TestFixtures}
@@ -80,6 +80,35 @@ defmodule CadenceWeb.Console.ContactPlanApproveTest do
 
       # #226(b): the approval records the policy it was decided under.
       assert %{"separation_of_duties" => true} = policy_document(c, plan_id)
+    end
+
+    # #273 step 1: until domain's rule change approves the rest, a closed booking window on any
+    # selected pass refuses the approval, now as its own 409 instead of a generic 422.
+    test "a pass whose booking window has closed refuses the approval with 409, recording nothing",
+         c do
+      plan_id = member_plan(c)
+      submit!(c, c.member, plan_id, "op-member")
+
+      %{"passes" => [%{"snapshot_id" => snapshot_id} | _]} =
+        get_as(c, c.admin, "/#{plan_id}")["data"]
+
+      past = DateTime.utc_now() |> DateTime.add(-60) |> DateTime.truncate(:microsecond)
+
+      Repo.update_all(
+        from(s in ContactOpportunitySnapshotRow,
+          where: s.contact_opportunity_snapshot_id == ^snapshot_id
+        ),
+        set: [expires_at: past]
+      )
+
+      conn = post_as(c, c.admin, plan_id, "approve", %{"operation_id" => "op-closed"})
+
+      assert %{"code" => "contact_plan_opportunity_expired", "message" => message} =
+               json_response(conn, 409)["error"]
+
+      assert message =~ "booking window has closed"
+      assert approvals(c, plan_id) == []
+      assert plan_state(c, plan_id) == "pending_approval"
     end
 
     test "the submitter's approve is refused (because: submitted) and records nothing", c do

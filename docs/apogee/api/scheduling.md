@@ -264,6 +264,11 @@ Errors:
   draft). A second, concurrent approve of the same plan gets this (the plan row lock serialises
   them), unless it is the same request, which replays.
 - `409 plan_changed`: `expected_version` isn't current, or the content changed.
+- `409 contact_plan_opportunity_expired` (#273, 2026-11-19; was a generic `422`): the booking
+  window has closed for at least one selected pass, so the plan can't be approved as it is.
+  Nothing is recorded. No details yet; the console uses ux's countless line. This is temporary:
+  once domain's rule change lands, an approval leaves those passes out instead (skipped), and
+  only a plan whose every pass has closed is refused, as `contact_plan_all_opportunities_expired`.
 - `409 duplicate_operation`, `409 operation_conflict`: as for submit.
 - `422 plan_not_ready` (`details: {unmet, conflicts}`), `422 acknowledgements_required`
   (`details.missing`), `409 plan_superseded`, `422 invalid_params`, `404 plan_not_found`.
