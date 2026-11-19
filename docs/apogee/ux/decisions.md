@@ -2282,6 +2282,17 @@ change set like any override. There's no separate routes editor.
       `legacy_conversion` is set). Under the description: "Staged by Mira K. Someone else reviews and applies it." For
       the stager, the review action is disabled with the A6 reason "You staged this batch, so someone else reviews and
       applies it." Other sets keep today's reviewer_is_author sentence.
+    - **Every set, up front** (#320, ca-ux 11-19; amends the line above): the console reads the change set's
+      `viewer.can_review` and `review_blocked_reason`, never its own `authors` list. The server sets
+      `reviewer_is_author` only when the set needs approval, for whoever submitted it or authored any change, so under
+      "Applies without approval" an author still reviews. When `can_review` is false, both review actions (Approve and
+      Send back; the server refuses both) are disabled with the A6 reason, muted under them and as their
+      description: "You staged part of this set or sent it for review, so someone else reviews it." (the conversion
+      batch keeps its own line above). A reason the console doesn't know: "You can't review this set, so someone else
+      reviews it." with the code in Technical details. The refusal stays the backstop: Approve "Not approved: you
+      staged part of this set or sent it for review, so someone else reviews it. Your approval wasn't recorded.";
+      Send back "Not sent back: you staged part of this set or sent it for review, so someone else reviews it.
+      Nothing changed."
     - Read fields (api v3.2, final): the button is `Stage batch <next_batch> of <batches_total>`; progress is
       routes_converted of routes_total. No per-craft "in batch 3" line. An author with no name: drop the name
       ("Batch 3 is already staged." / "Staged earlier."), never the id.
@@ -3193,6 +3204,22 @@ U90 and U94.
   `mission_model_runtime_plan_manifest_mismatch`, `invalid_spacecraft_model_bindings`): "Not approved: this request
   can't apply as it stands." plus the code in Technical details, then "Your approval wasn't recorded."
 - Refusals before the check keep their words (self approval, not pending, not found).
+- **After Approve** (#319, ca-ux 11-19; U20, U94): the line comes from the answer, never from "it didn't fail":
+  - `execution.state` `failed`: "Approved, but it didn't apply." + U41's apply sentence (a known failure).
+  - `outcome` `needs_review` (not failed): "Approved, but Cadence couldn't confirm it was applied yet. Reload to see
+    whether it applied." (U94's words).
+  - `execution.state` `in_progress`: "Approved. Applying it now."
+  - `outcome` `applied` with `execution.state` `succeeded`: "Approved and applied."
+  - Anything else (no outcome, an unknown one, no execution): "Approved. Cadence didn't confirm whether it was
+    applied. Reload to see it."
+- **The decide panel's other words** (L10; built before a spec, ratified here): the intro "Approving applies it to the
+  mission now. Rejecting leaves things as they are."; a reason is required for both ("Give a reason first.", A7);
+  after Reject "Rejected. Nothing changes."; after Withdraw "Withdrawn. Nothing changes."; the tags `WAITING`,
+  `APPROVED`, `REJECTED`, `WITHDRAWN`, `SUPERSEDED`, `UNKNOWN`; decisions read "Approved by Mira K. at 11-13
+  02:20Z" ("at", never "on", U29). The pre-check refusals open by the act, as U95: `not_pending` by the act: Approve "Not
+  approved: it's already decided, so your approval wasn't recorded. Reload to see how."; Reject "Not rejected: it's
+  already decided, so nothing changed. Reload to see how."; `activation_policy_changed` keeps U94's
+  line.
 
 ### U96 · Who may change a mission's approval setting (#233; api's shape on domain 10d59bb78, 11-18) (api / domain / fe-setup)
 Settings › Approvals (`cadence.governance`): the field keeps its server words, "Approval for changes and app
