@@ -343,7 +343,7 @@ defmodule Cadence.Runtime.IngressBackpressureMonitor do
            threshold: @raise_ratio,
            backlog_bytes: backlog_bytes(snapshot),
            observed_at: now,
-           rising: is_map(before) and ratio > before.ratio,
+           rising: is_map(before) and grew?(ratio, before),
            stream_id: snapshot.stream_id,
            last_error: snapshot.last_error
          }}
@@ -357,6 +357,11 @@ defmodule Cadence.Runtime.IngressBackpressureMonitor do
         {key, nil}
     end
   end
+
+  # #390: the stored `ratio` is rounded for display; compare exact ratios, or a steady fill whose
+  # ratio rounds down (96_415 / 100_000 -> 0.9641) would read 'rising' on every sample.
+  defp grew?(ratio, %{used_bytes: used, capacity_bytes: capacity}),
+    do: ratio > used / max(capacity, 1)
 
   defp backlog_bytes(%{processing_backlog: %{bytes: bytes}}) when is_integer(bytes), do: bytes
   defp backlog_bytes(%{lag_bytes: %{processing: bytes}}) when is_integer(bytes), do: bytes
