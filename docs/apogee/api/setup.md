@@ -226,9 +226,9 @@ by its catalog revision ("catalog rev 4"); the model revision id is Technical de
     and count don't change when later revisions are imported. Only a release that changes what
     counts as breaking (C3's rules below) can change the count. It's computed per read, not stored.
   - `breaking_base` null: the database's first revision, with nothing earlier to compare
-    (`breaking` null). `breaking_base` set with `breaking` null: the diff couldn't be read (a
-    revision without a model, or its declarations couldn't be queried). Both set: the count. `0`
-    means nothing breaks; an unknown count is never sent as `0`.
+    (`breaking` null). `breaking_base` set with `breaking` null: the diff couldn't be read, as C3's
+    `diff` below (no model, a model revision not stored for this mission, or a failed query; #367).
+    Both set: the count. `0` means nothing breaks; an unknown count is never sent as `0`.
   - The list (`GET ?status=`) doesn't carry these fields (one diff per row would read every model).
 - `POST /:id/comparison {}` → `201 <cmp>`, synchronous, against the mission's active binding set
   and the revision this one replaces (the previous catalog revision's model in the same
@@ -516,7 +516,9 @@ The shape is setup-shapes.md §C3, plus `declaration_count`.
   same base as the revision read's `breaking_base` (the model approval gate above).
 - `requested_by`: as the index's run row (C1 above).
 - `diff` (DECISIONS #9 v1, from the two revisions alone): `null` when there's no base or either
-  revision can't be read. Otherwise `{summary: {commands: {before, after, added, changed,
+  revision can't be read: it has no model, its model revision isn't stored for this mission, or its
+  declarations can't be queried (#367: a missing model is never read as an empty one, which would
+  show every item added and 0 breaking). Otherwise `{summary: {commands: {before, after, added, changed,
   removed}, telemetry: {…}, unchanged, total_before, breaking}, changes: [{op, kind, name, change,
   breaking}], truncated}`.
   - `total_before` counts the base revision's commands plus telemetry parameters; `unchanged` is
