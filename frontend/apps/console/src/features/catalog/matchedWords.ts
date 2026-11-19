@@ -31,6 +31,17 @@ function byAt(m: MatchedRevision): string {
   return `${by} at ${when(m.decision.at)}`;
 }
 
+/**
+ * How a rejected line ends (U99, mms-ux 11-19): `: “Wrong FSW build.”` when the reason ends in
+ * its own . ! or ?, `: “Wrong FSW build”.` when it doesn't (the quoted text is never edited), and
+ * `.` with no reason.
+ */
+function rejectedEnd(m: MatchedRevision): string {
+  const reason = m.decision?.reason?.trim();
+  if (!reason) return ".";
+  return `: “${reason}”${/[.!?]$/.test(reason) ? "" : "."}`;
+}
+
 /** The waiting line's added sentence, from the server's one answer; null when nothing bars. */
 export function cannotApproveLine(m: MatchedRevision): string | null {
   const ca = m.cannot_approve;
@@ -72,10 +83,7 @@ export function matchVerdict(m: MatchedRevision): MatchVerdict {
     };
   }
   if (status === "rejected") {
-    const reason = m.decision?.reason?.trim();
-    const quote = reason ? `: “${reason}”` : "";
-    // U99: a quoted reason ends the sentence at its closing quote; without one, a full stop.
-    const end = quote || ".";
+    const end = rejectedEnd(m);
     const which = m.revision
       ? `This file matches catalog rev ${m.revision.number}, which was rejected${byAt(m)}${end}`
       : `This file matches a catalog revision that already exists. It was rejected${byAt(m)}${end}`;
@@ -133,11 +141,9 @@ export function otherDatabaseVerdict(
     return { tone: "caution", text: [text, why].filter(Boolean).join(" "), rollout: false };
   }
   if (m.status === "rejected") {
-    const reason = m.decision?.reason?.trim();
-    const quote = reason ? `: “${reason}”` : "";
     return {
       tone: "caution",
-      text: `${opening}, which was rejected${byAt(m)}${quote || "."} So rev ${own.number} is rejected too, and spacecraft can't move to it. To try again, correct the catalog and import the corrected file.`,
+      text: `${opening}, which was rejected${byAt(m)}${rejectedEnd(m)} So rev ${own.number} is rejected too, and spacecraft can't move to it. To try again, correct the catalog and import the corrected file.`,
       rollout: false,
     };
   }

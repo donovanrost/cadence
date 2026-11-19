@@ -81,6 +81,19 @@ defmodule Cadence.Catalog.MatchedImport do
 
   defp creates_revision?(%ImportRun{}), do: false
 
+  @doc """
+  `{:matched, revision}` when a revision of the run's own catalog database already names its
+  matched model revision, else nil. `Catalog` asks under the database row lock, in the insert's
+  transaction, so two identical uploads finishing at once can't both make one (#119, domain).
+  """
+  @spec match_under_lock(ImportRun.t()) :: {:matched, Revision.t()} | nil
+  def match_under_lock(%ImportRun{} = run) do
+    case named_in_database(run) do
+      %Revision{} = revision -> {:matched, revision}
+      nil -> nil
+    end
+  end
+
   defp named_in_database(%ImportRun{} = run) do
     case get_in(run.result_document || %{}, ["mission_model", "matched_existing", "revision_id"]) do
       model_id when is_binary(model_id) ->

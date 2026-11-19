@@ -58,7 +58,7 @@ defmodule Cadence.Catalog.MissionModel.Layer do
          version: version,
          source: content_source(source),
          declarations: Enum.map(declarations, &Declaration.hash_basis/1),
-         metadata: metadata
+         metadata: content_metadata(metadata)
        }}
 
     %__MODULE__{
@@ -80,6 +80,11 @@ defmodule Cadence.Catalog.MissionModel.Layer do
   # are per-import facts kept on the layer as provenance, never hashed; so is the layer's `name`
   # (the uploaded file's name). Missing keys hash as nil.
   @content_source_keys ~w(format_key importer_key importer_version namespace format_version)a
+
+  # Source diagnostics are derived from the content (as the revision's diagnostics are, which its
+  # basis leaves out) and are struct-shaped maps, so they stay out of the hash (domain, #119).
+  defp content_metadata(metadata),
+    do: Map.drop(metadata, ["source_diagnostics", :source_diagnostics])
 
   defp content_source(source) do
     Map.new(@content_source_keys, &{&1, value(source, &1)})

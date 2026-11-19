@@ -128,6 +128,16 @@ describe("U99 words, same database", () => {
     expect(matchVerdict(rejected).text).toBe(
       "This file matches catalog rev 4, which was rejected by Ana R. at 11-15 09:12Z: “<b>Wrong</b> FSW build.” No new revision was created. To try again, correct the catalog and import the corrected file. It becomes a new revision.",
     );
+    // A reason without its own end punctuation gets a full stop after the quote (mms-ux, #325).
+    const bare = readMatch({
+      status: "rejected",
+      decision: { ...approvedBy("Ana R."), kind: "rejected", reason: "Wrong FSW build" },
+    });
+    expect(matchVerdict(bare).text).toContain("“Wrong FSW build”. No new revision was created.");
+    const own = { number: 1, database: { id: "db-p", name: "Payload catalog" } };
+    expect(otherDatabaseVerdict(own, bare).text).toContain(
+      "“Wrong FSW build”. So rev 1 is rejected too",
+    );
     for (const status of ["retired", "archived"])
       expect(matchVerdict(readMatch({ status }))).toEqual({
         tone: "info",

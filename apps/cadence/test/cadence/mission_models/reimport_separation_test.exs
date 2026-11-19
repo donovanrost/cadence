@@ -139,6 +139,55 @@ defmodule Cadence.MissionModels.ReimportSeparationTest do
     assert model == c.model and is_binary(name)
   end
 
+  # mms-security (d), fe-setup and domain (#325): racing identical imports. Like the approve race in
+  # revision_decisions_test, these tasks share the sandbox's connection, so they interleave in
+  # either order rather than in two live transactions. Each assertion holds in both orders; the
+  # cross-transaction guarantees are the catalog database row lock (the match is decided under it,
+  # in the insert's transaction) and the revision insert's ON CONFLICT DO NOTHING.
+  test "two uploads of the same new content at once: one catalog revision, the other matches it",
+       c do
+    database_id = c.revision.catalog_database_id
+    yaml = String.replace(Fixtures.default_catalog_yaml(), "bit_size: 8", "bit_size: 16")
+    runs = for n <- 1..2, do: start_upload!(c, database_id, "race-#{n}.yaml", yaml)
+
+    completed = race(runs, &Catalog.execute_enqueued_run(&1.import_run_id))
+    assert Enum.all?(completed, &match?({:ok, %{status: :completed}}, &1))
+    assert catalog_revision_count(database_id) == 2
+
+    [made, matched] =
+      completed
+      |> Enum.map(fn {:ok, run} -> run.result_document end)
+      |> Enum.sort_by(&is_nil(&1["catalog_revision"]))
+
+    assert %{"revision_number" => 2} = made["catalog_revision"]
+
+    assert %{"catalog_revision" => %{"revision_number" => 2}} =
+             matched["mission_model"]["matched_existing"]
+  end
+
+  test "two re-imports of an approved revision at once change no status or decision", c do
+    report = compare!(c, c.model)
+
+    assert {:ok, %{status: :approved}} =
+             approve(scope(c.organization, "admin-c"), c, c.model, report)
+
+    decided = stored_decision(c.model)
+
+    results =
+      race(["reimporter-b", "reimporter-d"], fn user ->
+        {:ok, %{"import_run_id" => id}} =
+          Reimport.execute(scope(c.organization, user), c.mid, c.revision.artifact_id)
+
+        Catalog.execute_enqueued_run(id)
+      end)
+
+    for {:ok, run} <- results,
+        do: assert(run.result_document["mission_model"]["revision_id"] == c.model)
+
+    assert length(results) == 2
+    assert stored_decision(c.model) == decided
+  end
+
   test "a runs table's matches cost the same queries for one matched run as for three", c do
     database_id = c.revision.catalog_database_id
     one = [upload!(c, database_id, Actor.system("test:q", "Q"), "q1.yaml")]
@@ -332,6 +381,33 @@ defmodule Cadence.MissionModels.ReimportSeparationTest do
 
     assert {:ok, %{status: :completed} = run} = Catalog.execute_enqueued_run(run.import_run_id)
     run
+  end
+
+  defp start_upload!(c, database_id, name, yaml) do
+    artifact =
+      Artifact.new(%{
+        mission_id: c.mid,
+        catalog_database_id: database_id,
+        catalog_family: :combined,
+        artifact_name: name,
+        format_key: "cadence_yaml",
+        media_type: "application/yaml",
+        source_artifact: yaml
+      })
+
+    {:ok, run} =
+      Catalog.start_revision_import(c.org, c.mid, database_id, artifact, "cadence_yaml",
+        metadata: %{"revision_label" => name},
+        requested_by: Actor.system("test:race", "Race")
+      )
+
+    run
+  end
+
+  defp race(items, fun) do
+    items
+    |> Task.async_stream(fun, ordered: false, timeout: :infinity)
+    |> Enum.map(fn {:ok, result} -> result end)
   end
 
   defp catalog_revision_count(database_id),
