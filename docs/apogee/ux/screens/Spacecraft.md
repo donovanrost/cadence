@@ -26,7 +26,11 @@ unknown). Primary `Add spacecraft` (organization admins only).
 
 ## B · A spacecraft's page (`…/:spacecraftId`)
 Header: the spacecraft's name (U25: "Unknown spacecraft" when null), with the tag `Ready` (nominal) or `Incomplete`
-(caution). Panels:
+(caution). Header actions:
+- `Open in Ops →` (U6), the spacecraft in Ops, today.
+- `Configuration`, the spacecraft's configuration workspace (U94), arrives with fe-ops' #285.
+
+Panels:
 - **D1 Readiness:** the spacecraft's findings, as Setup.md's rows.
 - **D2 Identity:** name, SCID, NORAD, plane and slot. Edited through `Edit` (organization admins), which stages.
 - **D3 Profile & version:** the profile and its version; none: "No profile".
