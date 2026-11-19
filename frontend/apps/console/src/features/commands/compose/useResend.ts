@@ -22,6 +22,10 @@ export function resendFrom(value: unknown): string | null {
     : null;
 }
 
+type Callout = Readonly<{ tone: "info" | "caution"; role: "status" | "alert" }>;
+const INFO: Callout = { tone: "info", role: "status" };
+const CAUTION: Callout = { tone: "caution", role: "alert" };
+
 /**
  * Prefills Compose once from a sent-back group: its explicit targets, stack (values as sent),
  * title, log, approver and hold time. The reviewer's note shows above the form.
@@ -34,13 +38,17 @@ export function useResend(
   only: readonly string[] = [],
 ) {
   const sentBackFrom = ref<string | null>(null);
-  const notice = shallowRef<{ tone: "info" | "caution"; text: string } | null>(null);
+  /**
+   * a11y B6 (#243): the callout's tone and role together; an outcome object's caution (a failed
+   * load, commands left out) is an alert, its info a status.
+   */
+  const notice = shallowRef<{ callout: Callout; text: string } | null>(null);
   if (fromId === null) return { sentBackFrom, notice };
-  notice.value = { tone: "info", text: "Loading the request you're resending…" };
+  notice.value = { callout: INFO, text: "Loading the request you're resending…" };
   loadResend(missionId.value, fromId)
     .then((r) => {
       if (!r.ok) {
-        notice.value = { tone: "caution", text: `Couldn't load that request: ${r.message}` };
+        notice.value = { callout: CAUTION, text: `Couldn't load that request: ${r.message}` };
         return;
       }
       const { group, stack, missing } = r.value;
@@ -72,7 +80,7 @@ export function useResend(
         ? ` ${missing.join(", ")} ${missing.length === 1 ? "is" : "are"} no longer in the active catalog and ${missing.length === 1 ? "was" : "were"} left out.`
         : "";
       notice.value = {
-        tone: missing.length ? "caution" : "info",
+        callout: missing.length ? CAUTION : INFO,
         // The quoted note ends the sentence itself; no period after the closing quote.
         text: `Resending “${group.title}”${only.length ? ` to ${only.length} of ${group.targets.length} targets` : ""}${note ? `, sent back with: “${note}”` : "."}${gone}`,
       };
