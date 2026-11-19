@@ -13,9 +13,8 @@ defmodule Cadence.Reads.MissionModelApprovals do
   alias Cadence.Catalog
   alias Cadence.Catalog.ModelRevisions
   alias Cadence.Control.{Activations, ModelApprovalGate}
-  alias Cadence.Governance.ActivationPolicy
   alias Cadence.MissionModels
-  alias Cadence.MissionModels.{ApprovalReads, Comparison}
+  alias Cadence.MissionModels.{ApprovalReads, Comparison, RevisionDecisions}
 
   @spec list(Scope.t(), binary(), binary()) :: [map()]
   def list(%Scope{} = scope, mission_id, status) do
@@ -49,7 +48,7 @@ defmodule Cadence.Reads.MissionModelApprovals do
         org |> ApprovalReads.latest_reports(mission_id, [revision_id]) |> Map.get(revision_id)
 
       viewer_id = scope.user && scope.user.user_id
-      blocked = cannot_decide(scope, mission_id, row, importers, plans_ready)
+      blocked = cannot_decide(scope, mission_id, row, plans_ready)
       catalog_revision = org |> ModelRevisions.for_models(mission_id, [row.id]) |> Map.get(row.id)
 
       {:ok,
@@ -221,7 +220,7 @@ defmodule Cadence.Reads.MissionModelApprovals do
   defp person(_none), do: nil
 
   # The first reason the viewer can't decide, in ux's order; nil when they can.
-  defp cannot_decide(scope, mission_id, row, importers, plans_ready) do
+  defp cannot_decide(scope, mission_id, row, plans_ready) do
     viewer_id = scope.user && scope.user.user_id
 
     cond do
@@ -234,7 +233,10 @@ defmodule Cadence.Reads.MissionModelApprovals do
       row.status != "candidate" ->
         "not_approvable"
 
-      separation?(scope.organization_id, mission_id) and viewer_id in importers ->
+      match?(
+        {:refused, _refusal},
+        RevisionDecisions.separation(scope.organization_id, mission_id, row.id, viewer_id)
+      ) ->
         "self_approval"
 
       not plans_ready ->
@@ -244,9 +246,6 @@ defmodule Cadence.Reads.MissionModelApprovals do
         nil
     end
   end
-
-  defp separation?(org, mission_id),
-    do: ActivationPolicy.evidence(org, mission_id)["separation_of_duties"] == true
 
   defp importer(org, mission_id, revision_id),
     do: org |> Catalog.model_importers(mission_id, revision_id) |> first_importer()

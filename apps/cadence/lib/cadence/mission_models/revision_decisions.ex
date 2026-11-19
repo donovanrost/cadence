@@ -25,6 +25,40 @@ defmodule Cadence.MissionModels.RevisionDecisions do
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Repo
 
+  @typedoc "A service as a refusal names it (U100): `name` is nil when its row is gone."
+  @type service :: %{id: binary(), name: binary() | nil}
+
+  @typedoc """
+  Why separation of duties bars a person from approving a revision (U100). Today only `:self`
+  (they imported it), with both services nil; #280 adds `:authors_unknown` and the services.
+  """
+  @type refusal :: %{
+          reason: :self | :authors_unknown,
+          via_service: service() | nil,
+          service: service() | nil
+        }
+
+  @doc """
+  The importer/approver separation (DECISIONS #92 a) for `person_id` on a revision: the check
+  approval itself runs, so the approval read and C3 (#119) call it rather than repeat it, and
+  #280's service accountability changes it in this one place.
+
+  `{:ok, %{policy, importers}}` returns the policy in force and the recorded importers, which
+  approval writes into its evidence. Under 'independent' an importer gets `{:refused, refusal}`.
+  Authorization, status and plan readiness are separate checks.
+  """
+  @spec separation(binary(), binary(), binary(), binary() | nil) ::
+          {:ok, %{policy: map(), importers: [binary()]}} | {:refused, refusal()}
+  def separation(organization_id, mission_id, revision_id, person_id)
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(revision_id) do
+    policy = ActivationPolicy.evidence(organization_id, mission_id)
+    importers = Catalog.model_importers(organization_id, mission_id, revision_id)
+
+    if policy["separation_of_duties"] == true and is_binary(person_id) and person_id in importers,
+      do: {:refused, %{reason: :self, via_service: nil, service: nil}},
+      else: {:ok, %{policy: policy, importers: importers}}
+  end
+
   @spec approve(Scope.t(), binary(), binary(), binary(), keyword()) ::
           {:ok, Revision.t()} | {:error, term()}
   def approve(%Scope{} = scope, mission_id, revision_id, comparison_report_id, opts \\ [])
@@ -53,8 +87,7 @@ defmodule Cadence.MissionModels.RevisionDecisions do
          :ok <- require_ready_plans(organization_id, mission_id, revision_id),
          {:ok, comparison} <- Comparison.fetch(organization_id, mission_id, comparison_report_id),
          :ok <- passed_for(comparison, revision_id),
-         policy = ActivationPolicy.evidence(organization_id, mission_id),
-         {:ok, importers} <- independent(organization_id, mission_id, revision_id, actor, policy) do
+         {:ok, %{policy: policy, importers: importers}} <- independent(row, actor) do
       evidence =
         Map.merge(actor, %{
           # The approval policy in force at decision time (M2, director 11-18).
@@ -212,13 +245,11 @@ defmodule Cadence.MissionModels.RevisionDecisions do
 
   defp passed_for(_comparison, _id), do: {:error, :mission_model_comparison_mismatch}
 
-  defp independent(organization_id, mission_id, revision_id, %{"id" => actor_id}, policy) do
-    importers = Catalog.model_importers(organization_id, mission_id, revision_id)
-    separation = policy["separation_of_duties"]
-
-    if separation == true and actor_id in importers,
-      do: {:error, :mission_model_self_approval_forbidden},
-      else: {:ok, importers}
+  defp independent(row, %{"id" => actor_id}) do
+    case separation(row.organization_id, row.mission_id, row.revision_id, actor_id) do
+      {:refused, _refusal} -> {:error, :mission_model_self_approval_forbidden}
+      {:ok, checked} -> {:ok, checked}
+    end
   end
 
   defp at(opts), do: opts |> Keyword.get(:at, DateTime.utc_now()) |> normalized_datetime()
