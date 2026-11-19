@@ -31,9 +31,10 @@ const listEl = ref<HTMLElement | null>(null);
 const moreEl = ref<HTMLElement | null>(null);
 async function showEarlier() {
   if (!cursor.value) return;
-  const hadFocus = holdsFocus(moreEl.value);
   const firstNew = audit.value.length;
   const page = await fetchReservation(props.missionId, props.passId, cursor.value);
+  // B4 (ux #426): read once the page is back; someone who tabbed away meanwhile keeps their place.
+  const hadFocus = holdsFocus(moreEl.value);
   if (!page.ok) {
     moreError.value = `Couldn't load more: ${describeApiError(page.error)}`;
     return;
