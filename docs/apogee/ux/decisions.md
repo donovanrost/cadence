@@ -2764,6 +2764,10 @@ the fix (with the P0 result); the console's disable is its reader.
   `command_request_in_group`; #121, ca-ux 11-19): "This command is part of a command group. Its group's GO queues it."
   It replaces the approve line the enqueue reused, which named the wrong act; a correctness fix, so it may change
   although the legacy ops page renders it.
+- **Any other standalone action on a group member** (REST `409 command_request_in_group`; the fallback when the
+  action is none of approve, reject or enqueue; unreachable today; #121, ca-security's review, ca-ux 11-19): "This
+  command is part of a command group. Use its group instead." It names no act, so a future caller never gets
+  another act's instruction.
 - **Standalone create naming a group** (REST): "Not created: this request names a command group. A group's commands
   are submitted with the group."
 - **Not here:** the group's own GO/NO-GO is unchanged; this only closes the standalone way round it.
