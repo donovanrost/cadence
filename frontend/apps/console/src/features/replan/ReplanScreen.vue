@@ -24,7 +24,7 @@ import { replanErrorText } from "./errors.ts";
 import ReplanWindowMeta from "./ReplanWindowMeta.vue";
 import { noneLeftLine } from "./windowMeta.ts";
 import { applyWords } from "./applyWords.ts";
-import type { Because } from "@/features/scheduling/review-words.ts";
+import type { ReviewAfter } from "@/features/scheduling/review-run.ts";
 import { lostWindow } from "./impact.ts";
 import { bookingRequests } from "./applied.ts";
 import { useLostBookings } from "./useLostBookings.ts";
@@ -130,7 +130,8 @@ const primary = computed(() =>
     ? planPrimary(footerPlan.value, isAdmin.value, {
         requestsLeft: stopped.value?.left ?? null,
         userId: session.user.id,
-        refusedBecause: refusedBecause.value,
+        refusedBecause:
+          applied.value?.version === footerPlan.value.version ? applied.value.because : null,
       })
     : null,
 );
@@ -190,18 +191,14 @@ const title = computed(() => {
   return station.stationId.value ? stationTitle.value : "Re-plan after provider changes";
 });
 /** #257 (U97): Apply's result on the screen; a self-approval refusal disables Approve (A6). */
-const applyLine = ref<Readonly<{ tone: "nominal" | "caution" | "crit"; text: string }> | null>(
-  null,
-);
-const refusedBecause = ref<Because | null>(null);
+const applied = ref<ReviewAfter | null>(null);
 async function onApply(acks: Acknowledgement[], note?: string) {
   const plan = proposal.value?.plan;
   if (!plan || !applyCopy.value) return;
   const out = await apply(applyCopy.value.act, plan, acks, note, session.user.id);
   if (out.kind === "refused") return void (sheetError.value = out.error);
   sheet.value?.close();
-  applyLine.value = { tone: out.tone, text: out.text };
-  refusedBecause.value = out.because;
+  applied.value = out;
 }
 </script>
 
@@ -307,7 +304,9 @@ async function onApply(acks: Acknowledgement[], note?: string) {
           :requests-left="stopped?.left ?? null"
           :sheet-label="applyCopy?.label"
           :user-id="session.user.id"
-          :refused-because="refusedBecause"
+          :refused-because="
+            applied && applied.version === footerPlan?.version ? applied.because : null
+          "
           @sheet="sheet?.open()"
           @execute="footerPlan && execute(footerPlan.id)"
           redraft-label="Propose again"
@@ -324,6 +323,7 @@ async function onApply(acks: Acknowledgement[], note?: string) {
           :confirm="applyCopy?.confirm ?? primary.confirm"
           :act="applyCopy?.act ?? primary.act"
           :user-id="session.user.id"
+          :kept-note="applied?.keepNote ?? null"
           :busy="busy"
           @submit="onApply"
         />
@@ -374,7 +374,7 @@ async function onApply(acks: Acknowledgement[], note?: string) {
         />
       </ApPanel>
       <ApCallout v-if="actionError" tone="caution">{{ replanErrorText(actionError) }}</ApCallout>
-      <ApCallout v-if="applyLine" :tone="applyLine.tone">{{ applyLine.text }}</ApCallout>
+      <ApCallout v-if="applied" :tone="applied.tone">{{ applied.text }}</ApCallout>
       <footer v-if="!proposal" class="flex flex-none justify-end border-t border-hairline pt-3">
         <ApButton
           v-if="!runId && canPropose"

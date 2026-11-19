@@ -35,6 +35,8 @@ const props = defineProps<{
   /** #257 (U97): what the commit does, for its refusal words; the viewer, for "you already …". */
   act?: ReviewAct | undefined;
   userId: string;
+  /** ux: a note typed for an approve that was refused, put back for the retry when the field is empty. */
+  keptNote?: string | null | undefined;
 }>();
 const emit = defineEmits<{ submit: [acks: Acknowledgement[], note?: string]; close: [] }>();
 /** U36: resubmitting a sent-back draft prefills the previous reasons. */
@@ -128,6 +130,7 @@ function prefill() {
 }
 function open() {
   error.value = null;
+  if (props.keptNote && !note.value) note.value = props.keptNote;
   if (again.value) prefill();
   sheet.value?.open();
 }

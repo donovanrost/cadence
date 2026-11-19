@@ -10,6 +10,7 @@ import {
   approvedLine,
   approveRefusal,
   noApprovalLine,
+  notConfirmedLine,
   SENT,
   sentNotApprovedLine,
   type Because,
@@ -26,18 +27,20 @@ export type ReviewAct = "submit" | "approve" | "submit_approve";
  * - `refused`: nothing happened (the submit, or an approve-only, was refused). The sheet stays
  *   open and says why; a self-approval refusal comes as `after` instead (Approve is then off).
  * - `after`: the sheet closes and the screen shows `text`: a success from the answer (`nominal`,
- *   U20), no approval recorded (`caution`), or the one act's submit landed but its approve was
- *   refused (`crit`; `because` disables Approve after a self-approval refusal).
+ *   U20), nothing confirmed (`caution`), or the one act's submit landed but its approve was refused
+ *   (`crit`). `because` disables Approve on `version` after a self-approval refusal (A6);
+ *   `keepNote` is the typed note, kept for the retry (ux).
  */
-export type ReviewOutcome =
-  | { kind: "refused"; error: ApiError }
-  | {
-      kind: "after";
-      tone: "nominal" | "caution" | "crit";
-      text: string;
-      because: Because | null;
-      expired: Expired | null;
-    };
+export type ReviewAfter = Readonly<{
+  kind: "after";
+  tone: "nominal" | "caution" | "crit";
+  text: string;
+  version: number;
+  because: Because | null;
+  expired: Expired | null;
+  keepNote: string | null;
+}>;
+export type ReviewOutcome = { kind: "refused"; error: ApiError } | ReviewAfter;
 
 type Ids = Readonly<{ submit: string; approve: string }>;
 
@@ -63,16 +66,26 @@ type Context = Readonly<{
 }>;
 
 const after = (
-  tone: "nominal" | "caution" | "crit",
+  version: number,
+  tone: ReviewAfter["tone"],
   text: string,
-  extra: Partial<{ because: Because | null; expired: Expired | null }> = {},
-): ReviewOutcome => ({ kind: "after", tone, text, because: null, expired: null, ...extra });
+  extra: Partial<Pick<ReviewAfter, "because" | "expired" | "keepNote">> = {},
+): ReviewOutcome => ({
+  kind: "after",
+  tone,
+  text,
+  version,
+  because: null,
+  expired: null,
+  keepNote: null,
+  ...extra,
+});
 
 /** U20: "Approved" only on outcome approved (a replay shows the original answer's result). */
 function approved(value: ApproveResult, version: number, passes: number): ReviewOutcome {
   return isKnown(value.outcome) && value.outcome === "approved"
-    ? after("nominal", approvedLine(passes), { expired: value.expired })
-    : after("caution", noApprovalLine(version));
+    ? after(version, "nominal", approvedLine(passes), { expired: value.expired })
+    : after(version, "caution", noApprovalLine(version));
 }
 
 export async function runReview(
@@ -91,18 +104,32 @@ export async function runReview(
     // A self-approval refusal disables Approve, so it closes the sheet and says why on the screen.
     const why = approveRefusal(a.error, { version: plan.version, ...who });
     return why.because
-      ? after("crit", why.text, { because: why.because })
+      ? after(plan.version, "crit", why.text, { because: why.because })
       : { kind: "refused", error: a.error };
   }
-  const s = await submitPlan(ctx.missionId, ref, ids.submit, acks, note);
+  // ux: in the one act the note is recorded once, on the decision (decision_note), not the submission.
+  const s = await submitPlan(
+    ctx.missionId,
+    ref,
+    ids.submit,
+    acks,
+    act === "submit" ? note : undefined,
+  );
   if (!s.ok) return { kind: "refused", error: s.error };
-  if (act === "submit") return after("nominal", SENT, { expired: s.value.expired });
-  // The one act: approve the version submit put up (a sent-back draft's resubmit cuts the next).
   const version = s.value.version ?? plan.version;
+  // U20: "Sent" only on outcome pending_approval; anything else stops the one act before approve.
+  if (!isKnown(s.value.outcome) || s.value.outcome !== "pending_approval")
+    return after(version, "caution", notConfirmedLine(version));
+  if (act === "submit") return after(version, "nominal", SENT, { expired: s.value.expired });
+  // The one act: approve the version submit put up (a sent-back draft's resubmit cuts the next).
   const a = await approvePlan(ctx.missionId, { id: plan.id, version }, ids.approve, acks, note);
   if (a.ok) return approved(a.value, version, plan.counts.passes);
   const why = approveRefusal(a.error, { version, ...who });
+  const keepNote = note ?? null;
   return why.unclear
-    ? after("caution", why.text)
-    : after("crit", sentNotApprovedLine(version, why.reason), { because: why.because });
+    ? after(version, "caution", why.text, { keepNote })
+    : after(version, "crit", sentNotApprovedLine(version, why.reason), {
+        because: why.because,
+        keepNote,
+      });
 }

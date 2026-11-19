@@ -352,3 +352,27 @@ describe("SubmitSheet approve refusals (#257, U97)", () => {
     expect(w.find("details").exists()).toBe(false);
   });
 });
+
+describe("SubmitSheet kept note (#257, ux)", () => {
+  it("puts back a note typed for an approve that was refused, only into an empty field", async () => {
+    const w = mount(SubmitSheet, {
+      props: {
+        plan: { ...plan, state: "pending_approval", unmet: [] },
+        nameOf: () => null,
+        commitLabel: "Approve and book 12 passes",
+        userId: "u1",
+        title: "Approve and book the plan",
+        confirm: "",
+        busy: false,
+        act: "approve",
+        keptNote: "Checked with ops.",
+      },
+      attachTo: document.body,
+    });
+    // oxlint-disable-next-line typescript/no-unsafe-call, typescript/no-unsafe-member-access -- vue-tsc checks the exposed open(); the lint type service can't resolve SFC instances.
+    w.vm.open();
+    await nextTick();
+    expect(w.get<HTMLTextAreaElement>("textarea").element.value).toBe("Checked with ops.");
+    w.unmount();
+  });
+});

@@ -38,7 +38,7 @@ import { stationHits } from "./unavailable.ts";
 import { planPrimary } from "./plan-primary.ts";
 import { usePlanDay } from "./usePlanDay.ts";
 import { resubmittedLines, sentBackLine } from "./review-lines.ts";
-import type { Because } from "./review-words.ts";
+import type { ReviewAfter } from "./review-run.ts";
 
 /** K1 · Plan a day (ScheduleFlow.md). States: plan-state.ts; data: usePlanDay. */
 const route = useRoute();
@@ -96,11 +96,16 @@ const stopped = useBookingStopped(
 /** U73: `?version=N` of an older version is read-only (the latest version's number, else null). */
 const latest = computed(() => (view.value.kind === "plan" ? historical(view.value.plan) : null));
 const historySheet = ref<InstanceType<typeof PlanHistorySheet> | null>(null);
-/** #257 (U97): a self-approval refusal disables Approve on that plan (A6; Send back stays). */
-const refused = ref<Readonly<{ planId: string; because: Because }> | null>(null);
+/** #257 (U97): the last review's result for a plan (its line, A6 disable on its version, kept note). */
+const reviewed = ref<(ReviewAfter & Readonly<{ planId: string }>) | null>(null);
+const current = computed(() =>
+  reviewed.value && view.value.kind === "plan" && reviewed.value.planId === view.value.plan.id
+    ? reviewed.value
+    : null,
+);
 const refusedBecause = computed(() =>
-  refused.value && view.value.kind === "plan" && refused.value.planId === view.value.plan.id
-    ? refused.value.because
+  view.value.kind === "plan" && current.value?.version === view.value.plan.version
+    ? current.value.because
     : null,
 );
 const primary = computed(() =>
@@ -127,11 +132,7 @@ const sentBack = computed(() =>
   view.value.kind === "plan" ? sentBackLine(view.value.plan, session.user.id, isAdmin.value) : null,
 );
 
-/** #257 (U97): the review's result on the screen (the sheet closes). */
-const reviewLine = ref<Readonly<{ tone: "nominal" | "caution" | "crit"; text: string }> | null>(
-  null,
-);
-watch(day, () => (reviewLine.value = null));
+watch(day, () => (reviewed.value = null));
 async function onSubmit(acks: Acknowledgement[], note?: string) {
   if (view.value.kind !== "plan" || primary.value?.kind !== "sheet") return;
   const planId = view.value.plan.id;
@@ -144,9 +145,8 @@ async function onSubmit(acks: Acknowledgement[], note?: string) {
     return;
   }
   sheet.value?.close();
-  reviewLine.value = { tone: out.tone, text: out.text };
+  reviewed.value = { ...out, planId };
   expired.value = out.expired;
-  if (out.because) refused.value = { planId, because: out.because };
 }
 const editable = computed(
   () =>
@@ -310,7 +310,7 @@ const clock = computed(() =>
       />
     </div>
     <ApCallout v-if="actionText" tone="caution">{{ actionText }}</ApCallout>
-    <ApCallout v-if="reviewLine" :tone="reviewLine.tone">{{ reviewLine.text }}</ApCallout>
+    <ApCallout v-if="current" :tone="current.tone">{{ current.text }}</ApCallout>
     <PlanFooter
       :plan="view.plan"
       :is-admin="isAdmin"
@@ -347,6 +347,7 @@ const clock = computed(() =>
       :confirm="primary.confirm"
       :act="primary.act"
       :user-id="session.user.id"
+      :kept-note="current?.keepNote ?? null"
       :busy="busy"
       :day="day"
       @submit="onSubmit"

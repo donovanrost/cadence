@@ -67,6 +67,22 @@ describe("approve refusals (U97)", () => {
     expect(approveRefusal(conflict("plan_not_pending"), who).text).toBe(none);
   });
 
+  it("keeps U61's lines and the server's own message as they are (dashboards)", () => {
+    expect(approveRefusal(conflict("contact_plan_day_already_planned"), who)).toMatchObject({
+      text: "Not approved: another plan already covers this day.",
+      reason: "another plan already covers this day",
+    });
+    const notReady: ApiError = {
+      kind: "invalid",
+      code: "plan_not_ready",
+      message: "KSAT window W-12 has 2 conflicts.",
+      details: null,
+    };
+    expect(approveRefusal(notReady, who).text).toBe(
+      "Not approved: KSAT window W-12 has 2 conflicts.",
+    );
+  });
+
   it("words a changed, missing, foreign or unknown refusal", () => {
     expect(approveRefusal(conflict("plan_changed"), who).text).toBe(
       "Not approved: R41 changed after you opened it, so it isn't what you reviewed. Your approval wasn't recorded. Reload to review it again.",
@@ -139,7 +155,7 @@ const approvedAnswer = (outcome: "approved" | { unrecognized: string }, replayed
 });
 
 describe("runReview (#257)", () => {
-  it("the one act submits, then approves the version submit put up", async () => {
+  it("the one act submits, then approves the version submit put up; the note goes on the decision only", async () => {
     submit.mockResolvedValue(submitted(42));
     approve.mockResolvedValue(approvedAnswer("approved"));
     const out = await runReview(ctx(), "submit_approve", plan, [], "Checked with ops.");
@@ -153,7 +169,7 @@ describe("runReview (#257)", () => {
       { id: "plan_1", version: 41 },
       "op-1",
       [],
-      "Checked with ops.",
+      undefined,
     );
     expect(approve).toHaveBeenCalledWith(
       expect.anything(),
@@ -167,12 +183,14 @@ describe("runReview (#257)", () => {
   it("the one act's submit lands and its approve is refused: the plan waits, and says why (lead)", async () => {
     submit.mockResolvedValue(submitted(42));
     approve.mockResolvedValue({ ok: false, error: conflict("plan_changed") });
-    expect(await runReview(ctx(), "submit_approve", plan, [])).toEqual({
+    expect(await runReview(ctx(), "submit_approve", plan, [], "Checked.")).toEqual({
       kind: "after",
       tone: "crit",
       text: "R42 was sent for approval, but not approved: it changed after you opened it, so it isn't what you reviewed. It's waiting for approval.",
+      version: 42,
       because: null,
       expired: null,
+      keepNote: "Checked.",
     });
     approve.mockResolvedValue({ ok: false, error: self("submitted") });
     expect(await runReview(ctx(), "submit_approve", plan, [])).toMatchObject({
@@ -219,12 +237,25 @@ describe("runReview (#257)", () => {
     expect(await runReview(ctx(), "approve", plan, [])).toMatchObject({ kind: "refused" });
   });
 
-  it("a submit says Sent for approval", async () => {
+  it("a submit says Sent only on outcome pending_approval; anything else stops the one act (U20)", async () => {
+    submit.mockResolvedValue({
+      ok: true,
+      value: { ...submitted(42).value, outcome: { unrecognized: "accepted" } },
+    });
+    expect(await runReview(ctx(), "submit_approve", plan, [])).toMatchObject({
+      tone: "caution",
+      text: "Cadence didn't confirm that R42 was sent for approval. Reload to see the plan.",
+    });
+    expect(approve).not.toHaveBeenCalled();
+  });
+
+  it("a submit says Sent for approval, with its note", async () => {
     submit.mockResolvedValue(submitted(41));
     expect(await runReview(ctx(), "submit", plan, [], "note")).toMatchObject({
       tone: "nominal",
       text: "Sent for approval.",
     });
+    expect(submit.mock.calls[0]?.[4]).toBe("note");
     expect(approve).not.toHaveBeenCalled();
   });
 

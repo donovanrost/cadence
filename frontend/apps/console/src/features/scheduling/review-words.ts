@@ -10,7 +10,7 @@ import {
 } from "@/api";
 import { plural } from "@/ui";
 import { planErrorText } from "./errors.ts";
-import { dayLabel } from "./lifecycle.ts";
+import { dayLabel, lifecycleRefusal } from "./lifecycle.ts";
 import { when } from "./plan-history.ts";
 import { planState, type PlanState } from "./plans-api.ts";
 
@@ -135,16 +135,26 @@ export function approveRefusal(error: ApiError, w: Who): Refusal {
       "Cadence can't find this plan any more",
     );
   if (isError(error, "duplicate_operation")) return duplicate;
+  // U61's own lines (day already planned, replaced, all expired) already open "Not approved:".
+  const lifecycle = lifecycleRefusal(error);
+  if (lifecycle) {
+    const rest = lifecycle.text.replace(/^Not approved: /, "");
+    return refusal(lifecycle.text, firstSentence(rest).replaceAll(r, "it"));
+  }
   const code = knownErrorCode(error);
+  if (code === "plan_superseded") {
+    // U36's line (the console's words), opening "Not approved:".
+    const text = planErrorText(error);
+    return refusal(`Not approved: ${lower(text)}`, lower(firstSentence(text)));
+  }
   if (
     code === "plan_not_ready" ||
     code === "acknowledgements_required" ||
-    code === "plan_superseded" ||
     code === "invalid_params"
   ) {
-    // U36's lines, opening "Not approved:".
+    // The server's own message: its case is kept (dashboards' review).
     const text = planErrorText(error);
-    return refusal(`Not approved: ${lower(text)}`, lower(firstSentence(text)).replaceAll(r, "it"));
+    return refusal(`Not approved: ${text}`, firstSentence(text));
   }
   return refusal(
     "Not approved: Cadence refused this approval. Your approval wasn't recorded.",
@@ -176,6 +186,9 @@ export function submitRefusalText(error: ApiError, w: Who): string {
 export const SENT = "Sent for approval.";
 export const approvedLine = (passes: number) =>
   `Approved. Booking ${plural(passes, "pass", "passes")}.`;
+/** U20: a submit answer that isn't outcome pending_approval (ux). */
+export const notConfirmedLine = (version: number) =>
+  `Cadence didn't confirm that R${version} was sent for approval. Reload to see the plan.`;
 /** U20: a success answer that isn't outcome approved. */
 export const noApprovalLine = (version: number) =>
   `Cadence didn't record an approval for R${version}. Reload to see the plan; if it's still waiting, try again or tell the team that runs Cadence for you.`;
