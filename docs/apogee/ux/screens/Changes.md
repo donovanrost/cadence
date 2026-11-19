@@ -146,7 +146,7 @@ h1 "Apply r6 · 2 changes"                                  base r5 · staged 14
   truncates with title) · Changes (`2 · 50 spacecraft, catalog`) · Kind tag (`Rollback of r5` when
   applicable). Current revision row has a white left inset bar + `LIVE` tag (readout outline).
   Select two (checkbox column) → `Compare r4 ↔ r6`.
-- **Revision detail** `M/setup/revisions/r6`: header `r6 · applied 2026-11-08 14:52Z by Donovan R.`
+- **Revision detail** `M/setup/revisions/6` (the route takes the bare number; the visible text stays `r6`): header `r6 · applied 2026-11-08 14:52Z by Donovan R.`
   + why as a `text-3` sentence; its changes (same diff rows as K1, read-only); approver if reviewed;
   `Roll back to r5` (secondary, danger tone only in its confirm) → stages a reverting change set and
   opens the review page with the summary `Roll back r6 (2 changes)`. Disabled with reason when the

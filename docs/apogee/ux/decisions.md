@@ -3553,3 +3553,35 @@ occurs.
   - A re-import never resets, reopens or copies an approval or a rejection. (It does add the importer; see the
     waiting case.)
   - The words never suggest re-importing as a way around a rejection.
+
+### U101 · Which change set last set a spacecraft's switch (#151; extends U94) (mms-ux / api / fe-setup)
+A mission admin sees where a Telemetry or Commanding switch was last changed, and where to change it back. The words
+build on U94's switch lines and its keys `switches.telemetry_enabled` / `switches.commanding_enabled`, each `{value,
+set, revision}`, plus (api, #151) `applied_by {kind, id, name}` and `applied_at`, sent both or neither.
+
+- **Where:** the same words in two places: the read-only switch rows in the configuration workspace (U94), and the
+  Operation panel on the spacecraft page (U40), as a muted line under each switch's state sentence. The Operation
+  panel's read sends the same per-switch shape; it doesn't keep its own.
+- **The lines:**
+  - Set by a change set, with the apply: "Off · set by r7, applied 11-18 03:40Z by Mira K." (`On` likewise). Who and
+    when are the apply, one event (U29). The line names whoever `applied_by` names, whatever their role. (api: that's
+    whoever ran the apply, which under "Needs a second person's approval" is the approver.) The person who asked for
+    the change is on the revision page. The time is §4's short form with the date always, because a switch can be
+    set days ago.
+  - `applied_by` by kind (ux's review):
+    - A person: their name, as above.
+    - The system: "applied 11-18 03:40Z by Cadence".
+    - A service identity: "applied 11-18 03:40Z by Nightly planner".
+    - A null `name` on a person or service: "Off · set by r7, applied 11-18 03:40Z." The name drops, never an id
+      (U25); the time stays, as in U99.
+    - A `kind` the console doesn't know: the same as a null name.
+  - Set by a change set, without `applied_by` / `applied_at`: "Off · set by r7." (U94).
+  - Set, with no revision: "On · set through Setup › Changes." (U94), plain text with no link, since there's no one
+    change set to open.
+  - Never set: U94's line unchanged ("Off · no change set has turned it on yet…").
+- **The link:** `r7` is a link in the mono revision style to Setup › Revisions › r7 (route `setup.revision`,
+  `/setup/revisions/7`), where the change set's changes, its submitter and approver, and `Roll back` are. Its
+  accessible name is "Change set r7" (B7; it contains the visible `r7`, so label-in-name holds). The link shows even
+  if that page can't open the revision; Revisions shows its own not-found state. The console never guesses a
+  revision.
+- **People who can only view Setup** see the same line and link (Changes §5: never hide the data).
