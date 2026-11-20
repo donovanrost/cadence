@@ -11,10 +11,10 @@ defmodule Cadence.Repo.Migrations.ChangeSetReviewRecord do
   # - separated_from: the actor ids the separation check compared (as #597's), '{}' when none;
   # - admin_mode: whether the decider acted as a platform admin;
   # - decision may be 'not_required' (a direct-path apply's own row), with no comment.
-  # Revisions gain submitted_by.
+  # Revisions gain submitted_by, required (domain on #616).
   #
-  # mission_config_reviews is append-only by trigger (20261117160000), so an existing row could
-  # never get these fields. Landing order (domain, #112): this refuses BEFORE any DDL while the
+  # mission_config_reviews and mission_config_revisions are append-only by trigger (20261117160000),
+  # so an existing row could never get these required fields. Landing order (domain, #112): this refuses BEFORE any DDL while the
   # table has rows. The remedy is a dev reset or the reset's designed purge, never a
   # trigger-disabled DELETE.
   def up do
@@ -29,7 +29,7 @@ defmodule Cadence.Repo.Migrations.ChangeSetReviewRecord do
     end
 
     alter table(:mission_config_revisions) do
-      add(:submitted_by, :map)
+      add(:submitted_by, :map, null: false)
     end
 
     execute("""
