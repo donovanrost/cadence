@@ -130,7 +130,7 @@ async function apply() {
     <div class="flex flex-col gap-4">
       <ApplyTiles
         :staged="changeSet.staged_count"
-        :outcome="preview.status === 'ready' ? (preview.value.outcome ?? null) : null"
+        :outcome="preview.status === 'ready' ? preview.value.outcome : undefined"
         :authors="changeSet.authors"
         :viewer-id="viewerId ?? null"
       />

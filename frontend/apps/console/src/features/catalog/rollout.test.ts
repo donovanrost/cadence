@@ -139,9 +139,9 @@ describe("C3 words", () => {
   };
 
   it("names a profile card and the primary by the choice", () => {
-    expect(profileCard(block1)).toBe("Earendil Block 1 · 500 SC · rev 14");
+    expect(profileCard(block1)).toBe("Earendil Block 1 · 500 spacecraft · rev 14");
     expect(profileCard({ ...block1, current_revision: null })).toBe(
-      "Earendil Block 1 · 500 SC · catalog set per spacecraft",
+      "Earendil Block 1 · 500 spacecraft · catalog set per spacecraft",
     );
     const one = { kind: "profiles", profiles: [{ id: "prof_1", allVersions: false }] } as const;
     expect(stageLabel(15, one, ["Earendil Block 1"])).toBe("Stage rev 15 for Earendil Block 1");

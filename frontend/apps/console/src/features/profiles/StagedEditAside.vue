@@ -37,8 +37,8 @@ defineEmits<{ check: []; stage: []; discard: [] }>();
         </li>
       </ul>
       <div v-if="counts" class="grid grid-cols-2 gap-px border border-hairline bg-hairline">
-        <ApStatTile label="Changes" :value="counts.changes" unit="SC" />
-        <ApStatTile label="Keeps" :value="counts.keeps" unit="SC" />
+        <ApStatTile label="Changes" :value="counts.changes" unit="spacecraft" />
+        <ApStatTile label="Keeps" :value="counts.keeps" unit="spacecraft" />
       </div>
       <ApCallout v-if="outcome" :tone="outcome.tone">{{ outcome.text }}</ApCallout>
       <FailureOutcomeCallout v-if="failure" :outcome="failure" />

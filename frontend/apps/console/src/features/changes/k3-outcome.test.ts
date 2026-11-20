@@ -87,7 +87,7 @@ describe("K9's Authors line", () => {
 });
 
 describe("ApplyTiles", () => {
-  it("shows Changes · SC · Routes and the readiness line with an outcome", () => {
+  it("shows Changes · Spacecraft · Routes and the readiness line with an outcome", () => {
     const w = mount(ApplyTiles, {
       props: { staged: 3, outcome: read(OUTCOME), authors: [], viewerId: null },
     });
@@ -99,12 +99,38 @@ describe("ApplyTiles", () => {
     expect(w.find("[data-readiness-after]").exists()).toBe(true);
   });
 
-  it("shows the Changes tile alone without one", () => {
+  it("shows the Changes tile alone when the server sends no outcome (before #522)", () => {
     const w = mount(ApplyTiles, {
-      props: { staged: 3, outcome: null, authors: [], viewerId: null },
+      props: { staged: 3, outcome: undefined, authors: [], viewerId: null },
     });
     expect(w.text()).not.toContain("Spacecraft");
     expect(w.text()).not.toContain("Routes");
+    expect(w.find("[data-not-worked-out]").exists()).toBe(false);
+  });
+
+  it("keeps the tiles as dashes and says why when the outcome is null (ux 11-20)", () => {
+    const w = mount(ApplyTiles, {
+      props: { staged: 3, outcome: null, authors: [], viewerId: null },
+    });
+    expect(w.text()).toContain("Spacecraft");
+    expect(w.text()).toContain("Routes");
+    expect(w.text()).toContain("—");
+    expect(w.get("[data-not-worked-out]").text()).toBe(
+      "Cadence couldn't work out these changes' effect on the fleet and its readiness. The checks still run.",
+    );
     expect(w.find("[data-readiness-after]").exists()).toBe(false);
+  });
+
+  it("says nothing about readiness when only readiness is null (the set touches nothing it reads)", () => {
+    const w = mount(ApplyTiles, {
+      props: {
+        staged: 3,
+        outcome: read({ ...OUTCOME, readiness: null }),
+        authors: [],
+        viewerId: null,
+      },
+    });
+    expect(w.find("[data-readiness-after]").exists()).toBe(false);
+    expect(w.find("[data-not-worked-out]").exists()).toBe(false);
   });
 });
