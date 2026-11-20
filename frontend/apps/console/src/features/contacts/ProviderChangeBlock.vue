@@ -2,7 +2,7 @@
 import { computed, ref } from "vue";
 import type { MissionId } from "@/api/index.ts";
 import { organizationCapabilities, useConsoleScope, useSession } from "@/shell/index.ts";
-import { ApButton, ApCallout, ApTextarea, outcomeRole } from "@/ui";
+import { ApButton, ApCallout, ApTextarea, OutcomeCallout } from "@/ui";
 import {
   fieldKey,
   fieldLabel,
@@ -164,9 +164,7 @@ async function submit() {
         </tr>
       </tbody>
     </table>
-    <ApCallout v-if="notice" :tone="notice.tone" :role="outcomeRole(notice.tone)">{{
-      notice.text
-    }}</ApCallout>
+    <OutcomeCallout v-if="notice" :outcome="notice" />
     <p v-if="decided" class="m-0 text-sm text-text-2">{{ decided }}</p>
     <p v-else-if="expired" class="m-0 text-sm text-text-2">{{ expiredLine }}</p>
     <template v-else-if="conflict !== 'configuration_failure'">

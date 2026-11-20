@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useRuntimeStatus } from "@/shell";
-import { ApButton, ApCallout, outcomeRole, plural } from "@/ui";
+import { ApButton, ApCallout, OutcomeCallout, plural } from "@/ui";
 import type { SubmitResult } from "./actions.ts";
 import { savedOnlyText } from "./nothingRunning.ts";
 import { configRuntime, outcomeRuntime, outcomeText } from "./runtime.ts";
@@ -52,19 +52,13 @@ const applied = computed(() => {
     set is applied as <span class="font-mono">r{{ next }}</span
     >.
   </ApCallout>
-  <ApCallout
-    v-if="applied"
-    data-changes-outcome
-    :tone="applied.tone"
-    :role="outcomeRole(applied.tone)"
-  >
-    {{ applied.text }}
+  <OutcomeCallout v-if="applied" data-changes-outcome :outcome="applied">
     <template #action
       ><ApButton size="compact" :to="{ name: 'setup.revisions' }"
         >View revisions</ApButton
       ></template
     >
-  </ApCallout>
+  </OutcomeCallout>
   <ApCallout v-else-if="outcome?.state === 'in_review'" data-changes-outcome tone="info">
     Sent for review. An org member who didn't stage any of these changes approves or sends it back.
   </ApCallout>

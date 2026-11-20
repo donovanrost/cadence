@@ -72,7 +72,12 @@ const columns: readonly ApColumn[] = [
         >
           Fleet size and state couldn't load.
           <template #action>
-            <ApButton size="compact" @click="summariesActed.after(summaries.refetch)()"
+            <ApButton
+              size="compact"
+              @click="
+                summariesActed.mark();
+                summaries.refetch();
+              "
               >Retry</ApButton
             >
           </template>

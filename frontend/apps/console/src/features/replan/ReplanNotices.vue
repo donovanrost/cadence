@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ReviewAfter } from "@/features/scheduling/review-run.ts";
-import { ApCallout, outcomeRole } from "@/ui";
+import { ApCallout, OutcomeCallout } from "@/ui";
 
 /**
  * The re-plan's outcomes of the person's own acts (a11y B6, #276, ux): a refused or failed action
@@ -11,7 +11,5 @@ defineProps<{ error: string | null; applied: ReviewAfter | null }>();
 
 <template>
   <ApCallout v-if="error" tone="caution" role="alert">{{ error }}</ApCallout>
-  <ApCallout v-if="applied" :tone="applied.tone" :role="outcomeRole(applied.tone)">{{
-    applied.text
-  }}</ApCallout>
+  <OutcomeCallout v-if="applied" :outcome="applied" />
 </template>
