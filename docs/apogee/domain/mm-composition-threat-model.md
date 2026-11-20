@@ -164,6 +164,11 @@ pin → head and assignment; head plus artifact → expansion → runtime; tenan
       activation's hash;
     - run: `runtime/mission_runtime_spec.ex` `validate_content_hash/2` before a runtime spec exists.
   - D carries the same three points for heads (G) and the index (I).
+  - **Open (domain, 11-20; for D and 4d #450):** `MissionRuntimeSpec.validate_content_hash` defaults
+    the expected hash to the computed one when a caller passes none. The live reconciler always
+    passes the activation's hash (closed). Replay (`replay.ex`) builds a spec without it, so only
+    #475's read check covers replay. Hardening: every caller names the hash it expects (no
+    default), and replay passes the recorded version's stored hash.
 - **CB-10 (medium; C2): heads and assignment history.**
   - Assignment history replaces per-change revision documents as per-craft audit, so it must be
     append-only (#116's triggers, as #436 did for accountables).
