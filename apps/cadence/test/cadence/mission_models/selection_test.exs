@@ -125,6 +125,21 @@ defmodule Cadence.MissionModels.SelectionTest do
              |> Enum.reverse()
   end
 
+  test "assume_approved: what the next staging would select once a candidate is approved", c do
+    CompositionFixtures.approve!(c.revision_id)
+    candidate = compile!(c, "3")
+    CompositionFixtures.set_status!([candidate], "candidate")
+    runnable = ["2", "3"]
+
+    assert {:ok, revision_id} = pick(c, runnable: runnable)
+    assert revision_id == c.revision_id
+    assert {:ok, ^candidate} = pick(c, runnable: runnable, assume_approved: candidate)
+
+    # It changes nothing stored, and an unrunnable revision stays unselectable.
+    assert {:ok, ^revision_id} = pick(c, runnable: runnable)
+    assert {:ok, ^revision_id} = pick(c, runnable: ["2"], assume_approved: candidate)
+  end
+
   test "every runnable version has a stored revision whose plans this runtime decodes", c do
     for version <- Selection.runnable() do
       assert %RevisionRow{revision_id: id} =

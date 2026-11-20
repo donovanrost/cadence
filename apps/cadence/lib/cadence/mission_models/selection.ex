@@ -39,12 +39,17 @@ defmodule Cadence.MissionModels.Selection do
   only revisions this server can't run are approved; else `{:error, :not_approved}`. It's the first
   approved, runnable link of `ranked/3`.
 
+  `opts[:assume_approved]` treats that one revision as approved (#577's "what the next staging
+  would select once it's approved"), in the same pass, so a read can't disagree with staging.
   `opts[:runnable]` replaces the list (tests only).
   """
   @spec select(binary(), binary(), binary(), keyword()) ::
           {:ok, binary()} | {:error, :not_approved | :reapproval_needed}
   def select(organization_id, mission_id, composition_id, opts \\ []) do
-    links = ranked(organization_id, mission_id, composition_id, opts)
+    links =
+      organization_id
+      |> ranked(mission_id, composition_id, opts)
+      |> assume_approved(Keyword.get(opts, :assume_approved))
 
     case Enum.find(links, &(&1.status == "approved" and &1.runnable)) do
       %{revision_id: revision_id} ->
@@ -56,6 +61,15 @@ defmodule Cadence.MissionModels.Selection do
           else: {:error, :not_approved}
     end
   end
+
+  defp assume_approved(links, nil), do: links
+
+  defp assume_approved(links, revision_id),
+    do:
+      Enum.map(links, fn
+        %{revision_id: ^revision_id} = link -> %{link | status: "approved"}
+        link -> link
+      end)
 
   @doc """
   Every link of `composition_id` (NULL head), newest first in the selection's own order, with its
