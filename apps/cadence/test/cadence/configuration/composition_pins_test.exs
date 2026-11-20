@@ -29,7 +29,11 @@ defmodule Cadence.Configuration.CompositionPinsTest do
       })
 
     rev2 =
-      Fixtures.persist_imported_revision!(org, mid, revision_label: "Rev 2", yaml: rev2_yaml())
+      Fixtures.persist_imported_revision!(org, mid,
+        revision_label: "Rev 2",
+        yaml: rev2_yaml(),
+        approve: false
+      )
 
     %{
       org: org,
@@ -68,13 +72,22 @@ defmodule Cadence.Configuration.CompositionPinsTest do
     test "a catalog revision and a composition that disagree are refused", c do
       profile = profile!(c, c.rev1.catalog_revision_id)
 
+      rev3 =
+        Fixtures.persist_imported_revision!(c.org, c.mid,
+          revision_label: "Rev 3",
+          yaml: String.replace(rev2_yaml(), "apid: 77", "apid: 78")
+        )
+
+      comp3 = composition!(c.org, c.mid, rev3)
+
       op = %{
         kind: "spacecraft_profile",
         action: :update,
         entity_id: profile,
         changes: [
-          %{path: "catalog_revision_id", value: c.rev1.catalog_revision_id},
-          %{path: "composition_id", value: c.comp2}
+          # Both change, to things that don't match (an unchanged path is dropped at staging).
+          %{path: "catalog_revision_id", value: c.rev2.catalog_revision_id},
+          %{path: "composition_id", value: comp3}
         ]
       }
 
@@ -82,7 +95,13 @@ defmodule Cadence.Configuration.CompositionPinsTest do
                Configuration.preview(c.scope, c.mid, {:ops, [op]})
 
       assert %{items: [%{errors: errors}]} = Enum.find(checks, &(&1.key == "validation"))
-      assert Enum.any?(errors, &(&1.path == "composition_id"))
+
+      assert %{message: message, details: %{reason: "mismatch"}} =
+               Enum.find(errors, &(&1.path == "composition_id"))
+
+      assert message ==
+               "Cadence couldn't match this to catalog rev #{c.rev2.revision_number}; " <>
+                 "choose the catalog revision again"
     end
   end
 
@@ -94,10 +113,21 @@ defmodule Cadence.Configuration.CompositionPinsTest do
       assert {:ok, %{verdict: :no_go, checks: checks}} =
                Configuration.preview(c.scope, c.mid, {:ops, [op]})
 
-      assert %{items: [%{errors: [%{path: "composition_id", message: message}]}]} =
+      assert %{
+               items: [%{errors: [%{path: "composition_id", message: message, details: details}]}]
+             } =
                Enum.find(checks, &(&1.key == "validation"))
 
-      assert message =~ "isn't approved"
+      # mms-ux (a U109 amendment): a one-catalog pin is named by its catalog revision.
+      n = c.rev2.revision_number
+
+      assert message ==
+               "Catalog rev #{n} isn't approved yet; an org admin approves it in Setup › Catalog first"
+
+      assert %{reason: "not_approved", catalog_revision_number: ^n, composition_id: comp} =
+               details
+
+      assert comp == c.comp2
     end
 
     test "a per-craft pin to a composition with no approved revision", c do
@@ -135,10 +165,16 @@ defmodule Cadence.Configuration.CompositionPinsTest do
       assert {:ok, %{verdict: :no_go, checks: checks}} =
                Configuration.preview(c.scope, c.mid, {:ops, [op]})
 
-      assert %{items: [%{errors: [%{path: "composition_id", message: message}]}]} =
+      assert %{
+               items: [%{errors: [%{path: "composition_id", message: message, details: details}]}]
+             } =
                Enum.find(checks, &(&1.key == "validation"))
 
-      assert message =~ "re-approv"
+      assert message ==
+               "Catalog rev #{c.rev2.revision_number} was approved for an earlier version of " <>
+                 "Cadence, so it needs approving again; an org admin does that in Setup › Catalog"
+
+      assert %{reason: "reapproval_needed"} = details
     end
 
     test "a composition that doesn't exist in the mission", c do
@@ -167,11 +203,12 @@ defmodule Cadence.Configuration.CompositionPinsTest do
               "reason" => "Trial"
             })
           ] do
-        assert {:ok, %{verdict: :no_go, checks: checks}} =
+        # A malformed op is refused at its shape check, a field error before any preview.
+        assert {:error, {:invalid_op, 0, [%{path: _, message: _} | _]}} =
                  Configuration.preview(c.scope, c.mid, {:ops, [op]}),
                inspect(op)
 
-        assert %{items: [%{errors: [_ | _]}]} = Enum.find(checks, &(&1.key == "validation"))
+        assert {:error, {:invalid_op, 0, _}} = stage(c, [op])
       end
 
       {:ok, stored} = SpacecraftTypeStore.fetch_spacecraft_type(c.org, c.mid, profile)

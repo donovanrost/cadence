@@ -157,8 +157,24 @@ defmodule Cadence.Platform.ConfigKind do
               prepared :: [map()]
             ) :: :ok | {:error, {:invalid_op, non_neg_integer(), [field_error()]}}
 
+  @doc """
+  Rewrites a staged document before `normalize/3`, with the tenant in hand, AT STAGING ONLY (never
+  at apply): e.g. D3's translation of an old client's `catalog_revision_id` to the composition it
+  names (#544). `previous` is the live document (nil for a create), `touched` the paths the op
+  sets. Paths it changes beyond `touched` are staged as further changes, so the staged op names
+  exactly what apply will write.
+  """
+  @callback translate(
+              String.t(),
+              String.t(),
+              previous :: document() | nil,
+              proposed :: document(),
+              touched :: [String.t()]
+            ) :: {:ok, document()} | {:error, [field_error()]}
+
   @optional_callbacks stage_check: 5,
                       stage_conflicts: 4,
+                      translate: 5,
                       absent_errors: 3,
                       effect: 7,
                       normalize_options: 2,

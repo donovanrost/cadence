@@ -18,6 +18,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
 
   alias Cadence.Platform.ConfigFields, as: F
   alias Cadence.Platform.ConfigurationSettings
+  alias Cadence.Spacecraft.ConfigKinds.CompositionPin
   alias Cadence.Spacecraft.ConfigKinds.Spacecraft, as: SpacecraftKind
   alias Cadence.SpacecraftStore
   alias Cadence.SpacecraftStore.Overrides
@@ -145,7 +146,17 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
         do: :ok,
         else: catalog_exists(organization_id, mission_id, catalog, "catalog_revision_id")
 
+    pin_errors =
+      CompositionPin.errors(
+        organization_id,
+        mission_id,
+        pin(previous),
+        pin(proposed),
+        "composition_id"
+      )
+
     with :ok <- catalog_check,
+         :ok <- if(pin_errors == [], do: :ok, else: {:error, pin_errors}),
          do:
            apids_in_catalog(
              organization_id,
@@ -157,6 +168,32 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
   end
 
   def validate(_organization_id, _mission_id, _action, _entity_id, _previous, _proposed), do: :ok
+
+  @impl true
+  # D3 (#544): an old client's catalog_revision_id names its composition, at staging only.
+  def translate(organization_id, mission_id, previous, proposed, touched) do
+    {catalog, composition} =
+      CompositionPin.translate(
+        organization_id,
+        mission_id,
+        pin(proposed),
+        {"catalog_revision_id" in touched, "composition_id" in touched}
+      )
+
+    {:ok,
+     proposed
+     |> Map.put("catalog_revision_id", catalog)
+     |> put_pin(composition, previous)}
+  end
+
+  # A profile without a pin keeps no composition_id key (#108: documents recorded before D3).
+  defp put_pin(document, nil, _previous), do: Map.delete(document, "composition_id")
+
+  defp put_pin(document, composition, _previous),
+    do: Map.put(document, "composition_id", composition)
+
+  defp pin(nil), do: {nil, nil}
+  defp pin(document), do: {document["catalog_revision_id"], document["composition_id"]}
 
   @impl true
   def write(organization_id, mission_id, :create, id, nil, proposed, _options) do
