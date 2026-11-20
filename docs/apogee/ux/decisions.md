@@ -3435,7 +3435,8 @@ are api's, switched on with `knownErrorCode`.
       can't tell who made one of this plan's versions since it was last approved, so it can't check that you weren't
       one of them. Your approval wasn't recorded. Draft the day again so a new plan replaces this one; if it keeps
       happening, tell the team that runs Cadence for you."
-    - Up front, when the read says so (`authors_unknown`): the same line without "Not approved:" and U95's sentence.
+    - No up-front form: no plan read carries a `cannot_decide_because` (ca-engineer), so the 403 is the only place it
+      shows. If a read adds one, the same line without "Not approved:" and U95's sentence.
   - 403 `forbidden`: "Not approved: only an org admin approves contact plans. Your approval wasn't recorded."
   - 409 `plan_not_pending` (`state`; `decided_by` and `decided_at` together or neither): "R41 was already approved by
     Ana R. at 03:46Z, so your approval wasn't recorded. Reload to see it." / "…already sent back by Ana R. at
