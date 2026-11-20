@@ -302,8 +302,17 @@ by its catalog revision ("catalog rev 4"); the model revision id is Technical de
   mission_model_runtime_plans_not_ready`, `409 mission_model_revision_not_approvable`, `404
   mission_model_revision_not_found` / `mission_model_comparison_report_not_found`, `422
   mission_model_decision_reason_required` ("Give a reason first."), `422
-  mission_model_decision_reason_too_long` (over 2,000 bytes), `422 invalid_params`. Approving an
-  already approved revision returns it unchanged (the first approver stays).
+  mission_model_decision_reason_too_long` (over 2,000 bytes), `422 invalid_params`.
+- Approve takes an optional `operation_id` (#260; 1-120 characters, else `422 invalid_params`),
+  recorded with the approval. Its `200` carries `replayed: false`. On an **already approved**
+  revision approve records nothing (the first approver stays), in this order: the separation
+  check still applies (the importer gets `403 mission_model_self_approval_forbidden` or
+  `…_authors_unknown`); the same `operation_id`, approver and `comparison_report_id` as the
+  recorded approval answer `200` (the read) with `replayed: true`; anything else answers `409
+  mission_model_revision_already_approved`, `details: {decided_by: {id, name} | null,
+  decided_at | null}`, both set or both null. `decided_by` names an active member (C1: a person
+  no longer a member reads `{id: null, name: null}`; never a stored name or an email). Before
+  #260 this answered `200` with the revision unchanged (breaking).
 - The catalog read's revision rows (`GET /catalog?database_id=`) carry `model {revision_id,
   status} | null` for the row tag (NEEDS APPROVAL / APPROVED / REJECTED).
   - `composition_id` (D2, #543): the id of the composition behind the row's model revision, or

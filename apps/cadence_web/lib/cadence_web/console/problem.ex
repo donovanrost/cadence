@@ -355,6 +355,10 @@ defmodule CadenceWeb.Console.Problem do
     mission_model_approver_authors_unknown:
       {403,
        "Not approved: Cadence can't tell who imported this revision, so this can't be approved yet."},
+    # #260 (mms-ux): the console names the revision, the decider and the time from the details.
+    mission_model_revision_already_approved:
+      {409,
+       "Not approved: this catalog revision was already approved, so your approval wasn't recorded. Reload to see it."},
     command_request_approver_authors_unknown:
       {403,
        "Not approved: Cadence can't tell who sent this command request, so this can't be approved yet."}
