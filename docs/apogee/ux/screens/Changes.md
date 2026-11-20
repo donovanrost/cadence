@@ -117,8 +117,8 @@ h1 "Apply r6 · 2 changes"                                  base r5 · staged 14
   delta line; the authors are a meta line, not a tile (ux, audit K9: four-eyes needs them). Words (ca-ux 11-20,
   from the preview's `outcome`, #522):
   - `Spacecraft` (U102: the word, never "SC"): the fleet after applying (`outcome.spacecraft.after`), "549".
-    `Routes`: the usable routes added minus removed, "+300", "−50", "0", or both when both are nonzero, "+300 −50" (counts with separators). Routes are the
-    per-spacecraft routes a profile's rules generate, never the rules.
+    `Routes`: the usable routes added minus removed, "+300", "−50", "0", or both when both are nonzero, "+300 −50"
+    (counts with separators). Routes are the per-spacecraft routes a profile's rules generate, never the rules.
   - Readiness line: "Readiness after: 0 blockers (no change) · 2 cautions (no change) · 0 not set up (was 1)".
     Blockers always; caution, stale and not set up only when nonzero now or after; each change in words, never
     "(=)".
@@ -127,9 +127,9 @@ h1 "Apply r6 · 2 changes"                                  base r5 · staged 14
     readiness. The checks still run." (ux: never drop the tiles silently).
   - Authors, muted under the tiles: "Staged by you, Mira K. and 2 more". The viewer first as "you"; a service with
     "(a service identity)" (U103); nameless people drop from the names but count; up to 3, then "and N more"; nobody
-    named, "Staged by 2 people". Never an id. **Why** textarea
-  (required, 10+ chars; goes in the audit and the revision list; "Say why (10 characters or more)."); caption "Goes
-  in the revision and the audit log"; primary `Apply as r6`.
+    named, "Staged by 2 people". Never an id.
+  - **Why** textarea (required, 10+ chars; goes in the audit and the revision list; "Say why (10 characters or
+    more)."); caption "Goes in the revision and the audit log"; primary `Apply as r6`.
   - Apply's disabled reasons (A6), first that applies: "Waiting for checks."; a NO-GO names it, "Can't apply yet:
     <the NO-GO's line>"; "Acknowledge the holds first."; "Say why (10 characters or more)."; without the apply
     capability, the page says who can apply, never only "You can stage changes but not apply them."
