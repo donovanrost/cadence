@@ -28,6 +28,9 @@ defmodule Cadence.Management.Contacts.Store.ContactPlanApprovalRow do
     field(:policy_document, :map)
     field(:decided_at, :utc_datetime_usec)
     field(:exceptions_document, {:array, :map}, default: [])
+    # #277: the author ids the separation check compared (#117's `separated_from`); [] when the
+    # policy didn't require separation, and on rows decided before it.
+    field(:separated_from, {:array, :string}, default: [])
 
     timestamps(updated_at: false)
   end

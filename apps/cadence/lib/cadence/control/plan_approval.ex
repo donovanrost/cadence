@@ -78,10 +78,11 @@ defmodule Cadence.Control.PlanApproval do
     end
   end
 
-  # 'submitted' wins when the approver both submitted and wrote the version (domain 11-19:
-  # 'edited' is the author of the version being approved). This mirrors the two requesters that
-  # ContactPlanApprovals.separate_approver/5 refuses (the plan's lifecycle_changed_by and the
-  # version's created_by); keep the two in step if that check gains a cause.
+  # 'submitted' wins when the approver both submitted and drafted (domain 11-19). 'edited' is any
+  # version's author since the plan's last approval (#277, ux U97: "you drafted a version of this
+  # plan since it was last approved"). This mirrors what ContactPlanApprovals.separate_approver/5
+  # refuses (the plan's lifecycle_changed_by, and each version's created_by in that window); keep
+  # the two in step if that check gains a cause.
   defp because(%ContactPlan{lifecycle_changed_by: actor_id}, {:ok, actor_id}), do: :submitted
   defp because(_plan, _actor_id), do: :edited
 

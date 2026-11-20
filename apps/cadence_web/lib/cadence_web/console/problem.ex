@@ -50,7 +50,8 @@ defmodule CadenceWeb.Console.Problem do
       {409,
        "The booking window has closed for some of this plan's passes, so it can't be approved as it is. Nothing was recorded."},
     contact_plan_self_approval_forbidden:
-      {403, "You submitted or drafted this version, so another org admin approves it."},
+      {403,
+       "You submitted this plan or drafted a version of it since it was last approved, so another org admin approves it."},
     contact_plan_version_already_decided:
       {422, "This version was already decided. Reload to see it."},
     booking_not_found: {404, "That pass isn't a booking of this plan."},
