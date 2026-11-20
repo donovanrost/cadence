@@ -91,6 +91,7 @@ const noticeText = computed(() => {
   <ApCallout
     v-if="noticeText"
     :tone="notice?.kind === 'skipped' || notice?.kind === 'too_many_commands' ? 'caution' : 'crit'"
+    role="alert"
   >
     {{ noticeText }}
   </ApCallout>

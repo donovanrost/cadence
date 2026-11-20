@@ -13,7 +13,7 @@ import {
   type FormValues,
   useStageFailure,
 } from "@/features/changes/index.ts";
-import { ApButton, ApCallout, ApPanel, ApTextarea } from "@/ui";
+import { ApButton, ApCallout, ApPanel, ApTextarea, outcomeRole } from "@/ui";
 import type { ProfileDetail } from "./detail.ts";
 import OverrideTarget from "./OverrideTarget.vue";
 import OverrideValue from "./OverrideValue.vue";
@@ -163,7 +163,9 @@ async function stage() {
         :maxlength="500"
         required
       />
-      <ApCallout v-if="outcome" :tone="outcome.tone">{{ outcome.text }}</ApCallout>
+      <ApCallout v-if="outcome" :tone="outcome.tone" :role="outcomeRole(outcome.tone)">{{
+        outcome.text
+      }}</ApCallout>
       <FailureOutcomeCallout v-if="failure" :outcome="failure" />
       <div class="flex flex-wrap gap-3">
         <ApButton

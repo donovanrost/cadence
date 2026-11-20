@@ -260,7 +260,7 @@ const onRange = (s: TimeSelection) =>
   <ApCallout v-else-if="live.stalled.value && !editing" tone="stale">
     Live updates aren't arriving for this dashboard. Values may be out of date.
   </ApCallout>
-  <ApCallout v-if="sourceNote && !editing" tone="caution">
+  <ApCallout v-if="sourceNote && !editing" tone="caution" role="alert">
     {{ sourceNote }}
     <template #action>
       <ApButton size="compact" variant="secondary" @click="sourceNote = null">Dismiss</ApButton>

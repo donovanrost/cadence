@@ -100,7 +100,7 @@ async function stage() {
         @click="open = true"
         >Roll back to <span class="font-mono normal-case">r{{ to }}</span></ApButton
       >
-      <ApCallout v-else-if="preview.state.value.status === 'failed'" tone="caution">
+      <ApCallout v-else-if="preview.state.value.status === 'failed'" tone="caution" role="alert">
         {{ rollbackErrorText(preview.state.value.error, to) }}
       </ApCallout>
       <ApRemote

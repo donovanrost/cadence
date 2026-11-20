@@ -4,7 +4,7 @@ import { ResolveBookingActions } from "@/features/resolutions/index.ts";
 import { useRoute, type RouteLocationRaw } from "vue-router";
 import { canAdministerOrganization, TakeoverHeader, useMissionScope, useSession } from "@/shell";
 import type { ApiError } from "@/api";
-import { ApButton, ApCallout, ApStationBar, useNow } from "@/ui";
+import { ApButton, ApCallout, ApStationBar, outcomeRole, useNow } from "@/ui";
 import { draftedByOther, editableStates, type Acknowledgement } from "./api.ts";
 import DayNav from "./DayNav.vue";
 import DemandPanel from "./DemandPanel.vue";
@@ -314,9 +314,11 @@ const clock = computed(() =>
         @select="selected = $event"
       />
     </div>
-    <ApCallout v-if="actionText" tone="caution">{{ actionText }}</ApCallout>
+    <ApCallout v-if="actionText" tone="caution" role="alert">{{ actionText }}</ApCallout>
     <div v-if="current" ref="resultBox" tabindex="-1">
-      <ApCallout :tone="current.tone">{{ current.text }}</ApCallout>
+      <ApCallout :tone="current.tone" :role="outcomeRole(current.tone)">{{
+        current.text
+      }}</ApCallout>
     </div>
     <PlanFooter
       :plan="view.plan"
@@ -369,7 +371,7 @@ const clock = computed(() =>
   <template v-else>
     <PlanStatePanel :view="view" />
     <StartLimits :estimate="estimate" :error="actionError" />
-    <ApCallout v-if="actionText && !limitRefusal(actionError)" tone="caution">{{
+    <ApCallout v-if="actionText && !limitRefusal(actionError)" tone="caution" role="alert">{{
       actionText
     }}</ApCallout>
     <footer class="flex flex-none justify-end border-t border-hairline pt-3">

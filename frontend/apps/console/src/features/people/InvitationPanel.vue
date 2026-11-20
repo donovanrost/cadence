@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useRouter } from "vue-router";
-import { ApButton, ApCallout, ApInlineConfirm, ApPanel, formatShort } from "@/ui";
+import { ApButton, ApCallout, ApInlineConfirm, ApPanel, formatShort, outcomeRole } from "@/ui";
 import { adminErrorText, resendInvitation, revokeInvitation } from "./admin.ts";
 import { roleLabel, type Invitation } from "./api.ts";
 
@@ -61,7 +61,9 @@ async function revoke() {
           · expires <span class="font-mono">{{ when(invitation.expires_at) }}</span></template
         ><template v-if="invitation.status !== 'pending'"> · {{ invitation.status }}</template>
       </p>
-      <ApCallout v-if="note" :tone="note.tone">{{ note.text }}</ApCallout>
+      <ApCallout v-if="note" :tone="note.tone" :role="outcomeRole(note.tone)">{{
+        note.text
+      }}</ApCallout>
       <div v-if="canManage" class="flex flex-wrap items-center gap-3">
         <ApButton :disabled="busy" disabled-reason="Working…" @click="resend">Resend</ApButton>
         <ApInlineConfirm

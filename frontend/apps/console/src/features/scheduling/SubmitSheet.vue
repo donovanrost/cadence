@@ -323,7 +323,7 @@ defineExpose({ open, close });
         }}</span>
       </span>
     </ApCallout>
-    <ApCallout v-if="refusal" tone="caution">
+    <ApCallout v-if="refusal" tone="caution" role="alert">
       <span class="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span>{{ refusal.text }}</span>
         <details v-if="refusal.code" class="mt-1 basis-full text-xs text-text-3">

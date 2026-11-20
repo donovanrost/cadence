@@ -6,7 +6,7 @@ import { useRemoteQuery } from "@/api";
 import { failureOutcome, fromDocument, type FormValues } from "@/features/changes/index.ts";
 import { fetchSpacecraftDirectory } from "@/features/spacecraft/index.ts";
 import { useSession } from "@/shell";
-import { ApButton, ApCallout, ApRemote, plural } from "@/ui";
+import { ApButton, ApCallout, ApRemote, outcomeRole, plural } from "@/ui";
 import RequirementGroups from "./RequirementGroups.vue";
 import {
   fetchRequirementSchema,
@@ -129,7 +129,7 @@ async function save() {
       <ApCallout v-if="requirement && drafts.length > 0" tone="caution">{{
         supersedeSentence(drafts, requirement.version + 1, session.user.id)
       }}</ApCallout>
-      <ApCallout v-if="note" :tone="note.tone"
+      <ApCallout v-if="note" :tone="note.tone" :role="outcomeRole(note.tone)"
         >{{ note.text }}
         <template v-if="created" #action>
           <ApButton

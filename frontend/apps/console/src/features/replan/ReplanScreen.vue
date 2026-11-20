@@ -2,7 +2,7 @@
 import { computed, ref } from "vue";
 import { useRemoteQuery, type ApiError } from "@/api";
 import { canAdministerOrganization, TakeoverHeader, useMissionScope, useSession } from "@/shell";
-import { ApButton, ApCallout, ApPanel, ApRemote, ApStationBar, plural } from "@/ui";
+import { ApButton, ApCallout, ApPanel, ApRemote, ApStationBar, outcomeRole, plural } from "@/ui";
 import {
   DraftGantt,
   useBookingStopped,
@@ -374,8 +374,12 @@ async function onApply(acks: Acknowledgement[], note?: string) {
           @retry="lost.refetch"
         />
       </ApPanel>
-      <ApCallout v-if="actionError" tone="caution">{{ replanErrorText(actionError) }}</ApCallout>
-      <ApCallout v-if="applied" :tone="applied.tone">{{ applied.text }}</ApCallout>
+      <ApCallout v-if="actionError" tone="caution" role="alert">{{
+        replanErrorText(actionError)
+      }}</ApCallout>
+      <ApCallout v-if="applied" :tone="applied.tone" :role="outcomeRole(applied.tone)">{{
+        applied.text
+      }}</ApCallout>
       <footer v-if="!proposal" class="flex flex-none justify-end border-t border-hairline pt-3">
         <ApButton
           v-if="!runId && canPropose"
