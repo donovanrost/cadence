@@ -1481,9 +1481,23 @@ Technical details.
 - **(b) Booking-time overlap flag** (on the plan's passes, Book a pass offers, and the booked pass on Contacts):
   - Tag `LISTENER OVERLAP` (caution ▲) on the **later** pass, the one that loses time.
   - Sentence on the later pass: "Overlaps EARENDIL-006's SNTG 00:05Z pass by 26 s. Santiago's listener takes one
-    connection at a time, so this pass loses its first 26 s."
+    connection at a time, so this pass may lose up to 26 s of its start."
   - On the earlier pass, no tag, only a `text-3` note: "EARENDIL-001's SNTG 00:13Z pass overlaps this one by 26 s
-    and loses its start."
+    and may lose up to 26 s of its start."
+  - **The seconds** (fe-ops, #361): they're the overlap of the runtime's claim windows, lead and teardown included,
+    so they're an upper bound on what's lost, never tied to AOS. Hence "may lose up to N s of its start", never
+    "its first N s" or "after AOS". Durations as §4 ("1 m 40 s" past a minute).
+  - **Either pass may lose** (`loses: "either"`: both claim the listener at the same moment, so whichever connects
+    second loses its start). Both passes get the tag and the same sentence, each naming the other: "Overlaps
+    EARENDIL-006's SNTG 00:05Z pass by 26 s. Santiago's listener takes one connection at a time, and both claim it
+    at once, so whichever connects second may lose up to 26 s of its start." No `text-3` note on either.
+  - **Several overlaps on one pass** (the object names the worst, the most seconds lost, plus `count`): the
+    sentence names the worst and counts the rest: "Overlaps EARENDIL-006's SNTG 00:05Z pass by 40 s and 2 other
+    passes. Santiago's listener takes one connection at a time, so this pass may lose up to 40 s of its start."
+    With `loses: "either"` on the worst, its "and both claim it at once, so whichever…" form, with "and 2 other
+    passes" after the first clause. The other passes' own entries carry their own sentences. On the earlier pass's
+    note with several: "EARENDIL-001's SNTG 00:13Z pass and 2 other passes overlap this one; the longest overlap is
+    40 s."
   - A Book a pass offer carries the sentence before booking, and booking is still allowed. On the plan's Gantt,
     the later pass gets U45's ▲ ("Needs attention" in the legend).
   - **Refuse variant (uplink), only if the director picks it:** the offer can't be booked. Disabled reason: "Can't
@@ -1494,7 +1508,8 @@ Technical details.
   - (a): `holder {realized_contact_id, spacecraft name, station code, starts_at, ends_at}`, plus
     `frames_lost` (int | null) only when it's really counted.
   - (b): per pass `listener_overlap {with {spacecraft name, station code, starts_at}, seconds, loses: this |
-    other, direction}`.
+    other | either, direction, count}` (ca-engineer's shape on #361: `with` and `seconds` are the worst overlap,
+    `count` how many passes overlap it).
 
 ### U59 · Command groups in the organization audit (api's proposal; lead and director decide scope) (api / fe-setup)
 One entry per decision, not per member. The verbs match the request log (groups/words.ts) and U46, so the audit and
