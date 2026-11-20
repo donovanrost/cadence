@@ -147,19 +147,28 @@ export function importerLine(r: ModelRevision): string | null {
 export function decidedLine(r: ModelRevision): string | null {
   const dcs = r.decision;
   if (!dcs) return null;
-  const what = vocabularyText(dcs.kind, { approved: "Approved", rejected: "Rejected" });
-  const why = dcs.kind === "rejected" && dcs.reason ? `: “${dcs.reason.trim()}”` : "";
-  const by = dcs.by.name ? ` by ${dcs.by.name}` : "";
+  const what = vocabularyText(dcs.kind, {
+    approved: "Approved",
+    rejected: "Rejected",
+    withdrawn: "Withdrawn",
+  });
+  // U109 (#615): a withdrawal says why, as a rejection does.
+  const why =
+    (dcs.kind === "rejected" || dcs.kind === "withdrawn") && dcs.reason
+      ? `: “${dcs.reason.trim()}”`
+      : "";
+  const by = dcs.by?.name ? ` by ${dcs.by.name}` : "";
   return `${what}${by} at ${when(dcs.at)}${why}.`;
 }
 
-/** U65 row tag: NEEDS APPROVAL (caution) / APPROVED / REJECTED; none otherwise. */
+/** U65 row tag: NEEDS APPROVAL (caution) / APPROVED / REJECTED / WITHDRAWN (off; E2); none otherwise. */
 export function approvalTag(
-  status: "candidate" | "approved" | "rejected" | "retired" | Unrecognized,
-): { label: string; state: "caution" | "neutral" } | null {
+  status: "candidate" | "approved" | "rejected" | "retired" | "withdrawn" | Unrecognized,
+): { label: string; state: "caution" | "neutral" | "off" } | null {
   if (status === "candidate") return { label: "NEEDS APPROVAL", state: "caution" };
   if (status === "approved") return { label: "APPROVED", state: "neutral" };
   if (status === "rejected") return { label: "REJECTED", state: "neutral" };
+  if (status === "withdrawn") return { label: "WITHDRAWN", state: "off" };
   return null;
 }
 
@@ -265,6 +274,12 @@ export function decisionFailure(
   return act === "approve" ? approveFailure(e, rev, viewerId, composedName) : rejectFailure(e);
 }
 
+const notApprovableDetails = d.object({
+  status: d.nullable(
+    d.knownText(["candidate", "approved", "rejected", "retired", "withdrawn"] as const),
+  ),
+});
+
 const alreadyApprovedDetails = d.object({
   decided_by: d.nullable(d.object({ id: d.nullable(d.string), name: d.nullable(d.string) })),
   decided_at: d.nullable(d.timestamp),
@@ -329,10 +344,18 @@ function approveFailure(
     return base(
       "Not approved: Cadence is still preparing this revision. Your approval wasn't recorded. Try again in a moment.",
     );
-  if (isError(e, "mission_model_revision_not_approvable"))
+  if (isError(e, "mission_model_revision_not_approvable")) {
+    // E2 (#546; mms-ux): a withdrawn revision says so; the page normally shows no Approve then.
+    if (detailsOf(e, notApprovableDetails)?.status === "withdrawn") {
+      const what = composedName ?? (rev === null ? "this catalog revision" : `catalog rev ${rev}`);
+      return base(
+        `Not approved: ${what}'s approval was withdrawn, and it can't be approved again for now. Your approval wasn't recorded.`,
+      );
+    }
     return base(
       "Not approved: this revision was already approved, rejected or replaced, so your approval wasn't recorded.",
     );
+  }
   if (isError(e, "human_mission_model_approver_required"))
     return base(
       "Not approved: only a person can approve a catalog revision, not a service identity. Your approval wasn't recorded.",

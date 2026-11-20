@@ -63,7 +63,8 @@ export type Comparison = Decoded<typeof comparisonReader>;
 
 export const modelRevisionReader = d.object({
   id: d.token,
-  status: d.knownText(["candidate", "approved", "rejected", "retired"] as const),
+  // E2 (#546): `withdrawn`, an approval taken back (final until #600).
+  status: d.knownText(["candidate", "approved", "rejected", "retired", "withdrawn"] as const),
   imported_at: d.nullable(d.timestamp),
   /** null: Cadence doesn't know who imported it (ux: "Importer not recorded"). */
   imported_by: d.nullable(actor),
@@ -87,8 +88,9 @@ export const modelRevisionReader = d.object({
   ),
   decision: d.nullable(
     d.object({
-      kind: d.knownText(["approved", "rejected"] as const),
-      by: actor,
+      kind: d.knownText(["approved", "rejected", "withdrawn"] as const),
+      /** null: nobody named on record (E2's withdrawal under C1; a legacy decision). */
+      by: d.nullable(actor),
       at: d.timestamp,
       report_id: d.nullable(d.token),
       // free-text: the rejecting admin's own words, shown quoted
@@ -96,6 +98,8 @@ export const modelRevisionReader = d.object({
     }),
   ),
   viewer_can_decide: d.boolean,
+  /** E2 (#546): shows `Withdraw approval…` on an approved revision. Optional until E2 ships. */
+  viewer_can_withdraw: d.optional(d.boolean),
   viewer_is_importer: d.boolean,
   cannot_decide_because: d.nullable(
     d.knownText([
@@ -191,6 +195,21 @@ export function approvalOps(newId: () => string = () => crypto.randomUUID()) {
     if (last?.key !== key) last = { key, id: newId() };
     return last.id;
   };
+}
+
+/**
+ * E2 (#546): POST …/withdraw {reason, operation_id}. One operation id per request (this revision
+ * with this reason), so a retry replays the original answer (U109: "shows as the original result").
+ */
+export function withdrawRevision(
+  key: ModelKey,
+  reason: string,
+  operationId: string,
+): Promise<ApiResult<ModelRevision>> {
+  return request(path(key, "/withdraw"), modelRevisionReader, {
+    method: "POST",
+    body: { reason, operation_id: operationId },
+  });
 }
 
 export function rejectRevision(key: ModelKey, reason: string): Promise<ApiResult<ModelRevision>> {
