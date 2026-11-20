@@ -4507,43 +4507,87 @@ agreed with ux 11-20.
   - C3 on its page (when D3's pins arrive): U102's lines with "composition 3": "Spacecraft can't move to composition
     3 until it's approved.", "Composition 3 was rejected, so spacecraft can't move to it.", "Composition 3 is retired,
     so spacecraft can't move to it. Any already on it keep it."
-- **A composition that's no longer approved** (E2, #546; the keys are confirmed there; ca-ux co-owns the command
-  hold). Only a withdrawal or a rejection of its own approval counts, never a newer approval of another one (#537 §5).
-  Approval is per revision since #559/#564, and a pin uses the newest approved, runnable revision of its composition,
-  so a withdrawal has two outcomes (mms-security):
-  - **An earlier approved version is left:** nothing is blocked, and nothing falls back silently. The next staging
-    shows that earlier version for the reviewer to see, with the line "Composition 3's newest approval was withdrawn
-    by Ana R. at 11-20 09:12Z, so this configuration uses its earlier approved version." (rejected: "…was rejected by
-    Ana R. at …"; no name: "…was withdrawn at 11-20 09:12Z…"). None of the lines below show.
-  - **No approved, runnable version is left:** these show.
+- **A composition that's no longer approved** (E2, #546; amended 11-20 after mms-security's correction and ux's #546
+  comment; ca-ux co-owns the command hold). Only a withdrawal or a rejection of the craft's own revision counts, never
+  a newer approval of another one (#537 §5). Until #600, a withdrawal is final: a withdrawn revision can't be approved
+  again (#546), so no line offers that.
   "Composition 3" below is the composition's name ("catalog rev 4" for one catalog; "this composition" with no
   number).
+  - **When they show:** the state line, the attention item and the hold show whenever the revision a craft **is on**
+    (its active configuration's) is withdrawn or rejected, from `approval_withdrawn` on the selection read. That holds
+    whatever else is approved, because until a new configuration is applied the craft is still on the withdrawn
+    content (mms-security, #546).
+  - **The way out depends on what's left:**
+    - An earlier approved, runnable version is left: "Stage a new configuration to move it to composition 3's earlier
+      approved version." Staging isn't refused. The next staging shows that version openly, with the line
+      "Composition 3's newest approval was withdrawn by Ana R. at 11-20 09:12Z, so this configuration uses its
+      earlier approved version." (rejected: "…was rejected by Ana R. at …"; no name: "…was withdrawn at 11-20
+      09:12Z…").
+    - None is left: "Move it to an approved composition." Staging this composition is refused (below).
   - The craft's state line (spacecraft page, configuration), caution: "Composition 3 is no longer approved: Ana R.
-    withdrew its approval at 11-20 09:12Z: “<reason>”. EARENDIL-004 stays on it, but can't take a new
-    configuration until it moves to an approved one or composition 3 is approved again." (The reason is quoted, as
-    U65; with none, the sentence ends at the time.) Rejected: "…Ana R. rejected
-    it at …". No name: "its approval was withdrawn at 11-20 09:12Z". The decision record's id goes in Technical
-    details.
+    withdrew its approval at 11-20 09:12Z: “<reason>”. EARENDIL-004 stays on it until a new configuration is
+    applied. <the way out>" (The reason is quoted, as U65; with none, the sentence ends at the time.) Rejected:
+    "…Ana R. rejected it at …". No name: "its approval was withdrawn at 11-20 09:12Z". The decision's record goes in
+    Technical details (until #600, the revision and the decision's time; then the record's id).
   - Attention item, a Now queue row (U31's form and ranking): P1 when the craft has a pass within 2 h or in
-    progress, else P2. Title "EARENDIL-004 · On composition 3, which is no longer approved."; secondary "Approval
-    withdrawn by Ana R. at 11-20 09:12Z. It can't take a new configuration."; action `Open EARENDIL-004`. Several
-    craft are one row each (U31 ranks them by pass).
-  - A new configuration for that craft (refused at staging and at activation, the gate's own check): "Not staged:
-    EARENDIL-004 is on composition 3, which is no longer approved, so it can't take a new configuration. Move it to an
-    approved composition, or have composition 3 approved again, first." ("Not sent:" in the U94 workspace.)
+    progress, else P2 (it needs `spacecraft_id` to rank). Title "EARENDIL-004 · On composition 3, which is no longer
+    approved."; secondary "Approval withdrawn by Ana R. at 11-20 09:12Z: “<reason>”. <the way out>"; action `Open
+    EARENDIL-004`. Several craft are one row each (U31 ranks them by pass). It resolves when the craft is on an
+    approved revision.
+  - A new configuration when nothing approved is left (refused at staging and at activation, the gate's own check;
+    D3's `restage_needed` names the record in `details.decision`): "Not staged: EARENDIL-004 is on composition 3,
+    which is no longer approved, so it can't take a new configuration that uses it. Move it to an approved
+    composition first." ("Not sent:" in the U94 workspace.)
   - **The command hold** (ca-security; Compose and the decide panel name a HOLD by its check, U60). Its check key is
-    `composition_not_approved` **[api to confirm on #546]**, and its label is `Composition`, mapped by key, never by
-    text. So: "Acknowledge the Composition HOLD", and in the log "Acknowledged the Composition HOLD on EARENDIL-004".
-    - One target: "EARENDIL-004 is on composition 3, whose approval Ana R. withdrew at 11-20 09:12Z. Acknowledge the HOLD to
-      send commands to EARENDIL-004 anyway." Rejected: "…composition 3, which Ana R. rejected at 11-20 09:12Z. …". No name:
-      "…composition 3, whose approval was withdrawn at 11-20 09:12Z. …".
+    `model_approval_withdrawn` (#546; it covers withdrawn and rejected), and its label is `Composition`, mapped by
+    key, never by text. So: "Acknowledge the Composition HOLD", and in the log "Acknowledged the Composition HOLD on
+    EARENDIL-004". Each new withdrawal holds again, and only new submissions meet it.
+    - One target: "EARENDIL-004 is on composition 3, whose approval Ana R. withdrew at 11-20 09:12Z: “<reason>”.
+      Acknowledge the HOLD to send this request to EARENDIL-004 anyway." Rejected: "…composition 3, which Ana R.
+      rejected at 11-20 09:12Z: “<reason>”. …". No name: "…composition 3, whose approval was withdrawn at 11-20
+      09:12Z. …". The reason names the record, as the attention item does (mms-security).
     - Several targets (a group): "3 of the 12 targets are on a composition that's no longer approved: EARENDIL-004,
-      EARENDIL-007 and EARENDIL-011. Acknowledge the HOLD to send commands to them anyway." Up to 3 names, then "and N
-      more".
+      EARENDIL-007 and EARENDIL-011. Acknowledge the HOLD to send this request to them anyway." Up to 3 names, then
+      "and N more".
     - Acknowledging clears only this HOLD; GO, the other checks and the pass still decide (U20), so the line
-      promises nothing more. Placeholder: "Why it's safe to command it" (several targets: "…command them"). The reviewer's side needs nothing new
-      (DecisionPanel's line for a HOLD the author's notes don't cover).
+      promises nothing more. Placeholder: "Why it's safe to command it" (several targets: "…command them"). The
+      reviewer's side needs nothing new (DecisionPanel's line for a HOLD the author's notes don't cover).
   - Note for builders, not screen text: telemetry keeps flowing and the craft stays on its composition, so no
     screen says either stopped.
+- **Withdrawing an approval** (E2, #546; `POST …/withdraw {reason, operation_id?}`; a person with
+  `:approve_mission_model`, no separation needed, since it only tightens). On U65's page for an approved revision,
+  shown when the read's `viewer_can_withdraw` is true (ca-engineer):
+  - The action `Withdraw approval…` (accessible name "Withdraw approval of catalog rev 4", B7) opens a sheet. It has a
+    required field, so focus goes to `Reason` (A1), and the consequence lines describe it (`aria-describedby`). Title:
+    "Withdraw approval of catalog rev 4?" Line: "Spacecraft on it stay on it, but they can't take a new configuration
+    that uses it, and new commands to them meet a hold until they move to an approved version. Nothing that's running
+    stops." Then, while #600 is open: "This can't be undone for now: the same catalog content can't be approved again
+    until a later Cadence update." (mms-security, ca-engineer: withdrawn is final, and the revision's id comes from its
+    content.)
+  - `Reason`, required: up front "Give a reason first." (A7). 422 on the field: "Say why." / "Keep the reason under
+    2,000 characters." Commit `Withdraw approval` (danger), `Cancel`.
+  - After it (a status, B6): "Approval withdrawn. Spacecraft on catalog rev 4 can't take a new configuration that
+    uses it." The page then reads the tag `WITHDRAWN` (off) and the decided line "Withdrawn by Ana R. at 11-20
+    09:12Z: “<reason>”." (U29; no name: "Withdrawn at …").
+  - 409 `mission_model_revision_not_withdrawable` by `status` (U97 / #260's shape; `decided_by` and `decided_at`
+    both or neither):
+    - `candidate`: "Not withdrawn: catalog rev 4 isn't approved, so there's nothing to withdraw. Nothing changed."
+    - `rejected`: "Catalog rev 4 was rejected by Ana R. at 11-20 09:12Z, so there's nothing to withdraw. Nothing
+      changed." Without them: "Not withdrawn: catalog rev 4 was rejected, so there's nothing to withdraw. Nothing
+      changed."
+    - `withdrawn`, by the viewer: "You already withdrew its approval at 11-20 09:12Z. Reload to see it." By someone
+      else: "Catalog rev 4's approval was already withdrawn by Ana R. at 11-20 09:12Z, so nothing changed. Reload to
+      see it." Without them: "Not withdrawn: its approval was already withdrawn, so nothing changed. Reload to see
+      it."
+    - `retired`: "Not withdrawn: catalog rev 4 is retired, so there's nothing to withdraw. Nothing changed."
+    - A status the console doesn't know: "Not withdrawn: catalog rev 4 can't be withdrawn as it stands, so nothing
+      changed. Reload to see it." with the status in Technical details.
+  - 403 `forbidden`: "Not withdrawn: only an org admin can withdraw an approval. Nothing changed." 403
+    `human_mission_model_approver_required`: "Not withdrawn: only a person can withdraw an approval, not a service
+    identity. Nothing changed."
+  - A replay (same `operation_id`, actor and reason) shows as the original result.
+  - Elsewhere: C3's place (U102) on a withdrawn revision reads "Catalog rev 4's approval was withdrawn, so spacecraft
+    can't move to it."; an import that matches it (U99) reads "This file matches catalog rev 4, whose approval was
+    withdrawn, so no new revision was created." with `Open rev 4`.
 - **Not here:** D4's composition editor (choosing catalogs, places, collisions) and its re-key HOLD, which lists
   every identity that changes before the change set is saved (#537 §1). Their words come with D4.
