@@ -4045,6 +4045,17 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
   the revoke sheet adds: "This also withdraws the proposal waiting for approval, so it can't switch automation
   back on later." (A widening proposal records `replaces_grant_id`; revoking that grant withdraws it in the same
   transaction.)
+- **A grant issued before two-person approval** (#497; the row's `issued_before_two_person_approval: true`) can
+  only be revoked. Never "legacy" or "two-person" on screen.
+  - The row's state line adds, muted: "Granted before grants needed a second person's approval, so it can only be
+    revoked. To change it, propose a new grant."
+  - Up front (A6/A7): `Narrow…` is disabled with "This grant can only be revoked. To change it, propose a new
+    grant." `Revoke…` stays.
+  - The backstop, 409 `automation_grant_legacy`, by the act: Narrow "Not narrowed: this grant was granted before
+    grants needed a second person's approval, so it can only be revoked. Nothing changed. To change it, propose a
+    new grant."; Approve "Not approved: this grant was granted before grants needed a second person's approval, so
+    it can only be revoked. Your approval wasn't recorded."; Reject "Not rejected: … so it can only be revoked.
+    Nothing changed." (Approve and Reject can't show on an active grant, so those two are for completeness.)
 - **Widening** (more actions, more services, longer validity) is a new proposal, worded as the sheet above.
 - **Audit** (who and when as one event, U29): "Proposed a grant for Nightly planner", "Granted Nightly planner
   automation (no approval needed under this mission's setting)" for a grant that takes effect at once, "Approved Mira K.'s grant for
