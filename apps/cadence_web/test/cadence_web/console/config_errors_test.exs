@@ -77,6 +77,29 @@ defmodule CadenceWeb.Console.ConfigErrorsTest do
     assert Words.sentence(:telemetry_app_not_installed, ["A", "B"]) =~ "installed on A and B."
   end
 
+  # mms-ux (for ca-ux): a submit under 'needs a second person's approval' was Request review, so
+  # the four server-worded refusals open with that act; the rest of each sentence is unchanged.
+  test "the four MM&S submit refusals name the act: Request review or Apply" do
+    refusals = [
+      {{:mission_model_revision_not_approved, ["model_1"]},
+       "a catalog revision isn't approved yet."},
+      {{:mission_model_comparison_failed, "model_1", "report_1"},
+       "a catalog revision's comparison didn't pass."},
+      {:telemetry_app_not_installed, "the telemetry app isn't installed."},
+      {:telemetry_packet_inputs_required, "telemetry's packet inputs aren't set up."}
+    ]
+
+    for {reason, rest} <- refusals,
+        {act, opener} <- [{:request_review, "Not sent for review: "}, {:apply, "Not applied: "}] do
+      conn = build_conn() |> Plug.Conn.assign(:submit_act, act) |> ConfigJSON.error(reason)
+      assert json_response(conn, 409)["error"]["message"] == opener <> rest
+    end
+
+    # An approve (no submit act) applies.
+    conn = ConfigJSON.error(build_conn(), {:mission_model_revision_not_approved, ["model_1"]})
+    assert json_response(conn, 409)["error"]["message"] =~ "Not applied: "
+  end
+
   test "U65: the model gate's apply refusals are coded 409s named by catalog revision" do
     conn = ConfigJSON.error(build_conn(), {:mission_model_revision_not_approved, ["model_1"]})
 

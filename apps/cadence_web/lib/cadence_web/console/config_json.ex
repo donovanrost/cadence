@@ -137,6 +137,12 @@ defmodule CadenceWeb.Console.ConfigJSON do
   def encode(value) when is_atom(value), do: Atom.to_string(value)
   def encode(value), do: value
 
+  # mms-ux (for ca-ux): the four server-worded MM&S refusals open with the submit's act. A submit
+  # under 'needs a second person's approval' was Request review, so "Not sent for review:"
+  # replaces "Not applied:"; the rest of each sentence is unchanged. An approve applies.
+  @by_act ~w(telemetry_app_not_installed telemetry_packet_inputs_required
+    mission_model_revision_not_approved mission_model_comparison_failed)a
+
   @doc "Sends the envelope for a facade error and halts."
   @spec error(Plug.Conn.t(), term()) :: Plug.Conn.t()
   # #280 (U100): who made this change set can't be established (a service with nobody on record).
@@ -161,7 +167,10 @@ defmodule CadenceWeb.Console.ConfigJSON do
       conn,
       409,
       "mission_model_revision_not_approved",
-      ModelApplyRefusals.sentence(:mission_model_revision_not_approved, Map.values(numbers)),
+      by_act(
+        conn,
+        ModelApplyRefusals.sentence(:mission_model_revision_not_approved, Map.values(numbers))
+      ),
       %{mission_model_revision_ids: ids, catalog_revision_numbers: Enum.map(ids, &numbers[&1])}
     )
   end
@@ -173,7 +182,7 @@ defmodule CadenceWeb.Console.ConfigJSON do
       conn,
       409,
       "mission_model_comparison_failed",
-      ModelApplyRefusals.sentence(:mission_model_comparison_failed, [number]),
+      by_act(conn, ModelApplyRefusals.sentence(:mission_model_comparison_failed, [number])),
       %{
         mission_model_revision_id: revision_id,
         comparison_report_id: report_id,
@@ -200,7 +209,7 @@ defmodule CadenceWeb.Console.ConfigJSON do
         mission && mission.mission_id
       )
 
-    respond_raw(conn, Map.fetch!(@status, tag), Atom.to_string(tag), message, %{
+    respond_raw(conn, Map.fetch!(@status, tag), Atom.to_string(tag), by_act(conn, message), %{
       spacecraft_ids: ids
     })
   end
@@ -223,6 +232,11 @@ defmodule CadenceWeb.Console.ConfigJSON do
       do: respond_raw(conn, 503, "preview_failed", @approve_preview_failed, nil),
       else: respond(conn, :preview_failed, nil)
   end
+
+  def error(conn, {tag, details}) when tag in @by_act,
+    do: respond_by_act(conn, tag, encode(details))
+
+  def error(conn, tag) when tag in @by_act, do: respond_by_act(conn, tag, nil)
 
   def error(conn, {tag, details}) when is_map_key(@status, tag),
     do: respond(conn, tag, encode(details))
@@ -248,8 +262,26 @@ defmodule CadenceWeb.Console.ConfigJSON do
   def error(conn, _unknown),
     do: respond_raw(conn, 422, "unprocessable", "The request could not be completed.", nil)
 
+  defp by_act(conn, "Not applied: " <> rest) do
+    if conn.assigns[:submit_act] == :request_review,
+      do: "Not sent for review: " <> rest,
+      else: "Not applied: " <> rest
+  end
+
+  defp by_act(_conn, message), do: message
+
   # Only an approve reaches these two from review: send back runs no checks.
   defp approving?(conn), do: conn.private[:phoenix_action] == :review
+
+  defp respond_by_act(conn, tag, details),
+    do:
+      respond_raw(
+        conn,
+        Map.fetch!(@status, tag),
+        Atom.to_string(tag),
+        by_act(conn, Map.fetch!(@messages, tag)),
+        details
+      )
 
   defp respond(conn, tag, details),
     do:

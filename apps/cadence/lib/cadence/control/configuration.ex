@@ -59,6 +59,11 @@ defmodule Cadence.Control.Configuration do
          do: Status.change_set(mission.mission_id, change_set_id)
   end
 
+  @doc "Whether submitting the set is a Request review (see `Submission.needs_approval?/3`)."
+  @spec needs_approval?(Scope.t(), String.t(), String.t()) :: boolean()
+  def needs_approval?(%Scope{} = scope, mission_id, change_set_id),
+    do: Submission.needs_approval?(scope.organization_id, mission_id, change_set_id)
+
   @spec stage(Scope.t(), String.t(), map(), [map()]) :: {:ok, map()} | {:error, term()}
   def stage(%Scope{} = scope, mission_id, attrs, ops) do
     with {:ok, mission} <- Access.authorize(scope, mission_id, :stage) do
