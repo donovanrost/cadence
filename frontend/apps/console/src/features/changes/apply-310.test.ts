@@ -33,6 +33,9 @@ describe("Apply's disabled reasons", () => {
     ]);
     expect(noGoReason(p)).toBe("Can't apply yet: SCID 312 is already used in this mission.");
     expect(noGoReason(preview([]))).toBe("Can't apply yet: a check says NO-GO.");
+    expect(noGoReason(p, "request_review")).toBe(
+      "Can't send for review yet: SCID 312 is already used in this mission.",
+    );
   });
 
   it("says who can apply without the capability, naming no role", () => {
@@ -45,13 +48,16 @@ describe("Apply's disabled reasons", () => {
 describe("apply refusals open 'Not applied:'", () => {
   it("words each known code: why, so nothing changed, what to do", () => {
     expect(applyRefusal(refused("change_set_changed"))?.sentence).toBe(
-      "Not applied: someone changed the staged set while you were looking, so nothing changed. It's been reloaded; check it, then apply again.",
+      "Not applied: someone changed the change set while you were looking, so nothing changed. It's been reloaded; check it, then apply again.",
     );
     expect(applyRefusal(refused("checks_failed"))?.sentence).toBe(
       "Not applied: a check says NO-GO, so nothing changed. Fix the NO-GO items, then apply again.",
     );
     expect(applyRefusal(refused("nothing_staged"))?.sentence).toBe(
       "Not applied: nothing is staged, so there's nothing to apply.",
+    );
+    expect(applyRefusal(refused("activation_policy_changed"))?.sentence).toBe(
+      "Not applied: the mission's approval setting changed while you had this open, so nothing changed. Check whether it now needs review, then apply or send it for review.",
     );
     expect(applyRefusal(refused("holds_blocking"))?.changed).toBe(false);
   });

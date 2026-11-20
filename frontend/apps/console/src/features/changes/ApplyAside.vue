@@ -80,7 +80,7 @@ const blocked = computed((): string | null => {
     return props.preview.status === "failed" ? NOT_RUN_REASON : RECHECKING_REASON;
   }
   if (verdict.value === "no_go" && props.preview.status === "ready")
-    return noGoReason(props.preview.value);
+    return noGoReason(props.preview.value, needsReview.value ? "request_review" : "apply");
   if (blocking.value) return blocking.value;
   if (verdict.value === "hold" && !acknowledged.value) return "Acknowledge the holds first.";
   if (why.value.trim().length < 10) return "Say why (10 characters or more).";

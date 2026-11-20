@@ -12,9 +12,9 @@ import type { RefusalOutcome } from "./refusals.ts";
  */
 const applyLines = {
   change_set_changed:
-    "Not applied: someone changed the staged set while you were looking, so nothing changed. It's been reloaded; check it, then apply again.",
+    "Not applied: someone changed the change set while you were looking, so nothing changed. It's been reloaded; check it, then apply again.",
   activation_policy_changed:
-    "Not applied: the mission's approval setting changed after this was submitted, so nothing changed. The change set has reopened; check it, then apply or send it for review again.",
+    "Not applied: the mission's approval setting changed while you had this open, so nothing changed. Check whether it now needs review, then apply or send it for review.",
   checks_failed:
     "Not applied: a check says NO-GO, so nothing changed. Fix the NO-GO items, then apply again.",
   holds_not_acknowledged:
