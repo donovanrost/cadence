@@ -182,6 +182,8 @@ describe("rows, Narrow… and Revoke… (U105)", () => {
           i.element instanceof HTMLInputElement &&
           i.element.value === "40",
       );
+    // ca-engineer on #514: the horizon hint reads as a duration, never a raw division.
+    expect(w.text()).toContain("Now 48h 00m. Choose the same or less.");
     await contacts?.setValue("20");
     const narrow = w.findAll("button").filter((b) => b.text() === "Narrow");
     await narrow[narrow.length - 1]?.trigger("click");
@@ -216,5 +218,29 @@ describe("rows, Narrow… and Revoke… (U105)", () => {
     const sent = posts(calls)[0];
     expect(sent?.url).toContain("/grants/g1/revoke");
     expect(sent?.body).toEqual({ reason: "Done with it" });
+    expect(w.text()).toContain(
+      "Revoked. The service identity this grant is for can't act under this grant any more.",
+    );
+  });
+
+  it("Revoke waits for a reason up front, and claims a revoke only on a confirmed state", async () => {
+    stub([activeBody], [json({ data: { grant: { ...activeBody, state: "active" } } })]);
+    const w = await panel();
+    await w.get('button[aria-haspopup="menu"]').trigger("click");
+    const items = w.findAll('[role="menuitem"]');
+    await items[items.length - 1]?.trigger("click");
+    await flushPromises();
+    const revoke = () =>
+      openSheet(w)
+        .findAll("button")
+        .find((b) => b.text().startsWith("Revoke"));
+    // ca-ux and ux on #514: the console's check is the whole rule (the server has no 422).
+    expect(revoke()?.attributes("aria-disabled")).toBe("true");
+    expect(document.body.textContent).toContain("Give a reason first.");
+    await openSheet(w).get("textarea").setValue("Done with it");
+    await revoke()?.trigger("click");
+    await flushPromises();
+    expect(w.text()).toContain("Cadence didn't confirm the revoke. Reload to see it.");
+    expect(w.text()).not.toContain("Revoked.");
   });
 });

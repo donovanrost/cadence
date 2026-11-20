@@ -116,7 +116,7 @@ export function approveFailure(
     };
   if (isError(e, "grant_changed"))
     return {
-      text: `Not approved: this grant changed since you loaded it. ${NOT_RECORDED} Reload to see it.`,
+      text: `Not approved: this grant changed after you opened it. ${NOT_RECORDED} Reload to see it.`,
     };
   if (isError(e, "authenticated_user_required"))
     return {

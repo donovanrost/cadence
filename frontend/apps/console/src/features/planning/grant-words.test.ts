@@ -220,7 +220,7 @@ describe("approve refusals (U105)", () => {
     );
     expect(policy.disable?.text).toContain("It has to be proposed again.");
     expect(said(refusal("conflict", "grant_changed")).text).toContain(
-      "this grant changed since you loaded it",
+      "this grant changed after you opened it",
     );
     expect(said(refusal("forbidden", "authenticated_user_required")).text).toBe(
       `Not approved: only a person can approve a grant, not a service identity.${NOT}`,
@@ -330,6 +330,10 @@ describe("the grant sheet follows the approval setting (U105)", () => {
     );
     expect(narrowedLine(grantOf(activeBody))).toBe(
       "Narrowed. Nightly planner can now plan, submit, planning up to 48 hours ahead, 40 contacts per plan, 2 at once, until 12-19 06:40Z.",
+    );
+    // ca-ux on #514: one contact reads singular.
+    expect(narrowedLine(grantOf({ ...activeBody, maximum_contacts: 1 }))).toContain(
+      "1 contact per plan",
     );
     expect(nameless.service_identity.name).toBeNull();
   });

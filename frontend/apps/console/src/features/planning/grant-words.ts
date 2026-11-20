@@ -1,5 +1,5 @@
 import { codeOf, isKnown, type ApiError } from "@/api";
-import { formatShort } from "@/ui";
+import { formatShort, plural } from "@/ui";
 import { canText, untilText, type Grant, type Grants } from "./grants.ts";
 
 /**
@@ -185,5 +185,5 @@ export function narrowedLine(g: Grant): string {
   const hours = g.maximum_horizon_seconds / 3600;
   const ahead = Number.isInteger(hours) ? `${hours} hours` : `${g.maximum_horizon_seconds} seconds`;
   const until = g.valid_until ? `, until ${untilText(g)}` : "";
-  return `Narrowed. ${subject(g)} can now ${canText(g)}, planning up to ${ahead} ahead, ${g.maximum_contacts} contacts per plan, ${g.maximum_execution_concurrency} at once${until}.`;
+  return `Narrowed. ${subject(g)} can now ${canText(g)}, planning up to ${ahead} ahead, ${plural(g.maximum_contacts, "contact")} per plan, ${g.maximum_execution_concurrency} at once${until}.`;
 }

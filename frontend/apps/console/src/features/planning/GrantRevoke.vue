@@ -42,7 +42,13 @@ async function submit() {
     const r = await revokeGrant(props.missionId, grant.value, reason.value.trim());
     if (r.ok) {
       sheet.value?.close();
-      return void emit("revoked", `Revoked. ${who.value} stops acting on its own now.`);
+      // ca-ux on #514: claim it only on a confirmed state (U20).
+      return void emit(
+        "revoked",
+        r.value.grant.state === "revoked"
+          ? `Revoked. ${who.value} can't act under this grant any more.`
+          : "Cadence didn't confirm the revoke. Reload to see it.",
+      );
     }
     error.value = fieldErrors(r.error)["reason"] ?? null;
     failure.value = error.value ? null : (revokeFailure(r.error) ?? grantFailure(r.error));

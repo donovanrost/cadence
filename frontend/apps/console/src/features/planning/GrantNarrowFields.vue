@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { ApField } from "@/ui";
+import { ApField, formatDuration } from "@/ui";
 import { actionsNarrowable, type NarrowDraft } from "./grant-narrow.ts";
 import { grantActions, type Grant } from "./grants.ts";
 
@@ -50,7 +50,7 @@ const now = (text: string) => `Now ${text}. Choose the same or less.`;
     label="Plans ahead up to"
     unit="hours"
     inputmode="numeric"
-    :hint="now(`${grant.maximum_horizon_seconds / 3600} hours`)"
+    :hint="now(formatDuration(grant.maximum_horizon_seconds))"
     :error="errors['hours'] ?? null"
     @update:model-value="set('hours', $event)"
   />
