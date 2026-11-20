@@ -17,7 +17,7 @@ defmodule Cadence.MissionModelCatalogNaming do
   alias Cadence.Catalog
   alias Cadence.Catalog.{Artifact, ImportRun, ImportRunRow, Revision, RevisionRow}
   alias Cadence.MissionModels
-  alias Cadence.MissionModels.Compositions
+  alias Cadence.MissionModels.{Compositions, EffectiveRevisionRow}
   alias Cadence.Repo
 
   @system %{"actor_kind" => "system", "system_id" => "cadence-test", "name" => "Cadence test"}
@@ -91,8 +91,9 @@ defmodule Cadence.MissionModelCatalogNaming do
     catalog_revision
   end
 
-  # An import's own composition: its single layer at '/', linked to this same revision (#456 keeps
-  # a lone layer at '/' byte-identical, so the link names exactly this revision id).
+  # An import's own composition: its single layer at '/', linked to THIS revision as an import
+  # links its own compile (`Compositions.effective_revision/5`'s `compiled:`). The link is written
+  # directly, not recompiled: a test may compile with options a plain recompile wouldn't repeat.
   defp compose!(organization_id, mission_id, revision_id) do
     {:ok, %{layer_ids: [layer_id]}} =
       MissionModels.fetch_revision(organization_id, mission_id, revision_id)
@@ -100,13 +101,16 @@ defmodule Cadence.MissionModelCatalogNaming do
     {:ok, composition} =
       Compositions.insert_or_get(organization_id, mission_id, [{layer_id, "/"}], @system)
 
-    {:ok, ^revision_id} =
-      Compositions.effective_revision(
-        organization_id,
-        mission_id,
-        composition.composition_id,
-        nil
-      )
+    Repo.insert!(
+      %EffectiveRevisionRow{
+        organization_id: organization_id,
+        mission_id: mission_id,
+        composition_id: composition.composition_id,
+        authored_head: nil,
+        revision_id: revision_id
+      },
+      on_conflict: :nothing
+    )
 
     :ok
   end
