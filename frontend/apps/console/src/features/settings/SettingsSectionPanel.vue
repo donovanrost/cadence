@@ -39,6 +39,9 @@ const { busy, note, pending, save, confirmSuspension, cancelSuspension } = useSe
   () => props.section,
   () => emit("saved"),
 );
+// #510 (api-ops): editing the form while the suspension callout is open drops the hold, so
+// Confirm never saves values other than the ones on screen.
+watch(values, () => cancelSuspension(), { deep: true });
 const mission = computed(() => props.scope.kind === "mission");
 const headerTag = computed(() =>
   mission.value ? setHereCount(props.section) : sectionTag(props.section, props.scope.kind),

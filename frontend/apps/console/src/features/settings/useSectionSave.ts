@@ -41,6 +41,8 @@ export function useSectionSave(
   ) {
     if (busy.value) return;
     busy.value = true;
+    // A new save (another field, or the form as now edited) replaces any held one (api-ops, #510).
+    if (!acknowledged) pending.value = null;
     try {
       const result = await saveSection(scope(), section().key, {
         values,

@@ -145,6 +145,20 @@ describe("the save holds, then resends with the digest", () => {
     expect(s.note.value?.text).toBe("Saved as v4. It's active now.");
   });
 
+  it("a new save replaces a held one (api-ops, #510)", async () => {
+    const fetch = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
+    fetch
+      .mockResolvedValueOnce(json(refusal([grant("a", "Nightly planner")]), 409))
+      .mockResolvedValueOnce(json({ data: { version: 4 } }, 201));
+    vi.stubGlobal("fetch", fetch);
+    const s = useSectionSave(() => ({ kind: "mission", id: "m-1" }), section, vi.fn());
+    await s.save({ approval_requirement: "independent" });
+    expect(s.pending.value).not.toBeNull();
+    await s.save({ other_field: 1 });
+    expect(s.pending.value).toBeNull();
+    expect(sent(fetch, 1)).not.toHaveProperty("acknowledged_suspensions");
+  });
+
   it("Cancel drops the held save; nothing more is sent", async () => {
     const fetch = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
     fetch.mockResolvedValueOnce(json(refusal([grant("a", "Nightly planner")]), 409));
