@@ -7,13 +7,16 @@ defmodule CadenceWeb.Console.ActivationRequestController do
   use CadenceWeb, :controller
 
   alias Cadence.Control.ActivationRequests
+  alias Cadence.Reads.CatalogCompositions
   alias CadenceWeb.Console.{ApproveRefusals, ConfigJSON, Problem}
 
   def index(conn, params),
     do: respond(conn, ActivationRequests.list(scope(conn), mission_id(conn), params))
 
-  def show(conn, %{"request_id" => id}),
-    do: respond(conn, ActivationRequests.get(scope(conn), mission_id(conn), id))
+  def show(conn, %{"request_id" => id}) do
+    result = ActivationRequests.get(scope(conn), mission_id(conn), id)
+    respond(conn, with_compositions(conn, result))
+  end
 
   # #235: one page of a configuration change group's spacecraft names.
   def configuration_change_names(conn, %{"request_id" => id} = params),
@@ -34,6 +37,21 @@ defmodule CadenceWeb.Console.ActivationRequestController do
 
   def resume(conn, %{"request_id" => id}),
     do: respond(conn, ActivationRequests.resume(scope(conn), mission_id(conn), id))
+
+  # D2 (#543): each catalog revision a configuration change names carries its composition. Added
+  # here, in the read layer, so Control doesn't depend on Reads.
+  defp with_compositions(conn, {:ok, %{configuration_changes: %{} = changes} = detail}) do
+    changes =
+      CatalogCompositions.configuration_changes(
+        scope(conn).organization_id,
+        mission_id(conn),
+        changes
+      )
+
+    {:ok, %{detail | configuration_changes: changes}}
+  end
+
+  defp with_compositions(_conn, result), do: result
 
   defp respond(conn, {:ok, data}), do: json(conn, %{data: ConfigJSON.encode(data)})
   defp respond(conn, {:error, reason}), do: error(conn, reason)

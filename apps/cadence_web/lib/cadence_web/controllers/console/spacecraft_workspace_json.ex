@@ -23,6 +23,8 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceJSON do
       token: s.token,
       saved_version: s.saved_version,
       document: document(s.document),
+      # D2 (#543): the composition behind the document's catalog revision, or nil.
+      composition: s.composition,
       external_changes: s.external_changes,
       switches: s.switches,
       active: active(s.active),
@@ -64,7 +66,8 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceJSON do
     do: %{
       version: active.version,
       generation: active.generation,
-      document: document(active.document)
+      document: document(active.document),
+      composition: active.composition
     }
 
   # The decision record's fields (subject, separated_from, admin_mode, applied_by) join `review`

@@ -82,6 +82,8 @@ with `spacecraft`.
 - `catalog_revision`: the catalog the profile's latest version sets (`SpacecraftType.catalog_revision_id`),
   `{id, number, label}` with `label` "rev N" ("rN" is a change-set revision), or `null` when the
   profile sets none. `number`/`label` are `null` if the revision can't be found.
+- `composition` (D2, #543): the composition behind this revision (shape in setup.md's
+  'Compositions' section), or null.
 - `override_count`: per-spacecraft override entries (spacecraft × path) across the spacecraft
   pinned to the profile, as the detail's `override_count`. `last_change`: the detail's
   `profile.last_change` (`{version, revision: null, at, actor: null}`: when the latest version was
@@ -206,15 +208,17 @@ by its catalog revision ("catalog rev 4"); the model revision id is Technical de
 - `GET /:id` → `{id, status, imported_at, imported_by, catalog_revision, decision {kind:
   approved|rejected, by {id, name}, at, report_id | null, reason | null, retroactive} | null,
   viewer_can_decide, viewer_is_importer, cannot_decide_because: not_admin | not_approvable |
-  self_approval | authors_unknown | plans_not_ready | null, cannot_decide_details: {via_service:
+  self_approval | composer | authors_unknown | plans_not_ready | null, cannot_decide_details: {via_service:
   {id, name} | null} | {service: {id, name} | null} | null, cannot_approve_because: not_in_catalog | null,
   plans_ready, comparison: <cmp> | null}`. `imported_by`
   null reads "Importer not recorded". `imported_by` names a person only while they hold an
   active membership in the mission's organization, never by email (#366, #146's rule). A member
   with no display name is `{id, name: null}`. Anyone outside the organization is `{id: null,
   name: null}`: recorded, but not named, and their id isn't sent. `cannot_approve_because` (11-17, ux U88) is
-  `not_in_catalog` when no catalog revision names the model revision (a second run of a file
-  makes one): Approve is refused (`409 mission_model_revision_not_in_catalog`), Reject stays;
+  `not_in_catalog` when the approve check refuses it as not catalog-named (a second run of a file
+  makes one). Since D2 (#543) it's that check itself (E1: a composition names the revision and
+  each of its layers came from an import a catalog revision names), so a composed revision, which
+  has no catalog revision of its own, isn't flagged: Approve is refused (`409 mission_model_revision_not_in_catalog`), Reject stays;
   `cannot_decide_because` wins when both are set. `self_approval` and `authors_unknown` (#280) come
   from the same check the approve path makes; `cannot_decide_details` carries the approve refusal's
   details for them (null otherwise). Importers (11-17) are the people recorded on the catalog
@@ -236,6 +240,47 @@ by its catalog revision ("catalog rev 4"); the model revision id is Technical de
     `diff` below (no model, a model revision not stored for this mission, or a failed query; #367).
     Both set: the count. `0` means nothing breaks; an unknown count is never sent as `0`.
   - The list (`GET ?status=`) doesn't carry these fields (one diff per row would read every model).
+- **Compositions (D2, #543; design `docs/apogee/domain/mission-composition-design.md` §6;
+  additive, read as optional).** The list rows and `GET /:id` carry `composition`, the shared
+  object below, or null when no composition names the revision. `GET /:id` also carries:
+  - `importers: [{layer_id, importers: [<actor>]}]`: per imported layer, in mount order, the
+    people and services the approve check counts as that layer's importers. The composer is
+    `composition.created_by`, not repeated here. Empty when no composition names the revision.
+  - `breaking_base: {revision_id, composition: {composition_id, number | null} | null,
+    catalog_revision: {id, number} | null} | null`: exactly the revision approval compares
+    against (`ModelApprovalGate.default_baseline/3`: the previous import of the same lineage, else
+    the revision most craft run), so U102's line can say "compared with rev 3" or "compared with
+    composition 2". Null when nothing earlier exists. `catalog_revision.breaking_base` above stays
+    as it is.
+  - `cannot_decide_because` adds `composer`: the viewer is refused only because they (or a service
+    they're accountable for) made the composition, and they import none of its layers. If they're
+    an importer too, it stays `self_approval`. `cannot_decide_details` for `composer` is
+    `{via_service: {id, name} | null}`, as for `self_approval`.
+
+  **The `composition` object**, shared by every read that shows one (profiles, overrides,
+  spacecraft configuration, activation rows and this one):
+
+  ```
+  {composition_id, number: integer | null, imported_layers: [{layer_id, mount, catalog_revision:
+   {id, number, database: {id, name | null}} | null}], created_by: <actor> | null, created_at}
+  ```
+
+  - `number`: the mission's short number for the composition ("Composition 3"), per mission,
+    assigned in order of creation and never reused. Null only if a composition has none.
+  - `imported_layers`: never empty, in mount order. Before D4 every composition has one layer at
+    `/`. A layer's `catalog_revision` is the earliest catalog revision in the mission that imported
+    it (by creation, then id; derived, not stored), which may be in another database than the
+    one a profile names. Null only if no catalog revision did.
+  - `<actor>` is `{kind: user | service | system, id, name, run_by: {id, name} | null}`. A person
+    has `id` and `name` only while an active member of the mission's organization (a member
+    without a display name: `name` null); anyone else `id: null, name: null`. A service of the
+    organization: its id and name; another organization's: nulls. A system actor (a seed or a
+    script): its system id, `name` null (say "Cadence"), and `run_by` naming who ran it by the
+    same member rule (#513, as `requested_by`). Never an email.
+  - `created_by` is null only for the compositions the D1 migration made for existing catalog
+    revisions (nobody chose them).
+  - Until pins exist (D3), a read's composition is the one its model revision belongs to (that
+    revision's link), so every read shows the same composition for the same revision.
 - `POST /:id/comparison {}` → `201 <cmp>`, synchronous, against the mission's active binding set
   and the revision this one replaces (the previous catalog revision's model in the same
   database, else none). Reports dedupe on content.
@@ -261,6 +306,8 @@ by its catalog revision ("catalog rev 4"); the model revision id is Technical de
   already approved revision returns it unchanged (the first approver stays).
 - The catalog read's revision rows (`GET /catalog?database_id=`) carry `model {revision_id,
   status} | null` for the row tag (NEEDS APPROVAL / APPROVED / REJECTED).
+  - `composition_id` (D2, #543): the id of the composition behind the row's model revision, or
+    null.
 - Preview HOLD `mission_model_not_approved` (blocking; compatibility check): `details
   {catalog_revision_id, catalog_revision_number, catalog_database_id, mission_model_revision_id}`.
 - Apply refusals: `409 mission_model_revision_not_approved {mission_model_revision_ids,
@@ -294,6 +341,8 @@ switches. The editable `document` never carries them; they're read-only in `swit
 - `document`: `{catalog_revision_id|null, telemetry_source_endpoint_id|null, handled_apids: [int],
   protocol: {downlink, uplink, frame_size, secondary_header_length, insert_zone_length,
   ocf_length, truncated_primary_header} | null}`. No switch keys.
+- `composition` (D2, #543), beside `document`: the composition behind the document's
+  `catalog_revision_id` (shape in setup.md's 'Compositions' section), or null.
 - `external_changes`: bool.
 - `switches`: `{telemetry_enabled: SWITCH, commanding_enabled: SWITCH}`, where SWITCH is `{value:
   bool, set: bool, revision: int|null}`. `set` false means no change set has set it (the value
@@ -301,6 +350,8 @@ switches. The editable `document` never carries them; they're read-only in `swit
   stored (null reads "set through Setup, Changes").
 - `active`: `{version, generation, document}` (the same document shape), or null when nothing runs
   for the craft.
+  - `active.composition` (D2, #543): the composition behind the active document's catalog
+    revision (shape in setup.md's 'Compositions' section), or null.
 - `review`: `{id, state: approval_pending|approved|rejected|withdrawn|superseded|stale|active,
   requester_id, version|null}` or null. From the dev reset (DECISIONS #112) it also carries the
   decision record's `subject`, `separated_from`, `admin_mode` and `applied_by`. Read them as
@@ -460,6 +511,9 @@ Profile detail with **schema-driven sections** (`Cadence.SpacecraftType.Schema`,
   "P2 additions"). `routing_model` is `"profile"` when the profile has rules, else
   `"per_spacecraft"` (legacy per-spacecraft rules not yet lifted). `override_count` and each
   field's `overridden_by` count the spacecraft overriding that path.
+  - `overrides[].composition` (D2, #543): for a `catalog_revision_id` override, the composition
+    behind the catalog revision it sets (shape in setup.md's 'Compositions' section); null for
+    any other override or a revision without one.
 - `extra_routes` (ux U79), beside `overrides`: one entry per extra route a spacecraft on this
   profile has of its own, `[{spacecraft: {id, name}, route_id, name, station: {id, code, name} |
   null, legs: [{direction: "downlink" | "uplink", role}]}]`, sorted by spacecraft name then route
@@ -474,6 +528,8 @@ Profile detail with **schema-driven sections** (`Cadence.SpacecraftType.Schema`,
   `catalog_revision_id`. `versions[].actor` and `last_change.actor` are `null` because profile versions don't
   record an author (change-set revisions do; `last_change.revision` fills in when profile edits go
   through change sets).
+- `profile.composition` (D2, #543): the composition behind this revision (shape in setup.md's
+  'Compositions' section), or null.
 - `applications`: the profile's app defaults as raw JSON. A typed app-config schema needs each
   app's declared contract; that's planned.
 

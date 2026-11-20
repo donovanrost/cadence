@@ -84,6 +84,9 @@ that fails or stalls shows on Now).
     `insert_zone_length`, `ocf_length` (int), `truncated_primary_header` (bool); a missing value
     is `null` ("Not set"). `label` is the fallback word. The switches are never rows (#109);
     `telemetry_enabled` is the value the craft will run with.
+  - `composition` (D2, #543), on each `catalog_revision` row's `before` and `after` (when not
+    null): the composition behind this revision (shape in setup.md's 'Compositions' section), or
+    null.
 
 ## Endpoints
 

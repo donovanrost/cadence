@@ -148,6 +148,27 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceAPITest do
     refute Map.has_key?(active_doc, "telemetry_enabled")
   end
 
+  test "D2 (#543): the composition behind the document's catalog revision, beside it", c do
+    data = workspace(c)
+    assert %{"composition" => nil, "active" => nil} = data
+
+    revision =
+      CatalogFixtures.persist_imported_revision!(c.mission.organization_id, c.mission.mission_id)
+
+    document = Map.put(data["document"], "catalog_revision_id", revision.catalog_revision_id)
+    assert %{"data" => saved} = put_draft(c, data["token"], document) |> json_response(200)
+    assert saved["document"]["catalog_revision_id"] == revision.catalog_revision_id
+
+    assert %{
+             "composition_id" => composition_id,
+             "number" => number,
+             "imported_layers" => [%{"mount" => "/", "catalog_revision" => %{"id" => catalog_id}}]
+           } = saved["composition"]
+
+    assert is_binary(composition_id) and is_integer(number)
+    assert catalog_id == revision.catalog_revision_id
+  end
+
   test "packets for an unknown catalog; an unknown craft; an unknown section", c do
     assert %{"error" => %{"code" => "catalog_revision_not_found"}} =
              conn(c) |> get(c.path <> "/catalogs/nope/packets") |> json_response(404)
