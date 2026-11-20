@@ -6,6 +6,7 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
 
   alias Cadence.Applications.ConfigurationLock
   alias Cadence.Applications.SpacecraftConfiguration.Active, as: ConfigurationActive
+  alias Cadence.Applications.SpacecraftConfiguration.CatalogAuthority
   alias Cadence.Applications.SpacecraftConfiguration.Drafts, as: ConfigurationDrafts
   alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Catalog.SpacecraftConfigurationInput, as: ConfigurationInput
@@ -73,6 +74,12 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
          spacecraft_id: id,
          name: craft.display_name,
          scid: craft.scid,
+         # #595 (fe-setup, U94's Open profile): the craft's own profile, or nil.
+         profile: profile(mission, craft),
+         # #595b: DECISIONS #65's one writer, CatalogAuthority: the profile (with its overrides)
+         # when it names a catalog revision, else the spacecraft's own configuration.
+         catalog_set_by:
+           if(CatalogAuthority.effective(mission, craft), do: "profile", else: "spacecraft"),
          section: section,
          base_href: base,
          token: current.token,
@@ -100,7 +107,14 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
                organization_id: mission.organization_id,
                mission_id: mission.mission_id
              }) == :ok,
-           can_review: Activations.authorize_review(scope, mission.mission_id) == :ok
+           can_review: Activations.authorize_review(scope, mission.mission_id) == :ok,
+           # #595: whether the viewer may save a draft: Drafts.save's own check, which isn't
+           # can_request's (:request_activation).
+           can_save:
+             Policy.authorize(scope, :operate_mission, %{
+               organization_id: mission.organization_id,
+               mission_id: mission.mission_id
+             }) == :ok
          },
          catalogs: catalogs,
          fleet:
@@ -163,6 +177,21 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
   end
 
   defp switch(value), do: %{value: value == true, set: is_boolean(value), revision: nil}
+
+  defp profile(_mission, %{spacecraft_type_id: nil}), do: nil
+
+  defp profile(mission, %{spacecraft_type_id: id}) when is_binary(id) do
+    case SpacecraftTypeStore.fetch_spacecraft_type(
+           mission.organization_id,
+           mission.mission_id,
+           id
+         ) do
+      {:ok, type} -> %{id: type.spacecraft_type_id, name: type.display_name}
+      {:error, _not_found} -> nil
+    end
+  end
+
+  defp profile(_mission, _craft), do: nil
 
   defp presets(mission) do
     SpacecraftTypeStore.list_spacecraft_types(mission.organization_id, mission.mission_id)
