@@ -4,7 +4,14 @@ defmodule Cadence.Control.PlanApproval do
   the console's `POST .../approve`. Submitting never approves; this is the only console path that
   does, under either approval setting.
 
-  One transaction, under the plan row lock: the operation id is checked first
+  #278 (F2): the approver is authorized before anything else, so a replay, a reused operation id
+  or an unknown plan from someone who may not approve now answers `:forbidden`, never their
+  earlier answer. This path is the console's (`Scheduling.approve_plan`, a person's session); a
+  service approves under its automation grant through `ControlContacts.approve_and_accept_plan`
+  (FleetAutomation), never here, so any non-person scope is refused. The person check is the same
+  decision `ContactPlanApprovals` makes for a person (`:approve_contact_plans`), which stays.
+
+  One transaction, under the plan row lock: the operation id is checked next
   (`ContactPlanning.PlanOperations`: the same request again gets the original answer back), then
   the version the approver saw must still be current, then `ContactPlanApprovals` decides. It
   reads the approval policy once for the separation check and the record (#226(b)), refuses the
@@ -14,8 +21,8 @@ defmodule Cadence.Control.PlanApproval do
   Execution itself runs off the request (the caller starts it on `{:approved, …}`).
   """
 
-  alias Cadence.Auth.Scope
-  alias Cadence.ContactPlanning.{ContactPlan, ContactPlans, PlanOperations}
+  alias Cadence.Auth.{Policy, Scope}
+  alias Cadence.ContactPlanning.{ContactPlan, ContactPlans, PlanOperations, PlanUpdates}
   alias Cadence.Control.Contacts, as: ControlContacts
   alias Cadence.Repo
 
@@ -39,6 +46,28 @@ defmodule Cadence.Control.PlanApproval do
           | {:ok, {:replayed, PlanOperations.answer()}}
           | {:error, term()}
   def approve(%Scope{} = scope, mission_id, plan_id, params) do
+    with :ok <- authorize(scope) do
+      scope
+      |> approve_transaction(mission_id, plan_id, params)
+      |> published(scope.organization_id, mission_id)
+    end
+  end
+
+  # A person who may approve contact plans now (a non-person scope never reaches this path).
+  defp authorize(%Scope{actor_kind: :user, user: %{}} = scope),
+    do: Policy.authorize(scope, :approve_contact_plans, %{organization_id: scope.organization_id})
+
+  defp authorize(_scope), do: {:error, :forbidden}
+
+  # #278 (F3): once, after the commit, and only for a new approval (not a replay or a refusal).
+  defp published({:ok, {:approved, _answer, _version, _sha}} = result, organization_id, mission) do
+    PlanUpdates.changed(organization_id, mission)
+    result
+  end
+
+  defp published(result, _organization_id, _mission_id), do: result
+
+  defp approve_transaction(scope, mission_id, plan_id, params) do
     Repo.transaction(fn ->
       with {:ok, plan, version} <-
              ContactPlans.fetch_locked(scope.organization_id, mission_id, plan_id),
@@ -63,7 +92,8 @@ defmodule Cadence.Control.PlanApproval do
            version.version,
            version.content_sha256,
            params[:note],
-           acknowledged_exceptions: params[:acknowledgements] || []
+           acknowledged_exceptions: params[:acknowledgements] || [],
+           publish: false
          ) do
       {:error, :contact_plan_self_approval_forbidden} ->
         {:error,

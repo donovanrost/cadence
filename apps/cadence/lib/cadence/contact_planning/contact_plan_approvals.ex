@@ -59,7 +59,16 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
       reason,
       opts
     )
-    |> PlanUpdates.published(current_scope.organization_id, mission_id)
+    |> publish_unless_deferred(current_scope.organization_id, mission_id, opts)
+  end
+
+  # #278 (F3): a caller that runs the approve inside its own transaction passes `publish: false`
+  # and publishes after its commit. Inside a transaction PlanUpdates only delays the publish, so it
+  # would still go out if the caller's transaction rolled back.
+  defp publish_unless_deferred(result, organization_id, mission_id, opts) do
+    if Keyword.get(opts, :publish, true),
+      do: PlanUpdates.published(result, organization_id, mission_id),
+      else: result
   end
 
   defp approve_unpublished(
