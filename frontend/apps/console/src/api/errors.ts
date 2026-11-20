@@ -108,6 +108,11 @@ export const errorCodes = [
   "change_set_activation_stale",
   "mission_model_activation_manifest_required",
   "spacecraft_configuration_review_stale",
+  // #595 (U94): the workspace draft's save refusals.
+  "spacecraft_configuration_changed",
+  "spacecraft_catalog_set_by_profile",
+  "spacecraft_packet_input_unavailable",
+  "spacecraft_configuration_catalog_not_loaded",
   "mission_model_comparison_report_required",
   // U95 additions (api b417a5757 with domain's R1).
   "spacecraft_configuration_review_required",

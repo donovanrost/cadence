@@ -172,6 +172,30 @@ export function fetchWorkspace(
   );
 }
 
+/**
+ * #595 (U94): PUT …/workspace/draft {token, document}. Saves a draft (the active configuration
+ * stays in use) and answers the fresh snapshot with a new token. Never sends a switch (#109).
+ */
+export function saveDraft(
+  k: WorkspaceKey,
+  token: string,
+  document: ConfigurationDocument,
+): Promise<ApiResult<ConfigurationSnapshot>> {
+  return request(
+    `${workspacePath(k.missionId, k.spacecraftId)}/draft?section=${encodeURIComponent(k.section)}`,
+    snapshotReader,
+    { method: "PUT", body: { token, document: documentBody(document) } },
+  );
+}
+
+/** Only the document's own keys, so nothing the reader passed through is ever sent back. */
+const documentBody = (doc: ConfigurationDocument) => ({
+  catalog_revision_id: doc.catalog_revision_id,
+  telemetry_source_endpoint_id: doc.telemetry_source_endpoint_id,
+  handled_apids: [...doc.handled_apids],
+  protocol: doc.protocol,
+});
+
 /** GET …/workspace/catalogs/:id/packets: the packet choices for a catalog revision. */
 export const packetChoicesReader = d.object({
   catalog_id: d.token,
