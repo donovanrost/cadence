@@ -69,8 +69,13 @@ defmodule Cadence.Configuration.CompositionPinsApplyTest do
              composition_id: c.composition,
              recorded_revision_id: c.revision_id,
              current_revision_id: nil,
-             current_reason: "not_approved"
+             current_reason: "none_left",
+             # What U109's words name the pin by (display only).
+             catalog_revision_number: c.catalog.revision_number,
+             composition_number: entry.composition_number
            }
+
+    assert is_integer(entry.composition_number)
 
     assert_unchanged(c, staged, version)
   end
@@ -108,10 +113,30 @@ defmodule Cadence.Configuration.CompositionPinsApplyTest do
     CompositionFixtures.approve!(newer)
 
     assert {:error,
-            {:restage_needed, [%{recorded_revision_id: old, current_revision_id: ^newer}]}} =
+            {:restage_needed,
+             [
+               %{
+                 recorded_revision_id: old,
+                 current_revision_id: ^newer,
+                 current_reason: "newer_approved"
+               }
+             ]}} =
              ConfigurationSelections.check(c.org, c.mid, recorded, catalogs, runnable: runnable)
 
     assert old == c.revision_id
+  end
+
+  test "check: the recorded revision's version no longer runs: unrunnable", c do
+    recorded = %{c.composition => c.revision_id}
+    catalogs = [c.catalog.catalog_revision_id]
+    ctx = %{org: c.org, mid: c.mid, revision_id: c.revision_id, catalog: c.catalog}
+    newer = CompositionFixtures.copy_revision!(ctx, "3")
+    CompositionFixtures.link!(ctx, c.composition, newer)
+
+    # A release drops '2' from the runnable list; '3' is approved.
+    assert {:error,
+            {:restage_needed, [%{current_revision_id: ^newer, current_reason: "unrunnable"}]}} =
+             ConfigurationSelections.check(c.org, c.mid, recorded, catalogs, runnable: ["3"])
   end
 
   # ca-security and domain on #544 (the table on the issue): profile changes staged before the pin

@@ -27,8 +27,12 @@ defmodule Cadence.Control.ConfigurationSelections do
           composition_id: binary(),
           recorded_revision_id: binary() | nil,
           current_revision_id: binary() | nil,
-          current_reason: binary() | nil
+          current_reason: binary() | nil,
+          catalog_revision_number: integer() | nil,
+          composition_number: pos_integer() | nil
         }
+
+  # current_reason: newer_approved | unrunnable | none_left | nil (E2 adds withdrawn); U109.
 
   @doc "`%{composition_id => answer}` and `%{catalog_revision_id => composition_id}`."
   @spec for_catalogs(binary(), binary(), [binary() | nil], keyword()) ::
@@ -92,23 +96,59 @@ defmodule Cadence.Control.ConfigurationSelections do
     :ok = MissionModels.share_lock_revisions(organization_id, mission_id, revisions(first))
     {current, pins} = for_catalogs(organization_id, mission_id, catalogs, opts)
 
-    case differences(recorded || %{}, current) do
+    case differences(organization_id, mission_id, recorded || %{}, current, opts) do
       [] -> {:ok, {current, pins}}
       entries -> {:error, {:restage_needed, entries}}
     end
   end
 
-  defp differences(recorded, current) do
+  defp differences(organization_id, mission_id, recorded, current, opts) do
     for composition <- Enum.sort(Map.keys(current)),
         Map.get(recorded, composition) != Map.get(current, composition) do
-      now = Map.get(current, composition)
+      was = revision(Map.get(recorded, composition))
+      now = revision(Map.get(current, composition))
+      ranked = Selection.ranked(organization_id, mission_id, composition, opts)
 
       %{
         composition_id: composition,
-        recorded_revision_id: revision(Map.get(recorded, composition)),
-        current_revision_id: revision(now),
-        current_reason: if(revision(now), do: nil, else: now)
+        recorded_revision_id: was,
+        current_revision_id: now,
+        current_reason: reason(was, now, ranked)
       }
+      |> Map.merge(numbers(organization_id, mission_id, composition))
+    end
+  end
+
+  # What the words name the pin by (U109): its catalog revision's number while it's one layer,
+  # else the composition's display number. Display only.
+  defp numbers(organization_id, mission_id, composition) do
+    catalog = CatalogPins.catalog_revision_for(organization_id, mission_id, composition)
+
+    %{
+      catalog_revision_number: CatalogPins.catalog_number(organization_id, mission_id, catalog),
+      composition_number: CatalogPins.composition_number(organization_id, mission_id, composition)
+    }
+  end
+
+  # U109's five whys (mms-ux, #633), one to one: E2 (#546) sets "withdrawn" with its decision.
+  defp reason(_was, nil, _ranked), do: "none_left"
+
+  defp reason(was, now, ranked) do
+    ids = Enum.map(ranked, & &1.revision_id)
+
+    cond do
+      Enum.any?(ranked, &(&1.revision_id == was and not &1.runnable)) -> "unrunnable"
+      ahead?(ids, now, was) -> "newer_approved"
+      true -> nil
+    end
+  end
+
+  # `now` ranks ahead of `was` (ranked/3 is newest first); a `was` no longer linked counts behind.
+  defp ahead?(ids, now, was) do
+    case {Enum.find_index(ids, &(&1 == now)), Enum.find_index(ids, &(&1 == was))} do
+      {nil, _was} -> false
+      {_now, nil} -> true
+      {now_at, was_at} -> now_at < was_at
     end
   end
 
