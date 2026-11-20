@@ -6,7 +6,7 @@ import AlternativesList from "./AlternativesList.vue";
 import StationIssues from "./StationIssues.vue";
 import type { StationHits } from "./unavailable.ts";
 import { stationCode, stationName, type Alternatives, type PlanDetail } from "./api.ts";
-import type { SpacecraftName } from "./names.ts";
+import { craftLabel, type SpacecraftName } from "./names.ts";
 
 /**
  * D · Selected: a drafted pass (Remove) or another window (Add), then the focused spacecraft's
@@ -94,7 +94,7 @@ const items = computed(() => {
     <template v-if="pass">
       <div class="mb-3 flex flex-wrap items-center gap-2.5">
         <span class="font-mono text-base font-semibold">{{
-          nameOf(pass.spacecraft_id)?.name ?? pass.spacecraft_id
+          craftLabel(nameOf(pass.spacecraft_id))
         }}</span>
         <ApTag v-if="pass.synthetic" state="stale" label="Synthetic" />
       </div>

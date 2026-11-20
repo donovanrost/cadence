@@ -7,7 +7,7 @@ import { isBooking, rejectedRows } from "./booking-state.ts";
 import { expiredRows } from "./offer-clock.ts";
 import { contactsShortText, coverage } from "./coverage.ts";
 import { gapSentence } from "./focus-day.ts";
-import type { SpacecraftName } from "./names.ts";
+import { craftLabel, type SpacecraftName } from "./names.ts";
 
 /** A · Demand: only spacecraft whose rule isn't met (ScheduleFlow R01: start from demand). */
 const props = defineProps<{
@@ -102,7 +102,7 @@ const meta = computed(() => {
             :aria-pressed="focused === row.spacecraft_id"
             @click="$emit('focus', row.spacecraft_id)"
           >
-            {{ nameOf(row.spacecraft_id)?.name ?? row.spacecraft_id }}
+            {{ craftLabel(nameOf(row.spacecraft_id)) }}
           </button>
         </template>
       </ApListRow>
