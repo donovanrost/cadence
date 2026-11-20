@@ -740,7 +740,7 @@ even with organization_admin, gets `403 authenticated_user_required`). Under `/c
   null, state, proposed_by, proposed_at, proposal_expires_at, approved_by | null, approved_at |
   null, reason, rejected_by | null, rejected_at | null, rejection_reason | null, withdrawn_by |
   null, withdrawn_at | null, revoked_by | null, revoked_at | null, revocation_reason | null,
-  replaces_grant_id | null, sha256, viewer_can_decide, cannot_decide_because,
+  replaces_grant_id | null, sha256, viewer_can_narrow, viewer_can_decide, cannot_decide_because,
   cannot_decide_details}`.
   - `state`: proposed | active | rejected | revoked | withdrawn | expired. `expired` is computed,
     by the same function the server uses at each use: an undecided proposal past
@@ -750,7 +750,8 @@ even with organization_admin, gets `403 authenticated_user_required`). Under `/c
   - `issued_before_two_person_approval`: `true` for a grant issued before #283, which had no
     proposal step. Its `proposed_by`, `proposed_at` and `proposal_expires_at` read null, never a
     proposer copied from its approval. It's still refused at use (its hash is the old layout), and
-    it has no decisions before #283 in its audit. It can be revoked. `false` otherwise.
+    it has no decisions before #283 in its audit. It can only be revoked: every other act answers
+    `409 automation_grant_legacy`, writing nothing. `false` otherwise.
   - People (`proposed_by`, `approved_by`, `rejected_by`, `withdrawn_by`, `revoked_by`) are
     `{id, name}`, named only while they're an active member of the organization, never by email.
     Anyone else is `{id: null, name: null}` (#146's rule). The `_by` and `_at` pairs are both

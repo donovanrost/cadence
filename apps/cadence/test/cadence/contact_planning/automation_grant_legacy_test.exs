@@ -60,11 +60,40 @@ defmodule Cadence.ContactPlanning.AutomationGrantLegacyTest do
                now: F.now()
              )
 
-    # (6) Revoke still works, and is recorded.
-    assert {:ok, %{lifecycle_state: :revoked}} =
+    # api-ops on #497: narrowing would re-hash it in today's layout and re-arm it, so it's
+    # refused with nothing written, Narrow isn't offered, and it's still refused at use.
+    assert row.viewer_can_narrow == false
+
+    assert {:error, {:automation_grant_legacy, %{}}} =
+             AutomationGrants.narrow(c.third, c.mission, id, %{maximum_contacts: 1}, now: F.now())
+
+    assert {:ok, %{content_sha256: unchanged}} = AutomationGrants.fetch(c.org, c.mission, id)
+    assert unchanged == String.duplicate("e", 64)
+    assert AutomationGrantDecisions.list(c.org, c.mission, id) == []
+
+    assert {:error, :automation_grant_hash_mismatch} =
+             AutomationGrants.authorize(
+               c.service_scope,
+               c.mission,
+               id,
+               :plan,
+               %{horizon_seconds: 60},
+               now: F.now()
+             )
+
+    for refused <- [
+          fn -> AutomationGrants.approve(c.third, c.mission, id, unchanged, now: F.now()) end,
+          fn -> AutomationGrants.reject(c.third, c.mission, id, "No", now: F.now()) end
+        ] do
+      assert {:error, {:automation_grant_legacy, %{}}} = refused.()
+    end
+
+    # (6) Revoke still works, and is recorded; the old-layout hash survives it.
+    assert {:ok, %{lifecycle_state: :revoked, content_sha256: ^unchanged}} =
              AutomationGrants.revoke(c.third, c.mission, id, nil, "Before two-person approval")
 
     assert [%{decision: :revoked}] = AutomationGrantDecisions.list(c.org, c.mission, id)
+    assert {:ok, %{content_sha256: ^unchanged}} = AutomationGrants.fetch(c.org, c.mission, id)
   end
 
   test "a revoked legacy grant reads too (the dev database's one row)", c do

@@ -16,6 +16,7 @@ defmodule Cadence.Control.PlanningGrants do
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.ContactPlanning.{AutomationGrant, AutomationGrantReview, AutomationGrants}
   alias Cadence.ContactPlanning.FleetPlanningPolicies
+  alias Cadence.ContactPlanning.GrantSeparation
   alias Cadence.Governance.ActivationPolicy
 
   @field_errors %{
@@ -105,10 +106,18 @@ defmodule Cadence.Control.PlanningGrants do
       end
 
     Map.merge(row, %{
+      # Narrow is offered only on an active grant issued under #283 by an org admin who's a
+      # person (api-ops on #497: never on a legacy grant, which is only revoked).
+      viewer_can_narrow: narrowable?(scope, grant, now),
       viewer_can_decide: is_nil(because),
       cannot_decide_because: because,
       cannot_decide_details: details
     })
+  end
+
+  defp narrowable?(scope, grant, now) do
+    not grant.legacy_issue and AutomationGrant.effective_state(grant, now) == :active and
+      match?({:ok, _id}, GrantSeparation.decider(scope))
   end
 
   defp approval_setting(org, mission_id) do

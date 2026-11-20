@@ -76,7 +76,8 @@ defmodule CadenceWeb.Console.ContactGrantController do
               :automation_grant_not_proposed,
               :approval_policy_changed,
               :automation_grant_not_active,
-              :automation_grant_not_narrower
+              :automation_grant_not_narrower,
+              :automation_grant_legacy
             ],
        do: Problem.respond(conn, reason, details)
 

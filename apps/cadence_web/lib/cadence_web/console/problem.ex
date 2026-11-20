@@ -114,6 +114,9 @@ defmodule CadenceWeb.Console.Problem do
     automation_grant_not_narrower:
       {422,
        "Not narrowed: this change gives the service more than it has now, so it needs approval. Propose it as a new grant instead."},
+    automation_grant_legacy:
+      {409,
+       "This grant was issued before two-person approval, so it can only be revoked. Propose a new grant instead."},
     automation_grant_narrow_unchanged:
       {422, "Not narrowed: nothing changed. Choose less than the grant allows now."},
     automation_grant_capability_required:

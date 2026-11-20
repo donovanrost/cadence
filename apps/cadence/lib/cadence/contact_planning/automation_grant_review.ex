@@ -86,6 +86,7 @@ defmodule Cadence.ContactPlanning.AutomationGrantReview do
 
   defp approve_in(scope, mission_id, grant_id, digest, approver, now) do
     with {:ok, row, grant} <- lock_in_order(scope.organization_id, mission_id, grant_id),
+         :ok <- not_legacy(grant),
          :ok <- proposed(grant, now),
          :ok <- at_digest(grant, digest),
          {:ok, policy} <- same_policy(grant),
@@ -97,6 +98,7 @@ defmodule Cadence.ContactPlanning.AutomationGrantReview do
 
   defp reject_in(scope, mission_id, grant_id, actor, reason, now) do
     with {:ok, row, grant} <- lock_grant(scope.organization_id, mission_id, grant_id),
+         :ok <- not_legacy(grant),
          :ok <- proposed(grant, now) do
       rejected =
         rebuild(grant, %{
@@ -125,6 +127,7 @@ defmodule Cadence.ContactPlanning.AutomationGrantReview do
 
   defp narrow_in(scope, mission_id, grant_id, changes, now) do
     with {:ok, row, grant} <- lock_grant(scope.organization_id, mission_id, grant_id),
+         :ok <- not_legacy(grant),
          :ok <- active_now(grant, now),
          {:ok, narrowed} <- GrantNarrowing.narrow(grant, changes) do
       write(scope, row, narrowed, :narrowed, %{
@@ -236,11 +239,14 @@ defmodule Cadence.ContactPlanning.AutomationGrantReview do
     end
   end
 
+  # A state change (approve, reject, revoke, withdraw) never changes a grant's content, so its
+  # stored hash is kept as it is, never recomputed (ca-security and api-ops on #497: a legacy
+  # grant's old-layout hash must survive every act, so it stays refused at use). Only narrowing
+  # changes content and re-hashes (GrantNarrowing), and it's refused on a legacy grant.
   defp rebuild(%AutomationGrant{} = grant, changes) do
     grant
     |> Map.from_struct()
-    |> Map.merge(changes)
-    |> Map.put(:content_sha256, nil)
+    |> Map.merge(Map.delete(changes, :content_sha256))
     |> AutomationGrant.new()
   end
 
@@ -316,6 +322,12 @@ defmodule Cadence.ContactPlanning.AutomationGrantReview do
 
   defp at_digest(%{content_sha256: digest}, digest), do: :ok
   defp at_digest(_grant, _digest), do: {:error, :stale_automation_grant_hash}
+
+  # api-ops and ca-security on #497: a grant issued before #283 is only ever revoked. Narrowing
+  # would re-hash it in today's layout and re-arm it past the hash guard, so approve, reject and
+  # narrow refuse it first, before any write.
+  defp not_legacy(%{legacy_issue: true}), do: {:error, {:automation_grant_legacy, %{}}}
+  defp not_legacy(_grant), do: :ok
 
   defp revocable(%{lifecycle_state: :active}), do: :ok
   defp revocable(%{lifecycle_state: :revoked} = grant), do: {:already_revoked, grant}
