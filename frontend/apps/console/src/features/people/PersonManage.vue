@@ -90,7 +90,7 @@ async function remove() {
           <ApButton
             variant="danger"
             :disabled="busy || confirm.trim() !== member.email"
-            disabled-reason="Type their email to confirm"
+            :disabled-reason="busy ? 'Removing…' : 'Type their email to confirm'"
             @click="remove"
             >Remove from organization</ApButton
           >

@@ -24,11 +24,9 @@ const tone = () => props.tone ?? (props.outcome.changed === null ? "caution" : "
         {{ line.label }}:
         <template v-for="(item, i) in line.items" :key="item.text"
           >{{ i > 0 ? ", " : ""
-          }}<RouterLink
-            v-if="item.to"
-            :to="item.to"
-            class="text-primary no-underline hover:underline"
-            >{{ item.text }}</RouterLink
+          }}<RouterLink v-if="item.to" :to="item.to" class="text-primary underline">{{
+            item.text
+          }}</RouterLink
           ><template v-else>{{ item.text }}</template></template
         ><template v-if="line.more > 0"> and {{ line.more }} more</template>
       </li>
