@@ -151,6 +151,11 @@ pin → head and assignment; head plus artifact → expansion → runtime; tenan
     hashes the expanded result, it already pins exactly what expansion produced, which covers
     ca-security's 'pin the expansion version' point. A future change to expansion that alters the
     output changes the hash, and so the evidence, as it should.
+  - **Condition (ca-security, 11-20):** whatever admits or runs a version (activation, the runtime
+    index, replay) recomputes the expanded hash from the artifact plus the identity parameters with
+    today's code, compares it to the approved evidence, and fails closed on a mismatch. It never
+    trusts a stored expanded hash. So an expansion-code change shows up as a refused activation, never
+    a silent change to what runs. #475 and I must show where that check sits, with a test.
 - **CB-10 (medium; C2): heads and assignment history.**
   - Assignment history replaces per-change revision documents as per-craft audit, so it must be
     append-only (#116's triggers, as #436 did for accountables).
@@ -204,7 +209,8 @@ pin → head and assignment; head plus artifact → expansion → runtime; tenan
 7. **Expansion (CB-8):** F's acceptance includes the three #38 mitigations, and I builds only from
    expanded instances.
 8. **Evidence (CB-9):** unchanged by 4a (the expanded set's hash; goldens in #475). D keeps it so
-   for compositions.
+   for compositions. Every admit or run recomputes the expanded hash with today's code and fails
+   closed against the approved evidence, never trusting a stored one.
 9. **Audit (CB-10, CB-11):** assignment history append-only by trigger; head writes atomic with
    their assignment row; collection safe against a racing assignment.
 10. **Projection (CB-12):** the reader inventory, with authorization readers called out.
