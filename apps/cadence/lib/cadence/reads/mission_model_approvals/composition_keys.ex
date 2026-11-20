@@ -5,8 +5,9 @@ defmodule Cadence.Reads.MissionModelApprovals.CompositionKeys do
 
   - `composition`: the shared object (`Reads.CompositionActors`), or nil for a revision no
     composition names.
-  - `importers`: `[{layer_id, importers: [actor]}]`, per imported layer, the people and services
-    E1's separation counts for it (the composer is `composition.created_by`, not repeated).
+  - `importers`: `[{layer_id, importers: [actor], importers_count}]`, per imported layer, the people
+    and services E1's separation counts for it (the composer is `composition.created_by`, not
+    repeated): at most 100 named, in no promised order, the count exact.
   - `breaking_base`: `ModelApprovalGate.default_baseline/3` itself (domain): exactly the revision
     approval compares against, `{revision_id, composition: {composition_id, number}, catalog_revision:
     {id, number}}`, each part nil when it has none.
@@ -21,6 +22,8 @@ defmodule Cadence.Reads.MissionModelApprovals.CompositionKeys do
   alias Cadence.Governance.Accountability
   alias Cadence.MissionModels.{CompositionApproval, CompositionViews}
   alias Cadence.Reads.CompositionActors
+
+  @importers_shown 100
 
   @doc "`%{revision_id => composition}` for a list of revisions (one lookup)."
   @spec for_list(binary(), binary(), [binary()]) :: %{binary() => map()}
@@ -77,15 +80,22 @@ defmodule Cadence.Reads.MissionModelApprovals.CompositionKeys do
     end
   end
 
+  # fe-setup on #609: the console reads at most 100 per layer, so the server sends at most 100 and
+  # the exact count beside them.
   defp importers(layers, names) do
     for {layer_id, documents} <- layers do
-      %{
-        layer_id: layer_id,
-        importers:
-          documents |> Enum.map(&CompositionActors.actor(&1, names)) |> Enum.reject(&is_nil/1)
-      }
+      actors =
+        documents |> Enum.map(&CompositionActors.actor(&1, names)) |> Enum.reject(&is_nil/1)
+
+      Map.put(shown(actors), :layer_id, layer_id)
     end
   end
+
+  @doc false
+  # At most 100 importers (in no promised order) and their exact count. Public for its test.
+  @spec shown([map()]) :: %{importers: [map()], importers_count: non_neg_integer()}
+  def shown(actors),
+    do: %{importers: Enum.take(actors, @importers_shown), importers_count: length(actors)}
 
   defp breaking_base(organization_id, mission_id, revision_id) do
     case ModelApprovalGate.default_baseline(organization_id, mission_id, revision_id) do

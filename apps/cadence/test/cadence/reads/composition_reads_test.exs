@@ -209,7 +209,10 @@ defmodule Cadence.Reads.CompositionReadsTest do
       keys = CompositionKeys.read(c.org, c.mid, id)
       assert keys.composition.composition_id == composition_id(c, id)
 
-      assert [%{layer_id: layer_id, importers: importers}] = keys.importers
+      assert [%{layer_id: layer_id, importers: importers, importers_count: count}] =
+               keys.importers
+
+      assert count == length(importers) and count <= 100
       assert layer_id == layer_of(c, id)
       assert %{kind: "system", run_by: %{id: person_id, name: "Ada"}} = hd(importers)
       assert person_id == person.user_id
@@ -226,6 +229,13 @@ defmodule Cadence.Reads.CompositionReadsTest do
           assert breaking_base.composition ==
                    Map.take(for_revision(c, base), [:composition_id, :number])
       end
+    end
+
+    test "a layer's importers: at most 100 named, the count exact (mms-engineer on #612)" do
+      actors = for n <- 1..150, do: %{kind: "user", id: "u#{n}", name: nil, run_by: nil}
+      assert %{importers: shown, importers_count: 150} = CompositionKeys.shown(actors)
+      assert length(shown) == 100
+      assert %{importers: [_], importers_count: 1} = CompositionKeys.shown([hd(actors)])
     end
 
     test "composer: refused only for having composed it, not for importing a layer", c do
