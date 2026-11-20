@@ -126,27 +126,6 @@ defmodule Cadence.Configuration.ReviewRecord do
     })
   end
 
-  @doc """
-  The landing guard (domain, DECISIONS #112): refuses, before any DDL, while mission_config_reviews
-  or mission_config_revisions has rows, since an append-only row can never get the required
-  fields. Migration 20261121090000
-  runs it; its test runs it directly.
-  """
-  @spec landing_guard_sql() :: binary()
-  def landing_guard_sql do
-    """
-    DO $$
-    DECLARE reviews bigint; revisions bigint;
-    BEGIN
-      SELECT count(*) INTO reviews FROM mission_config_reviews;
-      SELECT count(*) INTO revisions FROM mission_config_revisions;
-      IF reviews > 0 OR revisions > 0 THEN
-        RAISE EXCEPTION 'mission_config_reviews has % row(s), mission_config_revisions has % row(s): #117 step 2 adds required fields an append-only row can''t get. Remedy: a dev reset, or the reset''s designed decision-record purge, then run again (domain, DECISIONS #112). Never a trigger-disabled DELETE.', reviews, revisions;
-      END IF;
-    END $$;
-    """
-  end
-
   # domain on #616: no silent defaults. Every decision runs under a stored policy and a known mode.
   defp policy!(%{policy_document: %{} = policy}), do: policy
 

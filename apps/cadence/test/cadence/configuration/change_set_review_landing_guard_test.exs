@@ -7,13 +7,22 @@ defmodule Cadence.Configuration.ChangeSetReviewLandingGuardTest do
   """
   use Cadence.DataCase, async: false
 
-  alias Cadence.Configuration.{Ledger, ReviewRecord}
+  alias Cadence.Configuration.Ledger
 
-  test "it passes on an empty ledger" do
-    assert {:ok, _} = Repo.query(ReviewRecord.landing_guard_sql())
+  # The migration's own SQL (api-ops on #616: inline, so a replay never needs app code).
+  @migration "repo/migrations/20261121090000_change_set_review_record.exs"
+
+  setup_all do
+    path = Path.join(to_string(:code.priv_dir(:cadence)), @migration)
+    [{module, _bytecode} | _] = Code.require_file(path)
+    %{guard: module.guard_sql()}
   end
 
-  test "it refuses while a revision exists, naming the counts and the remedy" do
+  test "it passes on an empty ledger", c do
+    assert {:ok, _} = Repo.query(c.guard)
+  end
+
+  test "it refuses while a revision exists, naming the counts and the remedy", c do
     org = "org-guard-#{System.unique_integer([:positive])}"
     mission = "mission-guard-#{System.unique_integer([:positive])}"
     persist_mission_scope(org, mission)
@@ -21,7 +30,7 @@ defmodule Cadence.Configuration.ChangeSetReviewLandingGuardTest do
     assert %{revision_number: 1} = Ledger.lock_head(org, mission)
 
     assert {:error, %Postgrex.Error{postgres: %{message: message}}} =
-             Repo.query(ReviewRecord.landing_guard_sql())
+             Repo.query(c.guard)
 
     assert message =~ "mission_config_reviews has 0 row(s), mission_config_revisions has 1 row(s)"
     assert message =~ "dev reset"
