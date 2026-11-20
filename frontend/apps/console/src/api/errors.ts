@@ -277,6 +277,8 @@ export const errorCodes = [
   "mission_model_revision_not_found",
   "mission_model_comparison_report_not_found",
   "mission_model_decision_reason_required",
+  // E2 (#546): withdrawing an approval that isn't one.
+  "mission_model_revision_not_withdrawable",
   "mission_model_decision_reason_too_long",
   "mission_model_revision_not_approved",
   "mission_model_comparison_failed",

@@ -42,6 +42,12 @@ export function rolloutGate(r: ModelRevision): RolloutGate {
         kind: "line",
         line: `Rev ${cr.number} is retired, so spacecraft can't move to it. Any already on it keep it.`,
       };
+    // E2 (#546; U109 in #615): C3's place on a withdrawn revision.
+    case "withdrawn":
+      return {
+        kind: "line",
+        line: `Catalog rev ${cr.number}'s approval was withdrawn, so spacecraft can't move to it.`,
+      };
     default:
       return { kind: "none" };
   }

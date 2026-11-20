@@ -7,6 +7,7 @@ import ApprovalActions from "./ApprovalActions.vue";
 import ApprovalFacts from "./ApprovalFacts.vue";
 import ComparisonReport from "./ComparisonReport.vue";
 import RejectSheet from "./RejectSheet.vue";
+import WithdrawControl from "./WithdrawControl.vue";
 import { useApproval } from "./useApproval.ts";
 import {
   cannotApproveLine,
@@ -111,6 +112,8 @@ function runAgain() {
         </ApButton>
       </p>
       <ComparisonReport v-if="report && showReport" id="approval-report" :report="report" />
+      <!-- E2 (#546): an approved revision's approval can be withdrawn (U109 in #615). -->
+      <WithdrawControl :revision="revision" :model-key="modelKey" @changed="emit('changed')" />
     </div>
     <div v-else class="flex flex-col gap-3">
       <ApCallout v-if="report?.replay.status === 'not_run'" tone="caution">{{
