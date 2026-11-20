@@ -312,19 +312,58 @@ defmodule Cadence.Catalog.MissionModelMountTest do
   end
 
   describe "mounts are checked before compiling" do
-    test "two imports need a mount each: the compiler owns '/'" do
+    test "only a second or later import at '/' needs a mount (#537: one primary may stay)" do
       bus = yaml_layer()
       payload = xtce_layer()
+      third = yaml_layer("third.yaml")
 
-      assert {:error, {:mission_model_mount_required, ids}} = Compiler.compile([bus, payload])
-      assert ids == [bus.layer_id, payload.layer_id]
+      # Both at '/': the first is the primary, the second needs a mount.
+      assert {:error, {:mission_model_mount_required, [id]}} = Compiler.compile([bus, payload])
+      assert id == payload.layer_id
 
-      assert {:error, {:mission_model_mount_required, [id]}} =
+      assert {:error, {:mission_model_mount_required, ids}} =
+               Compiler.compile([bus, payload, third], mounts: %{payload.layer_id => "/payload"})
+
+      assert ids == [third.layer_id]
+
+      # The primary needn't be the first layer: whichever single import stays at '/'.
+      assert {:ok, _result} =
                Compiler.compile([bus, payload],
                  mounts: %{bus.layer_id => "/bus", payload.layer_id => "/"}
                )
+    end
 
-      assert id == payload.layer_id
+    test "the primary at '/' keeps every identity it has alone; the next mounts beside it" do
+      bus = yaml_layer()
+      payload = xtce_layer()
+      {:ok, alone} = Compiler.compile([bus])
+
+      {:ok, result} = Compiler.compile([bus, payload], mounts: %{payload.layer_id => "/payload"})
+      revision = result.revision
+
+      # Identities never move silently: every declaration of the primary is where it was.
+      for {id, declaration} <- alone.revision.declarations do
+        assert %{qualified_name: qualified_name} = Map.fetch!(revision.declarations, id)
+        assert qualified_name == declaration.qualified_name
+      end
+
+      refute Enum.any?(blocking(revision), &(&1.stage in [:composition, :namespace]))
+      root = revision.space_systems |> Map.values() |> Enum.find(&(&1.qualified_name == "/"))
+      assert root.semantic_id == Canonical.semantic_id(:space_system, "/")
+      assert qualified?(revision, :parameter, "/payload/Vehicle/parameters/temperature")
+    end
+
+    test "a mount that reuses one of the primary's top-level names collides (#537)" do
+      bus = yaml_layer()
+      payload = xtce_layer()
+
+      {:ok, result} =
+        Compiler.compile([bus, payload], mounts: %{payload.layer_id => "/containers"})
+
+      assert %{metadata: metadata} = code!(result.revision, "MM_MOUNT_COLLISION")
+      assert metadata.layer_ids == [bus.layer_id, payload.layer_id]
+      assert metadata.mounts == ["/", "/containers"]
+      assert result.plans.telemetry.status == :blocked
     end
 
     test "a mount must name an imported layer of this compile, at a plain absolute path" do

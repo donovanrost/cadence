@@ -9,9 +9,12 @@ defmodule Cadence.Catalog.MissionModel.Mount do
 
   - **One imported layer** at '/' (the default) compiles exactly as before: nothing is rebased,
     and the revision's ids and hashes are unchanged (#108; golden test).
-  - **More than one imported layer:** the compiler owns '/', and every imported layer needs a
-    non-root mount (`{:error, {:mission_model_mount_required, layer_ids}}`). Authored layers are
-    never mounted: they address the composed tree.
+  - **More than one imported layer** (#537, api-ops: identities never move silently): one import
+    may stay at '/' as the **primary**, keeping every semantic id and qualified name, and its own
+    '/' stays the root. Every further import needs a non-root mount
+    (`{:error, {:mission_model_mount_required, layer_ids}}` names the second and later ones at '/'),
+    disjoint from the primary's top-level names and from every other mount. With no primary, the
+    compiler owns '/'. Authored layers are never mounted: they address the composed tree.
   - **Rebasing a layer to `/m`:** each declaration's qualified name and space-system path move
     under `/m`, its semantic id is recomputed from the new path, and the layer's own '/' becomes
     the `/m` SpaceSystem. An algorithm's outputs name the moved parameter.
@@ -32,10 +35,19 @@ defmodule Cadence.Catalog.MissionModel.Mount do
           mounted?: boolean(),
           by_layer: %{binary() => binary()},
           layer_order: [binary()],
+          primary: binary() | nil,
+          primary_top: MapSet.t(),
           mounted_refs: %{binary() => {binary(), MapSet.t()}}
         }
 
-  @unmounted %{mounted?: false, by_layer: %{}, layer_order: [], mounted_refs: %{}}
+  @unmounted %{
+    mounted?: false,
+    by_layer: %{},
+    layer_order: [],
+    primary: nil,
+    primary_top: MapSet.new(),
+    mounted_refs: %{}
+  }
 
   # The targets whose runtime still keys these kinds by short name (target_lowering.ex).
   @short_name_targets %{container: :telemetry, parameter: :telemetry, command: :command}
@@ -52,12 +64,15 @@ defmodule Cadence.Catalog.MissionModel.Mount do
         {:ok, layers, @unmounted}
       else
         rebased = Enum.map(layers, &rebase(&1, by_layer))
+        primary = Enum.find(imported, &(by_layer[&1.layer_id] == "/"))
 
         {:ok, rebased,
          %{
            mounted?: true,
            by_layer: by_layer,
            layer_order: Enum.map(imported, & &1.layer_id),
+           primary: primary && primary.layer_id,
+           primary_top: top_names(primary),
            mounted_refs: mounted_refs(rebased, by_layer)
          }}
       end
@@ -69,6 +84,9 @@ defmodule Cadence.Catalog.MissionModel.Mount do
   @doc "The declarations composition starts from: the compiler's own '/' when mounted."
   @spec initial(t()) :: %{binary() => Declaration.t()}
   def initial(%{mounted?: false}), do: %{}
+
+  # A primary import's own '/' is the root; the compiler makes one only when no import stays there.
+  def initial(%{mounted?: true, primary: primary}) when is_binary(primary), do: %{}
 
   def initial(%{mounted?: true}) do
     root = Declaration.new(%{kind: :space_system, qualified_name: "/"})
@@ -104,7 +122,10 @@ defmodule Cadence.Catalog.MissionModel.Mount do
 
   def diagnostics(plan, layers, composition, declarations) do
     annotated = Enum.map(composition, &annotate(&1, layers, plan))
-    {annotated, mount_collisions(plan) ++ short_name_collisions(plan, declarations)}
+
+    {annotated,
+     mount_collisions(plan) ++
+       primary_collisions(plan) ++ short_name_collisions(plan, declarations)}
   end
 
   ## Validation
@@ -142,10 +163,12 @@ defmodule Cadence.Catalog.MissionModel.Mount do
   defp require_mounts([_one], _by_layer), do: :ok
   defp require_mounts([], _by_layer), do: :ok
 
+  # #537 (api-ops): the first import at '/' is the primary and keeps every identity; only a
+  # second or later import at '/' needs a mount.
   defp require_mounts(imported, by_layer) do
     case for(layer <- imported, by_layer[layer.layer_id] == "/", do: layer.layer_id) do
-      [] -> :ok
-      missing -> {:error, {:mission_model_mount_required, missing}}
+      [_primary | [_ | _] = later] -> {:error, {:mission_model_mount_required, later}}
+      _none_or_primary -> :ok
     end
   end
 
@@ -301,7 +324,35 @@ defmodule Cadence.Catalog.MissionModel.Mount do
     end
   end
 
+  # The primary at '/' contains every path, so it's checked by its top-level names instead.
+  defp overlap?("/", _right), do: false
+  defp overlap?(_left, "/"), do: false
   defp overlap?(left, right), do: under?(left, right) or under?(right, left)
+
+  # #537: a mount must be disjoint from the primary's top-level names, or the two layers would
+  # share a subtree.
+  defp primary_collisions(%{primary: nil}), do: []
+
+  defp primary_collisions(plan) do
+    for {layer_id, mount} <- Enum.map(plan.layer_order, &{&1, Map.fetch!(plan.by_layer, &1)}),
+        mount != "/",
+        MapSet.member?(plan.primary_top, top_name(mount)) do
+      Diagnostic.new(%{
+        code: "MM_MOUNT_COLLISION",
+        severity: :error,
+        stage: :composition,
+        message: "#{mount} is already a top-level name of the import at /",
+        metadata: %{layer_ids: [plan.primary, layer_id], mounts: ["/", mount]}
+      })
+    end
+  end
+
+  defp top_name(path), do: path |> String.split("/", trim: true) |> List.first()
+
+  defp top_names(nil), do: MapSet.new()
+
+  defp top_names(%Layer{declarations: declarations}),
+    do: for(d <- declarations, name = top_name(d.qualified_name), into: MapSet.new(), do: name)
 
   defp short_name_collisions(plan, declarations) do
     declarations
