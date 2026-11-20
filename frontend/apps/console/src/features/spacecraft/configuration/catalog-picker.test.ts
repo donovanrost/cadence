@@ -120,7 +120,7 @@ describe("the catalog revision field", () => {
     await radios[0]?.setValue(true);
     await flushPromises();
     expect(w.text()).toContain(
-      "Catalog rev 15 doesn't define 0x2B, so it's removed from Handled APIDs.",
+      "Catalog rev 15 doesn't define 0x2B, so it's removed from Handled APIDs. Discard edits brings it back.",
     );
     await button(w, "Choose")?.trigger("click");
     expect(w.emitted("edit")?.[0]).toEqual([{ catalog_revision_id: "cr-15", handled_apids: [42] }]);

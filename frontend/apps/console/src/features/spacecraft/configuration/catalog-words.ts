@@ -76,6 +76,7 @@ export function droppedApidsLine(rev: string, dropped: readonly number[]): strin
         ? (shown[0] ?? "")
         : `${shown.slice(0, -1).join(", ")} and ${shown.at(-1) ?? ""}`;
   const Rev = `${rev.charAt(0).toUpperCase()}${rev.slice(1)}`;
-  const them = dropped.length === 1 ? "it's" : "they're";
-  return `${Rev} doesn't define ${list}, so ${them} removed from Handled APIDs. Discard edits brings them back.`;
+  const one = dropped.length === 1;
+  // mms-ux on #628: one APID reads "it's … brings it back".
+  return `${Rev} doesn't define ${list}, so ${one ? "it's" : "they're"} removed from Handled APIDs. Discard edits brings ${one ? "it" : "them"} back.`;
 }
