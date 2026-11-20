@@ -72,9 +72,15 @@ defmodule Cadence.Reads.OrganizationAuditNamesTest do
   end
 
   describe "condition 2: only people with a membership row in this organization" do
-    test "a former member's own past acts keep their name" do
+    test "a former member's own past acts keep their name, without their id" do
       record_settings!("rae-470")
-      assert %{id: "rae-470", name: "Rae Removed"} = settings_actor(audit())
+      assert settings_actor(audit()) == %{kind: "user", id: nil, name: "Rae Removed"}
+      refute Jason.encode!(audit()) =~ "rae-470"
+    end
+
+    test "a current member keeps their id" do
+      record_settings!("mira-470")
+      assert settings_actor(audit()) == %{kind: "user", id: "mira-470", name: "Mira K."}
     end
 
     test "a platform admin from elsewhere, or anyone never a member, is {user, nil, nil}" do

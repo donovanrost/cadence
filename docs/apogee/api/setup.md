@@ -520,8 +520,9 @@ The shape is setup-shapes.md §C1. `?database_id=` selects a database (default: 
     conditions, with ux and lead (11-20); ca-ux's #523 has the screen words.
     `Reads.OrganizationAudit` (the organization's own Audit, behind `:read_organization`) names a
     *former* member of that organization by their current display name too: in membership rows
-    ("Removed Mira K. from the organization") and as the actor of their own past acts. The
-    conditions:
+    ("Removed Mira K. from the organization") and as the actor of their own past acts, as
+    `{kind: "user", id: null, name}`: a former member's id isn't sent; a current member keeps
+    theirs. The conditions:
     1. this read only; every other read keeps the rule above;
     2. only people with a membership row in that organization, in any state. A platform admin,
        or anyone never a member, is `{kind: "user", id: null, name: null}`;
@@ -787,9 +788,10 @@ access, provider accounts, account, platform) are always included.
 null, mission: {id, name} | null, reason}], sources: {included, missing}, next_cursor}`, newest
 first.
 
-- Who's named (#470): a person who holds or held a membership in this organization, by display
-  name (`null` without one), with their id. This is C1's exception for this read (catalog C1
-  above), so "Removed Mira K. from the organization" names a former member. Anyone else, a
+- Who's named (#470): a current member of this organization by display name (`null` without
+  one), with their id; a former member by display name with `id: null` (ca-security). This is
+  C1's exception for this read (catalog C1 above), so "Removed Mira K. from the organization"
+  names a former member. Anyone else, a
   platform admin included, is `{kind: "user", id: null, name: null}`. A service is named from its
   live row in this organization, else `{kind: "service", id: null, name: null}`. A name stored in
   a record is never used for a person or a service. Never an email.
@@ -866,7 +868,7 @@ first.
   missions."; none moved, no sentence. Only organization admins read this log, so no
   mission-level reader sees other missions' names or settings. A settings change's actor is named from the stored
   id by this log's rule above (#470), never the stored name, which is an email in rows saved before
-  #470; `actor_id` now finds a person's settings changes too. The log holds
+  #470; `actor_id` now finds a current member's settings changes too. The log holds
   each section's 10 most recent changes per scope, for the Governance, Commanding, Configuration
   and Pass review sections.
 - The per-field settings migration shows as one entry per mission it rewrote: `actor: null`,

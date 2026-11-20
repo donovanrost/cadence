@@ -191,7 +191,11 @@ defmodule Cadence.Reads.OrganizationAudit do
     %{invitations: invitations, memberships: memberships} =
       MembershipAdministration.access_history(organization_id)
 
-    people = MemberNames.ever_members(organization_id, Enum.map(memberships, & &1.user_id))
+    people =
+      organization_id
+      |> MemberNames.ever_members(Enum.map(memberships, & &1.user_id))
+      |> Map.new(fn {id, {name, _state}} -> {id, name} end)
+
     accepted = for i <- invitations, i.accepted_by, into: MapSet.new(), do: i.accepted_by
 
     Enum.flat_map(invitations, &invitation_events/1) ++
@@ -300,26 +304,57 @@ defmodule Cadence.Reads.OrganizationAudit do
   defp actor(_none), do: nil
 
   # #470: every actor on the page is named here, once, by the organization's own Audit rule
-  # (setup.md C1 and its exception, OK'd by ca-security, ux and lead): a person who holds or
-  # held a membership in this organization by their display name (nil without one); anyone
-  # else, a platform admin included, as {user, nil, nil}. A service by its live row in this
+  # (setup.md C1 and its exception, OK'd by ca-security, ux and lead): a current member by their
+  # display name (nil without one) with their id; a former member by their display name, with
+  # no id; anyone else, a platform admin included, as {user, nil, nil}. A service by its live row in this
   # organization; another's as {service, nil, nil}. A name stored in an actor document is never
   # used for a person or a service (it can be an email from before #466/#471). Other kinds
   # (Cadence's own) keep theirs.
   @doc false
   def named(events, organization_id) do
     actors = Enum.map(events, & &1.actor)
-    users = MemberNames.ever_members(organization_id, actor_ids(actors, "user"))
+    members = for %{target: %{kind: "member", id: id}} when is_binary(id) <- events, do: id
+    users = MemberNames.ever_members(organization_id, actor_ids(actors, "user") ++ members)
     services = Auth.organization_service_identities(organization_id, actor_ids(actors, "service"))
-    Enum.map(events, &%{&1 | actor: name(&1.actor, users, services)})
+
+    Enum.map(events, fn event ->
+      %{event | actor: name(event.actor, users, services)} |> without_former_id(users)
+    end)
   end
+
+  # A former member's id isn't sent anywhere in the Audit (ca-security, #523): not as an actor,
+  # not as a membership row's target, and not inside the event's id, which gets an opaque key.
+  defp without_former_id(%{target: %{kind: "member", id: id} = target} = event, users)
+       when is_binary(id) do
+    case Map.get(users, id) do
+      {_name, :active} ->
+        event
+
+      _former_or_unknown ->
+        %{
+          event
+          | target: %{target | id: nil},
+            id: String.replace(event.id, ":member:#{id}:", ":member:#{opaque(id)}:")
+        }
+    end
+  end
+
+  defp without_former_id(event, _users), do: event
+
+  defp opaque(id),
+    do:
+      :crypto.hash(:sha256, "audit-member:" <> id)
+      |> Base.url_encode64(padding: false)
+      |> binary_part(0, 16)
 
   defp actor_ids(actors, kind),
     do: for(%{kind: ^kind, id: id} when is_binary(id) <- actors, uniq: true, do: id)
 
   defp name(%{kind: "user", id: id} = actor, users, _services) when is_binary(id) do
     case Map.fetch(users, id) do
-      {:ok, name} -> %{actor | name: name}
+      {:ok, {name, :active}} -> %{actor | name: name}
+      # A former member is named, without their id (ca-security, #523).
+      {:ok, {name, :former}} -> %{actor | id: nil, name: name}
       :error -> %{actor | id: nil, name: nil}
     end
   end
