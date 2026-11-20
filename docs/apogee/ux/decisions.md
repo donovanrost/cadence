@@ -4168,7 +4168,7 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
     widen it, propose a new grant."; no actions "Keep at least one."; not a whole number "Enter a whole number above
     0."
   - `automation_grant_not_proposed` while `decided_by` is a bare id: the decider isn't named (U25): "This grant was
-    already approved at 11-19 06:52Z. Reload to see it."; when the id is the viewer's, "You already approved this
+    already approved at 11-19 06:52Z, so your approval wasn't recorded. Reload to see it." (U95, as the named form); when the id is the viewer's, "You already approved this
     grant at …". With `{id, name}`, U105's named form.
   - Reject on a grant no longer proposed: "Not rejected: this grant was already approved, so nothing changed. Reload
     to see it." (likewise expired and withdrawn).
