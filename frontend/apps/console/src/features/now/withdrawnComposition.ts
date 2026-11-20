@@ -9,6 +9,7 @@ import {
   wayOut,
 } from "@/features/commands/groups/withdrawn.ts";
 import type { Attention } from "./attention.ts";
+import type { Member } from "./actionQueueReader.ts";
 import type { QueueItem } from "./queue.ts";
 
 /**
@@ -50,17 +51,16 @@ export function withdrawnRow(
   base: Pick<QueueItem, "priority" | "state" | "spacecraftIds">,
   key: string,
   a: Attention,
-  craft: Readonly<{ name: string; scid: number | null }> | null,
+  craft: Pick<Member, "name" | "scid"> | null,
 ): QueueItem | null {
   const w = a.withdrawal;
   if (!w) return null;
   const name = compositionName(w.composition, w.catalog_revision);
   const who = craft?.name ?? "A spacecraft";
   const out = wayOut(name, w.earlier_approved);
-  const to: RouteLocationRaw | null =
-    craft && craft.scid !== null
-      ? { name: "ops.spacecraft", params: { scId: craft.scid, tab: "investigate" } }
-      : null;
+  const to: RouteLocationRaw | null = craft
+    ? { name: "ops.spacecraft", params: { scId: craft.scid, tab: "investigate" } }
+    : null;
   return {
     ...base,
     key,
