@@ -140,13 +140,15 @@ export function sendRefusal(e: ApiError, s: ConfigurationSnapshot): SendRefusal 
     return {
       text: `Not sent: telemetry is on for ${craft}, so choose a packet source and the APIDs to decode first.`,
     };
+  // The server's own line (spacecraft_workspace_words.ex; mms-ux: one wording).
   if (isError(e, "spacecraft_switch_set_by_change_set"))
     return {
-      text: `Not sent: a change set turned ${craft}'s telemetry or commanding on or off after the draft was saved. Save it again, then send it.`,
+      text: `Not sent: a change set turned Telemetry or Commanding on or off for ${craft} after this draft was saved. Save the draft again, then send it.`,
     };
+  // #534's race (#549, mms-ux's words, as the server sends them); the draft is untouched.
   if (isError(e, "packet_definition_version_taken"))
     return {
-      text: "Not sent: Cadence was updating this catalog revision's packets at the same moment. Send it again.",
+      text: "Not sent: another change saved a packet definition at the same moment. Send it again.",
     };
   if (isError(e, "mission_model_revision_not_approved")) {
     const det = detailsOf(e, notApproved);
@@ -161,8 +163,6 @@ export function sendRefusal(e: ApiError, s: ConfigurationSnapshot): SendRefusal 
       ? { text, openRevision: { number: n, revisionId: id } }
       : { text };
   }
-  if (isError(e, "activation_self_approval_forbidden"))
-    return { text: "Not sent: you requested it, so another person approves it." };
   if (isError(e, "spacecraft_catalog_set_by_profile"))
     return {
       text: `Not sent: ${craft}'s profile sets its catalog revision. Change it on the profile, through Setup › Changes.`,

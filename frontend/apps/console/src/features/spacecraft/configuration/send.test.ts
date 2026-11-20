@@ -115,6 +115,14 @@ describe("the send words", () => {
     expect(sendRefusal(refused("spacecraft_configuration_review_stale"), s).text).toMatch(
       /^Not sent: EARENDIL-004's active configuration changed/,
     );
+    expect(sendRefusal(refused("packet_definition_version_taken"), s).text).toBe(
+      "Not sent: another change saved a packet definition at the same moment. Send it again.",
+    );
+    // Self-approval is refused on Approve, never on a send (mms-ux): a generic line with its code.
+    expect(sendRefusal(refused("activation_self_approval_forbidden"), s)).toEqual({
+      text: "Not sent.",
+      code: "activation_self_approval_forbidden",
+    });
     expect(sendRefusal(refused("brand_new_code"), s)).toEqual({
       text: "Not sent.",
       code: "brand_new_code",
