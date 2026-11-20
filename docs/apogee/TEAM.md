@@ -234,7 +234,11 @@ part 2, the 001 repair, the gap fixes) sat still for ~3 h 20 min under a hold wi
   (`--slot-begin '<what>'` / `--slot-end`) for its slots and hold windows; everyone else waits. **Holds:** while a hold is active, a new
   heavy job exits 75 at once, except a job of qa while qa holds the slot lock: that one runs through the hold, still
   subject to load, memory and swap, and is logged in `heavy-gate.d/hold.log` as RAN-THROUGH (lead, 11-19, for the reset's
-  quiet window; laptop 2's gate is unchanged). Single targeted test
+  quiet window; laptop 2's gate is unchanged). **Swap cap (director, 2026-11-20):** on laptop 1, while swap used is
+  above 8192 MB, the gate runs ONE capped job at a time, not two (a fan-out job still starts when nothing else capped
+  runs; qa stays exempt). Each new macOS swap file costs 1 GiB of disk until a reboot. Heavy jobs that don't need the
+  laptop-1 stack (branch suites, typechecks, builds) can run on laptop 2: ask devops for a worktree and a partition
+  there (WORKER-SETUP.md on laptop 2). Single targeted test
   files can run without it. Never leave watchers, dev servers or feeds running that you aren't using (qa owns the one
   shared dev stack).
 - Conventional commit messages (`feat(console): …`, `feat(api): …`) with the Co-Authored-By trailer.
