@@ -12,6 +12,7 @@ defmodule Cadence.Dashboards.Sources.Telemetry.RevisionState do
   }
 
   alias Cadence.Reads.Telemetry, as: TelemetryReads
+  alias Cadence.Telemetry.ObservationIdentityDependency
   alias Cadence.Telemetry.Sample
 
   @spec resolve(
@@ -90,22 +91,38 @@ defmodule Cadence.Dashboards.Sources.Telemetry.RevisionState do
     end
   end
 
+  # The summary counts state rows; the dependency covers every identity on the frame's samples,
+  # with or without a row (first-seen rule, 11-17), so RuntimeCache invalidates on a later
+  # decision about any of them.
   defp annotate_frame({%Frame{} = frame, samples}, states_by_id, request) do
+    identity_ids = samples |> Enum.flat_map(&sample_identity_ids/1) |> Enum.uniq()
+
     states =
-      samples
-      |> Enum.flat_map(&sample_identity_ids/1)
-      |> Enum.uniq()
+      identity_ids
       |> Enum.map(&Map.get(states_by_id, &1))
       |> Enum.reject(&is_nil/1)
 
-    summary = TelemetryRevisionSummary.from_identity_states(states)
-    frame = put_summary(frame, summary)
+    dependency = ObservationIdentityDependency.from_states(states, identity_ids)
+
+    summary =
+      states
+      |> TelemetryRevisionSummary.from_identity_states()
+      |> Map.merge(%{dependency: dependency, dependency_fingerprint: dependency.fingerprint})
+
+    frame = put_summary(frame, summary, identity_ids)
     {frame, warnings(request, frame, summary)}
   end
 
-  defp put_summary(%Frame{} = frame, %{identity_count: 0}), do: frame
+  defp put_summary(%Frame{} = frame, _summary, []), do: frame
 
-  defp put_summary(%Frame{} = frame, summary) do
+  defp put_summary(%Frame{} = frame, %{identity_count: 0} = summary, _identity_ids) do
+    %Frame{
+      frame
+      | meta: Map.put(frame.meta, :telemetry_revision_dependency, summary.dependency)
+    }
+  end
+
+  defp put_summary(%Frame{} = frame, summary, _identity_ids) do
     warning_codes =
       frame.meta
       |> Map.get(:warning_codes, [])

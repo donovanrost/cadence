@@ -27,6 +27,20 @@ defmodule Cadence.Telemetry.Storage.ObservationEnvelopeTest do
     assert is_binary(envelope.idempotency_key)
   end
 
+  # DECISIONS #99 guard (lead): the journal frame that keys monitoring effects is runtime-only. It
+  # must not reach the stored observation (its provenance, row or identity), so packet rows'
+  # provenance is unchanged by #99 (and B's residual stays null for them).
+  test "a sample's journal frame changes nothing that is stored" do
+    plain = sample()
+    framed = %{plain | journal_frame: {"journal-1", 1_400, ~U[2026-11-17 01:00:00Z]}}
+
+    assert {:ok, a} = ObservationEnvelope.from_sample(write_context(), plain)
+    assert {:ok, b} = ObservationEnvelope.from_sample(write_context(), framed)
+
+    assert a == b
+    assert ObservationRow.params(a) == ObservationRow.params(b)
+  end
+
   test "uses write context as authoritative tenancy instead of sample provenance" do
     context = write_context(organization_id: "org-authoritative")
     sample = sample(provenance: %{organization_id: "org-from-payload"})

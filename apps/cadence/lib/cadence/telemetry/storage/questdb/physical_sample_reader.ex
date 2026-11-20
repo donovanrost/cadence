@@ -56,7 +56,13 @@ defmodule Cadence.Telemetry.Storage.QuestDB.PhysicalSampleReader do
     end
   end
 
-  defp columns, do: ["organization_id" | ObservationReader.select_columns()]
+  @doc """
+  The selected columns: the history reader's, plus the row's tenant and its revision. The revision
+  goes into the sample's storage provenance, as ETS and Postgres history rows already carry it
+  (11-17: an identity-state decision seed reads it).
+  """
+  @spec columns() :: [binary()]
+  def columns, do: ["organization_id", "revision" | ObservationReader.select_columns()]
   defp clause(_operator, nil), do: []
   defp clause(operator, value), do: ["#{operator} #{SQL.literal(value)}"]
   defp endpoint_clause(nil), do: []
@@ -92,7 +98,7 @@ defmodule Cadence.Telemetry.Storage.QuestDB.PhysicalSampleReader do
   defp admitted_records(rows, query) do
     records =
       Enum.map(rows, fn row ->
-        %{organization_id: row["organization_id"], sample: ObservationReader.sample_from_row(row)}
+        %{organization_id: row["organization_id"], sample: sample_from_row(row)}
       end)
 
     cond do
@@ -104,6 +110,19 @@ defmodule Cadence.Telemetry.Storage.QuestDB.PhysicalSampleReader do
 
       true ->
         {:error, :ambiguous_physical_sample}
+    end
+  end
+
+  defp sample_from_row(row) do
+    sample = ObservationReader.sample_from_row(row)
+
+    case row["revision"] do
+      revision when is_integer(revision) and revision > 0 ->
+        storage = Map.put(sample.provenance["storage"], "revision", revision)
+        %{sample | provenance: Map.put(sample.provenance, "storage", storage)}
+
+      _absent ->
+        sample
     end
   end
 
