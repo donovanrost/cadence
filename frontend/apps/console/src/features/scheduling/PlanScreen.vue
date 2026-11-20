@@ -236,8 +236,11 @@ const clock = computed(() =>
   <template v-if="view.kind === 'plan'">
     <PlanLifecycleCallouts :day="day" :superseded-by="view.plan.superseded_by" :expired="expired" />
     <OldVersionCallout v-if="latest !== null" :plan="view.plan" :latest="latest" />
+    <!-- ux on #656: keyed on the role, so an alert that arrives after the line is shown re-mounts
+      (a role flip on a mounted region isn't announced). -->
     <SupersededCallout
       v-else-if="view.plan.superseded"
+      :key="supersededRole.role.value ?? 'polite'"
       :superseded="view.plan.superseded"
       :role="supersededRole.role.value"
     />

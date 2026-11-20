@@ -1,6 +1,6 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vite-plus/test";
-import { effectScope, nextTick, ref } from "vue";
+import { defineComponent, effectScope, h, nextTick, ref } from "vue";
 import { supersededReader } from "./plans-api.ts";
 import { useSupersededRole } from "./superseded-role.ts";
 import SupersededCallout from "./SupersededCallout.vue";
@@ -24,6 +24,27 @@ describe("SupersededCallout's role (#654)", () => {
     expect(polite.find('[role="alert"]').exists()).toBe(false);
     const alert = mount(SupersededCallout, { props: { superseded, role: "alert" } });
     expect(alert.get('[role="alert"]').text()).toContain("Nothing was submitted.");
+  });
+});
+
+describe("the callout re-mounts as an alert (ux on #656)", () => {
+  it("superseded first, then the person's refusal: a fresh element with role=alert", async () => {
+    if (!superseded) throw new Error("fixture");
+    const role = ref<"alert" | undefined>(undefined);
+    // As PlanScreen renders it: keyed on the role.
+    const Host = defineComponent(
+      () => () =>
+        h(SupersededCallout, { key: role.value ?? "polite", superseded, role: role.value }),
+    );
+    const w = mount(Host, { attachTo: document.body });
+    const before = w.get('[role="status"]').element;
+    role.value = "alert";
+    await nextTick();
+    const after = w.get('[role="alert"]').element;
+    // A new live region, so a screen reader announces it (a flipped attribute isn't).
+    expect(after).not.toBe(before);
+    expect(before.isConnected).toBe(false);
+    w.unmount();
   });
 });
 
