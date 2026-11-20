@@ -7,11 +7,20 @@ defmodule Cadence.MissionModelCatalogNaming do
 
   Don't use it in the guard's own tests (`MissionModels.CatalogNamedRevisionTest`): they need a
   revision no catalog revision names.
+
+  Since #541/#542 it also gives the revision what an import gives it: its one-layer mission
+  composition at '/' (a system actor that counts no one, as a migrated composition) and the link
+  that names the revision, so approval and promotion (`MissionModels.require_composition/3`) see
+  it as an import's own.
   """
 
   alias Cadence.Catalog
   alias Cadence.Catalog.{Artifact, ImportRun, ImportRunRow, Revision, RevisionRow}
+  alias Cadence.MissionModels
+  alias Cadence.MissionModels.Compositions
   alias Cadence.Repo
+
+  @system %{"actor_kind" => "system", "system_id" => "cadence-test", "name" => "Cadence test"}
 
   @doc "Names `mission_model_revision_id` in a new catalog revision; returns the catalog revision."
   def name!(organization_id, mission_id, mission_model_revision_id) do
@@ -58,7 +67,7 @@ defmodule Cadence.MissionModelCatalogNaming do
 
     Repo.insert!(ImportRunRow.changeset(run))
 
-    %Revision{} =
+    catalog_revision =
       %{
         organization_id: organization_id,
         mission_id: mission_id,
@@ -77,5 +86,28 @@ defmodule Cadence.MissionModelCatalogNaming do
       |> RevisionRow.changeset()
       |> Repo.insert!()
       |> RevisionRow.to_domain()
+
+    compose!(organization_id, mission_id, mission_model_revision_id)
+    catalog_revision
+  end
+
+  # An import's own composition: its single layer at '/', linked to this same revision (#456 keeps
+  # a lone layer at '/' byte-identical, so the link names exactly this revision id).
+  defp compose!(organization_id, mission_id, revision_id) do
+    {:ok, %{layer_ids: [layer_id]}} =
+      MissionModels.fetch_revision(organization_id, mission_id, revision_id)
+
+    {:ok, composition} =
+      Compositions.insert_or_get(organization_id, mission_id, [{layer_id, "/"}], @system)
+
+    {:ok, ^revision_id} =
+      Compositions.effective_revision(
+        organization_id,
+        mission_id,
+        composition.composition_id,
+        nil
+      )
+
+    :ok
   end
 end
