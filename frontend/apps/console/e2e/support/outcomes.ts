@@ -17,6 +17,21 @@ export const WORDS = {
   unknownSpacecraft: "Unknown spacecraft",
   /** U97: "Approved. Booking 40 passes." only on the 202 with outcome approved; N is the count. */
   approved: (passes: number) => `Approved. Booking ${passes} passes.`,
+  /**
+   * U20 (outcome unknown) with qa #19: a 5xx after a write may have committed, so it's unclear, never
+   * "nothing changed". As the console words it (changes' failureOutcome), one literal per verb
+   * (ux on #648: literal entries only).
+   */
+  serverFailedUnclearStaged:
+    "The server failed while answering, so it isn't clear whether anything was staged. Check Staged changes and Revisions now, before trying again.",
+  /** U20 for the policy save (ux on #653): not a change set, so it reloads the policy's versions. */
+  policySaveUnclear:
+    "The server failed while answering, so it isn't clear whether this version was saved. Reload to see the policy's versions before trying again.",
+  /** CP2 policy save (U20's success line; PolicyTab): the second sentence of "Saved as vN. …". */
+  policyPendingActivation: "It's active once another admin approves it.",
+  /** U95 (ux on #653): the policy version's author can't approve it; nothing recorded. */
+  policyAuthorCantApprove:
+    "Not approved: you saved this version, so another org admin approves it. Your approval wasn't recorded.",
 } as const;
 
 /** ux: polite is role=status or aria-live=polite; alert is role=alert or aria-live=assertive. */
