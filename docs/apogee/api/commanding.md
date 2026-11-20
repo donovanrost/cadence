@@ -660,9 +660,9 @@ autosave from another tab survives.
 ## REST command requests: approve and reject require the review token (#117 step 4a; lands after the 11-22 reset, date set at landing)
 
 **Breaking (REST only).** `POST /api/organizations/:organization_id/missions/:mission_id/command_requests/:id/approve` and `/reject` require `approval.expected_review`: the request's review token (64 hex), the same token the command review read sends as `expected_review`. That's four-eyes design B: a decision names exactly what was reviewed.
-- Without it: `422 {errors: [{field: "approval.expected_review", reason: "required"}]}`. Nothing is recorded.
+- Without it: `422 {errors: [{field: "approval.expected_review", reason: "required"}]}`. Not a review token at all (not 64 lowercase hex): the same with `reason: "invalid"`. Nothing is recorded.
 - A token that no longer matches the request: `409 command_review_changed`. Nothing is recorded; read the request again.
-- The human-approver check runs first, so a service caller still gets its `403` (a REST bearer is a service, and a service can't approve), whatever it sent.
+- The human-approver check runs first, so a service caller still gets its `403` (a REST bearer is a service, and a service can't approve), whatever token it sent.
 - No working client is affected: REST approve and reject have no human caller today, and no qa script calls them (qa, 11-20).
 
 ## REST commanding: actors (#465)

@@ -122,10 +122,12 @@ defmodule Cadence.Commanding.RequestStore do
       with {:ok, %CommandRequestRow{} = request_row} <-
              lock_request_row(organization_id, mission_id, command_request_id),
            :ok <- LifecyclePolicy.ensure_request_not_in_group(request_row),
-           :ok <- ReviewPrecondition.check(request_row, opts),
-           :ok <- LifecyclePolicy.ensure_request_pending_approval(request_row),
+           # #117 step 4a (api-ops on #631): the human-approver refusal comes first, so a service
+           # gets its 403 whatever token it sent; then the token (required, well-formed, current).
            :ok <- LifecyclePolicy.ensure_human_approval_actor(decided_by, command_request_id),
            :ok <- ReviewPrecondition.required(opts),
+           :ok <- ReviewPrecondition.check(request_row, opts),
+           :ok <- LifecyclePolicy.ensure_request_pending_approval(request_row),
            :ok <- LifecyclePolicy.ensure_not_self_approval(request_row, decided_by),
            approval =
              CommandApproval.new(%{

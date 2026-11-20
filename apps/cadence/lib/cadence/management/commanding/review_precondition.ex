@@ -16,12 +16,17 @@ defmodule Cadence.Management.Commanding.ReviewPrecondition do
   nothing is recorded. It runs after the human-approver check, so that refusal stays the first
   answer (api-ops).
   """
-  @spec required(keyword()) :: :ok | {:error, :command_review_required}
+  @spec required(keyword()) :: :ok | {:error, :command_review_required | :command_review_invalid}
   def required(opts) do
-    if Keyword.get(opts, :require_review) == true and not is_binary(opts[:expected_review]),
-      do: {:error, :command_review_required},
-      else: :ok
+    case {Keyword.get(opts, :require_review), Keyword.get(opts, :expected_review)} do
+      {true, nil} -> {:error, :command_review_required}
+      # api-ops on #631: not a review token at all (64 lowercase hex) is malformed, not stale.
+      {true, token} -> if well_formed?(token), do: :ok, else: {:error, :command_review_invalid}
+      _not_required -> :ok
+    end
   end
+
+  defp well_formed?(token), do: is_binary(token) and String.match?(token, ~r/\A[0-9a-f]{64}\z/)
 
   def check(%CommandRequestRow{} = row, opts) do
     case Keyword.fetch(opts, :expected_review) do

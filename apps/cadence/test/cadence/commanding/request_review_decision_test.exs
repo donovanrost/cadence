@@ -68,6 +68,22 @@ defmodule Cadence.Commanding.RequestReviewDecisionTest do
     assert {:error, :command_review_required} =
              decide(c, :approved, "reviewer", require_review: true)
 
+    # api-ops on #631: a token that isn't one is malformed (422), not stale; and a service gets
+    # its human-approver refusal first, whatever token it sends.
+    assert {:error, :command_review_invalid} =
+             decide(c, :approved, "reviewer", require_review: true, expected_review: "junk")
+
+    assert {:error, {:command_request_approval_requires_user_actor, _}} =
+             RequestStore.decide_request(
+               c.org,
+               c.mission,
+               c.request,
+               :approved,
+               %{"service_identity_id" => "service"},
+               require_review: true,
+               expected_review: String.duplicate("0", 64)
+             )
+
     assert RequestStore.list_approvals(c.org, c.mission, []) == []
 
     assert {:ok, _} =
