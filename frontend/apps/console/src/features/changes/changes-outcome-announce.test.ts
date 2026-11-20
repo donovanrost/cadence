@@ -2,7 +2,9 @@ import { mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { ref } from "vue";
 import ChangesOutcome from "./ChangesOutcome.vue";
+import { decode } from "@/api";
 import type { SubmitResult } from "./actions.ts";
+import { submitReader } from "./submitResult.ts";
 
 /** #276 follow-up (lead, fe-setup on #614): the outcome is said once, in the words shown. */
 const said = vi.hoisted(() => ({ texts: [] as string[] }));
@@ -30,7 +32,11 @@ describe("ChangesOutcome's announcements", () => {
   });
 
   it("doesn't say Sent for review again when a refetch swaps in the same state", async () => {
-    const inReview = () => ({ state: "in_review" }) as unknown as SubmitResult;
+    const inReview = (): SubmitResult => {
+      const r = decode(submitReader, { state: "in_review", change_set_id: "cs-1", version: 3 });
+      if (!r.ok) throw r.error;
+      return r.value;
+    };
     const w = mount(ChangesOutcome, {
       props: { outcome: inReview(), stagedNotice: null, next: null },
       global: { stubs },
