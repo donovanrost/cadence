@@ -210,8 +210,9 @@ by its catalog revision ("catalog rev 4"); the model revision id is Technical de
   {id, name} | null} | {service: {id, name} | null} | null, cannot_approve_because: not_in_catalog | null,
   plans_ready, comparison: <cmp> | null}`. `imported_by`
   null reads "Importer not recorded". `imported_by` names a person only while they hold an
-  active membership in the mission's organization, never by email (#366, #146's rule). Anyone
-  else is `{id: null, name: null}`: recorded, but not named, and their id isn't sent. `cannot_approve_because` (11-17, ux U88) is
+  active membership in the mission's organization, never by email (#366, #146's rule). A member
+  with no display name is `{id, name: null}`. Anyone outside the organization is `{id: null,
+  name: null}`: recorded, but not named, and their id isn't sent. `cannot_approve_because` (11-17, ux U88) is
   `not_in_catalog` when no catalog revision names the model revision (a second run of a file
   makes one): Approve is refused (`409 mission_model_revision_not_in_catalog`), Reject stays;
   `cannot_decide_because` wins when both are set. `self_approval` and `authors_unknown` (#280) come

@@ -6,7 +6,8 @@ defmodule CadenceWeb.CatalogActorExposureAPITest do
   email or user id goes out in the stored actor document.
 
   - REST `catalog_artifacts[].uploaded_by` and `catalog_import_runs[].requested_by`: `{kind, name}`.
-  - The model approval read's `imported_by`: `{id, name}`, both null for anyone not named.
+  - The model approval read's `imported_by`: `{id, name}`. A member with no display name keeps
+    their id with a null name; anyone outside the organization reads both null.
   """
   use CadenceWeb.ConnCase, async: false
 
@@ -49,6 +50,7 @@ defmodule CadenceWeb.CatalogActorExposureAPITest do
       org: org,
       mission: mission,
       member: member,
+      unnamed: unnamed,
       outsider: outsider,
       actors: actors,
       emails: Enum.map([member, unnamed, outsider], & &1.email),
@@ -99,11 +101,14 @@ defmodule CadenceWeb.CatalogActorExposureAPITest do
     refute encoded =~ "Stored name"
   end
 
-  test "the approval read's imported_by names a member, never an outsider or their email", c do
+  test "the approval read's imported_by: a member by name, a nameless member by id, an outsider neither",
+       c do
     viewer = CatalogFixtures.user_scope(c.organization_id, "viewer")
 
     for {person, expected} <- [
           {c.member, %{id: c.member.user_id, name: "Mira K."}},
+          # A member with no display name keeps their id (membership is the line; api-ops on #487).
+          {c.unnamed, %{id: c.unnamed.user_id, name: nil}},
           {c.outsider, %{id: nil, name: nil}}
         ] do
       revision =
