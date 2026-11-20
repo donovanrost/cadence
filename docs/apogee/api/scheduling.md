@@ -94,7 +94,10 @@ filter takes any of them; a stored state filters as stored (an `executing` plan 
 ### `GET /contact-plans/:plan_id[?version=n]`
 
 The list row, plus:
-- `passes: [{snapshot_id, spacecraft_id, station, starts_at, ends_at, synthetic, locked}]`
+- `passes: [{snapshot_id, spacecraft_id, station, starts_at, ends_at, synthetic, locked,
+  listener_overlap}]`. `listener_overlap` (U58 (b), #361) is as on a booked pass
+  ([contacts.md](contacts.md)), against the plan's other passes (`with.state: "planned"`) and the
+  mission's booked passes (`"booked"`), the plan's own bookings left out.
 - `demand: {rule_met, rule_total, spacecraft: [{spacecraft_id, rule_met, contacts: {have, need},
   reasons: [code]}], rules: [{requirement_id, version, spacecraft_id, text, source: "requirement",
   window}]}` (S2, from the version's persisted coverage)

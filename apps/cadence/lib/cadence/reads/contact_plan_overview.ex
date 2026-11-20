@@ -25,7 +25,7 @@ defmodule Cadence.Reads.ContactPlanOverview do
   alias Cadence.GroundNetworks.MissionProviders
   alias Cadence.Management.Contacts
   alias Cadence.Reads.ContactPlanOverview.Demand
-  alias Cadence.Reads.{PlanApproval, PlanMeasures, PlanRounds}
+  alias Cadence.Reads.{PassListenerOverlap, PlanApproval, PlanMeasures, PlanRounds}
 
   @list_cap 100
 
@@ -117,7 +117,7 @@ defmodule Cadence.Reads.ContactPlanOverview do
          latest_version: current.version,
          counts: %{summary.counts | conflicts: length(conflicts)},
          ready_to_approve: summary.ready_to_approve and availability.conflicts == [],
-         passes: Enum.map(passes, &pass(&1, version, stations)),
+         passes: with_overlaps(organization_id, mission_id, passes, version, stations),
          demand: demand(organization_id, mission_id, version, passes),
          unmet: Demand.unmet(organization_id, mission_id, version),
          provider_freeze: provider_freeze(organization_id, mission_id, plan, version, passes),
@@ -225,6 +225,17 @@ defmodule Cadence.Reads.ContactPlanOverview do
       version_created_at: version.created_at,
       updated_at: plan.updated_at
     }
+  end
+
+  # U58 (b), #361: each pass's listener overlap (null when none).
+  defp with_overlaps(org, mission, passes, version, stations) do
+    overlaps = PassListenerOverlap.for_plan(org, mission, passes, stations)
+
+    Enum.map(passes, fn snapshot ->
+      snapshot
+      |> pass(version, stations)
+      |> Map.put(:listener_overlap, overlaps[snapshot.contact_opportunity_snapshot_id])
+    end)
   end
 
   defp pass(%ContactOpportunitySnapshot{} = snapshot, version, stations) do
