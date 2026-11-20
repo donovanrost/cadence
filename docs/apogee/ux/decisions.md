@@ -4067,11 +4067,14 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
   it answers the `expired` refusal below (api).
   - Tag `SUSPENDED` (caution, mark + word, B2).
   - Row line (`suspension {at, by, settings_revision}`; who and when one event, U29), by the setting now in force
-    (the read's `approval_setting`): "Suspended when Mira K. changed the mission's approval setting to Needs a second
-    person's approval, at 11-19 22:40Z. Another org admin resumes it." `by` with no name: "Suspended when the
-    mission's approval setting changed to Needs a second person's approval, at 11-19 22:40Z." (the next sentence
-    likewise). If the setting is back to "Applies without approval": the last sentence reads "An org admin resumes
-    it." The setting unread: "Another org admin resumes it." (the stricter form; the answer says what happened).
+    (the read's `approval_setting`). The suspension doesn't say whether the save was the mission's or the
+    organization's (an organization default reaches inheriting missions), so the line names neither: "Suspended when
+    Mira K. changed the approval setting for this mission to Needs a second person's approval at 11-19 22:40Z. A
+    second org admin resumes it." `by` with no name: "Suspended when the approval setting for this mission changed
+    to Needs a second person's approval at 11-19 22:40Z." (the next sentence likewise). If the setting is back to
+    "Applies without approval": "An org admin resumes it." The setting unread: "A second org admin resumes it." (the
+    stricter form; the answer says what happened). If api later sends the level, name it ("changed the
+    organization's approval setting to …").
   - `Resume…` (a sheet, as approve: `sha256`, `operation_id`): title `Resume the grant`, commit `Resume`, muted line
     "It takes effect again at once. Nightly planner can act under it until 12-19 06:40Z." After a resumed answer:
     "Resumed. Nightly planner can act under it until 12-19 06:40Z." Any other answer (U20): "Cadence didn't confirm
@@ -4099,8 +4102,10 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
     - 409 `automation_grant_legacy`: "Not resumed: this grant was made before Cadence checked grants against the
       mission's approval setting, so it can only be revoked. Nothing changed. To change it, propose a new grant."
     - 409 `automation_grant_not_suspended` (`state`): `expired` "Not resumed: this grant's validity ended, so it
-      can't be resumed. Nothing changed. To go on, propose a new grant."; another state "Not resumed: it isn't
-      suspended any more (ACTIVE). Nothing changed. Reload to see it." (the state's tag word; unknown: no bracket).
+      can't be resumed. Nothing changed. To go on, propose a new grant."; another state in words: `active`
+      "Not resumed: it's active again. Nothing changed. Reload to see it."; `revoked` "Not resumed: it was revoked.
+      Nothing changed. Reload to see it."; any other, or unknown: "Not resumed: it isn't suspended any more. Nothing
+      changed. Reload to see it."
     - 409 `grant_changed`: "Not resumed: the grant changed after you opened it. Nothing changed. Reload to see it,
       then resume it again."
     - 403 `authenticated_user_required`: "Not resumed: only a person can resume a grant, not a service identity.
@@ -4108,8 +4113,8 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
     - `duplicate_operation`: "Not resumed: Cadence matched this to an earlier, different request, so nothing
       changed. Reload and try again." Unknown code: "Not resumed: Cadence refused this. Nothing changed." with the
       code in Technical details.
-  - Audit: "Suspended the grant for Nightly planner, when the mission's approval setting changed to Needs a second
-    person's approval" (the settings saver as who); "Resumed the grant for Nightly planner".
+  - Audit: "Suspended the grant for Nightly planner, when the approval setting for this mission changed to Needs a
+    second person's approval" (the settings saver as who); "Resumed the grant for Nightly planner".
   - **The settings save that suspends** (Mission settings and Organization settings, Governance; fe-setup's screen,
     SettingsAuditProviders.md points here). Saving "Needs a second person's approval" can answer 409
     `approval_tightening_suspends_grants` (`details {grants: [{id, mission {id, name}, service {id, name|null},
@@ -4117,11 +4122,13 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
     caution callout (role="alert", the person's act refused for now), then saves again with
     `acknowledged_suspensions: digest` on confirm. In step with #430's audit words: option words, names up to 3
     then "and N more", what the save will do, never "now".
-    - Lead: "Saving this suspends 3 automation grants: Nightly planner, Relay sync and Ops bot. Until another org
+    - Lead: "Saving this suspends 3 automation grants: Nightly planner, Relay sync and Ops bot. Until a second org
       admin resumes each, its service can't act under it." One: "Saving this suspends 1 automation grant: Nightly
-      planner. Until another org admin resumes it, Nightly planner can't act under it." More than 3: "…: Nightly
+      planner. Until a second org admin resumes it, Nightly planner can't act under it." More than 3: "…: Nightly
       planner, Relay sync, Ops bot and 2 more." A service with no name: "Unknown service identity" (U25), never
-      the id. Organization level adds the missions: "…suspends 4 automation grants on 2 missions: …".
+      the id. Organization level adds the missions: "…suspends 4 automation grants on 2 missions: …", and names
+      each service once, with a count when it has grants on more than one mission: "Nightly planner (2 missions),
+      Relay sync". The Show all list stays per grant.
     - `Show all` lists each grant: "Nightly planner · plan, submit · until 12-19 06:40Z" (U105's action words); at
       organization level, the mission first: "EARENDIL · Nightly planner · …". Each mission links `Open grants` to
       its Contact planning page. A mission with no name: "Unknown mission".
