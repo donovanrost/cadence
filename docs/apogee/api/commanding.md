@@ -657,6 +657,28 @@ Discards the draft. The response is `204` (idempotent).
 draft is deleted in the same transaction, **only if it is still at that revision**, so a newer
 autosave from another tab survives.
 
+## The command four-eyes record (#117 step 4b; rides the next reset)
+
+Every row in `command_approvals` is a complete decision record (DECISIONS #112; the fields are
+required, so this lands only on a fresh database at a reset):
+- `subject_digest`: the request's review token at decision. For a group member, that's its own
+  token. For a release, it's the token at release.
+- `separated_from`: exactly the ids the separation check was given (the requester; a service by its
+  own id). It's `[]` on a `not_required` row, since no check ran.
+- `admin_mode`: whether the decider or releaser acted as a platform admin, from their scope. It
+  has no default: a path that omits it fails, and never records `false` by default.
+- `decision`: `approved | rejected | not_required`.
+  - **`not_required`** is written only when a request is released without a second GO (its policy
+    needs none): a single request's release (`enqueue`), or a group submitted under such a policy.
+    It's written in the release's own transaction, with the releaser as actor.
+  - A decision path never writes it.
+- **Two names on an automatic release, on purpose (api-ops):** the approved command's
+  `approved_by` stays the safety policy (`cadence:command_safety_policy`), because the policy is
+  what authorized it, while the `not_required` row's actor is the person who released it. The
+  audit shows the person, and the approved command shows the authority.
+- A group decision's `decision_document` also names `members_digest` (the members the GO's token
+  covered) and `excluded_request_ids` (the requests a GO-excluding left out).
+
 ## REST command requests: approve and reject require the review token (#117 step 4a; lands after the 11-22 reset, date set at landing)
 
 **Breaking (REST only).** `POST /api/organizations/:organization_id/missions/:mission_id/command_requests/:id/approve` and `/reject` require `approval.expected_review`: the request's review token (64 hex), the same token the command review read sends as `expected_review`. That's four-eyes design B: a decision names exactly what was reviewed.

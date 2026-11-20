@@ -3,6 +3,7 @@ defmodule Cadence.Commanding.ReleaseLaneTest do
   alias Cadence.Accounts.{OrganizationMembershipRow, UserRow}
 
   alias Cadence.Commanding.{
+    CommandApprovalRow,
     CommandQueueEntryRow,
     CommandRequestRow,
     LifecyclePolicy,
@@ -14,6 +15,7 @@ defmodule Cadence.Commanding.ReleaseLaneTest do
   alias Cadence.OperationalEvents.EventRow
   alias Cadence.Organizations.OrganizationRow
   alias Cadence.Projections.MissionEvents.Store.MissionEventRow
+  alias Cadence.TestSupport.DecisionRecordPurge
   alias Ecto.Adapters.SQL
   alias Ecto.Adapters.SQL.Sandbox
 
@@ -317,7 +319,7 @@ defmodule Cadence.Commanding.ReleaseLaneTest do
         c.mission,
         c.request.command_request_id,
         actor(c),
-        []
+        admin_mode: false
       )
 
   defp actor(c), do: %{"actor_kind" => "user", "user_id" => c.user.user_id}
@@ -335,6 +337,16 @@ defmodule Cadence.Commanding.ReleaseLaneTest do
   end
 
   defp cleanup(c) do
+    # #117 step 4b: a release writes its own not_required record, append-only, so it's purged first
+    # (the test database's designed purge, DecisionRecordPurge).
+    DecisionRecordPurge.run(fn ->
+      Repo.delete_all(
+        from(row in CommandApprovalRow,
+          where: row.organization_id == ^c.org and row.mission_id == ^c.mission
+        )
+      )
+    end)
+
     for schema <- [CommandQueueEntryRow, CommandRequestRow, EventRow, MissionEventRow, MissionRow] do
       Repo.delete_all(
         from(row in schema, where: row.organization_id == ^c.org and row.mission_id == ^c.mission)

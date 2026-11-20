@@ -380,7 +380,8 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
                mission_id,
                staged_command_request_id,
                %{"actor_kind" => "user", "user_id" => "reviewer-1"},
-               reason: "Reviewed for uplink"
+               reason: "Reviewed for uplink",
+               admin_mode: false
              )
 
     command_approval_id = approval.command_approval_id
