@@ -34,7 +34,8 @@ defmodule Cadence.Reads.PlanApproval do
     %{
       kind: doc["kind"] || to_string(approval.actor_kind),
       id: doc["id"] || approval.actor_id,
-      name: doc["display_name"] || doc["name"] || doc["email"]
+      # Never the email a row written before #466 may hold.
+      name: doc["display_name"] || doc["name"]
     }
   end
 

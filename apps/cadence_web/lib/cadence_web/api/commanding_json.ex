@@ -12,6 +12,7 @@ defmodule CadenceWeb.API.CommandingJSON do
   }
 
   alias Cadence.Persistence.JsonDocument
+  alias CadenceWeb.API.ActorDocument
 
   def command_stage(%CommandStage{} = stage) do
     %{
@@ -20,7 +21,7 @@ defmodule CadenceWeb.API.CommandingJSON do
       mission_id: stage.mission_id,
       stage_name: stage.stage_name,
       description: stage.description,
-      owner: stage.owner,
+      owner: ActorDocument.public(stage.owner),
       visibility: Atom.to_string(stage.visibility),
       lifecycle_state: Atom.to_string(stage.lifecycle_state),
       metadata: stage.metadata
@@ -63,7 +64,7 @@ defmodule CadenceWeb.API.CommandingJSON do
       priority: request.priority,
       not_before: iso8601(request.not_before),
       expires_at: iso8601(request.expires_at),
-      requested_by: JsonDocument.encode(request.requested_by),
+      requested_by: request.requested_by |> JsonDocument.encode() |> ActorDocument.public(),
       source_command_stage_id: request.source_command_stage_id,
       source_staged_command_item_id: request.source_staged_command_item_id,
       argument_values: JsonDocument.encode(request.argument_values),
@@ -91,7 +92,7 @@ defmodule CadenceWeb.API.CommandingJSON do
       mission_id: approval.mission_id,
       command_request_id: approval.command_request_id,
       decision: Atom.to_string(approval.decision),
-      decided_by: JsonDocument.encode(approval.decided_by),
+      decided_by: approval.decided_by |> JsonDocument.encode() |> ActorDocument.public(),
       decided_at: iso8601(approval.decided_at),
       reason: approval.reason,
       metadata: JsonDocument.encode(approval.metadata)
@@ -111,7 +112,7 @@ defmodule CadenceWeb.API.CommandingJSON do
       not_before: iso8601(entry.not_before),
       expires_at: iso8601(entry.expires_at),
       lifecycle_state: Atom.to_string(entry.lifecycle_state),
-      enqueued_by: JsonDocument.encode(entry.enqueued_by),
+      enqueued_by: entry.enqueued_by |> JsonDocument.encode() |> ActorDocument.public(),
       enqueued_at: iso8601(entry.enqueued_at),
       metadata: JsonDocument.encode(entry.metadata)
     }
@@ -142,7 +143,7 @@ defmodule CadenceWeb.API.CommandingJSON do
       lifecycle_state: Atom.to_string(attempt.lifecycle_state),
       verification_state: maybe_atom_to_string(attempt.verification_state),
       failure_reason: attempt.failure_reason,
-      released_by: JsonDocument.encode(attempt.released_by),
+      released_by: attempt.released_by |> JsonDocument.encode() |> ActorDocument.public(),
       attempted_at: iso8601(attempt.attempted_at),
       released_at: iso8601(attempt.released_at),
       metadata: JsonDocument.encode(attempt.metadata)

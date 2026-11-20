@@ -51,7 +51,6 @@ defmodule CadenceWeb.ControlPlaneAccess do
       :user ->
         Map.merge(base, %{
           "user_id" => current_scope.user.user_id,
-          "user_email" => current_scope.user.email,
           "user_display_name" => current_scope.user.display_name
         })
     end

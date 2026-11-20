@@ -618,8 +618,7 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
          "kind" => "user",
          "id" => user.user_id,
          "user_id" => user.user_id,
-         "display_name" => user.display_name,
-         "email" => user.email
+         "display_name" => user.display_name
        }}
     end
   end

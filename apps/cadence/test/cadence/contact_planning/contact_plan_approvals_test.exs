@@ -14,6 +14,7 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovalsTest do
 
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Contacts.Store.ContactPlanApprovalRow
+  alias Cadence.Persistence.JsonDocument
   alias Cadence.Spacecraft
 
   @organization_id "org-contact-plan-approvals"
@@ -106,9 +107,19 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovalsTest do
              "kind" => "user",
              "id" => context.admin_scope.user.user_id,
              "user_id" => context.admin_scope.user.user_id,
-             "display_name" => context.admin_scope.user.display_name,
-             "email" => context.admin_scope.user.email
+             "display_name" => context.admin_scope.user.display_name
            }
+
+    # #466: the stored row carries the same document, with no email.
+    assert [stored_actor] =
+             Repo.all(
+               from(row in ContactPlanApprovalRow,
+                 where: row.contact_plan_id == ^plan.contact_plan_id,
+                 select: row.actor_document
+               )
+             )
+
+    assert JsonDocument.unwrap_value(stored_actor) == approval.actor_document
 
     assert approval.actor_kind == :user
     assert approval.actor_id == context.admin_scope.user.user_id

@@ -260,11 +260,11 @@ defmodule Cadence.Reads.ContactPlanOverview do
   # automatic run (`{kind: "system", name: "Cadence"}`), or nil when it isn't known (ux).
   defp actor(%{"display_name" => name}) when is_binary(name), do: %{kind: "user", name: name}
   defp actor(%{"name" => name}) when is_binary(name), do: %{kind: "user", name: name}
-  defp actor(%{"email" => email}) when is_binary(email), do: %{kind: "user", name: email}
 
   defp actor(id) when is_binary(id) do
     case Accounts.fetch_user(id) do
-      {:ok, user} -> %{kind: "user", id: id, name: user.display_name || user.email}
+      # #466: never the email (#468 adds the membership check here).
+      {:ok, user} -> %{kind: "user", id: id, name: user.display_name}
       _not_a_user -> system_actor(id)
     end
   end

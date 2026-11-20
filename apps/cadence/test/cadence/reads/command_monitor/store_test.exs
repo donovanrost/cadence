@@ -154,9 +154,11 @@ defmodule Cadence.Reads.CommandMonitor.StoreTest do
   test "literal search preserves the application's Unicode conversion and byte ordering", c do
     for {id, name, actor} <- [
           {"a", "100%_Complete\\", %{display_name: "ÉLODIE"}},
-          {"A", "İSTANBUL ΣΣ", %{email: "ΣΣ@example.test"}},
+          {"A", "İSTANBUL ΣΣ", %{display_name: "ΣΣ"}},
           {"ä", "ẞtraße", %{user_id: "ÜSER"}},
-          {"z", "OTHER", %{display_name: false, email: "Fallback"}}
+          {"z", "OTHER", %{display_name: false, user_id: "Fallback"}},
+          # #466: a request stored before #466 may hold an email; it's never the label.
+          {"e", "EMAIL ONLY", %{email: "hidden-466@example.test"}}
         ] do
       Fixtures.request!(c, id, %{
         command_name: name,
@@ -177,10 +179,17 @@ defmodule Cadence.Reads.CommandMonitor.StoreTest do
           "sstrasse",
           "üser",
           "fallback",
+          "hidden-466",
           ""
         ] do
       assert_matches(c, %{"query" => term})
     end
+
+    # #466: the email-only request is labelled "Unknown", so its email finds nothing.
+    assert {:ok, query} = CommandMonitor.admit_query(%{"query" => "hidden-466"})
+
+    assert Commands.snapshot(c.org, c.mission, filters: query, observed_at: fn -> @now end).rows ==
+             []
 
     # Exercise all translated scalar mappings in one actual database query, plus
     # context-sensitive traps which default String.downcase intentionally ignores.
