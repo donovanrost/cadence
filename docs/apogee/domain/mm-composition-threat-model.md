@@ -140,7 +140,8 @@ pin → head and assignment; head plus artifact → expansion → runtime; tenan
     - a template can't be admitted without the endpoint parameter;
     - a test proves a frame on X never selects an instance of Y.
   - Add that the runtime index (I) is built only from expanded instances, never raw templates.
-  - **Status:** met by #475, per domain and mms-engineer: a structural endpoint and the #38 test.
+  - **Status:** met by #475's design, per domain and mms-engineer: a structural endpoint and the #38
+    test. #475 was reverted (#533, after #534); re-verify on the re-land.
     mms-security to verify; I's index rule is still for I.
 - **CB-9 (high; C2): membership integrity and activation evidence.**
   - Every spacecraft in a membership must belong to the mission, checked at write.
@@ -159,7 +160,8 @@ pin → head and assignment; head plus artifact → expansion → runtime; tenan
     today's code, compares it to the approved evidence, and fails closed on a mismatch. It never
     trusts a stored expanded hash. So an expansion-code change shows up as a refused activation, never
     a silent change to what runs.
-  - **Status (verified by mms-security on develop b4a646ef8, 11-20):** met for 4a, at three points,
+  - **Status (verified by mms-security on develop b4a646ef8, 11-20, before #475's revert (#533);
+    re-verify on the re-land):** met for 4a, at three points,
     each with today's code and failing closed:
     - read: `governance.ex` `hydrate_binding_set/1` (membership form) recomputes and refuses with
       `:binding_set_expansion_mismatch`, and every reader goes through `fetch_binding_set`;
@@ -258,7 +260,8 @@ get filled in when D's records exist, since composition and binding records are 
 ## 7. Status under design D+E (#537; reviewed at 0329e5e85, approved at 88d99048a; 11-20)
 
 The conditions are the combined mms-security + ca-security set on #537. All are now in D's text
-(**Must** marked what blocked D's approval). A slice name says where each is checked as built.
+(**Must** marked what blocked D's approval). A slice name says where each is checked as built:
+D1 #541, E1 #542, D2 #543, D2c #538, D3 #544, D4 #545, E2 #546.
 Two additions in D beyond the asks:
 - api-ops: the primary import stays at '/', and a remount is an explicit re-key behind an
   acknowledged HOLD. That closes a CB-5 risk: a silent remount splitting stored identities.
@@ -275,8 +278,8 @@ Two additions in D beyond the asks:
 | CB-5 mounting | The record decides the mount; #456's grammar; `MM_MOUNT_COLLISION` | D1: the grammar, bounds and collisions refuse the record's INSERT itself, recording nothing. |
 | CB-6 authored layers | The monitoring change set's review is their approval; no second gate decision | **Must (ca-security):** that review, and acknowledging a failed composed comparison, require `:approve_mission_model`, not `:approve_activation`. J: the gate's activation check verifies the three conditions from records, not a flag. |
 | CB-7 artifact scope | 4a as built; re-lands after #534 | Met by #475's design (per-tenant). mms-security verifies against the re-landed code. |
-| CB-8 expansion | 4a; I builds from membership | Met by #475. I's index rule stays for I. |
-| CB-9 evidence | Unchanged hash meaning; three checks (read, admit, run) | Met for 4a (verified on develop b4a646ef8). #450 removes `validate_content_hash`'s computed default, which closes the open item. |
+| CB-8 expansion | 4a; I builds from membership | Met by #475's design, before its revert (#533); re-verify on the re-land. I's index rule stays for I. |
+| CB-9 evidence | Unchanged hash meaning; three checks (read, admit, run) | Met for 4a as verified on develop b4a646ef8, before #475's revert (#533); re-verify the three checks on the re-land. #450 removes `validate_content_hash`'s computed default, which closes the open item. |
 | CB-10, CB-11 audit | G and H: append-only by trigger; head atomic with its assignment row; collection locks | For G and H. |
 | CB-12 projection | H: the reader inventory first | For H. |
 | CB-13 bounds | 8 imported layers, mount depth 4; compile and expansion bounds in C/F | Met in design; D1 refuses at write. |
