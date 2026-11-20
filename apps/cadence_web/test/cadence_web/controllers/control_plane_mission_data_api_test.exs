@@ -380,7 +380,8 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
                mission_id,
                staged_command_request_id,
                %{"actor_kind" => "user", "user_id" => "reviewer-1"},
-               reason: "Reviewed for uplink"
+               reason: "Reviewed for uplink",
+               admin_mode: false
              )
 
     command_approval_id = approval.command_approval_id
@@ -465,6 +466,27 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
                }
              }
            } = json_response(noop_queue_entry_conn, 200)
+
+    # #117 step 4b (api-ops on #639): the release recorded not_required in the four-eyes record,
+    # but the REST approvals read doesn't show it: decision stays approved | rejected there.
+    assert Enum.any?(
+             Cadence.Commanding.ApprovalDecisions.decisions(organization_id),
+             &(&1.decision == :not_required and &1.subject.id == "command-request-noop")
+           )
+
+    for params <- [%{"command_request_id" => "command-request-noop"}, %{}] do
+      approvals_conn =
+        conn
+        |> authorize(api_token)
+        |> get(
+          "/api/organizations/#{organization_id}/missions/#{mission_id}/command_approvals",
+          params
+        )
+
+      assert %{"data" => approvals} = json_response(approvals_conn, 200)
+      assert Enum.all?(approvals, &(&1["decision"] in ["approved", "rejected"]))
+      refute Enum.any?(approvals, &(&1["command_request_id"] == "command-request-noop"))
+    end
 
     command_queue_entries_conn =
       conn

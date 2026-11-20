@@ -15,7 +15,13 @@ defmodule Cadence.Management.Commanding.RequestReview do
          {:ok, _} <- Ids.path_segment(request),
          {:ok, decision, reason, review} <- admit(input) do
       actor = %{"actor_kind" => "user", "user_id" => fresh.user.user_id}
-      opts = Keyword.merge(opts, reason: reason, expected_review: review)
+      # #117 step 4b: the record's admin_mode, from the reviewer's own scope.
+      opts =
+        Keyword.merge(opts,
+          reason: reason,
+          expected_review: review,
+          admin_mode: fresh.admin_mode? == true
+        )
 
       result =
         case decision do
