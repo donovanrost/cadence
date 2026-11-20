@@ -80,6 +80,9 @@ describe("the send words", () => {
       requestId: "req-1",
     });
     expect(sendOutcome({ state: "active" }, s).text).toBe("v4 is active on EARENDIL-004.");
+    expect(sendOutcome({ state: "needs_review" }, s).text).toBe(
+      "v4 is approved, but Cadence couldn't confirm it was applied yet.",
+    );
     expect(
       reviewLine(snap({ review: { id: "r1", state: "stale", requester_id: "u1", version: 4 } })),
     ).toBe(
@@ -123,6 +126,9 @@ describe("the send words", () => {
       text: "Not sent.",
       code: "activation_self_approval_forbidden",
     });
+    expect(
+      sendRefusal({ kind: "forbidden", code: "forbidden", message: "x", details: null }, s).text,
+    ).toBe("Not sent: you can't activate configurations on this mission.");
     expect(sendRefusal(refused("brand_new_code"), s)).toEqual({
       text: "Not sent.",
       code: "brand_new_code",
@@ -147,6 +153,23 @@ describe("sending", () => {
     await s.send();
     expect(submit.fn.mock.calls[0]?.slice(1)).toEqual(["t-1", "p-1", "review"]);
     expect(s.outcome.value?.requestId).toBe("req-1");
+    expect(refetch).toHaveBeenCalled();
+  });
+
+  it("says it isn't confirmed, never 'Not sent' or 'approved', when the answer can't be read", async () => {
+    submit.fn.mockResolvedValue({
+      ok: false,
+      error: { kind: "malformed", message: "unknown state" },
+    });
+    const refetch = vi.fn();
+    const s = useSend(key, () => snap(), refetch);
+    await s.send();
+    expect(s.failure.value).toBeNull();
+    expect(s.outcome.value).toEqual({
+      tone: "caution",
+      text: "Cadence hasn't confirmed what happened to v4. Reload to see it.",
+      requestId: null,
+    });
     expect(refetch).toHaveBeenCalled();
   });
 

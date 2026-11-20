@@ -55,23 +55,37 @@ export type SendOutcome = Readonly<{
   requestId: string | null;
 }>;
 
-/** U94's results, by submit's `state`. */
+/** U94's results, by submit's `state`; each state its own line (mms-ux on #629). */
 export function sendOutcome(r: SubmitResult, s: ConfigurationSnapshot): SendOutcome {
   const v = vWord(s);
-  if (r.state === "approval_pending")
-    return {
-      tone: "info",
-      text: `Sent for approval. Another person approves ${v} in Setup › Changes.`,
-      requestId: r.request_id,
-    };
-  if (r.state === "active")
-    return { tone: "nominal", text: `${v} is active on ${s.name}.`, requestId: null };
-  return {
-    tone: "caution",
-    text: `${v} is approved, but Cadence couldn't confirm it was applied yet.`,
-    requestId: s.review?.id ?? null,
-  };
+  switch (r.state) {
+    case "approval_pending":
+      return {
+        tone: "info",
+        text: `Sent for approval. Another person approves ${v} in Setup › Changes.`,
+        requestId: r.request_id,
+      };
+    case "active":
+      return { tone: "nominal", text: `${v} is active on ${s.name}.`, requestId: null };
+    case "needs_review":
+      return {
+        tone: "caution",
+        text: `${v} is approved, but Cadence couldn't confirm it was applied yet.`,
+        requestId: s.review?.id ?? null,
+      };
+  }
 }
+
+/**
+ * U20 (#419; mms-ux on #629): a send whose outcome isn't known (an answer the console can't read,
+ * a state it doesn't know, a dropped connection, a 5xx) may have gone through, so it never says
+ * "Not sent" or claims an approval.
+ */
+export const unconfirmedOutcome = (s: ConfigurationSnapshot): SendOutcome => ({
+  tone: "caution",
+  text: `Cadence hasn't confirmed what happened to ${vWord(s)}. Reload to see it.`,
+  requestId: null,
+});
 
 /** U94: the request's state in the workspace, with `Open request` (U29); null when none. */
 export function reviewLine(s: ConfigurationSnapshot): string | null {
@@ -177,7 +191,9 @@ export function sendRefusal(e: ApiError, s: ConfigurationSnapshot): SendRefusal 
       text: `${craft} has more packet sources than one configuration can carry, so it can't be shown or sent. Remove some in Setup › Comms.`,
     };
   if (isError(e, "spacecraft_not_found")) return { text: "This spacecraft isn't on this mission." };
-  if (e.kind === "forbidden") return { text: `You can't change ${craft}'s configuration.` };
+  // mms-ux on #629: a 403 on send opens with its act.
+  if (e.kind === "forbidden")
+    return { text: "Not sent: you can't activate configurations on this mission." };
   const code = codeOf(e);
   return code ? { text: "Not sent.", code } : { text: "Not sent." };
 }

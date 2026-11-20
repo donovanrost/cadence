@@ -1,9 +1,11 @@
 import { ref, shallowRef, type Ref } from "vue";
+import { outcomeUnknown } from "@/api/index.ts";
 import { submitWorkspace, type ConfigurationSnapshot, type WorkspaceKey } from "./api.ts";
 import {
   needsApproval,
   sendOutcome,
   sendRefusal,
+  unconfirmedOutcome,
   type SendOutcome,
   type SendRefusal,
 } from "./send-words.ts";
@@ -34,6 +36,10 @@ export function useSend(
       const r = await submitWorkspace(k, s.token, s.approval.policy_token, intent);
       if (r.ok) {
         outcome.value = sendOutcome(r.value, s);
+        refetch();
+      } else if (outcomeUnknown(r.error)) {
+        // It may have gone through (an unknown state reads as unreadable): say so, and re-read.
+        outcome.value = unconfirmedOutcome(s);
         refetch();
       } else failure.value = sendRefusal(r.error, s);
     } finally {
