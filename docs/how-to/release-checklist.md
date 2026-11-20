@@ -53,7 +53,8 @@ Run before deploying a branch to an environment. Each line names why it exists.
 
 8. **No replay of telemetry ingested before identity v2** without a decision (DECISIONS #83);
    replaying it would give new identities next to the old ones.
-9. **Smoke:** sign-in, Now loads, one contact's telemetry arrives with distinct receipt times, and
-   `persistence_failed` stays at 0.
+9. **Smoke:** sign-in, Now loads, one contact's telemetry arrives with each frame stored once under
+   its own identity, and `persistence_failed` stays at 0. Receipt times can tie: a receipt time is
+   stamped per socket read, so frames from one read share it (#491).
 
 Add a line here whenever a release note says "before deploying" or "after deploying".

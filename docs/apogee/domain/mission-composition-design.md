@@ -199,7 +199,13 @@ migration reuses the existing rows.
 - **The gated unit is unchanged:** the effective revision, via the existing `ModelApprovalGate`.
 - **Approving a composition = approving its base effective revision** (authored head `nil`).
   It's the same `RevisionDecisions.approve` flow, with three changes:
-  - the catalog-row requirement is replaced by "a composition names this revision";
+  - a composition must name this revision, **and every imported layer must be carried by an
+    import revision a catalog revision names** (as built in E1, #567; ca-security confirmed). That's
+    the interim catalog-named guard applied per layer, not dropped: under D1 a reimport (a run with
+    no catalog revision) also gets its own one-layer composition, and dropping the guard would let
+    the file's original importer approve it, since a reimport counts only whoever ran it. For an
+    import's own one-layer composition it's exactly the old rule. The refusal keeps
+    `:mission_model_revision_not_in_catalog`;
   - **importers** become the union of the importers of every imported layer's catalog revision
     (`Catalog.model_importers` per layer), so separation covers every imported layer;
   - the comparison runs on the composed revision;
