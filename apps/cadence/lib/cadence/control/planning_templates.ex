@@ -50,14 +50,13 @@ defmodule Cadence.Control.PlanningTemplates do
           ContactRequirementTemplates.list_versions(organization_id, mission_id, template_id)
 
         people = MemberNames.members(organization_id, actor_ids(template, listed))
-        versions = Enum.map(listed, &version_row(&1, people))
 
         {:ok,
          template
          |> row(version, names)
          |> Map.merge(%{
            document: document(version),
-           versions: versions,
+           versions: Enum.map(listed, &version_row(&1, people)),
            state_changed: state_changed(template, people)
          })}
 
@@ -130,9 +129,7 @@ defmodule Cadence.Control.PlanningTemplates do
   defp reason(_reason), do: {:error, {:invalid_params, %{reason: "Say why."}}}
 
   # The last lifecycle move a person made; creating and versioning record system reasons.
-  defp state_changed(%{lifecycle_reason: reason}, _people)
-       when reason in [nil, "created", "versioned"],
-       do: nil
+  defp state_changed(%{lifecycle_reason: r}, _) when r in [nil, "created", "versioned"], do: nil
 
   defp state_changed(template, people) do
     %{
@@ -395,14 +392,9 @@ defmodule Cadence.Control.PlanningTemplates do
   defp actor_ids(template, versions),
     do: Enum.filter([template.lifecycle_changed_by | Enum.map(versions, & &1.created_by)], & &1)
 
-  # #146 (#468): a person is named, and keeps their id, only as an active member of the mission's
-  # organization (one lookup per read); anyone else reads id and name nil, never an email.
-  defp actor(user_id, people) do
-    case Map.fetch(people, user_id) do
-      {:ok, name} -> %{kind: "user", id: user_id, name: name}
-      :error -> %{kind: "user", id: nil, name: nil}
-    end
-  end
+  # #146 (#468): only an active member is named and keeps their id; never an email.
+  defp actor(id, p) when is_map_key(p, id), do: %{kind: "user", id: id, name: p[id]}
+  defp actor(_id, _people), do: %{kind: "user", id: nil, name: nil}
 
   defp expected_version(n) when is_integer(n) and n > 0, do: {:ok, n}
   defp expected_version(_n), do: {:error, {:invalid_params, %{expected_version: "is required"}}}
