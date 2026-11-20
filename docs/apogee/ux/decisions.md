@@ -4055,13 +4055,12 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
     it. An org admin who can do everything it allows approves it. Your approval wasn't recorded."
   - No list of what's beyond them: the 403 carries none (U20), so the lines don't name it. With no name, "the service
     identity this grant is for" replaces "Nightly planner".
-- **Revoke** stays one act, at once, with a reason, even while a widening of the same grant is proposed. The reason is
-  the console's rule (ux, #514): the server no longer requires one, and for a one-person tightening the reason is the
-  only record of why. So `Revoke` stays disabled with "Give a reason first." (A7) until there's one; no 422 is behind
-  it. If one is,
+- **Revoke** stays one act, at once, with a reason, even while a widening of the same grant is proposed. If a widening is proposed,
   the revoke sheet adds: "This also withdraws the proposal waiting for approval, so it can't switch automation
   back on later." (A widening proposal records `replaces_grant_id`; revoking that grant withdraws it in the same
-  transaction.)
+  transaction.) The reason is the console's rule (ux, #514): the server no longer requires one, and for a one-person
+  tightening the reason is the only record of why. So `Revoke` stays disabled with "Give a reason first." (A7) until
+  there's a reason; no 422 is behind it.
 - **A grant made before Cadence checked grants against the approval setting** (#497; the row's
   `issued_before_two_person_approval: true`) can only be revoked. Never "legacy" or "two-person" on screen, and not
   "before grants needed a second person's approval", which isn't true on a mission set to "Applies without approval"
@@ -4174,8 +4173,9 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
   - Reject on a grant no longer proposed: "Not rejected: this grant was already approved, so nothing changed. Reload
     to see it." (likewise expired and withdrawn).
   - `grant_changed` on Approve: "Not approved: this grant changed after you opened it. Your approval wasn't
-    recorded. Reload to see it."; Narrow or Revoke on a grant no longer active: "Not narrowed (revoked): this grant
-    isn't active any more, so nothing changed. Reload to see it."; an unknown narrow code: "Not narrowed: Cadence
+    recorded. Reload to see it."; Narrow or Revoke on a grant no longer active: "Not narrowed: this grant isn't active
+    any more, so nothing changed. Reload to see it." / "Not revoked: this grant isn't active any more, so nothing
+    changed. Reload to see it."; an unknown narrow code: "Not narrowed: Cadence
     refused this change, so nothing changed." with the code in Technical details.
   - A proposer with no name: the clause drops ("Proposed at 11-19 06:40Z · decide by …").
 - **Widening** (more actions, more services, longer validity) is a new proposal, worded as the sheet above.
