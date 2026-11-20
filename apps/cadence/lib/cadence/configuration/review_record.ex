@@ -120,30 +120,43 @@ defmodule Cadence.Configuration.ReviewRecord do
       decided_at: DateTime.utc_now(),
       subject_version: set.version,
       subject_digest: Map.fetch!(record, :digest),
-      policy_document: set.policy_document || %{},
-      separated_from: Map.get(record, :separated_from, []),
-      admin_mode: Map.get(record, :admin_mode, false) == true
+      policy_document: policy!(set),
+      separated_from: Map.fetch!(record, :separated_from),
+      admin_mode: boolean!(Map.fetch!(record, :admin_mode))
     })
   end
 
   @doc """
   The landing guard (domain, DECISIONS #112): refuses, before any DDL, while mission_config_reviews
-  has rows, since an append-only row can never get the required fields. Migration 20261121090000
+  or mission_config_revisions has rows, since an append-only row can never get the required
+  fields. Migration 20261121090000
   runs it; its test runs it directly.
   """
   @spec landing_guard_sql() :: binary()
   def landing_guard_sql do
     """
     DO $$
-    DECLARE reviews bigint;
+    DECLARE reviews bigint; revisions bigint;
     BEGIN
       SELECT count(*) INTO reviews FROM mission_config_reviews;
-      IF reviews > 0 THEN
-        RAISE EXCEPTION 'mission_config_reviews has % row(s): #117 step 2 adds required fields an append-only row can''t get. Remedy: a dev reset, or the reset''s designed decision-record purge, then run again (domain, DECISIONS #112). Never a trigger-disabled DELETE.', reviews;
+      SELECT count(*) INTO revisions FROM mission_config_revisions;
+      IF reviews > 0 OR revisions > 0 THEN
+        RAISE EXCEPTION 'mission_config_reviews has % row(s), mission_config_revisions has % row(s): #117 step 2 adds required fields an append-only row can''t get. Remedy: a dev reset, or the reset''s designed decision-record purge, then run again (domain, DECISIONS #112). Never a trigger-disabled DELETE.', reviews, revisions;
       END IF;
     END $$;
     """
   end
+
+  # domain on #616: no silent defaults. Every decision runs under a stored policy and a known mode.
+  defp policy!(%{policy_document: %{} = policy}), do: policy
+
+  defp policy!(set),
+    do: raise(ArgumentError, "change set #{set.change_set_id} has no policy_document to record")
+
+  defp boolean!(value) when is_boolean(value), do: value
+
+  defp boolean!(value),
+    do: raise(ArgumentError, "admin_mode must be a boolean, got #{inspect(value)}")
 
   @impl true
   def decisions(organization_id, opts \\ []) do
@@ -151,7 +164,7 @@ defmodule Cadence.Configuration.ReviewRecord do
     |> where([row], row.organization_id == ^organization_id)
     |> before(Keyword.get(opts, :before))
     |> order_by([row], desc: row.decided_at, desc: row.review_id)
-    |> limit(^Keyword.get(opts, :limit, @limit))
+    |> limit(^min(Keyword.get(opts, :limit, @limit), @limit))
     |> Repo.all()
     |> Enum.map(&record/1)
   end

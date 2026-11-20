@@ -5,7 +5,7 @@ defmodule Cadence.Configuration.ChangeSetReviewRecordTest do
   (version and the digest of the ops it decided, which the apply asserts), its policy, the ids the
   separation check compared (#599), and admin_mode. A direct apply writes its own not_required
   row in the apply's transaction. Revisions record submitted_by, and applied_by is whoever ran
-  the apply. The landing guard refuses while review rows exist.
+  the apply. (The landing guard: ChangeSetReviewLandingGuardTest.)
   """
   use Cadence.RuntimeCase, async: false
 
@@ -179,20 +179,6 @@ defmodule Cadence.Configuration.ChangeSetReviewRecordTest do
       ReviewRecord.decisions(c.org, before: {first.decided_at, review_id_of(first)}, limit: 1)
 
     assert [^second] = page
-  end
-
-  test "the landing guard refuses while any review row exists, before any DDL", c do
-    assert {:ok, _} = Repo.query(ReviewRecord.landing_guard_sql())
-
-    # One real row: a direct apply's not_required record.
-    {:ok, staged} = stage(c, [switch_op(c.craft.spacecraft_id, "commanding_enabled", false)])
-    assert {:ok, %{state: :applied}} = submit(c, staged)
-
-    assert {:error, %Postgrex.Error{postgres: %{message: message}}} =
-             Repo.query(ReviewRecord.landing_guard_sql())
-
-    assert message =~ "mission_config_reviews has 1 row(s)"
-    assert message =~ "dev reset"
   end
 
   defp review_id_of(%DecisionRecord{} = record) do
