@@ -95,6 +95,15 @@ describe("model_approval_withdrawn row (U109)", () => {
     );
   });
 
+  it("a craft it can't name is 'Unknown spacecraft', and its button 'Open spacecraft' (ux on #632)", () => {
+    const [row] = rows([{ ...item(withdrawal()), spacecraft: [{ ...craft, name: "" }] }]);
+    expect(row?.title).toBe("Unknown spacecraft · On catalog rev 4, which is no longer approved.");
+    expect(row?.action).toEqual({
+      label: "Open spacecraft",
+      to: { name: "ops.spacecraft", params: { scId: 4, tab: "investigate" } },
+    });
+  });
+
   it("rejected, nameless and reasonless forms", () => {
     const line = (x: Record<string, unknown>) => rows([item(withdrawal(x))])[0]?.sentence;
     expect(line({ kind: "rejected" })).toBe("Rejected by Ana R. at 11-20 09:12Z: “Bad limits”.");

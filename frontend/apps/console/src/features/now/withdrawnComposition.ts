@@ -56,7 +56,9 @@ export function withdrawnRow(
   const w = a.withdrawal;
   if (!w) return null;
   const name = compositionName(w.composition, w.catalog_revision);
-  const who = craft?.name ?? "A spacecraft";
+  // ux on #632 (U25): a craft the console can't name is "Unknown spacecraft", never its id.
+  const named = craft?.name?.trim() || null;
+  const who = named ?? "Unknown spacecraft";
   const out = wayOut(name, w.earlier_approved);
   const to: RouteLocationRaw | null = craft
     ? { name: "ops.spacecraft", params: { scId: craft.scid, tab: "investigate" } }
@@ -69,7 +71,7 @@ export function withdrawnRow(
     sentence: [decisionLine(w), out].filter(Boolean).join(" "),
     meta: null,
     action: to
-      ? { label: `Open ${who}`, to }
+      ? { label: named ? `Open ${named}` : "Open spacecraft", to }
       : { label: "Open spacecraft", to: { name: "ops.fleet" } },
   };
 }

@@ -6,6 +6,7 @@ import { checkLabel, checkRows, holdReason } from "./checks.ts";
 import {
   compositionName,
   craftList,
+  decisionLine,
   holdOneLine,
   holdPlaceholder,
   holdSeveralLine,
@@ -63,6 +64,20 @@ describe("the Composition HOLD's lines (U109)", () => {
     ).toBe(
       "EARENDIL-004 is on composition 3, which was rejected at 11-20 09:12Z. Acknowledge the HOLD to send this request to EARENDIL-004 anyway.",
     );
+  });
+
+  it("a decision kind it doesn't know reads neutrally, never as withdrawn (ca-ux on #632)", () => {
+    // As the reader decodes it: knownText gives an unknown kind as { unrecognized }.
+    const x = {
+      kind: { unrecognized: "suspended" },
+      decided_by: null,
+      decided_at: at,
+      reason: "x",
+    };
+    expect(one(x)).toBe(
+      "EARENDIL-004 is on composition 3, which is no longer approved since 11-20 09:12Z. Acknowledge the HOLD to send this request to EARENDIL-004 anyway.",
+    );
+    expect(decisionLine(x)).toBe("No longer approved since 11-20 09:12Z.");
   });
 
   it("counts several targets, three names then 'and N more'", () => {

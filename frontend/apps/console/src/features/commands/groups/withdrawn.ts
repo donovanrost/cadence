@@ -1,4 +1,4 @@
-import { decoders as d, orNull, type Decoded } from "@/api/index.ts";
+import { decoders as d, isKnown, orNull, type Decoded } from "@/api/index.ts";
 import {
   compositionInSentence,
   compositionKey,
@@ -57,11 +57,17 @@ const why = (reason: string | null | undefined) => {
   return r ? `: “${r.replace(/[.!?]+$/, "")}”` : "";
 };
 const rejected = (x: Decision) => x.kind === "rejected";
+/** ca-ux on #632: a decision kind this console doesn't know reads neutrally, never as withdrawn. */
+const unknownKind = (x: Decision) => x.kind != null && !isKnown(x.kind);
+const since = (iso: string | null | undefined) =>
+  iso ? ` since ${formatShort(new Date(iso))}` : "";
 const byName = (x: Decision) => x.decided_by?.name?.trim() || null;
 
 /** The HOLD's one-target line (U109). */
 export function holdOneLine(craft: string, name: string, x: Decision): string {
   const by = byName(x);
+  if (unknownKind(x))
+    return `${craft} is on ${name}, which is no longer approved${since(x.decided_at)}. Acknowledge the HOLD to send this request to ${craft} anyway.`;
   const what = rejected(x)
     ? by
       ? `which ${by} rejected${at(x.decided_at)}`
@@ -89,6 +95,7 @@ export const holdPlaceholder = (held: number) =>
 
 /** The attention row's decision line, without its way out (U109). */
 export function decisionLine(x: Decision): string {
+  if (unknownKind(x)) return `No longer approved${since(x.decided_at)}.`;
   const by = byName(x);
   const head = rejected(x) ? "Rejected" : "Approval withdrawn";
   return `${head}${by ? ` by ${by}` : ""}${at(x.decided_at)}${why(x.reason)}.`;
