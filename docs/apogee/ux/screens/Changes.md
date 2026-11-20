@@ -21,18 +21,18 @@ staged bar appears or updates, with a one-time 2s `raised` wash on the bar. No t
 
 | Surface | Stage CTA | Staged change summary (bar + list) |
 | --- | --- | --- |
-| Profile field edit (P1) + P4 aside | `Stage edit` | `Block 1 · framing.tm_frame_length 1,115 → 1,279 · 499 SC` |
+| Profile field edit (P1) + P4 aside | `Stage edit` | `Block 1 · framing.tm_frame_length 1,115 → 1,279 · 499 spacecraft` |
 | Profile routing rule (P2) | `Stage rule change` | `Block 1 · routing adds INU · +500 routes` |
 | Override reset (P3 `Reset`) | `Stage reset` | `EARENDIL-047 · reset VBAT red limit to profile` |
 | Add spacecraft (S2) | `Stage 50 spacecraft` | `50 new spacecraft (Block 2)` |
-| Catalog rollout (S3 C3) | `Stage rev 15 for Block 2` | `Catalog rev 15 → Block 2 · 50 SC` |
+| Catalog rollout (S3 C3) | `Stage rev 15 for Block 2` | `Catalog rev 15 → Block 2 · 50 spacecraft` |
 | Station, transport, data source, app setting edits | `Stage change` | `Svalbard · antenna 2 disabled` |
 Fields with a staged edit render the Profile board's edited state everywhere they appear: inset
 3px white left bar, `raised` bg, label suffix `· staged`, old value struck in mono `text-4`, new
 value in the input. Panel meta counts them: `INHERITED BY 500 · 1 EDIT STAGED`.
 
 **P4 Staged edit aside** (shown while a field is dirty and not yet staged): field path (mono),
-`− old` (crit-text) / `+ new` (nominal-text) lines, tiles `Changes 499 SC` / `Keeps 1 SC`, checks
+`− old` (crit-text) / `+ new` (nominal-text) lines, tiles `Changes 499 spacecraft` / `Keeps 1 spacecraft`, checks
 as callouts (caution "1,279-byte frames need flight software 3.2. **0 of 499** run it today…"),
 the keeps explanation ("EARENDIL-389 keeps its pinned 1,115 override"), primary `Stage edit`,
 secondary `Discard`. Effect counts come from the server (dry-run), not computed in the browser.
@@ -71,9 +71,9 @@ STAGED · NOT APPLIED   2 changes: 50 new spacecraft (Block 2), catalog rev 15 �
 lbl "EARENDIL · STAGED CHANGES"
 h1 "Apply r6 · 2 changes"                                  base r5 · staged 14:02Z–14:40Z
 ┌ K1 Changes (flex 999) ─────────────────────────────┐ ┌ K3 Apply (aside, sticky) ───────┐
-│ ▸ 50 new spacecraft (Block 2)       Mira K.    [×] │ │ tiles: Changes 2 · SC 549 · Routes +300
+│ ▸ 50 new spacecraft (Block 2)       Mira K.    [×] │ │ tiles: Changes 2 · Spacecraft 549 · Routes +300
 │   diff: table of the 50 + routes                   │ │ Readiness after: 0 blockers (=) │
-│ ▸ Catalog rev 15 → Block 2 · 50 SC  Mira K.    [×] │ │ Why (required textarea)         │
+│ ▸ Catalog rev 15 → Block 2 · 50 spacecraft  Mira K.    [×] │ │ Why (required textarea)         │
 ├ K2 Checks (GO / NO-GO poll) ───────────────────────┤ │ [Apply as r6]  (commit, 46px)   │
 │ Conflicts · Readiness · In flight · Compatibility  │ │ [Request review] (policy)       │
 └────────────────────────────────────────────────────┘ └─────────────────────────────────┘
@@ -113,17 +113,18 @@ h1 "Apply r6 · 2 changes"                                  base r5 · staged 14
     someone else." / "Checks couldn't run: the connection dropped." / "Checks ran, but the server's reply wasn't
     understood."
     - The first load, with no previous check, still reads `Running checks…`.
-- **K3 Apply aside:** tiles Changes · SC · Routes (changes, resulting fleet size, routes delta) and the readiness
+- **K3 Apply aside:** tiles Changes · Spacecraft · Routes (changes, resulting fleet size, routes delta) and the readiness
   delta line; the authors are a meta line, not a tile (ux, audit K9: four-eyes needs them). Words (ca-ux 11-20,
   from the preview's `outcome`, #522):
-  - `SC`: the fleet after applying (`outcome.spacecraft.after`), "549". `Routes`: the usable routes added minus
+  - `Spacecraft` (U102: the word, never "SC"): the fleet after applying (`outcome.spacecraft.after`), "549". `Routes`: the usable routes added minus
     removed, "+300", "−50", "0", or both when both are nonzero, "+300 −50" (counts with separators). Routes are the
     per-spacecraft routes a profile's rules generate, never the rules.
   - Readiness line: "Readiness after: 0 blockers (no change) · 2 cautions (no change) · 0 not set up (was 1)".
     Blockers always; caution, stale and not set up only when nonzero now or after; each change in words, never
     "(=)".
-  - `outcome` null (the pipeline halted, or a read failed): the Changes tile alone, no readiness line, and nothing
-    saying "unknown".
+  - `outcome` null (the pipeline halted, or a read failed): the tiles stay, `Spacecraft —` and `Routes —`, and in
+    place of the readiness line the muted "Cadence couldn't work out these changes' effect on the fleet and its
+    readiness. The checks still run." (ux: never drop the tiles silently).
   - Authors, muted under the tiles: "Staged by you, Mira K. and 2 more". The viewer first as "you"; a service with
     "(a service identity)" (U103); nameless people drop from the names but count; up to 3, then "and N more"; nobody
     named, "Staged by 2 people". Never an id. **Why** textarea
