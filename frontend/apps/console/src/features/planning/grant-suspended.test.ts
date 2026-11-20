@@ -52,6 +52,15 @@ describe("the suspended row line (U105)", () => {
     expect(suspendedLine(suspended(), null)).toMatch(/ A second org admin resumes it\.$/);
   });
 
+  it("still says who resumes it when the suspension record is missing (ca-ux on #565)", () => {
+    expect(suspendedLine(suspended({ suspension: null }), "independent")).toBe(
+      "Suspended. A second org admin resumes it.",
+    );
+    expect(suspendedLine(suspended({ suspension: null }), "direct")).toBe(
+      "Suspended. An org admin resumes it.",
+    );
+  });
+
   it("drops who when the saver isn't named", () => {
     const g = suspended({ suspension: suspension({ by: { kind: "user", id: null, name: null } }) });
     expect(suspendedLine(g, "independent")).toBe(
@@ -98,6 +107,17 @@ describe("Resume… up front (A6, the server's flags only)", () => {
     expect(blocked("something_new")).toEqual({
       text: "You can't resume this grant, so another org admin resumes it.",
       code: "something_new",
+    });
+  });
+
+  it("words policy_changed as the setting's change, never the viewer's refusal (ca-ux on #565)", () => {
+    expect(
+      resumeOffer(suspended({ viewer_can_decide: false, cannot_decide_because: "policy_changed" })),
+    ).toEqual({
+      kind: "act",
+      blocked: {
+        text: "The mission's approval setting changed after this grant was suspended, so who can resume it may have changed. Reload to see it.",
+      },
     });
   });
 

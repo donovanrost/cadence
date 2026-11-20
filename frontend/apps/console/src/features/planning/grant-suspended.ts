@@ -22,15 +22,17 @@ function whose(level: NonNullable<Grant["suspension"]>["level"]): string {
  * unread setting gives the stricter form).
  */
 export function suspendedLine(g: Grant, setting: Grants["approval_setting"]): string | null {
+  if (g.state !== "suspended") return null;
   const s = g.suspension;
-  if (g.state !== "suspended" || s === null) return null;
+  const resumes =
+    setting === "direct" ? "An org admin resumes it." : "A second org admin resumes it.";
+  // ca-ux on #565: without a suspension record the line still says who resumes it.
+  if (s === null) return `Suspended. ${resumes}`;
   const by = named(s.by);
   const what = whose(s.level);
   const head = by
     ? `Suspended when ${by} changed ${what} to ${TIGHTER} at ${when(s.at)}.`
     : `Suspended when ${what} changed to ${TIGHTER} at ${when(s.at)}.`;
-  const resumes =
-    setting === "direct" ? "An org admin resumes it." : "A second org admin resumes it.";
   return `${head} ${resumes}`;
 }
 
@@ -97,8 +99,13 @@ export function resumeOffer(g: Grant): ResumeOffer {
         },
       };
     case "policy_changed":
-      // U105 gives no resume words for it; it reads as a reason the console doesn't word.
-      return { kind: "act", blocked: { text: CANT, code: why } };
+      // ca-ux on #565: not the viewer's doing, so it doesn't read as their refusal.
+      return {
+        kind: "act",
+        blocked: {
+          text: "The mission's approval setting changed after this grant was suspended, so who can resume it may have changed. Reload to see it.",
+        },
+      };
   }
 }
 
