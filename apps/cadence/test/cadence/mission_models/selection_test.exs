@@ -99,6 +99,32 @@ defmodule Cadence.MissionModels.SelectionTest do
     assert Enum.uniq(answers) == [{:ok, a}]
   end
 
+  test "ranked/3: every link newest first, with status; select/4 is its first approved runnable",
+       c do
+    CompositionFixtures.approve!(c.revision_id)
+    candidate = compile!(c, "3")
+    CompositionFixtures.set_status!([candidate], "candidate")
+    old = compile!(c, "1")
+    CompositionFixtures.approve!(old)
+
+    runnable = ["1", "2", "3"]
+    links = Selection.ranked(c.org, c.mid, c.composition_id, runnable: runnable)
+
+    assert Enum.map(links, &{&1.compiler_version, &1.status}) ==
+             [{"3", "candidate"}, {"2", "approved"}, {"1", "approved"}]
+
+    # #577: the newer candidate is the one ahead of the selection in this same order.
+    assert {:ok, selected} = pick(c, runnable: runnable)
+    assert selected == c.revision_id
+    [%{revision_id: ^candidate} | _] = links
+
+    # An unrunnable link sorts after the runnable ones and is marked so.
+    assert [%{compiler_version: "1", runnable: false} | _] =
+             c.org
+             |> Selection.ranked(c.mid, c.composition_id, runnable: ["2", "3"])
+             |> Enum.reverse()
+  end
+
   test "every runnable version has a stored revision whose plans this runtime decodes", c do
     for version <- Selection.runnable() do
       assert %RevisionRow{revision_id: id} =

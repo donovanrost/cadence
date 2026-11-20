@@ -36,35 +36,58 @@ defmodule Cadence.MissionModels.Selection do
 
   @doc """
   The revision `composition_id` runs: `{:ok, revision_id}`; `{:error, :reapproval_needed}` when
-  only revisions this server can't run are approved; else `{:error, :not_approved}`.
+  only revisions this server can't run are approved; else `{:error, :not_approved}`. It's the first
+  approved, runnable link of `ranked/3`.
 
   `opts[:runnable]` replaces the list (tests only).
   """
   @spec select(binary(), binary(), binary(), keyword()) ::
           {:ok, binary()} | {:error, :not_approved | :reapproval_needed}
   def select(organization_id, mission_id, composition_id, opts \\ []) do
-    runnable = Keyword.get(opts, :runnable, @runnable)
-    approved = approved_links(organization_id, mission_id, composition_id)
+    links = ranked(organization_id, mission_id, composition_id, opts)
 
-    case Enum.filter(approved, &(&1.compiler_version in runnable)) do
-      [] when approved != [] ->
-        {:error, :reapproval_needed}
+    case Enum.find(links, &(&1.status == "approved" and &1.runnable)) do
+      %{revision_id: revision_id} ->
+        {:ok, revision_id}
 
-      [] ->
-        {:error, :not_approved}
-
-      candidates ->
-        {:ok, candidates |> Enum.max_by(&order(&1, runnable)) |> Map.fetch!(:revision_id)}
+      nil ->
+        if Enum.any?(links, &(&1.status == "approved")),
+          do: {:error, :reapproval_needed},
+          else: {:error, :not_approved}
     end
   end
 
-  # Larger is newer: list position, then link time, then revision id (a total order).
+  @doc """
+  Every link of `composition_id` (NULL head), newest first in the selection's own order, with its
+  revision's status and whether this server runs it: a reader (#577's "a newer compile awaits
+  approval") finds the candidate in the same order `select/4` picks from. Runnable versions come
+  by list position, unrunnable ones after them.
+  """
+  @spec ranked(binary(), binary(), binary(), keyword()) :: [
+          %{
+            revision_id: binary(),
+            compiler_version: binary(),
+            linked_at: DateTime.t(),
+            status: binary(),
+            runnable: boolean()
+          }
+        ]
+  def ranked(organization_id, mission_id, composition_id, opts \\ []) do
+    runnable = Keyword.get(opts, :runnable, @runnable)
+
+    organization_id
+    |> links(mission_id, composition_id)
+    |> Enum.map(&Map.put(&1, :runnable, &1.compiler_version in runnable))
+    |> Enum.sort_by(&order(&1, runnable), :desc)
+  end
+
+  # Larger is newer: list position (unrunnable: -1), then link time, then revision id (total).
   defp order(link, runnable),
     do:
-      {Enum.find_index(runnable, &(&1 == link.compiler_version)),
-       DateTime.to_unix(link.inserted_at, :microsecond), link.revision_id}
+      {Enum.find_index(runnable, &(&1 == link.compiler_version)) || -1,
+       DateTime.to_unix(link.linked_at, :microsecond), link.revision_id}
 
-  defp approved_links(organization_id, mission_id, composition_id) do
+  defp links(organization_id, mission_id, composition_id) do
     from(link in EffectiveRevisionRow,
       join: revision in RevisionRow,
       on:
@@ -72,12 +95,12 @@ defmodule Cadence.MissionModels.Selection do
           revision.mission_id == link.mission_id and revision.revision_id == link.revision_id,
       where:
         link.organization_id == ^organization_id and link.mission_id == ^mission_id and
-          link.composition_id == ^composition_id and is_nil(link.authored_head) and
-          revision.status == "approved",
+          link.composition_id == ^composition_id and is_nil(link.authored_head),
       select: %{
         revision_id: link.revision_id,
         compiler_version: link.compiler_version,
-        inserted_at: link.inserted_at
+        linked_at: link.inserted_at,
+        status: revision.status
       }
     )
     |> Repo.all()
