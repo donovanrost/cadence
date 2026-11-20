@@ -12,6 +12,7 @@ import {
   ApSelect,
   ApStatusMark,
   stateWord,
+  useActed,
 } from "@/ui";
 import { describeApiError, type Scid } from "@/api/index.ts";
 import { formatValue, withUnit } from "@/features/alarms/index.ts";
@@ -69,6 +70,9 @@ const search = useRemoteQuery(
   computed(() => ({ m: scope.value.mission.id, q: term.value, sc: firstSc.value ?? null })),
   (k, signal) => fetchPoints(k.m, { q: k.q, ...(k.sc ? { spacecraftId: k.sc } : {}) }, signal),
 );
+/** B6 (#276): a failed search after the person typed, picked a chip or pressed Retry is an alert. */
+const searchActed = useActed(() => search.state.value.status === "ready");
+watch([term, firstSc], () => searchActed.mark());
 /** B2: the limit mark's word, for a screen reader (the mark itself is decorative). */
 function limitWord(p: TelemetryPoint): string {
   const limits = pointLimits(p);
@@ -144,9 +148,17 @@ function addManual() {
         </div>
       </details>
     </div>
-    <ApCallout v-if="search.state.value.status === 'failed'" tone="caution">
+    <ApCallout
+      v-if="search.state.value.status === 'failed'"
+      tone="caution"
+      :role="searchActed.role.value"
+    >
       Couldn't search points: {{ describeApiError(search.state.value.error) }}
-      <template #action><ApButton size="compact" @click="search.refetch">Retry</ApButton></template>
+      <template #action
+        ><ApButton size="compact" @click="searchActed.after(search.refetch)()"
+          >Retry</ApButton
+        ></template
+      >
     </ApCallout>
     <ApEmptyState
       v-else-if="

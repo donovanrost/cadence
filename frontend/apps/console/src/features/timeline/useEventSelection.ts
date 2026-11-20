@@ -2,6 +2,7 @@ import type { MissionId } from "@/api/index.ts";
 import { computed, watch, type Ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { describeApiError, useRemoteQuery } from "@/api/index.ts";
+import { useActed } from "@/ui";
 import { fetchEvent, type MissionEvent } from "./api.ts";
 
 /**
@@ -46,6 +47,8 @@ export function useEventSelection(
       ? describeApiError(lookup.state.value.error)
       : null,
   );
+  /** B6 (#276): a lookup that fails after Retry is an alert; from a permalink on load, polite. */
+  const acted = useActed(() => lookup.state.value.status === "ready");
   watch(fetched, (e) => {
     const w = options.window.value;
     if (!e || !w) return;
@@ -63,7 +66,8 @@ export function useEventSelection(
     event: computed(() => inList.value ?? fetched.value),
     notFound,
     loadError,
-    retry: () => lookup.refetch(),
+    loadErrorRole: acted.role,
+    retry: acted.after(() => lookup.refetch()),
     /** The row's time button: selects it, or clears when it's already selected (aria-pressed). */
     toggle: (id: string) => setEvent(selectedId.value === id ? null : id),
     clear: () => setEvent(null),

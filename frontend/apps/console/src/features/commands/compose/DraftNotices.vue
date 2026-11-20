@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ApButton, ApCallout } from "@/ui";
+import { ApButton, ApCallout, outcomeRole } from "@/ui";
 import type { StoredDraft } from "./saved.ts";
 import { savedWhen, type DraftNotice, type DraftStatus } from "./useComposeDraft.ts";
 
@@ -64,5 +64,10 @@ defineEmits<{ resume: []; discardOffered: []; keepMine: []; retry: [] }>();
       <ApButton size="compact" @click="$emit('retry')">Try again</ApButton>
     </template>
   </ApCallout>
-  <ApCallout v-if="notice" :tone="notice.tone">{{ notice.text }}</ApCallout>
+  <ApCallout
+    v-if="notice"
+    :tone="notice.tone"
+    :role="notice.onLoad ? 'status' : outcomeRole(notice.tone)"
+    >{{ notice.text }}</ApCallout
+  >
 </template>
