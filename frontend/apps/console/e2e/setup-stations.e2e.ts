@@ -58,7 +58,8 @@ test.describe("Ground stations (organization admin)", () => {
     // #644 (U20, B6): a 5xx may have committed, so the editor says it's unclear, as an alert, and
     // never that it staged. The POST is stubbed, so nothing reaches the server.
     test("says it's unclear whether anything was staged, never that it was", async ({ page }) => {
-      await page.route(missionApi("stage"), (route) =>
+      // The station editor stages through the change sets' route (changes/actions.ts stageChange).
+      await page.route(missionApi("config/stage"), (route) =>
         route.request().method() === "POST"
           ? route.fulfill(jsonProblem(500, "internal_error"))
           : route.continue(),
@@ -70,8 +71,10 @@ test.describe("Ground stations (organization admin)", () => {
       await page.getByRole("textbox", { name: "Name", exact: true }).fill(`${name} ${MARKER}`);
       await page.getByRole("button", { name: "Stage change" }).click();
       await expectSaid(page, WORDS.serverFailedUnclearStaged, { alert: true });
+      // Never that it staged: the editor stays open with the edit, rather than returning to the list
+      // (an earlier test in this file leaves a staged change, so the banner's count can't tell).
       await expect(page).not.toHaveURL(/\/setup\/stations$/);
-      await expect(page.getByRole("banner")).not.toContainText(/staged/i);
+      await expect(page.getByRole("button", { name: "Stage change" })).toBeVisible();
     });
   });
 
