@@ -194,5 +194,8 @@ export function issuedLine(g: Grant): string {
 export function narrowedLine(g: Grant): string {
   const ahead = formatDuration(g.maximum_horizon_seconds);
   const until = g.valid_until ? `, until ${untilText(g)}` : "";
-  return `Narrowed. ${subject(g)} can now ${canList(g)}, planning up to ${ahead} ahead, ${plural(g.maximum_contacts, "contact")} per plan, ${g.maximum_execution_concurrency} at once${until}.`;
+  // ca-engineer and ca-ux on #565: a suspended grant acts only once it's resumed (U20).
+  const can =
+    g.state === "suspended" ? `Once it's resumed, ${subject(g)} can` : `${subject(g)} can now`;
+  return `Narrowed. ${can} ${canList(g)}, planning up to ${ahead} ahead, ${plural(g.maximum_contacts, "contact")} per plan, ${g.maximum_execution_concurrency} at once${until}.`;
 }

@@ -210,7 +210,7 @@ describe("rows, Narrow… and Revoke… (U105)", () => {
     await items[items.length - 1]?.trigger("click");
     await flushPromises();
     expect(document.body.textContent).toContain(
-      "The service identity this grant is for stops acting on its own now.",
+      "The service identity this grant is for can't act under this grant once it's revoked.",
     );
     await openSheet(w).get("textarea").setValue("Done with it");
     const revoke = w.findAll("button").filter((b) => b.text() === "Revoke");

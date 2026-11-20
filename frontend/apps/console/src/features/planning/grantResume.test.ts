@@ -176,6 +176,23 @@ describe("a suspended grant (U105, #499)", () => {
       "Not resumed: you approved this grant, so another org admin resumes it. Nothing changed.",
     );
     expect(resumeButton(w)?.attributes("aria-disabled")).toBe("true");
+    // ca-engineer on #565: closing and reopening the sheet keeps it off for the grant as read.
+    await openSheet(w)
+      .findAll("button")
+      .find((b) => b.text() === "Cancel")
+      ?.trigger("click");
+    await flushPromises();
+    await openResume(w);
+    expect(resumeButton(w)?.attributes("aria-disabled")).toBe("true");
+  });
+
+  it("Revoke's line on a suspended grant says it won't act again (ca-ux on #565)", async () => {
+    stub([suspendedBody]);
+    const w = await panel();
+    await (await menuItems(w)).find((i) => i.text() === "Revoke…")?.trigger("click");
+    await flushPromises();
+    expect(openSheet(w).text()).toContain("Nightly planner won't act under this grant again.");
+    expect(openSheet(w).text()).not.toContain("Plans it already submitted");
   });
 
   it("an unknown up-front reason keeps its code in the row's Technical details", async () => {

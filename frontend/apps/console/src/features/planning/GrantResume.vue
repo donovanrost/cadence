@@ -22,9 +22,16 @@ const busy = ref(false);
 const failure = ref<Worded | null>(null);
 const disabled = ref<Worded | null>(null);
 const ops = operationIds();
+/**
+ * ca-engineer on #565: a separation refusal holds for the grant as it was read, so reopening the
+ * sheet keeps Resume disabled until the grant changes (a new sha256 after a reload).
+ */
+const held = new Map<string, Worded>();
+const keyOf = (g: Grant) => `${g.id}:${g.sha256}`;
 function open(g: Grant) {
   grant.value = g;
-  failure.value = disabled.value = null;
+  failure.value = null;
+  disabled.value = held.get(keyOf(g)) ?? null;
   sheet.value?.open();
 }
 async function submit() {
@@ -40,7 +47,10 @@ async function submit() {
     }
     const f = resumeFailure(r.error, g);
     failure.value = f;
-    if (f.disable) disabled.value = f.disable;
+    if (f.disable) {
+      disabled.value = f.disable;
+      held.set(keyOf(g), f.disable);
+    }
   } finally {
     busy.value = false;
   }

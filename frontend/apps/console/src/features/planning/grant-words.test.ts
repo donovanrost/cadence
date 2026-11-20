@@ -331,6 +331,10 @@ describe("the grant sheet follows the approval setting (U105)", () => {
     expect(narrowedLine(grantOf(activeBody))).toBe(
       "Narrowed. Nightly planner can now plan and submit, planning up to 48h 00m ahead, 40 contacts per plan, 2 at once, until 12-19 06:40Z.",
     );
+    // ca-engineer and ca-ux on #565: a suspended grant acts only once it's resumed.
+    expect(narrowedLine(grantOf(activeBody, { state: "suspended" }))).toBe(
+      "Narrowed. Once it's resumed, Nightly planner can plan and submit, planning up to 48h 00m ahead, 40 contacts per plan, 2 at once, until 12-19 06:40Z.",
+    );
     // ca-ux on #514: one contact reads singular.
     expect(narrowedLine(grantOf({ ...activeBody, maximum_contacts: 1 }))).toContain(
       "1 contact per plan",
