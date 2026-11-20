@@ -73,11 +73,12 @@ export function namelessTargets(
   };
 }
 
-/** "Low power safe · 4 SC", "Mira K. · T+12m", the release sentence and the stack lines. */
+/** "Low power safe · 4 spacecraft", "Mira K. · T+12m", the release sentence and the stack lines. */
 export function yourGoWords(group: Group, nameOf: PersonName, now: Date) {
   const nb = group.release?.not_before;
   return {
-    title: `${group.title} · ${group.target_count} SC`,
+    // U102 (ux 11-20): never "SC"; "spacecraft" reads the same in the singular and the plural.
+    title: `${group.title} · ${group.target_count} spacecraft`,
     by: `${nameOf(group.requested_by.user_id)} · ${formatRelative(new Date(group.requested_at), now)}`,
     release: nb
       ? `Held until ${formatClock(new Date(nb))}Z, then each target at its next AOS.`
