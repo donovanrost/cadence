@@ -6,13 +6,18 @@ type Tone = "nominal" | "caution" | "crit" | "stale" | "off" | "info";
 
 /** a11y B6 (#243): the role follows what happened; the tone only sets the default. */
 describe("ApCallout role", () => {
-  const roleOf = (tone: Tone, role?: "alert" | "status") =>
+  const roleOf = (tone: Tone, role?: "alert" | "status" | "none") =>
     mount(ApCallout, { props: { tone, role }, slots: { default: "x" } }).attributes("role");
 
   it("defaults by tone: crit is alert, everything else status", () => {
     expect(roleOf("crit")).toBe("alert");
     const others: readonly Tone[] = ["nominal", "caution", "stale", "off", "info"];
     for (const tone of others) expect(roleOf(tone)).toBe("status");
+  });
+
+  it("is no live region at all with role none (#276: a countdown said elsewhere)", () => {
+    const w = mount(ApCallout, { props: { tone: "caution", role: "none" }, slots: { default: "x" } });
+    expect(w.attributes("role")).toBeUndefined();
   });
 
   it("takes the caller's role over the tone's", () => {

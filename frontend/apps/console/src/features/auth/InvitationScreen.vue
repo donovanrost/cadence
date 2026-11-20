@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import RetryAfterNotice from "./RetryAfterNotice.vue";
 import { computed, onMounted, ref, shallowRef } from "vue";
 import { useRoute } from "vue-router";
 import { describeApiError, detailsOf, fieldErrors, isError, type ApiError } from "@/api";
@@ -179,8 +180,10 @@ const reason = computed(
         {{ invitationHeader(invitation) }}
       </p>
       <ApCallout v-if="view.callout" :tone="view.callout.tone">{{ view.callout.text }}</ApCallout>
-      <ApCallout v-if="retry.text.value" tone="caution">{{ retry.text.value }}</ApCallout>
-      <ApCallout v-else-if="error" :tone="error.tone" role="alert">{{ error.text }}</ApCallout>
+      <RetryAfterNotice :retry="retry" />
+      <ApCallout v-if="!retry.text.value && error" :tone="error.tone" role="alert">{{
+        error.text
+      }}</ApCallout>
 
       <form
         v-if="invitation.case === 'new_account' || invitation.case === 'existing_account'"

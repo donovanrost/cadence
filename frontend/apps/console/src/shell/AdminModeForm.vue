@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import RetryAfterNotice from "@/features/auth/RetryAfterNotice.vue";
 import { computed, ref } from "vue";
 import { ApButton, ApCallout, ApField } from "@/ui";
 import { retryAfterOf, useRetryAfter } from "@/features/auth/retry-after.ts";
@@ -53,8 +54,10 @@ defineExpose({ reset });
 <template>
   <form class="m-0 flex flex-col gap-3" @submit.prevent="submit">
     <p class="m-0 text-base text-text-3">Enter your password to use platform administration.</p>
-    <ApCallout v-if="retry.text.value" tone="caution">{{ retry.text.value }}</ApCallout>
-    <ApCallout v-else-if="failed" tone="caution" role="alert">{{ failed }}</ApCallout>
+    <RetryAfterNotice :retry="retry" />
+    <ApCallout v-if="!retry.text.value && failed" tone="caution" role="alert">{{
+      failed
+    }}</ApCallout>
     <ApField
       v-model="password"
       label="Password"

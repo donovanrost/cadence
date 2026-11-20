@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { retryAfterOf, useRetryAfter } from "@/features/auth/index.ts";
+import { RetryAfterNotice, retryAfterOf, useRetryAfter } from "@/features/auth/index.ts";
 import { ApButton, ApCallout, ApField, ApPanel, outcomeRole } from "@/ui";
 import { changePassword, passwordFailure, passwordProblems, PASSWORD_MIN } from "./api.ts";
 
@@ -67,10 +67,13 @@ async function save() {
         autocomplete="new-password"
         :error="errors['confirm'] ?? null"
       />
-      <ApCallout v-if="retry.text.value" tone="caution">{{ retry.text.value }}</ApCallout>
-      <ApCallout v-else-if="note" :tone="note.tone" :role="outcomeRole(note.tone)">{{
-        note.text
-      }}</ApCallout>
+      <RetryAfterNotice :retry="retry" />
+      <ApCallout
+        v-if="!retry.text.value && note"
+        :tone="note.tone"
+        :role="outcomeRole(note.tone)"
+        >{{ note.text }}</ApCallout
+      >
       <div>
         <ApButton
           type="submit"

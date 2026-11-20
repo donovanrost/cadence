@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import RetryAfterNotice from "./RetryAfterNotice.vue";
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { describeApiError, isError } from "@/api";
@@ -50,8 +51,10 @@ const reason = computed(() => retry.text.value ?? (busy.value ? "Signing in…" 
 <template>
   <div class="flex flex-col gap-4">
     <h1 class="m-0 font-display text-[24px] font-semibold tracking-head uppercase">Sign in</h1>
-    <ApCallout v-if="retry.text.value" tone="caution">{{ retry.text.value }}</ApCallout>
-    <ApCallout v-else-if="error" :tone="error.tone" role="alert">{{ error.text }}</ApCallout>
+    <RetryAfterNotice :retry="retry" />
+    <ApCallout v-if="!retry.text.value && error" :tone="error.tone" role="alert">{{
+      error.text
+    }}</ApCallout>
     <form class="flex flex-col gap-3" @submit.prevent="submit">
       <ApField v-model="email" label="Email" type="email" autocomplete="username" required />
       <ApField
