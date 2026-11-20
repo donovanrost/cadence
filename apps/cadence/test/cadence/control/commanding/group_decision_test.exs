@@ -118,8 +118,20 @@ defmodule Cadence.Control.Commanding.GroupDecisionTest do
              %{via_service: %{id: ^service_id, name: "Release bot"}}}} =
              decide(c, c.approver, %{kind: :go, expected_review: review(c)})
 
+    # api-ops on #626: every decision, not only GO.
+    assert {:error,
+            {:command_group_self_approval_not_allowed, %{via_service: %{id: ^service_id}}}} =
+             decide(c, c.approver, %{kind: :no_go, note: "Not today", expected_review: review(c)})
+
     other = operator!(c, "Third Operator")
     assert {:ok, _} = decide(c, other, %{kind: :go, expected_review: review(c)})
+  end
+
+  test "a decider who isn't a person is refused, on its own (ca-security on #626)", c do
+    service_scope = %{c.approver | user: nil}
+
+    assert {:error, _refused} =
+             decide(c, service_scope, %{kind: :go, expected_review: review(c)})
   end
 
   test "a service nobody is accountable for refuses everyone (fail closed)", c do

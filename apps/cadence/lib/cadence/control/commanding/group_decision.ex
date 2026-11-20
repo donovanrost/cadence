@@ -90,6 +90,13 @@ defmodule Cadence.Control.Commanding.GroupDecision do
 
   # #622 (#280): the requester counts as people, as on a single request (LifecyclePolicy): a service
   # requester is its issuer and rotators, and a service nobody is accountable for refuses everyone.
+  # ca-security on #626: a decider who isn't a person is refused here, on its own (fail closed).
+  defp separated(_group, %{"user_id" => id}) when not is_binary(id) or id == "",
+    do: {:error, :command_group_self_approval_not_allowed}
+
+  defp separated(_group, actor) when not is_map_key(actor, "user_id"),
+    do: {:error, :command_group_self_approval_not_allowed}
+
   defp separated(group, actor) do
     group.organization_id
     |> Accountability.separate({:user, actor["user_id"]}, [group.requested_by])
