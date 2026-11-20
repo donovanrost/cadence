@@ -9,6 +9,7 @@ defmodule Cadence.Contacts.ReplayConflictAttention do
   Contract: docs/apogee/api/contacts.md.
   """
 
+  alias Cadence.Accounts.MemberNames
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Contacts.AttentionPasses
   alias Cadence.Runtime.ReplayConflicts
@@ -24,10 +25,12 @@ defmodule Cadence.Contacts.ReplayConflictAttention do
   def items(org, mission) do
     rows = ReplayConflicts.open(mission)
     passes = passes(org, mission, rows)
+    # #146: whoever acknowledged is named at read time, in the mission's organization.
+    people = MemberNames.members(org, rows |> Enum.map(&acknowledger/1) |> Enum.reject(&is_nil/1))
 
     rows
     |> units()
-    |> Enum.map(&item(&1, passes))
+    |> Enum.map(&item(&1, passes, people))
     |> Enum.sort_by(& &1.raised_at, DateTime)
   end
 
@@ -97,16 +100,32 @@ defmodule Cadence.Contacts.ReplayConflictAttention do
   defp note(_note), do: {:error, :invalid_note}
 
   # todo(authz): Cedar should decide who may acknowledge stuck processing (any operator today).
-  defp actor(%Scope{user: %{user_id: id, display_name: name}} = scope, mission) do
+  # Stored as kind and id only: the name comes from the live membership on read (#146).
+  defp actor(%Scope{user: %{user_id: id}} = scope, mission) when is_binary(id) do
     with :ok <-
            Policy.authorize(scope, :operate_mission, %{
              organization_id: scope.organization_id,
              mission_id: mission
            }),
-         do: {:ok, %{"kind" => "user", "id" => id, "name" => name}}
+         do: {:ok, %{"kind" => "user", "id" => id}}
   end
 
   defp actor(%Scope{}, _mission), do: {:error, :forbidden}
+
+  # Only a person acknowledges (`actor/2`): stored as kind and id, named from the live membership.
+  defp acknowledger(%{acknowledged_by: %{"kind" => "user", "id" => id}}) when is_binary(id),
+    do: id
+
+  defp acknowledger(_row), do: nil
+
+  defp acknowledged_by(row, people) do
+    with id when is_binary(id) <- acknowledger(row),
+         {:ok, name} <- Map.fetch(people, id) do
+      %{kind: "user", id: id, name: name}
+    else
+      _outsider -> %{kind: "user", id: nil, name: nil}
+    end
+  end
 
   # One unit per (path, unit key), its rows oldest first.
   defp units(rows) do
@@ -134,7 +153,7 @@ defmodule Cadence.Contacts.ReplayConflictAttention do
     AttentionPasses.context(org, mission, contacts)
   end
 
-  defp item([first | _] = unit, passes) do
+  defp item([first | _] = unit, passes, people) do
     pass = pass(first, passes)
 
     acked =
@@ -152,7 +171,7 @@ defmodule Cadence.Contacts.ReplayConflictAttention do
       conflict: @conflict,
       state: if(acked && not reraised, do: "acknowledged", else: "open"),
       raised_at: first.first_seen_at,
-      acknowledged_by: acked && acked.acknowledged_by,
+      acknowledged_by: acked && acknowledged_by(acked, people),
       acknowledged_at: acked && acked.acknowledged_at,
       acknowledged_note: acked && acked.acknowledged_note,
       reraised: reraised,
