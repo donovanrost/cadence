@@ -505,8 +505,32 @@ jobs:
         with:
           name: browser-assets
           path: apps/cadence_web/priv/static
-      - run: corepack pnpm exec playwright install --with-deps chromium chrome
+      # devops on #624: --with-deps ran apt for 7.5 min on two shards. The ubuntu-24.04 image has the
+      # system libraries and Google Chrome (the specs' chrome channel), so cache Playwright's own
+      # browsers and fall back to the full install only if the image's Chrome is missing.
+      - name: Playwright's version (the browser cache key)
+        id: pwversion
+        working-directory: frontend/apps/console
+        run: echo "version=$(node -p 'require("@playwright/test/package.json").version')" >> "$GITHUB_OUTPUT"
+      - name: Restore Playwright's browsers
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-${{ runner.os }}-${{ steps.pwversion.outputs.version }}
+      - name: Install Playwright's Chromium (the image's Chrome serves the chrome channel)
         working-directory: frontend
+        run: |
+          corepack pnpm exec playwright install chromium
+          if ! command -v google-chrome >/dev/null; then
+            echo "::warning::no Google Chrome on the image; installing it with its system packages"
+            corepack pnpm exec playwright install --with-deps chrome
+          fi
+      - name: Save Playwright's browsers
+        if: ${{ github.event_name == 'push' && matrix.shard == 1 }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-${{ runner.os }}-${{ steps.pwversion.outputs.version }}
       - name: Compile the app and the simulator (MIX_ENV=dev)
         run: |
           (cd apps/cadence_web && mix compile)
@@ -522,16 +546,9 @@ jobs:
         with:
           path: ${{ env.CADENCE_BUILD_PATHS }}
           key: ${{ env.CADENCE_BUILD_KEY }}
-      - name: Create and migrate the database and QuestDB
-        working-directory: apps/cadence_web
-        run: mix ecto.create -r Cadence.Repo && mix ecto.migrate -r Cadence.Repo && mix cadence.questdb.migrate
-      - name: Start the simulator
-        working-directory: apps/cadence_simulator
-        run: |
-          rm -rf ../../var/reflect_orbital
-          (mix run --no-start --no-halt ../../dev/reflect_orbital_simulator.exs > "$RUNNER_TEMP/simulator.log" 2>&1 &)
-          curl --retry-connrefused --retry 60 --retry-delay 1 -s -o /dev/null http://127.0.0.1:4111/
-      # Lead and the director: made here, masked, and kept in this job's env only.
+      # Lead and the director: made here, masked, and kept in this job's env only. Before any mix
+      # command that loads runtime config: CADENCE_ADMIN_EMAIL and _PASSWORD must be set together
+      # (devops' first run). After the dev _build save, so no password exists while it's cached.
       - name: Make this shard's passwords
         run: |
           set +x
@@ -541,6 +558,15 @@ jobs:
           echo "::add-mask::$persona"
           echo "CADENCE_ADMIN_PASSWORD=$admin" >> "$GITHUB_ENV"
           echo "E2E_PERSONA_PASSWORD=$persona" >> "$GITHUB_ENV"
+      - name: Create and migrate the database and QuestDB
+        working-directory: apps/cadence_web
+        run: mix ecto.create -r Cadence.Repo && mix ecto.migrate -r Cadence.Repo && mix cadence.questdb.migrate
+      - name: Start the simulator
+        working-directory: apps/cadence_simulator
+        run: |
+          rm -rf ../../var/reflect_orbital
+          (mix run --no-start --no-halt ../../dev/reflect_orbital_simulator.exs > "$RUNNER_TEMP/simulator.log" 2>&1 &)
+          curl --retry-connrefused --retry 60 --retry-delay 1 -s -o /dev/null http://127.0.0.1:4111/
       # Boot creates or updates the environment admin from CADENCE_ADMIN_EMAIL and _PASSWORD.
       - name: Start Phoenix
         working-directory: apps/cadence_web
