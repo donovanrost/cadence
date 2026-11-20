@@ -40,10 +40,11 @@ defmodule Cadence.Governance.Accountability do
 
   @doc """
   The people an approver counts as: a person is themselves; a service approving under an
-  automation grant is its accountable people plus the grant's approver (`grant_approver`, a user
-  id, or nil when there's no grant).
+  automation grant is its accountable people plus the grant's people (`grant_approver`: a user id
+  or a list of them, the grant's proposer and approver since #283; nil when there's no grant).
   """
-  @spec approvers(binary(), actor(), binary() | nil) :: {:ok, [binary()]} | {:error, :unknown}
+  @spec approvers(binary(), actor(), binary() | [binary() | nil] | nil) ::
+          {:ok, [binary()]} | {:error, :unknown}
   def approvers(organization_id, approver, grant_approver \\ nil) do
     authors(organization_id, [approver | grant_actors(grant_approver)])
   end
@@ -59,7 +60,7 @@ defmodule Cadence.Governance.Accountability do
   - `{:error, {:unknown, service}}`: a service on either side has no accountable people on record,
     so nobody can approve (fail closed). `service` names it.
   """
-  @spec separate(binary(), actor(), [actor()], binary() | nil) ::
+  @spec separate(binary(), actor(), [actor()], binary() | [binary() | nil] | nil) ::
           :ok | {:error, {:self, service_ref() | nil} | {:unknown, service_ref()}}
   def separate(organization_id, approver, authors, grant_approver \\ nil) do
     approver_actors = [approver | grant_actors(grant_approver)] |> Enum.map(&normalize/1)
@@ -100,6 +101,7 @@ defmodule Cadence.Governance.Accountability do
   def refusal({:error, {:unknown, service}}, _self_code, unknown_code),
     do: {:error, {unknown_code, %{service: service}}}
 
+  defp grant_actors(ids) when is_list(ids), do: Enum.flat_map(ids, &grant_actors/1)
   defp grant_actors(id) when is_binary(id) and id != "", do: [{:user, id}]
   defp grant_actors(_id), do: []
 

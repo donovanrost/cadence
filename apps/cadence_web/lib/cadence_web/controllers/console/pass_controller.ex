@@ -6,6 +6,7 @@ defmodule CadenceWeb.Console.PassController do
 
   use CadenceWeb, :controller
 
+  alias Cadence.Accounts.MemberNames
   alias Cadence.Auth.Policy
   alias Cadence.ContactPlanning.RepairChain
   alias Cadence.Contacts.{ProviderChangeAttention, ScheduleCommands}
@@ -91,31 +92,38 @@ defmodule CadenceWeb.Console.PassController do
     |> with_attention(conn, resolutions)
     |> with_readiness(conn, Map.new(blocked, &{&1.contact_id, &1}))
     |> with_releasable(conn)
-    |> with_bookers()
+    |> with_bookers(org_id(conn))
     |> with_contact_fields(conn)
   end
 
-  # L15: an off-plan booking names its booker (one batch of names per page).
-  defp with_bookers(%{passes: passes} = result) do
-    names =
-      for %{off_plan: %{booked_by: %{id: id}}} <- passes, is_binary(id), uniq: true, into: %{} do
-        case Cadence.Accounts.fetch_user(id) do
-          {:ok, user} -> {id, user.display_name || user.email}
-          _missing -> {id, nil}
-        end
-      end
+  # L15: an off-plan booking names its booker (one batch of names per page). #146 (#468): only an
+  # active member of the mission's organization is named and keeps their id; anyone else reads
+  # id and name null, never an email. Runs after with_releasable, which compares the booker's id.
+  defp with_bookers(%{passes: passes} = result, organization_id) do
+    people =
+      MemberNames.members(
+        organization_id,
+        for(%{off_plan: %{booked_by: %{id: id}}} <- passes, is_binary(id), do: id)
+      )
 
     %{
       result
       | passes:
           Enum.map(passes, fn
             %{off_plan: %{booked_by: %{id: id}}} = pass when is_binary(id) ->
-              put_in(pass, [:off_plan, :booked_by, :name], Map.get(names, id))
+              update_in(pass, [:off_plan, :booked_by], &booker(&1, id, people))
 
             pass ->
               pass
           end)
     }
+  end
+
+  defp booker(booked_by, id, people) do
+    case Map.fetch(people, id) do
+      {:ok, name} -> %{booked_by | name: name}
+      :error -> %{booked_by | id: nil, name: nil}
+    end
   end
 
   @releasable_states ~w(pending confirmed active)

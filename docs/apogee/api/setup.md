@@ -824,7 +824,19 @@ first.
   (organization default): …" / "Tightened …", and "Missions may now set their own approval
   setting." / "Missions can no longer set their own approval setting." (both in one save: two
   sentences, the value first). A change saved before #233 has no `change` and keeps "Changed
-  Governance settings". Settings history carries only the actor's name, so `actor` is `{kind:
+  Governance settings".
+- **The missions an organization save moved (#430; additive).** An organization entry's `change`
+  carries `missions: [{id, name | null, before, after}]`: every mission whose effective
+  requirement that save changed (turning overrides off moves pinned missions to the default;
+  turning them on applies the pins again; a default change moves the missions that inherit it),
+  with raw values, in stored order. `name` is looked up under the entry's organization and is
+  null for a mission that's gone (never its id). `[]` when none moved, and for saves before #430.
+  The sentence adds one per new value, in the setting's own words, never "loosened"/"tightened"
+  (ux): "Changed on 2 missions to Applies without approval: EARENDIL and KESTREL." / "Changed on
+  1 mission to Needs a second person's approval: VEGA." Up to three names, then "and N more"; a
+  null name reads "Unknown mission"; a value outside the two reads "Changed approval on N
+  missions."; none moved, no sentence. Only organization admins read this log, so no
+  mission-level reader sees other missions' names or settings. Settings history carries only the actor's name, so `actor` is `{kind:
   "user", id: null, name}` and `actor_id` doesn't find a person's settings changes. The log holds
   each section's 10 most recent changes per scope, for the Governance, Commanding, Configuration
   and Pass review sections.
@@ -1011,7 +1023,7 @@ bindings can be written. A platform-shared one needs a platform admin in admin m
   3 passes live now (AOS ≤ now < LOS), earliest AOS first. `403 platform_source` outside admin
   mode, `409 binding_not_shared` for a mission's own binding, `404 binding_not_found`, `503
   blast_radius_unavailable` when counting fails (the sheet then refuses to switch).
-- `GET /data-source-bindings/:binding_id/events` → `{events: [{at, actor: {id, name} | null,
+- `GET /data-source-bindings/:binding_id/events` (actors per #146's rule, #471: on an organization's binding a person is named only while an active member, and anyone else is `{id: null, name: null}`; never an email) → `{events: [{at, actor: {id, name} | null,
   kind: switched | registered | changed | enabled | disabled | superseded, from: {id,
   display_name} | null, to: …, reason | null, affected_missions | null, live_passes_total |
   null}]}`, newest first, 50. A platform-wide switch's entry carries its reason and counts. For a

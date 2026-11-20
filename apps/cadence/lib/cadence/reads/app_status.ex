@@ -17,7 +17,7 @@ defmodule Cadence.Reads.AppStatus do
   authorize again.
   """
 
-  alias Cadence.Accounts
+  alias Cadence.Accounts.MemberNames
 
   alias Cadence.Applications.{ApplicationDefinition, HostContext, TelemetryDecom}
   alias Cadence.Auth.Scope
@@ -50,7 +50,7 @@ defmodule Cadence.Reads.AppStatus do
         scope
         |> loaded(definition, host_context, :activation_pending, version)
         |> Map.put(:activation_request, %{
-          requested_by: requester(request),
+          requested_by: requester(scope.organization_id, request),
           requested_at: request.requested_at
         })
 
@@ -59,15 +59,17 @@ defmodule Cadence.Reads.AppStatus do
     end
   end
 
-  defp requester(%{requester_actor_kind: kind, requester_actor_id: id})
-       when kind in [:user, "user"] and is_binary(id) do
-    case Accounts.fetch_user(id) do
-      {:ok, user} -> %{name: user.display_name || user.email}
-      _missing -> nil
+  # #471 (#146's rule): the requester is named only while an active member of the request's
+  # organization, never by email; otherwise there's no name to show.
+  defp requester(org, %{requester_actor_kind: kind, requester_actor_id: id})
+       when kind in [:user, "user"] and is_binary(id) and is_binary(org) do
+    case MemberNames.display_names(org, [id]) do
+      %{^id => name} -> %{name: name}
+      _not_named -> nil
     end
   end
 
-  defp requester(_request), do: nil
+  defp requester(_org, _request), do: nil
 
   defp loaded(scope, definition, host_context, state, version) do
     case Applications.load_status(scope, definition, host_context) do

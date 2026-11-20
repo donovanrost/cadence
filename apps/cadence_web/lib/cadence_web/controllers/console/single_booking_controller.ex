@@ -9,6 +9,7 @@ defmodule CadenceWeb.Console.SingleBookingController do
 
   use CadenceWeb, :controller
 
+  alias Cadence.Accounts.MemberNames
   alias Cadence.Contacts.SingleBookings
   alias Cadence.Reads.Passes
   alias CadenceWeb.Console.{ConfigJSON, Problem}
@@ -45,11 +46,9 @@ defmodule CadenceWeb.Console.SingleBookingController do
   defp pass(conn, %{reservation_id: id}) when is_binary(id) do
     case Passes.fetch(scope(conn).organization_id, mission_id(conn), id) do
       {:ok, %{off_plan: %{} = off_plan} = pass} ->
-        user = scope(conn).user
-
         %{
           pass
-          | off_plan: put_in(off_plan, [:booked_by, :name], user.display_name || user.email),
+          | off_plan: named(off_plan, scope(conn).organization_id),
             releasable: pass.state in ~w(pending confirmed active)
         }
 
@@ -62,6 +61,17 @@ defmodule CadenceWeb.Console.SingleBookingController do
   end
 
   defp pass(_conn, _booking), do: nil
+
+  # #146 (#468): the booker is named, and keeps their id, only as an active member of the
+  # mission's organization (a platform admin acting in admin mode isn't); never by email.
+  defp named(%{booked_by: %{id: id} = by} = off_plan, organization_id) when is_binary(id) do
+    case MemberNames.members(organization_id, [id]) do
+      %{^id => name} -> %{off_plan | booked_by: %{by | name: name}}
+      _not_a_member -> %{off_plan | booked_by: %{by | id: nil, name: nil}}
+    end
+  end
+
+  defp named(off_plan, _organization_id), do: off_plan
 
   defp error(conn, {:invalid, details}), do: Problem.respond(conn, :invalid_params, details)
 

@@ -38,6 +38,25 @@ top-level keys are ignored; documents, values and options pass through as JSON.
 Wire encoding: the facade shapes with string keys. Atoms become lowercase strings, times are
 ISO-8601, revision numbers are integers (render them as `rN`), and actors are `{kind, id, name}`.
 
+## Who is named (#471)
+
+Every actor in these reads (`opened_by`, `submitted_by`, change `author`, review `actor`,
+`applied_by`, approvals, `changed_by`) is `{kind, id, name}`. The `name` follows #146's rule:
+- a person is named only while they hold an active membership in the mission's organization,
+  checked at read time, and never by email;
+- a service is named only when it belongs to the organization;
+- Cadence keeps its system name.
+
+An actor outside the organization reads `{kind, id: null, name: null}`: a person who isn't an
+active member (a platform admin acting as support, someone who has left) or another
+organization's service. `kind` stays, but the id isn't sent either. An active member with no
+display name, or the organization's own unnamed service, keeps its `id` with `name: null`, so the
+console still knows its own changes.
+
+Records written before #471 stored `display_name || email`. That stored name is never sent: an
+old record by someone who has left reads `id: null, name: null`, and one by an active member
+with no display name reads their `id` with `name: null`.
+
 ## Errors
 
 `code` is the facade's tag, so switch on it.

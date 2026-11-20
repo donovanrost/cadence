@@ -76,12 +76,10 @@ defmodule CadenceWeb.Console.ProviderAccountGrantController do
   end
 
   defp grant_row(conn, grant) do
-    names =
-      scope(conn).organization_id
-      |> Missions.list_missions()
-      |> Map.new(&{&1.mission_id, &1.display_name})
+    org = scope(conn).organization_id
+    names = org |> Missions.list_missions() |> Map.new(&{&1.mission_id, &1.display_name})
 
-    ProviderAccountDetail.grant_row(grant, names)
+    ProviderAccountDetail.grant_row(grant, names, ProviderAccountDetail.people(org, [grant]))
   end
 
   defp error(conn, {:error, {code, %{version: version}}}) when code in @changed,

@@ -170,14 +170,19 @@ defmodule Cadence.Reads.PlanCoverageAttention do
   defp author(_summary), do: nil
 
   # Who may approve a plan (`:approve_contact_plans`: an organization admin), never its author.
+  # The list is the organization's active members only; #146 (#468): an admin without a display
+  # name reads name nil (they keep their id), never their email.
   defp approvers(org, author) do
     author_id = author && Map.get(author, :id)
 
     for %{membership: membership, user: user} <- Accounts.list_organization_members(org),
         membership.role == :organization_admin,
         user.user_id != author_id,
-        do: %{id: user.user_id, name: user.display_name || user.email}
+        do: %{id: user.user_id, name: display_name(user.display_name)}
   end
+
+  defp display_name(name) when is_binary(name) and name != "", do: name
+  defp display_name(_none), do: nil
 
   defp raised_at(first, %{state: :approved, plan: plan}),
     do: latest([DateTime.add(first, -@raise_s), DateTime.add(plan.approved_at, @grace_s)])

@@ -11,7 +11,7 @@ defmodule Cadence.Configuration.Pipeline do
   Must run inside a transaction.
   """
 
-  alias Cadence.Configuration.{Document, Kinds, Ledger}
+  alias Cadence.Configuration.{ActorNames, Document, Kinds, Ledger}
   alias Cadence.SpacecraftTypeStore
 
   @type op :: %{
@@ -244,7 +244,7 @@ defmodule Cadence.Configuration.Pipeline do
 
       paths ->
         changed_in = changed_in(mission_id, op, base_revision, paths)
-        actors = changed_by(mission_id, changed_in)
+        actors = mission_id |> changed_by(changed_in) |> ActorNames.named(mission_id)
 
         Enum.map(paths, fn path ->
           revision = Map.get(changed_in, path, :outside)
