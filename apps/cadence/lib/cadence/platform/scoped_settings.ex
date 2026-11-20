@@ -141,7 +141,9 @@ defmodule Cadence.Platform.ScopedSettings do
   the section lock (exclusive). `opts`: `:check`, a function of the current snapshot that may
   refuse the change (`:ok` or `{:error, reason}`), run under the lock after the token check, so it
   sees exactly what the save replaces; `:audit`, a function of the current snapshot returning a map
-  stored with the revision as its `audit` (for example the before and after values). A
+  stored with the revision as its `audit` (for example the before and after values);
+  `:after_write`, a function of the current snapshot and the inserted revision, run in the same
+  transaction (`:ok` or `{:error, reason}`, which rolls the revision back). A
   rule-guarded section (`rule_guarded?/1`) is saved only with a `:check`; without one the answer
   is `{:error, :settings_check_required}` and nothing is locked or written (#429).
   """
@@ -185,8 +187,19 @@ defmodule Cadence.Platform.ScopedSettings do
 
       with :ok <- current_token(current, expected_token),
            :ok <- overridable(current, mission_id),
-           :ok <- check.(current) do
-        insert_revision(organization_id, mission_id, section_id, current, document, actor, opts)
+           :ok <- check.(current),
+           {:ok, revision} <-
+             insert_revision(
+               organization_id,
+               mission_id,
+               section_id,
+               current,
+               document,
+               actor,
+               opts
+             ),
+           :ok <- after_write(opts, current, revision) do
+        {:ok, revision}
       end
     end)
     |> ScopedReadUpdates.publish_result(:settings_changed, organization_id, mission_id)
@@ -206,6 +219,16 @@ defmodule Cadence.Platform.ScopedSettings do
   defp overridable(_current, nil), do: :ok
   defp overridable(%{allow_override: true}, _mission_id), do: :ok
   defp overridable(_current, _mission_id), do: {:error, :settings_enforced_by_organization}
+
+  # #499: work that must commit with the revision or not at all (the approval setting's
+  # tightening suspends grants), run in the same transaction under the section lock. An error
+  # rolls the revision back too.
+  defp after_write(opts, current, revision) do
+    case Keyword.get(opts, :after_write) do
+      nil -> :ok
+      fun when is_function(fun, 2) -> fun.(current, revision)
+    end
+  end
 
   defp insert_revision(organization_id, mission_id, section_id, current, document, actor, opts) do
     document =

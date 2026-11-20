@@ -63,6 +63,8 @@ defmodule CadenceWeb.Console.ContactGrantAPITest do
       member: member,
       identity: identity,
       version: v1.version,
+      mission: mission,
+      org: org,
       base: "/api/console/v1/missions/#{mission.mission_id}/contact-planning/grants"
     }
   end
@@ -265,5 +267,78 @@ defmodule CadenceWeb.Console.ContactGrantAPITest do
                post_json(c.admin, c.base, body(c, %{"reason" => "", "valid_days" => 0})),
                422
              )["error"]["details"]
+  end
+
+  # #499 end to end: a mission tightened to 'independent' through the console's settings save
+  # lists the single-approval grant first (409, nothing written), suspends it once acknowledged,
+  # and a second org admin resumes it (replayable); its original approver can't.
+  test "a tightening lists, then suspends, a single-approval grant; another admin resumes it",
+       c do
+    org_settings = "/api/console/v1/organizations/#{c.org.organization_id}/settings"
+    mission_settings = "/api/console/v1/missions/#{c.mission.mission_id}/settings"
+    assert json_response(save_setting(c.admin, org_settings, "direct", true), 201)
+
+    grant = json_response(post_json(c.admin, c.base, body(c)), 201)["data"]["grant"]
+    assert grant["state"] == "active"
+
+    assert %{"error" => %{"code" => "approval_tightening_suspends_grants", "details" => details}} =
+             json_response(save_setting(c.admin, mission_settings, "independent"), 409)
+
+    assert %{"grants" => [listed], "digest" => digest} = details
+    assert listed["id"] == grant["id"]
+    assert listed["mission"]["id"] == c.mission.mission_id
+    assert listed["service"] == %{"id" => c.identity.service_identity_id, "name" => "Planner bot"}
+
+    assert json_response(
+             save_setting(c.admin, mission_settings, "independent", nil, digest),
+             201
+           )
+
+    [suspended] = json_response(get_json(c.admin, c.base), 200)["data"]["grants"]
+    assert suspended["state"] == "suspended"
+
+    assert %{
+             "by" => %{"kind" => "user", "name" => "Ada"},
+             "level" => "mission",
+             "settings_revision" => revision
+           } = suspended["suspension"]
+
+    assert is_binary(revision)
+
+    resume = "#{c.base}/#{grant["id"]}/resume"
+    request = %{"sha256" => suspended["sha256"], "operation_id" => "op-resume"}
+
+    assert %{"error" => %{"code" => "automation_grant_self_approval_forbidden"}} =
+             json_response(
+               post_json(c.admin, resume, %{request | "operation_id" => "op-ada"}),
+               403
+             )
+
+    assert %{"grant" => %{"state" => "active"}, "replayed" => false} =
+             json_response(post_json(c.approver, resume, request), 200)["data"]
+
+    assert %{"replayed" => true} =
+             json_response(post_json(c.approver, resume, request), 200)["data"]
+  end
+
+  defp save_setting(user, base, requirement, allow_override \\ nil, acknowledged \\ nil) do
+    read = user |> TestFixtures.member_conn() |> get(base) |> json_response(200)
+    section = Enum.find(read["data"]["sections"], &(&1["key"] == "cadence.governance"))
+
+    values =
+      if is_nil(allow_override),
+        do: %{"approval_requirement" => requirement},
+        else: %{"approval_requirement" => requirement, "allow_override" => allow_override}
+
+    body =
+      %{
+        "values" => values,
+        "expected_version" => section["version"] && section["version"]["version"]
+      }
+      |> then(
+        &if(acknowledged, do: Map.put(&1, "acknowledged_suspensions", acknowledged), else: &1)
+      )
+
+    user |> TestFixtures.member_conn() |> put(base <> "/cadence.governance", body)
   end
 end

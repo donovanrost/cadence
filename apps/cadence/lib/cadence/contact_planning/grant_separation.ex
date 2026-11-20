@@ -34,13 +34,21 @@ defmodule Cadence.ContactPlanning.GrantSeparation do
   @doc """
   Why `scope` can't decide on `grant` now, for the console's flags (U105, #233's pattern: the
   server says, the console never computes it): nil when they can, else `{reason, details}` with
-  reason not_a_person | not_admin | not_proposed | policy_changed | proposer | accountable |
-  authors_unknown.
+  reason not_a_person | not_admin | not_proposed | policy_changed | proposer | approved (#499,
+  resuming) | accountable | authors_unknown.
   The same separation check approval runs, against the setting in force now.
   """
   @spec viewer_block(Scope.t(), AutomationGrant.t(), DateTime.t()) ::
           nil | {binary(), map() | nil}
   def viewer_block(%Scope{} = scope, %AutomationGrant{} = grant, now) do
+    case AutomationGrant.effective_state(grant, now) do
+      # #499: a suspended grant's decision is its resume, under the setting in force now.
+      :suspended -> resume_block(scope, grant)
+      _state -> approve_block(scope, grant, now)
+    end
+  end
+
+  defp approve_block(scope, grant, now) do
     with {:ok, viewer} <- viewer(scope),
          :proposed <- AutomationGrant.effective_state(grant, now),
          :ok <- same_setting(grant),
@@ -48,27 +56,39 @@ defmodule Cadence.ContactPlanning.GrantSeparation do
          {:ok, _separated} <- check(scope, viewer, grant, policy) do
       nil
     else
-      {:blocked, reason} ->
-        {reason, nil}
-
       # fe-ops on #497: the setting changed since the proposal, so approval would refuse it
       # (approval_policy_changed); the flags say so up front instead of offering Approve.
-      :policy_changed ->
-        {"policy_changed", nil}
-
-      {:error, {:automation_grant_self_approval_forbidden, %{because: "proposed"}}} ->
-        {"proposer", nil}
-
-      {:error, {:automation_grant_self_approval_forbidden, %{grantee: grantee}}} ->
-        {"accountable", %{grantee: grantee}}
-
-      {:error, {:automation_grant_approver_authors_unknown, details}} ->
-        {"authors_unknown", details}
-
-      _state ->
-        {"not_proposed", nil}
+      :policy_changed -> {"policy_changed", nil}
+      blocked -> reason(blocked)
     end
   end
+
+  defp resume_block(scope, grant) do
+    with {:ok, viewer} <- viewer(scope),
+         policy = ActivationPolicy.evidence(grant.organization_id, grant.mission_id),
+         {:ok, _separated} <- check_resume(scope, viewer, grant, policy) do
+      nil
+    else
+      blocked -> reason(blocked)
+    end
+  end
+
+  # The flags' short reasons (fe-ops on #499: never an error code).
+  defp reason({:blocked, reason}), do: {reason, nil}
+
+  defp reason({:error, {:automation_grant_self_approval_forbidden, %{because: "proposed"}}}),
+    do: {"proposer", nil}
+
+  defp reason({:error, {:automation_grant_self_approval_forbidden, %{because: "approved"}}}),
+    do: {"approved", nil}
+
+  defp reason({:error, {:automation_grant_self_approval_forbidden, %{grantee: grantee}}}),
+    do: {"accountable", %{grantee: grantee}}
+
+  defp reason({:error, {:automation_grant_approver_authors_unknown, details}}),
+    do: {"authors_unknown", details}
+
+  defp reason(_state), do: {"not_proposed", nil}
 
   defp same_setting(grant) do
     case ActivationPolicy.validate(grant.organization_id, grant.mission_id, grant.approval_policy) do
@@ -85,6 +105,32 @@ defmodule Cadence.ContactPlanning.GrantSeparation do
   end
 
   defp viewer(_scope), do: {:blocked, "not_a_person"}
+
+  @doc """
+  #499: separation for resuming a suspended grant, under the setting in force at resume
+  (ca-security, api-ops): under 'independent' as approval, and the original approver is refused
+  too (`because: "approved"`; they approved it alone, which is why it was suspended); under
+  'direct', anyone `check/4` allows.
+  """
+  @spec check_resume(Scope.t(), binary(), AutomationGrant.t(), map()) ::
+          {:ok, map()} | {:error, term()}
+  def check_resume(scope, approver, grant, %{"separation_of_duties" => true} = policy) do
+    if approver == grant.approved_by,
+      do:
+        {:error,
+         {:automation_grant_self_approval_forbidden,
+          %{because: "approved", grantee: grantee(scope, grant)}}},
+      else:
+        with(
+          {:ok, sep} <- check(scope, approver, grant, policy),
+          do: {:ok, with_approver(sep, grant)}
+        )
+  end
+
+  def check_resume(scope, approver, grant, policy), do: check(scope, approver, grant, policy)
+
+  defp with_approver(%{ids: ids} = separated, grant),
+    do: %{separated | ids: Enum.uniq(ids ++ Enum.reject([grant.approved_by], &is_nil/1))}
 
   @doc "Separation under the policy `policy`: `{:ok, %{approver, ids}}` or the refusal."
   @spec check(Scope.t(), binary(), AutomationGrant.t(), map()) :: {:ok, map()} | {:error, term()}

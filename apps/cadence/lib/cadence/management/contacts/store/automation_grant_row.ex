@@ -44,6 +44,13 @@ defmodule Cadence.Management.Contacts.Store.AutomationGrantRow do
     field(:withdrawn_at, :utc_datetime_usec)
     field(:replaces_grant_id, :string)
     field(:legacy_issue, :boolean, default: false)
+    # #499: a suspension (who, when, the settings revision) and the resume.
+    field(:suspended_by, :string)
+    field(:suspended_at, :utc_datetime_usec)
+    field(:suspension_revision, :string)
+    field(:suspension_level, :string)
+    field(:resumed_by, :string)
+    field(:resumed_at, :utc_datetime_usec)
 
     timestamps()
   end
@@ -81,7 +88,13 @@ defmodule Cadence.Management.Contacts.Store.AutomationGrantRow do
     :rejection_reason,
     :withdrawn_by,
     :withdrawn_at,
-    :replaces_grant_id
+    :replaces_grant_id,
+    :suspended_by,
+    :suspended_at,
+    :suspension_revision,
+    :suspension_level,
+    :resumed_by,
+    :resumed_at
   ]
 
   # Always present; the rest depends on the state (AutomationGrant's shape checks, #283).
@@ -129,7 +142,13 @@ defmodule Cadence.Management.Contacts.Store.AutomationGrantRow do
     :currency,
     :maximum_execution_concurrency,
     :validity_seconds,
-    :content_sha256
+    :content_sha256,
+    :suspended_by,
+    :suspended_at,
+    :suspension_revision,
+    :suspension_level,
+    :resumed_by,
+    :resumed_at
   ]
 
   @spec changeset(AutomationGrant.t()) :: Ecto.Changeset.t()
@@ -155,6 +174,10 @@ defmodule Cadence.Management.Contacts.Store.AutomationGrantRow do
     row
     |> cast(Map.take(domain_attrs(grant), @transition_fields), @transition_fields)
     |> common_validations()
+    |> unique_constraint(
+      [:organization_id, :mission_id, :service_identity_id],
+      name: :automation_grants_one_active_per_service_idx
+    )
   end
 
   @spec to_domain(struct()) :: AutomationGrant.t()
@@ -187,6 +210,9 @@ defmodule Cadence.Management.Contacts.Store.AutomationGrantRow do
       approval_policy: row.approval_policy,
       replaces_grant_id: row.replaces_grant_id,
       legacy_issue: row.legacy_issue == true,
+      suspension: suspension(row),
+      resumed_by: row.resumed_by,
+      resumed_at: row.resumed_at,
       inserted_at: row.inserted_at,
       updated_at: row.updated_at
     })
@@ -199,7 +225,10 @@ defmodule Cadence.Management.Contacts.Store.AutomationGrantRow do
     |> validate_number(:maximum_contacts, greater_than: 0)
     |> validate_optional_non_negative(:maximum_estimated_cost_micros)
     |> validate_number(:maximum_execution_concurrency, greater_than: 0)
-    |> validate_inclusion(:lifecycle_state, ~w(proposed active rejected revoked withdrawn))
+    |> validate_inclusion(
+      :lifecycle_state,
+      ~w(proposed active suspended rejected revoked withdrawn)
+    )
     |> validate_number(:validity_seconds, greater_than: 0)
     |> validate_subset(:allowed_actions, ~w(plan repair submit approve execute))
     |> validate_length(:allowed_actions, min: 1)
@@ -251,6 +280,16 @@ defmodule Cadence.Management.Contacts.Store.AutomationGrantRow do
 
   defp ending(_row), do: nil
 
+  defp suspension(%{suspended_by: by} = row) when is_binary(by),
+    do: %{
+      by: by,
+      at: row.suspended_at,
+      revision: row.suspension_revision,
+      level: row.suspension_level
+    }
+
+  defp suspension(_row), do: nil
+
   @no_ending %{
     revoked_by: nil,
     revoked_at: nil,
@@ -297,7 +336,13 @@ defmodule Cadence.Management.Contacts.Store.AutomationGrantRow do
       proposed_at: grant.proposed_at,
       proposal_expires_at: grant.proposal_expires_at,
       approval_policy: grant.approval_policy,
-      replaces_grant_id: grant.replaces_grant_id
+      replaces_grant_id: grant.replaces_grant_id,
+      suspended_by: grant.suspension && grant.suspension.by,
+      suspended_at: grant.suspension && grant.suspension.at,
+      suspension_revision: grant.suspension && grant.suspension.revision,
+      suspension_level: grant.suspension && grant.suspension.level,
+      resumed_by: grant.resumed_by,
+      resumed_at: grant.resumed_at
     }
   end
 end

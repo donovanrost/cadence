@@ -252,7 +252,10 @@ defmodule Cadence.Control.PlanningGrants do
       approved_at: grant.approved_at,
       reason: grant.approval_reason,
       replaces_grant_id: grant.replaces_grant_id,
-      sha256: grant.content_sha256
+      sha256: grant.content_sha256,
+      # #499: who suspended it by tightening the approval setting, when, by which settings
+      # revision and at which level; null unless it was suspended. `by` as #146 names people.
+      suspension: suspension(grant.suspension, users)
     }
     |> Map.merge(ended(grant, users))
   end
@@ -310,11 +313,29 @@ defmodule Cadence.Control.PlanningGrants do
   defp user_names(org, grants) do
     ids =
       grants
-      |> Enum.flat_map(&[&1.proposed_by, &1.approved_by, &1.ending && &1.ending.by])
+      |> Enum.flat_map(
+        &[
+          &1.proposed_by,
+          &1.approved_by,
+          &1.ending && &1.ending.by,
+          &1.suspension && &1.suspension.by
+        ]
+      )
       |> Enum.reject(&is_nil/1)
       |> Enum.filter(&is_binary/1)
 
     MemberNames.display_names(org, ids)
+  end
+
+  defp suspension(nil, _users), do: nil
+
+  defp suspension(suspension, users) do
+    %{
+      at: suspension.at,
+      by: suspension.by |> person(users) |> Map.put(:kind, "user"),
+      settings_revision: suspension.revision,
+      level: suspension.level
+    }
   end
 
   defp person(nil, _users), do: nil

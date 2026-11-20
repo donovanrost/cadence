@@ -50,7 +50,9 @@ defmodule Cadence.Management.ConsoleSettings do
   """
   @spec save(Scope.t(), binary() | nil, binary(), map(), integer() | nil) ::
           {:ok, %{version: pos_integer(), state: :active}} | {:error, term()}
-  def save(%Scope{} = scope, mission_id, section_id, values, expected_version)
+  def save(scope, mission_id, section_id, values, expected_version, opts \\ [])
+
+  def save(%Scope{} = scope, mission_id, section_id, values, expected_version, opts)
       when is_map(values) do
     with {:ok, field_list} <- section_fields(section_id),
          :ok <- known_paths(values, field_list, mission_id),
@@ -62,7 +64,8 @@ defmodule Cadence.Management.ConsoleSettings do
              mission_id,
              section_id,
              snapshot.token,
-             input(snapshot, values, mission_id)
+             input(snapshot, values, mission_id),
+             opts
            ) do
       {:ok, %{version: snapshot.version + 1, state: :active}}
     else
@@ -73,7 +76,7 @@ defmodule Cadence.Management.ConsoleSettings do
     end
   end
 
-  def save(_scope, _mission_id, _section_id, _values, _expected),
+  def save(_scope, _mission_id, _section_id, _values, _expected, _opts),
     do: {:error, {:invalid_params, %{values: "must be an object"}}}
 
   defp changed(scope, mission_id, section_id) do
@@ -261,11 +264,11 @@ defmodule Cadence.Management.ConsoleSettings do
     end
   end
 
-  defp write(scope, mission_id, "cadence.configuration", token, input),
+  defp write(scope, mission_id, "cadence.configuration", token, input, _opts),
     do: ConfigurationSettingsSection.save(scope, mission_id, token, input)
 
-  defp write(scope, mission_id, section_id, token, input),
-    do: Settings.save(scope, mission_id, section_id, token, input)
+  defp write(scope, mission_id, section_id, token, input, opts),
+    do: Settings.save(scope, mission_id, section_id, token, input, opts)
 
   defp known_paths(values, field_list, mission_id) do
     allowed =

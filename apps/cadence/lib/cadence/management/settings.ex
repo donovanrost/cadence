@@ -22,10 +22,12 @@ defmodule Cadence.Management.Settings do
     end
   end
 
-  def save(scope, mission_id, section_id, token, input) do
+  # `opts` reach a provider that takes them (the approval setting's acknowledged suspensions,
+  # #499); every other provider saves with four arguments.
+  def save(scope, mission_id, section_id, token, input, opts \\ []) do
     with :ok <- SettingsAccess.authorize(scope, :manage_settings, mission_id),
          {:ok, selected} <- select(sections(scope.organization_id, mission_id), section_id) do
-      save_section(selected.provider, scope, mission_id, token, input)
+      save_section(selected.provider, scope, mission_id, token, input, opts)
     end
   end
 
@@ -40,8 +42,10 @@ defmodule Cadence.Management.Settings do
       nil
   end
 
-  defp save_section(provider, scope, mission_id, token, input) do
-    provider.save(scope, mission_id, token, input)
+  defp save_section(provider, scope, mission_id, token, input, opts) do
+    if function_exported?(provider, :save, 5),
+      do: provider.save(scope, mission_id, token, input, opts),
+      else: provider.save(scope, mission_id, token, input)
   rescue
     exception ->
       Logger.error(

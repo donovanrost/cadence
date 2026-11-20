@@ -119,6 +119,15 @@ defmodule CadenceWeb.Console.Problem do
        "This grant was issued before two-person approval, so it can only be revoked. Propose a new grant instead."},
     automation_grant_narrow_unchanged:
       {422, "Not narrowed: nothing changed. Choose less than the grant allows now."},
+    # #499: resume (ca-ux words the console's lines; these are the server's fallbacks).
+    automation_grant_not_suspended:
+      {409, "This grant isn't suspended, so there's nothing to resume. Reload to see it."},
+    automation_grant_service_has_grant:
+      {409,
+       "This service already has a grant here. Revoke it, or propose a wider one that replaces it."},
+    approval_tightening_suspends_grants:
+      {409,
+       "Not saved: this change suspends automation grants that were approved by one person. Review them and save again to confirm."},
     automation_grant_capability_required:
       {403, "You can't propose or approve a grant for something you can't do yourself."},
     authenticated_user_required:

@@ -21,7 +21,7 @@ defmodule Cadence.ContactPlanning.AutomationGrant do
   alias Cadence.Persistence.JsonDocument
 
   @actions [:plan, :repair, :submit, :approve, :execute]
-  @states [:proposed, :active, :rejected, :revoked, :withdrawn]
+  @states [:proposed, :active, :suspended, :rejected, :revoked, :withdrawn]
   @proposal_window_seconds 72 * 3600
 
   @type action :: :plan | :repair | :submit | :approve | :execute
@@ -31,6 +31,17 @@ defmodule Cadence.ContactPlanning.AutomationGrant do
   and the reason (required to reject, optional to revoke, the server's own to withdraw).
   """
   @type ending :: %{by: binary(), at: DateTime.t(), reason: binary() | nil}
+
+  @typedoc """
+  #499: who suspended an active grant by tightening the mission's approval setting, when, and the
+  settings revision that did. Kept after a resume (the grant's history), and on a revoked grant.
+  """
+  @type suspension :: %{
+          by: binary(),
+          at: DateTime.t(),
+          revision: binary() | nil,
+          level: binary() | nil
+        }
 
   @type t :: %__MODULE__{
           automation_grant_id: binary(),
@@ -48,7 +59,7 @@ defmodule Cadence.ContactPlanning.AutomationGrant do
           validity_seconds: pos_integer(),
           valid_from: DateTime.t() | nil,
           valid_until: DateTime.t() | nil,
-          lifecycle_state: :proposed | :active | :rejected | :revoked | :withdrawn,
+          lifecycle_state: :proposed | :active | :suspended | :rejected | :revoked | :withdrawn,
           proposed_by: binary(),
           proposed_at: DateTime.t(),
           proposal_expires_at: DateTime.t(),
@@ -57,6 +68,9 @@ defmodule Cadence.ContactPlanning.AutomationGrant do
           approval_reason: binary(),
           approval_policy: map() | nil,
           ending: ending() | nil,
+          suspension: suspension() | nil,
+          resumed_by: binary() | nil,
+          resumed_at: DateTime.t() | nil,
           replaces_grant_id: binary() | nil,
           legacy_issue: boolean(),
           content_sha256: binary(),
@@ -89,6 +103,9 @@ defmodule Cadence.ContactPlanning.AutomationGrant do
     :approval_reason,
     :approval_policy,
     :ending,
+    :suspension,
+    :resumed_by,
+    :resumed_at,
     :replaces_grant_id,
     :content_sha256,
     :inserted_at,
@@ -125,6 +142,12 @@ defmodule Cadence.ContactPlanning.AutomationGrant do
       true ->
         :active
     end
+  end
+
+  # #499: a suspended grant authorizes nothing; its validity runs on (never extended), so one past
+  # valid_until reads as expired and can't be resumed.
+  def effective_state(%__MODULE__{lifecycle_state: :suspended} = grant, now) do
+    if DateTime.before?(now, grant.valid_until), do: :suspended, else: :expired
   end
 
   def effective_state(%__MODULE__{lifecycle_state: state}, _now), do: state
@@ -173,6 +196,9 @@ defmodule Cadence.ContactPlanning.AutomationGrant do
         approval_reason: required(attrs, :approval_reason),
         approval_policy: value(attrs, :approval_policy),
         ending: ending(value(attrs, :ending)),
+        suspension: suspension(value(attrs, :suspension)),
+        resumed_by: optional_string(value(attrs, :resumed_by)),
+        resumed_at: optional_datetime(value(attrs, :resumed_at), :resumed_at),
         replaces_grant_id: optional_string(value(attrs, :replaces_grant_id)),
         # Issued before #283 (lead 11-19): its proposal fields were filled from its approval.
         legacy_issue: value(attrs, :legacy_issue, false) == true,
@@ -258,9 +284,10 @@ defmodule Cadence.ContactPlanning.AutomationGrant do
   # Each state carries exactly its own evidence (ca-security: an active grant without approval
   # evidence fails closed, here at construction as well as at use).
   defp validate_revocation_shape(%__MODULE__{lifecycle_state: state} = grant) do
-    if shape?(state, approved?(grant), not is_nil(grant.valid_from), grant.ending),
-      do: grant,
-      else: raise(ArgumentError, "automation grant evidence doesn't match #{state}")
+    if shape?(state, approved?(grant), not is_nil(grant.valid_from), grant.ending) and
+         (state != :suspended or not is_nil(grant.suspension)),
+       do: grant,
+       else: raise(ArgumentError, "automation grant evidence doesn't match #{state}")
   end
 
   defp approved?(grant), do: not is_nil(grant.approved_by) and not is_nil(grant.approved_at)
@@ -269,6 +296,10 @@ defmodule Cadence.ContactPlanning.AutomationGrant do
     do: not approved and not windowed and is_nil(ending)
 
   defp shape?(:active, approved, windowed, ending), do: approved and windowed and is_nil(ending)
+
+  # #499: suspended keeps its approval and window; the suspension is checked in validate_shape.
+  defp shape?(:suspended, approved, windowed, ending),
+    do: approved and windowed and is_nil(ending)
 
   # A revoke's reason is recorded when given, never required (a tightening).
   defp shape?(:revoked, approved, windowed, ending),
@@ -280,6 +311,18 @@ defmodule Cadence.ContactPlanning.AutomationGrant do
   defp shape?(:withdrawn, approved, _windowed, ending), do: not approved and not is_nil(ending)
 
   defp present?(text), do: is_binary(text) and String.trim(text) != ""
+
+  defp suspension(nil), do: nil
+
+  defp suspension(%{by: by, at: at} = suspension) when is_binary(by) and by != "",
+    do: %{
+      by: by,
+      at: datetime(at, :suspended_at),
+      revision: optional_string(Map.get(suspension, :revision)),
+      level: optional_string(Map.get(suspension, :level))
+    }
+
+  defp suspension(_other), do: raise(ArgumentError, "automation grant suspension is invalid")
 
   defp ending(nil), do: nil
 

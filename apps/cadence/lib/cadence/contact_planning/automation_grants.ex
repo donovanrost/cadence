@@ -96,7 +96,12 @@ defmodule Cadence.ContactPlanning.AutomationGrants do
   defp insert_and_record(scope, grant) do
     decision = if grant.lifecycle_state == :active, do: :not_required, else: :proposed
 
-    with {:ok, row} <- grant |> AutomationGrantRow.changeset() |> Repo.insert(),
+    with {:ok, row} <-
+           grant
+           |> AutomationGrantRow.changeset()
+           # A savepoint, so a unique violation leaves the transaction usable for the named 409.
+           |> Repo.insert(mode: :savepoint)
+           |> AutomationGrantReview.service_has_grant(grant),
          grant = AutomationGrantRow.to_domain(row),
          :ok <-
            AutomationGrantDecisions.record(scope, decision, grant, %{
@@ -113,8 +118,9 @@ defmodule Cadence.ContactPlanning.AutomationGrants do
 
   defp replaces(scope, mission_id, grant) do
     case fetch(scope.organization_id, mission_id, grant.replaces_grant_id) do
-      {:ok, %{lifecycle_state: :active, service_identity_id: service}}
-      when service == grant.service_identity_id ->
+      # #499: a suspended grant may be replaced by a widening, like an active one.
+      {:ok, %{lifecycle_state: state, service_identity_id: service}}
+      when state in [:active, :suspended] and service == grant.service_identity_id ->
         :ok
 
       _other ->
