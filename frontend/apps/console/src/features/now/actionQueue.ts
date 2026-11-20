@@ -26,6 +26,7 @@ import { scidMismatchRow } from "./scidMismatch.ts";
 import { stuckRow, tagStuck } from "./stuckRow.ts";
 import { FOLD_AT, foldedSettlementRow, foldKey, type Settlement } from "./settlement.ts";
 import { missedPassRows, stationRow, type MissedItem } from "./sources.ts";
+import { withdrawnRow } from "./withdrawnComposition.ts";
 
 /** Now's action queue as rows (M6): the server's ranked items, worded per source. */
 export { actionQueueReader, fetchActionQueue, type ActionQueue };
@@ -224,6 +225,10 @@ function rowFor(
       if (a.source === "contact_scid_mismatch")
         return [scidMismatchRow(base(item), item.id, a, item.spacecraft[0]?.name ?? null, now)];
       if (a.source === "replay_conflict") return [stuckRow(base(item), item.id, a, now)];
+      if (a.source === "model_approval_withdrawn") {
+        const row = withdrawnRow(base(item), item.id, a, item.spacecraft[0] ?? null);
+        return row ? [row] : [];
+      }
       if (a.source === "job_outcome_unknown")
         return [jobRow(base(item), item.id, a, item.spacecraft[0]?.name ?? null, now)];
       if (a.source === "provider_change") {
