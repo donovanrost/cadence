@@ -8,8 +8,11 @@ defmodule Cadence.Catalog.Actor do
     nil. It never carries the email (#471, ca-security's P1 on #462); documents written before
     #471 may, and reads never use it.
   - A service identity: `{"actor_kind" => "service", "service_identity_id", "name"}`.
-  - Cadence itself (a seed or a task): `{"actor_kind" => "system", "system_id", "name"}`, where
-    `system_id` is a stable ref (e.g. the seed's id) and `name` says what ran, never a person.
+  - Cadence itself (a seed or a task): `{"actor_kind" => "system", "system_id", "name",
+    "run_by"}`. `system_id` is a stable ref (e.g. the seed's id), `name` says what ran (never a
+    person), and `run_by` is the user id of the person who ran it (#513, MM-2). A system actor
+    without `run_by` is refused (`recorded/1`), so no import has nobody accountable for it, and the
+    runner counts as an importer for the model gate's separation (`ModelImporters`).
 
   New documents never carry a bare `"id"`: the model approval gate's importer read
   (`Catalog.model_importers/3`) takes `"user_id"` (or, on old catalog revision rows, a legacy
@@ -42,23 +45,35 @@ defmodule Cadence.Catalog.Actor do
 
   def from_scope(_scope), do: {:error, :catalog_import_actor_required}
 
-  @doc "Cadence itself as the actor: `system_id` a stable ref, `name` what ran (never a person)."
-  @spec system(binary(), binary()) :: t()
-  def system(system_id, name)
-      when is_binary(system_id) and system_id != "" and is_binary(name) and name != "",
-      do: %{"actor_kind" => "system", "system_id" => system_id, "name" => name}
+  @doc """
+  Cadence itself as the actor: `system_id` a stable ref, `name` what ran (never a person), and
+  `run_by` the user id of the person who ran it (#513): they count as an importer, so they can't
+  approve what this imports under 'independent'.
+  """
+  @spec system(binary(), binary(), binary()) :: t()
+  def system(system_id, name, run_by)
+      when is_binary(system_id) and system_id != "" and is_binary(name) and name != "" and
+             is_binary(run_by) and run_by != "",
+      do: %{
+        "actor_kind" => "system",
+        "system_id" => system_id,
+        "name" => name,
+        "run_by" => run_by
+      }
 
   @doc """
   `:ok` when `actor` names who ran an import: a person's `user_id`, a service identity's
-  `service_identity_id`, or a system actor's `system_id`. Also the REST API's document
-  (`ControlPlaneAccess.actor_document/1`), which carries the same two ids.
+  `service_identity_id`, or a system actor's `system_id` with the person who ran it (`run_by`,
+  #513). Also the REST API's document (`ControlPlaneAccess.actor_document/1`), which carries the
+  same two ids.
   """
   @spec recorded(term()) :: :ok | {:error, :catalog_import_actor_required}
   def recorded(%{"user_id" => id}) when is_binary(id) and id != "", do: :ok
   def recorded(%{"service_identity_id" => id}) when is_binary(id) and id != "", do: :ok
 
-  def recorded(%{"actor_kind" => "system", "system_id" => id}) when is_binary(id) and id != "",
-    do: :ok
+  def recorded(%{"actor_kind" => "system", "system_id" => id, "run_by" => by})
+      when is_binary(id) and id != "" and is_binary(by) and by != "",
+      do: :ok
 
   def recorded(_actor), do: {:error, :catalog_import_actor_required}
 

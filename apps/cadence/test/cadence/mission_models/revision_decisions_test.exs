@@ -41,7 +41,8 @@ defmodule Cadence.MissionModels.RevisionDecisionsTest do
              "id" => "admin-a",
              "comparison_report_id" => id,
              "replay" => "not_run",
-             "importer_recorded" => false
+             # The fixture's system actor names its runner (#513), so an importer is on record.
+             "importer_recorded" => true
            } = JsonDocument.unwrap_value(approved_by)
 
     assert id == report["comparison_report_id"]
