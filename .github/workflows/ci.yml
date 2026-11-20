@@ -511,6 +511,17 @@ jobs:
         run: |
           (cd apps/cadence_web && mix compile)
           (cd apps/cadence_simulator && mix compile)
+      # devops on #624: only quality saves _build, and only for test, so save the dev build from
+      # shard 1 on pushes; PR runs restore the newest one through setup-cadence's restore-keys.
+      - name: Index the sources this dev _build was compiled from
+        if: ${{ github.event_name == 'push' && matrix.shard == 1 }}
+        run: scripts/ci/source_index.sh write "$CADENCE_SOURCE_INDEX"
+      - name: Save the dev _build
+        if: ${{ github.event_name == 'push' && matrix.shard == 1 }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.CADENCE_BUILD_PATHS }}
+          key: ${{ env.CADENCE_BUILD_KEY }}
       - name: Create and migrate the database and QuestDB
         working-directory: apps/cadence_web
         run: mix ecto.create -r Cadence.Repo && mix ecto.migrate -r Cadence.Repo && mix cadence.questdb.migrate
@@ -561,17 +572,35 @@ jobs:
       - name: No password in any file to upload
         id: leakcheck
         if: ${{ !cancelled() }}
+        shell: bash
+        # Fails closed (ca-security on #624): a trace that won't unpack, or a scan that errors, blocks
+        # the upload just as a match does. Nothing about the files or the match is printed.
         run: |
           set +x
+          set -euo pipefail
           scan="$RUNNER_TEMP/leakscan"
           mkdir -p "$scan"
           cd frontend/apps/console
+          paths=()
+          for p in playwright-report test-results "$RUNNER_TEMP/server.log" "$RUNNER_TEMP/simulator.log"; do
+            if [ -e "$p" ]; then paths+=("$p"); fi
+          done
           # Traces are zips: unpack them so their JSON and network logs are scanned too.
-          find playwright-report test-results -name '*.zip' -print0 2>/dev/null |
-            while IFS= read -r -d '' z; do unzip -qo "$z" -d "$scan/$(basename "$z" .zip)-$RANDOM"; done
+          while IFS= read -r -d '' z; do
+            if ! unzip -qo "$z" -d "$scan/$(basename "$z" .zip)-$RANDOM" >/dev/null 2>&1; then
+              echo "::error title=credential leak check::a trace couldn't be unpacked for the scan; upload blocked"
+              exit 1
+            fi
+          done < <(find playwright-report test-results -name '*.zip' -print0 2>/dev/null || true)
+          paths+=("$scan")
           for secret in "$CADENCE_ADMIN_PASSWORD" "$E2E_PERSONA_PASSWORD"; do
-            if grep -r -a -F -q -- "$secret" playwright-report test-results "$scan" "$RUNNER_TEMP/server.log" "$RUNNER_TEMP/simulator.log" 2>/dev/null; then
+            rc=0
+            grep -r -a -F -q -- "$secret" "${paths[@]}" >/dev/null 2>&1 || rc=$?
+            if [ "$rc" -eq 0 ]; then
               echo "::error title=credential leak::a run password appears in a file to be uploaded; upload blocked (file and match not printed)"
+              exit 1
+            elif [ "$rc" -ne 1 ]; then
+              echo "::error title=credential leak check::the scan failed (grep exit $rc); upload blocked"
               exit 1
             fi
           done
