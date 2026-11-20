@@ -446,6 +446,20 @@ defmodule Cadence.Configuration.Submission do
     end
   end
 
+  @doc """
+  Whether submitting `change_set_id` asks for a second person's approval (Request review) rather
+  than applying: the set's recorded policy once submitted, else the mission's, with a legacy route
+  conversion's forced approval. The same decision the submit makes, so the console's words for a
+  refused submit name the right act (fe-setup on #555).
+  """
+  @spec needs_approval?(String.t(), String.t(), String.t()) :: boolean()
+  def needs_approval?(organization_id, mission_id, change_set_id) do
+    case ChangeSetStore.fetch(mission_id, change_set_id) do
+      {:ok, set} -> needs_approval?(organization_id, set) == true
+      {:error, _not_found} -> false
+    end
+  end
+
   defp needs_approval?(organization_id, set) do
     case set.policy_document do
       %{"approval_required" => required} -> required
