@@ -1,73 +1,105 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
 /**
- * #242 (ux, lead): word-regression checks for the console specs. ux's matching rules (on #242):
- * words are literal, whole sentences from the U-entries, with only whitespace normalized; they come
- * from this one table, never copied into a spec, so a wording change is one edit here.
+ * #242 (ux, lead): word-regression checks for the console specs, to ux's matching rules on #242.
+ * Words are literal, whole sentences from the U-entries, with only whitespace normalized.
+ *
+ * WORDS holds exact U-entry sentences only, each with its entry (ux on #648): a spec takes its words
+ * from here, never types them, so a wording change is one edit. Add a sentence when a spec needs
+ * it, citing its U-entry, with ux's review.
  */
 export const WORDS = {
-  /** U20, rejected: the server answered with an error ("staged", "recorded"). */
-  rejected: (done: string) => `Nothing was ${done}.`,
-  /** U20, outcome unknown: the request may have landed. */
-  unclear: (done: string) => `It isn't clear whether anything was ${done}.`,
-  /** U20's console form for an act it couldn't confirm ("the grant", "that it resumed"). */
-  notConfirmed: (what: string) => `Cadence didn't confirm ${what}. Reload to see it.`,
-  /** U25: a spacecraft whose name Cadence can't read; never its id. */
+  /** U20 (rejected): "Nothing was staged." */
+  nothingStaged: "Nothing was staged.",
+  /** U20 (outcome unknown): "It isn't clear whether anything was staged." */
+  unclearStaged: "It isn't clear whether anything was staged.",
+  /** U25 and #237: a spacecraft whose name Cadence can't read, never its id. */
   unknownSpacecraft: "Unknown spacecraft",
-  /** U97: an approval the server confirmed (202, outcome approved). */
+  /** U97: "Approved. Booking 40 passes." only on the 202 with outcome approved; N is the count. */
   approved: (passes: number) => `Approved. Booking ${passes} passes.`,
+} as const;
+
+/** ux: polite is role=status or aria-live=polite; alert is role=alert or aria-live=assertive. */
+const REGIONS = {
+  status: '[role="status"], [aria-live="polite"]',
+  alert: '[role="alert"], [aria-live="assertive"]',
 } as const;
 
 const squash = (s: string) => s.replace(/\s+/g, " ").trim();
 
-/** The texts of every live region of one kind on the page, whitespace normalized. */
-async function regionTexts(page: Page, kind: "alert" | "status"): Promise<string[]> {
-  const texts = await page.getByRole(kind).allTextContents();
-  return texts.map(squash);
+async function saidIn(page: Page, kind: keyof typeof REGIONS, sentence: string): Promise<boolean> {
+  const texts = await page.locator(REGIONS[kind]).allTextContents();
+  return texts.some((t) => squash(t).includes(sentence));
+}
+
+/**
+ * Shown means on screen for a sighted person: in an element outside the kit's announcer
+ * ([data-ap-announcer]) and any .sr-only text, with a box bigger than a pixel and not hidden.
+ * Playwright counts the 1px sr-only announcer as visible, so it can't be the check (lead, ux on
+ * #648).
+ */
+async function shown(page: Page, sentence: string): Promise<boolean> {
+  return page.evaluate((s) => {
+    const squashed = (t: string | null) => (t ?? "").replace(/\s+/g, " ").trim();
+    for (const el of document.body.querySelectorAll<HTMLElement>("*")) {
+      if (el.closest("[data-ap-announcer], .sr-only, script, style, template")) continue;
+      if (!squashed(el.textContent).includes(s)) continue;
+      // The innermost element holding the whole sentence.
+      if (Array.from(el.children).some((c) => squashed(c.textContent).includes(s))) continue;
+      const box = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      if (box.width > 1 && box.height > 1 && style.visibility !== "hidden" && style.opacity !== "0")
+        return true;
+    }
+    return false;
+  }, sentence);
 }
 
 /**
  * a11y B6: how the words are said, and that what's shown is what's said (ux).
  * - `alert`: a refusal or failure of the person's act. In an alert region, and in no polite one.
- * - otherwise a success, said politely: in a status region (the kit's announcer, #604, or a
- *   status line), and in no alert region. It is also shown on the page, in the same words.
+ * - otherwise a success, said politely: in a polite region and in no alert one.
+ * Either way the same words are shown on screen.
  */
 export async function expectSaid(
   page: Page,
   words: string,
-  how: { alert: boolean },
+  how: { alert: boolean; timeout?: number },
 ): Promise<void> {
   const sentence = squash(words);
   const said = how.alert ? "alert" : "status";
   const other = how.alert ? "status" : "alert";
+  const timeout = how.timeout ?? 15_000;
   await expect
-    .poll(async () => (await regionTexts(page, said)).some((t) => t.includes(sentence)), {
-      message: `"${sentence}" is said in a ${said} region`,
+    .poll(() => saidIn(page, said, sentence), {
+      message: `"${sentence}" is said (${said})`,
+      timeout,
     })
     .toBe(true);
-  expect(
-    (await regionTexts(page, other)).some((t) => t.includes(sentence)),
-    `"${sentence}" is not also said in a ${other} region`,
-  ).toBe(false);
-  await expect(page.getByText(sentence).first(), `"${sentence}" is shown`).toBeVisible();
+  expect(await saidIn(page, other, sentence), `"${sentence}" is not also said (${other})`).toBe(
+    false,
+  );
+  await expect
+    .poll(() => shown(page, sentence), { message: `"${sentence}" is shown on screen`, timeout })
+    .toBe(true);
 }
 
 /**
  * U20: after a stubbed failure, the failure line (the caller's U20 sentence) is said as an alert,
- * and the success words appear nowhere: not shown, and not said in any region.
+ * and the success words are neither shown nor said in any region.
  */
 export async function expectNoFalseSuccess(
   page: Page,
-  outcome: { failure: string; success: string },
+  outcome: { failure: string; success: string; timeout?: number },
 ): Promise<void> {
-  await expectSaid(page, outcome.failure, { alert: true });
+  await expectSaid(page, outcome.failure, {
+    alert: true,
+    ...(outcome.timeout === undefined ? {} : { timeout: outcome.timeout }),
+  });
   const success = squash(outcome.success);
-  await expect(page.getByText(success)).toHaveCount(0);
+  expect(await shown(page, success), `"${success}" is not shown`).toBe(false);
   for (const kind of ["alert", "status"] as const) {
-    expect(
-      (await regionTexts(page, kind)).some((t) => t.includes(success)),
-      `"${success}" is not said in a ${kind} region`,
-    ).toBe(false);
+    expect(await saidIn(page, kind, success), `"${success}" is not said (${kind})`).toBe(false);
   }
 }
 
