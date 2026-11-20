@@ -91,9 +91,21 @@ describe("the save words", () => {
       details: { "document.protocol.frame_size": ["must be at most 2048"] },
     };
     expect(saveRefusal(invalid, s, s.document)).toEqual({
-      text: "Not saved.",
+      text: "Not saved: Frame size has a problem. Fix it, then save again.",
       fields: { frame_size: "must be at most 2048" },
     });
+    const many: ApiError = {
+      ...invalid,
+      details: {
+        "document.protocol.frame_size": ["x"],
+        "document.protocol.ocf_length": ["x"],
+        "document.handled_apids": ["x"],
+        "document.something_else": ["x"],
+      },
+    };
+    expect(saveRefusal(many, s, s.document).text).toBe(
+      "Not saved: Frame size, OCF, Handled APIDs and 1 more have problems. Fix them, then save again.",
+    );
     expect(saveRefusal(conflict("something_new"), s, s.document)).toEqual({
       text: "Not saved.",
       code: "something_new",

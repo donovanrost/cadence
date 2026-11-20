@@ -76,6 +76,42 @@ export type SaveRefusal = Readonly<{
   fields: Readonly<Record<string, string>>;
 }>;
 
+/** The draft fields' own labels (U94, U40), for the alert that names refused fields (ux, #618). */
+// keyed-by-text: looked up by the server's field paths (an open set); unknown ones read "Other setting"
+const FIELD_LABELS: Readonly<Record<string, string>> = {
+  catalog_revision_id: "Catalog revision",
+  telemetry_source_endpoint_id: "Packet source",
+  handled_apids: "Handled APIDs",
+  protocol: "Framing",
+  downlink: "Downlink protocol",
+  uplink: "Uplink protocol",
+  frame_size: "Frame size",
+  secondary_header_length: "Secondary header",
+  insert_zone_length: "Insert zone",
+  ocf_length: "OCF",
+  truncated_primary_header: "Truncated primary header",
+};
+
+/**
+ * ux on #618: "Not saved: Frame size and OCF have problems. Fix them, then save again." The
+ * fields' own labels (never a path; #308's "Other setting" for one without), up to 3, then "and
+ * N more".
+ */
+function fieldsLine(keys: readonly string[]): string {
+  const labels = [...new Set(keys.map((k) => FIELD_LABELS[k] ?? "Other setting"))];
+  const shown = labels.slice(0, 3);
+  const more = labels.length - shown.length;
+  const list =
+    more > 0
+      ? `${shown.join(", ")} and ${more} more`
+      : shown.length === 1
+        ? (shown[0] ?? "")
+        : `${shown.slice(0, -1).join(", ")} and ${shown.at(-1) ?? ""}`;
+  return labels.length === 1
+    ? `Not saved: ${list} has a problem. Fix it, then save again.`
+    : `Not saved: ${list} have problems. Fix them, then save again.`;
+}
+
 /** "document.handled_apids" → "handled_apids"; "document.protocol.frame_size" → "frame_size". */
 const fieldOf = (path: string) => path.replace(/^document\./, "").replace(/^protocol\./, "");
 
@@ -116,8 +152,8 @@ export function saveRefusal(
   if (e.kind === "invalid") {
     const fields = fieldErrors(e, fieldOf);
     return Object.keys(fields).length > 0
-      ? // U94: invalid_params is the field's own error, under its field; the bar keeps "Not saved."
-        { text: "Not saved.", fields }
+      ? // U94: each error under its field; the bar's alert names them (ux, #618).
+        { text: fieldsLine(Object.keys(fields)), fields }
       : plain("Not saved: Cadence couldn't read this draft. Reload and try again.");
   }
   const code = codeOf(e);
