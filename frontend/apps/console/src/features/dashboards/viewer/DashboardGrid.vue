@@ -3,6 +3,7 @@ import { computed, ref, useId, watch } from "vue";
 import { useNow } from "@/ui";
 import type { WorkspacePlacement, WorkspaceSnapshot } from "../model/snapshot.ts";
 import SectionHeading from "./SectionHeading.vue";
+import { readingOrder } from "../model/widget-data.ts";
 import WidgetPanel from "./WidgetPanel.vue";
 
 /**
@@ -15,7 +16,6 @@ import WidgetPanel from "./WidgetPanel.vue";
 const props = defineProps<{ snapshot: WorkspaceSnapshot }>();
 const emit = defineEmits<{ inspect: [placement: WorkspacePlacement] }>();
 const now = useNow();
-const order = (p: WorkspacePlacement) => (p.layout.y ?? 1e6) * 1000 + (p.layout.x ?? 0);
 const sections = computed(() => {
   const groups = [
     {
@@ -30,7 +30,7 @@ const sections = computed(() => {
     placements: props.snapshot.placements
       .filter((p) => p.section_id === s.id)
       .slice()
-      .sort((a, b) => order(a) - order(b)),
+      .sort((a, b) => readingOrder(a) - readingOrder(b)),
   }));
   return groups.filter((g) => g.placements.length > 0);
 });

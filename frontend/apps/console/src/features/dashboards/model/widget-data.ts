@@ -44,6 +44,13 @@ export const widgetTitle = (placement: WorkspacePlacement, position?: number): s
     ? placement.widget.title || untitled("widget", position)
     : "Unavailable widget";
 
+/**
+ * Reading order on the grid: by row, then column; a placement without a position comes last. The
+ * viewer and edit mode both sort by it, so "Untitled widget N" is the same widget in both.
+ */
+export const readingOrder = (p: { layout: { x: number | null; y: number | null } }): number =>
+  (p.layout.y ?? 1e6) * 1000 + (p.layout.x ?? 0);
+
 /** "Untitled widget 3", "Untitled section 2"; without a position, just the kind. */
 export const untitled = (kind: "widget" | "section", position?: number): string =>
   position === undefined ? `Untitled ${kind}` : `Untitled ${kind} ${position}`;
