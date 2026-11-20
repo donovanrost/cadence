@@ -10,7 +10,12 @@ import {
   valueWords,
   type ProviderChange,
 } from "@/features/now/index.ts";
-import { decideProviderChange, type ChangeDecision, type ChangeTarget } from "./attention.ts";
+import {
+  decidedLine,
+  decideProviderChange,
+  type ChangeDecision,
+  type ChangeTarget,
+} from "./attention.ts";
 
 /**
  * §11 L14 provider change on the pass (ux U44): what changed (Before → After), then Approve /
@@ -99,8 +104,12 @@ async function submit() {
     const o = await decideProviderChange(props.missionId, props.target, d, why);
     if (o.status === "done") {
       // U44's grammar with the signed-in user (qa: Acknowledge read without "by …").
-      const by = session.user.display_name ?? session.user.email;
-      decided.value = `${DONE[d]} by ${by} at ${short(new Date().toISOString(), props.now)}: ${why.replace(/[.!?]+$/, "")}.`;
+      decided.value = decidedLine(
+        DONE[d],
+        session.user.display_name,
+        short(new Date().toISOString(), props.now),
+        why,
+      );
       deciding.value = null;
       emit("changed");
       return;
