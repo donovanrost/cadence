@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vite-plus/test";
 import { scid as scidOf, spacecraftId } from "@/api";
 import type { SpacecraftRow } from "../api.ts";
-import { checkClashes, generateRows, manifestRows, nextFreeScid, rangeLabel } from "./batch.ts";
+import {
+  checkClashes,
+  generateRows,
+  manifestRows,
+  nextFreeScid,
+  rangeLabel,
+  type ProposedSpacecraft,
+} from "./batch.ts";
 import { guessMapping, parseCsv, readRows } from "./manifest.ts";
 import { expandName, parsePattern } from "./naming.ts";
 
@@ -103,6 +110,37 @@ describe("batch", () => {
       manifestRows(readRows(parsed.header, parsed.rows, guessMapping(parsed.header))),
       [],
     );
+    expect(report.clashCount).toBe(2);
+  });
+});
+
+describe("S9 (#313, U20): the server's SCIDs", () => {
+  const proposed = (name: string, scid: number): ProposedSpacecraft => ({
+    key: name,
+    name,
+    scid,
+    norad: null,
+    plane: null,
+    slot: null,
+    profileName: null,
+    problems: [],
+  });
+  const server = (next: number | null, inUse: readonly number[]) => ({ next, inUse });
+  it("suggests the server's next free SCID, null when none is free; never past 1023 without it", () => {
+    expect(nextFreeScid([existing("A", 7)], server(3, [1, 2, 7]))).toBe(3);
+    expect(nextFreeScid([existing("A", 7)], server(null, [7]))).toBeNull();
+    expect(nextFreeScid([existing("A", 1023)])).toBeNull();
+    expect(nextFreeScid([existing("A", 7)])).toBe(8);
+  });
+
+  it("flags a SCID the server says is in use but no live craft holds (archived or staged)", () => {
+    const rows = [proposed("NEW-5", 5), proposed("NEW-7", 7), proposed("NEW-9", 9)];
+    const report = checkClashes(rows, [existing("A", 7)], [5, 7]);
+    expect(report.rows.map((r) => r.problems)).toEqual([
+      ["SCID 5 is already used in this mission"],
+      ["SCID 7 is already A"],
+      [],
+    ]);
     expect(report.clashCount).toBe(2);
   });
 });

@@ -115,12 +115,25 @@ defmodule Cadence.Platform.ScopedSettings do
 
   defp effective(_source, organization_value, _saved), do: organization_value
 
+  # Sections whose saves carry a who-may-change rule of their own (#233: the approval setting is
+  # loosened only by an organization admin). `save/8` takes them only with that rule as its
+  # `:check` (#429), and `rewrite_override/6`, which runs no such rule, refuses them. Named by id,
+  # not module: the platform layer doesn't depend on governance (a test keeps the id in step with
+  # ActivationPolicy.section_id/0).
+  @rule_guarded_sections ["cadence.governance"]
+
+  @doc "Whether `section_id`'s saves carry a who-may-change rule (#233, #429)."
+  @spec rule_guarded?(binary()) :: boolean()
+  def rule_guarded?(section_id), do: section_id in @rule_guarded_sections
+
   @doc """
   Saves a new revision of `section_id` for the organization (`mission_id` nil) or a mission, under
   the section lock (exclusive). `opts`: `:check`, a function of the current snapshot that may
   refuse the change (`:ok` or `{:error, reason}`), run under the lock after the token check, so it
   sees exactly what the save replaces; `:audit`, a function of the current snapshot returning a map
-  stored with the revision as its `audit` (for example the before and after values).
+  stored with the revision as its `audit` (for example the before and after values). A
+  rule-guarded section (`rule_guarded?/1`) is saved only with a `:check`; without one the answer
+  is `{:error, :settings_check_required}` and nothing is locked or written (#429).
   """
   def save(
         organization_id,
@@ -132,6 +145,30 @@ defmodule Cadence.Platform.ScopedSettings do
         actor,
         opts \\ []
       ) do
+    with :ok <- check_given(section_id, opts) do
+      locked_save(
+        organization_id,
+        mission_id,
+        section_id,
+        default,
+        expected_token,
+        document,
+        actor,
+        opts
+      )
+    end
+  end
+
+  defp locked_save(
+         organization_id,
+         mission_id,
+         section_id,
+         default,
+         expected_token,
+         document,
+         actor,
+         opts
+       ) do
     with_lock(organization_id, section_id, fn ->
       current = load(organization_id, mission_id, section_id, default)
       check = Keyword.get(opts, :check, fn _current -> :ok end)
@@ -143,6 +180,14 @@ defmodule Cadence.Platform.ScopedSettings do
       end
     end)
     |> ScopedReadUpdates.publish_result(:settings_changed, organization_id, mission_id)
+  end
+
+  # #429: a rule-guarded section without its rule would run no who-may-change check at all. The
+  # check must be a function of the snapshot (`check: nil` is no check; lead's review).
+  defp check_given(section_id, opts) do
+    if rule_guarded?(section_id) and not is_function(Keyword.get(opts, :check), 1),
+      do: {:error, :settings_check_required},
+      else: :ok
   end
 
   defp current_token(%{token: token}, token) when is_binary(token), do: :ok
@@ -222,12 +267,6 @@ defmodule Cadence.Platform.ScopedSettings do
       }
     )
   end
-
-  # Sections whose saves carry a who-may-change rule of their own (#233: the approval setting is
-  # loosened only by an organization admin). This writer runs no such rule, so it refuses them.
-  # Named by id, not module: the platform layer doesn't depend on governance (a test keeps the
-  # id in step with ActivationPolicy.section_id/0).
-  @rule_guarded_sections ["cadence.governance"]
 
   @doc """
   Writes `document` as a mission override's next revision when its latest is still

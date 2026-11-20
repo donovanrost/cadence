@@ -169,7 +169,7 @@ export function propose(
     );
     return {
       status: "ready",
-      report: checkClashes(rows, directory.spacecraft),
+      report: checkClashes(rows, directory.spacecraft, directory.scids?.inUse),
       profileId: draft.profileId,
     };
   }
@@ -214,7 +214,7 @@ export function propose(
   const rows = generateRows(pattern.pattern, count, start, planes, norads.ids);
   return {
     status: "ready",
-    report: checkClashes(rows, directory.spacecraft),
+    report: checkClashes(rows, directory.spacecraft, directory.scids?.inUse),
     profileId: draft.profileId,
   };
 }

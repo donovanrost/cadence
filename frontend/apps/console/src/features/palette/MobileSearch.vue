@@ -63,7 +63,7 @@ onMounted(() => {
 onBeforeUnmount(() => returnFocus?.focus());
 /** a11y A3 (#243): an aria-modal div, so Tab is kept inside it by hand (a native <dialog> isn't). */
 const root = useTemplateRef<HTMLElement>("root");
-useTabTrap(root);
+useTabTrap(root, () => emit("close"));
 </script>
 
 <template>
@@ -73,7 +73,6 @@ useTabTrap(root);
     aria-modal="true"
     aria-label="Search"
     class="fixed inset-0 z-50 flex flex-col bg-panel"
-    @keydown.esc="emit('close')"
   >
     <div class="flex flex-none items-center gap-2 border-b border-hairline bg-chrome pl-4">
       <label for="phone-search" class="sr-only">Search</label>
@@ -104,7 +103,9 @@ useTabTrap(root);
       :query="query.trim()"
       :sources="empty ? {} : search.sources.value"
       @open="open"
+      :expanded="expanded"
       @expand="(g) => (expanded = new Set([...expanded, g]))"
+      @collapse="(g) => (expanded = new Set([...expanded].filter((x) => x !== g)))"
       @retry="(g) => search.retry[g]?.()"
     />
   </div>
