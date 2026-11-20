@@ -574,7 +574,7 @@ jobs:
 
   # Production reads and writes telemetry through QuestDB, but the test env swaps every
   # telemetry store for Postgres. This job runs against a real QuestDB (docs/ci/questdb-integration.md).
-  # Kept out of ci-ok: an open flake (#491). It joins once that fix lands (director 11-19; docs/ci/questdb-integration.md).
+  # Required through ci-ok since #491's fix (#566) landed (director 11-19; docs/ci/questdb-integration.md).
   questdb-integration:
     name: QuestDB integration
     needs: changes
@@ -696,6 +696,7 @@ jobs:
         js-audit,
         frontend-quality,
         ingest-journal-off,
+        questdb-integration,
       ]
     if: always()
     runs-on: ubuntu-24.04

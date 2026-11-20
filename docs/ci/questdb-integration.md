@@ -1,6 +1,6 @@
 # CI proposal: QuestDB integration job
 
-Status: **P0 built**. `ingest-journal-off` joined `ci-ok` on 2026-11-19. `questdb-integration` stays out until #491's fix lands (see the end).
+Status: **P0 built**. `ingest-journal-off` joined `ci-ok` on 2026-11-19; `questdb-integration` joined it with #491's fix (#566), 2026-11-20 (see the end).
 P1 is approved in principle; lead schedules it after api-ops' and domain's current fixes (BACKLOG).
 Director, 2026-11-14. Owner: devops.
 
@@ -96,3 +96,13 @@ got its `requires_ingress_journal` guard in 528e05179, which is on develop. Canc
 docs-only changes.
 
 The QuestDB tally above ends before the #491 failure. That run (20:51Z) came after the tally's runs were collected, and it's the job's first failure since 11-14.
+
+## QuestDB integration joins `ci-ok` (2026-11-20)
+
+#491 was a test assumption, not a product bug (api-ops' sizing). A receipt time is stamped per socket read
+(`RawEvidence`, microseconds), so frames that arrive in one read share it, in production too. The history read
+already breaks ties by `sample_id` (`ObservationReader.order_clause`). #566 made `HistoryStoreQuestDBTest` and
+`TCPIngestQuestDBTest` assert distinct sample, identity and idempotency ids and the read's own order, not distinct
+receipt times. With that fix the job is back in `ci-ok`'s `needs`, with no extra clean week (director 11-19,
+lead 11-20).
+
