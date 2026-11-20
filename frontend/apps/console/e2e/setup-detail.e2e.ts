@@ -23,8 +23,8 @@ test.describe("Setup spacecraft detail", () => {
     );
     await expect(rows.filter({ hasText: /TT&C uplink/i })).toHaveCount(1);
 
-    // Decision 1: no mission revision numbers until change sets exist.
-    await expect(page.getByText(/configuration arrives with change sets/i)).toBeVisible();
+    // Decision 1's placeholder ("configuration arrives with change sets") is gone now that change
+    // sets exist; the routing rows above are what the detail reads (#624 triage).
     await expectAccessible(page);
   });
 
