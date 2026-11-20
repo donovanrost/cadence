@@ -39,8 +39,6 @@ test.describe("Now · a11y", () => {
     // Desktop opens the palette from the top bar's query line; a phone opens the full-screen
     // Search sheet from the tab bar, with a searchbox instead of the palette's combobox.
     const phone = onPhone(info);
-    // Known gap (#243): the phone Search sheet doesn't trap Tab yet (A3). Remove once it does.
-    test.fail(phone, "#243: the phone Search sheet doesn't keep Tab inside it");
     const opener = phone
       ? page
           .getByRole("navigation", { name: "On-call tabs" })

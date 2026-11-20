@@ -3,7 +3,13 @@ import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api";
 import { field, frame, snapshotJson } from "../fixtures.test-support.ts";
 import { workspaceSnapshot, type WidgetType } from "../model/snapshot.ts";
-import { formatTime, laneSentence, segmentLine, widgetTitle } from "../model/widget-data.ts";
+import {
+  formatTime,
+  laneSentence,
+  readingOrder,
+  segmentLine,
+  widgetTitle,
+} from "../model/widget-data.ts";
 import EventTimelineWidget from "./EventTimelineWidget.vue";
 import StateTimelineWidget from "./StateTimelineWidget.vue";
 import WidgetBody from "./WidgetBody.vue";
@@ -140,6 +146,19 @@ describe("state timeline lanes (B5)", () => {
 });
 
 describe("widget names (B7)", () => {
+  it("numbers by reading order, the same in the viewer and edit mode: row, then column, unplaced last", () => {
+    const at = (x: number | null, y: number | null) => ({ layout: { x, y } });
+    const order = [at(4, 1), at(null, null), at(0, 1), at(8, 0)]
+      .sort((a, b) => readingOrder(a) - readingOrder(b))
+      .map((p) => p.layout);
+    expect(order).toEqual([
+      { x: 8, y: 0 },
+      { x: 0, y: 1 },
+      { x: 4, y: 1 },
+      { x: null, y: null },
+    ]);
+  });
+
   it("reads an unavailable placement as Unavailable widget", () => {
     expect(widgetTitle({ status: "unavailable" } as Parameters<typeof widgetTitle>[0])).toBe(
       "Unavailable widget",
