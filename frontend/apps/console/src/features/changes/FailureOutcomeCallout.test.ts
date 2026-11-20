@@ -33,4 +33,31 @@ describe("FailureOutcomeCallout (ux, lead 11-16: one failure callout everywhere)
     expect(w.find("a").exists()).toBe(false);
     expect(w.find("button").text()).toBe("Retry");
   });
+
+  it("underlines the in-use list's links, so they aren't marked by colour alone (#244, C)", () => {
+    const w = mount(FailureOutcomeCallout, {
+      props: {
+        outcome: {
+          changed: false,
+          sentence: "Not archived.",
+          uses: [
+            {
+              label: "Used by",
+              items: [
+                { text: "EARENDIL-1", to: { name: "setup.spacecraft" } },
+                { text: "A route" },
+              ],
+              more: 0,
+            },
+          ],
+        },
+      },
+      global: {
+        stubs: { RouterLink: { props: ["to"], template: "<a :class='$attrs.class'><slot /></a>" } },
+      },
+    });
+    const link = w.findAll("a").find((a) => a.text() === "EARENDIL-1");
+    expect(link?.classes()).toContain("underline");
+    expect(link?.classes()).not.toContain("no-underline");
+  });
 });

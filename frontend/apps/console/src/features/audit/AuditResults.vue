@@ -52,7 +52,10 @@ const unshown = computed(() => [...props.page.unshown, ...props.olderUnshown]);
             @click="$emit('older')"
             >Load older</ApButton
           >
-          <span v-if="failed" class="text-caution-text">Older events couldn't load.</span>
+          <!-- #244 (B6): always mounted, so the failed load is announced when it appears. -->
+          <span role="status" class="text-caution-text empty:hidden">{{
+            failed ? "Older events couldn't load." : ""
+          }}</span>
         </div>
       </template>
     </AuditTable>

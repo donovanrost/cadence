@@ -35,6 +35,8 @@ const whoText = (r: Row) => {
 };
 const cursor = ref<string | null>(null);
 const loading = ref(false);
+/** #244 (B6): a failed Older load says so (it showed nothing), announced. */
+const olderFailed = ref(false);
 watch(first.state, (s) => {
   if (s.status !== "ready") return;
   older.value = [];
@@ -45,6 +47,7 @@ async function loadOlder() {
   loading.value = true;
   try {
     const r = await fetchPlatformAudit({ after: cursor.value }, new AbortController().signal);
+    olderFailed.value = !r.ok;
     if (!r.ok) return;
     older.value = [...older.value, ...r.value.events];
     cursor.value = r.value.next;
@@ -82,7 +85,10 @@ const columns: readonly ApColumn[] = [
           /></template>
           <template #cell-org="{ row }"><AuditOrg :event="readable(row)" /></template>
         </ApTable>
-        <div v-if="cursor || older.length > 0" class="border-t border-hairline px-4 py-2.5">
+        <div
+          v-if="cursor || older.length > 0"
+          class="flex flex-wrap items-center gap-3 border-t border-hairline px-4 py-2.5"
+        >
           <ApButton
             size="compact"
             :disabled="loading || !cursor"
@@ -90,6 +96,9 @@ const columns: readonly ApColumn[] = [
             @click="loadOlder"
             >Older</ApButton
           >
+          <span role="status" class="text-sm text-caution-text empty:hidden">{{
+            olderFailed ? "Older events couldn't load." : ""
+          }}</span>
         </div>
       </template>
     </ApRemote>

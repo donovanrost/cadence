@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
-import { computed, ref } from "vue";
+import { computed, ref, useId } from "vue";
 import { ApButton, ApEmptyState, ApPanel, ApTable, ApTag, formatShort, type ApColumn } from "@/ui";
 import { ACTION_LINES, runKindText, runTag, sourceFailure } from "./present.ts";
 import { runAction, type SourceRun } from "./writes.ts";
@@ -20,6 +20,14 @@ const columns = computed<readonly ApColumn[]>(() => [
   ...(props.editable ? [{ key: "act", label: "Action", hiddenLabel: true }] : []),
 ]);
 const busy = ref<string | null>(null);
+/**
+ * #244 (A6/B7): the Retry/Requeue explanation was only a hover title. Each action present says
+ * once, visibly, under the table, and its buttons point at that line.
+ */
+const lineId = { retry: useId(), requeue: useId() } as const;
+const shownActions = computed(() =>
+  (["retry", "requeue"] as const).filter((a) => props.runs.some((r) => action(r) === a)),
+);
 const action = (r: SourceRun) =>
   r.actions?.find((a): a is "retry" | "requeue" => a === "retry" || a === "requeue") ?? null;
 async function act(r: SourceRun) {
@@ -63,6 +71,7 @@ async function act(r: SourceRun) {
           size="compact"
           variant="ghost"
           :title="ACTION_LINES[action(row) ?? 'retry']"
+          :aria-describedby="lineId[action(row) ?? 'retry']"
           :disabled="busy !== null"
           disabled-reason="Working…"
           @click="act(row)"
@@ -70,5 +79,10 @@ async function act(r: SourceRun) {
         >
       </template>
     </ApTable>
+    <div v-if="editable && shownActions.length > 0" class="flex flex-col gap-0.5 px-4 py-3">
+      <p v-for="a in shownActions" :id="lineId[a]" :key="a" class="m-0 text-sm text-text-3">
+        {{ ACTION_LINES[a] }}
+      </p>
+    </div>
   </ApPanel>
 </template>
