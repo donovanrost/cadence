@@ -1,6 +1,7 @@
 import type { MissionId } from "@/api/index.ts";
 import { expiryReader } from "./expiryReader.ts";
 import { resolvedArgumentsReader } from "./resolved.ts";
+import { withdrawnTargetFields } from "./withdrawn.ts";
 import {
   scid as scidReader,
   decoders as d,
@@ -93,6 +94,7 @@ const perTarget = d.object({
   reason: d.optional(d.nullable(failureReason)),
   next_contact: d.optional(d.nullable(nextContact)),
   routes: d.optional(d.array(route, 100)),
+  ...withdrawnTargetFields,
 });
 
 /** commanding.md: why a group needs a second GO (DECISIONS #61). */
@@ -133,6 +135,8 @@ export const checkKeys = [
   "contact",
   "two_person",
   "changed_since_submit",
+  // U109 (#546): a target on a composition that's no longer approved; label "Composition".
+  "model_approval_withdrawn",
 ] as const;
 export type CheckKey = (typeof checkKeys)[number];
 /** A check's key as text: acks and lists key by it, and an ack sends it back to the server. */
