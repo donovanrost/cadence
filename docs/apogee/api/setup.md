@@ -497,7 +497,8 @@ The shape is setup-shapes.md §C1. `?database_id=` selects a database (default: 
   queued import is `running`. `file_name` is known for runs that produced a revision, otherwise
   `null`.
 - `import_runs[].requested_by` (#146, ux U103; additive, read as optional): who started the run,
-  `{kind: user | service | system, name: string | null} | null`. Also on C3's run detail and the
+  `{kind: user | service | system, name: string | null, run_by: {name: string | null} | null} | null`
+  (`run_by` additive, #513). Also on C3's run detail and the
   source-file page's runs. `null` when the run recorded no actor. Two batched name queries per
   table, whatever its length. The name follows mms-security's rule (11-19); the console's words
   decide what shows:
@@ -509,7 +510,11 @@ The shape is setup-shapes.md §C1. `?database_id=` selects a database (default: 
   - `service`: the service identity's display name, only when it belongs to the mission's
     organization; otherwise `null`.
   - `system`: Cadence itself (a seed or a task), with the stored system name, which is never a
-    person.
+    person. `run_by` (#513, ux): the person who ran it, `{name}`, named by the same rule as
+    `user`. A runner's name that can't be read is `{name: null}`, never an id. `run_by` is null
+    for a system run that recorded no runner (one from before #513) and for `user` and `service`.
+    The console reads "by Cadence, run by Mira K.". The same object is the source-file page's
+    `uploaded_by`, C1's `revisions[].actor`, and the REST `requested_by`/`uploaded_by`.
 
 ## `GET /api/console/v1/missions/:mission_id/catalog/imports/:import_run_id` (C3)
 

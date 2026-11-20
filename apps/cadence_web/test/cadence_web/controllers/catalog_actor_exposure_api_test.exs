@@ -57,11 +57,11 @@ defmodule CadenceWeb.CatalogActorExposureAPITest do
   end
 
   @expected %{
-    member: %{"kind" => "user", "name" => "Mira K."},
-    unnamed: %{"kind" => "user", "name" => nil},
-    outsider: %{"kind" => "user", "name" => nil},
-    own_service: %{"kind" => "service", "name" => "Control Plane Test Service"},
-    foreign_service: %{"kind" => "service", "name" => nil}
+    member: %{"kind" => "user", "name" => "Mira K.", "run_by" => nil},
+    unnamed: %{"kind" => "user", "name" => nil, "run_by" => nil},
+    outsider: %{"kind" => "user", "name" => nil, "run_by" => nil},
+    own_service: %{"kind" => "service", "name" => "Control Plane Test Service", "run_by" => nil},
+    foreign_service: %{"kind" => "service", "name" => nil, "run_by" => nil}
   }
 
   test "REST artifacts and import runs name only members and own services; no email or id", c do

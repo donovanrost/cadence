@@ -106,8 +106,8 @@ defmodule Cadence.Catalog.ActorTest do
     }
 
     for {uploaded_by, expected} <- [
-          {rest_user, %{kind: "user", name: nil}},
-          {rest_service, %{kind: "service", name: nil}},
+          {rest_user, %{kind: "user", name: nil, run_by: nil}},
+          {rest_service, %{kind: "service", name: nil, run_by: nil}},
           {%{"user_display_name" => "", "user_email" => "e@example.test"}, nil}
         ] do
       {:ok, artifact} = Catalog.persist_artifact(ctx.org, artifact(ctx, nil, uploaded_by))
