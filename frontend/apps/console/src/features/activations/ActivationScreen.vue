@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from "vue";
-import { refocusFirst } from "@/ui";
+import { computed, ref } from "vue";
+import { useNoteFocus } from "./useNoteFocus.ts";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
 import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
@@ -47,11 +47,15 @@ const crumbs: readonly ApCrumb[] = [
  * was lost (the kit's refocusFirst; ux's #431 rule): a person who moved on keeps their place.
  */
 const noteBox = ref<HTMLElement | null>(null);
-async function decided(n: DecidedNote) {
+// The Decide panel leaves only when the refetch shows the request out of approval_pending (ux).
+const focusNote = useNoteFocus(
+  noteBox,
+  () => page.state.value.status === "ready" && page.state.value.value.state !== "approval_pending",
+);
+function decided(n: DecidedNote) {
   note.value = n;
   page.refetch();
-  await nextTick();
-  refocusFirst(noteBox.value);
+  void focusNote();
 }
 </script>
 
