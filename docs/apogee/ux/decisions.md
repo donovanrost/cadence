@@ -4543,7 +4543,14 @@ agreed with ux 11-20.
     `model_approval_withdrawn` (#546; it covers withdrawn and rejected), and its label is `Composition`, mapped by
     key, never by text. So: "Acknowledge the Composition HOLD", and in the log "Acknowledged the Composition HOLD on
     EARENDIL-004". Each new withdrawal holds again, and only new submissions meet it. When the check passes, its GO
-    sentence is "Every target is on an approved composition." (fe-ops, #632).
+    sentence is "Every target is on an approved composition." (fe-ops, #632); while no target is composed (every
+    mission until D4), "Every target is on an approved catalog revision." (one catalog reads as today).
+    - The log names the targets from `hold_acknowledged`'s `payload.evidence.spacecraft_ids` (ca-engineer, #546):
+      "Acknowledged the Composition HOLD on EARENDIL-004" (several: up to 3 names, then "and N more"; an unnamed craft
+      "Unknown spacecraft", never an id). Without the evidence: "Acknowledged the Composition HOLD" (#632).
+    - A decision kind the console doesn't know (neither withdrawn nor rejected) says only what's known: "EARENDIL-004
+      is on composition 3, which is no longer approved since 11-20 09:12Z. …" in the HOLD, and "No longer approved
+      since 11-20 09:12Z." on the Now row, never the withdrawn form (U20; #632).
     - One target: "EARENDIL-004 is on composition 3, whose approval Ana R. withdrew at 11-20 09:12Z: “<reason>”.
       Acknowledge the HOLD to send this request to EARENDIL-004 anyway." Rejected: "…composition 3, which Ana R.
       rejected at 11-20 09:12Z: “<reason>”. …". No name: "…composition 3, whose approval was withdrawn at 11-20
