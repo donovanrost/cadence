@@ -71,9 +71,9 @@ STAGED · NOT APPLIED   2 changes: 50 new spacecraft (Block 2), catalog rev 15 �
 lbl "EARENDIL · STAGED CHANGES"
 h1 "Apply r6 · 2 changes"                                  base r5 · staged 14:02Z–14:40Z
 ┌ K1 Changes (flex 999) ─────────────────────────────┐ ┌ K3 Apply (aside, sticky) ───────┐
-│ ▸ 50 new spacecraft (Block 2)       Mira K.    [×] │ │ tiles: Changes 2 · Spacecraft 549 · Routes +300
-│   diff: table of the 50 + routes                   │ │ Readiness after: 0 blockers (=) │
-│ ▸ Catalog rev 15 → Block 2 · 50 spacecraft  Mira K.    [×] │ │ Why (required textarea)         │
+│ ▸ 50 new spacecraft (Block 2)       Mira K.    [×] │ │ 2 · Spacecraft 549 · Routes +300│
+│   diff: table of the 50 + routes                   │ │ Readiness after: 0 blockers …   │
+│ ▸ Catalog rev 15 → Block 2 · 50 spacecraft  [×]    │ │ Why (required textarea)         │
 ├ K2 Checks (GO / NO-GO poll) ───────────────────────┤ │ [Apply as r6]  (commit, 46px)   │
 │ Conflicts · Readiness · In flight · Compatibility  │ │ [Request review] (policy)       │
 └────────────────────────────────────────────────────┘ └─────────────────────────────────┘
