@@ -488,3 +488,35 @@ describe("SubmitSheet's gap reasons are required (#244, A6)", () => {
     }
   });
 });
+
+describe("SubmitSheet's per-requirement overrides stay optional (fe-ops on #588)", () => {
+  it("never marks an override required", async () => {
+    // Two gaps on one craft, so its group offers per-requirement overrides.
+    const two = {
+      ...plan,
+      unmet: [
+        { ...gap("r1"), spacecraft_id: "sc-a" },
+        { ...gap("r2"), spacecraft_id: "sc-a" },
+      ],
+    };
+    const w = mount(SubmitSheet, {
+      props: {
+        plan: two,
+        nameOf: () => null,
+        commitLabel: "Accept 2 gaps and submit",
+        userId: "u1",
+        title: "Approve and book the plan",
+        confirm: "",
+        busy: false,
+      },
+      attachTo: document.body,
+    });
+    try {
+      const overrides = w.findAll("details textarea");
+      expect(overrides).toHaveLength(2);
+      expect(overrides.filter((t) => t.attributes("required") !== undefined)).toHaveLength(0);
+    } finally {
+      w.unmount();
+    }
+  });
+});

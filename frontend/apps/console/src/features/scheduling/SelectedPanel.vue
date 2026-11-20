@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import type { RemoteState } from "@/api";
 import { ApButton, ApEmptyState, ApKeyValue, ApPanel, ApTag, formatDuration } from "@/ui";
 import AlternativesList from "./AlternativesList.vue";
@@ -7,6 +7,7 @@ import StationIssues from "./StationIssues.vue";
 import type { StationHits } from "./unavailable.ts";
 import { stationCode, stationName, type Alternatives, type PlanDetail } from "./api.ts";
 import { craftLabel, type SpacecraftName } from "./names.ts";
+import { useArmedRefocus } from "./useArmedRefocus.ts";
 
 /**
  * D · Selected: a drafted pass (Remove) or another window (Add), then the focused spacecraft's
@@ -39,6 +40,21 @@ const other = computed(() => {
     ? (a.value.alternatives.find((x) => x.snapshot_id === props.selected) ?? null)
     : null;
 });
+/**
+ * #244 (A5): Remove ↔ Add swap in place once the edit lands (the selection stays). After the
+ * person's own click, focus goes to the replacement if it was lost (fe-ops on #590: armed only by
+ * that click, never by a background refetch).
+ */
+const actions = ref<HTMLElement | null>(null);
+const swapFocus = useArmedRefocus(
+  () => (drafted.value ? "drafted" : other.value ? "other" : null),
+  () => actions.value?.querySelector<HTMLElement>("button") ?? null,
+);
+function act(kind: "add" | "remove", snapshotId: string) {
+  swapFocus.arm();
+  if (kind === "add") emit("add", snapshotId);
+  else emit("remove", snapshotId);
+}
 const pass = computed(
   () =>
     drafted.value ??
@@ -102,13 +118,13 @@ const items = computed(() => {
       <p class="m-0 mt-3 text-md text-text-3">
         Provider-supplied. Cadence doesn't compute passes yet.
       </p>
-      <div v-if="editable" class="mt-3">
+      <div v-if="editable" ref="actions" class="mt-3">
         <ApButton
           v-if="drafted && !drafted.locked"
           size="compact"
           :disabled="busy"
           disabled-reason="Working…"
-          @click="emit('remove', drafted.snapshot_id)"
+          @click="act('remove', drafted.snapshot_id)"
           >Remove pass</ApButton
         >
         <ApButton
@@ -117,7 +133,7 @@ const items = computed(() => {
           variant="primary"
           :disabled="busy"
           disabled-reason="Working…"
-          @click="emit('add', other.snapshot_id)"
+          @click="act('add', other.snapshot_id)"
           >Add pass</ApButton
         >
       </div>

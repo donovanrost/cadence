@@ -69,6 +69,7 @@ const when = (a: Alternative) => `${a.starts_at.slice(11, 16)}–${a.ends_at.sli
               size="compact"
               :disabled="busy"
               disabled-reason="Working…"
+              :aria-label="`Add, ${name}, ${when(alt)}, ${stationCode(alt.station)}`"
               @click="$emit('add', alt.snapshot_id)"
               >Add</ApButton
             >

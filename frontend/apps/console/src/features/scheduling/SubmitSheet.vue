@@ -64,6 +64,10 @@ const keyOf = (id: string | null) => id ?? "—";
 const reasons = ref<Record<string, string>>({});
 const overrides = ref<Record<string, string>>({});
 const split = ref<Record<string, boolean>>({});
+/** A <details> toggle, read through a guard rather than a cast (fe-ops on #588). */
+function onSplitToggle(key: string, event: Event) {
+  if (event.target instanceof HTMLDetailsElement) split.value[key] = event.target.open;
+}
 /** "Same reason for all" (qa #27): one shared reason replaces every per-spacecraft box. */
 const sameForAll = ref(false);
 const shared = ref("");
@@ -281,7 +285,7 @@ defineExpose({ open, close });
         <details
           v-if="!sameForAll && group.unmet.length > 1"
           :open="split[keyOf(group.spacecraftId)]"
-          @toggle="split[keyOf(group.spacecraftId)] = ($event.target as HTMLDetailsElement).open"
+          @toggle="onSplitToggle(keyOf(group.spacecraftId), $event)"
         >
           <summary class="max-md:hit-44 cursor-pointer text-sm text-text-3">
             Different reason per requirement

@@ -8,8 +8,14 @@ import { refocusFirst } from "@/ui";
  * - again once `settled()` turns true (the refetch drops the Decide panel later, when the request
  *   leaves approval_pending). A pending move runs once.
  */
-export function useNoteFocus(box: Ref<HTMLElement | null>, settled: () => boolean) {
+export function useNoteFocus(
+  box: Ref<HTMLElement | null>,
+  settled: () => boolean,
+  /** The request it's for: a pending move is dropped when it changes (ux on #584). */
+  key: () => unknown = () => null,
+) {
   let pending = false;
+  watch(key, () => (pending = false));
   watch(settled, async (now) => {
     if (!pending || !now) return;
     pending = false;
