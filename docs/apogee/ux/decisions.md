@@ -4527,8 +4527,8 @@ agreed with ux 11-20.
   - The craft's state line (spacecraft page, configuration), caution: "Composition 3 is no longer approved: Ana R.
     withdrew its approval at 11-20 09:12Z: “<reason>”. EARENDIL-004 stays on it until a new configuration is
     applied. <the way out>" (The reason is quoted, as U65; with none, the sentence ends at the time.) Rejected:
-    "…Ana R. rejected it at …". No name: "its approval was withdrawn at 11-20 09:12Z". The decision record's id goes in
-    Technical details.
+    "…Ana R. rejected it at …". No name: "its approval was withdrawn at 11-20 09:12Z". The decision record's id goes
+    in Technical details.
   - Attention item, a Now queue row (U31's form and ranking): P1 when the craft has a pass within 2 h or in
     progress, else P2 (it needs `spacecraft_id` to rank). Title "EARENDIL-004 · On composition 3, which is no longer
     approved."; secondary "Approval withdrawn by Ana R. at 11-20 09:12Z: “<reason>”. <the way out>"; action `Open
