@@ -248,7 +248,8 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
          :ok <- pending_plan(plan_row),
          :ok <- exact_version(plan_row, context.expected_version),
          {:ok, version_row} <- fetch_version_row(plan_row, context.expected_version),
-         :ok <- separate_approver(context.decision, plan_row, version_row, context.actor, policy),
+         {:ok, separated_from} <-
+           separate_approver(context.decision, plan_row, version_row, context.actor, policy),
          :ok <- exact_hash(version_row, context.expected_hash),
          version <- ContactPlanVersionRow.to_domain(version_row),
          {:ok, requirements} <- lock_current_requirements(version),
@@ -277,6 +278,8 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
            approval
            |> ContactPlanApprovalRow.changeset()
            |> Ecto.Changeset.put_change(:policy_document, policy)
+           # #277 (ca-security, #117's field): who the approver was kept apart from.
+           |> Ecto.Changeset.put_change(:separated_from, separated_from)
            |> Repo.insert(),
          {:ok, updated_plan_row} <-
            update_plan(
@@ -561,33 +564,85 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
   # issuer and rotators; a service approving under an automation grant counts as its own people
   # plus the grant's proposer and approver (#283). Overlap refuses; an unknown set refuses
   # (`:contact_plan_approver_authors_unknown`).
+  # #277 (#236's rule for plans): under 'independent' the approver may not be ANY author of the
+  # content being approved: the submitter, and whoever cut each version since the plan's last
+  # approval on record (every version if none), the version being approved included. Versions
+  # are full snapshots and the only record of who authored a plan's content (ContactPlans.create/4
+  # and version/6 insert them; nothing updates one). Compared through Governance.Accountability: a
+  # service author counts as its accountable people; a system id (the planner's "cadence:…") is
+  # neither a person nor a service, so it counts no one (and is still recorded). A version with no
+  # recorded author fails closed (authors_unknown); created_by is NOT NULL, so that's a guard. On
+  # :ok, the compared author ids (`separated_from`, #117).
   defp separate_approver(:approved, plan_row, version_row, actor, policy)
        when is_map(actor) do
-    if policy["separation_of_duties"] == true do
-      org = plan_row.organization_id
+    if policy["separation_of_duties"] == true,
+      do: separate_from_window(plan_row, version_row, actor),
+      else: {:ok, []}
+  end
 
-      authors =
-        Accountability.actors_for_ids(org, [
-          plan_row.lifecycle_changed_by,
-          version_row.created_by
-        ])
+  defp separate_approver(_decision, _plan_row, _version_row, _actor, _policy), do: {:ok, []}
+
+  defp separate_from_window(plan_row, version_row, actor) do
+    with {:ok, author_ids} <- window_authors(plan_row, version_row) do
+      ids = Enum.uniq([plan_row.lifecycle_changed_by | author_ids])
+      org = plan_row.organization_id
 
       # #283: the grant's proposer and its approver both count (one person under 'direct').
       grant_people =
         Enum.map(["proposed_by", "approved_by"], &get_in(actor, ["automation_grant", &1]))
 
       org
-      |> Accountability.separate(actor, authors, grant_people)
+      |> Accountability.separate(actor, Accountability.actors_for_ids(org, ids), grant_people)
       |> Accountability.refusal(
         :contact_plan_self_approval_forbidden,
         :contact_plan_approver_authors_unknown
       )
-    else
-      :ok
+      |> separated_from(ids)
     end
   end
 
-  defp separate_approver(_decision, _plan_row, _version_row, _actor, _policy), do: :ok
+  defp separated_from(:ok, ids), do: {:ok, ids |> Enum.filter(&is_binary/1) |> Enum.sort()}
+  defp separated_from(error, _ids), do: error
+
+  # Every version's author after the last approved version, through the one being approved.
+  defp window_authors(plan_row, version_row) do
+    after_version = last_approved_version(plan_row, version_row.version)
+
+    created_by =
+      ContactPlanVersionRow
+      |> where(
+        [v],
+        v.organization_id == ^plan_row.organization_id and
+          v.mission_id == ^plan_row.mission_id and
+          v.contact_plan_id == ^plan_row.contact_plan_id and
+          v.version > ^after_version and v.version <= ^version_row.version
+      )
+      |> select([v], v.created_by)
+      |> Repo.all()
+
+    if Enum.all?(created_by, &recorded_author?/1),
+      do: {:ok, created_by},
+      else: {:error, {:contact_plan_approver_authors_unknown, %{service: nil}}}
+  end
+
+  defp recorded_author?(id), do: is_binary(id) and id != ""
+
+  # The window starts at the approval records (append-only; scoped to this organization, mission
+  # and plan), not `approved_version`: cutting a version clears that, and an approved plan can't
+  # be versioned today, so this is 0 (every version); the records keep it right if a plan can
+  # ever be approved again.
+  defp last_approved_version(plan_row, before_version) do
+    ContactPlanApprovalRow
+    |> where(
+      [a],
+      a.organization_id == ^plan_row.organization_id and a.mission_id == ^plan_row.mission_id and
+        a.contact_plan_id == ^plan_row.contact_plan_id and a.decision == "approved" and
+        a.contact_plan_version < ^before_version
+    )
+    |> select([a], max(a.contact_plan_version))
+    |> Repo.one()
+    |> Kernel.||(0)
+  end
 
   @doc "Whether the mission's approval setting requires a second person ('independent')."
   def separation_required?(%{organization_id: organization_id, mission_id: mission_id}),

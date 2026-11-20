@@ -256,11 +256,17 @@ separation check (#226(b)).
 Errors:
 - `403 contact_plan_self_approval_forbidden`, `details: {because: "submitted" | "edited",
   via_service: {id, name} | null}`: under 'independent' approval, the approver submitted this version
-  (`submitted`, which wins when both apply) or authored it (`edited`: the version's `created_by`; for
-  a drafted plan, the drafter). Or (#280) a service identity they're accountable for did, and
-  `via_service` names it (null when it was them). Nothing is recorded or booked.
+  (`submitted`, which wins when both apply) or drafted a version of it since its last approval
+  (`edited`, #277: every version's `created_by` in that window, the version being approved
+  included, so the author of an earlier version too, and the console resubmit's cut). Or (#280) a
+  service identity they're accountable for did, and `via_service` names it (null when it was
+  them). A system planner id (neither a person nor a service) counts no one. Nothing is recorded
+  or booked.
 - `403 contact_plan_approver_authors_unknown`, `details: {service: {id, name} | null}` (#280): a
-  service identity with nobody recorded as accountable submitted or authored it. Nothing is recorded.
+  service identity with nobody recorded as accountable submitted the plan or drafted a version of
+  it since its last approval. `null` is a guard (a version with no recorded author; `created_by`
+  is NOT NULL, so not reachable today). A send back doesn't clear it; recording who's accountable,
+  or drafting the day again (a new plan), does. Nothing is recorded.
 - Under 'independent', a service approving under an automation grant counts as its own accountable
   people plus the grant's approver. It's refused when they overlap the plan's authors, so automation
   can't approve a plan its own service made; a person outside them approves it (ux U100).
