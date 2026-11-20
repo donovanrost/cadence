@@ -516,6 +516,21 @@ The shape is setup-shapes.md §C1. `?database_id=` selects a database (default: 
     for a system run that recorded no runner (one from before #513) and for `user` and `service`.
     The console reads "by Cadence, run by Mira K.". The same object is the source-file page's
     `uploaded_by`, C1's `revisions[].actor`, and the REST `requested_by`/`uploaded_by`.
+  - **One exception: the organization's own Audit (#470).** OK'd by ca-security on its five
+    conditions, with ux and lead (11-20); ca-ux's #523 has the screen words.
+    `Reads.OrganizationAudit` (the organization's own Audit, behind `:read_organization`) names a
+    *former* member of that organization by their current display name too: in membership rows
+    ("Removed Mira K. from the organization") and as the actor of their own past acts. The
+    conditions:
+    1. this read only; every other read keeps the rule above;
+    2. only people with a membership row in that organization, in any state. A platform admin,
+       or anyone never a member, is `{kind: "user", id: null, name: null}`;
+    3. the display name only, never the email or an id as a name; without one, "a member";
+    4. recorded here;
+    5. a person offboarding erases reads unnamed (#220).
+
+    Every platform event (`kind: "platform"`) is a platform admin's act. A nameless actor there
+    reads "the team that runs Cadence" in the console (ux, #523).
 
 ## `GET /api/console/v1/missions/:mission_id/catalog/imports/:import_run_id` (C3)
 
@@ -772,6 +787,13 @@ access, provider accounts, account, platform) are always included.
 null, mission: {id, name} | null, reason}], sources: {included, missing}, next_cursor}`, newest
 first.
 
+- Who's named (#470): a person who holds or held a membership in this organization, by display
+  name (`null` without one), with their id. This is C1's exception for this read (catalog C1
+  above), so "Removed Mira K. from the organization" names a former member. Anyone else, a
+  platform admin included, is `{kind: "user", id: null, name: null}`. A service is named from its
+  live row in this organization, else `{kind: "service", id: null, name: null}`. A name stored in
+  a record is never used for a person or a service. Never an email.
+
 - There's no single audit store yet, so this merges each domain's own records:
   - `config`: applied configuration revisions ("Applied r6 · 2 changes", "Rolled back to r4") and
     settings changes ("Changed Governance settings");
@@ -842,8 +864,9 @@ first.
   1 mission to Needs a second person's approval: VEGA." Up to three names, then "and N more"; a
   null name reads "Unknown mission"; a value outside the two reads "Changed approval on N
   missions."; none moved, no sentence. Only organization admins read this log, so no
-  mission-level reader sees other missions' names or settings. Settings history carries only the actor's name, so `actor` is `{kind:
-  "user", id: null, name}` and `actor_id` doesn't find a person's settings changes. The log holds
+  mission-level reader sees other missions' names or settings. A settings change's actor is named from the stored
+  id by this log's rule above (#470), never the stored name, which is an email in rows saved before
+  #470; `actor_id` now finds a person's settings changes too. The log holds
   each section's 10 most recent changes per scope, for the Governance, Commanding, Configuration
   and Pass review sections.
 - The per-field settings migration shows as one entry per mission it rewrote: `actor: null`,

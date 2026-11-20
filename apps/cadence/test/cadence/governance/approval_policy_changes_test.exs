@@ -55,7 +55,7 @@ defmodule Cadence.Governance.ApprovalPolicyChangesTest do
     assert {:ok, _} = set(c.mission_admin, c.mission, "independent")
     assert requirement(c) == "independent"
 
-    assert [%{actor: "mission-admin", audit: audit} | _] = history(c, c.mission)
+    assert [%{actor_id: "mission-admin", audit: audit} | _] = history(c, c.mission)
 
     assert %{
              "scope" => "mission",
@@ -90,7 +90,9 @@ defmodule Cadence.Governance.ApprovalPolicyChangesTest do
     assert {:ok, _} = set(c.org_admin, c.mission, "direct")
     assert requirement(c) == "direct"
 
-    assert [%{actor: "org-admin", saved_at: saved_at, audit: audit} | _] = history(c, c.mission)
+    assert [%{actor_id: "org-admin", saved_at: saved_at, audit: audit} | _] =
+             history(c, c.mission)
+
     assert is_binary(saved_at)
 
     assert %{
@@ -197,7 +199,7 @@ defmodule Cadence.Governance.ApprovalPolicyChangesTest do
     assert {:ok, _} = clear(c.org_admin, c.mission)
     assert requirement(c) == "direct"
 
-    assert [%{actor: "org-admin", audit: audit} | _] = history(c, c.mission)
+    assert [%{actor_id: "org-admin", audit: audit} | _] = history(c, c.mission)
 
     assert %{
              "scope" => "mission",
@@ -224,7 +226,7 @@ defmodule Cadence.Governance.ApprovalPolicyChangesTest do
     assert {:ok, _} = set_organization(c.org_admin, "independent", false)
     assert {:ok, _} = set_organization(c.org_admin, "direct", true)
 
-    assert [%{actor: "org-admin", audit: audit} | _] = history(c, nil)
+    assert [%{actor_id: "org-admin", audit: audit} | _] = history(c, nil)
 
     assert %{
              "scope" => "organization",

@@ -66,7 +66,8 @@ defmodule CadenceWeb.Console.AuditAPITest do
     assert Map.drop(settings, ["id", "at", "mission"]) == %{
              "kind" => "config",
              "action" => "Changed Configuration settings",
-             "actor" => %{"kind" => "user", "id" => nil, "name" => "Ada"},
+             # #470: named by the organization's own Audit rule, from the saver's id.
+             "actor" => %{"kind" => "user", "id" => c.admin.user_id, "name" => "Ada"},
              "target" => %{
                "kind" => "settings",
                "id" => "cadence.configuration",

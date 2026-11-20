@@ -155,10 +155,11 @@ defmodule Cadence.Reads.CommandMonitor.StoreTest do
     for {id, name, actor} <- [
           {"a", "100%_Complete\\", %{display_name: "ÉLODIE"}},
           {"A", "İSTANBUL ΣΣ", %{display_name: "ΣΣ"}},
-          {"ä", "ẞtraße", %{user_id: "ÜSER"}},
-          {"z", "OTHER", %{display_name: false, user_id: "Fallback"}},
-          # #466: a request stored before #466 may hold an email; it's never the label.
-          {"e", "EMAIL ONLY", %{email: "hidden-466@example.test"}}
+          {"ä", "ẞtraße", %{display_name: "ÜSER"}},
+          {"z", "OTHER", %{display_name: false}},
+          # #466/#470: a request stored before #466 may hold an email; neither it nor the id is
+          # ever the label.
+          {"e", "EMAIL ONLY", %{email: "hidden-466@example.test", user_id: "hidden-470"}}
         ] do
       Fixtures.request!(c, id, %{
         command_name: name,
@@ -178,18 +179,21 @@ defmodule Cadence.Reads.CommandMonitor.StoreTest do
           "ßtraße",
           "sstrasse",
           "üser",
-          "fallback",
+          "unknown",
           "hidden-466",
+          "hidden-470",
           ""
         ] do
       assert_matches(c, %{"query" => term})
     end
 
-    # #466: the email-only request is labelled "Unknown", so its email finds nothing.
-    assert {:ok, query} = CommandMonitor.admit_query(%{"query" => "hidden-466"})
+    # #466/#470: the request is labelled "Unknown", so its email and id find nothing.
+    for hidden <- ["hidden-466", "hidden-470"] do
+      assert {:ok, query} = CommandMonitor.admit_query(%{"query" => hidden})
 
-    assert Commands.snapshot(c.org, c.mission, filters: query, observed_at: fn -> @now end).rows ==
-             []
+      assert Commands.snapshot(c.org, c.mission, filters: query, observed_at: fn -> @now end).rows ==
+               []
+    end
 
     # Exercise all translated scalar mappings in one actual database query, plus
     # context-sensitive traps which default String.downcase intentionally ignores.

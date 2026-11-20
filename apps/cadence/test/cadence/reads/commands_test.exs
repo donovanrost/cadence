@@ -77,8 +77,9 @@ defmodule Cadence.Reads.CommandsTest do
     assert [%{command_request_id: "queued", status: :queued}] = snapshot.rows
   end
 
-  # #466: a request stored before #466 may carry its requester's email; the label never uses it.
-  test "an old-form requested_by with an email and no display name is not labelled by email" do
+  # #466/#470: a request stored before #466 may carry its requester's email; the label never
+  # uses it, nor the id (an id is never a name).
+  test "an old-form requested_by with an email and no display name reads Unknown" do
     old_form = %{
       request("old", :queued)
       | requested_by: %{"user_id" => "user-466", "email" => "person@example.test"}
@@ -93,7 +94,7 @@ defmodule Cadence.Reads.CommandsTest do
         verifier_instances: records([])
       )
 
-    assert [%{requested_by: "user-466"}] = snapshot.rows
+    assert [%{requested_by: "Unknown"}] = snapshot.rows
   end
 
   defp records(records), do: fn _organization_id, _mission_id, [] -> records end

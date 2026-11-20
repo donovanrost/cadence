@@ -113,7 +113,7 @@ defmodule Cadence.Administration.ConsoleAdmin do
   def revoke_service_identity(scope, organization_id, id) do
     with {:ok, admin} <- Access.authorize(scope),
          # The name is read before the revoke: a revoked identity is no longer listed.
-         row = ConsoleServiceIdentities.row(organization_id, id),
+         row = ConsoleServiceIdentities.row(scope, organization_id, id),
          :ok <- ServiceIdentityAdministration.revoke(scope, organization_id, id) do
       record(
         admin,

@@ -14,13 +14,14 @@ defmodule Cadence.Reads.OrganizationAudit do
   is empty; it stays so the console can say when a source is absent.
   """
 
-  alias Cadence.{Accounts, Missions}
-  alias Cadence.Accounts.MembershipAdministration
+  alias Cadence.Accounts.{MemberNames, MembershipAdministration}
   alias Cadence.Administration.PlatformAudit
   alias Cadence.Alarms.Queries, as: Alarms
+  alias Cadence.Auth
   alias Cadence.Configuration.Status
   alias Cadence.Dashboards.ConfigAudit
   alias Cadence.Management.{Contacts, DataSources}
+  alias Cadence.Missions
 
   alias Cadence.Reads.OrganizationAudit.{
     AccountEvents,
@@ -62,7 +63,12 @@ defmodule Cadence.Reads.OrganizationAudit do
       |> Enum.filter(&keep?(&1, opts))
       |> Enum.sort_by(& &1.at, {:desc, DateTime})
 
-    page = events |> Enum.drop(opts.offset) |> Enum.take(opts.limit) |> with_actor_names()
+    page =
+      events
+      |> Enum.drop(opts.offset)
+      |> Enum.take(opts.limit)
+      |> named(organization_id)
+
     next = opts.offset + length(page)
 
     %{
@@ -185,7 +191,7 @@ defmodule Cadence.Reads.OrganizationAudit do
     %{invitations: invitations, memberships: memberships} =
       MembershipAdministration.access_history(organization_id)
 
-    people = people(memberships)
+    people = MemberNames.ever_members(organization_id, Enum.map(memberships, & &1.user_id))
     accepted = for i <- invitations, i.accepted_by, into: MapSet.new(), do: i.accepted_by
 
     Enum.flat_map(invitations, &invitation_events/1) ++
@@ -256,15 +262,6 @@ defmodule Cadence.Reads.OrganizationAudit do
 
   defp administration(%{"action" => action}, _label), do: to_string(action)
 
-  defp people(memberships) do
-    Map.new(memberships, fn %{user_id: id} ->
-      case Accounts.fetch_user(id) do
-        {:ok, user} -> {id, user.display_name || user.email}
-        _missing -> {id, nil}
-      end
-    end)
-  end
-
   defp user(id) when is_binary(id), do: %{kind: "user", id: id, name: nil}
   defp user(_none), do: nil
 
@@ -302,30 +299,42 @@ defmodule Cadence.Reads.OrganizationAudit do
   defp actor(%{kind: _} = actor), do: actor
   defp actor(_none), do: nil
 
-  # Actor documents often carry only an id: name the people once per page.
-  defp with_actor_names(events) do
-    names =
-      events
-      |> Enum.flat_map(fn
-        %{actor: %{id: id, name: nil}} when is_binary(id) -> [id]
-        _named -> []
-      end)
-      |> Enum.uniq()
-      |> Map.new(fn id ->
-        case Accounts.fetch_user(id) do
-          {:ok, user} -> {id, user.display_name || user.email}
-          _system -> {id, nil}
-        end
-      end)
-
-    Enum.map(events, fn
-      %{actor: %{id: id, name: nil} = actor} = event when is_binary(id) ->
-        %{event | actor: %{actor | name: Map.get(names, id)}}
-
-      event ->
-        event
-    end)
+  # #470: every actor on the page is named here, once, by the organization's own Audit rule
+  # (setup.md C1 and its exception, OK'd by ca-security, ux and lead): a person who holds or
+  # held a membership in this organization by their display name (nil without one); anyone
+  # else, a platform admin included, as {user, nil, nil}. A service by its live row in this
+  # organization; another's as {service, nil, nil}. A name stored in an actor document is never
+  # used for a person or a service (it can be an email from before #466/#471). Other kinds
+  # (Cadence's own) keep theirs.
+  @doc false
+  def named(events, organization_id) do
+    actors = Enum.map(events, & &1.actor)
+    users = MemberNames.ever_members(organization_id, actor_ids(actors, "user"))
+    services = Auth.organization_service_identities(organization_id, actor_ids(actors, "service"))
+    Enum.map(events, &%{&1 | actor: name(&1.actor, users, services)})
   end
+
+  defp actor_ids(actors, kind),
+    do: for(%{kind: ^kind, id: id} when is_binary(id) <- actors, uniq: true, do: id)
+
+  defp name(%{kind: "user", id: id} = actor, users, _services) when is_binary(id) do
+    case Map.fetch(users, id) do
+      {:ok, name} -> %{actor | name: name}
+      :error -> %{actor | id: nil, name: nil}
+    end
+  end
+
+  defp name(%{kind: "service", id: id} = actor, _users, services) when is_binary(id) do
+    case Map.fetch(services, id) do
+      {:ok, name} -> %{actor | name: name}
+      :error -> %{actor | id: nil, name: nil}
+    end
+  end
+
+  defp name(%{kind: kind} = actor, _users, _services) when kind in ["user", "service"],
+    do: %{actor | id: nil, name: nil}
+
+  defp name(actor, _users, _services), do: actor
 
   defp verb(:approved), do: "Approved"
   defp verb(:rejected), do: "Rejected"

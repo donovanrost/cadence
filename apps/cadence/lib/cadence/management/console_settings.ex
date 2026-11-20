@@ -13,8 +13,13 @@ defmodule Cadence.Management.ConsoleSettings do
   """
 
   alias Cadence.Auth.{Scope, SettingsAccess}
-  alias Cadence.Management.{ApprovalSettingAccess, ConfigurationSettingsSection, Settings}
-  alias Cadence.Platform.ScopedSettings
+
+  alias Cadence.Management.{
+    ApprovalSettingAccess,
+    ConfigurationSettingsSection,
+    Settings,
+    SettingsHistory
+  }
 
   @configuration %{
     id: "cadence.configuration",
@@ -240,7 +245,7 @@ defmodule Cadence.Management.ConsoleSettings do
   defp version(_organization_id, _mission_id, _id, %{version: 0}), do: nil
 
   defp version(organization_id, mission_id, id, snapshot) do
-    case ScopedSettings.history(organization_id, mission_id, id) do
+    case SettingsHistory.list(organization_id, mission_id, id) do
       [latest | _] ->
         %{version: snapshot.version, at: latest.saved_at, actor: %{name: latest.actor}}
 
