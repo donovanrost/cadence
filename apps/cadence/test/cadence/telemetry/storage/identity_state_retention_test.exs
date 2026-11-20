@@ -196,6 +196,24 @@ defmodule Cadence.Telemetry.Storage.IdentityStateRetentionTest do
     end
   end
 
+  describe "every tick is logged (qa 11-20: a silent tick looked like a stopped walk)" do
+    test "a tick that matched nothing still logs its summary, matched=0" do
+      _recent = state!("log-recent", last_seen_hours_ago: 1)
+
+      previous = Logger.level()
+      Logger.configure(level: :info)
+      on_exit(fn -> Logger.configure(level: previous) end)
+
+      log =
+        ExUnit.CaptureLog.capture_log([level: :info], fn ->
+          assert %{matched: 0} = [mode: :dry] |> Kernel.++(@settings) |> then(&start_and_tick/1)
+        end)
+
+      assert log =~ "identity state retention dry"
+      assert log =~ "matched=0"
+    end
+  end
+
   describe "near a pass (lead, #368 review)" do
     test "a tick does nothing while a pass is near, and is logged as skipped" do
       old = state!("pass-old", last_seen_hours_ago: 120)
