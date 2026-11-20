@@ -77,6 +77,27 @@ defmodule Cadence.MissionModels.CompositionsTest do
       assert composition.created_by == %{"actor_kind" => "user", "user_id" => "composer-a"}
       refute Map.has_key?(first.created_by, "name")
     end
+
+    test "a system actor keeps its run_by, the person #513 counts, and drops its name", c do
+      {:ok, first} = Compositions.for_revision(c.org, c.mid, c.revision_id)
+      [%{layer_id: a}] = first.imported_layers
+      b = second_layer!(c)
+
+      seed = %{
+        "actor_kind" => "system",
+        "system_id" => "seed:compositions",
+        "run_by" => "user-runner",
+        "name" => "Seed (test)"
+      }
+
+      {:ok, composition} = Compositions.insert_or_get(c.org, c.mid, [{a, "/"}, {b, "/p"}], seed)
+
+      assert composition.created_by == %{
+               "actor_kind" => "system",
+               "system_id" => "seed:compositions",
+               "run_by" => "user-runner"
+             }
+    end
   end
 
   describe "a bad composition is refused at the write, and nothing is written" do

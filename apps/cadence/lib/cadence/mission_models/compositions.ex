@@ -19,7 +19,8 @@ defmodule Cadence.MissionModels.Compositions do
     The link's version is always read from the revision row, never passed in. A revision with
     blocking diagnostics gets no link.
   - **Creator.** `created_by` keeps the actor's kind and ids only (`actor_kind`, `user_id`,
-    `service_identity_id`, `system_id`), never a stored name: readers name people live (#146).
+    `service_identity_id`, `system_id`, `run_by`), never a stored name: readers name people live
+    (#146), and a system actor's `run_by` still counts its runner (#513).
   - Rows are immutable by trigger (migration 20261120060000).
   """
 
@@ -39,7 +40,9 @@ defmodule Cadence.MissionModels.Compositions do
   alias Cadence.Repo
 
   @prefix "mission_model_composition"
-  @actor_keys ~w(actor_kind user_id service_identity_id system_id)
+  # run_by is the person a system actor ran for, which #513's separation counts (mms-security,
+  # domain on #559); it's an id, so it's kept under #146 too.
+  @actor_keys ~w(actor_kind user_id service_identity_id system_id run_by)
 
   @type layer_ref :: %{layer_id: binary(), mount: binary(), content_sha256: binary()}
   @type t :: %{
