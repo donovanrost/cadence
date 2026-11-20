@@ -70,15 +70,16 @@ defmodule Cadence.Accounts.MemberNames do
 
   @doc """
   The organization's own Audit only (`Reads.OrganizationAudit`; setup.md C1's exception, #470,
-  OK'd by ca-security, ux and lead): `%{user_id => {display_name | nil, :active | :former}}`
-  for every id that has a membership row in `organization_id`, in any state, so the Audit can
-  say who its admins removed and name a former member's own past acts. Display name only, never
-  the email. The state lets the Audit keep a current member's id and drop a former member's
-  (ca-security). Anyone never a member (a platform admin from elsewhere) is missing from the
+  OK'd by ca-security, ux and lead): `%{user_id => {display_name | nil, :active | :former,
+  membership_id}}` for every id that has a membership row in `organization_id`, in any state,
+  so the Audit can say who its admins removed and name a former member's own past acts. Display
+  name only, never the email. The state lets the Audit keep a current member's id and drop a
+  former member's (ca-security); the membership row's id keys a former member's events without
+  their user id (api-ops, ca-security). Anyone never a member (a platform admin from elsewhere) is missing from the
   map. No other read may use it (guarded in `OrganizationAuditNamesTest`).
   """
   @spec ever_members(binary(), [binary()]) :: %{
-          binary() => {binary() | nil, :active | :former}
+          binary() => {binary() | nil, :active | :former, binary()}
         }
   def ever_members(_organization_id, []), do: %{}
 
@@ -87,10 +88,13 @@ defmodule Cadence.Accounts.MemberNames do
     OrganizationMembershipRow
     |> join(:inner, [m], u in UserRow, on: m.user_id == u.user_id)
     |> where([m, _u], m.organization_id == ^organization_id and m.user_id in ^Enum.uniq(user_ids))
-    |> select([m, u], {u.user_id, u.display_name, m.lifecycle_state})
+    |> select(
+      [m, u],
+      {u.user_id, u.display_name, m.lifecycle_state, m.organization_membership_id}
+    )
     |> Repo.all()
-    |> Map.new(fn {id, name, state} ->
-      {id, {present(name), if(state == "active", do: :active, else: :former)}}
+    |> Map.new(fn {id, name, state, membership_id} ->
+      {id, {present(name), if(state == "active", do: :active, else: :former), membership_id}}
     end)
   end
 

@@ -25,6 +25,7 @@ defmodule Cadence.Reads.OrganizationAuditNamesTest do
 
   alias Cadence.Administration.PlatformEvents
   alias Cadence.Control.ActorRef
+  alias Cadence.Persistence.JsonDocument
   alias Cadence.Platform.ScopedSettings.RevisionRow
   alias Cadence.Reads.OrganizationAudit
 
@@ -152,6 +153,88 @@ defmodule Cadence.Reads.OrganizationAuditNamesTest do
              nil
            ]
   end
+
+  describe "a former member's event key (api-ops, ca-security)" do
+    test "two former members whose memberships began together get distinct keys, no user id" do
+      at = ~U[2026-11-20 01:00:00.000000Z]
+      for id <- ["twin-a-470", "twin-b-470"], do: person!(id, "Twin #{id}", @org, :member)
+
+      {2, _} =
+        Repo.update_all(
+          where(OrganizationMembershipRow, [m], m.user_id in ["twin-a-470", "twin-b-470"]),
+          set: [inserted_at: at]
+        )
+
+      for id <- ["twin-a-470", "twin-b-470"],
+          do: {:ok, _} = MembershipAdministration.remove_member(@org, id, "mira-470")
+
+      removals =
+        Enum.filter(audit(), &(&1.action =~ ~r/^Removed Twin twin-[ab]-470/))
+
+      joins = Enum.filter(audit(), &(&1.action == "Joined as member" and &1.at == at))
+
+      assert length(removals) == 2 and length(joins) == 2
+      ids = Enum.map(removals ++ joins, & &1.id)
+      assert length(Enum.uniq(ids)) == 4
+
+      keys = joins |> Enum.map(&(&1.id |> String.split(":") |> Enum.at(2))) |> Enum.sort()
+
+      # Built from the organization and the membership row's own id, never the user id, so an id
+      # held elsewhere can't be matched to it.
+      membership_keys =
+        for id <- ["twin-a-470", "twin-b-470"] do
+          row = Repo.get_by!(OrganizationMembershipRow, organization_id: @org, user_id: id)
+          key("audit-member:#{@org}:#{row.organization_membership_id}")
+        end
+
+      assert keys == Enum.sort(membership_keys)
+
+      refute Enum.any?(
+               keys,
+               &(&1 in [key("audit-member:twin-a-470"), key("audit-member:twin-b-470")])
+             )
+
+      for event_id <- ids, do: refute(event_id =~ "twin-")
+    end
+  end
+
+  describe "role words (ca-ux)" do
+    test "the console's 'org admin'" do
+      assert "Changed a member's role from member to org admin" in actions(audit())
+    end
+
+    test "a role it doesn't know drops its words, never the raw value" do
+      row = Repo.get_by!(OrganizationMembershipRow, organization_id: @org, user_id: "mira-470")
+      metadata = JsonDocument.unwrap_value(row.metadata) || %{}
+
+      future = %{
+        "action" => "role_changed",
+        "from" => "org_admin_v2",
+        "to" => "member",
+        "by" => "mira-470",
+        "at" => "2026-11-20T02:00:00.000000Z"
+      }
+
+      audit = List.wrap(metadata["audit"]) ++ [future]
+
+      {1, _} =
+        Repo.update_all(
+          where(OrganizationMembershipRow,
+            organization_membership_id: ^row.organization_membership_id
+          ),
+          set: [
+            metadata: JsonDocument.wrap_value(Map.put(metadata, "audit", audit))
+          ]
+        )
+
+      actions = actions(audit())
+      assert "Changed Mira K.'s role" in actions
+      refute Enum.any?(actions, &(&1 =~ "org_admin_v2"))
+    end
+  end
+
+  defp key(text),
+    do: :crypto.hash(:sha256, text) |> Base.url_encode64(padding: false) |> binary_part(0, 16)
 
   defp audit, do: OrganizationAudit.list(@org, %{offset: 0, limit: 200}).events
   defp actions(events), do: Enum.map(events, & &1.action)
