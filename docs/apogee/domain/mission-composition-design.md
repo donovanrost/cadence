@@ -48,6 +48,10 @@ Sources:
 | `imported_layers` | `[{layer_id, mount}]`, sorted by mount. Imported layers only. |
 | `created_by`, `created_at` | Who made it (a person, or a service counted through #280). |
 
+**Who may create one (ca-security, #537):**
+- a composition is created only by a configuration-lane change set (the kind `mission_model_composition`), staged by a holder of `:manage_mission`;
+- its creator (the stager, with #280's accountable people for a service) **joins the separation set** for approving its base effective revision (§4), with the importers and authors.
+
 - **Immutable.** UPDATE and DELETE are refused by trigger (#116's pattern).
 - **Insert-or-get** re-reads by `(org, mission, composition_id)` and fails closed on any scope or
   content mismatch, as #119 did (CB-2).
@@ -129,7 +133,18 @@ migration reuses the existing rows.
     (`Catalog.model_importers` per layer), so separation covers every imported layer;
   - the comparison runs on the composed revision.
 - **An effective revision with authored layers** (phase 3) is approved by the monitoring set's
-  own change-set review (the addendum; CB-6: no second gate decision). It's usable only when:
+  own change-set review (the addendum; CB-6: no second gate decision). That review carries **the
+  gate's authority** (ca-security, #537): `:approve_mission_model`, an organization admin, not the
+  `:approve_activation` any operator holds today. So:
+  - a monitoring-lane change set that advances the authored head may be reviewed and applied
+    only by a holder of `:approve_mission_model`;
+  - under 'direct', the one-step `Apply now` (#93 b) needs that authority too;
+  - an operator without it can stage the change, and an organization admin approves or applies it;
+  - acknowledging a failed composed comparison takes the same authority.
+
+  ux's U108 states the consequence: an operator can stage a limit fix, and an org admin applies it.
+
+  It's usable only when:
   - its composition's base is approved;
   - the comparison report on the COMPOSED revision has passed, or the change-set reviewer
     acknowledged it as today (CB-1: the combination is compared, not only its parts);
@@ -156,6 +171,9 @@ migration reuses the existing rows.
   refused** for every craft pinned to it, at staging and again at activation.
 - Craft keep running their last activated generation until then, and their state reads
   "pinned composition no longer approved", with the reason and the decision record.
+- **New commanding on such a craft meets an acknowledged hold** (ca-security, #537): it's
+  refused until a person acknowledges, with a recorded acknowledgement. It never proceeds
+  silently. Telemetry keeps flowing.
 - It's never used silently.
 - Suspending sooner (stopping running craft, as #499 does for grants) is a question for
   mms-security and ca-security. **Recommendation:** no. Stopping telemetry and commanding on an
@@ -193,7 +211,7 @@ The console rows are U-entries from ux.
 
 | # | Question | Answer |
 |---|---|---|
-| 1 | Composition approval (CB-1, CB-6) | §4: compared on the composed revision; base approved by the gate with union importers; authored layers by their change-set review, no second decision |
+| 1 | Composition approval (CB-1, CB-6) | §4: compared on the composed revision; base approved by the gate with union importers plus the composition's creator; authored layers by their change-set review, which needs the gate's authority (`:approve_mission_model`) |
 | 2 | Identity (CB-2) | §1: content-addressed within (org, mission); insert-or-get re-reads scoped and fails closed |
 | 3 | Pin (CB-3) | §3: change-set kinds only, four-eyes; unapproved refused at staging and at activation |
 | 4 | Gate re-key (CB-4) | §4: the gated unit is unchanged; one-transaction migration with no approval writes; guard test; digests kept |
@@ -205,7 +223,7 @@ The console rows are U-entries from ux.
 | 10 | Projection (CB-12) | H: the reader inventory first, authorization readers named |
 | 11 | Bounds (CB-13) | §1: 8 imported layers, depth 4; compile and expansion bounds in C/F |
 | 12 | Overrides (CB-14) | §3 |
-| 13 | Withdrawn approvals (CB-15) | §5 |
+| 13 | Withdrawn approvals (CB-15) | §5: the next generation is refused; new commanding meets an acknowledged hold; nothing auto-stops |
 | 14 | Old data | §7 |
 
 ## 9. Slices (issues)
