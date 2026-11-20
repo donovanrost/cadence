@@ -13,6 +13,11 @@ Each item has a short reason. Cite the code path and the condition for every fin
 - Say what you read, what you ran and what you didn't.
   *Why:* a reader has to be able to tell a checked claim from a trusted one.
 - A push after your review voids it for the new commits. Re-review them, or say they're out of your scope.
+- Read the PR's file list (`git diff <base>...<head> --stat`) against what the description says
+  it touches, before reading the code. On a rebase, compare with `git range-diff`; on a merge,
+  look at `git show --remerge-diff`.
+  *Why:* a squash or rebase onto a moved base can silently revert other merged work, including
+  another PR's approval checks, and a green run on that tree proves nothing (#575).
 - Never review your own work.
 
 ## The checks
