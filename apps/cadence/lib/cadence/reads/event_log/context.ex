@@ -6,6 +6,7 @@ defmodule Cadence.Reads.EventLog.Context do
 
   alias Cadence.Accounts.MemberNames
   alias Cadence.Comms.StationRefs
+  alias Cadence.Control.ActorRef
   alias Cadence.Dashboards.DocumentStore
   alias Cadence.Reads.EventSentences
 
@@ -37,10 +38,15 @@ defmodule Cadence.Reads.EventLog.Context do
     %{
       spacecraft: spacecraft_names(organization_id, mission_id),
       users: users,
+      # #488: every actor on the page (people, services, Cadence) through ActorRef, once.
+      actors: ActorRef.names(organization_id, Enum.map(entries, &actor_document(&1.actor))),
       dashboards: dashboards,
       stations: stations
     }
   end
+
+  defp actor_document(%{"value" => value}), do: value
+  defp actor_document(value), do: value
 
   defp spacecraft_names(organization_id, mission_id) do
     organization_id
