@@ -37,4 +37,17 @@ describe("OutcomeCallout", () => {
       "Not booked.",
     );
   });
+
+  it("shows the slot's markup and announces outcome.text, the same words (#604)", () => {
+    vi.useFakeTimers();
+    const w = mount(OutcomeCallout, {
+      props: { outcome: { tone: "nominal", text: "2 spacecraft staged as r7." } },
+      slots: { default: '2 spacecraft staged as <span class="font-mono">r7</span>.' },
+    });
+    expect(w.find(".font-mono").text()).toBe("r7");
+    vi.advanceTimersByTime(1000);
+    expect(document.querySelector("[data-ap-announcer]")?.textContent).toBe(
+      "2 spacecraft staged as r7.",
+    );
+  });
 });
