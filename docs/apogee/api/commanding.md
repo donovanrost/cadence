@@ -369,7 +369,12 @@ confirm_unbooked: bool (default false)}`; `operate_mission`, a fresh human (GO/N
 "expected_review": "<review_token>"}`. Returns the group. A note is required except for `go`.
 `go_excluding` rejects the named targets' members ("excluded at review").
 
-Errors: `403 command_group_self_approval_not_allowed`, `403 not_the_requested_approver`,
+Errors: `403 command_group_self_approval_not_allowed` (#622, #280: the requester counts as people,
+as on a single request, so a service requester is its issuer and rotators; details
+`{via_service: {id, name}}` when it came through a service you're accountable for, none when you
+requested it yourself), `403 command_group_approver_authors_unknown` (details `{service}`: a service
+nobody is recorded as accountable for requested it, so nobody can decide it; fail closed),
+`403 not_the_requested_approver`,
 `409 command_group_not_pending`, `409 command_group_review_stale`, `409 command_group_basis_changed`
 (the active catalog changed since submit, so resubmit), `409 command_group_members_changed` (GO
 only: the group's member rows no longer match what submission recorded; details
