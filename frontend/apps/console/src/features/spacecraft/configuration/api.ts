@@ -107,7 +107,15 @@ export const snapshotReader = d.object({
     source: d.knownText(["organization", "inherited", "overridden", "enforced"] as const),
     can_request: d.boolean,
     can_review: d.boolean,
+    /** #595 (api): `:operate_mission`, the check a draft save makes. Optional until api ships it. */
+    can_save: d.optional(d.boolean),
   }),
+  /**
+   * #595 (api): the profile the craft inherits, for U94's `Open profile` on
+   * spacecraft_catalog_set_by_profile. Optional until api ships it.
+   */
+  // free-text: the profile's display name
+  profile: d.optional(d.nullable(d.object({ id: d.token, name: d.string }))),
   catalogs: d.array(
     d.object({
       id: d.token,
@@ -171,6 +179,30 @@ export function fetchWorkspace(
     { signal },
   );
 }
+
+/**
+ * #595 (U94): PUT …/workspace/draft {token, document}. Saves a draft (the active configuration
+ * stays in use) and answers the fresh snapshot with a new token. Never sends a switch (#109).
+ */
+export function saveDraft(
+  k: WorkspaceKey,
+  token: string,
+  document: ConfigurationDocument,
+): Promise<ApiResult<ConfigurationSnapshot>> {
+  return request(
+    `${workspacePath(k.missionId, k.spacecraftId)}/draft?section=${encodeURIComponent(k.section)}`,
+    snapshotReader,
+    { method: "PUT", body: { token, document: documentBody(document) } },
+  );
+}
+
+/** Only the document's own keys, so nothing the reader passed through is ever sent back. */
+const documentBody = (doc: ConfigurationDocument) => ({
+  catalog_revision_id: doc.catalog_revision_id,
+  telemetry_source_endpoint_id: doc.telemetry_source_endpoint_id,
+  handled_apids: [...doc.handled_apids],
+  protocol: doc.protocol,
+});
 
 /** GET …/workspace/catalogs/:id/packets: the packet choices for a catalog revision. */
 export const packetChoicesReader = d.object({

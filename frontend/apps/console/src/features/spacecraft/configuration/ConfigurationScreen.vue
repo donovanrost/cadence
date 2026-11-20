@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { onBeforeRouteLeave, useRoute, useRouter } from "vue-router";
 import type { SpacecraftId } from "@/api/index.ts";
 import { codeOf, useRemoteQuery } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
@@ -13,20 +13,23 @@ import {
   ApSelect,
   ApTabLinks,
   ApTag,
+  OutcomeCallout,
   type ApCrumb,
   type ApTabLink,
 } from "@/ui";
+import ConfirmDialog from "@/features/commands/compose/ConfirmDialog.vue";
 import { fetchWorkspace, sections, type ConfigurationSnapshot } from "./api.ts";
-import ComparisonTable from "./ComparisonTable.vue";
-import SettingsPanel from "./SettingsPanel.vue";
-import SetupSteps from "./SetupSteps.vue";
-import SwitchesPanel from "./SwitchesPanel.vue";
+import ConfigurationBody from "./ConfigurationBody.vue";
+import ConflictPanel from "./ConflictPanel.vue";
+import DraftBar from "./DraftBar.vue";
+import { discardQuestion, leaveBody } from "./draft-words.ts";
+import { useConfigurationDraft } from "./useConfigurationDraft.ts";
 import { changesCount, readRefusal, statusTag, versionsLine } from "./words.ts";
 
 /**
  * (B) ux U94: Setup › Spacecraft › EARENDIL-004 › Configuration, the host's workspace in the
- * console. Read side only (lead): the draft, the active entry, the switches and the comparison.
- * Saving and sending come once api's write routes exist.
+ * console: the draft, the active entry, the switches and the comparison. #595a: one draft across
+ * the tabs, saved with `Save draft`; sending it for activation is #595c.
  */
 const props = defineProps<{ spacecraftId: SpacecraftId | null }>();
 const route = useRoute("setup.spacecraft.configuration");
@@ -45,6 +48,33 @@ const key = computed(() =>
     : null,
 );
 const { state, refetch } = useRemoteQuery(key, fetchWorkspace);
+const draft = useConfigurationDraft(
+  key,
+  () => (state.value.status === "ready" ? state.value.value : null),
+  refetch,
+);
+/** Framing sizes that don't read as numbers (Save waits for them). */
+const invalid = ref(0);
+const errors = computed(() => draft.failure.value?.fields ?? {});
+/** #595a: who can save a draft (api's can_save; can_request until it ships). */
+const editable = (s: ConfigurationSnapshot) => s.approval.can_save ?? s.approval.can_request;
+
+// mms-ux (#595a): leaving with unsaved edits asks first; moving between this craft's tabs doesn't.
+const leaveDialog = ref<InstanceType<typeof ConfirmDialog> | null>(null);
+onBeforeRouteLeave(async (to) => {
+  if (!draft.dirty.value) return true;
+  if (
+    to.name === "setup.spacecraft.configuration" &&
+    to.params["spacecraftId"] === props.spacecraftId
+  )
+    return true;
+  return (await leaveDialog.value?.ask()) === true;
+});
+const onUnload = (e: BeforeUnloadEvent) => {
+  if (draft.dirty.value) e.preventDefault();
+};
+onMounted(() => window.addEventListener("beforeunload", onUnload));
+onBeforeUnmount(() => window.removeEventListener("beforeunload", onUnload));
 useMissionInvalidation(
   computed(() => scope.value.mission.id),
   ["spacecraft", "configuration", "activations"],
@@ -97,6 +127,8 @@ function switchTo(id: string) {
 const refusal = computed(() =>
   state.value.status === "failed" ? readRefusal(codeOf(state.value.error)) : null,
 );
+/** The PUT's fresh answer until the next read arrives, else the read (#595a). */
+const snap = (value: ConfigurationSnapshot) => draft.snapshot.value ?? value;
 const craftOptions = (s: ConfigurationSnapshot) =>
   s.fleet.map((c) => ({ value: c.id, label: c.name }));
 </script>
@@ -118,10 +150,10 @@ const craftOptions = (s: ConfigurationSnapshot) =>
           size="reading"
         >
           <template #status>
-            <ApTag :state="statusTag(value).state" :label="statusTag(value).label" />
+            <ApTag v-bind="statusTag(snap(value), draft.dirty.value)" />
           </template>
           <ApSelect
-            v-if="value.fleet.length > 1 && !versionsLine(value)"
+            v-if="value.fleet.length > 1 && !versionsLine(snap(value))"
             :model-value="value.spacecraft_id"
             label="Spacecraft"
             hidden-label
@@ -131,8 +163,11 @@ const craftOptions = (s: ConfigurationSnapshot) =>
           />
         </ApPageHeader>
         <!-- Phone order (ux): title, tag, versions, then the switcher. -->
-        <div v-if="versionsLine(value)" class="flex flex-wrap items-center justify-between gap-3">
-          <p class="m-0 font-mono text-sm text-text-2">{{ versionsLine(value) }}</p>
+        <div
+          v-if="versionsLine(snap(value))"
+          class="flex flex-wrap items-center justify-between gap-3"
+        >
+          <p class="m-0 font-mono text-sm text-text-2">{{ versionsLine(snap(value)) }}</p>
           <ApSelect
             v-if="value.fleet.length > 1"
             :model-value="value.spacecraft_id"
@@ -143,21 +178,45 @@ const craftOptions = (s: ConfigurationSnapshot) =>
             @update:model-value="switchTo"
           />
         </div>
-        <ApTabLinks :links="links(value)" :active="section" label="Configuration sections" />
-        <SetupSteps :snapshot="value" />
-        <template v-if="section === 'changes'">
-          <ComparisonTable :snapshot="value" />
-        </template>
-        <SettingsPanel
-          v-else-if="section === 'communications'"
-          :snapshot="value"
-          show="communications"
+        <ApTabLinks :links="links(snap(value))" :active="section" label="Configuration sections" />
+        <ConflictPanel
+          v-if="draft.conflict.value && draft.doc.value"
+          :snapshot="snap(value)"
+          :saved="draft.conflict.value"
+          :mine="draft.doc.value"
+          @use-saved="draft.useSaved"
+          @keep-mine="draft.keepMine"
         />
-        <div v-else class="grid grid-cols-1 gap-3 console:grid-cols-[minmax(0,1fr)_360px]">
-          <SettingsPanel :snapshot="value" :show="section === 'overview' ? 'all' : 'catalog'" />
-          <SwitchesPanel :snapshot="value" />
-        </div>
+        <DraftBar
+          v-else
+          :dirty="draft.dirty.value"
+          :saving="draft.saving.value"
+          :failure="draft.failure.value"
+          :invalid="invalid"
+          :discard-question="discardQuestion(snap(value))"
+          :profile-id="snap(value).profile?.id ?? null"
+          @save="draft.save"
+          @discard="draft.discard"
+        />
+        <OutcomeCallout v-if="draft.saved.value" :outcome="draft.saved.value" />
+        <ConfigurationBody
+          :snapshot="snap(value)"
+          :doc="draft.doc.value ?? value.document"
+          :section="section"
+          :workspace="key"
+          :editable="editable(value)"
+          :errors="errors"
+          @edit="draft.edit"
+          @invalid="invalid = $event"
+        />
       </template>
     </ApRemote>
+    <ConfirmDialog
+      ref="leaveDialog"
+      question="Leave without saving?"
+      :body="leaveBody(name)"
+      confirm="Leave"
+      cancel="Stay"
+    />
   </div>
 </template>
