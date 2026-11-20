@@ -7,6 +7,7 @@ import {
   manifestRows,
   nextFreeScid,
   rangeLabel,
+  scidStartHint,
   type ProposedSpacecraft,
 } from "./batch.ts";
 import { guessMapping, parseCsv, readRows } from "./manifest.ts";
@@ -142,5 +143,17 @@ describe("S9 (#313, U20): the server's SCIDs", () => {
       [],
     ]);
     expect(report.clashCount).toBe(2);
+  });
+});
+
+describe("S9 follow-up (#313, mms-ux)", () => {
+  it("says why First SCID is empty when the server has none free from 1 to 1023", () => {
+    expect(scidStartHint({ next: null, inUse: [] }, "—")).toBe(
+      "Every SCID from 1 to 1023 is taken in this mission, so new spacecraft need one freed first.",
+    );
+    expect(scidStartHint({ next: 5, inUse: [] }, "9")).toBe(
+      "Last SCID 9 · prefilled with the next free SCID",
+    );
+    expect(scidStartHint(null, "9")).toBe("Last SCID 9 · prefilled with the next free SCID");
   });
 });

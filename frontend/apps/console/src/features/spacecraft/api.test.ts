@@ -93,6 +93,14 @@ describe("S9 (#313): the directory's SCIDs in use", () => {
     expect(before.ok && before.value.scids).toBeNull();
   });
 
+  it("derives the next free SCID from the list when the server leaves it out (mms-engineer)", () => {
+    const r = decode(directoryReader, { spacecraft: [], scids_in_use: [1, 2, 4] });
+    expect(r.ok && r.value.scids).toEqual({ next: 3, inUse: [1, 2, 4] });
+    const taken = Array.from({ length: 1023 }, (_, i) => i + 1);
+    const full = decode(directoryReader, { spacecraft: [], scids_in_use: taken });
+    expect(full.ok && full.value.scids?.next).toBeNull();
+  });
+
   it("refuses a SCID outside 0..1023", () => {
     expect(decode(directoryReader, { spacecraft: [], scids_in_use: [1024] }).ok).toBe(false);
     expect(

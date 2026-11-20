@@ -104,6 +104,13 @@ const directoryFields = object({
   scids_in_use: optional(array(scidValue, 1024)),
 });
 
+/** The lowest of 1..1023 not in `inUse` (0 is never suggested); null when none is free. */
+export function lowestFreeScid(inUse: readonly number[]): number | null {
+  const taken = new Set(inUse);
+  for (let scid = 1; scid <= 1023; scid += 1) if (!taken.has(scid)) return scid;
+  return null;
+}
+
 export const directoryReader: Reader<SpacecraftDirectory> = (value, path = "") => {
   const raw = directoryFields(value, path);
   return {
@@ -113,7 +120,14 @@ export const directoryReader: Reader<SpacecraftDirectory> = (value, path = "") =
     scids:
       raw.scids_in_use === undefined
         ? null
-        : { next: raw.next_free_scid ?? null, inUse: raw.scids_in_use },
+        : {
+            // Defined by the list (api docs); derived from it if the server ever leaves it out.
+            next:
+              raw.next_free_scid === undefined
+                ? lowestFreeScid(raw.scids_in_use)
+                : raw.next_free_scid,
+            inUse: raw.scids_in_use,
+          },
   };
 };
 

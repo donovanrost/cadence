@@ -26,6 +26,12 @@ describe("a version's author (U25)", () => {
     expect(cell({ kind: "service", id: "s-1", name: null }).text()).toBe("Not knownService");
   });
 
+  it("names the system Cadence, with no tag (fe-ops, #494)", () => {
+    const w = cell({ kind: "system", id: null, name: null });
+    expect(w.text()).toBe("Cadence");
+    expect(w.text()).not.toContain("Service");
+  });
+
   it("says 'Not recorded' only when there's no actor at all", () => {
     expect(cell(null).text()).toBe("Not recorded");
   });
