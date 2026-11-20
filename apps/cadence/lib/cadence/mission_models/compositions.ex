@@ -65,12 +65,15 @@ defmodule Cadence.MissionModels.Compositions do
     with :ok <- well_formed(organization_id, mission_id, layers) do
       Repo.transaction(fn ->
         insert(organization_id, mission_id, composition_id, layers, created_by)
-
-        case fetch(organization_id, mission_id, composition_id) do
-          {:ok, composition} -> same_or_rollback(composition, layers)
-          {:error, reason} -> Repo.rollback(reason)
-        end
+        read_back(organization_id, mission_id, composition_id, layers)
       end)
+    end
+  end
+
+  defp read_back(organization_id, mission_id, composition_id, layers) do
+    case fetch(organization_id, mission_id, composition_id) do
+      {:ok, composition} -> same_or_rollback(composition, layers)
+      {:error, reason} -> Repo.rollback(reason)
     end
   end
 
@@ -235,19 +238,20 @@ defmodule Cadence.MissionModels.Compositions do
       advisory_lock(organization_id, mission_id, composition_id)
 
       case link(organization_id, mission_id, composition_id) do
-        %EffectiveRevisionRow{revision_id: revision_id} ->
-          revision_id
-
-        nil ->
-          with {:ok, composition} <- fetch(organization_id, mission_id, composition_id),
-               {:ok, %CompilerResult{revision: revision}} <- compile(composition, opts),
-               :ok <- usable(revision) do
-            write_link(composition, revision.revision_id)
-          else
-            {:error, reason} -> Repo.rollback(reason)
-          end
+        %EffectiveRevisionRow{revision_id: revision_id} -> revision_id
+        nil -> compile_and_link(organization_id, mission_id, composition_id, opts)
       end
     end)
+  end
+
+  defp compile_and_link(organization_id, mission_id, composition_id, opts) do
+    with {:ok, composition} <- fetch(organization_id, mission_id, composition_id),
+         {:ok, %CompilerResult{revision: revision}} <- compile(composition, opts),
+         :ok <- usable(revision) do
+      write_link(composition, revision.revision_id)
+    else
+      {:error, reason} -> Repo.rollback(reason)
+    end
   end
 
   defp advisory_lock(organization_id, mission_id, composition_id) do

@@ -1,6 +1,8 @@
 defmodule Cadence.Repo.Migrations.MissionModelCompositions do
   use Ecto.Migration
 
+  alias Cadence.MissionModels.CompositionBackfill
+
   # D1 (#541; design docs/apogee/domain/mission-composition-design.md §1, §2, §7).
   #
   # - mission_model_compositions: which imported layers, at which mounts, in one tenant. Content-
@@ -122,7 +124,7 @@ defmodule Cadence.Repo.Migrations.MissionModelCompositions do
     end
 
     flush()
-    Cadence.MissionModels.CompositionBackfill.run(repo())
+    CompositionBackfill.run(repo())
   end
 
   def down do
