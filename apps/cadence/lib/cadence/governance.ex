@@ -5,8 +5,6 @@ defmodule Cadence.Governance do
 
   import Ecto.Query
 
-  require Logger
-
   alias Ecto.Changeset
   alias Ecto.Multi
 
@@ -24,7 +22,6 @@ defmodule Cadence.Governance do
   alias Cadence.Governance.{
     BindingRuleRow,
     BindingSetRow,
-    BindingSetStorage,
     CapabilityInstanceRow,
     DerivedDefinitions,
     GovernedPacketDefinitionRow,
@@ -34,7 +31,6 @@ defmodule Cadence.Governance do
   alias Cadence.Governance.Persistence, as: GovernancePersistence
   alias Cadence.Management.Comms.SourceEndpointReferences
   alias Cadence.Missions
-  alias Cadence.Persistence.OrganizationScope
   alias Cadence.Repo
   alias Cadence.Telemetry.{FieldDefinition, PacketDefinition}
 
@@ -61,16 +57,23 @@ defmodule Cadence.Governance do
       |> Multi.run(:packet_definitions, fn repo, _changes ->
         GovernancePersistence.persist_packet_definitions(repo, packet_definitions)
       end)
-      # #447: membership form when it expands back exactly, today's rows otherwise (and said so).
-      |> Multi.run(:storage, fn _repo, _changes -> {:ok, plan_storage(binding_set)} end)
-      # api-ops (#475): a version that already exists is never added to. A membership version
-      # re-persisted with the same content writes nothing; with other content it's refused.
-      |> Multi.run(:existing, fn repo, _changes -> {:ok, existing_version(repo, binding_set)} end)
-      |> Multi.run(:binding_set_row, fn repo, %{storage: storage} ->
-        GovernancePersistence.persist_binding_set(repo, binding_set, storage_attrs(storage))
+      |> Multi.run(:binding_set_row, fn repo, _changes ->
+        GovernancePersistence.persist_binding_set(repo, binding_set)
       end)
-      |> Multi.run(:binding_rows, fn repo, changes ->
-        persist_binding_rows(repo, changes, binding_set)
+      |> Multi.run(:capability_instance_rows, fn repo, %{binding_set_row: binding_set_row} ->
+        GovernancePersistence.persist_capability_instances(
+          repo,
+          binding_set_row,
+          binding_set.capability_instances
+        )
+      end)
+      |> Multi.run(:binding_rule_rows, fn repo, %{binding_set_row: binding_set_row} ->
+        GovernancePersistence.persist_binding_rules(
+          repo,
+          binding_set_row,
+          binding_set.rules,
+          binding_set.capability_instances
+        )
       end)
       |> Repo.transaction()
       |> case do
@@ -469,19 +472,6 @@ defmodule Cadence.Governance do
     end
   end
 
-  # #447: a membership version expands to the rows the rows form stores, and must hash as it was
-  # stored (api-ops): a different expansion is an error, never a different set.
-  defp hydrate_binding_set(%BindingSetRow{storage_form: "membership"} = binding_set_row) do
-    with {:ok, {capability_instance_rows, binding_rule_rows}} <-
-           BindingSetStorage.load(binding_set_row),
-         {:ok, binding_set} <-
-           hydrate_rows(binding_set_row, capability_instance_rows, binding_rule_rows) do
-      if BindingSet.content_sha256(binding_set) == binding_set_row.content_sha256,
-        do: {:ok, binding_set},
-        else: {:error, :binding_set_expansion_mismatch}
-    end
-  end
-
   defp hydrate_binding_set(%BindingSetRow{} = binding_set_row) do
     capability_instance_rows =
       CapabilityInstanceRow
@@ -490,24 +480,15 @@ defmodule Cadence.Governance do
         capability_instance_row.binding_set_row_id == ^binding_set_row.id
       )
       |> Repo.all()
+      # Bytewise, not by the database's text collation: the hydrated set is hashed (#56).
+      |> Enum.sort_by(& &1.capability_instance_id)
 
     binding_rule_rows =
       BindingRuleRow
       |> where([binding_rule_row], binding_rule_row.binding_set_row_id == ^binding_set_row.id)
       |> Repo.all()
-
-    hydrate_rows(binding_set_row, capability_instance_rows, binding_rule_rows)
-  end
-
-  defp hydrate_rows(
-         %BindingSetRow{} = binding_set_row,
-         capability_instance_rows,
-         binding_rule_rows
-       ) do
-    # Bytewise, not by the database's text collation: the hydrated set is hashed (#56).
-    capability_instance_rows = Enum.sort_by(capability_instance_rows, & &1.capability_instance_id)
-    # Priority, then id bytewise: the evaluation order and the hash mustn't follow the collation.
-    binding_rule_rows = Enum.sort_by(binding_rule_rows, &{&1.priority, &1.binding_rule_id})
+      # Priority, then id bytewise: the evaluation order and the hash mustn't follow the collation.
+      |> Enum.sort_by(&{&1.priority, &1.binding_rule_id})
 
     with {:ok, packet_definitions_by_key} <-
            fetch_capability_instance_packet_definitions(capability_instance_rows),
@@ -527,189 +508,6 @@ defmodule Cadence.Governance do
          capability_instances: capability_instances,
          rules: rules
        }}
-    end
-  end
-
-  ## #447: binding-set storage form
-
-  # Runs inside the persist transaction, after the packet definitions are written, so both forms
-  # hydrate exactly as a read will. The guard (api-ops): the rows the membership form expands to,
-  # through the storage codec, equal the rows the rows form stores, and both hydrate to the same
-  # content_sha256. Anything else stores rows, with a log line and a telemetry count.
-  defp plan_storage(%BindingSet{} = binding_set) do
-    # The row takes its organization from the mission when the set doesn't carry one
-    # (OrganizationScope), and a read hydrates with the row's: the guard uses the same.
-    organization_id =
-      binding_set.organization_id ||
-        OrganizationScope.organization_id_for_mission(binding_set.mission_id)
-
-    if is_binary(organization_id),
-      do: plan_membership(binding_set, organization_id),
-      else: unscoped(binding_set)
-  end
-
-  # A version with no organization (its mission has no row) can't have tenant-scoped artifacts,
-  # so it stays rows. Not a guard failure: every product path persists through
-  # persist_binding_set/2, which requires the mission in its organization first.
-  defp unscoped(%BindingSet{} = binding_set) do
-    Logger.debug(
-      "binding set #{binding_set.binding_set_id} v#{binding_set.version} has no organization; stored as rows"
-    )
-
-    :rows
-  end
-
-  defp plan_membership(%BindingSet{} = binding_set, organization_id) do
-    shell = %BindingSetRow{
-      binding_set_id: binding_set.binding_set_id,
-      organization_id: organization_id,
-      mission_id: binding_set.mission_id,
-      version: binding_set.version
-    }
-
-    with {:ok, instance_rows, rule_rows} <- GovernancePersistence.binding_rows(binding_set),
-         {instances, rules} = reference = BindingSetStorage.as_stored(instance_rows, rule_rows),
-         {:ok, artifacts, members} <- BindingSetStorage.compress(instances, rules),
-         templates = Map.new(artifacts, &{&1.sha, BindingSetStorage.codec(&1.template)}),
-         {:ok, {expanded_instances, expanded_rules}} <-
-           BindingSetStorage.expand(templates, members),
-         true <-
-           BindingSetStorage.as_stored(expanded_instances, expanded_rules) == reference ||
-             {:error, :rows_differ},
-         {:ok, by_rows} <- hydrate_rows(shell, instance_rows, rule_rows),
-         {:ok, by_membership} <- hydrate_rows(shell, expanded_instances, expanded_rules),
-         sha = BindingSet.content_sha256(by_membership),
-         true <- sha == BindingSet.content_sha256(by_rows) || {:error, :hash_differs} do
-      {:membership, artifacts, members, sha}
-    else
-      {:error, reason} -> fallback(binding_set, reason)
-    end
-  end
-
-  defp fallback(%BindingSet{} = binding_set, reason) do
-    metadata = %{
-      organization_id: binding_set.organization_id,
-      mission_id: binding_set.mission_id,
-      binding_set_id: binding_set.binding_set_id,
-      version: binding_set.version,
-      reason: reason
-    }
-
-    # Domain: a fallback is a bug to look at, not a normal path.
-    Logger.warning("binding set stored as rows, not membership (#447): #{inspect(metadata)}")
-
-    :telemetry.execute(
-      [:cadence, :governance, :binding_set_storage, :fallback],
-      %{count: 1},
-      metadata
-    )
-
-    :rows
-  end
-
-  defp storage_attrs({:membership, _artifacts, _members, sha}),
-    do: %{storage_form: "membership", content_sha256: sha}
-
-  defp storage_attrs(:rows), do: %{storage_form: "rows"}
-
-  defp existing_version(repo, %BindingSet{} = binding_set) do
-    repo.get_by(BindingSetRow,
-      mission_id: binding_set.mission_id,
-      binding_set_id: binding_set.binding_set_id,
-      version: binding_set.version
-    )
-  end
-
-  # A new version is written in its planned form. An existing membership version is immutable: the
-  # same content (the plan hashes as stored) is a no-op, anything else is refused, and nothing is
-  # written either way. An existing rows version keeps today's idempotent row inserts.
-  defp persist_binding_rows(repo, %{existing: nil, binding_set_row: row, storage: storage}, set) do
-    case {row.storage_form, storage} do
-      # The row may be another transaction's that won the insert: fill it only if it's this content.
-      {"membership", {:membership, artifacts, members, sha}} when sha == row.content_sha256 ->
-        BindingSetStorage.insert(repo, row, artifacts, members)
-
-      {"rows", _storage} ->
-        persist_rows(repo, row, set)
-
-      {_form, _storage} ->
-        {:error, :binding_set_version_changed}
-    end
-  end
-
-  defp persist_binding_rows(
-         _repo,
-         %{existing: %BindingSetRow{storage_form: "membership"} = row, storage: storage},
-         _set
-       ) do
-    case storage do
-      {:membership, _artifacts, _members, sha} when sha == row.content_sha256 -> {:ok, :unchanged}
-      _other -> {:error, :binding_set_version_changed}
-    end
-  end
-
-  defp persist_binding_rows(repo, %{binding_set_row: row}, set), do: persist_rows(repo, row, set)
-
-  defp persist_rows(repo, %BindingSetRow{} = row, %BindingSet{} = binding_set) do
-    with {:ok, _instances} <-
-           GovernancePersistence.persist_capability_instances(
-             repo,
-             row,
-             binding_set.capability_instances
-           ) do
-      GovernancePersistence.persist_binding_rules(
-        repo,
-        row,
-        binding_set.rules,
-        binding_set.capability_instances
-      )
-    end
-  end
-
-  @doc """
-  The dev check for #447 (qa runs it in a slot; read-only): every stored version of the mission,
-  hydrated through its own form, with its `content_sha256`. A membership version is `ok?` when it
-  hashes as stored; a rows version is `ok?` when it would compress and expand to the same hash.
-  """
-  @spec verify_binding_set_storage(binary(), binary()) :: [map()]
-  def verify_binding_set_storage(organization_id, mission_id) do
-    BindingSetRow
-    |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
-    |> order_by([row], asc: row.binding_set_id, asc: row.version)
-    |> Repo.all()
-    |> Enum.map(&verify_version/1)
-  end
-
-  defp verify_version(%BindingSetRow{} = row) do
-    result = %{
-      binding_set_id: row.binding_set_id,
-      version: row.version,
-      storage_form: row.storage_form
-    }
-
-    case hydrate_binding_set(row) do
-      {:ok, binding_set} ->
-        sha = BindingSet.content_sha256(binding_set)
-        Map.merge(result, %{content_sha256: sha, ok?: compresses_to?(row, binding_set, sha)})
-
-      {:error, reason} ->
-        Map.merge(result, %{content_sha256: nil, ok?: false, error: reason})
-    end
-  end
-
-  defp compresses_to?(%BindingSetRow{storage_form: "membership"}, _binding_set, _sha), do: true
-
-  defp compresses_to?(%BindingSetRow{} = row, %BindingSet{} = binding_set, sha) do
-    with {:ok, instance_rows, rule_rows} <- GovernancePersistence.binding_rows(binding_set),
-         {instances, rules} = BindingSetStorage.as_stored(instance_rows, rule_rows),
-         {:ok, artifacts, members} <- BindingSetStorage.compress(instances, rules),
-         templates = Map.new(artifacts, &{&1.sha, BindingSetStorage.codec(&1.template)}),
-         {:ok, {expanded_instances, expanded_rules}} <-
-           BindingSetStorage.expand(templates, members),
-         {:ok, expanded} <- hydrate_rows(row, expanded_instances, expanded_rules) do
-      BindingSet.content_sha256(expanded) == sha
-    else
-      _error -> false
     end
   end
 
