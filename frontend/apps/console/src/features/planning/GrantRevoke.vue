@@ -69,7 +69,11 @@ defineExpose({ open });
   >
     <div class="flex flex-col gap-3">
       <p :id="consequence" class="m-0 text-md text-text-2">
-        {{ who }} stops acting on its own now. Plans it already submitted stay as they are.
+        {{
+          grant?.state === "suspended"
+            ? `${who} won't act under this grant again.`
+            : `${who} can't act under this grant once it's revoked.`
+        }}
       </p>
       <p v-if="replacing" class="m-0 text-md text-text-2">
         This also withdraws the proposal waiting for approval, so it can't switch automation back on

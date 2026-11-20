@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import { ApField, formatDuration } from "@/ui";
 import { actionsNarrowable, type NarrowDraft } from "./grant-narrow.ts";
-import { grantActions, type Grant } from "./grants.ts";
+import { grantActions, validitySpan, type Grant } from "./grants.ts";
 
 /** Narrow…'s fields, labelled as the grant sheet's (U105 names the fields by these labels). */
 const props = defineProps<{ grant: Grant; errors: Readonly<Record<string, string>> }>();
@@ -76,7 +76,7 @@ const now = (text: string) => `Now ${text}. Choose the same or less.`;
     label="Valid for"
     unit="days"
     inputmode="numeric"
-    :hint="now(`${grant.validity_seconds / 86400} days, from approval`)"
+    :hint="now(`${validitySpan(grant.validity_seconds)}, from approval`)"
     :error="errors['days'] ?? null"
     @update:model-value="set('days', $event)"
   />

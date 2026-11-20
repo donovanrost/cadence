@@ -1,6 +1,6 @@
 import { codeOf, isKnown, type ApiError } from "@/api";
-import { formatShort, plural } from "@/ui";
-import { canText, untilText, type Grant, type Grants } from "./grants.ts";
+import { formatDuration, formatShort, plural } from "@/ui";
+import { canList, untilText, type Grant, type Grants } from "./grants.ts";
 
 /**
  * ux U105's words for automation grants (#283): row state lines, the Waiting for approval panel,
@@ -64,6 +64,7 @@ export function stateLine(g: Grant): string | null {
       return `Withdrawn at ${when(g.withdrawn_at)}, ${end}.`;
     }
     case "active":
+    case "suspended":
     case "revoked":
     case "unrecognized":
       return null;
@@ -146,6 +147,15 @@ export function decideOffer(g: Grant): DecideOffer {
       };
     case "policy_changed":
       return { kind: "act", blocked: { text: POLICY_CHANGED } };
+    case "approved":
+      // #499's reason for a suspended grant's resume; on a proposal it's one the panel doesn't word.
+      return {
+        kind: "act",
+        blocked: {
+          text: "You can't approve this grant, so another org admin approves it.",
+          code: why,
+        },
+      };
   }
 }
 
@@ -182,8 +192,10 @@ export function issuedLine(g: Grant): string {
 
 /** "Narrowed. Nightly planner can now plan and submit, …" (the answer's grant). */
 export function narrowedLine(g: Grant): string {
-  const hours = g.maximum_horizon_seconds / 3600;
-  const ahead = Number.isInteger(hours) ? `${hours} hours` : `${g.maximum_horizon_seconds} seconds`;
+  const ahead = formatDuration(g.maximum_horizon_seconds);
   const until = g.valid_until ? `, until ${untilText(g)}` : "";
-  return `Narrowed. ${subject(g)} can now ${canText(g)}, planning up to ${ahead} ahead, ${plural(g.maximum_contacts, "contact")} per plan, ${g.maximum_execution_concurrency} at once${until}.`;
+  // ca-engineer and ca-ux on #565: a suspended grant acts only once it's resumed (U20).
+  const can =
+    g.state === "suspended" ? `Once it's resumed, ${subject(g)} can` : `${subject(g)} can now`;
+  return `Narrowed. ${can} ${canList(g)}, planning up to ${ahead} ahead, ${plural(g.maximum_contacts, "contact")} per plan, ${g.maximum_execution_concurrency} at once${until}.`;
 }

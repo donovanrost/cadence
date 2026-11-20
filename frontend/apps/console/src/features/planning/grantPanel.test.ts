@@ -184,6 +184,7 @@ describe("rows, Narrow… and Revoke… (U105)", () => {
       );
     // ca-engineer on #514: the horizon hint reads as a duration, never a raw division.
     expect(w.text()).toContain("Now 48h 00m. Choose the same or less.");
+    expect(w.text()).toContain("Now 30 days, from approval. Choose the same or less.");
     await contacts?.setValue("20");
     const narrow = w.findAll("button").filter((b) => b.text() === "Narrow");
     await narrow[narrow.length - 1]?.trigger("click");
@@ -209,7 +210,7 @@ describe("rows, Narrow… and Revoke… (U105)", () => {
     await items[items.length - 1]?.trigger("click");
     await flushPromises();
     expect(document.body.textContent).toContain(
-      "The service identity this grant is for stops acting on its own now.",
+      "The service identity this grant is for can't act under this grant once it's revoked.",
     );
     await openSheet(w).get("textarea").setValue("Done with it");
     const revoke = w.findAll("button").filter((b) => b.text() === "Revoke");

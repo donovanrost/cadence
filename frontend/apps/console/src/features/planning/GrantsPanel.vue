@@ -6,6 +6,7 @@ import { useSession } from "@/shell";
 import { ApButton, ApEmptyState, ApPanel, ApRemote, ApTable, type ApColumn } from "@/ui";
 import GrantActions from "./GrantActions.vue";
 import GrantNarrow from "./GrantNarrow.vue";
+import GrantResume from "./GrantResume.vue";
 import GrantRevoke from "./GrantRevoke.vue";
 import GrantSheet from "./GrantSheet.vue";
 import GrantState from "./GrantState.vue";
@@ -35,6 +36,7 @@ const columns = computed<readonly ApColumn[]>(() => [
 const sheet = ref<InstanceType<typeof GrantSheet> | null>(null);
 const revoke = ref<InstanceType<typeof GrantRevoke> | null>(null);
 const narrow = ref<InstanceType<typeof GrantNarrow> | null>(null);
+const resume = ref<InstanceType<typeof GrantResume> | null>(null);
 /** The last act's result (a11y B6: an always-present status region, hidden while empty). */
 const said = ref("");
 function done(text: string) {
@@ -83,10 +85,13 @@ const replaced = (g: Grant) =>
           <template #cell-can="{ row }">{{ canText(row) }}</template>
           <template #cell-limits="{ row }">{{ limitsText(row) }}</template>
           <template #cell-until="{ row }">{{ untilText(row) }}</template>
-          <template #cell-state="{ row }"><GrantState :grant="row" /></template>
+          <template #cell-state="{ row }"
+            ><GrantState :grant="row" :setting="value.approval_setting"
+          /></template>
           <template #cell-act="{ row }"
             ><GrantActions
               :grant="row"
+              @resume="resume?.open(row)"
               @narrow="narrow?.open(row)"
               @revoke="revoke?.open(row, replaced(row))"
           /></template>
@@ -99,5 +104,6 @@ const replaced = (g: Grant) =>
     </ApRemote>
     <GrantRevoke ref="revoke" :mission-id="missionId" @revoked="done" />
     <GrantNarrow ref="narrow" :mission-id="missionId" @narrowed="done" />
+    <GrantResume ref="resume" :mission-id="missionId" @resumed="done" />
   </ApPanel>
 </template>
