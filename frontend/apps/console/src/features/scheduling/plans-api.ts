@@ -2,6 +2,7 @@ import {
   actor,
   actorKinds,
   decoders as d,
+  orNull,
   request,
   stationRef,
   type ApiResult,
@@ -72,12 +73,16 @@ export const planRow = {
   version: d.integer,
   state: planState,
   window: d.object({ from: d.nullable(d.timestamp), to: d.nullable(d.timestamp) }),
-  /** `kind: system` = an automatic run ("Cadence"); null only when unknown (api af0279d1). */
+  /**
+   * `kind: system` = an automatic run ("Cadence"); null only when unknown (api af0279d1). A person
+   * is named only as a member (#466/#485, #468): a nameless member reads name null, anyone else id
+   * and name null (readers first for #485).
+   */
   author: d.nullable(
     d.object({
       kind: d.optional(d.knownText(actorKinds)),
-      id: d.optional(d.token),
-      name: d.string,
+      id: orNull(d.token),
+      name: orNull(d.string),
     }),
   ),
   counts: d.object({
@@ -109,7 +114,9 @@ export function byAuthor(
   author: PlanSummary["author"],
   automatic: "automatic repair" | "automatic draft" = "automatic repair",
 ): string {
-  if (!author) return "";
+  // A person whose name isn't shown: the clause drops, never a blank or an id (U25, as U105's
+  // nameless proposer).
+  if (!author || author.name === null) return "";
   return author.kind === "system" ? ` by ${author.name} (${automatic})` : ` by ${author.name}`;
 }
 
