@@ -49,7 +49,9 @@ Sources:
 | `created_by`, `created_at` | Who made it (a person, or a service counted through #280). |
 
 **Who may create one (ca-security, #537):**
-- a composition is created only by a configuration-lane change set (the kind `mission_model_composition`), staged by a holder of `:manage_mission`;
+- a composition is created only two ways:
+  - by a configuration-lane change set (the kind `mission_model_composition`), staged by a holder of `:manage_mission`;
+  - by an import, for its own one-layer composition at '/' (below), with the importer as creator;
 - its creator (the stager, with #280's accountable people for a service) **joins the separation set** for approving its base effective revision (§4), with the importers and authors (mms-security M1). Insert-or-get returns the first creator's row for identical content, and that's the one counted.
 - **Migrated compositions** (§7) are created by a system actor that counts no one, as #513 did for seeds; only the union importers apply to them.
 - **A new import creates its own one-layer composition** at '/' (content-addressed insert-or-get), with the importer as creator. So after D1 and E1, a fresh import's revision can be approved, and an old client's `catalog_revision_id` pin translates to it (mms-engineer).
