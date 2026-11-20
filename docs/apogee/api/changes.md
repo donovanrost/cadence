@@ -31,7 +31,7 @@ changes the runtime doesn't use. On a result it is read right after the apply co
 the explicit previews only (`POST /preview`, `POST /change-sets/:id/preview`). It's never on a submit
 or review result: the preview those run as their gate doesn't compute it (api-ops).
 `{spacecraft: {now, after}, routes: {now, after, added, removed}, readiness: {now, after} | null} | null`.
-- `spacecraft`: active (not archived) spacecraft. K3's SC tile is `after`.
+- `spacecraft`: active (not archived) spacecraft. K3's Spacecraft tile is `after` (ux U102, #579).
 - `routes`: usable routes (active and enabled routing rows, one per spacecraft) of active spacecraft,
   counted by id, so a set that swaps routes has both `added` and `removed`. K3's Routes tile is the
   signed difference ("+300", "−50"), or both when both are nonzero (ca-ux).
