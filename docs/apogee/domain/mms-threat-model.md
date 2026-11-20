@@ -1,0 +1,265 @@
+# Threat model: Mission Model & Spacecraft gates (DRAFT)
+
+mms-security, 2026-11-19. Reviewers: fe-setup (squad lead), ca-security (security lead).
+Status: DRAFT. MM-1 (#280's impact list) approved by ca-security at 8b642b1e1; sections 2-5 in progress. Read from develop `a48743995`. Line numbers are as of this write;
+re-grep before acting on them. One page per feature, in the format of ca-security's E1 model once
+it lands. Until ca-security's checklist lands, reviews use ca-security's six points (C1-C6):
+
+- **C1** the actor comes only from the authenticated scope; a body naming one is `422 actor_not_assignable`.
+- **C2** fail closed when a rule can't be evaluated; mark gaps `# todo(authz):`.
+- **C3** refuse before writing, including publishes from inside a transaction that can still roll back.
+- **C4** org and mission scoping is server-side on every read and write, idempotency and dedup keys included.
+- **C5** author separation covers every author since the last approved version (the #236 rule). A
+  service identity's act counts as the act of every person accountable for it (its issuer and every
+  credential rotation's actor). If that set isn't recorded, the author is unknown, and under
+  'independent' an unknown author fails closed.
+- **C6** nothing secret on GitHub, and no exploit steps in public issues.
+
+## 1. The mission-model approval gate (E2 #208)
+
+### Assets and actors
+
+- **Asset:** an approved mission-model revision. Once approved, a catalog generation may introduce it
+  and a promotion activation may roll it out to the data plane (`MissionModels.request_promotion`).
+- **Importers:** whoever brings content in.
+  - People: `operate_mission`, which is any active org member today (`policy.ex:125`).
+  - Service identities bound to the mission: `operate_mission` via `authorize_service_mission`.
+  - Seeds: `Catalog.Actor.system/2`.
+- **Approvers:** organization admins only, never a service (`Policy :approve_mission_model`, `policy.ex:92-99`).
+
+### Entry points that import (all record `requested_by`)
+
+| Path | Authorizes | Actor from |
+|---|---|---|
+| Console upload, `console/catalog_import_controller.ex` → `Catalog.Upload.import_revision` | `operate_mission` | `Actor.from_scope` |
+| Console reimport, `console/catalog_controller.ex:58` → `Catalog.Reimport.execute` | `operate_mission` | `Actor.from_scope` |
+| Host page and mission-catalog action (`host_page_live.ex:445`, `mission_catalog/action_provider.ex:125`) → `Reimport.execute` | `operate_mission` | `Actor.from_scope` |
+| REST `POST …/catalog_import_runs` (`catalog_import_run_controller.ex:28`) → `Catalog.start_import_run` | `manage_mission`: platform admin, organization admin, or that mission's admin (`policy.ex:204-225`). REST bearers are always services, so in practice a service holding `mission_admin` for the mission or `organization_admin` | `ControlPlaneAccess.actor_document` |
+| Seed (`dev/reflect_orbital/configuration.exs:104`) | n/a | `Actor.system("seed:…")` |
+
+`Catalog.start_import_run`/`start_revision_import` refuse a run with no recorded actor (`Actor.recorded/1`).
+
+### Separation (DECISIONS #92 (a))
+
+Under 'independent', `RevisionDecisions.independent/5` refuses an approver who is in
+`Catalog.model_importers/3`. That set is the union of `created_by` on catalog revisions naming the model
+revision and the person requester of every completed run whose result names it, scoped by org + mission.
+Services, the system actor and failed runs count no one. A run still in progress doesn't count until it
+completes; that's harmless, since it's the same as approving before importing.
+
+### Findings
+
+- **MM-1 (high; C5): a service identity breaks importer/approver separation.**
+  - How: a mission-bound service identity can import. Its run counts no one as an importer, and a revision
+    with no recorded importer "can be approved by any administrator" (`revision_decisions.ex:10-12`).
+  - `service_identities` records no issuer or rotation actor (`auth/service_identity_row.ex`), so the admin
+    who issued the identity can import through it and approve the same content alone. Same class as
+    approval-sweep Ruling C.
+  - Fix (agreed with ca-security): (b) now: under 'independent', a revision whose importers include a
+    service with no accountable person on record can't be approved until a person imports it or the set
+    is known. Then (a): record the issuer and every rotation's actor on the service identity, and count
+    them. Not (c): refusing service imports breaks real automation.
+  - Applies across kinds. Director approved 11-19; filed as **#280** under #207, placed right after #233.
+#### MM-1 impact list per approval kind (director 11-19: impact first, then build)
+
+Merged with ca-security's notes (11-19); one list. Complete from both sides (ca-security 11-19); it's the
+reviewers' baseline for #280 and goes in as a docs PR before the build (lead).
+
+**⚠ Behaviour change first (api-ops 11-19: director and lead see this before the build): automated
+contact-plan approval under 'independent'.**
+- **Today:** a service holding an automation grant with `:submit` and `:approve` plans, submits AND approves its
+  own contact plan. `ContactPlanApprovals.separate_approver/5` skips non-user actors, so nothing refuses it.
+  `fleet_automation_test.exs:138` ("an exact grant plans, approves, and executes once…") covers exactly this. It
+  runs under the default mode, 'independent' (`config/config.exs:43`, `approval_required: true`).
+- **After #280:**
+  - The author's set (the planning service's issuer + rotators) and the approver's set (the same people plus the
+    grant's approver) always overlap.
+  - So under 'independent' a service can never approve a plan it authored itself. With no accountable people on
+    record, it's refused as unknown.
+  - Under 'direct', nothing changes: plans don't refuse self there, and #280 adds no refusal.
+- **What still works under 'independent':**
+  - a person outside the set approves the automated plan; or
+  - a second service whose accountable people (and grant approver) don't overlap the author's approves it.
+  This is in effect approval-sweep Ruling C option 2.
+- **What fails on the dev stack:**
+  - Any mission under 'independent' with a console-issued planning grant that includes `:approve` stops
+    auto-approving its own plans: they wait in `pending_approval` for a person.
+  - No seed issues a grant (none in `dev/`), so only grants issued by hand in the console (`contact_grant_controller`
+    → `Control.PlanningGrants.issue`) are affected. **qa's live check (11-19 06:05Z, read-only): #280 changes nothing that runs on the dev stack today.**
+    - All 171 command requests were requested by users.
+    - All 14 contact-plan approvals were made by users, none under an automation grant.
+    - The only automation grant (Earendil, plan + repair, an 11-14 test grant) is REVOKED.
+    - The simulator creates no requests or approvals.
+- **Test impact:** `fleet_automation_test.exs:138` must change. Either set the mission to 'direct', or use a
+  second service with a disjoint set. Also add the refusal case.
+- **Console:** the grant form should say that under 'independent' a grant's approve doesn't cover the service's
+  own plans (ux words).
+
+**Rule (ca-security, 11-19):**
+- The accountable set (issuer + every rotator, transitively) REPLACES "self" wherever a kind ALREADY
+  refuses self-approval, whatever the mode. It never adds a separation the kind doesn't have; it only
+  widens who counts as self.
+  - So under 'independent' it applies where the setting creates the separation (model revisions, contact
+    plans, change sets).
+  - Under every mode it applies where the kind always refuses self-approval (activations; commands
+    wherever a second GO is required).
+- An approver in the set is refused; an unknown set fails closed.
+- **Stated exactly (api-ops):** #280 widens who counts as "self". It never adds a refusal to a kind or a mode
+  that doesn't refuse self-approval today.
+- Today every check below compares **person ids only**, so a service author is invisible to all of them.
+
+**Who can be a service, and with what:** only `organization_admin` and `mission_admin` can be granted to a
+service (`ParamParser.normalize_capability`, the console's `@capabilities`); `platform_admin` can't.
+`:manage_service_identities` is `organization_admin` via `authorize_organization_capability`, which doesn't
+check `actor_kind`. So a service with `organization_admin` can issue and rotate other services, and the
+set must be transitive.
+
+**Where accountability is recorded today (the input every kind needs):**
+
+| Path | Issue / rotate recorded? |
+|---|---|
+| Platform-admin console (`console/admin_controller.ex` → `ConsoleAdmin.issue_service_identity`/`rotate_service_identity`, `console_admin.ex:77-110`) | Admin audit event (`service_identity_issued`/`_rotated`, actor = admin), written AFTER the change, outside its transaction |
+| Org console (`console/service_identity_controller.ex` → `ServiceIdentityAdministration.create/rotate`; the platform-admin path also creates through it) | Create: `metadata["created_by"]` from the scope, in the same insert (`service_identity_administration.ex:29`); `%{"kind" => "unknown"}` when the caller is a service. A free-form map, not a column. Rotate: nothing |
+| REST `POST /api/…/service_identities` (`service_identity_controller.ex:29`) → `Auth.issue_service_identity/1` | Nothing server-built. **Client `metadata` is copied verbatim** (`api/identity_params.ex:53`), so a caller can write any `created_by` (C1, DECISIONS #30/#32). `service_identity_id` is client-assignable too |
+| Rotation core (`auth/service_identity_keys.ex:16`) | Only `key_rotated_at` in metadata; no actor |
+
+- **Never read accountability from `metadata`:** it's client-writable on REST. Use server-built columns, and
+  REST refuses `metadata.created_by` (and any accountability key) with `422 actor_not_assignable`.
+
+- **Build:** record the issuer and each rotator ON the identity, in the same transaction as the issue or
+  rotate, on all three paths (`Auth.issue_service_identity/1` and `ServiceIdentityKeys.rotate/2` take the
+  acting scope). An audit event alone isn't enough: it's written outside the transaction and isn't
+  keyed for a separation check.
+- **Recursion:** a service with `organization_admin` capability can create identities over REST. Its
+  accountable set is then the creating service's set, resolved recursively. A cycle or an unknown link
+  makes the whole set unknown, which fails closed.
+
+**Per kind** (who a service can author as; where the check is; what changes):
+
+| Kind | Can a service author it today? | Check today | Change |
+|---|---|---|---|
+| Mission-model revisions | Yes: REST `catalog_import_runs`, console upload/reimport with a service scope | `RevisionDecisions.independent/5` ← `ModelImporters` (people only; services dropped) | `ModelImporters` returns service importers too. Expand them to their accountable set; unknown → `approval_authors_unknown`. Also closes MM-2 source 2 |
+| Activations (incl. spacecraft-configuration reviews) | Yes: REST `POST /activations` (`authorize_mission`; `actor/1` accepts a service). Approving is human-only (`human_activation_approver_required`) | `distinct_approver/2` (`management/activations.ex:549`) compares only when `requester_actor_kind == :user`; applies in every mode | Service requester → its set wherever there's an approval step. Under 'direct' a request is approved when made (no approval step at all), so nothing changes there (test) |
+| Configuration change sets | **Yes, in the domain** (found in the build, 11-19): `config.stage` is `operate_mission`, which a service scope passes, so `Control.Configuration.stage/submit` accept a service. No console route lets one today (the session API is users only) | `Submission.independent/2` (`configuration/submission.ex`) compared `kind:id` keys, so a service author's issuer could review its set | Review compares people through `Accountability`. Unknown → `change_set_approver_authors_unknown`. Test: a bot stages and submits; its issuer is refused, another member approves. Judge service authorship from domain authz, not routes (ca-security's checklist) |
+| Contact plans | Yes: planning runs author as a service (planner / fleet planning runs); a service submits with an automation grant (`contact_plans.ex:1208`) and **approves** with one (`contact_plan_approvals` `authorize_actor` `:service`/`:approved`) | `ContactPlanApprovals.separate_approver/5` (`:560`) checks a user actor only, so a service approver skips separation | Service author → its set. A service APPROVER's set is its accountable people plus the grant's approver; refused when it meets the author set. The planner proceeds when an approver outside the set approves. The grant's approver (`grant.approved_by`) is part of the approving set (#280 acceptance criteria) |
+| Fleet planning policies | No: create and approve take a person only (`actor_id/1`, `actor/1` → `authenticated_user_required`, `fleet_planning_policies.ex:584-601`) | `FleetPlanningPolicies.not_author/2` (`:354`) always refuses the author, matching `user_id` | None now. A guard test that a service author fails closed, as for change sets |
+| Command requests | **Yes** (ca-security 11-19): REST `POST /command_requests` (`:authenticated_api`; `authorize_mission` → `:manage_mission`, which a service with `mission_admin`/`organization_admin` passes). `requested_by` is the scope's actor document; a client-named actor is refused (`CommandingParams.scope_actor`, `actor_not_assignable`). Approving is human-only (`LifecyclePolicy.ensure_human_approval_actor`) | `LifecyclePolicy.ensure_not_self_approval/2` (`commanding/lifecycle_policy.ex:59`) compares `user_id` only: a service requester has none, so the check **passes**, and it fails open on an unknown requester too. Not governed by the setting (Ruling A) | Service requester → its set **wherever a second GO is required**, whatever the setting; unknown set → refused. After #280, REST command requests from legacy identities can't be approved until an org admin records attribution. No dev or simulator code creates command requests with a service token (the seed's bearer tokens are the simulator's own provider API; the simulator's Cadence token only GETs the runtime read). qa's live check: all 171 dev command requests were requested by users (11-19) |
+| Command groups | No: submit, decide and release take the requester/approver from `RequestAuthoring`'s fresh user (`group_submission.ex:28`, `group_decision.ex:46`); console single requests too (`request_authoring.ex:39`) | `group_decision.ex:87`: requester can't decide | **No change** (ca-security 11-19). The REST `command_requests` path is the separate row above |
+| Command group GO, arming, release (director Q1, 11-19: the set applies to every second-person GO) | Groups: no (person-only, row above). Arming is the state a group reaches after its GO; release (`control/commanding/group_release.ex`) is an operator action | GO: `group_decision.ex:87` refuses the requester. Arming and release: **no second-person rule today** | GO: covered when a service can request a group (guard test now). Arming/release: no change now (#280 adds no refusal). When #201's `armed_runs: independent` lands, its second person uses `Accountability.approvers/3` against the group's authors |
+| Provider changes | No: they come from providers' own reservation changes (`provider_reservation_changes.ex`); no Cadence person or service authors them. Approving is user-only (`provider_change_approvals.ex:111`) | No self-approval refusal | **No change** (ca-security 11-19) |
+| Qualification cases | No: `Comparison.register_case/5` needs a person (`human_qualification_approver_required`, `comparison.ex:504`) | None: registering IS approving (status `:approved` at once, `approved_by` = the registrant, authorized by `:request_activation`). No second step | **No change** (mms-security 11-19). No caller in `lib`/`cadence_web` today (only `MissionModels.register_qualification_case/5`); see MM-6 |
+
+**Shared pieces:** one function, `Governance.Accountability.separate/4`, used by every kind. Refusals (api's
+contract, 11-19; ux U100):
+- the self-approval codes are reused and always carry `details.via_service: {id, name} | null`;
+- the unknown set is one meaning with a 403 code per kind: `activation_`, `contact_plan_`, `mission_model_`,
+  `command_request_` and `change_set_approver_authors_unknown`, each with `details.service: {id, name} | null`.
+- REST command requests carry no details.
+The approver side has its own shared function, `Accountability.approvers(org, approver_actor, grant)`: a person
+is themselves; a service is its accountable people plus the grant's approver (`grant.approved_by`). Each kind
+refuses when `approvers ∩ authors ≠ ∅`. Contact plans use it; no kind hand-rolls it. The org admin's "record who is accountable" action is
+audited, and that admin joins the set.
+
+**Out of scope:** issuing an automation grant as its own approval decision (director 11-19, new requirement; its own
+issue and slot after #280, fe-setup/lead). Seed (system-actor) authorship (MM-2 source 3); grandfathering legacy identities (the
+dev reset recreates them, DECISIONS #112).
+
+- **MM-2 (medium; C2): `importer_recorded=false` lets any admin approve.** Three sources:
+  1. pre-11-17 runs that stored `%{}` (legacy; gone at the dev reset, DECISIONS #112);
+  2. service imports (MM-1);
+  3. seed imports under the system actor, which DECISIONS #113(4) relies on: "a second admin approves".
+     A person runs the seed and nothing records who.
+  - Proposal (pending ca-security): fail closed for 1 and 2. For 3, the seed run records who ran it and
+    that person counts as an importer; until then #113(4) stays a procedure rule.
+- **MM-6 (low, dormant; C5): qualification cases have no second person.** `Comparison.register_case/5` records a
+  case as approved by the operator who registers it (`:request_activation`). Cases feed the comparison replay
+  that the model gate requires, so an importer could register the cases its own revision is replayed against.
+  No caller today. Before anything calls it: decide whether a case needs a second person, or at least that
+  the registrant isn't an importer of the revision it's replayed against. Mark `# todo(authz):`.
+- **MM-3 (#119, in progress, mms-engineer): content-addressed revisions across tenants.**
+  `mission_model_revisions` and `mission_model_layers` have global primary keys and are inserted
+  `on_conflict: :nothing` (`mission_models.ex:280-290`). Today ids carry per-run provenance, so they never
+  collide. Once #119 makes them content digests, the agreed conditions apply:
+  - org + mission in both bases;
+  - re-read after insert, keyed on PK + org + mission, failing closed on a mismatch;
+  - the digest covers every compiled input;
+  - `matched_existing` reported with its status;
+  - decided revisions never reopen;
+  - lands in or after the dev reset slot.
+  `persist_layer/1` already re-reads by its own org + mission (`mission_models.ex:79-85`), so a foreign
+  row reads as not found.
+- **MM-4 (low; C3): an upload publishes a job inside a transaction.** `Upload.import_revision` wraps
+  `start_revision_import` in `Repo.transaction`. `start_import_run` calls `Jobs.enqueue`, which publishes
+  `Jobs.Available` at once instead of `Jobs.enqueue_in_transaction` + publish after commit
+  (`jobs.ex:14-27`). Nothing fails after the enqueue today, so a rollback can't strand a published job,
+  but the order is fragile.
+- **MM-5 (low; hardening): `request_promotion` writes before it authorizes.** `MissionModels.request_promotion`
+  runs `Comparison.run` (which inserts a comparison report) before `ManagementActivations.request`
+  authorizes. Both callers (`activation_controller.ex:33`, `telemetry_decom.ex`) authorize first, so it's
+  not reachable, but the domain function relies on its callers. Authorize at the top.
+
+### Checked, fine
+
+- Catalog store functions take org + mission and filter on both. `MissionModels` reads that take a nil org
+  match only rows with a nil org (`organization_filter/2`, `mission_models.ex:365`), never another tenant's.
+- Approve and reject take the revision row lock; approving an approved revision is a no-op, and the first
+  approver stays on record.
+
+## 2. Spacecraft configuration activation (#150, #235, #152)
+
+### Findings
+
+- **SC-1 (medium; C1/C4-adjacent; #235): request metadata a client sets drives what the approver sees.**
+  - `Control.Activations.Description.describe/1` builds the activation row's kind, summary and spacecraft
+    list (`activation_requests/rows.ex:44,70`), the apply attention item and the refusal details from
+    request metadata.
+  - REST `POST …/activations` (`activation_controller.ex:28`) accepts client `metadata` with only five
+    reserved keys (`activation_params.ex:7`). `composition`, `application`, `change_set`,
+    `triggering_spacecraft_id`, `contributors`, `reviewed_configuration_basis` and
+    `mission_model_comparison` are not reserved. So a requester can label a model promotion as a decom
+    change on chosen spacecraft.
+  - Display only: what applies is the binding set, `named/3` is org + mission scoped, and no check reads
+    these ids for a decision.
+  - Fix: the description reads only server-built keys, and the REST route reserves every key the server
+    builds (better: an allowlist of client keys).
+
+- **SC-2 (medium; C4-adjacent, checklist 9; relates to #122): REST creates spacecraft outside change sets.**
+  - `POST /api/organizations/:org/missions/:m/spacecraft` (`spacecraft_controller.ex:28`) calls
+    `SpacecraftStore.persist_spacecraft/2` directly. That means:
+    - no change set and no review;
+    - no same-SCID HOLD: `scid_shared_in_organization` lives only in the change-set kinds
+      (`spacecraft/config_kinds/scid_holds.ex`);
+    - no actor recorded.
+  - `authorize_mission` is `:manage_mission`: platform admin, organization admin, or that mission's admin
+    (`policy.ex:204-225`). REST bearers are always services, so in practice it's a service identity
+    holding `mission_admin` for the mission, or `organization_admin` (ca-security 11-19). Not any operator.
+  - Fix: route REST creation through a change set like the console, or retire the route with #122's
+    legacy writes. Until then, mark it `# todo(authz):`.
+- **SC-3 (low; correctness): a REST create that conflicts answers 201 with data that wasn't stored.**
+  `persist_spacecraft/2` inserts with `on_conflict: :nothing` on `(mission_id, spacecraft_id)`, but
+  returns the caller's struct, not the stored row. Re-posting an existing id with a different SCID answers
+  `201` with the new SCID while the old row stands. Fix: re-read the stored row (checklist 7), or refuse
+  `409` on conflict. Also, `persist_spacecraft/1` (no organization) has no callers left: delete it.
+
+_(Audit in progress: drafts and reviews, the forced approval on a legacy conversion batch, the same-SCID
+HOLD, change-set authorship.)_
+
+## 3. Actor on every write path (audit table)
+
+_(In progress: `spacecraft_store*`, `spacecraft_type_store*`, `activations*`, `applications*`.)_
+
+## 4. Tenant boundaries
+
+_(In progress.)_
+
+## 5. Secrets
+
+_(In progress.)_
+
+## Issues to file (once gh works on laptop 2)
+
+- ~~Bug under #207~~ FILED as **#280** (fe-setup, 11-19): "An admin can approve their own work when it was done
+  through a service identity they issued" (MM-1; impact list above).
+- Bug under #208 (domain:mission-model; component:api): "Activation request metadata a client sends
+  changes what the approver is shown" (SC-1). Note: no exploit steps in the public text (C6).
+- Task under #208: MM-4 and MM-5 hardening.
