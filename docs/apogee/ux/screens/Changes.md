@@ -116,8 +116,8 @@ h1 "Apply r6 · 2 changes"                                  base r5 · staged 14
 - **K3 Apply aside:** tiles Changes · Spacecraft · Routes (changes, resulting fleet size, routes delta) and the readiness
   delta line; the authors are a meta line, not a tile (ux, audit K9: four-eyes needs them). Words (ca-ux 11-20,
   from the preview's `outcome`, #522):
-  - `Spacecraft` (U102: the word, never "SC"): the fleet after applying (`outcome.spacecraft.after`), "549". `Routes`: the usable routes added minus
-    removed, "+300", "−50", "0", or both when both are nonzero, "+300 −50" (counts with separators). Routes are the
+  - `Spacecraft` (U102: the word, never "SC"): the fleet after applying (`outcome.spacecraft.after`), "549".
+    `Routes`: the usable routes added minus removed, "+300", "−50", "0", or both when both are nonzero, "+300 −50" (counts with separators). Routes are the
     per-spacecraft routes a profile's rules generate, never the rules.
   - Readiness line: "Readiness after: 0 blockers (no change) · 2 cautions (no change) · 0 not set up (was 1)".
     Blockers always; caution, stale and not set up only when nonzero now or after; each change in words, never
