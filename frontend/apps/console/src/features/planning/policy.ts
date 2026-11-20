@@ -8,6 +8,7 @@ import {
   request,
   type ApiResult,
   type Reader,
+  type JsonObject,
 } from "@/api";
 import {
   fromDocument,
@@ -21,7 +22,7 @@ import {
 /** Contract: docs/apogee/api/scheduling.md "Contact planning setup" (CP2). */
 const { array, boolean, integer, nullable, object, string, timestamp, token } = decoders;
 
-const doc: Reader<Readonly<Record<string, unknown>>> = jsonObject;
+const doc: Reader<JsonObject> = jsonObject;
 /** What a policy save or decision answers (Control.PlanningPolicy). */
 export const policyVersionStates = ["pending_approval", "active", "rejected"] as const;
 const fieldMeta = object({ path: string, group: token, advanced: boolean });
@@ -146,6 +147,8 @@ export function buildDocument(
   const errors: Record<string, string> = {};
   const stored = policy.document ?? policy.defaults ?? {};
   for (const f of policy.schema) {
+    // Not the shared getAt/setAt (#192): the policy document is two levels, `group` then the rest of
+    // the path as one key ("a.b.c" writes {a: {"b.c": …}}), which a nested write would change.
     const [group, ...rest] = f.path.split(".");
     if (!group || rest.length === 0) continue;
     const put = (v: unknown) => {
