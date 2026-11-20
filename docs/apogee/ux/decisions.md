@@ -4425,3 +4425,80 @@ in use) still hold. Domain's answers on #438 (11-19) settled the model points.
   - **The Profile page's hook** (mms-ux): limits scoped to a profile sit beside Profile P3's overrides, so the
     profile's summary carries a line with the server's count, e.g. "3 limits apply only to this profile · Open in
     Monitoring". Its words come with the follow-up once the user rules.
+
+### U109 · Mission composition on MM&S screens: naming a composition, "Made of", approving one, and one that's no longer approved (#537 D/E; reads #543, #581; console #538, #546) (mms-ux / api / fe-setup / domain / ca-ux)
+A composition is the set of catalogs a mission model is made from (#537). D2 (#581) puts `composition` beside every
+catalog revision a read shows. Until D4 (a composition with more than one catalog) every composition has one
+catalog, and **every screen reads exactly as today**. The composed forms below show only when `imported_layers` has
+more than one entry. Visible text never says "layer", "effective revision", "mount" or "lineage" (U108). Words
+agreed with ux 11-20.
+
+- **Naming it.**
+  - One catalog: "catalog rev 4" everywhere, as today (U17, U65). Its composition number isn't shown.
+  - Several: "composition 3" in a sentence, `Composition 3` where it stands alone (a cell, a heading), from
+    `number`. With `number` null: "this composition" in a sentence, and where it stands alone, the Made of line alone.
+    Never an id (U25). It's not a revision: no "rev", no "r".
+  - Beside it, where a single catalog revision shows today, the neutral tag `COMPOSED`.
+- **Made of** (its catalogs, in the server's order): "Made of: Bus catalog rev 4 · Payload catalog rev 2". Each
+  catalog leads with its database's name (`catalog_revision.database.name`). The place it sits (the mount's last
+  part, in parentheses) is added only when the name doesn't tell two apart or there's no name: "EPS catalog rev 4
+  (bus) · EPS catalog rev 2 (payload)"; "catalog rev 4 (bus)". The catalog at '/' never gets one. A catalog the server
+  can't name (`catalog_revision` null): "an imported catalog (bus)". Up to 3, then "and N more" with `Show all`.
+  Full mounts, layer ids and the composition id go in Technical details.
+  - Data note (#581): a catalog's revision is the earliest one that imported it, which can be in a different
+    database from the one a profile names. Show it as sent; the console never "corrects" it.
+- **Where it shows** (#538, readers first):
+  - Profiles list, Catalog cell: `Composition 3` + `COMPOSED`, with Made of as the cell's muted second line.
+    Profile detail: the summary's "catalog rev 4" part reads "composition 3", and Made of sits under the header.
+  - Overrides (P3): the value reads "composition 3" where it reads "catalog rev 4" today.
+  - Spacecraft configuration (U94): the `Catalog revision` field keeps its label and reads "Composition 3" with Made
+    of under it. What changes rows: "Catalog revision: catalog rev 14 → composition 3".
+  - L10 rows: as What changes.
+  - Catalog revision rows (A1 Revisions): nothing new. Every row is its own one-catalog composition until D4. D4's
+    words come with D4.
+  - A monitoring apply (U108) never changes any of these.
+- **Approving a composition** (U65's page for a composed base; a one-catalog base keeps today's page word for word):
+  - Header: `Composition 3`, Made of under it, then "Composed by Owen P. at 11-20 09:12Z" (`created_by` +
+    `created_at`, U29; actor forms as U103: "Nightly planner (a service identity)", "Cadence, run by Mira K.",
+    "run by a person"). `created_by` null (the migration's): no line.
+  - Importers (`importers` per catalog, the separation set): "Imported by Mira K. (Bus catalog rev 4) and Ana R.
+    (Payload catalog rev 2)". These are people, not events, so there's no time here; each catalog's own page has
+    U65's "Imported by … at …". A catalog with no named importer drops from the line; none named: no line.
+  - Up front (`cannot_decide_because`, A6; never computed in the console):
+    - `self_approval`: "Because you imported one of its catalogs, another org admin has to approve composition 3."
+      With `via_service`: "Because Nightly planner, a service identity you're accountable for, imported one of its
+      catalogs, another org admin has to approve composition 3."
+    - `composer`: "Because you chose this combination of catalogs, another org admin has to approve composition 3."
+      With `via_service`: "Because Nightly planner, a service identity you're accountable for, chose this
+      combination of catalogs, another org admin has to approve composition 3."
+    - `authors_unknown`: U99/U100's line with "composition 3" in place of "rev 4".
+    - No number: "…has to approve this composition."
+  - The approve refusals (E1's codes, the backstop) take U95's form: "Not approved: you chose this combination of
+    catalogs, so another org admin approves it. Your approval wasn't recorded." (and the `self` / `via_service`
+    forms likewise).
+  - The button: `Approve composition 3` (B7), where it reads `Approve rev 4` today.
+  - Breaking changes (U102 as amended, from the top-level `breaking_base`): "…compared with composition 2" when the
+    base is composed, "…compared with rev 3" when it's one catalog. No base: "Cadence has nothing earlier to compare
+    composition 3 with, so it can't tell what it breaks. Check what uses its commands and points before you
+    stage." A page reads one breaking source: one-catalog pages keep `catalog_revision.breaking_base` (#363, #387)
+    until D4.
+  - C3 on its page (when D3's pins arrive): U102's lines with "composition 3": "Spacecraft can't move to composition
+    3 until it's approved.", "Composition 3 was rejected, so spacecraft can't move to it.", "Composition 3 is retired,
+    so spacecraft can't move to it. Any already on it keep it."
+- **A composition that's no longer approved** (E2, #546; the keys are confirmed there; ca-ux co-owns the command
+  hold). Only a withdrawal or a rejection of its own approval counts, never a newer approval of another one (#537 §5).
+  "it" below is the composition's name ("composition 3", or "catalog rev 4" for one catalog).
+  - The craft's state line (spacecraft page, configuration), caution: "Composition 3 is no longer approved: Ana R.
+    withdrew its approval at 11-20 09:12Z: <reason>. EARENDIL-004 keeps running it, but can't take a new
+    configuration until it moves to an approved one." Rejected: "…Ana R. rejected it at …". No name: "its approval
+    was withdrawn at 11-20 09:12Z". The decision record's id goes in Technical details.
+  - Attention item (high severity): "EARENDIL-004 runs composition 3, which is no longer approved" with `Open
+    EARENDIL-004`. Several: "12 spacecraft run a composition that's no longer approved" with `Show all`.
+  - A new configuration for that craft (refused at staging and at activation, the gate's own check): "Not staged:
+    EARENDIL-004 runs composition 3, which is no longer approved, so it can't take a new configuration. Move it to an
+    approved composition first." ("Not sent:" in the U94 workspace.)
+  - New commanding meets a hold a person acknowledges (ca-security): "EARENDIL-004 runs composition 3, whose approval
+    Ana R. withdrew at 11-20 09:12Z. Commands still go out if you acknowledge." Placeholder: "Why it's safe to
+    command it". Telemetry keeps flowing, and nothing on the craft says it stopped.
+- **Not here:** D4's composition editor (choosing catalogs, places, collisions) and its re-key HOLD, which lists
+  every identity that changes before the change set is saved (#537 §1). Their words come with D4.
