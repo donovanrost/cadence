@@ -7,15 +7,17 @@ import { fetchMyInvitations } from "./invitations.ts";
 
 /** People.md Account: pending invitations to other organizations, shown first, only when there are any. */
 const list = useRemoteQuery(() => true as const, fetchMyInvitations);
-const note = ref<string | null>(null);
-function changed(text: string | null) {
-  note.value = text;
+const note = ref<{ text: string; failed: boolean } | null>(null);
+function changed(text: string | null, failed: boolean) {
+  note.value = text === null ? null : { text, failed };
   list.refetch();
 }
 </script>
 
 <template>
-  <ApCallout v-if="note" tone="info">{{ note }}</ApCallout>
+  <ApCallout v-if="note" tone="info" :role="note.failed ? 'alert' : 'status'">{{
+    note.text
+  }}</ApCallout>
   <ApPanel
     v-if="list.state.value.status === 'ready' && list.state.value.value.length > 0"
     index="A0"

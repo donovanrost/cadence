@@ -1,4 +1,4 @@
-import { computed, onScopeDispose, ref } from "vue";
+import { computed, nextTick, onScopeDispose, ref } from "vue";
 import { decoders as d, detailsOf, isError, type ApiError } from "@/api";
 
 const retryAfter = d.object({ retry_after: d.optional(d.nullable(d.number)) });
@@ -13,9 +13,33 @@ export function retryText(seconds: number): string {
   return `Too many attempts. Try again in ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}.`;
 }
 
+/**
+ * The 429 said once (a11y B6, ux #276): the wait in plain words, for the alert when the limit is
+ * hit. The m:ss countdown stays on screen but isn't live, so it doesn't interrupt every second.
+ */
+export function waitSentence(seconds: number): string {
+  const s = Math.max(1, Math.ceil(seconds));
+  if (s < 60) return `Too many attempts. Try again in ${s} second${s === 1 ? "" : "s"}.`;
+  const m = Math.ceil(s / 60);
+  return `Too many attempts. Try again in ${m} minute${m === 1 ? "" : "s"}.`;
+}
+
+/** Said politely once, when the wait is over and the form works again (ux #276). */
+export const RETRY_OPEN = "You can try again now.";
+
 export function useRetryAfter(now: () => number = Date.now) {
   const until = ref<number | null>(null);
   const tick = ref(now());
+  /**
+   * For the two always-present live regions (RetryAfterNotice): the alert when the limit is hit,
+   * the polite line when it's over. Cleared first, so the same words said twice are said twice.
+   */
+  const said = ref<{ alert: string; status: string }>({ alert: "", status: "" });
+  async function say(next: { alert: string; status: string }) {
+    said.value = { alert: "", status: "" };
+    await nextTick();
+    said.value = next;
+  }
   let timer: ReturnType<typeof setInterval> | null = null;
   const stop = () => {
     if (timer !== null) clearInterval(timer);
@@ -26,11 +50,13 @@ export function useRetryAfter(now: () => number = Date.now) {
     until.value = now() + Math.max(0, retryAfterSeconds) * 1000;
     tick.value = now();
     stop();
+    void say({ alert: waitSentence(retryAfterSeconds), status: "" });
     timer = setInterval(() => {
       tick.value = now();
       if (until.value !== null && tick.value >= until.value) {
         until.value = null;
         stop();
+        void say({ alert: "", status: RETRY_OPEN });
       }
     }, 250);
   }
@@ -41,8 +67,10 @@ export function useRetryAfter(now: () => number = Date.now) {
   return {
     block,
     blocked: computed(() => secondsLeft.value > 0),
-    /** The callout and the disabled primary's reason; null when the form works. */
+    /** The callout and the disabled primary's reason; null when the form works. Not live. */
     text: computed(() => (secondsLeft.value > 0 ? retryText(secondsLeft.value) : null)),
+    /** What the live regions say: once when the limit is hit, once when it's over. */
+    said: computed(() => said.value),
   };
 }
 

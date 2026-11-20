@@ -100,7 +100,13 @@ describe("edit session previews", () => {
       },
     });
     expect((await s.save({ message: "", defaults: { time: false, scope: false } })).ok).toBe(false);
-    expect(s.conflict.value).toEqual({ currentVersion: 4, savedBy: "Ana P.", savedAt: null });
+    // The person's Save was refused with it: an alert (ux #276).
+    expect(s.conflict.value).toEqual({
+      currentVersion: 4,
+      savedBy: "Ana P.",
+      savedAt: null,
+      refused: true,
+    });
     stop();
   });
 
@@ -126,6 +132,8 @@ describe("edit session previews", () => {
       currentVersion: 4,
       savedBy: "Ana P.",
       savedAt: "2026-11-14T11:55:00Z",
+      // It arrived on the channel, not as a refusal: read politely (ux #276).
+      refused: false,
     });
     stop();
   });

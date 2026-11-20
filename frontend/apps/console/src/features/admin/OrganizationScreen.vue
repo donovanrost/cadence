@@ -2,7 +2,7 @@
 import { computed, ref } from "vue";
 import { useRoute, type RouteLocationRaw } from "vue-router";
 import { useRemoteQuery } from "@/api";
-import { ApBreadcrumb, ApCallout, ApPageHeader, ApRemote, formatShort } from "@/ui";
+import { ApBreadcrumb, ApCallout, ApPageHeader, ApRemote, formatShort, outcomeRole } from "@/ui";
 import { fetchOrganization } from "./api.ts";
 import OrganizationInvite from "./OrganizationInvite.vue";
 import OrganizationPanels from "./OrganizationPanels.vue";
@@ -51,7 +51,9 @@ function changed(text: { tone: "nominal" | "caution" | "crit"; text: string }) {
           @changed="changed"
         />
       </ApPageHeader>
-      <ApCallout v-if="note" :tone="note.tone">{{ note.text }}</ApCallout>
+      <ApCallout v-if="note" :tone="note.tone" :role="outcomeRole(note.tone)">{{
+        note.text
+      }}</ApCallout>
       <OrganizationPanels :detail="value" @changed="changed" />
       <p class="m-0 text-sm text-text-3">
         Changes to {{ value.organization.name }}'s members and invitations are recorded in its

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
 import { ref } from "vue";
-import { ApButton, ApCallout } from "@/ui";
+import { ApButton, ApCallout, outcomeRole } from "@/ui";
 import { recoverUplink, type RecoverOutcome } from "./readiness.ts";
 
 /**
@@ -42,6 +42,8 @@ async function recover() {
         >Qualifying now</span
       >
     </div>
-    <ApCallout v-if="outcome" :tone="outcome.tone">{{ outcome.text }}</ApCallout>
+    <ApCallout v-if="outcome" :tone="outcome.tone" :role="outcomeRole(outcome.tone)">{{
+      outcome.text
+    }}</ApCallout>
   </div>
 </template>

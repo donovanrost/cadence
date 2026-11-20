@@ -39,5 +39,5 @@ const note = defineModel<string>("note", { required: true });
     The pass counts as booked on your word. Uplink stays unconfirmed until {{ provider }} confirms
     it.
   </p>
-  <ApCallout v-if="failure" tone="caution">{{ failure }}</ApCallout>
+  <ApCallout v-if="failure" tone="caution" role="alert">{{ failure }}</ApCallout>
 </template>

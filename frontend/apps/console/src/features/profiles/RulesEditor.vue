@@ -21,6 +21,7 @@ import {
   ApRemote,
   ApSegmented,
   focusAfterRemove,
+  outcomeRole,
   plural,
 } from "@/ui";
 import RuleForm from "./RuleForm.vue";
@@ -149,7 +150,9 @@ const rolloutOptions = [
           </div>
           <ApSegmented v-model="rollout" label="Roll out to" :options="rolloutOptions" />
           <ApCallout v-if="problems.length > 0" tone="caution">{{ problems.join(" ") }}</ApCallout>
-          <ApCallout v-if="outcome" :tone="outcome.tone">{{ outcome.text }}</ApCallout>
+          <ApCallout v-if="outcome" :tone="outcome.tone" :role="outcomeRole(outcome.tone)">{{
+            outcome.text
+          }}</ApCallout>
           <FailureOutcomeCallout v-if="failure" :outcome="failure" />
           <div class="flex flex-wrap gap-2">
             <ApButton

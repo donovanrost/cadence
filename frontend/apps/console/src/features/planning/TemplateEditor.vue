@@ -9,7 +9,16 @@ import {
   SchemaForm,
   type FormValues,
 } from "@/features/changes/index.ts";
-import { ApButton, ApCallout, ApField, ApPanel, ApRemote, formatCount, plural } from "@/ui";
+import {
+  ApButton,
+  ApCallout,
+  ApField,
+  ApPanel,
+  ApRemote,
+  formatCount,
+  outcomeRole,
+  plural,
+} from "@/ui";
 import { useSession } from "@/shell";
 import TargetPicker from "./TargetPicker.vue";
 import { decidedLine } from "./decided.ts";
@@ -200,7 +209,9 @@ async function save() {
       <ApCallout v-if="template && drafts.length > 0" tone="caution">{{
         supersedeSentence(drafts, template.version + 1, session.user.id)
       }}</ApCallout>
-      <ApCallout v-if="note" :tone="note.tone">{{ note.text }}</ApCallout>
+      <ApCallout v-if="note" :tone="note.tone" :role="outcomeRole(note.tone)">{{
+        note.text
+      }}</ApCallout>
       <div class="flex flex-wrap gap-2">
         <ApButton :disabled="busy" disabled-reason="Working…" @click="preview">Preview</ApButton>
         <ApButton

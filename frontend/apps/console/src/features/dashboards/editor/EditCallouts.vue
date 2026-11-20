@@ -2,14 +2,14 @@
 import { computed, watch } from "vue";
 import { ApButton, ApCallout, formatClock, refocusFirst } from "@/ui";
 import type { SkippedEvent } from "./contracts.ts";
-import type { Conflict, Notice } from "./useEditSession.ts";
+import type { Notice, ShownConflict } from "./useEditSession.ts";
 
 /**
  * Edit-mode callouts: someone saved meanwhile (Continue editing / Discard mine), plus the
  * session's latest notice (a refused edit, edits that no longer apply, the command cap).
  */
 const props = defineProps<{
-  conflict: Conflict | null;
+  conflict: ShownConflict | null;
   notice: Notice | null;
   busy: boolean;
   resumed: boolean;
@@ -66,7 +66,7 @@ const noticeText = computed(() => {
 </script>
 
 <template>
-  <ApCallout v-if="conflict" tone="caution">
+  <ApCallout v-if="conflict" tone="caution" :role="conflict.refused ? 'alert' : 'status'">
     {{ savedLine }}
     <template #action>
       <span class="flex gap-2">
@@ -91,6 +91,7 @@ const noticeText = computed(() => {
   <ApCallout
     v-if="noticeText"
     :tone="notice?.kind === 'skipped' || notice?.kind === 'too_many_commands' ? 'caution' : 'crit'"
+    role="alert"
   >
     {{ noticeText }}
   </ApCallout>

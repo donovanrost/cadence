@@ -28,7 +28,7 @@ describe("edit conflict callout", () => {
     document.body.innerHTML = "<main><h1>Bus overview</h1><div id='app'></div></main>";
     const w = mount(EditCallouts, {
       props: {
-        conflict: { currentVersion: 8, savedBy: "Mira K.", savedAt: null },
+        conflict: { currentVersion: 8, savedBy: "Mira K.", savedAt: null, refused: false },
         notice: null,
         busy: false,
         resumed: false,
@@ -42,6 +42,21 @@ describe("edit conflict callout", () => {
     await w.setProps({ conflict: null });
     await flushPromises();
     expect(document.activeElement).toBe(document.querySelector("h1"));
+  });
+
+  it("is read politely when it arrived live, and is an alert when the person's Save was refused (ux #276)", async () => {
+    const props = (refused: boolean) => ({
+      conflict: { currentVersion: 8, savedBy: "Mira K.", savedAt: null, refused },
+      notice: null,
+      busy: false,
+      resumed: false,
+      retiredLibrary: false,
+    });
+    const w = mount(EditCallouts, { props: props(false) });
+    const live = () => w.findAll("[role]").find((e) => e.text().includes("Mira K."));
+    expect(live()?.attributes("role")).toBe("status");
+    await w.setProps(props(true));
+    expect(live()?.attributes("role")).toBe("alert");
   });
 });
 

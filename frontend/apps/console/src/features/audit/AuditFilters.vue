@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ApButton, ApCallout, ApSegmented, ApSelect } from "@/ui";
+import { ApButton, ApCallout, ApSegmented, ApSelect, outcomeRole } from "@/ui";
 import type { AuditActor } from "./useAuditActor.ts";
 import type { AuditExport } from "./useAuditExport.ts";
 
@@ -50,7 +50,10 @@ const missionId = defineModel<string>("missionId", { required: true });
       >{{ exporter.busy.value ? "Exporting…" : "Export CSV" }}</ApButton
     >
   </div>
-  <ApCallout v-if="exporter.note.value" :tone="exporter.note.value.tone">{{
-    exporter.note.value.text
-  }}</ApCallout>
+  <ApCallout
+    v-if="exporter.note.value"
+    :tone="exporter.note.value.tone"
+    :role="outcomeRole(exporter.note.value.tone)"
+    >{{ exporter.note.value.text }}</ApCallout
+  >
 </template>

@@ -3,7 +3,7 @@ import type { MissionId } from "@/api/index.ts";
 import { computed, ref, useId } from "vue";
 import { describeApiError } from "@/api/index.ts";
 import { useSession } from "@/shell/index.ts";
-import { ApButton, ApCallout, ApPanel, ApSheet, ApTextarea, useNow } from "@/ui";
+import { ApButton, ApCallout, ApPanel, ApSheet, ApTextarea, outcomeRole, useNow } from "@/ui";
 import {
   decide,
   decisionErrorWords,
@@ -104,7 +104,9 @@ function openNoGo() {
 </script>
 
 <template>
-  <ApCallout v-if="outcome && !group" :tone="outcome.tone">{{ outcome.text }}</ApCallout>
+  <ApCallout v-if="outcome && !group" :tone="outcome.tone" :role="outcomeRole(outcome.tone)">{{
+    outcome.text
+  }}</ApCallout>
   <ApPanel v-if="group && words" index="G" title="Your GO is requested" alert="caution">
     <div class="flex flex-col gap-2">
       <p class="m-0 font-display text-lg font-semibold">{{ words.title }}</p>
@@ -113,7 +115,9 @@ function openNoGo() {
       <ol class="m-0 list-none p-0 font-mono text-sm text-readout">
         <li v-for="line in words.stack" :key="line" class="truncate">{{ line }}</li>
       </ol>
-      <ApCallout v-if="outcome" :tone="outcome.tone">{{ outcome.text }}</ApCallout>
+      <ApCallout v-if="outcome" :tone="outcome.tone" :role="outcomeRole(outcome.tone)">{{
+        outcome.text
+      }}</ApCallout>
       <p v-if="blocked" class="m-0 text-sm text-caution-text">{{ blocked }}</p>
       <ApCallout v-if="nameless" tone="caution">
         {{ nameless.line }}

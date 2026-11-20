@@ -17,7 +17,9 @@ const tone = () => props.tone ?? (props.outcome.changed === null ? "caution" : "
 </script>
 
 <template>
-  <ApCallout :tone="tone()">
+  <!-- a11y B6 (#276, ux): refused or unclear, the person's act needs them before they try again:
+       an alert, whatever the tone. -->
+  <ApCallout :tone="tone()" role="alert">
     {{ outcome.sentence }}<template v-if="$slots.default">{{ " " }}<slot /></template>
     <ul v-if="outcome.uses?.length" class="m-0 my-1 ps-5">
       <li v-for="line in outcome.uses" :key="line.label">
