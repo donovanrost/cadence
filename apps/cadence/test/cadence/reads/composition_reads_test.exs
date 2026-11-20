@@ -231,6 +231,13 @@ defmodule Cadence.Reads.CompositionReadsTest do
       end
     end
 
+    test "a layer's importers: at most 100 named, the count exact (mms-engineer on #612)" do
+      actors = for n <- 1..150, do: %{kind: "user", id: "u#{n}", name: nil, run_by: nil}
+      assert %{importers: shown, importers_count: 150} = CompositionKeys.shown(actors)
+      assert length(shown) == 100
+      assert %{importers: [_], importers_count: 1} = CompositionKeys.shown([hd(actors)])
+    end
+
     test "composer: refused only for having composed it, not for importing a layer", c do
       composer = member!(c, "Composer")
       a = layer_of(c, c.revision_id)

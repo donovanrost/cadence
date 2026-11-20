@@ -245,7 +245,7 @@ by its catalog revision ("catalog rev 4"); the model revision id is Technical de
   object below, or null when no composition names the revision. `GET /:id` also carries:
   - `importers: [{layer_id, importers: [<actor>], importers_count}]`: per imported layer, in mount
     order, the people and services the approve check counts as that layer's importers (at most
-    100 named, the first recorded; `importers_count` is exact). The composer is
+    100 named, in no promised order; `importers_count` is exact). The composer is
     `composition.created_by`, not repeated here. Empty when no composition names the revision.
   - `breaking_base: {revision_id, composition: {composition_id, number | null} | null,
     catalog_revision: {id, number} | null} | null`: exactly the revision approval compares
