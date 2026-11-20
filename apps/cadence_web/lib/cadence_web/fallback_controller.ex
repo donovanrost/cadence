@@ -236,6 +236,9 @@ defmodule CadenceWeb.FallbackController do
   def call(conn, {:error, :command_review_required}),
     do: call(conn, {:error, {:invalid_param, "approval.expected_review", :required}})
 
+  def call(conn, {:error, :command_review_invalid}),
+    do: call(conn, {:error, {:invalid_param, "approval.expected_review", :invalid}})
+
   def call(conn, {:error, :command_review_changed}),
     do: error_response(conn, :conflict, "command_review_changed")
 
