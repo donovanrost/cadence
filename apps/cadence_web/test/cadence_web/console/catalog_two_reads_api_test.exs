@@ -200,6 +200,33 @@ defmodule CadenceWeb.Console.CatalogTwoReadsAPITest do
     end
   end
 
+  # #474's named_actors/2 (mms-engineer's ask, landed in #471): C1's revisions[].actor follows the
+  # same rule as requested_by, never the stored name or email.
+  test "C1's revisions[].actor names a member and no one else, never by email", c do
+    member = TestFixtures.persist_user!(display_name: "Mira K.")
+    TestFixtures.grant_membership!(member, c.org)
+    outsider = TestFixtures.persist_user!(display_name: "Support Admin")
+    TestFixtures.grant_membership!(outsider, TestFixtures.persist_org!())
+
+    import!(c, revision_label: "by member", requested_by: user_actor(member))
+
+    import!(c,
+      revision_label: "by outsider",
+      requested_by: user_actor(outsider),
+      source_artifact: @second_yaml
+    )
+
+    revisions = get_data(c, "/catalog")["database"]["revisions"]
+    by_label = Map.new(revisions, &{&1["label"], &1["actor"]})
+
+    assert by_label["by member"] == %{"kind" => "user", "name" => "Mira K."}
+    assert by_label["by outsider"] == %{"kind" => "user", "name" => nil}
+
+    encoded = Jason.encode!(revisions)
+    for email <- [member.email, outsider.email], do: refute(encoded =~ email)
+    refute encoded =~ "Stored name"
+  end
+
   # The stored actor's own name and email are what Catalog.Actor records at import; the read uses
   # neither (a person's name is looked up live, under the mission's organization).
   defp user_actor(user),

@@ -1023,7 +1023,7 @@ bindings can be written. A platform-shared one needs a platform admin in admin m
   3 passes live now (AOS ≤ now < LOS), earliest AOS first. `403 platform_source` outside admin
   mode, `409 binding_not_shared` for a mission's own binding, `404 binding_not_found`, `503
   blast_radius_unavailable` when counting fails (the sheet then refuses to switch).
-- `GET /data-source-bindings/:binding_id/events` → `{events: [{at, actor: {id, name} | null,
+- `GET /data-source-bindings/:binding_id/events` (actors per #146's rule, #471: on an organization's binding a person is named only while an active member, and anyone else is `{id: null, name: null}`; never an email) → `{events: [{at, actor: {id, name} | null,
   kind: switched | registered | changed | enabled | disabled | superseded, from: {id,
   display_name} | null, to: …, reason | null, affected_missions | null, live_passes_total |
   null}]}`, newest first, 50. A platform-wide switch's entry carries its reason and counts. For a

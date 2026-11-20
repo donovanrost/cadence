@@ -9,6 +9,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.PlatformBindings do
   import Ecto.Query
 
   alias Cadence.Accounts
+  alias Cadence.Accounts.MemberNames
   alias Cadence.Administration.PlatformEvents
   alias Cadence.Comms.StationRefs
   alias Cadence.Contacts.ProviderReservations
@@ -97,11 +98,16 @@ defmodule Cadence.Applications.OpsConsole.Actions.PlatformBindings do
     }
   end
 
-  @doc "The binding's history (U53), newest first: switches carry their reason and counts."
-  @spec events(binary(), pos_integer()) :: [map()]
-  def events(binding_id, limit \\ 50) do
-    events = DataSources.list_data_binding_events(binding_id, limit: limit)
-    actors = actors(events)
+  @doc """
+  The binding's history (U53), newest first: switches carry their reason and counts. Actors are
+  named by #146's rule (#471): on an organization's own binding, a person only while an active
+  member of that organization; on a platform-wide one (shown in full only to platform admins in
+  admin mode), by display name. Never by email.
+  """
+  @spec events(DataBinding.t(), pos_integer()) :: [map()]
+  def events(%DataBinding{} = binding, limit \\ 50) do
+    events = DataSources.list_data_binding_events(binding.binding_id, limit: limit)
+    actors = actors(events, binding.organization_id)
     sources = source_refs(events)
 
     Enum.map(events, fn event ->
@@ -109,7 +115,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.PlatformBindings do
 
       %{
         at: event.occurred_at,
-        actor: event.actor_id && %{id: event.actor_id, name: Map.get(actors, event.actor_id)},
+        actor: actor(event.actor_id, actors, binding.organization_id),
         kind: event_kind(event),
         from: named(payload["from"], event.previous_data_source_id, sources),
         to: named(payload["to"], event.current_data_source_id, sources),
@@ -155,15 +161,32 @@ defmodule Cadence.Applications.OpsConsole.Actions.PlatformBindings do
        else: to_string(event.event_type)
   end
 
-  defp actors(events) do
-    events
-    |> Enum.map(& &1.actor_id)
-    |> Enum.reject(&is_nil/1)
-    |> Enum.uniq()
-    |> Map.new(fn id ->
+  defp actor(nil, _actors, _organization_id), do: nil
+
+  # On an organization's binding, someone who isn't a member (a platform admin acting as support)
+  # is recorded but neither named nor identified, as the model approval read does (#366).
+  defp actor(id, actors, organization_id) when is_binary(organization_id) do
+    case Map.fetch(actors, id) do
+      {:ok, name} -> %{id: id, name: name}
+      :error -> %{id: nil, name: nil}
+    end
+  end
+
+  defp actor(id, actors, nil), do: %{id: id, name: Map.get(actors, id)}
+
+  defp actors(events, organization_id) do
+    ids = events |> Enum.map(& &1.actor_id) |> Enum.reject(&is_nil/1) |> Enum.uniq()
+    names(ids, organization_id)
+  end
+
+  defp names(ids, organization_id) when is_binary(organization_id),
+    do: MemberNames.display_names(organization_id, ids)
+
+  defp names(ids, nil) do
+    Map.new(ids, fn id ->
       case Accounts.fetch_user(id) do
-        {:ok, user} -> {id, user.display_name || user.email}
-        _missing -> {id, nil}
+        {:ok, %{display_name: name}} when is_binary(name) and name != "" -> {id, name}
+        _no_name -> {id, nil}
       end
     end)
   end

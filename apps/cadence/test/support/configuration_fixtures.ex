@@ -1,7 +1,7 @@
 defmodule Cadence.ConfigurationFixtures do
   @moduledoc "Missions, member scopes and governance settings for change-set tests."
 
-  alias Cadence.Accounts.{OrganizationMembership, User}
+  alias Cadence.Accounts.{OrganizationMembership, OrganizationMembershipRow, User, UserRow}
   alias Cadence.Auth.Scope
 
   @doc "Persists an organization + mission and returns their ids."
@@ -30,11 +30,26 @@ defmodule Cadence.ConfigurationFixtures do
         role: role
       })
 
+    # #471: reads name people only as active members (Accounts.MemberNames), so the user and the
+    # membership this scope claims are persisted when the organization exists.
+    persist_member(organization_id, user, membership)
+
     Scope.new(%{
       user: user,
       organization_membership: membership,
       organization_id: organization_id
     })
+  end
+
+  defp persist_member(organization_id, user, membership) do
+    case Cadence.Organizations.fetch_organization(organization_id) do
+      {:ok, _organization} ->
+        Cadence.Repo.insert!(UserRow.changeset(user))
+        Cadence.Repo.insert!(OrganizationMembershipRow.changeset(membership))
+
+      _no_organization ->
+        :ok
+    end
   end
 
   @doc "Sets the deployment default approval requirement for the duration of a test."
