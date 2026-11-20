@@ -1,8 +1,9 @@
 import { expectAccessible } from "./support/accessibility.ts";
 import { discardQaChanges, hasForeignStagedChanges } from "./support/config.ts";
-import { missionPath, openConsole } from "./support/console.ts";
+import { jsonProblem, missionApi, missionPath, openConsole } from "./support/console.ts";
 import { storageStateFor } from "./support/env.ts";
-import { expect, test } from "./support/fixtures.ts";
+import { allow, expect, test } from "./support/fixtures.ts";
+import { expectSaid, WORDS } from "./support/outcomes.ts";
 
 // Setup › Ground stations edit/add through change sets (fe-setup b63311c7). Edits are staged, never
 // applied; values carry MARKER so cleanup discards only QA's changes.
@@ -49,6 +50,29 @@ test.describe("Ground stations (organization admin)", () => {
     await expect(
       page.getByText(new RegExp(`${escaped} · display_name → .*${MARKER}`)),
     ).toBeVisible();
+  });
+
+  test.describe("when the server fails while staging", () => {
+    test.use({ allowedDiagnostics: allow(/\/stage -> 500/, /status of 500/) });
+
+    // #644 (U20, B6): a 5xx may have committed, so the editor says it's unclear, as an alert, and
+    // never that it staged. The POST is stubbed, so nothing reaches the server.
+    test("says it's unclear whether anything was staged, never that it was", async ({ page }) => {
+      await page.route(missionApi("stage"), (route) =>
+        route.request().method() === "POST"
+          ? route.fulfill(jsonProblem(500, "internal_error"))
+          : route.continue(),
+      );
+      await openConsole(page, screen);
+      const first = page.getByRole("table").locator("tbody tr").first().getByRole("link").first();
+      const name = (await first.innerText()).trim();
+      await first.click();
+      await page.getByRole("textbox", { name: "Name", exact: true }).fill(`${name} ${MARKER}`);
+      await page.getByRole("button", { name: "Stage change" }).click();
+      await expectSaid(page, WORDS.serverFailedUnclear("staged"), { alert: true });
+      await expect(page).not.toHaveURL(/\/setup\/stations$/);
+      await expect(page.getByRole("banner")).not.toContainText(/staged/i);
+    });
   });
 
   test("Add station opens an empty form; Cancel goes back without staging", async ({ page }) => {

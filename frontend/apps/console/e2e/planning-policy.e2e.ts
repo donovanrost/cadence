@@ -1,7 +1,8 @@
 import { expectAccessible } from "./support/accessibility.ts";
-import { missionPath, openConsole } from "./support/console.ts";
+import { jsonProblem, missionApi, missionPath, openConsole } from "./support/console.ts";
 import { storageStateFor } from "./support/env.ts";
 import { allow, expect, test } from "./support/fixtures.ts";
+import { expectNoFalseSuccess, expectSaid, WORDS } from "./support/outcomes.ts";
 
 // CP2 · Contact planning policy (fe-setup). Saving creates a pending version that another admin
 // approves or rejects. The seeded policy (dev/reflect_orbital_planning.exs): 48 h horizon,
@@ -41,6 +42,8 @@ test.describe("Contact planning policy, organization admin", () => {
     await page.getByRole("textbox", { name: /contacts per plan/i }).fill("1001");
     await page.getByRole("textbox", { name: "Why" }).fill("QA-E2E pending-version check");
     await page.getByRole("button", { name: /save as v\d+/i }).click();
+    // #644 (B6): the save's success is said politely ("Saved as vN. It's active once …").
+    await expectSaid(page, WORDS.policyPendingActivation, { alert: false });
     const waiting = page.getByRole("region", { name: /waiting for approval/i }).or(
       page
         .locator("section, div")
@@ -52,11 +55,8 @@ test.describe("Contact planning policy, organization admin", () => {
     // The server requires a comment for any decision (qa #21).
     await page.getByRole("textbox", { name: "Comment" }).fill("QA-E2E self-approval attempt");
     await page.getByRole("button", { name: /^approve v\d+/i }).click();
-    await expect(
-      page.getByText(
-        "Nothing was changed. You saved this version, so another admin must approve it.",
-      ),
-    ).toBeVisible();
+    // #644 (B6): the refusal of the author's own approval is an alert.
+    await expectSaid(page, WORDS.policyAuthorCantApprove, { alert: true });
 
     // Clean up: a different admin (platform admin) rejects it; the active policy never changed.
     const other = await browser.newContext({ storageState: storageStateFor("admin") });
@@ -67,6 +67,35 @@ test.describe("Contact planning policy, organization admin", () => {
     await expect(reviewer.getByRole("heading", { name: /waiting for approval/i })).toHaveCount(0);
     await expect(reviewer.getByRole("textbox", { name: /contacts per plan/i })).toHaveValue("1000");
     await other.close();
+  });
+});
+
+test.describe("Contact planning policy, a save the server fails on", () => {
+  test.use({
+    allowedDiagnostics: allow(
+      /\/contact-planning -> 404/,
+      /status of 404/,
+      /\/policy -> 500/,
+      /status of 500/,
+    ),
+  });
+
+  // #644 (U20, B6): a 5xx may have committed, so it's said as unclear, an alert, and the success
+  // line ("…It's active once another admin approves it.") is neither shown nor said. The POST is
+  // stubbed, so no version is created.
+  test("is said as unclear, never as saved", async ({ page }) => {
+    await page.route(missionApi("contact-planning/policy"), (route) =>
+      route.request().method() === "POST"
+        ? route.fulfill(jsonProblem(500, "internal_error"))
+        : route.continue(),
+    );
+    await openConsole(page, screen);
+    await page.getByRole("textbox", { name: /contacts per plan/i }).fill("1001");
+    await page.getByRole("button", { name: /save as v\d+/i }).click();
+    await expectNoFalseSuccess(page, {
+      failure: WORDS.serverFailedUnclear("changed"),
+      success: WORDS.policyPendingActivation,
+    });
   });
 });
 
