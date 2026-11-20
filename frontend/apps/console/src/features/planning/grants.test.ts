@@ -6,8 +6,10 @@ import {
   grantFailure,
   grantTag,
   grantsReader,
+  identityName,
   untilText,
 } from "./grants.ts";
+import { activeBody, grantOf, proposalBody } from "./grant-fixtures.ts";
 
 /** Fixtures: plans/planning-verbs.md L3, as api agreed 11-13. */
 describe("automation grants (L3)", () => {
@@ -173,5 +175,44 @@ describe("the grants read across #283", () => {
       "EXPIRED",
       "UNKNOWN",
     ]);
+  });
+});
+
+// #497 (U105) and #499 readers first.
+describe("the grants read after #497, and #499's suspension", () => {
+  it("takes viewer_can_narrow, the pre-#283 mark and policy_changed", () => {
+    const legacy = grantOf(activeBody, {
+      viewer_can_narrow: false,
+      issued_before_two_person_approval: true,
+      proposed_by: null,
+      proposed_at: null,
+      proposal_expires_at: null,
+    });
+    expect(legacy.viewer_can_narrow).toBe(false);
+    expect(legacy.issued_before_two_person_approval).toBe(true);
+    expect(legacy.proposed_by).toBeNull();
+    const changed = grantOf(proposalBody, {
+      viewer_can_decide: false,
+      cannot_decide_because: "policy_changed",
+    });
+    expect(changed.cannot_decide_because).toBe("policy_changed");
+  });
+
+  it("a suspended grant with its suspension object reads, tagged UNKNOWN (#499)", () => {
+    const g = grantOf(activeBody, {
+      state: "suspended",
+      suspension: {
+        at: "2026-11-20T01:00:00Z",
+        by: { kind: "user", id: "u2", name: "Ana R." },
+        settings_revision: 4,
+      },
+    });
+    expect(grantTag(g)).toEqual({ state: "off", label: "UNKNOWN" });
+  });
+
+  it("a gone identity's name stands alone as 'Unknown service identity', never its id (U25)", () => {
+    const g = grantOf(activeBody, { service_identity: { id: "svc_9", name: null } });
+    expect(identityName(g)).toBe("Unknown service identity");
+    expect(identityName(grantOf(activeBody))).toBe("Nightly planner");
   });
 });

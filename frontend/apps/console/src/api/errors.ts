@@ -237,6 +237,17 @@ export const errorCodes = [
   "template_transition_not_allowed",
   "policy_changed",
   "grant_changed",
+  // #283 (ux U105): automation grant proposals, decisions and tightenings.
+  "automation_grant_self_approval_forbidden",
+  "automation_grant_approver_authors_unknown",
+  "automation_grant_not_proposed",
+  "approval_policy_changed",
+  "automation_grant_not_active",
+  "automation_grant_not_narrower",
+  "automation_grant_narrow_unchanged",
+  "automation_grant_legacy",
+  "automation_grant_capability_required",
+  "authenticated_user_required",
   // Model approval gate (ux U65, domain 742567770)
   "human_mission_model_approver_required",
   "mission_model_self_approval_forbidden",
