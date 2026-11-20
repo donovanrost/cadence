@@ -137,6 +137,10 @@ defmodule Cadence.Configuration.ChangeSetReviewRecordTest do
     assert row.subject_digest == ReviewRecord.digest(ops)
     assert row.actor["id"] == c.author.user.user_id
     assert row.policy_document["approval_required"] == false
+
+    # The change set's read lists reviewer decisions only (the console decodes approved | sent_back).
+    {:ok, set} = Configuration.change_set(c.author, c.mission.mission_id, staged.change_set_id)
+    assert set.reviews == []
   end
 
   test "an apply whose ops don't match the reviewed digest is refused, nothing written" do

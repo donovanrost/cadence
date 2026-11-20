@@ -53,6 +53,20 @@ top-level keys are ignored; documents, values and options pass through as JSON.
 Wire encoding: the facade shapes with string keys. Atoms become lowercase strings, times are
 ISO-8601, revision numbers are integers (render them as `rN`), and actors are `{kind, id, name}`.
 
+## The four-eyes record (#117 step 2, DECISIONS #112)
+
+Every decision on a change set is an append-only record (`mission_config_reviews`): the reviewer's
+`approved` or `sent_back`, or a direct apply's own `not_required`. Each names its subject (the set's
+version and a digest of the exact ops it decided), the approval policy in force, `separated_from`
+(the ids the separation check compared: the submitter and every change's author; `[]` on a direct
+apply) and `admin_mode`. A reviewed apply runs exactly the ops its review named; if they differ, it
+answers `409 change_set_changed` and writes nothing.
+- A revision's `applied_by` is whoever ran the apply: on a reviewed set, the reviewer who approved
+  it. The submitter is the change set's `submitted_by`.
+- A change set's `reviews` lists reviewer decisions only (`approved | sent_back`). A direct apply's
+  `not_required` record isn't a review; the audit shows it (#239).
+- A direct set's `approval_required` is `false`: its policy is stored now.
+
 ## Who is named (#471)
 
 Every actor in these reads (`opened_by`, `submitted_by`, change `author`, review `actor`,
