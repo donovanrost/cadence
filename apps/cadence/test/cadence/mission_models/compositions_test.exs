@@ -7,6 +7,7 @@ defmodule Cadence.MissionModels.CompositionsTest do
   import Ecto.Query
 
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
+  alias Cadence.Catalog.MissionModel.Compiler
   alias Cadence.MissionModels
 
   alias Cadence.MissionModels.{
@@ -63,6 +64,18 @@ defmodule Cadence.MissionModels.CompositionsTest do
       assert {:ok, again} = Compositions.insert_or_get(c.org, c.mid, [{layer_id, "/"}], @actor)
       assert again.composition_id == composition.composition_id
       assert again.created_by == composition.created_by
+    end
+
+    test "the creator is stored as kind and ids only, never a stored name (#146)", c do
+      {:ok, first} = Compositions.for_revision(c.org, c.mid, c.revision_id)
+      [%{layer_id: a}] = first.imported_layers
+      b = second_layer!(c)
+
+      {:ok, composition} =
+        Compositions.insert_or_get(c.org, c.mid, [{a, "/"}, {b, "/payload"}], @actor)
+
+      assert composition.created_by == %{"actor_kind" => "user", "user_id" => "composer-a"}
+      refute Map.has_key?(first.created_by, "name")
     end
   end
 
@@ -181,23 +194,85 @@ defmodule Cadence.MissionModels.CompositionsTest do
 
       assert {:ok, composition} = Compositions.for_revision(c.org, c.mid, c.revision_id)
       assert [%{mount: "/"}] = composition.imported_layers
-      assert %{"actor_kind" => "system"} = composition.created_by
-      refute Map.has_key?(composition.created_by, "run_by")
 
-      # Idempotent, and the approval columns are untouched.
+      assert composition.created_by == %{
+               "actor_kind" => "system",
+               "system_id" => "migration:20261120060000"
+             }
+
+      # Idempotent (a re-run links nothing new), and the approval columns are untouched.
       {:ok, before} = MissionModels.fetch_revision(c.org, c.mid, c.revision_id)
-      CompositionBackfill.run(Repo)
+      assert %{linked: 0} = CompositionBackfill.run(Repo)
       assert {:ok, ^before} = MissionModels.fetch_revision(c.org, c.mid, c.revision_id)
+    end
+
+    test "two compiler versions of one layer: each its own link, each approved on its own", c do
+      old = copy_revision!(c, "1")
+      lift_and_clear!()
+
+      CompositionBackfill.run(Repo)
+
+      assert {:ok, %{composition_id: id}} = Compositions.for_revision(c.org, c.mid, c.revision_id)
+      assert {:ok, %{composition_id: ^id}} = Compositions.for_revision(c.org, c.mid, old)
+
+      assert ["1", Compiler.compiler_version()] ==
+               Repo.all(
+                 from(e in EffectiveRevisionRow,
+                   where: e.composition_id == ^id,
+                   order_by: e.compiler_version,
+                   select: e.compiler_version
+                 )
+               )
+
+      # Approving the old version's revision doesn't carry forward: the effective revision stays
+      # the current version's, and its own status is untouched.
+      set_status!([c.revision_id, old], "candidate")
+      approve!(old)
+      {:ok, current} = MissionModels.fetch_revision(c.org, c.mid, c.revision_id)
+      refute current.status in [:approved, "approved"]
+      assert {:ok, revision_id} = Compositions.effective_revision(c.org, c.mid, id, nil)
+      assert revision_id == c.revision_id
+    end
+
+    test "a collision at one composition and compiler version raises; nothing is chosen", c do
+      _same_version = copy_revision!(c, Compiler.compiler_version())
+      lift_and_clear!()
+
+      assert_raise RuntimeError, ~r/refusing to choose one/, fn ->
+        CompositionBackfill.run(Repo)
+      end
+    end
+
+    test "an approved revision with a blocking diagnostic raises", c do
+      lift_and_clear!()
+      approve!(c.revision_id)
+
+      Repo.query!(
+        """
+        INSERT INTO mission_model_diagnostics
+          (diagnostic_id, revision_id, organization_id, mission_id, code, severity, stage,
+           inserted_at)
+        VALUES ($1, $2, $3, $4, 'MM_TEST_BLOCKING', 'error', 'compile', now())
+        """,
+        ["diag-#{System.unique_integer([:positive])}", c.revision_id, c.org, c.mid]
+      )
+
+      assert_raise RuntimeError, ~r/blocking_diagnostics/, fn -> CompositionBackfill.run(Repo) end
+    end
+
+    test "guard!: an approved, catalog-named revision with no link raises, naming it", c do
+      lift_and_clear!()
+      approve!(c.revision_id)
+
+      assert_raise RuntimeError, ~r/#{Regex.escape(c.revision_id)}/, fn ->
+        CompositionBackfill.guard!(Repo)
+      end
     end
 
     test "guard: every approved revision ends with a composition naming it", c do
       lift_and_clear!()
 
-      Repo.query!(
-        "UPDATE mission_model_revisions SET status = 'approved' WHERE revision_id = $1",
-        [c.revision_id]
-      )
-
+      approve!(c.revision_id)
       CompositionBackfill.run(Repo)
 
       for [revision_id, org, mission] <-
@@ -248,4 +323,55 @@ defmodule Cadence.MissionModels.CompositionsTest do
   end
 
   defp count(schema), do: Repo.aggregate(schema, :count)
+
+  defp approve!(revision_id), do: set_status!([revision_id], "approved")
+
+  defp set_status!(revision_ids, status),
+    do:
+      Repo.query!(
+        "UPDATE mission_model_revisions SET status = $2 WHERE revision_id = ANY($1)",
+        [revision_ids, status]
+      )
+
+  # A copy of the fixture's revision under another id and compiler version, with its layers and a
+  # catalog revision naming it: as if an older (or a rival) compiler had made it.
+  defp copy_revision!(c, version) do
+    new_id = "mission_model_revision:copy-#{System.unique_integer([:positive])}"
+
+    copy = fn table, key, changes ->
+      Repo.query!(
+        "INSERT INTO #{table} SELECT (jsonb_populate_record(NULL::#{table}, " <>
+          "to_jsonb(t) || $2::jsonb)).* FROM #{table} t WHERE t.#{key} = $1",
+        [c.revision_id, changes]
+      )
+    end
+
+    copy.("mission_model_revisions", "revision_id", %{
+      "revision_id" => new_id,
+      "compiler_version" => version,
+      "content_sha256" => Base.encode16(:crypto.hash(:sha256, new_id), case: :lower)
+    })
+
+    copy.("mission_model_revision_layers", "revision_id", %{"revision_id" => new_id})
+
+    run_id = "catalog_import_run:copy-#{new_id}"
+
+    Repo.query!(
+      "INSERT INTO catalog_import_runs SELECT (jsonb_populate_record(NULL::catalog_import_runs, " <>
+        "to_jsonb(t) || jsonb_build_object('import_run_id', $2::text))).* " <>
+        "FROM catalog_import_runs t WHERE t.import_run_id = $1",
+      [c.catalog.import_run_id, run_id]
+    )
+
+    Repo.query!(
+      "INSERT INTO catalog_revisions SELECT (jsonb_populate_record(NULL::catalog_revisions, " <>
+        "to_jsonb(t) || jsonb_build_object('catalog_revision_id', $2::text, " <>
+        "'mission_model_revision_id', $3::text, 'revision_number', t.revision_number + 1000, " <>
+        "'revision_label', t.revision_label || ' (copy)', 'import_run_id', $4::text))).* " <>
+        "FROM catalog_revisions t WHERE t.catalog_revision_id = $1",
+      [c.catalog.catalog_revision_id, "catalog_revision:copy-#{new_id}", new_id, run_id]
+    )
+
+    new_id
+  end
 end

@@ -13,25 +13,33 @@ defmodule Cadence.MissionModels.Compositions do
     and fails closed on any scope or content mismatch (CB-2).
   - **Effective revision.** `effective_revision/5` compiles the composition's layers at their
     mounts (plus authored layers at a head, phase 3), under a transaction advisory lock, and
-    links the revision. A revision with blocking diagnostics gets no link.
+    links the revision. A link is per compiler version (domain, mms-security on #559): the
+    effective revision is the one at the server's current compiler version, and a revision an
+    older compiler made keeps its own link and its own approval, which doesn't carry forward.
+    The link's version is always read from the revision row, never passed in. A revision with
+    blocking diagnostics gets no link.
+  - **Creator.** `created_by` keeps the actor's kind and ids only (`actor_kind`, `user_id`,
+    `service_identity_id`, `system_id`), never a stored name: readers name people live (#146).
   - Rows are immutable by trigger (migration 20261120060000).
   """
 
   import Ecto.Query
 
-  alias Cadence.Catalog.MissionModel.{Canonical, CompilerResult, Mount, Revision}
+  alias Cadence.Catalog.MissionModel.{Canonical, Compiler, CompilerResult, Mount, Revision}
   alias Cadence.MissionModels
 
   alias Cadence.MissionModels.{
     CompositionLayerRow,
     CompositionRow,
     EffectiveRevisionRow,
-    LayerRow
+    LayerRow,
+    RevisionRow
   }
 
   alias Cadence.Repo
 
   @prefix "mission_model_composition"
+  @actor_keys ~w(actor_kind user_id service_identity_id system_id)
 
   @type layer_ref :: %{layer_id: binary(), mount: binary(), content_sha256: binary()}
   @type t :: %{
@@ -52,7 +60,7 @@ defmodule Cadence.MissionModels.Compositions do
   @doc """
   The composition of `layers` (`[{layer_id, mount}]`), stored if new. `created_by` is the actor
   document of whoever composed it (an import's actor, a change set's stager, or the migration's
-  system actor); for identical content the first row stands.
+  system actor), stored as its kind and ids only; for identical content the first row stands.
   """
   @spec insert_or_get(binary(), binary(), [{binary(), binary()}], map()) ::
           {:ok, t()} | {:error, term()}
@@ -61,6 +69,7 @@ defmodule Cadence.MissionModels.Compositions do
              is_map(created_by) do
     layers = canonical(layers)
     composition_id = id(organization_id, mission_id, layers)
+    created_by = Map.take(created_by, @actor_keys)
 
     with :ok <- well_formed(organization_id, mission_id, layers) do
       Repo.transaction(fn ->
@@ -216,8 +225,8 @@ defmodule Cadence.MissionModels.Compositions do
   end
 
   @doc """
-  The effective revision of `composition_id` at `authored_head` (nil until phase 3, §2): an
-  existing link as-is; otherwise the composition's layers compiled at their mounts, the revision
+  The effective revision of `composition_id` at `authored_head` (nil until phase 3, §2), at the
+  server's current compiler version: that version's existing link as-is; otherwise the composition's layers compiled at their mounts, the revision
   written as today, and the link. Under a transaction advisory lock on the composition and head,
   so concurrent calls compile once (api-ops). A revision with blocking diagnostics gets no link:
   `{:error, {:mission_model_composition_invalid, codes}}`.
@@ -237,7 +246,7 @@ defmodule Cadence.MissionModels.Compositions do
     Repo.transaction(fn ->
       advisory_lock(organization_id, mission_id, composition_id)
 
-      case link(organization_id, mission_id, composition_id) do
+      case link(organization_id, mission_id, composition_id, Compiler.compiler_version()) do
         %EffectiveRevisionRow{revision_id: revision_id} -> revision_id
         nil -> compile_and_link(organization_id, mission_id, composition_id, opts)
       end
@@ -254,21 +263,27 @@ defmodule Cadence.MissionModels.Compositions do
     end
   end
 
+  # A 64-bit key from sha256, so unrelated compositions rarely wait on each other (api-ops).
   defp advisory_lock(organization_id, mission_id, composition_id) do
-    key =
-      :erlang.phash2(
-        {:mission_model_effective_revision, organization_id, mission_id, composition_id}
+    <<key::signed-64, _rest::binary>> =
+      :crypto.hash(
+        :sha256,
+        Enum.join(
+          ["mission_model_effective_revision", organization_id, mission_id, composition_id],
+          <<0>>
+        )
       )
 
     Repo.query!("SELECT pg_advisory_xact_lock($1)", [key])
   end
 
-  defp link(organization_id, mission_id, composition_id) do
+  defp link(organization_id, mission_id, composition_id, compiler_version) do
     EffectiveRevisionRow
     |> where(
       [link],
       link.organization_id == ^organization_id and link.mission_id == ^mission_id and
-        link.composition_id == ^composition_id and is_nil(link.authored_head)
+        link.composition_id == ^composition_id and is_nil(link.authored_head) and
+        link.compiler_version == ^compiler_version
     )
     |> Repo.one()
   end
@@ -301,15 +316,21 @@ defmodule Cadence.MissionModels.Compositions do
           revision.diagnostics |> Enum.filter(&(&1.severity == :error)) |> Enum.map(& &1.code)}}
   end
 
+  # The link's compiler version is the revision row's own (mms-security, condition 1); the
+  # composite foreign key refuses any other.
   defp write_link(composition, revision_id) do
+    %{organization_id: org, mission_id: mission, composition_id: composition_id} = composition
+    version = revision_compiler_version!(org, mission, revision_id)
+
     Repo.insert_all(
       EffectiveRevisionRow,
       [
         %{
-          organization_id: composition.organization_id,
-          mission_id: composition.mission_id,
-          composition_id: composition.composition_id,
+          organization_id: org,
+          mission_id: mission,
+          composition_id: composition_id,
           authored_head: nil,
+          compiler_version: version,
           revision_id: revision_id,
           inserted_at: DateTime.utc_now()
         }
@@ -317,9 +338,20 @@ defmodule Cadence.MissionModels.Compositions do
       on_conflict: :nothing
     )
 
-    case link(composition.organization_id, composition.mission_id, composition.composition_id) do
+    case link(org, mission, composition_id, version) do
       %EffectiveRevisionRow{revision_id: ^revision_id} -> revision_id
       _other -> Repo.rollback({:mission_model_effective_revision_conflict, revision_id})
     end
+  end
+
+  defp revision_compiler_version!(organization_id, mission_id, revision_id) do
+    RevisionRow
+    |> where(
+      [r],
+      r.organization_id == ^organization_id and r.mission_id == ^mission_id and
+        r.revision_id == ^revision_id
+    )
+    |> select([r], r.compiler_version)
+    |> Repo.one!()
   end
 end

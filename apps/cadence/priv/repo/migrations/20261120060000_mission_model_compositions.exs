@@ -9,9 +9,11 @@ defmodule Cadence.Repo.Migrations.MissionModelCompositions do
   #   addressed within (organization, mission); immutable.
   # - mission_model_composition_layers: its layers, each by (organization, mission, layer_id) FK,
   #   so a layer of another mission or organization can't be named.
-  # - mission_model_effective_revisions: "this composition at this authored head" -> its compiled
-  #   revision. Unique on the composition and head (NULL-safe: PG14 has no NULLS NOT DISTINCT) and
-  #   on revision_id (mms-security M2: an approval can't move to another composition). Immutable.
+  # - mission_model_effective_revisions: "this composition at this authored head, compiled by this
+  #   compiler version" -> its revision. Unique on the composition, head (NULL-safe: PG14 has no
+  #   NULLS NOT DISTINCT) and compiler version, so each compiler version's compile has its own link
+  #   (domain, mms-security on #559); and on revision_id (M2: an approval can't move to another
+  #   composition). The version is the linked revision's own, enforced by the foreign key. Immutable.
   #
   # Then the one-to-one backfill (§7), in this same transaction: every catalog revision's model
   # revision becomes a one-layer composition at '/' with its link, written by a system actor that
@@ -25,7 +27,9 @@ defmodule Cadence.Repo.Migrations.MissionModelCompositions do
     )
 
     create(
-      unique_index(:mission_model_revisions, [:organization_id, :mission_id, :revision_id],
+      unique_index(
+        :mission_model_revisions,
+        [:organization_id, :mission_id, :revision_id, :compiler_version],
         name: :mission_model_revisions_tenant_idx
       )
     )
@@ -53,6 +57,7 @@ defmodule Cadence.Repo.Migrations.MissionModelCompositions do
       add(:mission_id, :string, null: false)
       add(:composition_id, :string, null: false)
       add(:authored_head, :string)
+      add(:compiler_version, :string, null: false)
       add(:revision_id, :string, null: false)
 
       timestamps(type: :utc_datetime_usec, updated_at: false)
@@ -82,15 +87,16 @@ defmodule Cadence.Repo.Migrations.MissionModelCompositions do
         REFERENCES mission_model_compositions (organization_id, mission_id, composition_id)
         ON DELETE RESTRICT,
       ADD CONSTRAINT mission_model_effective_revisions_revision_fkey
-        FOREIGN KEY (organization_id, mission_id, revision_id)
-        REFERENCES mission_model_revisions (organization_id, mission_id, revision_id)
+        FOREIGN KEY (organization_id, mission_id, revision_id, compiler_version)
+        REFERENCES mission_model_revisions
+          (organization_id, mission_id, revision_id, compiler_version)
         ON DELETE RESTRICT
     """)
 
     execute("""
     CREATE UNIQUE INDEX mission_model_effective_revisions_head_idx
       ON mission_model_effective_revisions
-        (organization_id, mission_id, composition_id, COALESCE(authored_head, ''))
+        (organization_id, mission_id, composition_id, COALESCE(authored_head, ''), compiler_version)
     """)
 
     create(
