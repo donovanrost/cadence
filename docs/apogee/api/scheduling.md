@@ -853,7 +853,10 @@ rationale, provider_constraints_document {allowed, excluded}, station_constraint
   date.
 - `GET /requirements/:id` → the row plus `versions: [{version, created_at, actor {kind, id,
   name}}]` (newest first). `kind` is `user`, `service` (a service identity, named) or `system`
-  (`name` null). `404 requirement_not_found`.
+  (`name` null). A person is named only while an active member of the mission's organization
+  (#472, #146 C1); anyone else, or a member with no display name, is `{kind: "user", id: null,
+  name: null}`. A service of another organization is `{kind: "service", id: null, name: null}`.
+  `state_changed.by` follows the same rule. `404 requirement_not_found`.
   - `held_by: {plan_id, revision, state, day} | null` (ux P4): the plan past draft
     (pending_approval or later) that holds the requirement, the most recently changed if several
     do; `revision` is its current version; `day` is the plan's UTC day as the plans list files it

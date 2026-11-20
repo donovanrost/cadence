@@ -12,6 +12,21 @@ defmodule Cadence.Accounts.MemberNames do
   alias Cadence.Accounts.{OrganizationMembershipRow, UserRow}
   alias Cadence.Repo
 
+  @doc """
+  Which of `user_ids` are people at all, whatever their membership (#472: a non-member still
+  reads as a person, unnamed, never as Cadence).
+  """
+  @spec people([binary()]) :: MapSet.t(binary())
+  def people([]), do: MapSet.new()
+
+  def people(user_ids) when is_list(user_ids) do
+    UserRow
+    |> where([u], u.user_id in ^Enum.uniq(user_ids))
+    |> select([u], u.user_id)
+    |> Repo.all()
+    |> MapSet.new()
+  end
+
   @doc "`%{user_id => display_name}` for the ids with an active membership and a display name."
   @spec display_names(binary(), [binary()]) :: %{binary() => binary()}
   def display_names(_organization_id, []), do: %{}

@@ -238,6 +238,21 @@ defmodule Cadence.Auth do
   end
 
   @doc """
+  Which of `ids` are service identities, in any organization (#472: so a shared actor read can
+  say "a service" for another organization's identity without naming it or sending its id).
+  """
+  @spec service_identity_ids([binary()]) :: MapSet.t(binary())
+  def service_identity_ids([]), do: MapSet.new()
+
+  def service_identity_ids(ids) when is_list(ids) do
+    ServiceIdentityRow
+    |> where([r], r.service_identity_id in ^Enum.uniq(ids))
+    |> select([r], r.service_identity_id)
+    |> Repo.all()
+    |> MapSet.new()
+  end
+
+  @doc """
   `%{service_identity_id => display_name}` for the ids that belong to `organization_id` and have a
   display name; another organization's identity is left out (mms-security 11-19, #146).
   """
