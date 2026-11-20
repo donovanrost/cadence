@@ -51,6 +51,7 @@ const noteBox = ref<HTMLElement | null>(null);
 const focusNote = useNoteFocus(
   noteBox,
   () => page.state.value.status === "ready" && page.state.value.value.state !== "approval_pending",
+  () => key.value,
 );
 function decided(n: DecidedNote) {
   note.value = n;

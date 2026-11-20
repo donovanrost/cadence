@@ -65,8 +65,10 @@ async function submit() {
       ...(booked.value ? { provider_reference: reference.value.trim() } : {}),
     });
     if (r.ok) {
+      // #244 (A5): the outcome shows in the sheet; the parent's refresh (which removes this pass's
+      // row, and the sheet with it) waits until the person closes it.
       outcome.value = outcomeText(r.value, provider.value);
-      emit("resolved");
+      resolvedOnClose = true;
       return;
     }
     const f = failureText(r.error, provider.value);
@@ -77,11 +79,17 @@ async function submit() {
     busy.value = false;
   }
 }
+let resolvedOnClose = false;
+function onClosed() {
+  if (!resolvedOnClose) return;
+  resolvedOnClose = false;
+  emit("resolved");
+}
 </script>
 
 <template>
   <!-- Kit ApSheet (focus return, Escape); the first field takes focus, Enter submits. -->
-  <ApSheet ref="sheet" :title="title" initial-focus="input, textarea">
+  <ApSheet ref="sheet" :title="title" initial-focus="input, textarea" @closed="onClosed">
     <form class="flex flex-col gap-4" @submit.prevent="submit">
       <ApCallout v-if="outcome" tone="info">{{ outcome }}</ApCallout>
       <ResolveFields

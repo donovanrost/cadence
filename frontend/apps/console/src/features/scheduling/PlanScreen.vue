@@ -39,6 +39,8 @@ import { planPrimary } from "./plan-primary.ts";
 import { usePlanDay } from "./usePlanDay.ts";
 import { resubmittedLines, sentBackLine } from "./review-lines.ts";
 import type { ReviewAfter } from "./review-run.ts";
+import { usePlanFocus } from "./usePlanFocus.ts";
+import PlanReviewLine from "./PlanReviewLine.vue";
 
 /** K1 · Plan a day (ScheduleFlow.md). States: plan-state.ts; data: usePlanDay. */
 const route = useRoute();
@@ -122,8 +124,10 @@ const sendBackError = ref<ApiError | null>(null);
 async function onSendBack(reason: string) {
   if (view.value.kind !== "plan") return;
   const result = await sendBack(view.value.plan, reason);
-  if (result.ok) sendBackSheet.value?.close();
-  else sendBackError.value = result.error;
+  if (result.ok) {
+    sendBackSheet.value?.close();
+    focusSoon.to(() => reviewLine.value?.box ?? null);
+  } else sendBackError.value = result.error;
 }
 const resubmitted = computed(() =>
   view.value.kind === "plan" ? resubmittedLines(view.value.plan) : null,
@@ -132,7 +136,18 @@ const sentBack = computed(() =>
   view.value.kind === "plan" ? sentBackLine(view.value.plan, session.user.id, isAdmin.value) : null,
 );
 
-watch(day, () => (reviewed.value = null));
+/** #244 (A5, B4): focus follows Submit and Send back to their result lines (usePlanFocus.ts). */
+const resultBox = ref<HTMLElement | null>(null);
+const reviewLine = ref<InstanceType<typeof PlanReviewLine> | null>(null);
+const focusSoon = usePlanFocus(() =>
+  view.value.kind === "plan"
+    ? `${view.value.plan.id}:${view.value.plan.version}:${view.value.plan.state}`
+    : null,
+);
+watch(day, () => {
+  reviewed.value = null;
+  focusSoon.cancel();
+});
 async function onSubmit(acks: Acknowledgement[], note?: string) {
   if (view.value.kind !== "plan" || primary.value?.kind !== "sheet") return;
   const planId = view.value.plan.id;
@@ -147,6 +162,7 @@ async function onSubmit(acks: Acknowledgement[], note?: string) {
   sheet.value?.close();
   reviewed.value = { ...out, planId };
   expired.value = out.expired;
+  focusSoon.to(() => resultBox.value);
 }
 const editable = computed(
   () =>
@@ -156,8 +172,9 @@ const editable = computed(
 );
 function onEdit(change: { add?: string[]; remove?: string[] }) {
   if (view.value.kind !== "plan") return;
+  // #244 (A5): the selection stays, so SelectedPanel swaps Remove ↔ Add in place (it moves focus
+  // to the new button if focus was lost) instead of unmounting the focused one.
   void edit(view.value.plan, change);
-  selected.value = null;
 }
 const actionText = computed(() =>
   actionError.value ? (limitRefusal(actionError.value) ?? planErrorText(actionError.value)) : null,
@@ -216,27 +233,13 @@ const clock = computed(() =>
     <PlanLifecycleCallouts :day="day" :superseded-by="view.plan.superseded_by" :expired="expired" />
     <OldVersionCallout v-if="latest !== null" :plan="view.plan" :latest="latest" />
     <SupersededCallout v-else-if="view.plan.superseded" :superseded="view.plan.superseded" />
-    <ApCallout v-else-if="sentBack" tone="caution"
-      >{{ sentBack
-      }}<template #action
-        ><ApButton size="compact" variant="ghost" @click="historySheet?.open()"
-          >All decisions</ApButton
-        ></template
-      ></ApCallout
-    >
-    <ApCallout v-else-if="resubmitted" tone="info">
-      <span class="flex flex-col gap-1">
-        <span>{{ resubmitted.line }}</span>
-        <span v-if="resubmitted.earlier" class="text-sm text-text-3">{{
-          resubmitted.earlier
-        }}</span>
-      </span>
-      <template #action
-        ><ApButton size="compact" variant="ghost" @click="historySheet?.open()"
-          >All decisions</ApButton
-        ></template
-      >
-    </ApCallout>
+    <PlanReviewLine
+      v-else-if="sentBack || resubmitted"
+      ref="reviewLine"
+      :sent-back="sentBack"
+      :resubmitted="resubmitted"
+      @history="historySheet?.open()"
+    />
     <ApCallout v-else-if="stopped" :tone="stopped.tone">{{ stopped.text }}</ApCallout>
     <!-- U30: on any state that has unconfirmed bookings, on top of the state's own callout. -->
     <UnconfirmedCallout
@@ -310,7 +313,9 @@ const clock = computed(() =>
       />
     </div>
     <ApCallout v-if="actionText" tone="caution">{{ actionText }}</ApCallout>
-    <ApCallout v-if="current" :tone="current.tone">{{ current.text }}</ApCallout>
+    <div v-if="current" ref="resultBox" tabindex="-1">
+      <ApCallout :tone="current.tone">{{ current.text }}</ApCallout>
+    </div>
     <PlanFooter
       :plan="view.plan"
       :is-admin="isAdmin"

@@ -1,7 +1,15 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import type { RemoteState } from "@/api";
-import { ApButton, ApEmptyState, ApKeyValue, ApPanel, ApTag, formatDuration } from "@/ui";
+import {
+  ApButton,
+  ApEmptyState,
+  ApKeyValue,
+  ApPanel,
+  ApTag,
+  formatDuration,
+  refocusFirst,
+} from "@/ui";
 import AlternativesList from "./AlternativesList.vue";
 import StationIssues from "./StationIssues.vue";
 import type { StationHits } from "./unavailable.ts";
@@ -39,6 +47,18 @@ const other = computed(() => {
     ? (a.value.alternatives.find((x) => x.snapshot_id === props.selected) ?? null)
     : null;
 });
+/**
+ * #244 (A5): Remove ↔ Add swap in place once the edit lands (the selection stays). The button
+ * that had focus is gone, so focus goes to its replacement, only if it was lost (refocusFirst).
+ */
+const actions = ref<HTMLElement | null>(null);
+watch(
+  () => (drafted.value ? "drafted" : other.value ? "other" : null),
+  async () => {
+    await nextTick();
+    refocusFirst(actions.value?.querySelector<HTMLElement>("button"));
+  },
+);
 const pass = computed(
   () =>
     drafted.value ??
@@ -102,7 +122,7 @@ const items = computed(() => {
       <p class="m-0 mt-3 text-md text-text-3">
         Provider-supplied. Cadence doesn't compute passes yet.
       </p>
-      <div v-if="editable" class="mt-3">
+      <div v-if="editable" ref="actions" class="mt-3">
         <ApButton
           v-if="drafted && !drafted.locked"
           size="compact"
