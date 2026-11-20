@@ -57,7 +57,7 @@ defmodule Cadence.Reads.PassEnders do
       )
 
     cancels
-    |> Map.new(fn {reservation_id, user_id} -> {reservation_id, user(user_id, names.users)} end)
+    |> Map.new(fn {reservation_id, actor_id} -> {reservation_id, canceller(actor_id, names)} end)
     |> Map.merge(
       Map.new(resolutions, fn {reservation_id, doc} ->
         {{:resolution, reservation_id}, ActorRef.document(doc, names)}
@@ -95,10 +95,7 @@ defmodule Cadence.Reads.PassEnders do
 
   def ended_by(_reservation, _enders), do: nil
 
-  defp user(user_id, people) do
-    case Map.fetch(people, user_id) do
-      {:ok, name} -> %{kind: "user", id: user_id, name: name}
-      :error -> %{kind: "user", id: nil, name: nil}
-    end
-  end
+  # Through ActorRef.ref (api on #558), so a service that cancelled is named as a service.
+  defp canceller(id, names) when is_binary(id), do: ActorRef.ref(id, names)
+  defp canceller(_none, _names), do: %{kind: "user", id: nil, name: nil}
 end

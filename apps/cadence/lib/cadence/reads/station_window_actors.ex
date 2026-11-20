@@ -22,8 +22,12 @@ defmodule Cadence.Reads.StationWindowActors do
 
   defp documents(views) when is_list(views), do: Enum.flat_map(views, &documents/1)
 
+  # Both actors are looked up, never assuming created_by == reported_by (api on #558).
   defp documents(%{} = view),
-    do: [Map.get(view, :reported_by) | documents(Map.get(view, :windows, []))]
+    do: [
+      Map.get(view, :reported_by),
+      Map.get(view, :created_by) | documents(Map.get(view, :windows, []))
+    ]
 
   defp name_actors(views, names) when is_list(views),
     do: Enum.map(views, &name_actors(&1, names))

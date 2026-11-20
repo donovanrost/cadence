@@ -125,6 +125,20 @@ defmodule Cadence.Reads.ActorDocumentsTest do
     assert_rule(Enum.map(old, & &1.reported_by), c)
     assert Enum.map(old, & &1.created_by) == Enum.map(old, & &1.reported_by)
     no_email(old, c)
+
+    # api on #558: created_by is looked up on its own, even when it isn't reported_by.
+    [ada, nobody | _] = c.users
+
+    [mixed] =
+      StationWindowActors.named(
+        [%{reported_by: old_doc(nobody), created_by: old_doc(ada)}],
+        c.org
+      )
+
+    assert %{name: "Ada"} = mixed.created_by
+    assert %{id: nobody_id, name: nil} = mixed.reported_by
+    assert nobody_id == nobody.user_id
+    no_email(mixed, c)
   end
 
   test "plan rounds: an older round holding an email names its submitter by membership", c do
