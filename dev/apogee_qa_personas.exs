@@ -8,6 +8,12 @@
 #   cd apps/cadence_web
 #   mix run --no-start ../../dev/apogee_qa_personas.exs
 #
+# The password (#242): E2E_PERSONA_PASSWORD when set (at least 12 characters, not the public
+# default; from the environment or a CI secret only, never a committed file, and never printed),
+# else the public local default, printed as before. E2E_RESET_PERSONA_PASSWORDS=1 also sets the
+# EXISTING personas' passwords to it through Cadence.Accounts.FixturePasswords (all their
+# sessions signed out); it refuses without E2E_PERSONA_PASSWORD.
+#
 # Requires the Reflect Orbital seed (dev/reflect_orbital_demo.exs). See docs/apogee/qa/runbook.md.
 defmodule Cadence.Dev.ApogeeQaPersonas do
   @moduledoc false
@@ -21,10 +27,10 @@ defmodule Cadence.Dev.ApogeeQaPersonas do
     UserRow
   }
 
+  alias Cadence.Accounts.FixturePasswords
   alias Cadence.{Ids, Repo}
 
   @organization_id "org-reflect-orbital-demo"
-  @password "apogee-qa-password"
 
   @personas [
     %{email: "qa-operator@example.com", display_name: "QA Operator", role: :member},
@@ -43,28 +49,52 @@ defmodule Cadence.Dev.ApogeeQaPersonas do
     unless Code.ensure_loaded?(Mix) and Mix.env() == :dev,
       do: raise("Apogee QA personas are for the development database only")
 
+    env = System.get_env()
+    # Both read before anything is written: a bad value stops the run with nothing changed.
+    {password, source} = settle(FixturePasswords.persona_password(env))
+    reset? = settle(FixturePasswords.reset?(env))
+
     Logger.configure(level: :warning)
     {:ok, _apps} = Application.ensure_all_started(:cadence)
 
     {:ok, _organization} = Cadence.Organizations.fetch_organization(@organization_id)
 
     Enum.each(@personas, fn persona ->
-      user = ensure_user(persona)
+      user = ensure_user(persona, password, reset?)
       ensure_membership(user, persona.role)
       IO.puts("#{persona.email}  #{persona.role}")
     end)
 
-    IO.puts("Password for all personas: #{@password}")
-  end
-
-  defp ensure_user(%{email: email, display_name: display_name}) do
-    case Cadence.Accounts.fetch_user_by_email(email) do
-      {:ok, user} -> user
-      {:error, _not_found} -> insert_user(email, display_name)
+    case source do
+      :default -> IO.puts("Password for all personas: #{password}")
+      :env -> IO.puts("Password for all personas: from E2E_PERSONA_PASSWORD (not printed)")
     end
   end
 
-  defp insert_user(email, display_name) do
+  defp settle({:ok, password, source}), do: {password, source}
+  defp settle({:ok, value}), do: value
+  defp settle({:error, reason}), do: raise("Apogee QA personas: #{reason}")
+
+  defp ensure_user(%{email: email, display_name: display_name}, password, reset?) do
+    case Cadence.Accounts.fetch_user_by_email(email) do
+      {:ok, user} ->
+        if reset?, do: :ok = reset!(user, password)
+        user
+
+      {:error, _not_found} ->
+        insert_user(email, display_name, password)
+    end
+  end
+
+  # Through the app's credential path (FixturePasswords), never a Repo write here.
+  defp reset!(user, password) do
+    case FixturePasswords.set(user.user_id, password, "apogee-qa") do
+      :ok -> :ok
+      {:error, reason} -> raise("Apogee QA personas: #{user.email} not reset: #{inspect(reason)}")
+    end
+  end
+
+  defp insert_user(email, display_name, password) do
     user =
       User.new(%{
         user_id: Ids.new("user"),
@@ -76,7 +106,7 @@ defmodule Cadence.Dev.ApogeeQaPersonas do
         metadata: %{"fixture" => "apogee-qa"}
       })
 
-    password = Password.hash_password(@password)
+    password = Password.hash_password(password)
 
     {:ok, _rows} =
       Repo.transaction(fn ->
