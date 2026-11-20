@@ -124,7 +124,7 @@ defmodule CadenceWeb.Console.ConfigErrorsTest do
 
     assert approve.({:mission_model_revision_not_approved, ["model_1"]}) ==
              "Not approved: a catalog revision isn't approved yet" <>
-               tail <> "Approve it again once a catalog revision is approved."
+               tail <> "Approve it again once it's approved."
 
     assert approve.({:mission_model_revision_not_approved, ["model_1", "model_2"]}) ==
              "Not approved: 2 catalog revisions aren't approved yet" <>
@@ -132,7 +132,8 @@ defmodule CadenceWeb.Console.ConfigErrorsTest do
 
     assert approve.({:mission_model_comparison_failed, "model_1", "report_1"}) ==
              "Not approved: a catalog revision's comparison didn't pass" <>
-               tail <> "Send it back so the author can stage a revision that passed."
+               tail <>
+               "Send it back so the author can stage a catalog revision whose comparison passed."
   end
 
   test "U65: the model gate's apply refusals are coded 409s named by catalog revision" do

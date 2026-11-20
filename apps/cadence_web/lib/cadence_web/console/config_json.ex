@@ -301,13 +301,15 @@ defmodule CadenceWeb.Console.ConfigJSON do
 
   defp approve_next(:mission_model_revision_not_approved, why) do
     case Regex.run(~r/^(.+) isn't approved yet$/, why) do
+      # No number known: "a catalog revision" (mms-ux).
+      [_, "a " <> _] -> "Approve it again once it's approved."
       [_, label] -> "Approve it again once #{label} is approved."
       nil -> "Approve it again once they're approved."
     end
   end
 
   defp approve_next(:mission_model_comparison_failed, _why),
-    do: "Send it back so the author can stage a revision that passed."
+    do: "Send it back so the author can stage a catalog revision whose comparison passed."
 
   # Only an approve reaches these two from review: send back runs no checks.
   defp approving?(conn), do: conn.private[:phoenix_action] == :review
