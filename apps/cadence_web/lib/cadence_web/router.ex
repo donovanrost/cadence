@@ -1259,6 +1259,9 @@ defmodule CadenceWeb.Router do
       get("/contact-planning/grants", ContactGrantController, :index)
       post("/contact-planning/grants", ContactGrantController, :create)
       post("/contact-planning/grants/:grant_id/revoke", ContactGrantController, :revoke)
+      post("/contact-planning/grants/:grant_id/approve", ContactGrantController, :approve)
+      post("/contact-planning/grants/:grant_id/reject", ContactGrantController, :reject)
+      post("/contact-planning/grants/:grant_id/narrow", ContactGrantController, :narrow)
 
       post("/contact-plans/:plan_id/execute", ContactPlanController, :execute)
 

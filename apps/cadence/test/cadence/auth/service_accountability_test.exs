@@ -148,6 +148,30 @@ defmodule Cadence.Auth.ServiceAccountabilityTest do
                )
     end
 
+    # #283: the grant's proposer and its approver both count for a plan the service approves.
+    test "under a grant, its proposer and its approver both count as the approving side" do
+      planner = issue!("svc-acct-grant-people", person("ada"))
+      grant_people = ["grant-proposer", "grant-approver", nil]
+
+      for author <- ["grant-proposer", "grant-approver"] do
+        assert {:error, {:self, nil}} =
+                 Accountability.separate(
+                   @org,
+                   {:service, planner.service_identity_id},
+                   [{:user, author}],
+                   grant_people
+                 )
+      end
+
+      assert :ok =
+               Accountability.separate(
+                 @org,
+                 {:service, planner.service_identity_id},
+                 [{:user, "someone-else"}],
+                 grant_people
+               )
+    end
+
     test "the system actor and unrecorded actors count no one, as before" do
       system = %{"actor_kind" => "system", "system_id" => "seed:x", "name" => "Seed"}
       assert :ok = Accountability.separate(@org, {:user, "ada"}, [system, %{}, nil])
