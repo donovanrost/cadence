@@ -146,6 +146,8 @@ export interface EpisodeSeed {
   readonly severity: "critical" | "caution";
   readonly status: "new" | "acknowledged" | "cleared";
   readonly point: string;
+  /** U25 (#646): the spacecraft has no readable name, so the console must say Unknown spacecraft. */
+  readonly nameless?: boolean;
 }
 
 function seeded(seed: EpisodeSeed, index: number): Json {
@@ -164,7 +166,7 @@ function seeded(seed: EpisodeSeed, index: number): Json {
     spacecraft_id: `spacecraft-earendil-${String(seed.scid).padStart(3, "0")}`,
     spacecraft: {
       id: `spacecraft-earendil-${String(seed.scid).padStart(3, "0")}`,
-      name,
+      name: seed.nameless ? null : name,
       scid: seed.scid,
     },
     point: { id: seed.point, name: seed.point.split(".").pop() ?? seed.point, unit: "A" },
