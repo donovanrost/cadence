@@ -150,9 +150,8 @@ defmodule Cadence.ContactPlanning.AutomationGrantReviewTest do
       grant = propose!(c)
       id = c.service.service_identity_id
 
-      Repo.delete_all(
-        from(r in Cadence.Auth.ServiceAccountableRow, where: r.service_identity_id == ^id)
-      )
+      # The accountables table is append-only (#436): the test-only purge, on for this delete only.
+      Cadence.ServiceIdentityFixtures.forget_accountables!(id)
 
       assert {:error, {:automation_grant_approver_authors_unknown, %{service: %{id: ^id}}}} =
                approve(c, c.approver, grant)

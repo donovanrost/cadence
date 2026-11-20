@@ -24,6 +24,7 @@ defmodule Cadence.ServiceIdentityFixtures do
   The table is append-only (#436), so this uses #116's test-only purge setting, on just for the
   delete and off again, so it can't mask a later write in the same test. Test databases only.
   """
+  # SET LOCAL needs a transaction: the SQL sandbox's, in every DataCase test (devops on #504).
   @spec forget_accountables!(binary()) :: :ok
   def forget_accountables!(service_identity_id) do
     Repo.query!("SET LOCAL cadence.decision_record_test_purge = 'on'")
