@@ -50,23 +50,39 @@ Sources:
 
 **Who may create one (ca-security, #537):**
 - a composition is created only by a configuration-lane change set (the kind `mission_model_composition`), staged by a holder of `:manage_mission`;
-- its creator (the stager, with #280's accountable people for a service) **joins the separation set** for approving its base effective revision (§4), with the importers and authors.
+- its creator (the stager, with #280's accountable people for a service) **joins the separation set** for approving its base effective revision (§4), with the importers and authors (mms-security M1). Insert-or-get returns the first creator's row for identical content, and that's the one counted.
+- **Migrated compositions** (§7) are created by a system actor that counts no one, as #513 did for seeds; only the union importers apply to them.
+- **The id is under a stored hash (#108):** a golden pins the canonical term `{org, mission, sorted [{layer_id, mount}]}`, and the layer FK is on `(org, mission, layer_id)`, so a layer from another mission can't be named.
 
 - **Immutable.** UPDATE and DELETE are refused by trigger (#116's pattern).
 - **Insert-or-get** re-reads by `(org, mission, composition_id)` and fails closed on any scope or
   content mismatch, as #119 did (CB-2).
-- **Mounts** follow #456:
-  - a plain absolute path;
-  - '/' only when it's the composition's single imported layer;
-  - no two equal or nested mounts (`MM_MOUNT_COLLISION`).
-
-  The **record decides the mount**. The importer only suggests one (import-run metadata,
-  CB-5).
+- **Mounts** follow #456, with one change (api-ops, #537): **identities never move silently.**
+  - **The primary import stays at '/'.** At most one imported layer sits at '/', and it keeps
+    every semantic id and qualified name it had. When a second import joins a mission, the
+    existing one is NOT remounted.
+  - **Every further import mounts below**, at a plain absolute path disjoint from the primary's
+    top-level names and from every other mount (no equal or nested mounts: `MM_MOUNT_COLLISION`).
+  - **Remounting an existing layer** (moving it off '/' or between paths) changes its identities,
+    which would split packet definition ids, #483's stored `semantic_id`/`qualified_name`
+    history, dashboards, alarms and limits. It's an explicit **re-key**: before the change set
+    is saved, its check lists every identity that changes, and it's a HOLD a person
+    acknowledges. Never implicit.
+  - **#456 changes accordingly** (not merged yet): `:mission_model_mount_required` applies to
+    the second and later imports only; one layer may stay at '/', and its own '/' declaration
+    stays the root. mms-engineer amends it.
+  - **The record decides the mount**; the importer only suggests one (import-run metadata,
+    CB-5).
+  - **A bad composition is refused at the record's write** (mms-security): the grammar, the
+    bounds and the collision rule refuse the INSERT itself, and a refused write records nothing.
 - **Bounds (CB-13):** at most 8 imported layers, mount depth at most 4 segments.
 
 ### `mission_model_effective_revisions` (new, link)
 
-`(org, mission, composition_id, authored_head, revision_id)`, unique on the first four.
+`(org, mission, composition_id, authored_head, revision_id)`, unique on the first four AND unique
+on `revision_id` (mms-security M2): a revision is named by exactly one (composition, authored
+head), so an approval can't move to another composition. **Writers:** only
+`effective_revision/4`, with the revision it just compiled, and the migration (one-to-one).
 
 - `authored_head` is the mission's authored-layer lineage head (phase 3; `nil` until then).
 - `revision_id` references `mission_model_revisions`.
@@ -87,6 +103,14 @@ Sources:
   record, #456) plus the authored layers at the head, writes the revision as today (plans and
   diagnostics), and writes the link;
 - blocking diagnostics (`MM_*` errors) mean no link and no revision usable (`valid?` false).
+
+**Concurrency (api-ops):**
+- A revision's id is content-derived (`Canonical.content_id("mission_model_revision", basis)`),
+  and every insert is `on_conflict: :nothing`. So two concurrent calls compile the SAME id, and
+  nothing is orphaned.
+- To avoid compiling twice, `effective_revision/4` takes a transaction-scoped advisory lock on
+  `(mission, composition_id, authored_head)` and re-reads the link under it.
+- Test: two concurrent calls, one compile, one link, the same revision id.
 
 With **one imported layer at '/' and no authored layers**, `compose/4` gives the
 byte-identical revision a catalog import makes today. #456's goldens pin that, so the
@@ -131,7 +155,13 @@ migration reuses the existing rows.
   - the catalog-row requirement is replaced by "a composition names this revision";
   - **importers** become the union of the importers of every imported layer's catalog revision
     (`Catalog.model_importers` per layer), so separation covers every imported layer;
-  - the comparison runs on the composed revision.
+  - the comparison runs on the composed revision;
+  - the separated set is the union importers plus the composition's creator (§1). A system
+    import counts its `run_by` per #513, and a pre-#513 system run counts no one, so the other
+    layers' importers still apply;
+  - the approval's `DecisionRecord.subject` names the `composition_id` and its
+    `imported_layers` (each layer id and mount) beside the revision's digest (mms-security M2),
+    so the record shows which combination was approved.
 - **An effective revision with authored layers** (phase 3) is approved by the monitoring set's
   own change-set review (the addendum; CB-6: no second gate decision). That review carries **the
   gate's authority** (ca-security, #537): `:approve_mission_model`, an organization admin, not the
@@ -152,6 +182,9 @@ migration reuses the existing rows.
     #14), with #280 for services.
 
   The four-eyes record (#117) names the change set and the comparison report.
+  - **The gate verifies these three from records, at activation** (mms-security, for J's
+    acceptance): base approved, composed comparison passed or acknowledged, and separation held.
+    It never trusts a flag another path set.
 - **Baseline (`default_baseline`):** the previous effective revision of the same composition
   lineage, else the revision most craft run (today's fallback). `Catalog.previous_model_revision`
   stays only for a one-layer composition, where it's the same thing.
@@ -167,8 +200,14 @@ migration reuses the existing rows.
 
 ## 5. A withdrawn approval (CB-15)
 
-- If a composition's base approval is withdrawn or superseded, the **next generation is
-  refused** for every craft pinned to it, at staging and again at activation.
+- If a composition's base approval is **withdrawn or rejected**, the **next generation is
+  refused** for every craft pinned to it, at staging and again at activation. That refusal is
+  the gate's own check, not a flag.
+- **"Superseded" is defined narrowly** (mms-security): only a withdrawal or rejection of the
+  pinned composition's own approval counts. A newer approval of a DIFFERENT composition does not
+  refuse anything; otherwise every new approval would strand craft on the old one.
+- The attention item is high severity and names the decision record. A person can still stop
+  the craft through the existing operational path.
 - Craft keep running their last activated generation until then, and their state reads
   "pinned composition no longer approved", with the reason and the decision record.
 - **New commanding on such a craft meets an acknowledged hold** (ca-security, #537): it's
@@ -230,17 +269,30 @@ The console rows are U-entries from ux.
 
 | Slice | What | Owner | Reviewers |
 |---|---|---|---|
-| D1 | Composition and link tables with triggers; `effective_revision/4`; the one-to-one migration with its guard test | mms-engineer | domain, mms-security, api-ops |
-| D2 | Reads first (§6) | api / mms-engineer | fe-setup, mms-ux |
-| D3 | Pins via change sets (`composition_id`); translating old writes; staging NO-GO | mms-engineer | domain, ca-security |
+| D1 | Composition and link tables with triggers (write-time refusal of bad compositions, unique `revision_id`, the id golden, the layer FK); `effective_revision/4` with its lock; the one-to-one migration (system actor) with its guard test; #456's '/' amendment | mms-engineer | domain, mms-security, api-ops |
+| D2 | Reads first (§6); E's read shape agreed with api on D2's issue (fe-setup's proposal) | api / mms-engineer | fe-setup, mms-ux |
+| D2c | Console readers and U-entries (§6 step 2), including E2's state reader | fe-setup (words mms-ux) | ux, domain |
+| D3 | Pins via change sets (`composition_id`), by `:manage_mission` holders and org admins, services through #280; old clients translated **at staging**, never at apply; staging NO-GO | mms-engineer | domain, ca-security |
+| D4 | Creating a composition with more than one import: the API and console path (choose layers and mounts, see collisions and the re-key HOLD), and its approval entry point | mms-engineer + fe-setup | domain, mms-security, ux |
 | E1 | Approve and baseline re-keyed; union importers; composed comparison | domain | ca-security, api-ops |
 | E2 | Withdrawn-approval state on craft and in attention (§5) | domain | mms-security, ux |
 
 **Order:**
 1. #534 (P1);
-2. #456 (C) merges; then D1 and E1 together (one release, with the migration);
-3. then D2;
+2. #456 (C, amended for '/') merges; then D1 and E1 together (one release, with the migration);
+3. then D2, then D2c;
 4. then D3;
-5. then E2.
+5. then D4 and E2.
+
+**Readers-first gate (fe-setup):** no composition with more than one imported layer, and no pin to one,
+exists on any server until D2c has landed. D1 to D3 create only one-layer compositions, and D4
+is the first slice that can make a multi-layer one.
+
+**Revision volume** (api-ops, for #483's SYMBOL capacity):
+- Each monitoring apply (phase 3) makes one effective revision per composition in use: 2 on
+  dev, a handful per mission typically.
+- Estimate: 100 to 400 monitoring applies a year at 2 to 5 compositions gives about 200 to
+  2,000 revisions per mission per year, plus about 12 imports.
+- Bound it with 5,000 per mission per year.
 
 4a (#447) re-lands after #534, independently of D.
