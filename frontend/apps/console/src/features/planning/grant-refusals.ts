@@ -163,26 +163,30 @@ export function rejectFailure(e: ApiError): Worded {
   return withCode("Not rejected: Cadence refused this rejection, so nothing changed.", e);
 }
 
+const narrowFields = [
+  "allowed_actions",
+  "maximum_horizon_seconds",
+  "maximum_contacts",
+  "maximum_execution_concurrency",
+  "validity_seconds",
+] as const;
 /** U105: the sheet's labels name the widening fields; an unknown one is a code only. */
-export const NARROW_FIELD_LABELS: Readonly<Record<string, string>> = {
+const NARROW_FIELD_LABELS: Readonly<Record<(typeof narrowFields)[number], string>> = {
   allowed_actions: "Can",
   maximum_horizon_seconds: "Plans ahead up to",
   maximum_contacts: "Contacts per plan, at most",
   maximum_execution_concurrency: "At once, at most",
   validity_seconds: "Valid for",
 };
-const widening = d.object({
-  fields: (value: unknown) =>
-    Array.isArray(value) ? value.filter((f): f is string => typeof f === "string") : [],
-});
+const widening = d.object({ fields: orNull(d.array(d.knownText(narrowFields), 20)) });
 
 /** Narrow's refusals (U105). */
 export function narrowFailure(e: ApiError, g: Grant): Worded {
   const s = serviceOf(g) ?? "the service identity this grant is for";
   if (isError(e, "automation_grant_not_narrower")) {
     const fields = detailsOf(e, widening)?.fields ?? [];
-    const labels = fields.flatMap((f) => (NARROW_FIELD_LABELS[f] ? [NARROW_FIELD_LABELS[f]] : []));
-    const unknown = fields.filter((f) => !NARROW_FIELD_LABELS[f]);
+    const labels = fields.flatMap((f) => (isKnown(f) ? [NARROW_FIELD_LABELS[f]] : []));
+    const unknown = fields.flatMap((f) => (isKnown(f) ? [] : [f.unrecognized]));
     const bracket = labels.length ? ` (${labels.join(", ")})` : "";
     const text = `Not narrowed: this change gives ${s} more than it has now${bracket}, so it needs approval. Propose it as a new grant instead.`;
     return unknown.length ? { text, code: unknown.join(", ") } : { text };
