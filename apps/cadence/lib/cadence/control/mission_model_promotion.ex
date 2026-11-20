@@ -8,7 +8,6 @@ defmodule Cadence.Control.MissionModelPromotion do
   drift before handing a complete specification to the data plane.
   """
 
-  alias Cadence.Catalog
   alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Control.{ModelApprovalGate, SpacecraftModelBindings}
 
@@ -83,8 +82,8 @@ defmodule Cadence.Control.MissionModelPromotion do
                  mission_id,
                  value(manifest, :revision_id)
                ),
-             :ok <-
-               Catalog.require_named_model_revision(
+             {:ok, _composition} <-
+               MissionModels.require_composition(
                  organization_id,
                  mission_id,
                  revision.revision_id
