@@ -67,8 +67,8 @@ describe("#235 What changes panel", () => {
     );
     expect(w.text()).toContain("EARENDIL-1, EARENDIL-2, EARENDIL-3, EARENDIL-4, EARENDIL-5");
     // #244 (B3, A5): a disclosure that stays mounted, so focus isn't dropped.
-    const toggle = () => w.findAll("button").find((b) => /^Show (all 5|fewer)$/.test(b.text()));
-    expect(toggle()?.text()).toBe("Show fewer");
+    const toggle = () => w.findAll("button").find((b) => /^Show (all 5|first 3)$/.test(b.text()));
+    expect(toggle()?.text()).toBe("Show first 3");
     expect(toggle()?.attributes("aria-expanded")).toBe("true");
     await toggle()?.trigger("click");
     expect(toggle()?.text()).toBe("Show all 5");

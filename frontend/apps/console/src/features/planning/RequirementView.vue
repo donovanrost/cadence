@@ -2,7 +2,16 @@
 import type { MissionId } from "@/api/index.ts";
 import { computed, nextTick, ref, watch } from "vue";
 import { useRemoteQuery } from "@/api";
-import { ApCallout, ApKeyValue, ApPanel, ApRemote, ApTable, formatAbsolute, plural } from "@/ui";
+import {
+  ApCallout,
+  ApKeyValue,
+  ApPanel,
+  ApRemote,
+  ApTable,
+  formatAbsolute,
+  refocusFirst,
+  plural,
+} from "@/ui";
 import type { ApColumn } from "@/ui";
 import { fetchTemplate } from "./api.ts";
 import RequirementEnd from "./RequirementEnd.vue";
@@ -34,13 +43,19 @@ function onEnded() {
   justEnded = true;
   emit("ended");
 }
+// fe-ops on #584: a pending move never outlives the requirement it was for.
+watch(
+  () => props.requirement.id,
+  () => (justEnded = false),
+);
 watch(
   () => endedLine(props.requirement),
   async (line) => {
     if (!line || !justEnded) return;
     justEnded = false;
     await nextTick();
-    endedBox.value?.focus();
+    // B4 (ux's #431 rule): only when focus was lost (the kit's refocusFirst).
+    refocusFirst(endedBox.value);
   },
 );
 const schema = useRemoteQuery(() => props.missionId, fetchRequirementSchema);

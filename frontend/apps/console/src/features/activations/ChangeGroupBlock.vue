@@ -2,6 +2,7 @@
 import { computed, ref, useId } from "vue";
 import { ApButton, ApCallout, ApTag } from "@/ui";
 import {
+  NAMES_LISTED,
   firstStartLine,
   groupHeading,
   namesLine,
@@ -29,7 +30,8 @@ const loading = ref(false);
 const failed = ref(false);
 /**
  * #244 (B3, A5): Show all is a disclosure. It stays mounted with aria-expanded (it used to unmount
- * on success, dropping focus), reads "Show fewer" while open, and keeps the names once loaded.
+ * on success, dropping focus), reads "Show first 3" while open (ux: Show all N ↔ Show first N), and
+ * keeps the names once loaded.
  */
 const expanded = ref(false);
 const namesId = useId();
@@ -86,7 +88,7 @@ async function showAll() {
         :disabled="loading"
         disabled-reason="Loading…"
         @click="toggleAll"
-        >{{ expanded ? "Show fewer" : showAllLabel(group) }}</ApButton
+        >{{ expanded ? `Show first ${NAMES_LISTED}` : showAllLabel(group) }}</ApButton
       >
     </div>
     <!-- B6: it answers the person's own click. -->

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from "vue";
+import { refocusFirst } from "@/ui";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
 import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
@@ -41,15 +42,16 @@ const crumbs: readonly ApCrumb[] = [
   { label: "Activation" },
 ];
 /**
- * #244 (A5): Approve, Reject or a successful Retry apply unmounts the control that had focus (the
- * refetch drops the Decide panel or the Retry button). Focus moves to the outcome note.
+ * #244 (A5, B4): Approve, Reject or a successful Retry apply unmounts the control that had focus (the
+ * refetch drops the Decide panel or the Retry button). Focus moves to the outcome note only when it
+ * was lost (the kit's refocusFirst; ux's #431 rule): a person who moved on keeps their place.
  */
 const noteBox = ref<HTMLElement | null>(null);
 async function decided(n: DecidedNote) {
   note.value = n;
   page.refetch();
   await nextTick();
-  noteBox.value?.focus();
+  refocusFirst(noteBox.value);
 }
 </script>
 
