@@ -2,7 +2,8 @@
 
 Owner: mms-security. Status: reviewed against design D+E (#537, `mission-composition-design.md`,
 domain, 11-20). §7 gives each threat's status under D and the conditions mms-security and
-ca-security set on #537. D is approved once §7's must-fixes are in.
+ca-security set on #537. D was approved by mms-security and ca-security at 88d99048a with every
+condition in the design. The slice reviews check that each one is built.
 
 Sources:
 - `mission-model-build-plan.md` §2: phase 2 (composition), phase 4 (binding storage and heads);
@@ -253,10 +254,16 @@ pin → head and assignment; head plus artifact → expansion → runtime; tenan
 #293's §3–5 (the actor audit, tenant boundaries, secrets) carry over as open sections here. They
 get filled in when D's records exist, since composition and binding records are the new write paths.
 
-## 7. Status under design D+E (#537, at 0329e5e85; 11-20)
+## 7. Status under design D+E (#537; reviewed at 0329e5e85, approved at 88d99048a; 11-20)
 
-The conditions are the combined mms-security + ca-security set on #537. **Must** blocks D's
-approval; a slice name says where the rest is checked.
+The conditions are the combined mms-security + ca-security set on #537. All are now in D's text
+(**Must** marked what blocked D's approval). A slice name says where each is checked as built.
+Two additions in D beyond the asks:
+- api-ops: the primary import stays at '/', and a remount is an explicit re-key behind an
+  acknowledged HOLD. That closes a CB-5 risk: a silent remount splitting stored identities.
+- mms-engineer: a new import creates its own one-layer composition with the importer as
+  creator, which keeps M1's separation set unchanged. The link's uniqueness while
+  `authored_head` is NULL uses a COALESCE index.
 
 | Threat | Under D | Status and conditions |
 |---|---|---|
