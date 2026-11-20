@@ -62,6 +62,37 @@ describe("apply refusals open 'Not applied:'", () => {
     expect(applyRefusal(refused("holds_blocking"))?.changed).toBe(false);
   });
 
+  it("words Request review's refusals by its act (#553; U79 in #554)", () => {
+    expect(applyRefusal(refused("checks_failed"), "request_review")?.sentence).toBe(
+      "Not sent for review: a check says NO-GO, so nothing changed. Fix the NO-GO items, then send it for review again.",
+    );
+    expect(applyRefusal(refused("holds_blocking"), "request_review")?.sentence).toBe(
+      "Not sent for review: a blocking hold stands, so nothing changed. It can't be acknowledged; send it for review once it clears (the checks show it).",
+    );
+    expect(applyRefusal(refused("activation_policy_changed"), "request_review")?.sentence).toBe(
+      "Not sent for review: the mission's approval setting changed while you had this open, so nothing changed. Check whether it still needs review, then apply or send it for review.",
+    );
+    expect(applyRefusal(refused("nothing_staged"), "request_review")?.sentence).toBe(
+      "Not sent for review: nothing is staged, so there's nothing to review.",
+    );
+    expect(applyRefusal(refused("quorum_lost"), "request_review")?.sentence).toBe(
+      "Not sent for review: Cadence refused this, so nothing changed.",
+    );
+    expect(
+      applyRefusal(
+        {
+          kind: "invalid",
+          code: "invalid_params",
+          message: "x",
+          details: { reason: "is too short" },
+        },
+        "request_review",
+      )?.sentence,
+    ).toBe(
+      "Not sent for review: some changes aren't valid, so nothing changed. Reason: is too short",
+    );
+  });
+
   it("lists invalid changes by their field words, never raw paths, up to five", () => {
     const errors = Array.from({ length: 7 }, (_, i) => ({
       path: "display_name",

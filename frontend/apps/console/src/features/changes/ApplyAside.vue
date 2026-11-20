@@ -110,7 +110,7 @@ async function apply() {
         const act = needsReview.value ? "request_review" : "apply";
         failure.value =
           checksRefusal(result.error, act) ??
-          (act === "apply" ? applyRefusal(result.error) : null) ??
+          applyRefusal(result.error, act) ??
           refusalOutcome(result.error, "applied");
       }
       emit("inUse", inUseMark(failure.value));
