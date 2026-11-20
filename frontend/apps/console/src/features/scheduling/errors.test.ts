@@ -49,6 +49,11 @@ describe("byAuthor (ux, api af0279d1)", () => {
     // #485 (readers first): a member without a display name, or someone who isn't a member.
     expect(byAuthor({ kind: "user", id: "u", name: null })).toBe("");
     expect(byAuthor({ kind: "user", id: null, name: null })).toBe("");
+    // ca-ux on #530 (U73/#371): a service identity says so, named or not.
+    expect(byAuthor({ kind: "service", id: "svc_1", name: "Nightly planner" })).toBe(
+      " by Nightly planner (a service identity)",
+    );
+    expect(byAuthor({ kind: "service", id: null, name: null })).toBe(" by a service identity");
   });
 });
 
