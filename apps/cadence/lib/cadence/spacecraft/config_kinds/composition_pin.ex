@@ -13,9 +13,9 @@ defmodule Cadence.Spacecraft.ConfigKinds.CompositionPin do
   - **The number is display-only** (mms-security on #581): a pin is a composition id string. A
     number is refused by the kinds' shape checks and is never resolved.
   - **Words** (mms-ux, a U109 amendment): a field error, no final period, naming the pin by U109's
-    rule: a one-catalog pin is "catalog rev 4" (every pin until D4); otherwise "this composition"
-    until the composition's number reaches this branch (D2). `details` carries the reason and the
-    numbers so the console can rebuild the line.
+    rule: a one-catalog pin is "catalog rev 4" (every pin until D4); several catalogs read
+    "composition 3" (D2's number), and "this composition" without one. `details` carries the reason
+    and the numbers so the console can rebuild the line.
   """
 
   alias Cadence.MissionModels.{CatalogPins, Compositions, Selection}
@@ -140,6 +140,9 @@ defmodule Cadence.Spacecraft.ConfigKinds.CompositionPin do
   defp subject(%{catalog_revision_number: number}) when is_integer(number),
     do: "Catalog rev #{number}"
 
+  defp subject(%{composition_number: number}) when is_integer(number),
+    do: "Composition #{number}"
+
   defp subject(_pin), do: "This composition"
 
   defp pin_details(organization_id, mission_id, catalog, composition) do
@@ -153,7 +156,8 @@ defmodule Cadence.Spacecraft.ConfigKinds.CompositionPin do
     %{
       composition_id: composition,
       catalog_revision_id: catalog,
-      catalog_revision_number: CatalogPins.catalog_number(organization_id, mission_id, catalog)
+      catalog_revision_number: CatalogPins.catalog_number(organization_id, mission_id, catalog),
+      composition_number: CatalogPins.composition_number(organization_id, mission_id, composition)
     }
   end
 

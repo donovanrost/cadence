@@ -177,6 +177,31 @@ defmodule Cadence.Configuration.CompositionPinsTest do
       assert %{reason: "reapproval_needed"} = details
     end
 
+    # U109 (mms-ux): a pin of several catalogs is named by the composition's number (D2), never by
+    # one of its catalog revisions.
+    test "a two-layer composition is named 'Composition N'", c do
+      profile = profile!(c, c.rev1.catalog_revision_id)
+      [%{layer_id: a}] = layers!(c, c.comp1)
+      [%{layer_id: b}] = layers!(c, c.comp2)
+      actor = %{"actor_kind" => "user", "user_id" => "composer"}
+      {:ok, two} = Compositions.insert_or_get(c.org, c.mid, [{a, "/"}, {b, "/payload"}], actor)
+      {:ok, _candidate} = Compositions.effective_revision(c.org, c.mid, two.composition_id, nil)
+
+      op = update("spacecraft_profile", profile, "composition_id", two.composition_id)
+
+      assert {:ok, %{verdict: :no_go, checks: checks}} =
+               Configuration.preview(c.scope, c.mid, {:ops, [op]})
+
+      assert %{items: [%{errors: [%{message: message, details: details}]}]} =
+               Enum.find(checks, &(&1.key == "validation"))
+
+      assert %{composition_number: n, catalog_revision_id: nil} = details
+      assert is_integer(n)
+
+      assert message ==
+               "Composition #{n} isn't approved yet; an org admin approves it in Setup › Catalog first"
+    end
+
     test "a composition that doesn't exist in the mission", c do
       profile = profile!(c, c.rev1.catalog_revision_id)
 
@@ -234,6 +259,11 @@ defmodule Cadence.Configuration.CompositionPinsTest do
       Compositions.for_revision(org, mid, catalog.mission_model_revision_id)
 
     id
+  end
+
+  defp layers!(c, composition_id) do
+    {:ok, %{imported_layers: layers}} = Compositions.fetch(c.org, c.mid, composition_id)
+    layers
   end
 
   defp rev2_yaml do

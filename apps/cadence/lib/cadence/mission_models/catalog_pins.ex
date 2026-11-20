@@ -8,7 +8,15 @@ defmodule Cadence.MissionModels.CatalogPins do
   import Ecto.Query
 
   alias Cadence.Catalog.RevisionRow, as: CatalogRevisionRow
-  alias Cadence.MissionModels.{CompositionLayerRow, CompositionRow, Compositions, LayerRow}
+
+  alias Cadence.MissionModels.{
+    CompositionLayerRow,
+    CompositionNumberRow,
+    CompositionRow,
+    Compositions,
+    LayerRow
+  }
+
   alias Cadence.MissionModels.RevisionLayerRow
   alias Cadence.Repo
 
@@ -60,6 +68,18 @@ defmodule Cadence.MissionModels.CatalogPins do
         catalog.catalog_revision_id == ^catalog_revision_id and
           catalog.organization_id == ^organization_id and catalog.mission_id == ^mission_id,
       select: catalog.revision_number
+    )
+    |> Repo.one()
+  end
+
+  @doc "A composition's per-mission display number (D2, #543), or nil. Display only, never a key."
+  @spec composition_number(binary(), binary(), binary()) :: pos_integer() | nil
+  def composition_number(organization_id, mission_id, composition_id) do
+    from(number in CompositionNumberRow,
+      where:
+        number.organization_id == ^organization_id and number.mission_id == ^mission_id and
+          number.composition_id == ^composition_id,
+      select: number.number
     )
     |> Repo.one()
   end
