@@ -301,8 +301,8 @@ defmodule CadenceWeb.Console.ConfigJSON do
 
   defp approve_next(:mission_model_revision_not_approved, why) do
     case Regex.run(~r/^(.+) isn't approved yet$/, why) do
-      # No number known: "a catalog revision" (mms-ux).
-      [_, "a " <> _] -> "Approve it again once it's approved."
+      # No number known: "a catalog revision" (mms-ux, ca-ux).
+      [_, "a " <> _] -> "Approve it again once that catalog revision is approved."
       [_, label] -> "Approve it again once #{label} is approved."
       nil -> "Approve it again once they're approved."
     end

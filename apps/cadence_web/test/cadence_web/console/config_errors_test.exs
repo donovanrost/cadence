@@ -124,7 +124,7 @@ defmodule CadenceWeb.Console.ConfigErrorsTest do
 
     assert approve.({:mission_model_revision_not_approved, ["model_1"]}) ==
              "Not approved: a catalog revision isn't approved yet" <>
-               tail <> "Approve it again once it's approved."
+               tail <> "Approve it again once that catalog revision is approved."
 
     assert approve.({:mission_model_revision_not_approved, ["model_1", "model_2"]}) ==
              "Not approved: 2 catalog revisions aren't approved yet" <>
