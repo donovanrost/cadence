@@ -4514,14 +4514,14 @@ agreed with ux 11-20.
   - **The command hold** (ca-security; Compose and the decide panel name a HOLD by its check, U60). Its check key is
     `composition_not_approved` **[api to confirm on #546]**, and its label is `Composition`, mapped by key, never by
     text. So: "Acknowledge the Composition HOLD", and in the log "Acknowledged the Composition HOLD on EARENDIL-004".
-    - One target: "EARENDIL-004 is on composition 3, whose approval Ana R. withdrew at 11-20 09:12Z. Acknowledge it to
-      send commands to it anyway." Rejected: "…composition 3, which Ana R. rejected at 11-20 09:12Z. …". No name:
+    - One target: "EARENDIL-004 is on composition 3, whose approval Ana R. withdrew at 11-20 09:12Z. Acknowledge the HOLD to
+      send commands to EARENDIL-004 anyway." Rejected: "…composition 3, which Ana R. rejected at 11-20 09:12Z. …". No name:
       "…composition 3, whose approval was withdrawn at 11-20 09:12Z. …".
     - Several targets (a group): "3 of the 12 targets are on a composition that's no longer approved: EARENDIL-004,
-      EARENDIL-007 and EARENDIL-011. Acknowledge it to send commands to them anyway." Up to 3 names, then "and N
+      EARENDIL-007 and EARENDIL-011. Acknowledge the HOLD to send commands to them anyway." Up to 3 names, then "and N
       more".
     - Acknowledging clears only this HOLD; GO, the other checks and the pass still decide (U20), so the line
-      promises nothing more. Placeholder: "Why it's safe to command it". The reviewer's side needs nothing new
+      promises nothing more. Placeholder: "Why it's safe to command it" (several targets: "…command them"). The reviewer's side needs nothing new
       (DecisionPanel's line for a HOLD the author's notes don't cover).
   - Note for builders, not screen text: telemetry keeps flowing and the craft stays on its composition, so no
     screen says either stopped.
