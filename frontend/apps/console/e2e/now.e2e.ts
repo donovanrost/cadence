@@ -31,10 +31,13 @@ const nothingYet: Degradation = {
 };
 
 function statTile(page: Page, label: string): Locator {
-  return page
-    .getByRole("region", { name: "Fleet status" })
-    .locator(":scope > div")
-    .filter({ has: page.getByText(label, { exact: true }) });
+  return (
+    page
+      .getByRole("region", { name: "Fleet status" })
+      // A tile is a link to the list behind its number since b2792cd90, so any direct child.
+      .locator(":scope > *")
+      .filter({ has: page.getByText(label, { exact: true }) })
+  );
 }
 
 function queue(page: Page): Locator {

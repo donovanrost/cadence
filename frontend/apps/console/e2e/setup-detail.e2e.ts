@@ -8,7 +8,8 @@ test.describe("Setup spacecraft detail", () => {
   test("opens from the directory with real identity, readiness and routing", async ({ page }) => {
     await openConsole(page, missionPath("setup/spacecraft"));
     await page.getByRole("link", { name: "EARENDIL-001", exact: true }).click();
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("EARENDIL-001");
+    // The heading names the SCID too ("EARENDIL-001 · SCID 1").
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(/^EARENDIL-001\b/);
     await expect(page.getByText("Ready", { exact: true }).first()).toBeVisible();
 
     await expect(page.getByText("SCID 1", { exact: true })).toBeVisible();
@@ -22,8 +23,8 @@ test.describe("Setup spacecraft detail", () => {
     );
     await expect(rows.filter({ hasText: /TT&C uplink/i })).toHaveCount(1);
 
-    // Decision 1: no mission revision numbers until change sets exist.
-    await expect(page.getByText(/configuration arrives with change sets/i)).toBeVisible();
+    // Decision 1's placeholder ("configuration arrives with change sets") is gone now that change
+    // sets exist; the routing rows above are what the detail reads (#624 triage).
     await expectAccessible(page);
   });
 

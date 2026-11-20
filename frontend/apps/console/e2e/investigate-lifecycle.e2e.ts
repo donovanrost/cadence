@@ -72,7 +72,8 @@ test.describe("Alarm lifecycle on Investigate (decision 6)", () => {
       server.failNext(409, "episode_cleared");
       await openConsole(page, screen);
       await page.getByRole("button", { name: "Acknowledge" }).click();
-      await expect(page.getByRole("status").filter({ hasText: /Nothing changed:/ })).toBeVisible();
+      // A refused act is an alert (a11y B6, #601).
+      await expect(page.getByRole("alert").filter({ hasText: /Nothing changed:/ })).toBeVisible();
       await expect(page.getByRole("button", { name: "Acknowledge" })).toBeVisible();
     });
 
