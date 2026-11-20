@@ -3418,11 +3418,15 @@ are api's, switched on with `knownErrorCode`.
   `approval_setting` in the read, the console offers `Request approval` to everyone and never guesses.
 - **Approve refusals:**
   - 403 `contact_plan_self_approval_forbidden`, `because: "submitted"`: "Not approved: you submitted this plan, so
-    another org admin approves it. Your approval wasn't recorded and nothing was booked." `because: "edited"` (api: the
-    author of the version being approved, so the drafter): "Not approved: you drafted this version of the plan, so
-    another org admin approves it. Your approval wasn't recorded and nothing was booked." Then Approve is disabled
-    (A6) with the sentence without "Not approved:" and the ending, muted; Send back stays. (No authors-unknown case
-    for plans: the plan and version rows always carry their actor.)
+    another org admin approves it. Your approval wasn't recorded and nothing was booked." `because: "edited"` (api: an author of
+    any version since the plan was last approved, the one being approved included, #277): "Not approved: you drafted a
+    version of this plan since it was last approved, so another org admin approves it. Your approval wasn't recorded
+    and nothing was booked." (It used to say "this version", untrue for an earlier version's author.) Then Approve is
+    disabled (A6) with the sentence without "Not approved:" and the ending, muted; Send back stays.
+  - 403 `contact_plan_approver_authors_unknown` (#277: a version since the last approval has no recorded author, so
+    separation can't be checked; it fails closed): U100's lines. `details.service` null: "Not approved: Cadence can't
+    tell who made this plan, so it can't check that you weren't one of them. Your approval wasn't recorded. Send it
+    back so it can be submitted again; if it keeps happening, tell the team that runs Cadence for you."
   - 403 `forbidden`: "Not approved: only an org admin approves contact plans. Your approval wasn't recorded."
   - 409 `plan_not_pending` (`state`; `decided_by` and `decided_at` together or neither): "R41 was already approved by
     Ana R. at 03:46Z, so your approval wasn't recorded. Reload to see it." / "…already sent back by Ana R. at
@@ -3566,7 +3570,8 @@ groups, provider changes, qualification cases (no service authors them).
   - `{id, name}` (a service whose accountable people aren't recorded; under an automation grant it can be the approving
     service): "Not approved: Nightly planner has no one recorded as accountable for it, so this can't be approved yet.
     An org admin records who's accountable in People › Service identities. Your approval wasn't recorded." With a
-    null `name`: "the service identity that imported this revision" (submitted this plan, sent this command request;
+    null `name`: "the service identity that imported this revision" (plans, since #277: "a service identity involved
+    in this plan", as activations below, since the service may be an earlier version's author; sent this command request;
     the approving one under a grant: "the service identity approving for this automation") in its place, never an
     id (U25; the id goes in Technical details).
     - **Activations say "a service identity involved in this request"** (api's #453 question, from mms-security's
