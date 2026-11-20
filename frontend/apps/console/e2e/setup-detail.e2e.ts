@@ -23,8 +23,12 @@ test.describe("Setup spacecraft detail", () => {
     );
     await expect(rows.filter({ hasText: /TT&C uplink/i })).toHaveCount(1);
 
-    // Decision 1's placeholder ("configuration arrives with change sets") is gone now that change
-    // sets exist; the routing rows above are what the detail reads (#624 triage).
+    // Decision 1's placeholder left the detail in 02caace33; the craft's configuration has its own
+    // screen, linked from the header (fe-setup on #624).
+    await expect(page.getByRole("link", { name: "Configuration", exact: true })).toHaveAttribute(
+      "href",
+      /\/setup\/spacecraft\/spacecraft-earendil-001\/configuration$/,
+    );
     await expectAccessible(page);
   });
 
