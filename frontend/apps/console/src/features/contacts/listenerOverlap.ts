@@ -68,7 +68,8 @@ function others(o: ListenerOverlap): string {
 
 /**
  * The seconds' words, in one place (#640: `seconds` can be null when neither pass has an end).
- * Until ux words that case in U58 (b), the sentence drops the number: "may lose its start".
+ * U58 (b) as #649 words it: the sentence drops the number ("may lose its start"), and the earlier
+ * pass's several-note drops "the longest overlap is …".
  */
 const by = (seconds: number | null) => (seconds === null ? "" : ` by ${overlapDuration(seconds)}`);
 const loseStart = (seconds: number | null) =>

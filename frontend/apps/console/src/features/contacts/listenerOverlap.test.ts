@@ -88,7 +88,7 @@ describe("listener overlap words (U58 (b))", () => {
     expect(said({ seconds: 100 })?.text).toContain("may lose up to 1 m 40 s of its start");
   });
 
-  it("open-ended (seconds null, #640): the sentence drops the number until ux words it", () => {
+  it("open-ended (seconds null, #640): U58 (b) as #649 words it, without a number", () => {
     expect(said({ seconds: null })?.text).toBe(
       "Overlaps EARENDIL-006's SNTG 00:05Z pass. Santiago's listener takes one connection at a time, so this pass may lose its start.",
     );
@@ -97,6 +97,9 @@ describe("listener overlap words (U58 (b))", () => {
     );
     expect(said({ seconds: null, loses: "other" })?.text).toBe(
       "EARENDIL-006's SNTG 00:05Z pass overlaps this one and may lose its start.",
+    );
+    expect(said({ seconds: null, count: 3 })?.text).toBe(
+      "Overlaps EARENDIL-006's SNTG 00:05Z pass and 2 other passes. Santiago's listener takes one connection at a time, so this pass may lose its start.",
     );
     expect(said({ seconds: null, loses: "other", count: 3 })?.text).toBe(
       "EARENDIL-006's SNTG 00:05Z pass and 2 other passes overlap this one.",
