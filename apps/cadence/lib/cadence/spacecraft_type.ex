@@ -35,6 +35,7 @@ defmodule Cadence.SpacecraftType do
           packet_protocol: packet_protocol(),
           frame_parameters: map(),
           catalog_revision_id: binary() | nil,
+          composition_id: binary() | nil,
           handled_apids: [non_neg_integer()] | nil,
           routing_rules: [map()],
           applications: %{application_key() => map()},
@@ -53,6 +54,8 @@ defmodule Cadence.SpacecraftType do
     :packet_protocol,
     frame_parameters: %{},
     catalog_revision_id: nil,
+    # D3 (#544): the mission composition this profile pins; catalog_revision_id is provenance.
+    composition_id: nil,
     # L22: nil = all of the catalog's APIDs.
     handled_apids: nil,
     routing_rules: [],
@@ -109,6 +112,7 @@ defmodule Cadence.SpacecraftType do
         normalize_applications(Map.get(attrs, :applications, Map.get(attrs, "applications", %{}))),
       catalog_revision_id:
         Map.get(attrs, :catalog_revision_id, Map.get(attrs, "catalog_revision_id")),
+      composition_id: Map.get(attrs, :composition_id, Map.get(attrs, "composition_id")),
       handled_apids: Map.get(attrs, :handled_apids, Map.get(attrs, "handled_apids")),
       routing_rules:
         attrs
