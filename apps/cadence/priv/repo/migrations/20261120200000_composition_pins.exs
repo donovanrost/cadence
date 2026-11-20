@@ -14,12 +14,23 @@ defmodule Cadence.Repo.Migrations.CompositionPins do
       add(:composition_id, :string)
     end
 
+    # What the submit's preview selected per pinned composition (%{composition_id => revision_id
+    # or the reason none is selectable}); the apply selects again under the activation lock and
+    # refuses restage_needed on any difference.
+    alter table(:mission_config_change_sets) do
+      add(:selections, :map)
+    end
+
     flush()
     PinBackfill.run(repo())
   end
 
   def down do
     execute("DELETE FROM spacecraft_config_overrides WHERE path = 'composition_id'")
+
+    alter table(:mission_config_change_sets) do
+      remove(:selections)
+    end
 
     alter table(:mission_spacecraft_types) do
       remove(:composition_id)

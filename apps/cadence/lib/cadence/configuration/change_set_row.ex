@@ -20,6 +20,8 @@ defmodule Cadence.Configuration.ChangeSetRow do
     field(:reason, :string)
     field(:policy_document, :map)
     field(:failure_document, :map)
+    # D3 (#544): what the submit selected, %{composition_id => revision_id | reason}.
+    field(:selections, :map)
     field(:applied_revision_number, :integer)
     field(:closed_at, :utc_datetime_usec)
     timestamps(type: :utc_datetime_usec)

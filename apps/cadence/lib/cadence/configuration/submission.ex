@@ -141,21 +141,30 @@ defmodule Cadence.Configuration.Submission do
     end
   end
 
-  defp submit_locked(set, actor, reason, %{"approval_required" => true} = policy, _preview, _rev) do
+  # D3 (#544): the submit records what its preview selected per pinned composition; the apply,
+  # now or after review, selects again under the activation lock and refuses restage_needed.
+  defp submit_locked(set, actor, reason, %{"approval_required" => true} = policy, preview, _rev) do
     set =
       ChangeSetStore.update_set(set,
         state: "in_review",
         submitted_by: actor,
         submitted_at: DateTime.utc_now(),
         reason: reason,
-        policy_document: policy
+        policy_document: policy,
+        selections: Map.get(preview, :selections, %{})
       )
 
     %{state: :in_review, change_set_id: set.change_set_id, version: set.version}
   end
 
-  defp submit_locked(set, actor, reason, policy, _preview, revision_id) do
-    set = %{set | submitted_by: actor, reason: reason}
+  defp submit_locked(set, actor, reason, policy, preview, revision_id) do
+    set = %{
+      set
+      | submitted_by: actor,
+        reason: reason,
+        selections: Map.get(preview, :selections, %{})
+    }
+
     execute_locked(set, actor, reason, policy, [], revision_id)
   end
 
