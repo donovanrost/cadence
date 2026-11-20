@@ -5,6 +5,7 @@ import { canAdministerOrganization, useConsoleScope, useSession } from "@/shell"
 import { ApButton, ApCallout, ApPanel, ApTag, formatShort } from "@/ui";
 import MissionSettingsSection from "./MissionSettingsSection.vue";
 import SettingsValues from "./SettingsValues.vue";
+import SuspendGrantsCallout from "./SuspendGrantsCallout.vue";
 import {
   initialValues,
   sectionTag,
@@ -33,7 +34,7 @@ watch(
   },
   { immediate: true },
 );
-const { busy, note, save } = useSectionSave(
+const { busy, note, pending, save, confirmSuspension, cancelSuspension } = useSectionSave(
   () => props.scope,
   () => props.section,
   () => emit("saved"),
@@ -111,8 +112,15 @@ function submit() {
         :errors="errors"
         :disabled-values="disabledValues(section.fields)"
       />
-      <ApCallout v-if="note" :tone="note.tone">{{ note.text }}</ApCallout>
-      <div class="flex flex-wrap gap-2">
+      <SuspendGrantsCallout
+        v-if="pending"
+        :pending="pending"
+        :busy="busy"
+        @confirm="confirmSuspension"
+        @cancel="cancelSuspension"
+      />
+      <ApCallout v-else-if="note" :tone="note.tone">{{ note.text }}</ApCallout>
+      <div v-if="!pending" class="flex flex-wrap gap-2">
         <ApButton variant="primary" :disabled="busy" disabled-reason="Saving…" @click="submit"
           >Save</ApButton
         >
