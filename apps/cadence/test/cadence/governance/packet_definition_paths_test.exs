@@ -18,10 +18,16 @@ defmodule Cadence.Governance.PacketDefinitionPathsTest do
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Control.{Configuration, ConfigurationRollback}
   alias Cadence.Governance
-  alias Cadence.Governance.{GovernedPacketDefinitionRow, PacketDefinitionFieldRow}
-  alias Cadence.Governance.ActivationPolicy
+
+  alias Cadence.Governance.{
+    ActivationPolicy,
+    GovernedPacketDefinitionRow,
+    PacketDefinitionFieldRow
+  }
+
   alias Cadence.Management.Activations
   alias Cadence.Runtime.MissionRuntimeSpec
+  alias Cadence.Telemetry.PacketDefinition
 
   setup do
     org = "org-pd-paths-#{System.unique_integer([:positive])}"
@@ -161,7 +167,7 @@ defmodule Cadence.Governance.PacketDefinitionPathsTest do
   end
 
   defp rival(c, packet_definition_id, version) do
-    Cadence.Telemetry.PacketDefinition.new(%{
+    PacketDefinition.new(%{
       organization_id: c.org,
       mission_id: c.mission.mission_id,
       packet_definition_id: packet_definition_id,
