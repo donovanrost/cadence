@@ -426,6 +426,171 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # #242: the console's Playwright specs (e2e and a11y) against a real stack, one per shard.
+  # Non-blocking: not in ci-ok during its probation week; the director decides when it joins.
+  # Each shard boots its own Postgres, QuestDB, simulator and Phoenix and seeds them (devops on
+  # #242: the simulator keeps its own reservations, so a restored dump wouldn't match it).
+  # Credentials (lead, director): each shard makes its own random passwords, masked, kept in this
+  # job's env only; nothing passes between jobs and nothing is stored. Sign-in goes through the API
+  # (no typed password in a trace), and a leak check gates every upload.
+  console-e2e:
+    name: Console e2e (${{ matrix.shard }}/4)
+    needs: [changes, browser-assets]
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --tmpfs /var/lib/postgresql/data:rw
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      questdb:
+        image: questdb/questdb:9.4.3
+        ports:
+          - 9000:9000
+          - 8812:8812
+          - 9009:9009
+    env:
+      MIX_ENV: dev
+      CADENCE_DEV_DATABASE: cadence_e2e
+      CADENCE_QUESTDB_HTTP_ENDPOINT: http://127.0.0.1:9000
+      CADENCE_QUESTDB_HOST: 127.0.0.1
+      CADENCE_QUESTDB_PORT: "8812"
+      EARENDIL_SIMULATOR_PORT: "4111"
+      EARENDIL_PROVIDER_URL: http://127.0.0.1:4111
+      # The public demo token (mise.toml), not a secret.
+      EARENDIL_DEMO_PROVIDER_TOKEN: earendil-local-provider
+      OTEL_EXPORTER_OTLP_ENDPOINT: ""
+      # Serve the built console from priv/static/console (browser-assets), not a Vite dev server.
+      CONSOLE_VITE_ORIGIN: ""
+      PORT: "4402"
+      CADENCE_ADMIN_EMAIL: ci-admin@example.invalid
+      CADENCE_ADMIN_DISPLAY_NAME: CI Administrator
+      BASE_URL: http://127.0.0.1:4402
+      E2E_WORKERS: "2"
+      CI: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Allow Chrome's sandbox to create user namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Tune Postgres for throwaway test data
+        run: scripts/ci/tune_postgres.sh
+      - uses: ./.github/actions/setup-cadence
+      - name: Restore npm cache (LiveView assets)
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.npm
+          key: npm-v1-${{ runner.os }}-${{ hashFiles('apps/cadence_web/package-lock.json') }}
+          restore-keys: npm-v1-${{ runner.os }}-
+      - run: npm ci --prefer-offline --no-audit --no-fund
+        working-directory: apps/cadence_web
+      - name: Download the browser assets (with the built console)
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: browser-assets
+          path: apps/cadence_web/priv/static
+      - run: corepack pnpm exec playwright install --with-deps chromium chrome
+        working-directory: frontend
+      - name: Compile the app and the simulator (MIX_ENV=dev)
+        run: |
+          (cd apps/cadence_web && mix compile)
+          (cd apps/cadence_simulator && mix compile)
+      - name: Create and migrate the database and QuestDB
+        working-directory: apps/cadence_web
+        run: mix ecto.create -r Cadence.Repo && mix ecto.migrate -r Cadence.Repo && mix cadence.questdb.migrate
+      - name: Start the simulator
+        working-directory: apps/cadence_simulator
+        run: |
+          rm -rf ../../var/reflect_orbital
+          (mix run --no-start --no-halt ../../dev/reflect_orbital_simulator.exs > "$RUNNER_TEMP/simulator.log" 2>&1 &)
+          curl --retry-connrefused --retry 60 --retry-delay 1 -s -o /dev/null http://127.0.0.1:4111/
+      # Lead and the director: made here, masked, and kept in this job's env only.
+      - name: Make this shard's passwords
+        run: |
+          set +x
+          admin=$(openssl rand -base64 30 | tr -d '/+=')
+          persona=$(openssl rand -base64 30 | tr -d '/+=')
+          echo "::add-mask::$admin"
+          echo "::add-mask::$persona"
+          echo "CADENCE_ADMIN_PASSWORD=$admin" >> "$GITHUB_ENV"
+          echo "E2E_PERSONA_PASSWORD=$persona" >> "$GITHUB_ENV"
+      # Boot creates or updates the environment admin from CADENCE_ADMIN_EMAIL and _PASSWORD.
+      - name: Start Phoenix
+        working-directory: apps/cadence_web
+        run: |
+          (mix phx.server > "$RUNNER_TEMP/server.log" 2>&1 &)
+          curl --retry-connrefused --retry 120 --retry-delay 1 -fsS -o /dev/null http://127.0.0.1:4402/sign-in
+          curl -fsS -o /dev/null http://127.0.0.1:4402/console/
+      # Never reflect_orbital_activate.exs (director 11-18); E2E_MUTATE stays unset.
+      - name: Seed the demo, the QA personas and planning (timed)
+        working-directory: apps/cadence_web
+        run: |
+          for script in reflect_orbital_demo apogee_qa_personas reflect_orbital_planning; do
+            start=$SECONDS
+            mix run --no-start "../../dev/$script.exs"
+            echo "seed $script: $((SECONDS - start)) s"
+          done
+      - name: Console specs (this shard)
+        id: specs
+        working-directory: frontend/apps/console
+        run: >-
+          corepack pnpm exec playwright test --shard=${{ matrix.shard }}/4
+          --project=desktop --project=a11y-desktop-admin --project=a11y-desktop-member
+          --project=a11y-phone-admin --project=a11y-phone-member
+      # ci-handoff.md §1: the specs that stage a change set run alone, on one shard.
+      - name: Console specs that stage a change set (serial)
+        if: ${{ !cancelled() && matrix.shard == 1 }}
+        working-directory: frontend/apps/console
+        run: corepack pnpm exec playwright test --project=desktop-serial --workers=1
+      - name: No password in any file to upload
+        id: leakcheck
+        if: ${{ !cancelled() }}
+        run: |
+          set +x
+          scan="$RUNNER_TEMP/leakscan"
+          mkdir -p "$scan"
+          cd frontend/apps/console
+          # Traces are zips: unpack them so their JSON and network logs are scanned too.
+          find playwright-report test-results -name '*.zip' -print0 2>/dev/null |
+            while IFS= read -r -d '' z; do unzip -qo "$z" -d "$scan/$(basename "$z" .zip)-$RANDOM"; done
+          for secret in "$CADENCE_ADMIN_PASSWORD" "$E2E_PERSONA_PASSWORD"; do
+            if grep -r -a -F -q -- "$secret" playwright-report test-results "$scan" "$RUNNER_TEMP/server.log" "$RUNNER_TEMP/simulator.log" 2>/dev/null; then
+              echo "::error title=credential leak::a run password appears in a file to be uploaded; upload blocked (file and match not printed)"
+              exit 1
+            fi
+          done
+          echo "leak check: no run password in any file to be uploaded"
+      # ux (#242): the report and its screenshots on every run, for word review from the artifact.
+      # Every path here must be in the leak check's list above.
+      - name: Upload the Playwright report, results and stack logs
+        if: ${{ !cancelled() && steps.leakcheck.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: console-e2e-${{ matrix.shard }}
+          path: |
+            frontend/apps/console/playwright-report
+            frontend/apps/console/test-results
+            ${{ runner.temp }}/server.log
+            ${{ runner.temp }}/simulator.log
+          if-no-files-found: ignore
+          retention-days: 7
+
   test-packages:
     name: Packages, simulator, planes and cluster tests
     needs: changes
