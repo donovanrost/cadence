@@ -1,4 +1,5 @@
 import { decoders as d, type Decoded } from "@/api";
+import { formatCount } from "@/ui";
 
 /**
  * #522 (ca-engineer; ca-ux's K3 words, Changes.md K3): what applying the staged set does, from the
@@ -29,9 +30,9 @@ export type Outcome = NonNullable<Decoded<typeof outcomeReader>>;
 
 /** The Routes tile: added − removed ("+300", "−50", "0"), or both when both ("+300 −50"). */
 export function routesDelta(r: NonNullable<Outcome["routes"]>): string {
-  if (r.added > 0 && r.removed > 0) return `+${r.added} −${r.removed}`;
+  if (r.added > 0 && r.removed > 0) return `+${formatCount(r.added)} −${formatCount(r.removed)}`;
   const net = r.added - r.removed;
-  return net > 0 ? `+${net}` : net < 0 ? `−${-net}` : "0";
+  return net > 0 ? `+${formatCount(net)}` : net < 0 ? `−${formatCount(-net)}` : "0";
 }
 
 const severityWords = [
@@ -68,10 +69,15 @@ type Author = Readonly<{ kind: unknown; id: string | null; name: string | null }
 export function authorsLine(authors: readonly Author[], viewerId: string | null): string {
   if (authors.length === 0) return "";
   const isViewer = (a: Author) => viewerId !== null && a.id === viewerId;
+  // A nameless service is still named as one (U25's sentence form, ca-ux on #578), so "people"
+  // only ever counts people.
   const named = authors.flatMap((a) => {
     if (isViewer(a)) return [];
-    if (!a.name) return [];
-    return [a.kind === "service" ? `${a.name} (a service identity)` : a.name];
+    if (a.kind === "service")
+      return [a.name ? `${a.name} (a service identity)` : "a service identity"];
+    // The system actor reads "Cadence" (U103), never a nameless person (mms-ux on #578).
+    if (a.kind === "system") return [a.name ?? "Cadence"];
+    return a.name ? [a.name] : [];
   });
   const names = [...(authors.some(isViewer) ? ["you"] : []), ...named];
   if (names.length === 0)

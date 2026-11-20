@@ -5,8 +5,8 @@ import type { Actor } from "@/api";
 import { authorsLine, readinessAfterLine, routesDelta, type Outcome } from "./outcome.ts";
 
 /**
- * K3's tiles (Changes.md K3; ca-ux's words for #522): Changes · SC · Routes, then the readiness
- * line. SC is the fleet after applying; Routes is added − removed. Without an outcome (not computed
+ * K3's tiles (Changes.md K3; ca-ux's words for #522): Changes · Spacecraft · Routes (never "SC",
+ * U102), then the readiness line. Spacecraft is the fleet after applying; Routes is added − removed. Without an outcome (not computed
  * yet, or the server can't), the Changes tile alone.
  */
 const props = defineProps<{
@@ -20,7 +20,7 @@ const tiles = computed(() => {
   const o = props.outcome;
   return [
     { label: "Changes", value: formatCount(props.staged) },
-    ...(o?.spacecraft ? [{ label: "SC", value: formatCount(o.spacecraft.after) }] : []),
+    ...(o?.spacecraft ? [{ label: "Spacecraft", value: formatCount(o.spacecraft.after) }] : []),
     ...(o?.routes ? [{ label: "Routes", value: routesDelta(o.routes) }] : []),
   ];
 });

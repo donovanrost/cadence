@@ -38,6 +38,7 @@ describe("K3's outcome words", () => {
     expect(r(0, 50)).toBe("−50");
     expect(r(0, 0)).toBe("0");
     expect(r(300, 50)).toBe("+300 −50");
+    expect(r(1200, 0)).toBe("+1,200");
   });
 
   it("words readiness after: blockers always, the rest only when nonzero now or after", () => {
@@ -75,6 +76,12 @@ describe("K9's Authors line", () => {
     );
     expect(authorsLine([person("u4", null), person("u5", null)], null)).toBe("Staged by 2 people");
     expect(authorsLine([person("u4", null)], null)).toBe("Staged by 1 person");
+    // The system actor is Cadence, never "1 person" (U103, mms-ux on #578).
+    expect(authorsLine([{ kind: "system", id: null, name: null }], null)).toBe("Staged by Cadence");
+    // A nameless service is named as one, never counted among people (ca-ux on #578).
+    expect(authorsLine([person("u4", null), { kind: "service", id: "s9", name: null }], null)).toBe(
+      "Staged by a service identity and 1 more",
+    );
     expect(authorsLine([], null)).toBe("");
   });
 });
@@ -85,7 +92,8 @@ describe("ApplyTiles", () => {
       props: { staged: 3, outcome: read(OUTCOME), authors: [], viewerId: null },
     });
     expect(w.text()).toContain("Changes");
-    expect(w.text()).toContain("SC");
+    expect(w.text()).toContain("Spacecraft");
+    expect(w.text()).not.toContain("SC");
     expect(w.text()).toContain("549");
     expect(w.text()).toContain("+300");
     expect(w.find("[data-readiness-after]").exists()).toBe(true);
@@ -95,7 +103,7 @@ describe("ApplyTiles", () => {
     const w = mount(ApplyTiles, {
       props: { staged: 3, outcome: null, authors: [], viewerId: null },
     });
-    expect(w.text()).not.toContain("SC");
+    expect(w.text()).not.toContain("Spacecraft");
     expect(w.text()).not.toContain("Routes");
     expect(w.find("[data-readiness-after]").exists()).toBe(false);
   });
