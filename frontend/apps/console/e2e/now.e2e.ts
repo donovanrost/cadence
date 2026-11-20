@@ -168,6 +168,21 @@ test.describe("Now (J1)", () => {
       await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
       await expect(page.getByText(/need you|nominal/i)).toHaveCount(0);
     });
+
+    // #646 (a11y B6, #603): a first load's failure is read politely; after the person's Retry
+    // fails too, it's an alert.
+    test("a failed first load is polite; a failed Retry is an alert", async ({ page }) => {
+      await page.route(missionApi("fleet"), (route) =>
+        route.fulfill(jsonProblem(500, "internal_error")),
+      );
+      await openConsole(page, screen);
+      const retry = page.getByRole("button", { name: "Retry" });
+      const roleOfFailure = () => retry.locator("xpath=ancestor::*[@role][1]").getAttribute("role");
+      await expect(retry).toBeVisible();
+      expect(await roleOfFailure()).toBe("status");
+      await retry.click();
+      await expect.poll(roleOfFailure).toBe("alert");
+    });
   });
 
   test.describe("phone width", () => {

@@ -52,6 +52,15 @@ test.describe("outcomes helper self-test", () => {
     ).rejects.toThrow(/is not shown/);
   });
 
+  test("the fallback is found when a hidden picker option says it first (#652)", async ({
+    page,
+  }) => {
+    await page.setContent(
+      `<main><select><option>Spacecraft</option><option>${WORDS.unknownSpacecraft} · SCID 9 (1)</option></select><table><tr><td>${WORDS.unknownSpacecraft}</td></tr></table></main>`,
+    );
+    await expectNameFallback(page, "spacecraft-qa-9");
+  });
+
   test("a raw id in an aria-label outside Technical details fails; inside, it passes", async ({
     page,
   }) => {

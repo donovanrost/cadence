@@ -123,7 +123,10 @@ export async function expectNoFalseSuccess(
  * Technical details disclosure: not in the text, nor in an aria-* or title attribute, elsewhere.
  */
 export async function expectNameFallback(page: Page, rawId: string): Promise<void> {
-  await expect(page.getByText(WORDS.unknownSpacecraft).first()).toBeVisible();
+  // A visible one: the same words can also sit in a hidden <option> of a closed picker (#652).
+  await expect(
+    page.getByText(WORDS.unknownSpacecraft).filter({ visible: true }).first(),
+  ).toBeVisible();
   const leaks = await page.locator("body").evaluate((body, id) => {
     const copy = body.cloneNode(true) as HTMLElement;
     // Not shown to anyone: scripts, styles and templates can carry ids that are never read.
