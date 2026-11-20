@@ -705,7 +705,8 @@ defmodule Cadence.Catalog do
         case ImportExecution.persist(
                run.organization_id,
                run.import_run_id,
-               import_result
+               import_result,
+               run.requested_by || %{}
              ) do
           {:ok, outcome} ->
             completed_run =
