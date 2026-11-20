@@ -1,4 +1,4 @@
-import { mount } from "@vue/test-utils";
+import { mount, type DOMWrapper } from "@vue/test-utils";
 import { describe, expect, it } from "vite-plus/test";
 import ApRemote from "./ApRemote.vue";
 import type { RemoteState } from "./remote-state.ts";
@@ -11,7 +11,7 @@ const failed: RemoteState<string> = {
 const ready: RemoteState<string> = { status: "ready", value: "x", receivedAt: new Date(0) };
 
 describe("ApRemote's failure role", () => {
-  const roleOf = (w: ReturnType<typeof mount>) =>
+  const roleOf = (w: { findAll(selector: string): DOMWrapper<Element>[] }) =>
     w
       .findAll("[role]")
       .find((e) => e.text().includes("Retry"))

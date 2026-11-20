@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { linkByName, type ParamlessRouteName } from "@/shell";
-import { computed } from "vue";
+import { computed, onBeforeUnmount, watch } from "vue";
 import { describeApiError, isKeyOf } from "@/api";
 import { ApCallout, ApPanel, ApStatusMark, formatCount, formatRelative, useNow } from "@/ui";
 import { runPhases, runPhaseText } from "./api.ts";
+import { planActRole, settlePlanAct } from "./plan-acts.ts";
 import type { PlanView } from "./plan-state.ts";
 
 /**
@@ -12,11 +13,19 @@ import type { PlanView } from "./plan-state.ts";
  */
 const props = defineProps<{ view: Exclude<PlanView, { kind: "plan" }> }>();
 /**
- * a11y B6 (#276, ux): a failure that appears while the person watches (a draft run they started
- * ending, a day they moved to not loading) is an alert; one the screen opened on is read politely.
+ * a11y B6 (#276, ux): a failure after the person's own act (Draft, Resume, Propose, a day change:
+ * plan-acts.ts) is an alert; on first load or a background refetch it's read politely.
  */
-const openedOn = props.view.kind;
-const failureRole = computed(() => (props.view.kind === openedOn ? "status" : "alert"));
+const failureRole = planActRole;
+const UNSETTLED: readonly string[] = ["loading", "drafting", "failed", "draft_failed"];
+watch(
+  () => props.view.kind,
+  (kind) => {
+    if (!UNSETTLED.includes(kind)) settlePlanAct();
+  },
+  { immediate: true },
+);
+onBeforeUnmount(settlePlanAct);
 const now = useNow();
 const PHASES = runPhases;
 /** Setup gaps the console words (rule A); another gap reads as its key in words. */

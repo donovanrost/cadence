@@ -1,4 +1,5 @@
 import type { MissionId } from "@/api/index.ts";
+import { markPlanAct } from "./plan-acts.ts";
 import { computed, ref, shallowRef, watch, type Ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { decoders as d, isError, useRemoteQuery, type ApiError } from "@/api";
@@ -129,6 +130,7 @@ export function usePlanDay(
   });
 
   async function draftDay() {
+    markPlanAct();
     busy.value = true;
     actionError.value = null;
     try {
@@ -157,6 +159,7 @@ export function usePlanDay(
 
   async function resume() {
     if (!runId.value) return;
+    markPlanAct();
     busy.value = true;
     actionError.value = null;
     try {
