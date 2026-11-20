@@ -7,4 +7,5 @@ export { default as ApRemote } from "./api/ApRemote.vue";
 export { useInPlaceSwap } from "./in-place-swap.ts";
 export { focusAfterRemove } from "./list-focus.ts";
 export { default as OutcomeCallout } from "./OutcomeCallout.vue";
-export { outcomeRole } from "./outcome-role.ts";
+export { outcomeRole, type OutcomeTone } from "./outcome-role.ts";
+export { useActed } from "./acted.ts";

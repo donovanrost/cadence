@@ -11,6 +11,12 @@ import type { PlanView } from "./plan-state.ts";
  * so its ticking elapsed is aria-hidden (a11y B4); the current phase is aria-current and underlined (B2).
  */
 const props = defineProps<{ view: Exclude<PlanView, { kind: "plan" }> }>();
+/**
+ * a11y B6 (#276, ux): a failure that appears while the person watches (a draft run they started
+ * ending, a day they moved to not loading) is an alert; one the screen opened on is read politely.
+ */
+const openedOn = props.view.kind;
+const failureRole = computed(() => (props.view.kind === openedOn ? "status" : "alert"));
 const now = useNow();
 const PHASES = runPhases;
 /** Setup gaps the console words (rule A); another gap reads as its key in words. */
@@ -128,10 +134,10 @@ const elapsed = computed(() =>
         >. Nothing was submitted.</template
       >
     </ApCallout>
-    <ApCallout v-else-if="view.kind === 'draft_failed'" tone="caution">{{
+    <ApCallout v-else-if="view.kind === 'draft_failed'" tone="caution" :role="failureRole">{{
       view.message
     }}</ApCallout>
-    <ApCallout v-else-if="view.kind === 'failed'" tone="caution">{{
+    <ApCallout v-else-if="view.kind === 'failed'" tone="caution" :role="failureRole">{{
       describeApiError(view.error)
     }}</ApCallout>
     <p v-else role="status" class="m-0 font-mono text-sm text-text-4">Loading the plan…</p>
