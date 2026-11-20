@@ -4533,7 +4533,8 @@ agreed with ux 11-20.
     progress, else P2 (it needs `spacecraft_id` to rank). Title "EARENDIL-004 · On composition 3, which is no longer
     approved."; secondary "Approval withdrawn by Ana R. at 11-20 09:12Z: “<reason>”. <the way out>"; action `Open
     EARENDIL-004`. Several craft are one row each (U31 ranks them by pass). It resolves when the craft is on an
-    approved revision.
+    approved revision. A craft with no name reads "Unknown spacecraft · On composition 3, …" (U25), with the action
+    `Open spacecraft` (ux).
   - A new configuration when nothing approved is left (refused at staging and at activation, the gate's own check;
     D3's `restage_needed` names the record in `details.decision`): "Not staged: EARENDIL-004 is on composition 3,
     which is no longer approved, so it can't take a new configuration that uses it. Move it to an approved
@@ -4541,7 +4542,8 @@ agreed with ux 11-20.
   - **The command hold** (ca-security; Compose and the decide panel name a HOLD by its check, U60). Its check key is
     `model_approval_withdrawn` (#546; it covers withdrawn and rejected), and its label is `Composition`, mapped by
     key, never by text. So: "Acknowledge the Composition HOLD", and in the log "Acknowledged the Composition HOLD on
-    EARENDIL-004". Each new withdrawal holds again, and only new submissions meet it.
+    EARENDIL-004". Each new withdrawal holds again, and only new submissions meet it. When the check passes, its GO
+    sentence is "Every target is on an approved composition." (fe-ops, #632).
     - One target: "EARENDIL-004 is on composition 3, whose approval Ana R. withdrew at 11-20 09:12Z: “<reason>”.
       Acknowledge the HOLD to send this request to EARENDIL-004 anyway." Rejected: "…composition 3, which Ana R.
       rejected at 11-20 09:12Z: “<reason>”. …". No name: "…composition 3, whose approval was withdrawn at 11-20
@@ -4579,15 +4581,83 @@ agreed with ux 11-20.
       else: "Catalog rev 4's approval was already withdrawn by Ana R. at 11-20 09:12Z, so nothing changed. Reload to
       see it." Without them: "Not withdrawn: its approval was already withdrawn, so nothing changed. Reload to see
       it."
-    - `retired`: "Not withdrawn: catalog rev 4 is retired, so there's nothing to withdraw. Nothing changed."
+    - `retired`: "Not withdrawn: catalog rev 4 is retired, so its approval can't be withdrawn. Nothing changed." (A
+      retired revision may have been approved; ux on #615, built in #630.)
     - A status the console doesn't know: "Not withdrawn: catalog rev 4 can't be withdrawn as it stands, so nothing
       changed. Reload to see it." with the status in Technical details.
   - 403 `forbidden`: "Not withdrawn: only an org admin can withdraw an approval. Nothing changed." 403
     `human_mission_model_approver_required`: "Not withdrawn: only a person can withdraw an approval, not a service
     identity. Nothing changed."
   - A replay (same `operation_id`, actor and reason) shows as the original result.
+  - The catalog list's row for a withdrawn revision carries the same `WITHDRAWN` (off) tag as its page.
+  - Approve on a withdrawn revision (the backstop; the page shows no Approve): 409
+    `mission_model_revision_not_approvable` with `status: "withdrawn"` reads "Not approved: catalog rev 4's approval
+    was withdrawn, and it can't be approved again for now. Your approval wasn't recorded." (composed: "composition
+    3's approval…"; no number: "this catalog revision's approval…"). Built in #630.
+  - The audit line (ca-engineer, #546): "Withdrew the approval of catalog rev 4", with the reason in the reason
+    column; the approval it withdrew stays listed. Composed: "…of composition 3" (D4 names composed revisions in
+    every reader, #446).
   - Elsewhere: C3's place (U102) on a withdrawn revision reads "Catalog rev 4's approval was withdrawn, so spacecraft
     can't move to it."; an import that matches it (U99) reads "This file matches catalog rev 4, whose approval was
     withdrawn, so no new revision was created." with `Open rev 4`.
+- **Pins, versions and the next staging** (D3, #544; #577's read, agreed on #577 11-20). A pin uses the newest
+  approved, runnable version of its composition. "Catalog rev 4" below is the pin's name by the naming rule above
+  ("composition 3" when composed).
+  - **Staging a pin that can't run** (field errors on `composition_id`, no final period; the numbers come in the
+    error's details):
+    - Not approved: "Catalog rev 4 isn't approved yet; an org admin approves it in Setup › Catalog first"
+    - Only an approval made under an earlier version of Cadence: "Catalog rev 4 was approved for an earlier version
+      of Cadence, so it needs approving again; an org admin does that in Setup › Catalog"
+    - The catalog revision and the composition disagree (a client bug): "Cadence couldn't match this to catalog rev
+      4; choose the catalog revision again"
+  - **The version changed after staging** (409 `restage_needed`, D3 §3; nothing is written; details per entry
+    `{composition_id, recorded_revision_id, current_revision_id | null, current_reason | null}` plus the catalog
+    revision numbers, and E2's `decision`). The why, by `current_reason`:
+    - a newer version was approved: "a newer approved version of catalog rev 4 is now the one to use"
+    - the staged version was withdrawn (E2): "catalog rev 4's approval was withdrawn by Ana R. at 11-20 09:12Z" (no
+      name: "…was withdrawn at …")
+    - the staged version doesn't run on this Cadence update: "the version of catalog rev 4 it staged doesn't run on
+      this version of Cadence"
+    - none approved is left (`current_revision_id` null): "no approved version of catalog rev 4 is left"
+    - unknown or missing: "the version of catalog rev 4 it staged isn't the one to use any more"
+    - Several entries: the first why, then "and 2 more catalog revisions changed too"; all of them in `Show all`.
+  - Lines, by the act (U95's order; the console words them from the code):
+    - `Apply as r5`: "Not applied: <why>, so nothing changed. Stage it again to use the current version."
+    - `Request review`: "Not sent for review: <why>, so nothing changed. Stage it again to use the current
+      version."
+    - Approve: "Not approved: <why>, so nothing was applied and the change set stays in review. Your approval wasn't
+      recorded. Send it back so it can be staged again."
+    - The action beside the apply and request-review lines is `Stage again` ("Stage again with the current version
+      of catalog rev 4", B7). With none approved left, there's no action, and the line ends "Move it to an approved
+      composition first." in place of "Stage it again…"; the Approve form ends "Send it back so it can move to an
+      approved composition." (ca-ux).
+  - **A newer version waiting** (`selection.newer_candidate`; rejected and non-runnable ones are never sent): on the
+    craft's and the profile's configuration, "A newer version of catalog rev 4, from a Cadence update, has been
+    waiting for approval since 11-20 06:52Z. Until it's approved, EARENDIL-004 stays on the earlier one." with `Open
+    it` (the candidate's page). The Cadence version itself never shows.
+  - **Nothing approved and runnable** (`selection.selected` null): "Catalog rev 4 needs approving again after a
+    Cadence update."
+  - **The approval page** (`next_staging_selects`): "Approving it doesn't change anything that's running. 12
+    spacecraft on 2 profiles take this version the next time a configuration is staged for them." With open change
+    sets that need staging again: "1 open change set will need staging again." Up to 3 craft names, then "and N
+    more".
+  - **Attention** (source `composition_candidate`, U31 rows):
+    - `candidate_waiting`, P2: "Catalog rev 4 · A newer version from a Cadence update is waiting for approval.";
+      secondary "12 spacecraft on 2 profiles take it once it's approved and their configuration is next staged.";
+      `Review` (the candidate's page).
+    - `nothing_selectable`, high (P1 when one of the craft has a pass within 2 h, else P2): "Catalog rev 4 · Needs
+      approving again after a Cadence update."; secondary "12 spacecraft on 2 profiles can't take a new
+      configuration until it's approved." With a candidate, `Review` opens it. Without one, by `compile.status`:
+      - running or queued: "Cadence is making a version of it for this update. It's ready for approval when this row
+        changes. 12 spacecraft on 2 profiles can't take a new configuration until then." No button.
+      - failed: "Cadence couldn't make a version of it for this update, so 12 spacecraft on 2 profiles can't take a
+        new configuration." `Try again` ("Try again: make a version of catalog rev 4", B7); the error in Technical
+        details.
+      - not run: "Cadence hasn't made a version of it for this update yet, so …" `Make it now` ("Make it now: make a
+        version of catalog rev 4", B7).
+      - After pressing: the status "Cadence is making a version of catalog rev 4 for this update." Without the
+        import right: no button, and the secondary ends "Someone who can import catalogs can start it." A status the
+        console doesn't know: the not-run line with no button, the status in Technical details.
+      - Never "compile" or "recompile" on screen (U108).
 - **Not here:** D4's composition editor (choosing catalogs, places, collisions) and its re-key HOLD, which lists
   every identity that changes before the change set is saved (#537 §1). Their words come with D4.
