@@ -339,8 +339,10 @@ defmodule CadenceWeb.Console.Problem do
       {409, "Not applied: the catalog revision isn't approved yet."},
     # #275 (U94, ca-ux's amendment): the requester only; an author gets
     # activation_approver_authored_content (#236).
+    # ca-ux on #608: neutral, so it's true with or without via_service; U95's ending.
     activation_self_approval_forbidden:
-      {403, "Not approved: you requested this, so another person approves it."},
+      {403,
+       "Not approved: you, or a service identity you're accountable for, requested this, so another person approves it. Your approval wasn't recorded."},
     # #534 (mms-ux): another generation saved a packet definition under the same version at the
     # same moment; nothing was written, and doing it again re-resolves. Retryable.
     packet_definition_version_taken:
