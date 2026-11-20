@@ -103,7 +103,7 @@ export function resumeOffer(g: Grant): ResumeOffer {
       return {
         kind: "act",
         blocked: {
-          text: "The mission's approval setting changed after this grant was suspended, so who can resume it may have changed. Reload to see it.",
+          text: "The approval setting for this mission changed after this grant was suspended, so who can resume it may have changed. Reload to see it.",
         },
       };
   }
@@ -123,6 +123,9 @@ const notSuspended = d.object({
 const NOTHING = "Nothing changed.";
 
 /** U105's resume refusals; `disable` keeps Resume off with its up-front line afterwards. */
+/** ux on #570: Resume's A6 reason while it stays off after a separation refusal. */
+const REFUSED: Worded = { text: "Resume was refused. Reload to see the grant as it is now." };
+
 export function resumeFailure(e: ApiError, g: Grant): Worded & { disable?: Worded } {
   const s = serviceOf(g);
   if (isError(e, "automation_grant_self_approval_forbidden")) {
@@ -132,12 +135,12 @@ export function resumeFailure(e: ApiError, g: Grant): Worded & { disable?: Worde
       const why = who
         ? `you're accountable for ${who}, so another org admin resumes its grant`
         : "you're accountable for the service identity this grant is for, so another org admin resumes it";
-      return { text: `Not resumed: ${why}. ${NOTHING}`, disable: { text: accountable(who) } };
+      return { text: `Not resumed: ${why}. ${NOTHING}`, disable: REFUSED };
     }
     const verb = f?.because === "approved" ? "approved" : "proposed";
     return {
       text: `Not resumed: you ${verb} this grant, so another org admin resumes it. ${NOTHING}`,
-      disable: { text: `You ${verb} this grant, so another org admin resumes it.` },
+      disable: REFUSED,
     };
   }
   if (isError(e, "automation_grant_approver_authors_unknown")) {
@@ -145,12 +148,13 @@ export function resumeFailure(e: ApiError, g: Grant): Worded & { disable?: Worde
     const mid = `${who ?? "the service identity this grant is for"} has no one recorded as accountable for it, so its grant can't be resumed yet.`;
     return {
       text: `Not resumed: ${mid} ${NOTHING} ${RECORD_AUTHORS}`,
-      disable: { text: `${authorsUnknown(who)} ${RECORD_AUTHORS}` },
+      disable: REFUSED,
     };
   }
   if (isError(e, "automation_grant_capability_required"))
     return {
       text: `Not resumed: this grant lets ${s ?? "the service identity this grant is for"} do something you can't do yourself, so you can't resume it. ${NOTHING} Ask an org admin who can do everything it allows to resume it.`,
+      disable: REFUSED,
     };
   if (isError(e, "automation_grant_legacy"))
     return {

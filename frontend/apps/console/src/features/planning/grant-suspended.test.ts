@@ -116,7 +116,7 @@ describe("Resume… up front (A6, the server's flags only)", () => {
     ).toEqual({
       kind: "act",
       blocked: {
-        text: "The mission's approval setting changed after this grant was suspended, so who can resume it may have changed. Reload to see it.",
+        text: "The approval setting for this mission changed after this grant was suspended, so who can resume it may have changed. Reload to see it.",
       },
     });
   });
@@ -159,7 +159,8 @@ describe("the resume answer and refusals (U105)", () => {
       said(refusal("forbidden", "automation_grant_self_approval_forbidden", { because, grantee }));
     expect(forbidden("approved")).toEqual({
       text: "Not resumed: you approved this grant, so another org admin resumes it. Nothing changed.",
-      disable: { text: "You approved this grant, so another org admin resumes it." },
+      // ux on #570: while Resume stays off, its reason says it was refused.
+      disable: { text: "Resume was refused. Reload to see the grant as it is now." },
     });
     expect(forbidden("proposed").text).toBe(
       "Not resumed: you proposed this grant, so another org admin resumes it. Nothing changed.",
@@ -179,6 +180,16 @@ describe("the resume answer and refusals (U105)", () => {
     expect(said(refusal("forbidden", "automation_grant_capability_required")).text).toBe(
       "Not resumed: this grant lets Nightly planner do something you can't do yourself, so you can't resume it. Nothing changed. Ask an org admin who can do everything it allows to resume it.",
     );
+    // ux on #570: every separation refusal keeps Resume off with one reason; a retryable one doesn't.
+    for (const code of [
+      "automation_grant_self_approval_forbidden",
+      "automation_grant_approver_authors_unknown",
+      "automation_grant_capability_required",
+    ])
+      expect(said(refusal("forbidden", code)).disable?.text).toBe(
+        "Resume was refused. Reload to see the grant as it is now.",
+      );
+    expect(said(refusal("conflict", "grant_changed")).disable).toBeUndefined();
     expect(said(refusal("conflict", "automation_grant_legacy")).text).toBe(
       "Not resumed: this grant was made before Cadence checked grants against the mission's approval setting, so it can only be revoked. Nothing changed. To change it, propose a new grant.",
     );
