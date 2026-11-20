@@ -3875,6 +3875,20 @@ fixes their words and lists what the legacy pages offered that the console doesn
   it was and not who: "11-19 05:40Z by a service identity", as U70 (mms-security: the kind names no one and says it
   wasn't a person). A person with no name, or no actor, shows the time alone, never an id (U25). (Amended 11-19,
   fe-setup's #364 question and ux's #371.)
+- **A system run that records who ran it** (#516, mms-security; `run_by` on the system actor, in `requested_by`,
+  `uploaded_by`, `revisions[].actor` and the REST reads). A seed import run by a person counts that person as the
+  importer, so the approval panel says "Imported by Mira K." (U65). The run's row says the same person, or the two
+  would disagree and the row would hide why Mira K. can't approve it (U20, U89).
+  - `run_by.name`: "11-19 05:40Z by Cadence, run by Mira K." It's one event and one time (U29), with U103's system
+    line first.
+  - `run_by` with a null name: "11-19 05:40Z by Cadence, run by a person". It says what ran it, not who, as U103's
+    "by a service identity" does. `run_by` carries no id (name only), so there's no id to show anywhere.
+  - `run_by` is always a person, never a service identity, so it never takes the service mark. It's named only while
+    they're an active member of the mission's organization (#146's rule); otherwise, such as a platform admin running
+    a seed for support or someone who has left, it reads "run by a person" (mms-security).
+  - `run_by` null (an older system run): "by Cadence", as above.
+  - The same rule applies wherever a system actor is shown: the Started cell, a source file's uploaded-by line and a
+    revision's actor.
   Data: the run row stores `requested_by` (an actor: kind and user id), so the runs read adds its display name
   (#146's read; fe-setup assigns it).
 
