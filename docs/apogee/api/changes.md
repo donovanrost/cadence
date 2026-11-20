@@ -98,9 +98,13 @@ with no display name reads their `id` with `name: null`.
 - Once the apply has committed, submit and approve never fail the response (qa #19). If notifying
   or converging the runtime crashes afterwards (a DB pool timeout under load, say), the response
   is still `200 {state: "applied", revision, …}` with `runtime: "degraded"`, and the mission
-  reconciler keeps retrying. If the connection drops during the apply itself, the server checks
-  whether it landed: if it did, the normal applied result with `runtime: "degraded"`; if not,
-  `503 apply_interrupted` ("did not take effect"), which is safe to retry. Any other 5xx on
+  reconciler keeps retrying. If the connection drops during the apply itself (or during a submit
+  or review), the server checks whether THIS request landed, never just the set's state (#261):
+  its own review row or revision (by the id it chose before its transaction), or for a submit to
+  review everything that submit records (submitter, version, reason, policy). If it did, the
+  normal result (an apply with `runtime: "degraded"`). If not, including when another person's
+  decision is what landed, `503 apply_interrupted` ("did not take effect"): refetch the set
+  before retrying. Any other 5xx on
   submit means "unclear": refetch the change set and head before telling the operator it failed.
 
 ## Permissions

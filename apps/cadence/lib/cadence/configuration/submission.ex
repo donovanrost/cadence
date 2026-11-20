@@ -47,19 +47,28 @@ defmodule Cadence.Configuration.Submission do
          :ok <- expected(set, params),
          {:ok, preview} <- checks(organization_id, set, params) do
       policy = policy(organization_id, mission_id, set)
+      # #261: what this request writes, decided before its transaction (api-ops: ids, not clocks).
+      proof = %{
+        actor: actor,
+        act: :submit,
+        version: set.version + 1,
+        reason: reason,
+        policy: policy,
+        revision_id: revision_id()
+      }
 
-      apply_transaction(set, fn ->
-        submit_transaction(set, actor, reason, policy, preview, params)
+      apply_transaction(set, proof, fn ->
+        submit_transaction(set, actor, reason, policy, preview, params, proof.revision_id)
       end)
     end
   end
 
-  defp submit_transaction(set, actor, reason, policy, preview, params) do
+  defp submit_transaction(set, actor, reason, policy, preview, params, revision_id) do
     with {:ok, set} <- ChangeSetStore.lock_set(set.mission_id, set.change_set_id),
          :ok <- state(set, "open"),
          :ok <- expected(set, params),
          :ok <- something_staged(set) do
-      submit_locked(set, actor, reason, policy, preview)
+      submit_locked(set, actor, reason, policy, preview, revision_id)
     else
       {:error, reason} -> Repo.rollback(reason)
     end
@@ -81,8 +90,10 @@ defmodule Cadence.Configuration.Submission do
   def review(_org, _mission, _set, _reviewer, _decision, _params), do: {:error, :invalid_decision}
 
   defp decide(_organization_id, set, reviewer, :send_back, comment, params) do
-    locked(set, params, fn set ->
-      insert_review(set, reviewer, "sent_back", comment)
+    proof = %{actor: reviewer, act: :send_back, review_id: review_id()}
+
+    locked(set, params, proof, fn set ->
+      insert_review(set, reviewer, "sent_back", comment, proof.review_id)
       set = ChangeSetStore.update_set(set, state: "open", policy_document: nil)
       %{state: :open, change_set_id: set.change_set_id, version: set.version}
     end)
@@ -91,13 +102,25 @@ defmodule Cadence.Configuration.Submission do
   defp decide(organization_id, set, reviewer, :approve, comment, params) do
     case checks(organization_id, set, %{acknowledged_holds: true}) do
       {:ok, _preview} ->
-        result =
-          locked(set, params, fn set ->
-            review = insert_review(set, reviewer, "approved", comment)
+        proof = %{
+          actor: reviewer,
+          act: :approve,
+          review_id: review_id(),
+          revision_id: revision_id()
+        }
 
-            execute_locked(set, set.submitted_by, set.reason, set.policy_document, [
-              approval(review)
-            ])
+        result =
+          locked(set, params, proof, fn set ->
+            review = insert_review(set, reviewer, "approved", comment, proof.review_id)
+
+            execute_locked(
+              set,
+              set.submitted_by,
+              set.reason,
+              set.policy_document,
+              [approval(review)],
+              proof.revision_id
+            )
           end)
 
         reopen_on_failure(set, result)
@@ -118,7 +141,7 @@ defmodule Cadence.Configuration.Submission do
     end
   end
 
-  defp submit_locked(set, actor, reason, %{"approval_required" => true} = policy, _preview) do
+  defp submit_locked(set, actor, reason, %{"approval_required" => true} = policy, _preview, _rev) do
     set =
       ChangeSetStore.update_set(set,
         state: "in_review",
@@ -131,13 +154,13 @@ defmodule Cadence.Configuration.Submission do
     %{state: :in_review, change_set_id: set.change_set_id, version: set.version}
   end
 
-  defp submit_locked(set, actor, reason, policy, _preview) do
+  defp submit_locked(set, actor, reason, policy, _preview, revision_id) do
     set = %{set | submitted_by: actor, reason: reason}
-    execute_locked(set, actor, reason, policy, [])
+    execute_locked(set, actor, reason, policy, [], revision_id)
   end
 
   # Runs inside the caller's transaction; rolls it back on any failure.
-  defp execute_locked(set, applier, reason, policy, approvals) do
+  defp execute_locked(set, applier, reason, policy, approvals, revision_id) do
     org = set.organization_id
     mission = set.mission_id
 
@@ -156,7 +179,10 @@ defmodule Cadence.Configuration.Submission do
              revision: head.revision_number + 1
            }),
          {:ok, revision} <-
-           record(head, set, applier, reason, approvals, changes, ops, {result, generation}) do
+           record(head, set, {applier, reason, approvals, revision_id}, changes, ops, {
+             result,
+             generation
+           }) do
       ChangeSetStore.set_change_states(
         set.change_set_id,
         Enum.map(changes, & &1.change_id),
@@ -204,10 +230,18 @@ defmodule Cadence.Configuration.Submission do
     end
   end
 
-  defp record(head, set, applier, reason, approvals, changes, ops, {result, generation}) do
+  defp record(
+         head,
+         set,
+         {applier, reason, approvals, revision_id},
+         changes,
+         ops,
+         {result, generation}
+       ) do
     Ledger.record(
       head,
       %{
+        revision_id: revision_id,
         kind: if(rolls_back_to(changes), do: "rollback", else: "change_set"),
         rolls_back_to: rolls_back_to(changes),
         change_set_id: set.change_set_id,
@@ -289,8 +323,8 @@ defmodule Cadence.Configuration.Submission do
   defp preview_cause(reason) when is_atom(reason), do: Atom.to_string(reason)
   defp preview_cause(_reason), do: "an unexpected transaction result"
 
-  defp locked(set, params, fun) do
-    apply_transaction(set, fn ->
+  defp locked(set, params, proof, fun) do
+    apply_transaction(set, proof, fn ->
       with {:ok, set} <- ChangeSetStore.lock_set(set.mission_id, set.change_set_id),
            :ok <- state(set, "in_review"),
            :ok <- expected(set, params) do
@@ -303,10 +337,10 @@ defmodule Cadence.Configuration.Submission do
 
   # The memo covers the pipeline and the generation build that follows it in the same
   # transaction: both re-read the same profile versions per spacecraft.
-  defp apply_transaction(set, fun) do
+  defp apply_transaction(set, proof, fun) do
     SpacecraftTypeStore.with_version_memo(fn -> timed_transaction(set, fun) end)
   rescue
-    DBConnection.ConnectionError -> landed(set)
+    DBConnection.ConnectionError -> landed(set, proof)
   end
 
   # [:cadence, :configuration, :apply_transaction]: how long the apply held its transaction, which
@@ -345,25 +379,72 @@ defmodule Cadence.Configuration.Submission do
   end
 
   # The connection dropped mid-transaction (qa #19), so COMMIT may or may not have reached
-  # Postgres. The set's own state says which. A landed apply is reported as applied with its
-  # runtime degraded: the generation is committed and the mission reconciler converges on it.
+  # Postgres. A landed apply is reported as applied with its runtime degraded: the generation is
+  # committed and the mission reconciler converges on it.
+  #
+  # #261: only THIS request's own result counts, never a state someone else reached. `proof` is
+  # what the request decided before its transaction (api-ops: ids, not clocks):
+  # - a submit to review: the set records exactly what this request writes (no row of its own,
+  #   api-ops' (A)): in_review, submitted by this actor, at the version it writes, with its reason
+  #   and its policy document. `acknowledged_holds` isn't stored: a request with HOLDs and no
+  #   acknowledgement is refused before its transaction, so it never reaches here. Two tabs
+  #   sending byte-identical submits both get 200, which misattributes nothing;
+  # - a submit that applied: the set's revision is the one with this request's revision id;
+  # - a send back: this request's review row (its id), sent_back, by this actor, and the set open;
+  # - an approve: this request's review row, approved, by this actor, and the set applied (the
+  #   revision's applied_by is the submitter, so the review row is the proof).
+  # Anything else is `apply_interrupted` (503, changes.md).
   @doc false
-  @spec landed(ChangeSetRow.t()) :: {:ok, map()} | {:error, :apply_interrupted}
-  def landed(set) do
+  @spec landed(ChangeSetRow.t(), map()) :: {:ok, map()} | {:error, :apply_interrupted}
+  def landed(set, proof) do
     case ChangeSetStore.fetch(set.mission_id, set.change_set_id) do
-      {:ok, %{state: "applied", applied_revision_number: number} = applied} ->
-        {:ok, recovered(applied, number)}
-
-      {:ok, %{state: "in_review"} = frozen} when set.state == "open" ->
-        {:ok, %{state: :in_review, change_set_id: frozen.change_set_id, version: frozen.version}}
-
-      {:ok, %{state: "open"} = reopened} when set.state == "in_review" ->
-        {:ok, %{state: :open, change_set_id: reopened.change_set_id, version: reopened.version}}
-
-      _rolled_back ->
-        {:error, :apply_interrupted}
+      {:ok, reread} -> own_result(reread, proof)
+      _gone -> {:error, :apply_interrupted}
     end
   end
+
+  defp own_result(%{state: "in_review"} = set, %{act: :submit, actor: actor} = proof) do
+    if set.version == proof.version and same_actor?(set.submitted_by, actor) and
+         set.reason == proof.reason and set.policy_document == proof.policy,
+       do: {:ok, %{state: :in_review, change_set_id: set.change_set_id, version: set.version}},
+       else: {:error, :apply_interrupted}
+  end
+
+  defp own_result(%{state: "applied"} = set, %{act: :submit, revision_id: revision_id}) do
+    case Ledger.fetch_revision(set.mission_id, set.applied_revision_number) do
+      {:ok, %{revision_id: ^revision_id}} -> {:ok, recovered(set, set.applied_revision_number)}
+      _other -> {:error, :apply_interrupted}
+    end
+  end
+
+  defp own_result(%{state: "open"} = set, %{act: :send_back} = proof) do
+    if own_review?(proof, "sent_back"),
+      do: {:ok, %{state: :open, change_set_id: set.change_set_id, version: set.version}},
+      else: {:error, :apply_interrupted}
+  end
+
+  defp own_result(%{state: "applied"} = set, %{act: :approve} = proof) do
+    if own_review?(proof, "approved"),
+      do: {:ok, recovered(set, set.applied_revision_number)},
+      else: {:error, :apply_interrupted}
+  end
+
+  defp own_result(_set, _proof), do: {:error, :apply_interrupted}
+
+  defp own_review?(%{review_id: id, actor: actor}, decision) do
+    case Repo.get(ReviewRow, id) do
+      %ReviewRow{decision: ^decision, actor: recorded} -> same_actor?(recorded, actor)
+      _none -> false
+    end
+  end
+
+  defp same_actor?(%{} = recorded, %{} = actor),
+    do: recorded["kind"] == actor["kind"] and recorded["id"] == actor["id"]
+
+  defp same_actor?(_recorded, _actor), do: false
+
+  defp review_id, do: Ids.new("config_review")
+  defp revision_id, do: Ids.new("config_revision")
 
   defp recovered(set, number) do
     {:ok, revision} = Ledger.fetch_revision(set.mission_id, number)
@@ -495,9 +576,9 @@ defmodule Cadence.Configuration.Submission do
 
   defp independent(_set, _reviewer), do: {:error, :forbidden}
 
-  defp insert_review(set, reviewer, decision, comment) do
+  defp insert_review(set, reviewer, decision, comment, review_id) do
     Repo.insert!(%ReviewRow{
-      review_id: Ids.new("config_review"),
+      review_id: review_id,
       change_set_id: set.change_set_id,
       organization_id: set.organization_id,
       mission_id: set.mission_id,
