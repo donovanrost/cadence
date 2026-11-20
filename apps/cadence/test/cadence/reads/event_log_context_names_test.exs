@@ -6,8 +6,11 @@ defmodule Cadence.Reads.EventLogContextNamesTest do
   use Cadence.DataCase, async: false
 
   alias Cadence.Accounts.{OrganizationMembership, OrganizationMembershipRow, User, UserRow}
+  alias Cadence.Auth
+  alias Cadence.Auth.{Scope, ServiceIdentity}
   alias Cadence.MissionEvents.Entry
   alias Cadence.Reads.EventLog.Context
+  alias Cadence.Reads.EventSentences
 
   @org "org-472-log"
   @mission "mission-472-log"
@@ -32,6 +35,53 @@ defmodule Cadence.Reads.EventLogContextNamesTest do
 
     assert users == %{"log-member" => "Mira K."}
     refute Enum.any?(Map.values(users), &(&1 =~ "@"))
+  end
+
+  test "#488: services and Cadence are named in the sentence, through the loaded names" do
+    planner = service!(@org, "Nightly planner")
+    foreign = service!("org-472-log-other", "Their planner")
+
+    entries =
+      for actor <- [
+            %{"kind" => "service", "id" => planner},
+            %{"kind" => "service", "id" => foreign},
+            %{"kind" => "system"}
+          ],
+          do:
+            struct(Entry,
+              mission_event_id: "e-#{System.unique_integer([:positive])}",
+              kind: :dashboard_published,
+              subject_id: "dash",
+              actor: %{"value" => actor},
+              metadata: %{"payload" => %{"value" => %{"dashboard_version" => 1}}}
+            )
+
+    ctx = Map.merge(Context.load(@org, @mission, entries), %{contacts: %{}})
+    texts = Enum.map(entries, &EventSentences.describe(&1, ctx).text)
+
+    assert [planned, foreign_text, cadence] = texts
+    assert planned =~ "by Nightly planner (a service identity)"
+    assert foreign_text =~ "by a service identity"
+    refute foreign_text =~ foreign
+    assert cadence =~ "by Cadence"
+  end
+
+  defp service!(organization_id, name) do
+    {:ok, %{service_identity: identity}} =
+      Auth.issue_service_identity(
+        ServiceIdentity.new(%{
+          organization_id: organization_id,
+          display_name: name,
+          capabilities: [:mission_admin]
+        }),
+        %Scope{
+          actor_kind: :user,
+          organization_id: organization_id,
+          user: %User{user_id: "issuer-488"}
+        }
+      )
+
+    identity.service_identity_id
   end
 
   defp person!(id, name, organization_id, state \\ :active, capabilities \\ []) do

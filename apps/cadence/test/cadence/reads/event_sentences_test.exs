@@ -190,11 +190,78 @@ defmodule Cadence.Reads.EventSentencesTest do
         }
       })
 
+    # #488 (ca-ux): Cadence's own act says so.
     assert %{
-             text: "Catalog rev 2 (QA-E2E re-import) registered",
+             text: "Catalog rev 2 (QA-E2E re-import) registered by Cadence",
              subject: %{kind: "catalog_revision"}
            } =
              EventSentences.describe(catalog, @ctx)
+  end
+
+  describe "#488: who acted, by kind (ca-ux; names through Control.ActorRef)" do
+    setup do
+      dashboard =
+        entry(:dashboard_published, %{
+          subject_id: "dash-comms",
+          metadata: %{"payload" => %{"value" => %{"dashboard_version" => 1}}}
+        })
+
+      # As ActorRef.names/2 would answer for this page: Mira is a member; the planner belongs
+      # to the organization; svc-foreign is another organization's service.
+      actors = %{
+        users: %{"user-mira" => "Mira K."},
+        user_ids: MapSet.new(["user-mira", "user-gone"]),
+        services: %{"svc-planner" => "Nightly planner"},
+        service_ids: MapSet.new(["svc-planner", "svc-foreign"])
+      }
+
+      %{dashboard: dashboard, ctx: Map.put(@ctx, :actors, actors)}
+    end
+
+    test "Cadence itself", c do
+      assert %{text: "Dashboard Comms payload v1 published by Cadence"} =
+               describe_as(c, %{"kind" => "system"})
+    end
+
+    test "a service identity of the organization, by its display name (U70)", c do
+      assert %{
+               text:
+                 "Dashboard Comms payload v1 published by Nightly planner (a service identity)"
+             } =
+               describe_as(c, %{"kind" => "service", "id" => "svc-planner"})
+
+      assert %{
+               text:
+                 "Dashboard Comms payload v1 published by Nightly planner (a service identity)"
+             } =
+               describe_as(c, %{"actor_kind" => "service", "service_identity_id" => "svc-planner"})
+    end
+
+    test "a service identity that can't be named: never its id (U25)", c do
+      assert %{text: text} = describe_as(c, %{"kind" => "service", "id" => "svc-foreign"})
+      assert text == "Dashboard Comms payload v1 published by a service identity"
+      refute text =~ "svc-foreign"
+    end
+
+    test "a person: named by the membership rule; with no name, no 'by' (#472)", c do
+      assert %{text: "Dashboard Comms payload v1 published by Mira K."} =
+               describe_as(c, %{"kind" => "user", "id" => "user-mira"})
+
+      assert %{text: "Dashboard Comms payload v1 published"} =
+               describe_as(c, %{"kind" => "user", "id" => "user-gone"})
+    end
+
+    test "a stored name is never used", c do
+      assert %{text: "Dashboard Comms payload v1 published by a service identity"} =
+               describe_as(c, %{
+                 "kind" => "service",
+                 "id" => "svc-foreign",
+                 "display_name" => "Stored Name"
+               })
+    end
+
+    defp describe_as(c, actor),
+      do: EventSentences.describe(%{c.dashboard | actor: %{"value" => actor}}, c.ctx)
   end
 
   test "a cancelled contact names its spacecraft, station and window; activations drop internal keys" do

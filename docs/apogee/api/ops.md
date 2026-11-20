@@ -683,7 +683,10 @@ request), so housekeeping rows don't starve a filtered page. Fewer than `limit` 
   EARENDIL-004 completed, 10:22:54Z–10:23:52Z", "Dashboard Comms payload v1 published by Mira K.",
   "Catalog rev 2 (QA-E2E re-import) registered". A person is named ("by Mira K.") only while
   an active member of the mission's organization (#472, #146 C1). Otherwise the "by" clause is
-  dropped, never an id or email (ux U25). Unknown kinds fall back to the sentence-case key
+  dropped, never an id or email (ux U25). Cadence's own act reads "by Cadence", and a service
+  identity of the organization "by Nightly planner (a service identity)" (U70). One that can't be
+  named reads "by a service identity", never its id (#488, ca-ux). Names come from the live
+  rows (`Control.ActorRef`), never from a stored actor document. Unknown kinds fall back to the sentence-case key
   plus the spacecraft ("Limit violation on EARENDIL-004"), never Title Case. `detail` is `null`.
 - Contact events (`scheduled_contact_*`, `realized_contact_*`) have kind `contact`. A realized
   contact that completed reads "ended (not verified)" until S9 verifies it. A provider-cancelled
