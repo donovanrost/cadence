@@ -95,6 +95,8 @@ export const errorCodes = [
   "account_grant_not_found",
   // App activations (L10)
   "self_approval_forbidden",
+  // #275: the console's activation code (as contact_plan_ and mission_model_), beside the old one.
+  "activation_self_approval_forbidden",
   "not_requester",
   "share_not_active",
   "not_pending",
