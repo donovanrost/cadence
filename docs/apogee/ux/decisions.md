@@ -1498,6 +1498,9 @@ Technical details.
     passes" after the first clause. The other passes' own entries carry their own sentences. On the earlier pass's
     note with several: "EARENDIL-001's SNTG 00:13Z pass and 2 other passes overlap this one; the longest overlap is
     40 s."
+  - **Nameless forms** (fe-ops, #635): a null `with` spacecraft name reads "an unknown spacecraft's SNTG 00:05Z
+    pass" (U25's sentence form, as designers §3), never an id. A null station name uses its code, "SNTG's listener".
+    With neither, "The station's listener".
   - A Book a pass offer carries the sentence before booking, and booking is still allowed. On the plan's Gantt,
     the later pass gets U45's ▲ ("Needs attention" in the legend).
   - **Refuse variant (uplink), only if the director picks it:** the offer can't be booked. Disabled reason: "Can't
