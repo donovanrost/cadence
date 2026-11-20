@@ -69,7 +69,7 @@ defmodule Cadence.Configuration.Submission do
           {:ok, map()} | {:error, term()}
   def review(organization_id, mission_id, change_set_id, reviewer, decision, params)
       when decision in [:approve, :send_back] do
-    with {:ok, comment} <- text(params, :comment, @comment_bytes, :comment_required),
+    with {:ok, comment} <- comment(params, decision),
          {:ok, set} <- ChangeSetStore.fetch(mission_id, change_set_id),
          :ok <- state(set, "in_review"),
          :ok <- expected(set, params),
@@ -541,6 +541,26 @@ defmodule Cadence.Configuration.Submission do
 
   defp expected(%{version: version}, %{expected_version: version}), do: :ok
   defp expected(_set, _params), do: {:error, :change_set_changed}
+
+  # #521 (#313 K9, ux): a comment is required to send back, optional to approve. Blank is NULL,
+  # never an empty string; too long is refused by field on either decision.
+  defp comment(params, decision) do
+    value = params |> Map.get(:comment) |> to_string() |> String.trim()
+
+    cond do
+      byte_size(value) > @comment_bytes.last ->
+        {:error, {:invalid_params, %{comment: "must be at most #{@comment_bytes.last} bytes"}}}
+
+      value != "" ->
+        {:ok, value}
+
+      decision == :approve ->
+        {:ok, nil}
+
+      true ->
+        {:error, :comment_required}
+    end
+  end
 
   defp text(params, field, range, error) do
     case params |> Map.get(field) |> to_string() |> String.trim() do

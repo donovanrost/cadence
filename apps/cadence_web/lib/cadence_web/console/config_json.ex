@@ -66,7 +66,8 @@ defmodule CadenceWeb.Console.ConfigJSON do
     entity_gone: "The item no longer exists.",
     invalid_op: "A staged change is invalid.",
     reason_required: "Enter a reason (10 to 2000 characters).",
-    comment_required: "Enter a comment.",
+    # #521: only Send back needs a comment now (ca-ux: the console's own words).
+    comment_required: "Add a comment for the author.",
     nothing_staged: "Nothing is staged.",
     not_in_review: "The change set isn't in review.",
     checks_failed: "Checks failed; nothing was applied.",
