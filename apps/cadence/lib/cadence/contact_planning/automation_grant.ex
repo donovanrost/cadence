@@ -69,8 +69,7 @@ defmodule Cadence.ContactPlanning.AutomationGrant do
           approval_policy: map() | nil,
           ending: ending() | nil,
           suspension: suspension() | nil,
-          resumed_by: binary() | nil,
-          resumed_at: DateTime.t() | nil,
+          resumption: %{by: binary(), at: DateTime.t()} | nil,
           replaces_grant_id: binary() | nil,
           legacy_issue: boolean(),
           content_sha256: binary(),
@@ -104,8 +103,7 @@ defmodule Cadence.ContactPlanning.AutomationGrant do
     :approval_policy,
     :ending,
     :suspension,
-    :resumed_by,
-    :resumed_at,
+    :resumption,
     :replaces_grant_id,
     :content_sha256,
     :inserted_at,
@@ -197,8 +195,7 @@ defmodule Cadence.ContactPlanning.AutomationGrant do
         approval_policy: value(attrs, :approval_policy),
         ending: ending(value(attrs, :ending)),
         suspension: suspension(value(attrs, :suspension)),
-        resumed_by: optional_string(value(attrs, :resumed_by)),
-        resumed_at: optional_datetime(value(attrs, :resumed_at), :resumed_at),
+        resumption: resumption(value(attrs, :resumption)),
         replaces_grant_id: optional_string(value(attrs, :replaces_grant_id)),
         # Issued before #283 (lead 11-19): its proposal fields were filled from its approval.
         legacy_issue: value(attrs, :legacy_issue, false) == true,
@@ -311,6 +308,14 @@ defmodule Cadence.ContactPlanning.AutomationGrant do
   defp shape?(:withdrawn, approved, _windowed, ending), do: not approved and not is_nil(ending)
 
   defp present?(text), do: is_binary(text) and String.trim(text) != ""
+
+  # #499: who resumed a suspended grant, and when (one field: the struct stays within credo's 31).
+  defp resumption(nil), do: nil
+
+  defp resumption(%{by: by, at: at}) when is_binary(by) and by != "",
+    do: %{by: by, at: datetime(at, :resumed_at)}
+
+  defp resumption(_other), do: raise(ArgumentError, "automation grant resumption is invalid")
 
   defp suspension(nil), do: nil
 

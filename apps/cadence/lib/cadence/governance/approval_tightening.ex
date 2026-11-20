@@ -19,7 +19,7 @@ defmodule Cadence.Governance.ApprovalTightening do
   """
   @callback preview(binary(), [binary()], binary() | nil, keyword()) :: :ok | {:error, term()}
 
-  @doc "Suspends what the tightening of `mission_ids` suspends; `level` is \"mission\" or \"organization\"."
+  @doc "Suspends what the tightening of `mission_ids` suspends; `level` is mission or organization."
   @callback apply(Scope.t(), binary(), [binary()], binary(), binary(), keyword()) ::
               {:ok, [binary()]} | {:error, term()}
 

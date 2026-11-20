@@ -10,6 +10,8 @@ defmodule Cadence.ContactPlanning.GrantSuspensionTest do
 
   import Ecto.Query
 
+  alias Cadence.Auth
+  alias Cadence.Auth.ServiceIdentity
   alias Cadence.AutomationGrantFixtures, as: F
 
   alias Cadence.ContactPlanning.{
@@ -211,7 +213,7 @@ defmodule Cadence.ContactPlanning.GrantSuspensionTest do
 
       assert {:ok, resumed} = resume(c, c.third, grant)
       assert resumed.lifecycle_state == :active
-      assert resumed.resumed_by == c.third.user.user_id
+      assert resumed.resumption.by == c.third.user.user_id
       assert resumed.approval_policy["separation_of_duties"] == true
       assert resumed.content_sha256 == grant.content_sha256
       assert resumed.valid_until == grant.valid_until
@@ -441,7 +443,7 @@ defmodule Cadence.ContactPlanning.GrantSuspensionTest do
 
   defp second_service!(c, name) do
     identity =
-      Cadence.Auth.ServiceIdentity.new(%{
+      ServiceIdentity.new(%{
         service_identity_id: "svc-#{name}-#{System.unique_integer([:positive])}",
         organization_id: c.org,
         mission_id: c.mission,
@@ -449,7 +451,7 @@ defmodule Cadence.ContactPlanning.GrantSuspensionTest do
         capabilities: [:mission_admin]
       })
 
-    {:ok, issued} = Cadence.Auth.issue_service_identity(identity, c.issuer)
+    {:ok, issued} = Auth.issue_service_identity(identity, c.issuer)
     issued.service_identity
   end
 end

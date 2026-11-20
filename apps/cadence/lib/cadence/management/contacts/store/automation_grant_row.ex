@@ -211,8 +211,7 @@ defmodule Cadence.Management.Contacts.Store.AutomationGrantRow do
       replaces_grant_id: row.replaces_grant_id,
       legacy_issue: row.legacy_issue == true,
       suspension: suspension(row),
-      resumed_by: row.resumed_by,
-      resumed_at: row.resumed_at,
+      resumption: row.resumed_by && %{by: row.resumed_by, at: row.resumed_at},
       inserted_at: row.inserted_at,
       updated_at: row.updated_at
     })
@@ -341,8 +340,8 @@ defmodule Cadence.Management.Contacts.Store.AutomationGrantRow do
       suspended_at: grant.suspension && grant.suspension.at,
       suspension_revision: grant.suspension && grant.suspension.revision,
       suspension_level: grant.suspension && grant.suspension.level,
-      resumed_by: grant.resumed_by,
-      resumed_at: grant.resumed_at
+      resumed_by: grant.resumption && grant.resumption.by,
+      resumed_at: grant.resumption && grant.resumption.at
     }
   end
 end

@@ -128,8 +128,7 @@ defmodule Cadence.ContactPlanning.AutomationGrantReview do
         rebuild(grant, %{
           lifecycle_state: :active,
           approval_policy: policy,
-          resumed_by: approver,
-          resumed_at: now
+          resumption: %{by: approver, at: now}
         })
 
       write(scope, row, resumed, :resumed, %{
