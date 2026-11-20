@@ -52,6 +52,8 @@ Sources:
 - a composition is created only by a configuration-lane change set (the kind `mission_model_composition`), staged by a holder of `:manage_mission`;
 - its creator (the stager, with #280's accountable people for a service) **joins the separation set** for approving its base effective revision (§4), with the importers and authors (mms-security M1). Insert-or-get returns the first creator's row for identical content, and that's the one counted.
 - **Migrated compositions** (§7) are created by a system actor that counts no one, as #513 did for seeds; only the union importers apply to them.
+- **A new import creates its own one-layer composition** at '/' (content-addressed insert-or-get), with the importer as creator. So after D1 and E1, a fresh import's revision can be approved, and an old client's `catalog_revision_id` pin translates to it (mms-engineer).
+- **Bounds are enforced twice:** at the record's write and in `Mount.prepare` (#456), so neither path accepts what the other refuses.
 - **The id is under a stored hash (#108):** a golden pins the canonical term `{org, mission, sorted [{layer_id, mount}]}`, and the layer FK is on `(org, mission, layer_id)`, so a layer from another mission can't be named.
 
 - **Immutable.** UPDATE and DELETE are refused by trigger (#116's pattern).
@@ -81,7 +83,10 @@ Sources:
 
 `(org, mission, composition_id, authored_head, revision_id)`, unique on the first four AND unique
 on `revision_id` (mms-security M2): a revision is named by exactly one (composition, authored
-head), so an approval can't move to another composition. **Writers:** only
+head), so an approval can't move to another composition. `authored_head` is NULL until phase 3,
+and PG14 has no NULLS NOT DISTINCT, so the first index is on
+`(org, mission, composition_id, COALESCE(authored_head, ''))`, written with `ON CONFLICT DO
+NOTHING` and re-read (mms-engineer). **Writers:** only
 `effective_revision/4`, with the revision it just compiled, and the migration (one-to-one).
 
 - `authored_head` is the mission's authored-layer lineage head (phase 3; `nil` until then).
@@ -273,7 +278,7 @@ The console rows are U-entries from ux.
 | D1 | Composition and link tables with triggers (write-time refusal of bad compositions, unique `revision_id`, the id golden, the layer FK); `effective_revision/4` with its lock; the one-to-one migration (system actor) with its guard test; #456's '/' amendment | mms-engineer | domain, mms-security, api-ops |
 | D2 | Reads first (§6); E's read shape agreed with api on D2's issue (fe-setup's proposal) | api / mms-engineer | fe-setup, mms-ux |
 | D2c (#538) | Console readers and U-entries (§6 step 2), including E2's state reader | fe-setup (words mms-ux) | ux, domain |
-| D3 | Pins via change sets (`composition_id`), by `:manage_mission` holders and org admins, services through #280; old clients translated **at staging**, never at apply; staging NO-GO | mms-engineer | domain, ca-security |
+| D3 | Pins via change sets (`composition_id`; the #108 checklist for the profile and override documents that gain it), by `:manage_mission` holders and org admins, services through #280; old clients translated **at staging**, never at apply; staging NO-GO | mms-engineer | domain, ca-security |
 | D4 | Creating a composition with more than one import: the API and console path (choose layers and mounts, see collisions and the re-key HOLD), and its approval entry point | mms-engineer + fe-setup | domain, mms-security, ux |
 | E1 | Approve and baseline re-keyed; union importers; composed comparison | domain | ca-security, api-ops |
 | E2 | Withdrawn-approval state on craft and in attention (§5) | domain | mms-security, ux |
