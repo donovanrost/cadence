@@ -571,10 +571,16 @@ jobs:
           --project=desktop --project=a11y-desktop-admin --project=a11y-desktop-member
           --project=a11y-phone-admin --project=a11y-phone-member
       # ci-handoff.md §1: the specs that stage a change set run alone, on one shard.
+      # A second playwright run clears test-results and rewrites playwright-report, so the main run's
+      # evidence (traces, snapshots, its report) moves aside first and both sets are scanned and
+      # uploaded (found on #652: shard 1 uploaded only the serial run).
       - name: Console specs that stage a change set (serial)
         if: ${{ !cancelled() && matrix.shard == 1 }}
         working-directory: frontend/apps/console
-        run: corepack pnpm exec playwright test --project=desktop-serial --workers=1
+        run: |
+          if [ -d test-results ]; then mv test-results test-results-main; fi
+          if [ -d playwright-report ]; then mv playwright-report playwright-report-main; fi
+          corepack pnpm exec playwright test --project=desktop-serial --workers=1
       - name: No password in any file to upload
         id: leakcheck
         if: ${{ !cancelled() }}
@@ -588,7 +594,7 @@ jobs:
           mkdir -p "$scan"
           cd frontend/apps/console
           paths=()
-          for p in playwright-report test-results "$RUNNER_TEMP/server.log" "$RUNNER_TEMP/simulator.log"; do
+          for p in playwright-report test-results playwright-report-main test-results-main "$RUNNER_TEMP/server.log" "$RUNNER_TEMP/simulator.log"; do
             if [ -e "$p" ]; then paths+=("$p"); fi
           done
           # Traces are zips: unpack them so their JSON and network logs are scanned too.
@@ -597,7 +603,7 @@ jobs:
               echo "::error title=credential leak check::a trace couldn't be unpacked for the scan; upload blocked"
               exit 1
             fi
-          done < <(find playwright-report test-results -name '*.zip' -print0 2>/dev/null || true)
+          done < <(find playwright-report test-results playwright-report-main test-results-main -name '*.zip' -print0 2>/dev/null || true)
           paths+=("$scan")
           # A shard that failed before its passwords existed has nothing secret to find (devops).
           # Skip an empty one: grep -F with an empty pattern matches everything.
@@ -624,6 +630,8 @@ jobs:
           path: |
             frontend/apps/console/playwright-report
             frontend/apps/console/test-results
+            frontend/apps/console/playwright-report-main
+            frontend/apps/console/test-results-main
             ${{ runner.temp }}/server.log
             ${{ runner.temp }}/simulator.log
           if-no-files-found: ignore
