@@ -4,7 +4,7 @@ import { ResolveBookingActions } from "@/features/resolutions/index.ts";
 import { useRoute, type RouteLocationRaw } from "vue-router";
 import { canAdministerOrganization, TakeoverHeader, useMissionScope, useSession } from "@/shell";
 import type { ApiError } from "@/api";
-import { ApButton, ApCallout, ApStationBar, outcomeRole, useNow } from "@/ui";
+import { ApButton, ApCallout, ApStationBar, OutcomeCallout, useNow } from "@/ui";
 import { draftedByOther, editableStates, type Acknowledgement } from "./api.ts";
 import DayNav from "./DayNav.vue";
 import DemandPanel from "./DemandPanel.vue";
@@ -316,9 +316,7 @@ const clock = computed(() =>
     </div>
     <ApCallout v-if="actionText" tone="caution" role="alert">{{ actionText }}</ApCallout>
     <div v-if="current" ref="resultBox" tabindex="-1">
-      <ApCallout :tone="current.tone" :role="outcomeRole(current.tone)">{{
-        current.text
-      }}</ApCallout>
+      <OutcomeCallout :outcome="current" />
     </div>
     <PlanFooter
       :plan="view.plan"

@@ -22,14 +22,15 @@ describe("FailureOutcomeCallout (ux, lead 11-16: one failure callout everywhere)
     expect(w.find("[role=alert]").exists()).toBe(true);
   });
 
-  it("reads an unclear outcome as caution, adds a surface's words and buttons after the link", () => {
+  it("reads an unclear outcome as caution, as an alert, and adds a surface's words and buttons after the link", () => {
     const w = mount(FailureOutcomeCallout, {
       props: { outcome: { changed: null, sentence: "The connection dropped." } },
       slots: { default: "Your draft is kept.", action: "<button>Retry</button>" },
       global: { stubs },
     });
     expect(w.text()).toContain("The connection dropped. Your draft is kept.");
-    expect(w.find("[role=alert]").exists()).toBe(false);
+    // a11y B6 (#276, ux): unclear needs the person to check before trying again, so an alert.
+    expect(w.find("[role=alert]").exists()).toBe(true);
     expect(w.find("a").exists()).toBe(false);
     expect(w.find("button").text()).toBe("Retry");
   });
