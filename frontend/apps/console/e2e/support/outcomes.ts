@@ -19,10 +19,14 @@ export const WORDS = {
   approved: (passes: number) => `Approved. Booking ${passes} passes.`,
   /**
    * U20 (outcome unknown) with qa #19: a 5xx after a write may have committed, so it's unclear, never
-   * "nothing changed". As the console words it (changes' failureOutcome); `verb` is the write's.
+   * "nothing changed". As the console words it (changes' failureOutcome), one literal per verb
+   * (ux on #648: literal entries only).
    */
-  serverFailedUnclear: (verb: "staged" | "changed") =>
-    `The server failed while answering, so it isn't clear whether anything was ${verb}. Check Staged changes and Revisions now, before trying again.`,
+  serverFailedUnclearStaged:
+    "The server failed while answering, so it isn't clear whether anything was staged. Check Staged changes and Revisions now, before trying again.",
+  /** As above, for a write that changes rather than stages (the policy save). */
+  serverFailedUnclearChanged:
+    "The server failed while answering, so it isn't clear whether anything was changed. Check Staged changes and Revisions now, before trying again.",
   /** CP2 policy save (U20's success line; PolicyTab): the second sentence of "Saved as vN. …". */
   policyPendingActivation: "It's active once another admin approves it.",
   /** CP2 policy decision, `reviewer_is_author` (PolicyDecision): the version's author can't approve it. */

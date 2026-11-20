@@ -69,7 +69,7 @@ test.describe("Ground stations (organization admin)", () => {
       await first.click();
       await page.getByRole("textbox", { name: "Name", exact: true }).fill(`${name} ${MARKER}`);
       await page.getByRole("button", { name: "Stage change" }).click();
-      await expectSaid(page, WORDS.serverFailedUnclear("staged"), { alert: true });
+      await expectSaid(page, WORDS.serverFailedUnclearStaged, { alert: true });
       await expect(page).not.toHaveURL(/\/setup\/stations$/);
       await expect(page.getByRole("banner")).not.toContainText(/staged/i);
     });

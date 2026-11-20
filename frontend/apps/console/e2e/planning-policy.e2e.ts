@@ -93,7 +93,7 @@ test.describe("Contact planning policy, a save the server fails on", () => {
     await page.getByRole("textbox", { name: /contacts per plan/i }).fill("1001");
     await page.getByRole("button", { name: /save as v\d+/i }).click();
     await expectNoFalseSuccess(page, {
-      failure: WORDS.serverFailedUnclear("changed"),
+      failure: WORDS.serverFailedUnclearChanged,
       success: WORDS.policyPendingActivation,
     });
   });
