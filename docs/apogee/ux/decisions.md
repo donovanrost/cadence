@@ -1498,6 +1498,13 @@ Technical details.
     passes" after the first clause. The other passes' own entries carry their own sentences. On the earlier pass's
     note with several: "EARENDIL-001's SNTG 00:13Z pass and 2 other passes overlap this one; the longest overlap is
     40 s."
+  - **Open-ended, no number** (`seconds: null`: neither pass has a set end, so the overlap can't be measured;
+    fe-ops, #361): the same sentences without a number, never a guessed one (U20). Later pass: "Overlaps
+    EARENDIL-006's SNTG 00:05Z pass. Santiago's listener takes one connection at a time, so this pass may lose its
+    start." Earlier pass's note: "EARENDIL-001's SNTG 00:13Z pass overlaps this one and may lose its start." Either:
+    "…and both claim it at once, so whichever connects second may lose its start." Several: "Overlaps EARENDIL-006's
+    SNTG 00:05Z pass and 2 other passes. … may lose its start."; the earlier pass's note with several: "…and 2
+    other passes overlap this one." (no longest).
   - **Nameless forms** (fe-ops, #635): a null `with` spacecraft name reads "an unknown spacecraft's SNTG 00:05Z
     pass" (U25's sentence form, as designers §3), never an id. A null station name uses its code, "SNTG's listener".
     With neither, "The station's listener".
