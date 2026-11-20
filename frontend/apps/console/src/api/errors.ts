@@ -261,6 +261,7 @@ export const errorCodes = [
   "mission_model_comparison_mismatch",
   "mission_model_runtime_plans_not_ready",
   "mission_model_revision_not_approvable",
+  "mission_model_revision_already_approved",
   "mission_model_revision_not_found",
   "mission_model_comparison_report_not_found",
   "mission_model_decision_reason_required",

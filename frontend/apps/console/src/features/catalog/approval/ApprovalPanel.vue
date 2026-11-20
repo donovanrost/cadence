@@ -19,6 +19,7 @@ import {
   revisionWord,
 } from "./words.ts";
 import { compositionInSentence, isComposed } from "../composition.ts";
+import { useSession } from "@/shell";
 
 /**
  * ux U65 Approval · catalog rev N: the comparison against the revision it would replace, who
@@ -59,6 +60,12 @@ const act = useApproval(
   computed(() => props.modelKey),
   () => rev.value,
   () => emit("changed"),
+  useSession().user.id,
+  // U109: a composed base's refusal names "composition 3".
+  () =>
+    isComposed(props.revision.composition)
+      ? compositionInSentence(props.revision.composition)
+      : null,
 );
 const panelFailure = computed(() =>
   act.failure.value && act.failure.value.from !== "reject" ? act.failure.value : null,

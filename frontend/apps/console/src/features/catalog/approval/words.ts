@@ -1,5 +1,7 @@
 import {
   codeOf,
+  decoders as d,
+  detailsOf,
   isError,
   isKnown,
   vocabularyText,
@@ -253,16 +255,56 @@ export function decisionFailure(
   e: ApiError,
   rev: number | null,
   act: DecisionAct = "approve",
+  viewerId: string | null = null,
+  composedName: string | null = null,
 ): DecisionFailure {
   const base = (text: string, runAgain = false) => ({ text, runAgain });
   if (isError(e, "mission_model_decision_reason_required")) return base("Give a reason first.");
   if (isError(e, "mission_model_decision_reason_too_long"))
     return base(`Keep the reason under ${REASON_MAX.toLocaleString("en-US")} characters.`);
-  return act === "approve" ? approveFailure(e, rev) : rejectFailure(e);
+  return act === "approve" ? approveFailure(e, rev, viewerId, composedName) : rejectFailure(e);
 }
 
-function approveFailure(e: ApiError, rev: number | null): DecisionFailure {
+const alreadyApprovedDetails = d.object({
+  decided_by: d.nullable(d.object({ id: d.nullable(d.string), name: d.nullable(d.string) })),
+  decided_at: d.nullable(d.timestamp),
+});
+
+/**
+ * #260 (#613; mms-ux): approving a revision someone already approved. The viewer: "You already
+ * approved catalog rev 4 at 11-20 06:52Z. Reload to see it." Someone else: "Catalog rev 4 was
+ * already approved by Ana R. at …, so your approval wasn't recorded. Reload to see it." Neither
+ * known: "Not approved: catalog rev 4 was already approved, so …". A nameless approver drops "by".
+ */
+function alreadyApproved(
+  e: ApiError,
+  rev: number | null,
+  viewerId: string | null,
+  composedName: string | null,
+): string {
+  // U109: a composed base is "composition 3" ("this composition"); one catalog as mms-ux's lines.
+  const what = composedName ?? (rev === null ? "this catalog revision" : `catalog rev ${rev}`);
+  const What = `${what.charAt(0).toUpperCase()}${what.slice(1)}`;
+  const det = detailsOf(e, alreadyApprovedDetails);
+  const by = det?.decided_by ?? null;
+  const at = det?.decided_at ?? null;
+  if (by === null || at === null)
+    return `Not approved: ${what} was already approved, so your approval wasn't recorded. Reload to see it.`;
+  if (viewerId !== null && by.id === viewerId)
+    return `You already approved ${what} at ${when(at)}. Reload to see it.`;
+  const name = by.name ? ` by ${by.name}` : "";
+  return `${What} was already approved${name} at ${when(at)}, so your approval wasn't recorded. Reload to see it.`;
+}
+
+function approveFailure(
+  e: ApiError,
+  rev: number | null,
+  viewerId: string | null,
+  composedName: string | null,
+): DecisionFailure {
   const base = (text: string, runAgain = false) => ({ text, runAgain });
+  if (isError(e, "mission_model_revision_already_approved"))
+    return base(alreadyApproved(e, rev, viewerId, composedName));
   if (isError(e, "mission_model_revision_not_in_catalog"))
     return {
       ...base(

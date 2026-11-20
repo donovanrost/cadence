@@ -165,14 +165,32 @@ export function runComparison(key: ModelKey): Promise<ApiResult<Comparison>> {
   return request(path(key, "/comparison"), comparisonReader, { method: "POST", body: {} });
 }
 
+/**
+ * #260 (#613): `operation_id` makes a retry of the same approval a replay (200, `replayed: true`)
+ * rather than a 409 already-approved. The 200's `replayed` is additive and not read.
+ */
 export function approveRevision(
   key: ModelKey,
   reportId: string,
+  operationId: string,
 ): Promise<ApiResult<ModelRevision>> {
   return request(path(key, "/approve"), modelRevisionReader, {
     method: "POST",
-    body: { comparison_report_id: reportId },
+    body: { comparison_report_id: reportId, operation_id: operationId },
   });
+}
+
+/**
+ * One operation id per approval request: a retry of the SAME request (this revision against this
+ * report) reuses it, so the server replays what already happened; another report is a new one.
+ */
+export function approvalOps(newId: () => string = () => crypto.randomUUID()) {
+  let last: Readonly<{ key: string; id: string }> | null = null;
+  return (revisionId: string, reportId: string): string => {
+    const key = `${revisionId} ${reportId}`;
+    if (last?.key !== key) last = { key, id: newId() };
+    return last.id;
+  };
 }
 
 export function rejectRevision(key: ModelKey, reason: string): Promise<ApiResult<ModelRevision>> {
