@@ -35,10 +35,10 @@ const groups = computed<Group[]>(() => {
 });
 const passOf = (id: string) => props.plan.passes.find((p) => p.snapshot_id === id) ?? null;
 const hhmm = (t: string | null) => (t ? `${t.slice(11, 16)}Z` : "open-ended");
-/** B7 (ux on #588): a row's buttons are named by their pass: "Remove, EARENDIL-12 · 17:00Z". */
+/** B7 (ux on #588; U107's commas): a row's buttons are named by their pass: "Remove, EARENDIL-12, 17:00Z". */
 const rowName = (id: string) => {
   const p = passOf(id);
-  return `${craftLabel(props.nameOf(p?.spacecraft_id ?? null))} · ${hhmm(p?.starts_at ?? null)}`;
+  return `${craftLabel(props.nameOf(p?.spacecraft_id ?? null))}, ${hhmm(p?.starts_at ?? null)}`;
 };
 function headline(g: Group): string {
   const first = g.hits[0];

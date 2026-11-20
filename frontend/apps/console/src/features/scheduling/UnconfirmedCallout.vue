@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
-import { ApButton, ApCallout, formatCountdown, refocusFirst, useNow } from "@/ui";
+import { computed, ref } from "vue";
+import { ApButton, ApCallout, formatCountdown, useNow } from "@/ui";
 import type { PlanDetail } from "./api.ts";
 import type { SpacecraftName } from "./names.ts";
 import { unconfirmedView, type UnconfirmedPass } from "./unconfirmed.ts";
 import UnconfirmedSheet from "./UnconfirmedSheet.vue";
+import { useArmedRefocus } from "./useArmedRefocus.ts";
 
 /**
  * U30 caution block, shared by K1 and K2 (exported): who hasn't confirmed what, and the passes
@@ -29,17 +30,16 @@ const sheet = ref<InstanceType<typeof UnconfirmedSheet> | null>(null);
 const shown = computed(() => view.value?.passes.slice(0, CAP) ?? []);
 const hidden = computed(() => (view.value ? view.value.passes.length - CAP : 0));
 /**
- * #244 (A5): resolving a pass removes its row (and the actions that had focus). Once the list
- * changes, focus goes to the callout, or the page's heading when none is left, only if it was lost.
+ * #244 (A5): resolving a pass removes its row (and the actions that had focus). The screen arms the
+ * move on its own resolve (fe-ops on #590); the list's next change then sends focus to the callout,
+ * or the page's heading when none is left, only if it was lost. A background refetch never does.
  */
 const box = ref<HTMLElement | null>(null);
-watch(
+const resolveFocus = useArmedRefocus(
   () => view.value?.passes.length ?? 0,
-  async () => {
-    await nextTick();
-    refocusFirst(box.value);
-  },
+  () => box.value,
 );
+defineExpose({ armFocus: resolveFocus.arm });
 </script>
 
 <template>

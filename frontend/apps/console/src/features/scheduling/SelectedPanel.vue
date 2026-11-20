@@ -1,20 +1,13 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, ref } from "vue";
 import type { RemoteState } from "@/api";
-import {
-  ApButton,
-  ApEmptyState,
-  ApKeyValue,
-  ApPanel,
-  ApTag,
-  formatDuration,
-  refocusFirst,
-} from "@/ui";
+import { ApButton, ApEmptyState, ApKeyValue, ApPanel, ApTag, formatDuration } from "@/ui";
 import AlternativesList from "./AlternativesList.vue";
 import StationIssues from "./StationIssues.vue";
 import type { StationHits } from "./unavailable.ts";
 import { stationCode, stationName, type Alternatives, type PlanDetail } from "./api.ts";
 import { craftLabel, type SpacecraftName } from "./names.ts";
+import { useArmedRefocus } from "./useArmedRefocus.ts";
 
 /**
  * D · Selected: a drafted pass (Remove) or another window (Add), then the focused spacecraft's
@@ -48,17 +41,20 @@ const other = computed(() => {
     : null;
 });
 /**
- * #244 (A5): Remove ↔ Add swap in place once the edit lands (the selection stays). The button
- * that had focus is gone, so focus goes to its replacement, only if it was lost (refocusFirst).
+ * #244 (A5): Remove ↔ Add swap in place once the edit lands (the selection stays). After the
+ * person's own click, focus goes to the replacement if it was lost (fe-ops on #590: armed only by
+ * that click, never by a background refetch).
  */
 const actions = ref<HTMLElement | null>(null);
-watch(
+const swapFocus = useArmedRefocus(
   () => (drafted.value ? "drafted" : other.value ? "other" : null),
-  async () => {
-    await nextTick();
-    refocusFirst(actions.value?.querySelector<HTMLElement>("button"));
-  },
+  () => actions.value?.querySelector<HTMLElement>("button") ?? null,
 );
+function act(kind: "add" | "remove", snapshotId: string) {
+  swapFocus.arm();
+  if (kind === "add") emit("add", snapshotId);
+  else emit("remove", snapshotId);
+}
 const pass = computed(
   () =>
     drafted.value ??
@@ -128,7 +124,7 @@ const items = computed(() => {
           size="compact"
           :disabled="busy"
           disabled-reason="Working…"
-          @click="emit('remove', drafted.snapshot_id)"
+          @click="act('remove', drafted.snapshot_id)"
           >Remove pass</ApButton
         >
         <ApButton
@@ -137,7 +133,7 @@ const items = computed(() => {
           variant="primary"
           :disabled="busy"
           disabled-reason="Working…"
-          @click="emit('add', other.snapshot_id)"
+          @click="act('add', other.snapshot_id)"
           >Add pass</ApButton
         >
       </div>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
+import { ref } from "vue";
 import { ResolveBookingActions } from "@/features/resolutions/index.ts";
 import {
   UnconfirmedCallout,
@@ -15,16 +16,18 @@ defineProps<{
   isAdmin: boolean;
 }>();
 const emit = defineEmits<{ resolved: [] }>();
+// #244 (A5; fe-ops on #590): a resolve arms the callout's focus move for the refetch that follows.
+const callout = ref<InstanceType<typeof UnconfirmedCallout> | null>(null);
 </script>
 
 <template>
-  <UnconfirmedCallout :plan="plan" :name-of="nameOf" :member-note="!isAdmin">
+  <UnconfirmedCallout ref="callout" :plan="plan" :name-of="nameOf" :member-note="!isAdmin">
     <template v-if="isAdmin" #row-actions="{ pass }">
       <ResolveBookingActions
         :mission-id="missionId"
         :plan-id="plan.id"
         :pass="pass"
-        @resolved="emit('resolved')"
+        @resolved="(callout?.armFocus(), emit('resolved'))"
       />
     </template>
   </UnconfirmedCallout>

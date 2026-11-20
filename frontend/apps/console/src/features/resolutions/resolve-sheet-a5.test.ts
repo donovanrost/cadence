@@ -47,6 +47,8 @@ describe("ResolveBookingActions' sheet", () => {
       await flushPromises();
       expect(fetch).toHaveBeenCalledOnce();
       expect(document.body.textContent).toContain("Northlight answered: booked.");
+      // The primary that had focus is gone, so the outcome takes it and is read (ux on #590).
+      expect(document.activeElement?.textContent).toContain("Northlight answered: booked.");
       expect(w.emitted("resolved")).toBeUndefined();
       const close = [...document.querySelectorAll("button")].find((b) =>
         /^(Done|Close)$/.test(b.textContent?.trim() ?? ""),

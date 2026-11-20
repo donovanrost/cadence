@@ -139,6 +139,7 @@ const sentBack = computed(() =>
 /** #244 (A5, B4): focus follows Submit and Send back to their result lines (usePlanFocus.ts). */
 const resultBox = ref<HTMLElement | null>(null);
 const reviewLine = ref<InstanceType<typeof PlanReviewLine> | null>(null);
+const unconfirmed = ref<InstanceType<typeof UnconfirmedCallout> | null>(null);
 const focusSoon = usePlanFocus(() =>
   view.value.kind === "plan"
     ? `${view.value.plan.id}:${view.value.plan.version}:${view.value.plan.state}`
@@ -244,6 +245,7 @@ const clock = computed(() =>
     <!-- U30: on any state that has unconfirmed bookings, on top of the state's own callout. -->
     <UnconfirmedCallout
       v-if="view.plan.unconfirmed"
+      ref="unconfirmed"
       :plan="view.plan"
       :name-of="nameOf"
       :member-note="!isAdmin"
@@ -254,7 +256,7 @@ const clock = computed(() =>
           :mission-id="missionId"
           :plan-id="view.plan.id"
           :pass="pass"
-          @resolved="refresh"
+          @resolved="(unconfirmed?.armFocus(), refresh())"
         />
       </template>
     </UnconfirmedCallout>
