@@ -54,7 +54,7 @@ describe("Mobile 'Your GO is requested' (Mobile.md §3)", () => {
     const g = groupOf({ target_count: 4, member_count: 4 });
     const w = yourGoWords(g, names, new Date("2026-11-08T02:12:00Z"));
     expect([w.title, w.by, w.release, w.stack, w.confirm]).toEqual([
-      "Reset watchdogs · 4 SC",
+      "Reset watchdogs · 4 spacecraft",
       "Mira K. · T+00:12:00",
       "Each target at its next AOS.",
       ["01 FORCE_WATCHDOG"],
