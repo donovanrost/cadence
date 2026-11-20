@@ -19,6 +19,8 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceJSON do
       spacecraft_id: s.spacecraft_id,
       name: s.name,
       scid: s.scid,
+      # #595: the craft's own profile {id, name}, or nil.
+      profile: s.profile,
       section: s.section,
       token: s.token,
       saved_version: s.saved_version,
@@ -81,7 +83,9 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceJSON do
       policy_token: a.token,
       source: a.source,
       can_request: a.can_request,
-      can_review: a.can_review
+      can_review: a.can_review,
+      # #595: gates editing (Drafts.save's check); can_request gates Request activation.
+      can_save: a.can_save
     }
   end
 

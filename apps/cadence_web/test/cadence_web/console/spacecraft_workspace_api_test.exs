@@ -43,8 +43,12 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceAPITest do
                "policy_token" => policy_token,
                "source" => "inherited",
                "can_request" => true,
-               "can_review" => true
+               "can_review" => true,
+               # #595: gates editing (Drafts.save's own check).
+               "can_save" => true
              },
+             # #595: the craft's own profile; this one has none.
+             "profile" => nil,
              "fleet_total" => 1,
              "fleet" => [%{"has_changes" => false}]
            } = data
@@ -70,6 +74,28 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceAPITest do
              "telemetry_enabled" => %{"value" => true, "set" => true, "revision" => nil},
              "commanding_enabled" => ^off
            } = workspace(c)["switches"]
+  end
+
+  test "the snapshot names the craft's own profile (#595, U94's Open profile)", c do
+    profile = TestFixtures.persist_spacecraft_profile!(c.mission, display_name: "Bus A")
+
+    craft =
+      TestFixtures.persist_spacecraft!(c.mission,
+        spacecraft_type_id: profile.spacecraft_type_id,
+        spacecraft_type_version: profile.version
+      )
+
+    path =
+      "/api/console/v1/missions/#{c.mission.mission_id}/spacecraft/#{craft.spacecraft_id}/configuration/workspace"
+
+    data =
+      c.user
+      |> TestFixtures.member_conn()
+      |> get(path)
+      |> json_response(200)
+      |> Map.fetch!("data")
+
+    assert data["profile"] == %{"id" => profile.spacecraft_type_id, "name" => "Bus A"}
   end
 
   test "a draft with a switch key is refused, field-keyed, and nothing is saved", c do
