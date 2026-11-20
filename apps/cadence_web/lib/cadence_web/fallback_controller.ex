@@ -232,6 +232,13 @@ defmodule CadenceWeb.FallbackController do
     |> json(%{errors: translate_errors(changeset)})
   end
 
+  # #117 step 4a: REST approve and reject require the review token, and refuse a stale one.
+  def call(conn, {:error, :command_review_required}),
+    do: call(conn, {:error, {:invalid_param, "approval.expected_review", :required}})
+
+  def call(conn, {:error, :command_review_changed}),
+    do: error_response(conn, :conflict, "command_review_changed")
+
   def call(conn, {:error, reason}) do
     conn
     |> put_status(:unprocessable_entity)

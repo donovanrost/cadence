@@ -125,6 +125,7 @@ defmodule Cadence.Commanding.RequestStore do
            :ok <- ReviewPrecondition.check(request_row, opts),
            :ok <- LifecyclePolicy.ensure_request_pending_approval(request_row),
            :ok <- LifecyclePolicy.ensure_human_approval_actor(decided_by, command_request_id),
+           :ok <- ReviewPrecondition.required(opts),
            :ok <- LifecyclePolicy.ensure_not_self_approval(request_row, decided_by),
            approval =
              CommandApproval.new(%{

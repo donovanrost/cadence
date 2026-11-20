@@ -381,6 +381,12 @@ only: the group's member rows no longer match what submission recorded; details
 `submitted_member_count`, `current_member_count`; send back and NO-GO stay allowed; resubmit), `422 note_required`, `422 exclusions_required`,
 `422 unknown_excluded_target`, `422 invalid_params`.
 
+`expected_review` is **required on `go` and `go_excluding`** (#117 step 4a; fail closed: a GO without it
+answers `409 command_group_review_stale`), and optional on `send_back` and `no_go`. The token covers
+the group's state, preflight and member count, and **which requests are its members** (the members
+digest: each member's id with its own review token). Swapping one member for another at the same
+count makes it stale. GO recomputes it under the group lock.
+
 **HOLDs at GO** (DECISIONS #61): `go` and `go_excluding` re-run the review preflight
 (`GET …/preflight`) on a pending group.
 - Hard HOLDs refuse: `changed_since_submit`, and `contact` (no commandable contact).
@@ -650,6 +656,14 @@ Discards the draft. The response is `204` (idempotent).
 `POST /command-groups` takes an optional `draft_revision`. Once the group is created, the caller's
 draft is deleted in the same transaction, **only if it is still at that revision**, so a newer
 autosave from another tab survives.
+
+## REST command requests: approve and reject require the review token (#117 step 4a; lands after the 11-22 reset, date set at landing)
+
+**Breaking (REST only).** `POST /api/organizations/:organization_id/missions/:mission_id/command_requests/:id/approve` and `/reject` require `approval.expected_review`: the request's review token (64 hex), the same token the command review read sends as `expected_review`. That's four-eyes design B: a decision names exactly what was reviewed.
+- Without it: `422 {errors: [{field: "approval.expected_review", reason: "required"}]}`. Nothing is recorded.
+- A token that no longer matches the request: `409 command_review_changed`. Nothing is recorded; read the request again.
+- The human-approver check runs first, so a service caller still gets its `403` (a REST bearer is a service, and a service can't approve), whatever it sent.
+- No working client is affected: REST approve and reject have no human caller today, and no qa script calls them (qa, 11-20).
 
 ## REST commanding: actors (#465)
 
