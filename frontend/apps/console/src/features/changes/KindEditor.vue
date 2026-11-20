@@ -110,7 +110,6 @@ function useSuggestion() {
 const show = (v: unknown) =>
   v === null ? "cleared" : typeof v === "string" ? v : JSON.stringify(v);
 
-/** Nested document from dotted paths (create). */
 /** A create's document from its field changes, through the shared dotted-path write (#192). */
 function toDocument(changes: readonly { path: string; value: unknown }[]) {
   const doc: Record<string, unknown> = {};
