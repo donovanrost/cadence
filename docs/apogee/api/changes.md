@@ -26,6 +26,21 @@ nothing about runtime health (a mission whose runtime isn't admitted, U91, reads
 `false`, applying saves the changes and starts nothing: a mission's first generation comes from
 each spacecraft's configuration. Don't infer it from `runtime: not_applicable`, which also covers
 changes the runtime doesn't use. On a result it is read right after the apply commits.
+
+`outcome` (#522, K3; additive, readers first, optional): what applying the set would leave behind, on
+the explicit previews only (`POST /preview`, `POST /change-sets/:id/preview`). It's never on a submit
+or review result: the preview those run as their gate doesn't compute it (api-ops).
+`{spacecraft: {now, after}, routes: {now, after, added, removed}, readiness: {now, after} | null} | null`.
+- `spacecraft`: active (not archived) spacecraft. K3's SC tile is `after`.
+- `routes`: usable routes (active and enabled routing rows, one per spacecraft) of active spacecraft,
+  counted by id, so a set that swaps routes has both `added` and `removed`. K3's Routes tile is the
+  signed difference ("+300", "−50"), or both when both are nonzero (ca-ux).
+- `readiness`: Readiness' verdict counts, `{blocker, caution, stale, not_set_up}`, before and after.
+  It's `null` when the set touches none of spacecraft, profiles, overrides, routes, transports or
+  stations (domain). One evaluation at 500 spacecraft takes about 85 ms.
+- Read in the preview's own rolled-back transaction, before and after the staged ops. `outcome` is
+  `null` when the pipeline didn't fully check the set (a halt, a validation error or a conflict) or
+  when a read failed. A failed read never changes `verdict` or `checks`.
 | `GET /revisions?limit=&before=` | `list_revisions/3` | | `{revisions: [revision_summary]}` (newest first; `limit` 1–100) |
 | `GET /revisions/:n` | `get_revision/3` | | revision_summary + `entries` |
 | `GET /revisions?entity_kind=&entity_id=&limit=` | `entity_revisions/5` | | `{revisions: [revision_summary + entries]}`: only the revisions touching that entity, newest first, each with just that entity's entries, labelled as `GET /revisions/:n`'s (Profile History; `422 details.entity_kind` for an unknown kind) |
