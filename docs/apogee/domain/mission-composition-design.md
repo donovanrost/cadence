@@ -83,12 +83,18 @@ Sources:
 
 ### `mission_model_effective_revisions` (new, link)
 
-`(org, mission, composition_id, authored_head, revision_id)`, unique on the first four AND unique
-on `revision_id` (mms-security M2): a revision is named by exactly one (composition, authored
-head), so an approval can't move to another composition. `authored_head` is NULL until phase 3,
-and PG14 has no NULLS NOT DISTINCT, so the first index is on
-`(org, mission, composition_id, COALESCE(authored_head, ''))`, written with `ON CONFLICT DO
-NOTHING` and re-read (mms-engineer). **Writers:** only
+`(org, mission, composition_id, authored_head, compiler_version, revision_id)`.
+- **Unique on `(org, mission, composition_id, COALESCE(authored_head, ''), compiler_version)`.**
+  A link per compiler version (#559: mms-security, domain): a revision's id covers its compiler
+  version, so one composition at one head has one compiled revision per compiler version. Each
+  version's revision has its own link and its own approval, and approval never transfers between
+  versions.
+- **The link's `compiler_version` is the revision's own,** enforced by the composite FK
+  `(org, mission, revision_id, compiler_version)`; no caller passes it.
+- **Unique on `revision_id`** (mms-security M2): a revision is named by exactly one link, so an
+  approval can't move to another composition.
+- `authored_head` is NULL until phase 3. PG14 has no NULLS NOT DISTINCT, hence the COALESCE index,
+  written with `ON CONFLICT DO NOTHING` and re-read (mms-engineer). **Writers:** only
 `effective_revision/4`, with the revision it just compiled, and the migration (one-to-one).
 
 - `authored_head` is the mission's authored-layer lineage head (phase 3; `nil` until then).
@@ -136,7 +142,41 @@ migration reuses the existing rows.
 - **What's pinned:**
   - profiles gain `composition_id` beside `catalog_revision_id`;
   - per-craft overrides gain the path `composition_id`;
-  - the effective revision a craft runs is `effective_revision(pinned composition, mission's authored head)`.
+  - the revision a craft runs is chosen by the **selection rule** below.
+- **The selection rule** (#559, agreed by api-ops and mms-security; supersedes "the current
+  compiler version's revision"):
+  - **The newest APPROVED, RUNNABLE revision** of the pinned composition at the mission's authored
+    head. **"Newest"** is a fixed order on the link rows: compiler version, then link time. It never
+    depends on caller input or row order (mms-security).
+  - **"Runnable"** is an explicit list, in code with a test, of the compiler versions whose plans
+    this server can execute. A revision outside it is not runnable. That's never discovered by
+    failing at run time (api-ops).
+  - **After a compiler version bump,** `effective_revision/5` compiles and links the current
+    version's revision as a **candidate**, approved on its own like an import. Until someone
+    approves it, craft keep running the approved older compile: exactly the content that was
+    approved. Nothing unapproved runs, and nothing is refused just because Cadence was updated.
+  - **Staging (or review) selects** for each pin and records that exact revision id in the change
+    set and the activation evidence.
+  - **Under the activation lock, in the same read as the approval check, the server selects
+    again** (api-ops). If the result equals the recorded id, it runs.
+  - If it differs (a newer compile was approved in between, or the recorded one was withdrawn or
+    became unrunnable), activation is **refused with 're-stage needed'**. The refusal writes
+    nothing, names both ids (recorded and current) in its details, and the console offers a
+    re-stage. Only what was reviewed ever runs, and re-selection never silently changes it.
+  - **No silent fallback** (mms-security): when the newest approval is withdrawn, re-staging selects
+    the older approved compile visibly, for a reviewer to see.
+  - **Refused only when nothing is approved and runnable**: 're-approval needed after a Cadence
+    update', in ux's words.
+  - **Visibility:**
+    - a craft running an older compile while a newer one awaits approval shows it in the console
+      and in attention (api-ops);
+    - E1's approval read lists the pins an approval would move: the craft whose next staging
+      would select it (mms-security; D2's read shape).
+  - **Tests (D3):**
+    - a newer approval between staging and activation is refused with 're-stage needed';
+    - a withdrawal between them is refused too;
+    - the selection order is fixed;
+    - a revision outside the runnable list isn't selected.
 - **Pins change only by change set** (configuration lane), with four-eyes under 'independent'
   and #280's separation. That covers the kinds `spacecraft_profile` (`composition_id`) and the
   per-craft override. No other writer; REST bearers can't reach it outside the change-set path.
