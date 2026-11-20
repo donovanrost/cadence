@@ -18,7 +18,7 @@ defmodule Cadence.Reads.Passes do
   alias Cadence.Comms.{GroundStationStore, StationRefs}
   alias Cadence.Contacts.{PassWindows, ProviderReservation, RealizedContact}
   alias Cadence.Control.Contacts
-  alias Cadence.Reads.{HandStartedPasses, PassEnders}
+  alias Cadence.Reads.{HandStartedPasses, PassEnders, PassListenerOverlap}
 
   @default_limit 500
   @hand_only_states ~w(defined stopped)
@@ -182,7 +182,9 @@ defmodule Cadence.Reads.Passes do
       reservations: reservations,
       enders: PassEnders.load(organization_id, mission_id, reservations),
       stations: GroundStationStore.list_ground_stations(organization_id, mission_id),
-      spacecraft: Cadence.SpacecraftStore.list_spacecraft(organization_id, mission_id)
+      spacecraft: Cadence.SpacecraftStore.list_spacecraft(organization_id, mission_id),
+      # U58 (b), #361: a booked pass that loses its start to a one-connection listener.
+      overlaps: PassListenerOverlap.for_rows(organization_id, mission_id, reservations)
     })
     |> build()
   end
@@ -196,13 +198,15 @@ defmodule Cadence.Reads.Passes do
     station = Map.get(filters, :station)
 
     enders = Map.get(input, :enders, %{})
+    overlaps = Map.get(input, :overlaps, %{})
 
     passes =
       reservations
       |> Enum.map(
         &(&1
           |> row(index, crafts)
-          |> Map.put(:ended_by, PassEnders.ended_by(&1, enders)))
+          |> Map.put(:ended_by, PassEnders.ended_by(&1, enders))
+          |> Map.put(:listener_overlap, Map.get(overlaps, &1.scheduled_contact_id)))
       )
       |> Enum.filter(&(state_match?(&1, states) and station_match?(&1, station)))
 

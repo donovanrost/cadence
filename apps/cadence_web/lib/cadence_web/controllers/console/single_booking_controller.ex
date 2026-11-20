@@ -11,11 +11,19 @@ defmodule CadenceWeb.Console.SingleBookingController do
 
   alias Cadence.Accounts.MemberNames
   alias Cadence.Contacts.SingleBookings
-  alias Cadence.Reads.Passes
+  alias Cadence.Reads.{Passes, PassListenerOverlap}
   alias CadenceWeb.Console.{ConfigJSON, Problem}
 
   def search(conn, params) do
-    case SingleBookings.search(scope(conn), mission_id(conn), Map.drop(params, ["mission_id"])) do
+    # U58 (b), #361: each offer's listener overlap, named by the read.
+    opts = [listener_overlap: &PassListenerOverlap.for_offers/3]
+
+    case SingleBookings.search(
+           scope(conn),
+           mission_id(conn),
+           Map.drop(params, ["mission_id"]),
+           opts
+         ) do
       {:ok, result} -> json(conn, %{data: ConfigJSON.encode(result)})
       {:error, reason} -> error(conn, reason)
     end
