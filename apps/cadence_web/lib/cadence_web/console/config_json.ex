@@ -169,6 +169,7 @@ defmodule CadenceWeb.Console.ConfigJSON do
       "mission_model_revision_not_approved",
       by_act(
         conn,
+        :mission_model_revision_not_approved,
         ModelApplyRefusals.sentence(:mission_model_revision_not_approved, Map.values(numbers))
       ),
       %{mission_model_revision_ids: ids, catalog_revision_numbers: Enum.map(ids, &numbers[&1])}
@@ -182,7 +183,11 @@ defmodule CadenceWeb.Console.ConfigJSON do
       conn,
       409,
       "mission_model_comparison_failed",
-      by_act(conn, ModelApplyRefusals.sentence(:mission_model_comparison_failed, [number])),
+      by_act(
+        conn,
+        :mission_model_comparison_failed,
+        ModelApplyRefusals.sentence(:mission_model_comparison_failed, [number])
+      ),
       %{
         mission_model_revision_id: revision_id,
         comparison_report_id: report_id,
@@ -209,9 +214,15 @@ defmodule CadenceWeb.Console.ConfigJSON do
         mission && mission.mission_id
       )
 
-    respond_raw(conn, Map.fetch!(@status, tag), Atom.to_string(tag), by_act(conn, message), %{
-      spacecraft_ids: ids
-    })
+    respond_raw(
+      conn,
+      Map.fetch!(@status, tag),
+      Atom.to_string(tag),
+      by_act(conn, tag, message),
+      %{
+        spacecraft_ids: ids
+      }
+    )
   end
 
   # The conversion's 'alone in its set' refusal names the open set (domain gives its id).
@@ -262,13 +273,41 @@ defmodule CadenceWeb.Console.ConfigJSON do
   def error(conn, _unknown),
     do: respond_raw(conn, 422, "unprocessable", "The request could not be completed.", nil)
 
-  defp by_act(conn, "Not applied: " <> rest) do
-    if conn.assigns[:submit_act] == :request_review,
-      do: "Not sent for review: " <> rest,
-      else: "Not applied: " <> rest
+  # An approve applies, so its refusal is U95's (ca-ux): why, then that nothing was applied and the
+  # set stays in review, that the approval wasn't recorded, and what the approver can do.
+  defp by_act(conn, tag, "Not applied: " <> rest) do
+    cond do
+      approving?(conn) -> approve_form(tag, why(rest))
+      conn.assigns[:submit_act] == :request_review -> "Not sent for review: " <> rest
+      true -> "Not applied: " <> rest
+    end
   end
 
-  defp by_act(_conn, message), do: message
+  defp by_act(_conn, _tag, message), do: message
+
+  defp approve_form(tag, why),
+    do:
+      "Not approved: #{why}, so nothing was applied and the change set stays in review. " <>
+        "Your approval wasn't recorded. " <> approve_next(tag, why)
+
+  # The refusal's own reason: its first sentence, without the closing period.
+  defp why(rest), do: rest |> String.split(". ", parts: 2) |> hd() |> String.trim_trailing(".")
+
+  defp approve_next(:telemetry_app_not_installed, _why),
+    do: "Approve it again once the app is installed in Setup › Apps."
+
+  defp approve_next(:telemetry_packet_inputs_required, _why),
+    do: "Approve it again once they're set up, or send it back."
+
+  defp approve_next(:mission_model_revision_not_approved, why) do
+    case Regex.run(~r/^(.+) isn't approved yet$/, why) do
+      [_, label] -> "Approve it again once #{label} is approved."
+      nil -> "Approve it again once they're approved."
+    end
+  end
+
+  defp approve_next(:mission_model_comparison_failed, _why),
+    do: "Send it back so the author can stage a revision that passed."
 
   # Only an approve reaches these two from review: send back runs no checks.
   defp approving?(conn), do: conn.private[:phoenix_action] == :review
@@ -279,7 +318,7 @@ defmodule CadenceWeb.Console.ConfigJSON do
         conn,
         Map.fetch!(@status, tag),
         Atom.to_string(tag),
-        by_act(conn, Map.fetch!(@messages, tag)),
+        by_act(conn, tag, Map.fetch!(@messages, tag)),
         details
       )
 
