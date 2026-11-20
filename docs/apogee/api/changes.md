@@ -62,7 +62,10 @@ version and a digest of the exact ops it decided), the approval policy in force,
 apply) and `admin_mode`. A reviewed apply runs exactly the ops its review named; if they differ, it
 answers `409 change_set_changed` and writes nothing.
 - A revision's `applied_by` is whoever ran the apply: on a reviewed set, the reviewer who approved
-  it. The submitter is the change set's `submitted_by`.
+  it. The submitter is the change set's `submitted_by`. The apply runs as that person, so on a
+  reviewed set the reviewer is also the `saved_by` of the limit and derived-telemetry versions it
+  saves, and the actor of the organization audit's `config` event for it (api-ops). #236's author
+  check is unaffected: it reads the review's authors, not `saved_by` or `applied_by`.
 - A change set's `reviews` lists reviewer decisions only (`approved | sent_back`). A direct apply's
   `not_required` record isn't a review; the audit shows it (#239).
 - A direct set's `approval_required` is `false`: its policy is stored now.
