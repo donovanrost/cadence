@@ -14,7 +14,7 @@ import type { ReviewAct } from "./review-run.ts";
 import { approveRefusal, submitRefusalText, type Refusal } from "./review-words.ts";
 import { dayLabel, expiredLine, lifecycleRefusal, planOfDayRoute } from "./lifecycle.ts";
 import { contactsShortText, coverage, gapGroups } from "./coverage.ts";
-import type { SpacecraftName } from "./names.ts";
+import { craftLabel, type SpacecraftName } from "./names.ts";
 
 /**
  * Accept-gaps sheet (ScheduleFlow K1, DECISIONS #28, U23 amended): one row per uncovered
@@ -216,7 +216,7 @@ const atRisk = computed(() => {
     .filter((p) => ids.has(p.snapshot_id))
     .map((p) => ({
       id: p.snapshot_id,
-      text: `${props.nameOf(p.spacecraft_id)?.name ?? p.spacecraft_id ?? "?"} · ${stationCode(p.station)} · ${p.starts_at.slice(11, 16)}–${p.ends_at.slice(11, 16)}Z`,
+      text: `${craftLabel(props.nameOf(p.spacecraft_id))} · ${stationCode(p.station)} · ${p.starts_at.slice(11, 16)}–${p.ends_at.slice(11, 16)}Z`,
     }));
 });
 defineExpose({ open, close });
@@ -256,9 +256,9 @@ defineExpose({ open, close });
       >
         <p class="m-0 font-mono text-sm font-semibold text-readout">
           {{
-            nameOf(group.spacecraftId)?.name ??
-            group.spacecraftId ??
-            "Requirements without a spacecraft"
+            group.spacecraftId === null
+              ? "Requirements without a spacecraft"
+              : craftLabel(nameOf(group.spacecraftId))
           }}
         </p>
         <ul class="m-0 list-none p-0 font-mono text-xs text-text-3">

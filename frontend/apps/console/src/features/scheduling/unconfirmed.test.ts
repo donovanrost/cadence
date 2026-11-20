@@ -90,6 +90,11 @@ describe("U30 unconfirmed", () => {
       "EARENDIL-1 · KIR · 09:00Z",
     ]);
   });
+  it("names a craft it can't read as 'Unknown spacecraft', never its id (#237, U25)", () => {
+    const v = unconfirmedView(plan("unconfirmed", ["Northlight"]), () => null, "2026-11-10");
+    expect(v?.passes.map((r) => r.text)).toEqual(["Unknown spacecraft · KIR · 09:00Z"]);
+  });
+
   it("splits by provider when there are several", () => {
     expect(
       unconfirmedView(plan("unconfirmed", ["Northlight", "KSAT"]), names, "2026-11-10")?.headline,

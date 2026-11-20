@@ -51,6 +51,11 @@ describe("K1 offer clock (ux)", () => {
     expect(c?.snapshotId).toBe("s1");
   });
 
+  it("names a craft it can't read as 'Unknown spacecraft', never its id (#237, U25)", () => {
+    const c = offerClock(plan([pass("s1", "17:00", "16:15")], "16:15"), () => null, now);
+    expect(c?.passText).toBe("Unknown spacecraft · SVB-1 · 17:00Z");
+  });
+
   it("never counts up from an expired offer: moves to the next live one and counts the lapsed", () => {
     const c = offerClock(
       plan(

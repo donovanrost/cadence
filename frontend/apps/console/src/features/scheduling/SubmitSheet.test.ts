@@ -62,6 +62,9 @@ describe("SubmitSheet", () => {
       attachTo: document.body,
     });
     expect(wrapper.text()).toContain("2 gaps still need a reason");
+    // #237 (U25): a craft the fleet can't name is "Unknown spacecraft", never its id.
+    expect(wrapper.text()).toContain("Unknown spacecraft");
+    expect(wrapper.text()).not.toContain("sc-r1");
     expect(wrapper.text()).toContain("Accept 2 gaps ·"); // gaps title the sheet, not the act
     expect(wrapper.text()).not.toContain("Approve and book the plan");
     const [first] = wrapper.findAll("textarea");
