@@ -283,6 +283,12 @@ export const errorCodes = [
   "approval_tightening_suspends_grants",
   // #534 (mms-engineer, #548/#549): a packet definition version race; retryable, nothing written.
   "packet_definition_version_taken",
+  // Change-set apply refusals (api changes.md § Errors), worded per code by #310 (ca-ux, U79).
+  "change_set_changed",
+  "checks_failed",
+  "holds_not_acknowledged",
+  "nothing_staged",
+  "invalid_op",
   "open_change_set_not_empty",
   "nothing_to_convert",
   "conversion_in_progress",
