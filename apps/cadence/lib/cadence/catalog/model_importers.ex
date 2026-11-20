@@ -44,31 +44,62 @@ defmodule Cadence.Catalog.ModelImporters do
   @spec actors(binary(), binary(), binary()) :: [{:user, binary()} | {:service, binary()}]
   def actors(organization_id, mission_id, mission_model_revision_id) do
     revisions =
-      from(row in RevisionRow,
-        where:
-          row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-            row.mission_model_revision_id == ^mission_model_revision_id,
-        select: row.created_by
-      )
-      |> Repo.all()
+      organization_id
+      |> revision_creators(mission_id, mission_model_revision_id)
       |> Enum.map(&revision_importer/1)
 
     runs =
-      from(run in ImportRunRow,
-        where:
-          run.organization_id == ^organization_id and run.mission_id == ^mission_id and
-            run.status == "completed" and
-            fragment(
-              "? -> 'value' -> 'mission_model' ->> 'revision_id' = ?",
-              run.result_document,
-              ^mission_model_revision_id
-            ),
-        select: run.requested_by
-      )
-      |> Repo.all()
+      organization_id
+      |> run_requesters(mission_id, mission_model_revision_id)
       |> Enum.map(&run_importer/1)
 
     (revisions ++ runs) |> Enum.reject(&is_nil/1) |> Enum.uniq()
+  end
+
+  defp revision_creators(organization_id, mission_id, mission_model_revision_id) do
+    from(row in RevisionRow,
+      where:
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.mission_model_revision_id == ^mission_model_revision_id,
+      select: row.created_by
+    )
+    |> Repo.all()
+  end
+
+  defp run_requesters(organization_id, mission_id, mission_model_revision_id) do
+    from(run in ImportRunRow,
+      where:
+        run.organization_id == ^organization_id and run.mission_id == ^mission_id and
+          run.status == "completed" and
+          fragment(
+            "? -> 'value' -> 'mission_model' ->> 'revision_id' = ?",
+            run.result_document,
+            ^mission_model_revision_id
+          ),
+      select: run.requested_by
+    )
+    |> Repo.all()
+  end
+
+  @doc """
+  D2 (#543): the stored actor documents `actors/3` counts, unwrapped (one per counted actor), so a
+  read can name each the way it was recorded: a seed's system actor keeps its `run_by` (#513).
+  """
+  @spec documents(binary(), binary(), binary()) :: [map()]
+  def documents(organization_id, mission_id, mission_model_revision_id) do
+    revisions =
+      for doc <- revision_creators(organization_id, mission_id, mission_model_revision_id),
+          actor <- [revision_importer(doc)],
+          actor != nil,
+          do: {actor, JsonDocument.unwrap_value(doc)}
+
+    runs =
+      for doc <- run_requesters(organization_id, mission_id, mission_model_revision_id),
+          actor <- [run_importer(doc)],
+          actor != nil,
+          do: {actor, JsonDocument.unwrap_value(doc)}
+
+    (revisions ++ runs) |> Enum.uniq_by(&elem(&1, 0)) |> Enum.map(&elem(&1, 1))
   end
 
   @doc """

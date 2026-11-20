@@ -99,6 +99,26 @@ defmodule Cadence.MissionModels.CompositionApproval do
     (layer_importers ++ List.wrap(composer)) |> Enum.uniq()
   end
 
+  @doc """
+  D2 (#543): per imported layer, the stored documents of the importers `composition_actors/3`
+  counts for it (the composer excluded), in the composition's layer order.
+  """
+  @spec layer_importers(binary(), binary(), Compositions.t() | map()) :: [{binary(), [map()]}]
+  def layer_importers(organization_id, mission_id, composition) do
+    layer_ids = Enum.map(composition.imported_layers, & &1.layer_id)
+    carrying = carrying_revisions(organization_id, mission_id, layer_ids)
+
+    for layer_id <- layer_ids do
+      documents =
+        carrying
+        |> Map.get(layer_id, [])
+        |> Enum.flat_map(&Catalog.model_import_documents(organization_id, mission_id, &1))
+        |> Enum.uniq_by(&Catalog.model_import_actor_of/1)
+
+      {layer_id, documents}
+    end
+  end
+
   @doc "What an approval records about the combination it approved (M2)."
   @spec evidence(Compositions.t()) :: map()
   def evidence(composition) do

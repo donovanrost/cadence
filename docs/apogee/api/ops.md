@@ -577,8 +577,12 @@ Errors: `404 spacecraft_not_found`.
     `catalog.profile` is the one its profile (with its overrides) sets. Either can be `null`. When
     both are set and differ, show the "Running rev 14; the profile is on rev 15" caution (the same
     rule as the Readiness catalog finding, DECISIONS #65).
+  - `catalog.running.composition` and `catalog.profile.composition` (D2, #543): the composition
+    behind this revision (shape in setup.md's 'Compositions' section), or null.
 - **G2 `overrides`:** this spacecraft's overrides only, labelled from the profile schema (`label`,
   `unit` may be null). Values are JSON text; `null` means not set. `[]` → "Uses its profile as is."
+  - `composition` (D2, #543): for a `catalog_revision_id` override, the composition behind the
+    catalog revision it sets (shape in setup.md's 'Compositions' section); null for any other.
 - **G3 `routing_rules`:** as `/spacecraft/:id`, plus the transport's `station` (null when the
   transport names none).
 - **G4 `pending`:** the mission's open or in-review change set when it has changes touching this

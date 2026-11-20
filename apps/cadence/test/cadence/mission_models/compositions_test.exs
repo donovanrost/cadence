@@ -335,8 +335,9 @@ defmodule Cadence.MissionModels.CompositionsTest do
 
   # The rows imports wrote, cleared in this sandbox so the backfill runs as on an old database.
   defp lift_and_clear! do
-    for table <- ~w(mission_model_effective_revisions mission_model_composition_layers
-                    mission_model_compositions) do
+    # D2's numbers first: they reference the compositions (#543).
+    for table <- ~w(mission_model_composition_numbers mission_model_effective_revisions
+                    mission_model_composition_layers mission_model_compositions) do
       Repo.query!("ALTER TABLE #{table} DISABLE TRIGGER USER")
       Repo.query!("DELETE FROM #{table}")
       Repo.query!("ALTER TABLE #{table} ENABLE TRIGGER USER")

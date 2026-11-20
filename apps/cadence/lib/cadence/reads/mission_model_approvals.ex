@@ -17,6 +17,7 @@ defmodule Cadence.Reads.MissionModelApprovals do
   alias Cadence.MissionModels
   alias Cadence.MissionModels.{ApprovalReads, Comparison, RevisionDecisions}
   alias Cadence.Reads.Catalog.RevisionBase
+  alias Cadence.Reads.MissionModelApprovals.CompositionKeys
 
   @spec list(Scope.t(), binary(), binary()) :: [map()]
   def list(%Scope{} = scope, mission_id, status) do
@@ -30,6 +31,7 @@ defmodule Cadence.Reads.MissionModelApprovals do
       Map.new(rows, &{&1.id, org |> Catalog.model_importers(mission_id, &1.id) |> List.first()})
 
     names = MemberNames.members(org, firsts |> Map.values() |> Enum.reject(&is_nil/1))
+    compositions = CompositionKeys.for_list(org, mission_id, ids)
 
     Enum.map(rows, fn row ->
       %{
@@ -38,6 +40,8 @@ defmodule Cadence.Reads.MissionModelApprovals do
         imported_at: row.imported_at,
         imported_by: person_or_nil(firsts[row.id], names),
         catalog_revision: Map.get(catalogs, row.id),
+        # D2 (#543): the composition behind the revision, beside its catalog revision.
+        composition: Map.get(compositions, row.id),
         latest_comparison_status: Map.get(statuses, row.id)
       }
     end)
@@ -64,26 +68,35 @@ defmodule Cadence.Reads.MissionModelApprovals do
         end
 
       {:ok,
-       %{
-         id: row.id,
-         status: row.status,
-         imported_at: row.imported_at,
-         imported_by: first_importer(org, importers),
-         catalog_revision: catalog_revision,
-         decision: decision(row),
-         viewer_can_decide: is_nil(blocked),
+       row
+       |> base_view(org, importers, catalog_revision, blocked, blocked_details)
+       |> Map.merge(%{
          viewer_is_importer: is_binary(viewer_id) and viewer_id in importers,
-         cannot_decide_because: blocked,
-         # #280 (ux U100): via_service for self_approval through a service; service for
-         # authors_unknown. Nil otherwise.
-         cannot_decide_details: blocked_details,
-         # Approve only (lead 11-17, ux U88): no catalog revision names this model revision, so
-         # domain's guard refuses approving it; Reject stays. cannot_decide_because wins if set.
-         cannot_approve_because: if(is_nil(catalog_revision), do: "not_in_catalog"),
          plans_ready: plans_ready,
          comparison: report && summary(org, mission_id, report)
-       }}
+       })
+       # D2 (#543): composition, importers per layer and breaking_base (CompositionKeys).
+       |> Map.merge(CompositionKeys.read(org, mission_id, row.id))}
     end
+  end
+
+  defp base_view(row, org, importers, catalog_revision, blocked, blocked_details) do
+    %{
+      id: row.id,
+      status: row.status,
+      imported_at: row.imported_at,
+      imported_by: first_importer(org, importers),
+      catalog_revision: catalog_revision,
+      decision: decision(row),
+      viewer_can_decide: is_nil(blocked),
+      cannot_decide_because: blocked,
+      # #280 (ux U100): via_service for self_approval through a service; service for
+      # authors_unknown. Nil otherwise.
+      cannot_decide_details: blocked_details,
+      # Approve only (lead 11-17, ux U88): no catalog revision names this model revision, so
+      # domain's guard refuses approving it; Reject stays. cannot_decide_because wins if set.
+      cannot_approve_because: if(is_nil(catalog_revision), do: "not_in_catalog")
+    }
   end
 
   @doc """
@@ -251,7 +264,7 @@ defmodule Cadence.Reads.MissionModelApprovals do
 
       true ->
         case RevisionDecisions.separation(scope.organization_id, mission_id, row.id, viewer_id) do
-          {:refused, refusal} -> separation_reason(refusal)
+          {:refused, refusal} -> refused(scope, mission_id, row, refusal)
           {:ok, _checked} when not plans_ready -> {"plans_not_ready", nil}
           {:ok, _checked} -> {nil, nil}
         end
@@ -273,6 +286,18 @@ defmodule Cadence.Reads.MissionModelApprovals do
       RevisionBase.breaking(org, mission_id, revision)
     )
   end
+
+  # D2 (#543): a self refusal that is the composer's alone reads "composer" (E1's precedence: an
+  # importer who also composed stays self_approval), with the same via_service details.
+  defp refused(scope, mission_id, row, %{reason: :self} = refusal) do
+    viewer_id = scope.user && scope.user.user_id
+
+    if CompositionKeys.composer?(scope.organization_id, mission_id, row.id, viewer_id),
+      do: {"composer", %{via_service: refusal.via_service}},
+      else: separation_reason(refusal)
+  end
+
+  defp refused(_scope, _mission_id, _row, refusal), do: separation_reason(refusal)
 
   defp separation_reason(%{reason: :self, via_service: nil}), do: {"self_approval", nil}
 

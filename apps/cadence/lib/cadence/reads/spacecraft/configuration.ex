@@ -11,6 +11,7 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
   alias Cadence.Catalog.SpacecraftConfigurationInput, as: ConfigurationInput
   alias Cadence.Catalog.SpacecraftModelBindings
   alias Cadence.Control.Activations, as: ControlActivations
+  alias Cadence.Reads.CatalogCompositions
   alias Cadence.Reads.Spacecraft.ConfigurationCatalogs
   alias Cadence.SourceEndpoints
   alias Cadence.SpacecraftStore
@@ -35,11 +36,15 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
       current = ConfigurationDrafts.snapshot(mission, craft)
       approval = ActivationPolicy.load(mission.organization_id, mission.mission_id)
       active_entry = active.entries[id]
+      saved_catalog = current.document["catalog_revision_id"]
+      active_catalog = active_entry && active_entry["catalog_revision_id"]
+      catalogs = ConfigurationCatalogs.list(mission, [saved_catalog, active_catalog])
 
-      catalogs =
-        ConfigurationCatalogs.list(mission, [
-          current.document["catalog_revision_id"],
-          active_entry && active_entry["catalog_revision_id"]
+      # D2 (#543): the compositions behind the saved and the active document's catalog revisions.
+      compositions =
+        CatalogCompositions.load(mission.organization_id, mission.mission_id, [
+          saved_catalog,
+          active_catalog
         ])
 
       fleet =
@@ -73,6 +78,7 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
          token: current.token,
          saved_version: current.row && current.row.version,
          document: current.document,
+         composition: Map.get(compositions, saved_catalog),
          external_changes: current.external_changes,
          switches: switches,
          active:
@@ -80,6 +86,7 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
              %{
                version: active_entry["configuration_version"],
                document: active_entry["document"],
+               composition: Map.get(compositions, active_catalog),
                generation: active.activation.generation
              },
          review: review(mission, id, current, active),

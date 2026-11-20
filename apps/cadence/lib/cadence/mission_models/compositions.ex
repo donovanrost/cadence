@@ -21,7 +21,9 @@ defmodule Cadence.MissionModels.Compositions do
   - **Creator.** `created_by` keeps the actor's kind and ids only (`actor_kind`, `user_id`,
     `service_identity_id`, `system_id`, `run_by`), never a stored name: readers name people live
     (#146), and a system actor's `run_by` still counts its runner (#513).
-  - Rows are immutable by trigger (migration 20261120060000).
+  - **Number.** A new composition gets its mission's next short number (D2, #543), in
+    `mission_model_composition_numbers`, never reused.
+  - Rows are immutable by trigger (migrations 20261120060000 and 20261120150000).
   """
 
   import Ecto.Query
@@ -105,12 +107,13 @@ defmodule Cadence.MissionModels.Compositions do
       composition_id: composition_id
     }
 
-    Repo.insert_all(
-      CompositionRow,
-      [Map.merge(scope, %{created_by: created_by, inserted_at: now})],
-      on_conflict: :nothing,
-      conflict_target: [:organization_id, :mission_id, :composition_id]
-    )
+    {inserted, _rows} =
+      Repo.insert_all(
+        CompositionRow,
+        [Map.merge(scope, %{created_by: created_by, inserted_at: now})],
+        on_conflict: :nothing,
+        conflict_target: [:organization_id, :mission_id, :composition_id]
+      )
 
     rows =
       layers
@@ -120,6 +123,26 @@ defmodule Cadence.MissionModels.Compositions do
       end)
 
     Repo.insert_all(CompositionLayerRow, rows, on_conflict: :nothing)
+    if inserted == 1, do: number(organization_id, mission_id, composition_id)
+  end
+
+  # D2 (#543): a NEW composition's per-mission short number, never reused (an existing one keeps
+  # the number it has). Max + 1 under a per-mission lock with its own key prefix, so two new
+  # compositions can't take the same one.
+  defp number(organization_id, mission_id, composition_id) do
+    lock(["mission_model_composition_number", organization_id, mission_id])
+
+    Repo.query!(
+      """
+      INSERT INTO mission_model_composition_numbers
+        (organization_id, mission_id, composition_id, number, inserted_at)
+      SELECT $1::text, $2::text, $3::text, COALESCE(MAX(number), 0) + 1, now()
+        FROM mission_model_composition_numbers
+       WHERE organization_id = $1::text AND mission_id = $2::text
+      ON CONFLICT (organization_id, mission_id, composition_id) DO NOTHING
+      """,
+      [organization_id, mission_id, composition_id]
+    )
   end
 
   # Refused before anything is written (mms-security): every layer is this tenant's and imported,
@@ -267,16 +290,11 @@ defmodule Cadence.MissionModels.Compositions do
   end
 
   # A 64-bit key from sha256, so unrelated compositions rarely wait on each other (api-ops).
-  defp advisory_lock(organization_id, mission_id, composition_id) do
-    <<key::signed-64, _rest::binary>> =
-      :crypto.hash(
-        :sha256,
-        Enum.join(
-          ["mission_model_effective_revision", organization_id, mission_id, composition_id],
-          <<0>>
-        )
-      )
+  defp advisory_lock(organization_id, mission_id, composition_id),
+    do: lock(["mission_model_effective_revision", organization_id, mission_id, composition_id])
 
+  defp lock(parts) do
+    <<key::signed-64, _rest::binary>> = :crypto.hash(:sha256, Enum.join(parts, <<0>>))
     Repo.query!("SELECT pg_advisory_xact_lock($1)", [key])
   end
 
