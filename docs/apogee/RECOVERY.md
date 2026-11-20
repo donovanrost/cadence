@@ -35,14 +35,16 @@ Non-agent qa panes in `w0R` (the dev stack): `qa-server` (`:4011`), `qa-console-
 
 pane ids will change if herdr recreates panes; update `docs/apogee/ROSTER.md` after recovery.
 
-## Laptop 2 sessions (donovans-macbook-pro-1; lead, 2026-11-20 05:3xZ)
+## Laptop 2 sessions (lead, 2026-11-20 05:3xZ)
 
 The six squad agents on laptop 2 run as hc terminals in the space **'Laptop 2 squads'**. Each
 worktree is under `~/projects/cadence/worktrees/` on laptop 2. The session ids below are each
 worktree's newest Claude transcript, read from laptop 2's `~/.claude/projects/` at 05:3xZ. Each
-agent confirms its own id in its handoff note.
+agent confirmed its own id on 11-20 and keeps its handoff note current. The hc address is how
+laptop 1 reaches the agent: laptop 2 appears to laptop 1's hc as `donovans-macbook-pro-1`, even
+though its hostname is Donovans-MacBook-Pro-2. On laptop 2 itself the terminal is the bare `tN`.
 
-| Name | Squad | hc terminal (11-20) | Worktree (cwd, on laptop 2) | Claude session id |
+| Name | Squad | hc address from laptop 1 (11-20) | Worktree (cwd, on laptop 2) | Claude session id |
 |---|---|---|---|---|
 | ca-security | Commanding & Approvals (security lead) | `donovans-macbook-pro-1/t9` | `~/projects/cadence/worktrees/ca-security` | `06daf23d-4f99-4629-890e-473eec7d232a` |
 | ca-ux | Commanding & Approvals | `donovans-macbook-pro-1/t10` | `~/projects/cadence/worktrees/ca-ux` | `a487bea0-4b40-4d92-b650-f74d3252cad7` |
@@ -55,7 +57,14 @@ agent confirms its own id in its handoff note.
 1. On laptop 2, open one hc terminal per agent in the 'Laptop 2 squads' space, named as above.
 2. In each, `cd` to the worktree and run `claude --resume <session-id> --permission-mode auto`.
 3. Each agent first reads its own handoff note, then the hc messages it missed.
-4. devops restarts laptop 2's own Postgres and gate, and the laptop-1 owners' laptop-2 worktree runs (domain, fe-ops, api, api-ops) re-run anything that was interrupted. Nothing on laptop 2 is part of the laptop-1 dev stack, so qa's stack is unaffected.
+4. devops checks laptop 2's services; nothing needs a restart by hand:
+   - Postgres is a brew service with a LaunchAgent and starts at login. devops checks `pg_isready` and one connection per claimed `cadence_testNN`, and runs `brew services start postgresql@14` only if it's down.
+   - The heavy gate has no daemon, and a killed job's lock clears on the next call. devops runs `heavy-gate.sh --status`.
+   - devops tells the four `*-l2` worktree owners (domain, fe-ops, api, api-ops) to re-run interrupted work.
+
+   Nothing on laptop 2 is part of the laptop-1 dev stack, so qa's stack is unaffected.
+
+All of this starts only after the user has logged in on laptop 2 (devops, 11-20).
 
 Terminal numbers can change when hc recreates terminals; update this table after recovery.
 
