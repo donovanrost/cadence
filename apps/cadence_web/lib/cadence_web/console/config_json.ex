@@ -76,11 +76,6 @@ defmodule CadenceWeb.Console.ConfigJSON do
     catalog_command_in_flight:
       "A command started while applying; nothing was applied. Try again when it finishes.",
     # The apply's own refusals (api-ops 11-15); the preview's blocking hold normally says it first.
-    telemetry_app_not_installed: "Not applied: the telemetry app isn't installed.",
-    telemetry_packet_inputs_required: "Not applied: telemetry's packet inputs aren't set up.",
-    mission_model_revision_not_approved: "Not applied: the catalog revision isn't approved yet.",
-    mission_model_comparison_failed:
-      "Not applied: the catalog revision's comparison didn't pass.",
     invalid_range: "Choose an older revision first.",
     forbidden: "You do not have permission to do that.",
     change_set_not_found: "Change set not found.",
@@ -140,8 +135,18 @@ defmodule CadenceWeb.Console.ConfigJSON do
   # mms-ux (for ca-ux): the four server-worded MM&S refusals open with the submit's act. A submit
   # under 'needs a second person's approval' was Request review, so "Not sent for review:"
   # replaces "Not applied:"; the rest of each sentence is unchanged. An approve applies.
-  @by_act ~w(telemetry_app_not_installed telemetry_packet_inputs_required
-    mission_model_revision_not_approved mission_model_comparison_failed)a
+  # The four refusals worded by act (submit, Request review, approve), as data: the reason clause
+  # and, for an unapproved model, what the approver waits on (ModelApplyRefusals.refusal/2).
+  @by_act_refusals %{
+    telemetry_app_not_installed: %{why: "the telemetry app isn't installed"},
+    telemetry_packet_inputs_required: %{why: "telemetry's packet inputs aren't set up"},
+    mission_model_revision_not_approved: %{
+      why: "the catalog revision isn't approved yet",
+      subject: {:one, "the catalog revision"}
+    },
+    mission_model_comparison_failed: %{why: "the catalog revision's comparison didn't pass"}
+  }
+  @by_act Map.keys(@by_act_refusals)
 
   @doc "Sends the envelope for a facade error and halts."
   @spec error(Plug.Conn.t(), term()) :: Plug.Conn.t()
@@ -170,7 +175,7 @@ defmodule CadenceWeb.Console.ConfigJSON do
       by_act(
         conn,
         :mission_model_revision_not_approved,
-        ModelApplyRefusals.sentence(:mission_model_revision_not_approved, Map.values(numbers))
+        ModelApplyRefusals.refusal(:mission_model_revision_not_approved, Map.values(numbers))
       ),
       %{mission_model_revision_ids: ids, catalog_revision_numbers: Enum.map(ids, &numbers[&1])}
     )
@@ -186,7 +191,7 @@ defmodule CadenceWeb.Console.ConfigJSON do
       by_act(
         conn,
         :mission_model_comparison_failed,
-        ModelApplyRefusals.sentence(:mission_model_comparison_failed, [number])
+        ModelApplyRefusals.refusal(:mission_model_comparison_failed, [number])
       ),
       %{
         mission_model_revision_id: revision_id,
@@ -206,8 +211,8 @@ defmodule CadenceWeb.Console.ConfigJSON do
     scope = conn.assigns[:current_scope]
     mission = conn.assigns[:current_mission]
 
-    message =
-      TelemetryApplyRefusals.message(
+    refusal =
+      TelemetryApplyRefusals.refusal(
         tag,
         ids,
         scope && scope.organization_id,
@@ -218,7 +223,7 @@ defmodule CadenceWeb.Console.ConfigJSON do
       conn,
       Map.fetch!(@status, tag),
       Atom.to_string(tag),
-      by_act(conn, tag, message),
+      by_act(conn, tag, refusal),
       %{
         spacecraft_ids: ids
       }
@@ -275,40 +280,45 @@ defmodule CadenceWeb.Console.ConfigJSON do
 
   # An approve applies, so its refusal is U95's (ca-ux): why, then that nothing was applied and the
   # set stays in review, that the approval wasn't recorded, and what the approver can do.
-  defp by_act(conn, tag, "Not applied: " <> rest) do
+  # `then` (a refusal's own next sentence) follows a submit's words; an approve says its own next.
+  defp by_act(conn, tag, %{why: why} = refusal) do
     cond do
-      approving?(conn) -> approve_form(tag, why(rest))
-      conn.assigns[:submit_act] == :request_review -> "Not sent for review: " <> rest
-      true -> "Not applied: " <> rest
+      approving?(conn) ->
+        approve_form(tag, refusal)
+
+      conn.assigns[:submit_act] == :request_review ->
+        opener("Not sent for review: ", why, refusal)
+
+      true ->
+        opener("Not applied: ", why, refusal)
     end
   end
 
-  defp by_act(_conn, _tag, message), do: message
+  defp opener(act, why, refusal),
+    do: Enum.join([act <> why <> "." | List.wrap(refusal[:then])], " ")
 
-  defp approve_form(tag, why),
+  defp approve_form(tag, %{why: why} = refusal),
     do:
       "Not approved: #{why}, so nothing was applied and the change set stays in review. " <>
-        "Your approval wasn't recorded. " <> approve_next(tag, why)
+        "Your approval wasn't recorded. " <> approve_next(tag, refusal)
 
-  # The refusal's own reason: its first sentence, without the closing period.
-  defp why(rest), do: rest |> String.split(". ", parts: 2) |> hd() |> String.trim_trailing(".")
-
-  defp approve_next(:telemetry_app_not_installed, _why),
+  defp approve_next(:telemetry_app_not_installed, _refusal),
     do: "Approve it again once the app is installed in Setup › Apps."
 
-  defp approve_next(:telemetry_packet_inputs_required, _why),
+  defp approve_next(:telemetry_packet_inputs_required, _refusal),
     do: "Approve it again once they're set up, or send it back."
 
-  defp approve_next(:mission_model_revision_not_approved, why) do
-    case Regex.run(~r/^(.+) isn't approved yet$/, why) do
-      # No number known: "a catalog revision" (mms-ux, ca-ux).
-      [_, "a " <> _] -> "Approve it again once that catalog revision is approved."
-      [_, label] -> "Approve it again once #{label} is approved."
-      nil -> "Approve it again once they're approved."
-    end
-  end
+  defp approve_next(:mission_model_revision_not_approved, %{subject: {:one, label}}),
+    do: "Approve it again once #{label} is approved."
 
-  defp approve_next(:mission_model_comparison_failed, _why),
+  # No number known: "a catalog revision" (mms-ux, ca-ux).
+  defp approve_next(:mission_model_revision_not_approved, %{subject: :unknown}),
+    do: "Approve it again once that catalog revision is approved."
+
+  defp approve_next(:mission_model_revision_not_approved, %{subject: :many}),
+    do: "Approve it again once they're approved."
+
+  defp approve_next(:mission_model_comparison_failed, _refusal),
     do: "Send it back so the author can stage a catalog revision whose comparison passed."
 
   # Only an approve reaches these two from review: send back runs no checks.
@@ -320,7 +330,7 @@ defmodule CadenceWeb.Console.ConfigJSON do
         conn,
         Map.fetch!(@status, tag),
         Atom.to_string(tag),
-        by_act(conn, tag, Map.fetch!(@messages, tag)),
+        by_act(conn, tag, Map.fetch!(@by_act_refusals, tag)),
         details
       )
 
