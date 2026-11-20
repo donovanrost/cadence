@@ -42,10 +42,13 @@ describe("byAuthor (ux, api af0279d1)", () => {
     expect(byAuthor({ kind: "user", id: "u", name: "Cadence Administrator" })).toBe(
       " by Cadence Administrator",
     );
-    expect(byAuthor({ kind: "system", id: undefined, name: "Cadence" })).toBe(
+    expect(byAuthor({ kind: "system", id: null, name: "Cadence" })).toBe(
       " by Cadence (automatic repair)",
     );
     expect(byAuthor(null)).toBe("");
+    // #485 (readers first): a member without a display name, or someone who isn't a member.
+    expect(byAuthor({ kind: "user", id: "u", name: null })).toBe("");
+    expect(byAuthor({ kind: "user", id: null, name: null })).toBe("");
   });
 });
 
@@ -77,7 +80,7 @@ describe("draftedByOther (ux K1 drafter line)", () => {
     );
     expect(draftedByOther(row(mira), "user_mira")).toBeNull();
     expect(
-      draftedByOther(row({ kind: "system" as const, id: undefined, name: "Cadence" }), "user_me"),
+      draftedByOther(row({ kind: "system" as const, id: null, name: "Cadence" }), "user_me"),
     ).toBe("Drafted by Cadence (automatic draft) · updated 10:52Z");
     expect(draftedByOther(row(null), "user_me")).toBeNull();
   });
