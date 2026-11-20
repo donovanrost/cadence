@@ -256,8 +256,19 @@ defmodule CadenceWeb.API.CommandingParams do
        [
          reason: string_value(params, "reason"),
          decided_by: decided_by || %{},
-         metadata: map_value(params, "metadata")
-       ]}
+         metadata: map_value(params, "metadata"),
+         require_review: true
+       ] ++ expected_review(params)}
+    end
+  end
+
+  # #117 step 4a (breaking, commanding.md): the review token the decider saw is required, and
+  # ReviewPrecondition.required/1 refuses without it, after the human-approver check. An absent
+  # token sends no key at all (an explicit nil would read as a stale review, before that check).
+  defp expected_review(params) do
+    case string_value(params, "expected_review") do
+      token when is_binary(token) -> [expected_review: token]
+      _absent -> []
     end
   end
 

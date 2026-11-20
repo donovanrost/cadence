@@ -10,6 +10,19 @@ defmodule Cadence.Management.Commanding.ReviewPrecondition do
     |> Base.encode16(case: :lower)
   end
 
+  @doc """
+  #117 step 4a (four-eyes design B): a caller that opts in with `require_review: true` (the REST
+  approve and reject) must send the review token; without it, `:command_review_required` and
+  nothing is recorded. It runs after the human-approver check, so that refusal stays the first
+  answer (api-ops).
+  """
+  @spec required(keyword()) :: :ok | {:error, :command_review_required}
+  def required(opts) do
+    if Keyword.get(opts, :require_review) == true and not is_binary(opts[:expected_review]),
+      do: {:error, :command_review_required},
+      else: :ok
+  end
+
   def check(%CommandRequestRow{} = row, opts) do
     case Keyword.fetch(opts, :expected_review) do
       :error ->
