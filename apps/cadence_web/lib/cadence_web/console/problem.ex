@@ -340,6 +340,11 @@ defmodule CadenceWeb.Console.Problem do
       {409, "Not applied: the catalog revision isn't approved yet."},
     activation_self_approval_forbidden:
       {403, "A different person must review this configuration."},
+    # #534 (mms-ux): another generation saved a packet definition under the same version at the
+    # same moment; nothing was written, and doing it again re-resolves. Retryable.
+    packet_definition_version_taken:
+      {409,
+       "Not applied: another change saved a packet definition at the same moment, so nothing changed. Try again."},
     # #280 (U100): who made this can't be established; details.service names the service whose
     # accountable people aren't recorded (null when none is involved).
     activation_approver_authors_unknown:

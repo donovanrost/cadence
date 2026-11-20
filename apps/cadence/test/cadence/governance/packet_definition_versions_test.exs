@@ -141,6 +141,32 @@ defmodule Cadence.Governance.PacketDefinitionVersionsTest do
       end
     end
 
+    # domain on #548: the triggers list columns by hand, so every CONTENT column of each schema is
+    # tried here; a column added to PacketDefinitionContent but missed by a trigger fails this.
+    test "every content column's UPDATE is refused, on both tables", %{row: row} do
+      [field] = row.field_rows
+
+      for {table, schema, kind, id} <- [
+            {"governed_packet_definitions", GovernedPacketDefinitionRow, :definition, row.id},
+            {"governed_packet_definition_fields", PacketDefinitionFieldRow, :field, field.id}
+          ],
+          column <- PacketDefinitionContent.columns(kind) do
+        changed = changed_value(schema.__schema__(:type, column))
+
+        assert_raise Postgrex.Error, ~r/immutable/, fn ->
+          Repo.query!("UPDATE #{table} SET #{column} = $1 WHERE id = $2", [changed, id])
+        end
+      end
+    end
+
+    test "neither table can be truncated (ca-security on #548)" do
+      for table <- ["governed_packet_definition_fields", "governed_packet_definitions"] do
+        assert_raise Postgrex.Error, ~r/TRUNCATE refused/, fn ->
+          Repo.query!("TRUNCATE #{table} CASCADE")
+        end
+      end
+    end
+
     test "a field allows exactly the #73 fill: NULL to a value, or its own value again", %{
       row: row
     } do
@@ -202,6 +228,9 @@ defmodule Cadence.Governance.PacketDefinitionVersionsTest do
         end)
     })
   end
+
+  defp changed_value(:integer), do: 999_999
+  defp changed_value(:string), do: "changed-by-test"
 
   defp put_identity(%PacketDefinition{} = definition, parameter_id),
     do: %{definition | fields: Enum.map(definition.fields, &%{&1 | parameter_id: parameter_id})}
