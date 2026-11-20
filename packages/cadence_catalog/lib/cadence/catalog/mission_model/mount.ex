@@ -40,6 +40,10 @@ defmodule Cadence.Catalog.MissionModel.Mount do
           mounted_refs: %{binary() => {binary(), MapSet.t()}}
         }
 
+  # CB-13 (#537): a composition holds at most 8 imported layers, mounted at most 4 segments deep.
+  @max_layers 8
+  @max_depth 4
+
   @unmounted %{
     mounted?: false,
     by_layer: %{},
@@ -59,6 +63,7 @@ defmodule Cadence.Catalog.MissionModel.Mount do
 
     with :ok <- validate(layers, mounts),
          by_layer = Map.new(imported, &{&1.layer_id, Map.get(mounts, &1.layer_id, "/")}),
+         :ok <- within_bounds(imported),
          :ok <- require_mounts(imported, by_layer) do
       if Enum.all?(Map.values(by_layer), &(&1 == "/")) do
         {:ok, layers, @unmounted}
@@ -80,6 +85,22 @@ defmodule Cadence.Catalog.MissionModel.Mount do
   end
 
   def prepare(_layers, _mounts), do: {:error, {:mission_model_mount_invalid, nil, :not_a_map}}
+
+  @doc """
+  Whether `layers` at `mounts` make a well-formed composition, without compiling (#537, D1): the
+  grammar and bounds (`prepare/2`) and the collision rules, equal or nested mounts and a mount on one
+  of the primary's top-level names. `:ok`, or the first refusal: the composition record refuses
+  its INSERT with it, so a bad composition is never stored.
+  """
+  @spec check([Layer.t()], map()) :: :ok | {:error, term()}
+  def check(layers, mounts) do
+    with {:ok, _layers, plan} <- prepare(layers, mounts) do
+      case mount_collisions(plan) ++ primary_collisions(plan) do
+        [] -> :ok
+        [first | _] -> {:error, {:mission_model_mount_collision, first.metadata}}
+      end
+    end
+  end
 
   @doc "The declarations composition starts from: the compiler's own '/' when mounted."
   @spec initial(t()) :: %{binary() => Declaration.t()}
@@ -147,15 +168,33 @@ defmodule Cadence.Catalog.MissionModel.Mount do
   defp invalid(%Layer{layer_kind: :authored}, _path), do: :authored_layer
 
   defp invalid(%Layer{}, path) do
-    if is_binary(path) and plain_absolute?(path), do: nil, else: :invalid_path
+    cond do
+      not (is_binary(path) and plain_absolute?(path)) -> :invalid_path
+      depth(path) > @max_depth -> :too_deep
+      true -> nil
+    end
   end
+
+  defp depth(path), do: path |> String.split("/", trim: true) |> length()
+
+  # CB-13 (#537): at most @max_layers imported layers in one composition.
+  defp within_bounds(imported) when length(imported) > @max_layers,
+    do: {:error, {:mission_model_too_many_layers, length(imported)}}
+
+  defp within_bounds(_imported), do: :ok
 
   # '/' or '/a/b': absolute, already normal, no '.' or '..' segments.
   defp plain_absolute?("/"), do: true
 
   defp plain_absolute?("/" <> _rest = path) do
     segments = String.split(path, "/") |> tl()
-    Path.normalize(path) == path and Enum.all?(segments, &(&1 not in ["", ".", ".."]))
+    # The composition record's CHECK allows the same segments (#541), so neither refuses what the
+    # other accepts.
+    Path.normalize(path) == path and
+      Enum.all?(
+        segments,
+        &(&1 not in ["", ".", ".."] and Regex.match?(~r/^[A-Za-z0-9_.-]+$/, &1))
+      )
   end
 
   defp plain_absolute?(_path), do: false
