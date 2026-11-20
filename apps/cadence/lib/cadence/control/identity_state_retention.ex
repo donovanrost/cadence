@@ -112,9 +112,8 @@ defmodule Cadence.Control.IdentityStateRetention do
 
   @impl true
   def init(opts) do
-    state = %{opts: settings(opts), cursor: ""}
-    schedule(state.opts)
-    {:ok, state}
+    opts = settings(opts)
+    {:ok, %{opts: opts, cursor: "", due: schedule(opts, nil, now_ms())}}
   end
 
   @impl true
@@ -126,8 +125,7 @@ defmodule Cadence.Control.IdentityStateRetention do
   @impl true
   def handle_info(:tick, state) do
     cursor = state |> safely_tick() |> next_cursor()
-    schedule(state.opts)
-    {:noreply, %{state | cursor: cursor}}
+    {:noreply, %{state | cursor: cursor, due: schedule(state.opts, state.due, now_ms())}}
   end
 
   defp tick(state), do: state.opts |> Keyword.put(:cursor, state.cursor) |> run() |> tap(&log/1)
@@ -215,10 +213,33 @@ defmodule Cadence.Control.IdentityStateRetention do
       %{cursor: state.cursor, stopped: :failed}
   end
 
-  defp schedule(opts) do
+  # Fixed rate (qa 11-20: scheduling an hour after each walk ENDED let the hour slip by the walk's
+  # own ~60-90 s, about +1 min an hour, into qa's 03:00Z chain). The next tick is due one period
+  # after the previous one was DUE, whatever the walk took.
+  defp schedule(opts, due, now) do
     case Keyword.get(opts, :tick_ms) do
-      ms when is_integer(ms) and ms > 0 -> Process.send_after(self(), :tick, ms)
-      _off -> :ok
+      ms when is_integer(ms) and ms > 0 ->
+        next = next_due(due, now, ms)
+        Process.send_after(self(), :tick, next - now)
+        next
+
+      _off ->
+        nil
     end
   end
+
+  @doc """
+  When the next tick is due (monotonic ms): one `period` after `due`, the previous tick's due time.
+  The first tick (`due` nil) is one period from `now`. A tick that ran past one or more due times
+  skips to the first one still ahead, so ticks never bunch up after a long walk.
+  """
+  @spec next_due(integer() | nil, integer(), pos_integer()) :: integer()
+  def next_due(nil, now, period), do: now + period
+
+  def next_due(due, now, period) when due + period > now, do: due + period
+
+  def next_due(due, now, period),
+    do: due + period * (div(now - due, period) + 1)
+
+  defp now_ms, do: System.monotonic_time(:millisecond)
 end

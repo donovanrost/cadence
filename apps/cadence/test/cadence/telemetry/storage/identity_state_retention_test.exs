@@ -161,6 +161,41 @@ defmodule Cadence.Telemetry.Storage.IdentityStateRetentionTest do
     end
   end
 
+  describe "ticks run at a fixed rate (qa 11-20: the hour slipped by each walk's own time)" do
+    @hour_ms 3_600_000
+
+    test "the first tick is one period from start" do
+      assert IdentityStateRetention.next_due(nil, 1_000, @hour_ms) == 1_000 + @hour_ms
+    end
+
+    test "the next tick is one period after the previous one was DUE, not after the walk ended" do
+      due = 10 * @hour_ms
+      walk_ended = due + 90_000
+
+      assert IdentityStateRetention.next_due(due, walk_ended, @hour_ms) == due + @hour_ms
+    end
+
+    test "a walk that ran past due times skips to the first one still ahead, never bunching ticks" do
+      due = 10 * @hour_ms
+
+      assert IdentityStateRetention.next_due(due, due + @hour_ms, @hour_ms) == due + 2 * @hour_ms
+
+      assert IdentityStateRetention.next_due(due, due + 2 * @hour_ms + 5, @hour_ms) ==
+               due + 3 * @hour_ms
+    end
+
+    test "after 24 ticks of 90 s walks, the schedule hasn't moved" do
+      start = 0
+
+      due =
+        Enum.reduce(1..24, IdentityStateRetention.next_due(nil, start, @hour_ms), fn _tick, due ->
+          IdentityStateRetention.next_due(due, due + 90_000, @hour_ms)
+        end)
+
+      assert due == start + 25 * @hour_ms
+    end
+  end
+
   describe "near a pass (lead, #368 review)" do
     test "a tick does nothing while a pass is near, and is logged as skipped" do
       old = state!("pass-old", last_seen_hours_ago: 120)
