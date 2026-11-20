@@ -8,6 +8,7 @@ import {
   grantsReader,
   identityName,
   untilText,
+  validitySpan,
 } from "./grants.ts";
 import { activeBody, grantOf, proposalBody } from "./grant-fixtures.ts";
 
@@ -168,13 +169,9 @@ describe("the grants read across #283", () => {
       const [g] = r.value.grants;
       return g ? grantTag(g).label : null;
     };
-    expect(["rejected", "withdrawn", "revoked", "expired", "paused"].map(tag)).toEqual([
-      "REJECTED",
-      "WITHDRAWN",
-      "REVOKED",
-      "EXPIRED",
-      "UNKNOWN",
-    ]);
+    expect(["suspended", "rejected", "withdrawn", "revoked", "expired", "paused"].map(tag)).toEqual(
+      ["SUSPENDED", "REJECTED", "WITHDRAWN", "REVOKED", "EXPIRED", "UNKNOWN"],
+    );
   });
 });
 
@@ -198,16 +195,35 @@ describe("the grants read after #497, and #499's suspension", () => {
     expect(changed.cannot_decide_because).toBe("policy_changed");
   });
 
-  it("a suspended grant with its suspension object reads, tagged UNKNOWN (#499)", () => {
+  it("a suspended grant reads its suspension and tags SUSPENDED (#499, caution)", () => {
     const g = grantOf(activeBody, {
       state: "suspended",
       suspension: {
         at: "2026-11-20T01:00:00Z",
         by: { kind: "user", id: "u2", name: "Ana R." },
         settings_revision: 4,
+        level: "organization",
       },
+      cannot_decide_because: "approved",
     });
-    expect(grantTag(g)).toEqual({ state: "off", label: "UNKNOWN" });
+    expect(grantTag(g)).toEqual({ state: "caution", label: "SUSPENDED" });
+    expect(g.suspension?.level).toBe("organization");
+    expect(g.suspension?.by?.name).toBe("Ana R.");
+    expect(g.cannot_decide_because).toBe("approved");
+    // A level the console doesn't know, or none, still reads.
+    const other = grantOf(activeBody, {
+      state: "suspended",
+      suspension: { at: "2026-11-20T01:00:00Z", by: null, settings_revision: null, level: "fleet" },
+    });
+    expect(other.suspension?.level).toEqual({ unrecognized: "fleet" });
+    expect(grantOf(activeBody).suspension).toBeNull();
+  });
+
+  // ca-engineer on #514: Narrow's Valid for hint, never a raw division.
+  it("words a validity length in whole days, else hours, else the exact span", () => {
+    expect(validitySpan(2_592_000)).toBe("30 days");
+    expect(validitySpan(129_600)).toBe("36 hours");
+    expect(validitySpan(5_400)).toBe("1h 30m");
   });
 
   it("a gone identity's name stands alone as 'Unknown service identity', never its id (U25)", () => {

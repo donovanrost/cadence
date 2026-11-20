@@ -248,6 +248,8 @@ export const errorCodes = [
   "automation_grant_legacy",
   "automation_grant_capability_required",
   "authenticated_user_required",
+  // #499 (U105 Suspended): resume refused, the grant isn't suspended (or it expired).
+  "automation_grant_not_suspended",
   // Model approval gate (ux U65, domain 742567770)
   "human_mission_model_approver_required",
   "mission_model_self_approval_forbidden",

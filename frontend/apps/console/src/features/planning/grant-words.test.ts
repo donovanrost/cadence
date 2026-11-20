@@ -329,12 +329,41 @@ describe("the grant sheet follows the approval setting (U105)", () => {
       "Not granted: this grant would let Nightly planner do something you can't do yourself",
     );
     expect(narrowedLine(grantOf(activeBody))).toBe(
-      "Narrowed. Nightly planner can now plan, submit, planning up to 48 hours ahead, 40 contacts per plan, 2 at once, until 12-19 06:40Z.",
+      "Narrowed. Nightly planner can now plan and submit, planning up to 48h 00m ahead, 40 contacts per plan, 2 at once, until 12-19 06:40Z.",
     );
     // ca-ux on #514: one contact reads singular.
     expect(narrowedLine(grantOf({ ...activeBody, maximum_contacts: 1 }))).toContain(
       "1 contact per plan",
     );
     expect(nameless.service_identity.name).toBeNull();
+  });
+
+  // #519 (ca-ux): the actions as a sentence list, the horizon as a duration.
+  it("lists three actions as a sentence and words an odd horizon as a duration", () => {
+    const g = grantOf(activeBody, {
+      allowed_actions: ["plan", "repair", "submit"],
+      maximum_horizon_seconds: 5_400,
+    });
+    expect(narrowedLine(g)).toContain(
+      "can now plan, repair and submit, planning up to 1h 30m ahead",
+    );
+    expect(narrowedLine(grantOf(activeBody, { allowed_actions: ["plan"] }))).toContain(
+      "can now plan, planning",
+    );
+  });
+
+  // #499: `approved` is a resume reason; on a proposal the panel keeps its code, unworded.
+  it("reads an `approved` reason on a proposal as one it doesn't word", () => {
+    expect(
+      decideOffer(
+        grantOf(proposalBody, { viewer_can_decide: false, cannot_decide_because: "approved" }),
+      ),
+    ).toEqual({
+      kind: "act",
+      blocked: {
+        text: "You can't approve this grant, so another org admin approves it.",
+        code: "approved",
+      },
+    });
   });
 });

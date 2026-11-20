@@ -24,10 +24,29 @@ const grant = d.object({
   valid_from: d.nullable(d.timestamp),
   valid_until: d.nullable(d.timestamp),
   /**
-   * #283 (U105): proposals. `expired` is derived on read: an active grant past valid_until, or a
-   * proposal undecided past proposal_expires_at. An unknown state reads as unrecognized.
+   * #283 (U105): proposals. `expired` is derived on read: an active or suspended grant past
+   * valid_until, or a proposal undecided past proposal_expires_at. #499: `suspended`, by a
+   * tightening of the approval setting, until a second admin resumes it. An unknown state reads as
+   * unrecognized.
    */
-  state: d.known(["proposed", "active", "rejected", "revoked", "withdrawn", "expired"] as const),
+  state: d.known([
+    "proposed",
+    "active",
+    "suspended",
+    "rejected",
+    "revoked",
+    "withdrawn",
+    "expired",
+  ] as const),
+  /** #499: who saved the tightening that suspended it, when, and at which level; null otherwise. */
+  suspension: orNull(
+    d.object({
+      at: d.timestamp,
+      by: orNull(actor),
+      settings_revision: orNull(d.integer),
+      level: orNull(d.knownText(["mission", "organization"] as const)),
+    }),
+  ),
   approved_by: orNull(actor),
   approved_at: d.nullable(d.timestamp),
   /**
@@ -51,6 +70,8 @@ const grant = d.object({
       "not_admin",
       "not_a_person",
       "proposer",
+      // #499: the grant's original approver, for a suspended grant's resume.
+      "approved",
       "accountable",
       "authors_unknown",
       "not_proposed",
@@ -138,6 +159,9 @@ export type NarrowChanges = Readonly<
     validity_seconds: number;
   }>
 >;
+/** #499: resume a suspended grant as read (its sha256); refused like approve. */
+export const resumeGrant = (missionId: MissionId, g: Grant, operationId: string) =>
+  decide(missionId, g, "resume", { sha256: g.sha256, operation_id: operationId });
 export const narrowGrant = (
   missionId: MissionId,
   g: Grant,
@@ -165,8 +189,15 @@ const ACTION_WORDS: Readonly<Record<Grant["allowed_actions"][number], string>> =
   approve: "approve",
   unrecognized: "other",
 };
-/** "plan, repair, submit". */
+/** "plan, repair, submit" (the table cell). */
 export const canText = (g: Grant) => g.allowed_actions.map((a) => ACTION_WORDS[a]).join(", ");
+/** "plan, repair and submit" (in a sentence, #519). */
+export function canList(g: Grant): string {
+  const words = g.allowed_actions.map((a) => ACTION_WORDS[a]);
+  return words.length < 2
+    ? (words[0] ?? "")
+    : `${words.slice(0, -1).join(", ")} and ${words.at(-1) ?? ""}`;
+}
 /** "48h 00m · 40 contacts · 2 at once". */
 export const limitsText = (g: Grant) =>
   `${formatDuration(g.maximum_horizon_seconds)} · ${plural(g.maximum_contacts, "contact")} · ${g.maximum_execution_concurrency} at once`;
@@ -181,6 +212,8 @@ export function grantTag(g: Grant): {
       return { state: "caution", label: "PROPOSED" };
     case "active":
       return { state: "nominal", label: "ACTIVE" };
+    case "suspended":
+      return { state: "caution", label: "SUSPENDED" };
     case "expired":
       return { state: "stale", label: "EXPIRED" };
     case "rejected":
@@ -203,15 +236,16 @@ export function untilText(g: Grant): string {
   if (g.valid_until !== null) return formatShort(new Date(g.valid_until));
   if (g.state !== "proposed") return "—";
   const s = g.validity_seconds;
-  if (s === null) return "Set at approval";
-  const span =
-    s % 86_400 === 0
-      ? plural(s / 86_400, "day")
-      : s % 3_600 === 0
-        ? plural(s / 3_600, "hour")
-        : formatDuration(s);
-  return `${span} from approval`;
+  return s === null ? "Set at approval" : `${validitySpan(s)} from approval`;
 }
+
+/** A validity length: whole days, else whole hours, else the exact span, never rounded. */
+export const validitySpan = (s: number) =>
+  s % 86_400 === 0
+    ? plural(s / 86_400, "day")
+    : s % 3_600 === 0
+      ? plural(s / 3_600, "hour")
+      : formatDuration(s);
 
 /** "Night ops bot"; a null name reads "Unknown service identity", never its id (U25, U105). */
 export const identityName = (g: Grant) => g.service_identity.name ?? "Unknown service identity";
