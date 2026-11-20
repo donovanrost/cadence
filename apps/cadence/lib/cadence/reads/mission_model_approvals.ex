@@ -29,7 +29,7 @@ defmodule Cadence.Reads.MissionModelApprovals do
     firsts =
       Map.new(rows, &{&1.id, org |> Catalog.model_importers(mission_id, &1.id) |> List.first()})
 
-    names = MemberNames.display_names(org, firsts |> Map.values() |> Enum.reject(&is_nil/1))
+    names = MemberNames.members(org, firsts |> Map.values() |> Enum.reject(&is_nil/1))
 
     Enum.map(rows, fn row ->
       %{
@@ -283,12 +283,13 @@ defmodule Cadence.Reads.MissionModelApprovals do
     do: {"authors_unknown", %{service: service}}
 
   # #366 (mms-security, #146's rule): the importer is named only while an active member of the
-  # mission's organization, checked at read time, and never by email. Anyone else (a platform
-  # admin from another organization, someone who has left, a member with no display name) is
-  # `%{id: nil, name: nil}`, so neither their name nor their id reaches this organization; it
-  # still reads as recorded ("Imported 11-19 05:40Z"), not as "Importer not recorded".
+  # mission's organization, checked at read time, and never by email. An active member with no
+  # display name keeps their id with `name: nil` (api-ops on #487: membership, not a name, is the
+  # line for the id, as Configuration.ActorNames). Anyone else (a platform admin from another
+  # organization, someone who has left) is `%{id: nil, name: nil}`, so neither their name nor their
+  # id reaches this organization; it still reads as recorded, not as "Importer not recorded".
   defp first_importer(org, [id | _]),
-    do: person_or_nil(id, MemberNames.display_names(org, [id]))
+    do: person_or_nil(id, MemberNames.members(org, [id]))
 
   defp first_importer(_org, []), do: nil
 
