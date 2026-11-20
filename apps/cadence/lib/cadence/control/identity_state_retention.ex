@@ -193,8 +193,8 @@ defmodule Cadence.Control.IdentityStateRetention do
     )
   end
 
-  defp log(%{matched: 0}), do: :ok
-
+  # Every tick is logged, matched=0 included (qa 11-20: a tick that logged nothing after the
+  # nightly prune looked exactly like a stopped walk).
   defp log(outcome) do
     Logger.info(
       "identity state retention #{outcome.mode} cutoff=#{inspect(outcome.cutoff)} " <>
