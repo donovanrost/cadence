@@ -1410,10 +1410,8 @@ defmodule CadenceWeb.Router do
     get("/current_scope", CurrentScopeController, :show)
 
     scope "/organizations/:organization_id" do
-      get("/", OrganizationController, :show)
-
-      get("/missions", MissionController, :index)
-      post("/missions", MissionController, :create)
+      # No organization read and no mission list or create here (#384, director 11-19): a REST
+      # bearer is always a service identity, and organization-level acts are a person's (#282).
       get("/missions/:mission_id", MissionController, :show)
 
       # No service_identities here (#281): a REST bearer is always a service identity, and

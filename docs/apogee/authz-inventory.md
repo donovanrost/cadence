@@ -30,17 +30,18 @@ even when it holds `organization_admin` or `platform_admin`. The check runs firs
 `Policy.authorize_organization_capability/4`, before any role or organization is read, so an
 action added there later is person-only too unless it's listed. The list is
 `@service_allowed_organization_actions` in `policy.ex`, pinned by
-`Cadence.Auth.OrganizationActionsPersonOnlyTest`:
+`Cadence.Auth.OrganizationActionsPersonOnlyTest`. **It is empty since #384** (director, 11-19),
+which retired the three bearer routes that were its only reason:
 
 | Action | Service may? | Why |
 | --- | --- | --- |
-| `:read_organization` | yes, **until #384** | Only for the bearer `GET /api/organizations/:id` DECISIONS #79 kept. It also admits a service to the provider-account and data-source reads, which no service reaches today (console and app host are sessions). `todo(authz)`. |
-| `:manage_missions` | yes, **until #384** | Only for the bearer `GET`/`POST /api/organizations/:id/missions` DECISIONS #79 kept. It also gates pass cancel, single bookings, and the contact and historical workflows, which no service reaches today. `todo(authz)`. |
+| `:read_organization`, `:manage_missions` | no (since #384) | They were listed only for the bearer `GET /api/organizations/:id` and `GET`/`POST …/missions` that DECISIONS #79 kept; #384 removed those routes. |
 | `:manage_organization_members`, `:create_missions`, `:manage_provider_accounts`, `:approve_provider_changes`, `:approve_contact_plans`, `:manage_fleet_planning_policy`, `:approve_fleet_planning_policy`, `:manage_automation_grants`, `:manage_service_identities` (#281) | no | A person's act. A service approves a contact plan only through its automation grant (`AutomationGrants.authorize`), a separate check that never asks `:approve_contact_plans`. |
 | `:approve_mission_model` | no | Its own clause refuses a service first, with `human_mission_model_approver_required` (DECISIONS #92). |
 | `:manage_mission` (mission-level, not through this check) | yes, by design | The REST control plane's gate (`ControlPlaneAccess`) for a mission-scoped service. |
 
-#384 (director, 11-19) retires the three bearer routes and empties the list.
+If a deployment ever needs organization-level service access, it comes back as a scoped design
+under Cedar (#284), not as an entry in this list.
 
 ## Commanding (DECISIONS #62: any operator today, minus self-approval)
 

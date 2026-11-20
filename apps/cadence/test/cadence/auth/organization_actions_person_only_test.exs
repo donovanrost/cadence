@@ -6,8 +6,8 @@ defmodule Cadence.Auth.OrganizationActionsPersonOnlyTest do
   on the fixed service allow-list. A person admin and a platform admin pass as before.
 
   The allow-list's exact contents are pinned here, so adding to it is a visible diff a security
-  review sees. Today it holds only the two actions behind the bearer routes DECISIONS #79 kept;
-  #384 retires those routes and empties it.
+  review sees. Since #384 retired the bearer routes behind its two entries, it is empty: every
+  organization-level action refuses a service.
   """
   use ExUnit.Case, async: true
 
@@ -31,9 +31,9 @@ defmodule Cadence.Auth.OrganizationActionsPersonOnlyTest do
     :manage_service_identities
   ]
 
-  @service_allowed [:manage_missions, :read_organization]
+  @service_allowed []
 
-  test "the service allow-list is exactly the two #79 bearer-route actions (until #384)" do
+  test "the service allow-list is empty (#384): every organization-level action is a person's" do
     assert Enum.sort(Policy.service_allowed_organization_actions()) == @service_allowed
   end
 
@@ -41,7 +41,7 @@ defmodule Cadence.Auth.OrganizationActionsPersonOnlyTest do
     describe "#{action}" do
       @action action
 
-      test "a service holding organization_admin is refused unless the action is listed" do
+      test "a service holding organization_admin is refused" do
         assert Policy.authorize(service([:organization_admin]), @action, params()) ==
                  service_answer(@action)
       end
@@ -54,15 +54,13 @@ defmodule Cadence.Auth.OrganizationActionsPersonOnlyTest do
       test "the person check comes before the role and organization checks" do
         # A service with no admin role, or from another organization, gets the person refusal,
         # not forbidden or scope_mismatch (ca-security: before any membership or role lookup).
-        # A listed action falls through to the role and organization checks as before.
-        assert Policy.authorize(service([]), @action, params()) ==
-                 ordered_answer(@action, {:error, :forbidden})
+        assert Policy.authorize(service([]), @action, params()) == service_answer(@action)
 
         assert Policy.authorize(
                  service([:organization_admin], "org-other"),
                  @action,
                  params()
-               ) == ordered_answer(@action, {:error, :scope_mismatch})
+               ) == service_answer(@action)
       end
 
       test "a person who is the organization's admin passes" do
@@ -86,14 +84,7 @@ defmodule Cadence.Auth.OrganizationActionsPersonOnlyTest do
   defp service_answer(:approve_mission_model),
     do: {:error, :human_mission_model_approver_required}
 
-  defp service_answer(action) when action in @service_allowed, do: :ok
   defp service_answer(_action), do: {:error, :authenticated_user_required}
-
-  defp ordered_answer(:approve_mission_model, _listed),
-    do: {:error, :human_mission_model_approver_required}
-
-  defp ordered_answer(action, listed) when action in @service_allowed, do: listed
-  defp ordered_answer(_action, _listed), do: {:error, :authenticated_user_required}
 
   defp params, do: %{organization_id: @org}
 
