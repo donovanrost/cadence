@@ -17,7 +17,7 @@ defmodule CadenceWeb.CommandRequestController do
          {:ok, filters} <- CommandingParams.command_request_filters(params) do
       command_requests =
         Cadence.Management.Commanding.list_command_requests(organization_id, mission_id, filters)
-        |> Enum.map(&CommandingJSON.command_request/1)
+        |> CommandingJSON.encode_all(&CommandingJSON.command_request/2)
 
       json(conn, %{data: command_requests})
     end

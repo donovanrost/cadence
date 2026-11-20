@@ -22,7 +22,7 @@ defmodule CadenceWeb.CommandReleaseAttemptController do
           mission_id,
           filters
         )
-        |> Enum.map(&CommandingJSON.command_release_attempt/1)
+        |> CommandingJSON.encode_all(&CommandingJSON.command_release_attempt/2)
 
       json(conn, %{data: command_release_attempts})
     end
