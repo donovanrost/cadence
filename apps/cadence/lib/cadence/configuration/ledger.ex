@@ -55,6 +55,7 @@ defmodule Cadence.Configuration.Ledger do
       change_set_id: Map.get(attrs, :change_set_id),
       rolls_back_to: Map.get(attrs, :rolls_back_to),
       applied_by: Map.fetch!(attrs, :applied_by),
+      submitted_by: Map.get(attrs, :submitted_by),
       applied_at: Map.fetch!(attrs, :applied_at),
       reason: Map.fetch!(attrs, :reason),
       approvals: Map.get(attrs, :approvals, []),

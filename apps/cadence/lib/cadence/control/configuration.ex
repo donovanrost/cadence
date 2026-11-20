@@ -186,7 +186,12 @@ defmodule Cadence.Control.Configuration do
       progress(change_set_id, "validate", :running)
 
       mission.organization_id
-      |> Submission.submit(mission.mission_id, change_set_id, Access.actor(scope), params)
+      |> Submission.submit(
+        mission.mission_id,
+        change_set_id,
+        Access.actor(scope),
+        record(scope, params)
+      )
       |> after_apply(mission, change_set_id)
       |> ScidSharing.for_viewer(scope, mission)
     end
@@ -205,12 +210,16 @@ defmodule Cadence.Control.Configuration do
         change_set_id,
         Access.actor(scope),
         decision,
-        params
+        record(scope, params)
       )
       |> after_apply(mission, change_set_id)
       |> ScidSharing.for_viewer(scope, mission)
     end
   end
+
+  # #117 step 2: the decision record's admin_mode comes from the scope, never from the request.
+  defp record(%Scope{} = scope, params),
+    do: Map.put(params, :admin_mode, scope.admin_mode? == true)
 
   @spec list_revisions(Scope.t(), String.t(), keyword()) :: {:ok, [map()]} | {:error, term()}
   def list_revisions(%Scope{} = scope, mission_id, opts \\ []) do
