@@ -11,6 +11,7 @@ defmodule Cadence.Reads.CompositionReadsTest do
 
   alias Cadence.Accounts.{OrganizationMembership, OrganizationMembershipRow, User, UserRow}
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
+  alias Cadence.Catalog
   alias Cadence.Catalog.Actor
   alias Cadence.Control.ModelApprovalGate
 
@@ -21,7 +22,7 @@ defmodule Cadence.Reads.CompositionReadsTest do
     CompositionViews
   }
 
-  alias Cadence.Reads.CompositionActors
+  alias Cadence.Reads.{CompositionActors, MissionModelApprovals}
   alias Cadence.Reads.MissionModelApprovals.CompositionKeys
 
   @migration %{"actor_kind" => "system", "system_id" => "migration:20261120060000"}
@@ -170,6 +171,32 @@ defmodule Cadence.Reads.CompositionReadsTest do
     end
   end
 
+  describe "importer documents (mms-engineer's parity note on #581)" do
+    test "model_import_documents/3 counts exactly the actors model_import_actors/3 does", c do
+      person = member!(c, "Ida")
+      service_id = "service_identity:d2-#{System.unique_integer([:positive])}"
+
+      actors = [
+        %{"actor_kind" => "user", "user_id" => person.user_id, "name" => "Ida"},
+        %{"actor_kind" => "service", "service_identity_id" => service_id, "name" => "Bot"},
+        Actor.system("seed:parity", "Seed", person.user_id)
+      ]
+
+      for {actor, n} <- Enum.with_index(actors) do
+        yaml = String.replace(payload_yaml(), "apid: 77", "apid: #{80 + n}")
+        id = import!(c, "Parity #{n}", yaml, actor).mission_model_revision_id
+
+        documents = Catalog.model_import_documents(c.org, c.mid, id)
+        counted = Catalog.model_import_actors(c.org, c.mid, id)
+
+        assert documents |> Enum.map(&Catalog.model_import_actor_of/1) |> Enum.sort() ==
+                 Enum.sort(counted)
+
+        assert counted != []
+      end
+    end
+  end
+
   describe "the approval read's keys (E)" do
     test "importers per layer, and breaking_base is exactly what approval compares against", c do
       person = member!(c, "Ada")
@@ -219,6 +246,13 @@ defmodule Cadence.Reads.CompositionReadsTest do
         Compositions.effective_revision(c.org, c.mid, composition.composition_id, nil)
 
       assert CompositionKeys.composer?(c.org, c.mid, revision_id, composer.user_id)
+
+      # fe-setup on #581: a composed revision has no catalog revision of its own, but E1's check
+      # approves it (every layer catalog-named), so the read doesn't flag it not_in_catalog.
+      scope = Fixtures.user_scope(c.org, "viewer")
+      assert {:ok, read} = MissionModelApprovals.read(scope, c.mid, revision_id)
+      assert read.catalog_revision == nil
+      assert read.cannot_approve_because == nil
       # The layers' runner imported them: refused as an importer, so not "composer".
       refute CompositionKeys.composer?(c.org, c.mid, revision_id, "test-fixture-runner")
       refute CompositionKeys.composer?(c.org, c.mid, revision_id, nil)

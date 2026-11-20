@@ -215,8 +215,10 @@ by its catalog revision ("catalog rev 4"); the model revision id is Technical de
   active membership in the mission's organization, never by email (#366, #146's rule). A member
   with no display name is `{id, name: null}`. Anyone outside the organization is `{id: null,
   name: null}`: recorded, but not named, and their id isn't sent. `cannot_approve_because` (11-17, ux U88) is
-  `not_in_catalog` when no catalog revision names the model revision (a second run of a file
-  makes one): Approve is refused (`409 mission_model_revision_not_in_catalog`), Reject stays;
+  `not_in_catalog` when the approve check refuses it as not catalog-named (a second run of a file
+  makes one). Since D2 (#543) it's that check itself (E1: a composition names the revision and
+  each of its layers came from an import a catalog revision names), so a composed revision, which
+  has no catalog revision of its own, isn't flagged: Approve is refused (`409 mission_model_revision_not_in_catalog`), Reject stays;
   `cannot_decide_because` wins when both are set. `self_approval` and `authors_unknown` (#280) come
   from the same check the approve path makes; `cannot_decide_details` carries the approve refusal's
   details for them (null otherwise). Importers (11-17) are the people recorded on the catalog

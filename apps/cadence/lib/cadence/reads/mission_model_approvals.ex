@@ -15,7 +15,7 @@ defmodule Cadence.Reads.MissionModelApprovals do
   alias Cadence.Catalog.ModelRevisions
   alias Cadence.Control.{Activations, ModelApprovalGate}
   alias Cadence.MissionModels
-  alias Cadence.MissionModels.{ApprovalReads, Comparison, RevisionDecisions}
+  alias Cadence.MissionModels.{ApprovalReads, Comparison, CompositionApproval, RevisionDecisions}
   alias Cadence.Reads.Catalog.RevisionBase
   alias Cadence.Reads.MissionModelApprovals.CompositionKeys
 
@@ -67,9 +67,13 @@ defmodule Cadence.Reads.MissionModelApprovals do
           revision -> catalog_revision(org, mission_id, revision)
         end
 
+      # E1's own check (fe-setup on #581): a composition names the revision and each layer came
+      # from a catalog-named import. A composed revision has no catalog revision of its own.
+      named? = match?({:ok, _}, CompositionApproval.require(org, mission_id, row.id))
+
       {:ok,
        row
-       |> base_view(org, importers, catalog_revision, blocked, blocked_details)
+       |> base_view(org, importers, catalog_revision, named?, {blocked, blocked_details})
        |> Map.merge(%{
          viewer_is_importer: is_binary(viewer_id) and viewer_id in importers,
          plans_ready: plans_ready,
@@ -80,7 +84,7 @@ defmodule Cadence.Reads.MissionModelApprovals do
     end
   end
 
-  defp base_view(row, org, importers, catalog_revision, blocked, blocked_details) do
+  defp base_view(row, org, importers, catalog_revision, named?, {blocked, blocked_details}) do
     %{
       id: row.id,
       status: row.status,
@@ -93,9 +97,9 @@ defmodule Cadence.Reads.MissionModelApprovals do
       # #280 (ux U100): via_service for self_approval through a service; service for
       # authors_unknown. Nil otherwise.
       cannot_decide_details: blocked_details,
-      # Approve only (lead 11-17, ux U88): no catalog revision names this model revision, so
-      # domain's guard refuses approving it; Reject stays. cannot_decide_because wins if set.
-      cannot_approve_because: if(is_nil(catalog_revision), do: "not_in_catalog")
+      # Approve only (lead 11-17, ux U88): the approve check refuses it as not catalog-named;
+      # Reject stays. cannot_decide_because wins if set.
+      cannot_approve_because: if(named?, do: nil, else: "not_in_catalog")
     }
   end
 
