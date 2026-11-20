@@ -18,6 +18,7 @@ defmodule Cadence.Reads.PlanHistory do
   alias Cadence.Accounts.MemberNames
   alias Cadence.Auth
   alias Cadence.ContactPlanning.{ContactPlanApprovals, ContactPlans, PlanSubmissions}
+  alias Cadence.Control.ActorRef
   alias Cadence.Reads.{PlanApproval, RequirementLabels}
 
   @max_versions 200
@@ -76,7 +77,7 @@ defmodule Cadence.Reads.PlanHistory do
 
   # ux U73: each acknowledgement and exception names its requirement and spacecraft.
   defp decisions_with_labels(org, mission, rounds, approvals) do
-    decisions = decisions(rounds, approvals)
+    decisions = decisions(rounds, approvals, actor_names(org, rounds, approvals))
 
     refs =
       Enum.flat_map(decisions, fn d ->
@@ -111,7 +112,21 @@ defmodule Cadence.Reads.PlanHistory do
     })
   end
 
-  defp decisions(rounds, approvals) do
+  # #146 (#468): every stored actor in the history (rounds' and decisions' documents) is named
+  # through ActorRef, one lookup per read: an active member of the plan's organization by name,
+  # anyone else with id and name nil, never by a stored name or an email an older row holds.
+  defp actor_names(org, rounds, approvals),
+    do:
+      ActorRef.names(
+        org,
+        Enum.map(rounds, & &1.actor_document) ++ Enum.map(approvals, &approval_document/1)
+      )
+
+  # The decision's own actor columns say who; ActorRef never reads a stored name.
+  defp approval_document(approval),
+    do: %{"kind" => to_string(approval.actor_kind), "id" => approval.actor_id}
+
+  defp decisions(rounds, approvals, names) do
     round_of = Map.new(rounds, &{&1.contact_plan_version, &1.round})
 
     submits =
@@ -120,7 +135,7 @@ defmodule Cadence.Reads.PlanHistory do
           kind: "submitted",
           version: round.contact_plan_version,
           round: round.round,
-          actor: actor(round.actor_document),
+          actor: actor(round.actor_document, names),
           at: round.submitted_at,
           text: round.note,
           unchanged: round.unchanged,
@@ -142,7 +157,7 @@ defmodule Cadence.Reads.PlanHistory do
           kind: to_string(approval.decision),
           version: approval.contact_plan_version,
           round: Map.get(round_of, approval.contact_plan_version),
-          actor: view.actor,
+          actor: actor(approval_document(approval), names),
           at: view.at,
           text: view.reason,
           unchanged: nil,
@@ -155,8 +170,8 @@ defmodule Cadence.Reads.PlanHistory do
     Enum.sort_by(submits ++ decided, &DateTime.to_unix(&1.at, :microsecond), :desc)
   end
 
-  defp actor(%{} = doc), do: %{kind: doc["kind"], id: doc["id"], name: doc["name"]}
-  defp actor(_none), do: nil
+  defp actor(%{} = doc, names), do: ActorRef.document(doc, names)
+  defp actor(_none, _names), do: nil
 
   # A version's `created_by` is an actor id: a person, a service identity, or Cadence's planner.
   defp creator(_org_people, nil), do: nil
@@ -178,7 +193,8 @@ defmodule Cadence.Reads.PlanHistory do
       _not_user ->
         case Auth.fetch_service_identity(org, id) do
           {:ok, service} -> %{kind: "service_identity", id: id, name: service.display_name}
-          _not_service -> %{kind: "system", id: id, name: nil}
+          # ca-security on #503: an id that's neither a person nor a service isn't echoed.
+          _not_service -> %{kind: "system", id: nil, name: nil}
         end
     end
   end
