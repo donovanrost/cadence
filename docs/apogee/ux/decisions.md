@@ -4170,6 +4170,20 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
     - `duplicate_operation`: "Not resumed: Cadence matched this to an earlier, different request, so nothing
       changed. Reload and try again." Unknown code: "Not resumed: Cadence refused this. Nothing changed." with the
       code in Technical details.
+  - Settled in the build (#565, fe-ops; agreed by ca-ux and ca-engineer):
+    - A suspended grant whose `suspension` is null: "Suspended. A second org admin resumes it." ("An org admin…" under
+      "Applies without approval"), never the tag alone.
+    - Up front, `policy_changed` on a suspended grant (the setting changed after the suspension): "The mission's
+      approval setting changed after this grant was suspended, so who can resume it may have changed. Reload to see
+      it." with the code in Technical details, and never the viewer-blaming "You can't resume…".
+    - An unknown resume reason's code goes in Technical details in the row's State cell (a menu item can't hold it).
+      Resume's busy reason: "Resuming…". After a refusal, Resume stays off until a reload, including on reopen.
+    - Narrowing a suspended grant (allowed by `viewer_can_narrow`): "Narrowed. Once it's resumed, Nightly planner can
+      plan and submit, planning up to 48h 00m ahead, 40 contacts per plan, 2 at once, until 12-19 06:40Z." An active
+      grant keeps "can now".
+    - Revoke's sheet line: on a suspended grant "Nightly planner won't act under this grant again."; on an active one
+      "Nightly planner can't act under this grant once it's revoked." (never "stops acting now": in-flight work isn't
+      the revoke's answer). Nothing about plans already submitted unless api confirms what happens to them.
   - Audit: "Suspended the grant for Nightly planner, when the mission's approval setting changed to Needs a second
     person's approval" (`organization`: "the organization's"; no level: "the approval setting for this mission";
     the settings saver as who); "Resumed the grant for Nightly planner".
