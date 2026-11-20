@@ -230,14 +230,15 @@ defmodule CadenceWeb.Console.ConfigJSON do
   def error(conn, tag) when is_map_key(@status, tag), do: respond(conn, tag, nil)
 
   # #534 (api-ops' condition 3): another generation saved a packet definition under the version
-  # this one resolved, at the same moment. Nothing was applied; a resubmit re-resolves.
+  # this one resolved, at the same moment. Nothing was applied; doing it again re-resolves. mms-ux's
+  # apply line; the console words a refused "Request review" itself, since it knows the act.
   def error(conn, {:packet_definition_content_changed, packet_definition_id, version}),
     do:
       respond_raw(
         conn,
         409,
         "packet_definition_version_taken",
-        "Another change saved a packet definition at the same moment, so nothing was applied. Submit again.",
+        "Not applied: another change saved a packet definition at the same moment, so nothing changed. Try again.",
         %{packet_definition_id: packet_definition_id, version: version, retryable: true}
       )
 

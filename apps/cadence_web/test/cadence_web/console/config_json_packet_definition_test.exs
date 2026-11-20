@@ -6,7 +6,7 @@ defmodule CadenceWeb.Console.ConfigJSONPacketDefinitionTest do
   """
   use CadenceWeb.ConnCase, async: true
 
-  alias CadenceWeb.Console.ConfigJSON
+  alias CadenceWeb.Console.{ConfigJSON, Problem, SpacecraftWorkspaceWords}
 
   test "a packet definition version race is a retryable 409", %{conn: conn} do
     conn = ConfigJSON.error(conn, {:packet_definition_content_changed, "semantic:container:x", 4})
@@ -21,7 +21,15 @@ defmodule CadenceWeb.Console.ConfigJSONPacketDefinitionTest do
              }
            } = json_response(conn, 409)["error"]
 
-    assert message =~ "nothing was applied"
-    assert message =~ "Submit again"
+    assert message ==
+             "Not applied: another change saved a packet definition at the same moment, so nothing changed. Try again."
+  end
+
+  test "the workspace submit's refusal is a 409 with mms-ux's U94 line" do
+    assert {409, "packet_definition_version_taken", _default} =
+             Problem.describe(:packet_definition_version_taken)
+
+    assert SpacecraftWorkspaceWords.message(:packet_definition_version_taken, :submit, %{}) ==
+             "Not sent: another change saved a packet definition at the same moment. Send it again."
   end
 end
