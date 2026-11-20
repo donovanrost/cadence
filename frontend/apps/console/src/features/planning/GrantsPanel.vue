@@ -2,26 +2,28 @@
 import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { useRemoteQuery } from "@/api";
-import { ApButton, ApEmptyState, ApPanel, ApRemote, ApTable, ApTag, type ApColumn } from "@/ui";
+import { useSession } from "@/shell";
+import { ApButton, ApEmptyState, ApPanel, ApRemote, ApTable, type ApColumn } from "@/ui";
+import GrantActions from "./GrantActions.vue";
+import GrantNarrow from "./GrantNarrow.vue";
 import GrantRevoke from "./GrantRevoke.vue";
 import GrantSheet from "./GrantSheet.vue";
-import {
-  canText,
-  fetchGrants,
-  grantTag,
-  identityName,
-  limitsText,
-  untilText,
-  type Grant,
-} from "./grants.ts";
+import GrantState from "./GrantState.vue";
+import GrantWaiting from "./GrantWaiting.vue";
+import { decideOffer } from "./grant-words.ts";
+import { canText, fetchGrants, identityName, limitsText, untilText, type Grant } from "./grants.ts";
 
-/** Policy › Grants (L3): what lets a service identity act without a person. */
+/** Policy › Grants (L3, U105): what lets a service identity act without a person. */
 const props = defineProps<{ missionId: MissionId }>();
+const viewerId = useSession().user.id;
 const grants = useRemoteQuery(() => props.missionId, fetchGrants);
 const ready = computed(() =>
   grants.state.value.status === "ready" ? grants.state.value.value : null,
 );
 const canManage = computed(() => ready.value?.permissions.includes("grants.manage") ?? false);
+const waiting = computed(
+  () => ready.value?.grants.filter((g) => decideOffer(g).kind !== "none") ?? [],
+);
 const columns = computed<readonly ApColumn[]>(() => [
   { key: "who", label: "Service identity" },
   { key: "can", label: "Can" },
@@ -32,13 +34,36 @@ const columns = computed<readonly ApColumn[]>(() => [
 ]);
 const sheet = ref<InstanceType<typeof GrantSheet> | null>(null);
 const revoke = ref<InstanceType<typeof GrantRevoke> | null>(null);
+const narrow = ref<InstanceType<typeof GrantNarrow> | null>(null);
+/** The last act's result (a11y B6: an always-present status region, hidden while empty). */
+const said = ref("");
+function done(text: string) {
+  said.value = text;
+  grants.refetch();
+}
+const replaced = (g: Grant) =>
+  ready.value?.grants.some((p) => p.state === "proposed" && p.replaces_grant_id === g.id) ?? false;
 </script>
 
 <template>
+  <GrantWaiting
+    v-for="g in waiting"
+    :key="g.id"
+    :mission-id="missionId"
+    :grant="g"
+    :viewer-id="viewerId"
+    @decided="done"
+  />
   <ApPanel index="G1" title="Grants" flush>
     <template v-if="canManage" #header>
       <ApButton size="compact" variant="primary" @click="sheet?.open()">Grant automation…</ApButton>
     </template>
+    <p
+      role="status"
+      :class="said ? 'm-0 border-b border-hairline px-4 py-2.5 text-md text-readout' : 'sr-only'"
+    >
+      {{ said }}
+    </p>
     <ApRemote :state="grants.state.value" loading-label="Loading grants…" @retry="grants.refetch">
       <template #default="{ value }">
         <ApEmptyState
@@ -58,25 +83,21 @@ const revoke = ref<InstanceType<typeof GrantRevoke> | null>(null);
           <template #cell-can="{ row }">{{ canText(row) }}</template>
           <template #cell-limits="{ row }">{{ limitsText(row) }}</template>
           <template #cell-until="{ row }">{{ untilText(row) }}</template>
-          <template #cell-state="{ row }"
-            ><ApTag :state="grantTag(row).state" :label="grantTag(row).label"
-          /></template>
+          <template #cell-state="{ row }"><GrantState :grant="row" /></template>
           <template #cell-act="{ row }"
-            ><ApButton
-              v-if="row.state === 'active'"
-              size="compact"
-              variant="ghost"
-              @click="revoke?.open(row)"
-              >Revoke…</ApButton
-            ></template
-          >
+            ><GrantActions
+              :grant="row"
+              @narrow="narrow?.open(row)"
+              @revoke="revoke?.open(row, replaced(row))"
+          /></template>
         </ApTable>
         <p v-if="!canManage" class="m-0 px-4 py-3 text-sm text-text-3">
           Org admins grant automation.
         </p>
-        <GrantSheet ref="sheet" :mission-id="missionId" :grants="value" @granted="grants.refetch" />
+        <GrantSheet ref="sheet" :mission-id="missionId" :grants="value" @granted="done" />
       </template>
     </ApRemote>
-    <GrantRevoke ref="revoke" :mission-id="missionId" @revoked="grants.refetch" />
+    <GrantRevoke ref="revoke" :mission-id="missionId" @revoked="done" />
+    <GrantNarrow ref="narrow" :mission-id="missionId" @narrowed="done" />
   </ApPanel>
 </template>

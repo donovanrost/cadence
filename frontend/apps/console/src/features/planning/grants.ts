@@ -54,9 +54,14 @@ const grant = d.object({
       "accountable",
       "authors_unknown",
       "not_proposed",
+      "policy_changed",
     ] as const),
   ),
   cannot_decide_details: orNull(d.object({ grantee: orNull(actor), service: orNull(actor) })),
+  /** #497: the viewer may narrow it now (the server's flag; the console never computes it). */
+  viewer_can_narrow: orNull(d.boolean),
+  /** #497: issued before #283, so it can only be revoked; its proposal fields read null. */
+  issued_before_two_person_approval: orNull(d.boolean),
   // free-text: the reason the admin gave when granting it.
   reason: d.nullable(d.string),
   revoked_by: orNull(actor),
@@ -102,11 +107,54 @@ export type GrantBody = Readonly<{
 export function issueGrant(missionId: MissionId, body: GrantBody) {
   return request(base(missionId), d.object({ grant }), { method: "POST", body });
 }
+/** #283: revoke is at once and never refused for a reason or a hash; a reason goes when given. */
 export function revokeGrant(missionId: MissionId, g: Grant, reason: string) {
+  const why = reason.trim();
   return request(`${base(missionId)}/${encodeURIComponent(g.id)}/revoke`, d.object({ grant }), {
     method: "POST",
-    body: { reason, sha256: g.sha256 },
+    body: why ? { reason: why } : {},
   });
+}
+
+/** #283 decisions answer the grant and whether this was a replay of an earlier operation_id. */
+const decided = d.object({ grant, replayed: orNull(d.boolean) });
+export type Decided = Decoded<typeof decided>;
+const decide = (missionId: MissionId, g: Grant, act: string, body: Record<string, unknown>) =>
+  request(`${base(missionId)}/${encodeURIComponent(g.id)}/${act}`, decided, {
+    method: "POST",
+    body,
+  });
+/** Approve the proposal as read (its sha256). */
+export const approveGrant = (missionId: MissionId, g: Grant, operationId: string) =>
+  decide(missionId, g, "approve", { sha256: g.sha256, operation_id: operationId });
+export const rejectGrant = (missionId: MissionId, g: Grant, reason: string, operationId: string) =>
+  decide(missionId, g, "reject", { reason, operation_id: operationId });
+export type NarrowChanges = Readonly<
+  Partial<{
+    allowed_actions: readonly string[];
+    maximum_horizon_seconds: number;
+    maximum_contacts: number;
+    maximum_execution_concurrency: number;
+    validity_seconds: number;
+  }>
+>;
+export const narrowGrant = (
+  missionId: MissionId,
+  g: Grant,
+  changes: NarrowChanges,
+  operationId: string,
+) => decide(missionId, g, "narrow", { changes, operation_id: operationId });
+
+/**
+ * #257's rule for operation ids (as reviewOps): a retry of the SAME request reuses its id, so the
+ * server replays what already happened; a changed request is a new id.
+ */
+export function operationIds(newId: () => string = () => crypto.randomUUID()) {
+  let last: Readonly<{ key: string; id: string }> | null = null;
+  return (key: string): string => {
+    if (last?.key !== key) last = { key, id: newId() };
+    return last.id;
+  };
 }
 
 const ACTION_WORDS: Readonly<Record<Grant["allowed_actions"][number], string>> = {
@@ -165,8 +213,8 @@ export function untilText(g: Grant): string {
   return `${span} from approval`;
 }
 
-/** "Night ops bot", or its id when the identity is gone. */
-export const identityName = (g: Grant) => g.service_identity.name ?? g.service_identity.id;
+/** "Night ops bot"; a null name reads "Unknown service identity", never its id (U25, U105). */
+export const identityName = (g: Grant) => g.service_identity.name ?? "Unknown service identity";
 
 /** 422 messages with no field of their own (the grant as a whole, the policy evidence). */
 export const generalError = (errors: Readonly<Record<string, string>>) =>
