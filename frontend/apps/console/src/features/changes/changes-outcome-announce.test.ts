@@ -42,7 +42,7 @@ describe("ChangesOutcome's announcements", () => {
       global: { stubs },
     });
     expect(said.texts).toEqual([
-      "Sent for review. An org member who didn't stage any of these changes approves or sends it back.",
+      "Sent for review. Another person who didn't stage any of these changes approves it or sends it back.",
     ]);
     await w.setProps({ outcome: inReview() });
     expect(said.texts).toHaveLength(1);
