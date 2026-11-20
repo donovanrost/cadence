@@ -8,10 +8,10 @@ defmodule CadenceWeb.Console.LegacyConversionAPITest do
   """
   use CadenceWeb.ConnCase, async: false
 
-  alias Cadence.Configuration.Submission
-  alias Cadence.Governance.ActivationPolicy
   alias Cadence.Comms.{GroundStation, GroundStationStore, RoutingRule, RoutingRuleStore}
   alias Cadence.Comms.{Transport, TransportStore}
+  alias Cadence.Configuration.Submission
+  alias Cadence.Governance.ActivationPolicy
   alias CadenceWeb.TestFixtures
 
   setup do
