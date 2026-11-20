@@ -87,7 +87,10 @@ defmodule Cadence.MissionModels.CompositionApprovalTest do
 
   test "a one-layer composition (an import's own) approves exactly as before", c do
     {:ok, composition} = Compositions.fetch(c.org, c.mid, one_layer_id(c))
-    {:ok, revision} = Compositions.effective_revision(c.org, c.mid, composition.composition_id, nil)
+
+    {:ok, revision} =
+      Compositions.effective_revision(c.org, c.mid, composition.composition_id, nil)
+
     report = compare!(c, revision)
 
     assert {:error, :mission_model_self_approval_forbidden} =

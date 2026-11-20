@@ -342,9 +342,13 @@ defmodule Cadence.Catalog do
 
   @doc "Which of the mission-model revisions a catalog revision names; see `ModelRevisionNaming`."
   @spec catalog_named_model_revisions(binary(), binary(), [binary()]) :: MapSet.t()
-  defdelegate catalog_named_model_revisions(organization_id, mission_id, mission_model_revision_ids),
-    to: Cadence.Catalog.ModelRevisionNaming,
-    as: :named
+  defdelegate catalog_named_model_revisions(
+                organization_id,
+                mission_id,
+                mission_model_revision_ids
+              ),
+              to: Cadence.Catalog.ModelRevisionNaming,
+              as: :named
 
   @doc "`:ok` when a catalog revision names the mission-model revision; see `ModelRevisionNaming`."
   defdelegate require_named_model_revision(
