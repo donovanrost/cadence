@@ -11,8 +11,8 @@ import { expect, type Locator, type Page } from "@playwright/test";
 export const WORDS = {
   /** U20 (rejected): "Nothing was staged." */
   nothingStaged: "Nothing was staged.",
-  /** U20 (outcome unknown): "It isn't clear whether anything was staged." */
-  unclearStaged: "It isn't clear whether anything was staged.",
+  // U20's outcome-unknown words appear only mid-sentence, with a cause ("The connection dropped, so
+  // it isn't clear …"): add those real sentences, cited, when a spec needs one (ux on #648).
   /** U25 and #237: a spacecraft whose name Cadence can't read, never its id. */
   unknownSpacecraft: "Unknown spacecraft",
   /** U97: "Approved. Booking 40 passes." only on the 202 with outcome approved; N is the count. */

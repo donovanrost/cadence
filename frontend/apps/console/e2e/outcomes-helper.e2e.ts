@@ -41,11 +41,11 @@ test.describe("outcomes helper self-test", () => {
 
   test("a success shown after a failure is a false success", async ({ page }) => {
     await page.setContent(
-      `<main><p role="alert">${WORDS.unclearStaged}</p><p>${WORDS.approved(40)}</p></main>`,
+      `<main><p role="alert">${WORDS.nothingStaged}</p><p>${WORDS.approved(40)}</p></main>`,
     );
     await expect(
       expectNoFalseSuccess(page, {
-        failure: WORDS.unclearStaged,
+        failure: WORDS.nothingStaged,
         success: WORDS.approved(40),
         ...quick,
       }),
