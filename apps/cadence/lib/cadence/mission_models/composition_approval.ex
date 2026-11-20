@@ -71,8 +71,11 @@ defmodule Cadence.MissionModels.CompositionApproval do
         ]
   def importer_actors(organization_id, mission_id, revision_id) do
     case Compositions.for_revision(organization_id, mission_id, revision_id) do
-      {:ok, composition} -> composition_actors(organization_id, mission_id, composition)
-      {:error, :not_found} -> Catalog.model_import_actors(organization_id, mission_id, revision_id)
+      {:ok, composition} ->
+        composition_actors(organization_id, mission_id, composition)
+
+      {:error, :not_found} ->
+        Catalog.model_import_actors(organization_id, mission_id, revision_id)
     end
   end
 
