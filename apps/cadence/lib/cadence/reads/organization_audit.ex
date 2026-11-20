@@ -194,7 +194,7 @@ defmodule Cadence.Reads.OrganizationAudit do
     people =
       organization_id
       |> MemberNames.ever_members(Enum.map(memberships, & &1.user_id))
-      |> Map.new(fn {id, {name, _state}} -> {id, name} end)
+      |> Map.new(fn {id, {name, _state, _membership}} -> {id, name} end)
 
     accepted = for i <- invitations, i.accepted_by, into: MapSet.new(), do: i.accepted_by
 
@@ -210,7 +210,7 @@ defmodule Cadence.Reads.OrganizationAudit do
         "access",
         invitation.sent_at,
         user(invitation.invited_by),
-        "Invited #{invitation.email} as #{role(invitation.role)}",
+        "Invited #{invitation.email}#{as(invitation.role)}",
         target: target
       ),
       invitation.accepted_at &&
@@ -218,7 +218,7 @@ defmodule Cadence.Reads.OrganizationAudit do
           "access",
           invitation.accepted_at,
           user(invitation.accepted_by),
-          "Accepted the invitation and joined as #{role(invitation.role)}",
+          "Accepted the invitation and joined#{as(invitation.role)}",
           target: %{kind: "member", id: invitation.accepted_by, label: invitation.email}
         ),
       invitation.revoked_at &&
@@ -245,7 +245,7 @@ defmodule Cadence.Reads.OrganizationAudit do
             "access",
             membership.began_at,
             %{kind: "user", id: membership.user_id, name: label},
-            "Joined as #{role(membership.role)}",
+            "Joined#{as(membership.role)}",
             target: target
           )
         ]
@@ -258,8 +258,15 @@ defmodule Cadence.Reads.OrganizationAudit do
             )
   end
 
-  defp administration(%{"action" => "role_changed", "from" => from, "to" => to}, label),
-    do: "Changed #{label || "a member"}'s role from #{role(from)} to #{role(to)}"
+  defp administration(%{"action" => "role_changed", "from" => from, "to" => to}, label) do
+    case {role(from), role(to)} do
+      {from, to} when is_binary(from) and is_binary(to) ->
+        "Changed #{label || "a member"}'s role from #{from} to #{to}"
+
+      _unknown ->
+        "Changed #{label || "a member"}'s role"
+    end
+  end
 
   defp administration(%{"action" => "removed"}, label),
     do: "Removed #{label || "a member"} from the organization"
@@ -318,43 +325,50 @@ defmodule Cadence.Reads.OrganizationAudit do
     services = Auth.organization_service_identities(organization_id, actor_ids(actors, "service"))
 
     Enum.map(events, fn event ->
-      %{event | actor: name(event.actor, users, services)} |> without_former_id(users)
+      %{event | actor: name(event.actor, users, services)}
+      |> without_former_id(users, organization_id)
     end)
   end
 
   # A former member's id isn't sent anywhere in the Audit (ca-security, #523): not as an actor,
   # not as a membership row's target, and not inside the event's id, which gets an opaque key.
-  defp without_former_id(%{target: %{kind: "member", id: id} = target} = event, users)
+  defp without_former_id(%{target: %{kind: "member", id: id} = target} = event, users, org)
        when is_binary(id) do
     case Map.get(users, id) do
-      {_name, :active} ->
+      {_name, :active, _membership} ->
         event
 
-      _former_or_unknown ->
+      former_or_unknown ->
+        key = opaque(org, former_or_unknown)
+
         %{
           event
           | target: %{target | id: nil},
-            id: String.replace(event.id, ":member:#{id}:", ":member:#{opaque(id)}:")
+            id: String.replace(event.id, ":member:#{id}:", ":member:#{key}:")
         }
     end
   end
 
-  defp without_former_id(event, _users), do: event
+  defp without_former_id(event, _users, _org), do: event
 
-  defp opaque(id),
+  # Keyed by the organization and the membership row's own id, never the user id, so no id held
+  # elsewhere matches it; unique per membership by construction (api-ops, ca-security).
+  defp opaque(org, {_name, _state, membership_id}),
     do:
-      :crypto.hash(:sha256, "audit-member:" <> id)
+      :crypto.hash(:sha256, "audit-member:#{org}:#{membership_id}")
       |> Base.url_encode64(padding: false)
       |> binary_part(0, 16)
+
+  defp opaque(_org, nil), do: "unknown"
 
   defp actor_ids(actors, kind),
     do: for(%{kind: ^kind, id: id} when is_binary(id) <- actors, uniq: true, do: id)
 
   defp name(%{kind: "user", id: id} = actor, users, _services) when is_binary(id) do
     case Map.fetch(users, id) do
-      {:ok, {name, :active}} -> %{actor | name: name}
+      {:ok, {name, :active, _membership}} -> %{actor | name: name}
       # A former member is named, without their id (ca-security, #523).
-      {:ok, {name, :former}} -> %{actor | id: nil, name: name}
+      {:ok, {name, :former, _membership}} -> %{actor | id: nil, name: name}
       :error -> %{actor | id: nil, name: nil}
     end
   end
@@ -378,9 +392,18 @@ defmodule Cadence.Reads.OrganizationAudit do
   defp changes(1), do: "1 change"
   defp changes(n), do: "#{n || 0} changes"
 
-  defp role("organization_admin"), do: "organization admin"
-  defp role(:organization_admin), do: "organization admin"
-  defp role(other), do: to_string(other)
+  # The console's words for a role ("org admin", ca-ux: U104/U105). A role it doesn't know drops
+  # its words ("Joined", "Changed Mira K.'s role"), never the raw value (ca-ux, U20).
+  defp role(role) when role in ["organization_admin", :organization_admin], do: "org admin"
+  defp role(role) when role in ["member", :member], do: "member"
+  defp role(_unknown), do: nil
+
+  defp as(role) do
+    case role(role) do
+      nil -> ""
+      words -> " as #{words}"
+    end
+  end
 
   defp to_utc(%DateTime{} = at), do: at
   defp to_utc(%NaiveDateTime{} = at), do: DateTime.from_naive!(at, "Etc/UTC")
