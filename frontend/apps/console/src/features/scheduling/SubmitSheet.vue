@@ -246,6 +246,7 @@ defineExpose({ open, close });
         v-model="shared"
         :label="`Reason for accepting all ${plural(groups.length, 'gap')}`"
         :rows="2"
+        required
         :maxlength="REASON_MAX"
         :hint="`At least ${REASON_MIN} characters. Recorded for each of the ${plural(requirementCount, 'requirement')}.`"
       />
@@ -272,6 +273,7 @@ defineExpose({ open, close });
           :model-value="reasons[keyOf(group.spacecraftId)] ?? ''"
           :label="`Reason for accepting this gap`"
           :rows="2"
+          required
           :maxlength="REASON_MAX"
           :hint="`At least ${REASON_MIN} characters. Recorded for each of its ${plural(group.unmet.length, 'requirement')}.`"
           @update:model-value="reasons[keyOf(group.spacecraftId)] = $event"

@@ -383,6 +383,7 @@ const clock = computed(() =>
         variant="primary"
         size="commit"
         :disabled="busy"
+        disabled-reason="Working…"
         @click="resume"
         >Continue drafting</ApButton
       >

@@ -91,12 +91,16 @@ const reportedAfter = (g: Group) => {
             <ApButton
               size="compact"
               :disabled="busy"
+              disabled-reason="Working…"
               @click="$emit('focus', passOf(h.snapshotId)?.spacecraft_id ?? '')"
               >Other windows</ApButton
             >
+            <!-- A7 (#244): a locked pass (a repair keeps it booked) offers no Remove, as SelectedPanel. -->
             <ApButton
+              v-if="passOf(h.snapshotId)?.locked !== true"
               size="compact"
-              :disabled="busy || passOf(h.snapshotId)?.locked === true"
+              :disabled="busy"
+              disabled-reason="Working…"
               @click="$emit('remove', h.snapshotId)"
               >Remove</ApButton
             >

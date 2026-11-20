@@ -107,6 +107,7 @@ const items = computed(() => {
           v-if="drafted && !drafted.locked"
           size="compact"
           :disabled="busy"
+          disabled-reason="Working…"
           @click="emit('remove', drafted.snapshot_id)"
           >Remove pass</ApButton
         >
@@ -115,6 +116,7 @@ const items = computed(() => {
           size="compact"
           variant="primary"
           :disabled="busy"
+          disabled-reason="Working…"
           @click="emit('add', other.snapshot_id)"
           >Add pass</ApButton
         >
