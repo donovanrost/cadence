@@ -245,7 +245,6 @@ defmodule CadenceWeb.Console.Problem do
     configuration_changes_group_not_found:
       {404, "That group of spacecraft isn't in this request."},
     not_pending: {409, "That request has already been decided."},
-    self_approval_forbidden: {403, "You can't approve your own request."},
     activation_approver_authored_content:
       {403,
        "Not approved: you saved part of what this request activates, so another person approves it. Your approval wasn't recorded."},
@@ -338,8 +337,10 @@ defmodule CadenceWeb.Console.Problem do
     spacecraft_source_limit_exceeded: {422, "Too many packet sources for one spacecraft."},
     mission_model_revision_not_approved:
       {409, "Not applied: the catalog revision isn't approved yet."},
+    # #275 (U94, ca-ux's amendment): the requester only; an author gets
+    # activation_approver_authored_content (#236).
     activation_self_approval_forbidden:
-      {403, "A different person must review this configuration."},
+      {403, "Not approved: you requested this, so another person approves it."},
     # #534 (mms-ux): another generation saved a packet definition under the same version at the
     # same moment; nothing was written, and doing it again re-resolves. Retryable.
     packet_definition_version_taken:

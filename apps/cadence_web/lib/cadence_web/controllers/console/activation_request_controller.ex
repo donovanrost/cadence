@@ -84,12 +84,15 @@ defmodule CadenceWeb.Console.ActivationRequestController do
   defp error(conn, {:not_resumable, code}),
     do: Problem.respond(conn, :not_resumable, %{error_code: code})
 
-  # #280 (U100): the self-approval refusal always says whether it came through a service.
-  defp error(conn, :self_approval_forbidden),
-    do: Problem.respond(conn, :self_approval_forbidden, %{via_service: nil})
-
-  defp error(conn, {:self_approval_forbidden, %{} = details}),
-    do: Problem.respond(conn, :self_approval_forbidden, details)
+  # #275 (U94): the requester's refusal, kind-prefixed. #280 (U100): it always says whether it
+  # came through a service.
+  defp error(conn, {:activation_self_approval_forbidden, %{} = details}),
+    do:
+      Problem.respond(
+        conn,
+        :activation_self_approval_forbidden,
+        Map.put_new(details, :via_service, nil)
+      )
 
   defp error(conn, reason)
        when reason in [

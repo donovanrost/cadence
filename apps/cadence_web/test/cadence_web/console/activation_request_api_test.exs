@@ -114,14 +114,21 @@ defmodule CadenceWeb.Console.ActivationRequestAPITest do
              |> Map.fetch!("error")
   end
 
-  test "the requester can't approve their own request", c do
+  test "the requester can't approve their own request: the kind-prefixed code, via_service null (#275)",
+       c do
     id = request(c).activation_request_id
 
-    assert %{"code" => "self_approval_forbidden"} =
+    # #275 (U94): requester only, no details.rule; #280's via_service always sent.
+    assert %{
+             "code" => "activation_self_approval_forbidden",
+             "details" => %{"via_service" => nil} = details
+           } =
              c.requester
              |> post_conn(c.base <> "/#{id}/approve", %{"reason" => "Mine"})
              |> json_response(403)
              |> Map.fetch!("error")
+
+    refute Map.has_key?(details, "rule")
   end
 
   test "approve answers with the row and whether it applied", c do

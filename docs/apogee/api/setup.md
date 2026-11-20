@@ -411,7 +411,7 @@ console's mission scope), so the mission's existence doesn't leak.
 | `spacecraft_packet_input_unavailable` | 422 | The source isn't this craft's |
 | `spacecraft_source_limit_exceeded` | 422 | Too many sources |
 | `mission_model_revision_not_approved` | 409 | The catalog's model isn't approved (U65). `details {mission_model_revision_ids, catalog_revision_numbers}`: one number per id, in the same order; an entry is `null` when that catalog revision has no number, so read it as "a catalog revision" (U65, #272) |
-| `activation_self_approval_forbidden` | 403 | (L10 approve) A different person must review |
+| `activation_self_approval_forbidden` | 403 | You requested it, so another person approves it (U94; the same code L10's approve sends since #275). `details {via_service}` on L10 |
 | `forbidden` | 403 | No operate access |
 | `spacecraft_not_found` | 404 | Also when the craft is removed between the access check and the read (#272) |
 
