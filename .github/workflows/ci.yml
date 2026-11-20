@@ -593,7 +593,10 @@ jobs:
             fi
           done < <(find playwright-report test-results -name '*.zip' -print0 2>/dev/null || true)
           paths+=("$scan")
-          for secret in "$CADENCE_ADMIN_PASSWORD" "$E2E_PERSONA_PASSWORD"; do
+          # A shard that failed before its passwords existed has nothing secret to find (devops).
+          # Skip an empty one: grep -F with an empty pattern matches everything.
+          for secret in "${CADENCE_ADMIN_PASSWORD:-}" "${E2E_PERSONA_PASSWORD:-}"; do
+            if [ -z "$secret" ]; then continue; fi
             rc=0
             grep -r -a -F -q -- "$secret" "${paths[@]}" >/dev/null 2>&1 || rc=$?
             if [ "$rc" -eq 0 ]; then
