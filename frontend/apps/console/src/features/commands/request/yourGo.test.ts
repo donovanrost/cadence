@@ -60,6 +60,10 @@ describe("Mobile 'Your GO is requested' (Mobile.md §3)", () => {
       ["01 FORCE_WATCHDOG"],
       "Sign GO for 4 targets and 4 uplinks?",
     ]);
+    // ux on #580: a large count takes its thousands separator.
+    expect(
+      yourGoWords(groupOf({ target_count: 1200, member_count: 1200 }), names, new Date()).title,
+    ).toBe("Reset watchdogs · 1,200 spacecraft");
     expect(phoneGoBlocked(g, null, "user-1", true, names)).toMatch(/your own request/);
     expect(phoneGoBlocked(g, null, "user-9", true, names)).toBe("Re-checking before GO…");
     const noGo = review([{ key: "catalog", result: "no_go", per_target: [], evidence: {} }]);
