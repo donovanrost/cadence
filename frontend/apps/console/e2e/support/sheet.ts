@@ -3,6 +3,11 @@ import { expect, type Locator, type Page, type Request } from "@playwright/test"
 interface SheetCheck {
   /** The control that opens the sheet. It's focused and pressed with Enter, as from the keyboard. */
   readonly opener: Locator;
+  /**
+   * A menu item, when the opener is a menu button (the viewer's More menu, a row's Actions): the
+   * opener is pressed, then this item. A5 still expects focus back on the opener.
+   */
+  readonly via?: Locator;
   /** The sheet's title: its accessible name (A2). */
   readonly name: string | RegExp;
   /** Where focus must land on open (A1): the first field, or the safe button of a danger sheet. */
@@ -55,6 +60,11 @@ export async function expectSheetChecks(page: Page, check: SheetCheck): Promise<
 async function open(page: Page, check: SheetCheck): Promise<Locator> {
   await check.opener.focus();
   await page.keyboard.press("Enter");
+  if (check.via) {
+    await expect(check.via, "the menu shows the item").toBeVisible();
+    await check.via.focus();
+    await page.keyboard.press("Enter");
+  }
   const sheet = page.getByRole("dialog", {
     name: check.name,
     exact: typeof check.name === "string",
@@ -82,14 +92,18 @@ async function expectTrapped(page: Page, sheet: Locator, nonModal: boolean): Pro
       ).length,
   );
   // A native showModal() dialog lets Tab pass from its last control to the browser's own UI,
-  // where the page sees <body> focused; that isn't the page behind, so it passes. Focus on any
-  // element outside the sheet fails.
+  // where the page sees <body> focused; that isn't the page behind, so it passes. Only a native
+  // modal <dialog> gets that pass: <body> focused from a custom role=dialog means focus was lost
+  // (an A5 failure, fe-ops #433). Focus on any element outside the sheet fails.
   for (const key of ["Tab", "Shift+Tab"]) {
     for (let i = 0; i < stops + 2; i++) {
       await page.keyboard.press(key);
       const where = await sheet.evaluate((d) => {
         const active = document.activeElement;
-        if (active === null || active === document.body) return "browser";
+        if (active === null || active === document.body)
+          return d instanceof HTMLDialogElement && d.matches(":modal")
+            ? "browser"
+            : "<body> (lost)";
         return d.contains(active)
           ? "inside"
           : `${active.tagName.toLowerCase()} "${(active.textContent ?? "").trim().slice(0, 40)}"`;

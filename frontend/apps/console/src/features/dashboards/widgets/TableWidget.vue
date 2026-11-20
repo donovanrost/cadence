@@ -3,15 +3,19 @@ import { computed } from "vue";
 import { ApStatusMark, stateTextClass } from "@/ui";
 import type { WorkspacePlacement } from "../model/snapshot.ts";
 import { limitLabel, limitMark, table } from "../model/widget-data.ts";
+import { useWidgetName } from "./widget-name.ts";
 
 /** Data table / status matrix. Limit-state cells carry their mark, not just a tint. */
 const props = defineProps<{ placement: WorkspacePlacement }>();
 const data = computed(() => table(props.placement));
+const name = useWidgetName(() => props.placement);
 </script>
 
 <template>
-  <div class="h-full min-h-0 overflow-auto">
+  <!-- B1: the scroll box is a tab stop named by its widget, and the table has a caption. -->
+  <div class="h-full min-h-0 overflow-auto" role="region" tabindex="0" :aria-label="name">
     <table class="w-full border-collapse text-md">
+      <caption class="sr-only" v-text="name" />
       <thead class="sticky top-0 bg-panel">
         <tr>
           <th

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import { ApButton, ApCallout, formatClock } from "@/ui";
+import { computed, watch } from "vue";
+import { ApButton, ApCallout, formatClock, refocusFirst } from "@/ui";
 import type { SkippedEvent } from "./contracts.ts";
 import type { Conflict, Notice } from "./useEditSession.ts";
 
@@ -17,6 +17,14 @@ const props = defineProps<{
   retiredLibrary: boolean;
 }>();
 const emit = defineEmits<{ continue: []; discardMine: [] }>();
+/** A5: Continue editing and Discard mine take the callout, and the focused button, with them. */
+watch(
+  () => props.conflict,
+  (now, was) => {
+    if (was && !now) refocusFirst();
+  },
+  { flush: "post" },
+);
 const savedLine = computed(() => {
   const c = props.conflict;
   if (!c) return "";

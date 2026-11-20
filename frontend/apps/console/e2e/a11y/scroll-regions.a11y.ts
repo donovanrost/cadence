@@ -1,8 +1,12 @@
+import { guardReadOnly } from "../support/read-only.ts";
 import AxeBuilder from "@axe-core/playwright";
 import { onPhone } from "../support/a11y-projects.ts";
 import { missionPath, openConsole } from "../support/console.ts";
 import { expect, test } from "../support/fixtures.ts";
 import { DEV_ONLY, waitForScreen } from "../support/keyboard.ts";
+
+// qa's :4011 condition: only reads reach the server (support/read-only.ts).
+test.beforeEach(({ page }) => guardReadOnly(page));
 
 // qa a11y run 2, findings #1 and #2 (390 only): a table or the wizard's step bar scrolled sideways
 // with no tab stop, role or name (axe scrollable-region-focusable). The kit fix (8fa0f9e9e) landed
