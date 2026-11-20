@@ -30,7 +30,8 @@ that fails or stalls shows on Now).
   same reviewed spacecraft) arrived. `superseded_by` (that request's id) and `superseded_at` are set
   then, else null.
 - `decision`: the latest human decision, `{state: approved | rejected | withdrawn, by {kind, id,
-  name}, at, reason}`, or null. A request approved by policy alone (no reviewer) is `approved`
+  name}, at, reason}`, or null. `reason` is `null` for a change-set approval given without a comment
+  (#521); a reject or withdraw always has one. A request approved by policy alone (no reviewer) is `approved`
   with a null decision. A superseded one has no decision (the system did it).
   - **From the dev reset (DECISIONS #112, P3 step 3; it rides the dev reset slot, ~11-21):** every
     decision is recorded, including one no second person was needed for. A request activated
