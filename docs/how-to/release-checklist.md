@@ -33,19 +33,27 @@ Run before deploying a branch to an environment. Each line names why it exists.
    pass loses that pass's unprocessed bytes).
 4. **Struct changes** (runbook gate, 84aaa0811): if the release adds or removes a struct field, plan
    a node restart, not an in-node reload; in-flight processes hold the old struct.
+5. **Mission-model compiler version** (#559, mission-composition-design.md §3). If the release
+   bumps the mission-model `compiler_version`, every composition gets a NEW candidate revision at
+   the next compile, and approval never carries over from the old version. Craft keep running their
+   approved older compile, so nothing is refused, unless the release also drops the old version from
+   the runtime's runnable list. In that case every pin with no approved runnable revision is refused
+   ('re-approval needed after a Cadence update') until an org admin approves the candidates. Say in
+   the release notes which it is. If old versions stay runnable, approve the candidates at the
+   team's pace; if they don't, approve them right after the deploy, before the next generation.
 
 ## The deploy
 
-5. **Graceful stop, journal sealed, never a kill** (ingest identity v2, DECISIONS #83). A kill can
+6. **Graceful stop, journal sealed, never a kill** (ingest identity v2, DECISIONS #83). A kill can
    re-persist one in-flight batch under the new identity digest.
-6. **After a `mix.lock` change**, run `mix deps.get` in each app (`apps/cadence`,
+7. **After a `mix.lock` change**, run `mix deps.get` in each app (`apps/cadence`,
    `apps/cadence_web`, `apps/cadence_simulator`).
 
 ## After the deploy
 
-7. **No replay of telemetry ingested before identity v2** without a decision (DECISIONS #83);
+8. **No replay of telemetry ingested before identity v2** without a decision (DECISIONS #83);
    replaying it would give new identities next to the old ones.
-8. **Smoke:** sign-in, Now loads, one contact's telemetry arrives with distinct receipt times, and
+9. **Smoke:** sign-in, Now loads, one contact's telemetry arrives with distinct receipt times, and
    `persistence_failed` stays at 0.
 
 Add a line here whenever a release note says "before deploying" or "after deploying".
