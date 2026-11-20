@@ -672,6 +672,10 @@ required, so this lands only on a fresh database at a reset):
     needs none): a single request's release (`enqueue`), or a group submitted under such a policy.
     It's written in the release's own transaction, with the releaser as actor.
   - A decision path never writes it.
+  - **No existing read shows it** (api-ops on #639): the org audit's command approvals, REST
+    `GET …/command_approvals` (and `/:id`, which answers `404` for one) and the console review's
+    history leave it out, so `decision` there stays `approved | rejected`. The four-eyes record has
+    it (#239's audit).
 - **Two names on an automatic release, on purpose (api-ops):** the approved command's
   `approved_by` stays the safety policy (`cadence:command_safety_policy`), because the policy is
   what authorized it, while the `not_required` row's actor is the person who released it. The
