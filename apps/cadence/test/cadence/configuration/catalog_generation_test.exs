@@ -201,20 +201,16 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
         update("spacecraft_profile", profile, "catalog_revision_id", rev3.catalog_revision_id)
       ])
 
-    assert {:ok, %{checks: checks}} =
+    # D3 (#544; design §3): the profile's pin is translated at staging to rev 3's composition,
+    # which has no approved revision, so it's a validation NO-GO on the pin (no longer only the
+    # blocking HOLD, which a NO-GO's preview doesn't reach).
+    assert {:ok, %{verdict: :no_go, checks: checks}} =
              Configuration.preview(c.scope, c.mission.mission_id, staged.change_set_id)
 
-    assert %{blocking: true, sentence: sentence, details: details} =
-             checks
-             |> Enum.flat_map(& &1.items)
-             |> Enum.find(&(&1[:reason] == :mission_model_not_approved))
+    assert %{items: [%{errors: [%{path: "composition_id", message: message}]}]} =
+             Enum.find(checks, &(&1.key == "validation"))
 
-    assert sentence ==
-             "Catalog rev #{rev3.revision_number} isn't approved yet, so 1 spacecraft can't " <>
-               "move to it. An org admin approves it in Setup › Catalog first."
-
-    assert details.catalog_revision_number == rev3.revision_number
-    assert details.catalog_database_id == rev3.catalog_database_id
+    assert message =~ "isn't approved"
 
     # The default baseline for its approval: no earlier import in its database, so the revision
     # the fleet runs now.
@@ -228,8 +224,7 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
            ) ==
              entry["mission_model"]["revision_id"]
 
-    assert details.mission_model_revision_id == rev3.mission_model_revision_id
-    assert {:error, {:holds_blocking, _preview}} = submit(c, staged)
+    assert {:error, _not_go} = submit(c, staged)
 
     MissionModelApproval.approve!(c.org, c.mission.mission_id, rev3.mission_model_revision_id)
     assert {:ok, %{state: :applied}} = submit(c, staged)

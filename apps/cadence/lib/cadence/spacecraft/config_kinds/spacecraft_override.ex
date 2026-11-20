@@ -12,6 +12,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftOverride do
   @behaviour Cadence.Platform.ConfigKind
 
   alias Cadence.Platform.ConfigFields, as: F
+  alias Cadence.Spacecraft.ConfigKinds.CompositionPin
   alias Cadence.Spacecraft.ConfigKinds.SpacecraftProfile
   alias Cadence.SpacecraftStore
   alias Cadence.SpacecraftStore.Overrides
@@ -60,6 +61,10 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftOverride do
           not (is_map(value) and Map.has_key?(value, "value")) ->
             [F.error(key, "Give the override a value")]
 
+          # mms-security on #581: the pin is a composition id, never its display number.
+          path(key) == "composition_id" and not is_binary(value["value"]) ->
+            [F.error(key, "Choose a mission composition")]
+
           true ->
             F.text(value, "reason", 1..500, label: "Reason")
             |> Enum.map(&%{&1 | path: key <> ".reason"})
@@ -75,7 +80,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftOverride do
   @impl true
   # DECISIONS #36/#65: a catalog override moves the spacecraft's catalog through a generation;
   # it must name a catalog revision that exists.
-  def validate(organization_id, mission_id, _action, entity_id, _previous, proposed)
+  def validate(organization_id, mission_id, _action, entity_id, previous, proposed)
       when is_map(proposed) do
     errors =
       Enum.flat_map(proposed, fn {key, value} ->
@@ -87,12 +92,67 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftOverride do
         else
           _ok -> []
         end
-      end) ++ apids_errors(organization_id, mission_id, entity_id, proposed)
+      end) ++
+        apids_errors(organization_id, mission_id, entity_id, proposed) ++
+        CompositionPin.errors(
+          organization_id,
+          mission_id,
+          pin(previous),
+          pin(proposed),
+          "composition_id"
+        )
 
     if errors == [], do: :ok, else: {:error, errors}
   end
 
   def validate(_organization_id, _mission_id, _action, _entity_id, _previous, _proposed), do: :ok
+
+  @impl true
+  # D3 (#544): an old client's catalog override names its composition, at staging only; the
+  # composition override carries the catalog override's reason.
+  def translate(organization_id, mission_id, _previous, proposed, touched) do
+    {catalog, composition} =
+      CompositionPin.translate(
+        organization_id,
+        mission_id,
+        pin(proposed),
+        {"catalog_revision_id" in touched, "composition_id" in touched}
+      )
+
+    reason = reason(proposed, "catalog_revision_id") || reason(proposed, "composition_id")
+
+    {:ok,
+     proposed
+     |> put_pin("catalog_revision_id", catalog, reason)
+     |> put_pin("composition_id", composition, reason)}
+  end
+
+  defp put_pin(document, key, nil, _reason), do: Map.put(document, key, nil)
+
+  defp put_pin(document, key, value, reason) do
+    case Map.get(document, key) do
+      %{"value" => ^value} -> document
+      _other -> Map.put(document, key, %{"value" => value, "reason" => reason})
+    end
+  end
+
+  defp reason(document, key) do
+    case Map.get(document || %{}, key) do
+      %{"reason" => reason} when is_binary(reason) -> reason
+      _none -> nil
+    end
+  end
+
+  defp pin(document) do
+    {value(document, "catalog_revision_id"), value(document, "composition_id")}
+  end
+
+  defp value(document, key) do
+    case Map.get(document || %{}, key) do
+      %{"value" => value} -> value
+      _none -> nil
+    end
+  end
 
   @impl true
   def write(organization_id, mission_id, :update, id, previous, proposed, _options) do
