@@ -8,7 +8,8 @@ test.describe("Setup spacecraft detail", () => {
   test("opens from the directory with real identity, readiness and routing", async ({ page }) => {
     await openConsole(page, missionPath("setup/spacecraft"));
     await page.getByRole("link", { name: "EARENDIL-001", exact: true }).click();
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("EARENDIL-001");
+    // The heading names the SCID too ("EARENDIL-001 · SCID 1").
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(/^EARENDIL-001\b/);
     await expect(page.getByText("Ready", { exact: true }).first()).toBeVisible();
 
     await expect(page.getByText("SCID 1", { exact: true })).toBeVisible();
