@@ -1505,6 +1505,13 @@ Technical details.
     "…and both claim it at once, so whichever connects second may lose its start." Several: "Overlaps EARENDIL-006's
     SNTG 00:05Z pass and 2 other passes. … may lose its start."; the earlier pass's note with several: "…and 2
     other passes overlap this one." (no longest).
+  - **Settled in the build** (fe-ops, #650):
+    - No station on the other pass: its time stands alone, "EARENDIL-006's 00:05Z pass"; with neither, "EARENDIL-006's
+      pass". One other overlapping pass: "and 1 other pass".
+    - Durations past an hour: "1 h 5 m" (§4).
+    - The tag's word is "Listener overlap" (the kit renders `LISTENER OVERLAP`). On the plan's Gantt the bar's
+      description adds " · listener overlap" beside U45's caution mark, so the mark has its word (B2).
+    - Technical details: "listener host:port · direction · N s · N passes" ("no end" when `seconds` is null).
   - **Nameless forms** (fe-ops, #635): a null `with` spacecraft name reads "an unknown spacecraft's SNTG 00:05Z
     pass" (U25's sentence form, as designers §3), never an id. A null station name uses its code, "SNTG's listener".
     With neither, "The station's listener".
