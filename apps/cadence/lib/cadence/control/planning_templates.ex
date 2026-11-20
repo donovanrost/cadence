@@ -11,7 +11,7 @@ defmodule Cadence.Control.PlanningTemplates do
   not mission configuration).
   """
 
-  alias Cadence.Accounts
+  alias Cadence.Accounts.MemberNames
   alias Cadence.Auth.Scope
 
   alias Cadence.ContactPlanning.{
@@ -46,12 +46,11 @@ defmodule Cadence.Control.PlanningTemplates do
       {:ok, template, version} ->
         names = names(organization_id, mission_id)
 
-        versions =
-          organization_id
-          |> ContactRequirementTemplates.list_versions(mission_id, template_id)
-          |> Enum.map(
-            &%{version: &1.version, created_at: &1.created_at, actor: actor(&1.created_by)}
-          )
+        listed =
+          ContactRequirementTemplates.list_versions(organization_id, mission_id, template_id)
+
+        people = MemberNames.members(organization_id, actor_ids(template, listed))
+        versions = Enum.map(listed, &version_row(&1, people))
 
         {:ok,
          template
@@ -59,7 +58,7 @@ defmodule Cadence.Control.PlanningTemplates do
          |> Map.merge(%{
            document: document(version),
            versions: versions,
-           state_changed: state_changed(template)
+           state_changed: state_changed(template, people)
          })}
 
       {:error, _missing} ->
@@ -131,14 +130,15 @@ defmodule Cadence.Control.PlanningTemplates do
   defp reason(_reason), do: {:error, {:invalid_params, %{reason: "Say why."}}}
 
   # The last lifecycle move a person made; creating and versioning record system reasons.
-  defp state_changed(%{lifecycle_reason: reason}) when reason in [nil, "created", "versioned"],
-    do: nil
+  defp state_changed(%{lifecycle_reason: reason}, _people)
+       when reason in [nil, "created", "versioned"],
+       do: nil
 
-  defp state_changed(template) do
+  defp state_changed(template, people) do
     %{
       state: template.lifecycle_state,
       at: template.lifecycle_changed_at,
-      actor: template.lifecycle_changed_by && actor(template.lifecycle_changed_by),
+      actor: template.lifecycle_changed_by && actor(template.lifecycle_changed_by, people),
       reason: template.lifecycle_reason
     }
   end
@@ -389,14 +389,19 @@ defmodule Cadence.Control.PlanningTemplates do
     |> Map.merge(crafts)
   end
 
-  defp actor(user_id) do
-    name =
-      case Accounts.fetch_user(user_id) do
-        {:ok, user} -> user.display_name || user.email
-        _missing -> nil
-      end
+  defp version_row(v, people),
+    do: %{version: v.version, created_at: v.created_at, actor: actor(v.created_by, people)}
 
-    %{kind: "user", id: user_id, name: name}
+  defp actor_ids(template, versions),
+    do: Enum.filter([template.lifecycle_changed_by | Enum.map(versions, & &1.created_by)], & &1)
+
+  # #146 (#468): a person is named, and keeps their id, only as an active member of the mission's
+  # organization (one lookup per read); anyone else reads id and name nil, never an email.
+  defp actor(user_id, people) do
+    case Map.fetch(people, user_id) do
+      {:ok, name} -> %{kind: "user", id: user_id, name: name}
+      :error -> %{kind: "user", id: nil, name: nil}
+    end
   end
 
   defp expected_version(n) when is_integer(n) and n > 0, do: {:ok, n}

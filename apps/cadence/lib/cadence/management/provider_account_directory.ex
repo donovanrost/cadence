@@ -9,7 +9,7 @@ defmodule Cadence.Management.ProviderAccountDirectory do
   always `nil` (credentials carry no expiry yet), so there's no `expiring`.
   """
 
-  alias Cadence.{Accounts, Missions}
+  alias Cadence.Accounts.MemberNames
   alias Cadence.Auth.{Policy, Scope}
 
   alias Cadence.GroundNetworks.{
@@ -19,15 +19,20 @@ defmodule Cadence.Management.ProviderAccountDirectory do
     ProviderAccounts
   }
 
+  alias Cadence.Missions
+
   @spec list(Scope.t()) :: {:ok, map()} | {:error, term()}
   def list(%Scope{organization_id: organization_id} = scope) do
     with {:ok, accounts} <- ProviderAccounts.list(scope) do
       used_by = missions_by_account(organization_id)
+      people = people(organization_id, Enum.map(accounts, fn {_account, v} -> v.created_by end))
 
       {:ok,
        %{
          accounts:
-           Enum.map(accounts, fn {account, version} -> row(account, version, used_by) end),
+           Enum.map(accounts, fn {account, version} ->
+             row(account, version, used_by, people)
+           end),
          adapters: Enum.map(MissionProvider.provider_types(), &%{key: &1, label: label(&1)}),
          permissions: permissions(scope)
        }}
@@ -84,9 +89,15 @@ defmodule Cadence.Management.ProviderAccountDirectory do
   @doc "One account's PA1 row (PA2 builds on it)."
   @spec account_row(ProviderAccount.t(), struct()) :: map()
   def account_row(%ProviderAccount{} = account, version),
-    do: row(account, version, missions_by_account(account.organization_id))
+    do:
+      row(
+        account,
+        version,
+        missions_by_account(account.organization_id),
+        people(account.organization_id, [version.created_by])
+      )
 
-  defp row(%ProviderAccount{} = account, version, used_by) do
+  defp row(%ProviderAccount{} = account, version, used_by, people) do
     %{
       id: account.provider_account_id,
       name: account.display_name,
@@ -99,7 +110,7 @@ defmodule Cadence.Management.ProviderAccountDirectory do
       last_success_at: account.last_validated_at,
       missions: Map.get(used_by, account.provider_account_id, []),
       added_at: version.created_at,
-      added_by: added_by(version.created_by)
+      added_by: added_by(version.created_by, people)
     }
   end
 
@@ -124,14 +135,20 @@ defmodule Cadence.Management.ProviderAccountDirectory do
     end
   end
 
-  defp added_by(user_id) when is_binary(user_id) do
-    case Accounts.fetch_user(user_id) do
-      {:ok, user} -> %{name: user.display_name || user.email}
-      _system -> nil
+  # #146 (#468): one batched lookup per read; a person is named only while an active member of the
+  # account's organization, never by email. Anyone else (a platform admin, someone who has left)
+  # reads nil, as a service always did.
+  defp people(organization_id, ids),
+    do: MemberNames.display_names(organization_id, Enum.filter(ids, &is_binary/1))
+
+  defp added_by(user_id, people) when is_binary(user_id) do
+    case Map.fetch(people, user_id) do
+      {:ok, name} -> %{name: name}
+      :error -> nil
     end
   end
 
-  defp added_by(_none), do: nil
+  defp added_by(_none, _people), do: nil
 
   defp label(type), do: type |> to_string() |> String.replace("_", " ") |> String.capitalize()
 

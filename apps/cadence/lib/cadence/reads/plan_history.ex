@@ -15,6 +15,7 @@ defmodule Cadence.Reads.PlanHistory do
   """
 
   alias Cadence.Accounts
+  alias Cadence.Accounts.MemberNames
   alias Cadence.Auth
   alias Cadence.ContactPlanning.{ContactPlanApprovals, ContactPlans, PlanSubmissions}
   alias Cadence.Reads.{PlanApproval, RequirementLabels}
@@ -156,12 +157,17 @@ defmodule Cadence.Reads.PlanHistory do
   defp creator(_org, "cadence" <> _ = id), do: %{kind: "system", id: id, name: "Cadence"}
   defp creator(_org, "system" <> _ = id), do: %{kind: "system", id: id, name: "Cadence"}
 
+  # #146 (#468): a person is named, and keeps their id, only while an active member of the
+  # mission's organization; any other person reads id and name nil, never an email.
   defp creator(org, id) do
-    case Accounts.fetch_user(id) do
-      {:ok, user} ->
-        %{kind: "user", id: id, name: user.display_name || user.email}
+    case {MemberNames.members(org, [id]), Accounts.fetch_user(id)} do
+      {%{^id => name}, _user} ->
+        %{kind: "user", id: id, name: name}
 
-      _not_user ->
+      {_not_member, {:ok, _person}} ->
+        %{kind: "user", id: nil, name: nil}
+
+      {_not_member, _not_user} ->
         case Auth.fetch_service_identity(org, id) do
           {:ok, service} -> %{kind: "service_identity", id: id, name: service.display_name}
           _not_service -> %{kind: "system", id: id, name: nil}
