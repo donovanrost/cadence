@@ -95,7 +95,7 @@ defmodule Cadence.MissionModelCatalogNaming do
   # links its own compile (`Compositions.effective_revision/5`'s `compiled:`). The link is written
   # directly, not recompiled: a test may compile with options a plain recompile wouldn't repeat.
   defp compose!(organization_id, mission_id, revision_id) do
-    {:ok, %{layer_ids: [layer_id]}} =
+    {:ok, %{layer_ids: [layer_id], compiler_version: compiler_version}} =
       MissionModels.fetch_revision(organization_id, mission_id, revision_id)
 
     {:ok, composition} =
@@ -107,7 +107,9 @@ defmodule Cadence.MissionModelCatalogNaming do
         mission_id: mission_id,
         composition_id: composition.composition_id,
         authored_head: nil,
-        revision_id: revision_id
+        revision_id: revision_id,
+        # #559: a link per compiler version, the revision's own (its composite FK).
+        compiler_version: compiler_version
       },
       on_conflict: :nothing
     )
