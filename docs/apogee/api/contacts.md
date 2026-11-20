@@ -524,6 +524,9 @@ timer); `contact {id, station_code, starts_at}` or null (the pass label); `space
 `first_seen_at`, `last_seen_at` (the log line's times), `occurrences` (retries that hit it);
 `buffer {used_bytes, max_bytes}` or null (the stream's journal, sampled every 10 s; null on timer);
 `dropping`, `dropping_since` (the buffer is full, so new telemetry is being lost);
+`acknowledged_by {kind: "user", id, name}` (#146: named, and identified, only while they hold an
+active membership in the mission's organization, checked at read time; `name` null without a display
+name; anyone else `{kind: "user", id: null, name: null}`; the record keeps only kind and id),
 `acknowledged_at`, `acknowledged_note`, `reraised` (dropping began after the acknowledgement, so it
 reads open again; the earlier ack fields stay). Resolved entries: `{id, source, conflict, path,
 spacecraft_ids, resolved_at, resolved_by: {kind: "system", id: null, name: null}, action:

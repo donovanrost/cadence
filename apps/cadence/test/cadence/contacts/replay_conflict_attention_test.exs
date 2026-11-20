@@ -2,7 +2,11 @@ defmodule Cadence.Contacts.ReplayConflictAttentionTest do
   # #99 follow-up / ux U84 'Stuck processing': the attention source over the durable records.
   use Cadence.DataCase, async: false
 
+  import Ecto.Query
+
+  alias Cadence.Accounts.OrganizationMembershipRow
   alias Cadence.Applications.TelemetryDecomFixtures
+  alias Cadence.CommandReviewFixtures
   alias Cadence.Contacts.ReplayConflictAttention
   alias Cadence.Reads.ActionQueue.AttentionItems
   alias Cadence.Runtime.ReplayConflicts
@@ -24,6 +28,30 @@ defmodule Cadence.Contacts.ReplayConflictAttentionTest do
   defp operator(ctx) do
     persist_mission_scope(ctx.organization_id, ctx.mission_id)
     TelemetryDecomFixtures.user_scope(ctx.organization_id, "op")
+  end
+
+  test "the acknowledger is named only while a member, and stored as kind and id only (#146)" do
+    c = CommandReviewFixtures.scope!()
+    ctx = %{organization_id: c.org, mission_id: c.mission}
+    trip(stream(ctx))
+    [%{id: id}] = items(ctx)
+
+    assert {:ok, item} = ReplayConflictAttention.acknowledge(c.scope, c.mission, id, nil)
+    assert item.acknowledged_by == %{kind: "user", id: c.user.user_id, name: "Reviewer"}
+
+    # The record holds who, never a name: the read names them from the live membership.
+    assert [%{acknowledged_by: stored}] = ReplayConflicts.open(c.mission)
+    assert stored == %{"kind" => "user", "id" => c.user.user_id}
+
+    Repo.update_all(
+      from(m in OrganizationMembershipRow,
+        where: m.user_id == ^c.user.user_id and m.organization_id == ^c.org
+      ),
+      set: [lifecycle_state: "revoked"]
+    )
+
+    assert [%{state: "acknowledged", acknowledged_by: %{kind: "user", id: nil, name: nil}}] =
+             items(ctx)
   end
 
   test "one item per stalled unit, in the agreed shape", ctx do
@@ -128,7 +156,7 @@ defmodule Cadence.Contacts.ReplayConflictAttentionTest do
                " told domain at 03:18Z "
              )
 
-    assert %{"kind" => "user", "id" => _} = item.acknowledged_by
+    assert %{kind: "user"} = item.acknowledged_by
 
     assert {:ok, %{acknowledged_note: nil}} =
              ReplayConflictAttention.acknowledge(scope, ctx.mission_id, id)
