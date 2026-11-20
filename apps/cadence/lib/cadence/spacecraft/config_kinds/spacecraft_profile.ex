@@ -26,7 +26,8 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
   alias Cadence.SpacecraftTypeStore
 
   @fields ~w(display_name downlink_protocol uplink_protocol packet_protocol frame_parameters
-             applications metadata catalog_revision_id handled_apids routing_rules)
+             applications metadata catalog_revision_id composition_id handled_apids
+             routing_rules)
   # `fecf` (frame error control field present) is carried by existing profiles and read by the
   # TM frame codec.
   @frame_fields ~w(frame_size secondary_header_length insert_zone_length ocf_length
@@ -78,6 +79,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
     errors =
       rule_errors ++
         F.text(document, "catalog_revision_id", 1..255, label: "Catalog revision") ++
+        F.text(document, "composition_id", 1..255, label: "Mission composition") ++
         F.only(document, @fields) ++
         F.text(document, "display_name", 1..200, required: true, label: "Name") ++
         F.one_of(document, "downlink_protocol", ~w(tm aos uslp),
@@ -297,6 +299,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
         applications: document["applications"],
         metadata: document["metadata"],
         catalog_revision_id: document["catalog_revision_id"],
+        composition_id: document["composition_id"],
         handled_apids: document["handled_apids"],
         routing_rules: document["routing_rules"] || []
       })
@@ -398,6 +401,13 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
     |> then(fn document ->
       if profile.handled_apids,
         do: Map.put(document, "handled_apids", profile.handled_apids),
+        else: document
+    end)
+    # D3 (#544; #108, no legacy-hash shim per domain, #112): in the document once set. A profile
+    # change staged before the pin was filled in reads stale at apply and must be re-staged.
+    |> then(fn document ->
+      if profile.composition_id,
+        do: Map.put(document, "composition_id", profile.composition_id),
         else: document
     end)
   end

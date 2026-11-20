@@ -25,8 +25,10 @@ defmodule Cadence.SpacecraftStore.Overrides do
 
   @doc "Whether a path may be overridden."
   @spec overridable?(String.t()) :: boolean()
+  # D3 (#544): composition_id is the per-craft pin, a change-set path only. It isn't a schema
+  # field, so the console's kind editor shows no raw id field before its reads move (D2c).
   def overridable?(path) when is_binary(path) do
-    Regex.match?(@routing, path) or path in schema_paths()
+    Regex.match?(@routing, path) or path == "composition_id" or path in schema_paths()
   end
 
   def overridable?(_path), do: false
