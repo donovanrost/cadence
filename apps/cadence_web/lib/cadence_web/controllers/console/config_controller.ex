@@ -17,7 +17,7 @@ defmodule CadenceWeb.Console.ConfigController do
     SpacecraftOps
   }
 
-  alias Cadence.Reads.{ChangeSetViewer, ConfigKindSchema, ConfigLabels}
+  alias Cadence.Reads.{ChangeSetOutcome, ChangeSetViewer, ConfigKindSchema, ConfigLabels}
   alias CadenceWeb.Console.{ConfigJSON, ConfigParams, Problem}
 
   def show(conn, _params) do
@@ -61,7 +61,7 @@ defmodule CadenceWeb.Console.ConfigController do
 
   def preview_set(conn, %{"change_set_id" => id}),
     do:
-      Configuration.preview(scope(conn), mission_id(conn), id)
+      Configuration.preview(scope(conn), mission_id(conn), id, outcome: ChangeSetOutcome)
       |> labelled(conn)
       |> with_active_configuration(conn)
       |> wrap()
@@ -72,7 +72,9 @@ defmodule CadenceWeb.Console.ConfigController do
          {:ok, ops} <-
            params(SpacecraftOps.prepare(scope(conn).organization_id, mission_id(conn), ops)),
          {:ok, preview} <-
-           Configuration.preview(scope(conn), mission_id(conn), {:ops, ops})
+           Configuration.preview(scope(conn), mission_id(conn), {:ops, ops},
+             outcome: ChangeSetOutcome
+           )
            |> labelled(conn)
            |> with_active_configuration(conn) do
       ok(conn, preview)
