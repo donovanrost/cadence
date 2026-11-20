@@ -209,7 +209,10 @@ defmodule Cadence.Reads.CompositionReadsTest do
       keys = CompositionKeys.read(c.org, c.mid, id)
       assert keys.composition.composition_id == composition_id(c, id)
 
-      assert [%{layer_id: layer_id, importers: importers}] = keys.importers
+      assert [%{layer_id: layer_id, importers: importers, importers_count: count}] =
+               keys.importers
+
+      assert count == length(importers) and count <= 100
       assert layer_id == layer_of(c, id)
       assert %{kind: "system", run_by: %{id: person_id, name: "Ada"}} = hd(importers)
       assert person_id == person.user_id
