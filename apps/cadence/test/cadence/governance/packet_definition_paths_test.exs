@@ -104,6 +104,76 @@ defmodule Cadence.Governance.PacketDefinitionPathsTest do
     assert_every_activation_rereads(c)
   end
 
+  # api-ops' condition 3: the change-set apply and a Review hold different locks, so two
+  # generations can resolve the same next version for different contents. Simulated here: right
+  # after this generation resolves, "another" saves a different HEALTH under that version, inside
+  # the same transaction. The persist refuses, the whole apply rolls back, and a resubmit applies.
+  test "a generation racing another to the same next version is refused, writes nothing, retries",
+       c do
+    b = catalog!(c, "B", ["mode", "aux"])
+    profile = profile!(c, c.a)
+    ref = make_ref()
+
+    :telemetry.attach(
+      inspect(ref),
+      [:cadence, :governance, :packet_definitions, :resolved],
+      fn _event, _measurements, %{mission_id: mission_id, versions: versions}, test_c ->
+        # Every resolution (a submit also previews, in a transaction it rolls back); saving the
+        # same rival again is a no-op under #534's rule.
+        if mission_id == test_c.mission.mission_id do
+          for {id, version} <- versions, version > 1 do
+            Process.put(ref, :fired)
+
+            {:ok, _} =
+              Governance.persist_packet_definition(test_c.org, rival(test_c, id, version))
+          end
+        end
+      end,
+      c
+    )
+
+    on_exit(fn -> :telemetry.detach(inspect(ref)) end)
+
+    {:ok, staged} =
+      Configuration.stage(c.scope, c.mission.mission_id, %{summary: "Race"}, [
+        update("spacecraft_profile", profile, "catalog_revision_id", b)
+      ])
+
+    assert {:error, {:packet_definition_content_changed, _id, _version}} = submit(c, staged)
+    assert Process.get(ref) == :fired
+
+    # Nothing was written: not the generation's definitions, not even the rival's (same transaction).
+    assert stored_fields(c) == %{1 => ["mode"]}
+    assert health_versions(c) == [1]
+
+    :telemetry.detach(inspect(ref))
+    {:ok, retried} = Configuration.current(c.scope, c.mission.mission_id)
+
+    assert {:ok, %{state: :applied}} =
+             Configuration.submit(c.scope, c.mission.mission_id, staged.change_set_id, %{
+               reason: "Packet definition paths test",
+               expected_version: retried.change_set.version,
+               acknowledged_holds: true
+             })
+
+    assert health_versions(c) == [2]
+    assert_every_activation_rereads(c)
+  end
+
+  defp rival(c, packet_definition_id, version) do
+    Cadence.Telemetry.PacketDefinition.new(%{
+      organization_id: c.org,
+      mission_id: c.mission.mission_id,
+      packet_definition_id: packet_definition_id,
+      packet_name: "HEALTH",
+      apid: 42,
+      version: version,
+      fields: [
+        %{field_id: "rival", name: "rival", offset_bits: 0, size_bits: 8, data_type: :uint}
+      ]
+    })
+  end
+
   # Every activation, current and past: its binding set re-read now hashes as it recorded.
   defp assert_every_activation_rereads(c) do
     activations = Cadence.Activations.list_activations(c.org, c.mission.mission_id)

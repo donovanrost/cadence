@@ -1,8 +1,6 @@
 defmodule Cadence.Governance.Persistence do
   @moduledoc false
 
-  import Ecto.Query, only: [from: 2]
-
   alias Ecto.Changeset
 
   alias Cadence.ApplicationDispatch.{
@@ -17,6 +15,7 @@ defmodule Cadence.Governance.Persistence do
     BindingSetRow,
     CapabilityInstanceRow,
     GovernedPacketDefinitionRow,
+    PacketDefinitionContent,
     PacketDefinitionFieldRow
   }
 
@@ -36,26 +35,54 @@ defmodule Cadence.Governance.Persistence do
     end)
   end
 
+  @doc """
+  Writes a packet definition under `(mission, packet_definition_id, version)`, which it never
+  changes afterwards (#534): a new key is written whole; the same key with the same content
+  (`PacketDefinitionContent`) is a no-op apart from DECISIONS #73's identity fill; the same key
+  with another content is `{:error, {:packet_definition_content_changed, id, version}}`, and the
+  caller's transaction writes nothing. Fields are never added to an existing version (they used to
+  be merged in, so an earlier binding set re-read to fields it never had). The version is the
+  caller's, resolved by content before the binding set was built
+  (`Governance.resolve_packet_definition_versions/4`); a refusal here is a race with another
+  generation that resolved the same next version, and a retry re-resolves.
+  """
   def persist_packet_definition(repo, %PacketDefinition{} = packet_definition) do
     changeset = GovernedPacketDefinitionRow.changeset(packet_definition)
 
-    with {:ok, _row} <-
-           repo.insert(changeset,
-             on_conflict: :nothing,
-             conflict_target: [:mission_id, :packet_definition_id, :version]
-           ),
-         %GovernedPacketDefinitionRow{} = packet_definition_row <-
-           repo.get_by!(GovernedPacketDefinitionRow,
-             mission_id: packet_definition.mission_id,
-             packet_definition_id: packet_definition.packet_definition_id,
-             version: packet_definition.version
-           ),
-         {:ok, _field_rows} <-
-           persist_packet_definition_fields(repo, packet_definition_row, packet_definition) do
-      {:ok, packet_definition_row}
+    case repo.insert(changeset,
+           on_conflict: :nothing,
+           conflict_target: [:mission_id, :packet_definition_id, :version]
+         ) do
+      {:ok, %GovernedPacketDefinitionRow{id: id} = row} when is_integer(id) ->
+        with {:ok, _fields} <- insert_fields(repo, row, packet_definition), do: {:ok, row}
+
+      {:ok, _existing} ->
+        repo
+        |> stored(packet_definition)
+        |> same_content(repo, packet_definition)
+
+      {:error, %Changeset{} = changeset} ->
+        {:error, changeset}
+    end
+  end
+
+  defp stored(repo, %PacketDefinition{} = packet_definition) do
+    GovernedPacketDefinitionRow
+    |> repo.get_by!(
+      mission_id: packet_definition.mission_id,
+      packet_definition_id: packet_definition.packet_definition_id,
+      version: packet_definition.version
+    )
+    |> repo.preload(:field_rows)
+  end
+
+  defp same_content(%GovernedPacketDefinitionRow{} = row, repo, packet_definition) do
+    if PacketDefinitionContent.of(row) == PacketDefinitionContent.of(packet_definition) do
+      fill_field_identity(repo, row, packet_definition)
     else
-      {:error, %Changeset{} = changeset} -> {:error, changeset}
-      {:error, reason} -> {:error, reason}
+      {:error,
+       {:packet_definition_content_changed, packet_definition.packet_definition_id,
+        packet_definition.version}}
     end
   end
 
@@ -137,42 +164,45 @@ defmodule Cadence.Governance.Persistence do
     end)
   end
 
-  defp persist_packet_definition_fields(
-         repo,
-         %GovernedPacketDefinitionRow{} = packet_definition_row,
-         %PacketDefinition{} = packet_definition
-       ) do
-    Enum.reduce_while(packet_definition.fields, {:ok, []}, fn %FieldDefinition{} =
-                                                                field_definition,
+  defp insert_fields(repo, %GovernedPacketDefinitionRow{} = row, packet_definition) do
+    Enum.reduce_while(packet_definition.fields, {:ok, []}, fn %FieldDefinition{} = field,
                                                               {:ok, acc} ->
-      changeset = PacketDefinitionFieldRow.changeset(packet_definition_row.id, field_definition)
-
-      case repo.insert(changeset,
-             on_conflict: fill_field_identity(),
-             conflict_target: [:packet_definition_row_id, :field_id]
-           ) do
-        {:ok, %PacketDefinitionFieldRow{} = field_row} ->
-          {:cont, {:ok, [field_row | acc]}}
-
-        {:error, %Changeset{} = changeset} ->
-          {:halt, {:error, changeset}}
+      case repo.insert(PacketDefinitionFieldRow.changeset(row.id, field)) do
+        {:ok, %PacketDefinitionFieldRow{} = field_row} -> {:cont, {:ok, [field_row | acc]}}
+        {:error, %Changeset{} = changeset} -> {:halt, {:error, changeset}}
       end
     end)
   end
 
   # DECISIONS #73: a field row written before its identity was persisted gains it when the same
-  # packet definition is persisted again; a stored identity is never replaced.
-  defp fill_field_identity do
-    from(field_row in PacketDefinitionFieldRow,
-      update: [
-        set: [
-          parameter_id: fragment("COALESCE(?, EXCLUDED.parameter_id)", field_row.parameter_id),
-          qualified_name:
-            fragment("COALESCE(?, EXCLUDED.qualified_name)", field_row.qualified_name)
-        ]
-      ]
-    )
+  # content is persisted again with it. NULL-only: a stored identity is never replaced, and no
+  # other column moves (the field trigger allows exactly this, ca-security on #534).
+  defp fill_field_identity(repo, %GovernedPacketDefinitionRow{} = row, packet_definition) do
+    incoming = Map.new(packet_definition.fields, &{&1.field_id, &1})
+
+    row.field_rows
+    |> Enum.flat_map(&identity_fill(&1, Map.get(incoming, &1.field_id)))
+    |> Enum.each(fn {field_row, changes} ->
+      field_row |> Changeset.change(changes) |> repo.update!()
+    end)
+
+    {:ok, row}
   end
+
+  defp identity_fill(%PacketDefinitionFieldRow{} = field_row, %FieldDefinition{} = field) do
+    changes =
+      for {column, value} <- [
+            parameter_id: field.parameter_id,
+            qualified_name: field.qualified_name
+          ],
+          is_nil(Map.fetch!(field_row, column)) and is_binary(value),
+          into: %{},
+          do: {column, value}
+
+    if changes == %{}, do: [], else: [{field_row, changes}]
+  end
+
+  defp identity_fill(_field_row, _field), do: []
 
   defp capability_instance_config_attrs(%CapabilityInstance{} = capability_instance) do
     case {CapabilityInstance.capability_config(capability_instance),

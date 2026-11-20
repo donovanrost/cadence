@@ -229,6 +229,18 @@ defmodule CadenceWeb.Console.ConfigJSON do
 
   def error(conn, tag) when is_map_key(@status, tag), do: respond(conn, tag, nil)
 
+  # #534 (api-ops' condition 3): another generation saved a packet definition under the version
+  # this one resolved, at the same moment. Nothing was applied; a resubmit re-resolves.
+  def error(conn, {:packet_definition_content_changed, packet_definition_id, version}),
+    do:
+      respond_raw(
+        conn,
+        409,
+        "packet_definition_version_taken",
+        "Another change saved a packet definition at the same moment, so nothing was applied. Submit again.",
+        %{packet_definition_id: packet_definition_id, version: version, retryable: true}
+      )
+
   def error(conn, {:invalid_params, details}),
     do: Problem.respond(conn, :invalid_params, details)
 
