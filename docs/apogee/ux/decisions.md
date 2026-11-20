@@ -2345,17 +2345,17 @@ change set like any override. There's no separate routes editor.
       then what to do. Never the server's text as the line, and never a mechanical rewrite of the older sentences:
       - `change_set_changed`: "Not applied: someone changed the staged set while you were looking, so nothing
         changed. It's been reloaded; check it, then apply again." / "Not sent for review: … It's been reloaded;
-        check it, then send it again."
+        check it, then send it for review again."
       - `activation_policy_changed`: "Not applied (Not sent for review): the mission's approval setting changed after
         this was submitted, so nothing changed. The change set has reopened; check it, then apply or send it for
         review again."
       - `checks_failed`: "Not applied: a check says NO-GO, so nothing changed. Fix the NO-GO items, then apply
-        again." / "Not sent for review: … then send it again."
+        again." / "Not sent for review: … then send it for review again."
       - `holds_not_acknowledged`: "Not applied: some holds aren't acknowledged yet, so nothing changed. Read and
-        acknowledge them, then apply again." / "Not sent for review: … then send it again."
+        acknowledge them, then apply again." / "Not sent for review: … then send it for review again."
       - `holds_blocking`: "Not applied: a blocking hold stands, so nothing changed. It can't be acknowledged; apply
-        once it clears (the checks show it)." / "Not sent for review: … send it once it clears (the checks show
-        it)."
+        once it clears (the checks show it)." / "Not sent for review: … send it for review once it clears (the
+        checks show it)."
       - `catalog_command_in_flight`: "Not applied (Not sent for review): commands started on the affected spacecraft,
         so nothing changed. Try again when they finish."
       - `nothing_staged`: "Not applied: nothing is staged, so there's nothing to apply." / "Not sent for review:
