@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { codeOf, useRemoteQuery } from "@/api/index.ts";
 import { ApPanel, ApSelect } from "@/ui";
 import ApidChips from "./ApidChips.vue";
+import CatalogField from "./CatalogField.vue";
 import {
   fetchPacketChoices,
   type ConfigurationDocument,
@@ -13,8 +14,8 @@ import FramingFields from "./FramingFields.vue";
 import { packetsOffReason } from "./draft-words.ts";
 
 /**
- * #595a (U94): the draft's editable fields for one section. Catalog & applications: the packet
- * source and the handled APIDs (the catalog revision's picker is #595b). Communications: framing.
+ * #595a (U94): the draft's editable fields for one section. Catalog & applications: the catalog
+ * revision (its picker, #595b), the packet source and the handled APIDs. Communications: framing.
  */
 const props = defineProps<{
   workspace: WorkspaceKey;
@@ -52,6 +53,12 @@ const sourceOptions = computed(() =>
   <ApPanel :title="show === 'catalog' ? 'Catalog & applications' : 'Communications'">
     <div class="flex flex-col gap-4 px-4 py-3">
       <template v-if="show === 'catalog'">
+        <CatalogField
+          :workspace="workspace"
+          :snapshot="snapshot"
+          :doc="doc"
+          @edit="emit('edit', $event)"
+        />
         <ApSelect
           :model-value="doc.telemetry_source_endpoint_id ?? ''"
           label="Packet source"

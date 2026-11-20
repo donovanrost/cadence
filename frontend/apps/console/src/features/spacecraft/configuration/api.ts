@@ -114,8 +114,10 @@ export const snapshotReader = d.object({
    * #595 (api): the profile the craft inherits, for U94's `Open profile` on
    * spacecraft_catalog_set_by_profile. Optional until api ships it.
    */
-  // free-text: the profile's display name
-  profile: d.optional(d.nullable(d.object({ id: d.token, name: d.string }))),
+  // free-text: the profile's display name (nullable here, so one name never fails the snapshot)
+  profile: d.optional(d.nullable(d.object({ id: d.token, name: d.nullable(d.string) }))),
+  /** #595b (api): who sets the catalog revision; "profile" disables Change… (U94). Optional. */
+  catalog_set_by: d.optional(d.knownText(["profile", "spacecraft"] as const)),
   catalogs: d.array(
     d.object({
       id: d.token,
@@ -128,6 +130,13 @@ export const snapshotReader = d.object({
       commands: d.integer,
       /** The catalog revision number, for U65's "catalog rev 14"; optional until api adds it. */
       number: d.optional(d.integer),
+      /**
+       * #595b (api): its mission model revision's approval (U65), for the picker. `withdrawn`
+       * comes with E2 (#546). Optional until api ships it.
+       */
+      approval_status: d.optional(
+        d.knownText(["candidate", "approved", "rejected", "retired", "withdrawn"] as const),
+      ),
     }),
     500,
   ),
