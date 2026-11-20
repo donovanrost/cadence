@@ -65,7 +65,8 @@ defmodule Cadence.Reads.OrganizationAudit.SettingsEvents do
     %{
       id: "config:settings:#{entry.section}:#{DateTime.to_unix(entry.at, :microsecond)}",
       at: entry.at,
-      actor: %{kind: "user", id: nil, name: entry.actor},
+      # Named by the organization's own Audit rule (OrganizationAudit, #470), from the id.
+      actor: %{kind: "user", id: entry.actor_id, name: nil},
       kind: "config",
       action: "Changed #{entry.title} settings#{where}",
       target: %{kind: "settings", id: entry.section, label: entry.title},

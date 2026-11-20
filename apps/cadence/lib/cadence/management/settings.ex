@@ -4,8 +4,7 @@ defmodule Cadence.Management.Settings do
   alias Cadence.Applications.{ApplicationInstallations, Registry}
   alias Cadence.Auth.SettingsAccess
   alias Cadence.Governance.ActivationPolicy
-  alias Cadence.Management.PassReviewSettingsSection
-  alias Cadence.Platform.ScopedSettings
+  alias Cadence.Management.{PassReviewSettingsSection, SettingsHistory}
 
   def load(scope, mission_id, section_id) do
     with :ok <- SettingsAccess.authorize(scope, :read_settings, mission_id),
@@ -17,7 +16,7 @@ defmodule Cadence.Management.Settings do
          sections: Enum.map(sections, &Map.delete(&1, :provider)),
          can_edit: SettingsAccess.authorize(scope, :manage_settings, mission_id) == :ok,
          settings: read_section(selected.provider, scope.organization_id, mission_id),
-         history: ScopedSettings.history(scope.organization_id, mission_id, section_id)
+         history: SettingsHistory.list(scope.organization_id, mission_id, section_id)
        }}
     end
   end

@@ -251,6 +251,11 @@ defmodule Cadence.Platform.ScopedSettings do
     )
   end
 
+  @doc """
+  A section's last ten revisions, with who saved each as `actor_id` only. The stored
+  `actor_name` isn't returned: it is `display_name || email` in rows saved before #470. Readers
+  name the actor live (`Management.SettingsHistory`, or the organization's own Audit).
+  """
   def history(organization_id, mission_id, section_id) do
     key = scope_key(mission_id)
 
@@ -265,7 +270,7 @@ defmodule Cadence.Platform.ScopedSettings do
       &%{
         id: &1.revision_id,
         version: &1.version,
-        actor: &1.actor_name,
+        actor_id: &1.actor_id,
         saved_at: DateTime.to_iso8601(&1.inserted_at),
         migration: &1.document["migration"],
         audit: &1.document["audit"]

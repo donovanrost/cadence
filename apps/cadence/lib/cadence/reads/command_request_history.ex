@@ -9,7 +9,8 @@ defmodule Cadence.Reads.CommandRequestHistory do
 
   import Ecto.Query
 
-  alias Cadence.{Accounts, Auth}
+  alias Cadence.Accounts.MemberNames
+  alias Cadence.Auth
 
   alias Cadence.Commanding.{
     CommandReleaseAttemptRow,
@@ -207,29 +208,27 @@ defmodule Cadence.Reads.CommandRequestHistory do
 
   # A resolution's actor is a person or a service identity (an API credential), never Cadence
   # itself: an automatic timeout records outcome `unknown`, which isn't a resolved failure.
-  defp actor(%{"kind" => "user", "id" => id}, _org) when is_binary(id) do
-    name =
-      case Accounts.fetch_user(id) do
-        {:ok, user} -> user.display_name || user.email
-        _missing -> nil
-      end
-
-    %{kind: "user", id: id, name: name}
+  # #470 (#146 C1): a person only while an active member of the request's organization (with
+  # their id, name nil without one), a service only from its live row there; anyone else has no
+  # id and no name. Never a name or email stored in the log. The wire's kinds stay `user` and
+  # `service_identity`; an entry without a kind has no id.
+  defp actor(%{"kind" => "user", "id" => id}, org) when is_binary(id) and is_binary(org) do
+    case Map.fetch(MemberNames.members(org, [id]), id) do
+      {:ok, name} -> %{kind: "user", id: id, name: name}
+      :error -> %{kind: "user", id: nil, name: nil}
+    end
   end
 
-  defp actor(%{"kind" => "service", "id" => id}, org) when is_binary(id) do
-    name =
-      with true <- is_binary(org),
-           {:ok, service} <- Auth.fetch_service_identity(org, id) do
-        service.display_name
-      else
-        _missing -> nil
-      end
-
-    %{kind: "service_identity", id: id, name: name}
+  defp actor(%{"kind" => "service", "id" => id}, org) when is_binary(id) and is_binary(org) do
+    case Map.fetch(Auth.organization_service_identities(org, [id]), id) do
+      {:ok, name} -> %{kind: "service_identity", id: id, name: name}
+      :error -> %{kind: "service_identity", id: nil, name: nil}
+    end
   end
 
-  defp actor(%{"id" => id}, _org) when is_binary(id), do: %{kind: nil, id: id, name: nil}
+  defp actor(%{"kind" => "user"}, _org), do: %{kind: "user", id: nil, name: nil}
+  defp actor(%{"kind" => "service"}, _org), do: %{kind: "service_identity", id: nil, name: nil}
+  defp actor(%{}, _org), do: %{kind: nil, id: nil, name: nil}
   defp actor(_none, _org), do: nil
 
   defp time(iso) when is_binary(iso) do

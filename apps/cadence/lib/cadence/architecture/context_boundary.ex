@@ -31,6 +31,7 @@ defmodule Cadence.Architecture.ContextBoundary do
   @file_context_overrides %{
     "lib/cadence/management/settings.ex" => :composition,
     "lib/cadence/management/console_settings.ex" => :composition,
+    "lib/cadence/management/settings_history.ex" => :composition,
     "lib/cadence/management/approval_setting_access.ex" => :composition,
     "lib/cadence/management/settings_override_migration.ex" => :composition,
     "lib/cadence/management/provider_account_directory.ex" => :composition,

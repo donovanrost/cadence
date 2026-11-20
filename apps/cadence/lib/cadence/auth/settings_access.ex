@@ -17,8 +17,10 @@ defmodule Cadence.Auth.SettingsAccess do
 
   def authorize(_, _, _), do: {:error, :authenticated_user_required}
 
+  # #470: who saved a settings section is stored by id and display name only, never the email.
+  # Reads name them live from the id (Management.SettingsHistory, the Audit).
   def actor(scope),
-    do: %{id: scope.user.user_id, name: scope.user.display_name || scope.user.email}
+    do: %{id: scope.user.user_id, name: scope.user.display_name}
 
   defp mission_exists(_org, nil), do: :ok
 

@@ -58,14 +58,14 @@ defmodule CadenceWeb.Console.AdminController do
 
     respond(
       no_store(conn),
-      ConsoleServiceIdentities.issued(result, params["organization_id"]),
+      ConsoleServiceIdentities.issued(result, scope(conn), params["organization_id"]),
       :created
     )
   end
 
   def rotate(conn, %{"id" => id, "organization_id" => org}) do
     result = ConsoleAdmin.rotate_service_identity(scope(conn), org, id)
-    respond(no_store(conn), ConsoleServiceIdentities.issued(result, org))
+    respond(no_store(conn), ConsoleServiceIdentities.issued(result, scope(conn), org))
   end
 
   def rotate(conn, _params),
