@@ -27,6 +27,8 @@ defmodule Cadence.Catalog.ConfigurationChoices do
         label: revision.revision_label,
         number: revision.revision_number,
         model_id: model.revision_id,
+        # #595b (fe-setup): the model gate's state, candidate | approved | rejected | retired.
+        approval_status: model.status,
         declarations: model.declaration_count
       }
     )

@@ -6,6 +6,7 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
 
   alias Cadence.Applications.ConfigurationLock
   alias Cadence.Applications.SpacecraftConfiguration.Active, as: ConfigurationActive
+  alias Cadence.Applications.SpacecraftConfiguration.CatalogAuthority
   alias Cadence.Applications.SpacecraftConfiguration.Drafts, as: ConfigurationDrafts
   alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Catalog.SpacecraftConfigurationInput, as: ConfigurationInput
@@ -75,6 +76,10 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
          scid: craft.scid,
          # #595 (fe-setup, U94's Open profile): the craft's own profile, or nil.
          profile: profile(mission, craft),
+         # #595b: DECISIONS #65's one writer, CatalogAuthority: the profile (with its overrides)
+         # when it names a catalog revision, else the spacecraft's own configuration.
+         catalog_set_by:
+           if(CatalogAuthority.effective(mission, craft), do: "profile", else: "spacecraft"),
          section: section,
          base_href: base,
          token: current.token,

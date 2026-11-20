@@ -363,8 +363,14 @@ switches. The editable `document` never carries them; they're read-only in `swit
   (any mission operator), while `can_request` gates Request activation.
 - `profile` (#595): `{id, name}` of the craft's own profile (spacecraft type), for U94's Open
   profile, or null when it has none.
-- `catalogs` (≤100): `{id, name, label, number, declarations, packets, commands}`, where `number`
-  is the catalog revision number (U65's "catalog rev 14").
+- `catalog_set_by` (#595b): `profile | spacecraft`. It's `profile` when the craft's profile (with
+  its overrides) names a catalog revision: that one is the catalog, and a draft naming another is
+  refused with `spacecraft_catalog_set_by_profile` (DECISIONS #65). Otherwise `spacecraft`: the
+  craft's own configuration sets it.
+- `catalogs` (≤100): `{id, name, label, number, approval_status, declarations, packets, commands}`,
+  where `number` is the catalog revision number (U65's "catalog rev 14") and `approval_status`
+  (#595b) is its mission-model revision's gate state: `candidate | approved | rejected | retired`.
+  (`withdrawn` isn't a model revision state; a withdrawn approval is E2's, #546.)
 - `fleet` (≤100, this craft first): `{id, name, scid, active_catalog_id, has_changes}`, plus
   `fleet_total`.
 - `sources`: `{id, name}` (this craft's packet sources). `presets`: `{id, version, name,

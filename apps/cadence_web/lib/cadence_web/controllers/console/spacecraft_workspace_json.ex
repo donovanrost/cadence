@@ -21,6 +21,8 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceJSON do
       scid: s.scid,
       # #595: the craft's own profile {id, name}, or nil.
       profile: s.profile,
+      # #595b: who sets the catalog revision: its profile (DECISIONS #65) or the spacecraft.
+      catalog_set_by: s.catalog_set_by,
       section: s.section,
       token: s.token,
       saved_version: s.saved_version,
@@ -90,5 +92,15 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceJSON do
   end
 
   defp catalog(c),
-    do: Map.take(c, [:id, :name, :label, :number, :declarations, :packets, :commands])
+    do:
+      Map.take(c, [
+        :id,
+        :name,
+        :label,
+        :number,
+        :approval_status,
+        :declarations,
+        :packets,
+        :commands
+      ])
 end

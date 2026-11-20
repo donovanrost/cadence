@@ -96,6 +96,8 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceAPITest do
       |> Map.fetch!("data")
 
     assert data["profile"] == %{"id" => profile.spacecraft_type_id, "name" => "Bus A"}
+    # A profile that names no catalog revision leaves it to the spacecraft (DECISIONS #65).
+    assert data["catalog_set_by"] == "spacecraft"
   end
 
   test "a draft with a switch key is refused, field-keyed, and nothing is saved", c do
@@ -193,6 +195,13 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceAPITest do
 
     assert is_binary(composition_id) and is_integer(number)
     assert catalog_id == revision.catalog_revision_id
+
+    # #595b: each catalog row says the model gate's state (the fixture approves it), and a craft
+    # without a profile catalog sets its own.
+    assert %{"approval_status" => "approved"} =
+             Enum.find(saved["catalogs"], &(&1["id"] == revision.catalog_revision_id))
+
+    assert saved["catalog_set_by"] == "spacecraft"
   end
 
   test "packets for an unknown catalog; an unknown craft; an unknown section", c do
