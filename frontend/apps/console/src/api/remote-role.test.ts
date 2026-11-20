@@ -6,8 +6,8 @@ import type { RemoteState } from "./remote-state.ts";
 /** a11y B6 (#276, ux): a first load's failure is read politely; after the person's Retry, an alert. */
 const failed: RemoteState<string> = {
   status: "failed",
-  error: { kind: "network", message: "offline" },
-} as RemoteState<string>;
+  error: { kind: "unavailable", status: 503, message: "Cadence is unavailable." },
+};
 const ready: RemoteState<string> = { status: "ready", value: "x", receivedAt: new Date(0) };
 
 describe("ApRemote's failure role", () => {
