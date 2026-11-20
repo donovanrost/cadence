@@ -281,6 +281,8 @@ export const errorCodes = [
   "path_already_staged",
   // #499 (api): tightening approval would suspend automation grants; details {grants, digest}.
   "approval_tightening_suspends_grants",
+  // #534 (mms-engineer, #548/#549): a packet definition version race; retryable, nothing written.
+  "packet_definition_version_taken",
   "open_change_set_not_empty",
   "nothing_to_convert",
   "conversion_in_progress",
