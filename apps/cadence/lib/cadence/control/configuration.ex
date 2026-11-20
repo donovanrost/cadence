@@ -59,7 +59,10 @@ defmodule Cadence.Control.Configuration do
          do: Status.change_set(mission.mission_id, change_set_id)
   end
 
-  @doc "Whether submitting the set is a Request review (see `Submission.needs_approval?/3`)."
+  @doc """
+  Whether submitting the set is a Request review (see `Submission.needs_approval?/3`). It doesn't
+  authorize: only for wording a submit the caller already authorized, never as a read (api-ops).
+  """
   @spec needs_approval?(Scope.t(), String.t(), String.t()) :: boolean()
   def needs_approval?(%Scope{} = scope, mission_id, change_set_id),
     do: Submission.needs_approval?(scope.organization_id, mission_id, change_set_id)

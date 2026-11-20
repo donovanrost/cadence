@@ -451,6 +451,9 @@ defmodule Cadence.Configuration.Submission do
   than applying: the set's recorded policy once submitted, else the mission's, with a legacy route
   conversion's forced approval. The same decision the submit makes, so the console's words for a
   refused submit name the right act (fe-setup on #555).
+
+  It doesn't authorize (api-ops): only for wording a submit the caller already authorized, never
+  as a read.
   """
   @spec needs_approval?(String.t(), String.t(), String.t()) :: boolean()
   def needs_approval?(organization_id, mission_id, change_set_id) do
