@@ -12,6 +12,7 @@ defmodule Cadence.Commanding.CommandApprovalRecordTest do
   import Ecto.Query
 
   alias Cadence.{Ids, Missions, Organizations}
+  alias Cadence.Commanding.Groups.AuditRecords
 
   alias Cadence.Commanding.{
     ApprovalDecisions,
@@ -115,6 +116,15 @@ defmodule Cadence.Commanding.CommandApprovalRecordTest do
     assert row.admin_mode == false
     assert row.subject_digest == ReviewPrecondition.digest(request)
     assert row.decided_by_document["value"]["user_id"] == "releaser"
+
+    # api-ops on #639: no existing read shows it; only the four-eyes record does.
+    assert RequestStore.list_approvals(c.org, c.mission, []) == []
+
+    assert {:error, :command_approval_not_found} =
+             RequestStore.fetch_approval(c.org, c.mission, row.command_approval_id)
+
+    assert AuditRecords.records(c.org, c.mission, %{}).approvals == []
+    assert [%DecisionRecord{decision: :not_required}] = ApprovalDecisions.decisions(c.org)
   end
 
   test "the migration refuses while command_approvals has rows, before any DDL" do
