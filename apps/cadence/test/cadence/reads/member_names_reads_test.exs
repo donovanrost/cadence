@@ -11,7 +11,7 @@ defmodule Cadence.Reads.MemberNamesReadsTest do
   import Cadence.ConfigurationFixtures
   import Ecto.Query
 
-  alias Cadence.Accounts.{MemberNames, UserRow}
+  alias Cadence.Accounts.{MemberNames, OrganizationMembershipRow, UserRow}
   alias Cadence.Contacts.{ContactAction, RealizedContact, ScheduleOperation}
   alias Cadence.Management.Providers.ProviderAccountDetail
   alias Cadence.Reads.{ContactStart, PassContactFields, PassEnders}
@@ -28,13 +28,25 @@ defmodule Cadence.Reads.MemberNamesReadsTest do
     # A platform admin from another organization, acting in this one in admin mode.
     admin = member_scope(other_org, :organization_admin, "Pat")
 
+    # Someone who was a member of this organization and was removed (api on #503).
+    departed = member_scope(org, :member, "Dee")
+    departed_id = departed.user.user_id
+
+    Repo.update_all(
+      from(m in OrganizationMembershipRow,
+        where: m.organization_id == ^org and m.user_id == ^departed_id
+      ),
+      set: [lifecycle_state: "revoked"]
+    )
+
     %{
       org: org,
       mission: mission,
       named: named.user,
       nameless: nameless.user,
       admin: admin.user,
-      emails: Enum.map([named, nameless, admin], & &1.user.email)
+      departed: departed.user,
+      emails: Enum.map([named, nameless, admin, departed], & &1.user.email)
     }
   end
 
@@ -42,7 +54,7 @@ defmodule Cadence.Reads.MemberNamesReadsTest do
 
   test "who started a contact (Uplink, hand-started passes)", c do
     contacts =
-      for user <- [c.named, c.nameless, c.admin],
+      for user <- [c.named, c.nameless, c.admin, c.departed],
           do: %RealizedContact{
             metadata: %{"started_by" => %{"kind" => "user", "id" => user.user_id}}
           }
@@ -53,6 +65,8 @@ defmodule Cadence.Reads.MemberNamesReadsTest do
     assert [
              %{kind: "user", id: named_id, name: "Ada"},
              %{kind: "user", id: nameless_id, name: nil},
+             %{kind: "user", id: nil, name: nil},
+             # A removed member of this organization: no name, no id.
              %{kind: "user", id: nil, name: nil}
            ] = starters
 
