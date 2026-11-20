@@ -110,11 +110,7 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
            can_review: Activations.authorize_review(scope, mission.mission_id) == :ok,
            # #595: whether the viewer may save a draft: Drafts.save's own check, which isn't
            # can_request's (:request_activation).
-           can_save:
-             Policy.authorize(scope, :operate_mission, %{
-               organization_id: mission.organization_id,
-               mission_id: mission.mission_id
-             }) == :ok
+           can_save: ConfigurationDrafts.may_save?(scope, mission.mission_id)
          },
          catalogs: catalogs,
          fleet:
