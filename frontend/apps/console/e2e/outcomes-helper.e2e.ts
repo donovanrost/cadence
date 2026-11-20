@@ -61,6 +61,15 @@ test.describe("outcomes helper self-test", () => {
     await expectNameFallback(page, "spacecraft-qa-9");
   });
 
+  test("the fallback said only in sr-only text isn't shown, so it fails (ux on #652)", async ({
+    page,
+  }) => {
+    await page.setContent(
+      `<main><span class="sr-only" style="${SR_ONLY}">${WORDS.unknownSpacecraft}</span></main>`,
+    );
+    await expect(expectNameFallback(page, "spacecraft-qa-9")).rejects.toThrow(/shown on screen/);
+  });
+
   test("a raw id in an aria-label outside Technical details fails; inside, it passes", async ({
     page,
   }) => {
