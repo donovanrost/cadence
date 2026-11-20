@@ -100,6 +100,36 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceAPITest do
     assert data["catalog_set_by"] == "spacecraft"
   end
 
+  test "a profile that names a catalog revision sets it: catalog_set_by is profile (#595b)", c do
+    revision =
+      CatalogFixtures.persist_imported_revision!(c.mission.organization_id, c.mission.mission_id)
+
+    profile =
+      TestFixtures.persist_spacecraft_profile!(c.mission,
+        display_name: "Bus B",
+        catalog_revision_id: revision.catalog_revision_id
+      )
+
+    craft =
+      TestFixtures.persist_spacecraft!(c.mission,
+        spacecraft_type_id: profile.spacecraft_type_id,
+        spacecraft_type_version: profile.version
+      )
+
+    path =
+      "/api/console/v1/missions/#{c.mission.mission_id}/spacecraft/#{craft.spacecraft_id}/configuration/workspace"
+
+    data =
+      c.user
+      |> TestFixtures.member_conn()
+      |> get(path)
+      |> json_response(200)
+      |> Map.fetch!("data")
+
+    assert data["catalog_set_by"] == "profile"
+    assert data["profile"] == %{"id" => profile.spacecraft_type_id, "name" => "Bus B"}
+  end
+
   test "a draft with a switch key is refused, field-keyed, and nothing is saved", c do
     data = workspace(c)
     document = Map.merge(data["document"], %{"telemetry_enabled" => true})
