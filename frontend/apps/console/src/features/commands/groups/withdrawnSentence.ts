@@ -11,8 +11,11 @@ export function withdrawnSentence(
   nameOf: (spacecraftId: string) => string,
 ): string {
   const held = check.per_target.filter((t) => t.result !== "go");
+  // U109 (#634): "catalog revision" until the check says a target is composed (D4).
   if (check.result === "go" || held.length === 0)
-    return "Every target is on an approved composition";
+    return check.evidence.composed === true
+      ? "Every target is on an approved composition"
+      : "Every target is on an approved catalog revision";
   const [one] = held;
   if (held.length === 1 && one)
     return holdOneLine(nameOf(one.spacecraft_id), compositionName(one.composition), {
