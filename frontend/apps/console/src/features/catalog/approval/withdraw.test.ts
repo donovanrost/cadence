@@ -106,6 +106,9 @@ describe("the withdraw refusals", () => {
     expect(not({ status: "withdrawn", decided_by: null, decided_at: null }).text).toBe(
       "Not withdrawn: its approval was already withdrawn, so nothing changed. Reload to see it.",
     );
+    expect(not({ status: "retired", decided_by: null, decided_at: null }).text).toBe(
+      "Not withdrawn: catalog rev 4 is retired, so its approval can't be withdrawn. Nothing changed.",
+    );
     expect(not({ status: "quarantined" })).toEqual({
       text: "Not withdrawn: catalog rev 4 can't be withdrawn as it stands, so nothing changed. Reload to see it.",
       code: "quarantined",

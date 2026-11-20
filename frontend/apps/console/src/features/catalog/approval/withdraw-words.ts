@@ -91,7 +91,7 @@ function notWithdrawableLine(e: ApiError, what: string, viewerId: string | null)
   }
   if (status === "retired")
     return {
-      text: `Not withdrawn: ${what} is retired, so there's nothing to withdraw. Nothing changed.`,
+      text: `Not withdrawn: ${what} is retired, so its approval can't be withdrawn. Nothing changed.`,
     };
   // "approved" (a race) or a status the console doesn't know: U109's catch-all, its status in
   // Technical details.
