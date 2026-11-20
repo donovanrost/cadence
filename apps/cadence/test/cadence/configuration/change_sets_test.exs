@@ -6,7 +6,7 @@ defmodule Cadence.Configuration.ChangeSetsTest do
   alias Cadence.Auth
   alias Cadence.Auth.{Scope, ServiceIdentity}
   alias Cadence.Comms.GroundStationStore
-  alias Cadence.Configuration.{ChangeSetStore, Submission}
+  alias Cadence.Configuration.{Access, ChangeSetStore, Ledger, Submission}
   alias Cadence.Control.Configuration
   alias Cadence.Organizations
   alias Cadence.Platform.ScopedReadUpdates
@@ -350,10 +350,23 @@ defmodule Cadence.Configuration.ChangeSetsTest do
         ])
 
       {:ok, before} = ChangeSetStore.fetch(ctx.mission, staged.change_set_id)
-      assert {:error, :apply_interrupted} = Submission.landed(before)
+      # #261: landed/2 takes what this request wrote (its revision id, chosen before the apply).
+      proof = %{
+        actor: Access.actor(alice),
+        act: :submit,
+        version: before.version + 1,
+        reason: params(staged).reason,
+        policy: nil,
+        revision_id: "config_revision-not-yet"
+      }
+
+      assert {:error, :apply_interrupted} = Submission.landed(before, proof)
 
       {:ok, %{state: :applied, revision: 2}} =
         Configuration.submit(alice, ctx.mission, staged.change_set_id, params(staged))
+
+      {:ok, %{revision_id: landed_id}} = Ledger.fetch_revision(ctx.mission, 2)
+      proof = %{proof | revision_id: landed_id}
 
       assert {:ok,
               %{
@@ -363,7 +376,7 @@ defmodule Cadence.Configuration.ChangeSetsTest do
                 kinds: ["ground_station"],
                 runtime: :not_applicable,
                 activation_payload: nil
-              }} = Submission.landed(before)
+              }} = Submission.landed(before, proof)
     end
   end
 
