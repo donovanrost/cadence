@@ -1,7 +1,8 @@
-# Threat model: mission composition and binding records (DRAFT, before design D)
+# Threat model: mission composition and binding records
 
-Owner: mms-security. Status: a draft from domain's plan, ahead of design D. When D lands it gets
-refined against D, and every question in §5 needs D's answer before D is approved.
+Owner: mms-security. Status: reviewed against design D+E (#537, `mission-composition-design.md`,
+domain, 11-20). §7 gives each threat's status under D and the conditions mms-security and
+ca-security set on #537. D is approved once §7's must-fixes are in.
 
 Sources:
 - `mission-model-build-plan.md` §2: phase 2 (composition), phase 4 (binding storage and heads);
@@ -240,14 +241,40 @@ pin → head and assignment; head plus artifact → expansion → runtime; tenan
 | Item | Status |
 |---|---|
 | MM-1 (service breaks importer/approver separation) | Fixed: #280 (#435), plus #283 (#497) for grants and #436 (#504) for append-only accountables. |
-| MM-2 (`importer_recorded=false`; seed counts no one) | Open: #513 (the seed runner is recorded and counts as an importer). #435 made `importer_recorded` count services. |
+| MM-2 (`importer_recorded=false`; seed counts no one) | Fixed: #513 (#516, merged 11-20): a system import records its runner (`run_by`), who counts as an importer and is named on the run. A system run from before #513 counts no one. #435 made `importer_recorded` count services. |
 | MM-3 (#119 content-addressed revisions across tenants) | Fixed by #119's scoped re-read. CB-2 and CB-7 apply the same rule to compositions and artifacts. |
 | MM-4 (upload publishes a job inside a transaction) | Open, low. |
 | MM-5 (`request_promotion` writes before it authorizes) | Open, low. |
 | MM-6 (qualification cases have no second person) | Open, dormant. |
 | SC-1 (client-set request metadata drives the approver's view) | Likely closed for spacecraft configuration by #329 (L10 derives what a request changes; ca-security). To verify when #235 closes. |
 | SC-2, SC-3 (REST spacecraft create outside change sets) | Fixed: #328 (#332). |
-| Actor naming (#146's rule) | Fixed across MM&S: #365, #366 (#474), #471 (#487); #511 (approved, landing). The other squads' reads are #462. |
+| Actor naming (#146's rule) | Fixed across MM&S: #365, #366 (#474), #471 (#487), #511. The other squads' reads are #462. |
 
 #293's §3–5 (the actor audit, tenant boundaries, secrets) carry over as open sections here. They
 get filled in when D's records exist, since composition and binding records are the new write paths.
+
+## 7. Status under design D+E (#537, at 0329e5e85; 11-20)
+
+The conditions are the combined mms-security + ca-security set on #537. **Must** blocks D's
+approval; a slice name says where the rest is checked.
+
+| Threat | Under D | Status and conditions |
+|---|---|---|
+| CB-1 composed approval | The gated unit stays the model revision; a composition's base is approved through `RevisionDecisions.approve` on the composed revision; separation from the union of the layers' importers | **Must:** the composer (`created_by`, a service's people via #280) is separated too; one revision per link (unique on `revision_id`), written only by `effective_revision/4` or the migration; the decision subject names the `composition_id` and each layer's id, mount and digest. |
+| CB-2 identity | Content-addressed within (org, mission); scoped insert-or-get that fails closed | Met. D1: a golden for the canonical term (#108); the layer FK on (org, mission, layer_id). |
+| CB-3 pin | `composition_id` on profiles and overrides, change sets only, four-eyes; unapproved refused at staging and at activation | Met in design. D3: name who may pin; translate old clients' `catalog_revision_id` at staging, never at apply. |
+| CB-4 re-key | The gate's per-revision check unchanged; one-transaction migration with no approval writes; guard test; digests kept | Met. The migration's compositions are a system actor that counts no one; their base revisions keep their approvals and no new approval is made. |
+| CB-5 mounting | The record decides the mount; #456's grammar; `MM_MOUNT_COLLISION` | D1: the grammar, bounds and collisions refuse the record's INSERT itself, recording nothing. |
+| CB-6 authored layers | The monitoring change set's review is their approval; no second gate decision | **Must (ca-security):** that review, and acknowledging a failed composed comparison, require `:approve_mission_model`, not `:approve_activation`. J: the gate's activation check verifies the three conditions from records, not a flag. |
+| CB-7 artifact scope | 4a as built; re-lands after #534 | Met by #475's design (per-tenant). mms-security verifies against the re-landed code. |
+| CB-8 expansion | 4a; I builds from membership | Met by #475. I's index rule stays for I. |
+| CB-9 evidence | Unchanged hash meaning; three checks (read, admit, run) | Met for 4a (verified on develop b4a646ef8). #450 removes `validate_content_hash`'s computed default, which closes the open item. |
+| CB-10, CB-11 audit | G and H: append-only by trigger; head atomic with its assignment row; collection locks | For G and H. |
+| CB-12 projection | H: the reader inventory first | For H. |
+| CB-13 bounds | 8 imported layers, mount depth 4; compile and expansion bounds in C/F | Met in design; D1 refuses at write. |
+| CB-14 overrides | Per-craft overrides pin `composition_id` by change set; identity overrides stay change-set kinds with #38's checks at apply and activation | Met in design (D3). |
+| CB-15 withdrawn approval | The next generation is refused at staging and activation; craft keep running; state says why | Agreed: no automatic suspension, on four conditions. (1) New commanding to such a craft meets an acknowledged hold, never silently (ca-security). (2) The refusal is the gate's own check. (3) The craft state and a high-severity attention item name the decision record, and a person can still stop the craft. (4) "Superseded" is defined: withdrawn or rejected only, not a newer approval of another composition. (E2) |
+| Old data (#112) | One-to-one: one-layer compositions at '/', same revision ids, no recompile, no reset | Met in design; D1's guard test shows it. |
+
+E1 also states how the union of importers treats a system import: it counts `run_by` (#513), and a
+pre-#513 system run counts no one, so the other layers' importers still apply.
