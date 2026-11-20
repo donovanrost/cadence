@@ -58,6 +58,7 @@ defmodule Cadence.ContactPlanning.AutomationGrant do
           approval_policy: map() | nil,
           ending: ending() | nil,
           replaces_grant_id: binary() | nil,
+          legacy_issue: boolean(),
           content_sha256: binary(),
           inserted_at: DateTime.t() | nil,
           updated_at: DateTime.t() | nil
@@ -91,7 +92,8 @@ defmodule Cadence.ContactPlanning.AutomationGrant do
     :replaces_grant_id,
     :content_sha256,
     :inserted_at,
-    :updated_at
+    :updated_at,
+    legacy_issue: false
   ]
 
   @spec actions() :: [action()]
@@ -172,6 +174,8 @@ defmodule Cadence.ContactPlanning.AutomationGrant do
         approval_policy: value(attrs, :approval_policy),
         ending: ending(value(attrs, :ending)),
         replaces_grant_id: optional_string(value(attrs, :replaces_grant_id)),
+        # Issued before #283 (lead 11-19): its proposal fields were filled from its approval.
+        legacy_issue: value(attrs, :legacy_issue, false) == true,
         content_sha256: value(attrs, :content_sha256),
         inserted_at: value(attrs, :inserted_at),
         updated_at: value(attrs, :updated_at)

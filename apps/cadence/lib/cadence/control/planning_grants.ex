@@ -233,9 +233,12 @@ defmodule Cadence.Control.PlanningGrants do
       valid_until: grant.valid_until,
       # One function decides expiry for use and read (AutomationGrant.effective_state/2).
       state: grant |> AutomationGrant.effective_state(now) |> to_string(),
-      proposed_by: person(grant.proposed_by, users),
-      proposed_at: grant.proposed_at,
-      proposal_expires_at: grant.proposal_expires_at,
+      # A grant issued before #283 had no proposal: its proposal fields read null and it says
+      # so (lead and ca-security on #497), never a proposer or time copied from its approval.
+      issued_before_two_person_approval: grant.legacy_issue,
+      proposed_by: if(grant.legacy_issue, do: nil, else: person(grant.proposed_by, users)),
+      proposed_at: if(grant.legacy_issue, do: nil, else: grant.proposed_at),
+      proposal_expires_at: if(grant.legacy_issue, do: nil, else: grant.proposal_expires_at),
       approved_by: person(grant.approved_by, users),
       approved_at: grant.approved_at,
       reason: grant.approval_reason,
@@ -299,6 +302,7 @@ defmodule Cadence.Control.PlanningGrants do
     ids =
       grants
       |> Enum.flat_map(&[&1.proposed_by, &1.approved_by, &1.ending && &1.ending.by])
+      |> Enum.reject(&is_nil/1)
       |> Enum.filter(&is_binary/1)
 
     MemberNames.display_names(org, ids)

@@ -747,6 +747,10 @@ even with organization_admin, gets `403 authenticated_user_required`). Under `/c
     `proposal_expires_at` (72 h; `approved_at` null), or an active grant past `valid_until`.
   - Validity starts at approval: a proposal has `validity_seconds` and null `valid_from` and
     `valid_until`.
+  - `issued_before_two_person_approval`: `true` for a grant issued before #283, which had no
+    proposal step. Its `proposed_by`, `proposed_at` and `proposal_expires_at` read null, never a
+    proposer copied from its approval. It's still refused at use (its hash is the old layout), and
+    it has no decisions before #283 in its audit. It can be revoked. `false` otherwise.
   - People (`proposed_by`, `approved_by`, `rejected_by`, `withdrawn_by`, `revoked_by`) are
     `{id, name}`, named only while they're an active member of the organization, never by email.
     Anyone else is `{id: null, name: null}` (#146's rule). The `_by` and `_at` pairs are both

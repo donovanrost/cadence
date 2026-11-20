@@ -43,6 +43,7 @@ defmodule Cadence.Management.Contacts.Store.AutomationGrantRow do
     field(:withdrawn_by, :string)
     field(:withdrawn_at, :utc_datetime_usec)
     field(:replaces_grant_id, :string)
+    field(:legacy_issue, :boolean, default: false)
 
     timestamps()
   end
@@ -185,6 +186,7 @@ defmodule Cadence.Management.Contacts.Store.AutomationGrantRow do
       proposal_expires_at: row.proposal_expires_at,
       approval_policy: row.approval_policy,
       replaces_grant_id: row.replaces_grant_id,
+      legacy_issue: row.legacy_issue == true,
       inserted_at: row.inserted_at,
       updated_at: row.updated_at
     })

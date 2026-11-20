@@ -29,7 +29,15 @@ defmodule Cadence.Repo.Migrations.AutomationGrantProposals do
       add(:withdrawn_at, :utc_datetime_usec)
       add(:replaces_grant_id, :string)
       add(:approval_policy, :map)
+      # A grant issued before #283 (no proposal step), its proposal columns filled from its own
+      # approval below; readers show it as issued before two-person approval, never a proposal.
+      add(:legacy_issue, :boolean, null: false, default: false)
     end
+
+    # lead 11-19 (#497): rows from before #283 stay readable (the new struct needs the proposal
+    # columns) and are still refused at use (their hash is the old layout). One-to-one, from the
+    # row's own approval; no state, hash or decision changes.
+    execute(legacy_fill_sql())
 
     # The state and its evidence, as AutomationGrant's shape checks (#283). NOT VALID: a row from
     # before #283 stays readable (and is refused at use by the hash guard); every new or changed
@@ -74,6 +82,10 @@ defmodule Cadence.Repo.Migrations.AutomationGrantProposals do
         validate: false
       )
     )
+
+    # ca-security on #497: every row, the filled ones included, now satisfies its state's shape;
+    # nothing is relaxed to make that so. A row that doesn't stops the migration here, loudly.
+    execute("ALTER TABLE automation_grants VALIDATE CONSTRAINT automation_grants_state_shape")
 
     create(
       index(:automation_grants, [:organization_id, :mission_id, :lifecycle_state],
@@ -153,6 +165,20 @@ defmodule Cadence.Repo.Migrations.AutomationGrantProposals do
     )
   end
 
+  @doc false
+  # Public so a test runs this exact statement against a legacy-shaped row.
+  def legacy_fill_sql do
+    """
+    UPDATE automation_grants SET
+      legacy_issue = true,
+      proposed_by = approved_by,
+      proposed_at = approved_at,
+      proposal_expires_at = approved_at + interval '72 hours',
+      validity_seconds = greatest(1, floor(extract(epoch FROM valid_until - valid_from))::integer)
+    WHERE proposed_by IS NULL
+    """
+  end
+
   def down do
     drop_if_exists(constraint(:automation_grants, :automation_grants_state_shape))
     drop_if_exists(constraint(:automation_grants, :automation_grants_state_check))
@@ -208,6 +234,7 @@ defmodule Cadence.Repo.Migrations.AutomationGrantProposals do
     )
 
     alter table(:automation_grants) do
+      remove(:legacy_issue)
       remove(:approval_policy)
       remove(:replaces_grant_id)
       remove(:withdrawn_at)
