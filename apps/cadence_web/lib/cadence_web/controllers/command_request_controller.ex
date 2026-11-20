@@ -99,7 +99,10 @@ defmodule CadenceWeb.CommandRequestController do
              mission_id,
              command_request_id,
              Keyword.fetch!(approval_opts, :decided_by),
-             Keyword.drop(approval_opts, [:decided_by])
+             approval_opts
+             |> Keyword.drop([:decided_by])
+             # #117 step 4b: the record's admin_mode, from the bearer's scope.
+             |> Keyword.put(:admin_mode, conn.assigns.current_scope.admin_mode? == true)
            ) do
       json(conn, %{data: CommandingJSON.command_request_decision_result(result)})
     end
@@ -131,7 +134,10 @@ defmodule CadenceWeb.CommandRequestController do
              mission_id,
              command_request_id,
              Keyword.fetch!(approval_opts, :decided_by),
-             Keyword.drop(approval_opts, [:decided_by])
+             approval_opts
+             |> Keyword.drop([:decided_by])
+             # #117 step 4b: the record's admin_mode, from the bearer's scope.
+             |> Keyword.put(:admin_mode, conn.assigns.current_scope.admin_mode? == true)
            ) do
       json(conn, %{data: CommandingJSON.command_request_decision_result(result)})
     end
@@ -162,7 +168,10 @@ defmodule CadenceWeb.CommandRequestController do
              mission_id,
              command_request_id,
              Keyword.fetch!(queue_opts, :enqueued_by),
-             Keyword.drop(queue_opts, [:enqueued_by])
+             queue_opts
+             |> Keyword.drop([:enqueued_by])
+             # #117 step 4b: a not_required record's admin_mode, from the bearer's scope.
+             |> Keyword.put(:admin_mode, conn.assigns.current_scope.admin_mode? == true)
            ) do
       json(conn, %{data: CommandingJSON.command_request_enqueue_result(result)})
     end

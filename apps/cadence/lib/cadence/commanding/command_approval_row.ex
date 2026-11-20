@@ -21,6 +21,10 @@ defmodule Cadence.Commanding.CommandApprovalRow do
     field(:decided_at, :utc_datetime_usec)
     field(:reason, :string)
     field(:metadata_document, :map, default: %{})
+    # #117 step 4b: the four-eyes record, required.
+    field(:subject_digest, :string)
+    field(:separated_from, {:array, :string}, default: [])
+    field(:admin_mode, :boolean)
 
     timestamps()
   end
@@ -32,7 +36,9 @@ defmodule Cadence.Commanding.CommandApprovalRow do
     :decision,
     :decided_by_document,
     :decided_at,
-    :metadata_document
+    :metadata_document,
+    :subject_digest,
+    :admin_mode
   ]
 
   @spec changeset(CommandApproval.t()) :: Ecto.Changeset.t()
@@ -55,7 +61,10 @@ defmodule Cadence.Commanding.CommandApprovalRow do
       decided_by: JsonDocument.unwrap_value(row.decided_by_document),
       decided_at: row.decided_at,
       reason: row.reason,
-      metadata: JsonDocument.unwrap_value(row.metadata_document)
+      metadata: JsonDocument.unwrap_value(row.metadata_document),
+      subject_digest: row.subject_digest,
+      separated_from: row.separated_from,
+      admin_mode: row.admin_mode
     })
   end
 
@@ -69,7 +78,10 @@ defmodule Cadence.Commanding.CommandApprovalRow do
       decided_by_document: JsonDocument.wrap_value(command_approval.decided_by),
       decided_at: command_approval.decided_at,
       reason: command_approval.reason,
-      metadata_document: JsonDocument.wrap_value(command_approval.metadata)
+      metadata_document: JsonDocument.wrap_value(command_approval.metadata),
+      subject_digest: command_approval.subject_digest,
+      separated_from: command_approval.separated_from,
+      admin_mode: command_approval.admin_mode
     }
   end
 
@@ -83,7 +95,10 @@ defmodule Cadence.Commanding.CommandApprovalRow do
       :decided_by_document,
       :decided_at,
       :reason,
-      :metadata_document
+      :metadata_document,
+      :subject_digest,
+      :separated_from,
+      :admin_mode
     ]
   end
 end
