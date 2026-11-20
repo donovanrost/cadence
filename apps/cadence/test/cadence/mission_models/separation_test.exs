@@ -72,6 +72,32 @@ defmodule Cadence.MissionModels.SeparationTest do
              RevisionDecisions.separation(c.org, c.mid, c.model, nil)
   end
 
+  # #513 (MM-2): a seed imports under Cadence's system actor and names the person who ran it; that
+  # person counts as the importer, so the server refuses their approval of the seeded model.
+  test "a seeded model's runner can't approve it under independent; another admin can", c do
+    seeded =
+      Fixtures.persist_imported_revision!(c.org, c.mid,
+        approve: false,
+        requested_by: Actor.system("seed:test-513", "Test seed", "seed-runner")
+      )
+
+    model = seeded.mission_model_revision_id
+    runner = scope(c.other.organization, "seed-runner")
+
+    assert {:refused, %{reason: :self}} =
+             RevisionDecisions.separation(c.org, c.mid, model, "seed-runner")
+
+    {:ok, report} = Comparison.run(c.org, c.mid, model, "separation-binding", 1)
+
+    assert {:error, :mission_model_self_approval_forbidden} =
+             MissionModels.approve_revision(runner, c.mid, model, report["comparison_report_id"])
+
+    assert {:ok, %{status: :approved}} =
+             MissionModels.approve_revision(c.other, c.mid, model, report["comparison_report_id"])
+
+    assert Repo.get!(RevisionRow, model).approved_by["value"]["importer_recorded"] == true
+  end
+
   defp read_reason(scope, c) do
     {:ok, read} = MissionModelApprovals.read(scope, c.mid, c.model)
     read.cannot_decide_because

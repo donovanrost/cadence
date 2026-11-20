@@ -15,6 +15,7 @@ defmodule CadenceWeb.Console.CatalogTwoReadsAPITest do
 
   alias Cadence.Accounts.{OrganizationMembershipRow, UserRow}
   alias Cadence.Auth.ServiceIdentity
+  alias Cadence.Catalog.Actor
   alias Cadence.Reads.Catalog.RevisionBase
   alias Cadence.Repo
   alias Cadence.TestSupport.CatalogTestActor
@@ -149,7 +150,9 @@ defmodule CadenceWeb.Console.CatalogTwoReadsAPITest do
               unnamed: user_actor(unnamed),
               own_service: service_actor(own_service),
               foreign_service: service_actor(foreign_service),
-              system: CatalogTestActor.system()
+              system: CatalogTestActor.system(),
+              # #513 (ux on #516): a seed run by a member reads 'by Cadence, run by Mira K.'.
+              seed_by_member: Actor.system("seed:test", "Test seed", member.user_id)
             ],
             into: %{} do
           run =
@@ -165,13 +168,23 @@ defmodule CadenceWeb.Console.CatalogTwoReadsAPITest do
     end
 
     @expected %{
-      member: %{"kind" => "user", "name" => "Mira K."},
-      outsider: %{"kind" => "user", "name" => nil},
-      former: %{"kind" => "user", "name" => nil},
-      unnamed: %{"kind" => "user", "name" => nil},
-      own_service: %{"kind" => "service", "name" => "Nightly planner"},
-      foreign_service: %{"kind" => "service", "name" => nil},
-      system: %{"kind" => "system", "name" => "Cadence test fixture"}
+      member: %{"kind" => "user", "name" => "Mira K.", "run_by" => nil},
+      outsider: %{"kind" => "user", "name" => nil, "run_by" => nil},
+      former: %{"kind" => "user", "name" => nil, "run_by" => nil},
+      unnamed: %{"kind" => "user", "name" => nil, "run_by" => nil},
+      own_service: %{"kind" => "service", "name" => "Nightly planner", "run_by" => nil},
+      foreign_service: %{"kind" => "service", "name" => nil, "run_by" => nil},
+      # The fixture's runner isn't a member, so it's run by someone not named (#513).
+      system: %{
+        "kind" => "system",
+        "name" => "Cadence test fixture",
+        "run_by" => %{"name" => nil}
+      },
+      seed_by_member: %{
+        "kind" => "system",
+        "name" => "Test seed",
+        "run_by" => %{"name" => "Mira K."}
+      }
     }
 
     test "C1's runs name members, own services and Cadence; never an outsider, email or id", c do
@@ -219,8 +232,8 @@ defmodule CadenceWeb.Console.CatalogTwoReadsAPITest do
     revisions = get_data(c, "/catalog")["database"]["revisions"]
     by_label = Map.new(revisions, &{&1["label"], &1["actor"]})
 
-    assert by_label["by member"] == %{"kind" => "user", "name" => "Mira K."}
-    assert by_label["by outsider"] == %{"kind" => "user", "name" => nil}
+    assert by_label["by member"] == %{"kind" => "user", "name" => "Mira K.", "run_by" => nil}
+    assert by_label["by outsider"] == %{"kind" => "user", "name" => nil, "run_by" => nil}
 
     encoded = Jason.encode!(revisions)
     for email <- [member.email, outsider.email], do: refute(encoded =~ email)

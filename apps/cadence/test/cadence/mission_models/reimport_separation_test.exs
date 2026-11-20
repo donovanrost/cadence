@@ -91,7 +91,8 @@ defmodule Cadence.MissionModels.ReimportSeparationTest do
     assert importers(c, orphan) == []
   end
 
-  test "another mission's read, or a service or system actor's run, counts no one", c do
+  test "another mission's read or a service's run counts no person; a system run counts its runner",
+       c do
     {_run_id, orphan} = reimport!(scope(c.organization, "reimporter-b"), c)
     other_mission = "mission-model-reimport-other-#{System.unique_integer([:positive])}"
     persist_mission_scope(c.org, other_mission)
@@ -103,14 +104,19 @@ defmodule Cadence.MissionModels.ReimportSeparationTest do
       "name" => "Pipeline"
     }
 
-    for requested_by <- [service, Actor.system("test:reimport", "Reimport test")] do
+    # A service's people count through Accountability (#280), not as a listed person; a system
+    # actor counts the person who ran it (#513).
+    for {requested_by, expected} <- [
+          {service, []},
+          {Actor.system("test:reimport", "Reimport test", "reimport-runner"), ["reimport-runner"]}
+        ] do
       {:ok, run} =
         Catalog.start_import_run(c.org, c.mid, c.revision.artifact_id, "cadence_yaml",
           requested_by: requested_by
         )
 
       {:ok, %{status: :completed} = run} = Catalog.execute_enqueued_run(run.import_run_id)
-      assert importers(c, run.result_document["mission_model"]["revision_id"]) == []
+      assert importers(c, run.result_document["mission_model"]["revision_id"]) == expected
     end
   end
 

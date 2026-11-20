@@ -9,7 +9,8 @@ defmodule Cadence.Dev.ReflectOrbital.Configuration do
   alias Cadence.MissionModels.TelemetryProjection
 
   def prepare(scope, opts \\ []) do
-    revision = import_database(opts)
+    # #513: the import names the person who ran the seed, the scope this seed acts as.
+    revision = import_database(Keyword.put_new(opts, :run_by, scope.user.user_id))
     {:ok, mission} = Cadence.Missions.fetch_mission(F.organization_id(), F.mission_id())
     {:ok, telemetry} = TelemetryProjection.load(F.organization_id(), F.mission_id(), revision)
     apids = telemetry.packet_definitions |> Enum.map(& &1.apid) |> Enum.uniq() |> Enum.sort()
@@ -58,7 +59,8 @@ defmodule Cadence.Dev.ReflectOrbital.Configuration do
   spacecraft configuration. For moving a fleet onto it with a change set (#65): the artifact id
   is content-addressed, so this is a no-op returning the existing revision when nothing changed.
   """
-  def import_revision(opts \\ []), do: import_database(opts)
+  # `opts` must name `run_by`, the user id of the person running it (#513).
+  def import_revision(opts), do: import_database(opts)
 
   # The legacy reference database has no verifiers, so commands would never read satisfied.
   # The demo adds uplink verifiers to a few commands as it reads the file (#44); the reference
@@ -99,9 +101,11 @@ defmodule Cadence.Dev.ReflectOrbital.Configuration do
             use_calibrated: false
   """
 
-  # Who imported the demo catalog (lead 11-14/11-17): the seed runs as no user or service
-  # identity, so it names itself as a system actor (a stable ref, never a person).
-  defp seed_actor, do: Actor.system("seed:reflect-orbital-v1", "Reflect Orbital demo seed")
+  # Who imported the demo catalog (lead 11-14/11-17): the seed names itself as a system actor (a
+  # stable ref, never a person) and, since #513, the person who ran it (`run_by`), who counts as
+  # the model's importer, so a second admin approves it.
+  defp seed_actor(run_by),
+    do: Actor.system("seed:reflect-orbital-v1", "Reflect Orbital demo seed", run_by)
 
   defp with_demo_verifiers(source) do
     Enum.reduce(@verified_commands, source, fn name, acc ->
@@ -113,6 +117,8 @@ defmodule Cadence.Dev.ReflectOrbital.Configuration do
   end
 
   defp import_database(opts) do
+    run_by = Keyword.fetch!(opts, :run_by)
+
     id = "catalog-earendil-command-telemetry"
     source = F.database_path() |> File.read!() |> with_demo_verifiers()
     digest = :crypto.hash(:sha256, source) |> Base.encode16(case: :lower)
@@ -128,7 +134,7 @@ defmodule Cadence.Dev.ReflectOrbital.Configuration do
             name: "Demo Spacecraft — Command & Telemetry",
             catalog_family: :combined,
             default_importer_key: "cadence_yaml",
-            created_by: seed_actor(),
+            created_by: seed_actor(run_by),
             description:
               "The repository's complete demo_spacecraft.yaml, assigned to the Earendil demonstration fleet.",
             metadata: F.metadata()
@@ -153,7 +159,7 @@ defmodule Cadence.Dev.ReflectOrbital.Configuration do
           format_key: "cadence_yaml",
           media_type: "application/yaml",
           source_artifact: source,
-          uploaded_by: seed_actor(),
+          uploaded_by: seed_actor(run_by),
           metadata:
             Map.put(
               F.metadata(),
@@ -169,7 +175,7 @@ defmodule Cadence.Dev.ReflectOrbital.Configuration do
           id,
           artifact,
           "cadence_yaml",
-          requested_by: seed_actor()
+          requested_by: seed_actor(run_by)
         )
 
       await_import(run.import_run_id, 120)

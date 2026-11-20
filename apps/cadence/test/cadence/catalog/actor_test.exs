@@ -38,8 +38,19 @@ defmodule Cadence.Catalog.ActorTest do
             %{"actor_kind" => "service", "service_identity_id" => "svc-1", "name" => "Pipeline"}} =
              Actor.from_scope(service)
 
-    assert %{"actor_kind" => "system", "system_id" => "seed:x", "name" => "X seed"} =
-             system = Actor.system("seed:x", "X seed")
+    # #513: a system actor names the person who ran it.
+    assert %{
+             "actor_kind" => "system",
+             "system_id" => "seed:x",
+             "name" => "X seed",
+             "run_by" => "u-runner"
+           } = system = Actor.system("seed:x", "X seed", "u-runner")
+
+    assert :ok = Actor.recorded(system)
+
+    # A system actor recorded without who ran it is refused (#513: nobody accountable).
+    assert {:error, :catalog_import_actor_required} =
+             Actor.recorded(%{"actor_kind" => "system", "system_id" => "seed:x", "name" => "X"})
 
     for {:ok, actor} <- [Actor.from_scope(user), Actor.from_scope(service), {:ok, system}],
         do: refute(Map.has_key?(actor, "id"))
@@ -95,8 +106,8 @@ defmodule Cadence.Catalog.ActorTest do
     }
 
     for {uploaded_by, expected} <- [
-          {rest_user, %{kind: "user", name: nil}},
-          {rest_service, %{kind: "service", name: nil}},
+          {rest_user, %{kind: "user", name: nil, run_by: nil}},
+          {rest_service, %{kind: "service", name: nil, run_by: nil}},
           {%{"user_display_name" => "", "user_email" => "e@example.test"}, nil}
         ] do
       {:ok, artifact} = Catalog.persist_artifact(ctx.org, artifact(ctx, nil, uploaded_by))

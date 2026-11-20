@@ -14,7 +14,8 @@ defmodule Cadence.Catalog.ModelImporters do
     actor (`"actor_kind" => "user"` with its `"user_id"`); a failed run counts no one.
 
   `list/3` is the people named directly. `actors/3` adds the service identities that imported it,
-  whose accountable people count for separation (#280); the system actor still counts no one.
+  whose accountable people count for separation (#280). A system actor counts the person who ran
+  it (`run_by`, #513); one recorded before #513 counts no one.
 
   Empty when no importer was recorded. Both columns are `JsonDocument`-wrapped (`{"value": …}`).
   """
@@ -73,6 +74,7 @@ defmodule Cadence.Catalog.ModelImporters do
   defp revision_importer(created_by) do
     case JsonDocument.unwrap_value(created_by) do
       %{"actor_kind" => "service"} = actor -> service(actor)
+      %{"actor_kind" => "system"} = actor -> runner(actor)
       %{"user_id" => id} when is_binary(id) and id != "" -> {:user, id}
       %{"id" => id} when is_binary(id) and id != "" -> {:user, id}
       _not_recorded -> nil
@@ -83,9 +85,16 @@ defmodule Cadence.Catalog.ModelImporters do
     case JsonDocument.unwrap_value(requested_by) do
       %{"actor_kind" => "user", "user_id" => id} when is_binary(id) and id != "" -> {:user, id}
       %{"actor_kind" => "service"} = actor -> service(actor)
+      %{"actor_kind" => "system"} = actor -> runner(actor)
       _not_counted -> nil
     end
   end
+
+  # #513 (MM-2): a seed or task runs as Cadence's system actor, and the person who ran it counts
+  # as its importer, so they can't approve the model it imported. A system actor recorded before
+  # #513 has no `run_by` and counts no one, as before.
+  defp runner(%{"run_by" => id}) when is_binary(id) and id != "", do: {:user, id}
+  defp runner(_actor), do: nil
 
   defp service(%{"service_identity_id" => id}) when is_binary(id) and id != "", do: {:service, id}
   defp service(_actor), do: nil
