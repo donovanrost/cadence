@@ -92,7 +92,8 @@ defmodule Cadence.Configuration.ChangeSetApproveCommentTest do
     long = %{comment: String.duplicate("a", 2_001)}
 
     for decision <- [:approve, :send_back] do
-      assert {:error, {:invalid_params, %{comment: _}}} =
+      assert {:error,
+              {:invalid_params, %{comment: "That's too long: keep it to about 2,000 characters."}}} =
                review(c, staged, decision, version, long)
     end
   end
