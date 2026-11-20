@@ -92,9 +92,12 @@ describe("Org Audit's failed Older load (#244, B6)", () => {
       // The footer (Load older and the region) is the table's footer slot.
       global: { stubs: { AuditTable: { template: "<table><slot name='footer' /></table>" } } },
     });
-    const region = w.get("[role=status]");
+    // An alert: it answers the person's own click (ca-ux on #569, as #410).
+    const region = w.get("[role=alert]");
     expect(region.text()).toBe("");
     await w.setProps({ failed: true });
-    expect(w.get("[role=status]").text()).toBe("Older events couldn't load.");
+    expect(w.get("[role=alert]").text()).toBe("Older events couldn't load. Try Load older again.");
+    // In the tree (not display:none), so the alert is announced.
+    expect(w.get("[role=alert]").classes()).not.toContain("empty:hidden");
   });
 });

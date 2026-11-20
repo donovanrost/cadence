@@ -31,6 +31,10 @@ describe("SourceRuns actions", () => {
     expect(line).toBeTruthy();
     const button = w.findAll("button").find((b) => b.text() === "Retry");
     expect(button?.attributes("aria-describedby")).toBe(line?.attributes("id"));
+    // B7: the row is in the name, label first.
+    expect(button?.attributes("aria-label")).toMatch(
+      /^Retry, Reconcile run, \d\d-\d\d \d\d:\d\dZ$/,
+    );
     expect(w.text()).not.toContain("Requeue puts");
   });
 

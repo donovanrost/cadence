@@ -45,6 +45,8 @@ watch(first.state, (s) => {
 async function loadOlder() {
   if (!cursor.value || loading.value) return;
   loading.value = true;
+  // B6 (ux on #569): cleared as it starts, so a repeat failure is said again.
+  olderFailed.value = false;
   try {
     const r = await fetchPlatformAudit({ after: cursor.value }, new AbortController().signal);
     olderFailed.value = !r.ok;
@@ -96,8 +98,9 @@ const columns: readonly ApColumn[] = [
             @click="loadOlder"
             >Older</ApButton
           >
-          <span role="status" class="text-sm text-caution-text empty:hidden">{{
-            olderFailed ? "Older events couldn't load." : ""
+          <!-- B6 (ux on #569): an alert, kept in the tree (no display:none) so it's announced. -->
+          <span role="alert" class="text-sm text-caution-text">{{
+            olderFailed ? "Older events couldn't load. Try Older again." : ""
           }}</span>
         </div>
       </template>

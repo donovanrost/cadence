@@ -25,6 +25,13 @@ const busy = ref<string | null>(null);
  * once, visibly, under the table, and its buttons point at that line.
  */
 const lineId = { retry: useId(), requeue: useId() } as const;
+/**
+ * B7 (ux on #569): describedby isn't a name. Each button names its row, label first: "Retry,
+ * Reconcile run, 11-19 03:10Z". While busy the kit's own reason describes it, so the line's id is
+ * passed only when it's enabled (a fallthrough attribute would override the kit's).
+ */
+const actionName = (r: SourceRun) =>
+  `${action(r) === "requeue" ? "Requeue" : "Retry"}, ${runKindText(r)} run, ${formatShort(new Date(r.started_at))}`;
 const shownActions = computed(() =>
   (["retry", "requeue"] as const).filter((a) => props.runs.some((r) => action(r) === a)),
 );
@@ -71,7 +78,8 @@ async function act(r: SourceRun) {
           size="compact"
           variant="ghost"
           :title="ACTION_LINES[action(row) ?? 'retry']"
-          :aria-describedby="lineId[action(row) ?? 'retry']"
+          :aria-label="actionName(row)"
+          :aria-describedby="busy === null ? lineId[action(row) ?? 'retry'] : undefined"
           :disabled="busy !== null"
           disabled-reason="Working…"
           @click="act(row)"
