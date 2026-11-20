@@ -120,7 +120,9 @@ const rowsOf = (episodes: Episodes) => {
   const rows = tabRows(episodes.filter((e) => matches(e, filters.value)));
   return point.value === null ? groupAlarmRows(rows, expanded.value) : rows;
 };
-const nameOf = (id: string) => fleetRows.value.find((sc) => sc.id === id)?.name ?? id;
+/** U25 and #237: a craft's name for a sentence; one the fleet can't name is "an unknown spacecraft", never its id. */
+const nameOf = (id: string) =>
+  fleetRows.value.find((sc) => sc.id === id)?.name ?? "an unknown spacecraft";
 /** Picker: spacecraft with alarms in this tab (severity applied), each with its count. */
 const scOptions = (episodes: Episodes) =>
   spacecraftOptions(
