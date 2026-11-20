@@ -16,7 +16,7 @@ import {
   ApPanel,
   ApRemote,
   formatCount,
-  outcomeRole,
+  OutcomeCallout,
   plural,
 } from "@/ui";
 import { useSession } from "@/shell";
@@ -209,9 +209,7 @@ async function save() {
       <ApCallout v-if="template && drafts.length > 0" tone="caution">{{
         supersedeSentence(drafts, template.version + 1, session.user.id)
       }}</ApCallout>
-      <ApCallout v-if="note" :tone="note.tone" :role="outcomeRole(note.tone)">{{
-        note.text
-      }}</ApCallout>
+      <OutcomeCallout v-if="note" :outcome="note" />
       <div class="flex flex-wrap gap-2">
         <ApButton :disabled="busy" disabled-reason="Working…" @click="preview">Preview</ApButton>
         <ApButton

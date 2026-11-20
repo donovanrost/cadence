@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
 import { ref } from "vue";
-import { ApButton, ApCallout, ApEmptyState, ApKeyValue, outcomeRole } from "@/ui";
+import { ApButton, ApCallout, ApEmptyState, ApKeyValue, OutcomeCallout } from "@/ui";
 import type { MissionProvider } from "./api.ts";
 import ProviderArchive from "./ProviderArchive.vue";
 import {
@@ -75,9 +75,7 @@ const facts = (p: MissionProvider) => [
     <ApCallout v-if="provider.grant?.state === 'revoked'" tone="crit">{{
       revokedSentence(provider.account?.name ?? null)
     }}</ApCallout>
-    <ApCallout v-if="note" :tone="note.tone" :role="outcomeRole(note.tone)">{{
-      note.text
-    }}</ApCallout>
+    <OutcomeCallout v-if="note" :outcome="note" />
     <div
       v-if="canManage && provider.status.lifecycle_state === 'active'"
       class="flex flex-wrap gap-2"

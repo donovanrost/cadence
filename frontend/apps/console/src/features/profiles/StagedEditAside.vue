@@ -5,7 +5,7 @@ import {
   type FormValues,
   type SchemaField,
 } from "@/features/changes/index.ts";
-import { ApButton, ApCallout, ApPanel, ApStatTile, outcomeRole, plural } from "@/ui";
+import { ApButton, ApPanel, ApStatTile, OutcomeCallout, plural } from "@/ui";
 import type { PreviewCounts } from "./sectionEdit.ts";
 
 /** Profile.md P4: the dirty fields, the dry run's Changes / Keeps tiles, Check and Stage edit. */
@@ -40,9 +40,7 @@ defineEmits<{ check: []; stage: []; discard: [] }>();
         <ApStatTile label="Changes" :value="counts.changes" unit="spacecraft" />
         <ApStatTile label="Keeps" :value="counts.keeps" unit="spacecraft" />
       </div>
-      <ApCallout v-if="outcome" :tone="outcome.tone" :role="outcomeRole(outcome.tone)">{{
-        outcome.text
-      }}</ApCallout>
+      <OutcomeCallout v-if="outcome" :outcome="outcome" />
       <FailureOutcomeCallout v-if="failure" :outcome="failure" />
       <div class="flex flex-wrap gap-3">
         <ApButton
