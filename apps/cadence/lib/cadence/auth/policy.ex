@@ -12,15 +12,13 @@ defmodule Cadence.Auth.Policy do
   # makes it a visible diff for review. Mission-level access is separate: :manage_mission (the REST
   # control plane's gate for a mission-scoped service) and :operate_mission don't go through here.
   #
-  # todo(authz): both entries exist ONLY so the bearer routes DECISIONS #79 kept keep working:
-  # GET /api/organizations/:id (:read_organization) and GET/POST /api/organizations/:id/missions
-  # (:manage_missions). They also admit a service to these actions' other callers, which no
-  # service reaches today (console and app host are sessions): :manage_missions gates pass cancel,
-  # single bookings, the contact and historical workflows; :read_organization the provider-account
-  # and data-source reads. #384 retires the three routes and empties this list.
-  @service_allowed_organization_actions [:read_organization, :manage_missions]
+  # #384 (director 11-19) retired the bearer routes that were its only entries
+  # (GET /api/organizations/:id, GET/POST /api/organizations/:id/missions), so it is empty: every
+  # organization-level action is a person's. If a deployment ever needs organization-level service
+  # access, it comes back as a scoped design under Cedar (#284), not as an entry here.
+  @service_allowed_organization_actions []
 
-  @doc "The organization-level actions a service identity may perform (#282; empty after #384)."
+  @doc "The organization-level actions a service identity may perform (#282): none since #384."
   @spec service_allowed_organization_actions() :: [atom()]
   def service_allowed_organization_actions, do: @service_allowed_organization_actions
 
@@ -344,7 +342,7 @@ defmodule Cadence.Auth.Policy do
   end
 
   defp person_unless_service_allowed(%Scope{} = scope, action) do
-    if action in @service_allowed_organization_actions,
+    if Enum.member?(@service_allowed_organization_actions, action),
       do: :ok,
       else: authenticated_user(scope)
   end

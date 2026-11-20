@@ -4,14 +4,6 @@ defmodule CadenceWeb.ControlPlaneAccess do
   alias Cadence.Auth.Policy
   alias Cadence.Auth.Scope
 
-  @spec authorize_organization(Scope.t(), binary(), atom()) :: {:ok, term()} | {:error, term()}
-  def authorize_organization(%Scope{} = current_scope, organization_id, action)
-      when is_binary(organization_id) and is_atom(action) do
-    with :ok <- Policy.authorize(current_scope, action, %{organization_id: organization_id}) do
-      Cadence.Organizations.fetch_organization(organization_id)
-    end
-  end
-
   @spec authorize_mission(Scope.t(), binary(), binary()) :: {:ok, term()} | {:error, term()}
   def authorize_mission(%Scope{} = current_scope, organization_id, mission_id)
       when is_binary(organization_id) and is_binary(mission_id) do

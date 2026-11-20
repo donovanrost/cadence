@@ -67,6 +67,21 @@ defmodule CadenceWeb.ControlPlaneApiFixtures do
     }
   end
 
+  @doc "A mission in the organization, made through the domain (the REST create is retired, #384)."
+  def persist_mission!(organization_id, mission_id) do
+    assert {:ok, mission} =
+             Cadence.Missions.persist_mission(
+               Mission.new(%{
+                 mission_id: mission_id,
+                 organization_id: organization_id,
+                 slug: mission_id,
+                 display_name: mission_id
+               })
+             )
+
+    mission
+  end
+
   @doc """
   A spacecraft in the mission, through the store (#328: the REST create it replaces is retired;
   spacecraft are created through the console's change sets).

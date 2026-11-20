@@ -19,15 +19,9 @@ defmodule CadenceWeb.ControlPlaneApiAuthTest do
   test "mission-scoped token is constrained to its mission", %{conn: conn} do
     %{conn: conn, api_token: org_api_token, organization_id: organization_id} = bootstrap(conn)
 
-    conn
-    |> authorize(org_api_token)
-    |> post("/api/organizations/#{organization_id}/missions", %{
-      "mission" => %{
-        "mission_id" => "mission-bravo",
-        "slug" => "mission-bravo",
-        "display_name" => "Mission Bravo"
-      }
-    })
+    # The REST mission create is retired (#384); the mission is made through the domain.
+    _ = org_api_token
+    persist_mission!(organization_id, "mission-bravo")
 
     # REST can't issue service identities (#281), so the mission-scoped token is issued
     # through the domain directly, as `bootstrap/1` issues its own.
@@ -77,5 +71,31 @@ defmodule CadenceWeb.ControlPlaneApiAuthTest do
     assert conn |> authorize(api_token) |> get(path) |> response(404)
     assert conn |> authorize(api_token) |> post(path, body) |> response(404)
     assert [_bootstrap_only] = Cadence.Auth.list_service_identities(organization_id)
+  end
+
+  # #384 (director 11-19): the organization-level REST bearer routes are retired. A bearer is
+  # always a service identity, and organization-level actions are a person's (#282).
+  test "the organization read and the mission list and create answer 404 to a service", %{
+    conn: conn
+  } do
+    %{api_token: api_token, organization_id: organization_id} = bootstrap(conn)
+    base = "/api/organizations/#{organization_id}"
+    before = Cadence.Missions.list_missions(organization_id)
+
+    assert conn |> authorize(api_token) |> get(base) |> response(404)
+    assert conn |> authorize(api_token) |> get(base <> "/missions") |> response(404)
+
+    assert conn
+           |> authorize(api_token)
+           |> post(base <> "/missions", %{
+             "mission" => %{
+               "mission_id" => "mission-384",
+               "slug" => "mission-384",
+               "display_name" => "Mission 384"
+             }
+           })
+           |> response(404)
+
+    assert Cadence.Missions.list_missions(organization_id) == before
   end
 end

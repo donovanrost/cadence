@@ -36,8 +36,8 @@ on success. JSON views are in `W/api/*_json.ex`. Every `…` row passes `authori
 | Area | Method + path | Controller | Calls | Note |
 | --- | --- | --- | --- | --- |
 | Identity | `GET /api/current_scope` | CurrentScope | `IdentityJSON.current_scope` | service actor document |
-| Identity | `GET /api/organizations/:org` | Organization | `Organizations.fetch_organization` | `:read_organization` |
-| Identity | `GET`, `POST /api/organizations/:org/missions` | Mission | `Missions.list_missions`, `persist_mission` | `:manage_missions` |
+| Identity | ~~`GET /api/organizations/:org`~~ | ~~Organization~~ | — | **Removed (#384):** a bearer is always a service, and organization-level acts are a person's (#282). |
+| Identity | ~~`GET`, `POST /api/organizations/:org/missions`~~ | Mission | — | **Removed (#384):** as above. Missions are created in the console (L4). |
 | Identity | `GET /api/organizations/:org/missions/:m` | Mission | `Missions.fetch_mission` | |
 | Identity | ~~`GET`, `POST /api/organizations/:org/service_identities`~~ | ServiceIdentity | — | **Removed (#281):** services never manage service identities; people issue them in the console (O6). |
 | Telemetry | `GET …/telemetry/latest` | Telemetry | `Reads.Telemetry.latest_values_for_mission` | `?spacecraft_id` |
