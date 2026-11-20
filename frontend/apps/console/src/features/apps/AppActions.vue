@@ -10,7 +10,8 @@ import { changeApp, type App, type AppAction } from "./api.ts";
 const props = defineProps<{ missionId: MissionId; app: App; spacecraftId?: SpacecraftId | null }>();
 const emit = defineEmits<{ changed: [] }>();
 const busy = ref(false);
-const note = ref<string | null>(null);
+/** `failed`: the act was refused or failed, said as an alert; "Staged" is read politely (B6, ux #276). */
+const note = ref<{ text: string; failed: boolean } | null>(null);
 
 async function run(action: AppAction) {
   busy.value = true;
@@ -22,8 +23,10 @@ async function run(action: AppAction) {
       action,
       props.spacecraftId ?? null,
     );
-    if (outcome.kind === "failed") note.value = failureOutcome(outcome.error, "changed").sentence;
-    else if (outcome.kind === "staged") note.value = "Staged. It applies with the change set.";
+    if (outcome.kind === "failed")
+      note.value = { text: failureOutcome(outcome.error, "changed").sentence, failed: true };
+    else if (outcome.kind === "staged")
+      note.value = { text: "Staged. It applies with the change set.", failed: false };
     emit("changed");
   } finally {
     busy.value = false;
@@ -69,6 +72,8 @@ async function run(action: AppAction) {
         >Uninstall</ApButton
       >
     </div>
-    <ApCallout v-if="note" tone="caution">{{ note }}</ApCallout>
+    <ApCallout v-if="note" tone="caution" :role="note.failed ? 'alert' : 'status'">{{
+      note.text
+    }}</ApCallout>
   </div>
 </template>
