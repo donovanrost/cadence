@@ -38,6 +38,7 @@ defmodule Cadence.Telemetry.Sample do
           receipt_time: DateTime.t(),
           generation_time_source: :onboard | :receipt | nil,
           frame_ref: frame_ref() | nil,
+          journal_frame: journal_frame() | nil,
           provenance: map()
         }
 
@@ -64,8 +65,14 @@ defmodule Cadence.Telemetry.Sample do
     :receipt_time,
     :generation_time_source,
     :frame_ref,
+    # The journal frame that produced it (DECISIONS #99): keys its monitoring effects' replay-safe
+    # ids. Runtime only: never stored with the observation, never in provenance.
+    :journal_frame,
     provenance: %{}
   ]
+
+  @typedoc "{journal stream, absolute frame offset, receipt time of the frame's last byte}"
+  @type journal_frame :: {binary(), non_neg_integer(), DateTime.t()}
 
   @doc """
   The names a command verifier or transmission constraint may give this sample's subject: the
@@ -103,4 +110,22 @@ defmodule Cadence.Telemetry.Sample do
 
   def decode_frame_ref({_kind, _a, _b} = ref), do: decode_frame_ref(encode_frame_ref(ref))
   def decode_frame_ref(_ref), do: nil
+
+  @doc "A JSON-safe form of a journal frame, for metadata that may be encoded."
+  @spec encode_journal_frame(journal_frame() | nil) :: [term()] | nil
+  def encode_journal_frame({stream, offset, %DateTime{} = receipt})
+      when is_binary(stream) and is_integer(offset),
+      do: [stream, offset, DateTime.to_unix(receipt, :microsecond)]
+
+  def encode_journal_frame(_frame), do: nil
+
+  @spec decode_journal_frame(term()) :: journal_frame() | nil
+  def decode_journal_frame([stream, offset, receipt_us])
+      when is_binary(stream) and is_integer(offset) and is_integer(receipt_us),
+      do: {stream, offset, DateTime.from_unix!(receipt_us, :microsecond)}
+
+  def decode_journal_frame({_stream, _offset, %DateTime{}} = frame),
+    do: decode_journal_frame(encode_journal_frame(frame))
+
+  def decode_journal_frame(_frame), do: nil
 end

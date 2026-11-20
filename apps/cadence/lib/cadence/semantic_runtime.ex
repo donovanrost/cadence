@@ -84,7 +84,8 @@ defmodule Cadence.SemanticRuntime do
       %{
         trigger_id: "timer:" <> algorithm_id <> ":" <> DateTime.to_iso8601(at),
         at: at,
-        scope: scope
+        scope: scope,
+        effect_source: ["timer:" <> algorithm_id, 0, DateTime.to_unix(at, :microsecond)]
       },
       Enum.map(Map.get(plan, :monitoring, []), &build_monitoring/1),
       %Result{},
@@ -105,7 +106,12 @@ defmodule Cadence.SemanticRuntime do
     evaluate_algorithms(
       impacted,
       algorithms,
-      %{trigger_id: update.update_id, at: update.receipt_time, scope: scope},
+      %{
+        trigger_id: update.update_id,
+        at: update.receipt_time,
+        scope: scope,
+        effect_source: effect_source(update.metadata)
+      },
       monitoring,
       append_update(result, update),
       state
@@ -416,16 +422,35 @@ defmodule Cadence.SemanticRuntime do
     if source do
       source.metadata
       |> Map.put(:trigger_sample_id, trigger.trigger_id)
+      |> put_trigger_frame(trigger)
     else
       {mission_id, spacecraft_id} = trigger.scope
 
-      %{
-        trigger_sample_id: trigger.trigger_id,
-        mission_id: mission_id,
-        spacecraft_id: spacecraft_id
-      }
+      put_trigger_frame(
+        %{
+          trigger_sample_id: trigger.trigger_id,
+          mission_id: mission_id,
+          spacecraft_id: spacecraft_id
+        },
+        trigger
+      )
     end
   end
+
+  # A derived update's effects are keyed on its TRIGGER (DECISIONS #99): the trigger's journal
+  # frame, or for a timer the algorithm's timer stream and fire time. Never on the frame of
+  # whichever input's metadata it copies: that may be an older frame, whose effect ids are taken.
+  defp put_trigger_frame(metadata, trigger) do
+    metadata = Map.drop(metadata, [:effect_source, "effect_source"])
+
+    case Map.get(trigger, :effect_source) do
+      nil -> metadata
+      source -> Map.put(metadata, :effect_source, source)
+    end
+  end
+
+  defp effect_source(metadata),
+    do: Map.get(metadata, :effect_source, Map.get(metadata, "effect_source"))
 
   defp later_time(left, right) do
     if DateTime.compare(left, right) == :gt, do: left, else: right
