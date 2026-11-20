@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { ResolveBookingActions } from "@/features/resolutions/index.ts";
-import { useRoute, type RouteLocationRaw } from "vue-router";
+import { useRoute } from "vue-router";
 import { canAdministerOrganization, TakeoverHeader, useMissionScope, useSession } from "@/shell";
 import type { ApiError } from "@/api";
 import { ApButton, ApCallout, ApStationBar, OutcomeCallout, useNow } from "@/ui";
@@ -20,9 +20,9 @@ import { historical } from "./plan-history.ts";
 import PlanHistorySheet from "./PlanHistorySheet.vue";
 import OldVersionCallout from "./OldVersionCallout.vue";
 import { useBookingStopped } from "./useBookingStopped.ts";
-import PlanStatePanel from "./PlanStatePanel.vue";
-import { limitRefusal, overLimit } from "./start-limit.ts";
-import StartLimits from "./StartLimits.vue";
+import PlanStartPanel from "./PlanStartPanel.vue";
+import { limitRefusal } from "./start-limit.ts";
+import { useSupersededRole } from "./superseded-role.ts";
 import SelectedPanel from "./SelectedPanel.vue";
 import { isPlanSuperseded, planErrorText } from "./errors.ts";
 import SendBackSheet from "./SendBackSheet.vue";
@@ -149,6 +149,10 @@ watch(day, () => {
   reviewed.value = null;
   focusSoon.cancel();
 });
+/** #654 (B6): the superseded line is an alert only right after this person's refused Submit. */
+const supersededRole = useSupersededRole(() =>
+  view.value.kind === "plan" ? `${day.value}:${view.value.plan.id}` : null,
+);
 async function onSubmit(acks: Acknowledgement[], note?: string) {
   if (view.value.kind !== "plan" || primary.value?.kind !== "sheet") return;
   const planId = view.value.plan.id;
@@ -156,8 +160,10 @@ async function onSubmit(acks: Acknowledgement[], note?: string) {
   if (out.kind === "refused") {
     // A draft superseded meanwhile (409 plan_superseded): the plan was re-read, so it lands in the
     // superseded state, which says nothing was submitted.
-    if (isPlanSuperseded(out.error)) sheet.value?.close();
-    else sheetError.value = out.error;
+    if (isPlanSuperseded(out.error)) {
+      supersededRole.mark();
+      sheet.value?.close();
+    } else sheetError.value = out.error;
     return;
   }
   sheet.value?.close();
@@ -180,8 +186,6 @@ function onEdit(change: { add?: string[]; remove?: string[] }) {
 const actionText = computed(() =>
   actionError.value ? (limitRefusal(actionError.value) ?? planErrorText(actionError.value)) : null,
 );
-/** U52: over the limit, Start is disabled with the sentence StartLimits shows above it. */
-const overReason = computed(() => overLimit(estimate.value));
 function onExecute() {
   if (view.value.kind === "plan") void execute(view.value.plan.id);
 }
@@ -200,7 +204,6 @@ const step = computed(() =>
       : 0,
 );
 const headerLine = computed(() => headerFor(view.value, dayLabel(day.value)));
-const setupLink = computed((): RouteLocationRaw => ({ name: "setup.contact-planning" }));
 /** ux: "NEXT OFFER EXPIRES T−… · KSAT" from the plan's provider_freeze (domain c38bb5de). */
 const clockNow = useNow();
 const clock = computed(() =>
@@ -233,7 +236,14 @@ const clock = computed(() =>
   <template v-if="view.kind === 'plan'">
     <PlanLifecycleCallouts :day="day" :superseded-by="view.plan.superseded_by" :expired="expired" />
     <OldVersionCallout v-if="latest !== null" :plan="view.plan" :latest="latest" />
-    <SupersededCallout v-else-if="view.plan.superseded" :superseded="view.plan.superseded" />
+    <!-- ux on #656: keyed on the role, so an alert that arrives after the line is shown re-mounts
+      (a role flip on a mounted region isn't announced). -->
+    <SupersededCallout
+      v-else-if="view.plan.superseded"
+      :key="supersededRole.role.value ?? 'polite'"
+      :superseded="view.plan.superseded"
+      :role="supersededRole.role.value"
+    />
     <PlanReviewLine
       v-else-if="sentBack || resubmitted"
       ref="reviewLine"
@@ -366,34 +376,14 @@ const clock = computed(() =>
       :day="day"
     />
   </template>
-  <template v-else>
-    <PlanStatePanel :view="view" />
-    <StartLimits :estimate="estimate" :error="actionError" />
-    <ApCallout v-if="actionText && !limitRefusal(actionError)" tone="caution" role="alert">{{
-      actionText
-    }}</ApCallout>
-    <footer class="flex flex-none justify-end border-t border-hairline pt-3">
-      <ApButton v-if="view.kind === 'not_set_up'" variant="primary" size="commit" :to="setupLink"
-        >Set up contact planning</ApButton
-      >
-      <ApButton
-        v-else-if="view.kind === 'no_draft' || view.kind === 'draft_failed'"
-        variant="primary"
-        size="commit"
-        :disabled="busy || overReason !== null"
-        :disabled-reason="overReason ?? 'Drafting…'"
-        @click="draftDay"
-        >Draft the day</ApButton
-      >
-      <ApButton
-        v-else-if="view.kind === 'interrupted'"
-        variant="primary"
-        size="commit"
-        :disabled="busy"
-        disabled-reason="Working…"
-        @click="resume"
-        >Continue drafting</ApButton
-      >
-    </footer>
-  </template>
+  <PlanStartPanel
+    v-else
+    :view="view"
+    :estimate="estimate"
+    :action-error="actionError"
+    :action-text="actionText"
+    :busy="busy"
+    @draft="draftDay"
+    @resume="resume"
+  />
 </template>

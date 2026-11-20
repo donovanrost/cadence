@@ -11,6 +11,8 @@ import { expect, type Locator, type Page } from "@playwright/test";
 export const WORDS = {
   /** U20 (rejected): "Nothing was staged." */
   nothingStaged: "Nothing was staged.",
+  /** ux's superseded state (SupersededCallout): a Submit refused as superseded ends with it (#654). */
+  nothingSubmitted: "Nothing was submitted.",
   // U20's outcome-unknown words appear only mid-sentence, with a cause ("The connection dropped, so
   // it isn't clear …"): add those real sentences, cited, when a spec needs one (ux on #648).
   /** U25 and #237: a spacecraft whose name Cadence can't read, never its id. */

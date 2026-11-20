@@ -6,8 +6,11 @@ import type { Superseded } from "./api.ts";
 
 type SupersededReason = Exclude<Superseded["reason"], Readonly<{ unrecognized: string }>>;
 
-/** Why this draft is no longer current (ux: superseded state): what changed, when, by whom. */
-const props = defineProps<{ superseded: Superseded }>();
+/**
+ * Why this draft is no longer current (ux: superseded state): what changed, when, by whom. `role`
+ * is "alert" when the person's own Submit was just refused because of it (#654, B6); else polite.
+ */
+const props = defineProps<{ superseded: Superseded; role?: "alert" | undefined }>();
 const REASONS: Readonly<Record<SupersededReason, string>> = {
   template_changed: "A contact rule template changed",
   requirement_changed: "A contact rule changed",
@@ -33,7 +36,7 @@ const changes = computed(() =>
 </script>
 
 <template>
-  <ApCallout tone="stale">
+  <ApCallout tone="stale" :role="role">
     <span class="flex flex-col gap-1">
       <span>{{ sentence }}</span>
       <span v-for="line in changes" :key="line" class="font-mono text-sm text-text-2">{{
