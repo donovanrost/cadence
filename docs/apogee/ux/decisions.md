@@ -2334,6 +2334,44 @@ change set like any override. There's no separate routes editor.
         keeps happening, tell the team that runs Cadence for you."; `Request review` "Not sent for review: Cadence
         couldn't run the checks, so nothing changed. Try again; …" (same ending). The button stays enabled; the Why
         and the hold acknowledgement stay filled.
+      - K3's submit meeting 409 `packet_definition_version_taken` (#534, #550; another change saved a packet
+        definition at the same moment; nothing written, retryable; the definition's id and version only in Technical
+        details): `Apply as r5` "Not applied: another change saved a packet definition at the same moment, so nothing
+        changed. Try again."; `Request review` "Not sent for review: … so nothing changed. Try again."; Approve "Not
+        approved: another change saved a packet definition at the same moment, so nothing was applied and the change
+        set stays in review. Your approval wasn't recorded. Try again." The buttons stay enabled.
+    - **K3's submit refused, per code** (#310, #552; ca-ux 11-20, mms-ux's follow-up). Each line opens by the act the
+      button named (`Apply as r5` "Not applied:", `Request review` "Not sent for review:"), says "so nothing changed",
+      then what to do. Never the server's text as the line, and never a mechanical rewrite of the older sentences:
+      - `change_set_changed`: "Not applied: someone changed the staged set while you were looking, so nothing
+        changed. It's been reloaded; check it, then apply again." / "Not sent for review: … It's been reloaded;
+        check it, then send it again."
+      - `activation_policy_changed`: "Not applied (Not sent for review): the mission's approval setting changed after
+        this was submitted, so nothing changed. The change set has reopened; check it, then apply or send it for
+        review again."
+      - `checks_failed`: "Not applied: a check says NO-GO, so nothing changed. Fix the NO-GO items, then apply
+        again." / "Not sent for review: … then send it again."
+      - `holds_not_acknowledged`: "Not applied: some holds aren't acknowledged yet, so nothing changed. Read and
+        acknowledge them, then apply again." / "Not sent for review: … then send it again."
+      - `holds_blocking`: "Not applied: a blocking hold stands, so nothing changed. It can't be acknowledged; apply
+        once it clears (the checks show it)." / "Not sent for review: … send it once it clears (the checks show
+        it)."
+      - `catalog_command_in_flight`: "Not applied (Not sent for review): commands started on the affected spacecraft,
+        so nothing changed. Try again when they finish."
+      - `nothing_staged`: "Not applied: nothing is staged, so there's nothing to apply." / "Not sent for review:
+        nothing is staged, so there's nothing to review."
+      - `invalid_op` / `invalid_params`: "Not applied (Not sent for review): some changes aren't valid, so nothing
+        changed." then the list, each field by its kind schema's label where there is one (no raw paths, #308), up
+        to five, then "and N more".
+      - `reason_required`: the Why field's own message, "Say why (10 characters or more).", not a callout.
+      - An unknown code: "Not applied (Not sent for review): Cadence refused this, so nothing changed." with the code
+        and the server's message in Technical details.
+      - Codes worded elsewhere keep their lines: U82's in-use, U63/U65, the conversion refusal, `preview_failed`
+        and `packet_definition_version_taken` above.
+    - **K3's Apply, disabled** (A6): a NO-GO names what stops it, "Can't apply yet: <the NO-GO item's line, as the
+      checks word it>". Without the apply capability (unreachable for people today: stage and apply both need
+      operate_mission; defensive): "You can't apply changes on EARENDIL, so someone who can operate it applies
+      them." No role word (U104). The server's 403 is the backstop.
     - Read fields (api v3.2, final): the button is `Stage batch <next_batch> of <batches_total>`; progress is
       routes_converted of routes_total. No per-craft "in batch 3" line. An author with no name: drop the name
       ("Batch 3 is already staged." / "Staged earlier."), never the id.
