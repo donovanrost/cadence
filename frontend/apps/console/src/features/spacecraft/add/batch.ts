@@ -84,6 +84,16 @@ export type ClashReport = Readonly<{
 }>;
 
 /**
+ * First SCID's hint. S9 (#313, mms-ux): when the server says no SCID from 1 to 1023 is free, the
+ * field stays empty and the hint says why (0 is never suggested, so it isn't counted).
+ */
+export function scidStartHint(server: ServerScids | null, lastScid: string): string {
+  return server?.next === null
+    ? "Every SCID from 1 to 1023 is taken in this mission, so new spacecraft need one freed first."
+    : `Last SCID ${lastScid} · prefilled with the next free SCID`;
+}
+
+/**
  * Adds clash problems: names and SCIDs unique within the batch and against the mission. S9 (#313):
  * `inUse` is the server's SCIDs in use; one with no live craft in the directory (archived, or
  * staged) can't be named, so it reads as the server's own stage-time words.
