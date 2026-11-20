@@ -4066,15 +4066,16 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
   validity: past `valid_until`, a suspended grant reads `expired` (`EXPIRED`, the active grant's line), and resuming
   it answers the `expired` refusal below (api).
   - Tag `SUSPENDED` (caution, mark + word, B2).
-  - Row line (`suspension {at, by, settings_revision}`; who and when one event, U29), by the setting now in force
-    (the read's `approval_setting`). The suspension doesn't say whether the save was the mission's or the
-    organization's (an organization default reaches inheriting missions), so the line names neither: "Suspended when
-    Mira K. changed the approval setting for this mission to Needs a second person's approval at 11-19 22:40Z. A
-    second org admin resumes it." `by` with no name: "Suspended when the approval setting for this mission changed
-    to Needs a second person's approval at 11-19 22:40Z." (the next sentence likewise). If the setting is back to
-    "Applies without approval": "An org admin resumes it." The setting unread: "A second org admin resumes it." (the
-    stricter form; the answer says what happened). If api later sends the level, name it ("changed the
-    organization's approval setting to …").
+  - Row line (`suspension {at, by, settings_revision, level}`; who and when one event, U29), by the setting now in
+    force (the read's `approval_setting`). `level` (api 11-19) says which save tightened it: `mission` "Suspended
+    when Mira K. changed the mission's approval setting to Needs a second person's approval at 11-19 22:40Z. A
+    second org admin resumes it."; `organization` "Suspended when Mira K. changed the organization's approval setting
+    to Needs a second person's approval at 11-19 22:40Z. …" (an organization default reaches inheriting missions).
+    `level` missing or unknown: "…changed the approval setting for this mission to …", which claims neither. `by`
+    with no name: "Suspended when the mission's (organization's) approval setting changed to Needs a second person's
+    approval at 11-19 22:40Z." (the next sentence likewise). If the setting is back to "Applies without approval":
+    "An org admin resumes it." The setting unread: "A second org admin resumes it." (the stricter form; the answer
+    says what happened).
   - `Resume…` (a sheet, as approve: `sha256`, `operation_id`): title `Resume the grant`, commit `Resume`, muted line
     "It takes effect again at once. Nightly planner can act under it until 12-19 06:40Z." After a resumed answer:
     "Resumed. Nightly planner can act under it until 12-19 06:40Z." Any other answer (U20): "Cadence didn't confirm
@@ -4113,8 +4114,9 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
     - `duplicate_operation`: "Not resumed: Cadence matched this to an earlier, different request, so nothing
       changed. Reload and try again." Unknown code: "Not resumed: Cadence refused this. Nothing changed." with the
       code in Technical details.
-  - Audit: "Suspended the grant for Nightly planner, when the approval setting for this mission changed to Needs a
-    second person's approval" (the settings saver as who); "Resumed the grant for Nightly planner".
+  - Audit: "Suspended the grant for Nightly planner, when the mission's approval setting changed to Needs a second
+    person's approval" (`organization`: "the organization's"; no level: "the approval setting for this mission";
+    the settings saver as who); "Resumed the grant for Nightly planner".
   - **The settings save that suspends** (Mission settings and Organization settings, Governance; fe-setup's screen,
     SettingsAuditProviders.md points here). Saving "Needs a second person's approval" can answer 409
     `approval_tightening_suspends_grants` (`details {grants: [{id, mission {id, name}, service {id, name|null},
