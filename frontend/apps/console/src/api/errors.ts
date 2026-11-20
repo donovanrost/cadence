@@ -214,6 +214,8 @@ export const errorCodes = [
   // #257 (api): submit on a plan already waiting; approve by its submitter or drafter (independent).
   "plan_already_submitted",
   "contact_plan_self_approval_forbidden",
+  // #277: a service identity made a version since the last approval and no one is accountable for it.
+  "contact_plan_approver_authors_unknown",
   "plan_not_ready",
   "plan_not_repairable",
   "plan_not_resumable",

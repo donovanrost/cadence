@@ -71,6 +71,32 @@ const notReadyDetails = d.object({
     d.array(d.object({ snapshot_ids: d.optional(d.array(d.string, 5_000)) }), 5_000),
   ),
 });
+const authorsDetails = d.object({
+  service: d.optional(d.nullable(d.object({ id: d.string, name: d.nullable(d.string) }))),
+});
+const RECORD = "An org admin records who's accountable in People › Service identities.";
+
+/**
+ * U97 (#277, ca-ux #592): a service identity made one of the plan's versions since its last approval
+ * and no one is recorded as accountable for it. A send-back doesn't clear it; recording who's
+ * accountable, or drafting the day again, does. Nameless: U100's plan form, never the id (U25).
+ */
+function authorsUnknown(error: ApiError): Refusal {
+  const service = detailsOf(error, authorsDetails)?.service ?? null;
+  if (service === null)
+    return refusal(
+      "Not approved: Cadence can't tell who made one of this plan's versions since it was last approved, so it can't check that you weren't one of them. Your approval wasn't recorded. Draft the day again so a new plan replaces this one; if it keeps happening, tell the team that runs Cadence for you.",
+      "Cadence can't tell who made one of its versions",
+    );
+  const name = service.name?.trim();
+  const who = name
+    ? `${name} made one of this plan's versions since it was last approved and has`
+    : "a service identity that made one of this plan's versions since it was last approved has";
+  return refusal(
+    `Not approved: ${who} no one recorded as accountable for it, so this can't be approved yet. ${RECORD} Your approval wasn't recorded. You can also draft the day again so a new plan replaces this one.`,
+    "a service identity that made one of its versions has no one recorded as accountable for it",
+  );
+}
 const submittedDetails = d.object({
   submitted_by: d.optional(person),
   submitted_at: d.optional(d.nullable(d.timestamp)),
@@ -78,7 +104,9 @@ const submittedDetails = d.object({
 
 const SELF: Readonly<Record<Because, string>> = {
   submitted: "you submitted this plan, so another org admin approves it",
-  edited: "you drafted this version of the plan, so another org admin approves it",
+  // #277 (U97): an author of any version since the last approval, not only the one being approved.
+  edited:
+    "you drafted a version of this plan since it was last approved, so another org admin approves it",
 };
 /** A self-approval refusal's `because`, or null for any other error (or an unknown because). */
 export function selfBecause(error: ApiError): Because | null {
@@ -138,6 +166,7 @@ export function approveRefusal(error: ApiError, w: Who): Refusal {
       SELF[because],
       { because },
     );
+  if (isError(error, "contact_plan_approver_authors_unknown")) return authorsUnknown(error);
   if (isError(error, "forbidden"))
     return refusal(
       "Not approved: only an org admin approves contact plans. Your approval wasn't recorded.",
