@@ -194,14 +194,17 @@ defmodule Cadence.Protocol.TMFramePipeline do
 
   # Reassembly builds an SDU's meta from the frame that completes it, so the completing frame's
   # position within this decode call reaches the SDU (meta.raw_frame_offset_bytes): a packet's
-  # stable archive id is keyed on it (#71 follow-up). Only reassembly sees it.
+  # stable archive id is keyed on it (#71 follow-up), and with its length, the receipt time of its
+  # last byte keys its replay-safe effect ids (#99). Only reassembly sees them.
   defp located_frame(frame_info) do
     frame = frame_info.frame
 
     %{
       frame
       | meta:
-          Map.put(frame.meta || %{}, :raw_frame_offset_bytes, frame_info.raw_frame_offset_bytes)
+          (frame.meta || %{})
+          |> Map.put(:raw_frame_offset_bytes, frame_info.raw_frame_offset_bytes)
+          |> Map.put(:raw_frame_length_bytes, frame_info.raw_frame_length_bytes)
     }
   end
 

@@ -28,9 +28,11 @@ defmodule Cadence.Runtime.MissionRuntime do
         {MissionExecution,
          mission_id: mission_id, process_namespace: process_namespace, runtime_opts: runtime_opts},
         {Cadence.Runtime.MissionCoordinator,
-         mission_id: mission_id,
-         process_namespace: process_namespace,
-         profiler: Keyword.get(runtime_opts, :profiler, Cadence.Telemetry.Profiler)}
+         [
+           mission_id: mission_id,
+           process_namespace: process_namespace,
+           profiler: Keyword.get(runtime_opts, :profiler, Cadence.Telemetry.Profiler)
+         ] ++ Keyword.take(runtime_opts, [:partition_stable_ms])}
       ]
       |> Enum.reject(&is_nil/1)
 
