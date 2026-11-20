@@ -139,7 +139,8 @@ export function packetsOffReason(
   if (read.code === "catalog_revision_not_found")
     return "This catalog revision isn't in the mission's catalog any more. Choose another.";
   const rev = catalogWord(s, doc.catalog_revision_id);
+  // mms-ux on #618: the same sentence as the save refusal.
   if (read.code === "spacecraft_catalog_unavailable")
-    return `${rev.charAt(0).toUpperCase()}${rev.slice(1)} can't be used for ${s.name}.`;
+    return `${rev.charAt(0).toUpperCase()}${rev.slice(1)} isn't one of this mission's catalog revisions. Choose another.`;
   return `Cadence couldn't load ${rev}'s packets. Reload to try again.`;
 }

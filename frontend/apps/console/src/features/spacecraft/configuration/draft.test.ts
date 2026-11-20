@@ -108,7 +108,7 @@ describe("the save words", () => {
     ).toBe("Choose a catalog revision first.");
     expect(
       packetsOffReason(s, s.document, { status: "failed", code: "spacecraft_catalog_unavailable" }),
-    ).toBe("Catalog rev 14 can't be used for EARENDIL-004.");
+    ).toBe("Catalog rev 14 isn't one of this mission's catalog revisions. Choose another.");
     const withPreset = snap({
       presets: [{ id: "p1", version: 2, name: "S-band", protocol: framing }],
     });
