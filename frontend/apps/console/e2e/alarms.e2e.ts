@@ -65,11 +65,13 @@ test("with no active episodes the list says so", async ({ page }) => {
 });
 
 // #646 (U25): a spacecraft whose name Cadence can't read reads as Unknown spacecraft, never its id.
-test("a nameless spacecraft reads as Unknown spacecraft, never its id", async ({ page }) => {
+// The list names a craft from the fleet read by SCID when the episode carries no name, so the craft
+// here has a SCID the fleet doesn't have: nothing anywhere can name it.
+test("a craft nothing can name reads as Unknown spacecraft, never its id", async ({ page }) => {
   await routeEpisodeList(page, [
-    { scid: 9, severity: "critical", status: "new", point: "EPS.sa1_current", nameless: true },
+    { scid: 9999, severity: "critical", status: "new", point: "EPS.sa1_current", nameless: true },
   ]);
   await openConsole(page, screen);
   await expect(page.getByRole("table")).toBeVisible();
-  await expectNameFallback(page, "spacecraft-earendil-009");
+  await expectNameFallback(page, "spacecraft-earendil-9999");
 });
