@@ -13,7 +13,7 @@ defmodule Cadence.Reads.MissionModelApprovals do
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Catalog
   alias Cadence.Catalog.ModelRevisions
-  alias Cadence.Control.{Activations, ModelApprovalGate}
+  alias Cadence.Control.{Activations, ActorRef, ModelApprovalGate}
   alias Cadence.MissionModels
   alias Cadence.MissionModels.{ApprovalReads, Comparison, CompositionApproval, RevisionDecisions}
   alias Cadence.Reads.Catalog.RevisionBase
@@ -105,16 +105,39 @@ defmodule Cadence.Reads.MissionModelApprovals do
 
   @doc """
   Approves against `report_id`; retroactive when a spacecraft already runs the revision (grandfathered,
-  domain 71ce7d850), which the approval records and the audit says.
+  domain 71ce7d850), which the approval records and the audit says. `operation_id` (optional,
+  #260) makes a retry of this approval a replay. An already approved revision's refusal names who
+  decided by C1 (`Control.ActorRef`: never a stored name or an email) and when, both or neither.
   """
-  @spec approve(Scope.t(), binary(), binary(), binary()) :: {:ok, term()} | {:error, term()}
-  def approve(%Scope{} = scope, mission_id, revision_id, report_id) do
+  @spec approve(Scope.t(), binary(), binary(), binary(), binary() | nil) ::
+          {:ok, term()} | {:error, term()}
+  def approve(%Scope{} = scope, mission_id, revision_id, report_id, operation_id \\ nil) do
     retroactive = ModelApprovalGate.running?(scope.organization_id, mission_id, revision_id)
 
-    MissionModels.approve_revision(scope, mission_id, revision_id, report_id,
-      retroactive: retroactive
+    scope
+    |> MissionModels.approve_revision(mission_id, revision_id, report_id,
+      retroactive: retroactive,
+      operation_id: operation_id
     )
+    |> already_decided(scope.organization_id)
   end
+
+  defp already_decided(
+         {:error,
+          {:mission_model_revision_already_approved, %{approved_by: by, approved_at: at}}},
+         organization_id
+       ) do
+    decided_by = by && ActorRef.document(by, ActorRef.names(organization_id, [by]))
+
+    details =
+      if decided_by && at,
+        do: %{decided_by: %{id: decided_by.id, name: decided_by.name}, decided_at: at},
+        else: %{decided_by: nil, decided_at: nil}
+
+    {:error, {:mission_model_revision_already_approved, details}}
+  end
+
+  defp already_decided(result, _organization_id), do: result
 
   @doc "Runs a comparison for the revision (synchronous; reports dedupe on content)."
   @spec compare(Scope.t(), binary(), binary()) :: {:ok, map()} | {:error, term()}

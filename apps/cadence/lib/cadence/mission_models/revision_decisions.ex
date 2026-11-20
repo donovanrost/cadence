@@ -89,8 +89,15 @@ defmodule Cadence.MissionModels.RevisionDecisions do
   defp separate(organization_id, person_id, actors),
     do: Accountability.separate(organization_id, {:user, person_id}, actors)
 
+  @doc """
+  Approves a candidate revision against a passed comparison. `operation_id:` (the console's, #260)
+  is recorded in the approval's evidence. On an approved revision (#260): the separation check
+  still runs first; the same `operation_id`, approver and comparison report as its recorded
+  approval answer `{:ok, {:replayed, revision}}` and write nothing; anything else is
+  `{:error, {:mission_model_revision_already_approved, %{approved_by, approved_at}}}`.
+  """
   @spec approve(Scope.t(), binary(), binary(), binary(), keyword()) ::
-          {:ok, Revision.t()} | {:error, term()}
+          {:ok, Revision.t() | {:replayed, Revision.t()}} | {:error, term()}
   def approve(%Scope{} = scope, mission_id, revision_id, comparison_report_id, opts \\ [])
       when is_binary(mission_id) and is_binary(revision_id) and is_binary(comparison_report_id) do
     organization_id = scope.organization_id
@@ -105,9 +112,19 @@ defmodule Cadence.MissionModels.RevisionDecisions do
     end
   end
 
-  # Approving an approved revision again changes nothing: the first approver stays on record.
-  defp approve_locked(%RevisionRow{status: "approved"} = row, _actor, _report, _opts),
-    do: {:ok, row}
+  # #260: approving an approved revision records nothing. The separation check runs first (the
+  # importer gets its refusal, never who approved); then this approval's own retry is a replay,
+  # matched against THIS revision's recorded approval only; anything else is refused with who
+  # decided and when. The first approver stays on record either way.
+  defp approve_locked(%RevisionRow{status: "approved"} = row, actor, report, opts) do
+    with {:ok, _checked} <- independent(row, actor) do
+      evidence = JsonDocument.unwrap_value(row.approved_by)
+
+      if replay?(evidence, actor, report, Keyword.get(opts, :operation_id)),
+        do: {:ok, {:replayed, row}},
+        else: {:error, already_approved(evidence, row.approved_at)}
+    end
+  end
 
   defp approve_locked(row, actor, comparison_report_id, opts) do
     %{organization_id: organization_id, mission_id: mission_id, revision_id: revision_id} = row
@@ -132,6 +149,7 @@ defmodule Cadence.MissionModels.RevisionDecisions do
           # (ModelApprovalGate.running?/3), and the audit tells it.
           "retroactive" => Keyword.get(opts, :retroactive, false) == true
         })
+        |> put_operation_id(Keyword.get(opts, :operation_id))
 
       row |> RevisionRow.status_changeset(:approved, evidence, at(opts)) |> Repo.update()
     end
@@ -213,10 +231,30 @@ defmodule Cadence.MissionModels.RevisionDecisions do
       |> decide_locked(fun)
     end)
     |> case do
+      {:ok, {:replayed, row}} -> {:ok, {:replayed, RevisionRow.to_domain(row)}}
       {:ok, row} -> {:ok, RevisionRow.to_domain(row)}
       {:error, reason} -> {:error, reason}
     end
   end
+
+  # The recorded approval's own operation: same id, same approver, same comparison report.
+  defp replay?(%{} = evidence, %{"id" => actor_id}, report, operation_id)
+       when is_binary(operation_id) do
+    evidence["operation_id"] == operation_id and evidence["id"] == actor_id and
+      evidence["comparison_report_id"] == report
+  end
+
+  defp replay?(_evidence, _actor, _report, _operation_id), do: false
+
+  defp already_approved(evidence, approved_at),
+    do:
+      {:mission_model_revision_already_approved,
+       %{approved_by: evidence, approved_at: approved_at}}
+
+  defp put_operation_id(evidence, id) when is_binary(id),
+    do: Map.put(evidence, "operation_id", id)
+
+  defp put_operation_id(evidence, _id), do: evidence
 
   defp reject_locked(%RevisionRow{status: "candidate"} = row, actor, reason, opts) do
     row
