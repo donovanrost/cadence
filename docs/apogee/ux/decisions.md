@@ -4527,8 +4527,8 @@ agreed with ux 11-20.
   - The craft's state line (spacecraft page, configuration), caution: "Composition 3 is no longer approved: Ana R.
     withdrew its approval at 11-20 09:12Z: “<reason>”. EARENDIL-004 stays on it until a new configuration is
     applied. <the way out>" (The reason is quoted, as U65; with none, the sentence ends at the time.) Rejected:
-    "…Ana R. rejected it at …". No name: "its approval was withdrawn at 11-20 09:12Z". The decision record's id goes
-    in Technical details.
+    "…Ana R. rejected it at …". No name: "its approval was withdrawn at 11-20 09:12Z". The decision's record goes in
+    Technical details (until #600, the revision and the decision's time; then the record's id).
   - Attention item, a Now queue row (U31's form and ranking): P1 when the craft has a pass within 2 h or in
     progress, else P2 (it needs `spacecraft_id` to rank). Title "EARENDIL-004 · On composition 3, which is no longer
     approved."; secondary "Approval withdrawn by Ana R. at 11-20 09:12Z: “<reason>”. <the way out>"; action `Open
@@ -4543,11 +4543,11 @@ agreed with ux 11-20.
     key, never by text. So: "Acknowledge the Composition HOLD", and in the log "Acknowledged the Composition HOLD on
     EARENDIL-004". Each new withdrawal holds again, and only new submissions meet it.
     - One target: "EARENDIL-004 is on composition 3, whose approval Ana R. withdrew at 11-20 09:12Z: “<reason>”.
-      Acknowledge the HOLD to send commands to EARENDIL-004 anyway." Rejected: "…composition 3, which Ana R.
+      Acknowledge the HOLD to send this request to EARENDIL-004 anyway." Rejected: "…composition 3, which Ana R.
       rejected at 11-20 09:12Z: “<reason>”. …". No name: "…composition 3, whose approval was withdrawn at 11-20
       09:12Z. …". The reason names the record, as the attention item does (mms-security).
     - Several targets (a group): "3 of the 12 targets are on a composition that's no longer approved: EARENDIL-004,
-      EARENDIL-007 and EARENDIL-011. Acknowledge the HOLD to send commands to them anyway." Up to 3 names, then
+      EARENDIL-007 and EARENDIL-011. Acknowledge the HOLD to send this request to them anyway." Up to 3 names, then
       "and N more".
     - Acknowledging clears only this HOLD; GO, the other checks and the pass still decide (U20), so the line
       promises nothing more. Placeholder: "Why it's safe to command it" (several targets: "…command them"). The
@@ -4556,13 +4556,14 @@ agreed with ux 11-20.
     screen says either stopped.
 - **Withdrawing an approval** (E2, #546; `POST …/withdraw {reason, operation_id?}`; a person with
   `:approve_mission_model`, no separation needed, since it only tightens). On U65's page for an approved revision,
-  for people who can approve:
-  - The action `Withdraw approval…` (accessible name "Withdraw approval of catalog rev 4", B7) opens a sheet, focus
-    on Cancel (A1). Title: "Withdraw approval of catalog rev 4?" Line: "Spacecraft on it stay on it, but they can't
-    take a new configuration that uses it, and new commands to them meet a hold until they move to an approved
-    version. Nothing stops." Then, while #600 is open: "This can't be undone for now: the same catalog content
-    can't be approved again until a later Cadence update." (mms-security, ca-engineer: withdrawn is final, and the
-    revision's id comes from its content.)
+  shown when the read's `viewer_can_withdraw` is true (ca-engineer):
+  - The action `Withdraw approval…` (accessible name "Withdraw approval of catalog rev 4", B7) opens a sheet. It has a
+    required field, so focus goes to `Reason` (A1), and the consequence lines describe it (`aria-describedby`). Title:
+    "Withdraw approval of catalog rev 4?" Line: "Spacecraft on it stay on it, but they can't take a new configuration
+    that uses it, and new commands to them meet a hold until they move to an approved version. Nothing that's running
+    stops." Then, while #600 is open: "This can't be undone for now: the same catalog content can't be approved again
+    until a later Cadence update." (mms-security, ca-engineer: withdrawn is final, and the revision's id comes from its
+    content.)
   - `Reason`, required: up front "Give a reason first." (A7). 422 on the field: "Say why." / "Keep the reason under
     2,000 characters." Commit `Withdraw approval` (danger), `Cancel`.
   - After it (a status, B6): "Approval withdrawn. Spacecraft on catalog rev 4 can't take a new configuration that
@@ -4578,14 +4579,15 @@ agreed with ux 11-20.
       else: "Catalog rev 4's approval was already withdrawn by Ana R. at 11-20 09:12Z, so nothing changed. Reload to
       see it." Without them: "Not withdrawn: its approval was already withdrawn, so nothing changed. Reload to see
       it."
+    - `retired`: "Not withdrawn: catalog rev 4 is retired, so there's nothing to withdraw. Nothing changed."
     - A status the console doesn't know: "Not withdrawn: catalog rev 4 can't be withdrawn as it stands, so nothing
       changed. Reload to see it." with the status in Technical details.
   - 403 `forbidden`: "Not withdrawn: only an org admin can withdraw an approval. Nothing changed." 403
     `human_mission_model_approver_required`: "Not withdrawn: only a person can withdraw an approval, not a service
     identity. Nothing changed."
   - A replay (same `operation_id`, actor and reason) shows as the original result.
-  - Elsewhere: C3's place (U102) on a withdrawn revision reads "Rev 4's approval was withdrawn, so spacecraft can't
-    move to it."; an import that matches it (U99) reads "This file matches catalog rev 4, whose approval was
+  - Elsewhere: C3's place (U102) on a withdrawn revision reads "Catalog rev 4's approval was withdrawn, so spacecraft
+    can't move to it."; an import that matches it (U99) reads "This file matches catalog rev 4, whose approval was
     withdrawn, so no new revision was created." with `Open rev 4`.
 - **Not here:** D4's composition editor (choosing catalogs, places, collisions) and its re-key HOLD, which lists
   every identity that changes before the change set is saved (#537 §1). Their words come with D4.
