@@ -78,6 +78,37 @@ defmodule Cadence.Accounts.FixturePasswordsTest do
     end
   end
 
+  test "a failed credential write reaches the caller as field errors only: no hash, salt or password",
+       c do
+    leaky =
+      %Ecto.Changeset{
+        data: %Cadence.Accounts.UserLocalCredentialRow{},
+        types: %{password_hash: :string, password_salt: :string},
+        changes: %{password_hash: "HASH-SHOULD-NOT-LEAK", password_salt: "SALT-SHOULD-NOT-LEAK"},
+        errors: [password_hash: {"is invalid", [value: "HASH-SHOULD-NOT-LEAK"]}],
+        valid?: false
+      }
+
+    for failure <- [{:error, leaky}, {:error, {:boom, @new, "SALT-SHOULD-NOT-LEAK"}}] do
+      result =
+        FixturePasswords.set(c.persona.user_id, @new, "apogee-qa",
+          store: fn _repo, _id, _password, _metadata -> failure end
+        )
+
+      assert {:error, reason} = result
+
+      assert reason in [:password_not_set] or
+               match?({:credential_invalid, %{password_hash: ["is invalid"]}}, reason)
+
+      text = inspect(result)
+
+      for secret <- ["HASH-SHOULD-NOT-LEAK", "SALT-SHOULD-NOT-LEAK", @new],
+          do: refute(text =~ secret)
+    end
+
+    assert_unchanged(c.persona)
+  end
+
   describe "the script's environment" do
     test "the password comes from E2E_PERSONA_PASSWORD, else the public default" do
       assert {:ok, @new, :env} =

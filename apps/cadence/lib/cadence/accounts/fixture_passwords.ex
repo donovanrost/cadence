@@ -68,23 +68,39 @@ if Mix.env() in [:dev, :test] do
     end
 
     @doc "Sets an apogee-qa persona's password; see the moduledoc."
-    @spec set(binary(), binary(), binary()) ::
+    @spec set(binary(), binary(), binary(), keyword()) ::
             :ok
             | {:error,
                :fixture_passwords_disabled
                | :password_managed_externally
                | :not_a_fixture_user
                | {:invalid, map()}
-               | term()}
-    def set(user_id, password, fixture) when is_binary(user_id) and is_binary(password) do
+               | {:credential_invalid, map()}
+               | :password_not_set}
+    def set(user_id, password, fixture, opts \\ [])
+        when is_binary(user_id) and is_binary(password) do
+      # `store:` is the credential writer (a test forces its failure; api-ops, #625).
+      store = Keyword.get(opts, :store, &Authentication.upsert_password_credential/4)
+
       with :ok <- allowed(user_id, password, fixture) do
-        Repo.transaction(fn -> set_locked(user_id, password) end)
+        Repo.transaction(fn -> set_locked(user_id, password, store) end)
         |> case do
           {:ok, :ok} -> :ok
-          {:error, reason} -> {:error, reason}
+          {:error, reason} -> {:error, safe(reason)}
         end
       end
     end
+
+    # What a caller (and a public CI log) may see of a failure: a changeset becomes its fields'
+    # message templates only, never its changes (the hash, the salt) or values; a known reason
+    # stays; anything else is `:password_not_set` (api-ops, #625).
+    defp safe(%Ecto.Changeset{} = changeset),
+      do:
+        {:credential_invalid,
+         Ecto.Changeset.traverse_errors(changeset, fn {message, _} -> message end)}
+
+    defp safe(reason) when reason in [:not_a_fixture_user], do: reason
+    defp safe(_reason), do: :password_not_set
 
     # Each refusal before anything is read or written.
     defp allowed(user_id, password, fixture) do
@@ -106,14 +122,12 @@ if Mix.env() in [:dev, :test] do
       end
     end
 
-    defp set_locked(user_id, password) do
+    defp set_locked(user_id, password, store) do
       with %UserRow{} = row <- Repo.get(UserRow, user_id),
            # The stored metadata is a wrapped JSON document; read it as the domain does.
            %{metadata: %{"fixture" => @fixture}} <- UserRow.to_domain(row),
            :ok <-
-             Authentication.upsert_password_credential(Repo, user_id, password, %{
-               "fixture" => @fixture
-             }),
+             store.(Repo, user_id, password, %{"fixture" => @fixture}),
            :ok <- Authentication.revoke_all_user_sessions(Repo, user_id) do
         AccountEvents.record(user_id, @actor, "password_changed", %{
           "all_sessions_signed_out" => true
