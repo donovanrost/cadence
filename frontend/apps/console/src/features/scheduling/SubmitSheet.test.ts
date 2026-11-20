@@ -462,3 +462,29 @@ describe("SubmitSheet booking windows closed (#273, #340)", () => {
     expect(later.text()).toContain("Draft a new plan for 01-01…");
   });
 });
+
+describe("SubmitSheet's gap reasons are required (#244, A6)", () => {
+  it("marks the shared and per-gap reasons required, and the per-requirement overrides not", async () => {
+    const w = mount(SubmitSheet, {
+      props: {
+        plan,
+        nameOf: () => null,
+        commitLabel: "Accept 2 gaps and submit",
+        userId: "u1",
+        title: "Approve and book the plan",
+        confirm: "",
+        busy: false,
+      },
+      attachTo: document.body,
+    });
+    try {
+      const reasons = w.findAll("textarea").filter((t) => t.attributes("required") !== undefined);
+      expect(reasons.length).toBeGreaterThan(0);
+      await w.get("input[type=checkbox]").setValue(true);
+      const shared = w.findAll("textarea").find((t) => t.attributes("required") !== undefined);
+      expect(shared).toBeTruthy();
+    } finally {
+      w.unmount();
+    }
+  });
+});

@@ -79,9 +79,14 @@ const atRisk = computed(() => props.plan.at_risk.flatMap((r) => r.snapshot_ids).
     </ApStatStrip>
     <div v-if="!readOnly" class="flex min-w-[240px] flex-col justify-center gap-1.5">
       <template v-if="primary.kind === 'sheet'">
-        <ApButton variant="primary" size="commit" :disabled="busy" @click="$emit('sheet')">{{
-          sheetLabel ?? primary.label
-        }}</ApButton>
+        <ApButton
+          variant="primary"
+          size="commit"
+          :disabled="busy"
+          disabled-reason="Working…"
+          @click="$emit('sheet')"
+          >{{ sheetLabel ?? primary.label }}</ApButton
+        >
         <p v-if="primary.note" class="m-0 max-w-[320px] text-sm text-text-3">{{ primary.note }}</p>
       </template>
       <ApButton
@@ -89,6 +94,7 @@ const atRisk = computed(() => props.plan.at_risk.flatMap((r) => r.snapshot_ids).
         variant="primary"
         size="commit"
         :disabled="busy"
+        disabled-reason="Working…"
         @click="$emit('execute')"
         >{{ primary.label }}</ApButton
       >
@@ -97,6 +103,7 @@ const atRisk = computed(() => props.plan.at_risk.flatMap((r) => r.snapshot_ids).
         variant="primary"
         size="commit"
         :disabled="busy"
+        disabled-reason="Working…"
         @click="$emit('redraft')"
         >{{ redraftLabel ?? primary.label }}</ApButton
       >
@@ -117,7 +124,12 @@ const atRisk = computed(() => props.plan.at_risk.flatMap((r) => r.snapshot_ids).
         {{ primary.note }}
       </p>
       <!-- U97: Send back stays when Approve is hidden (the submitter) or disabled (a self refusal). -->
-      <ApButton v-if="canSendBack" variant="ghost" :disabled="busy" @click="$emit('sendBack')"
+      <ApButton
+        v-if="canSendBack"
+        variant="ghost"
+        :disabled="busy"
+        disabled-reason="Working…"
+        @click="$emit('sendBack')"
         >Send back…</ApButton
       >
     </div>
