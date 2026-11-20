@@ -155,7 +155,15 @@ pin → head and assignment; head plus artifact → expansion → runtime; tenan
     index, replay) recomputes the expanded hash from the artifact plus the identity parameters with
     today's code, compares it to the approved evidence, and fails closed on a mismatch. It never
     trusts a stored expanded hash. So an expansion-code change shows up as a refused activation, never
-    a silent change to what runs. #475 and I must show where that check sits, with a test.
+    a silent change to what runs.
+  - **Status (verified by mms-security on develop b4a646ef8, 11-20):** met for 4a, at three points,
+    each with today's code and failing closed:
+    - read: `governance.ex` `hydrate_binding_set/1` (membership form) recomputes and refuses with
+      `:binding_set_expansion_mismatch`, and every reader goes through `fetch_binding_set`;
+    - admit: `control/activations/preflight.ex` `exact_approved_content/2` against the approved
+      activation's hash;
+    - run: `runtime/mission_runtime_spec.ex` `validate_content_hash/2` before a runtime spec exists.
+  - D carries the same three points for heads (G) and the index (I).
 - **CB-10 (medium; C2): heads and assignment history.**
   - Assignment history replaces per-change revision documents as per-craft audit, so it must be
     append-only (#116's triggers, as #436 did for accountables).
