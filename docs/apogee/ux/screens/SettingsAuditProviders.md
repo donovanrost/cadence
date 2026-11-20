@@ -91,6 +91,18 @@ filters: actor (select) · mission (select) · kind as a one-of segmented contro
   It holds because a platform-kind entry is only ever a platform admin's act (ca-engineer, #470: ConsoleAdmin behind
   Access.authorize, admin mode entered or left, platform-shared binding switches). If anything else can ever write
   one, the null form comes back (U20).
+- **Former members on their own organization's Audit** (#470; an exception to #146's C1, OK'd by lead and
+  ca-security 11-19; the director may overrule). A person who held a membership in this organization and has since
+  left is still named here by display name, so the organization's admins can see who they removed or re-roled:
+  "Removed Mira K. from the organization", "Changed Mira K.'s role from Member to Mission admin", and Mira K. as the
+  actor of their own past acts. No "former member" marker: the audit records what happened then. The conditions,
+  each with a test in #470:
+  - this organization's own Audit only (never another organization's, nor any other screen);
+  - only people who held a membership in this organization;
+  - display name only, never email or id;
+  - never a platform admin (the row above applies);
+  - erased people are unnamed once #220 exists (a #220 acceptance item).
+  Without a readable name, C1's "a member" and the U25 forms.
 - **Source honesty:** a unified audit read doesn't exist yet (plans/setup.md). Until api unifies
   `OperationalEvents` + config revisions + command/alarm actions + access events, show the sources
   that exist and say which are missing: info callout "Showing configuration, commanding and access
