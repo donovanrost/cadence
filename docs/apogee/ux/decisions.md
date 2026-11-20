@@ -4055,10 +4055,12 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
     it. An org admin who can do everything it allows approves it. Your approval wasn't recorded."
   - No list of what's beyond them: the 403 carries none (U20), so the lines don't name it. With no name, "the service
     identity this grant is for" replaces "Nightly planner".
-- **Revoke** stays one act, at once, with a reason, even while a widening of the same grant is proposed. If one is,
+- **Revoke** stays one act, at once, with a reason, even while a widening of the same grant is proposed. If a widening is proposed,
   the revoke sheet adds: "This also withdraws the proposal waiting for approval, so it can't switch automation
   back on later." (A widening proposal records `replaces_grant_id`; revoking that grant withdraws it in the same
-  transaction.)
+  transaction.) The reason is the console's rule (ux, #514): the server no longer requires one, and for a one-person
+  tightening the reason is the only record of why. So `Revoke` stays disabled with "Give a reason first." (A7) until
+  there's a reason; no 422 is behind it.
 - **A grant made before Cadence checked grants against the approval setting** (#497; the row's
   `issued_before_two_person_approval: true`) can only be revoked. Never "legacy" or "two-person" on screen, and not
   "before grants needed a second person's approval", which isn't true on a mission set to "Applies without approval"
@@ -4152,6 +4154,30 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
       callout and leaves the setting unsaved, as the field shows).
     - The list changed on the resend (a new 409 with a new list): "The grants this would suspend changed, so nothing
       was saved. Check the list, then save again." above the new list and buttons.
+- **Words the build settled** (fe-ops' nearest forms in #514, agreed by ca-ux; U105 hadn't given them):
+  - Result lines (each only on the answer's confirmed state, U20; otherwise "Cadence didn't confirm the approval /
+    rejection / revoke. Reload to see it."): Approve "Approved. Nightly planner can act under it until 12-19
+    06:40Z."; Reject "Rejected. Nightly planner won't act under this grant."; Revoke "Revoked. Nightly planner can't
+    act under this grant any more." (never "stops now": in-flight runs aren't the revoke's answer).
+  - Reject sheet: title `Reject the proposed grant`, body "Nightly planner won't act under this grant. To try again,
+    propose a new grant.", commit `Reject`; a reason is required ("Give a reason first.", A7), the 422's field
+    message under the field.
+  - Narrow result (the answer's grant): "Narrowed. Nightly planner can now plan and submit, planning up to 48h 00m
+    ahead, 40 contacts per plan, 2 at once, until 12-19 06:40Z." (counts through plural()).
+  - Narrow fields: hint "Now <value>. Choose the same or less."; larger "That's more than the grant allows now. To
+    widen it, propose a new grant."; no actions "Keep at least one."; not a whole number "Enter a whole number above
+    0."
+  - `automation_grant_not_proposed` while `decided_by` is a bare id: the decider isn't named (U25): "This grant was
+    already approved at 11-19 06:52Z, so your approval wasn't recorded. Reload to see it." (U95, as the named form); when the id is the viewer's, "You already approved this
+    grant at …". With `{id, name}`, U105's named form.
+  - Reject on a grant no longer proposed: "Not rejected: this grant was already approved, so nothing changed. Reload
+    to see it." (likewise expired and withdrawn).
+  - `grant_changed` on Approve: "Not approved: this grant changed after you opened it. Your approval wasn't
+    recorded. Reload to see it."; Narrow or Revoke on a grant no longer active: "Not narrowed: this grant isn't active
+    any more, so nothing changed. Reload to see it." / "Not revoked: this grant isn't active any more, so nothing
+    changed. Reload to see it."; an unknown narrow code: "Not narrowed: Cadence
+    refused this change, so nothing changed." with the code in Technical details.
+  - A proposer with no name: the clause drops ("Proposed at 11-19 06:40Z · decide by …").
 - **Widening** (more actions, more services, longer validity) is a new proposal, worded as the sheet above.
 - **Audit** (who and when as one event, U29): "Proposed a grant for Nightly planner", "Granted Nightly planner
   automation (no approval needed under this mission's setting)" for a grant that takes effect at once, "Approved Mira K.'s grant for
