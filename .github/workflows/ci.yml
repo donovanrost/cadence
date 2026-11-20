@@ -505,32 +505,10 @@ jobs:
         with:
           name: browser-assets
           path: apps/cadence_web/priv/static
-      # devops on #624: --with-deps ran apt for 7.5 min on two shards. The ubuntu-24.04 image has the
-      # system libraries and Google Chrome (the specs' chrome channel), so cache Playwright's own
-      # browsers and fall back to the full install only if the image's Chrome is missing.
-      - name: Playwright's version (the browser cache key)
-        id: pwversion
-        working-directory: frontend/apps/console
-        run: echo "version=$(node -p 'require("@playwright/test/package.json").version')" >> "$GITHUB_OUTPUT"
-      - name: Restore Playwright's browsers
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ms-playwright
-          key: ms-playwright-${{ runner.os }}-${{ steps.pwversion.outputs.version }}
-      - name: Install Playwright's Chromium (the image's Chrome serves the chrome channel)
+      # Federation browser's install line, as is (lead on #624: one proven pattern, 33-40 s there;
+      # if apt mirror delays recur, devops proposes one cached pattern for both jobs).
+      - run: corepack pnpm exec playwright install --with-deps chromium chrome
         working-directory: frontend
-        run: |
-          corepack pnpm exec playwright install chromium
-          if ! command -v google-chrome >/dev/null; then
-            echo "::warning::no Google Chrome on the image; installing it with its system packages"
-            corepack pnpm exec playwright install --with-deps chrome
-          fi
-      - name: Save Playwright's browsers
-        if: ${{ github.event_name == 'push' && matrix.shard == 1 }}
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ms-playwright
-          key: ms-playwright-${{ runner.os }}-${{ steps.pwversion.outputs.version }}
       - name: Compile the app and the simulator (MIX_ENV=dev)
         run: |
           (cd apps/cadence_web && mix compile)
