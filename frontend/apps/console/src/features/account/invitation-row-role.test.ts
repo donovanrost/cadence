@@ -26,8 +26,9 @@ const read = decode(myInvitationsReader, {
   ],
 });
 if (!read.ok) throw read.error;
-const invitation: MyInvitation | undefined = read.value.invitations[0];
-if (!invitation) throw new Error("fixture");
+const first = read.value.invitations[0];
+if (!first) throw new Error("fixture");
+const invitation: MyInvitation = first;
 
 async function decline() {
   const w = mount(InvitationRow, { props: { invitation } });

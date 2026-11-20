@@ -16,7 +16,10 @@ describe("ApCallout role", () => {
   });
 
   it("is no live region at all with role none (#276: a countdown said elsewhere)", () => {
-    const w = mount(ApCallout, { props: { tone: "caution", role: "none" }, slots: { default: "x" } });
+    const w = mount(ApCallout, {
+      props: { tone: "caution", role: "none" },
+      slots: { default: "x" },
+    });
     expect(w.attributes("role")).toBeUndefined();
   });
 

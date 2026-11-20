@@ -2,7 +2,7 @@
 import { computed, ref } from "vue";
 import { useRemoteQuery, type ApiError } from "@/api";
 import { canAdministerOrganization, TakeoverHeader, useMissionScope, useSession } from "@/shell";
-import { ApButton, ApCallout, ApPanel, ApRemote, ApStationBar, outcomeRole, plural } from "@/ui";
+import { ApButton, ApCallout, ApPanel, ApRemote, ApStationBar, plural } from "@/ui";
 import {
   DraftGantt,
   useBookingStopped,
@@ -21,6 +21,7 @@ import {
 } from "@/features/scheduling/index.ts";
 import ChangesPanel from "./ChangesPanel.vue";
 import { replanErrorText } from "./errors.ts";
+import ReplanNotices from "./ReplanNotices.vue";
 import ReplanWindowMeta from "./ReplanWindowMeta.vue";
 import { noneLeftLine } from "./windowMeta.ts";
 import { applyWords } from "./applyWords.ts";
@@ -374,12 +375,7 @@ async function onApply(acks: Acknowledgement[], note?: string) {
           @retry="lost.refetch"
         />
       </ApPanel>
-      <ApCallout v-if="actionError" tone="caution" role="alert">{{
-        replanErrorText(actionError)
-      }}</ApCallout>
-      <ApCallout v-if="applied" :tone="applied.tone" :role="outcomeRole(applied.tone)">{{
-        applied.text
-      }}</ApCallout>
+      <ReplanNotices :error="actionError && replanErrorText(actionError)" :applied="applied" />
       <footer v-if="!proposal" class="flex flex-none justify-end border-t border-hairline pt-3">
         <ApButton
           v-if="!runId && canPropose"

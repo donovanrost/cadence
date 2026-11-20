@@ -14,10 +14,15 @@ const props = defineProps<{
   tone?: "crit" | "caution" | "info" | undefined;
 }>();
 const tone = () => props.tone ?? (props.outcome.changed === null ? "caution" : "crit");
+/**
+ * a11y B6 (#276, ux): a refusal of the person's act is an alert whatever the tone; an outcome we
+ * can't be sure of keeps the kit's default for its tone.
+ */
+const role = () => (props.outcome.changed === null ? undefined : "alert");
 </script>
 
 <template>
-  <ApCallout :tone="tone()" role="alert">
+  <ApCallout :tone="tone()" :role="role()">
     {{ outcome.sentence }}<template v-if="$slots.default">{{ " " }}<slot /></template>
     <ul v-if="outcome.uses?.length" class="m-0 my-1 ps-5">
       <li v-for="line in outcome.uses" :key="line.label">
