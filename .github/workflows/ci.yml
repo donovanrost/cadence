@@ -480,6 +480,8 @@ jobs:
       PORT: "4402"
       CADENCE_ADMIN_EMAIL: ci-admin@example.invalid
       CADENCE_ADMIN_DISPLAY_NAME: CI Administrator
+      # No dev code reloader or asset watchers on this server (config/dev.exs; probation flake #1).
+      CADENCE_CI_SERVER: "1"
       # The demo seed and planning act as this user (default admin@example.com): the CI admin.
       EARENDIL_DEMO_EMAIL: ci-admin@example.invalid
       BASE_URL: http://127.0.0.1:4402
