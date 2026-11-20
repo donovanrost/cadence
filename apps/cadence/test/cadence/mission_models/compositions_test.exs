@@ -8,6 +8,7 @@ defmodule Cadence.MissionModels.CompositionsTest do
 
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Catalog.MissionModel.Compiler
+  alias Cadence.CompositionFixtures
   alias Cadence.MissionModels
 
   alias Cadence.MissionModels.{
@@ -228,7 +229,7 @@ defmodule Cadence.MissionModels.CompositionsTest do
     end
 
     test "two compiler versions of one layer: each its own link, each approved on its own", c do
-      old = copy_revision!(c, "1")
+      old = CompositionFixtures.copy_revision!(c, "1")
       lift_and_clear!()
 
       CompositionBackfill.run(Repo)
@@ -247,8 +248,8 @@ defmodule Cadence.MissionModels.CompositionsTest do
 
       # Approving the old version's revision doesn't carry forward: the effective revision stays
       # the current version's, and its own status is untouched.
-      set_status!([c.revision_id, old], "candidate")
-      approve!(old)
+      CompositionFixtures.set_status!([c.revision_id, old], "candidate")
+      CompositionFixtures.approve!(old)
       {:ok, current} = MissionModels.fetch_revision(c.org, c.mid, c.revision_id)
       refute current.status in [:approved, "approved"]
       assert {:ok, revision_id} = Compositions.effective_revision(c.org, c.mid, id, nil)
@@ -256,7 +257,7 @@ defmodule Cadence.MissionModels.CompositionsTest do
     end
 
     test "a collision at one composition and compiler version raises; nothing is chosen", c do
-      _same_version = copy_revision!(c, Compiler.compiler_version())
+      _same_version = CompositionFixtures.copy_revision!(c, Compiler.compiler_version())
       lift_and_clear!()
 
       assert_raise RuntimeError, ~r/refusing to choose one/, fn ->
@@ -266,7 +267,7 @@ defmodule Cadence.MissionModels.CompositionsTest do
 
     test "an approved revision with a blocking diagnostic raises", c do
       lift_and_clear!()
-      approve!(c.revision_id)
+      CompositionFixtures.approve!(c.revision_id)
 
       Repo.query!(
         """
@@ -283,7 +284,7 @@ defmodule Cadence.MissionModels.CompositionsTest do
 
     test "guard!: an approved, catalog-named revision with no link raises, naming it", c do
       lift_and_clear!()
-      approve!(c.revision_id)
+      CompositionFixtures.approve!(c.revision_id)
 
       assert_raise RuntimeError, ~r/#{Regex.escape(c.revision_id)}/, fn ->
         CompositionBackfill.guard!(Repo)
@@ -293,7 +294,7 @@ defmodule Cadence.MissionModels.CompositionsTest do
     test "guard: every approved revision ends with a composition naming it", c do
       lift_and_clear!()
 
-      approve!(c.revision_id)
+      CompositionFixtures.approve!(c.revision_id)
       CompositionBackfill.run(Repo)
 
       for [revision_id, org, mission] <-
@@ -345,55 +346,4 @@ defmodule Cadence.MissionModels.CompositionsTest do
   end
 
   defp count(schema), do: Repo.aggregate(schema, :count)
-
-  defp approve!(revision_id), do: set_status!([revision_id], "approved")
-
-  defp set_status!(revision_ids, status),
-    do:
-      Repo.query!(
-        "UPDATE mission_model_revisions SET status = $2 WHERE revision_id = ANY($1)",
-        [revision_ids, status]
-      )
-
-  # A copy of the fixture's revision under another id and compiler version, with its layers and a
-  # catalog revision naming it: as if an older (or a rival) compiler had made it.
-  defp copy_revision!(c, version) do
-    new_id = "mission_model_revision:copy-#{System.unique_integer([:positive])}"
-
-    copy = fn table, key, changes ->
-      Repo.query!(
-        "INSERT INTO #{table} SELECT (jsonb_populate_record(NULL::#{table}, " <>
-          "to_jsonb(t) || $2::jsonb)).* FROM #{table} t WHERE t.#{key} = $1",
-        [c.revision_id, changes]
-      )
-    end
-
-    copy.("mission_model_revisions", "revision_id", %{
-      "revision_id" => new_id,
-      "compiler_version" => version,
-      "content_sha256" => Base.encode16(:crypto.hash(:sha256, new_id), case: :lower)
-    })
-
-    copy.("mission_model_revision_layers", "revision_id", %{"revision_id" => new_id})
-
-    run_id = "catalog_import_run:copy-#{new_id}"
-
-    Repo.query!(
-      "INSERT INTO catalog_import_runs SELECT (jsonb_populate_record(NULL::catalog_import_runs, " <>
-        "to_jsonb(t) || jsonb_build_object('import_run_id', $2::text))).* " <>
-        "FROM catalog_import_runs t WHERE t.import_run_id = $1",
-      [c.catalog.import_run_id, run_id]
-    )
-
-    Repo.query!(
-      "INSERT INTO catalog_revisions SELECT (jsonb_populate_record(NULL::catalog_revisions, " <>
-        "to_jsonb(t) || jsonb_build_object('catalog_revision_id', $2::text, " <>
-        "'mission_model_revision_id', $3::text, 'revision_number', t.revision_number + 1000, " <>
-        "'revision_label', t.revision_label || ' (copy)', 'import_run_id', $4::text))).* " <>
-        "FROM catalog_revisions t WHERE t.catalog_revision_id = $1",
-      [c.catalog.catalog_revision_id, "catalog_revision:copy-#{new_id}", new_id, run_id]
-    )
-
-    new_id
-  end
 end
