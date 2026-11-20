@@ -2343,7 +2343,7 @@ change set like any override. There's no separate routes editor.
     - **K3's submit refused, per code** (#310, #552; ca-ux 11-20, mms-ux's follow-up). Each line opens by the act the
       button named (`Apply as r5` "Not applied:", `Request review` "Not sent for review:"), says "so nothing changed",
       then what to do. Never the server's text as the line, and never a mechanical rewrite of the older sentences:
-      - `change_set_changed`: "Not applied: someone changed the staged set while you were looking, so nothing
+      - `change_set_changed`: "Not applied: someone changed the change set while you were looking, so nothing
         changed. It's been reloaded; check it, then apply again." / "Not sent for review: … It's been reloaded;
         check it, then send it for review again."
       - `activation_policy_changed`: "Not applied (Not sent for review): the mission's approval setting changed after
@@ -2369,8 +2369,8 @@ change set like any override. There's no separate routes editor.
       - Codes worded elsewhere keep their lines: U82's in-use, U63/U65, the conversion refusal, `preview_failed`
         and `packet_definition_version_taken` above.
     - **K3's Apply, disabled** (A6): a NO-GO names what stops it, "Can't apply yet: <the NO-GO item's line, as the
-      checks word it>". Without the apply capability (unreachable for people today: stage and apply both need
-      operate_mission; defensive): "You can't apply changes on EARENDIL, so someone who can operate it applies
+      checks word it>"; when the button is `Request review`, "Can't send for review yet: <the same line>" (mms-ux). Without the apply capability (unreachable for people today: stage and apply both need
+      operate_mission; defensive): "You can't apply changes on Earendil, so someone who can operate it applies
       them." No role word (U104). The server's 403 is the backstop.
     - Read fields (api v3.2, final): the button is `Stage batch <next_batch> of <batches_total>`; progress is
       routes_converted of routes_total. No per-craft "in batch 3" line. An author with no name: drop the name
