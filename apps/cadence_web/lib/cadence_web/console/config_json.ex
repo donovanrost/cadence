@@ -10,7 +10,7 @@ defmodule CadenceWeb.Console.ConfigJSON do
 
   alias Cadence.Reads.ModelApplyRefusals
   alias Cadence.Reads.TelemetryApplyRefusals
-  alias CadenceWeb.Console.Problem
+  alias CadenceWeb.Console.{Problem, RestageWords}
 
   @status %{
     frozen_in_review: 409,
@@ -263,6 +263,17 @@ defmodule CadenceWeb.Console.ConfigJSON do
   # #534 (api-ops' condition 3): another generation saved a packet definition under the version
   # this one resolved, at the same moment. Nothing was applied; doing it again re-resolves. mms-ux's
   # apply line; the console words a refused "Request review" itself, since it knows the act.
+  # D3 (#544; U109): the version the set staged isn't the one to use any more; nothing applied.
+  def error(conn, {:restage_needed, [_ | _] = entries}),
+    do:
+      respond_raw(
+        conn,
+        409,
+        "restage_needed",
+        RestageWords.message(entries, act(conn)),
+        %{entries: encode(entries)}
+      )
+
   def error(conn, {:packet_definition_content_changed, packet_definition_id, version}),
     do:
       respond_raw(
@@ -324,6 +335,14 @@ defmodule CadenceWeb.Console.ConfigJSON do
 
   # Only an approve reaches these two from review: send back runs no checks.
   defp approving?(conn), do: conn.private[:phoenix_action] == :review
+
+  defp act(conn) do
+    cond do
+      approving?(conn) -> :approve
+      conn.assigns[:submit_act] == :request_review -> :request_review
+      true -> :apply
+    end
+  end
 
   defp respond_by_act(conn, tag, details),
     do:
