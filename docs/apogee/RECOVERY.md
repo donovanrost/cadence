@@ -35,6 +35,30 @@ Non-agent qa panes in `w0R` (the dev stack): `qa-server` (`:4011`), `qa-console-
 
 pane ids will change if herdr recreates panes; update `docs/apogee/ROSTER.md` after recovery.
 
+## Laptop 2 sessions (donovans-macbook-pro-1; lead, 2026-11-20 05:3xZ)
+
+The six squad agents on laptop 2 run as hc terminals in the space **'Laptop 2 squads'**. Each
+worktree is under `~/projects/cadence/worktrees/` on laptop 2. The session ids below are each
+worktree's newest Claude transcript, read from laptop 2's `~/.claude/projects/` at 05:3xZ. Each
+agent confirms its own id in its handoff note.
+
+| Name | Squad | hc terminal (11-20) | Worktree (cwd, on laptop 2) | Claude session id |
+|---|---|---|---|---|
+| ca-security | Commanding & Approvals (security lead) | `donovans-macbook-pro-1/t9` | `~/projects/cadence/worktrees/ca-security` | `06daf23d-4f99-4629-890e-473eec7d232a` |
+| ca-ux | Commanding & Approvals | `donovans-macbook-pro-1/t10` | `~/projects/cadence/worktrees/ca-ux` | `a487bea0-4b40-4d92-b650-f74d3252cad7` |
+| ca-engineer | Commanding & Approvals | `donovans-macbook-pro-1/t11` | `~/projects/cadence/worktrees/ca-engineer` | `e2110309-ecdb-438a-b65c-637421f22d08` |
+| mms-security | Mission Model & Spacecraft | `donovans-macbook-pro-1/t12` | `~/projects/cadence/worktrees/mms-security` | `a7693b6b-96ad-4e80-ab07-8409d2602df2` |
+| mms-ux | Mission Model & Spacecraft | `donovans-macbook-pro-1/t13` | `~/projects/cadence/worktrees/mms-ux` | `f915a53d-27de-45c5-9205-9c0ff13ae4eb` |
+| mms-engineer | Mission Model & Spacecraft | `donovans-macbook-pro-1/t14` | `~/projects/cadence/worktrees/mms-engineer` | `e31a0024-4b0e-4169-9881-af5a3c219eb6` |
+
+**Resume after a laptop-2 reboot (director, 11-20):**
+1. On laptop 2, open one hc terminal per agent in the 'Laptop 2 squads' space, named as above.
+2. In each, `cd` to the worktree and run `claude --resume <session-id> --permission-mode auto`.
+3. Each agent first reads its own handoff note, then the hc messages it missed.
+4. devops restarts laptop 2's own Postgres and gate, and the laptop-1 owners' laptop-2 worktree runs (domain, fe-ops, api, api-ops) re-run anything that was interrupted. Nothing on laptop 2 is part of the laptop-1 dev stack, so qa's stack is unaffected.
+
+Terminal numbers can change when hc recreates terminals; update this table after recovery.
+
 ## Dev stack restart order (qa)
 
 Stack shut down cleanly 21:13-21:15Z (qa): `:4011` stopped gracefully (drain: contacts 0, journals
