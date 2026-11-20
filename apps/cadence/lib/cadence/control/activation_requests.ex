@@ -174,12 +174,10 @@ defmodule Cadence.Control.ActivationRequests do
     end
   end
 
+  # #275: the kind-prefixed code, as every other kind's (U94; requester only: an author gets
+  # #236's activation_approver_authored_content). #280 (U100): via_service is always sent.
   defp decision_result({:error, :activation_self_approval_forbidden}),
-    do: {:error, :self_approval_forbidden}
-
-  # #280 (U100): through a service identity the approver is accountable for.
-  defp decision_result({:error, {:activation_self_approval_forbidden, details}}),
-    do: {:error, {:self_approval_forbidden, details}}
+    do: {:error, {:activation_self_approval_forbidden, %{via_service: nil}}}
 
   defp decision_result({:error, :activation_request_not_pending_approval}),
     do: {:error, {:not_pending, nil}}

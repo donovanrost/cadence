@@ -118,8 +118,9 @@ Errors:
 - `403 not_requester` (withdraw): "Only the person who requested it can withdraw it."
 - `409 not_pending {state}`: already decided (`state` is the request's state, or null when it
   changed under you).
-- `403 self_approval_forbidden`, `details: {via_service: {id, name} | null}`: you requested it, or
-  (#280) a service identity you're accountable for requested it. `via_service` names that service
+- `403 activation_self_approval_forbidden`, `details: {via_service: {id, name} | null}` (#275: was
+  `self_approval_forbidden`; no `details.rule`): you requested it, or (#280) a service identity
+  you're accountable for requested it. `via_service` names that service
   (null when it was you). Accountable means you issued it, rotated its key, or were recorded as
   accountable by an org admin.
 - `403 activation_approver_authored_content` (#236): you saved a version of a reviewed spacecraft's
