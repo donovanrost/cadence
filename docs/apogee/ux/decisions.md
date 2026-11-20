@@ -4173,12 +4173,13 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
   - Settled in the build (#565, fe-ops; agreed by ca-ux and ca-engineer):
     - A suspended grant whose `suspension` is null: "Suspended. A second org admin resumes it." ("An org admin…" under
       "Applies without approval"), never the tag alone.
-    - Up front, `policy_changed` on a suspended grant (the setting changed after the suspension): "The mission's
-      approval setting changed after this grant was suspended, so who can resume it may have changed. Reload to see
-      it." (a known reason, so no code shown), and never the viewer-blaming "You can't resume…".
+    - Up front, `policy_changed` on a suspended grant (the setting changed after the suspension): "The approval setting
+      for this mission changed after this grant was suspended, so who can resume it may have changed. Reload to see
+      it." (#509's neutral form; the reason doesn't say which level) (a known reason, so no code shown), and never the viewer-blaming "You can't resume…".
     - An unknown resume reason's code goes in Technical details in the row's State cell (a menu item can't hold it).
       Resume's busy reason: "Resuming…". After a separation refusal (approved, proposed, accountable, authors
-      unknown, capability), Resume stays off until a reload, including on reopen; after `grant_changed`, a duplicate
+      unknown, capability), Resume stays off until a reload, including on reopen, with the A6 reason "Resume was refused.
+      Reload to see the grant as it is now." (ux); after `grant_changed`, a duplicate
       or a failed request it stays on, since trying again (after a reload) is the fix.
     - Narrowing a suspended grant (allowed by `viewer_can_narrow`): "Narrowed. Once it's resumed, Nightly planner can
       plan and submit, planning up to 48h 00m ahead, 40 contacts per plan, 2 at once, until 12-19 06:40Z." An active
