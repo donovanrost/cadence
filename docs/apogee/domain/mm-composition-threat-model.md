@@ -48,7 +48,8 @@ except where it writes authored layers (CB-6); phases 5 and 6.
 ## 3. Actors and trust boundaries
 
 - **Importers:** a person, a service identity (counted as its accountable people, #280), or Cadence's
-  seed actor (counts no one, MM-2). An import is untrusted input: its declarations and mount
+  system actor, which counts the person who ran it (`run_by`, #513/#516); a system import from
+  before #513 counts no one (MM-2). An import is untrusted input: its declarations and mount
   requests are parsed, never executed.
 - **Authors of authored layers:** through change sets in the monitoring lane, with four-eyes (#92 (a),
   #280's accountability).
