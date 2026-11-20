@@ -16,6 +16,7 @@ import {
   decisionOptions,
   flaggedTargets,
   membersChangedLine,
+  membersChangedUpFront,
   noGoAfter,
 } from "./decision.ts";
 
@@ -44,8 +45,12 @@ const options = computed(() => decisionOptions(props.group, flagged.value));
 const acks = ref<HoldAcks>({});
 const holds = computed(() => reviewHolds(props.review, props.group.events));
 const goKind = computed(() => choice.value === "go" || choice.value === "go_excluding");
-/** U92: a GO refused because the group changed; GO stays off with it, NO-GO stays open. */
-const membersChanged = ref<string | null>(null);
+/**
+ * U92: GO stays off once refused because the group changed, or up front when the read already
+ * says so (#120); one path either way. NO-GO stays open.
+ */
+const refusedChanged = ref<string | null>(null);
+const membersChanged = computed(() => refusedChanged.value ?? membersChangedUpFront(props.group));
 const blocked = computed(() => {
   const who = cannotDecide(props.group, props.viewerId, props.canApprove, props.nameOf);
   if (who) return who;
@@ -85,7 +90,7 @@ async function commit({ value, note }: { value: DecisionKind; note: string }) {
       const e = result.error;
       if (isError(e, "command_group_members_changed")) {
         const line = membersChangedLine(e.kind === "conflict" ? e.details : undefined);
-        membersChanged.value = line;
+        refusedChanged.value = line;
         outcome.value = { tone: "crit", text: line, reload: false };
         return;
       }
