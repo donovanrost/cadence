@@ -417,8 +417,8 @@ defmodule Cadence.Configuration.Submission do
   #   sending byte-identical submits both get 200, which misattributes nothing;
   # - a submit that applied: the set's revision is the one with this request's revision id;
   # - a send back: this request's review row (its id), sent_back, by this actor, and the set open;
-  # - an approve: this request's review row, approved, by this actor, and the set applied (the
-  #   revision's applied_by is the submitter, so the review row is the proof).
+  # - an approve: this request's review row, approved, by this actor, and the set applied (since
+  #   #117 step 2 the revision's applied_by is this reviewer too; the review row is the proof).
   # Anything else is `apply_interrupted` (503, changes.md).
   @doc false
   @spec landed(ChangeSetRow.t(), map()) :: {:ok, map()} | {:error, :apply_interrupted}
