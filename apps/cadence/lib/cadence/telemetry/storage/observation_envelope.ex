@@ -229,9 +229,9 @@ defmodule Cadence.Telemetry.Storage.ObservationEnvelope do
   # stream position; (c) on-board time with no count is unchanged. The tag keeps (a) and (b) from
   # ever colliding, and an envelope without a ref digests exactly as v1 did.
   # The version slot travels with the ref, and the version tells the truth: 2 only when a ref is in
-  # the digest. Both are stored on the row (metadata_json / provenance_json) so a v2 identity can
-  # be explained and recomputed. The ref and time source live on the sample (the envelope stays
-  # within 31 fields).
+  # the digest. Both are stored on the row (metadata_json / the identity_ref column, DECISIONS
+  # #103) so a v2 identity can be explained and recomputed. The ref and time source live on the
+  # sample (the envelope stays within 31 fields).
   defp identity_ref(%Sample{frame_ref: {:seq, apid, count}})
        when is_integer(apid) and is_integer(count),
        do: {:seq, apid, count}

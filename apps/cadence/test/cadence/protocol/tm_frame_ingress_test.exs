@@ -157,6 +157,52 @@ defmodule Cadence.Protocol.TMFrameIngressTest do
     refute Enum.map(plain.packet_records, & &1.packet_id) == ids
   end
 
+  # DECISIONS #99: monitoring effects are keyed on the frame that completed the packet. The key must
+  # not depend on how a replay batches the journal, including a frame split across two evidences
+  # and its receipt time (the record holding its LAST byte), and must stay out of what is archived.
+  test "a packet's journal frame is the same however the journal is batched (#99)" do
+    t0 = ~U[2026-11-17 01:00:00.000000Z]
+    bytes = Enum.map_join(0..7, &frame(100 + &1))
+    # Socket reads of 10 bytes, so frames (14 bytes) straddle records and the split below.
+    records =
+      for start <- 0..(byte_size(bytes) - 1)//10,
+          do: {start, DateTime.add(t0, start, :millisecond)}
+
+    whole = records_evidence(bytes, 0, records)
+    {:ok, once, <<>>, _pipeline, _continuity} = process(whole, initial_state())
+
+    {head, tail} = String.split_at(bytes, 50)
+    {head_records, tail_records} = Enum.split_with(records, fn {start, _time} -> start < 50 end)
+
+    {:ok, a, rest, pipeline, continuity} =
+      process(records_evidence(head, 0, head_records), initial_state())
+
+    {:ok, b, <<>>, _pipeline, _continuity} =
+      process(records_evidence(tail, 50, tail_records), {pipeline, continuity, rest})
+
+    frames = Enum.map(once.packet_records, & &1.journal_frame)
+    assert frames == Enum.map(a.packet_records ++ b.packet_records, & &1.journal_frame)
+
+    expected =
+      for k <- 0..7 do
+        last_byte = k * 14 + 13
+        {"j", k * 14, DateTime.add(t0, div(last_byte, 10) * 10, :millisecond)}
+      end
+
+    assert frames == expected
+
+    # Not archived: neither the frame position nor its length reaches the packet's provenance.
+    refute Enum.any?(once.packet_records, fn packet ->
+             Map.has_key?(packet.provenance.tm.metadata, :raw_frame_offset_bytes) or
+               Map.has_key?(packet.provenance.tm.metadata, :raw_frame_length_bytes)
+           end)
+
+    # Without a journal stream there is no frame key.
+    unjournaled = %{whole | metadata: %{frame_size: 14, ocf_length: 0}}
+    {:ok, plain, _rest, _pipeline, _continuity} = process(unjournaled, initial_state())
+    assert Enum.all?(plain.packet_records, &is_nil(&1.journal_frame))
+  end
+
   # director 11-15: the processing ack ran past a partial frame or packet held in memory.
   describe "resume_offset" do
     test "an evidence ending mid-frame resumes at that frame's start" do
@@ -217,6 +263,20 @@ defmodule Cadence.Protocol.TMFrameIngressTest do
       protocol_family: :tm,
       raw: bytes,
       receipt_time: ~U[2026-11-14 01:35:54Z],
+      metadata:
+        Map.merge(%{frame_size: 14, ocf_length: 0}, metadata("j", "s", offset, byte_size(bytes)))
+    })
+  end
+
+  defp records_evidence(bytes, offset, [{_start, first} | _] = records) do
+    RawEvidence.new(%{
+      evidence_id: "evidence-#{offset}",
+      mission_id: "mission",
+      source_endpoint_ref: "endpoint",
+      protocol_family: :tm,
+      raw: bytes,
+      receipt_time: first,
+      receipt_times: records,
       metadata:
         Map.merge(%{frame_size: 14, ocf_length: 0}, metadata("j", "s", offset, byte_size(bytes)))
     })

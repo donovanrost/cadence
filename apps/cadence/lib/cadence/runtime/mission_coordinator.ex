@@ -218,7 +218,9 @@ defmodule Cadence.Runtime.MissionCoordinator do
        pending_application: nil,
        max_partition_requests: Keyword.get(opts, :max_partition_requests, 32),
        partition_backoff: %{},
-       owner_monitors: %{}
+       owner_monitors: %{},
+       # An owner up this long before it fails starts its partition's backoff over at 250 ms.
+       partition_stable_ms: Keyword.get(opts, :partition_stable_ms, 30_000)
      }, {:continue, :recover_admission}}
   end
 
@@ -394,8 +396,9 @@ defmodule Cadence.Runtime.MissionCoordinator do
   # off, so the next frame can't start (and fail) another straight away.
   def handle_info({:DOWN, ref, :process, pid, reason}, state)
       when is_map_key(state.owner_monitors, pid) do
-    {{^ref, key}, monitors} = Map.pop(state.owner_monitors, pid)
-    {:noreply, owner_down(%{state | owner_monitors: monitors}, key, reason)}
+    {{^ref, key, started_ms}, monitors} = Map.pop(state.owner_monitors, pid)
+    uptime_ms = System.monotonic_time(:millisecond) - started_ms
+    {:noreply, owner_down(%{state | owner_monitors: monitors}, key, reason, uptime_ms)}
   end
 
   @impl true
@@ -601,20 +604,33 @@ defmodule Cadence.Runtime.MissionCoordinator do
 
     if is_map_key(monitors, pid),
       do: state,
-      else: Map.put(state, :owner_monitors, Map.put(monitors, pid, {Process.monitor(pid), key}))
+      else:
+        Map.put(
+          state,
+          :owner_monitors,
+          Map.put(monitors, pid, {Process.monitor(pid), key, System.monotonic_time(:millisecond)})
+        )
   end
 
-  defp owner_down(state, key, {:shutdown, {:partition_initialization_failed, reason}}) do
+  # A partition that failed to initialize, or tripped on a replay-id conflict (DECISIONS #99) and
+  # stopped with a shutdown so its supervisor doesn't restart it, is backed off; the next request
+  # after the delay starts it again. The delay doubles (to 30 s) while failures recur; only an owner
+  # that ran `partition_stable_ms` before failing starts it over at 250 ms. Uptime, not a reply:
+  # an owner answers before its timers run, and clustered ingest doesn't reply through here.
+  defp owner_down(state, key, {:shutdown, {kind, reason}}, uptime_ms)
+       when kind in [:partition_initialization_failed, :replay_id_tripped] do
+    backoff = Map.get(state, :partition_backoff, %{})
+
+    backoff =
+      if uptime_ms >= Map.get(state, :partition_stable_ms, 30_000),
+        do: Map.delete(backoff, key),
+        else: backoff
+
     {backoff, delay} =
-      PartitionBackoff.failed(
-        Map.get(state, :partition_backoff, %{}),
-        key,
-        reason,
-        System.monotonic_time(:millisecond)
-      )
+      PartitionBackoff.failed(backoff, key, reason, System.monotonic_time(:millisecond))
 
     Logger.warning(
-      "Partition #{inspect(PartitionKey.identifier(key))} failed to initialize; " <>
+      "Partition #{inspect(PartitionKey.identifier(key))} #{down_words(kind)}; " <>
         "not starting it again for #{delay}ms: #{inspect(reason, limit: 10, printable_limit: 300)}",
       mission_id: state.mission_id
     )
@@ -622,7 +638,12 @@ defmodule Cadence.Runtime.MissionCoordinator do
     Map.put(state, :partition_backoff, backoff)
   end
 
-  defp owner_down(state, _key, _reason), do: state
+  defp owner_down(state, _key, _reason, _uptime_ms), do: state
+
+  defp down_words(:partition_initialization_failed), do: "failed to initialize"
+
+  defp down_words(:replay_id_tripped),
+    do: "stopped on a replay-id conflict (MM_REPLAY_ID_CONFLICT)"
 
   defp start_partition_owner(
          process_namespace,
