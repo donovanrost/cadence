@@ -15,6 +15,8 @@ const props = defineProps<{
   /** Fields that don't read as numbers: Save waits for them (A6). */
   invalid: number;
   discardQuestion: string;
+  /** The craft's profile, for Open profile on spacecraft_catalog_set_by_profile (U94). */
+  profileId: string | null;
 }>();
 const emit = defineEmits<{ save: []; discard: [] }>();
 const confirming = ref(false);
@@ -34,7 +36,11 @@ function discard() {
         <summary class="ap-label cursor-pointer">Technical details</summary>
         <p class="m-0 mt-1 font-mono text-xs text-text-3">{{ failure.code }}</p>
       </details>
-      <!-- U94's Open profile waits for the snapshot to name the craft's profile (asked of api). -->
+      <template v-if="failure.openProfile && profileId" #action>
+        <ApButton size="compact" :to="{ name: 'setup.profile', params: { profileId } }"
+          >Open profile</ApButton
+        >
+      </template>
     </ApCallout>
     <div v-if="dirty" class="flex flex-wrap items-center gap-2" data-draft-bar>
       <ApButton

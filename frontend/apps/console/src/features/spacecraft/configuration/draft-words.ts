@@ -70,6 +70,8 @@ export type SaveRefusal = Readonly<{
   text: string;
   /** A code the console doesn't word, for Technical details (U20). */
   code?: string;
+  /** U94: `Open profile` (spacecraft_catalog_set_by_profile), when the snapshot names one. */
+  openProfile?: true;
   /** Server field errors by the document's field (U94: under their field). */
   fields: Readonly<Record<string, string>>;
 }>;
@@ -87,9 +89,12 @@ export function saveRefusal(
   const rev = catalogWord(s, doc.catalog_revision_id);
   const plain = (text: string) => ({ text, fields: {} });
   if (isError(e, "spacecraft_catalog_set_by_profile"))
-    return plain(
-      `Not saved: ${craft}'s profile sets its catalog revision. Change it on the profile, through Setup › Changes.`,
-    );
+    return {
+      ...plain(
+        `Not saved: ${craft}'s profile sets its catalog revision. Change it on the profile, through Setup › Changes.`,
+      ),
+      openProfile: true,
+    };
   if (isError(e, "spacecraft_packet_input_unavailable"))
     return plain(
       `Not saved: the packet source you chose isn't available to ${craft} any more. Choose another.`,

@@ -75,6 +75,9 @@ describe("the save words", () => {
 
   it("words U94's save refusals, the field errors under their fields, others by code", () => {
     const s = snap();
+    expect(
+      saveRefusal(conflict("spacecraft_catalog_set_by_profile"), s, s.document).openProfile,
+    ).toBe(true);
     expect(saveRefusal(conflict("spacecraft_catalog_set_by_profile"), s, s.document).text).toBe(
       "Not saved: EARENDIL-004's profile sets its catalog revision. Change it on the profile, through Setup › Changes.",
     );

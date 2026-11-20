@@ -56,8 +56,8 @@ const draft = useConfigurationDraft(
 /** Framing sizes that don't read as numbers (Save waits for them). */
 const invalid = ref(0);
 const errors = computed(() => draft.failure.value?.fields ?? {});
-/** #595a: who can change it; the server refuses anyone else (`forbidden`). */
-const editable = (s: ConfigurationSnapshot) => s.approval.can_request;
+/** #595a: who can save a draft (api's can_save; can_request until it ships). */
+const editable = (s: ConfigurationSnapshot) => s.approval.can_save ?? s.approval.can_request;
 
 // mms-ux (#595a): leaving with unsaved edits asks first; moving between this craft's tabs doesn't.
 const leaveDialog = ref<InstanceType<typeof ConfirmDialog> | null>(null);
@@ -194,6 +194,7 @@ const craftOptions = (s: ConfigurationSnapshot) =>
           :failure="draft.failure.value"
           :invalid="invalid"
           :discard-question="discardQuestion(snap(value))"
+          :profile-id="snap(value).profile?.id ?? null"
           @save="draft.save"
           @discard="draft.discard"
         />

@@ -107,7 +107,15 @@ export const snapshotReader = d.object({
     source: d.knownText(["organization", "inherited", "overridden", "enforced"] as const),
     can_request: d.boolean,
     can_review: d.boolean,
+    /** #595 (api): `:operate_mission`, the check a draft save makes. Optional until api ships it. */
+    can_save: d.optional(d.boolean),
   }),
+  /**
+   * #595 (api): the profile the craft inherits, for U94's `Open profile` on
+   * spacecraft_catalog_set_by_profile. Optional until api ships it.
+   */
+  // free-text: the profile's display name
+  profile: d.optional(d.nullable(d.object({ id: d.token, name: d.string }))),
   catalogs: d.array(
     d.object({
       id: d.token,
