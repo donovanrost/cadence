@@ -14,17 +14,18 @@ defmodule Cadence.MissionModels.RevisionDecisions do
     all (a seed's system actor, a legacy `%{}`) can be approved by any administrator; the approval
     records that (MM-2).
   - Approval needs a candidate (or already approved) revision whose four runtime plans are ready.
-  - Approval needs a catalog revision that names the revision
-    (`:mission_model_revision_not_in_catalog`, director 11-17, interim); rejecting doesn't.
+  - Approval needs a mission composition that names the revision (#542, E1; `CompositionApproval`),
+    refused as before with `:mission_model_revision_not_in_catalog`; rejecting doesn't. Importers
+    are the union across the composition's layers plus its composer, and the evidence names the
+    composition and each layer's id, mount and digest.
   """
 
   import Ecto.Query
 
   alias Cadence.Auth.{Policy, Scope}
-  alias Cadence.Catalog
   alias Cadence.Catalog.MissionModel.Revision
   alias Cadence.Governance.{Accountability, ActivationPolicy}
-  alias Cadence.MissionModels.{Comparison, RevisionRow, RuntimePlanRow}
+  alias Cadence.MissionModels.{Comparison, CompositionApproval, RevisionRow, RuntimePlanRow}
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Repo
 
@@ -58,10 +59,10 @@ defmodule Cadence.MissionModels.RevisionDecisions do
   def separation(organization_id, mission_id, revision_id, person_id)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(revision_id) do
     policy = ActivationPolicy.evidence(organization_id, mission_id)
-    importers = Catalog.model_importers(organization_id, mission_id, revision_id)
     # #280: importers as actors, services included (mms-engineer's review: a service import is
-    # still a recorded importer).
-    actors = Catalog.model_import_actors(organization_id, mission_id, revision_id)
+    # still a recorded importer). #542: across the composition's layers, plus its composer.
+    actors = CompositionApproval.importer_actors(organization_id, mission_id, revision_id)
+    importers = for {:user, id} <- actors, do: id
     checked = %{policy: policy, importers: importers, recorded: actors != []}
 
     if policy["separation_of_duties"] == true do
@@ -112,7 +113,8 @@ defmodule Cadence.MissionModels.RevisionDecisions do
     %{organization_id: organization_id, mission_id: mission_id, revision_id: revision_id} = row
 
     with :ok <- require_approvable(RevisionRow.to_domain(row)),
-         :ok <- Catalog.require_named_model_revision(organization_id, mission_id, revision_id),
+         {:ok, composition} <-
+           CompositionApproval.require(organization_id, mission_id, revision_id),
          :ok <- require_ready_plans(organization_id, mission_id, revision_id),
          {:ok, comparison} <- Comparison.fetch(organization_id, mission_id, comparison_report_id),
          :ok <- passed_for(comparison, revision_id),
@@ -124,6 +126,8 @@ defmodule Cadence.MissionModels.RevisionDecisions do
           "comparison_report_id" => comparison_report_id,
           "replay" => get_in(comparison, ["replay", "status"]),
           "importer_recorded" => recorded,
+          # #542 (M2): the combination approved, not only a revision id.
+          "composition" => CompositionApproval.evidence(composition),
           # Approved after it already ran (the pre-gate revisions, lead 11-15): the caller says so
           # (ModelApprovalGate.running?/3), and the audit tells it.
           "retroactive" => Keyword.get(opts, :retroactive, false) == true

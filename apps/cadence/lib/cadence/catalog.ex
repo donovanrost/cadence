@@ -336,6 +336,10 @@ defmodule Cadence.Catalog do
     to: ModelImporters,
     as: :actors
 
+  @doc "The separation actor a stored actor document counts as (`ModelImporters.actor_of/1`)."
+  @spec model_import_actor_of(map() | nil) :: {:user, binary()} | {:service, binary()} | nil
+  defdelegate model_import_actor_of(created_by), to: ModelImporters, as: :actor_of
+
   @doc "`:ok` when a catalog revision names the mission-model revision; see `ModelRevisionNaming`."
   defdelegate require_named_model_revision(
                 organization_id,

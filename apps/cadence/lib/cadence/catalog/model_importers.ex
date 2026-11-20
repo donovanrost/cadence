@@ -71,6 +71,15 @@ defmodule Cadence.Catalog.ModelImporters do
     (revisions ++ runs) |> Enum.reject(&is_nil/1) |> Enum.uniq()
   end
 
+  @doc """
+  The separation actor a stored actor document counts as, or nil when it counts no one: the rule
+  a catalog revision's `created_by` follows, so a mission composition's `created_by` (#542, the
+  composer joins separation) counts the same way. A system actor counts its `run_by` (#513), one
+  without counts no one (a migrated composition).
+  """
+  @spec actor_of(map() | nil) :: {:user, binary()} | {:service, binary()} | nil
+  def actor_of(created_by), do: revision_importer(created_by)
+
   defp revision_importer(created_by) do
     case JsonDocument.unwrap_value(created_by) do
       %{"actor_kind" => "service"} = actor -> service(actor)

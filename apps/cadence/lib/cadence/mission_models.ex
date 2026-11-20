@@ -9,7 +9,6 @@ defmodule Cadence.MissionModels do
   alias Ecto.Multi
 
   alias Cadence.Auth.Scope
-  alias Cadence.Catalog
   alias Cadence.Catalog.MissionModel.{Compiler, CompilerResult, Layer, Revision, RuntimePlan}
   alias Cadence.Management.Activations, as: ManagementActivations
 
@@ -65,6 +64,17 @@ defmodule Cadence.MissionModels do
       {:ok, result}
     end
   end
+
+  @doc """
+  The mission composition that names `revision_id` (#542), or
+  `{:error, :mission_model_revision_not_in_catalog}`: what approval, promotion requests and their
+  apply require of a revision (`CompositionApproval.require/3`).
+  """
+  @spec require_composition(binary(), binary(), binary()) ::
+          {:ok, map()} | {:error, :mission_model_revision_not_in_catalog}
+  defdelegate require_composition(organization_id, mission_id, revision_id),
+    to: Cadence.MissionModels.CompositionApproval,
+    as: :require
 
   @spec compose(binary(), binary(), [binary()], keyword()) ::
           {:ok, CompilerResult.t()} | {:error, term()}
@@ -222,7 +232,7 @@ defmodule Cadence.MissionModels do
 
     with {:ok, %Revision{status: :approved} = revision} <-
            fetch_revision(organization_id, mission_id, revision_id),
-         :ok <- Catalog.require_named_model_revision(organization_id, mission_id, revision_id),
+         {:ok, _composition} <- require_composition(organization_id, mission_id, revision_id),
          {:ok, plans} <- fetch_runtime_plans(organization_id, mission_id, revision_id),
          {:ok, comparison} <-
            Comparison.run(
