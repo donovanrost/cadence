@@ -4632,7 +4632,8 @@ agreed with ux 11-20.
       - failed: "Cadence couldn't make a version of it for this update, so 12 spacecraft on 2 profiles can't take a
         new configuration." `Try again` ("Try again: make a version of catalog rev 4", B7); the error in Technical
         details.
-      - not run: "Cadence hasn't made a version of it for this update yet, so …" `Make it now`.
+      - not run: "Cadence hasn't made a version of it for this update yet, so …" `Make it now` ("Make it now: make a
+        version of catalog rev 4", B7).
       - After pressing: the status "Cadence is making a version of catalog rev 4 for this update." Without the
         import right: no button, and the secondary ends "Someone who can import catalogs can start it." A status the
         console doesn't know: the not-run line with no button, the status in Technical details.
