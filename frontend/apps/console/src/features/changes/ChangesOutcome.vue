@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useRuntimeStatus } from "@/shell";
-import { ApButton, ApCallout, OutcomeCallout, plural } from "@/ui";
+import { ApButton, OutcomeCallout, plural } from "@/ui";
 import type { SubmitResult } from "./actions.ts";
 import { savedOnlyText } from "./nothingRunning.ts";
 import { configRuntime, outcomeRuntime, outcomeText } from "./runtime.ts";
@@ -44,14 +44,33 @@ const applied = computed(() => {
     runtimeStatus.value?.reason ?? null,
   );
 });
+/** #276 (ux, fe-setup): the person's own act said once (OutcomeCallout); computed, so one object per act. */
+const staged = computed(() =>
+  props.stagedNotice !== null && props.next !== null && !props.outcome
+    ? {
+        tone: "nominal" as const,
+        text: `${plural(props.stagedNotice, "spacecraft", "spacecraft")} staged. They're created when this change set is applied as r${props.next}.`,
+      }
+    : null,
+);
+const sent = computed(() =>
+  props.outcome?.state === "in_review"
+    ? {
+        tone: "info" as const,
+        text: "Sent for review. An org member who didn't stage any of these changes approves or sends it back.",
+      }
+    : props.outcome?.state === "open"
+      ? { tone: "info" as const, text: "Sent back to the authors with your comment." }
+      : null,
+);
 </script>
 
 <template>
-  <ApCallout v-if="stagedNotice !== null && next !== null && !outcome" tone="nominal">
-    {{ plural(stagedNotice, "spacecraft", "spacecraft") }} staged. They're created when this change
-    set is applied as <span class="font-mono">r{{ next }}</span
+  <OutcomeCallout v-if="staged" :outcome="staged">
+    {{ plural(stagedNotice ?? 0, "spacecraft", "spacecraft") }} staged. They're created when this
+    change set is applied as <span class="font-mono">r{{ next }}</span
     >.
-  </ApCallout>
+  </OutcomeCallout>
   <OutcomeCallout v-if="applied" data-changes-outcome :outcome="applied">
     <template #action
       ><ApButton size="compact" :to="{ name: 'setup.revisions' }"
@@ -59,10 +78,5 @@ const applied = computed(() => {
       ></template
     >
   </OutcomeCallout>
-  <ApCallout v-else-if="outcome?.state === 'in_review'" data-changes-outcome tone="info">
-    Sent for review. An org member who didn't stage any of these changes approves or sends it back.
-  </ApCallout>
-  <ApCallout v-else-if="outcome?.state === 'open'" data-changes-outcome tone="info">
-    Sent back to the authors with your comment.
-  </ApCallout>
+  <OutcomeCallout v-else-if="sent" data-changes-outcome :outcome="sent" />
 </template>
