@@ -4438,7 +4438,7 @@ agreed with ux 11-20.
   - Several: "composition 3" in a sentence, `Composition 3` where it stands alone (a cell, a heading), from
     `number`. With `number` null: "this composition" in a sentence, and where it stands alone, the Made of line alone.
     Never an id (U25). It's not a revision: no "rev", no "r".
-  - Beside it, where a single catalog revision shows today, the neutral tag `COMPOSED`.
+  - The neutral tag `COMPOSED` marks it only where it could pass for one catalog (see the profiles cell below).
 - **Made of** (its catalogs, in the server's order): "Made of: Bus catalog rev 4 · Payload catalog rev 2". Each
   catalog leads with its database's name (`catalog_revision.database.name`). The place it sits (the mount's last
   part, in parentheses) is added only when the name doesn't tell two apart or there's no name: "EPS catalog rev 4
@@ -4448,7 +4448,8 @@ agreed with ux 11-20.
   - Data note (#581): a catalog's revision is the earliest one that imported it, which can be in a different
     database from the one a profile names. Show it as sent; the console never "corrects" it.
 - **Where it shows** (#538, readers first):
-  - Profiles list, Catalog cell: `Composition 3` + `COMPOSED`, with Made of as the cell's muted second line.
+  - Profiles list, Catalog cell: `Composition 3`, with Made of as the cell's muted second line. The `COMPOSED` tag
+    shows only where the cell would otherwise look like one catalog (no number, so only Made of shows; ux).
     Profile detail: the summary's "catalog rev 4" part reads "composition 3", and Made of sits under the header.
   - Overrides (P3): the value reads "composition 3" where it reads "catalog rev 4" today.
   - Spacecraft configuration (U94): the `Catalog revision` field keeps its label and reads "Composition 3" with Made
@@ -4465,14 +4466,15 @@ agreed with ux 11-20.
     (Payload catalog rev 2)". These are people, not events, so there's no time here; each catalog's own page has
     U65's "Imported by … at …". A catalog with no named importer drops from the line; none named: no line.
   - Up front (`cannot_decide_because`, A6; never computed in the console):
-    - `self_approval`: "Because you imported one of its catalogs, another org admin has to approve composition 3."
-      With `via_service`: "Because Nightly planner, a service identity you're accountable for, imported one of its
-      catalogs, another org admin has to approve composition 3."
-    - `composer`: "Because you chose this combination of catalogs, another org admin has to approve composition 3."
-      With `via_service`: "Because Nightly planner, a service identity you're accountable for, chose this
-      combination of catalogs, another org admin has to approve composition 3."
+    - `self_approval`: "You imported one of its catalogs, so another org admin approves composition 3." With
+      `via_service`: "Nightly planner, a service identity you're accountable for, imported one of its catalogs, so
+      another org admin approves composition 3."
+    - `composer`: "You chose this combination of catalogs, so another org admin approves composition 3." With
+      `via_service`: "Nightly planner, a service identity you're accountable for, chose this combination of
+      catalogs, so another org admin approves composition 3." (U65/U105's "You …, so another org admin approves
+      it." form; ux.)
     - `authors_unknown`: U99/U100's line with "composition 3" in place of "rev 4".
-    - No number: "…has to approve this composition."
+    - No number: "…approves this composition."
   - The approve refusals (E1's codes, the backstop) take U95's form: "Not approved: you chose this combination of
     catalogs, so another org admin approves it. Your approval wasn't recorded." (and the `self` / `via_service`
     forms likewise).
@@ -4487,18 +4489,41 @@ agreed with ux 11-20.
     so spacecraft can't move to it. Any already on it keep it."
 - **A composition that's no longer approved** (E2, #546; the keys are confirmed there; ca-ux co-owns the command
   hold). Only a withdrawal or a rejection of its own approval counts, never a newer approval of another one (#537 §5).
-  "it" below is the composition's name ("composition 3", or "catalog rev 4" for one catalog).
+  Approval is per revision since #559/#564, and a pin uses the newest approved, runnable revision of its composition,
+  so a withdrawal has two outcomes (mms-security):
+  - **An earlier approved version is left:** nothing is blocked, and nothing falls back silently. The next staging
+    shows that earlier version for the reviewer to see, with the line "Composition 3's newest approval was withdrawn
+    by Ana R. at 11-20 09:12Z, so this configuration uses its earlier approved version." (rejected: "…was rejected by
+    Ana R. at …"; no name: "…was withdrawn at 11-20 09:12Z…"). None of the lines below show.
+  - **No approved, runnable version is left:** these show.
+  "Composition 3" below is the composition's name ("catalog rev 4" for one catalog; "this composition" with no
+  number).
   - The craft's state line (spacecraft page, configuration), caution: "Composition 3 is no longer approved: Ana R.
-    withdrew its approval at 11-20 09:12Z: <reason>. EARENDIL-004 keeps running it, but can't take a new
-    configuration until it moves to an approved one." Rejected: "…Ana R. rejected it at …". No name: "its approval
-    was withdrawn at 11-20 09:12Z". The decision record's id goes in Technical details.
-  - Attention item (high severity): "EARENDIL-004 runs composition 3, which is no longer approved" with `Open
-    EARENDIL-004`. Several: "12 spacecraft run a composition that's no longer approved" with `Show all`.
+    withdrew its approval at 11-20 09:12Z: “<reason>”. EARENDIL-004 stays on it, but can't take a new
+    configuration until it moves to an approved one or composition 3 is approved again." (The reason is quoted, as
+    U65; with none, the sentence ends at the time.) Rejected: "…Ana R. rejected
+    it at …". No name: "its approval was withdrawn at 11-20 09:12Z". The decision record's id goes in Technical
+    details.
+  - Attention item, a Now queue row (U31's form and ranking): P1 when the craft has a pass within 2 h or in
+    progress, else P2. Title "EARENDIL-004 · On composition 3, which is no longer approved."; secondary "Approval
+    withdrawn by Ana R. at 11-20 09:12Z. It can't take a new configuration."; action `Open EARENDIL-004`. Several
+    craft are one row each (U31 ranks them by pass).
   - A new configuration for that craft (refused at staging and at activation, the gate's own check): "Not staged:
-    EARENDIL-004 runs composition 3, which is no longer approved, so it can't take a new configuration. Move it to an
-    approved composition first." ("Not sent:" in the U94 workspace.)
-  - New commanding meets a hold a person acknowledges (ca-security): "EARENDIL-004 runs composition 3, whose approval
-    Ana R. withdrew at 11-20 09:12Z. Commands still go out if you acknowledge." Placeholder: "Why it's safe to
-    command it". Telemetry keeps flowing, and nothing on the craft says it stopped.
+    EARENDIL-004 is on composition 3, which is no longer approved, so it can't take a new configuration. Move it to an
+    approved composition, or have composition 3 approved again, first." ("Not sent:" in the U94 workspace.)
+  - **The command hold** (ca-security; Compose and the decide panel name a HOLD by its check, U60). Its check key is
+    `composition_not_approved` **[api to confirm on #546]**, and its label is `Composition`, mapped by key, never by
+    text. So: "Acknowledge the Composition HOLD", and in the log "Acknowledged the Composition HOLD on EARENDIL-004".
+    - One target: "EARENDIL-004 is on composition 3, whose approval Ana R. withdrew at 11-20 09:12Z. Acknowledge it to
+      send commands to it anyway." Rejected: "…composition 3, which Ana R. rejected at 11-20 09:12Z. …". No name:
+      "…composition 3, whose approval was withdrawn at 11-20 09:12Z. …".
+    - Several targets (a group): "3 of the 12 targets are on a composition that's no longer approved: EARENDIL-004,
+      EARENDIL-007 and EARENDIL-011. Acknowledge it to send commands to them anyway." Up to 3 names, then "and N
+      more".
+    - Acknowledging clears only this HOLD; GO, the other checks and the pass still decide (U20), so the line
+      promises nothing more. Placeholder: "Why it's safe to command it". The reviewer's side needs nothing new
+      (DecisionPanel's line for a HOLD the author's notes don't cover).
+  - Note for builders, not screen text: telemetry keeps flowing and the craft stays on its composition, so no
+    screen says either stopped.
 - **Not here:** D4's composition editor (choosing catalogs, places, collisions) and its re-key HOLD, which lists
   every identity that changes before the change set is saved (#537 §1). Their words come with D4.
