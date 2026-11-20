@@ -23,7 +23,7 @@ defmodule CadenceWeb.CommandQueueEntryController do
           mission_id,
           filters
         )
-        |> Enum.map(&CommandingJSON.command_queue_entry/1)
+        |> CommandingJSON.encode_all(&CommandingJSON.command_queue_entry/2)
 
       json(conn, %{data: command_queue_entries})
     end

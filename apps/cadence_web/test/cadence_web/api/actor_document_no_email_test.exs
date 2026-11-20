@@ -11,18 +11,9 @@ defmodule CadenceWeb.API.ActorDocumentNoEmailTest do
   alias Cadence.Accounts.User
   alias Cadence.Auth.Scope
 
-  alias Cadence.Commanding.{
-    CommandApproval,
-    CommandQueueEntry,
-    CommandReleaseAttempt,
-    CommandRequest,
-    CommandStage
-  }
-
   alias Cadence.Control.Activations.ActivationExecution
   alias Cadence.Management.Activations.{ActivationDecision, ActivationRequest}
   alias CadenceWeb.ActivationJSON
-  alias CadenceWeb.API.CommandingJSON
   alias CadenceWeb.ControlPlaneAccess
 
   # A person's actor document as REST commanding stored it before #466.
@@ -61,40 +52,8 @@ defmodule CadenceWeb.API.ActorDocumentNoEmailTest do
     end
   end
 
-  describe "REST commanding JSON reads an old-form row without its email" do
-    test "requested_by" do
-      json = CommandingJSON.command_request(struct(CommandRequest, requested_by: @old_rest))
-      assert json.requested_by == Map.delete(@old_rest, "user_email")
-    end
-
-    test "decided_by" do
-      json = CommandingJSON.command_approval(struct(CommandApproval, decided_by: @old_rest))
-      assert json.decided_by == Map.delete(@old_rest, "user_email")
-    end
-
-    test "enqueued_by" do
-      json = CommandingJSON.command_queue_entry(struct(CommandQueueEntry, enqueued_by: @old_rest))
-      assert json.enqueued_by == Map.delete(@old_rest, "user_email")
-    end
-
-    test "released_by" do
-      json =
-        CommandingJSON.command_release_attempt(
-          struct(CommandReleaseAttempt, released_by: @old_rest)
-        )
-
-      assert json.released_by == Map.delete(@old_rest, "user_email")
-    end
-
-    test "a stage's owner" do
-      json =
-        CommandingJSON.command_stage(
-          struct(CommandStage, owner: @old_rest, visibility: :private, lifecycle_state: :draft)
-        )
-
-      assert json.owner == Map.delete(@old_rest, "user_email")
-    end
-  end
+  # REST commanding's actors are {kind, id, name} since #465, named against the organization
+  # (CadenceWeb.API.RESTCommandingActorsTest covers them, the old-form rows included).
 
   describe "REST activation JSON reads an old-form row without its email" do
     test "an activation request's requester" do

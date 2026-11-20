@@ -646,6 +646,26 @@ Discards the draft. The response is `204` (idempotent).
 draft is deleted in the same transaction, **only if it is still at that revision**, so a newer
 autosave from another tab survives.
 
+## REST commanding: actors (#465)
+
+Every actor object the pre-console REST commanding API sends (a command stage's `owner`, a command
+request's `requested_by`, an approval's `decided_by`, a queue entry's `enqueued_by`, a release
+attempt's `released_by`, alone or inside the decide, enqueue and release answers) is `{kind, id,
+name}` or `null`, never the stored actor document (#146, through #472's `ActorRef`):
+
+- `kind`: `user`, `service` or `system`.
+- A person is named, and keeps their `id`, only while they hold an active membership in the
+  record's organization, checked at read time; `name` is null when they have no display name.
+  Anyone else (someone who has left, a platform admin from another organization) is `{kind:
+  "user", id: null, name: null}`.
+- A service identity of the organization keeps its `id` and its live display name; another
+  organization's is `{kind: "service", id: null, name: null}`.
+- The system actor reads as stored (`{kind: "system", id, name}`).
+- A stored document Cadence can't read makes the whole field `null`.
+- Never an email: the rows written before #466 that hold one stay as they are (#116), and it never
+  leaves the server. The stored keys (`actor_kind`, `user_id`, `service_identity_id`,
+  `user_display_name`, …) are gone from the answer; read `kind` and `id`.
+
 ## REST command requests: command-group members (owner: api-ops; four-eyes P0, 2026-11-18)
 
 The pre-console REST API under `/api/organizations/:organization_id/missions/:mission_id`
