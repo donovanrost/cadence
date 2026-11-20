@@ -44,33 +44,39 @@ const applied = computed(() => {
     runtimeStatus.value?.reason ?? null,
   );
 });
-/** #276 (ux, fe-setup): the person's own act said once (OutcomeCallout); computed, so one object per act. */
-const staged = computed(() =>
+/**
+ * #276 (ux, fe-setup): the person's own act, said once (OutcomeCallout). Built from primitives, so
+ * a refetch that swaps in an outcome with the same state makes no new object and isn't said
+ * again (lead, #614). The staged line's words are written once: the slot adds only the mono.
+ */
+const stagedLead = computed(() =>
   props.stagedNotice !== null && props.next !== null && !props.outcome
-    ? {
-        tone: "nominal" as const,
-        text: `${plural(props.stagedNotice, "spacecraft", "spacecraft")} staged. They're created when this change set is applied as r${props.next}.`,
-      }
+    ? `${plural(props.stagedNotice, "spacecraft", "spacecraft")} staged. They're created when this change set is applied as `
     : null,
 );
+const staged = computed(() =>
+  stagedLead.value === null
+    ? null
+    : { tone: "nominal" as const, text: `${stagedLead.value}r${props.next}.` },
+);
+const sentState = computed(() => props.outcome?.state ?? null);
 const sent = computed(() =>
-  props.outcome?.state === "in_review"
+  sentState.value === "in_review"
     ? {
         tone: "info" as const,
         text: "Sent for review. An org member who didn't stage any of these changes approves or sends it back.",
       }
-    : props.outcome?.state === "open"
+    : sentState.value === "open"
       ? { tone: "info" as const, text: "Sent back to the authors with your comment." }
       : null,
 );
 </script>
 
 <template>
-  <OutcomeCallout v-if="staged" :outcome="staged">
-    {{ plural(stagedNotice ?? 0, "spacecraft", "spacecraft") }} staged. They're created when this
-    change set is applied as <span class="font-mono">r{{ next }}</span
-    >.
-  </OutcomeCallout>
+  <OutcomeCallout v-if="staged" :outcome="staged"
+    >{{ stagedLead }}<span class="font-mono">r{{ next }}</span
+    >.</OutcomeCallout
+  >
   <OutcomeCallout v-if="applied" data-changes-outcome :outcome="applied">
     <template #action
       ><ApButton size="compact" :to="{ name: 'setup.revisions' }"
