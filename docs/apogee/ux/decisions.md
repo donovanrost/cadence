@@ -4610,6 +4610,26 @@ agreed with ux 11-20.
       of Cadence, so it needs approving again; an org admin does that in Setup › Catalog"
     - The catalog revision and the composition disagree (a client bug): "Cadence couldn't match this to catalog rev
       4; choose the catalog revision again"
+  - **The version changed after staging** (409 `restage_needed`, D3 §3; nothing is written; details per entry
+    `{composition_id, recorded_revision_id, current_revision_id | null, current_reason | null}` plus the catalog
+    revision numbers, and E2's `decision`). The why, by `current_reason`:
+    - a newer version was approved: "a newer approved version of catalog rev 4 is now the one to use"
+    - the staged version was withdrawn (E2): "catalog rev 4's approval was withdrawn by Ana R. at 11-20 09:12Z" (no
+      name: "…was withdrawn at …")
+    - the staged version doesn't run on this Cadence update: "the version of catalog rev 4 it staged doesn't run on
+      this version of Cadence"
+    - none approved is left (`current_revision_id` null): "no approved version of catalog rev 4 is left"
+    - unknown or missing: "the version of catalog rev 4 it staged isn't the one to use any more"
+    - Several entries: the first why, then "and 2 more catalog revisions changed too"; all of them in `Show all`.
+  - Lines, by the act (U95's order; the console words them from the code):
+    - `Apply as r5`: "Not applied: <why>, so nothing changed. Stage it again to use the current version."
+    - `Request review`: "Not sent for review: <why>, so nothing changed. Stage it again to use the current
+      version."
+    - Approve: "Not approved: <why>, so nothing was applied and the change set stays in review. Your approval wasn't
+      recorded. Send it back so it can be staged again."
+    - The action beside the apply and request-review lines is `Stage again` ("Stage again with the current version
+      of catalog rev 4", B7). With none approved left, there's no action, and the line ends "Move it to an approved
+      composition first." in place of "Stage it again…".
   - **A newer version waiting** (`selection.newer_candidate`; rejected and non-runnable ones are never sent): on the
     craft's and the profile's configuration, "A newer version of catalog rev 4, from a Cadence update, has been
     waiting for approval since 11-20 06:52Z. Until it's approved, EARENDIL-004 stays on the earlier one." with `Open
