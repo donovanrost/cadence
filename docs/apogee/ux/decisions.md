@@ -3423,10 +3423,19 @@ are api's, switched on with `knownErrorCode`.
     version of this plan since it was last approved, so another org admin approves it. Your approval wasn't recorded
     and nothing was booked." (It used to say "this version", untrue for an earlier version's author.) Then Approve is
     disabled (A6) with the sentence without "Not approved:" and the ending, muted; Send back stays.
-  - 403 `contact_plan_approver_authors_unknown` (#277: a version since the last approval has no recorded author, so
-    separation can't be checked; it fails closed): U100's lines. `details.service` null: "Not approved: Cadence can't
-    tell who made this plan, so it can't check that you weren't one of them. Your approval wasn't recorded. Send it
-    back so it can be submitted again; if it keeps happening, tell the team that runs Cadence for you."
+  - 403 `contact_plan_approver_authors_unknown` (#277; ca-engineer: reachable only when a service identity made one of
+    the plan's versions since its last approval and no one is recorded as accountable for it). A send-back doesn't
+    clear it (the version stays in the window until an approval); recording who's accountable does, and so does
+    drafting the day again, which makes a new plan:
+    - `details.service` `{id, name}`: "Not approved: Nightly planner made one of this plan's versions since it was
+      last approved and has no one recorded as accountable for it, so this can't be approved yet. An org admin
+      records who's accountable in People › Service identities. Your approval wasn't recorded. You can also draft
+      the day again so a new plan replaces this one." With a null `name`, U100's plan line below.
+    - `details.service` null (a guard: `created_by` is NOT NULL, so it can't happen today): "Not approved: Cadence
+      can't tell who made one of this plan's versions since it was last approved, so it can't check that you weren't
+      one of them. Your approval wasn't recorded. Draft the day again so a new plan replaces this one; if it keeps
+      happening, tell the team that runs Cadence for you."
+    - Up front, when the read says so (`authors_unknown`): the same line without "Not approved:" and U95's sentence.
   - 403 `forbidden`: "Not approved: only an org admin approves contact plans. Your approval wasn't recorded."
   - 409 `plan_not_pending` (`state`; `decided_by` and `decided_at` together or neither): "R41 was already approved by
     Ana R. at 03:46Z, so your approval wasn't recorded. Reload to see it." / "…already sent back by Ana R. at
@@ -3570,10 +3579,15 @@ groups, provider changes, qualification cases (no service authors them).
   - `{id, name}` (a service whose accountable people aren't recorded; under an automation grant it can be the approving
     service): "Not approved: Nightly planner has no one recorded as accountable for it, so this can't be approved yet.
     An org admin records who's accountable in People › Service identities. Your approval wasn't recorded." With a
-    null `name`: "the service identity that imported this revision" (plans, since #277: "a service identity involved
-    in this plan", as activations below, since the service may be an earlier version's author; sent this command request;
+    null `name`: "the service identity that imported this revision" (sent this command request;
     the approving one under a grant: "the service identity approving for this automation") in its place, never an
     id (U25; the id goes in Technical details).
+    - **Plans say "a service identity that made one of this plan's versions since it was last approved"** (#277:
+      separation counts every version's author since the last approval, so "submitted this plan" could be untrue):
+      "Not approved: a service identity that made one of this plan's versions since it was last approved has no one
+      recorded as accountable for it, so this can't be approved yet. An org admin records who's accountable in People
+      › Service identities. Your approval wasn't recorded. You can also draft the day again so a new plan replaces
+      this one." (U97 has the named form.)
     - **Activations say "a service identity involved in this request"** (api's #453 question, from mms-security's
       review). Since #435 the unnamed service may be the requester or the author of a version the request
       includes, such as a change set's applier, and the 403 doesn't say which, so "requested this" could be untrue
