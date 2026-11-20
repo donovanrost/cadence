@@ -122,10 +122,10 @@ const notSuspended = d.object({
 });
 const NOTHING = "Nothing changed.";
 
-/** U105's resume refusals; `disable` keeps Resume off with its up-front line afterwards. */
 /** ux on #570: Resume's A6 reason while it stays off after a separation refusal. */
 const REFUSED: Worded = { text: "Resume was refused. Reload to see the grant as it is now." };
 
+/** U105's resume refusals; `disable` keeps Resume off with its up-front line afterwards. */
 export function resumeFailure(e: ApiError, g: Grant): Worded & { disable?: Worded } {
   const s = serviceOf(g);
   if (isError(e, "automation_grant_self_approval_forbidden")) {
