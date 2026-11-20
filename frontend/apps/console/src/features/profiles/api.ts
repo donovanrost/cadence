@@ -1,6 +1,7 @@
 import type { MissionId } from "@/api/index.ts";
 import { actor, decoders, orNull, request, type ApiResult, type Decoded, type Reader } from "@/api";
 import { formatShort } from "@/ui";
+import { compositionKey, type Composition } from "@/features/catalog/composition.ts";
 
 /** Contract: docs/apogee/api/setup.md, `GET /api/console/v1/missions/:mission_id/profiles`. */
 const { array, integer, nullable, object, string, token } = decoders;
@@ -29,6 +30,8 @@ export type ProfileSummary = Readonly<{
   uplinkProtocol: EnumValue;
   packetProtocol: EnumValue;
   catalogRevision: CatalogRevision | null;
+  /** D2 (#581; U109): the composition behind the catalog revision; composed only after D4. */
+  composition: Composition | null;
   spacecraftCount: number;
   /** Subset of spacecraftCount pinned below `version`. */
   spacecraftOnOlderVersions: number;
@@ -73,6 +76,7 @@ const profile: Reader<ProfileSummary> = (value, path = "") => {
     uplink_protocol: enumValue,
     packet_protocol: enumValue,
     catalog_revision: nullable(catalogRevision),
+    composition: compositionKey,
     spacecraft_count: count,
     spacecraft_on_older_versions: count,
     override_count: optionalOf(count),
@@ -89,6 +93,7 @@ const profile: Reader<ProfileSummary> = (value, path = "") => {
     uplinkProtocol: raw.uplink_protocol,
     packetProtocol: raw.packet_protocol,
     catalogRevision: raw.catalog_revision,
+    composition: raw.composition ?? null,
     spacecraftCount: raw.spacecraft_count,
     spacecraftOnOlderVersions: raw.spacecraft_on_older_versions,
     overrideCount: raw.override_count,

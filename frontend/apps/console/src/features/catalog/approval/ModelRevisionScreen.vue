@@ -7,6 +7,8 @@ import { fetchCatalogIndex } from "../api.ts";
 import { fetchModelRevision, type ModelRevision } from "./api.ts";
 import ApprovalPanel from "./ApprovalPanel.vue";
 import RevisionRollout from "./RevisionRollout.vue";
+import ComposedHeader from "./ComposedHeader.vue";
+import { compositionTitle, isComposed } from "../composition.ts";
 
 /**
  * ux U65: a catalog revision's approval. Visible text says "catalog rev 4"; the compiled mission
@@ -33,8 +35,13 @@ const databaseName = computed(() =>
     : null,
 );
 
+// U109: a composed base is titled `Composition 3` ("Composition" with no number); one catalog as before.
 const title = (r: ModelRevision) =>
-  r.catalog_revision ? `Catalog rev ${r.catalog_revision.number}` : "Catalog revision";
+  isComposed(r.composition)
+    ? (compositionTitle(r.composition) ?? "Composition")
+    : r.catalog_revision
+      ? `Catalog rev ${r.catalog_revision.number}`
+      : "Catalog revision";
 function crumbs(r: ModelRevision): readonly ApCrumb[] {
   const database: ApCrumb | null =
     r.catalog_revision && databaseName.value
@@ -98,6 +105,11 @@ const details = (r: ModelRevision) => [
             ><span class="text-sm text-text-2">{{ value.catalog_revision.label }}</span></template
           >
         </ApPageHeader>
+        <ComposedHeader
+          v-if="isComposed(value.composition)"
+          :revision="value"
+          :composition="value.composition"
+        />
         <ApprovalPanel
           v-if="hasApproval(value)"
           :revision="value"

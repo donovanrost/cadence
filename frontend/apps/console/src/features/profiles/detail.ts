@@ -11,6 +11,7 @@ import {
 } from "@/api";
 import { formatCount } from "@/ui";
 import { catalogRevision } from "./api.ts";
+import { compositionKey } from "@/features/catalog/composition.ts";
 
 /** Contract: docs/apogee/api/setup.md, `GET /missions/:mission_id/profiles/:profile_id`. */
 const { array, boolean, integer, nullable, object, oneOf, string, timestamp, token } = decoders;
@@ -97,6 +98,8 @@ const override = object({
   set_at: nullable(timestamp),
   actor: orNull(actor),
   redundant: boolean,
+  /** D2 (#581; U109): for a catalog_revision_id override, the composition behind the revision it sets. */
+  composition: compositionKey,
 });
 export type ProfileOverride = Decoded<typeof override>;
 
@@ -109,6 +112,8 @@ export const profileDetailReader = object({
     name: string,
     version: integer,
     catalog_revision: nullable(catalogRevision),
+    /** D2 (#581; U109): the composition behind the catalog revision. */
+    composition: compositionKey,
     protocols: object({ downlink: enumValue, uplink: enumValue, packet: enumValue }),
     last_change: nullable(
       object({ version: integer, revision: nullable(integer), at: timestamp, actor: actorName }),

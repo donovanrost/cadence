@@ -16,7 +16,9 @@ import {
   noEarlierLine,
   REPLAY_NOT_RUN,
   unwordedBlockCode,
+  revisionWord,
 } from "./words.ts";
+import { compositionInSentence, isComposed } from "../composition.ts";
 
 /**
  * ux U65 Approval · catalog rev N: the comparison against the revision it would replace, who
@@ -26,9 +28,14 @@ const props = defineProps<{ revision: ModelRevision; modelKey: ModelKey }>();
 const emit = defineEmits<{ changed: [] }>();
 const rev = computed(() => props.revision.catalog_revision?.number ?? null);
 const report = computed(() => props.revision.comparison);
-const revWord = computed(() => (rev.value === null ? "this revision" : `rev ${rev.value}`));
+// U109: a composed base is "composition 3"; one catalog reads exactly as before.
+const revWord = computed(() => revisionWord(props.revision));
 const title = computed(() =>
-  rev.value === null ? "Approval" : `Approval · catalog rev ${rev.value}`,
+  isComposed(props.revision.composition)
+    ? `Approval · ${compositionInSentence(props.revision.composition)}`
+    : rev.value === null
+      ? "Approval"
+      : `Approval · catalog rev ${rev.value}`,
 );
 const meta = computed(() => {
   const r = report.value;

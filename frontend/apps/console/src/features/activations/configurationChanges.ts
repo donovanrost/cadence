@@ -10,6 +10,7 @@ import {
   type PerItem,
   type Reader,
 } from "@/api/index.ts";
+import { compositionKey } from "@/features/catalog/composition.ts";
 
 /**
  * #235 (lead's FINAL 11-18 08:49:52Z; ux U94 "Fleets"): what a spacecraft-configuration request
@@ -34,7 +35,10 @@ export const changeFields = [
 ] as const;
 export type ChangeField = (typeof changeFields)[number];
 
-const catalogValue = d.nullable(d.object({ id: d.token, number: d.nullable(d.integer) }));
+/** D2 (#581; U109): each side carries the composition behind its revision (composed only after D4). */
+const catalogValue = d.nullable(
+  d.object({ id: d.token, number: d.nullable(d.integer), composition: compositionKey }),
+);
 // free-text: a packet source's display name; null when the server can't find it (api #415).
 const sourceValue = d.nullable(d.object({ id: d.token, name: d.nullable(d.string) }));
 const apidsValue = d.nullable(d.array(d.integer, 2048));

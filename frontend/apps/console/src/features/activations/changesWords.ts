@@ -12,6 +12,7 @@ import {
   craftName,
   UNKNOWN_SOURCE,
 } from "./configurationChanges.ts";
+import { compositionInSentence, isComposed } from "@/features/catalog/composition.ts";
 
 /** ux U94 (#235): the What changes panel's words. Values are never ids (U25). */
 export const FIELD_LABELS: Readonly<Record<ChangeField, string>> = {
@@ -40,6 +41,8 @@ export function valueWord(row: ChangeRow, side: "before" | "after"): string {
     case "catalog_revision": {
       const v = row[side];
       if (!v) return NOT_SET;
+      // U109: a composed side reads "composition 3" ("Catalog revision: catalog rev 14 → composition 3").
+      if (isComposed(v.composition)) return compositionInSentence(v.composition);
       return v.number === null ? "a catalog revision" : `catalog rev ${v.number}`;
     }
     case "telemetry_source": {

@@ -1,5 +1,6 @@
 import type { MissionId } from "@/api/index.ts";
 import { actor, decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
+import { compositionActor, compositionKey } from "../composition.ts";
 
 /**
  * ux U65 · catalog revision approval (domain's model approval gate, DECISIONS #92 a; api's wire
@@ -97,7 +98,45 @@ export const modelRevisionReader = d.object({
   viewer_can_decide: d.boolean,
   viewer_is_importer: d.boolean,
   cannot_decide_because: d.nullable(
-    d.knownText(["not_admin", "self_approval", "plans_not_ready", "not_approvable"] as const),
+    d.knownText([
+      "not_admin",
+      "self_approval",
+      "plans_not_ready",
+      "not_approvable",
+      // D2 (#581): the composition's creator, who imports none of its catalogs.
+      "composer",
+    ] as const),
+  ),
+  /** #280/D2: the service the viewer is accountable for, behind self_approval or composer. */
+  cannot_decide_details: d.optional(
+    d.nullable(
+      d.object({
+        via_service: d.optional(
+          d.nullable(d.object({ id: d.nullable(d.string), name: d.nullable(d.string) })),
+        ),
+      }),
+    ),
+  ),
+  /** D2 (#581; U109): the composition behind this revision. Composed only after D4. */
+  composition: compositionKey,
+  /** D2: per catalog, the people and services separation counts as its importers. */
+  importers: d.optional(
+    d.array(d.object({ layer_id: d.token, importers: d.array(compositionActor, 100) }), 64),
+  ),
+  /**
+   * D2: what approval compares against (the gate's default baseline). A composed base reads
+   * it; a one-catalog page keeps `catalog_revision.breaking_base` (U109).
+   */
+  breaking_base: d.optional(
+    d.nullable(
+      d.object({
+        revision_id: d.token,
+        composition: d.nullable(
+          d.object({ composition_id: d.token, number: d.nullable(d.integer) }),
+        ),
+        catalog_revision: d.nullable(d.object({ id: d.token, number: d.integer })),
+      }),
+    ),
   ),
   /**
    * U88 (api, 11-18): Approve only; Reject stays allowed, so an orphan clears from the queue.

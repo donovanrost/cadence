@@ -8,6 +8,13 @@ import {
 } from "@/api/index.ts";
 import { formatCount, formatShort } from "@/ui";
 import type { Comparison, DeclarationKind, ModelRevision } from "./api.ts";
+import {
+  actorInSentence,
+  compositionInSentence,
+  isComposed,
+  madeOfParts,
+  type Composition,
+} from "../composition.ts";
 
 /** ux U65 words. Visible text says "catalog rev 4"; the model revision id is Technical details. */
 
@@ -96,6 +103,37 @@ export function replayLine(c: Comparison): string | null {
 
 const when = (iso: string) => formatShort(new Date(iso));
 
+/**
+ * U109, a composed base: "Imported by Mira K. (Bus catalog rev 4) and Ana R. (Payload catalog
+ * rev 2)". People, not events, so no time; a catalog with no named importer drops; none named:
+ * null (no line).
+ */
+export function composedImportersLine(r: ModelRevision): string | null {
+  const c = r.composition;
+  if (!isComposed(c)) return null;
+  const parts = madeOfParts(c);
+  const named = c.imported_layers.flatMap((l, i) => {
+    const people = (r.importers ?? [])
+      .find((x) => x.layer_id === l.layer_id)
+      ?.importers.map(actorInSentence)
+      .filter((n): n is string => n !== null);
+    return people && people.length > 0 ? [`${joinAnd(people)} (${parts[i] ?? ""})`] : [];
+  });
+  return named.length > 0 ? `Imported by ${joinAnd(named)}.` : null;
+}
+
+/** "Composed by Owen P. at 11-20 09:12Z." (U29; U103's forms); null for the migration's (no creator). */
+export function composedByLine(c: Composition): string | null {
+  const who = actorInSentence(c.created_by);
+  if (c.created_by === null) return null;
+  return who
+    ? `Composed by ${who} at ${when(c.created_at)}.`
+    : `Composed at ${when(c.created_at)}.`;
+}
+
+const joinAnd = (xs: readonly string[]) =>
+  xs.length <= 1 ? (xs[0] ?? "") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`;
+
 /** "Imported by Mira K. at 11-14 22:10Z."; null when the importer isn't recorded (its own line). */
 export function importerLine(r: ModelRevision): string | null {
   if (!r.imported_by) return null;
@@ -123,10 +161,46 @@ export function approvalTag(
   return null;
 }
 
+/**
+ * U109: what a decision names. A composed base is "composition 3" ("this composition" with no
+ * number); one catalog stays "rev 4" ("this revision" with none), word for word as before D4.
+ */
+export function revisionWord(r: ModelRevision): string {
+  if (isComposed(r.composition)) return compositionInSentence(r.composition);
+  return r.catalog_revision ? `rev ${r.catalog_revision.number}` : "this revision";
+}
+
+/** U109's up-front lines for a composed base ("You …, so another org admin approves composition 3."). */
+function composedCannotDecide(r: ModelRevision, c: Composition): string | null {
+  const why = r.cannot_decide_because;
+  const name = compositionInSentence(c);
+  const service = r.cannot_decide_details?.via_service ?? null;
+  // U100: "Nightly planner, a service identity you're accountable for, …"; nameless, no commas
+  // (mms-ux and ca-ux on #609): "A service identity you're accountable for …".
+  const svc = service
+    ? service.name
+      ? `${service.name}, a service identity you're accountable for,`
+      : "A service identity you're accountable for"
+    : null;
+  if (why === "self_approval")
+    return svc
+      ? `${svc} imported one of its catalogs, so another org admin approves ${name}.`
+      : `You imported one of its catalogs, so another org admin approves ${name}.`;
+  if (why === "composer")
+    return svc
+      ? `${svc} chose this combination of catalogs, so another org admin approves ${name}.`
+      : `You chose this combination of catalogs, so another org admin approves ${name}.`;
+  return null;
+}
+
 /** Why the viewer has no decision buttons (null: they can decide, or it's already decided). */
 export function cannotDecideLine(r: ModelRevision): string | null {
   const why = r.cannot_decide_because;
   if (why === null || why === "not_approvable") return null;
+  if (isComposed(r.composition)) {
+    const composed = composedCannotDecide(r, r.composition);
+    if (composed) return composed;
+  }
   if (why === "self_approval")
     return "You imported this revision, so another org admin has to approve it.";
   if (why === "plans_not_ready")
