@@ -2346,9 +2346,10 @@ change set like any override. There's no separate routes editor.
       - `change_set_changed`: "Not applied: someone changed the change set while you were looking, so nothing
         changed. It's been reloaded; check it, then apply again." / "Not sent for review: … It's been reloaded;
         check it, then send it for review again."
-      - `activation_policy_changed`: "Not applied (Not sent for review): the mission's approval setting changed after
-        this was submitted, so nothing changed. The change set has reopened; check it, then apply or send it for
-        review again."
+      - `activation_policy_changed` (on a submit; the review path's line is U94's): "Not applied: the mission's
+        approval setting changed while you had this open, so nothing changed. Check whether it now needs review, then
+        apply or send it for review." / "Not sent for review: the mission's approval setting changed while you had
+        this open, so nothing changed. Check whether it still needs review, then apply or send it for review." (ux)
       - `checks_failed`: "Not applied: a check says NO-GO, so nothing changed. Fix the NO-GO items, then apply
         again." / "Not sent for review: … then send it for review again."
       - `holds_not_acknowledged`: "Not applied: some holds aren't acknowledged yet, so nothing changed. Read and
@@ -2356,16 +2357,17 @@ change set like any override. There's no separate routes editor.
       - `holds_blocking`: "Not applied: a blocking hold stands, so nothing changed. It can't be acknowledged; apply
         once it clears (the checks show it)." / "Not sent for review: … send it for review once it clears (the
         checks show it)."
-      - `catalog_command_in_flight`: "Not applied (Not sent for review): commands started on the affected spacecraft,
-        so nothing changed. Try again when they finish."
+      - `catalog_command_in_flight`: "Not applied: commands started on the affected spacecraft, so nothing changed.
+        Try again when they finish." / "Not sent for review: commands started on the affected spacecraft, so nothing
+        changed. Try again when they finish."
       - `nothing_staged`: "Not applied: nothing is staged, so there's nothing to apply." / "Not sent for review:
         nothing is staged, so there's nothing to review."
-      - `invalid_op` / `invalid_params`: "Not applied (Not sent for review): some changes aren't valid, so nothing
-        changed." then the list, each field by its kind schema's label where there is one (no raw paths, #308), up
+      - `invalid_op` / `invalid_params`: "Not applied: some changes aren't valid, so nothing changed." / "Not sent for
+        review: some changes aren't valid, so nothing changed." then the list, each field by its kind schema's label where there is one (no raw paths, #308), up
         to five, then "and N more".
       - `reason_required`: the Why field's own message, "Say why (10 characters or more).", not a callout.
-      - An unknown code: "Not applied (Not sent for review): Cadence refused this, so nothing changed." with the code
-        and the server's message in Technical details.
+      - An unknown code: "Not applied: Cadence refused this, so nothing changed." / "Not sent for review: Cadence
+        refused this, so nothing changed." with the code and the server's message in Technical details.
       - Codes worded elsewhere keep their lines: U82's in-use, U63/U65, the conversion refusal, `preview_failed`
         and `packet_definition_version_taken` above.
     - **K3's Apply, disabled** (A6): a NO-GO names what stops it, "Can't apply yet: <the NO-GO item's line, as the
