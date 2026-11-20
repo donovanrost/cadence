@@ -61,7 +61,7 @@ except where it writes authored layers (CB-6); phases 5 and 6.
 Boundaries the design must hold: import input → compiler; composition → gate; gate → profile pin;
 pin → head and assignment; head plus artifact → expansion → runtime; tenant → tenant.
 
-## 4. Threats (draft; each says what D must show)
+## 4. Threats (draft; each says what D must show; refined 11-20 from ca-security, domain and mms-engineer)
 
 **Composition and the gate (phase 2)**
 
@@ -73,7 +73,11 @@ pin → head and assignment; head plus artifact → expansion → runtime; tenan
     - whether the comparison report runs on the **composed** result before the composition is usable;
     - who approves a composition whose layers were each approved by different people;
     - whether separation holds across layers: the authored layer's author must not approve a
-      composition that includes their own layer, with #280's accountability for services.
+      composition that includes their own layer, with #280's accountability for services;
+    - that the approval's digest (`DecisionRecord.subject.digest`) covers every layer's content hash
+      plus the mount map, so approving one combination can't be replayed onto another
+      (ca-security).
+  - domain (11-20): D answers yes, the comparison on the composed result gates it.
 - **CB-2 (high; C3): a content-addressed composition across tenants.**
   - If composition ids are content hashes, the address must include org and mission. Insert-or-get
     must re-read by key plus org plus mission and fail closed on a mismatch, as #119 had to
@@ -101,11 +105,15 @@ pin → head and assignment; head plus artifact → expansion → runtime; tenan
     collision must be a loud refusal, never a silent drop or override.
   - D must give the mount-path grammar and the collision rule, and say who chooses the mount point:
     the importer or a reviewed config.
+  - Built in C (mms-engineer): the grammar, no root mount, no authored mounts, and collisions as
+    BLOCKING diagnostics. D must add that a composition with any blocking diagnostic is refused at
+    the record's write and at pin.
 - **CB-6 (medium; C5): authored layers and separation.**
   - Authored layers arrive by change set (phase 3). The change-set review's separation (#280:
     services count as their people) must cover them.
-  - The gate approval for the resulting composition is a second, distinct decision (CB-1). D says
-    whether one person may author the layer and also approve the composition: they must not.
+  - domain (11-20): an authored layer has no separate gate decision. The monitoring change set's
+    review IS its approval (the addendum), with separation as for change sets. So the threat is that
+    review's separation, plus CB-1's composed-result comparison. D shows both.
 
 **Binding records (phase 4)**
 
@@ -116,6 +124,10 @@ pin → head and assignment; head plus artifact → expansion → runtime; tenan
   - D or F must scope artifacts to org and mission, or prove sharing is safe: the artifact holds
     nothing tenant-specific, and readers never treat its creator or its time as theirs. Either way,
     re-read and verify scope after an insert-or-get, as CB-2.
+  - An artifact never holds a secret (credentials, keys, endpoint auth). Those stay per craft or per
+    endpoint, referenced by id, never in shared content (ca-security).
+  - **Status:** met by 4a as built (#475), per domain and mms-engineer: per-tenant artifacts, a write
+    guard and a hash check on read. mms-security to verify against #475's code.
 - **CB-8 (high; C3/#38): expansion without the endpoint.**
   - Telemetry endpoint scoping moves from stored rows to expansion. A template rule expanded without
     its endpoint parameter would match frames across craft. That's #38's class for telemetry, and
@@ -125,15 +137,20 @@ pin → head and assignment; head plus artifact → expansion → runtime; tenan
     - a template can't be admitted without the endpoint parameter;
     - a test proves a frame on X never selects an instance of Y.
   - Add that the runtime index (I) is built only from expanded instances, never raw templates.
+  - **Status:** met by #475, per domain and mms-engineer: a structural endpoint and the #38 test.
+    mms-security to verify; I's index rule is still for I.
 - **CB-9 (high; C2): membership integrity and activation evidence.**
   - Every spacecraft in a membership must belong to the mission, checked at write.
   - Membership is written only by the activation path, under the activation lock.
-  - `binding_set_content_sha256` must hash the membership plus the artifact hashes, so an approved
-    activation's evidence still pins exactly what runs.
+  - The activation evidence must still pin exactly what runs.
   - `expand(compress(v)) == v` for every stored version is the proof for 4a. Run it on dev in a qa
     slot, and keep it as a test over fixtures.
-  - #108's checklist applies: the hash's meaning changes for new versions, with a golden test and
-    old versions keeping theirs.
+  - **Correction (domain and mms-engineer, 11-20):** 4a as built (#475) keeps
+    `binding_set_content_sha256` as the expanded set's hash, unchanged from the rows form, with
+    goldens at 6 and 500 craft. The evidence doesn't change, and #108 isn't triggered. Because it
+    hashes the expanded result, it already pins exactly what expansion produced, which covers
+    ca-security's 'pin the expansion version' point. A future change to expansion that alters the
+    output changes the hash, and so the evidence, as it should.
 - **CB-10 (medium; C2): heads and assignment history.**
   - Assignment history replaces per-change revision documents as per-craft audit, so it must be
     append-only (#116's triggers, as #436 did for accountables).
@@ -147,37 +164,55 @@ pin → head and assignment; head plus artifact → expansion → runtime; tenan
   - Every historical activation's evidence must stay resolvable for replay and audit. D or G gives
     the lock or the reference check inside the delete.
 - **CB-12 (medium; C4): retiring `spacecraft_application_bindings` (H).**
-  - Some readers make decisions from it, for example release checks under #38 or the console's
-    "which catalog is this craft on".
+  - Some readers make decisions from it: #38's release check (a command releases only over its own
+    spacecraft) and the console's "which catalog is this craft on".
   - The reader inventory must list each authorization-relevant reader, and none may read a stale
     projection. The projection is written in the head's transaction, or each reader moves to the head.
+- **CB-14 (high; C1/C5): head overrides and identity parameters bypass the composition approval**
+  (ca-security).
+  - A compile-affecting override (catalog, APIDs, protocol) selects a different artifact, so it
+    changes what a craft runs without the composition being re-approved. An identity override (SCID,
+    endpoint) is bound at expansion, so a wrong one routes another craft's frames or commands (#38).
+  - D or G must make every override change a change-set kind with four-eyes (#280's separation),
+    re-run #38's checks at apply and at activation, and refuse an override that points to an
+    unapproved artifact or composition.
+- **CB-15 (medium; C2): an approval withdrawn while craft run it** (ca-security; #499's pattern).
+  - If a composition's approval is revoked or superseded, D must say what happens to craft whose
+    head pins it: suspended (as #499 suspends grants), kept until the next activation, or refused at
+    the next generation.
+  - Whatever happens is recorded, and the craft's state says why. Silent continued use of a revoked
+    composition is the failure to rule out.
 - **CB-13 (low; availability): unbounded composition or expansion.** Bounds on layer count, mount
   depth and expansion size, so one import or authored layer can't make compile or expansion
-  unbounded. A refused oversize write records nothing.
+  unbounded. A refused oversize write records nothing. C has no layer or depth bounds
+  (mms-engineer), so this is for D.
 
 ## 5. Questions design D must answer (for mms-security's review of D)
 
-1. **Composition approval (CB-1, CB-6):** is the comparison run on the composed result? Who
-   approves, and which ids is the approver separated from (importers, authored-layer authors, their
-   services' people)?
+1. **Composition approval (CB-1, CB-6):** the composed-result comparison gates it (domain: yes). Who
+   approves, which ids is the approver separated from (importers, authored-layer authors, their
+   services' people), and does the approval digest cover every layer plus the mount map?
 2. **Identity (CB-2):** is a composition content-addressed? Is the address scoped to org and
    mission? What's the re-read check?
 3. **Pin (CB-3):** is a pin change a change-set kind? Who may make one? Is an unapproved pin refused
    at write and re-checked at activation?
 4. **The gate re-key (CB-4):** the order of the migration and the code switch, how approval and
    rejection carry over one-to-one, the guard test, and the evidence for migrated approvals.
-5. **Mounting (CB-5):** the mount-path grammar, who picks the mount, and the collision rule (always
-   a refusal).
-6. **Artifact scope (CB-7):** per org and mission, or global with a proof?
+5. **Mounting (CB-5):** C's grammar and BLOCKING collisions, plus D's refusal of a composition with
+   any blocking diagnostic at the record's write and at pin. Who picks the mount?
+6. **Artifact scope (CB-7):** met by #475 (to verify); no secrets in artifacts.
 7. **Expansion (CB-8):** F's acceptance includes the three #38 mitigations, and I builds only from
    expanded instances.
-8. **Evidence (CB-9):** what `binding_set_content_sha256` hashes for new versions, and #108's golden
-   test.
+8. **Evidence (CB-9):** unchanged by 4a (the expanded set's hash; goldens in #475). D keeps it so
+   for compositions.
 9. **Audit (CB-10, CB-11):** assignment history append-only by trigger; head writes atomic with
    their assignment row; collection safe against a racing assignment.
 10. **Projection (CB-12):** the reader inventory, with authorization readers called out.
-11. **Bounds (CB-13):** layer, depth and expansion limits.
-12. **Old data (#112):** each migration reads old rows. The plan says phases 2 and 4 migrate rather
+11. **Bounds (CB-13):** layer, depth and expansion limits (none in C).
+12. **Overrides (CB-14):** every compile-affecting and identity override is a change-set kind with
+    four-eyes; #38 re-checked at apply and activation; no override to an unapproved artifact.
+13. **Withdrawn approvals (CB-15):** what running craft do, and what's recorded.
+14. **Old data (#112):** each migration reads old rows. The plan says phases 2 and 4 migrate rather
     than reset; each PR shows it, as #497 had to for grants (a one-to-one fill that keeps old rows
     readable and refused where they must be).
 
@@ -186,12 +221,12 @@ pin → head and assignment; head plus artifact → expansion → runtime; tenan
 | Item | Status |
 |---|---|
 | MM-1 (service breaks importer/approver separation) | Fixed: #280 (#435), plus #283 (#497) for grants and #436 (#504) for append-only accountables. |
-| MM-2 (`importer_recorded=false`; seed counts no one) | Open. #435 made `importer_recorded` count services. Recording the seed runner as an importer is still to file. |
+| MM-2 (`importer_recorded=false`; seed counts no one) | Open: #513 (the seed runner is recorded and counts as an importer). #435 made `importer_recorded` count services. |
 | MM-3 (#119 content-addressed revisions across tenants) | Fixed by #119's scoped re-read. CB-2 and CB-7 apply the same rule to compositions and artifacts. |
 | MM-4 (upload publishes a job inside a transaction) | Open, low. |
 | MM-5 (`request_promotion` writes before it authorizes) | Open, low. |
 | MM-6 (qualification cases have no second person) | Open, dormant. |
-| SC-1 (client-set request metadata drives the approver's view) | Open (#235). |
+| SC-1 (client-set request metadata drives the approver's view) | Likely closed for spacecraft configuration by #329 (L10 derives what a request changes; ca-security). To verify when #235 closes. |
 | SC-2, SC-3 (REST spacecraft create outside change sets) | Fixed: #328 (#332). |
 | Actor naming (#146's rule) | Fixed across MM&S: #365, #366 (#474), #471 (#487); #511 (approved, landing). The other squads' reads are #462. |
 
