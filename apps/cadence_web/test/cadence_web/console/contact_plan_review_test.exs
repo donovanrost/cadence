@@ -187,6 +187,11 @@ defmodule CadenceWeb.Console.ContactPlanReviewTest do
     assert %{"version" => 2, "decision" => nil, "submitted" => true} = v2
     assert %{"version" => 1, "decision" => "rejected", "submitted" => true} = v1
     assert %{"kind" => _, "id" => _} = v2["created_by"]
+    # #468 (api on #503): the member who created version 1 keeps their id, and no one is named
+    # by email.
+    member_id = c.member.user_id
+    assert %{"kind" => "user", "id" => ^member_id} = v1["created_by"]
+    refute inspect(history) =~ c.member.email
 
     admin_id = c.admin.user_id
 

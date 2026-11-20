@@ -12,7 +12,7 @@ defmodule Cadence.Reads.PassEnders do
 
   import Ecto.Query
 
-  alias Cadence.Accounts
+  alias Cadence.Accounts.MemberNames
   alias Cadence.Contacts.ScheduleOperation
   alias Cadence.Repo
 
@@ -35,8 +35,16 @@ defmodule Cadence.Reads.PassEnders do
       )
       |> select([o], {o.reservation_id, o.user_id})
       |> Repo.all()
-      |> Map.new(fn {reservation_id, user_id} -> {reservation_id, user(user_id)} end)
+      |> named(organization_id)
     end
+  end
+
+  # #146 (#468): a person is named, and keeps their id, only while an active member of the
+  # mission's organization (one lookup per read); any other person reads id and name nil, never
+  # an email.
+  defp named(enders, organization_id) do
+    people = MemberNames.members(organization_id, Enum.map(enders, &elem(&1, 1)))
+    Map.new(enders, fn {reservation_id, user_id} -> {reservation_id, user(user_id, people)} end)
   end
 
   @doc "The row's `ended_by`, or nil for a booking that hasn't ended."
@@ -67,10 +75,10 @@ defmodule Cadence.Reads.PassEnders do
 
   defp actor(_actor), do: nil
 
-  defp user(user_id) do
-    case Accounts.fetch_user(user_id) do
-      {:ok, user} -> %{kind: "user", id: user_id, name: user.display_name || user.email}
-      _missing -> %{kind: "user", id: user_id, name: nil}
+  defp user(user_id, people) do
+    case Map.fetch(people, user_id) do
+      {:ok, name} -> %{kind: "user", id: user_id, name: name}
+      :error -> %{kind: "user", id: nil, name: nil}
     end
   end
 end
