@@ -39,7 +39,10 @@ defmodule Cadence.Telemetry.HistoryStoreQuestDBTest do
      to: DateTime.add(List.last(receipts), 60, :second)}
   end
 
-  test "history returns every canonical sample once, in time order, with its own receipt", c do
+  # #491: frames that arrive in one socket read share a receipt time (RawEvidence, microseconds),
+  # in production as here; the read breaks ties by sample_id (ObservationReader.order_clause), so
+  # the order is still deterministic.
+  test "history returns every canonical sample once, in receipt then sample order", c do
     assert {:ok, %{samples: samples}} =
              TelemetryReads.sample_history_result(
                c.contact.organization_id,
@@ -52,8 +55,9 @@ defmodule Cadence.Telemetry.HistoryStoreQuestDBTest do
              )
 
     assert length(samples) == @frames
-    assert samples |> Enum.map(& &1.receipt_time) |> Enum.uniq() |> length() == @frames
+    assert samples |> Enum.map(& &1.sample_id) |> Enum.uniq() |> length() == @frames
     assert Enum.map(samples, & &1.receipt_time) == Enum.sort(c.receipts, DateTime)
+    assert samples == Enum.sort(samples, &read_order?/2)
     assert Enum.all?(samples, &(&1.point_id == c.point_id))
     # The fixture's packet carries sc_mode = 4 in every frame.
     assert Enum.all?(
@@ -122,6 +126,15 @@ defmodule Cadence.Telemetry.HistoryStoreQuestDBTest do
     assert %{sample_count: @frames, latest_receipt_time: %DateTime{} = latest_receipt} = watermark
     assert DateTime.compare(latest_receipt, latest) == :eq
     assert DateTime.compare(watermark.retention_starts_at, first) == :eq
+  end
+
+  # The history read's own order (ObservationReader.order_clause): receipt time, then sample id.
+  defp read_order?(a, b) do
+    case DateTime.compare(a.receipt_time, b.receipt_time) do
+      :lt -> true
+      :gt -> false
+      :eq -> a.sample_id <= b.sample_id
+    end
   end
 
   defp numeric(%Decimal{} = value), do: Decimal.to_float(value)
