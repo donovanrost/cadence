@@ -110,6 +110,16 @@ defmodule Cadence.Platform.ScopedSettings do
     }
   end
 
+  @doc """
+  A mission's effective value for an organization value, its `allow_override` and the mission's
+  own saved override (nil when it has none): the rule `load/4` applies (#430: the approval
+  setting's save judges a mission change and lists the missions an organization save moves with
+  this one function, so they can't disagree).
+  """
+  @spec effective_for(map() | nil, boolean() | nil, map() | nil) :: map() | nil
+  def effective_for(organization_value, allow_override, saved),
+    do: effective(source(:mission, saved, allow_override), organization_value, saved)
+
   defp effective("overridden", organization_value, saved),
     do: Map.merge(organization_value || %{}, saved)
 
