@@ -3881,8 +3881,10 @@ fixes their words and lists what the legacy pages offered that the console doesn
   would disagree and the row would hide why Mira K. can't approve it (U20, U89).
   - `run_by.name`: "11-19 05:40Z by Cadence, run by Mira K." It's one event and one time (U29), with U103's system
     line first.
-  - `run_by` with a null name: "11-19 05:40Z by Cadence, run by a person whose name can't be read". `run_by`
-    carries no id (name only), so there's no id to show anywhere.
+  - `run_by` with a null name: "11-19 05:40Z by Cadence, run by a person". It says what ran it, not who, as U103's
+    "by a service identity" does. `run_by` carries no id (name only), so there's no id to show anywhere.
+  - `run_by` is always a person, a member of the mission's organization (#516's member rule, mms-security), never a
+    service identity, so it never takes the service mark.
   - `run_by` null (an older system run): "by Cadence", as above.
   - The same rule applies wherever a system actor is shown: the Started cell, a source file's uploaded-by line and a
     revision's actor.
