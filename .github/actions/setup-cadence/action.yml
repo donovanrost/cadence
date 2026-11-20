@@ -19,7 +19,7 @@ runs:
   using: composite
   steps:
     - if: inputs.xmllint == 'true'
-      # #327: from a pinned Ubuntu noble source, independent of the runner image's apt sources.
+      # #327: from the image's own index, else a pinned Ubuntu noble source (independent of the image's apt sources).
       uses: ./.github/actions/install-xmllint
 
     - id: beam
