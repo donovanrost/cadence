@@ -26,6 +26,8 @@ export default defineConfig({
     {
       name: "setup",
       testMatch: /.*\.setup\.ts/,
+      // #242 (director): sign-in is never traced or recorded; the specs only reuse its storageState.
+      use: { trace: "off", video: "off" },
       // The LiveView sign-in page can take 10–20 s to connect on the loaded laptop; retry once.
       retries: 1,
     },
