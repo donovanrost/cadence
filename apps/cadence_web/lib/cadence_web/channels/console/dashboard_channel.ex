@@ -218,7 +218,12 @@ defmodule CadenceWeb.Console.DashboardChannel do
 
     %{
       current_version: version(summary),
-      saved_by: saver && %{kind: "user", id: saver, name: Map.get(Authors.names([saver]), saver)},
+      saved_by:
+        saver &&
+          summary.organization_id
+          |> Authors.members([saver])
+          |> Authors.person(saver)
+          |> Map.put(:kind, "user"),
       saved_at: summary.published_at || summary.updated_at,
       archived: archived
     }

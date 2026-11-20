@@ -14,6 +14,7 @@ import {
   requirementFacts,
   type RequirementDetail,
 } from "./requirements.ts";
+import VersionByCell from "./VersionByCell.vue";
 
 /** P4 requirement, read: its facts, how it ended, where a template's lives, and its versions. */
 const props = defineProps<{
@@ -83,7 +84,7 @@ const columns: readonly ApColumn[] = [
     >
       <template #cell-version="{ row }">v{{ row.version }}</template>
       <template #cell-at="{ row }">{{ formatAbsolute(new Date(row.created_at)) }}</template>
-      <template #cell-by="{ row }">{{ row.actor?.name ?? "Not recorded" }}</template>
+      <template #cell-by="{ row }"><VersionByCell :actor="row.actor" /></template>
     </ApTable>
   </ApPanel>
   <p v-if="!canEdit" class="m-0 text-sm text-text-3">Org admins change contact planning.</p>

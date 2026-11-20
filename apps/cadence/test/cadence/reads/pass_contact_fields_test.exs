@@ -45,7 +45,7 @@ defmodule Cadence.Reads.PassContactFieldsTest do
       occurred_at: @now
     }
 
-    assert PassContactFields.ended(fact(%{ending: action})) == %{
+    assert PassContactFields.ended(fact(%{ending: action}), %{}) == %{
              kind: "canceled",
              cause: "provider_failed",
              by: %{kind: "system", id: "provider_reservation_reconciler", name: nil},
@@ -65,11 +65,11 @@ defmodule Cadence.Reads.PassContactFieldsTest do
     }
 
     assert %{kind: "ended_early", cause: "operator", reason: "Wrong target", reason_code: nil} =
-             PassContactFields.ended(fact(%{ending: action}))
+             PassContactFields.ended(fact(%{ending: action}), %{})
   end
 
   test "a cancel with no action record takes its lifecycle time; cause and by stay null" do
-    assert PassContactFields.ended(fact(%{state: :canceled, canceled_at: @now})) == %{
+    assert PassContactFields.ended(fact(%{state: :canceled, canceled_at: @now}), %{}) == %{
              kind: "canceled",
              cause: nil,
              by: nil,
@@ -78,7 +78,7 @@ defmodule Cadence.Reads.PassContactFieldsTest do
              reason_code: nil
            }
 
-    assert %{at: nil} = PassContactFields.ended(fact(%{state: :canceled}))
+    assert %{at: nil} = PassContactFields.ended(fact(%{state: :canceled}), %{})
   end
 
   test "an actor missing its kind or id is null, never half an actor" do
@@ -91,7 +91,7 @@ defmodule Cadence.Reads.PassContactFieldsTest do
         occurred_at: @now
       }
 
-      assert %{by: nil, at: @now} = PassContactFields.ended(fact(%{ending: action}))
+      assert %{by: nil, at: @now} = PassContactFields.ended(fact(%{ending: action}), %{})
     end
   end
 end

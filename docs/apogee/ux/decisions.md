@@ -3875,6 +3875,20 @@ fixes their words and lists what the legacy pages offered that the console doesn
   it was and not who: "11-19 05:40Z by a service identity", as U70 (mms-security: the kind names no one and says it
   wasn't a person). A person with no name, or no actor, shows the time alone, never an id (U25). (Amended 11-19,
   fe-setup's #364 question and ux's #371.)
+- **A system run that records who ran it** (#516, mms-security; `run_by` on the system actor, in `requested_by`,
+  `uploaded_by`, `revisions[].actor` and the REST reads). A seed import run by a person counts that person as the
+  importer, so the approval panel says "Imported by Mira K." (U65). The run's row says the same person, or the two
+  would disagree and the row would hide why Mira K. can't approve it (U20, U89).
+  - `run_by.name`: "11-19 05:40Z by Cadence, run by Mira K." It's one event and one time (U29), with U103's system
+    line first.
+  - `run_by` with a null name: "11-19 05:40Z by Cadence, run by a person". It says what ran it, not who, as U103's
+    "by a service identity" does. `run_by` carries no id (name only), so there's no id to show anywhere.
+  - `run_by` is always a person, never a service identity, so it never takes the service mark. It's named only while
+    they're an active member of the mission's organization (#146's rule); otherwise, such as a platform admin running
+    a seed for support or someone who has left, it reads "run by a person" (mms-security).
+  - `run_by` null (an older system run): "by Cadence", as above.
+  - The same rule applies wherever a system actor is shown: the Started cell, a source file's uploaded-by line and a
+    revision's actor.
   Data: the run row stores `requested_by` (an actor: kind and user id), so the runs read adds its display name
   (#146's read; fe-setup assigns it).
 
@@ -3969,6 +3983,9 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
     - `not_admin`: no actions; the panel's line ends "Org admins approve grants."
     - `not_proposed`: no panel (the row's state says why).
     - `not_a_person`: never shown in the console (a service can't sign in); as `not_admin` if it is.
+    - `policy_changed` (#497: the mission's approval setting changed since the proposal, so approving would answer
+      the 409 below): "The mission's approval setting changed after this grant was proposed, so it can't be approved.
+      It has to be proposed again." Reject stays, so the proposal can be cleared.
     - A reason the console doesn't know: "You can't approve this grant, so another org admin approves it." with the
       code in Technical details.
 - **Approve refusals** (nothing recorded; each says "Your approval wasn't recorded." after the why, U95):
@@ -4024,10 +4041,143 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
   Technical details only): "Not narrowed: this
   change gives Nightly planner more than it has now (Contacts per plan, at most), so it needs approval. Propose it as
   a new grant instead." Without `fields`, the same without the bracket. The console offers only narrower values in the sheet, so this is the backstop.
-- **Revoke** stays one act, at once, with a reason, even while a widening of the same grant is proposed. If one is,
+  - Nothing changed (422 `automation_grant_narrow_unchanged`, #497): "Not narrowed: these values are the ones the
+    grant has now, so nothing changed. Choose less than it allows, or cancel." Up front (A6/A7), `Narrow` is disabled
+    until a value is narrower, with the reason "Choose less than the grant allows now."; the 422 is the backstop.
+- **Access the person doesn't hold** (403 `automation_grant_capability_required`, #497; #281's rule: whoever proposes,
+  grants or approves must hold every capability the grant gives; no `details`). **Unreachable today:** an org admin
+  holds every capability a grant can give; the lines are for when that changes. By the act:
+  - Propose: "Not proposed: this grant would let Nightly planner do something you can't do yourself, so you can't
+    propose it. Ask an org admin who can do everything it allows to propose it."
+  - Grant (under "Applies without approval"): "Not granted: this grant would let Nightly planner do something you
+    can't do yourself, so you can't grant it. Ask an org admin who can do everything it allows to grant it."
+  - Approve: "Not approved: this grant lets Nightly planner do something you can't do yourself, so you can't approve
+    it. An org admin who can do everything it allows approves it. Your approval wasn't recorded."
+  - No list of what's beyond them: the 403 carries none (U20), so the lines don't name it. With no name, "the service
+    identity this grant is for" replaces "Nightly planner".
+- **Revoke** stays one act, at once, with a reason, even while a widening of the same grant is proposed. If a widening is proposed,
   the revoke sheet adds: "This also withdraws the proposal waiting for approval, so it can't switch automation
   back on later." (A widening proposal records `replaces_grant_id`; revoking that grant withdraws it in the same
-  transaction.)
+  transaction.) The reason is the console's rule (ux, #514): the server no longer requires one, and for a one-person
+  tightening the reason is the only record of why. So `Revoke` stays disabled with "Give a reason first." (A7) until
+  there's a reason; no 422 is behind it.
+- **A grant made before Cadence checked grants against the approval setting** (#497; the row's
+  `issued_before_two_person_approval: true`) can only be revoked. Never "legacy" or "two-person" on screen, and not
+  "before grants needed a second person's approval", which isn't true on a mission set to "Applies without approval"
+  (ux).
+  - The row's state line adds, muted: "Made before Cadence checked grants against the mission's approval setting, so
+    it can only be revoked. To change it, propose a new grant."
+  - Up front (A6/A7): `Narrow…` is disabled with "This grant can only be revoked. To change it, propose a new
+    grant." `Revoke…` stays.
+  - The backstop, 409 `automation_grant_legacy`, by the act: Narrow "Not narrowed: this grant was made before Cadence
+    checked grants against the mission's approval setting, so it can only be revoked. Nothing changed. To change it,
+    propose a new grant."; Approve "Not approved: this grant was made before Cadence checked grants against the
+    mission's approval setting, so it can only be revoked. Your approval wasn't recorded."; Reject "Not rejected: …
+    so it can only be revoked. Nothing changed." (Approve and Reject can't show on an active grant, so those two are
+    for completeness.)
+- **Suspended** (#499, the director's ruling on #283; api's shape 11-19). Changing a mission's approval setting to
+  "Needs a second person's approval" suspends each active grant that became active on one person's approval. A
+  suspended grant authorizes nothing until it's resumed. Revoke stays, as on an active grant. A grant made before
+  Cadence checked grants against the setting is never suspended (ca-security). A suspension never extends a grant's
+  validity: past `valid_until`, a suspended grant reads `expired` (`EXPIRED`, the active grant's line), and resuming
+  it answers the `expired` refusal below (api).
+  - Tag `SUSPENDED` (caution, mark + word, B2).
+  - Row line (`suspension {at, by, settings_revision, level}`; who and when one event, U29), by the setting now in
+    force (the read's `approval_setting`). `level` (api 11-19) says which save tightened it: `mission` "Suspended
+    when Mira K. changed the mission's approval setting to Needs a second person's approval at 11-19 22:40Z. A
+    second org admin resumes it."; `organization` "Suspended when Mira K. changed the organization's approval setting
+    to Needs a second person's approval at 11-19 22:40Z. …" (an organization default reaches inheriting missions).
+    `level` missing or unknown: "…changed the approval setting for this mission to …", which claims neither. `by`
+    with no name: "Suspended when the mission's (organization's) approval setting changed to Needs a second person's
+    approval at 11-19 22:40Z." (the next sentence likewise). If the setting is back to "Applies without approval":
+    "An org admin resumes it." The setting unread: "A second org admin resumes it." (the stricter form; the answer
+    says what happened).
+  - `Resume…` (a sheet, as approve: `sha256`, `operation_id`): title `Resume the grant`, commit `Resume`, muted line
+    "It takes effect again at once. Nightly planner can act under it until 12-19 06:40Z." After a resumed answer:
+    "Resumed. Nightly planner can act under it until 12-19 06:40Z." Any other answer (U20): "Cadence didn't confirm
+    that it resumed. Reload to see it." A replay (`replayed: true`) shows as this one's result.
+  - Up front (A6), from `viewer_can_decide` / `cannot_decide_because` / `cannot_decide_details`, which cover a
+    suspended grant ("decide" = resume). `Resume…` is disabled with its reason; Revoke stays:
+    - `approved` (the grant's original approver): "You approved this grant, so another org admin resumes it."
+    - `proposer`: "You proposed this grant, so another org admin resumes it."
+    - `accountable` (`.grantee`): "You're accountable for Nightly planner, so another org admin resumes its grant."
+    - `authors_unknown` (`.service`): "Nightly planner has no one recorded as accountable for it, so its grant can't
+      be resumed yet. An org admin records who's accountable in People › Service identities."
+    - `not_admin`: no actions; the row line stands. Unknown reason: "You can't resume this grant, so another org
+      admin resumes it." with the code in Technical details.
+  - Refusals (nothing changed; why, then "Nothing changed.", then the reader's act):
+    - 403 `automation_grant_self_approval_forbidden`: `because: "approved"` "Not resumed: you approved this grant,
+      so another org admin resumes it. Nothing changed."; `"proposed"` "Not resumed: you proposed this grant, so
+      another org admin resumes it. Nothing changed."; `"accountable"` (`grantee`) "Not resumed: you're accountable
+      for Nightly planner, so another org admin resumes its grant. Nothing changed."
+    - 403 `automation_grant_approver_authors_unknown` (`service`): "Not resumed: Nightly planner has no one recorded
+      as accountable for it, so its grant can't be resumed yet. Nothing changed. An org admin records who's
+      accountable in People › Service identities."
+    - 403 `automation_grant_capability_required`: "Not resumed: this grant lets Nightly planner do something you
+      can't do yourself, so you can't resume it. Nothing changed. Ask an org admin who can do everything it allows
+      to resume it."
+    - 409 `automation_grant_legacy`: "Not resumed: this grant was made before Cadence checked grants against the
+      mission's approval setting, so it can only be revoked. Nothing changed. To change it, propose a new grant."
+    - 409 `automation_grant_not_suspended` (`state`): `expired` "Not resumed: this grant's validity ended, so it
+      can't be resumed. Nothing changed. To go on, propose a new grant."; another state in words: `active`
+      "Not resumed: it's active again. Nothing changed. Reload to see it."; `revoked` "Not resumed: it was revoked.
+      Nothing changed. Reload to see it."; any other, or unknown: "Not resumed: it isn't suspended any more. Nothing
+      changed. Reload to see it."
+    - 409 `grant_changed`: "Not resumed: the grant changed after you opened it. Nothing changed. Reload to see it,
+      then resume it again."
+    - 403 `authenticated_user_required`: "Not resumed: only a person can resume a grant, not a service identity.
+      Nothing changed." (unreachable today, as the other person-only lines.)
+    - `duplicate_operation`: "Not resumed: Cadence matched this to an earlier, different request, so nothing
+      changed. Reload and try again." Unknown code: "Not resumed: Cadence refused this. Nothing changed." with the
+      code in Technical details.
+  - Audit: "Suspended the grant for Nightly planner, when the mission's approval setting changed to Needs a second
+    person's approval" (`organization`: "the organization's"; no level: "the approval setting for this mission";
+    the settings saver as who); "Resumed the grant for Nightly planner".
+  - **The settings save that suspends** (Mission settings and Organization settings, Governance; fe-setup's screen,
+    SettingsAuditProviders.md points here). Saving "Needs a second person's approval" can answer 409
+    `approval_tightening_suspends_grants` (`details {grants: [{id, mission {id, name}, service {id, name|null},
+    allowed_actions, valid_until}], digest}`); nothing is written. The section shows, in place of its save line, a
+    caution callout (role="alert", the person's act refused for now), then saves again with
+    `acknowledged_suspensions: digest` on confirm. In step with #430's audit words: option words, names up to 3
+    then "and N more", what the save will do, never "now".
+    - Lead: "Saving this suspends 3 automation grants: Nightly planner, Relay sync and Ops bot. Until a second org
+      admin resumes each, its service can't act under it." One: "Saving this suspends 1 automation grant: Nightly
+      planner. Until a second org admin resumes it, Nightly planner can't act under it." More than 3: "…: Nightly
+      planner, Relay sync, Ops bot and 2 more." A service with no name: "Unknown service identity" (U25), never
+      the id. Organization level adds the missions: "…suspends 4 automation grants on 2 missions: …", and names
+      each service once, with a count when it has grants on more than one mission: "Nightly planner (2 missions),
+      Relay sync". The Show all list stays per grant.
+    - `Show all` lists each grant: "Nightly planner · plan, submit · until 12-19 06:40Z" (U105's action words); at
+      organization level, the mission first: "EARENDIL · Nightly planner · …". Each mission links `Open grants` to
+      its Contact planning page. A mission with no name: "Unknown mission".
+    - Buttons: `Save and suspend 3 grants` (`1 grant`) and `Cancel` (focus starts on Cancel; Cancel closes the
+      callout and leaves the setting unsaved, as the field shows).
+    - The list changed on the resend (a new 409 with a new list): "The grants this would suspend changed, so nothing
+      was saved. Check the list, then save again." above the new list and buttons.
+- **Words the build settled** (fe-ops' nearest forms in #514, agreed by ca-ux; U105 hadn't given them):
+  - Result lines (each only on the answer's confirmed state, U20; otherwise "Cadence didn't confirm the approval /
+    rejection / revoke. Reload to see it."): Approve "Approved. Nightly planner can act under it until 12-19
+    06:40Z."; Reject "Rejected. Nightly planner won't act under this grant."; Revoke "Revoked. Nightly planner can't
+    act under this grant any more." (never "stops now": in-flight runs aren't the revoke's answer).
+  - Reject sheet: title `Reject the proposed grant`, body "Nightly planner won't act under this grant. To try again,
+    propose a new grant.", commit `Reject`; a reason is required ("Give a reason first.", A7), the 422's field
+    message under the field.
+  - Narrow result (the answer's grant): "Narrowed. Nightly planner can now plan and submit, planning up to 48h 00m
+    ahead, 40 contacts per plan, 2 at once, until 12-19 06:40Z." (counts through plural()).
+  - Narrow fields: hint "Now <value>. Choose the same or less."; larger "That's more than the grant allows now. To
+    widen it, propose a new grant."; no actions "Keep at least one."; not a whole number "Enter a whole number above
+    0."
+  - `automation_grant_not_proposed` while `decided_by` is a bare id: the decider isn't named (U25): "This grant was
+    already approved at 11-19 06:52Z, so your approval wasn't recorded. Reload to see it." (U95, as the named form); when the id is the viewer's, "You already approved this
+    grant at …". With `{id, name}`, U105's named form.
+  - Reject on a grant no longer proposed: "Not rejected: this grant was already approved, so nothing changed. Reload
+    to see it." (likewise expired and withdrawn).
+  - `grant_changed` on Approve: "Not approved: this grant changed after you opened it. Your approval wasn't
+    recorded. Reload to see it."; Narrow or Revoke on a grant no longer active: "Not narrowed: this grant isn't active
+    any more, so nothing changed. Reload to see it." / "Not revoked: this grant isn't active any more, so nothing
+    changed. Reload to see it."; an unknown narrow code: "Not narrowed: Cadence
+    refused this change, so nothing changed." with the code in Technical details.
+  - A proposer with no name: the clause drops ("Proposed at 11-19 06:40Z · decide by …").
 - **Widening** (more actions, more services, longer validity) is a new proposal, worded as the sheet above.
 - **Audit** (who and when as one event, U29): "Proposed a grant for Nightly planner", "Granted Nightly planner
   automation (no approval needed under this mission's setting)" for a grant that takes effect at once, "Approved Mira K.'s grant for

@@ -55,11 +55,7 @@ defmodule Cadence.Commanding.ServiceRequesterSeparationTest do
   end
 
   test "with nobody on record for the service, nobody can approve its request", c do
-    Repo.delete_all(
-      from(row in ServiceAccountableRow,
-        where: row.service_identity_id == ^c.service.service_identity_id
-      )
-    )
+    Cadence.ServiceIdentityFixtures.forget_accountables!(c.service.service_identity_id)
 
     id = c.service.service_identity_id
 

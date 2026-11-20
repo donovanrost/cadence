@@ -229,9 +229,7 @@ defmodule Cadence.Control.ActivationAuthorSeparationTest do
     test "a service with nobody on record refuses everyone, naming the service", c do
       legacy = c.service.service_identity_id
 
-      Repo.delete_all(
-        from(row in ServiceAccountableRow, where: row.service_identity_id == ^legacy)
-      )
+      Cadence.ServiceIdentityFixtures.forget_accountables!(legacy)
 
       restamp!(c.revision_id, legacy)
       {:ok, request} = submit(c, c.b, [c.craft])

@@ -10,6 +10,7 @@ defmodule CadenceWeb.ActivationController do
   alias Cadence.Management.Activations.{ActivationDecision, ActivationRequest}
   alias Cadence.MissionModels
   alias CadenceWeb.{ActivationJSON, ActivationParams, ControlPlaneAccess}
+  alias CadenceWeb.Activations.ApproveOutcome
 
   def index(conn, %{"organization_id" => organization_id, "mission_id" => mission_id} = params) do
     with {:ok, _mission} <-
@@ -97,9 +98,11 @@ defmodule CadenceWeb.ActivationController do
              conn.assigns.current_scope,
              activation_request_id,
              reason
-           ),
-         {:ok, %ActivationExecution{} = execution} <- ControlActivations.execute(approved) do
-      json(conn, %{data: ActivationJSON.approval_result(request, decision, execution)})
+           ) do
+      # #263: the approval is recorded now, so the answer says so whatever the apply does: an
+      # apply that fails, doesn't finish or raises is `needs_review`, never a refusal (as L10).
+      {execution, outcome} = ApproveOutcome.after_approval(approved, activation_request_id)
+      json(conn, %{data: ActivationJSON.approval_result(request, decision, execution, outcome)})
     end
   end
 

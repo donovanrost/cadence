@@ -5,23 +5,26 @@ defmodule Cadence.Configuration.Status do
   revision numbers integers, actors `%{kind, id, name}`.
   """
 
-  alias Cadence.Configuration.{ChangeSetStore, Document, Ledger}
+  alias Cadence.Configuration.{ActorNames, ChangeSetStore, Document, Ledger}
 
   @spec current(String.t(), String.t()) :: map()
   def current(organization_id, mission_id) do
     head = Ledger.ensure_head(organization_id, mission_id)
     {:ok, revision} = Ledger.fetch_revision(mission_id, head.revision_number)
 
-    %{
-      head: revision_view(revision, head.revision_number),
-      change_set: mission_id |> ChangeSetStore.active() |> change_set_view()
-    }
+    ActorNames.named(
+      %{
+        head: revision_view(revision, head.revision_number),
+        change_set: mission_id |> ChangeSetStore.active() |> change_set_view()
+      },
+      mission_id
+    )
   end
 
   @spec change_set(String.t(), String.t()) :: {:ok, map()} | {:error, term()}
   def change_set(mission_id, change_set_id) do
     with {:ok, set} <- ChangeSetStore.fetch(mission_id, change_set_id),
-         do: {:ok, change_set_view(set)}
+         do: {:ok, set |> change_set_view() |> ActorNames.named(mission_id)}
   end
 
   @spec list_revisions(String.t(), String.t(), keyword()) :: [map()]
@@ -31,6 +34,7 @@ defmodule Cadence.Configuration.Status do
     mission_id
     |> Ledger.list_revisions(opts)
     |> Enum.map(&revision_view(&1, head.revision_number))
+    |> ActorNames.named(mission_id)
   end
 
   @spec get_revision(String.t(), String.t(), pos_integer()) :: {:ok, map()} | {:error, term()}
@@ -39,7 +43,12 @@ defmodule Cadence.Configuration.Status do
 
     with {:ok, revision} <- Ledger.fetch_revision(mission_id, number) do
       entries = Enum.map(Ledger.entries(revision.revision_id), &entry_view/1)
-      {:ok, revision |> revision_view(head.revision_number) |> Map.put(:entries, entries)}
+
+      {:ok,
+       revision
+       |> revision_view(head.revision_number)
+       |> Map.put(:entries, entries)
+       |> ActorNames.named(mission_id)}
     end
   end
 
@@ -48,7 +57,11 @@ defmodule Cadence.Configuration.Status do
   def compare(mission_id, from, to) when is_integer(from) and is_integer(to) and from < to do
     with {:ok, _} <- Ledger.fetch_revision(mission_id, from),
          {:ok, _} <- Ledger.fetch_revision(mission_id, to) do
-      {:ok, fold_entries(Ledger.entries_between(mission_id, from, to))}
+      {:ok,
+       mission_id
+       |> Ledger.entries_between(from, to)
+       |> fold_entries()
+       |> ActorNames.named(mission_id)}
     end
   end
 
@@ -59,6 +72,7 @@ defmodule Cadence.Configuration.Status do
     mission_id
     |> Ledger.entity_entries(kind, entity_id)
     |> Enum.map(&entry_view/1)
+    |> ActorNames.named(mission_id)
   end
 
   defp fold_entries(entries) do

@@ -1,5 +1,10 @@
 defmodule Cadence.ContactPlanning.AutomationGrants do
-  @moduledoc "Issue, revoke, inspect, and enforce exact mission automation authorization."
+  @moduledoc """
+  Propose, inspect and enforce mission automation grants. #283 (ux U105): `issue/4` makes a
+  proposal under the mission's 'independent' approval setting, which authorizes nothing until a
+  second org admin approves it (`AutomationGrantReview`), and an active grant at once under
+  'direct'. `authorize/6` is checked at every use, inside the caller's transaction.
+  """
 
   import Ecto.Query
 
@@ -8,8 +13,12 @@ defmodule Cadence.ContactPlanning.AutomationGrants do
 
   alias Cadence.ContactPlanning.{
     AutomationGrant,
+    AutomationGrantDecisions,
+    AutomationGrantReview,
     FleetPlanningPolicies
   }
+
+  alias Cadence.Governance.ActivationPolicy
 
   alias Cadence.Management.Contacts.Store.AutomationGrantRow
   alias Cadence.Repo
@@ -20,13 +29,35 @@ defmodule Cadence.ContactPlanning.AutomationGrants do
       when is_binary(mission_id) and is_map(attrs) and is_list(opts) do
     now = now(opts)
 
-    with :ok <- authorize_admin(scope),
-         {:ok, actor_id} <- admin_actor_id(scope) do
-      Repo.transaction(fn ->
-        issue_or_rollback(scope, mission_id, attrs, actor_id, now, opts)
+    with {:ok, actor_id} <- admin_actor_id(scope),
+         :ok <- authorize_admin(scope) do
+      # The approval setting is held stable while the proposal records it (#283, M2 evidence).
+      ActivationPolicy.with_stable_policy(scope.organization_id, fn ->
+        issue_transaction(scope, mission_id, attrs, actor_id, now, opts)
       end)
     end
   end
+
+  @doc """
+  Locks a grant's row in the caller's transaction, in the one order every grant path uses (the
+  grant a proposal replaces first; `AutomationGrantReview.lock_in_order/3`): `:ok` or
+  `{:error, :automation_grant_not_found}`. The console's decisions take it before checking their
+  operation id (#283, as #257's plans).
+  """
+  @spec lock(binary(), binary(), binary()) :: :ok | {:error, :automation_grant_not_found}
+  def lock(organization_id, mission_id, grant_id) do
+    with {:ok, _row, _grant} <-
+           AutomationGrantReview.lock_in_order(organization_id, mission_id, grant_id),
+         do: :ok
+  end
+
+  defdelegate approve(scope, mission_id, grant_id, digest, opts \\ []), to: AutomationGrantReview
+  defdelegate reject(scope, mission_id, grant_id, reason, opts \\ []), to: AutomationGrantReview
+  defdelegate narrow(scope, mission_id, grant_id, changes, opts \\ []), to: AutomationGrantReview
+
+  defp issue_transaction(scope, mission_id, attrs, actor_id, now, opts),
+    do:
+      Repo.transaction(fn -> issue_or_rollback(scope, mission_id, attrs, actor_id, now, opts) end)
 
   defp issue_or_rollback(scope, mission_id, attrs, actor_id, now, opts) do
     case issue_locked(scope, mission_id, attrs, actor_id, now, opts) do
@@ -56,14 +87,38 @@ defmodule Cadence.ContactPlanning.AutomationGrants do
              now
            ),
          :ok <- grant_within_policy(grant, policy_version),
-         :ok <- valid_for_future(grant, now) do
-      grant
-      |> AutomationGrantRow.changeset()
-      |> Repo.insert()
-      |> case do
-        {:ok, row} -> {:ok, AutomationGrantRow.to_domain(row)}
-        {:error, reason} -> {:error, reason}
-      end
+         :ok <- replaces(scope, mission_id, grant),
+         :ok <- AutomationGrantReview.confers(scope, mission_id, grant) do
+      insert_and_record(scope, grant)
+    end
+  end
+
+  defp insert_and_record(scope, grant) do
+    decision = if grant.lifecycle_state == :active, do: :not_required, else: :proposed
+
+    with {:ok, row} <- grant |> AutomationGrantRow.changeset() |> Repo.insert(),
+         grant = AutomationGrantRow.to_domain(row),
+         :ok <-
+           AutomationGrantDecisions.record(scope, decision, grant, %{
+             reason: grant.approval_reason,
+             policy: grant.approval_policy,
+             decided_at: grant.proposed_at
+           }) do
+      {:ok, grant}
+    end
+  end
+
+  # A widening names the active grant it would replace (U105); approval revokes that one.
+  defp replaces(_scope, _mission_id, %{replaces_grant_id: nil}), do: :ok
+
+  defp replaces(scope, mission_id, grant) do
+    case fetch(scope.organization_id, mission_id, grant.replaces_grant_id) do
+      {:ok, %{lifecycle_state: :active, service_identity_id: service}}
+      when service == grant.service_identity_id ->
+        :ok
+
+      _other ->
+        {:error, :automation_grant_replaces_invalid}
     end
   end
 
@@ -81,28 +136,16 @@ defmodule Cadence.ContactPlanning.AutomationGrants do
     if expected == reference, do: :ok, else: {:error, :stale_fleet_planning_policy_evidence}
   end
 
-  @spec revoke(Scope.t(), binary(), binary(), binary(), binary(), keyword()) ::
+  @doc """
+  Revokes an active grant at once (`AutomationGrantReview.revoke/5`). `_read_hash` is what the
+  revoker's screen showed; it no longer refuses (ca-security 11-19: a tightening is never refused,
+  even if the grant was narrowed meanwhile).
+  """
+  @spec revoke(Scope.t(), binary(), binary(), binary() | nil, binary() | nil, keyword()) ::
           {:ok, AutomationGrant.t()} | {:error, term()}
-  def revoke(%Scope{} = scope, mission_id, grant_id, expected_hash, reason, opts \\ [])
-      when is_binary(mission_id) and is_binary(grant_id) and is_binary(expected_hash) and
-             is_list(opts) do
-    reason = reason |> to_string() |> String.trim()
-    now = now(opts)
-
-    with :ok <- authorize_admin(scope),
-         {:ok, actor_id} <- admin_actor_id(scope),
-         :ok <- require_reason(reason) do
-      revoke_transaction(
-        scope.organization_id,
-        mission_id,
-        grant_id,
-        expected_hash,
-        reason,
-        actor_id,
-        now
-      )
-    end
-  end
+  def revoke(%Scope{} = scope, mission_id, grant_id, _read_hash, reason, opts \\ [])
+      when is_binary(mission_id) and is_binary(grant_id) and is_list(opts),
+      do: AutomationGrantReview.revoke(scope, mission_id, grant_id, reason, opts)
 
   @spec fetch(binary(), binary(), binary()) ::
           {:ok, AutomationGrant.t()} | {:error, term()}
@@ -183,8 +226,9 @@ defmodule Cadence.ContactPlanning.AutomationGrants do
     now = now(opts)
 
     with :ok <- service_actor(scope, mission_id),
-         {:ok, grant} <- fetch(scope.organization_id, mission_id, grant_id),
+         {:ok, grant} <- fetch_shared(scope.organization_id, mission_id, grant_id),
          :ok <- grant_actor(grant, scope),
+         :ok <- current_layout(grant),
          :ok <- usable(grant, now),
          :ok <- action_allowed(grant, action),
          {:ok, _policy, active_policy} <-
@@ -222,18 +266,53 @@ defmodule Cadence.ContactPlanning.AutomationGrants do
         maximum_estimated_cost_micros: value(attrs, :maximum_estimated_cost_micros),
         currency: value(attrs, :currency),
         maximum_execution_concurrency: value(attrs, :maximum_execution_concurrency),
-        valid_from: value(attrs, :valid_from, now),
-        valid_until: value(attrs, :valid_until),
-        lifecycle_state: :active,
-        approved_by: actor_id,
-        approved_at: now,
+        validity_seconds: validity_seconds(attrs),
+        lifecycle_state: :proposed,
+        proposed_by: actor_id,
+        proposed_at: now,
+        proposal_expires_at:
+          DateTime.add(now, AutomationGrant.proposal_window_seconds(), :second),
         approval_reason: value(attrs, :approval_reason),
-        revocation_reason: ""
+        approval_policy: ActivationPolicy.evidence(organization_id, mission_id),
+        replaces_grant_id: value(attrs, :replaces_grant_id)
       })
 
-    {:ok, grant}
+    {:ok, direct(grant, actor_id, now)}
   rescue
     error in ArgumentError -> {:error, {:invalid_automation_grant, error.message}}
+  end
+
+  # Under 'direct' the proposer's own approval stands (U105: no new refusal under direct): the
+  # grant is active at once, its validity starting now.
+  defp direct(%AutomationGrant{approval_policy: %{"separation_of_duties" => true}} = grant, _, _),
+    do: grant
+
+  defp direct(grant, actor_id, now) do
+    grant
+    |> Map.from_struct()
+    |> Map.merge(%{
+      lifecycle_state: :active,
+      approved_by: actor_id,
+      approved_at: now,
+      valid_from: now,
+      valid_until: DateTime.add(now, grant.validity_seconds, :second),
+      content_sha256: nil
+    })
+    |> AutomationGrant.new()
+  end
+
+  # Validity is a length until approval (#283). Callers that still send a window give its length.
+  defp validity_seconds(attrs) do
+    case {value(attrs, :validity_seconds), value(attrs, :valid_from), value(attrs, :valid_until)} do
+      {seconds, _from, _until} when is_integer(seconds) ->
+        seconds
+
+      {nil, %DateTime{} = from, %DateTime{} = until} ->
+        DateTime.diff(until, from, :second)
+
+      _missing ->
+        nil
+    end
   end
 
   defp grant_within_policy(grant, policy) do
@@ -392,13 +471,47 @@ defmodule Cadence.ContactPlanning.AutomationGrants do
       else: {:error, :automation_grant_actor_mismatch}
   end
 
-  defp usable(%{lifecycle_state: :revoked}, _now), do: {:error, :automation_grant_revoked}
-
+  # One expiry function for use and read (AutomationGrant.effective_state/2; ca-security).
   defp usable(grant, now) do
-    cond do
-      DateTime.before?(now, grant.valid_from) -> {:error, :automation_grant_not_yet_valid}
-      not DateTime.before?(now, grant.valid_until) -> {:error, :automation_grant_expired}
-      true -> :ok
+    case AutomationGrant.effective_state(grant, now) do
+      :active ->
+        if DateTime.before?(now, grant.valid_from),
+          do: {:error, :automation_grant_not_yet_valid},
+          else: :ok
+
+      :revoked ->
+        {:error, :automation_grant_revoked}
+
+      :expired when grant.lifecycle_state == :active ->
+        {:error, :automation_grant_expired}
+
+      state ->
+        {:error, {:automation_grant_not_active, %{state: state}}}
+    end
+  end
+
+  # DECISIONS #108 (#283): a row whose stored hash isn't its content's hash in today's layout
+  # (written before #283, or altered) is refused, never trusted. The dev reset recreates grants.
+  defp current_layout(grant) do
+    if grant.content_sha256 == AutomationGrant.content_sha256(grant),
+      do: :ok,
+      else: {:error, :automation_grant_hash_mismatch}
+  end
+
+  # Read under a shared lock in the caller's transaction (ca-security): a revoke or narrow
+  # (FOR UPDATE) waits for in-flight uses, and the next use sees it.
+  defp fetch_shared(organization_id, mission_id, grant_id) do
+    AutomationGrantRow
+    |> where(
+      [grant],
+      grant.organization_id == ^organization_id and grant.mission_id == ^mission_id and
+        grant.automation_grant_id == ^grant_id
+    )
+    |> lock("FOR SHARE")
+    |> Repo.one()
+    |> case do
+      nil -> {:error, :automation_grant_not_found}
+      row -> {:ok, AutomationGrantRow.to_domain(row)}
     end
   end
 
@@ -413,12 +526,6 @@ defmodule Cadence.ContactPlanning.AutomationGrants do
          grant.fleet_planning_policy_version == active_policy.version,
        do: :ok,
        else: {:error, :automation_grant_policy_drift}
-  end
-
-  defp valid_for_future(grant, now) do
-    if DateTime.after?(grant.valid_until, now),
-      do: :ok,
-      else: {:error, :automation_grant_already_expired}
   end
 
   defp exceeds_optional?(_value, nil), do: false
@@ -436,66 +543,11 @@ defmodule Cadence.ContactPlanning.AutomationGrants do
 
   defp admin_actor_id(%Scope{}), do: {:error, :authenticated_user_required}
 
-  defp revoke_transaction(
-         organization_id,
-         mission_id,
-         grant_id,
-         expected_hash,
-         reason,
-         actor_id,
-         now
-       ) do
-    Repo.transaction(fn ->
-      with {:ok, row} <- lock_grant(organization_id, mission_id, grant_id),
-           :ok <- active_grant(row),
-           :ok <- exact_hash(row, expected_hash),
-           {:ok, revoked} <-
-             row
-             |> AutomationGrantRow.revocation_changeset(%{
-               lifecycle_state: "revoked",
-               revoked_by: actor_id,
-               revoked_at: now,
-               revocation_reason: reason
-             })
-             |> Repo.update() do
-        AutomationGrantRow.to_domain(revoked)
-      else
-        {:error, error} -> Repo.rollback(error)
-      end
-    end)
-    |> normalize_transaction()
-  end
-
-  defp lock_grant(organization_id, mission_id, grant_id) do
-    case AutomationGrantRow
-         |> where(
-           [grant],
-           grant.organization_id == ^organization_id and grant.mission_id == ^mission_id and
-             grant.automation_grant_id == ^grant_id
-         )
-         |> lock("FOR UPDATE")
-         |> Repo.one() do
-      nil -> {:error, :automation_grant_not_found}
-      row -> {:ok, row}
-    end
-  end
-
-  defp active_grant(%AutomationGrantRow{lifecycle_state: "active"}), do: :ok
-  defp active_grant(_row), do: {:error, :automation_grant_revoked}
-
-  defp exact_hash(%AutomationGrantRow{content_sha256: hash}, hash), do: :ok
-  defp exact_hash(_row, _hash), do: {:error, :stale_automation_grant_hash}
-
-  defp require_reason(""), do: {:error, :automation_grant_revocation_reason_required}
-  defp require_reason(_reason), do: :ok
-
   defp maybe_filter_state(query, nil), do: query
 
-  defp maybe_filter_state(query, state) when state in [:active, :revoked],
-    do: where(query, [grant], grant.lifecycle_state == ^Atom.to_string(state))
-
-  defp normalize_transaction({:ok, grant}), do: {:ok, grant}
-  defp normalize_transaction({:error, reason}), do: {:error, reason}
+  defp maybe_filter_state(query, state)
+       when state in [:proposed, :active, :rejected, :revoked, :withdrawn],
+       do: where(query, [grant], grant.lifecycle_state == ^Atom.to_string(state))
 
   defp now(opts),
     do: opts |> Keyword.get(:now, DateTime.utc_now()) |> DateTime.truncate(:microsecond)

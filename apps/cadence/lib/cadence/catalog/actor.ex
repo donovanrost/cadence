@@ -4,15 +4,18 @@ defmodule Cadence.Catalog.Actor do
   `requested_by`, and a database's or revision's `created_by` (lead 11-14/11-17; imports used to
   store `%{}`).
 
-  - A person: `{"actor_kind" => "user", "user_id", "name", "email"}`.
+  - A person: `{"actor_kind" => "user", "user_id", "name"}`, where `name` is the display name or
+    nil. It never carries the email (#471, ca-security's P1 on #462); documents written before
+    #471 may, and reads never use it.
   - A service identity: `{"actor_kind" => "service", "service_identity_id", "name"}`.
   - Cadence itself (a seed or a task): `{"actor_kind" => "system", "system_id", "name"}`, where
     `system_id` is a stable ref (e.g. the seed's id) and `name` says what ran, never a person.
 
   New documents never carry a bare `"id"`: the model approval gate's importer read
   (`Catalog.model_importers/3`) takes `"user_id"` (or, on old catalog revision rows, a legacy
-  `"id"`), so only a person counts as an importer. The catalog read names the actor
-  by `"name"`, else `"email"`; the operational event by `user_id` or `service_identity_id`.
+  `"id"`), so only a person counts as an importer. Reads name the actor by who they are now
+  (`Reads.Catalog.Requesters`, #146/#366), never by the stored `"name"` or `"email"`; the
+  operational event by `user_id` or `service_identity_id`.
   """
 
   alias Cadence.Auth.Scope
@@ -25,8 +28,7 @@ defmodule Cadence.Catalog.Actor do
       recorded_as(%{
         "actor_kind" => "user",
         "user_id" => id,
-        "name" => Map.get(user, :display_name),
-        "email" => Map.get(user, :email)
+        "name" => present(Map.get(user, :display_name))
       })
 
   def from_scope(%Scope{actor_kind: :service, service_identity: %{service_identity_id: id} = s})
@@ -59,6 +61,9 @@ defmodule Cadence.Catalog.Actor do
     do: :ok
 
   def recorded(_actor), do: {:error, :catalog_import_actor_required}
+
+  defp present(name) when is_binary(name) and name != "", do: name
+  defp present(_none), do: nil
 
   defp recorded_as(actor) do
     with :ok <- recorded(actor), do: {:ok, actor}

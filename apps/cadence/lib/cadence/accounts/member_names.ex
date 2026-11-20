@@ -12,6 +12,21 @@ defmodule Cadence.Accounts.MemberNames do
   alias Cadence.Accounts.{OrganizationMembershipRow, UserRow}
   alias Cadence.Repo
 
+  @doc """
+  Which of `user_ids` are people at all, whatever their membership (#472: a non-member still
+  reads as a person, unnamed, never as Cadence).
+  """
+  @spec people([binary()]) :: MapSet.t(binary())
+  def people([]), do: MapSet.new()
+
+  def people(user_ids) when is_list(user_ids) do
+    UserRow
+    |> where([u], u.user_id in ^Enum.uniq(user_ids))
+    |> select([u], u.user_id)
+    |> Repo.all()
+    |> MapSet.new()
+  end
+
   @doc "`%{user_id => display_name}` for the ids with an active membership and a display name."
   @spec display_names(binary(), [binary()]) :: %{binary() => binary()}
   def display_names(_organization_id, []), do: %{}
@@ -30,4 +45,29 @@ defmodule Cadence.Accounts.MemberNames do
     |> Repo.all()
     |> Map.new()
   end
+
+  @doc """
+  `%{user_id => display_name | nil}` for every id with an active membership, a member without a
+  display name included (nil). Reads that compare ids (the console's "mine") keep a nameless
+  member's id; anyone missing from the map isn't a member and gets neither (#471).
+  """
+  @spec members(binary(), [binary()]) :: %{binary() => binary() | nil}
+  def members(_organization_id, []), do: %{}
+
+  def members(organization_id, user_ids)
+      when is_binary(organization_id) and is_list(user_ids) do
+    OrganizationMembershipRow
+    |> join(:inner, [m], u in UserRow, on: m.user_id == u.user_id)
+    |> where(
+      [m, _u],
+      m.organization_id == ^organization_id and m.lifecycle_state == "active" and
+        m.user_id in ^Enum.uniq(user_ids)
+    )
+    |> select([_m, u], {u.user_id, u.display_name})
+    |> Repo.all()
+    |> Map.new(fn {id, name} -> {id, present(name)} end)
+  end
+
+  defp present(name) when is_binary(name) and name != "", do: name
+  defp present(_none), do: nil
 end

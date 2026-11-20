@@ -65,10 +65,11 @@ defmodule Cadence.Reads.HandStartedPasses do
     crafts =
       Map.new(Cadence.SpacecraftStore.list_spacecraft(org, mission), &{&1.spacecraft_id, &1})
 
-    Enum.map(contacts, &build(&1, owners, crafts, index))
+    people = ContactStart.people(org, contacts)
+    Enum.map(contacts, &build(&1, owners, crafts, index, people))
   end
 
-  defp build(%RealizedContact{} = contact, owners, crafts, index) do
+  defp build(%RealizedContact{} = contact, owners, crafts, index, people) do
     spacecraft = spacecraft(contact, owners, crafts)
 
     %{
@@ -85,7 +86,7 @@ defmodule Cadence.Reads.HandStartedPasses do
       antenna: nil,
       starts_at: ContactStart.went_live_at(contact),
       ends_at: ContactStart.ended_at(contact),
-      started_by: ContactStart.started_by(contact),
+      started_by: ContactStart.started_by(contact, people),
       not_started: not_started?(contact),
       uplink_capable: nil,
       source: nil,

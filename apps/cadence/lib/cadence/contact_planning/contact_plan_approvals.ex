@@ -558,8 +558,9 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
   # Submit approved and booked in one step). Under 'direct' it's allowed, as before. A send back
   # by the requester is fine either way.
   # #280: the authors and the approver are compared as people. A service author counts as its
-  # issuer and rotators; a service approving under an automation grant counts as its own people plus
-  # the grant's approver. Overlap refuses; an unknown set refuses (`:contact_plan_approver_authors_unknown`).
+  # issuer and rotators; a service approving under an automation grant counts as its own people
+  # plus the grant's proposer and approver (#283). Overlap refuses; an unknown set refuses
+  # (`:contact_plan_approver_authors_unknown`).
   defp separate_approver(:approved, plan_row, version_row, actor, policy)
        when is_map(actor) do
     if policy["separation_of_duties"] == true do
@@ -571,10 +572,12 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
           version_row.created_by
         ])
 
-      grant_approver = get_in(actor, ["automation_grant", "approved_by"])
+      # #283: the grant's proposer and its approver both count (one person under 'direct').
+      grant_people =
+        Enum.map(["proposed_by", "approved_by"], &get_in(actor, ["automation_grant", &1]))
 
       org
-      |> Accountability.separate(actor, authors, grant_approver)
+      |> Accountability.separate(actor, authors, grant_people)
       |> Accountability.refusal(
         :contact_plan_self_approval_forbidden,
         :contact_plan_approver_authors_unknown
@@ -647,6 +650,7 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
          "automation_grant" => %{
            "id" => grant.automation_grant_id,
            "content_sha256" => grant.content_sha256,
+           "proposed_by" => grant.proposed_by,
            "approved_by" => grant.approved_by,
            "approved_at" => DateTime.to_iso8601(grant.approved_at)
          }

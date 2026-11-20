@@ -65,6 +65,8 @@ with Profile/People.
   - Help: "Covers change sets in Setup › Changes, spacecraft configuration reviews, and app settings that need
     activation, such as decom. App settings that save immediately, such as limits, aren't covered." (fe-setup
     found the third reader.)
+  - Saving `Needs a second person's approval` can first list the automation grants it would suspend (#499): words
+    and behaviour in U105 "Suspended", "The settings save that suspends".
 - **Read-only** without the capability: values as text plus "Org admins change settings."
 - **Empty section** (an app with no settings): don't list it.
 

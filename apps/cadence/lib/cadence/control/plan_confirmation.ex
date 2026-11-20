@@ -6,7 +6,7 @@ defmodule Cadence.Control.PlanConfirmation do
   say which passes wait on which provider instead of guessing from reservation states.
   """
 
-  alias Cadence.Accounts
+  alias Cadence.Accounts.MemberNames
   alias Cadence.Control.Contacts, as: ControlContacts
   alias Cadence.GroundNetworks.MissionProviders
   alias Cadence.Management.Contacts, as: ManagementContacts
@@ -47,7 +47,7 @@ defmodule Cadence.Control.PlanConfirmation do
         %{
           unconfirmed: unconfirmed_of(organization_id, mission_id, items, opts),
           execution: execution(items),
-          bookings: bookings(items, resolver_names(items))
+          bookings: bookings(items, resolver_names(organization_id, items))
         }
 
       _not_approved ->
@@ -100,9 +100,11 @@ defmodule Cadence.Control.PlanConfirmation do
   a short code from the last error (`nil` when there is none). `at` is when it last changed.
   `detail`, `retryable` and `retry_after_seconds` are the provider's, when its error said
   (ux ScheduleFlow f05d68e9). `resolved` is `%{by, at}` for an operator's resolution (U29), from
-  `resolved_by` / `resolved_at` on the error document; `names` maps actor ids to display names.
+  `resolved_by` / `resolved_at` on the error document; `names` maps the people who are active members
+  of the plan's organization to their display names (nil when they have none, #468). A person
+  missing from it reads id and name nil: never their email, and no id outside the organization.
   """
-  @spec bookings([struct()], %{binary() => binary()}) :: %{binary() => map()}
+  @spec bookings([struct()], %{binary() => binary() | nil}) :: %{binary() => map()}
   def bookings(items, names \\ %{}),
     do: Map.new(items, &{&1.contact_opportunity_snapshot_id, booking(&1, names)})
 
@@ -131,28 +133,34 @@ defmodule Cadence.Control.PlanConfirmation do
   defp provider_error(%{"reason" => %{"category" => _} = provider}), do: provider
   defp provider_error(_error), do: %{}
 
-  defp resolved(%{"resolved_by" => %{"id" => id} = by, "resolved_at" => at}, names)
+  defp resolved(%{"resolved_by" => %{"kind" => "user", "id" => id}, "resolved_at" => at}, names)
        when is_binary(id) do
-    %{by: %{kind: by["kind"], id: id, name: Map.get(names, id)}, at: at}
+    by =
+      case Map.fetch(names, id) do
+        {:ok, name} -> %{kind: "user", id: id, name: name}
+        :error -> %{kind: "user", id: nil, name: nil}
+      end
+
+    %{by: by, at: at}
+  end
+
+  defp resolved(%{"resolved_by" => %{"id" => id} = by, "resolved_at" => at}, _names)
+       when is_binary(id) do
+    %{by: %{kind: by["kind"], id: id, name: nil}, at: at}
   end
 
   defp resolved(_error, _names), do: nil
 
-  defp resolver_names(items) do
-    for item <- items,
-        %{"resolved_by" => %{"kind" => "user", "id" => id}} <- [item.last_error_document],
-        is_binary(id),
-        uniq: true,
-        into: %{} do
-      {id, user_name(id)}
-    end
-  end
+  # #146 (#468): one batched lookup; a person is named only as an active member, never by email.
+  defp resolver_names(organization_id, items) do
+    ids =
+      for item <- items,
+          %{"resolved_by" => %{"kind" => "user", "id" => id}} <- [item.last_error_document],
+          is_binary(id),
+          uniq: true,
+          do: id
 
-  defp user_name(id) do
-    case Accounts.fetch_user(id) do
-      {:ok, user} -> user.display_name || user.email
-      _missing -> nil
-    end
+    MemberNames.members(organization_id, ids)
   end
 
   defp text(value) when is_binary(value) and value != "", do: value

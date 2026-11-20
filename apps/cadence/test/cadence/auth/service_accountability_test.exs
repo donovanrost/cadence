@@ -148,6 +148,30 @@ defmodule Cadence.Auth.ServiceAccountabilityTest do
                )
     end
 
+    # #283: the grant's proposer and its approver both count for a plan the service approves.
+    test "under a grant, its proposer and its approver both count as the approving side" do
+      planner = issue!("svc-acct-grant-people", person("ada"))
+      grant_people = ["grant-proposer", "grant-approver", nil]
+
+      for author <- ["grant-proposer", "grant-approver"] do
+        assert {:error, {:self, nil}} =
+                 Accountability.separate(
+                   @org,
+                   {:service, planner.service_identity_id},
+                   [{:user, author}],
+                   grant_people
+                 )
+      end
+
+      assert :ok =
+               Accountability.separate(
+                 @org,
+                 {:service, planner.service_identity_id},
+                 [{:user, "someone-else"}],
+                 grant_people
+               )
+    end
+
     test "the system actor and unrecorded actors count no one, as before" do
       system = %{"actor_kind" => "system", "system_id" => "seed:x", "name" => "Seed"}
       assert :ok = Accountability.separate(@org, {:user, "ada"}, [system, %{}, nil])
@@ -185,6 +209,52 @@ defmodule Cadence.Auth.ServiceAccountabilityTest do
              FleetPlanningPolicies.create(bot, @mission, %{})
   end
 
+  # #436: who counts as "self" can't be rewritten after the fact. The table is append-only, as
+  # the decision records are (#116), and an identity with accountable rows can't be deleted.
+  describe "append-only (#436)" do
+    test "UPDATE, DELETE and TRUNCATE are refused; the row is unchanged" do
+      svc = issue!("svc-acct-append-only", person("ada"))
+      id = svc.service_identity_id
+      rows = from(row in ServiceAccountableRow, where: row.service_identity_id == ^id)
+
+      for write <- [
+            fn -> Repo.update_all(rows, set: [user_id: "mallory"]) end,
+            fn -> Repo.delete_all(rows) end,
+            fn -> Repo.query!("TRUNCATE service_identity_accountables") end
+          ] do
+        assert_raise Postgrex.Error, ~r/append-only/, fn ->
+          Repo.transaction(fn -> write.() end)
+        end
+      end
+
+      assert {:ok, ["ada"]} = ServiceAccountability.people(@org, id)
+    end
+
+    test "an identity with accountable rows can't be deleted out from under them" do
+      svc = issue!("svc-acct-restrict", person("ada"))
+      id = svc.service_identity_id
+
+      assert_raise Postgrex.Error, ~r/foreign key/, fn ->
+        Repo.transaction(fn ->
+          Repo.query!("DELETE FROM service_identities WHERE service_identity_id = $1", [id])
+        end)
+      end
+
+      assert {:ok, ["ada"]} = ServiceAccountability.people(@org, id)
+    end
+
+    test "recording still inserts: issue, rotate and attribute" do
+      svc = issue!("svc-acct-still-inserts", person("ada"))
+      assert {:ok, _} = ServiceIdentityKeys.rotate(@org, svc.service_identity_id, person("bo"))
+
+      assert :ok =
+               ServiceAccountability.attribute(admin("cy"), @org, svc.service_identity_id, ["dee"])
+
+      assert {:ok, ["ada", "bo", "cy", "dee"]} =
+               ServiceAccountability.people(@org, svc.service_identity_id)
+    end
+  end
+
   defp issue!(id, issued_by) do
     identity =
       ServiceIdentity.new(%{
@@ -202,7 +272,7 @@ defmodule Cadence.Auth.ServiceAccountabilityTest do
   # An identity issued before #280: no accountable row.
   defp insert_legacy_identity!(id) do
     issued = issue!(id, person("legacy-issuer"))
-    Repo.delete_all(from(row in ServiceAccountableRow, where: row.service_identity_id == ^id))
+    Cadence.ServiceIdentityFixtures.forget_accountables!(id)
     issued
   end
 

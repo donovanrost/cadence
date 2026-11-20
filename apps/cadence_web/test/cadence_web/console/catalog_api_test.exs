@@ -134,10 +134,9 @@ defmodule CadenceWeb.Console.CatalogAPITest do
     {:ok, artifact} =
       Cadence.Catalog.fetch_artifact(org_id, c.mission.mission_id, run.artifact_id)
 
-    assert %{"actor_kind" => "user", "user_id" => ^user_id, "email" => email} =
-             artifact.uploaded_by
-
-    assert email == c.user.email
+    # #471: the stored document names the person by id and display name, never by email.
+    assert %{"actor_kind" => "user", "user_id" => ^user_id} = artifact.uploaded_by
+    refute Map.has_key?(artifact.uploaded_by, "email")
   end
 
   test "upload rejects an unsupported format, missing fields and a missing file", c do
