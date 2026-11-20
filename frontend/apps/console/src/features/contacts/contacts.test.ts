@@ -76,6 +76,7 @@ const pass = (id: string, overrides: Partial<Pass> = {}): Pass => ({
   incomplete_at_end: undefined,
   scid_mismatch: undefined,
   window_moves: undefined,
+  listener_overlap: undefined,
   telemetry_stored: undefined,
   ...overrides,
 });

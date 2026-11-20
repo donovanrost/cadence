@@ -14,6 +14,7 @@ const pass = (id: string, sc: string, start: string) => ({
   locked: false,
   expires_at: null,
   booking: null,
+  listener_overlap: undefined,
 });
 const plan = (state: PlanDetail["state"], providers: readonly string[]): PlanDetail => ({
   id: "plan_1",

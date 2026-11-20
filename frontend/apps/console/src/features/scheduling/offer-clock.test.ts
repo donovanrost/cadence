@@ -20,6 +20,7 @@ const pass = (
   locked: false,
   expires_at: expires === null ? null : `2026-11-13T${expires}:00Z`,
   booking: b,
+  listener_overlap: undefined,
 });
 const ksat = { id: "p-ksat", name: "KSAT" };
 type Plan = Parameters<typeof offerClock>[0];

@@ -35,6 +35,7 @@ import {
   type Reserve,
   type Search,
 } from "./singleBookings.ts";
+import ListenerOverlapNote from "./ListenerOverlapNote.vue";
 
 /**
  * Book a pass (ux Contacts.md, §11 L15): search the spacecraft's ready routes, pick an offer before
@@ -265,6 +266,8 @@ const reasonId = (token: string) => `${reasonPrefix}-${token}`;
           >
             {{ offerBlocked(o, now) }}
           </p>
+          <!-- U58 (b), #361: said before booking; booking stays allowed. -->
+          <ListenerOverlapNote :overlap="o.listener_overlap" class="pt-1" />
           <div v-if="chosen?.token === o.token && !result" class="flex flex-col gap-2 pt-2">
             <p class="m-0 text-readout">{{ confirmLine(scName, o, direction) }}</p>
             <ApTextarea v-model="note" label="Why" :rows="2" placeholder="Optional" />

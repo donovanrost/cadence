@@ -211,6 +211,7 @@ describe("SubmitSheet at-risk passes (ux #13)", () => {
           locked: false,
           expires_at: null,
           booking: null,
+          listener_overlap: undefined,
         },
       ],
       at_risk: [

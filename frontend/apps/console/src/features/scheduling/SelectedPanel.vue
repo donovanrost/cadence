@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import type { RemoteState } from "@/api";
+import { ListenerOverlapNote } from "@/features/contacts/index.ts";
 import { ApButton, ApEmptyState, ApKeyValue, ApPanel, ApTag, formatDuration } from "@/ui";
 import AlternativesList from "./AlternativesList.vue";
 import StationIssues from "./StationIssues.vue";
@@ -115,6 +116,8 @@ const items = computed(() => {
         <ApTag v-if="pass.synthetic" state="stale" label="Synthetic" />
       </div>
       <ApKeyValue :items="items" />
+      <!-- U58 (b), #361: a plan pass that may lose its start to a one-connection listener. -->
+      <ListenerOverlapNote :overlap="drafted?.listener_overlap" class="mt-3" />
       <p class="m-0 mt-3 text-md text-text-3">
         Provider-supplied. Cadence doesn't compute passes yet.
       </p>

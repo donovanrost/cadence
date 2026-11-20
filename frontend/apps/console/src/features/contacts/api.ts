@@ -13,6 +13,7 @@ import {
 } from "@/api/index.ts";
 import { passChangeReader } from "@/features/now/index.ts";
 import { passAttention, passAttentionList, withPassAttentions } from "./passAttentionReader.ts";
+import { listenerOverlapKey } from "./listenerOverlap.ts";
 import { passListReader } from "./passList.ts";
 import { passReadinessReader } from "./readiness.ts";
 
@@ -237,6 +238,8 @@ const pass = withPassAttentions(
         100,
       ),
     ),
+    /** U58 (b), #361: a single-connection listener overlap with another pass; absent before #640. */
+    listener_overlap: listenerOverlapKey,
     /** GET /passes/:id only (api, L14 flown passes): the pass's open changes, newest first. */
     provider_changes: d.optional(d.array(passChangeReader, 100)),
   }),
