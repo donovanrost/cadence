@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, nextTick, ref } from "vue";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
 import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
@@ -40,9 +40,16 @@ const crumbs: readonly ApCrumb[] = [
   { label: "Changes", to: { name: "setup.changes" } },
   { label: "Activation" },
 ];
-function decided(n: DecidedNote) {
+/**
+ * #244 (A5): Approve, Reject or a successful Retry apply unmounts the control that had focus (the
+ * refetch drops the Decide panel or the Retry button). Focus moves to the outcome note.
+ */
+const noteBox = ref<HTMLElement | null>(null);
+async function decided(n: DecidedNote) {
   note.value = n;
   page.refetch();
+  await nextTick();
+  noteBox.value?.focus();
 }
 </script>
 
@@ -59,9 +66,11 @@ function decided(n: DecidedNote) {
           <ApTag :state="stateTag(value).state" :label="stateTag(value).label" />
         </ApPageHeader>
         <!-- a11y B6: a failed or unconfirmed apply is an alert; the rest a status (#319). -->
-        <ApCallout v-if="note" :tone="note.tone" :role="note.failed ? 'alert' : 'status'">{{
-          note.text
-        }}</ApCallout>
+        <div v-if="note" ref="noteBox" tabindex="-1" data-decided-note>
+          <ApCallout :tone="note.tone" :role="note.failed ? 'alert' : 'status'">{{
+            note.text
+          }}</ApCallout>
+        </div>
         <ActivationApply
           v-else
           :request-key="key"
