@@ -4629,7 +4629,8 @@ agreed with ux 11-20.
       recorded. Send it back so it can be staged again."
     - The action beside the apply and request-review lines is `Stage again` ("Stage again with the current version
       of catalog rev 4", B7). With none approved left, there's no action, and the line ends "Move it to an approved
-      composition first." in place of "Stage it again…".
+      composition first." in place of "Stage it again…"; the Approve form ends "Send it back so it can move to an
+      approved composition." (ca-ux).
   - **A newer version waiting** (`selection.newer_candidate`; rejected and non-runnable ones are never sent): on the
     craft's and the profile's configuration, "A newer version of catalog rev 4, from a Cadence update, has been
     waiting for approval since 11-20 06:52Z. Until it's approved, EARENDIL-004 stays on the earlier one." with `Open
