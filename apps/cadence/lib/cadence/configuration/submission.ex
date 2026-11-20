@@ -549,7 +549,9 @@ defmodule Cadence.Configuration.Submission do
 
     cond do
       byte_size(value) > @comment_bytes.last ->
-        {:error, {:invalid_params, %{comment: "must be at most #{@comment_bytes.last} bytes"}}}
+        # ca-ux: the console shows it under the field; characters, not bytes.
+        {:error,
+         {:invalid_params, %{comment: "That's too long: keep it to about 2,000 characters."}}}
 
       value != "" ->
         {:ok, value}
