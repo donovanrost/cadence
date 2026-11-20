@@ -25,7 +25,7 @@ defmodule Cadence.Reads.Dashboards.PlaylistRows do
         |> limit(@limit)
         |> Repo.all()
 
-      names = Authors.names(scope.organization_id, Enum.map(rows, & &1.updated_by))
+      names = Authors.members(scope.organization_id, Enum.map(rows, & &1.updated_by))
 
       {:ok,
        %{playlists: Enum.map(rows, &summary(&1, names)), can_edit: can_edit?(scope, mission)}}
@@ -48,7 +48,7 @@ defmodule Cadence.Reads.Dashboards.PlaylistRows do
   @spec detail(DashboardPlaylist.t()) :: map()
   def detail(%DashboardPlaylist{} = playlist) do
     dashboards = dashboards(playlist)
-    names = Authors.names(playlist.organization_id, [playlist.updated_by])
+    names = Authors.members(playlist.organization_id, [playlist.updated_by])
 
     playlist
     |> summary(names)
@@ -105,7 +105,7 @@ defmodule Cadence.Reads.Dashboards.PlaylistRows do
 
   defp search(query, _q), do: query
 
-  defp person(id, names) when is_binary(id), do: %{id: id, name: Map.get(names, id)}
+  defp person(id, members) when is_binary(id), do: Authors.person(members, id)
   defp person(_none, _names), do: nil
 
   defp authorize(scope, mission) do

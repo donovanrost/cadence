@@ -180,12 +180,12 @@ defmodule CadenceWeb.Console.DashboardActivity do
   # #469: named only as members of the organization, checked now (Authors).
   defp names(organization_id, history),
     do:
-      Authors.names(
+      Authors.members(
         organization_id,
         Enum.map(history.versions, & &1.actor_id) ++ Enum.map(history.events, & &1.actor_id)
       )
 
-  defp actor(id, names) when is_binary(id), do: %{id: id, name: Map.get(names, id)}
+  defp actor(id, members) when is_binary(id), do: Authors.person(members, id)
   defp actor(_none, _names), do: nil
 
   defp blank(""), do: nil

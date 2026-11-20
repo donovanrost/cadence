@@ -20,16 +20,18 @@ defmodule Cadence.Reads.Dashboards.SharedViewRecords do
         :error
 
       share ->
+        members = Authors.members(organization_id, [share.created_by, share.revoked_by])
+
         {:ok,
          %{
            id: id,
            dashboard_id: share.dashboard_id,
            data_visibility: share.data_visibility,
            created_at: share.inserted_at,
-           created_by: person(organization_id, share.created_by),
+           created_by: person(members, share.created_by),
            expires_at: share.expires_at,
            revoked_at: share.revoked_at,
-           revoked_by: person(organization_id, share.revoked_by)
+           revoked_by: person(members, share.revoked_by)
          }}
     end
   end
@@ -45,6 +47,7 @@ defmodule Cadence.Reads.Dashboards.SharedViewRecords do
 
       snapshot ->
         context = snapshot.runtime_context || %{}
+        members = Authors.members(organization_id, [snapshot.created_by, snapshot.deleted_by])
 
         {:ok,
          %{
@@ -54,9 +57,9 @@ defmodule Cadence.Reads.Dashboards.SharedViewRecords do
            data_visibility: snapshot.data_visibility,
            window: window(snapshot.data_semantics, context),
            created_at: snapshot.inserted_at,
-           created_by: person(organization_id, snapshot.created_by),
+           created_by: person(members, snapshot.created_by),
            deleted_at: snapshot.deleted_at,
-           deleted_by: person(organization_id, snapshot.deleted_by)
+           deleted_by: person(members, snapshot.deleted_by)
          }}
     end
   end
@@ -67,9 +70,10 @@ defmodule Cadence.Reads.Dashboards.SharedViewRecords do
 
   defp window(_semantics, _context), do: nil
 
-  # #469: named only while a member of the organization, checked now (Authors); never an email.
-  defp person(organization_id, id) when is_binary(id),
-    do: %{id: id, name: Map.get(Authors.names(organization_id, [id]), id), kind: "user"}
+  # #469: a member keeps their id (named when they have a name); anyone else is neither, never
+  # an email (Authors). One membership read per record (dashboards' review).
+  defp person(members, id) when is_binary(id),
+    do: members |> Authors.person(id) |> Map.put(:kind, "user")
 
-  defp person(_organization_id, _none), do: nil
+  defp person(_members, _none), do: nil
 end

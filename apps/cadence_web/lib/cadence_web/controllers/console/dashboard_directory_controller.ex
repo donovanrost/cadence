@@ -241,7 +241,7 @@ defmodule CadenceWeb.Console.DashboardDirectoryController do
       |> Map.take(ids)
       |> Map.values()
       |> Enum.map(& &1.published_by)
-      |> then(&Authors.names(org, &1))
+      |> then(&Authors.members(org, &1))
 
     context = %{
       summaries: summaries,
@@ -276,7 +276,7 @@ defmodule CadenceWeb.Console.DashboardDirectoryController do
       starred: row.starred,
       current_version: row.version,
       updated_at: row.updated_at,
-      updated_by: author_id && %{id: author_id, name: Map.get(context.authors, author_id)},
+      updated_by: Authors.person(context.authors, author_id),
       viewed_at: row.viewed_at,
       spacecraft: Map.get(context.spacecraft, row.id)
     }

@@ -137,7 +137,7 @@ defmodule Cadence.Reads.Dashboards.Settings do
   # D14-D16: who made a share or snapshot, `{id, name | null, kind: "user"}`, or null.
   # #469: named only as members of the organization, checked now (Authors).
   defp with_creators(%{rows: rows} = page, org) do
-    names = Authors.names(org, Enum.flat_map(rows, &[&1.created_by, Map.get(&1, :revoked_by)]))
+    names = Authors.members(org, Enum.flat_map(rows, &[&1.created_by, Map.get(&1, :revoked_by)]))
 
     %{page | rows: Enum.map(rows, &actors(&1, names))}
   end
@@ -151,8 +151,8 @@ defmodule Cadence.Reads.Dashboards.Settings do
       else: row
   end
 
-  defp creator(id, names) when is_binary(id),
-    do: %{id: id, name: Map.get(names, id), kind: "user"}
+  defp creator(id, members) when is_binary(id),
+    do: members |> Authors.person(id) |> Map.put(:kind, "user")
 
   defp creator(_none, _names), do: nil
 

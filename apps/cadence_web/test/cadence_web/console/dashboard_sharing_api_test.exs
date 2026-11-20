@@ -3,7 +3,11 @@ defmodule CadenceWeb.Console.DashboardSharingAPITest do
   use CadenceWeb.ConnCase, async: false
   import CadenceWeb.DashboardAuthoringDraftTestSupport
 
+  import Ecto.Query
+
+  alias Cadence.Accounts.OrganizationMembershipRow
   alias Cadence.Dashboards.StatelessAuthoring
+  alias Cadence.Repo
   alias CadenceWeb.TestFixtures
 
   setup do: authoring_draft_setup()
@@ -114,6 +118,63 @@ defmodule CadenceWeb.Console.DashboardSharingAPITest do
 
     assert c |> call(:delete, "/snapshots/" <> snapshot["id"]) |> response(204)
     assert c |> call(:delete, "/snapshots/" <> snapshot["id"]) |> json_response(404)
+  end
+
+  # #469 (ca-security): who revoked a share or deleted a snapshot is named only while a member of
+  # the organization. Once the creator has left, another member sees {id: null, name: null}: no
+  # email and no id in the record or its message.
+  test "D20 records name an outsider by neither email nor id (#469)", c do
+    base = "/api/console/v1/missions/#{c.mission.mission_id}"
+    rename = %{"event" => "rename", "input" => %{"name" => "Current", "description" => ""}}
+
+    assert {:ok, _saved} =
+             StatelessAuthoring.save(
+               c.scope,
+               c.mission.mission_id,
+               c.document.dashboard_id,
+               1,
+               [rename],
+               nil
+             )
+
+    share =
+      c
+      |> call(:post, "/shares", %{"data_visibility" => "definition_only", "expires_at" => nil})
+      |> json_response(201)
+      |> Map.fetch!("data")
+
+    c |> call(:delete, "/shares/" <> share["id"]) |> json_response(200)
+
+    runtime = %{"from" => "2026-11-12T21:00:00Z", "to" => "2026-11-12T23:00:00Z"}
+
+    snapshot =
+      c
+      |> call(:post, "/snapshots", %{"data_visibility" => "definition_only", "runtime" => runtime})
+      |> json_response(201)
+      |> Map.fetch!("data")
+
+    c |> call(:delete, "/snapshots/" <> snapshot["id"]) |> response(204)
+
+    reader = TestFixtures.persist_user!(display_name: "Reader")
+    TestFixtures.grant_membership!(reader, c.org)
+    creator = c.user.user_id
+
+    Repo.update_all(
+      from(m in OrganizationMembershipRow, where: m.user_id == ^creator),
+      set: [lifecycle_state: "revoked"]
+    )
+
+    open = fn suffix -> reader |> TestFixtures.member_conn() |> get(base <> suffix) end
+
+    for {suffix, key} <- [
+          {"/dashboard-shares/" <> share["id"], "revoked_by"},
+          {"/dashboard-snapshots/" <> snapshot["id"], "deleted_by"}
+        ] do
+      error = open.(suffix) |> json_response(404) |> Map.fetch!("error")
+      assert error["details"][key] == %{"id" => nil, "name" => nil}
+      refute Jason.encode!(error) =~ "@"
+      refute Jason.encode!(error) =~ creator
+    end
   end
 
   test "D20: a share's link opens until revoked; a snapshot's says who deleted it", c do

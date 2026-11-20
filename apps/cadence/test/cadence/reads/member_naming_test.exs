@@ -4,7 +4,8 @@ defmodule Cadence.Reads.MemberNamingTest do
   organization being read, checked at read time, and never by email or id. Every dashboards read
   names people through `Reads.Dashboards.Authors.names/2`; alarm episodes through
   `Reads.AlarmEpisodes.People.put/2`. Each case: (a) a member with a name, (b) a member without
-  one, (c) someone who left, and a platform admin from another organization.
+  one (keeps their id, #471), (c) someone who left, and a platform admin from another organization
+  (neither id nor name, ca-security).
   """
   use Cadence.DataCase, async: true
 
@@ -27,11 +28,23 @@ defmodule Cadence.Reads.MemberNamingTest do
     }
   end
 
-  test "dashboards: only an active member with a name is named; never an email or an id", c do
-    names = Authors.names(c.org, [c.named, c.nameless, c.left, c.support, nil, c.named])
+  test "dashboards: a member keeps their id, named when they have a name; anyone else neither",
+       c do
+    ids = [c.named, c.nameless, c.left, c.support, nil, c.named]
+    members = Authors.members(c.org, ids)
 
-    assert names == %{c.named => "Ada Member"}
-    refute inspect(names) =~ "@"
+    assert Enum.map([c.named, c.nameless, c.left, c.support, nil], &Authors.person(members, &1)) ==
+             [
+               %{id: c.named, name: "Ada Member"},
+               %{id: c.nameless, name: nil},
+               %{id: nil, name: nil},
+               %{id: nil, name: nil},
+               nil
+             ]
+
+    # A name alone (the directory row) only for a member that has one.
+    assert Authors.names(c.org, ids) == %{c.named => "Ada Member"}
+    refute inspect(members) =~ "@"
   end
 
   test "alarm episodes: people are named again now; a service and the system keep theirs", c do
@@ -50,11 +63,11 @@ defmodule Cadence.Reads.MemberNamingTest do
     assert [named] = People.put(c.org, [episode])
 
     assert named.assignee == %{id: c.named, name: "Ada Member"}
-    assert named.acknowledged_by == %{kind: "user", id: c.left, name: nil}
+    assert named.acknowledged_by == %{kind: "user", id: nil, name: nil}
 
     assert Enum.map(named.events, & &1.actor) == [
              %{kind: "user", id: c.nameless, name: nil},
-             %{kind: "user", id: c.support, name: nil},
+             %{kind: "user", id: nil, name: nil},
              %{kind: "service", id: "service-1", name: "Nightly planner"},
              %{kind: "system", id: nil, name: "Cadence"},
              nil

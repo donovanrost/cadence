@@ -33,7 +33,7 @@ defmodule Cadence.Reads.Dashboards.LibraryRows do
         |> Repo.all()
 
       latest = latest_versions(items)
-      names = Authors.names(org, Enum.map(items, &(&1.updated_by || &1.created_by)))
+      names = Authors.members(org, Enum.map(items, &(&1.updated_by || &1.created_by)))
 
       {:ok,
        %{
@@ -65,7 +65,7 @@ defmodule Cadence.Reads.Dashboards.LibraryRows do
          versions = versions(item_id),
          %DashboardLibraryVersion{} = selected <- Enum.find(versions, &(&1.version == wanted)) do
       names =
-        Authors.names(org, [
+        Authors.members(org, [
           item.updated_by,
           item.created_by | Enum.map(versions, & &1.created_by)
         ])
@@ -177,7 +177,7 @@ defmodule Cadence.Reads.Dashboards.LibraryRows do
     end
   end
 
-  defp person(id, names) when is_binary(id), do: %{id: id, name: Map.get(names, id)}
+  defp person(id, members) when is_binary(id), do: Authors.person(members, id)
   defp person(_none, _names), do: nil
 
   defp authorize(scope, mission) do
