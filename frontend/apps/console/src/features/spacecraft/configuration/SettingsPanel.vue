@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { ApKeyValue, ApPanel, type ApKeyValueItem } from "@/ui";
 import type { ConfigurationSnapshot } from "./api.ts";
+import { compositionTitle, isComposed, madeOfLine } from "@/features/catalog/composition.ts";
 import { apidsWord, catalogWord, changesFromLine, framingWord, sourceWord } from "./words.ts";
 
 /**
@@ -54,6 +55,14 @@ const title = computed(() =>
         >Review</RouterLink
       >
     </template>
-    <div class="px-4 py-3"><ApKeyValue :items="items" /></div>
+    <div class="px-4 py-3">
+      <ApKeyValue :items="items">
+        <!-- U109: the field keeps its label and reads Composition 3, with Made of under it. -->
+        <template v-if="isComposed(snapshot.composition)" #value-catalog>
+          {{ compositionTitle(snapshot.composition) ?? "This composition" }}
+          <span class="block text-sm text-text-3">{{ madeOfLine(snapshot.composition) }}</span>
+        </template>
+      </ApKeyValue>
+    </div>
   </ApPanel>
 </template>

@@ -7,6 +7,7 @@ import {
   type ApiResult,
   type Decoded,
 } from "@/api/index.ts";
+import { compositionKey } from "@/features/catalog/composition.ts";
 
 /**
  * (B) a spacecraft's configuration workspace (director 11-17; ux U94; api's shape diff, ported
@@ -78,10 +79,18 @@ export const snapshotReader = d.object({
   /** Per craft (v1, v2…); null: never saved, so the document is derived. */
   saved_version: d.nullable(d.integer),
   document: documentReader,
+  /** D2 (#581; U109): the composition behind the document's catalog revision. */
+  composition: compositionKey,
   external_changes: d.boolean,
   /** null: nothing runs for this craft yet (U94 "Not set up"). */
   active: d.nullable(
-    d.object({ version: d.integer, generation: d.integer, document: documentReader }),
+    d.object({
+      version: d.integer,
+      generation: d.integer,
+      document: documentReader,
+      /** D2: the composition behind the active document's catalog revision. */
+      composition: compositionKey,
+    }),
   ),
   review: d.nullable(
     d.object({
