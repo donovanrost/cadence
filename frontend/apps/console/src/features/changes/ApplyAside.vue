@@ -3,7 +3,8 @@ import type { MissionId } from "@/api/index.ts";
 import { computed, ref, watch } from "vue";
 import { isError, type RemoteState } from "@/api";
 import { useMissionScope } from "@/shell";
-import { ApButton, ApCallout, ApField, ApPanel, ApStatTile } from "@/ui";
+import { ApButton, ApCallout, ApField, ApPanel } from "@/ui";
+import ApplyTiles from "./ApplyTiles.vue";
 import { cannotApplyLine, noGoReason } from "./apply-reasons.ts";
 import { NOTHING_RUNNING } from "./nothingRunning.ts";
 import FailureOutcomeCallout from "./FailureOutcomeCallout.vue";
@@ -24,6 +25,8 @@ const props = defineProps<{
   preview: RemoteState<Preview>;
   /** ux B4: the previous checks while the current set's re-run (or failed). */
   held: HeldChecks | null;
+  /** K9: the Authors line reads the viewer as "you". */
+  viewerId?: string | null | undefined;
 }>();
 const emit = defineEmits<{
   result: [result: SubmitResult];
@@ -125,10 +128,12 @@ async function apply() {
 <template>
   <ApPanel index="K3" title="Apply">
     <div class="flex flex-col gap-4">
-      <div class="grid grid-cols-2 gap-px border border-hairline bg-hairline">
-        <ApStatTile label="Changes" :value="changeSet.staged_count" />
-        <ApStatTile label="Authors" :value="changeSet.authors.length" />
-      </div>
+      <ApplyTiles
+        :staged="changeSet.staged_count"
+        :outcome="preview.status === 'ready' ? (preview.value.outcome ?? null) : null"
+        :authors="changeSet.authors"
+        :viewer-id="viewerId ?? null"
+      />
       <ApField v-model="why" label="Why" :placeholder="placeholder" required :error="whyError" />
       <label
         v-if="verdict === 'hold' && !blocking"
