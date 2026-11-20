@@ -64,7 +64,7 @@ const sent = computed(() =>
   sentState.value === "in_review"
     ? {
         tone: "info" as const,
-        text: "Sent for review. An org member who didn't stage any of these changes approves or sends it back.",
+        text: "Sent for review. Another person who didn't stage any of these changes approves it or sends it back.",
       }
     : sentState.value === "open"
       ? { tone: "info" as const, text: "Sent back to the authors with your comment." }

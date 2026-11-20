@@ -134,8 +134,8 @@ h1 "Apply r6 · 2 changes"                                  base r5 · staged 14
     <the NO-GO's line>"; "Acknowledge the holds first."; "Say why (10 characters or more)."; without the apply
     capability, the page says who can apply, never only "You can stage changes but not apply them."
   - If mission policy requires review (DECISIONS #7 pattern, policy-driven): primary becomes `Request review`, and
-    after sending, "Sent for review. An org member who didn't stage any of these changes approves or sends it
-    back."
+    after sending, "Sent for review. Another person who didn't stage any of these changes approves it or sends
+    it back." (ca-ux 11-20, #320: the sender can't review either.)
   - **The reviewer** (distinct from **every** author in the set, change-sets §7; capability-gated) sees `Approve &
     apply as r6` and `Send back`. The comment is optional on Approve and required for Send back ("Add a comment for
     the author."; ux, audit K9). If the server requires one on Approve, that's an api item, not words. After Send
