@@ -81,6 +81,15 @@ filters: actor (select) · mission (select) · kind as a one-of segmented contro
   tag) · action in words ("Applied r6 · 2 changes", "Gave GO on SET_MODE and 2 more for 12 spacecraft", "Invited ana@…",
   "Acknowledged VBAT on EARENDIL-001") · target (link) · mission · why (reason / note, `text-3`).
   Identical consecutive actions group (Timeline rule). Name link → the object's page.
+- **A platform act with no name** (#470; ux 11-19). A platform admin who isn't a member of this organization reads
+  `{kind: user, id: null, name: null}`. On an entry whose kind is `platform`, as the server sends it (never a
+  console-side list of action names), that actor is the team that runs Cadence: the actor cell reads `The team that
+  runs Cadence` (muted); in a sentence, "by the team that runs Cadence at 03:40Z" (who and when one event, U29).
+  Never an id, never "Cadence support", never plain "Cadence" (U103 keeps that for the system actor). Only kind
+  `user` with a null name changes: a named actor, a service identity or the system actor on a platform entry keep
+  their forms, and a nameless actor on any other entry keeps the null form ("Not known", or the clause dropped, U25).
+  This holds only while a platform-kind entry can be written by nothing but a platform admin's act (ca-engineer to
+  confirm on #470); if anything else can write one, the null form stays (U20).
 - **Source honesty:** a unified audit read doesn't exist yet (plans/setup.md). Until api unifies
   `OperationalEvents` + config revisions + command/alarm actions + access events, show the sources
   that exist and say which are missing: info callout "Showing configuration, commanding and access
