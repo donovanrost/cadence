@@ -88,8 +88,9 @@ filters: actor (select) · mission (select) · kind as a one-of segmented contro
   Never an id, never "Cadence support", never plain "Cadence" (U103 keeps that for the system actor). Only kind
   `user` with a null name changes: a named actor, a service identity or the system actor on a platform entry keep
   their forms, and a nameless actor on any other entry keeps the null form ("Not known", or the clause dropped, U25).
-  This holds only while a platform-kind entry can be written by nothing but a platform admin's act (ca-engineer to
-  confirm on #470); if anything else can write one, the null form stays (U20).
+  It holds because a platform-kind entry is only ever a platform admin's act (ca-engineer, #470: ConsoleAdmin behind
+  Access.authorize, admin mode entered or left, platform-shared binding switches). If anything else can ever write
+  one, the null form comes back (U20).
 - **Source honesty:** a unified audit read doesn't exist yet (plans/setup.md). Until api unifies
   `OperationalEvents` + config revisions + command/alarm actions + access events, show the sources
   that exist and say which are missing: info callout "Showing configuration, commanding and access
