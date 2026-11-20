@@ -103,10 +103,24 @@ defmodule Cadence.ContactPlanning.AutomationGrantLegacyTest do
              AutomationGrants.fetch(c.org, c.mission, id)
   end
 
+  # #506 (fe-ops on #497): a window that isn't whole seconds still reads, lists and revokes.
+  test "a legacy grant with a sub-second window reads, lists and revokes", c do
+    id = legacy_row!(c, "active", 86_400_500_000)
+
+    assert {:ok, %{legacy_issue: true, validity_seconds: 86_400}} =
+             AutomationGrants.fetch(c.org, c.mission, id)
+
+    assert {:ok, %{grants: [%{issued_before_two_person_approval: true}]}} =
+             PlanningGrants.load(c.approver, c.mission)
+
+    assert {:ok, %{lifecycle_state: :revoked}} =
+             AutomationGrants.revoke(c.third, c.mission, id, nil, nil)
+  end
+
   # Drops the shape check inside the test's transaction (rolled back after), inserts a row as
   # pre-#283 code wrote it, runs the migration's fill, and re-adds the check VALID (ca-security's
   # point 5: the filled row must satisfy the unchanged definition).
-  defp legacy_row!(c, state) do
+  defp legacy_row!(c, state, window_us \\ 86_400_000_000) do
     %{rows: [[definition]]} =
       Repo.query!(
         "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'automation_grants_state_shape'"
@@ -138,7 +152,7 @@ defmodule Cadence.ContactPlanning.AutomationGrantLegacyTest do
             maximum_contacts: 5,
             maximum_execution_concurrency: 1,
             valid_from: approved_at,
-            valid_until: DateTime.add(approved_at, 86_400, :second),
+            valid_until: DateTime.add(approved_at, window_us, :microsecond),
             lifecycle_state: state,
             approved_by: c.proposer.user.user_id,
             approved_at: approved_at,

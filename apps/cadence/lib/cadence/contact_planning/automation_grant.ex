@@ -213,6 +213,18 @@ defmodule Cadence.ContactPlanning.AutomationGrant do
   # exactly validity_seconds long, from its approval.
   defp validate_validity(%__MODULE__{valid_from: nil, valid_until: nil} = grant), do: grant
 
+  # #506: a grant issued before #283 had its validity_seconds filled from its window by the
+  # migration, rounded down to whole seconds, so only the window's order is checked. It's never
+  # usable anyway (its hash is the old layout) and is revoke-only.
+  defp validate_validity(
+         %__MODULE__{legacy_issue: true, valid_from: %DateTime{}, valid_until: %DateTime{}} =
+           grant
+       ) do
+    if DateTime.before?(grant.valid_from, grant.valid_until),
+      do: grant,
+      else: raise(ArgumentError, "automation grant valid_until must be after valid_from")
+  end
+
   defp validate_validity(%__MODULE__{valid_from: %DateTime{}, valid_until: %DateTime{}} = grant) do
     if DateTime.diff(grant.valid_until, grant.valid_from, :microsecond) ==
          grant.validity_seconds * 1_000_000,
