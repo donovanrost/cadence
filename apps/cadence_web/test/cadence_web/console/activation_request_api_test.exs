@@ -5,7 +5,8 @@ defmodule CadenceWeb.Console.ActivationRequestAPITest do
   import ExUnit.CaptureLog
 
   alias Cadence.ApplicationDispatch.BindingSet
-  alias Cadence.Auth.Scope
+  alias Cadence.Auth
+  alias Cadence.Auth.{Scope, ServiceIdentity}
   alias Cadence.Catalog.MissionModel.Layer
   alias Cadence.Control.ActivationRequests
   alias Cadence.Management.Activations
@@ -129,6 +130,43 @@ defmodule CadenceWeb.Console.ActivationRequestAPITest do
              |> Map.fetch!("error")
 
     refute Map.has_key?(details, "rule")
+  end
+
+  # api-ops on #608: #280's service path, pinned at the console too (the domain pins it in
+  # activation_vertical_slice_test): a request made by a service the approver issued.
+  test "a request by a service the approver is accountable for: the same code, naming the service",
+       c do
+    issuer = %{c.scope | user: c.approver}
+
+    {:ok, %{service_identity: service}} =
+      Auth.issue_service_identity(
+        ServiceIdentity.new(%{
+          organization_id: c.org.organization_id,
+          mission_id: c.mission.mission_id,
+          display_name: "Rollout bot",
+          capabilities: [:mission_admin]
+        }),
+        issuer
+      )
+
+    service_scope =
+      Scope.new(%{
+        organization_id: c.org.organization_id,
+        organization: c.org,
+        service_identity: service
+      })
+
+    id = request(%{c | scope: service_scope}).activation_request_id
+    service_id = service.service_identity_id
+
+    assert %{
+             "code" => "activation_self_approval_forbidden",
+             "details" => %{"via_service" => %{"id" => ^service_id, "name" => "Rollout bot"}}
+           } =
+             c.approver
+             |> post_conn(c.base <> "/#{id}/approve", %{"reason" => "Through my bot"})
+             |> json_response(403)
+             |> Map.fetch!("error")
   end
 
   test "approve answers with the row and whether it applied", c do
