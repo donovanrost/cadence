@@ -240,8 +240,11 @@ starts nothing again. A rolled-back request records no operation, so its retry r
 ### `POST /contact-plans/:plan_id/approve` (#257)
 
 The approver's decision on a plan waiting for approval: the only console path that approves.
-Org admins (`approve_contact_plans`). Body `{expected_version, operation_id, decision_note?,
-acknowledgements?}`:
+Org admins (`approve_contact_plans`), checked **first** (#278): before the operation id, the plan
+and the version, so a replay, a reused operation id or an unknown plan from someone who may not
+approve now answers `403 forbidden`, never an earlier `202` (not `409` either). A person's session
+only; a service approves under its automation grant elsewhere. Body `{expected_version,
+operation_id, decision_note?, acknowledgements?}`:
 - `expected_version`: the version the approver saw (after a submit, the `version` it returned).
 - `decision_note`: optional, at most 2,000 characters after trimming; recorded as the approval's
   reason, `NULL` when blank or absent (U76).
@@ -251,7 +254,8 @@ acknowledgements?}`:
 `202 {plan_id, version, state: "executing", outcome: "approved", replayed: false}` once the
 approval is committed, then booking runs **off the request** (`scheduling_progress {kind:
 "execute"}`). The approval records the approval policy in force, from the same read as the
-separation check (#226(b)).
+separation check (#226(b)). The `contact_plans` channel update goes out once the approval has
+committed (#278), never for a replay or a refusal.
 
 Errors:
 - `403 contact_plan_self_approval_forbidden`, `details: {because: "submitted" | "edited",
