@@ -24,14 +24,14 @@ export const WORDS = {
    */
   serverFailedUnclearStaged:
     "The server failed while answering, so it isn't clear whether anything was staged. Check Staged changes and Revisions now, before trying again.",
-  /** As above, for a write that changes rather than stages (the policy save). */
-  serverFailedUnclearChanged:
-    "The server failed while answering, so it isn't clear whether anything was changed. Check Staged changes and Revisions now, before trying again.",
+  /** U20 for the policy save (ux on #653): not a change set, so it reloads the policy's versions. */
+  policySaveUnclear:
+    "The server failed while answering, so it isn't clear whether this version was saved. Reload to see the policy's versions before trying again.",
   /** CP2 policy save (U20's success line; PolicyTab): the second sentence of "Saved as vN. …". */
   policyPendingActivation: "It's active once another admin approves it.",
-  /** CP2 policy decision, `reviewer_is_author` (PolicyDecision): the version's author can't approve it. */
+  /** U95 (ux on #653): the policy version's author can't approve it; nothing recorded. */
   policyAuthorCantApprove:
-    "Nothing was changed. You saved this version, so another admin must approve it.",
+    "Not approved: you saved this version, so another org admin approves it. Your approval wasn't recorded.",
 } as const;
 
 /** ux: polite is role=status or aria-live=polite; alert is role=alert or aria-live=assertive. */

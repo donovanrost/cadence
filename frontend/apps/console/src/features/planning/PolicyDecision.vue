@@ -3,7 +3,7 @@ import type { MissionId } from "@/api/index.ts";
 import { ref } from "vue";
 import { errorCode, failureOutcome } from "@/features/changes/index.ts";
 import { ApButton, ApCallout, ApField, ApPanel, formatShort } from "@/ui";
-import { decidePolicy, pendingLine, type Policy } from "./policy.ts";
+import { authorDecisionRefusal, decidePolicy, pendingLine, type Policy } from "./policy.ts";
 
 /** A pending policy version: approve or reject (reviewer ≠ author, enforced by the server). */
 const props = defineProps<{ missionId: MissionId; policy: Policy }>();
@@ -29,7 +29,7 @@ async function decide(decision: "approve" | "reject") {
     else
       failure.value =
         errorCode(result.error) === "reviewer_is_author"
-          ? "Nothing was changed. You saved this version, so another admin must approve it."
+          ? authorDecisionRefusal(decision)
           : failureOutcome(result.error, "changed").sentence;
   } finally {
     busy.value = false;
