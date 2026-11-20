@@ -21,7 +21,7 @@ defmodule Cadence.ContactPlanning.GrantSuspensionTest do
     GrantSuspension
   }
 
-  alias Cadence.Governance.ActivationPolicy
+  alias Cadence.Governance.{ActivationPolicy, ApprovalTightening}
   alias Cadence.Management.Contacts.Store.AutomationGrantRow
   alias Cadence.Platform.ScopedSettings
   alias Ecto.Adapters.SQL.Sandbox
@@ -177,6 +177,23 @@ defmodule Cadence.ContactPlanning.GrantSuspensionTest do
       assert {:ok, _} = pin(c, c.proposer, "direct")
       assert fetch!(c, grant).lifecycle_state == :suspended
     end
+  end
+
+  # api-ops: a missing registration would suspend nothing (fail open), so it's pinned.
+  test "the approval setting's tightening hook is GrantSuspension" do
+    assert ApprovalTightening.implementation() == GrantSuspension
+  end
+
+  # ca-security: with nothing registered, a tightening is refused (fail closed), not let through.
+  test "a tightening save with no hook registered is refused, writing nothing", c do
+    grant = issue!(c)
+    previous = Application.get_env(:cadence, :approval_tightening)
+    Application.delete_env(:cadence, :approval_tightening)
+    on_exit(fn -> Application.put_env(:cadence, :approval_tightening, previous) end)
+
+    assert {:error, :approval_tightening_unavailable} = pin(c, c.approver, "independent")
+    assert requirement(c) == "direct"
+    assert fetch!(c, grant).lifecycle_state == :active
   end
 
   describe "the acknowledgement digest" do

@@ -107,9 +107,11 @@ defmodule Cadence.Governance.ActivationPolicy do
 
   defp preview(_org, [], _acknowledged, _opts), do: :ok
 
+  # ca-security: with nothing registered a tightening is refused, never let through unchecked
+  # (fail closed: a missing config line must not switch the control off).
   defp preview(org, mission_ids, acknowledged, opts) do
     case ApprovalTightening.implementation() do
-      nil -> :ok
+      nil -> {:error, :approval_tightening_unavailable}
       tightening -> tightening.preview(org, mission_ids, acknowledged, opts)
     end
   end
@@ -121,7 +123,7 @@ defmodule Cadence.Governance.ActivationPolicy do
 
     case ApprovalTightening.implementation() do
       nil ->
-        :ok
+        {:error, :approval_tightening_unavailable}
 
       tightening ->
         with {:ok, _suspended} <-

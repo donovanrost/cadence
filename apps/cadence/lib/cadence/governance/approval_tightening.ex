@@ -23,7 +23,10 @@ defmodule Cadence.Governance.ApprovalTightening do
   @callback apply(Scope.t(), binary(), [binary()], binary(), binary(), keyword()) ::
               {:ok, [binary()]} | {:error, term()}
 
-  @doc "The registered implementation, or nil (nothing to suspend)."
+  @doc """
+  The registered implementation, or nil. A tightening save with nil is refused
+  (`:approval_tightening_unavailable`, fail closed); config registers `GrantSuspension`.
+  """
   @spec implementation() :: module() | nil
   def implementation, do: Application.get_env(:cadence, :approval_tightening)
 end

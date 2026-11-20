@@ -125,6 +125,9 @@ defmodule CadenceWeb.Console.Problem do
     automation_grant_service_has_grant:
       {409,
        "This service already has a grant here. Revoke it, or propose a wider one that replaces it."},
+    approval_tightening_unavailable:
+      {503,
+       "Not saved: Cadence can't check what this change would suspend right now. Try again later."},
     approval_tightening_suspends_grants:
       {409,
        "Not saved: this change suspends automation grants that were approved by one person. Review them and save again to confirm."},
