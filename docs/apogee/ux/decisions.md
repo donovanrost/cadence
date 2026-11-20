@@ -4061,7 +4061,10 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
     for completeness.)
 - **Suspended** (#499, the director's ruling on #283; api's shape 11-19). Changing a mission's approval setting to
   "Needs a second person's approval" suspends each active grant that became active on one person's approval. A
-  suspended grant authorizes nothing until it's resumed. Revoke stays, as on an active grant.
+  suspended grant authorizes nothing until it's resumed. Revoke stays, as on an active grant. A grant made before
+  Cadence checked grants against the setting is never suspended (ca-security). A suspension never extends a grant's
+  validity: past `valid_until`, a suspended grant reads `expired` (`EXPIRED`, the active grant's line), and resuming
+  it answers the `expired` refusal below (api).
   - Tag `SUSPENDED` (caution, mark + word, B2).
   - Row line (`suspension {at, by, settings_revision}`; who and when one event, U29), by the setting now in force
     (the read's `approval_setting`): "Suspended when Mira K. changed the mission's approval setting to Needs a second
