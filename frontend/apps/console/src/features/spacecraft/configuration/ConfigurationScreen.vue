@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { onBeforeRouteLeave, useRoute, useRouter } from "vue-router";
 import type { SpacecraftId } from "@/api/index.ts";
 import { codeOf, useRemoteQuery } from "@/api/index.ts";
@@ -22,14 +22,16 @@ import { fetchWorkspace, sections, type ConfigurationSnapshot } from "./api.ts";
 import ConfigurationBody from "./ConfigurationBody.vue";
 import ConflictPanel from "./ConflictPanel.vue";
 import DraftBar from "./DraftBar.vue";
+import SendPanel from "./SendPanel.vue";
 import { discardQuestion, leaveBody } from "./draft-words.ts";
 import { useConfigurationDraft } from "./useConfigurationDraft.ts";
+import { useSend } from "./useSend.ts";
 import { changesCount, readRefusal, statusTag, versionsLine } from "./words.ts";
 
 /**
  * (B) ux U94: Setup › Spacecraft › EARENDIL-004 › Configuration, the host's workspace in the
  * console: the draft, the active entry, the switches and the comparison. #595a: one draft across
- * the tabs, saved with `Save draft`; sending it for activation is #595c.
+ * the tabs, saved with `Save draft`, then sent for activation (#595c).
  */
 const props = defineProps<{ spacecraftId: SpacecraftId | null }>();
 const route = useRoute("setup.spacecraft.configuration");
@@ -52,6 +54,12 @@ const draft = useConfigurationDraft(
   key,
   () => (state.value.status === "ready" ? state.value.value : null),
   refetch,
+);
+const sender = useSend(key, () => draft.snapshot.value, refetch);
+// A new edit starts over: the last send's lines no longer describe the draft.
+watch(
+  () => draft.dirty.value,
+  (dirty) => dirty && sender.clear(),
 );
 /** Framing sizes that don't read as numbers (Save waits for them). */
 const invalid = ref(0);
@@ -199,6 +207,16 @@ const craftOptions = (s: ConfigurationSnapshot) =>
           @discard="draft.discard"
         />
         <OutcomeCallout v-if="draft.saved.value" :outcome="draft.saved.value" />
+        <SendPanel
+          v-if="!draft.conflict.value"
+          :snapshot="snap(value)"
+          :dirty="draft.dirty.value"
+          :conflict="draft.conflict.value !== null"
+          :sending="sender.sending.value"
+          :outcome="sender.outcome.value"
+          :failure="sender.failure.value"
+          @send="sender.send"
+        />
         <ConfigurationBody
           :snapshot="snap(value)"
           :doc="draft.doc.value ?? value.document"

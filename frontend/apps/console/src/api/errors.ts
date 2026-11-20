@@ -110,6 +110,11 @@ export const errorCodes = [
   "spacecraft_configuration_review_stale",
   // #595 (U94): the workspace draft's save refusals.
   "spacecraft_configuration_changed",
+  // #595c (U94): the workspace submit's refusals.
+  "spacecraft_configuration_review_unavailable",
+  "spacecraft_switch_set_by_change_set",
+  "spacecraft_catalog_required",
+  "spacecraft_packet_inputs_required",
   "spacecraft_catalog_set_by_profile",
   "spacecraft_packet_input_unavailable",
   "spacecraft_configuration_catalog_not_loaded",

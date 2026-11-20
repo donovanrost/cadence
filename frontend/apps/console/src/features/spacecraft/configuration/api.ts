@@ -239,7 +239,23 @@ export function fetchPacketChoices(
   );
 }
 
-/** POST …/workspace/submit's answer (writes land in a later commit, once the route exists). */
+/**
+ * #595c (U94): POST …/workspace/submit {token, policy_token, intent}. `review` when the mission
+ * needs a second person's approval (L10 lists the request), `activate` when it applies without.
+ */
+export function submitWorkspace(
+  k: WorkspaceKey,
+  token: string,
+  policyToken: string,
+  intent: "review" | "activate",
+): Promise<ApiResult<SubmitResult>> {
+  return request(`${workspacePath(k.missionId, k.spacecraftId)}/submit`, submitResultReader, {
+    method: "POST",
+    body: { token, policy_token: policyToken, intent },
+  });
+}
+
+/** POST …/workspace/submit's answer. */
 export const submitResultReader = d.variant("state", {
   approval_pending: d.object({
     state: d.literal("approval_pending"),
