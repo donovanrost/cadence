@@ -155,7 +155,22 @@ describe("the Composition check (#546 readers first)", () => {
       "2 of the 3 targets are on a composition that's no longer approved: EARENDIL-004 and EARENDIL-007. Acknowledge the HOLD to send this request to them anyway.",
     );
     const go = preflight([{ ...check([]), result: "go", ackable: null, hold_basis: null }]);
-    expect(checkRows(go, nameOf)[0]?.sentence).toBe("Every target is on an approved composition");
+    // U109 (#634): a catalog revision until the check says a target is composed (D4).
+    expect(checkRows(go, nameOf)[0]?.sentence).toBe(
+      "Every target is on an approved catalog revision",
+    );
+    const composed = preflight([
+      {
+        ...check([]),
+        result: "go",
+        ackable: null,
+        hold_basis: null,
+        evidence: { composed: true },
+      },
+    ]);
+    expect(checkRows(composed, nameOf)[0]?.sentence).toBe(
+      "Every target is on an approved composition",
+    );
   });
 
   it("today's per_target, without #546's keys, still reads", () => {

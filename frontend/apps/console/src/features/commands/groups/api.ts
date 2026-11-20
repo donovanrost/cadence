@@ -124,6 +124,8 @@ const evidence = d.object({
   max_members: d.optional(d.integer),
   targets: d.optional(d.integer),
   commands: d.optional(d.integer),
+  /** #546 (D4): a target's composition has more than one catalog; absent until then. */
+  composed: d.optional(d.boolean),
 });
 
 /** commanding.md preflight: the checks the console labels; a newer one still shows, by its key. */
