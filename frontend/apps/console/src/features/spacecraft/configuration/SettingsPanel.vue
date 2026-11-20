@@ -57,10 +57,14 @@ const title = computed(() =>
     </template>
     <div class="px-4 py-3">
       <ApKeyValue :items="items">
-        <!-- U109: the field keeps its label and reads Composition 3, with Made of under it. -->
+        <!-- U109: the field keeps its label and reads Composition 3, with Made of under it;
+          with no number, Made of alone (mms-ux on #609). -->
         <template v-if="isComposed(snapshot.composition)" #value-catalog>
-          {{ compositionTitle(snapshot.composition) ?? "This composition" }}
-          <span class="block text-sm text-text-3">{{ madeOfLine(snapshot.composition) }}</span>
+          <template v-if="compositionTitle(snapshot.composition)">
+            {{ compositionTitle(snapshot.composition) }}
+            <span class="block text-sm text-text-3">{{ madeOfLine(snapshot.composition) }}</span>
+          </template>
+          <template v-else>{{ madeOfLine(snapshot.composition) }}</template>
         </template>
       </ApKeyValue>
     </div>

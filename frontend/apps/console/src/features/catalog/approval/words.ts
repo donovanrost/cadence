@@ -175,8 +175,12 @@ function composedCannotDecide(r: ModelRevision, c: Composition): string | null {
   const why = r.cannot_decide_because;
   const name = compositionInSentence(c);
   const service = r.cannot_decide_details?.via_service ?? null;
+  // U100: "Nightly planner, a service identity you're accountable for, …"; nameless, no commas
+  // (mms-ux and ca-ux on #609): "A service identity you're accountable for …".
   const svc = service
-    ? `${service.name ?? "A service identity"}, a service identity you're accountable for,`
+    ? service.name
+      ? `${service.name}, a service identity you're accountable for,`
+      : "A service identity you're accountable for"
     : null;
   if (why === "self_approval")
     return svc

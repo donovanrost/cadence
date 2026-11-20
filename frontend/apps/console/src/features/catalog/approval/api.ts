@@ -124,8 +124,8 @@ export const modelRevisionReader = d.object({
     d.array(d.object({ layer_id: d.token, importers: d.array(compositionActor, 100) }), 64),
   ),
   /**
-   * D2: what approval compares against (the previous of the same lineage). A composed base
-   * reads it; a one-catalog page keeps `catalog_revision.breaking_base` (U109).
+   * D2: what approval compares against (the gate's default baseline). A composed base reads
+   * it; a one-catalog page keeps `catalog_revision.breaking_base` (U109).
    */
   breaking_base: d.optional(
     d.nullable(

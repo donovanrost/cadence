@@ -150,6 +150,24 @@ describe("the approval page for a composed base", () => {
     );
   });
 
+  it("words a nameless service in U100's form, with no commas (#609 review)", () => {
+    const nameless = { via_service: { id: "s1", name: null } };
+    expect(
+      cannotDecideLine(
+        read({ cannot_decide_because: "composer", cannot_decide_details: nameless }),
+      ),
+    ).toBe(
+      "A service identity you're accountable for chose this combination of catalogs, so another org admin approves composition 3.",
+    );
+    expect(
+      cannotDecideLine(
+        read({ cannot_decide_because: "self_approval", cannot_decide_details: nameless }),
+      ),
+    ).toBe(
+      "A service identity you're accountable for imported one of its catalogs, so another org admin approves composition 3.",
+    );
+  });
+
   it("says who composed it and who imported each catalog, dropping the unnamed", () => {
     const r = read({
       importers: [
