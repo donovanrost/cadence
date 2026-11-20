@@ -44,6 +44,26 @@ defmodule Cadence.ContactPlanning.AutomationGrantReview do
     end
   end
 
+  @doc """
+  #499: resumes a grant a tightening suspended, at `digest` (the hash the approver read), as an
+  approval: the setting in force NOW decides who may. Under 'independent', a separated approver
+  (not the proposer, not the original approver, outside the service's accountable set, #280);
+  under 'direct', any org admin who holds what it confers (#281), proposer included, as issuing a
+  new grant would be. The current evidence is recorded, so a later tightening suspends it again
+  if it was resumed under 'direct'. Never re-hashes, never extends validity.
+  """
+  @spec resume(Scope.t(), binary(), binary(), binary(), keyword()) ::
+          {:ok, AutomationGrant.t()} | {:error, term()}
+  def resume(%Scope{} = scope, mission_id, grant_id, digest, opts \\ []) do
+    now = now(opts)
+
+    with {:ok, approver} <- GrantSeparation.decider(scope) do
+      stable_transaction(scope.organization_id, fn ->
+        resume_in(scope, mission_id, grant_id, digest, approver, now)
+      end)
+    end
+  end
+
   @doc "Rejects a proposal, with a reason."
   @spec reject(Scope.t(), binary(), binary(), binary(), keyword()) ::
           {:ok, AutomationGrant.t()} | {:error, term()}
@@ -96,6 +116,36 @@ defmodule Cadence.ContactPlanning.AutomationGrantReview do
     end
   end
 
+  defp resume_in(scope, mission_id, grant_id, digest, approver, now) do
+    with {:ok, row, grant} <- lock_in_order(scope.organization_id, mission_id, grant_id),
+         :ok <- not_legacy(grant),
+         :ok <- suspended_now(grant, now),
+         :ok <- at_digest(grant, digest),
+         policy = ActivationPolicy.evidence(grant.organization_id, grant.mission_id),
+         :ok <- confers(scope, mission_id, grant),
+         {:ok, separated} <- GrantSeparation.check_resume(scope, approver, grant, policy) do
+      resumed =
+        rebuild(grant, %{
+          lifecycle_state: :active,
+          approval_policy: policy,
+          resumption: %{by: approver, at: now}
+        })
+
+      write(scope, row, resumed, :resumed, %{
+        policy: policy,
+        separated_from: separated.ids,
+        decided_at: now
+      })
+    end
+  end
+
+  defp suspended_now(grant, now) do
+    case AutomationGrant.effective_state(grant, now) do
+      :suspended -> :ok
+      state -> {:error, {:automation_grant_not_suspended, %{state: state}}}
+    end
+  end
+
   defp reject_in(scope, mission_id, grant_id, actor, reason, now) do
     with {:ok, row, grant} <- lock_grant(scope.organization_id, mission_id, grant_id),
          :ok <- not_legacy(grant),
@@ -128,7 +178,7 @@ defmodule Cadence.ContactPlanning.AutomationGrantReview do
   defp narrow_in(scope, mission_id, grant_id, changes, now) do
     with {:ok, row, grant} <- lock_grant(scope.organization_id, mission_id, grant_id),
          :ok <- not_legacy(grant),
-         :ok <- active_now(grant, now),
+         :ok <- narrowable_now(grant, now),
          {:ok, narrowed} <- GrantNarrowing.narrow(grant, changes) do
       write(scope, row, narrowed, :narrowed, %{
         previous_digest: grant.content_sha256,
@@ -166,7 +216,8 @@ defmodule Cadence.ContactPlanning.AutomationGrantReview do
 
   defp supersede(scope, grant, actor, now) do
     case lock_grant(grant.organization_id, grant.mission_id, grant.replaces_grant_id) do
-      {:ok, row, %{lifecycle_state: :active} = replaced} ->
+      # #499: a suspended grant is replaced like an active one (ca-security).
+      {:ok, row, %{lifecycle_state: state} = replaced} when state in [:active, :suspended] ->
         reason = "Superseded by #{grant.automation_grant_id}"
 
         with {:ok, _revoked} <- revoke_locked(scope, row, replaced, actor, reason, now),
@@ -233,10 +284,44 @@ defmodule Cadence.ContactPlanning.AutomationGrantReview do
   # -- shared ------------------------------------------------------------------------------
 
   defp write(scope, row, grant, decision, attrs) do
-    with {:ok, updated} <- row |> AutomationGrantRow.transition_changeset(grant) |> Repo.update(),
+    with {:ok, updated} <-
+           row
+           |> AutomationGrantRow.transition_changeset(grant)
+           # A savepoint, so a unique violation leaves the transaction usable for the named 409.
+           |> Repo.update(mode: :savepoint)
+           |> service_has_grant(grant),
          :ok <- AutomationGrantDecisions.record(scope, decision, grant, attrs) do
       {:ok, AutomationGrantRow.to_domain(updated)}
     end
+  end
+
+  @doc false
+  # #499 (ca-security): one live grant per service (active or suspended, the partial unique
+  # index). A second one is a named 409 naming the live one, never a constraint 500.
+  def service_has_grant({:error, %Ecto.Changeset{} = changeset}, grant) do
+    if Enum.any?(changeset.errors, fn {_field, {_message, opts}} ->
+         opts[:constraint_name] == "automation_grants_one_active_per_service_idx"
+       end),
+       do:
+         {:error,
+          {:automation_grant_service_has_grant, live_grant(grant) || %{grant_id: nil, state: nil}}},
+       else: {:error, changeset}
+  end
+
+  def service_has_grant(result, _grant), do: result
+
+  defp live_grant(grant) do
+    AutomationGrantRow
+    |> where(
+      [r],
+      r.organization_id == ^grant.organization_id and r.mission_id == ^grant.mission_id and
+        r.service_identity_id == ^grant.service_identity_id and
+        r.lifecycle_state in ["active", "suspended"] and
+        r.automation_grant_id != ^grant.automation_grant_id
+    )
+    |> select([r], %{grant_id: r.automation_grant_id, state: r.lifecycle_state})
+    |> limit(1)
+    |> Repo.one()
   end
 
   # A state change (approve, reject, revoke, withdraw) never changes a grant's content, so its
@@ -330,14 +415,18 @@ defmodule Cadence.ContactPlanning.AutomationGrantReview do
   defp not_legacy(_grant), do: :ok
 
   defp revocable(%{lifecycle_state: :active}), do: :ok
+  # #499: revoking is a tightening, never blocked, a suspended grant included.
+  defp revocable(%{lifecycle_state: :suspended}), do: :ok
   defp revocable(%{lifecycle_state: :revoked} = grant), do: {:already_revoked, grant}
 
   defp revocable(grant),
     do: {:error, {:automation_grant_not_active, %{state: grant.lifecycle_state}}}
 
-  defp active_now(grant, now) do
+  # #499: narrowing is a tightening, allowed on a suspended (non-legacy) grant, which stays
+  # suspended (ca-security); not_legacy runs first, so #497's re-hash guard holds.
+  defp narrowable_now(grant, now) do
     case AutomationGrant.effective_state(grant, now) do
-      :active -> :ok
+      state when state in [:active, :suspended] -> :ok
       state -> {:error, {:automation_grant_not_active, %{state: state}}}
     end
   end

@@ -29,9 +29,12 @@ defmodule Cadence.Governance.DecisionRecord do
 
   alias Cadence.Auth.Scope
 
-  @decisions ~w(approved rejected sent_back withdrawn acknowledged not_required proposed revoked narrowed)a
+  # #499 (api-ops' contract): `suspended` (a tightening of the approval setting, never blocked:
+  # the server records the hash, none is required) and `resumed` (an approval-like act on the
+  # hash the approver saw).
+  @decisions ~w(approved rejected sent_back withdrawn acknowledged not_required proposed revoked narrowed suspended resumed)a
   @reason_required ~w(rejected sent_back withdrawn)a
-  @digest_required ~w(approved not_required proposed narrowed)a
+  @digest_required ~w(approved not_required proposed narrowed resumed)a
 
   # Pure decision tables: append-only, guarded by triggers (migration
   # 20261117160000_decision_records_append_only). A path joins by adding its table here.

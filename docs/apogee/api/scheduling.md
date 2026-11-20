@@ -740,11 +740,17 @@ even with organization_admin, gets `403 authenticated_user_required`). Under `/c
   null, state, proposed_by, proposed_at, proposal_expires_at, approved_by | null, approved_at |
   null, reason, rejected_by | null, rejected_at | null, rejection_reason | null, withdrawn_by |
   null, withdrawn_at | null, revoked_by | null, revoked_at | null, revocation_reason | null,
-  replaces_grant_id | null, sha256, viewer_can_narrow, viewer_can_decide, cannot_decide_because,
-  cannot_decide_details}`.
-  - `state`: proposed | active | rejected | revoked | withdrawn | expired. `expired` is computed,
-    by the same function the server uses at each use: an undecided proposal past
-    `proposal_expires_at` (72 h; `approved_at` null), or an active grant past `valid_until`.
+  replaces_grant_id | null, sha256, suspension | null, viewer_can_narrow, viewer_can_decide,
+  cannot_decide_because, cannot_decide_details}`.
+  - `state`: proposed | active | suspended | rejected | revoked | withdrawn | expired. `expired` is
+    computed, by the same function the server uses at each use: an undecided proposal past
+    `proposal_expires_at` (72 h; `approved_at` null), or an active or suspended grant past
+    `valid_until`.
+  - `suspended` (#499): a tightening of the mission's approval setting to 'independent' suspended
+    it, because it went active on one approval under 'direct'. It authorizes nothing until a
+    resume (below); its validity runs on and is never extended. `suspension: {at, by: {kind, id,
+    name}, settings_revision, level: mission | organization}` says who saved the tightening (named
+    as below), by which settings revision, and at which level; null unless it was suspended.
   - Validity starts at approval: a proposal has `validity_seconds` and null `valid_from` and
     `valid_until`.
   - `issued_before_two_person_approval`: `true` for a grant issued before #283, which had no
@@ -757,8 +763,10 @@ even with organization_admin, gets `403 authenticated_user_required`). Under `/c
     Anyone else is `{id: null, name: null}` (#146's rule). The `_by` and `_at` pairs are both
     set or both null.
   - The flags are the viewer's, from the server; the console never computes them (#233's
-    pattern). `cannot_decide_because`: `not_admin | not_a_person | proposer | accountable |
-    authors_unknown | not_proposed | policy_changed | null` (`policy_changed`: the mission's
+    pattern). For a suspended grant "decide" means resume (#499), under the setting in force.
+    `cannot_decide_because`: `not_admin | not_a_person | proposer | approved | accountable |
+    authors_unknown | not_proposed | policy_changed | null` (`approved`: the grant's original
+    approver, when resuming under 'independent') (`policy_changed`: the mission's
     setting changed since the proposal, so approving it would answer `409
     approval_policy_changed`; it has to be proposed again), and `cannot_decide_details`: `{grantee: {id, name}}`
     for accountable, `{service: {id, name}}` for authors_unknown, else null.
@@ -788,6 +796,24 @@ even with organization_admin, gets `403 authenticated_user_required`). Under `/c
       proposal;
     - `409 grant_changed`: `sha256` isn't the proposal's;
     - `403 automation_grant_capability_required`: #281's rule.
+- `POST /grants/:id/resume` (organization admins; #499) `{sha256, operation_id}` → `200 {grant,
+  replayed}`, as approve (replays, `409 duplicate_operation`). The setting in force at resume
+  decides who may: under 'independent', a separated approver (not the proposer, not the original
+  approver, outside the service's accountable set, #280); under 'direct', any organization admin
+  who holds what it confers (#281), the proposer included, as issuing a new grant would. The
+  current setting is recorded, so a grant resumed under 'direct' is suspended again by the next
+  tightening. It never re-hashes or extends validity. Refusals, with nothing recorded:
+  - `403 automation_grant_self_approval_forbidden {because: proposed | approved | accountable,
+    grantee}` (under 'independent');
+  - `403 automation_grant_approver_authors_unknown {service}`;
+  - `403 automation_grant_capability_required`;
+  - `409 automation_grant_legacy` (a grant issued before #283; those are never suspended);
+  - `409 automation_grant_not_suspended {state}`: not suspended, or expired (`state: expired`);
+  - `409 grant_changed`: `sha256` isn't the grant's (a narrowing moves it).
+- A suspended grant can be revoked, and narrowed (it stays suspended). A widening may replace it,
+  as it replaces an active one. One live grant per service: while one is active or suspended, a
+  new grant for the service answers `409 automation_grant_service_has_grant {grant_id, state}`
+  (revoke it, or propose a widening that replaces it).
 - `POST /grants/:id/reject` (organization admins) `{reason, operation_id}` → `200 {grant,
   replayed}`. `422 invalid_params` (`details.reason`) without a reason; `409
   automation_grant_not_proposed` as above.

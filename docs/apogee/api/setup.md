@@ -1214,6 +1214,16 @@ writes nothing:
 - While the organization doesn't allow an override, every mission save, an organization admin's
   included, is `409 settings_enforced_by_organization`. A stale version is refused first
   (`409 version_conflict`).
+- `409 approval_tightening_suspends_grants` (#499): the save tightens a mission's setting to
+  'independent' (a mission save, or an organization save for each mission it moves that way), and
+  that suspends the mission's automation grants that went active on one approval. Nothing is
+  written. `details: {grants: [{id, mission: {id, name}, service: {id, name | null},
+  allowed_actions, valid_until}], digest}`: an organization save lists every mission's grants.
+  Save again with `acknowledged_suspensions: digest` (the same `PUT` body plus that key) to
+  suspend them with the setting, in one transaction; a list that changed meanwhile (a grant made,
+  revoked or changed) answers this 409 again with the new list. The digest is sha256 of
+  `[1, [[id, sha256, state], …]]` sorted by id. Loosening never resumes a grant (see
+  [scheduling.md](scheduling.md), automation grants).
 
 ### `GET /missions/:mission_id/routing-rules/groups` (pass-2 #10)
 

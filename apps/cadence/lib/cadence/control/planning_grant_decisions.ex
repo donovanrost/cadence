@@ -1,7 +1,7 @@
 defmodule Cadence.Control.PlanningGrantDecisions do
   @moduledoc """
   The console's decisions on automation grants (#283, ux U105): approve and reject a proposal,
-  narrow an active grant. Each takes an `operation_id` (as #257's plans): one transaction, the
+  narrow an active grant, resume a suspended one (#499). Each takes an `operation_id` (as #257's plans): one transaction, the
   mission's approval setting held stable first (Governance.ActivationLocks' order), then the
   grant row lock, then the operation check (`GrantOperations`: the same request again gets the
   original answer, `replayed: true`), then the act (`AutomationGrantReview`), then the record.
@@ -20,6 +20,19 @@ defmodule Cadence.Control.PlanningGrantDecisions do
     with {:ok, sha} <- required(params, :sha256) do
       run(scope, mission_id, grant_id, params, :approve, sha, fn ->
         AutomationGrantReview.approve(scope, mission_id, grant_id, sha)
+      end)
+    end
+  end
+
+  @doc """
+  #499: resumes a suspended grant read at `sha256` (an approval-like act, with replays):
+  `{:ok, {:decided | :replayed, row}}`. The setting in force decides who may.
+  """
+  @spec resume(Scope.t(), binary(), binary(), map()) :: {:ok, tuple()} | {:error, term()}
+  def resume(%Scope{} = scope, mission_id, grant_id, params) do
+    with {:ok, sha} <- required(params, :sha256) do
+      run(scope, mission_id, grant_id, params, :resume, sha, fn ->
+        AutomationGrantReview.resume(scope, mission_id, grant_id, sha)
       end)
     end
   end

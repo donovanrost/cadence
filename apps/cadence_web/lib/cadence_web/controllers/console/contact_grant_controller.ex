@@ -26,6 +26,10 @@ defmodule CadenceWeb.Console.ContactGrantController do
   def reject(conn, %{"grant_id" => id} = params),
     do: decided(conn, PlanningGrantDecisions.reject(scope(conn), mission_id(conn), id, params))
 
+  # #499: resume a grant a tightening suspended (an approval-like act, with replays).
+  def resume(conn, %{"grant_id" => id} = params),
+    do: decided(conn, PlanningGrantDecisions.resume(scope(conn), mission_id(conn), id, params))
+
   def narrow(conn, %{"grant_id" => id} = params),
     do: decided(conn, PlanningGrantDecisions.narrow(scope(conn), mission_id(conn), id, params))
 
@@ -77,7 +81,9 @@ defmodule CadenceWeb.Console.ContactGrantController do
               :approval_policy_changed,
               :automation_grant_not_active,
               :automation_grant_not_narrower,
-              :automation_grant_legacy
+              :automation_grant_legacy,
+              :automation_grant_not_suspended,
+              :automation_grant_service_has_grant
             ],
        do: Problem.respond(conn, reason, details)
 

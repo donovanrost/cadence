@@ -1,6 +1,7 @@
 defmodule Cadence.Governance.ActivationPolicy do
   @moduledoc "Organization approval requirements, mission overrides, and exact policy evidence."
   alias Cadence.Auth.{Policy, SettingsAccess}
+  alias Cadence.Governance.ApprovalTightening
   alias Cadence.Missions
   alias Cadence.Platform.ScopedSettings
 
@@ -55,20 +56,86 @@ defmodule Cadence.Governance.ActivationPolicy do
   Every change records who, when, and the effective setting before and after (`audit`); a refused
   change records nothing.
   """
-  def save(scope, mission_id, token, input) do
+  def save(scope, mission_id, token, input, opts \\ []) do
     with :ok <- SettingsAccess.authorize(scope, :manage_settings, mission_id),
          {:ok, document} <- decode(mission_id, input) do
+      org = scope.organization_id
+      acknowledged = Keyword.get(opts, :acknowledged_suspensions)
+      tightening_opts = Keyword.take(opts, [:now])
+
       ScopedSettings.save(
-        scope.organization_id,
+        org,
         mission_id,
         @section,
         default(),
         token,
         document,
         SettingsAccess.actor(scope),
-        check: &may_change(scope, mission_id, &1, document),
-        audit: &audit(scope.organization_id, mission_id, &1, document)
+        check: fn current ->
+          with :ok <- may_change(scope, mission_id, current, document),
+               do:
+                 preview(
+                   org,
+                   tightened(org, mission_id, current, document),
+                   acknowledged,
+                   tightening_opts
+                 )
+        end,
+        audit: &audit(org, mission_id, &1, document),
+        after_write: fn current, revision ->
+          tightened = tightened(org, mission_id, current, document)
+          suspend(scope, tightened, revision, mission_id, tightening_opts)
+        end
       )
+    end
+  end
+
+  # #499: the missions this save tightens ('direct' to 'independent', by ScopedSettings' one
+  # rule): the mission itself on a mission save; on an organization save, each mission #430's
+  # list moved that way. Read under the save's lock, so the preview and the suspension agree.
+  defp tightened(org, nil = _mission, current, document) do
+    for %{"before" => "direct", "after" => "independent", "mission_id" => id} <-
+          moved_missions(org, current, document),
+        do: id
+  end
+
+  defp tightened(_org, mission_id, current, document) do
+    before = requirement(current.effective)
+    after_value = requirement(after_effective(current, document))
+    if before == "direct" and after_value == "independent", do: [mission_id], else: []
+  end
+
+  defp preview(_org, [], _acknowledged, _opts), do: :ok
+
+  # ca-security: with nothing registered a tightening is refused, never let through unchecked
+  # (fail closed: a missing config line must not switch the control off).
+  defp preview(org, mission_ids, acknowledged, opts) do
+    case ApprovalTightening.implementation() do
+      nil -> {:error, :approval_tightening_unavailable}
+      tightening -> tightening.preview(org, mission_ids, acknowledged, opts)
+    end
+  end
+
+  defp suspend(_scope, [], _revision, _mission_id, _opts), do: :ok
+
+  defp suspend(scope, mission_ids, revision, mission_id, opts) do
+    level = if mission_id, do: "mission", else: "organization"
+
+    case ApprovalTightening.implementation() do
+      nil ->
+        {:error, :approval_tightening_unavailable}
+
+      tightening ->
+        with {:ok, _suspended} <-
+               tightening.apply(
+                 scope,
+                 scope.organization_id,
+                 mission_ids,
+                 revision.revision_id,
+                 level,
+                 opts
+               ),
+             do: :ok
     end
   end
 

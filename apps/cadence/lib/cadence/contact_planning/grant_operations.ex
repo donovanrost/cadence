@@ -33,7 +33,7 @@ defmodule Cadence.ContactPlanning.GrantOperations do
     field(:inserted_at, :utc_datetime_usec)
   end
 
-  @type action :: :approve | :reject | :narrow
+  @type action :: :approve | :reject | :narrow | :resume
   @type answer :: {pos_integer(), map()}
 
   @doc """
@@ -100,6 +100,8 @@ defmodule Cadence.ContactPlanning.GrantOperations do
   end
 
   defp normalize(:approve, digest), do: digest
+  # #499: resume is an approval-like act on the hash the approver read.
+  defp normalize(:resume, digest), do: digest
   defp normalize(:reject, reason) when is_binary(reason), do: String.trim(reason)
   defp normalize(:reject, _reason), do: nil
 

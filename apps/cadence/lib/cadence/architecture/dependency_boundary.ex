@@ -51,6 +51,8 @@ defmodule Cadence.Architecture.DependencyBoundary do
     "lib/cadence/contact_planning/grant_separation.ex",
     "lib/cadence/contact_planning/grant_narrowing.ex",
     "lib/cadence/contact_planning/grant_operations.ex",
+    # #499: the suspension a tightening of the approval setting makes, with the grants it suspends.
+    "lib/cadence/contact_planning/grant_suspension.ex",
     "lib/cadence/contact_planning/contact_plan_approvals.ex",
     "lib/cadence/contact_planning/contact_plans.ex",
     "lib/cadence/contact_planning/contact_requirement_templates.ex",
