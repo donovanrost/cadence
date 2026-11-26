@@ -60,8 +60,10 @@ Each agent gets its own worktree off `origin/develop` and its own hc terminal, n
 git -C <repo> fetch origin && git -C <repo> worktree add --detach <worktrees>/<handle> origin/develop
 (cd <worktrees>/<handle> && mise trust)        # without this, node is missing and hooks fail
 # start a login shell (so mise's PATH applies), then the agent inside it
+# herdr.space makes the terminal visible in the user's herdr-app: laptop 1 sp58a63cab3ed4d89afb805669510138a9
+# (Apogee team), laptop 2 sp1603e397e561f3fd4f4373b657db0f1d. Forgot it? hc label <handle> herdr.space=<id>.
 hc run --bg --name <handle> --no-parent --no-notify --keep --label team=cadence --label head=<your handle> \
-  --cwd <worktrees>/<handle>
+  --label herdr.space=<id> --cwd <worktrees>/<handle>
 hc send <handle> "claude --model <model> --effort <level> --permission-mode auto"
 # Codex instead: sandboxed to its worktree, approvals off (it never blocks on a dialog). <git> is the
 # main repo's .git (~/projects/cadence/cadence/.git on both laptops); a worktree's HEAD,
