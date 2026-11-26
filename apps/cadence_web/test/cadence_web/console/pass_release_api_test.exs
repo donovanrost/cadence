@@ -31,7 +31,7 @@ defmodule CadenceWeb.Console.PassReleaseAPITest do
       id: reservation.provider_reservation_id,
       org_id: org.organization_id,
       mission_id: mission.mission_id,
-      base: "/api/console/v1/missions/#{mission.mission_id}"
+      base: "/api/v1/missions/#{mission.mission_id}"
     }
   end
 

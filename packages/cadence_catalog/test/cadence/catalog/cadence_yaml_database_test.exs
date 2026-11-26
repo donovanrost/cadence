@@ -40,17 +40,7 @@ defmodule Cadence.Catalog.CadenceYamlDatabaseTest do
   """
 
   test "imports and compiles a combined database without Cadence persistence" do
-    source =
-      Source.new(%{
-        artifact_id: "simulator-database",
-        organization_id: "org-alpha",
-        mission_id: "mission-alpha",
-        catalog_family: :combined,
-        artifact_name: "simulator.yaml",
-        format_key: "cadence_yaml",
-        media_type: "application/yaml",
-        source_artifact: @database
-      })
+    source = combined_source()
 
     assert :ok = CadenceYamlDatabase.validate(source)
 
@@ -83,6 +73,25 @@ defmodule Cadence.Catalog.CadenceYamlDatabaseTest do
 
     assert state_effect["argument_id"] ==
              argument["argument_id"]
+  end
+
+  test "import_with_document returns the validated source document with its import result" do
+    source = combined_source()
+    context = %{import_run_id: "simulator-import"}
+
+    assert {:ok, result, document} = CadenceYamlDatabase.import_with_document(source, context)
+    assert {:ok, ^result} = CadenceYamlDatabase.import(source, context)
+
+    assert %{
+             "version" => "1.0.0",
+             "packets" => [%{"name" => "HK", "apid" => 42}],
+             "commands" => [%{"name" => "SET_MODE", "opcode" => 3}]
+           } = document
+
+    invalid = %{source | source_artifact: "- unexpected"}
+
+    assert {:error, {:validation_error, "YAML root must be a map"}} =
+             CadenceYamlDatabase.import_with_document(invalid, context)
   end
 
   # 2026-11-12: YAML limits lower to the same default_rules the XTCE importer gives, so they
@@ -173,5 +182,18 @@ defmodule Cadence.Catalog.CadenceYamlDatabaseTest do
     assert CadenceYamlDatabase.validate(source) ==
              {:error,
               {:validation_error, "Command 'INVALID' APID must be between 0 and 2047, got 2048"}}
+  end
+
+  defp combined_source do
+    Source.new(%{
+      artifact_id: "simulator-database",
+      organization_id: "org-alpha",
+      mission_id: "mission-alpha",
+      catalog_family: :combined,
+      artifact_name: "simulator.yaml",
+      format_key: "cadence_yaml",
+      media_type: "application/yaml",
+      source_artifact: @database
+    })
   end
 end

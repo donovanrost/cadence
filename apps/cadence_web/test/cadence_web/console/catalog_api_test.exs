@@ -12,7 +12,7 @@ defmodule CadenceWeb.Console.CatalogAPITest do
     %{
       user: user,
       mission: mission,
-      base: "/api/console/v1/missions/#{mission.mission_id}/catalog"
+      base: "/api/v1/missions/#{mission.mission_id}/catalog"
     }
   end
 

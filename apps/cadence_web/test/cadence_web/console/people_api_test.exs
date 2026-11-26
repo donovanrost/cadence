@@ -10,7 +10,7 @@ defmodule CadenceWeb.Console.PeopleAPITest do
     TestFixtures.grant_membership!(admin, org, role: :organization_admin)
     TestFixtures.grant_membership!(member, org, role: :member)
 
-    %{admin: admin, member: member, base: "/api/console/v1/organizations/#{org.organization_id}"}
+    %{admin: admin, member: member, base: "/api/v1/organizations/#{org.organization_id}"}
   end
 
   defp call(user, :get, path), do: user |> TestFixtures.member_conn() |> get(path)
@@ -110,7 +110,7 @@ defmodule CadenceWeb.Console.PeopleAPITest do
     stranger = TestFixtures.persist_org!()
 
     conn =
-      call(c.member, :get, "/api/console/v1/organizations/#{stranger.organization_id}/people")
+      call(c.member, :get, "/api/v1/organizations/#{stranger.organization_id}/people")
 
     assert json_response(conn, 404)["error"]["code"] == "organization_not_found"
   end

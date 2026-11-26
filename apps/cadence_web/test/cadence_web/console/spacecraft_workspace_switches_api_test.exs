@@ -34,7 +34,7 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceSwitchesAPITest do
       catalog: revision.catalog_revision_id,
       endpoint: endpoint.source_endpoint_id,
       path:
-        "/api/console/v1/missions/#{mission.mission_id}/spacecraft/#{craft.spacecraft_id}/configuration/workspace"
+        "/api/v1/missions/#{mission.mission_id}/spacecraft/#{craft.spacecraft_id}/configuration/workspace"
     }
   end
 

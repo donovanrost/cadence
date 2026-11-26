@@ -246,6 +246,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
           "raw_frame_offset_bytes" => frame_record.raw_frame_offset_bytes,
           "raw_frame_length_bytes" => frame_record.raw_frame_length_bytes,
           "payload_length_bytes" => frame_record.payload_length_bytes,
+          "frame_sha256" => encode_hash(frame_record.frame_sha256),
           "first_header_pointer" => frame_record.first_header_pointer,
           "quality" => encode_atom(frame_record.quality),
           "source_time" => encode_datetime(frame_record.source_time),
@@ -429,6 +430,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
       raw_frame_offset_bytes: Map.fetch!(entry, "raw_frame_offset_bytes"),
       raw_frame_length_bytes: Map.fetch!(entry, "raw_frame_length_bytes"),
       payload_length_bytes: Map.fetch!(entry, "payload_length_bytes"),
+      frame_sha256: decode_hash(Map.get(entry, "frame_sha256")),
       first_header_pointer: Map.get(entry, "first_header_pointer"),
       quality: decode_atom(Map.get(entry, "quality")),
       source_time: decode_datetime(Map.get(entry, "source_time")),
@@ -462,6 +464,12 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
         raise "invalid protocol archive datetime #{inspect(value)}: #{inspect(reason)}"
     end
   end
+
+  defp encode_hash(nil), do: nil
+  defp encode_hash(hash) when is_binary(hash), do: Base.encode16(hash, case: :lower)
+
+  defp decode_hash(nil), do: nil
+  defp decode_hash(hex) when is_binary(hex), do: Base.decode16!(hex, case: :lower)
 
   defp encode_atom(nil), do: nil
   defp encode_atom(value) when is_atom(value), do: Atom.to_string(value)

@@ -293,6 +293,16 @@ export function actionQueueFor(fleet: Json, awaitingViewer = 0): Json {
 }
 
 /**
+ * Refuses the console socket, so a routed `/fleet` (data or failure) isn't overwritten by the live
+ * `fleet` push. Specs using this must allow `/socket\/console/` diagnostics.
+ */
+export async function refuseLiveSocket(page: Page): Promise<void> {
+  await page.routeWebSocket(/\/socket\/console\//, (ws) => {
+    void ws.close({ code: 1011, reason: "qa fixture: live socket disabled" });
+  });
+}
+
+/**
  * Routes `/fleet` and `/action-queue` from one degraded fleet, so Now's panels agree.
  *
  * The fleet normally arrives over the live `fleet` push (realtime.md), which would overwrite the
@@ -301,13 +311,11 @@ export function actionQueueFor(fleet: Json, awaitingViewer = 0): Json {
  * must allow `/socket\/console/` diagnostics.
  */
 export async function routeDegradedNow(page: Page, d: Degradation): Promise<void> {
-  await page.routeWebSocket(/\/socket\/console\//, (ws) => {
-    void ws.close({ code: 1011, reason: "qa fixture: live socket disabled" });
-  });
+  await refuseLiveSocket(page);
   let degraded: Json | null = null;
   const fleetOnce = async (): Promise<Json> => {
     if (degraded) return degraded;
-    const response = await page.request.get(`/api/console/v1/missions/${DEMO.missionId}/fleet`);
+    const response = await page.request.get(`/api/v1/missions/${DEMO.missionId}/fleet`);
     const body: unknown = await response.json();
     if (!isJson(body) || !isJson(body["data"])) throw new Error("fleet fixture: unexpected body");
     degraded = degradeFleet(body["data"], d);

@@ -1,6 +1,6 @@
 defmodule CadenceWeb.Console.PassController do
   @moduledoc """
-  `GET /api/console/v1/missions/:mission_id/passes` (ops M7 = scheduling S1) and one pass,
+  `GET /api/v1/missions/:mission_id/passes` (ops M7 = scheduling S1) and one pass,
   `GET …/passes/:id` (U32). Contract: docs/apogee/api/contacts.md.
   """
 

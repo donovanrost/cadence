@@ -44,7 +44,7 @@ defmodule CadenceWeb.Console.CatalogTwoReadsAPITest do
       admin: admin,
       mission: mission,
       database: database,
-      base: "/api/console/v1/missions/#{mission.mission_id}"
+      base: "/api/v1/missions/#{mission.mission_id}"
     }
   end
 

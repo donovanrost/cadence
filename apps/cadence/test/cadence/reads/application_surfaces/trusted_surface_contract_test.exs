@@ -148,18 +148,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.TrustedSurfaceContractTest do
     commands = surface_props(context, "commands", "OpsCommands")
     assert commands == %{"mission_id" => @mission_id, "query" => %{}}
 
-    activations =
-      surface_props(
-        context,
-        "activation_requests",
-        "OpsActivationRequests"
-      )
-
-    assert Map.has_key?(activations["page"], "list")
-
-    assert Map.keys(activations["form"]) |> Enum.sort() ==
-             ~w(actions id panel_id reason request_id)
-
     planning = surface_props(context, "fleet_planning", "OpsFleetPlanning")
     assert planning["directory"]["contract_version"] == 1
     assert planning["directory"]["active_policy"] == nil

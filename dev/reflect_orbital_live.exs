@@ -1,9 +1,25 @@
-# Run with mise run earendil-live. This process owns the ten TCP simulator feeds.
+# Run with mise run earendil-live. This process owns the rehearsal TCP feeds.
 if Mix.env() != :dev, do: raise("Earendil live telemetry is a local development demo")
 
+{options, [], []} =
+  OptionParser.parse(System.argv(), strict: [craft: :integer, shape: :string, per_site: :integer])
+
+craft = Keyword.get(options, :craft, 10)
+shape = Keyword.get(options, :shape, "peak")
+per_site = Keyword.get(options, :per_site, 8)
+
+case CadenceSimulator.Load.Shape.validate(craft, shape, per_site) do
+  :ok -> :ok
+  {:error, reason} -> raise reason
+end
+
 {:ok, hostname} = :inet.gethostname()
-# EARENDIL_CADENCE_NODE targets another worktree's server (its iex --sname); default `cadence`.
-peer = :"#{System.get_env("EARENDIL_CADENCE_NODE", "cadence")}@#{hostname}"
+# EARENDIL_CADENCE_NODE targets another worktree's server.
+peer_name =
+  System.get_env("EARENDIL_CADENCE_NODE") || "cadence_#{System.fetch_env!("CADENCE_DEV_SLOT")}"
+
+peer = :"#{peer_name}@#{hostname}"
+
 unless Node.connect(peer), do: raise("Start mise run cadence before the live demo")
 
 # Per-packet SQL debug output overwhelms an interactive development terminal.
@@ -23,14 +39,31 @@ for file <- ["fixture.exs", "dashboards.exs", "live_contacts.exs"] do
   end
 end
 
+sites =
+  case :rpc.call(peer, Cadence.Dev.ReflectOrbital.Fixture, :sites, []) do
+    sites when is_list(sites) -> length(sites)
+    error -> raise "Could not read fixture sites: #{inspect(error)}"
+  end
+
+scids =
+  for {scid, _site} <- CadenceSimulator.Load.Shape.fleet(craft, sites),
+      CadenceSimulator.Load.Shape.in_contact?(scid, sites, shape, per_site),
+      do: scid
+
 duration = String.to_integer(System.get_env("EARENDIL_DEMO_CONTACT_SECONDS") || "7200")
 unless duration in 60..28_800, do: raise("Demo duration must be 60–28800 seconds")
 
-IO.puts("Preparing ten rehearsal contacts and recovering their telemetry decoders…")
+IO.puts("Preparing #{length(scids)} rehearsal contacts and recovering their telemetry decoders…")
 
 contacts =
-  case :rpc.call(peer, Cadence.Dev.ReflectOrbital.LiveContacts, :run, [duration], 1_800_000) do
-    contacts when is_list(contacts) and length(contacts) == 10 -> contacts
+  case :rpc.call(
+         peer,
+         Cadence.Dev.ReflectOrbital.LiveContacts,
+         :run,
+         [duration, scids],
+         1_800_000
+       ) do
+    contacts when is_list(contacts) and length(contacts) == length(scids) -> contacts
     error -> raise "Contact setup failed: #{inspect(error, limit: 20)}"
   end
 
@@ -44,7 +77,9 @@ case :rpc.call(
        120_000
      ) do
   %{dashboards: dashboards, playlist: playlist} ->
-    IO.puts("Earendil: ten live spacecraft, 1 Hz per packet family, local TCP ingress")
+    IO.puts(
+      "Earendil: #{length(contacts)} live spacecraft, 1 Hz per packet family, local TCP ingress"
+    )
 
     Enum.each(
       dashboards,
@@ -82,7 +117,6 @@ feeds =
         frame: %{format: :tm, frame_size: 1115, scid: contact.scid, vcid: 0}
       )
 
-    Process.sleep(100)
     {pid, contact}
   end)
 

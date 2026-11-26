@@ -46,6 +46,7 @@ defmodule Cadence.Application do
       ] ++
         background_job_children(root_composition) ++
         retention_children() ++
+        questdb_retention_children() ++
         [{Drain, callback: fn -> drain_runtime(root_composition) end}]
 
     opts = [strategy: :one_for_one, name: Cadence.Supervisor]
@@ -105,8 +106,24 @@ defmodule Cadence.Application do
     Cadence.Persistence.Retention.children([
       Cadence.Runtime.PartitionStreamKeys.Retention,
       Cadence.IngressArchive.Retention,
+      Cadence.Telemetry.Storage.ObservationIdentityStates.Retention,
+      Cadence.Projections.DataSources.Watermarks.Retention,
       Cadence.Protocol.RecordArchive.FileSystem.Retention
     ])
+  end
+
+  # Retention for the QuestDB observation table (#693): only when that table is the store.
+  defp questdb_retention_children do
+    enabled? =
+      :cadence
+      |> Application.get_env(:telemetry_observation_retention, [])
+      |> Keyword.get(:enabled?, false)
+
+    writer = :cadence |> Application.get_env(:telemetry_storage, []) |> Keyword.get(:writer)
+
+    if enabled? and writer == Cadence.Telemetry.Storage.Writers.QuestDB,
+      do: [Cadence.Telemetry.Storage.QuestDB.RetentionJob],
+      else: []
   end
 
   defp background_job_children(%RootComposition{} = root_composition) do

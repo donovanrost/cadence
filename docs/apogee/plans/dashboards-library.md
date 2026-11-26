@@ -5,7 +5,7 @@ fe-ops, 2026-11-13, for api (cc dashboards, lead, domain). Spec: ux `screens/Das
 inserts are editor commands, saved through `CurrentVersions`), Q6 (update and delete are new domain functions),
 Q10 (refuse while used, then retire; never a hard delete; audited).
 
-All paths under `/api/console/v1/missions/:mission_id/dashboard-library`: a sibling of `/dashboards` (like slice 6's
+All paths under `/api/v1/missions/:mission_id/dashboard-library`: a sibling of `/dashboards` (like slice 6's
 `/dashboard-playlists`), so `library` never reads as a `:dashboard_id` (dashboards' review). Errors use the console Problem
 envelope (`{error: {code, message, details}}`). Invalidation: `dashboards`.
 

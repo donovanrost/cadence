@@ -76,6 +76,34 @@ defmodule CadenceSimulator.Provider.ContactLifecycleTest do
     assert resumed_contact["revision"] == 2
   end
 
+  test "a timing shift replaces a queued acquisition deadline" do
+    now = DateTime.utc_now()
+
+    %{run: run, contact: contact} =
+      TestProviderFixtures.create_contact!(%{}, search_starts_at: DateTime.add(now, 3_600))
+
+    :ok = Orchestrator.reconcile(now)
+    {:ok, original_start, _offset} = DateTime.from_iso8601(contact["starts_at"])
+
+    assert {:ok, shifted} =
+             ContactChanges.apply(run, contact["id"], %{
+               "type" => "timing_shift",
+               "start_shift_seconds" => 60,
+               "end_shift_seconds" => 60
+             })
+
+    :ok = Orchestrator.reconcile(original_start)
+
+    assert {:ok, %{"status" => "confirmed", "pass_phase" => "scheduled"}} =
+             Contacts.fetch_internal(contact["id"])
+
+    {:ok, shifted_start, _offset} = DateTime.from_iso8601(shifted["starts_at"])
+    :ok = Orchestrator.reconcile(DateTime.add(shifted_start, -1))
+
+    assert {:ok, %{"status" => "confirmed", "pass_phase" => "prepass"}} =
+             Contacts.fetch_internal(contact["id"])
+  end
+
   test "event delay and omission advance only according to declared provider behavior" do
     context = TestProviderFixtures.create_contact!(%{}, run_state: "paused")
 

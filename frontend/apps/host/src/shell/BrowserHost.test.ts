@@ -40,8 +40,6 @@ import { hostBrowserHistory } from "./host-browser-history";
 import BrowserHost from "./BrowserHost.vue";
 import OpsModulePage from "../ops-workspace/features/module-pages/OpsModulePage.vue";
 import SpacecraftPage from "../mission-and-spacecraft/SpacecraftPage.vue";
-import ActivationApprovalsPage from "../capability-management/features/activation-approvals/ActivationApprovalsPage.vue";
-import { inboxFixture } from "../capability-management/features/activation-approvals/fixtures.test-support";
 
 import { createHostRouter, hostRoute, shellForRoute } from "./host-navigation";
 import routes from "../routes.json";
@@ -340,44 +338,6 @@ async function reply(index: number, value: unknown) {
   await flushHostUpdates();
 }
 
-test("activation decisions bind path and token and cannot replace a later visit to the same inbox", async () => {
-  await start();
-  const path = "/missions/mission-1/ops/activations";
-  const original = { ...snapshot(path, "mission-1"), activation_approvals: inboxFixture() };
-  await click(path);
-  await reply(0, original);
-  const input = {
-    activation_decision: { request_id: "request-1", reason: "Reviewed" },
-    decision: "rejected" as const,
-  };
-  const execute: (value: typeof input) => Promise<unknown> = view()
-    .getComponent(ActivationApprovalsPage)
-    .props("execute");
-  const pending = execute(input);
-  expect(required(transport.requests[1]).event).toBe("host:activation");
-  expect(required(transport.requests[1]).payload).toEqual({ path, token: "review-token", input });
-  // §11c A and B retired the settings routes; leave through the catalog artifact page (L18) instead.
-  await click(neutralPath);
-  await reply(2, snapshot(neutralPath, "mission-1"));
-  await click(path);
-  const successor = {
-    ...original,
-    activation_approvals: { ...inboxFixture(), token: "new-visit-token" },
-  };
-  await reply(3, successor);
-  await reply(1, {
-    result: {
-      status: "ok",
-      data: { activationRequestId: "request-1", decision: "rejected", outcome: "rejected" },
-    },
-    page: original,
-  });
-  await pending;
-  expect(view().getComponent(ActivationApprovalsPage).props("snapshot")).toMatchObject({
-    token: "new-visit-token",
-  });
-});
-
 test("host remounts within the same Vue app and ignores the previous instance's pending reply", async () => {
   const listen = vi.spyOn(hostBrowserHistory, "listen");
   const destroyHistory = vi.spyOn(hostBrowserHistory, "destroy");
@@ -675,7 +635,6 @@ const routeComponents = {
   spacecraft: "SpacecraftPage",
   catalog: "CatalogPage",
   ops_module: "OpsModulePage",
-  activation_approvals: "ActivationApprovalsPage",
 };
 const routeStubs = Object.fromEntries(
   [...Object.values(routeComponents), "WorkspaceLanding", "TimelinePage"].map((name) => [

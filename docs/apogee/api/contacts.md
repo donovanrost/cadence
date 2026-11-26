@@ -11,7 +11,7 @@ S8) are api's: [scheduling.md](scheduling.md). Conventions: [README.md](README.m
 | S9 | `GET /missions/:mission_id/pass-review[/rows|/daily]` | **implemented** (K3) |
 | S10 | `contacts` and `contact_plans` on the `mission:<id>` `invalidate` event | **implemented** (contact facts + reservation changes; plans and fleet runs) |
 
-## `GET /api/console/v1/missions/:mission_id/passes`
+## `GET /api/v1/missions/:mission_id/passes`
 
 One row per **provider reservation** whose window overlaps `[from, to)`, oldest start first
 (`order=desc`: newest first). Every reservation row carries `booked: true`.
@@ -143,7 +143,7 @@ Every row gains four fields:
 - An attention change (`invalidate` `attention`) also invalidates `contacts`, since rows carry
   their item.
 
-### `GET /api/console/v1/missions/:mission_id/passes/:id`
+### `GET /api/v1/missions/:mission_id/passes/:id`
 
 One pass by its reservation id (the row `id`, or the attention object's `reservation_id`), in the
 same row shape including `attention`, whatever its window. Review opens passes days out with it.
@@ -173,7 +173,7 @@ the plan's UTC day, the day of its earliest selected pass, as plan detail derive
 `requirement: {id, version, name}` (`name` as plan history's `requirement_label`: template name,
 else the rule in words). Both `null` for a pass booked outside a plan.
 
-### `GET /api/console/v1/missions/:mission_id/passes/:id/reservation` (L14 / A11, owner: api)
+### `GET /api/v1/missions/:mission_id/passes/:id/reservation` (L14 / A11, owner: api)
 
 The pass's reservation for the drawer's Technical details (what the legacy reservation review
 showed):
@@ -198,7 +198,7 @@ showed):
 - `audit`: newest first, 25 per page; `?audit_cursor=<next_cursor>`. A cursor not on this
   reservation → `422 invalid_params` (`details.audit_cursor`). `404 pass_not_found`.
 
-### `GET /api/console/v1/missions/:mission_id/contacts/:contact_id/record` (L14 / A13, owner: api)
+### `GET /api/v1/missions/:mission_id/contacts/:contact_id/record` (L14 / A13, owner: api)
 
 A contact's record for the drawer's Technical details (what the legacy contact record showed).
 `contact_id` is a scheduled OR a realized contact id; both sides of the pair come back.
@@ -517,7 +517,7 @@ Writes (operators, `operate_mission`; neither changes the provider booking, whic
 - Hand-started contacts aren't pass rows, so they're out of this step: ending one from Uplink's
   contact view is a follow-up.
 
-### `POST /api/console/v1/missions/:mission_id/attention/:source/:id/acknowledge` · `…/resolve`
+### `POST /api/v1/missions/:mission_id/attention/:source/:id/acknowledge` · `…/resolve`
 
 `:source` and `:id` are the attention object's `source` and `id`: `pass_resolution` (the
 resolution id), or `contact_settlement` (only a lost-telemetry item, acknowledge only; see
@@ -586,7 +586,7 @@ and `attention`.
     - `armed_group_ids`: the mission's `queued` groups with members still queued for that
       spacecraft, oldest GO first. Send it as is to the named release (commanding.md); the viewed
       group is in it while it has unreleased members there. Empty means nothing to release.
-- **`POST /api/console/v1/missions/:mission_id/passes/:id/recover-uplink`** (`:id` = the pass row
+- **`POST /api/v1/missions/:mission_id/passes/:id/recover-uplink`** (`:id` = the pass row
   `id`, a reservation). No body; `operate_mission`; audited; safe to repeat. It re-runs the pass's
   uplink qualification.
   - Returns `{data: {state: "ready", ready_at}}`.
@@ -614,7 +614,7 @@ and `attention`.
   - `/counts.attention` counts both sources. `POST /attention/uplink_blocked/…` answers
     `404 attention_item_not_found`, since these resolve by themselves.
 
-## `GET /api/console/v1/missions/:mission_id/contact-findings` (M22, Contacts D4)
+## `GET /api/v1/missions/:mission_id/contact-findings` (M22, Contacts D4)
 
 "Needs a decision": problems across the mission's live bookings (requesting, pending, confirmed,
 active) in a window. Query: `from`, `to` (default now to +6 h, at most 7 days), `max_gap_s`
@@ -659,7 +659,7 @@ active) in a window. Query: `from`, `to` (default now to +6 h, at most 7 days), 
     when `state` is `pending | confirmed | active` and the viewer may cancel bookings
     (organization admin, `:manage_missions`, as for the contact workspace's cancel). Members don't
     see the button; D2 shows "Org admins can release a booking." (ux).
-  - `POST /api/console/v1/missions/:mission_id/passes/:id/release` with body
+  - `POST /api/v1/missions/:mission_id/passes/:id/release` with body
     `{"expected_provider_revision": <the row's provider_revision>}`. The server builds the
     cancellation evidence from the stored booking; a different revision means the provider
     changed it, so reload.

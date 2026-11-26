@@ -2,7 +2,7 @@
 
 fe-setup, 2026-11-13, for api (cc dashboards, lead). Spec: ux `screens/Dashboards.md` § Settings, § Snapshots
 and shares, § Export. Plan: `plans/dashboards.md` data table (D14–D19), DECISIONS #76 (Q1, Q5).
-All paths under `/api/console/v1/missions/:mission_id/dashboards/:dashboard_id`. Errors are the console
+All paths under `/api/v1/missions/:mission_id/dashboards/:dashboard_id`. Errors are the console
 Problem envelope (`{error: {code, message, details}}`), never LiveView statuses.
 
 ## What exists (read of the domain, 2026-11-13)

@@ -20,6 +20,7 @@ defmodule Cadence.Protocol.TransferFrameRecord do
           raw_frame_offset_bytes: non_neg_integer(),
           raw_frame_length_bytes: pos_integer(),
           payload_length_bytes: non_neg_integer(),
+          frame_sha256: <<_::256>> | nil,
           first_header_pointer: non_neg_integer() | nil,
           quality: atom() | nil,
           source_time: DateTime.t() | nil,
@@ -42,6 +43,9 @@ defmodule Cadence.Protocol.TransferFrameRecord do
     :raw_frame_offset_bytes,
     :raw_frame_length_bytes,
     :payload_length_bytes,
+    # The sha256 of the frame's own raw bytes (never the evidence's, which changes when a replay
+    # regroups the journal): what lets the archive tell two frames under one id apart (#738).
+    :frame_sha256,
     :first_header_pointer,
     :quality,
     :source_time,
@@ -68,6 +72,7 @@ defmodule Cadence.Protocol.TransferFrameRecord do
       raw_frame_offset_bytes: Map.fetch!(attrs, :raw_frame_offset_bytes),
       raw_frame_length_bytes: Map.fetch!(attrs, :raw_frame_length_bytes),
       payload_length_bytes: Map.fetch!(attrs, :payload_length_bytes),
+      frame_sha256: Map.get(attrs, :frame_sha256),
       first_header_pointer:
         Map.get(attrs, :first_header_pointer, Map.get(attrs, "first_header_pointer")),
       quality: Map.get(attrs, :quality, Map.get(attrs, "quality")),

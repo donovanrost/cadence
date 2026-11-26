@@ -34,10 +34,10 @@ defmodule CadenceWeb.Console.ServiceBearerAPITest do
   end
 
   # Phoenix.ConnTest skips CSRF by default; these requests check it for real.
-  # The one API's prefix: /api/console/v1 until platform's router move (#757), /api/v1 after.
+  # The one API's prefix: /api/v1 until platform's router move (#757), /api/v1 after.
   @prefix if Enum.any?(CadenceWeb.Router.__routes__(), &String.starts_with?(&1.path, "/api/v1/")),
             do: "/api/v1",
-            else: "/api/console/v1"
+            else: "/api/v1"
 
   defp csrf_checked, do: build_conn() |> put_private(:plug_skip_csrf_protection, false)
 

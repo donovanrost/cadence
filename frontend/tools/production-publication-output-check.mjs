@@ -40,6 +40,9 @@ const authoritativeHostJavascriptDigests = new Set([
   "2f6b02fbac438b374f8ee5af736b953d8f0e7dbdf96d058cd00c1c9c31cfc0e5",
   // Reviewed mounted-boundary metadata; two identical pinned build:phoenix runs.
   "d05e3fd0e993aa512018627ea68f8772e5fc7c8860d3958428c5575a2b322a55",
+  // Reviewed the activation approvals page leaving the host (#710): the checker's tokenizer finds the
+  // same 2 federation-loader templates as before and nothing new; identical digest from repeated builds.
+  "66010ec52223a1b517db8a418a2467f2bb76f496f7a323b8baf699e9c6c4f06a",
 ]);
 
 /** @param {string} message @returns {never} */

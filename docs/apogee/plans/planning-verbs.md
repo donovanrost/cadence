@@ -22,7 +22,7 @@ Shapes follow the requirement close / cancel endpoints already in the console AP
   revoked_by/at, revocation_reason}`. The console's `GET /contact-planning/policy` has no grants and no
   service identities.
 
-## L2 template verbs (`/api/console/v1/missions/:mission_id/contact-planning/templates/:template_id`)
+## L2 template verbs (`/api/v1/missions/:mission_id/contact-planning/templates/:template_id`)
 ```
 POST /pause     {expected_version, reason}  → 200 {id, state: "paused", version}
 POST /activate  {expected_version, reason}  → 200 {id, state: "active", version}
@@ -45,7 +45,7 @@ requirements from it until you resume. Ones it already made stay." Close "Ends t
 reopened. Ones it already made stay." Paused and closed templates read `PAUSED` (caution) / `CLOSED` (off) in the
 Templates table.
 
-## L3 automation grants (`/api/console/v1/missions/:mission_id/contact-planning`)
+## L3 automation grants (`/api/v1/missions/:mission_id/contact-planning`)
 ```
 GET  /grants   → {grants: [{id, service_identity {id, name}, policy_version, allowed_actions: ["plan", "repair",
                   "execute", "submit", "approve"], maximum_horizon_seconds, maximum_contacts,

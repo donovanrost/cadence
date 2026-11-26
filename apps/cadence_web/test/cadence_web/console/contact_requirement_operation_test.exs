@@ -14,7 +14,7 @@ defmodule CadenceWeb.Console.ContactRequirementOperationTest do
     %{
       member: member,
       craft: craft,
-      base: "/api/console/v1/missions/#{mission.mission_id}/contact-planning/requirements"
+      base: "/api/v1/missions/#{mission.mission_id}/contact-planning/requirements"
     }
   end
 

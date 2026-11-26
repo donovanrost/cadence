@@ -12,7 +12,7 @@ import {
 
 /**
  * The Setup spacecraft directory.
- * Contract: docs/apogee/api/setup.md, `GET /api/console/v1/missions/:mission_id/spacecraft`.
+ * Contract: docs/apogee/api/setup.md, `GET /api/v1/missions/:mission_id/spacecraft`.
  */
 const { array, boolean, integer, nullable, object, optional, string, timestamp, token } = decoders;
 

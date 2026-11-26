@@ -20,7 +20,7 @@ defmodule CadenceWeb.Console.FleetAPITest do
     data =
       c.user
       |> TestFixtures.member_conn()
-      |> get("/api/console/v1/missions/#{c.mission.mission_id}/fleet")
+      |> get("/api/v1/missions/#{c.mission.mission_id}/fleet")
       |> json_response(200)
       |> Map.fetch!("data")
 
@@ -50,7 +50,7 @@ defmodule CadenceWeb.Console.FleetAPITest do
     conn =
       c.user
       |> TestFixtures.member_conn()
-      |> get("/api/console/v1/missions/#{stranger.mission_id}/fleet")
+      |> get("/api/v1/missions/#{stranger.mission_id}/fleet")
 
     assert %{"error" => %{"code" => "mission_not_found"}} = json_response(conn, 404)
   end

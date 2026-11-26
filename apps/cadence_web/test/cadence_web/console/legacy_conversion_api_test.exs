@@ -73,7 +73,7 @@ defmodule CadenceWeb.Console.LegacyConversionAPITest do
     %{
       stager: TestFixtures.member_conn(stager),
       reviewer: TestFixtures.member_conn(reviewer),
-      base: "/api/console/v1/missions/#{mission.mission_id}",
+      base: "/api/v1/missions/#{mission.mission_id}",
       org_id: org.organization_id,
       mission_id: mission.mission_id,
       rule: rule

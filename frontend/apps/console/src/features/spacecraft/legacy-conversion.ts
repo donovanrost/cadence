@@ -2,7 +2,7 @@
  * TEMPORARY, deleted with 9ac6dc8ee (lead; the director's change-set path, in batches).
  * The legacy route conversion: routes set up on the old routing page are converted to extra routes,
  * one batch of spacecraft per change set, each staged by a click here (ux U79).
- * Contract: api v3.2, `GET|POST /api/console/v1/missions/:mission_id/routes/legacy-conversion`.
+ * Contract: api v3.2, `GET|POST /api/v1/missions/:mission_id/routes/legacy-conversion`.
  */
 import {
   decoders,

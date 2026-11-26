@@ -17,7 +17,7 @@ defmodule CadenceWeb.Console.CommandCatalogAPITest do
   defp get_json(c, path) do
     c.user
     |> TestFixtures.member_conn()
-    |> get("/api/console/v1/missions/#{c.mission.mission_id}" <> path)
+    |> get("/api/v1/missions/#{c.mission.mission_id}" <> path)
   end
 
   describe "with an active catalog" do
@@ -92,7 +92,7 @@ defmodule CadenceWeb.Console.CommandCatalogAPITest do
     assert %{"error" => %{"code" => "mission_not_found"}} =
              c.user
              |> TestFixtures.member_conn()
-             |> get("/api/console/v1/missions/#{stranger.mission_id}/commands")
+             |> get("/api/v1/missions/#{stranger.mission_id}/commands")
              |> json_response(404)
   end
 end

@@ -24,7 +24,7 @@ defmodule CadenceWeb.Console.ContactPlanNotesTest do
       member: member,
       admin_membership: admin_membership,
       member_membership: member_membership,
-      base: "/api/console/v1/missions/#{mission.mission_id}/contact-plans"
+      base: "/api/v1/missions/#{mission.mission_id}/contact-plans"
     }
   end
 

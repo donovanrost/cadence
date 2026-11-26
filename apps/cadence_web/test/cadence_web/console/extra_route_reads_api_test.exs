@@ -77,7 +77,7 @@ defmodule CadenceWeb.Console.ExtraRouteReadsAPITest do
 
     %{
       conn: TestFixtures.member_conn(user),
-      base: "/api/console/v1/missions/#{mission.mission_id}",
+      base: "/api/v1/missions/#{mission.mission_id}",
       craft: craft,
       other: other,
       profile: profile,

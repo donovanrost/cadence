@@ -24,7 +24,7 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceAPITest do
       mission: mission,
       craft: craft,
       path:
-        "/api/console/v1/missions/#{mission.mission_id}/spacecraft/#{craft.spacecraft_id}/configuration/workspace"
+        "/api/v1/missions/#{mission.mission_id}/spacecraft/#{craft.spacecraft_id}/configuration/workspace"
     }
   end
 
@@ -86,7 +86,7 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceAPITest do
       )
 
     path =
-      "/api/console/v1/missions/#{c.mission.mission_id}/spacecraft/#{craft.spacecraft_id}/configuration/workspace"
+      "/api/v1/missions/#{c.mission.mission_id}/spacecraft/#{craft.spacecraft_id}/configuration/workspace"
 
     data =
       c.user
@@ -117,7 +117,7 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceAPITest do
       )
 
     path =
-      "/api/console/v1/missions/#{c.mission.mission_id}/spacecraft/#{craft.spacecraft_id}/configuration/workspace"
+      "/api/v1/missions/#{c.mission.mission_id}/spacecraft/#{craft.spacecraft_id}/configuration/workspace"
 
     data =
       c.user

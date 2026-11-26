@@ -19,7 +19,7 @@ export function missionPath(rest = ""): string {
 
 /** Glob for a mission-scoped console API endpoint, for page.route. */
 export function missionApi(rest: string): string {
-  return `**/api/console/v1/missions/${DEMO.missionId}/${rest.replace(/^\//, "")}`;
+  return `**/api/v1/missions/${DEMO.missionId}/${rest.replace(/^\//, "")}`;
 }
 
 /** Fulfils a console API route with `{ data }` JSON. */

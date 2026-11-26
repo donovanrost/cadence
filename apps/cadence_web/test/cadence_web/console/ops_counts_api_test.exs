@@ -16,7 +16,7 @@ defmodule CadenceWeb.Console.OpsCountsAPITest do
   defp counts(c, mission_id \\ nil) do
     c.user
     |> TestFixtures.member_conn()
-    |> get("/api/console/v1/missions/#{mission_id || c.mission.mission_id}/counts")
+    |> get("/api/v1/missions/#{mission_id || c.mission.mission_id}/counts")
   end
 
   test "an empty mission has zero counts and null contacts", c do
@@ -95,7 +95,7 @@ defmodule CadenceWeb.Console.OpsCountsAPITest do
     fleet =
       c.user
       |> TestFixtures.member_conn()
-      |> get("/api/console/v1/missions/#{c.mission.mission_id}/fleet")
+      |> get("/api/v1/missions/#{c.mission.mission_id}/fleet")
       |> json_response(200)
       |> Map.fetch!("data")
 
@@ -134,7 +134,7 @@ defmodule CadenceWeb.Console.OpsCountsAPITest do
     fleet =
       c.user
       |> TestFixtures.member_conn()
-      |> get("/api/console/v1/missions/#{c.mission.mission_id}/fleet")
+      |> get("/api/v1/missions/#{c.mission.mission_id}/fleet")
       |> json_response(200)
 
     {data["alarms"]["limits_configured"], data["posture"]["limits_configured"],

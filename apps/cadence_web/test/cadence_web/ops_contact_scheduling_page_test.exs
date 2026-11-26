@@ -1,11 +1,3 @@
-Code.require_file(
-  Path.expand("../../browser_test/support/dashboard_rendered_viewport_runner.exs", __DIR__)
-)
-
-Code.require_file(
-  Path.expand("../../browser_test/support/federation_release_fixture.exs", __DIR__)
-)
-
 defmodule CadenceWeb.OpsContactSchedulingPageTest do
   use CadenceWeb.ConnCase, async: false
   import Phoenix.LiveViewTest
@@ -17,11 +9,8 @@ defmodule CadenceWeb.OpsContactSchedulingPageTest do
   alias Cadence.ContactScheduleFixtures, as: Fixtures
   alias Cadence.GroundNetworks.ProviderContact
   alias Cadence.Jobs.Runner, as: JobRunner
-  alias Cadence.Jobs.Supervisor, as: JobsSupervisor
   alias Cadence.TestSupport.FakeProviderClient
   alias CadenceWeb.ApplicationHostBridge
-  alias CadenceWeb.Assets.DashboardRenderedViewportRunner, as: BrowserRunner
-  alias CadenceWeb.Assets.FederationReleaseFixture
   alias CadenceWeb.TestFixtures
 
   @renderer Path.expand(
@@ -327,66 +316,6 @@ defmodule CadenceWeb.OpsContactSchedulingPageTest do
     assert receipt["result"]["operation"]["status"] == "completed"
     assert_receive {:provider, :post, "/provider/v1/contacts"}
     refute_receive {:provider, :post, "/provider/v1/contacts"}
-  end
-
-  @tag :browser_smoke
-  @tag timeout: 300_000
-  test "production native, client-routed and federated scheduling share durable operations", c do
-    output =
-      Path.join(
-        System.tmp_dir!(),
-        "cadence-contact-schedule-#{System.unique_integer([:positive])}"
-      )
-
-    File.mkdir_p!(output)
-    port = BrowserRunner.start_browser_endpoint_on_ephemeral_port!(c.sandbox_owner)
-    prepare_browser_release(c.sandbox_owner)
-    start_supervised!({JobsSupervisor, safety_poll_interval_ms: 100, max_concurrency: 2})
-
-    {log, status} =
-      BrowserRunner.run_dashboard_viewport_smoke(
-        [
-          Path.expand("../../../../frontend/tools/phoenix/contact_schedule_browser.mjs", __DIR__),
-          "http://127.0.0.1:#{port}",
-          c.mission_id,
-          c.spacecraft.spacecraft_id,
-          c.user.email,
-          output
-        ],
-        stdin: Jason.encode!(%{password: TestFixtures.default_password()}) <> "\n",
-        timeout: 240_000
-      )
-
-    assert status == 0, log <> "\nArtifacts: " <> output
-    assert log =~ "CONTACT_SCHEDULE_BROWSER_OK"
-    assert_receive {:provider, :post, "/provider/v1/contacts"}
-    refute_receive {:provider, :post, "/provider/v1/contacts"}
-    assert_receive {:provider, :post, "/provider/v1/contacts/provider-contact-one/cancel"}
-    refute_receive {:provider, :post, "/provider/v1/contacts/provider-contact-one/cancel"}
-  end
-
-  defp prepare_browser_release(owner) do
-    previous = Application.get_env(:cadence_web, :frontend_release_publication)
-
-    Application.put_env(
-      :cadence_web,
-      :frontend_release_publication,
-      FederationReleaseFixture.publication_config()
-    )
-
-    on_exit(fn ->
-      if previous,
-        do: Application.put_env(:cadence_web, :frontend_release_publication, previous),
-        else: Application.delete_env(:cadence_web, :frontend_release_publication)
-    end)
-
-    release =
-      FederationReleaseFixture.prepare_and_activate!(Path.expand("../..", __DIR__),
-        sandbox_owner: owner,
-        ops_console_surface: "contact_schedule"
-      )
-
-    on_exit(fn -> FederationReleaseFixture.cleanup!(release) end)
   end
 
   defp accept_reservation(c) do

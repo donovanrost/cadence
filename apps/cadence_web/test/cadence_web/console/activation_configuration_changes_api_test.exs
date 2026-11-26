@@ -59,7 +59,7 @@ defmodule CadenceWeb.Console.ActivationConfigurationChangesAPITest do
       second: second,
       rev_a: rev_a,
       rev_b: rev_b,
-      base: "/api/console/v1/missions/#{m}/activations",
+      base: "/api/v1/missions/#{m}/activations",
       fleet: fleet.activation_request_id,
       direct: request.activation_request_id
     }

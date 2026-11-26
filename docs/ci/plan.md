@@ -249,7 +249,7 @@ keep that rare. Phase 4 adds 3–4 jobs per PR.
 ## Phase 4: Apogee console and full browser e2e
 
 Starts when `ui/apogee-spa` is on develop. Inputs: qa's handoff
-(`docs/apogee/qa/ci-handoff.md` on `ui/apogee-spa`, b2771377) and `e2e.md`/`runbook.md`.
+(`docs/apogee/qa/e2e.md` on `ui/apogee-spa`, b2771377) and `docs/dev-environment.md`.
 
 **Console typecheck, lint and unit tests** come for free. `frontend/apps/console` is a pnpm
 workspace member, so `corepack pnpm verify` (`check` + `-r test`) in the frontend quality job

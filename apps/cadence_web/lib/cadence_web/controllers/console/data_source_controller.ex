@@ -1,6 +1,6 @@
 defmodule CadenceWeb.Console.DataSourceController do
   @moduledoc """
-  D1, `GET /api/console/v1/missions/:mission_id/data-sources`. Contract:
+  D1, `GET /api/v1/missions/:mission_id/data-sources`. Contract:
   docs/apogee/api/setup.md.
   """
 

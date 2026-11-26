@@ -7,7 +7,7 @@ import {
   type Decoded,
 } from "@/api/index.ts";
 
-/** Contract: docs/apogee/api/ops.md, `GET /api/console/v1/missions/:mission_id/alarms` (M9). */
+/** Contract: docs/apogee/api/ops.md, `GET /api/v1/missions/:mission_id/alarms` (M9). */
 
 export const alarmSeverities = ["critical", "caution", "nominal"] as const;
 export type AlarmSeverity = (typeof alarmSeverities)[number];

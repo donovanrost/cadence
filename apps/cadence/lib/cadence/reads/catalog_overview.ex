@@ -61,7 +61,7 @@ defmodule Cadence.Reads.CatalogOverview do
   def download_url(_mission_id, nil), do: nil
 
   def download_url(mission_id, artifact_id),
-    do: "/api/console/v1/missions/#{mission_id}/catalog/artifacts/#{artifact_id}/download"
+    do: "/api/v1/missions/#{mission_id}/catalog/artifacts/#{artifact_id}/download"
 
   defp artifact_detail(organization_id, mission_id, artifact) do
     labels = importer_labels()

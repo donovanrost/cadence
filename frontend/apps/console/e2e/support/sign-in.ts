@@ -51,7 +51,7 @@ export async function signInByApi(
     expect(page.ok(), "the console document loads").toBe(true);
     const csrf = /<meta[^>]+name="csrf-token"[^>]+content="([^"]+)"/.exec(await page.text())?.[1];
     expect(csrf, "the console document carries a CSRF token").toBeTruthy();
-    const res = await api.post("/api/console/v1/auth/sign-in", {
+    const res = await api.post("/api/v1/auth/sign-in", {
       headers: { "x-csrf-token": csrf ?? "", accept: "application/json" },
       data: { email: credentials.email, password: credentials.password },
     });

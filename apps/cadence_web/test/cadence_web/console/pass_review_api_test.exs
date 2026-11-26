@@ -8,7 +8,7 @@ defmodule CadenceWeb.Console.PassReviewAPITest do
     user = TestFixtures.persist_user!()
     TestFixtures.grant_membership!(user, org)
     mission = TestFixtures.persist_mission!(org)
-    %{user: user, base: "/api/console/v1/missions/#{mission.mission_id}/pass-review"}
+    %{user: user, base: "/api/v1/missions/#{mission.mission_id}/pass-review"}
   end
 
   defp get_json(c, path, status \\ 200),

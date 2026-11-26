@@ -19,7 +19,7 @@ defmodule CadenceWeb.Console.ServiceIdentityAPITest do
       admin: admin,
       member: member,
       mission: mission,
-      base: "/api/console/v1/organizations/#{org.organization_id}/service-identities"
+      base: "/api/v1/organizations/#{org.organization_id}/service-identities"
     }
   end
 

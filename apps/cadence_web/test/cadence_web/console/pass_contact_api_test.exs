@@ -19,7 +19,7 @@ defmodule CadenceWeb.Console.PassContactAPITest do
       booked: booked,
       user: user,
       conn: TestFixtures.member_conn(user),
-      path: "/api/console/v1/missions/#{booked.mission_id}/passes/#{id}"
+      path: "/api/v1/missions/#{booked.mission_id}/passes/#{id}"
     }
   end
 

@@ -25,7 +25,7 @@ Every response has the basis: `state` (`active | not_active`), `revision_id`, `c
 model revision, or `null` when no catalog revision records it (for example a model composed by
 hand). The group show response has the same `catalog_revision` for its members' revision.
 
-## `GET /api/console/v1/missions/:mission_id/commands`
+## `GET /api/v1/missions/:mission_id/commands`
 
 Query: `q` (case-insensitive substring of id, name, display name, description or subsystem),
 `limit` 1–500 (default 100), `after` (the `meta.next_cursor` of the previous page). Sorted by
@@ -51,7 +51,7 @@ command id.
 
 Errors: `422 invalid_params` (`details.limit`), `503 catalog_unavailable`, `404 mission_not_found`.
 
-## `GET /api/console/v1/missions/:mission_id/commands/:command_id`
+## `GET /api/v1/missions/:mission_id/commands/:command_id`
 
 The list entry plus:
 
@@ -493,7 +493,7 @@ queued to go out at a later contact. Members released before the deadline stay r
 (about a minute) cleans up the rest. Live progress: the `command_group:<mission_id>:<command_group_id>` channel
 (realtime.md).
 
-## `GET /api/console/v1/missions/:mission_id/command-requests/:command_request_id/encoding` (M24, owner: api)
+## `GET /api/v1/missions/:mission_id/command-requests/:command_request_id/encoding` (M24, owner: api)
 
 The bytes release would send for one request (Approve A3), encoded exactly as release encodes
 them: the request's **own** model revision basis and its resolved argument values. Nothing is
@@ -517,7 +517,7 @@ transmitted.
 - Access: anyone who may review the mission's requests (`operate_mission`); otherwise `403
   forbidden`. `404 command_request_not_found`.
 
-## `GET /api/console/v1/missions/:mission_id/command-requests/:command_request_id/brief` (A1, owner: api)
+## `GET /api/v1/missions/:mission_id/command-requests/:command_request_id/brief` (A1, owner: api)
 
 Context for reviewing one request: each argument's value and that argument's **current value**
 on the request's spacecraft, plus the command's prior requests to the same target.
@@ -548,7 +548,7 @@ on the request's spacecraft, plus the command's prior requests to the same targe
   don't present its values as the spacecraft's state), `null` when it was never released.
 - Bounds (`valid_range`, unit) stay on the command catalog read (`GET /commands/:id`).
 - Access as for M24 (`403 forbidden`, `404 command_request_not_found`).
-## `GET /api/console/v1/missions/:mission_id/command-requests/:command_request_id/history` (U68 R3/R4, owner: api)
+## `GET /api/v1/missions/:mission_id/command-requests/:command_request_id/history` (U68 R3/R4, owner: api)
 
 One member's release attempts and verifiers with the record that matched each (parity A3, A4b/c).
 A member is a command request (`targets[].members[].request_id` on the group read).
@@ -722,10 +722,10 @@ used to succeed is now refused.
 
 | Endpoint | New refusal | Meaning | Instead |
 | --- | --- | --- | --- |
-| `POST /command_requests/:id/approve` · `/reject` | `409 command_request_in_group` | The request belongs to a command group. Nothing was recorded. | Decide the group: `POST /api/console/v1/missions/:mission_id/command-groups/:id/decision` (GO, GO excluding, send back, NO-GO). |
+| `POST /command_requests/:id/approve` · `/reject` | `409 command_request_in_group` | The request belongs to a command group. Nothing was recorded. | Decide the group: `POST /api/v1/missions/:mission_id/command-groups/:id/decision` (GO, GO excluding, send back, NO-GO). |
 | `POST /command_requests/:id/enqueue` | `409 command_request_in_group` | The same, for queueing. Nothing was queued. | The group's GO queues its members. |
 | `POST /command_queue_entries/:id/release` | `409 command_group_not_armed` | The entry is a group member and its group isn't armed (`queued`, after its GO), judged from the server's group row. Nothing was released. | Give the group its GO; its release goes through the group. |
-| `POST /command_requests` | `422 command_request_group_reserved` | The request's `metadata` names a group (`metadata["group"]`). Nothing was created. | Submit the group: `POST /api/console/v1/missions/:mission_id/command-groups`. Drop group keys from a standalone request's `metadata`. |
+| `POST /command_requests` | `422 command_request_group_reserved` | The request's `metadata` names a group (`metadata["group"]`). Nothing was created. | Submit the group: `POST /api/v1/missions/:mission_id/command-groups`. Drop group keys from a standalone request's `metadata`. |
 | `POST /command_requests/:id/approve` | `403 command_request_approver_authors_unknown` (#280) | The request was made through a service identity with nobody recorded as accountable for it, so nobody can approve it. Nothing was recorded. | An org admin records who is accountable (People › Service identities), then a person outside them approves. |
 
 The `message` is ux U87's words: "This command is part of a command group. Approve it with the

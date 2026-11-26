@@ -49,6 +49,9 @@ defmodule CadenceWorkspace.MixProject do
   defp aliases do
     [
       setup: ["deps.get", workspace_command("deps.get")],
+      "cadence_simulator.load": [
+        workspace_command("cadence_simulator.load", projects: [:cadence_simulator])
+      ],
       "format.all": [&run_format_all/1],
       test: [workspace_test_command()],
       "test.fast": [

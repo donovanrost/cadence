@@ -10,7 +10,6 @@ defmodule Cadence.Applications.OpsConsole.ActionProvider do
     ContactPlanning,
     DataSources,
     FleetPlanning,
-    MissionOperations,
     TelemetryExplore,
     UiInteractions
   }
@@ -24,7 +23,6 @@ defmodule Cadence.Applications.OpsConsole.ActionProvider do
     ContactPlanning,
     FleetPlanning,
     DataSources,
-    MissionOperations,
     TelemetryExplore
   ]
 

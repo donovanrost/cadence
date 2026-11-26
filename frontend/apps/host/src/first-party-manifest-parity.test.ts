@@ -224,16 +224,6 @@ const expected = [
         ["refresh-fleet-run", "repair-fleet-run"],
       ],
       [
-        "activation_requests",
-        "operations",
-        "mission",
-        "ops_workspace",
-        "Activation Requests",
-        10,
-        "cadence.ops.activation_requests",
-        ["decide"],
-      ],
-      [
         "commands",
         "operations",
         "mission",
@@ -533,7 +523,8 @@ describe("first-party federated manifest parity", () => {
     }
 
     // Sweep row 2: spacecraft's new / profile_new / edit forms left (40 → 37); the
-    // organization-admin notifications page left (37 → 36).
-    expect(surfaceCount).toBe(36);
+    // organization-admin notifications page left (37 → 36); the ops-console
+    // activation_requests surface left (36 → 35).
+    expect(surfaceCount).toBe(35);
   });
 });
