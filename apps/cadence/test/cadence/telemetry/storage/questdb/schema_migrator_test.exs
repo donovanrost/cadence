@@ -103,7 +103,28 @@ defmodule Cadence.Telemetry.Storage.QuestDB.SchemaMigratorTest do
              password: "quest",
              timeout: 15_000,
              http_endpoint: "http://127.0.0.1:9000"
-           ] = SchemaMigrator.connection_config([])
+           ] = SchemaMigrator.connection_config(environment: %{})
+  end
+
+  test "connection config reads explicit environment without changing process environment" do
+    assert [
+             hostname: "fixture-host",
+             port: 10_101,
+             database: "fixture-db",
+             username: "fixture-user",
+             password: "quest",
+             timeout: 15_000,
+             http_endpoint: "http://fixture-host:10001"
+           ] =
+             SchemaMigrator.connection_config(
+               environment: %{
+                 "CADENCE_QUESTDB_HOST" => "fixture-host",
+                 "CADENCE_QUESTDB_PORT" => "10101",
+                 "CADENCE_QUESTDB_DATABASE" => "fixture-db",
+                 "CADENCE_QUESTDB_USERNAME" => "fixture-user",
+                 "CADENCE_QUESTDB_HTTP_ENDPOINT" => "http://fixture-host:10001"
+               }
+             )
   end
 
   describe "check/1 (read-only, mix cadence.questdb.migrate --check)" do
