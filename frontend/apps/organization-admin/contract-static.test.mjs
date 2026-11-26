@@ -6,7 +6,7 @@ import { join } from "node:path";
 const appRoot = import.meta.dirname;
 const sourceRoot = join(appRoot, "src");
 const entryFiles = ["federated-application.ts"];
-const surfaceIds = ["notifications", "notifications_bell"];
+const surfaceIds = ["notifications_bell"];
 
 /** @param {string} directory @returns {Promise<string[]>} */
 async function sourceFiles(directory) {

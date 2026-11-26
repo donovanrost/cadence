@@ -4,9 +4,9 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationRow do
   """
 
   alias Cadence.Telemetry.Storage.ObservationEnvelope
-  alias Cadence.Telemetry.Storage.QuestDB.SQL
+  alias Cadence.Telemetry.Storage.QuestDB.{ObservationProvenance, SQL}
 
-  @columns [
+  @base_columns [
     :observed_at,
     :generation_time,
     :receipt_time,
@@ -44,6 +44,10 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationRow do
     :metadata_json
   ]
 
+  # The provenance columns (DECISIONS #103) follow the base columns; `provenance_json` holds only
+  # the residual that has no column.
+  @columns @base_columns ++ ObservationProvenance.columns()
+
   @spec columns() :: [atom()]
   def columns, do: @columns
 
@@ -77,6 +81,8 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationRow do
   def params(%ObservationEnvelope{} = envelope) do
     {value_kind, value_double, value_long, value_bool, value_string} =
       typed_value(envelope.engineering_value)
+
+    {provenance_values, residual_provenance_json} = ObservationProvenance.params(envelope)
 
     [
       observed_at(envelope),
@@ -112,8 +118,9 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationRow do
       Atom.to_string(envelope.validity_state),
       envelope.revision,
       envelope.supersedes_observation_id,
-      json(envelope.provenance),
+      residual_provenance_json,
       json(envelope.metadata)
+      | provenance_values
     ]
   end
 
@@ -154,7 +161,7 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationRow do
 
   defp textual_value(value) when is_map(value) or is_list(value) do
     value
-    |> normalize_json()
+    |> ObservationProvenance.json_term()
     |> Jason.encode!()
   end
 
@@ -162,34 +169,7 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationRow do
 
   defp json(value) do
     value
-    |> normalize_json()
+    |> ObservationProvenance.json_term()
     |> Jason.encode!()
   end
-
-  defp normalize_json(%DateTime{} = datetime), do: DateTime.to_iso8601(datetime)
-  defp normalize_json(%NaiveDateTime{} = datetime), do: NaiveDateTime.to_iso8601(datetime)
-  defp normalize_json(%Date{} = date), do: Date.to_iso8601(date)
-  defp normalize_json(%Time{} = time), do: Time.to_iso8601(time)
-  defp normalize_json(nil), do: nil
-  defp normalize_json(atom) when is_atom(atom), do: Atom.to_string(atom)
-
-  defp normalize_json(%{} = map) do
-    Map.new(map, fn {key, value} ->
-      {normalize_json_key(key), normalize_json(value)}
-    end)
-  end
-
-  defp normalize_json(list) when is_list(list), do: Enum.map(list, &normalize_json/1)
-
-  defp normalize_json(tuple) when is_tuple(tuple),
-    do: tuple |> Tuple.to_list() |> normalize_json()
-
-  defp normalize_json(value) when is_binary(value) or is_number(value) or is_boolean(value),
-    do: value
-
-  defp normalize_json(value), do: inspect(value)
-
-  defp normalize_json_key(key) when is_atom(key), do: Atom.to_string(key)
-  defp normalize_json_key(key) when is_binary(key), do: key
-  defp normalize_json_key(key), do: to_string(key)
 end

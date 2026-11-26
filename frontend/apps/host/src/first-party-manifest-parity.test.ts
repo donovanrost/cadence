@@ -358,16 +358,6 @@ const expected = [
     releaseId: () => "organization-admin-v1",
     surfaces: [
       [
-        "notifications",
-        "activity",
-        "user",
-        "application_workspace",
-        "Notifications",
-        50,
-        "cadence.organization.notifications",
-        ["accept_invitation", "mark_notification_read"],
-      ],
-      [
         "notifications_bell",
         "activity",
         "user",
@@ -542,7 +532,8 @@ describe("first-party federated manifest parity", () => {
       }
     }
 
-    // Sweep row 2: spacecraft's new / profile_new / edit forms left (40 → 37).
-    expect(surfaceCount).toBe(37);
+    // Sweep row 2: spacecraft's new / profile_new / edit forms left (40 → 37); the
+    // organization-admin notifications page left (37 → 36).
+    expect(surfaceCount).toBe(36);
   });
 });

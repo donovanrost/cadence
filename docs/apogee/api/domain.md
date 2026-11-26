@@ -52,7 +52,8 @@ Shapes:
 
 ```elixir
 revision_summary = %{revision, kind: :baseline | :change_set | :rollback | :legacy_activation,
-  live: boolean, applied_at, applied_by: actor, reason, summary, entry_count, change_set_id,
+  live: boolean, applied_at, applied_by: actor,   # whoever ran the apply: the reviewer on a reviewed set (#117)
+  reason, summary, entry_count, change_set_id,
   rolls_back_to, approvals: [%{actor, comment, decided_at}], activation_id, generation}
 
 change_set = %{id, version, state: :open | :in_review | :applied | :discarded, base_revision,
