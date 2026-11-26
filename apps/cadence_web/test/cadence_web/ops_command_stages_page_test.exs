@@ -149,7 +149,7 @@ defmodule CadenceWeb.OpsCommandStagesPageTest do
       "token" => current["token"]
     })
 
-    assert_redirect(view, "/no-organization")
+    assert_redirect(view, "/console/no-organization")
     assert request_count(c) == 0
   end
 

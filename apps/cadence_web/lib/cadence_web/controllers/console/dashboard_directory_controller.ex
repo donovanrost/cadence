@@ -77,6 +77,10 @@ defmodule CadenceWeb.Console.DashboardDirectoryController do
 
   def restore(conn, %{"dashboard_id" => id}), do: lifecycle(conn, "restore", id)
 
+  # A body with a `document` imports it (D4b); otherwise a blank dashboard (D4).
+  def create(conn, %{"document" => document} = params) when is_map(document),
+    do: import_dashboard(conn, document, params)
+
   def create(conn, params) do
     input =
       params
@@ -90,6 +94,44 @@ defmodule CadenceWeb.Console.DashboardDirectoryController do
       {:invalid, field} -> Problem.respond(conn, :invalid_params, %{field: field})
     end
   end
+
+  # `document` is the export bundle or a raw document, as `GET /dashboards/:id/export` returns it.
+  defp import_dashboard(conn, document, params) do
+    input =
+      params
+      |> Map.take(~w(name description identity))
+      |> Map.reject(fn {_key, value} -> is_nil(value) end)
+      |> Map.put("document_json", Jason.encode!(document))
+
+    conn |> imported(Creation.create(scope(conn), mission(conn), %{mode: "import"}, input))
+  end
+
+  defp imported(conn, {:ok, %{existing?: true} = existing}),
+    do:
+      json(conn, %{data: %{id: existing.dashboard_id, version: existing.version, existing: true}})
+
+  defp imported(conn, {:ok, created}) do
+    conn
+    |> put_status(:created)
+    |> json(%{data: %{id: created.dashboard_id, version: created.version}})
+  end
+
+  defp imported(conn, {:invalid, {:field, field}}),
+    do: Problem.respond(conn, :invalid_params, %{field: field})
+
+  defp imported(conn, {:invalid, {:conflict, summary}}),
+    do: Problem.respond(conn, :dashboard_import_conflict, %{differences: summary})
+
+  defp imported(conn, {:invalid, {:id_in_use, mission_id}}),
+    do: Problem.respond(conn, :dashboard_id_in_use, %{mission_id: mission_id})
+
+  defp imported(conn, {:invalid, :id_in_use}), do: Problem.respond(conn, :dashboard_id_in_use)
+
+  defp imported(conn, {:invalid, _document}),
+    do: Problem.respond(conn, :invalid_params, %{field: "document"})
+
+  defp imported(conn, {:error, :forbidden}), do: Problem.respond(conn, :forbidden)
+  defp imported(conn, error), do: command_error(conn, error, "document")
 
   defp create_dashboard(conn, input) do
     case Creation.create(scope(conn), mission(conn), %{mode: "new"}, input) do

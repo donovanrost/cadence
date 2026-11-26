@@ -28,7 +28,7 @@ defmodule CadenceWeb.Plugs.RequireAuthenticatedScopeTest do
       conn = RequireAuthenticatedScope.call(conn, [])
 
       assert conn.halted
-      assert redirected_to(conn) == "/sign-in"
+      assert redirected_to(conn) == "/console/sign-in"
 
       assert get_session(conn, :user_return_to) ==
                "/missions/mission-1/ops/explore?point_id=HK.temp&time_mode=historical"
@@ -48,7 +48,7 @@ defmodule CadenceWeb.Plugs.RequireAuthenticatedScopeTest do
       conn = RequireAuthenticatedScope.call(conn, [])
 
       assert conn.halted
-      assert redirected_to(conn) == "/sign-in"
+      assert redirected_to(conn) == "/console/sign-in"
       refute get_session(conn, :user_return_to)
     end
 
@@ -58,7 +58,7 @@ defmodule CadenceWeb.Plugs.RequireAuthenticatedScopeTest do
       conn = RequireAuthenticatedScope.call(conn, [])
 
       assert conn.halted
-      assert redirected_to(conn) == "/sign-in"
+      assert redirected_to(conn) == "/console/sign-in"
       refute get_session(conn, :user_return_to)
     end
   end

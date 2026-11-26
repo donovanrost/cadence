@@ -9,8 +9,7 @@ const ATTEMPTS = 3;
 const BOOT_TIMEOUT_MS = 45_000;
 
 /**
- * Signs in through the console's own sign-in screen (`/console/sign-in`, L5). The old Phoenix
- * `/sign-in` page now 302s here (api-ops ecdddab10), so this is the only login path.
+ * Signs in through the console's own sign-in screen (`/console/sign-in`), the only login path.
  *
  * On the shared, loaded dev laptop the SPA can take a while to boot; a fresh navigation fixes a
  * stuck boot (the same thing a person would do), so we try up to ATTEMPTS times. The button is

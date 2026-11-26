@@ -64,8 +64,8 @@ defmodule CadenceWeb.OpsTimelinePageTest do
     assert page(view)["data"]["events"] == []
     :ok = Cadence.Auth.revoke_user_session(get_session(c.conn, :user_session_token))
     render_hook(view, "host:context", %{"path" => path(c)})
-    assert_redirect(view, "/sign-in")
-    assert {:error, {:redirect, %{to: "/sign-in"}}} = live(build_conn(), path(c))
+    assert_redirect(view, "/console/sign-in")
+    assert {:error, {:redirect, %{to: "/console/sign-in"}}} = live(build_conn(), path(c))
   end
 
   defp page(view),

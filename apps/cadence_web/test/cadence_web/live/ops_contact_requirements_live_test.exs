@@ -24,7 +24,7 @@ defmodule CadenceWeb.OpsContactRequirementsLiveTest do
   test "contact planning pages remain authentication scoped" do
     {_conn, _user, _organization, mission} = signed_in_user_org_and_mission()
 
-    assert {:error, {:redirect, %{to: "/sign-in"}}} =
+    assert {:error, {:redirect, %{to: "/console/sign-in"}}} =
              live(build_conn(), ~p"/missions/#{mission.mission_id}/ops/plans/plan-1?version=2")
   end
 
@@ -78,7 +78,7 @@ defmodule CadenceWeb.OpsContactRequirementsLiveTest do
       Map.put(params, "provider_reservation_id", "reservation-1")
     )
 
-    assert {:error, {:redirect, %{to: "/sign-in"}}} =
+    assert {:error, {:redirect, %{to: "/console/sign-in"}}} =
              live(build_conn(), "/missions/#{mission.mission_id}/ops/contacts/reservation-1")
   end
 

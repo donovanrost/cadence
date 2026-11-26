@@ -9,7 +9,7 @@ defmodule CadenceWeb.UserSessionController do
     conn
     |> renew_browser_session()
     |> put_flash(:info, "Session closed.")
-    |> redirect(to: ~p"/sign-in")
+    |> redirect(to: "/console/sign-in")
   end
 
   def update(conn, %{"organization_id" => organization_id}) when is_binary(organization_id) do

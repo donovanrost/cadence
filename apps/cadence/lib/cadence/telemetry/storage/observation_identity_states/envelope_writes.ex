@@ -188,6 +188,26 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates.EnvelopeWrites do
     |> Map.put(:validity_state, validity_state(nil, envelope))
   end
 
+  # #369 (lead's ruling: a revision never clears an operator's decision; domain's scope): a row an
+  # operator DECIDED (decision_event_id set) keeps every field the decision owns: the canonical
+  # columns, validity_state, decision_reason, decided_at and the payload's "decision" that
+  # EffectiveSelection reads. A later sighting (a duplicate, a conflict or a revision) updates only
+  # the counts, latest_* and the seen times, so latest_revision > canonical_revision says a newer
+  # revision arrived (U106) while selection still follows the decision.
+  defp updated_attrs(%Row{decision_event_id: decided} = row, %ObservationEnvelope{} = envelope)
+       when is_binary(decided) do
+    row
+    |> Map.take(Row.fields())
+    |> merge_counts(envelope)
+    |> Map.merge(%{
+      latest_observation_id: envelope.observation_id,
+      latest_sample_id: envelope.sample_id,
+      latest_revision: envelope.revision
+    })
+    |> Map.put(:first_seen_at, earliest(row.first_seen_at, envelope.ingested_at))
+    |> Map.put(:last_seen_at, latest(row.last_seen_at, envelope.ingested_at))
+  end
+
   defp updated_attrs(%Row{} = row, %ObservationEnvelope{} = envelope) do
     row
     |> Map.take(Row.fields())

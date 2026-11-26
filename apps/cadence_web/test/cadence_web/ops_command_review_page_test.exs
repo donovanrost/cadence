@@ -91,7 +91,7 @@ defmodule CadenceWeb.OpsCommandReviewPageTest do
 
   test "anonymous users redirect and plain members can read privileged request arguments (#62)",
        c do
-    assert {:error, {:redirect, %{to: "/sign-in"}}} = live(build_conn(), c.path)
+    assert {:error, {:redirect, %{to: "/console/sign-in"}}} = live(build_conn(), c.path)
     user = TestFixtures.persist_user!()
     {:ok, org} = Cadence.Organizations.fetch_organization(c.org)
     TestFixtures.grant_membership!(user, org)

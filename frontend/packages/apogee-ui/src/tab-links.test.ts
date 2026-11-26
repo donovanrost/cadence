@@ -33,9 +33,44 @@ describe("ApTabLinks on a narrow screen", () => {
       attachTo: document.body,
     });
     await flushPromises();
-    expect(w.find("nav").element.scrollLeft).toBe(130);
+    // 520 - 390, plus the 24px edge fade the link must clear.
+    expect(w.find("nav").element.scrollLeft).toBe(154);
     expect(pageScroll).not.toHaveBeenCalled();
     w.unmount();
+  });
+
+  it("scrolls the strip to a link that Tab focuses past the edge (#189)", async () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: HTMLElement) {
+        if (this.tagName === "NAV") return rect(0, 390);
+        // The sweep's Configuration tab: 133px wide, starting at x=369.
+        if (this.textContent?.trim() === "communications") return rect(369, 502);
+        return rect(0, 100);
+      },
+    );
+    const w = mount(ApTabLinks, {
+      props: { links, active: "overview", label: "Sections" },
+      global: { plugins: [router] },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const nav = w.find("nav").element;
+    expect(nav.scrollLeft).toBe(0);
+    w.findAll("a")[2]?.element.focus();
+    expect(nav.scrollLeft).toBe(502 - 390 + 24);
+    w.unmount();
+  });
+
+  it("keeps the count a separate word in the link's name", () => {
+    const w = mount(ApTabLinks, {
+      props: {
+        links: [{ key: "released", label: "Released", to: "/released", count: 0 }],
+        active: "released",
+        label: "Sections",
+      },
+      global: { plugins: [router] },
+    });
+    expect(w.get("a").text()).toBe("Released 0");
   });
 
   it("keeps each link on one line", () => {

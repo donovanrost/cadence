@@ -88,7 +88,11 @@ defmodule CadenceWeb.CommandRequestGroupMemberApiTest do
           decision: :approved,
           decided_by: %{"actor_kind" => "user", "user_id" => "someone-else"},
           decided_at: DateTime.utc_now(),
-          metadata: %{"command_group_id" => c.group.command_group_id}
+          metadata: %{"command_group_id" => c.group.command_group_id},
+          # #117 step 4b's required record fields.
+          subject_digest: String.duplicate("a", 64),
+          separated_from: [],
+          admin_mode: false
         })
       ])
 

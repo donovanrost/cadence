@@ -167,7 +167,7 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
   test "unauthenticated application-host requests use the browser gate", %{conn: conn} do
     response = post(conn, query_path("mission-missing"), %{})
 
-    assert redirected_to(response) == "/sign-in"
+    assert redirected_to(response) == "/console/sign-in"
   end
 
   test "post-cutover missing-generation catalog failure is a sanitized service-unavailable response" do
