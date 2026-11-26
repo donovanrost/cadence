@@ -269,6 +269,28 @@ defmodule Cadence.SpacecraftStore do
   end
 
   @doc """
+  The first `limit` of `spacecraft_ids` by name then id, as `%{"id", "name"}`: a bounded answer
+  however many ids are asked about (one query, the ids as an array), for a screen that names a few
+  of many (#796). Spacecraft that aren't the mission's are left out.
+  """
+  @spec name_sample(binary(), binary(), [binary()], pos_integer()) :: [map()]
+  def name_sample(_organization_id, _mission_id, [], _limit), do: []
+
+  def name_sample(organization_id, mission_id, spacecraft_ids, limit)
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(spacecraft_ids) and
+             is_integer(limit) and limit > 0 do
+    from(row in SpacecraftRow,
+      where:
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.spacecraft_id in ^spacecraft_ids,
+      order_by: [asc: row.display_name, asc: row.spacecraft_id],
+      limit: ^limit,
+      select: %{"id" => row.spacecraft_id, "name" => row.display_name}
+    )
+    |> Repo.all()
+  end
+
+  @doc """
   One page of the mission's spacecraft names (#847), the rows `display_names/4` returns with
   `scid: true`, sorted
   by name then id so pages are stable: the `limit` rows after `after` (`{name, id}`, the previous
