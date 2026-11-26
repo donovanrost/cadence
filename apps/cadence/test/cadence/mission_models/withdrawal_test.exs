@@ -239,7 +239,8 @@ defmodule Cadence.MissionModels.WithdrawalTest do
       {:ok, _} = withdraw(c, c.model)
       id = c.craft.spacecraft_id
 
-      row = c.org |> SpacecraftDirectory.load(c.mid) |> Enum.find(&(&1.id == id))
+      {:ok, %{spacecraft: rows}} = SpacecraftDirectory.page(c.org, c.mid)
+      row = Enum.find(rows, &(&1.id == id))
 
       assert %{revision_id: revision, decision: %{kind: "withdrawn", reason: "Limits were wrong"}} =
                row.approval_withdrawn
