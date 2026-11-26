@@ -1,5 +1,5 @@
-defmodule CadenceWeb.API.ContactJSON do
-  @moduledoc "Legacy realized-contact runtime snapshot serialization boundary."
+defmodule CadenceWeb.Console.ContactRuntimeJSON do
+  @moduledoc "Realized-contact runtime snapshot serialization."
 
   def realized_contact_runtime_snapshot(snapshot) when is_map(snapshot) do
     %{

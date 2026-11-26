@@ -123,7 +123,6 @@ defmodule CadenceSimulator.CLITest do
         cadence:
           url: http://127.0.0.1:4001
           api_token: token-alpha
-          organization_id: org-alpha
           mission_id: mission-alpha
           realized_contact_id: contact-alpha_run
           path_id: downlink-path-alpha
@@ -151,7 +150,6 @@ defmodule CadenceSimulator.CLITest do
     assert opts[:rate_hz] == 12.5
     assert opts[:cadence_url] == "http://127.0.0.1:4001"
     assert opts[:api_token] == "token-alpha"
-    assert opts[:organization_id] == "org-alpha"
     assert opts[:mission_id] == "mission-alpha"
     assert opts[:realized_contact_id] == "contact-alpha_run"
     assert opts[:path_id] == "downlink-path-alpha"
@@ -203,7 +201,6 @@ defmodule CadenceSimulator.CLITest do
       cadence:
         url: http://127.0.0.1:4001
         api_token: token-alpha
-        organization_id: org-alpha
         mission_id: mission-alpha
         realized_contact_id: contact-alpha_run
         path_id: uplink-path-alpha
@@ -229,7 +226,6 @@ defmodule CadenceSimulator.CLITest do
     assert opts[:runtime_mode] == :cop1_loopback
     assert opts[:cadence_url] == "http://127.0.0.1:4001"
     assert opts[:api_token] == "token-alpha"
-    assert opts[:organization_id] == "org-alpha"
     assert opts[:mission_id] == "mission-alpha"
     assert opts[:realized_contact_id] == "contact-alpha_run"
     assert opts[:path_id] == "uplink-path-alpha"
@@ -280,8 +276,6 @@ defmodule CadenceSimulator.CLITest do
                "http://127.0.0.1:4001",
                "--api-token",
                "token-alpha",
-               "--organization-id",
-               "org-alpha",
                "--mission-id",
                "mission-alpha",
                "--realized-contact-id",
@@ -293,7 +287,6 @@ defmodule CadenceSimulator.CLITest do
     assert opts[:runtime_mode] == :cop1_loopback
     assert opts[:cadence_url] == "http://127.0.0.1:4001"
     assert opts[:api_token] == "token-alpha"
-    assert opts[:organization_id] == "org-alpha"
     assert opts[:mission_id] == "mission-alpha"
     assert opts[:realized_contact_id] == "contact-alpha_run"
     assert opts[:path_id] == "uplink-path-alpha"

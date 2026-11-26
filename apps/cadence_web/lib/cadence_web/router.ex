@@ -477,6 +477,15 @@ defmodule CadenceWeb.Router do
       get("/single-bookings/routes", SingleBookingController, :routes)
       post("/single-bookings/search", SingleBookingController, :search)
       post("/single-bookings", SingleBookingController, :create)
+
+      get("/realized-contacts/:realized_contact_id/runtime", ContactRuntimeController, :runtime)
+
+      get(
+        "/realized-contacts/:realized_contact_id/paths/:path_id/runtime",
+        ContactRuntimeController,
+        :path_runtime
+      )
+
       get("/commands", CommandCatalogController, :index)
       get("/commands/:command_id", CommandCatalogController, :show)
       get("/command-policies", CommandGroupController, :policies)
@@ -984,18 +993,6 @@ defmodule CadenceWeb.Router do
           "/command_verifier_instances/:command_verifier_instance_id",
           CommandVerifierInstanceController,
           :show
-        )
-
-        get(
-          "/realized_contacts/:realized_contact_id/runtime",
-          RealizedContactController,
-          :runtime
-        )
-
-        get(
-          "/realized_contacts/:realized_contact_id/paths/:path_id/runtime",
-          RealizedContactController,
-          :path_runtime
         )
 
         get("/packet_definitions", PacketDefinitionController, :index)
