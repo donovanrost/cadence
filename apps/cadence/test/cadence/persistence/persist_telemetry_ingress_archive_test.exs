@@ -55,7 +55,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressArchiveTest do
     assert result.outputs == []
     # Completion is the journal processing acknowledgement boundary. Files and
     # index rows must already exist before the periodic writer timer fires.
-    [entry] = Repo.all(Cadence.Protocol.RecordArchive.FileSystem.RecordEntryRow)
+    [entry] = Repo.all(Cadence.Protocol.RecordArchive.FileSystem.SegmentRow)
     assert File.regular?(Path.join(protocol_base_path, entry.object_key))
 
     assert RecordArchive.stats(persistence_policy.record_archive, raw_evidence.mission_id).queue_depth ==
@@ -98,7 +98,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressArchiveTest do
     assert {:error, {:protocol_archive_segment_write_failed, _, _}} =
              RuntimePersistence.persist_semantic_processing_results(policy, [result], [])
 
-    assert Repo.aggregate(Cadence.Protocol.RecordArchive.FileSystem.RecordEntryRow, :count) == 0
+    assert Repo.aggregate(Cadence.Protocol.RecordArchive.FileSystem.SegmentRow, :count) == 0
     assert RecordArchive.stats(policy.record_archive, evidence.mission_id).queue_depth > 0
   end
 

@@ -11,7 +11,7 @@ defmodule Cadence.Contacts.ArchiveQuarantineAttentionTest do
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Protocol.{RecordArchive, TransferFrameRecord}
   alias Cadence.Protocol.RecordArchive.FileSystem
-  alias Cadence.Protocol.RecordArchive.FileSystem.RecordEntryRow
+  alias Cadence.Protocol.RecordArchive.FileSystem.IdentityRow
   alias Cadence.Protocol.RecordArchive.Quarantine
   alias Cadence.ProviderChangeFixtures
 
@@ -91,7 +91,7 @@ defmodule Cadence.Contacts.ArchiveQuarantineAttentionTest do
     assert %{by: %{"kind" => "user", "name" => "Mira K."}, indexed: 0, at: %DateTime{}} = retry
 
     # The cause is fixed (the conflicting archived row is gone): the retry archives it.
-    Repo.delete_all(from(r in RecordEntryRow, where: r.record_id == ^c.archived.frame_record_id))
+    Repo.delete_all(from(r in IdentityRow, where: r.record_id == ^c.archived.frame_record_id))
 
     assert {:ok, %{indexed: 1, still_failing: 0, item: %{state: "resolved", resolution: res}}} =
              Attention.retry(c.scope, c.mission, id)
