@@ -165,7 +165,9 @@ defmodule Cadence.Runtime.Persistence do
       telemetry_samples: samples,
       semantic_result: result,
       observation_context: MissionRuntimeSpec.observation_context(runtime_spec),
-      alarm_rules: AlarmRules.for_result(runtime_spec.runtime_plans, result)
+      alarm_rules: AlarmRules.for_result(runtime_spec.runtime_plans, result),
+      # The timer streams' ordinals (DECISIONS #99), resolved by the partition owner.
+      effect_ordinals: Keyword.get(opts, :effect_ordinals, %{})
     }
 
     case Storage.persist_prepared_results(policy.telemetry_storage, [prepared], recorded_at: at) do
@@ -505,6 +507,7 @@ defmodule Cadence.Runtime.Persistence do
                   semantic_result: Map.get(processing_result, :semantic_result),
                   observation_context: Map.get(processing_result, :observation_context),
                   alarm_rules: Map.get(processing_result, :alarm_rules, %{}),
+                  effect_ordinals: Map.get(processing_result, :effect_ordinals, %{}),
                   runtime_spec: Map.get(processing_result, :runtime_spec)
                 }
                 | acc

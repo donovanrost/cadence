@@ -18,7 +18,8 @@ defmodule Cadence.Runtime.ManagedActionRequest do
           packet_id: binary() | nil,
           evidence_id: binary() | nil,
           request_document: map(),
-          requested_at: DateTime.t()
+          requested_at: DateTime.t(),
+          effect_source: [term()] | nil
         }
 
   defstruct [
@@ -35,6 +36,9 @@ defmodule Cadence.Runtime.ManagedActionRequest do
     :packet_id,
     :evidence_id,
     :request_document,
-    :requested_at
+    :requested_at,
+    # [stream key, offset, receipt µs]: what the replay-safe id is derived from (DECISIONS #99,
+    # PartitionOwner.EffectIds). Runtime only, not a column; nil keeps an Ids.new id.
+    :effect_source
   ]
 end
