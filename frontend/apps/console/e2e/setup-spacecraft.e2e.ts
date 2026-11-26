@@ -1,11 +1,12 @@
 import { expectAccessible } from "./support/accessibility.ts";
-import { jsonData, jsonProblem, missionApi, missionPath, openConsole } from "./support/console.ts";
+import { jsonData, jsonProblem, missionPath, openConsole } from "./support/console.ts";
 import { DEMO, storageStateFor } from "./support/env.ts";
 import { allow, expect, test } from "./support/fixtures.ts";
 
 // Setup › Spacecraft directory (fe-setup, d53a554e). Data: GET /missions/:id/spacecraft (§S).
 const screen = missionPath("setup/spacecraft");
-const directoryApi = missionApi("spacecraft");
+// The screen asks for `?limit=…`, and a string glob doesn't match a query: match the path, any query.
+const directoryApi = new RegExp(`/api/v1/missions/${DEMO.missionId}/spacecraft(\\?.*)?$`);
 
 function directory(page: import("@playwright/test").Page) {
   return page.getByRole("table", { name: "Spacecraft" });
@@ -96,7 +97,7 @@ test.describe("setup spacecraft directory", () => {
   });
 
   test.describe("when the directory read fails", () => {
-    test.use({ allowedDiagnostics: allow(/\/spacecraft -> 500/, /status of 500/) });
+    test.use({ allowedDiagnostics: allow(/\/spacecraft\?[^ ]* -> 500/, /status of 500/) });
 
     test("shows a retryable error, then recovers", async ({ page }) => {
       await page.route(directoryApi, (route) => route.fulfill(jsonProblem(500, "internal_error")));
