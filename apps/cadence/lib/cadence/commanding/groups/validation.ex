@@ -84,7 +84,11 @@ defmodule Cadence.Commanding.Groups.Validation do
       validate_members(resolved, draft, org, mission, requested_by, now, snapshot)
 
     commands = policy_commands(draft.commands, members, snapshot)
-    policy = CommandPolicy.evaluate(commands, length(draft.targets))
+
+    policy =
+      CommandPolicy.evaluate(commands, length(draft.targets),
+        requester: requester_kind(requested_by)
+      )
 
     %{
       snapshot: %{
@@ -104,6 +108,9 @@ defmodule Cadence.Commanding.Groups.Validation do
       digest: digest(snapshot, members)
     }
   end
+
+  defp requester_kind(%{"actor_kind" => "service"}), do: :service
+  defp requester_kind(_requested_by), do: :user
 
   defp endpoints_by_spacecraft(org, mission) do
     org
@@ -162,7 +169,22 @@ defmodule Cadence.Commanding.Groups.Validation do
   defp pick(nil, failure), do: {nil, failure}
   defp pick(%SourceEndpoint{} = endpoint, _failure), do: {endpoint, nil}
 
+  # One locked read for every target's endpoint, shared by all its members (500 targets is one
+  # read, not 500 x commands). Runs inside `validate/4`'s transaction.
+  defp locked_targets(resolved, org, mission) do
+    case SourceEndpoints.fetch_command_authoring_targets(
+           org,
+           mission,
+           for(%{failure: nil, source_endpoint_id: id} <- resolved, do: id)
+         ) do
+      {:ok, targets} -> targets
+      {:error, reason} -> Repo.rollback(reason)
+    end
+  end
+
   defp validate_members(resolved, draft, org, mission, requested_by, now, snapshot) do
+    targets = locked_targets(resolved, org, mission)
+
     {members, failures} =
       for %{failure: nil} = target <- resolved,
           {command, position} <- Enum.with_index(draft.commands),
@@ -170,7 +192,7 @@ defmodule Cadence.Commanding.Groups.Validation do
         {members, failures} ->
           request = member_request(org, mission, target, command, draft, requested_by, now)
 
-          case RequestValidation.validate_on_snapshot(request, snapshot) do
+          case RequestValidation.validate_on_snapshot(request, snapshot, nil, targets: targets) do
             {:ok, enriched, state} ->
               member = %{
                 target_index: target.index,

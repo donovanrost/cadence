@@ -8,7 +8,14 @@ defmodule CadenceWeb.Console.CommandGroupController do
 
   alias Cadence.Commanding.CommandPolicy
   alias Cadence.Commanding.Groups.GroupStore
-  alias Cadence.Control.Commanding.{GroupAbort, GroupDecision, GroupNotes, GroupSubmission}
+
+  alias Cadence.Control.Commanding.{
+    GroupAbort,
+    GroupCreation,
+    GroupDecision,
+    GroupNotes,
+    GroupSubmission
+  }
 
   alias Cadence.Reads.{
     CommandEndpoints,
@@ -27,7 +34,8 @@ defmodule CadenceWeb.Console.CommandGroupController do
 
   def preflight(conn, params) do
     with {:ok, draft} <- CommandGroupParams.draft(params),
-         {:ok, preflight} <- CommandPreflight.run(org(conn), mission(conn), actor(conn), draft) do
+         {:ok, org, actor} <- GroupSubmission.requester(conn.assigns.current_scope, mission(conn)),
+         {:ok, preflight} <- CommandPreflight.run(org, mission(conn), actor, draft) do
       json(conn, %{data: CommandGroupJSON.preflight(preflight)})
     else
       error -> CommandGroupProblems.respond(conn, error)
@@ -35,17 +43,14 @@ defmodule CadenceWeb.Console.CommandGroupController do
   end
 
   def create(conn, params) do
-    operation_id = blank_to_nil(params["operation_id"])
-
     with {:ok, draft} <- CommandGroupParams.draft(params),
          {:ok, draft_revision} <- CommandGroupParams.draft_revision(params),
          {:ok, acks} <- CommandGroupParams.acknowledged_holds(params),
-         {:ok, accepted} <- holds_satisfied(conn, draft, acks, operation_id),
          {:ok, group} <-
-           GroupSubmission.submit(conn.assigns.current_scope, mission(conn), draft,
+           GroupCreation.create(conn.assigns.current_scope, mission(conn), draft,
              preflight_digest: params["preflight_digest"],
-             operation_id: operation_id,
-             hold_acks: accepted,
+             operation_id: blank_to_nil(params["operation_id"]),
+             acknowledged_holds: acks,
              draft_revision: draft_revision
            ),
          {:ok, view} <-
@@ -53,25 +58,6 @@ defmodule CadenceWeb.Console.CommandGroupController do
       conn |> put_status(:created) |> json(%{data: CommandGroupJSON.show(view)})
     else
       error -> CommandGroupProblems.respond(conn, error)
-    end
-  end
-
-  # DECISIONS #60: HOLDs hold. Every HOLD in the current preflight is either acknowledged (key and
-  # hold_basis match, with a note) or refuses the submit. A replay of a known operation skips this,
-  # so it still answers 409 duplicate_operation (U20).
-  defp holds_satisfied(conn, draft, acks, operation_id) do
-    with :new <- replay(conn, operation_id),
-         {:ok, preflight} <- CommandPreflight.run(org(conn), mission(conn), actor(conn), draft) do
-      case CommandPreflight.holds(preflight, acks) do
-        %{unsatisfied: [], accepted: accepted} ->
-          {:ok, Enum.map(accepted, &Map.put(&1, :preflight_digest, preflight.digest))}
-
-        %{unsatisfied: holds} ->
-          {:error, {:holds_unacknowledged, holds}}
-      end
-    else
-      :replay -> {:ok, []}
-      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -106,15 +92,6 @@ defmodule CadenceWeb.Console.CommandGroupController do
   end
 
   defp go_holds_satisfied(_conn, _id, _decision, _acks), do: {:ok, []}
-
-  defp replay(_conn, nil), do: :new
-
-  defp replay(conn, operation_id) do
-    case CommandGroups.fetch_by_operation(org(conn), mission(conn), operation_id) do
-      {:ok, _group} -> :replay
-      {:error, _none} -> :new
-    end
-  end
 
   def index(conn, %{"operation_id" => operation_id}) when is_binary(operation_id) do
     case CommandGroups.fetch_by_operation(org(conn), mission(conn), operation_id) do
@@ -257,8 +234,6 @@ defmodule CadenceWeb.Console.CommandGroupController do
 
   defp viewer(conn),
     do: conn.assigns.current_scope.user && conn.assigns.current_scope.user.user_id
-
-  defp actor(conn), do: %{"actor_kind" => "user", "user_id" => viewer(conn)}
 
   defp blank_to_nil(value) when is_binary(value) and value != "", do: value
   defp blank_to_nil(_value), do: nil

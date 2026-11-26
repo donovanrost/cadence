@@ -7,11 +7,14 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
   group, its members and (when no second GO is needed) their queue entries in
   bulk. Read updates and lane kicks happen after commit.
 
-  The requester is always the authenticated human (DECISIONS #30).
+  The requester comes only from the authenticated scope (DECISIONS #30): a signed-in person, or a
+  mission-pinned service identity. A service's group always needs a person's GO
+  (`CommandPolicy`, `requester: :service`).
   """
 
   require Logger
 
+  alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Commanding.{Dispatcher, Drafts, ProcessNamespace, RequestValidation}
   alias Cadence.Commanding.Groups.{Admission, CommandGroup, GroupStore, Validation}
   alias Cadence.Comms.UplinkResolution
@@ -23,9 +26,7 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
   # todo(authz): Cedar should decide who may request this group (DECISIONS #62: any mission
   # operator today), e.g. by command significance, hazard, target set or fleet reach.
   def submit(scope, mission_id, draft, opts) do
-    with {:ok, fresh, _mission} <- RequestAuthoring.authorize(scope, mission_id),
-         org = fresh.organization_id,
-         actor = %{"actor_kind" => "user", "user_id" => fresh.user.user_id},
+    with {:ok, org, actor} <- requester(scope, mission_id),
          :ok <- not_replayed(org, mission_id, Keyword.get(opts, :operation_id)),
          :ok <- required_text(draft),
          draft = %{draft | targets: UplinkResolution.annotate(org, mission_id, draft.targets)},
@@ -34,6 +35,36 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
       org
       |> admit(mission_id, actor, draft, validated, opts)
       |> after_commit(org, mission_id)
+    end
+  end
+
+  @doc """
+  The organization and the requester document for `scope` on `mission_id`, or why it may not
+  request. A person is re-read fresh (`RequestAuthoring.authorize/2`). A service identity must be
+  pinned to this mission and active (`:operate_mission`) and the mission must exist; its document
+  is built from the scope here, never from a request body.
+  """
+  @spec requester(Scope.t(), binary()) :: {:ok, binary(), map()} | {:error, term()}
+  def requester(%Scope{actor_kind: :service} = scope, mission_id) do
+    org = scope.organization_id
+
+    with :ok <-
+           Policy.authorize(scope, :operate_mission, %{
+             organization_id: org,
+             mission_id: mission_id
+           }),
+         {:ok, _mission} <- Cadence.Missions.fetch_mission(org, mission_id) do
+      {:ok, org,
+       %{
+         "actor_kind" => "service",
+         "service_identity_id" => scope.service_identity.service_identity_id
+       }}
+    end
+  end
+
+  def requester(scope, mission_id) do
+    with {:ok, fresh, _mission} <- RequestAuthoring.authorize(scope, mission_id) do
+      {:ok, fresh.organization_id, %{"actor_kind" => "user", "user_id" => fresh.user.user_id}}
     end
   end
 
@@ -106,7 +137,7 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
     with {:ok, group} <- GroupStore.insert_group(group),
          :ok <- GroupStore.insert_members(members),
          :ok <-
-           Drafts.consume({org, mission, actor["user_id"]}, Keyword.get(opts, :draft_revision)) do
+           consume_draft(org, mission, actor, Keyword.get(opts, :draft_revision)) do
       queued =
         if second_go?, do: [], else: Admission.enqueue(members, actor, &auto_approved_hash/1)
 
@@ -125,6 +156,12 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
       {:ok, %{group: group, lanes: queued |> Enum.map(& &1.queue_lane_key) |> Enum.uniq()}}
     end
   end
+
+  # Drafts are a person's compose state; a service has none.
+  defp consume_draft(org, mission, %{"user_id" => user_id}, revision),
+    do: Drafts.consume({org, mission, user_id}, revision)
+
+  defp consume_draft(_org, _mission, _service, _revision), do: :ok
 
   # DECISIONS #60: each acknowledged preflight HOLD, with who acknowledged it, the note and the
   # HOLD's basis, so the audit shows what was known when the group was armed.

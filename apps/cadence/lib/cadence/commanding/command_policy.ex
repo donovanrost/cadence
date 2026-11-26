@@ -6,7 +6,9 @@ defmodule Cadence.Commanding.CommandPolicy do
   A second operator's GO is required when any command in the stack needs one
   on its own (critical, hazardous, critical/hazardous significance, or a
   confirmation/approval policy hint, the same predicate single requests use),
-  or when the group reaches `fleet_reach_threshold/0` targets or more.
+  or when the group reaches `fleet_reach_threshold/0` targets or more, or when
+  a service identity requested it (`requester: :service`): a service's group
+  always needs a person's GO, whatever its commands and reach say.
   Reasons carry stable keys plus facts; the UI words them.
   """
 
@@ -31,6 +33,7 @@ defmodule Cadence.Commanding.CommandPolicy do
             name: binary() | nil
           }
           | %{key: :fleet_reach, targets: non_neg_integer(), threshold: pos_integer()}
+          | %{key: :service_requester}
 
   @spec evaluate([command()], non_neg_integer(), keyword()) :: %{
           second_go_required: boolean(),
@@ -45,6 +48,7 @@ defmodule Cadence.Commanding.CommandPolicy do
       |> Enum.flat_map(&command_reason/1)
       |> Enum.uniq_by(& &1.command_id)
       |> Kernel.++(fleet_reason(target_count, threshold))
+      |> Kernel.++(service_reason(Keyword.get(opts, :requester)))
 
     %{second_go_required: reasons != [], reasons: reasons, policy_version: @policy_version}
   end
@@ -90,4 +94,9 @@ defmodule Cadence.Commanding.CommandPolicy do
     do: [%{key: :fleet_reach, targets: count, threshold: threshold}]
 
   defp fleet_reason(_count, _threshold), do: []
+
+  # todo(authz): Cedar decides when a service's request may release without a second person
+  # (automation grants, #722). Until then a person always gives the GO (DECISIONS #7, #708).
+  defp service_reason(:service), do: [%{key: :service_requester}]
+  defp service_reason(_requester), do: []
 end
