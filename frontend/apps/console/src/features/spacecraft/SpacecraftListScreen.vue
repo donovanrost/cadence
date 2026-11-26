@@ -108,11 +108,14 @@ async function loadMore() {
       <div ref="panel">
         <ApRemote :state="state" loading-label="Loading spacecraft…" @retry="refetch">
           <template #default="{ value }">
-            <!-- A live refresh that failed keeps the rows; say so (usePagedQuery.refreshError). -->
-            <ApCallout v-if="directory.refreshError.value" tone="caution"
-              >Couldn't refresh the directory: {{ describeApiError(directory.refreshError.value) }}.
-              The spacecraft shown may be out of date.</ApCallout
-            >
+            <!-- A live refresh that failed keeps the rows; say so. Always mounted, its text clears (#837). -->
+            <p role="status" class="px-4 text-sm text-caution-text empty:hidden">
+              {{
+                directory.refreshError.value
+                  ? `Couldn't refresh the directory: ${describeApiError(directory.refreshError.value)}. The spacecraft shown may be out of date.`
+                  : ""
+              }}
+            </p>
             <ApEmptyState
               v-if="value.items.length === 0 && !filtering"
               state="off"
