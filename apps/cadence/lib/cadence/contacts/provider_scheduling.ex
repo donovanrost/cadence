@@ -19,10 +19,10 @@ defmodule Cadence.Contacts.ProviderScheduling do
   }
 
   alias Cadence.Control.Providers, as: ProviderControl
-  alias Cadence.GroundNetworks
 
   alias Cadence.GroundNetworks.{
     MissionProvider,
+    MissionProviders,
     Opportunity,
     ProviderAccountGrants,
     ProviderContext,
@@ -74,28 +74,105 @@ defmodule Cadence.Contacts.ProviderScheduling do
           {:ok, %{routes: [ready_route()], findings: [map()]}} | {:error, term()}
   def list_ready_downlink_routes(organization_id, mission_id, spacecraft_id)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(spacecraft_id) do
+    with {:ok, routes, _providers} <-
+           list_ready_downlink_routes_for_fleet(organization_id, mission_id, [spacecraft_id]) do
+      Map.get(routes, spacecraft_id, {:error, :spacecraft_not_found})
+    end
+  end
+
+  @doc false
+  def list_ready_downlink_routes_for_fleet(organization_id, mission_id, spacecraft_ids) do
     with {:ok, spacecraft} <-
-           SpacecraftStore.fetch_spacecraft(organization_id, mission_id, spacecraft_id) do
+           SpacecraftStore.fetch_spacecrafts_in_batches(
+             organization_id,
+             mission_id,
+             spacecraft_ids
+           ) do
       endpoints =
-        SourceEndpoints.list_source_endpoints(
+        SourceEndpoints.list_source_endpoints_for_spacecrafts(
           organization_id,
           mission_id,
-          spacecraft_id: spacecraft_id
+          spacecraft_ids
         )
 
       rules =
-        organization_id
-        |> RoutingRuleStore.list_routing_rules_for_spacecraft(mission_id, spacecraft_id)
-        |> Enum.filter(&downlink_rule?/1)
+        spacecraft_ids
+        |> Enum.chunk_every(500)
+        |> Enum.flat_map(fn ids ->
+          RoutingRuleStore.list_routing_rules_for_spacecrafts(organization_id, mission_id, ids)
+        end)
+        |> Map.new(fn {id, rules} -> {id, Enum.filter(rules, &downlink_rule?/1)} end)
 
-      {routes, findings} = resolve_rules(spacecraft, endpoints, rules)
+      pins = load_route_pins(organization_id, mission_id, rules |> Map.values() |> List.flatten())
 
-      {:ok,
-       %{
-         routes: Enum.sort_by(routes, &{&1.provider_display_name, &1.route_display_name}),
-         findings: Enum.uniq_by(findings, &{&1.code, &1[:resource_id]})
-       }}
+      routes =
+        Map.new(spacecraft, fn {id, item} ->
+          {routes, findings} =
+            resolve_rules(item, Map.get(endpoints, id, []), Map.fetch!(rules, id), pins)
+
+          {id,
+           {:ok,
+            %{
+              routes: Enum.sort_by(routes, &{&1.provider_display_name, &1.route_display_name}),
+              findings: Enum.uniq_by(findings, &{&1.code, &1[:resource_id]})
+            }}}
+        end)
+
+      {:ok, routes, pins.providers}
     end
+  end
+
+  defp load_route_pins(organization_id, mission_id, rules) do
+    assignments =
+      LinkAssignmentStore.fetch_many(
+        organization_id,
+        mission_id,
+        Enum.flat_map(rules, &materialized_assignment_ids/1)
+      )
+
+    templates =
+      PathTemplateStore.fetch_versions(
+        organization_id,
+        mission_id,
+        Enum.map(assignments, fn {_id, row} ->
+          {row.path_template_id, row.path_template_version}
+        end)
+      )
+
+    transports =
+      TransportStore.fetch_transport_versions(
+        organization_id,
+        mission_id,
+        Enum.map(rules, &{&1.transport_id, &1.transport_version})
+      )
+
+    managed = transports |> Map.values() |> Enum.filter(&(&1.origin == :provider_managed))
+
+    providers =
+      MissionProviders.fetch_provider_versions(
+        organization_id,
+        mission_id,
+        Enum.map(managed, &{&1.mission_provider_id, &1.mission_provider_version})
+      )
+
+    profiles =
+      ProfileStore.fetch_provider_profiles(
+        organization_id,
+        mission_id,
+        managed |> Enum.map(& &1.materialized_provider_profile_id) |> Enum.reject(&is_nil/1)
+      )
+
+    %{
+      assignments: assignments,
+      templates: templates,
+      transports: transports,
+      providers: providers,
+      provider_readiness:
+        Map.new(providers, fn {key, provider} ->
+          {key, with(:ok <- provider_ready(provider), do: provider_grant_ready(provider))}
+        end),
+      profiles: profiles
+    }
   end
 
   @spec resolve_ready_downlink_route(binary(), binary(), binary(), binary()) ::
@@ -165,7 +242,7 @@ defmodule Cadence.Contacts.ProviderScheduling do
          {:ok, starts_at} <- parse_time(window, :starts_at),
          {:ok, ends_at} <- parse_time(window, :ends_at),
          :ok <- validate_window(starts_at, ends_at, opts),
-         result_limit <- Keyword.get(opts, :result_limit, @default_result_limit),
+         result_limit = result_limit(opts),
          {:ok, response} <-
            ProviderControl.search_opportunities(
              organization_id,
@@ -182,7 +259,17 @@ defmodule Cadence.Contacts.ProviderScheduling do
              },
              Keyword.put(opts, :provider_version, route.provider_version)
            ),
-         {:ok, opportunities} <-
+         result <- search_result(response, route, starts_at, ends_at, result_limit) do
+      result
+    else
+      false -> {:error, :spacecraft_required}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc false
+  def search_result(response, route, starts_at, ends_at, result_limit) do
+    with {:ok, opportunities} <-
            validate_opportunities(response, route, starts_at, ends_at, result_limit) do
       {:ok,
        %{
@@ -201,9 +288,6 @@ defmodule Cadence.Contacts.ProviderScheduling do
              |> Map.put("delivery_profile_ref", route.delivery_profile_ref["id"])
            end)
        }}
-    else
-      false -> {:error, :spacecraft_required}
-      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -213,7 +297,7 @@ defmodule Cadence.Contacts.ProviderScheduling do
     if route_evidence(route) === expected, do: :ok, else: {:error, :route_changed}
   end
 
-  defp resolve_rules(spacecraft, [], _rules) do
+  defp resolve_rules(spacecraft, [], _rules, _pins) do
     {[],
      [
        finding(
@@ -224,7 +308,7 @@ defmodule Cadence.Contacts.ProviderScheduling do
      ]}
   end
 
-  defp resolve_rules(spacecraft, _endpoints, []) do
+  defp resolve_rules(spacecraft, _endpoints, [], _pins) do
     {[],
      [
        finding(
@@ -235,9 +319,9 @@ defmodule Cadence.Contacts.ProviderScheduling do
      ]}
   end
 
-  defp resolve_rules(spacecraft, endpoints, rules) do
+  defp resolve_rules(spacecraft, endpoints, rules, pins) do
     Enum.reduce(rules, {[], []}, fn rule, {routes, findings} ->
-      case resolve_rule(spacecraft, endpoints, rule) do
+      case resolve_rule(spacecraft, endpoints, rule, pins) do
         {:ok, route} ->
           {[route | routes], findings}
 
@@ -247,23 +331,33 @@ defmodule Cadence.Contacts.ProviderScheduling do
     end)
   end
 
-  defp resolve_rule(spacecraft, endpoints, rule) do
-    with {:ok, assignment} <- downlink_assignment(rule),
-         {:ok, template} <- path_template(rule, assignment),
+  defp resolve_rule(spacecraft, endpoints, rule, pins) do
+    with {:ok, assignment} <- downlink_assignment(rule, pins.assignments),
+         {:ok, template} <-
+           fetch_pin(
+             pins.templates,
+             {assignment.path_template_id, assignment.path_template_version},
+             :contact_path_template_not_found
+           ),
          {:ok, endpoint} <- source_endpoint(endpoints, assignment.source_endpoint_ref),
          :ok <- provider_spacecraft_mapping(endpoint),
-         {:ok, transport} <- exact_transport(rule),
+         {:ok, transport} <-
+           fetch_pin(
+             pins.transports,
+             {rule.transport_id, rule.transport_version},
+             :transport_not_found
+           ),
          :ok <- externally_schedulable_transport(transport),
-         {:ok, provider} <- exact_provider(transport),
-         :ok <- provider_ready(provider),
-         :ok <- provider_grant_ready(provider),
+         provider_key = {transport.mission_provider_id, transport.mission_provider_version},
+         {:ok, provider} <- fetch_pin(pins.providers, provider_key, :mission_provider_not_found),
+         :ok <- Map.fetch!(pins.provider_readiness, provider_key),
          {:ok, service_profile} <-
            exact_profile(provider, "service_profiles", transport.service_profile_ref),
          {:ok, delivery_profile} <-
            exact_profile(provider, "delivery_profiles", transport.delivery_profile_ref),
          :ok <- profiles_compatible(service_profile, delivery_profile),
          :ok <- transport_snapshot_matches(transport, provider, service_profile, delivery_profile),
-         {:ok, runtime_profile} <- runtime_profile(transport),
+         {:ok, runtime_profile} <- runtime_profile(transport, pins.profiles),
          {:ok, context} <- ProviderContext.from_mission_provider(provider),
          {:ok, client} <- Registry.fetch(context) do
       {:ok,
@@ -318,12 +412,12 @@ defmodule Cadence.Contacts.ProviderScheduling do
       rule.direction in [:inbound, :bidirectional]
   end
 
-  defp downlink_assignment(rule) do
+  defp downlink_assignment(rule, assignments) do
     rule
     |> materialized_assignment_ids()
     |> Enum.reduce_while({:error, :contact_link_assignment_not_found}, fn assignment_id, _acc ->
-      case LinkAssignmentStore.fetch(rule.organization_id, rule.mission_id, assignment_id) do
-        {:ok, %LinkAssignment{direction: :downlink} = assignment} ->
+      case Map.get(assignments, assignment_id) do
+        %LinkAssignment{direction: :downlink} = assignment ->
           {:halt, {:ok, assignment}}
 
         _other ->
@@ -340,13 +434,11 @@ defmodule Cadence.Contacts.ProviderScheduling do
       else: ids
   end
 
-  defp path_template(rule, assignment) do
-    PathTemplateStore.fetch_version(
-      rule.organization_id,
-      rule.mission_id,
-      assignment.path_template_id,
-      assignment.path_template_version
-    )
+  defp fetch_pin(pins, key, reason) do
+    case Map.fetch(pins, key) do
+      {:ok, value} -> {:ok, value}
+      :error -> {:error, reason}
+    end
   end
 
   defp source_endpoint(endpoints, source_endpoint_id) do
@@ -367,15 +459,6 @@ defmodule Cadence.Contacts.ProviderScheduling do
          "Source endpoint needs a provider spacecraft reference."}
   end
 
-  defp exact_transport(rule) do
-    TransportStore.fetch_transport_version(
-      rule.organization_id,
-      rule.mission_id,
-      rule.transport_id,
-      rule.transport_version
-    )
-  end
-
   defp externally_schedulable_transport(%Transport{
          origin: :provider_managed,
          lifecycle_state: :active
@@ -389,15 +472,6 @@ defmodule Cadence.Contacts.ProviderScheduling do
 
   defp externally_schedulable_transport(%Transport{}) do
     {:error, :transport_not_active, "Selected Transport version is not active."}
-  end
-
-  defp exact_provider(transport) do
-    GroundNetworks.fetch_provider_version(
-      transport.organization_id,
-      transport.mission_id,
-      transport.mission_provider_id,
-      transport.mission_provider_version
-    )
   end
 
   defp provider_ready(%MissionProvider{} = provider) do
@@ -491,14 +565,9 @@ defmodule Cadence.Contacts.ProviderScheduling do
     end
   end
 
-  defp runtime_profile(%Transport{materialized_provider_profile_id: id} = transport)
+  defp runtime_profile(%Transport{materialized_provider_profile_id: id} = transport, profiles)
        when is_binary(id) and id != "" do
-    with {:ok, profile} <-
-           ProfileStore.fetch_provider_profile(
-             transport.organization_id,
-             transport.mission_id,
-             id
-           ),
+    with {:ok, profile} <- Map.fetch(profiles, id),
          true <- profile.metadata["materialized_from_transport_id"] == transport.transport_id,
          true <- profile.metadata["materialized_from_transport_version"] == transport.version do
       {:ok, profile}
@@ -507,7 +576,8 @@ defmodule Cadence.Contacts.ProviderScheduling do
     end
   end
 
-  defp runtime_profile(_transport), do: {:error, :transport_runtime_profile_not_materialized}
+  defp runtime_profile(_transport, _profiles),
+    do: {:error, :transport_runtime_profile_not_materialized}
 
   defp ready_route(%{
          spacecraft: spacecraft,
@@ -606,7 +676,8 @@ defmodule Cadence.Contacts.ProviderScheduling do
 
   defp readiness_message(_reason), do: "Provider scheduling route is not ready."
 
-  defp validate_window(starts_at, ends_at, opts) do
+  @doc false
+  def validate_window(starts_at, ends_at, opts) do
     now = Keyword.get(opts, :now, DateTime.utc_now())
 
     cond do
@@ -623,6 +694,9 @@ defmodule Cadence.Contacts.ProviderScheduling do
         :ok
     end
   end
+
+  @doc false
+  def result_limit(opts), do: Keyword.get(opts, :result_limit, @default_result_limit)
 
   defp validate_opportunities(response, route, starts_at, ends_at, result_limit) do
     opportunities = Map.get(response, :data, Map.get(response, "data"))

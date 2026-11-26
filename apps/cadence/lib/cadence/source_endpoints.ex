@@ -13,6 +13,7 @@ defmodule Cadence.SourceEndpoints do
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Listing
   alias Cadence.Missions
+  alias Cadence.Persistence.BulkLookup
   alias Cadence.Repo
   alias Cadence.SourceEndpoints.{SourceEndpoint, SourceEndpointRow}
   alias Cadence.Spacecraft
@@ -133,6 +134,16 @@ defmodule Cadence.SourceEndpoints do
     |> order_by([row], asc: row.source_endpoint_id)
     |> Repo.all()
     |> Enum.map(&SourceEndpointRow.to_domain/1)
+  end
+
+  @doc "Mission endpoints for the requested spacecraft, grouped by spacecraft in endpoint order."
+  def list_source_endpoints_for_spacecrafts(organization_id, mission_id, spacecraft_ids) do
+    SourceEndpointRow
+    |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
+    |> order_by([row], asc: row.source_endpoint_id)
+    |> BulkLookup.by_id(:spacecraft_id, spacecraft_ids)
+    |> Enum.map(&SourceEndpointRow.to_domain/1)
+    |> Enum.group_by(& &1.spacecraft_id)
   end
 
   @doc "Curated command target page; no endpoint metadata is returned."

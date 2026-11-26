@@ -15,6 +15,7 @@ defmodule Cadence.Contacts.LinkAssignmentStore do
   alias Cadence.Contacts.ProfileStore
   alias Cadence.Listing
   alias Cadence.Missions
+  alias Cadence.Persistence.BulkLookup
   alias Cadence.Repo
   alias Cadence.SourceEndpoints
   alias Cadence.SpacecraftStore
@@ -81,6 +82,18 @@ defmodule Cadence.Contacts.LinkAssignmentStore do
       %LinkAssignmentRow{} = row ->
         {:ok, LinkAssignmentRow.to_domain(row)}
     end
+  end
+
+  @doc "Non-deleted mission assignments keyed by their exact IDs."
+  def fetch_many(organization_id, mission_id, ids) do
+    LinkAssignmentRow
+    |> where(
+      [row],
+      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+        row.lifecycle_state != "deleted"
+    )
+    |> BulkLookup.by_id(:link_assignment_id, ids)
+    |> Map.new(&{&1.link_assignment_id, LinkAssignmentRow.to_domain(&1)})
   end
 
   @spec list(binary(), binary()) :: [LinkAssignment.t()]

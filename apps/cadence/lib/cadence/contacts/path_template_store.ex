@@ -18,6 +18,7 @@ defmodule Cadence.Contacts.PathTemplateStore do
   alias Cadence.Contacts.TransportProfile
   alias Cadence.Listing
   alias Cadence.Missions
+  alias Cadence.Persistence.BulkLookup
   alias Cadence.Repo
 
   @spec persist(binary(), PathTemplate.t()) ::
@@ -130,6 +131,14 @@ defmodule Cadence.Contacts.PathTemplateStore do
       nil -> {:error, :contact_path_template_not_found}
       %PathTemplateRow{} = row -> {:ok, PathTemplateRow.to_domain(row)}
     end
+  end
+
+  @doc "Exact mission path template versions keyed by `{id, version}`."
+  def fetch_versions(organization_id, mission_id, keys) do
+    PathTemplateRow
+    |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
+    |> BulkLookup.by_version(:path_template_id, keys)
+    |> Map.new(&{{&1.path_template_id, &1.version}, PathTemplateRow.to_domain(&1)})
   end
 
   @spec list(binary()) :: [PathTemplate.t()]
