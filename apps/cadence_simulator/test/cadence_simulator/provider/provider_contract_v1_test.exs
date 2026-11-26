@@ -222,7 +222,8 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
 
   test "profile-backed Contacts keep contact, pass, and delivery state independent", context do
     delivery_profile = provision_delivery(context)
-    opportunity = search_opportunity(context.run)
+    # Keep live prepass out of the assertions; this test advances each phase explicitly below.
+    opportunity = search_opportunity(context.run, 300)
 
     contact_request = %{
       "opportunity_ref" => opportunity["id"],
@@ -573,7 +574,7 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
     profile
   end
 
-  defp search_opportunity(run) do
+  defp search_opportunity(run, start_delay_seconds \\ 5) do
     now = DateTime.utc_now()
 
     response =
@@ -581,7 +582,7 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
         "spacecraft_refs" => ["SC-001"],
         "ground_station_refs" => [],
         "service_profile_ref" => "service-realtime-ttc-downlink",
-        "starts_at" => now |> DateTime.add(5) |> DateTime.to_iso8601(),
+        "starts_at" => now |> DateTime.add(start_delay_seconds) |> DateTime.to_iso8601(),
         "ends_at" => now |> DateTime.add(7_200) |> DateTime.to_iso8601(),
         "page_size" => 2
       })
