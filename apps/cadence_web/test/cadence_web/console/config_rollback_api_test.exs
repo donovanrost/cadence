@@ -12,7 +12,7 @@ defmodule CadenceWeb.Console.ConfigRollbackAPITest do
     previous = Application.get_env(:cadence, :activation_governance, [])
     Application.put_env(:cadence, :activation_governance, approval_required: false)
     on_exit(fn -> Application.put_env(:cadence, :activation_governance, previous) end)
-    %{alice: alice, base: "/api/console/v1/missions/#{mission.mission_id}/config"}
+    %{alice: alice, base: "/api/v1/missions/#{mission.mission_id}/config"}
   end
 
   defp call(c, :get, path), do: c.alice |> TestFixtures.member_conn() |> get(c.base <> path)

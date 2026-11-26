@@ -9,7 +9,7 @@ defmodule CadenceWeb.Console.BookingResolutionAPITest do
     alice = TestFixtures.persist_user!(display_name: "Alice")
     TestFixtures.grant_membership!(alice, org)
     mission = TestFixtures.persist_mission!(org)
-    %{alice: alice, base: "/api/console/v1/missions/#{mission.mission_id}/contact-plans"}
+    %{alice: alice, base: "/api/v1/missions/#{mission.mission_id}/contact-plans"}
   end
 
   defp resolve(c, body),

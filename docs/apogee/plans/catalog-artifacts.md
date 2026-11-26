@@ -17,7 +17,7 @@ console's catalog patterns (index §A, import run §C).
   import run's `file {name, format_label, size_bytes}` (C1). Neither has a download link or an artifact id on the
   run.
 
-## Proposed (`/api/console/v1/missions/:mission_id/catalog`)
+## Proposed (`/api/v1/missions/:mission_id/catalog`)
 ### K1 artifact
 ```
 GET /artifacts/:artifact_id → {artifact: {id, file_name, format_label, format_version|null, media_type|null,

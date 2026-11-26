@@ -1,6 +1,6 @@
 # Platform admin area (L7, api-ops)
 
-`/api/console/v1/admin`, for platform administrators in admin mode (L6) only. Every call checks
+`/api/v1/admin`, for platform administrators in admin mode (L6) only. Every call checks
 `Administration.Access.authorize/1`. Without admin mode, or for an account that lost the
 capability: `403 admin_mode_required` (end the admin chip). Writes need `x-csrf-token` and are
 recorded in the platform audit. Proposal: `docs/apogee/plans/admin.md`; screens: ux `screens/Admin.md`.

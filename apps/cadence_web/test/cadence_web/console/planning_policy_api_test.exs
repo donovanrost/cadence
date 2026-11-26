@@ -19,7 +19,7 @@ defmodule CadenceWeb.Console.PlanningPolicyAPITest do
       ada: ada,
       bob: bob,
       mia: mia,
-      base: "/api/console/v1/missions/#{mission.mission_id}/contact-planning/policy"
+      base: "/api/v1/missions/#{mission.mission_id}/contact-planning/policy"
     }
   end
 
@@ -74,7 +74,7 @@ defmodule CadenceWeb.Console.PlanningPolicyAPITest do
 
     audit =
       c.ada
-      |> call(:get, "/api/console/v1/organizations/#{c.org.organization_id}/audit?kinds=contacts")
+      |> call(:get, "/api/v1/organizations/#{c.org.organization_id}/audit?kinds=contacts")
       |> json_response(200)
       |> get_in(["data", "events"])
 

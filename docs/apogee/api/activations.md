@@ -4,7 +4,7 @@ Conventions: [README.md](README.md). Proposal: `docs/apogee/plans/activations.md
 api. Domain: `Management.Activations` (requests and decisions), `Control.Activations` (execute,
 resume; domain 9b8456132, 8f30aac21). Replaces the LiveView `/ops/activations`.
 
-Base: `/api/console/v1/missions/:mission_id/activations`. Every call checks the request belongs to
+Base: `/api/v1/missions/:mission_id/activations`. Every call checks the request belongs to
 this mission (`404 activation_request_not_found` otherwise). Refetch on `invalidate` with
 `activations` (new topic, sent when this API decides or resumes a request) and `attention` (an apply
 that fails or stalls shows on Now).

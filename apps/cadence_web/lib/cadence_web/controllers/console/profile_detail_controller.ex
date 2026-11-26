@@ -1,5 +1,5 @@
 defmodule CadenceWeb.Console.ProfileDetailController do
-  @moduledoc "`GET /api/console/v1/missions/:mission_id/profiles/:profile_id`. Contract: docs/apogee/api/setup.md."
+  @moduledoc "`GET /api/v1/missions/:mission_id/profiles/:profile_id`. Contract: docs/apogee/api/setup.md."
 
   use CadenceWeb, :controller
 

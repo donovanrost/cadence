@@ -40,7 +40,7 @@ defmodule CadenceWeb.Console.ContactPlanOldActorRowsTest do
       second_admin: second_admin,
       member: member,
       member_membership: member_membership,
-      base: "/api/console/v1/missions/#{mission.mission_id}/contact-plans"
+      base: "/api/v1/missions/#{mission.mission_id}/contact-plans"
     }
   end
 

@@ -4,7 +4,7 @@ Status: **implemented** (P1). This is a thin pass-through of `Cadence.Control.Co
 semantics and shapes live in [domain.md](domain.md); the HTTP mapping is fe-setup's
 setup-shapes.md §K, adopted as is. Conventions: [README.md](README.md).
 
-Base: `/api/console/v1/missions/:mission_id/config`. Write calls need `x-csrf-token`.
+Base: `/api/v1/missions/:mission_id/config`. Write calls need `x-csrf-token`.
 
 | Method + path | Facade | Body | `data` |
 | --- | --- | --- | --- |

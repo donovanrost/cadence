@@ -8,7 +8,7 @@ defmodule CadenceWeb.Console.DashboardLibraryAPITest do
 
   setup do: authoring_draft_setup()
 
-  defp base(c), do: "/api/console/v1/missions/#{c.mission.mission_id}/dashboard-library"
+  defp base(c), do: "/api/v1/missions/#{c.mission.mission_id}/dashboard-library"
 
   defp call(c, method, suffix, body \\ %{}) do
     conn = TestFixtures.member_conn(c.user)

@@ -1,7 +1,7 @@
 import { decode, nullable, object, optional, string, token, type Reader } from "./decode.ts";
 
 /** Base path of the session-authenticated console JSON API. */
-export const API_BASE = "/api/console/v1";
+export const API_BASE = "/api/v1";
 
 export type ApiError =
   | { kind: "unauthenticated" }

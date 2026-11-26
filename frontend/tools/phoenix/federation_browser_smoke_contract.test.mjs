@@ -3587,7 +3587,7 @@ void test("delayed websocket events without a request-boundary record fail close
 
 void test("the console sign-in request is the exact API POST, same-origin, as a fetch", () => {
   const base = { method: "POST", resourceType: "Fetch" };
-  const api = "/api/console/v1/auth/sign-in";
+  const api = "/api/v1/auth/sign-in";
 
   for (const [pathname, expected] of /** @type {const} */ ([
     [api, true],

@@ -315,7 +315,7 @@ export async function routeDegradedNow(page: Page, d: Degradation): Promise<void
   let degraded: Json | null = null;
   const fleetOnce = async (): Promise<Json> => {
     if (degraded) return degraded;
-    const response = await page.request.get(`/api/console/v1/missions/${DEMO.missionId}/fleet`);
+    const response = await page.request.get(`/api/v1/missions/${DEMO.missionId}/fleet`);
     const body: unknown = await response.json();
     if (!isJson(body) || !isJson(body["data"])) throw new Error("fleet fixture: unexpected body");
     degraded = degradeFleet(body["data"], d);

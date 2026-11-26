@@ -46,7 +46,7 @@ defmodule CadenceWeb.Console.MissionModelAlreadyApprovedTest do
       mission: mission,
       revision: revision.mission_model_revision_id,
       path:
-        "/api/console/v1/missions/#{mission.mission_id}/mission-model-revisions/#{revision.mission_model_revision_id}"
+        "/api/v1/missions/#{mission.mission_id}/mission-model-revisions/#{revision.mission_model_revision_id}"
     }
 
     Map.put(c, :report_id, compare!(c, approver))
@@ -138,7 +138,7 @@ defmodule CadenceWeb.Console.MissionModelAlreadyApprovedTest do
     other = Fixtures.persist_imported_revision!(c.org.organization_id, mission.mission_id)
 
     other_path =
-      "/api/console/v1/missions/#{mission.mission_id}/mission-model-revisions/" <>
+      "/api/v1/missions/#{mission.mission_id}/mission-model-revisions/" <>
         other.mission_model_revision_id
 
     conn = c.approver |> TestFixtures.member_conn() |> post(other_path <> "/approve", body)

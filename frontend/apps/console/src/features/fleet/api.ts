@@ -8,7 +8,7 @@ import {
   type Decoded,
 } from "@/api/index.ts";
 
-/** Contract: docs/apogee/api/ops.md, `GET /api/console/v1/missions/:mission_id/fleet`. */
+/** Contract: docs/apogee/api/ops.md, `GET /api/v1/missions/:mission_id/fleet`. */
 
 export const fleetStates = ["critical", "caution", "stale", "nominal", "never_heard"] as const;
 export type FleetState = (typeof fleetStates)[number];

@@ -61,7 +61,7 @@ defmodule CadenceWeb.Console.ActivationAuthorRefusalAPITest do
       approver: approver,
       craft: craft,
       request: request,
-      base: "/api/console/v1/missions/#{mission.mission_id}/activations"
+      base: "/api/v1/missions/#{mission.mission_id}/activations"
     }
   end
 

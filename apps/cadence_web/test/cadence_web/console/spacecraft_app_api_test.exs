@@ -23,9 +23,8 @@ defmodule CadenceWeb.Console.SpacecraftAppAPITest do
       membership: membership,
       mission: mission,
       craft: craft,
-      base:
-        "/api/console/v1/missions/#{mission.mission_id}/spacecraft/#{craft.spacecraft_id}/apps",
-      missing: "/api/console/v1/missions/#{mission.mission_id}/spacecraft/nope/apps"
+      base: "/api/v1/missions/#{mission.mission_id}/spacecraft/#{craft.spacecraft_id}/apps",
+      missing: "/api/v1/missions/#{mission.mission_id}/spacecraft/nope/apps"
     }
   end
 

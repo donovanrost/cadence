@@ -38,7 +38,7 @@ defmodule CadenceWeb.ApplicationHostOriginTest do
     console =
       legacy
       |> recycle()
-      |> get("/api/console/v1/missions/#{mission.mission_id}/apps/limits/surfaces/manage/host")
+      |> get("/api/v1/missions/#{mission.mission_id}/apps/limits/surfaces/manage/host")
 
     %{
       user: user,

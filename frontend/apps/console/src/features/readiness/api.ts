@@ -3,7 +3,7 @@ import { actor, decoders, request, type ApiResult, type Reader } from "@/api/ind
 
 /**
  * Contract (requested): docs/apogee/plans/setup-shapes.md §R, final in docs/apogee/api/setup.md.
- * GET /api/console/v1/missions/:mission_id/readiness
+ * GET /api/v1/missions/:mission_id/readiness
  */
 const { array, integer, known, nullable, object, oneOf, string, timestamp, token } = decoders;
 

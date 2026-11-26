@@ -1,7 +1,7 @@
 # Scheduling endpoints (S2–S6, S8)
 
 Owner: **api** (DECISIONS #26). Consumer: **lead** (K1 Plan, K2 Re-plan). S1 passes and S10 push
-are api-ops'. Base: `/api/console/v1/missions/:mission_id`. Conventions: [README.md](README.md).
+are api-ops'. Base: `/api/v1/missions/:mission_id`. Conventions: [README.md](README.md).
 
 Status: decisions agreed (DECISIONS #27, #28). **Implemented:** S6 list, plan detail with S2 demand,
 S3 drafts (start/read/continue) and S5 submit/execute with acknowledged exceptions. Planning setup, day demand,
@@ -643,7 +643,7 @@ repair's moves affect). Ask if a screen needs either.
 
 ## Contact planning setup (CP, Setup screen; DECISIONS #27)
 
-Base: `/api/console/v1/missions/:mission_id/contact-planning`.
+Base: `/api/v1/missions/:mission_id/contact-planning`.
 
 ### `GET /policy` (CP2)
 

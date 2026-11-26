@@ -16,7 +16,7 @@ defmodule CadenceWeb.Console.AuditAPITest do
       admin: admin,
       member: member,
       mission: mission,
-      base: "/api/console/v1/organizations/#{org.organization_id}"
+      base: "/api/v1/organizations/#{org.organization_id}"
     }
   end
 
@@ -32,7 +32,7 @@ defmodule CadenceWeb.Console.AuditAPITest do
     c.admin
     |> TestFixtures.member_conn()
     |> put(
-      "/api/console/v1/missions/#{c.mission.mission_id}/settings/cadence.configuration",
+      "/api/v1/missions/#{c.mission.mission_id}/settings/cadence.configuration",
       %{"values" => %{"profile_framing_generations" => false}}
     )
     |> json_response(201)
@@ -102,7 +102,7 @@ defmodule CadenceWeb.Console.AuditAPITest do
     # Under 'direct' approval an admin may approve their own submit; approving is its own
     # action since #257 (director 11-19).
     CadenceWeb.ContactPlanningFixtures.approve_directly!(org, admin, membership, mission)
-    plans = "/api/console/v1/missions/#{mission.mission_id}/contact-plans"
+    plans = "/api/v1/missions/#{mission.mission_id}/contact-plans"
 
     admin
     |> TestFixtures.member_conn()
@@ -124,7 +124,7 @@ defmodule CadenceWeb.Console.AuditAPITest do
       admin
       |> TestFixtures.member_conn()
       |> get(
-        "/api/console/v1/organizations/#{org.organization_id}/audit?kinds=contacts&from=2000-01-01T00:00:00Z"
+        "/api/v1/organizations/#{org.organization_id}/audit?kinds=contacts&from=2000-01-01T00:00:00Z"
       )
       |> json_response(200)
       |> get_in(["data", "events"])

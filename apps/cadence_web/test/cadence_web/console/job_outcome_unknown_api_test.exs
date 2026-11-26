@@ -14,7 +14,7 @@ defmodule CadenceWeb.Console.JobOutcomeUnknownAPITest do
     %{
       conn: TestFixtures.member_conn(user),
       mission: mission.mission_id,
-      base: "/api/console/v1/missions/#{mission.mission_id}/attention/job_outcome_unknown/"
+      base: "/api/v1/missions/#{mission.mission_id}/attention/job_outcome_unknown/"
     }
   end
 

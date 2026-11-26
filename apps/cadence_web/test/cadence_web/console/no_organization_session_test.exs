@@ -70,5 +70,5 @@ defmodule CadenceWeb.Console.NoOrganizationSessionTest do
 
   # What the console's no-organization screen reads.
   defp no_organization_page(conn),
-    do: conn |> get("/api/console/v1/session") |> json_response(200) |> Map.fetch!("data")
+    do: conn |> get("/api/v1/session") |> json_response(200) |> Map.fetch!("data")
 end

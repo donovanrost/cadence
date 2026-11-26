@@ -35,7 +35,7 @@ revoke). Reads to extend: `GET /missions/:id/providers` (`Reads.CommsDirectory.p
 5. **Credential revoke doesn't show.** Nothing sets `ProviderAccount.credential_status = :revoked`, so the directory's
    status never says so.
 
-## L13 · provider-account grants and credential (`/api/console/v1/organizations/:organization_id/provider-accounts/:id`)
+## L13 · provider-account grants and credential (`/api/v1/organizations/:organization_id/provider-accounts/:id`)
 Who: `:manage_provider_accounts` (org admins), as today. **todo(authz):** granting an account to a mission checks
 only that the mission exists in the org; nobody on the mission side agrees. Fine while only org admins grant; note
 it for Cedar.
@@ -71,7 +71,7 @@ POST /credential/revoke {reason, expected_credential_version}
   credential line gets `Revoke credential…` (danger, required reason): "Every mission provider on this account
   stops working until you point the account at a new reference."
 
-## L12 · mission providers (`/api/console/v1/missions/:mission_id/providers`)
+## L12 · mission providers (`/api/v1/missions/:mission_id/providers`)
 Who: `:manage_mission` (mission admins) for every write, as today (create also checks `:operate_mission`).
 
 ```
