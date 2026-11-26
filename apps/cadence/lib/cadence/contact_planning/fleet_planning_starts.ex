@@ -65,6 +65,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
     with {:ok, as_of} <- review_as_of(evidence),
          {:ok, inputs} <- FleetStartInputs.load(scope, mission_id, window, true, as_of),
          true <- inputs.evidence === evidence,
+         :ok <- prefer_index_scans_for_materialization(),
          {:ok, generated, materialization} <- materialize(scope, mission_id, inputs),
          :ok <- supersede(scope, inputs),
          requirements <- requirement_pairs(inputs, generated),
@@ -88,6 +89,14 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
       false -> Repo.rollback(:fleet_planning_review_changed)
       {:error, reason} -> Repo.rollback(reason)
     end
+  end
+
+  defp prefer_index_scans_for_materialization do
+    # New missions may create thousands of parent rows in this transaction while the planner
+    # still sees near-empty committed tables. FK checks then scan every prior insert for each
+    # child row. All referenced keys are indexed; keep their checks logarithmic until commit.
+    Repo.query!("SET LOCAL enable_seqscan = off")
+    :ok
   end
 
   defp record_operation(_scope, _mission_id, _run, nil), do: :ok
