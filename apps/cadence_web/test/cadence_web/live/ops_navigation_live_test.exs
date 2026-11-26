@@ -87,26 +87,10 @@ defmodule CadenceWeb.OpsNavigationLiveTest do
     })
   end
 
-  test "legacy Explore bookmarks go to the console's Telemetry with the point and range" do
-    {conn, _user, organization, mission} = signed_in_user_org_and_mission()
-
-    conn =
-      get(
-        conn,
-        "/missions/#{mission.mission_id}/ops/telemetry/explore?point_id=HK.temp&time_mode=historical&from=2026-08-01T12%3A00%3A00Z"
-      )
-
-    assert conn.status == 301
-
-    assert get_resp_header(conn, "location") == [
-             "/console/#{organization.slug}/#{mission.slug}/telemetry?from=2026-08-01T12%3A00%3A00Z&p=HK.temp"
-           ]
-  end
-
   test "Explore remains authentication scoped" do
     {_conn, _user, _organization, mission} = signed_in_user_org_and_mission()
 
-    assert {:error, {:redirect, %{to: "/sign-in"}}} =
+    assert {:error, {:redirect, %{to: "/console/sign-in"}}} =
              live(build_conn(), ~p"/missions/#{mission.mission_id}/ops/explore")
   end
 

@@ -20,25 +20,19 @@ defmodule CadenceWeb.BrowserShellTest do
     :ok
   end
 
-  test "unauthenticated root redirects to sign-in", %{conn: conn} do
-    conn = get(conn, "/")
-
-    assert redirected_to(conn) == "/sign-in"
-    assert get_session(conn, :user_return_to) == "/"
+  test "the site root opens the console", %{conn: conn} do
+    assert redirected_to(get(conn, "/")) == "/console"
   end
 
-  # L5: the sign-in page's GET goes to the console's sign-in screen (ecdddab10).
-  test "GET /sign-in goes to the console's sign-in", %{conn: conn} do
-    assert redirected_to(get(conn, "/sign-in")) == "/console/sign-in"
+  test "signed out, the console sends you to its sign-in and back", %{conn: conn} do
+    conn = get(conn, "/console/")
+
+    assert redirected_to(conn) == "/console/sign-in"
+    assert get_session(conn, :user_return_to) == "/console/"
   end
 
-  test "platform admin root redirect routes to the console admin dashboard", %{conn: conn} do
-    root_conn =
-      conn
-      |> environment_admin_conn()
-      |> get("/")
-
-    assert redirected_to(root_conn) == "/console/admin"
+  test "the old root sign-in page is gone", %{conn: conn} do
+    assert conn |> get("/sign-in") |> response(404)
   end
 
   test "environment admin in admin mode can open any organization without membership",
@@ -79,14 +73,14 @@ defmodule CadenceWeb.BrowserShellTest do
       })
       |> delete("/session")
 
-    assert redirected_to(conn) == "/sign-in"
+    assert redirected_to(conn) == "/console/sign-in"
 
     copied_conn =
       build_conn()
       |> init_test_session(%{user_session_token: session_token})
-      |> get("/")
+      |> get("/console/")
 
-    assert redirected_to(copied_conn) == "/sign-in"
+    assert redirected_to(copied_conn) == "/console/sign-in"
     assert {:error, :unauthenticated} = Cadence.Auth.authenticate_browser_session(session_token)
     assert {:error, :unauthenticated} = Cadence.Auth.authenticate_api_token(session_token)
   end

@@ -35,7 +35,7 @@ defmodule Cadence.Management.Commanding.WireAuthoringTest do
   test "the full demo database supports command arguments also used by state effects", c do
     path =
       Path.expand(
-        "../../../../../../legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml",
+        "../../../../../../dev/catalogs/demo_spacecraft.yaml",
         __DIR__
       )
 

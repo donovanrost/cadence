@@ -12,6 +12,8 @@ defmodule CadenceWeb.Console.Problem do
     unauthenticated: {401, "Sign in to continue."},
     invalid_csrf: {403, "The request CSRF token is invalid. Reload the page and try again."},
     forbidden: {403, "You do not have permission to do that."},
+    # #753: a service identity's bearer token reaches only the actions that opt in.
+    service_not_allowed: {403, "A service identity can't do that; a person must."},
     scope_mismatch: {403, "That resource belongs to a different organization."},
     not_found: {404, "Not found."},
     mission_not_found: {404, "Mission not found."},
@@ -231,6 +233,9 @@ defmodule CadenceWeb.Console.Problem do
     too_many_commands: {422, "Too many unsaved edits. Save to keep going."},
     dashboard_not_ready: {422, "Some widgets aren't ready to save."},
     dashboard_in_use: {409, "A playlist shows this dashboard. Confirm to archive it anyway."},
+    dashboard_id_in_use: {409, "That dashboard id is already in use."},
+    dashboard_import_conflict:
+      {409, "A dashboard with that id exists here with different content."},
     catalog_unavailable: {503, "The command catalog is unavailable right now."},
     alarms_unavailable: {503, "Alarms are unavailable right now."},
     commanding_unavailable: {503, "Commanding is unavailable right now."},

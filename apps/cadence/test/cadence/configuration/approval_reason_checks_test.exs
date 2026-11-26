@@ -76,7 +76,13 @@ defmodule Cadence.Configuration.ApprovalReasonChecksTest do
         decision: decision,
         actor: %{"kind" => "user", "id" => "u"},
         comment: comment,
-        decided_at: @now
+        decided_at: @now,
+        # #117 step 2's required record fields.
+        subject_version: 1,
+        subject_digest: String.duplicate("a", 64),
+        policy_document: %{},
+        separated_from: [],
+        admin_mode: false
       }
     ])
   end

@@ -314,6 +314,21 @@ defmodule Cadence.SpacecraftStore do
     |> Enum.map(&SpacecraftRow.to_domain/1)
   end
 
+  @doc "The SCIDs the mission's spacecraft hold, archived ones included (they keep theirs)."
+  @spec scids(binary(), binary()) :: [non_neg_integer()]
+  def scids(organization_id, mission_id)
+      when is_binary(organization_id) and is_binary(mission_id) do
+    SpacecraftRow
+    |> where(
+      [row],
+      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+        not is_nil(row.scid)
+    )
+    |> select([row], row.scid)
+    |> distinct(true)
+    |> Repo.all()
+  end
+
   @doc "Whether another spacecraft of the mission already uses `scid`."
   @spec scid_taken?(binary(), binary(), non_neg_integer()) :: boolean()
   def scid_taken?(organization_id, mission_id, scid)
@@ -405,6 +420,16 @@ defmodule Cadence.SpacecraftStore do
       {:version, version}, query -> where(query, [row], row.spacecraft_type_version == ^version)
       {:spacecraft_ids, ids}, query -> where(query, [row], row.spacecraft_id in ^ids)
     end)
+  end
+
+  @doc "Counts a mission's active spacecraft in SQL, without loading their records."
+  @spec count_mission_spacecraft(binary(), binary()) :: non_neg_integer()
+  def count_mission_spacecraft(organization_id, mission_id)
+      when is_binary(organization_id) and is_binary(mission_id) do
+    SpacecraftRow
+    |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
+    |> active()
+    |> Repo.aggregate(:count, :spacecraft_id)
   end
 
   @doc "Counts spacecraft across an organization's missions without loading their records."

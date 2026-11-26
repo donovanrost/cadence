@@ -15,7 +15,7 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
     ]
   ]
   @definitions Path.expand(
-                 "../../../../../legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml",
+                 "../../../../../dev/catalogs/demo_spacecraft.yaml",
                  __DIR__
                )
 

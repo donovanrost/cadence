@@ -52,6 +52,38 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityFirstSeenTest do
       assert state.advisory_count == 1
     end
 
+    # #161: a replay that batches the journal differently carries the same sample and packet in
+    # another evidence. It's the same observation, so an identity that has a row sees a no-op:
+    # counts, latest and canonical stay as they were (a non-canonical row, and a decided one
+    # whose latest sighting is canonical).
+    test "a re-batched replay of an identity's latest sighting changes nothing" do
+      advisory =
+        envelope(sample_id: "fs-replay-advisory", validity_state: :advisory, point_id: "HK.a")
+
+      first = envelope(sample_id: "fs-replay-first", validity_state: :advisory, point_id: "HK.b")
+      canonical = envelope(sample_id: "fs-replay-canonical", point_id: "HK.b")
+
+      for batch <- [[advisory, first], [canonical]],
+          do:
+            assert(:ok = ObservationIdentityStates.record_envelopes(batch, publish_facts?: false))
+
+      before = states([advisory, canonical])
+
+      replayed =
+        for item <- [advisory, canonical] do
+          envelope(
+            sample_id: item.sample_id,
+            point_id: item.observable_id,
+            evidence_id: "evidence-rebatched",
+            validity_state: item.validity_state
+          )
+        end
+
+      assert [%{advisory_count: 1}, %{canonical_count: 1, advisory_count: 1}] = before
+      assert :ok = ObservationIdentityStates.record_envelopes(replayed, publish_facts?: false)
+      assert states([advisory, canonical]) == before
+    end
+
     test "a batch of first sightings costs one locking read and no writes" do
       envelopes =
         for index <- 1..50, do: envelope(sample_id: "fs-batch-#{index}", point_id: "HK.p#{index}")
@@ -64,6 +96,21 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityFirstSeenTest do
 
       assert statements == 1
       assert ObservationIdentityStates.list_for_selection("mission-first-seen") == []
+    end
+  end
+
+  defp states(envelopes) do
+    for envelope <- envelopes do
+      {:ok, state} = ObservationIdentityStates.fetch(envelope.observation_identity_id)
+
+      Map.take(state, [
+        :canonical_count,
+        :advisory_count,
+        :latest_observation_id,
+        :latest_sample_id,
+        :canonical_observation_id,
+        :validity_state
+      ])
     end
   end
 

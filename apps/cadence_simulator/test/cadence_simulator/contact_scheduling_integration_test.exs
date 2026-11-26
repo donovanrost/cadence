@@ -46,7 +46,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
   alias CadenceSimulator.Provider.{FleetScenarios, Orchestrator, Router, Store}
 
   @definitions Path.expand(
-                 "../../../../legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml",
+                 "../../../../dev/catalogs/demo_spacecraft.yaml",
                  __DIR__
                )
 

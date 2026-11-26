@@ -3,7 +3,12 @@ defmodule Cadence.Telemetry.Storage.ObservationEnvelopeTest do
 
   alias Cadence.Telemetry.Sample
   alias Cadence.Telemetry.Storage.{ObservationEnvelope, WriteContext}
-  alias Cadence.Telemetry.Storage.QuestDB.{ObservationReader, ObservationRow}
+
+  alias Cadence.Telemetry.Storage.QuestDB.{
+    ObservationProvenance,
+    ObservationReader,
+    ObservationRow
+  }
 
   test "wraps a telemetry sample with tenant and data source context" do
     context = write_context()
@@ -69,6 +74,29 @@ defmodule Cadence.Telemetry.Storage.ObservationEnvelopeTest do
     assert first.idempotency_key == second.idempotency_key
     assert first.observation_id == second.observation_id
     assert first.observation_identity_id == second.observation_identity_id
+  end
+
+  # #161 (domain's design A): an observation is (identity, sample, packet, revision); the evidence
+  # that carried it is transport. A replay batched differently (same sample and packet, another
+  # evidence) is the same observation on every backend, so identity states see a no-op.
+  test "an observation's id doesn't depend on the evidence that carried it" do
+    context = write_context()
+
+    assert {:ok, first} = ObservationEnvelope.from_sample(context, sample(evidence_id: "ev-a"))
+
+    assert {:ok, rebatched} =
+             ObservationEnvelope.from_sample(context, sample(evidence_id: "ev-b"))
+
+    assert first.observation_id == rebatched.observation_id
+    assert first.idempotency_key == rebatched.idempotency_key
+
+    assert first.observation_id ==
+             ObservationEnvelope.observation_id_for(
+               first.observation_identity_id,
+               first.sample_id,
+               first.packet_id,
+               first.revision
+             )
   end
 
   test "observation identity survives alternate path and row identity changes" do
@@ -207,8 +235,14 @@ defmodule Cadence.Telemetry.Storage.ObservationEnvelopeTest do
     assert {:ok, envelope} = ObservationEnvelope.from_sample(write_context(), read_back)
     assert envelope.provenance == %{"semantic_id" => "semantic:parameter:1"}
 
-    stored = Jason.decode!(Enum.at(ObservationRow.params(envelope), provenance_index()))
-    assert stored == %{"semantic_id" => "semantic:parameter:1"}
+    # Neither the provenance columns nor the residual JSON carry the reader's "storage".
+    row = stored_row(envelope)
+    assert row["semantic_id"] == "semantic:parameter:1"
+    assert row["provenance_json"] == nil
+
+    assert ObservationProvenance.rebuild(row, &Map.get(row, &1)) == %{
+             "semantic_id" => "semantic:parameter:1"
+           }
   end
 
   test "an atom-keyed storage map is not stored either" do
@@ -356,8 +390,12 @@ defmodule Cadence.Telemetry.Storage.ObservationEnvelopeTest do
     envelope.observation_identity_id
   end
 
-  defp provenance_index,
-    do: Enum.find_index(ObservationRow.columns(), &(&1 == :provenance_json))
+  defp stored_row(envelope) do
+    ObservationRow.columns()
+    |> Enum.map(&Atom.to_string/1)
+    |> Enum.zip(ObservationRow.params(envelope))
+    |> Map.new()
+  end
 
   defp write_context(overrides \\ []) do
     {:ok, context} =

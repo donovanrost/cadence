@@ -38,7 +38,7 @@ defmodule CadenceWeb.OpsDataOperationsHandoffLiveTest do
   test "management route remains administrator scoped" do
     {conn, mission} = signed_in(:member)
 
-    assert {:error, {:redirect, %{to: "/"}}} =
+    assert {:error, {:redirect, %{to: "/console"}}} =
              live(conn, ~p"/missions/#{mission.mission_id}/ops/data-operations/manage")
   end
 

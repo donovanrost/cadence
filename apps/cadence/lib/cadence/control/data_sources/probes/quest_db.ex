@@ -4,7 +4,7 @@ defmodule Cadence.Control.DataSources.Probes.QuestDB do
   alias Cadence.DataSources.SourceProbe
 
   alias Cadence.DataSources.DataSource
-  alias Cadence.Telemetry.Storage.QuestDB.{ObservationReader, ObservationRow, RestClient}
+  alias Cadence.Telemetry.Storage.QuestDB.{RestClient, SchemaMigrator}
 
   @type policy :: %{
           required(:enabled?) => boolean(),
@@ -130,14 +130,8 @@ defmodule Cadence.Control.DataSources.Probes.QuestDB do
     "SELECT #{probe_columns() |> Enum.join(", ")} FROM telemetry_observations LIMIT 0"
   end
 
-  defp probe_columns do
-    writer_columns =
-      ObservationRow.columns()
-      |> Enum.map(&Atom.to_string/1)
-
-    (ObservationReader.select_columns() ++ writer_columns)
-    |> Enum.uniq()
-  end
+  # The one list `mix cadence.questdb.migrate --check` also compares against.
+  defp probe_columns, do: SchemaMigrator.required_columns()
 
   defp result_columns(%{"columns" => columns}) when is_list(columns) do
     columns

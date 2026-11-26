@@ -1,4 +1,3 @@
-import type { HostActionReceipt } from "@cadence/plugin-sdk";
 import { isKeyOf } from "@/api";
 
 /**
@@ -13,7 +12,7 @@ export type SaveOutcome =
   | Readonly<{ kind: "activation_requested"; text: string }>
   | Readonly<{ kind: "staged"; count: number }>;
 
-export type SaveAdapter = (actionId: string, receipt: HostActionReceipt) => SaveOutcome | null;
+export type SaveAdapter = (actionId: string) => SaveOutcome | null;
 
 /** Saves the app reports as done: definitions are versioned by the app itself (limits, derived). */
 const savesNow: SaveAdapter = (actionId) =>
@@ -23,22 +22,18 @@ const savesNow: SaveAdapter = (actionId) =>
 const adapters = {
   limits: savesNow,
   derived_telemetry: savesNow,
-  telemetry_decom: (actionId, receipt) =>
+  telemetry_decom: (actionId) =>
     actionId === "request_activation"
       ? {
           kind: "activation_requested",
           text: "Activation requested. It applies once it's approved.",
         }
-      : savesNow(actionId, receipt),
+      : savesNow(actionId),
 } satisfies Readonly<Record<string, SaveAdapter>>;
 
 /** Unknown apps say nothing rather than guess (U20); the app's own UI shows its result. */
-export function saveOutcome(
-  appKey: string,
-  actionId: string,
-  receipt: HostActionReceipt,
-): SaveOutcome | null {
-  return isKeyOf(adapters, appKey) ? adapters[appKey](actionId, receipt) : null;
+export function saveOutcome(appKey: string, actionId: string): SaveOutcome | null {
+  return isKeyOf(adapters, appKey) ? adapters[appKey](actionId) : null;
 }
 
 /**

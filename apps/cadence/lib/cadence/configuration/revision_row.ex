@@ -15,6 +15,7 @@ defmodule Cadence.Configuration.RevisionRow do
     field(:change_set_id, :string)
     field(:rolls_back_to, :integer)
     field(:applied_by, :map)
+    field(:submitted_by, :map)
     field(:applied_at, :utc_datetime_usec)
     field(:reason, :string)
     field(:approvals, {:array, :map}, default: [])

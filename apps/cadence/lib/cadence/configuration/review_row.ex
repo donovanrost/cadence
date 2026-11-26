@@ -1,5 +1,5 @@
 defmodule Cadence.Configuration.ReviewRow do
-  @moduledoc "A reviewer decision on a change set in review (append-only)."
+  @moduledoc "A decision on a change set: a reviewer's, or a direct apply's not_required (append-only)."
   use Ecto.Schema
 
   @type t :: %__MODULE__{}
@@ -13,5 +13,11 @@ defmodule Cadence.Configuration.ReviewRow do
     field(:actor, :map)
     field(:comment, :string)
     field(:decided_at, :utc_datetime_usec)
+    # #117 step 2 (DECISIONS #112): the four-eyes record's required fields.
+    field(:subject_version, :integer)
+    field(:subject_digest, :string)
+    field(:policy_document, :map)
+    field(:separated_from, {:array, :string}, default: [])
+    field(:admin_mode, :boolean)
   end
 end

@@ -16,8 +16,7 @@ Application.put_env(:cadence_simulator, :provider_store,
 )
 
 Application.put_env(:cadence_simulator, :provider_defaults,
-  definitions_path:
-    Path.expand("../legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml", __DIR__)
+  definitions_path: Path.expand("../dev/catalogs/demo_spacecraft.yaml", __DIR__)
 )
 
 # Public, loopback-only demo credentials; never use these for a deployed service.

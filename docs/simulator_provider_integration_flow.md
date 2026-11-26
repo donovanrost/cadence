@@ -22,7 +22,7 @@ export CADENCE_SIMULATOR_PORT=4101
 export CADENCE_SIMULATOR_ADMIN_API_TOKEN=local-simulator-admin-token
 export CADENCE_SIMULATOR_PROVIDER_API_TOKEN=local-simulator-provider-token
 export CADENCE_SIMULATOR_STORE_PATH="$PWD/var/cadence_simulator_provider.dets"
-export CADENCE_SIMULATOR_DEFINITIONS_PATH="$PWD/legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml"
+export CADENCE_SIMULATOR_DEFINITIONS_PATH="$PWD/dev/catalogs/demo_spacecraft.yaml"
 
 cd apps/cadence_simulator
 mix run --no-halt
@@ -197,7 +197,7 @@ export CADENCE_SIMULATOR_PORT=4101
 export CADENCE_SIMULATOR_ADMIN_API_TOKEN=local-simulator-admin-token
 export CADENCE_SIMULATOR_PROVIDER_API_TOKEN=local-simulator-provider-token
 export CADENCE_SIMULATOR_STORE_PATH="$PWD/var/cadence_simulator_provider.dets"
-export CADENCE_SIMULATOR_DEFINITIONS_PATH="$PWD/legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml"
+export CADENCE_SIMULATOR_DEFINITIONS_PATH="$PWD/dev/catalogs/demo_spacecraft.yaml"
 
 cd apps/cadence_simulator
 mix run --no-halt
