@@ -149,6 +149,23 @@ defmodule Cadence.Governance.Accountability do
     Enum.map(ids, &{:user, &1}) ++ Enum.map(services, &{:service, &1})
   end
 
+  @doc """
+  The ids of `actors` (a service by its own id), sorted and unique: what a four-eyes record's
+  `separated_from` stores for the authors a separation check was given (#117).
+  """
+  @spec ids([term()]) :: [binary()]
+  def ids(actors) do
+    actors
+    |> Enum.flat_map(fn actor ->
+      case normalize(actor) do
+        {_kind, id} -> [id]
+        :none -> []
+      end
+    end)
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
   @doc "Whether any of `actors` is a service identity (its people come from its record)."
   @spec any_service?([actor()]) :: boolean()
   def any_service?(actors), do: Enum.any?(actors, &match?({:service, _}, normalize(&1)))

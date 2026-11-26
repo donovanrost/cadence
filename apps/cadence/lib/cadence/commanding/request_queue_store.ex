@@ -6,6 +6,8 @@ defmodule Cadence.Commanding.RequestQueueStore do
   import Ecto.Query
 
   alias Cadence.Commanding.{
+    CommandApproval,
+    CommandApprovalRow,
     CommandQueueEntry,
     CommandQueueEntryRow,
     CommandRequest,
@@ -15,6 +17,7 @@ defmodule Cadence.Commanding.RequestQueueStore do
     QueueLaneSequence
   }
 
+  alias Cadence.Management.Commanding.RequestReview
   alias Cadence.Platform.ScopedReadUpdates, as: ReadUpdates
   alias Cadence.Repo
 
@@ -40,6 +43,7 @@ defmodule Cadence.Commanding.RequestQueueStore do
            {:ok, sequence} <- QueueLaneSequence.next(request_row),
            :ok <- LifecyclePolicy.ensure_request_not_expired(request_row),
            :ok <- validate_request(request_row, opts),
+           :ok <- record_not_required(request_row, enqueued_by, opts),
            {:ok, queue_row} <- insert_queue_entry(request_row, sequence, enqueued_by, opts),
            {:ok, updated_request_row} <-
              Repo.update(CommandRequestRow.lifecycle_changeset(request_row, :queued)) do
@@ -70,6 +74,33 @@ defmodule Cadence.Commanding.RequestQueueStore do
       %CommandRequestRow{} -> {:ok, row}
     end
   end
+
+  # #117 step 4b: a request released without a second GO (its policy needs none: it's
+  # `validated`, never `approved`) gets its own not_required record, in this release's transaction.
+  # The actor is whoever released it (a person acted); separated_from is empty (no check ran);
+  # admin_mode has no default (#112), so a releaser that omits it raises. An approved request
+  # already has its decision row.
+  defp record_not_required(%CommandRequestRow{lifecycle_state: "validated"} = row, by, opts) do
+    approval =
+      CommandApproval.new(%{
+        organization_id: row.organization_id,
+        mission_id: row.mission_id,
+        command_request_id: row.command_request_id,
+        decision: :not_required,
+        decided_by: by,
+        decided_at: DateTime.utc_now(),
+        subject_digest: RequestReview.review_token(CommandRequestRow.to_domain(row)),
+        separated_from: [],
+        admin_mode: Keyword.fetch!(opts, :admin_mode)
+      })
+
+    case Repo.insert(CommandApprovalRow.changeset(approval)) do
+      {:ok, _row} -> :ok
+      {:error, changeset} -> {:error, changeset}
+    end
+  end
+
+  defp record_not_required(_row, _by, _opts), do: :ok
 
   defp validate_request(row, opts) do
     case Keyword.get(opts, :before_enqueue) do

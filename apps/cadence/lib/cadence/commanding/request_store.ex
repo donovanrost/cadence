@@ -138,7 +138,13 @@ defmodule Cadence.Commanding.RequestStore do
                decided_by: decided_by,
                decided_at: Keyword.get(opts, :decided_at, DateTime.utc_now()),
                reason: Keyword.get(opts, :reason),
-               metadata: Keyword.get(opts, :metadata, %{})
+               metadata: Keyword.get(opts, :metadata, %{}),
+               # #117 step 4b: the record. admin_mode has no default (#112, ca-security): every
+               # caller passes it, so a missing one raises rather than claiming false.
+               subject_digest:
+                 ReviewPrecondition.digest(CommandRequestRow.to_domain(request_row)),
+               separated_from: LifecyclePolicy.separated_from(request_row),
+               admin_mode: Keyword.fetch!(opts, :admin_mode)
              }),
            {:ok, approval_row} <- Repo.insert(CommandApprovalRow.changeset(approval)),
            {:ok, updated_request_row} <-
@@ -195,6 +201,9 @@ defmodule Cadence.Commanding.RequestStore do
            command_approval_id: command_approval_id
          ) do
       nil -> {:error, :command_approval_not_found}
+      # #117 step 4b (api-ops on #639): a release's not_required record isn't an approval a
+      # read shows; it's the four-eyes record's (ApprovalDecisions), and the audit's with #239.
+      %CommandApprovalRow{decision: "not_required"} -> {:error, :command_approval_not_found}
       %CommandApprovalRow{} = row -> {:ok, CommandApprovalRow.to_domain(row)}
     end
   end
@@ -205,7 +214,8 @@ defmodule Cadence.Commanding.RequestStore do
     CommandApprovalRow
     |> where(
       [row],
-      row.organization_id == ^organization_id and row.mission_id == ^mission_id
+      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+        row.decision != "not_required"
     )
     |> maybe_filter_equals(:command_request_id, Keyword.get(opts, :command_request_id))
     |> maybe_filter_equals(:decision, normalized_filter(opts, :decision))
