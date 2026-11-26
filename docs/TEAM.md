@@ -67,6 +67,8 @@ hc send <handle> "claude --model <model> --effort <level> --permission-mode auto
 # main repo's .git (~/projects/cadence/cadence/.git on both laptops); a worktree's HEAD,
 # refs, config and objects live there. Verified in the sandbox: gh, mix deps.get, git commit/push/branch -D, docker,
 # a targeted mix test against local Postgres.
+# Its sandbox lets it push anywhere the account can: its brief must say "push only <handle>/* branches;
+# never push develop or main" (until #206 protects them).
 # hc send <handle> "codex -s workspace-write -a never -c model_reasoning_effort=high \
 #   -c sandbox_workspace_write.network_access=true \
 #   -c 'sandbox_workspace_write.writable_roots=[\"<git>\",\"<git>/worktrees/<handle>\",\"$HOME/.hex\",\"$HOME/.mix\",\"$HOME/.cache\",\"$HOME/Library/pnpm\"]'"
