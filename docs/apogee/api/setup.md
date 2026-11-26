@@ -343,6 +343,8 @@ by its catalog revision ("catalog rev 4"); the model revision id is Technical de
   status} | null` for the row tag (NEEDS APPROVAL / APPROVED / REJECTED).
   - `composition_id` (D2, #543): the id of the composition behind the row's model revision, or
     null.
+  - `current_revision.composition_id` (#748, for #752): the same for the current revision, so a
+    client can pin it (D3) without listing the revisions.
 - Preview HOLD `mission_model_not_approved` (blocking; compatibility check): `details
   {catalog_revision_id, catalog_revision_number, catalog_database_id, mission_model_revision_id}`.
 - Apply refusals: `409 mission_model_revision_not_approved {mission_model_revision_ids,

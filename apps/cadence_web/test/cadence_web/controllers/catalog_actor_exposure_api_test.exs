@@ -5,7 +5,8 @@ defmodule CadenceWeb.CatalogActorExposureAPITest do
   active membership in the mission's organization; a service only when it belongs to it. Nobody's
   email or user id goes out in the stored actor document.
 
-  - REST `catalog_artifacts[].uploaded_by` and `catalog_import_runs[].requested_by`: `{kind, name}`.
+  - The catalog artifact read's `uploaded_by` and the import run read's `requested_by` (`/api/v1`;
+    the REST lists went with #748): `{kind, name}`.
   - The model approval read's `imported_by`: `{id, name}`. A member with no display name keeps
     their id with a null name; anyone outside the organization reads both null.
   """
@@ -66,9 +67,12 @@ defmodule CadenceWeb.CatalogActorExposureAPITest do
     foreign_service: %{"kind" => "service", "name" => nil, "run_by" => nil}
   }
 
-  test "REST artifacts and import runs name only members and own services; no email or id", c do
-    by_artifact =
-      for {key, actor} <- c.actors, into: %{} do
+  test "the artifact and import run reads name only members and own services; no email or id",
+       c do
+    base = "/api/v1/missions/#{c.mission_id}/catalog"
+
+    shown =
+      for {key, actor} <- c.actors do
         artifact =
           TestFixtures.persist_catalog_artifact!(c.mission,
             artifact_name: "#{key}.yaml",
@@ -76,26 +80,14 @@ defmodule CadenceWeb.CatalogActorExposureAPITest do
           )
 
         run = TestFixtures.persist_catalog_import_run!(artifact, requested_by: actor)
-        {artifact.artifact_id, {key, run.import_run_id}}
+        shown_artifact = get_data(c, base <> "/artifacts/#{artifact.artifact_id}")["artifact"]
+        assert shown_artifact["uploaded_by"] == @expected[key], "#{key}"
+        shown_run = get_data(c, base <> "/imports/#{run.import_run_id}")
+        assert shown_run["requested_by"] == @expected[key], "#{key}"
+        [shown_artifact, shown_run]
       end
 
-    base = "/api/organizations/#{c.organization_id}/missions/#{c.mission_id}"
-    artifacts = get_data(c, base <> "/catalog_artifacts")
-    runs = get_data(c, base <> "/catalog_import_runs")
-
-    for {artifact_id, {key, run_id}} <- by_artifact do
-      listed = Enum.find(artifacts, &(&1["artifact_id"] == artifact_id))
-      assert listed["uploaded_by"] == @expected[key], "#{key}"
-      shown = get_data(c, base <> "/catalog_artifacts/#{artifact_id}")
-      assert shown["uploaded_by"] == @expected[key], "#{key}"
-
-      run = Enum.find(runs, &(&1["import_run_id"] == run_id))
-      assert run["requested_by"] == @expected[key], "#{key}"
-      shown_run = get_data(c, base <> "/catalog_import_runs/#{run_id}")
-      assert shown_run["requested_by"] == @expected[key], "#{key}"
-    end
-
-    encoded = Jason.encode!([artifacts, runs])
+    encoded = Jason.encode!(shown)
     for email <- c.emails, do: refute(encoded =~ email)
     for id <- c.hidden_ids, do: refute(encoded =~ id)
     refute encoded =~ "Stored name"
@@ -134,8 +126,8 @@ defmodule CadenceWeb.CatalogActorExposureAPITest do
 
   defp get_data(c, path),
     do:
-      c.conn
-      |> authorize(c.api_token)
+      c.member
+      |> TestFixtures.member_conn()
       |> get(path)
       |> json_response(200)
       |> Map.fetch!("data")

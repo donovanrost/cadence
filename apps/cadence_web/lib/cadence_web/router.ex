@@ -937,16 +937,6 @@ defmodule CadenceWeb.Router do
       # services never manage service identities. People issue them in the console.
 
       scope "/missions/:mission_id" do
-        get("/catalog/importers", CatalogImporterController, :index)
-        get("/catalog_artifacts", CatalogArtifactController, :index)
-        post("/catalog_artifacts", CatalogArtifactController, :create)
-        get("/catalog_artifacts/:artifact_id", CatalogArtifactController, :show)
-        get("/catalog_import_runs", CatalogImportRunController, :index)
-        post("/catalog_import_runs", CatalogImportRunController, :create)
-        get("/catalog_import_runs/:import_run_id", CatalogImportRunController, :show)
-        get("/spacecraft", SpacecraftController, :index)
-        get("/spacecraft/:spacecraft_id", SpacecraftController, :show)
-
         get("/command_stages", CommandStageController, :index)
         post("/command_stages", CommandStageController, :create)
         get("/command_stages/:command_stage_id", CommandStageController, :show)
@@ -997,29 +987,6 @@ defmodule CadenceWeb.Router do
           "/command_verifier_instances/:command_verifier_instance_id",
           CommandVerifierInstanceController,
           :show
-        )
-
-        get("/packet_definitions", PacketDefinitionController, :index)
-        post("/packet_definitions", PacketDefinitionController, :create)
-
-        post("/binding_sets", BindingSetController, :create)
-        get("/binding_sets/:binding_set_id/versions/:version", BindingSetController, :show)
-
-        post("/activations", ActivationController, :create)
-        get("/activations/active", ActivationController, :show)
-        get("/activation_requests", ActivationController, :index)
-        get("/activation_requests/:activation_request_id", ActivationController, :show_request)
-
-        post(
-          "/activation_requests/:activation_request_id/approve",
-          ActivationController,
-          :approve
-        )
-
-        post(
-          "/activation_requests/:activation_request_id/reject",
-          ActivationController,
-          :reject
         )
       end
     end

@@ -124,14 +124,12 @@ defmodule Cadence.Reads.CatalogOverview do
       |> named_actors(organization_id)
 
     revision_by_run = Map.new(revisions, &{&1.import_run_id, &1})
+    revisions = with_model_status(revisions, organization_id, mission_id)
 
     %{
       id: id,
       current_revision: current(organization_id, mission_id, List.first(revisions)),
-      revisions:
-        revisions
-        |> with_model_status(organization_id, mission_id)
-        |> Enum.map(&Map.drop(&1, [:import_run_id, :model_revision_id])),
+      revisions: Enum.map(revisions, &Map.drop(&1, [:import_run_id, :model_revision_id])),
       import_runs: run_rows(organization_id, Enum.take(runs, @run_limit), revision_by_run, labels)
     }
   end
@@ -201,7 +199,9 @@ defmodule Cadence.Reads.CatalogOverview do
         :declaration_count,
         :command_count,
         :telemetry_count,
-        :spacecraft_count
+        :spacecraft_count,
+        # #752: what a profile pins for this revision (D3), without listing every revision.
+        :composition_id
       ])
 
   # #146 (U103): each row's requested_by, from two batched name queries per table.
