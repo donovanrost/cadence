@@ -68,7 +68,7 @@ const cleared = useClearedEpisodes(
   computed(
     () =>
       tab.value === "cleared" ||
-      (active.state.value.status === "ready" && active.state.value.value.summary.active === 0),
+      (active.state.value.status === "ready" && active.state.value.value.meta.summary.active === 0),
   ),
 );
 const shown = computed(() => (tab.value === "cleared" ? cleared.state.value : active.state.value));
@@ -90,8 +90,8 @@ const limitsOff = computed(
 const counts = computed(() =>
   active.state.value.status === "ready"
     ? tabCounts(
-        active.state.value.value.episodes,
-        cleared.state.value.status === "ready" ? cleared.state.value.value.episodes : null,
+        active.state.value.value.items,
+        cleared.state.value.status === "ready" ? cleared.state.value.value.items : null,
         now.value,
       )
     : null,
@@ -99,10 +99,10 @@ const counts = computed(() =>
 const headline = computed(() => {
   const s = active.state.value;
   if (s.status !== "ready") return "Alarms";
-  if (s.value.summary.active === 0)
+  if (s.value.meta.summary.active === 0)
     return limitsOff.value ? "Ground limits off" : "No active alarms";
-  const fresh = s.value.episodes.filter((e) => e.status === "new").length;
-  return `${plural(s.value.summary.active, "alarm")} active · ${fresh} new`;
+  const fresh = s.value.items.filter((e) => e.status === "new").length;
+  return `${plural(s.value.meta.summary.active, "alarm")} active · ${fresh} new`;
 });
 const tabs = computed(() =>
   ALARM_TABS.map((key) => {
@@ -142,7 +142,7 @@ const fleetNames = computed<FleetNames>(() => {
   return s.status === "failed" ? { state: "failed" } : { state: "loading" };
 });
 const scids = computed(() =>
-  shown.value.status === "ready" ? scidsOf(shown.value.value.episodes) : new Map<string, number>(),
+  shown.value.status === "ready" ? scidsOf(shown.value.value.items) : new Map<string, number>(),
 );
 const nameOf = (id: string) => craftInSentence(id, scids.value.get(id) ?? null, fleetNames.value);
 /** U86 (ux on #652): names that couldn't be read say so once, with Retry; polite until retried. */
@@ -157,7 +157,7 @@ const scOptions = (episodes: Episodes) =>
     fleetNames.value,
   );
 const options = computed(() =>
-  shown.value.status === "ready" ? scOptions(shown.value.value.episodes) : [],
+  shown.value.status === "ready" ? scOptions(shown.value.value.items) : [],
 );
 const shownOf = (episodes: Episodes, more: boolean) =>
   shownLine(
@@ -177,13 +177,13 @@ async function loadMore() {
 /** ux U69 A6: the header's newest change, mission-wide (filters don't change it). */
 const lastChange = computed(() =>
   active.state.value.status === "ready"
-    ? lastChangeLine(active.state.value.value.summary.latest_change, nameOf, now.value)
+    ? lastChangeLine(active.state.value.value.meta.summary.latest_change, nameOf, now.value)
     : null,
 );
 /** ux U71 A12: the sentence links to its episode in Investigate (needs the spacecraft's SCID). */
 const lastChangeTo = computed<RouteLocationRaw | null>(() => {
   const s = active.state.value;
-  const c = s.status === "ready" ? s.value.summary.latest_change : null;
+  const c = s.status === "ready" ? s.value.meta.summary.latest_change : null;
   const sc = c?.spacecraft_id ? fleetRows.value.find((x) => x.id === c.spacecraft_id) : null;
   return c && sc
     ? {
@@ -196,7 +196,7 @@ const lastChangeTo = computed<RouteLocationRaw | null>(() => {
 /** OpsLists §Alarms empty: "No active alarms. Last cleared 01:12Z on EARENDIL-047." */
 const lastCleared = computed(() =>
   cleared.state.value.status === "ready"
-    ? lastClearedLine(cleared.state.value.value.episodes, now.value)
+    ? lastClearedLine(cleared.state.value.value.items, now.value)
     : null,
 );
 const empty = computed(() =>
@@ -271,14 +271,17 @@ const empty = computed(() =>
           <template #default="{ value }">
             <ApCallout
               v-if="
-                tab === 'new' && point === null && !filtered(filters) && value.summary.active === 0
+                tab === 'new' &&
+                point === null &&
+                !filtered(filters) &&
+                value.meta.summary.active === 0
               "
               tone="nominal"
             >
               No active alarms.{{ lastCleared ? ` ${lastCleared}` : "" }}
             </ApCallout>
             <!-- ux on #652: the headline names a craft, so it waits while the fleet read loads. -->
-            <template v-else-if="rowsOf(value.episodes).length === 0 && filtered(filters)">
+            <template v-else-if="rowsOf(value.items).length === 0 && filtered(filters)">
               <ApEmptyState
                 v-if="filteredEmpty(filters, nameOf) !== null"
                 :headline="filteredEmpty(filters, nameOf) ?? ''"
@@ -286,24 +289,24 @@ const empty = computed(() =>
                 <ApButton size="compact" @click="clearFilters">Clear filters</ApButton>
               </ApEmptyState>
             </template>
-            <ApEmptyState v-else-if="rowsOf(value.episodes).length === 0" :headline="empty" />
+            <ApEmptyState v-else-if="rowsOf(value.items).length === 0" :headline="empty" />
             <template v-else>
               <p
                 v-if="filtered(filters)"
                 class="m-0 border-b border-hairline px-4 py-2 font-mono text-xs text-text-3 uppercase"
               >
-                {{ shownOf(value.episodes, value.next !== null) }}
+                {{ shownOf(value.items, value.next !== null) }}
               </p>
               <div ref="list">
-                <AlarmTable class="max-md:hidden" :rows="rowsOf(value.episodes)" @toggle="toggle" />
+                <AlarmTable class="max-md:hidden" :rows="rowsOf(value.items)" @toggle="toggle" />
               </div>
-              <AlarmRowList class="md:hidden" :rows="rowsOf(value.episodes)" @toggle="toggle" />
+              <AlarmRowList class="md:hidden" :rows="rowsOf(value.items)" @toggle="toggle" />
               <!-- ux U72: Load more only while there's a next page (A6d cursor). -->
               <div v-if="value.next" class="border-t border-hairline px-4 py-2">
                 <ApButton
                   size="compact"
                   variant="secondary"
-                  :disabled="(tab === 'cleared' ? cleared : active).busy.value"
+                  :disabled="(tab === 'cleared' ? cleared : active).moreBusy.value"
                   disabled-reason="Loading…"
                   @click="loadMore"
                   >Load more</ApButton
@@ -315,7 +318,7 @@ const empty = computed(() =>
       </ApPanel>
       <ByPointPanel
         v-if="active.state.value.status === 'ready'"
-        :points="byPoint(active.state.value.value.episodes)"
+        :points="byPoint(active.state.value.value.items)"
         :selected="point"
         @select="selectPoint"
       />
