@@ -166,8 +166,10 @@ defmodule Cadence.Dev.ReflectOrbital.Fixture do
         "latitude_deg" => latitude,
         "longitude_deg" => longitude,
         "antenna_count" => antennas,
-        "ingress_port" => 42_100 + index,
-        "uplink_port" => 42_200 + index,
+        "ingress_port" =>
+          String.to_integer(System.get_env("EARENDIL_INGRESS_BASE_PORT", "42100")) + index,
+        "uplink_port" =>
+          String.to_integer(System.get_env("EARENDIL_UPLINK_BASE_PORT", "42200")) + index,
         "synthetic" => true
       }
     end)

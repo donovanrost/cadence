@@ -20,70 +20,14 @@ The intended process model is:
 The simulator is never run inside the Cadence server process. The profiler is a
 short-lived Cadence developer task.
 
-## 1. Prepare the environment administrator
+## 1. Start the worktree stack
 
-For local development, it is convenient to keep the administrator credentials in
-`mise.toml` or your shell profile.
+Follow [Per-worktree development environment](../dev-environment.md) and run `dev/stack up`.
+It creates this worktree's credentials, database, QuestDB, simulator, Phoenix server, and console.
+The stack starts Phoenix as a named node with the slot's private cookie, so profiler tasks can
+attach to it.
 
-Required:
-
-```toml
-[env]
-CADENCE_ADMIN_EMAIL = "admin@example.com"
-CADENCE_ADMIN_PASSWORD = "change-me"
-```
-
-Optional:
-
-```toml
-CADENCE_ADMIN_DISPLAY_NAME = "Cadence Administrator"
-CADENCE_ADMIN_MODE_TTL_SECONDS = "3600"
-```
-
-This makes the reserved environment administrator available through the normal
-sign-in page and enters admin mode immediately. Removing both required variables
-removes that access the next time Cadence starts.
-
-## 2. Prepare the database
-
-If you are starting from a fresh local database, run migrations first:
-
-```bash
-cd apps/cadence_web
-mix ecto.migrate
-```
-
-If you also need seed/setup work in your local environment, do that before
-starting the server.
-
-## 3. Start Cadence as a named node
-
-For local profiling tasks, start Cadence with a distributed node name:
-
-```bash
-cd apps/cadence_web
-iex --sname cadence -S mix phx.server
-```
-
-Using `--sname cadence` lets the profiler tasks attach to the live node.
-
-## 4. Start the simulator independently
-
-From a second shell, start the external provider simulator:
-
-```bash
-cd apps/cadence_simulator
-export CADENCE_SIMULATOR_HTTP_ENABLED=true
-export CADENCE_SIMULATOR_PORT=4101
-export CADENCE_SIMULATOR_ADMIN_API_TOKEN=local-simulator-admin-token
-export CADENCE_SIMULATOR_PROVIDER_API_TOKEN=local-simulator-provider-token
-mix run --no-halt
-```
-
-The simulator has its own configuration and supervision tree. Starting it does
-not create a mission, contact, or runtime inside Cadence.
-
-## 5. Configure the mission
+## 2. Configure the mission
 
 In Cadence, create an ordinary provider profile under **Comms → Providers** and
 enable its external scheduling integration. Point it at the simulator URL and
@@ -92,40 +36,40 @@ token, then configure the normal telemetry listener and mission paths.
 Follow [Simulator Provider Integration Flow](../simulator_provider_integration_flow.md)
 for the complete setup.
 
-## 6. Inspect the live ingress path
+## 3. Inspect the live ingress path
 
 To sample the live profiler while the simulator is running:
 
 ```bash
-mix cadence.profile demo_spacecraft
+mise exec -- mix cadence.profile demo_spacecraft
 ```
 
 To reset the profiler first:
 
 ```bash
-mix cadence.profile demo_spacecraft --reset
+mise exec -- mix cadence.profile demo_spacecraft --reset
 ```
 
 To print one cumulative snapshot:
 
 ```bash
-mix cadence.profile demo_spacecraft --snapshot
+mise exec -- mix cadence.profile demo_spacecraft --snapshot
 ```
 
-## 7. Run a stepped rate sweep
+## 4. Run a stepped rate sweep
 
 Create or update simulator scenarios and runs through its provider API, then
 sample Cadence after each selected rate:
 
 ```bash
-mix cadence.profile demo_spacecraft --reset
-mix cadence.profile demo_spacecraft --snapshot
+mise exec -- mix cadence.profile demo_spacecraft --reset
+mise exec -- mix cadence.profile demo_spacecraft --snapshot
 ```
 
 Keep contact scheduling and scenario control separate: Cadence reserves the
 provider contact, while the simulator owns scenario/run administration.
 
-## 8. Exercise the external provider boundary
+## 5. Exercise the external provider boundary
 
 To run the simulator independently and configure it through the same mission
 provider surface used by a commercial ground-station provider, use:
@@ -134,7 +78,7 @@ provider surface used by a commercial ground-station provider, use:
 
 The simulator does not create or administer Cadence mission resources.
 
-## 9. Run commit checks
+## 6. Run commit checks
 
 Run focused tests from the project that owns them. Test paths are relative to
 that project:

@@ -14,8 +14,12 @@ case CadenceSimulator.Load.Shape.validate(craft, shape, per_site) do
 end
 
 {:ok, hostname} = :inet.gethostname()
-# EARENDIL_CADENCE_NODE targets another worktree's server (its iex --sname); default `cadence`.
-peer = :"#{System.get_env("EARENDIL_CADENCE_NODE", "cadence")}@#{hostname}"
+# EARENDIL_CADENCE_NODE targets another worktree's server.
+peer_name =
+  System.get_env("EARENDIL_CADENCE_NODE") || "cadence_#{System.fetch_env!("CADENCE_DEV_SLOT")}"
+
+peer = :"#{peer_name}@#{hostname}"
+
 unless Node.connect(peer), do: raise("Start mise run cadence before the live demo")
 
 # Per-packet SQL debug output overwhelms an interactive development terminal.

@@ -34,7 +34,7 @@
 #   mise exec -- mix run --no-start ../../dev/apogee_qa_mission.exs [--offline]
 #
 # --offline skips the provider's validate and sync (they call the simulator over HTTP), for a dry
-# run where the simulator isn't up. See docs/apogee/qa/runbook.md.
+# run where the simulator isn't up. See docs/dev-environment.md.
 Code.require_file("reflect_orbital/fixture.exs", __DIR__)
 Code.require_file("apogee_qa_mission/provider.exs", __DIR__)
 

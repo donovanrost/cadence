@@ -40,7 +40,7 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
       do: raise("The Earendil fixture requires development mode or the isolated chaos lab")
 
     Logger.configure(level: :warning)
-    System.put_env(@token_key, "earendil-local-provider")
+    provider_token!()
     {:ok, _apps} = Application.ensure_all_started(:cadence)
     email = System.get_env("EARENDIL_DEMO_EMAIL", "admin@example.com")
     {:ok, user} = Cadence.Accounts.fetch_user_by_email(email)
@@ -59,6 +59,7 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
     approved = scope.user |> Approver.scope() |> Approver.approve_candidates()
     Planning.prepare(scope)
     verify!()
+    server_url = "http://127.0.0.1:#{System.get_env("PORT", "4001")}"
 
     n = F.fleet_size()
     antennas = F.sites() |> Enum.map(& &1["antenna_count"]) |> Enum.sum()
@@ -73,7 +74,7 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
     Fleet rows (spacecraft, switches, sources, routes) written in #{fleet_ms} ms.
     Configuration activation remains an explicit review step in Cadence.
     Simulator environment: #{F.run_id()}
-    Console: http://127.0.0.1:#{System.get_env("PORT", "4001")}/console (organization Reflect Orbital, mission Earendil)
+    Console: #{server_url}/console (organization Reflect Orbital, mission Earendil)
     All spacecraft, orbits, sites, and telemetry definitions are synthetic.
     """)
   end
@@ -541,13 +542,20 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
     record
   end
 
+  defp provider_token! do
+    case System.get_env(@token_key) do
+      value when is_binary(value) and value != "" -> value
+      _ -> raise "#{@token_key} is required; run dev/stack env and use mise exec"
+    end
+  end
+
   defp request!(method, path, namespace, body \\ nil) do
     {:ok, data} = request(method, path, namespace, body)
     data
   end
 
   defp request(method, path, namespace, body \\ nil) do
-    token = if namespace == :admin, do: "earendil-local-admin", else: "earendil-local-provider"
+    token = if namespace == :admin, do: "earendil-local-admin", else: provider_token!()
     headers = [{"authorization", "Bearer #{token}"}, {"x-simulator-environment-ref", F.run_id()}]
 
     opts = [

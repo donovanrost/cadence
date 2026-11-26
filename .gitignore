@@ -47,3 +47,6 @@ npm-debug.log
 
 # TypeScript incremental compiler metadata
 *.tsbuildinfo
+
+# Per-worktree ports and secrets; never commit.
+/mise.local.toml
