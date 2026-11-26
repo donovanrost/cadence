@@ -28,6 +28,11 @@ planning, QA mission. They build the complete local demo until the REST path rea
 The simulator starts before those seeds, and Phoenix starts before its environment admin and
 seeds. `reset` deletes only this slot's dev data.
 
+After the #718 migration baseline lands, run `dev/stack reset` once in each existing worktree.
+The old migration ledger and schema cannot be upgraded in place; the baseline reports that reset
+instruction before applying any DDL. Recreate your own test partition after dropping its old
+database as well.
+
 For the REST harness, use `dev/stack reset --no-seed` then `dev/stack seed-rest`. This starts the
 simulator, Phoenix, and console before the standalone REST client. The environment admin in
 `mise.local.toml` is the only bootstrap credential; the client signs in through the console and

@@ -70,6 +70,20 @@ describe("usePagedQuery (#176)", () => {
     t.scope.stop();
   });
 
+  it("Load more keeps the first page's receivedAt: older pages don't make the newest rows fresher", async () => {
+    const t = start();
+    t.calls[0]?.resolve(page(rows("a"), "c2"));
+    await flush();
+    const before = t.query.state.value;
+    if (before.status !== "ready") throw new Error("not ready");
+    const more = t.query.more();
+    t.calls[1]?.resolve(page(rows("b"), null));
+    await more;
+    const after = t.query.state.value;
+    expect(after.status === "ready" && after.receivedAt).toBe(before.receivedAt);
+    t.scope.stop();
+  });
+
   it("shows a row that moved between pages once, at its first place with its newest value", async () => {
     const t = start();
     t.calls[0]?.resolve(page(rows("a", "b"), "c2"));
@@ -208,6 +222,22 @@ describe("usePagedQuery (#176)", () => {
     await flush();
     expect(items(t.query)).toEqual(["a"]);
     t.scope.stop();
+  });
+
+  it("works for a read whose pages carry no meta (undefined)", async () => {
+    const calls: ((value: ApiResult<Page<Row, undefined>>) => void)[] = [];
+    const scope = effectScope();
+    const query = scope.run(() =>
+      usePagedQuery(
+        ref("k"),
+        () => new Promise<ApiResult<Page<Row, undefined>>>((resolve) => calls.push(resolve)),
+        (r) => r.id,
+      ),
+    );
+    calls[0]?.({ ok: true, value: { items: rows("a"), next: null, meta: undefined } });
+    await flush();
+    expect(query?.state.value).toMatchObject({ status: "ready", value: { items: rows("a") } });
+    scope.stop();
   });
 
   it("a null key pauses: nothing is fetched and refetch does nothing", async () => {

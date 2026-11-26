@@ -1,6 +1,6 @@
 import type { RouteLocationRaw } from "vue-router";
 import type { Scid } from "@/api/index.ts";
-import type { OpState } from "@/ui";
+import { formatHourMinute, type OpState } from "@/ui";
 import type { Density, EventKind, EventSeverity, MissionEvent } from "./api.ts";
 
 /** Timeline (OpsLists §Timeline): pure helpers. */
@@ -339,3 +339,10 @@ export function brushRange(
   const t = (f: number) => Math.round(window.from + Math.min(1, Math.max(0, f)) * span);
   return { from: t(Math.min(a, b)), to: t(Math.max(a, b)) };
 }
+
+/**
+ * A failed live refresh keeps the log but says how old it is (U72): nothing else on the Timeline
+ * refreshes it, so a log that stopped moving must not look current. Null while refreshes succeed.
+ */
+export const staleLine = (refreshFailed: boolean, receivedAt: Date): string | null =>
+  refreshFailed ? `Couldn't refresh. Showing events as of ${formatHourMinute(receivedAt)}.` : null;

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from "vue";
 import { useRoute, useRouter, type LocationQuery } from "vue-router";
-import { useRemoteQuery } from "@/api/index.ts";
+import { describeApiError, useRemoteQuery } from "@/api/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
 import { ApButton, ApEmptyState, ApPageHeader, ApPanel, ApRemote, ApTabLinks } from "@/ui";
 import { useFleet } from "@/features/fleet/index.ts";
@@ -35,7 +35,7 @@ const filters = computed(() => filtersOf(route.query));
 const isFiltered = computed(() => filtered(filters.value));
 const groups = useGroupPages(missionId, filters);
 const rows = computed(() =>
-  groups.state.value.status === "ready" ? groups.state.value.value.rows : [],
+  groups.state.value.status === "ready" ? groups.state.value.value.items : [],
 );
 const go = (query: LocationQuery) =>
   router.replace({ query }).catch((e: unknown) => console.error("Navigation failed", e));
@@ -60,7 +60,9 @@ const resultSaid = computed(() => {
 /** ux U72: after Load more, focus goes to the first new row's link. */
 const list = ref<HTMLElement | null>(null);
 async function loadMore() {
-  const id = await groups.more();
+  const known = new Set(rows.value.map((r) => r.id));
+  await groups.more();
+  const id = rows.value.find((r) => !known.has(r.id))?.id;
   if (!id) return;
   await nextTick();
   list.value?.querySelector<HTMLElement>(`a[href*="${CSS.escape(id)}"]`)?.focus();
@@ -155,17 +157,21 @@ const EMPTY: Readonly<Record<CommandTab, string>> = {
           >Resume</ApButton
         >
       </div>
-      <ApRemote :state="groups.state.value" loading-label="LOADING REQUESTS…" @retry="groups.retry">
+      <ApRemote
+        :state="groups.state.value"
+        loading-label="LOADING REQUESTS…"
+        @retry="groups.refetch"
+      >
         <template #default="{ value }">
           <ApEmptyState
-            v-if="isFiltered && value.rows.length === 0"
+            v-if="isFiltered && value.items.length === 0"
             :headline="emptyLine(filters, nameOfSc)"
           >
             <ApButton size="compact" @click="clearFilters">Clear filters</ApButton>
           </ApEmptyState>
-          <ApEmptyState v-else-if="shownRows(value.rows).length === 0" :headline="EMPTY[tab]" />
+          <ApEmptyState v-else-if="shownRows(value.items).length === 0" :headline="EMPTY[tab]" />
           <div v-else ref="list">
-            <CommandTable :rows="shownRows(value.rows)" :name-of="nameOf" :stations="stations" />
+            <CommandTable :rows="shownRows(value.items)" :name-of="nameOf" :stations="stations" />
           </div>
           <!-- ux U72: only while there's a next page; it disappears at the end. -->
           <div v-if="value.next" class="flex flex-col gap-1 border-t border-hairline px-4 py-2">
@@ -173,14 +179,18 @@ const EMPTY: Readonly<Record<CommandTab, string>> = {
               size="compact"
               variant="secondary"
               class="self-start"
-              :disabled="groups.busy.value"
+              :disabled="groups.moreBusy.value"
               disabled-reason="Loading…"
               @click="loadMore"
               >Load more</ApButton
             >
-            <!-- a11y B6 (#243): a failed Load more is an alert. -->
-            <p v-if="groups.moreError.value" role="alert" class="m-0 text-sm text-caution-text">
-              {{ groups.moreError.value }}
+            <!-- a11y B6 (#243): a failed Load more is an alert, always mounted so it's announced. -->
+            <p role="alert" class="m-0 text-sm text-caution-text">
+              {{
+                groups.moreError.value
+                  ? `Couldn't load more: ${describeApiError(groups.moreError.value)}`
+                  : ""
+              }}
             </p>
           </div>
         </template>
