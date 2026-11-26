@@ -110,6 +110,62 @@ defmodule Cadence.Telemetry.Storage.QuestDB.RetentionTest do
              Retention.run(now: @now, settings: settings(), exec_fun: exec(dataset, self()))
   end
 
+  test "a drop on a WAL table applies later: a pending partition is not dropped again nor measured" do
+    active = partition("2026-11-25", 5, true)
+    listing = [partition("2026-10-01", 10), partition("2026-10-02", 20), active]
+
+    # Run 1 drops both; the listing still shows them (the drop is queued, not applied).
+    assert {:ok, first} =
+             Retention.run(now: @now, settings: settings(), exec_fun: exec(listing, self()))
+
+    assert first.dropped == ["2026-10-01", "2026-10-02"]
+    assert first.pending == %{"2026-10-01" => 1, "2026-10-02" => 1}
+    assert_receive {:sql, "ALTER TABLE" <> _}
+
+    # Run 2 sees them still listed: no second drop, and they are left out of the measurement.
+    assert {:ok, second} =
+             Retention.run(
+               now: @now,
+               settings: settings(),
+               pending: first.pending,
+               exec_fun: exec(listing, self())
+             )
+
+    assert second.dropped == []
+    assert second.partitions == 1
+    assert second.disk_bytes == 5
+    assert second.pending == %{"2026-10-01" => 2, "2026-10-02" => 2}
+    refute_receive {:sql, "ALTER TABLE" <> _}
+
+    # Once the drop has applied they leave the listing and the pending set.
+    assert {:ok, third} =
+             Retention.run(
+               now: @now,
+               settings: settings(),
+               pending: second.pending,
+               exec_fun: exec([active], self())
+             )
+
+    assert third.pending == %{}
+    assert third.disk_bytes == 5
+  end
+
+  test "a partition still listed after three runs is given up on and dropped again" do
+    active = partition("2026-11-25", 5, true)
+    listing = [partition("2026-10-01", 10), active]
+
+    assert {:ok, report} =
+             Retention.run(
+               now: @now,
+               settings: settings(),
+               pending: %{"2026-10-01" => 3},
+               exec_fun: exec(listing, self())
+             )
+
+    assert report.dropped == ["2026-10-01"]
+    assert_receive {:sql, "ALTER TABLE telemetry_observations DROP PARTITION LIST '2026-10-01'"}
+  end
+
   test "nothing expired means no drop statement" do
     dataset = [partition("2026-11-24", 100), partition("2026-11-25", 200, true)]
 

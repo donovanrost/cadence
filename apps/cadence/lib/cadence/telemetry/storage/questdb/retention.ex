@@ -22,6 +22,16 @@ defmodule Cadence.Telemetry.Storage.QuestDB.Retention do
   `ALTER TABLE ... DROP PARTITION LIST`, and emits
   `[:cadence, :telemetry, :questdb_retention, :measured]` with the partitions and disk bytes left,
   which is the storage line of #686's scorecard.
+
+  **A drop on a WAL table is applied asynchronously** (the table is a WAL table, like its inserts):
+  the statement is accepted at once, and the partition can still be listed for a while. So a run
+  never drops a partition again while its earlier drop may still be pending. The caller passes the
+  report's `pending` map (`name => runs seen`) back in as `:pending`; a pending partition that is
+  still listed is skipped and left out of the `partitions` and `disk_bytes` it reports (they count
+  what is left once the drop applies, so the gauge does not briefly include dropped data). A
+  partition still listed after three runs is no longer assumed pending and is dropped again.
+  Re-dropping a partition a WAL drop already covers is avoided rather than relied on to be
+  harmless, since the statement is queued, not applied, when it is sent.
   """
 
   alias Cadence.Telemetry.Storage.QuestDB.{RestClient, SQL}
@@ -29,6 +39,7 @@ defmodule Cadence.Telemetry.Storage.QuestDB.Retention do
   @table "telemetry_observations"
   @default_days 30
   @default_max_drops 31
+  @max_pending_runs 3
 
   @type partition :: %{
           name: binary(),
@@ -64,6 +75,7 @@ defmodule Cadence.Telemetry.Storage.QuestDB.Retention do
   """
   @spec run(keyword()) :: {:ok, map()} | {:error, term()}
   def run(opts \\ []) do
+    pending = Keyword.get(opts, :pending, %{})
     settings = Keyword.get_lazy(opts, :settings, &settings/0)
     now = Keyword.get_lazy(opts, :now, &DateTime.utc_now/0)
     exec = Keyword.get(opts, :exec_fun, &RestClient.exec/2)
@@ -71,13 +83,19 @@ defmodule Cadence.Telemetry.Storage.QuestDB.Retention do
     cutoff = cutoff(now, retention_days(settings))
 
     with {:ok, partitions} <- partitions(exec, exec_opts) do
+      still_pending = still_pending(pending, partitions)
+
       # The newest partition is never a candidate: QuestDB refuses to drop it, and a refusal
-      # would abort the whole list.
+      # would abort the whole list. Nor is one whose earlier drop may still be applying.
       doomed =
-        partitions |> Enum.drop(-1) |> expired(cutoff) |> Enum.take(max_drops(settings))
+        partitions
+        |> Enum.drop(-1)
+        |> expired(cutoff)
+        |> Enum.reject(&Map.has_key?(still_pending, &1.name))
+        |> Enum.take(max_drops(settings))
 
       with :ok <- drop(doomed, exec, exec_opts) do
-        report(partitions, doomed, cutoff)
+        report(partitions, doomed, still_pending, cutoff)
       end
     end
   end
@@ -152,9 +170,21 @@ defmodule Cadence.Telemetry.Storage.QuestDB.Retention do
     end
   end
 
-  defp report(partitions, doomed, cutoff) do
-    dropped_names = MapSet.new(doomed, & &1.name)
-    kept = Enum.reject(partitions, &MapSet.member?(dropped_names, &1.name))
+  # Earlier drops that are still listed and not yet old enough to be given up on: `name => runs`.
+  defp still_pending(pending, partitions) do
+    listed = MapSet.new(partitions, & &1.name)
+
+    pending
+    |> Enum.filter(fn {name, runs} ->
+      MapSet.member?(listed, name) and runs < @max_pending_runs
+    end)
+    |> Map.new(fn {name, runs} -> {name, runs + 1} end)
+  end
+
+  defp report(partitions, doomed, still_pending, cutoff) do
+    gone = MapSet.new(doomed, & &1.name) |> MapSet.union(MapSet.new(Map.keys(still_pending)))
+    kept = Enum.reject(partitions, &MapSet.member?(gone, &1.name))
+    pending = Enum.reduce(doomed, still_pending, &Map.put(&2, &1.name, 1))
     disk_bytes = kept |> Enum.map(& &1.disk_bytes) |> Enum.sum()
     dropped_bytes = doomed |> Enum.map(& &1.disk_bytes) |> Enum.sum()
 
@@ -164,7 +194,8 @@ defmodule Cadence.Telemetry.Storage.QuestDB.Retention do
         partitions: length(kept),
         disk_bytes: disk_bytes,
         dropped_partitions: length(doomed),
-        dropped_bytes: dropped_bytes
+        dropped_bytes: dropped_bytes,
+        pending_partitions: map_size(pending)
       },
       %{}
     )
@@ -175,7 +206,8 @@ defmodule Cadence.Telemetry.Storage.QuestDB.Retention do
        partitions: length(kept),
        disk_bytes: disk_bytes,
        dropped: Enum.map(doomed, & &1.name),
-       dropped_bytes: dropped_bytes
+       dropped_bytes: dropped_bytes,
+       pending: pending
      }}
   end
 end

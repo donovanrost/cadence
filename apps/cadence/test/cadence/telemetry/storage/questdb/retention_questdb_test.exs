@@ -64,7 +64,9 @@ defmodule Cadence.Telemetry.Storage.QuestDB.RetentionQuestDBTest do
     refute @newest in report.dropped
     assert report.disk_bytes > 0
 
-    names = partition_names()
+    # The table is a WAL table, so the drop is applied asynchronously, like the inserts above:
+    # wait for it, then check what remains.
+    names = read_back(fn -> oldest_gone(partition_names()) end)
     refute @oldest in names
     assert @middle in names
     assert @newest in names
@@ -79,6 +81,8 @@ defmodule Cadence.Telemetry.Storage.QuestDB.RetentionQuestDBTest do
 
     List.flatten(rows)
   end
+
+  defp oldest_gone(names), do: if(@oldest in names, do: names, else: {:ok, names})
 
   defp all_present(names) do
     if Enum.all?([@oldest, @middle, @newest], &(&1 in names)), do: {:ok, names}, else: names

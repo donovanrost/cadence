@@ -664,7 +664,7 @@ defmodule Cadence.Observability.Metrics.Catalog do
         [:cadence, :telemetry, :questdb_retention, :measured],
         :disk_bytes,
         "By",
-        "Disk used by QuestDB telemetry observation partitions, measured by the retention job.",
+        "Disk used by QuestDB telemetry observation partitions once the retention job's pending drops apply (a drop on a WAL table is asynchronous, so dropped partitions are excluded).",
         [],
         []
       ),
@@ -673,7 +673,7 @@ defmodule Cadence.Observability.Metrics.Catalog do
         [:cadence, :telemetry, :questdb_retention, :measured],
         :partitions,
         "{partition}",
-        "QuestDB telemetry observation day partitions kept after the retention job's drop.",
+        "QuestDB telemetry observation day partitions kept after the retention job's drops, which apply asynchronously.",
         [],
         []
       ),

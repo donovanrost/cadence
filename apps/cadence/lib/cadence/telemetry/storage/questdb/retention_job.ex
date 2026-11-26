@@ -34,7 +34,9 @@ defmodule Cadence.Telemetry.Storage.QuestDB.RetentionJob do
     state = %{
       interval_ms: Keyword.get(opts, :interval_ms, @default_interval_ms),
       run_fun: Keyword.get(opts, :run_fun, &Retention.run/1),
-      run_opts: Keyword.get(opts, :run_opts, [])
+      run_opts: Keyword.get(opts, :run_opts, []),
+      # Partitions dropped on an earlier run that may still be applying (WAL drops are async).
+      pending: %{}
     }
 
     # The first run comes one interval after the node starts, not during boot.
@@ -42,33 +44,38 @@ defmodule Cadence.Telemetry.Storage.QuestDB.RetentionJob do
   end
 
   @impl true
-  def handle_call(:run, _from, state), do: {:reply, run(state), state}
+  def handle_call(:run, _from, state) do
+    {result, state} = run(state)
+    {:reply, result, state}
+  end
 
   @impl true
   def handle_info(:tick, state) do
-    _ = run(state)
+    {_result, state} = run(state)
     {:noreply, schedule(state)}
   end
 
   def handle_info(_message, state), do: {:noreply, state}
 
   defp run(state) do
-    case state.run_fun.(state.run_opts) do
-      {:ok, %{dropped: []} = report} ->
-        {:ok, report}
-
+    case state.run_fun.(Keyword.put(state.run_opts, :pending, state.pending)) do
       {:ok, report} ->
-        Logger.info(
-          "questdb retention dropped #{length(report.dropped)} day partition(s) " <>
-            "(#{report.dropped_bytes} bytes) older than #{report.cutoff}: #{Enum.join(report.dropped, ", ")}"
-        )
-
-        {:ok, report}
+        log(report)
+        {{:ok, report}, %{state | pending: Map.get(report, :pending, %{})}}
 
       {:error, reason} ->
         Logger.error("questdb retention failed: #{inspect(reason)}")
-        {:error, reason}
+        {{:error, reason}, state}
     end
+  end
+
+  defp log(%{dropped: []}), do: :ok
+
+  defp log(report) do
+    Logger.info(
+      "questdb retention dropped #{length(report.dropped)} day partition(s) " <>
+        "(#{report.dropped_bytes} bytes) older than #{report.cutoff}: #{Enum.join(report.dropped, ", ")}"
+    )
   end
 
   defp schedule(%{interval_ms: interval} = state) do
