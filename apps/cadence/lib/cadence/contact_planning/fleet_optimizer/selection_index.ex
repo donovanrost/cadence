@@ -77,16 +77,20 @@ defmodule Cadence.ContactPlanning.FleetOptimizer.SelectionIndex do
   def for_route_spacecraft(index, spacecraft_id),
     do: Map.get(index.by_route_spacecraft, spacecraft_id, [])
 
-  def for_resource(index, snapshot) do
-    resource = Constraints.resource_key(snapshot)
+  def overlapping_resource(index, resource, snapshot) do
+    overlaps? = &Constraints.overlap?(snapshot, &1)
+    long = Map.get(index.long_resources, resource, [])
 
-    case bucket_keys(resource, snapshot) do
-      :long ->
-        Map.get(index.by_resource, resource, [])
+    case {bucket_keys(resource, snapshot), long} do
+      {:long, _} ->
+        Enum.filter(Map.get(index.by_resource, resource, []), overlaps?)
 
-      keys ->
-        (Enum.flat_map(keys, &Map.get(index.by_resource_bucket, &1, [])) ++
-           Map.get(index.long_resources, resource, []))
+      {[key], []} ->
+        Enum.filter(Map.get(index.by_resource_bucket, key, []), overlaps?)
+
+      {keys, long} ->
+        (Enum.flat_map(keys, &Map.get(index.by_resource_bucket, &1, [])) ++ long)
+        |> Enum.filter(overlaps?)
         |> Enum.uniq_by(& &1.contact_opportunity_snapshot_id)
         |> Enum.sort_by(&(-index.order[&1.contact_opportunity_snapshot_id]))
     end

@@ -27,6 +27,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
     FleetPlanningScoreDocumentRow
   }
 
+  alias Cadence.Persistence.{BulkInsert, JsonDocument}
   alias Cadence.Repo
 
   @algorithm_key "deterministic_bounded_greedy"
@@ -225,15 +226,79 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
   @spec list_requirement_refs(binary(), binary(), binary()) ::
           [FleetPlanningRunRequirementRef.t()]
   def list_requirement_refs(organization_id, mission_id, run_id) do
-    FleetPlanningRunRequirementRefRow
-    |> where(
+    requirement_refs_query(organization_id, mission_id, run_id)
+    |> order_by([ref], asc: ref.contact_requirement_id, asc: ref.contact_requirement_version)
+    |> Repo.all()
+    |> Enum.map(&FleetPlanningRunRequirementRefRow.to_domain/1)
+  end
+
+  @doc false
+  def planning_run_ids(run) do
+    requirement_refs_query(run.organization_id, run.mission_id, run.fleet_planning_run_id)
+    |> where([ref], not is_nil(ref.contact_planning_run_id))
+    |> distinct(true)
+    |> select([ref], ref.contact_planning_run_id)
+    |> Repo.all()
+  end
+
+  @doc false
+  def requirements_current?(run) do
+    drift =
+      run
+      |> pinned_requirements_query()
+      |> where(
+        [ref, requirement, version],
+        requirement.current_version != ref.contact_requirement_version or
+          requirement.lifecycle_state != "active" or
+          version.content_sha256 != ref.input_content_sha256
+      )
+
+    not Repo.exists?(drift)
+  end
+
+  @doc false
+  def optimization_requirements(run) do
+    run
+    |> pinned_requirements_query()
+    |> select(
+      [ref, requirement, version],
+      {version,
+       requirement.current_version == ref.contact_requirement_version and
+         requirement.lifecycle_state == "active" and
+         version.content_sha256 == ref.input_content_sha256}
+    )
+    |> Repo.all()
+    |> Enum.reduce_while({:ok, []}, fn
+      {version, true}, {:ok, versions} ->
+        {:cont, {:ok, [ContactRequirementVersionRow.to_domain(version) | versions]}}
+
+      {_version, false}, _versions ->
+        {:halt, {:error, :fleet_planning_input_drift}}
+    end)
+  end
+
+  defp pinned_requirements_query(run) do
+    # The scoped ref names an exact version through its FK, and that version has a scoped
+    # FK to the requirement. Join through those keys before testing for drift so PostgreSQL
+    # can use the requirement's primary key even on a freshly populated mission.
+    requirement_refs_query(run.organization_id, run.mission_id, run.fleet_planning_run_id)
+    |> join(:inner, [ref], requirement in ContactRequirementRow,
+      on: requirement.contact_requirement_id == ref.contact_requirement_id
+    )
+    |> join(:inner, [ref], version in ContactRequirementVersionRow,
+      on:
+        version.contact_requirement_id == ref.contact_requirement_id and
+          version.version == ref.contact_requirement_version
+    )
+  end
+
+  defp requirement_refs_query(organization_id, mission_id, run_id) do
+    where(
+      FleetPlanningRunRequirementRefRow,
       [ref],
       ref.organization_id == ^organization_id and ref.mission_id == ^mission_id and
         ref.fleet_planning_run_id == ^run_id
     )
-    |> order_by([ref], asc: ref.contact_requirement_id, asc: ref.contact_requirement_version)
-    |> Repo.all()
-    |> Enum.map(&FleetPlanningRunRequirementRefRow.to_domain/1)
   end
 
   @spec list_decisions(binary(), binary(), binary()) :: [FleetPlanningDecision.t()]
@@ -552,45 +617,65 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
   end
 
   defp persist_coverage_rows(run, coverage) do
-    run.organization_id
-    |> list_requirement_refs(run.mission_id, run.fleet_planning_run_id)
-    |> Stream.map(&coverage_ref(&1, coverage))
+    refs = requirement_refs_query(run.organization_id, run.mission_id, run.fleet_planning_run_id)
+
+    refs
+    |> select([ref], ref.contact_requirement_id)
+    |> Repo.all()
     |> Stream.chunk_every(@coverage_batch_size)
-    |> Enum.reduce_while(:ok, fn batch, :ok ->
-      rows = Enum.map(batch, &FleetPlanningRunRequirementRefRow.insert_attrs/1)
+    |> Enum.reduce_while(:ok, fn ids, :ok ->
+      count = update_coverage_batch(refs, ids, coverage)
 
-      {count, _} =
-        Repo.insert_all(FleetPlanningRunRequirementRefRow, rows,
-          on_conflict:
-            {:replace, [:input_state, :result_state, :explanation_document, :updated_at]},
-          conflict_target: [:fleet_planning_run_requirement_ref_id]
-        )
-
-      if count == length(batch),
+      if count == length(ids),
         do: {:cont, :ok},
         else: {:halt, {:error, :fleet_planning_coverage_persistence_incomplete}}
     end)
   end
 
-  defp coverage_ref(ref, coverage) do
-    result = Map.fetch!(coverage, ref.contact_requirement_id)
+  defp update_coverage_batch(refs, ids, coverage) do
+    checkpoints =
+      Enum.map(ids, fn id ->
+        result = Map.fetch!(coverage, id)
 
-    {input_state, result_state} =
-      if ref.input_state == :failed,
-        do: {:failed, :failed},
-        else: {:searched, coverage_state(result["state"])}
+        %{
+          requirement_id: id,
+          result_state: coverage_state(result["state"]),
+          document: JsonDocument.encode(result)
+        }
+      end)
 
-    %{
-      ref
-      | input_state: input_state,
-        result_state: result_state,
-        explanation_document: Map.put(ref.explanation_document, "coverage", result)
-    }
+    types = %{requirement_id: :string, result_state: :string, document: :map}
+
+    {count, _} =
+      refs
+      |> join(:inner, [ref], checkpoint in values(checkpoints, types),
+        on: ref.contact_requirement_id == checkpoint.requirement_id
+      )
+      |> update([ref, checkpoint],
+        set: [
+          input_state:
+            fragment("CASE WHEN ? = 'failed' THEN 'failed' ELSE 'searched' END", ref.input_state),
+          result_state:
+            fragment(
+              "CASE WHEN ? = 'failed' THEN 'failed' ELSE ? END",
+              ref.input_state,
+              checkpoint.result_state
+            ),
+          explanation_document:
+            fragment(
+              "jsonb_build_object('value', coalesce(? -> 'value', ?) || jsonb_build_object('coverage', ?))",
+              ref.explanation_document,
+              ref.explanation_document,
+              checkpoint.document
+            )
+        ]
+      )
+      |> Repo.update_all([])
+
+    count
   end
 
-  defp coverage_state("satisfied"), do: :satisfied
-  defp coverage_state("partial"), do: :partial
-  defp coverage_state("unsatisfied"), do: :unsatisfied
+  defp coverage_state(state) when state in ~w(satisfied partial unsatisfied), do: state
 
   defp persist_run(run, requirements) do
     Repo.transaction(fn ->
@@ -940,11 +1025,20 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
 
     result =
       decisions
+      |> Enum.sort_by(
+        &Map.get(&1, :contact_opportunity_snapshot_id, &1["contact_opportunity_snapshot_id"])
+      )
       |> Stream.chunk_every(@decision_batch_size)
       |> Task.async_stream(
         fn batch ->
           rows = Enum.map(batch, &decision_insert_attrs(&1, run))
-          {count, _} = Repo.insert_all(FleetPlanningDecisionRow, rows)
+
+          count =
+            BulkInsert.insert!(FleetPlanningDecisionRow, rows,
+              fleet_planning_run_id: run.fleet_planning_run_id,
+              organization_id: run.organization_id,
+              mission_id: run.mission_id
+            )
 
           if count == length(batch),
             do: {:ok, count},

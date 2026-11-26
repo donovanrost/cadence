@@ -22,7 +22,7 @@ defmodule Cadence.Management.Contacts.PlanningResults do
     ContactPlanningSearchRow
   }
 
-  alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.{BulkInsert, JsonDocument}
   alias Cadence.Repo
 
   # The caller commits these immutable results with the fleet requirement checkpoints.
@@ -43,22 +43,16 @@ defmodule Cadence.Management.Contacts.PlanningResults do
     :ok
   end
 
-  # An array per column keeps the statement shape fixed and avoids thousands of
-  # individual bind parameters. PostgreSQL still validates the ordinary table constraints.
   defp insert_entries(entries, schema, take_records, timestamp_fields, to_row \\ nil) do
-    now = DateTime.utc_now() |> DateTime.to_naive()
-    fields = schema.__schema__(:fields) -- timestamp_fields
-    sql = fleet_insert_sql(schema, fields, timestamp_fields)
+    now = DateTime.utc_now()
+    timestamps = Enum.map(timestamp_fields, &{&1, now})
     to_row = to_row || (&schema.domain_attrs/1)
 
     entries
     |> Stream.flat_map(take_records)
     |> Stream.map(to_row)
     |> Stream.chunk_every(2_000)
-    |> Enum.each(fn rows ->
-      columns = Enum.map(fields, &column_values(rows, &1))
-      Repo.query!(sql, columns ++ [now])
-    end)
+    |> Enum.each(&BulkInsert.insert!(schema, &1, timestamps))
   end
 
   defp snapshot_rows(entry) do
@@ -71,38 +65,6 @@ defmodule Cadence.Management.Contacts.PlanningResults do
       )
     end)
   end
-
-  defp fleet_insert_sql(schema, fields, timestamp_fields) do
-    arrays =
-      fields
-      |> Enum.with_index(1)
-      |> Enum.map_join(", ", fn {field, index} ->
-        "$#{index}::#{column_type(schema.__schema__(:type, field))}[]"
-      end)
-
-    timestamps =
-      Enum.map_join(timestamp_fields, ", ", fn _ -> "$#{length(fields) + 1}::timestamp" end)
-
-    columns = Enum.join(fields ++ timestamp_fields, ", ")
-    table = schema.__schema__(:source)
-
-    "INSERT INTO #{table} (#{columns}) SELECT batch.*, #{timestamps} FROM unnest(#{arrays}) AS batch"
-  end
-
-  defp column_values(rows, field) do
-    Enum.map(rows, fn row ->
-      case Map.fetch!(row, field) do
-        %DateTime{} = value -> DateTime.to_naive(value)
-        value -> value
-      end
-    end)
-  end
-
-  defp column_type(:string), do: "text"
-  defp column_type(:integer), do: "integer"
-  defp column_type(:boolean), do: "boolean"
-  defp column_type(:map), do: "jsonb"
-  defp column_type(:utc_datetime_usec), do: "timestamp"
 
   @doc false
   def fetch_runs(_organization_id, _mission_id, []), do: %{}

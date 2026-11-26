@@ -106,7 +106,7 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
         requirements
         |> demand_order(scarcity)
         |> Enum.reduce(initial, fn requirement, state ->
-          allocate_requirement(requirement, scarcity, requirements, policy, now, state)
+          allocate_requirement(requirement, scarcity, policy, now, state)
         end)
       after
         :ets.delete(initial.feasible_table)
@@ -459,7 +459,7 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
     end
   end
 
-  defp allocate_requirement(requirement, scarcity, requirements, policy, now, state) do
+  defp allocate_requirement(requirement, scarcity, policy, now, state) do
     key = requirement_key(requirement)
 
     candidates =
@@ -475,34 +475,16 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
     allocate_candidates(
       requirement,
       candidates,
-      scarcity,
-      requirements,
+      scarcity[requirement_key(requirement)],
       policy,
       now,
       state
     )
   end
 
-  defp allocate_candidates(
-         _requirement,
-         [],
-         _scarcity,
-         _requirements,
-         _policy,
-         _now,
-         state
-       ),
-       do: state
+  defp allocate_candidates(_requirement, [], _scarcity, _policy, _now, state), do: state
 
-  defp allocate_candidates(
-         requirement,
-         candidates,
-         scarcity,
-         requirements,
-         policy,
-         now,
-         state
-       ) do
+  defp allocate_candidates(requirement, candidates, scarcity, policy, now, state) do
     {scored, score_documents} =
       candidates
       |> Enum.map_reduce(state.score_documents, fn snapshot, cache ->
@@ -510,7 +492,7 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
           Scoring.score(
             requirement,
             snapshot,
-            scarcity[requirement_key(requirement)],
+            scarcity,
             state.selection_index,
             policy,
             now,
@@ -521,15 +503,36 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
       end)
 
     scored = order_candidates(scored, requirement, state.selection_index)
-    state = %{state | score_documents: score_documents}
+    covered? = coverage_satisfied?(requirement, state.selection_index, policy)
 
-    [{snapshot, score, score_document} | _rest] = scored
-    remaining = Enum.reject(candidates, &same_snapshot?(&1, snapshot))
+    allocate_scored(
+      scored,
+      requirement,
+      scarcity,
+      policy,
+      now,
+      %{state | score_documents: score_documents},
+      covered?
+    )
+  end
+
+  defp allocate_scored([], _requirement, _scarcity, _policy, _now, state, _covered?), do: state
+
+  defp allocate_scored(
+         [{snapshot, score, score_document} | remaining],
+         requirement,
+         scarcity,
+         policy,
+         now,
+         state,
+         covered?
+       ) do
+    selected_count = state.selection_index.count
     state = Map.update!(state, :greedy_evaluations, &(&1 + 1))
 
     state =
       cond do
-        coverage_satisfied?(requirement, state.selection_index, policy) ->
+        covered? ->
           put_decision(
             state,
             snapshot,
@@ -564,15 +567,13 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
           )
       end
 
-    allocate_candidates(
-      requirement,
-      remaining,
-      scarcity,
-      requirements,
-      policy,
-      now,
-      state
-    )
+    if state.selection_index.count == selected_count do
+      allocate_scored(remaining, requirement, scarcity, policy, now, state, covered?)
+    else
+      # A selection changes fragmentation and diversity, so the remaining scores need a refresh.
+      candidates = Enum.map(remaining, &elem(&1, 0))
+      allocate_candidates(requirement, candidates, scarcity, policy, now, state)
+    end
   end
 
   # Without a gap limit, the order is unchanged: score, then AOS, then id. With one (DECISIONS
@@ -667,46 +668,69 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
       |> :gb_sets.to_list()
       |> Enum.map(fn {_negative_score, _id, snapshot} -> snapshot end)
 
-    Enum.reduce(candidates, state, fn candidate, state ->
-      state = Map.update!(state, :improvement_evaluations, &(&1 + 1))
-      requirement = requirements[snapshot_key(candidate)]
+    excess =
+      Map.filter(state.selection_index.by_requirement, fn {_key, snapshots} ->
+        match?([_, _ | _], snapshots)
+      end)
 
-      case improvement_swap(
-             candidate,
-             requirement,
-             requirements,
-             policy,
-             scarcity,
-             now,
-             state
-           ) do
-        {:ok, improved} -> improved
-        :unchanged -> state
+    {state, _excess} =
+      Enum.reduce(candidates, {state, excess}, fn candidate, {state, excess} ->
+        state = Map.update!(state, :improvement_evaluations, &(&1 + 1))
+        key = snapshot_key(candidate)
+        requirement = requirements[key]
+
+        removable =
+          excess
+          |> Map.put(key, SelectionIndex.for_requirement(state.selection_index, requirement))
+          |> Map.values()
+          |> List.flatten()
+          |> Enum.reject(&MapSet.member?(state.locked_ids, &1.contact_opportunity_snapshot_id))
+          |> Enum.sort_by(fn snapshot ->
+            decision = state.decisions[snapshot.contact_opportunity_snapshot_id]
+            {decision.score, snapshot.contact_opportunity_snapshot_id}
+          end)
+
+        case improvement_swap(
+               removable,
+               candidate,
+               requirement,
+               requirements,
+               policy,
+               scarcity,
+               now,
+               state
+             ) do
+          {:ok, improved, removed_key} ->
+            excess = refresh_excess(excess, improved.selection_index, [key, removed_key])
+            {improved, excess}
+
+          :unchanged ->
+            {state, excess}
+        end
+      end)
+
+    state
+  end
+
+  defp refresh_excess(excess, selection, keys) do
+    Enum.reduce(keys, excess, fn key, excess ->
+      case selection.by_requirement[key] do
+        [_, _ | _] = snapshots -> Map.put(excess, key, snapshots)
+        _ -> Map.delete(excess, key)
       end
     end)
   end
 
-  defp improvement_swap(candidate, requirement, requirements, policy, scarcity, now, state) do
-    candidate_key = snapshot_key(candidate)
-
-    removable =
-      state.selected
-      |> Enum.reject(&MapSet.member?(state.locked_ids, &1.contact_opportunity_snapshot_id))
-      |> Enum.filter(fn snapshot ->
-        snapshot_key(snapshot) == candidate_key or
-          length(
-            SelectionIndex.for_requirement(
-              state.selection_index,
-              requirements[snapshot_key(snapshot)]
-            )
-          ) >
-            1
-      end)
-      |> Enum.sort_by(fn snapshot ->
-        decision = state.decisions[snapshot.contact_opportunity_snapshot_id]
-        {decision.score, snapshot.contact_opportunity_snapshot_id}
-      end)
-
+  defp improvement_swap(
+         removable,
+         candidate,
+         requirement,
+         requirements,
+         policy,
+         scarcity,
+         now,
+         state
+       ) do
     Enum.find_value(removable, :unchanged, fn current ->
       current_requirement = requirements[snapshot_key(current)]
 
@@ -772,7 +796,7 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
           )
           |> Map.update!(:improvement_replacements, &(&1 + 1))
 
-        {:ok, improved}
+        {:ok, improved, snapshot_key(current)}
       else
         _reason -> false
       end
@@ -856,13 +880,16 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
     }
   end
 
-  defp coverage_satisfied?(requirement, selected, policy),
-    do:
-      requirement_coverage(
-        requirement,
-        SelectionIndex.for_requirement(selected, requirement),
-        policy
-      )["satisfied"]
+  defp coverage_satisfied?(requirement, selected, policy) do
+    case SelectionIndex.for_requirement(selected, requirement) do
+      [] ->
+        false
+
+      own ->
+        RequirementEvaluator.evaluate_selection(requirement, own)["satisfied"] and
+          redundancy_evaluation(requirement, own, policy)["satisfied"]
+    end
+  end
 
   defp redundancy_evaluation(requirement, selected, policy) do
     target = requirement.contact_count

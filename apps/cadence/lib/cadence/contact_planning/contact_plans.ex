@@ -33,6 +33,7 @@ defmodule Cadence.ContactPlanning.ContactPlans do
   alias Cadence.Management.Contacts.Store.ContactPlanVersionRow
   alias Cadence.Management.Contacts.Store.ContactRequirementVersionRow
 
+  alias Cadence.Persistence.BulkInsert
   alias Cadence.Repo
 
   @insert_batch_size 3_000
@@ -568,9 +569,10 @@ defmodule Cadence.ContactPlanning.ContactPlans do
          {:ok, policy} <- policy_snapshot(requirements, commitments) do
       {:ok,
        %{
+         organization_id: organization_id,
+         mission_id: mission_id,
          run_ids: run_ids,
          requirement_refs: requirement_refs,
-         requirements: requirements,
          selected: selected,
          locked: locked,
          rejected: rejected,
@@ -588,10 +590,10 @@ defmodule Cadence.ContactPlanning.ContactPlans do
     planning_run_refs_document = %{"runs" => proposal.run_ids}
 
     {:ok,
-     ContactPlanVersion.new(%{
+     ContactPlanVersion.from_documents(%{
        contact_plan_id: plan_id,
-       organization_id: hd(proposal.requirements).organization_id,
-       mission_id: hd(proposal.requirements).mission_id,
+       organization_id: proposal.organization_id,
+       mission_id: proposal.mission_id,
        version: version,
        requirement_refs_document: requirement_refs_document,
        planning_run_refs_document: planning_run_refs_document,
@@ -609,30 +611,28 @@ defmodule Cadence.ContactPlanning.ContactPlans do
   end
 
   defp insert_refs(version, proposal) do
-    base = %{
+    base = [
       organization_id: version.organization_id,
       mission_id: version.mission_id,
       contact_plan_id: version.contact_plan_id,
       contact_plan_version: version.version
-    }
+    ]
 
     requirements =
       Stream.map(proposal.requirement_refs, fn ref ->
-        base
-        |> Map.merge(%{
+        %{
           contact_plan_requirement_ref_id: Cadence.Ids.new("contact_plan_requirement_ref"),
           contact_requirement_id: ref["id"],
           contact_requirement_version: ref["version"]
-        })
+        }
       end)
 
     runs =
       Stream.map(proposal.run_ids, fn run_id ->
-        base
-        |> Map.merge(%{
+        %{
           contact_plan_run_ref_id: Cadence.Ids.new("contact_plan_run_ref"),
           contact_planning_run_id: run_id
-        })
+        }
       end)
 
     commitments =
@@ -643,30 +643,29 @@ defmodule Cadence.ContactPlanning.ContactPlans do
       |> Stream.concat()
       |> Stream.with_index()
       |> Stream.map(fn {{snapshot, disposition}, index} ->
-        base
-        |> Map.merge(%{
+        %{
           contact_plan_opportunity_ref_id: Cadence.Ids.new("contact_plan_opportunity_ref"),
           contact_opportunity_snapshot_id: snapshot.contact_opportunity_snapshot_id,
           disposition: disposition,
           selection_order: index,
           reason_document: reference_reason(snapshot, disposition)
-        })
+        }
       end)
 
-    with :ok <- insert_ref_batches(ContactPlanRequirementRefRow, requirements),
-         :ok <- insert_ref_batches(ContactPlanRunRefRow, runs) do
+    with :ok <- insert_ref_batches(ContactPlanRequirementRefRow, requirements, base),
+         :ok <- insert_ref_batches(ContactPlanRunRefRow, runs, base) do
       # Rejected identities live in the immutable version and their reasons in the snapshots.
       # Relational refs are needed only for commitments that booking and runtime reads consume.
-      insert_ref_batches(ContactPlanOpportunityRefRow, commitments)
+      insert_ref_batches(ContactPlanOpportunityRefRow, commitments, base)
     end
   end
 
-  defp insert_ref_batches(schema, attrs_stream) do
+  defp insert_ref_batches(schema, attrs_stream, shared) do
     attrs_stream
     |> Stream.chunk_every(@insert_batch_size)
     |> Enum.reduce_while(:ok, fn batch, :ok ->
       rows = Enum.map(batch, &schema.insert_attrs/1)
-      {count, _} = Repo.insert_all(schema, rows)
+      count = BulkInsert.insert!(schema, rows, shared)
 
       if count == length(batch),
         do: {:cont, :ok},
@@ -689,9 +688,9 @@ defmodule Cadence.ContactPlanning.ContactPlans do
   defp persist_new_plan(plan, version, proposal) do
     Repo.transaction(fn ->
       with {:ok, plan_row} <- Repo.insert(ContactPlanRow.changeset(plan)),
-           {:ok, version_row} <- Repo.insert(ContactPlanVersionRow.changeset(version)),
+           {:ok, _row} <- Repo.insert(ContactPlanVersionRow.changeset(version)),
            :ok <- insert_refs(version, proposal) do
-        {ContactPlanRow.to_domain(plan_row), ContactPlanVersionRow.to_domain(version_row)}
+        {ContactPlanRow.to_domain(plan_row), version}
       else
         {:error, reason} -> Repo.rollback(reason)
       end
@@ -716,10 +715,10 @@ defmodule Cadence.ContactPlanning.ContactPlans do
          {:ok, proposal} <- build_proposal(organization_id, mission_id, attrs, previous),
          {:ok, next_version} <-
            build_version(plan_id, row.current_version + 1, actor_id, now, proposal),
-         {:ok, version_row} <- Repo.insert(ContactPlanVersionRow.changeset(next_version)),
+         {:ok, _row} <- Repo.insert(ContactPlanVersionRow.changeset(next_version)),
          :ok <- insert_refs(next_version, proposal),
          {:ok, updated_row} <- update_current_version(row, next_version, actor_id, now) do
-      {ContactPlanRow.to_domain(updated_row), ContactPlanVersionRow.to_domain(version_row)}
+      {ContactPlanRow.to_domain(updated_row), next_version}
     else
       {:error, reason} -> Repo.rollback(reason)
     end
@@ -832,6 +831,15 @@ defmodule Cadence.ContactPlanning.ContactPlans do
         run.organization_id == ^organization_id and run.mission_id == ^mission_id and
           run.contact_planning_run_id in ^run_ids
       )
+      |> select(
+        [run],
+        map(run, [
+          :contact_planning_run_id,
+          :contact_requirement_id,
+          :contact_requirement_version,
+          :lifecycle_state
+        ])
+      )
       |> Repo.all()
 
     if length(runs) == length(run_ids),
@@ -864,7 +872,6 @@ defmodule Cadence.ContactPlanning.ContactPlans do
     snapshots =
       organization_id
       |> FleetSnapshotReader.list_by_ids(mission_id, selected_ids)
-      |> Enum.sort_by(&{&1.starts_at, &1.contact_opportunity_snapshot_id})
 
     {:ok, snapshots}
   end
@@ -874,7 +881,7 @@ defmodule Cadence.ContactPlanning.ContactPlans do
     |> where(
       [search],
       search.organization_id == ^organization_id and search.mission_id == ^mission_id and
-        search.contact_planning_run_id in ^run_ids
+        search.contact_planning_run_id in ^run_ids and search.outcome in ["not_ready", "failed"]
     )
     |> order_by([search], asc: search.route_key)
     |> select([search], %{
@@ -885,10 +892,7 @@ defmodule Cadence.ContactPlanning.ContactPlans do
     |> Repo.all()
     |> Enum.map(
       &Map.update!(&1, :outcome, fn
-        "succeeded_with_results" -> :succeeded_with_results
-        "succeeded_without_results" -> :succeeded_without_results
         "not_ready" -> :not_ready
-        "excluded_by_requirement" -> :excluded_by_requirement
         "failed" -> :failed
       end)
     )
@@ -956,18 +960,18 @@ defmodule Cadence.ContactPlanning.ContactPlans do
 
   defp spacecraft_conflicts(spacecraft_id, snapshots) do
     ordered = Enum.sort_by(snapshots, & &1.starts_at, DateTime)
-
-    ordered
-    |> Enum.with_index()
-    |> Enum.flat_map(fn {left, index} ->
-      left_conflicts(spacecraft_id, left, Enum.drop(ordered, index + 1))
-    end)
+    spacecraft_conflicts_from(spacecraft_id, ordered, [])
   end
 
-  defp left_conflicts(spacecraft_id, left, candidates) do
-    candidates
-    |> Enum.filter(&overlap?(left, &1))
-    |> Enum.map(&conflict_document(spacecraft_id, left, &1))
+  defp spacecraft_conflicts_from(_spacecraft_id, [], conflicts), do: conflicts
+
+  defp spacecraft_conflicts_from(spacecraft_id, [left | rest], conflicts) do
+    conflicts =
+      rest
+      |> Enum.take_while(&DateTime.before?(&1.starts_at, left.ends_at))
+      |> Enum.reduce(conflicts, &[conflict_document(spacecraft_id, left, &1) | &2])
+
+    spacecraft_conflicts_from(spacecraft_id, rest, conflicts)
   end
 
   defp conflict_document(spacecraft_id, left, right) do
@@ -981,11 +985,6 @@ defmodule Cadence.ContactPlanning.ContactPlans do
         ])
     }
   end
-
-  defp overlap?(left, right),
-    do:
-      DateTime.before?(left.starts_at, right.ends_at) and
-        DateTime.before?(right.starts_at, left.ends_at)
 
   defp unsatisfied(coverage, conflicts) do
     requirement_items =
