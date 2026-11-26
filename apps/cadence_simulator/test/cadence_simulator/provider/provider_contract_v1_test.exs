@@ -5,6 +5,7 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
 
   alias CadenceSimulator.Provider
   alias CadenceSimulator.Provider.{Contacts, Orchestrator, Router, Store}
+  alias CadenceSimulator.StoreRestart
   alias Plug.Conn
   alias Plug.Test
 
@@ -80,6 +81,50 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
 
     {:ok, other_run} = Provider.create_run(context.run["scenario_id"], %{"seed" => 99})
     assert request(:get, "/provider/v1/delivery-profiles/#{profile_id}", other_run).status == 404
+  end
+
+  test "search replies while the store is suspended and its offer books after a hard restart",
+       context do
+    delivery_profile = provision_delivery(context)
+    store = Process.whereis(Store)
+    :ok = :sys.suspend(store)
+
+    opportunity =
+      try do
+        task = Task.async(fn -> search_clipped_opportunity(context.run) end)
+        assert {:ok, opportunity} = Task.yield(task, 1_000) || Task.shutdown(task)
+        Process.exit(store, :kill)
+        _replacement = StoreRestart.await(store)
+        opportunity
+      after
+        if Process.alive?(store), do: :sys.resume(store)
+      end
+
+    contact_request = %{
+      "opportunity_ref" => opportunity["id"],
+      "spacecraft_ref" => opportunity["spacecraft_ref"],
+      "service_profile_ref" => opportunity["service_profile_ref"],
+      "delivery_profile_ref" => delivery_profile["id"],
+      "client_reference" => "post-restart-offer"
+    }
+
+    {:ok, other_run} = Provider.create_run(context.run["scenario_id"], %{"seed" => 42})
+    assert request(:post, "/provider/v1/contacts", other_run, contact_request).status == 404
+
+    altered = Map.update!(contact_request, "opportunity_ref", &(&1 <> "x"))
+    assert request(:post, "/provider/v1/contacts", context.run, altered).status == 404
+
+    response =
+      request(:post, "/provider/v1/contacts", context.run, contact_request,
+        "idempotency-key": "post-restart-offer"
+      )
+
+    assert response.status == 201, response.resp_body
+    assert %{"data" => booked} = Jason.decode!(response.resp_body)
+
+    for field <- ["starts_at", "ends_at", "ground_station_ref", "antenna_or_service_pool_ref"] do
+      assert booked[field] == opportunity[field]
+    end
   end
 
   test "profile-backed Contacts keep contact, pass, and delivery state independent", context do
@@ -451,6 +496,27 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
     assert response.status == 200
     %{"data" => [opportunity | _rest]} = Jason.decode!(response.resp_body)
     opportunity
+  end
+
+  defp search_clipped_opportunity(run) do
+    full = search_opportunity(run)
+    {:ok, from, 0} = DateTime.from_iso8601(full["starts_at"])
+    clipped_end = from |> DateTime.add(1) |> DateTime.to_iso8601()
+
+    response =
+      request(:post, "/provider/v1/opportunities/search", run, %{
+        "spacecraft_refs" => [full["spacecraft_ref"]],
+        "ground_station_refs" => [full["ground_station_ref"]],
+        "service_profile_ref" => full["service_profile_ref"],
+        "starts_at" => full["starts_at"],
+        "ends_at" => clipped_end
+      })
+
+    assert response.status == 200
+    assert %{"data" => [clipped]} = Jason.decode!(response.resp_body)
+    assert clipped["ends_at"] == clipped_end
+    assert clipped["id"] != full["id"]
+    clipped
   end
 
   defp assert_contact(run, contact_id, status, phase, delivery_status) do

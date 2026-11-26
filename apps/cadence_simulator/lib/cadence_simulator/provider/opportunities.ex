@@ -8,9 +8,10 @@ defmodule CadenceSimulator.Provider.Opportunities do
     OrbitReadiness,
     RouteProfiles,
     ServiceProfiles,
-    StationOutages,
-    Store
+    StationOutages
   }
+
+  @offer_prefix "opportunity-v1-"
 
   @spec search(map(), map()) ::
           {:ok, %{data: [map()], next_cursor: binary() | nil, truncated: boolean()}}
@@ -57,7 +58,6 @@ defmodule CadenceSimulator.Provider.Opportunities do
         |> Enum.map(&normalize(&1, run, service_profile, orbit_readiness))
 
       page = opportunities |> Enum.drop(offset) |> Enum.take(page_size)
-      Enum.each(page, &Store.put(:opportunity, &1))
 
       truncated = length(opportunities) > offset + page_size
       next_cursor = if truncated, do: Integer.to_string(offset + page_size), else: nil
@@ -74,15 +74,49 @@ defmodule CadenceSimulator.Provider.Opportunities do
 
   @spec fetch(map(), binary()) :: {:ok, map()} | {:error, :not_found}
   def fetch(run, id) when is_binary(id) do
-    expected_run_id = run["id"]
+    run_id = run["id"]
 
-    case Store.fetch(:opportunity, id) do
-      {:ok, %{"run_id" => ^expected_run_id} = opportunity} ->
-        {:ok, opportunity}
-
-      _other ->
-        {:error, :not_found}
+    with {:ok, [^run_id, spacecraft, station, service, from, to]} <- decode_offer(id),
+         {:ok, profile} <- service_profile(run, service),
+         {:ok, raw} <- Provider.restore_opportunity(run, spacecraft, station, from, to),
+         {:ok, readiness} <- OrbitReadiness.for_search(run, raw),
+         opportunity = normalize(raw, run, profile, readiness),
+         true <- opportunity["id"] == id do
+      {:ok, opportunity}
+    else
+      _invalid -> {:error, :not_found}
     end
+  end
+
+  # Include the clipped end and service so successive searches can't change a previously
+  # returned offer. The booker revalidates these fields against the saved simulator run.
+  defp offer_id(opportunity, service) do
+    payload = [
+      opportunity["run_id"],
+      opportunity["spacecraft_id"],
+      opportunity["ground_station_id"],
+      service,
+      unix(opportunity["starts_at"]),
+      unix(opportunity["ends_at"])
+    ]
+
+    @offer_prefix <> Base.url_encode64(Jason.encode!(payload), padding: false)
+  end
+
+  defp decode_offer(@offer_prefix <> encoded) when byte_size(encoded) <= 2_048 do
+    with {:ok, json} <- Base.url_decode64(encoded, padding: false),
+         {:ok, [_, craft, station, service, from, to] = offer} <- Jason.decode(json),
+         true <- is_binary(craft) and is_binary(station) and is_binary(service),
+         true <- is_integer(from) and is_integer(to) do
+      {:ok, offer}
+    end
+  end
+
+  defp decode_offer(_id), do: {:error, :not_found}
+
+  defp unix(iso) do
+    {:ok, at, _offset} = DateTime.from_iso8601(iso)
+    DateTime.to_unix(at)
   end
 
   defp service_profile(_run, nil),
@@ -159,7 +193,7 @@ defmodule CadenceSimulator.Provider.Opportunities do
       end
 
     %{
-      "id" => opportunity["id"],
+      "id" => offer_id(opportunity, service_profile["id"]),
       "run_id" => opportunity["run_id"],
       "spacecraft_ref" => opportunity["spacecraft_id"],
       "ground_station_ref" => opportunity["ground_station_id"],
