@@ -1,11 +1,8 @@
 defmodule Cadence.Architecture.DependencyBoundary do
   @moduledoc """
-  Ratchets transitional root-facade, persistence-schema, cross-context schema,
-  cross-plane, and web-boundary dependencies.
-
-  The checked-in baseline is debt, not permission for new code. A change fails
-  when it adds an unlisted dependency, leaves a resolved dependency in the
-  baseline, or lets the baseline review date expire.
+  Finds root-facade, persistence-schema, cross-context schema, cross-plane, and
+  web-boundary dependency violations. There is no tolerated-debt baseline: any
+  finding fails the architecture check.
   """
 
   alias Cadence.Architecture.{ContextBoundary, DashboardBoundary, PlaneBoundary, WebBoundary}
@@ -218,13 +215,6 @@ defmodule Cadence.Architecture.DependencyBoundary do
           required(:fingerprint) => String.t()
         }
 
-  @type baseline :: %{
-          required(:owner) => String.t(),
-          required(:review_by) => Date.t(),
-          required(:rationale) => String.t(),
-          required(:allowed) => MapSet.t(String.t())
-        }
-
   @spec findings(map()) :: [finding()]
   def findings(graph) when is_map(graph) do
     edge_findings =
@@ -239,37 +229,6 @@ defmodule Cadence.Architecture.DependencyBoundary do
 
     (edge_findings ++ classification_findings)
     |> Enum.sort_by(& &1.fingerprint)
-  end
-
-  @spec read_baseline!(String.t()) :: baseline()
-  def read_baseline!(path) do
-    lines = path |> File.read!() |> String.split("\n")
-
-    %{
-      owner: required_metadata!(lines, "owner"),
-      review_by: required_date_metadata!(lines, "review-by"),
-      rationale: required_metadata!(lines, "rationale"),
-      allowed:
-        lines
-        |> Enum.map(&String.trim/1)
-        |> Enum.reject(&(&1 == "" or String.starts_with?(&1, "#")))
-        |> MapSet.new()
-    }
-  end
-
-  @spec compare([finding()], baseline(), Date.t()) :: map()
-  def compare(findings, baseline, today \\ Date.utc_today()) do
-    current = MapSet.new(findings, & &1.fingerprint)
-
-    %{
-      current: current,
-      new: Enum.reject(findings, &MapSet.member?(baseline.allowed, &1.fingerprint)),
-      resolved: MapSet.difference(baseline.allowed, current) |> Enum.sort(),
-      expired?: Date.after?(today, baseline.review_by),
-      owner: baseline.owner,
-      review_by: baseline.review_by,
-      rationale: baseline.rationale
-    }
   end
 
   @spec format_finding(finding()) :: String.t()
@@ -372,35 +331,5 @@ defmodule Cadence.Architecture.DependencyBoundary do
     Enum.any?(context_paths, fn context_path ->
       path == context_path or String.starts_with?(path, context_path)
     end)
-  end
-
-  defp required_metadata!(lines, key) do
-    prefix = "# #{key}:"
-
-    case Enum.find(lines, &String.starts_with?(&1, prefix)) do
-      nil ->
-        raise ArgumentError, "dependency baseline is missing #{key} metadata"
-
-      line ->
-        line
-        |> String.replace_prefix(prefix, "")
-        |> String.trim()
-        |> ensure_metadata_value!(key)
-    end
-  end
-
-  defp ensure_metadata_value!("", key) do
-    raise ArgumentError, "dependency baseline has empty #{key} metadata"
-  end
-
-  defp ensure_metadata_value!(value, _key), do: value
-
-  defp required_date_metadata!(lines, key) do
-    value = required_metadata!(lines, key)
-
-    case Date.from_iso8601(value) do
-      {:ok, date} -> date
-      {:error, _reason} -> raise ArgumentError, "dependency baseline has invalid #{key} metadata"
-    end
   end
 end
