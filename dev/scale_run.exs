@@ -189,14 +189,17 @@ defmodule Cadence.Dev.ScaleRun do
       capacity_heading(load.summary.host_capacity, meta.host.logical_cpus, opts[:label]),
       "- Fleet size #{opts[:spacecraft]}, #{sites} sites, #{opts[:shape]} load shape\n",
       per_site_line(opts),
-      "- Requested duration #{opts[:duration]} s, #{seconds} sampler rows\n",
+      "- Requested duration #{opts[:duration]} s, #{seconds} sampler rows " <>
+        "(#{Float.round(opts[:duration] / max(seconds, 1), 2)} s per row on average)\n",
       "- Simulator paths sending #{load.paths_sending}/#{load.paths_expected}\n",
       "- Simulator frames sent #{load.frames_sent}, target #{load.frames_per_second_expected} frames/s\n",
       "- Per-second JSONL \`#{Path.relative_to(out, @root)}\`\n",
       "- Summary JSON \`#{Path.relative_to(load.summary_path, @root)}\`\n\n",
       "## Run settings\n\n| Setting | Value |\n| --- | --- |\n",
       meta_rows(meta),
-      "\n## Per-second metrics\n\n| Metric | p50 | p99 | Max |\n| --- | ---: | ---: | ---: |\n",
+      # Counts are per sampler row, which covers about a second only on an unloaded host.
+      "\n## Per-sample metrics\n\nOne row per sampler tick; counts (frames, batches, bytes) are " <>
+        "per row, not per second.\n\n| Metric | p50 | p99 | Max |\n| --- | ---: | ---: | ---: |\n",
       for {key, stats} <- Enum.sort(metrics) do
         "| \`#{key}\` | #{cell(stats.p50)} | #{cell(stats.p99)} | #{cell(stats.max)} |\n"
       end,
