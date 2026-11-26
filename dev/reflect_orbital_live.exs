@@ -1,5 +1,6 @@
 # Run with mise run earendil-live. This process owns the rehearsal TCP feeds.
 if Mix.env() != :dev, do: raise("Earendil live telemetry is a local development demo")
+Code.require_file("seed/earendil_dashboard_import.exs", __DIR__)
 
 {options, [], []} =
   OptionParser.parse(System.argv(), strict: [craft: :integer, shape: :string, per_site: :integer])
@@ -26,7 +27,7 @@ unless Node.connect(peer), do: raise("Start mise run cadence before the live dem
 # Keep normal operational messages and every warning/error during the rehearsal.
 :ok = :rpc.call(peer, Logger, :configure, [[level: :info]])
 
-for file <- ["fixture.exs", "dashboards.exs", "live_contacts.exs"] do
+for file <- ["fixture.exs", "live_contacts.exs"] do
   case :rpc.call(
          peer,
          Code,
@@ -69,30 +70,15 @@ contacts =
 
 IO.puts("Checking telemetry history and saving the dashboard suite…")
 
-case :rpc.call(
-       peer,
-       Cadence.Dev.ReflectOrbital.Dashboards,
-       :run,
-       [[replace?: System.get_env("EARENDIL_REBUILD_DASHBOARDS") == "1"]],
-       120_000
-     ) do
-  %{dashboards: dashboards, playlist: playlist} ->
-    IO.puts(
-      "Earendil: #{length(contacts)} live spacecraft, 1 Hz per packet family, local TCP ingress"
-    )
+%{dashboards: dashboards, playlist: playlist} =
+  EarendilDashboardImport.run("org-reflect-orbital-demo", "mission-earendil-demo")
 
-    Enum.each(
-      dashboards,
-      &IO.puts(
-        "#{&1.name}: http://localhost:4001/missions/mission-earendil-demo/ops/dashboards/#{&1.id}"
-      )
-    )
+IO.puts("Earendil: #{length(contacts)} live spacecraft, 1 Hz per packet family, local TCP ingress")
 
-    IO.puts("Playlist: #{playlist}")
-
-  error ->
-    raise "Dashboard setup failed: #{inspect(error, limit: 30)}"
-end
+base_url = System.get_env("BASE_URL") || "http://127.0.0.1:#{System.get_env("PORT", "4001")}"
+console_url = base_url <> "/console/reflect-orbital/earendil/telemetry/dashboards"
+Enum.each(dashboards, &IO.puts("#{&1.name}: #{console_url}/#{&1.id}"))
+IO.puts("Playlist: #{console_url}/playlists/#{playlist}/present")
 
 Application.put_env(:cadence_simulator, :provider_http, enabled: false)
 

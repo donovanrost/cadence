@@ -1,5 +1,5 @@
 defmodule EarendilDashboardDocuments do
-  @moduledoc "Pure REST seed documents derived from dev/reflect_orbital/dashboards.exs."
+  @moduledoc "The Earendil dashboard documents shared by the REST seed and live rehearsal."
 
   def documents(organization_id, mission_id) do
     Enum.map(

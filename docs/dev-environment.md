@@ -38,8 +38,8 @@ simulator run over its HTTP admin API, and creates the provider account, mission
 provider through the console API. It validates and syncs the provider, probes the managed QuestDB
 dashboard source through the console API, then stages the selected ground stations, a catalog-backed
 spacecraft profile, and spacecraft pinned to that profile in one change set. The spacecraft use the
-stable IDs referenced by the six documents in
-`dev/reflect_orbital/dashboards.exs`. That change set enters independent review. Once the first ten
+stable IDs referenced by the six documents in `dev/seed/earendil_dashboards.exs`. That change set
+enters independent review. Once the first ten
 spacecraft are applied, the client imports those dashboards through `POST /dashboards` with
 `identity: "keep"`; an identical rerun reuses them. Until then, it reports the #745 approval wait.
 Invitation delivery and a second person's session also wait on #745. Per-spacecraft configuration
@@ -58,6 +58,18 @@ Fresh `reset --no-seed` + `seed-rest` measurements on the Platform worktree (202
 Both runs reached `in_review` and the dashboard phase reported the #745 wait. The mission's default
 independent approval policy prevents the spacecraft from becoming active until #745 supplies a
 second person.
+
+Default `up` retains these direct seeds until the REST harness reaches parity:
+
+| Direct seed step | Remaining REST work |
+| --- | --- |
+| `reflect_orbital_demo.exs` | Independent fleet and model approval need a second person (#745); orbital elements need #732; bulk spacecraft configuration review needs #734. |
+| `apogee_qa_personas.exs` | Invite and sign in the four QA people using the dev mailbox (#745). |
+| `reflect_orbital_planning.exs` | Seed planning policy and recurring templates over REST; its second-person policy approval needs #745. |
+| `apogee_qa_mission.exs` | Build both QA missions through REST after the QA people can join by invitation (#745). |
+
+`mise run earendil-live` imports the shared dashboard documents and playlist through REST. Its
+contact setup still uses the fixture and live contact scripts required by the scale harness.
 
 Use `mise exec --` from anywhere under the worktree to load `mise.local.toml`, including when
 running `mise run cadence`, `mise run earendil-live`, Mix tasks, and console e2e tests. The

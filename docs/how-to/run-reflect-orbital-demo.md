@@ -194,26 +194,26 @@ idempotency key retain retry deduplication. Counters outside QuestDB's signed LO
 range use the lossless JSON integer representation; these values remain readable
 but do not participate in native numeric aggregates.
 
-The task creates six native dashboards and a 30-second rotating wallboard playlist:
+The task imports six native dashboards through REST and creates a 30-second rotating wallboard playlist:
 
-- **Fleet Watch** (`/missions/mission-earendil-demo/ops/dashboards/dashboard-earendil-fleet`)
-- **Spacecraft Overview** (`/missions/mission-earendil-demo/ops/dashboards/dashboard-earendil-overview`)
-- **Electrical Power** (`/missions/mission-earendil-demo/ops/dashboards/dashboard-earendil-power`)
-- **Thermal Control** (`/missions/mission-earendil-demo/ops/dashboards/dashboard-earendil-thermal`)
-- **Attitude & Pointing** (`/missions/mission-earendil-demo/ops/dashboards/dashboard-earendil-attitude`)
-- **Communications & Payload** (`/missions/mission-earendil-demo/ops/dashboards/dashboard-earendil-comms-payload`)
+- **Fleet Watch** (`/console/reflect-orbital/earendil/telemetry/dashboards/dashboard-earendil-fleet`)
+- **Spacecraft Overview** (`/console/reflect-orbital/earendil/telemetry/dashboards/dashboard-earendil-overview`)
+- **Electrical Power** (`/console/reflect-orbital/earendil/telemetry/dashboards/dashboard-earendil-power`)
+- **Thermal Control** (`/console/reflect-orbital/earendil/telemetry/dashboards/dashboard-earendil-thermal`)
+- **Attitude & Pointing** (`/console/reflect-orbital/earendil/telemetry/dashboards/dashboard-earendil-attitude`)
+- **Communications & Payload** (`/console/reflect-orbital/earendil/telemetry/dashboards/dashboard-earendil-comms-payload`)
 
 Use the dashboard's spacecraft selector to switch subsystem views. All views
 refresh every second and show five-minute receipt-time trends. Open the dashboard
-directory to present **Earendil — Demo Rotation**. Rerunning the task reuses the
-saved dashboards and playlist, preserving manual dashboard edits.
+directory to present **Earendil — Demo Rotation**. Rerunning the task reuses identical
+dashboards and the saved playlist. If an existing dashboard has different content, the
+REST import reports a conflict with a diff; reset the worktree stack to restore the fixture.
 The playlist presents published snapshots and refreshes on each entry change or
 manual refresh; open an individual dashboard for continuous live updates.
 
-Startup probes QuestDB and saves its supported query capabilities before creating
+Startup probes QuestDB and saves its supported query capabilities before importing
 the views. Trend charts use native decimation to preserve the range of samples
-that arrive together after TCP buffering. To intentionally restore the fixture's
-dashboard definitions, run `EARENDIL_REBUILD_DASHBOARDS=1 mise run earendil-live`.
+that arrive together after TCP buffering.
 After a server restart, allow time for the ten telemetry partitions to recover
 their recorded state before the feeds start. This can take several minutes after
 repeated rehearsals, so start the feed before the presentation.
