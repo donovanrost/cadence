@@ -29,6 +29,8 @@ const BUDGET = {
   heapMb: 150,
 } as const;
 const LOADS = 3;
+/** A common phone (#868): Fleet's row list, not the table. */
+const PHONE = { width: 390, height: 844 } as const;
 const SIZES = [500, 1_000] as const;
 
 /** What this spec scales; every SCALE line says so. */
@@ -38,8 +40,16 @@ const SCALED = ["fleet"] as const;
  * `live`: the screen subscribes to the `fleet` push (useFleet without `live: false`), so it gets
  * the scaled snapshot and one full-fleet push is timed. A screen without it has no push cost.
  */
-const SCREENS: readonly Readonly<{ name: string; path: string; live: boolean }>[] = [
+const SCREENS: readonly Readonly<{
+  name: string;
+  path: string;
+  live: boolean;
+  /** Only where the screen lays out differently at that width; else the project's desktop. */
+  viewport?: Readonly<{ width: number; height: number }>;
+}>[] = [
   { name: "Fleet", path: missionPath("fleet"), live: true },
+  // #868: below 768px Fleet mounts its phone row list instead of the virtual table (#867).
+  { name: "Fleet (phone)", path: missionPath("fleet"), live: true, viewport: PHONE },
   { name: "Now", path: missionPath("now"), live: true },
   { name: "Alarms", path: missionPath("alarms"), live: true },
   { name: "Contacts", path: missionPath("contacts"), live: true },
@@ -71,6 +81,7 @@ async function load(
 ) {
   const page = await context.newPage();
   try {
+    if (screen.viewport) await page.setViewportSize(screen.viewport);
     await installScaleProbes(page);
     const fleet = await serveScaledFleet(page, size);
     await page.goto(screen.path);
