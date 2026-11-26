@@ -77,7 +77,9 @@ defmodule Cadence.Reads.FleetStatusScaleTest do
       end
 
     for chunk <- Enum.chunk_every(rows, 2_000), do: Repo.insert_all(LatestStateRow, chunk)
+    Cadence.Limits.Store.FleetSummary.refresh(Repo, @mission, :all)
     Repo.query!("ANALYZE telemetry_latest_limit_states")
+    Repo.query!("ANALYZE telemetry_fleet_limit_summaries")
 
     cache = CurrentValueStore.policy(module: ETS)
     saved = Application.get_env(:cadence, :telemetry_current_value_store)

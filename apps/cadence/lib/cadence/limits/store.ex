@@ -5,7 +5,7 @@ defmodule Cadence.Limits.Store do
 
   alias Cadence.Alarms.Ground, as: AlarmGround
   alias Cadence.Limits.Event
-  alias Cadence.Limits.Store.{LatestStateRow, LimitEventRow}
+  alias Cadence.Limits.Store.{FleetSummary, LatestStateRow, LimitEventRow}
   alias Cadence.Repo
   alias Cadence.Telemetry.LatestProjectionOrder
   alias Ecto.Multi
@@ -27,11 +27,26 @@ defmodule Cadence.Limits.Store do
 
   @spec persist_latest_states(module(), [Event.t()]) :: {:ok, [struct()]} | {:error, term()}
   def persist_latest_states(repo, events) when is_list(events) do
-    Enum.reduce_while(events, {:ok, []}, fn %Event{} = event, {:ok, acc} ->
+    events
+    |> Enum.reduce_while({:ok, []}, fn %Event{} = event, {:ok, acc} ->
       case persist_latest_state(repo, event) do
         {:ok, row} -> {:cont, {:ok, [row | acc]}}
         {:error, reason} -> {:halt, {:error, reason}}
       end
+    end)
+    |> tap(fn
+      {:ok, _rows} -> refresh_fleet_summaries(repo, events)
+      {:error, _reason} -> :ok
+    end)
+  end
+
+  # The fleet summary of every spacecraft these events touched, once each (#849).
+  defp refresh_fleet_summaries(repo, events) do
+    events
+    |> Enum.reject(&is_nil(&1.spacecraft_id))
+    |> Enum.group_by(& &1.mission_id, & &1.spacecraft_id)
+    |> Enum.each(fn {mission_id, ids} ->
+      FleetSummary.refresh(repo, mission_id, Enum.uniq(ids))
     end)
   end
 
@@ -151,6 +166,7 @@ defmodule Cadence.Limits.Store do
         %LatestStateRow{} |> LatestStateRow.changeset(event) |> Repo.insert!()
       end)
 
+      FleetSummary.refresh(Repo, mission_id, if(spacecraft_id, do: [spacecraft_id], else: :all))
       {:ok, changed} = AlarmGround.reconcile(Repo, mission_id, spacecraft_id, events)
       changed
     end)

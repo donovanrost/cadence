@@ -1,20 +1,26 @@
 defmodule Cadence.Limits.Store.FleetSummary do
   @moduledoc """
-  The fleet's limit conditions in the database (#798): one row per spacecraft from the latest limit
-  states, aggregated there instead of read whole (at 1,000 spacecraft x 200 points the whole read is
-  200,000 rows, 2.7 s). Two statements however many spacecraft or points there are.
+  The fleet's limit conditions, one row per spacecraft (#798, #849). `telemetry_fleet_limit_summaries`
+  summarizes each spacecraft's latest limit states: its worst condition across every point
+  (`:critical` when one is red, `:caution` when one is yellow, else `:nominal`), how many points
+  violate (red or yellow), the newest receipt time of any of its limit states, and its worst
+  violating point (the most severe, then the newest) as the state it came from. A spacecraft with no
+  limit state has no row.
 
-  Per spacecraft that has any limit state: its worst condition across every point (`:critical` when
-  one is red, `:caution` when one is yellow, else `:nominal`), how many points violate (red or
-  yellow), the newest receipt time of any of its limit states, and its worst violating point (the
-  most severe, then the newest) as the event it came from. A spacecraft with no limit state is
-  absent.
+  **Kept by the writers, in their transaction.** `refresh/3` recomputes the rows of the spacecraft a
+  writer touched from their latest states (one aggregate over that spacecraft's rows, about 0.6 ms
+  at 200 points, once per spacecraft per transaction), and removes the row of a spacecraft left
+  without states. `Limits.Store.persist_latest_states/2` and `replace_latest_states/3`, the only
+  writers of `telemetry_latest_limit_states`, call it; a new writer must too (the property test in
+  `fleet_summary_property_test.exs` is the check). Bulk fixtures call `refresh(repo, mission, :all)`.
+
+  `load/2` is one statement over the summaries however many spacecraft or points there are.
   """
 
   import Ecto.Query
 
   alias Cadence.Limits.Event
-  alias Cadence.Limits.Store.LatestStateRow
+  alias Cadence.Limits.Store.{FleetSummaryRow, LatestStateRow}
   alias Cadence.Repo
 
   @type summary :: %{
@@ -24,58 +30,74 @@ defmodule Cadence.Limits.Store.FleetSummary do
           worst: Event.t() | nil
         }
 
-  # The severity rank of a normalized state: red 2, yellow 1, everything else 0 (the violators
-  # index is on exactly this expression).
-  defmacrop rank(state) do
-    quote do
-      fragment("(CASE ? WHEN 'red' THEN 2 WHEN 'yellow' THEN 1 ELSE 0 END)", unquote(state))
-    end
-  end
+  # The severity rank of a normalized state: red 2, yellow 1, everything else 0.
+  @rank "(CASE normalized_state WHEN 'red' THEN 2 WHEN 'yellow' THEN 1 ELSE 0 END)"
 
   @spec load(binary(), binary()) :: %{binary() => summary()}
   def load(organization_id, mission_id) do
-    worst = worst_violating(organization_id, mission_id)
-
-    organization_id
-    |> aggregates(mission_id)
-    |> Map.new(fn {id, rank, violating, last_received_at} ->
-      {id,
+    from(s in FleetSummaryRow,
+      left_join: l in LatestStateRow,
+      on: l.id == s.worst_state_id,
+      where: s.organization_id == ^organization_id and s.mission_id == ^mission_id,
+      select: {s, l}
+    )
+    |> Repo.all()
+    |> Map.new(fn {summary, worst} ->
+      {summary.spacecraft_id,
        %{
-         limit_state: condition(rank),
-         violating: violating,
-         last_received_at: last_received_at,
-         worst: Map.get(worst, id)
+         limit_state: condition(summary.worst_rank),
+         violating: summary.violating,
+         last_received_at: summary.last_received_at,
+         worst: worst && LatestStateRow.to_domain(worst)
        }}
     end)
   end
 
-  defp aggregates(organization_id, mission_id) do
-    from(r in LatestStateRow,
-      where:
-        r.mission_id == ^mission_id and r.organization_id == ^organization_id and
-          not is_nil(r.spacecraft_id),
-      group_by: r.spacecraft_id,
-      select: {
-        r.spacecraft_id,
-        max(rank(r.normalized_state)),
-        filter(count(), r.violation),
-        max(r.receipt_time)
-      }
-    )
-    |> Repo.all()
+  @doc """
+  Recomputes the summaries of `spacecraft_ids` (or of every spacecraft of the mission, `:all`) from
+  their latest limit states, inside the caller's transaction.
+  """
+  @spec refresh(module(), binary(), :all | [binary()]) :: :ok
+  def refresh(_repo, _mission_id, []), do: :ok
+
+  def refresh(repo, mission_id, spacecraft_ids) do
+    {scope, params} =
+      case spacecraft_ids do
+        :all -> {"", [mission_id]}
+        ids -> {"AND SCOPE_COLUMN = ANY($2)", [mission_id, ids]}
+      end
+
+    repo.query!(delete_sql(scope), params)
+    repo.query!(upsert_sql(scope), params)
+    :ok
   end
 
-  # DISTINCT ON the spacecraft: its most severe, then newest, violating row.
-  defp worst_violating(organization_id, mission_id) do
-    from(r in LatestStateRow,
-      where:
-        r.mission_id == ^mission_id and r.organization_id == ^organization_id and r.violation and
-          not is_nil(r.spacecraft_id),
-      distinct: r.spacecraft_id,
-      order_by: [asc: r.spacecraft_id, desc: rank(r.normalized_state), desc: r.receipt_time]
-    )
-    |> Repo.all()
-    |> Map.new(&{&1.spacecraft_id, LatestStateRow.to_domain(&1)})
+  defp delete_sql(scope) do
+    """
+    DELETE FROM telemetry_fleet_limit_summaries s
+    WHERE s.mission_id = $1 #{String.replace(scope, "SCOPE_COLUMN", "s.spacecraft_id")}
+      AND NOT EXISTS (
+        SELECT 1 FROM telemetry_latest_limit_states l
+        WHERE l.mission_id = s.mission_id AND l.organization_id = s.organization_id
+          AND l.spacecraft_scope_id = s.spacecraft_id AND l.spacecraft_id IS NOT NULL)
+    """
+  end
+
+  defp upsert_sql(scope) do
+    """
+    INSERT INTO telemetry_fleet_limit_summaries
+      (organization_id, mission_id, spacecraft_id, worst_rank, violating, last_received_at, worst_state_id)
+    SELECT organization_id, mission_id, spacecraft_id, max(#{@rank}), count(*) FILTER (WHERE violation),
+      max(receipt_time),
+      (array_agg(id ORDER BY #{@rank} DESC, receipt_time DESC, id DESC) FILTER (WHERE violation))[1]
+    FROM telemetry_latest_limit_states
+    WHERE mission_id = $1 #{String.replace(scope, "SCOPE_COLUMN", "spacecraft_scope_id")}
+      AND spacecraft_id IS NOT NULL AND organization_id IS NOT NULL
+    GROUP BY organization_id, mission_id, spacecraft_id
+    ON CONFLICT (organization_id, mission_id, spacecraft_id) DO UPDATE SET
+      worst_rank = EXCLUDED.worst_rank, violating = EXCLUDED.violating,
+      last_received_at = EXCLUDED.last_received_at, worst_state_id = EXCLUDED.worst_state_id
+    """
   end
 
   defp condition(2), do: :critical
