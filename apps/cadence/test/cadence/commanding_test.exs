@@ -1399,7 +1399,7 @@ defmodule Cadence.CommandingTest do
         )
 
       {:ok, bravo} =
-        Cadence.SourceEndpoints.persist_source_endpoint(
+        Cadence.SourceEndpointFixtures.persist(
           @organization_id,
           SourceEndpoint.new(%{
             source_endpoint_id: "source-endpoint-bravo",
@@ -1878,7 +1878,7 @@ defmodule Cadence.CommandingTest do
       })
 
     assert {:ok, persisted_source_endpoint} =
-             Cadence.SourceEndpoints.persist_source_endpoint(@organization_id, source_endpoint)
+             Cadence.SourceEndpointFixtures.persist(@organization_id, source_endpoint)
 
     persisted_source_endpoint
   end

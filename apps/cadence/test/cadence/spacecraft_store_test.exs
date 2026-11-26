@@ -1,7 +1,6 @@
 defmodule Cadence.SpacecraftStoreTest do
   use Cadence.DataCase, async: false
 
-  alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
   alias Cadence.Spacecraft.ConfigKinds.SpacecraftOverride
   alias Cadence.SpacecraftType
@@ -249,17 +248,15 @@ defmodule Cadence.SpacecraftStoreTest do
   test "rejects source endpoints that reference a spacecraft missing from the mission" do
     persist_mission_scope("org-spacecraft", "mission-spacecraft")
 
-    source_endpoint =
-      SourceEndpoint.new(%{
-        source_endpoint_id: "source-endpoint-001",
-        organization_id: "org-spacecraft",
-        mission_id: "mission-spacecraft",
-        spacecraft_id: "spacecraft-missing",
-        source_ref: "sc-001"
-      })
-
     assert {:error, :spacecraft_not_found} =
-             Cadence.SourceEndpoints.persist_source_endpoint("org-spacecraft", source_endpoint)
+             Cadence.SourceEndpoints.create_source_endpoint(
+               "org-spacecraft",
+               "mission-spacecraft",
+               %{
+                 spacecraft_id: "spacecraft-missing",
+                 source_ref: "sc-001"
+               }
+             )
   end
 
   describe "list_spacecraft_page/3" do

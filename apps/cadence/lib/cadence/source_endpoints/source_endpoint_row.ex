@@ -28,13 +28,21 @@ defmodule Cadence.SourceEndpoints.SourceEndpointRow do
 
   @spec changeset(SourceEndpoint.t()) :: Ecto.Changeset.t()
   def changeset(%SourceEndpoint{} = source_endpoint) do
-    %__MODULE__{}
-    |> cast(domain_attrs(source_endpoint), all_fields())
+    %__MODULE__{
+      source_endpoint_id: source_endpoint.source_endpoint_id,
+      organization_id: source_endpoint.organization_id,
+      mission_id: source_endpoint.mission_id
+    }
+    |> cast(domain_attrs(source_endpoint), [
+      :spacecraft_id,
+      :source_ref,
+      :scid,
+      :display_name,
+      :metadata
+    ])
     |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
-    |> unique_constraint([:mission_id, :source_endpoint_id],
-      name: :mission_source_endpoints_scope_idx
-    )
+    |> unique_constraint(:source_endpoint_id, name: :mission_source_endpoints_pkey)
   end
 
   @spec update_changeset(struct(), SourceEndpoint.t()) :: Ecto.Changeset.t()
@@ -66,27 +74,11 @@ defmodule Cadence.SourceEndpoints.SourceEndpointRow do
 
   defp domain_attrs(%SourceEndpoint{} = source_endpoint) do
     %{
-      source_endpoint_id: source_endpoint.source_endpoint_id,
-      organization_id: source_endpoint.organization_id,
-      mission_id: source_endpoint.mission_id,
       spacecraft_id: source_endpoint.spacecraft_id,
       source_ref: source_endpoint.source_ref,
       scid: source_endpoint.scid,
       display_name: source_endpoint.display_name,
       metadata: JsonDocument.wrap_value(source_endpoint.metadata)
     }
-  end
-
-  defp all_fields do
-    [
-      :source_endpoint_id,
-      :organization_id,
-      :mission_id,
-      :spacecraft_id,
-      :source_ref,
-      :scid,
-      :display_name,
-      :metadata
-    ]
   end
 end

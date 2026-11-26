@@ -401,7 +401,7 @@ defmodule Cadence.Contacts.ProviderSchedulingTest do
         display_name: "#{spacecraft.display_name} provider identity"
       })
 
-    {:ok, endpoint} = Cadence.SourceEndpoints.persist_source_endpoint(organization_id, endpoint)
+    {:ok, endpoint} = Cadence.SourceEndpointFixtures.persist(organization_id, endpoint)
     endpoint
   end
 

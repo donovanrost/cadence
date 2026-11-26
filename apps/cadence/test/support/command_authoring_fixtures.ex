@@ -2,7 +2,7 @@ defmodule Cadence.CommandAuthoringFixtures do
   @moduledoc false
   alias Cadence.Catalog.Importers.CadenceYamlDatabase
   alias Cadence.Catalog.Source
-  alias Cadence.{CommandReviewFixtures, Ids, MissionModelFixtures, MissionModels, SourceEndpoints}
+  alias Cadence.{CommandReviewFixtures, Ids, MissionModelFixtures, MissionModels}
   alias Cadence.SourceEndpoints.SourceEndpoint
 
   def fixture! do
@@ -14,7 +14,7 @@ defmodule Cadence.CommandAuthoringFixtures do
 
   def target!(org, mission, attrs \\ %{}) do
     {:ok, target} =
-      SourceEndpoints.persist_source_endpoint(
+      Cadence.SourceEndpointFixtures.persist(
         org,
         SourceEndpoint.new(
           Map.merge(

@@ -417,7 +417,7 @@ defmodule CadenceWeb.DashboardExplorationReadTest do
         spacecraft_id: c.spacecraft
       })
 
-    assert {:ok, endpoint} = Cadence.SourceEndpoints.persist_source_endpoint(c.org, endpoint)
+    assert {:ok, endpoint} = Cadence.SourceEndpointFixtures.persist(c.org, endpoint)
     contact = contact(c, [endpoint.source_endpoint_id])
 
     params = %{

@@ -30,7 +30,6 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
   alias Cadence.Missions.Mission
   alias Cadence.Organizations.Organization
   alias Cadence.{Repo, Spacecraft, SpacecraftType}
-  alias Cadence.SourceEndpoints.SourceEndpoint
 
   @token_key "EARENDIL_DEMO_PROVIDER_TOKEN"
   @fleet_chunk 100
@@ -371,17 +370,12 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
       )
 
     {:ok, _source} =
-      Cadence.SourceEndpoints.persist_source_endpoint(
-        F.organization_id(),
-        SourceEndpoint.new(%{
-          source_endpoint_id: "source-#{craft.spacecraft_id}",
-          mission_id: F.mission_id(),
-          spacecraft_id: craft.spacecraft_id,
-          source_ref: craft.display_name,
-          display_name: "#{craft.display_name} TT&C",
-          metadata: F.metadata()
-        })
-      )
+      Cadence.SourceEndpoints.create_source_endpoint(F.organization_id(), F.mission_id(), %{
+        spacecraft_id: craft.spacecraft_id,
+        source_ref: craft.display_name,
+        display_name: "#{craft.display_name} TT&C",
+        metadata: F.metadata()
+      })
 
     # Primary and candidate sites are half the site ring apart.
     {primary_site, _transport} = primary = Enum.at(transports, rem(index, sites))

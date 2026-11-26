@@ -1594,3 +1594,6 @@ Lists accept `page` (default 1) and `page_size` (default 50, maximum 100). The r
 `source_endpoint` object with `source_ref`, `display_name`, optional `scid` and `metadata`, and
 an optional `spacecraft_id` on the mission route. The server generates `source_endpoint_id` and
 returns it with the stored endpoint. Supplying the ID on create returns `422 invalid_params`.
+
+A non-empty `source_ref` identifies an endpoint within its mission and spacecraft scope. Repeating
+that reference returns the existing endpoint with its saved attributes.

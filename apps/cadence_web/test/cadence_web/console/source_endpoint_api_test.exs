@@ -4,7 +4,6 @@ defmodule CadenceWeb.Console.SourceEndpointAPITest do
   alias Cadence.Organizations
   alias Cadence.Organizations.Organization
   alias Cadence.SourceEndpoints
-  alias Cadence.SourceEndpoints.SourceEndpoint
   alias CadenceWeb.{ControlPlaneApiFixtures, TestFixtures}
 
   setup %{conn: conn} do
@@ -121,13 +120,9 @@ defmodule CadenceWeb.Console.SourceEndpointAPITest do
       ControlPlaneApiFixtures.persist_mission!(other.organization_id, "mission-other-source")
 
     {:ok, theirs} =
-      SourceEndpoints.persist_source_endpoint(
-        other.organization_id,
-        SourceEndpoint.new(%{
-          mission_id: mission.mission_id,
-          source_ref: "other-source"
-        })
-      )
+      SourceEndpoints.create_source_endpoint(other.organization_id, mission.mission_id, %{
+        source_ref: "other-source"
+      })
 
     conn = session_conn(context.session)
     path = context.path <> "/source-endpoints"
@@ -166,7 +161,13 @@ defmodule CadenceWeb.Console.SourceEndpointAPITest do
     assert %{"data" => %{"source_endpoint_id" => second_id, "display_name" => "changed"}} =
              conn |> post(path, endpoint("changed")) |> json_response(201)
 
-    assert original_id != second_id
+    refute original_id == second_id
+
+    retry =
+      put_in(endpoint("original"), ["source_endpoint", "display_name"], "ignore retry input")
+
+    assert %{"data" => %{"source_endpoint_id" => ^original_id, "display_name" => "original"}} =
+             conn |> post(path, retry) |> json_response(201)
 
     assert %{"data" => %{"display_name" => "original"}} =
              conn |> get(path <> "/#{original_id}") |> json_response(200)

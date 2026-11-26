@@ -3,7 +3,7 @@ defmodule Cadence.SourceEndpointsTest do
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.Ingress.RawEvidence
-  alias Cadence.SourceEndpoints.SourceEndpoint
+  alias Cadence.SourceEndpoints
   alias Cadence.Spacecraft
   alias Cadence.Telemetry.PacketDefinition
 
@@ -24,18 +24,12 @@ defmodule Cadence.SourceEndpointsTest do
     assert {:ok, _persisted_spacecraft} =
              Cadence.SpacecraftStore.persist_spacecraft(@organization_id, spacecraft)
 
-    source_endpoint =
-      SourceEndpoint.new(%{
-        source_endpoint_id: "endpoint-sc-001",
-        organization_id: @organization_id,
-        mission_id: @mission_id,
-        spacecraft_id: "sc-001",
-        source_ref: "provider/path-a",
-        display_name: "SC-001 Downlink"
-      })
-
     assert {:ok, persisted_source_endpoint} =
-             Cadence.SourceEndpoints.persist_source_endpoint(@organization_id, source_endpoint)
+             SourceEndpoints.create_source_endpoint(@organization_id, @mission_id, %{
+               spacecraft_id: "sc-001",
+               source_ref: "provider/path-a",
+               display_name: "SC-001 Downlink"
+             })
 
     raw_evidence =
       RawEvidence.new(%{
@@ -86,37 +80,25 @@ defmodule Cadence.SourceEndpointsTest do
     assert {:ok, _persisted_spacecraft} =
              Cadence.SpacecraftStore.persist_spacecraft(@organization_id, spacecraft_beta)
 
-    assert {:ok, _endpoint_alpha} =
-             Cadence.SourceEndpoints.persist_source_endpoint(
-               @organization_id,
-               SourceEndpoint.new(%{
-                 source_endpoint_id: "endpoint-sc-001-primary",
-                 organization_id: @organization_id,
-                 mission_id: @mission_id,
-                 spacecraft_id: "sc-001",
-                 source_ref: "provider/path-a"
-               })
-             )
+    assert {:ok, endpoint_alpha} =
+             SourceEndpoints.create_source_endpoint(@organization_id, @mission_id, %{
+               spacecraft_id: "sc-001",
+               source_ref: "provider/path-a"
+             })
 
     assert {:ok, _endpoint_beta} =
-             Cadence.SourceEndpoints.persist_source_endpoint(
-               @organization_id,
-               SourceEndpoint.new(%{
-                 source_endpoint_id: "endpoint-sc-002-primary",
-                 organization_id: @organization_id,
-                 mission_id: @mission_id,
-                 spacecraft_id: "sc-002",
-                 source_ref: "provider/path-b"
-               })
-             )
+             SourceEndpoints.create_source_endpoint(@organization_id, @mission_id, %{
+               spacecraft_id: "sc-002",
+               source_ref: "provider/path-a"
+             })
 
     filtered_source_endpoints =
-      Cadence.SourceEndpoints.list_source_endpoints(@organization_id, @mission_id,
+      SourceEndpoints.list_source_endpoints(@organization_id, @mission_id,
         spacecraft_id: "sc-001"
       )
 
     assert Enum.map(filtered_source_endpoints, & &1.source_endpoint_id) == [
-             "endpoint-sc-001-primary"
+             endpoint_alpha.source_endpoint_id
            ]
 
     assert Enum.map(filtered_source_endpoints, & &1.spacecraft_id) == ["sc-001"]
@@ -137,18 +119,12 @@ defmodule Cadence.SourceEndpointsTest do
     assert {:ok, _persisted_spacecraft} =
              Cadence.SpacecraftStore.persist_spacecraft(@organization_id, spacecraft)
 
-    source_endpoint =
-      SourceEndpoint.new(%{
-        source_endpoint_id: "endpoint-sc-042",
-        organization_id: @organization_id,
-        mission_id: @mission_id,
-        spacecraft_id: "sc-042",
-        scid: 42,
-        display_name: "SC-042 Downlink"
-      })
-
     assert {:ok, persisted_source_endpoint} =
-             Cadence.SourceEndpoints.persist_source_endpoint(@organization_id, source_endpoint)
+             SourceEndpoints.create_source_endpoint(@organization_id, @mission_id, %{
+               spacecraft_id: "sc-042",
+               scid: 42,
+               display_name: "SC-042 Downlink"
+             })
 
     raw_evidence =
       RawEvidence.new(%{
@@ -158,9 +134,61 @@ defmodule Cadence.SourceEndpointsTest do
         raw: tm_frame_header(42)
       })
 
-    assert {:ok, resolved_evidence} = Cadence.SourceEndpoints.resolve_raw_evidence(raw_evidence)
+    assert {:ok, resolved_evidence} = SourceEndpoints.resolve_raw_evidence(raw_evidence)
     assert resolved_evidence.source_endpoint_ref == persisted_source_endpoint.source_endpoint_id
     assert resolved_evidence.spacecraft_id == "sc-042"
+  end
+
+  test "a repeated natural identity returns the stored row and is scoped to its mission" do
+    persist_mission_scope(@organization_id, @mission_id)
+    persist_mission_scope("org-beta", "mission-beta")
+
+    attrs = %{source_ref: "provider/shared", display_name: "original"}
+
+    assert {:ok, original} =
+             SourceEndpoints.create_source_endpoint(@organization_id, @mission_id, attrs)
+
+    assert {:ok, ^original} =
+             SourceEndpoints.create_source_endpoint(@organization_id, @mission_id, %{
+               attrs
+               | display_name: "changed during retry"
+             })
+
+    assert {:ok, other} =
+             SourceEndpoints.create_source_endpoint("org-beta", "mission-beta", attrs)
+
+    assert other.source_endpoint_id != original.source_endpoint_id
+
+    assert {:error, :source_endpoint_not_found} =
+             SourceEndpoints.fetch_source_endpoint(
+               @organization_id,
+               @mission_id,
+               other.source_endpoint_id
+             )
+
+    for id <- [other.source_endpoint_id, "unknown-endpoint"] do
+      assert {:error, :source_endpoint_id_server_generated} =
+               SourceEndpoints.create_source_endpoint(
+                 @organization_id,
+                 @mission_id,
+                 Map.put(attrs, :source_endpoint_id, id)
+               )
+    end
+  end
+
+  test "blank source references create independent endpoints" do
+    persist_mission_scope(@organization_id, @mission_id)
+
+    assert {:ok, first} =
+             SourceEndpoints.create_source_endpoint(@organization_id, @mission_id, %{
+               source_ref: " "
+             })
+
+    assert {:ok, second} =
+             SourceEndpoints.create_source_endpoint(@organization_id, @mission_id, %{})
+
+    assert first.source_ref == nil
+    assert first.source_endpoint_id != second.source_endpoint_id
   end
 
   defp telemetry_binding_set(organization_id, mission_id) do

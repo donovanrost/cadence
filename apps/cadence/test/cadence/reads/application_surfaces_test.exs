@@ -703,7 +703,7 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
       })
 
     assert {:ok, _endpoint} =
-             Cadence.SourceEndpoints.persist_source_endpoint(@organization_id, endpoint)
+             Cadence.SourceEndpointFixtures.persist(@organization_id, endpoint)
 
     path_template =
       PathTemplate.new(%{

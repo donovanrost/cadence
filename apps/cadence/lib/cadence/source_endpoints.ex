@@ -19,51 +19,74 @@ defmodule Cadence.SourceEndpoints do
   alias Cadence.Spacecraft
   alias Cadence.SpacecraftStore
 
-  @spec persist_source_endpoint(binary(), SourceEndpoint.t()) ::
+  @natural_conflict_target {:unsafe_fragment,
+                            "(mission_id, COALESCE(spacecraft_id, ''), source_ref) " <>
+                              "WHERE source_ref IS NOT NULL"}
+
+  @doc """
+  Creates an endpoint with a server-generated ID. A source reference identifies
+  an endpoint within its mission and spacecraft scope. A repeated reference
+  returns the stored endpoint, including its original editable attributes.
+  """
+  @spec create_source_endpoint(binary(), binary(), map()) ::
           {:ok, SourceEndpoint.t()} | {:error, term()}
-  def persist_source_endpoint(organization_id, %SourceEndpoint{} = source_endpoint)
-      when is_binary(organization_id) do
-    with {:ok, scoped_source_endpoint} <-
-           put_organization_scope(source_endpoint, organization_id),
-         {:ok, _mission} <-
-           Missions.fetch_mission(
-             scoped_source_endpoint.organization_id,
-             scoped_source_endpoint.mission_id
-           ),
-         :ok <- validate_spacecraft_reference(scoped_source_endpoint),
-         {:ok, _row} <-
-           Repo.insert(SourceEndpointRow.changeset(scoped_source_endpoint),
-             on_conflict: :nothing,
-             conflict_target: [:mission_id, :source_endpoint_id]
-           ) do
-      {:ok, scoped_source_endpoint}
+  def create_source_endpoint(organization_id, mission_id, attrs)
+      when is_binary(organization_id) and is_binary(mission_id) and is_map(attrs) do
+    if Map.has_key?(attrs, :source_endpoint_id) or Map.has_key?(attrs, "source_endpoint_id") do
+      {:error, :source_endpoint_id_server_generated}
     else
-      {:error, %Changeset{} = changeset} -> {:error, changeset}
-      {:error, reason} -> {:error, reason}
+      attrs
+      |> Map.take([:spacecraft_id, :source_ref, :scid, :display_name, :metadata])
+      |> Map.merge(%{organization_id: organization_id, mission_id: mission_id})
+      |> SourceEndpoint.new()
+      |> create_endpoint()
+      |> notify_configuration_change()
     end
-    |> notify_configuration_change()
   end
 
-  @spec persist_source_endpoint(SourceEndpoint.t()) ::
-          {:ok, SourceEndpoint.t()} | {:error, term()}
-  def persist_source_endpoint(%SourceEndpoint{} = source_endpoint) do
-    with :ok <- validate_spacecraft_reference(source_endpoint) do
-      case Repo.insert(SourceEndpointRow.changeset(source_endpoint),
-             on_conflict: :nothing,
-             conflict_target: [:mission_id, :source_endpoint_id]
-           ) do
-        {:ok, %SourceEndpointRow{} = row} ->
-          {:ok, SourceEndpointRow.to_domain(row)}
+  defp create_endpoint(%SourceEndpoint{} = endpoint) do
+    with {:ok, _mission} <- Missions.fetch_mission(endpoint.organization_id, endpoint.mission_id),
+         :ok <- validate_spacecraft_reference(endpoint) do
+      changeset = SourceEndpointRow.changeset(endpoint)
 
-        {:error, %Changeset{} = changeset} ->
-          {:error, changeset}
+      case Changeset.get_field(changeset, :source_ref) do
+        nil ->
+          changeset |> Repo.insert() |> decode_insert()
 
-        {:error, reason} ->
-          {:error, reason}
+        reference ->
+          insert_or_fetch_reference(changeset, endpoint, reference)
       end
     end
-    |> notify_configuration_change()
   end
+
+  defp insert_or_fetch_reference(changeset, endpoint, reference) do
+    with {:ok, _row} <-
+           Repo.insert(changeset,
+             on_conflict: :nothing,
+             conflict_target: @natural_conflict_target
+           ) do
+      spacecraft_id = Changeset.get_field(changeset, :spacecraft_id) || ""
+
+      SourceEndpointRow
+      |> where(
+        [row],
+        row.organization_id == ^endpoint.organization_id and
+          row.mission_id == ^endpoint.mission_id and
+          fragment("COALESCE(?, '')", row.spacecraft_id) == ^spacecraft_id and
+          row.source_ref == ^reference
+      )
+      |> Repo.one()
+      |> case do
+        %SourceEndpointRow{} = row -> {:ok, SourceEndpointRow.to_domain(row)}
+        nil -> {:error, :source_endpoint_not_found}
+      end
+    end
+  end
+
+  defp decode_insert({:ok, %SourceEndpointRow{} = row}),
+    do: {:ok, SourceEndpointRow.to_domain(row)}
+
+  defp decode_insert({:error, reason}), do: {:error, reason}
 
   @doc "The ids among `ids` that exist as the mission's source endpoints (one query)."
   @spec existing_source_endpoint_ids(binary(), [binary()]) :: [binary()]
@@ -464,46 +487,17 @@ defmodule Cadence.SourceEndpoints do
   defp transfer_frame_scid(<<_version::2, scid::10, _rest::bitstring>>), do: {:ok, scid}
   defp transfer_frame_scid(_raw), do: {:ok, nil}
 
-  defp put_organization_scope(%SourceEndpoint{} = source_endpoint, organization_id)
-       when is_binary(organization_id) and organization_id != "" do
-    case source_endpoint.organization_id do
-      nil ->
-        {:ok, %SourceEndpoint{source_endpoint | organization_id: organization_id}}
-
-      ^organization_id ->
-        {:ok, source_endpoint}
-
-      existing_organization_id ->
-        {:error,
-         {:organization_mission_mismatch, existing_organization_id, organization_id,
-          source_endpoint.mission_id}}
-    end
-  end
-
   defp validate_spacecraft_reference(%SourceEndpoint{spacecraft_id: nil}), do: :ok
   defp validate_spacecraft_reference(%SourceEndpoint{spacecraft_id: ""}), do: :ok
 
-  defp validate_spacecraft_reference(%SourceEndpoint{} = source_endpoint) do
-    case source_endpoint.organization_id do
-      organization_id when is_binary(organization_id) and organization_id != "" ->
-        case SpacecraftStore.fetch_spacecraft(
-               organization_id,
-               source_endpoint.mission_id,
-               source_endpoint.spacecraft_id
-             ) do
-          {:ok, _spacecraft} -> :ok
-          {:error, :spacecraft_not_found} -> {:error, :spacecraft_not_found}
-        end
-
-      _other ->
-        case SpacecraftStore.fetch_spacecraft(
-               source_endpoint.mission_id,
-               source_endpoint.spacecraft_id
-             ) do
-          {:ok, _spacecraft} -> :ok
-          {:error, :spacecraft_not_found} -> {:error, :spacecraft_not_found}
-        end
-    end
+  defp validate_spacecraft_reference(%SourceEndpoint{} = endpoint) do
+    with {:ok, _spacecraft} <-
+           SpacecraftStore.fetch_spacecraft(
+             endpoint.organization_id,
+             endpoint.mission_id,
+             endpoint.spacecraft_id
+           ),
+         do: :ok
   end
 
   @doc "The id of the spacecraft's managed source endpoint, which every route materializes on."
@@ -537,13 +531,12 @@ defmodule Cadence.SourceEndpoints do
     source_endpoint =
       managed_source_endpoint(organization_id, spacecraft, source_endpoint_id, %{})
 
-    case Repo.insert(SourceEndpointRow.changeset(source_endpoint),
-           on_conflict: :nothing,
-           conflict_target: [:mission_id, :source_endpoint_id]
-         ) do
-      {:ok, %SourceEndpointRow{} = row} -> {:ok, SourceEndpointRow.to_domain(row)}
-      {:error, %Changeset{} = changeset} -> {:error, changeset}
-      {:error, reason} -> {:error, reason}
+    with {:ok, _row} <-
+           Repo.insert(SourceEndpointRow.changeset(source_endpoint),
+             on_conflict: :nothing,
+             conflict_target: :source_endpoint_id
+           ) do
+      fetch_source_endpoint(organization_id, spacecraft.mission_id, source_endpoint_id)
     end
   end
 

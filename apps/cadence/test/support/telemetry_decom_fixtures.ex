@@ -122,7 +122,7 @@ defmodule Cadence.Applications.TelemetryDecomFixtures do
       })
 
     {:ok, persisted} =
-      Cadence.SourceEndpoints.persist_source_endpoint(organization_id, endpoint)
+      Cadence.SourceEndpointFixtures.persist(organization_id, endpoint)
 
     persisted
   end

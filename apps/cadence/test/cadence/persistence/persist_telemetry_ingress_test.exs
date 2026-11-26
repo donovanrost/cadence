@@ -53,7 +53,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
       })
 
     assert {:ok, _persisted_source_endpoint} =
-             Cadence.SourceEndpoints.persist_source_endpoint(source_endpoint)
+             Cadence.SourceEndpointFixtures.persist(source_endpoint)
 
     source_time = DateTime.from_unix!(1_700_000_000, :second)
     receipt_time = DateTime.from_unix!(1_700_000_005, :second)
@@ -258,7 +258,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
       })
 
     assert {:ok, _persisted_source_endpoint} =
-             Cadence.SourceEndpoints.persist_source_endpoint(source_endpoint)
+             Cadence.SourceEndpointFixtures.persist(source_endpoint)
 
     packet_definition =
       PacketDefinition.new(%{

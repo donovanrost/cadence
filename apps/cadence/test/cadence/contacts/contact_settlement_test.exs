@@ -513,7 +513,7 @@ defmodule Cadence.Contacts.ContactSettlementTest do
     {:ok, _} = Cadence.SpacecraftStore.persist_spacecraft(organization_id, spacecraft)
 
     {:ok, endpoint} =
-      Cadence.SourceEndpoints.persist_source_endpoint(
+      Cadence.SourceEndpointFixtures.persist(
         organization_id,
         SourceEndpoint.new(%{
           source_endpoint_id: "endpoint-settlement-" <> suffix,
