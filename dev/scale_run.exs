@@ -32,7 +32,8 @@ defmodule Cadence.Dev.ScaleRun do
 
     env = [{"EARENDIL_SPACECRAFT_COUNT", Integer.to_string(opts[:spacecraft])}]
     stack_command = if opts[:reset], do: "reset", else: "up"
-    command!("dev/stack", [stack_command], env)
+    # System.cmd resolves a relative program through PATH only, so give dev/stack's full path.
+    command!(Path.join(@root, "dev/stack"), [stack_command], env)
 
     command!("mise", ["exec", "--", "bash", "-c", @measure_command, "scale" | args], env)
   end
@@ -217,7 +218,11 @@ defmodule Cadence.Dev.ScaleRun do
       if capacity.classification == :baseline, do: "Baseline", else: "Ceiling check"
 
     load = capacity.max_load_one || "unavailable"
-    swap = if capacity.max_swap_percent, do: "#{capacity.max_swap_percent}%", else: "unavailable"
+
+    swap =
+      if capacity.max_swap_percent,
+        do: "#{Float.round(capacity.max_swap_percent * 1.0, 1)}%",
+        else: "unavailable"
 
     "# #{classification} — max 1-min load #{load} (#{cores} logical cores), max swap #{swap} — #{label}\n\n"
   end
