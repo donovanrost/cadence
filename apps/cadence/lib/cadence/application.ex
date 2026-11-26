@@ -107,7 +107,8 @@ defmodule Cadence.Application do
       Cadence.Runtime.PartitionStreamKeys.Retention,
       Cadence.IngressArchive.Retention,
       Cadence.Telemetry.Storage.ObservationIdentityStates.Retention,
-      Cadence.Projections.DataSources.Watermarks.Retention
+      Cadence.Projections.DataSources.Watermarks.Retention,
+      Cadence.Protocol.RecordArchive.FileSystem.Retention
     ])
   end
 
