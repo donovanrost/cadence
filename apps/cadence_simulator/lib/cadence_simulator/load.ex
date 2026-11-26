@@ -10,30 +10,32 @@ defmodule CadenceSimulator.Load do
   @sites 10
   @frame_size 1115
   @packets_per_second 10
-  @store_flush_timeout :timer.seconds(60)
+  @diagnostics_interval_seconds 10
 
   def run(opts) do
     directory = Path.join(System.tmp_dir!(), "cadence-simulator-load-#{System.pid()}")
     File.mkdir_p!(Path.dirname(opts.output))
     File.mkdir!(directory)
+    store_path = Path.join(directory, "store.dets")
 
     try do
       Application.put_env(:cadence_simulator, :provider_http, enabled: false)
 
       Application.put_env(:cadence_simulator, :provider_store,
-        path: Path.join(directory, "store.dets")
+        path: store_path,
+        batch_observer: self()
       )
 
       {:ok, _apps} = Application.ensure_all_started(:cadence_simulator)
       :ok = Logger.configure(level: :warning)
-      File.open!(opts.output, [:write, :utf8], &exercise(&1, opts))
+      File.open!(opts.output, [:write, :utf8], &exercise(&1, opts, store_path))
     after
       Application.stop(:cadence_simulator)
       File.rm_rf!(directory)
     end
   end
 
-  defp exercise(output, opts) do
+  defp exercise(output, opts, store_path) do
     fleet = Shape.fleet(opts.craft, @sites)
 
     active =
@@ -51,7 +53,7 @@ defmodule CadenceSimulator.Load do
       {run, frames_per_step, rate_hz} = create_run(fleet)
       profiles = Enum.map(sinks, fn {_pid, port} -> delivery_profile(run, port) end)
       seed_contacts(fleet, run, profiles, opts)
-      :ok = Store.flush(@store_flush_timeout)
+      :ok = Store.flush()
 
       await_paths(active, counters, now_ms() + 30_000)
       path_target = frames_per_step * rate_hz
@@ -62,11 +64,10 @@ defmodule CadenceSimulator.Load do
           "at #{target} frames/s for #{opts.duration}s. JSONL: #{opts.output}"
       )
 
-      result = measure(output, active, counters, opts.duration)
+      report_diagnostics("start", diagnostics(store_path))
+      result = measure(output, active, counters, opts.duration, store_path)
       outcome = report(result, frames_per_step, rate_hz, length(active))
-      {:ok, _run} = Provider.transition_run(run["id"], "stop")
-      :ok = Orchestrator.reconcile()
-      :ok = Store.flush(@store_flush_timeout)
+      stop_run(run["id"], store_path)
       outcome
     after
       for {pid, _port} <- sinks do
@@ -184,7 +185,7 @@ defmodule CadenceSimulator.Load do
     end
   end
 
-  defp measure(output, active, counters, duration) do
+  defp measure(output, active, counters, duration, store_path) do
     previous_flag = :erlang.system_flag(:scheduler_wall_time, true)
     start = now_ms()
     first = snapshot(active, counters)
@@ -204,7 +205,12 @@ defmodule CadenceSimulator.Load do
         Enum.reduce(1..duration, initial, fn second, acc ->
           Process.sleep(max(start + second * 1000 - now_ms(), 0))
           current = snapshot(active, counters)
-          sample = sample(second, acc.previous, current)
+
+          sample =
+            second
+            |> sample(acc.previous, current)
+            |> maybe_add_diagnostics(store_path)
+
           :ok = IO.binwrite(output, [Jason.encode_to_iodata!(sample), "\n"])
           print_sample(sample)
 
@@ -263,6 +269,55 @@ defmodule CadenceSimulator.Load do
       memory_bytes: current.memory_bytes,
       paths: paths
     }
+  end
+
+  defp maybe_add_diagnostics(sample, store_path) do
+    if rem(sample.second, @diagnostics_interval_seconds) == 0 do
+      Map.put(sample, :diagnostics, diagnostics(store_path))
+    else
+      sample
+    end
+  end
+
+  defp diagnostics(store_path) do
+    %{
+      store: Map.put(Store.diagnostics(), :dets_file_bytes, File.stat!(store_path).size),
+      batches: drain_batch_samples([]),
+      memory: Map.new(:erlang.memory())
+    }
+  end
+
+  defp drain_batch_samples(samples) do
+    receive do
+      {:provider_store_batch, sample} -> drain_batch_samples([sample | samples])
+    after
+      0 -> Enum.reverse(samples)
+    end
+  end
+
+  defp stop_run(run_id, store_path) do
+    started = System.monotonic_time(:microsecond)
+    {:ok, _run} = Provider.transition_run(run_id, "stop")
+    :ok = Orchestrator.reconcile()
+    flush_started = System.monotonic_time(:microsecond)
+
+    try do
+      :ok = Store.flush()
+    after
+      flush_ended = System.monotonic_time(:microsecond)
+
+      report_diagnostics(
+        "shutdown",
+        Map.merge(diagnostics(store_path), %{
+          contact_shutdown_us: flush_started - started,
+          final_flush_us: flush_ended - flush_started
+        })
+      )
+    end
+  end
+
+  defp report_diagnostics(phase, diagnostics) do
+    IO.puts("Provider store #{phase} " <> Jason.encode!(diagnostics))
   end
 
   defp path_deltas(previous, current) do

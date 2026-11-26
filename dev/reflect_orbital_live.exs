@@ -7,17 +7,11 @@ if Mix.env() != :dev, do: raise("Earendil live telemetry is a local development 
 craft = Keyword.get(options, :craft, 10)
 shape = Keyword.get(options, :shape, "peak")
 per_site = Keyword.get(options, :per_site, 8)
-sites = 10
 
 case CadenceSimulator.Load.Shape.validate(craft, shape, per_site) do
   :ok -> :ok
   {:error, reason} -> raise reason
 end
-
-scids =
-  for {scid, _site} <- CadenceSimulator.Load.Shape.fleet(craft, sites),
-      CadenceSimulator.Load.Shape.in_contact?(scid, sites, shape, per_site),
-      do: scid
 
 {:ok, hostname} = :inet.gethostname()
 # EARENDIL_CADENCE_NODE targets another worktree's server (its iex --sname); default `cadence`.
@@ -40,6 +34,17 @@ for file <- ["fixture.exs", "dashboards.exs", "live_contacts.exs"] do
     _ -> :ok
   end
 end
+
+sites =
+  case :rpc.call(peer, Cadence.Dev.ReflectOrbital.Fixture, :sites, []) do
+    sites when is_list(sites) -> length(sites)
+    error -> raise "Could not read fixture sites: #{inspect(error)}"
+  end
+
+scids =
+  for {scid, _site} <- CadenceSimulator.Load.Shape.fleet(craft, sites),
+      CadenceSimulator.Load.Shape.in_contact?(scid, sites, shape, per_site),
+      do: scid
 
 duration = String.to_integer(System.get_env("EARENDIL_DEMO_CONTACT_SECONDS") || "7200")
 unless duration in 60..28_800, do: raise("Demo duration must be 60–28800 seconds")

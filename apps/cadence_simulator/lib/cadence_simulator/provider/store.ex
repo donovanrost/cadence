@@ -20,6 +20,7 @@ defmodule CadenceSimulator.Provider.Store do
   @resource_kinds [:scenario, :run, :reservation, :delivery_profile, :opportunity, :contact]
   @sequence_key {:metadata, :event_sequence}
   @flush_interval_ms 25
+  @batch_size 256
   @scheduled_kinds [:run, :reservation, :contact]
 
   @type resource_kind ::
@@ -32,7 +33,7 @@ defmodule CadenceSimulator.Provider.Store do
   @spec put(resource_kind(), map()) :: {:ok, map()}
   def put(kind, %{"id" => id} = resource) when kind in @resource_kinds do
     key = {kind, id}
-    objects = [{key, resource}, {{:dirty, key}, true}]
+    objects = [{key, resource}, dirty_marker(key)]
 
     objects =
       if kind in @scheduled_kinds, do: [{{:schedule_change, key}, true} | objects], else: objects
@@ -71,8 +72,8 @@ defmodule CadenceSimulator.Provider.Store do
     true =
       :ets.insert(@mirror, [
         {key, stored_event},
-        {{:dirty, key}, true},
-        {{:dirty, @sequence_key}, true}
+        dirty_marker(key),
+        dirty_marker(@sequence_key)
       ])
 
     {:ok, stored_event}
@@ -123,7 +124,7 @@ defmodule CadenceSimulator.Provider.Store do
       :ets.update_counter(@mirror, key, [{2, 0}, {2, 1, limit, limit}], {key, 0})
 
     if consumed < limit do
-      true = :ets.insert(@mirror, {{:dirty, key}, true})
+      true = :ets.insert(@mirror, dirty_marker(key))
       true
     else
       false
@@ -136,7 +137,24 @@ defmodule CadenceSimulator.Provider.Store do
   end
 
   @doc false
-  def take_schedule_changes, do: take_marked(:schedule_change)
+  def take_schedule_changes do
+    for key <- marked_keys(:schedule_change),
+        :ets.take(@mirror, {:schedule_change, key}) != [],
+        do: key
+  end
+
+  @doc false
+  def diagnostics do
+    memory_words = :ets.info(@mirror, :memory)
+
+    %{
+      mirror_entries: :ets.info(@mirror, :size),
+      mirror_memory_words: memory_words,
+      mirror_memory_bytes: memory_words * :erlang.system_info(:wordsize),
+      dirty_keys: count_keys(:dirty),
+      event_count: count_keys(:event)
+    }
+  end
 
   @doc false
   def clear do
@@ -144,9 +162,9 @@ defmodule CadenceSimulator.Provider.Store do
   end
 
   @doc false
-  @spec flush(timeout()) :: :ok
-  def flush(timeout \\ 5_000) do
-    GenServer.call(__MODULE__, :flush, timeout)
+  @spec flush() :: :ok
+  def flush do
+    GenServer.call(__MODULE__, :flush)
   end
 
   @impl true
@@ -167,9 +185,10 @@ defmodule CadenceSimulator.Provider.Store do
           ])
 
         @mirror = :dets.to_ets(@table, mirror)
+        restore_event_sequence()
         reset_schedule_generation()
         schedule_flush()
-        {:ok, @table}
+        {:ok, %{table: @table, batch_observer: opts[:batch_observer]}}
 
       {:error, reason} ->
         {:stop, {:provider_store_open_failed, path, reason}}
@@ -177,30 +196,37 @@ defmodule CadenceSimulator.Provider.Store do
   end
 
   @impl true
-  def handle_call(:clear, _from, table) do
+  def handle_call(:clear, _from, state) do
     true = :ets.delete_all_objects(@mirror)
     reset_schedule_generation()
-    :ok = :dets.delete_all_objects(table)
-    :ok = :dets.sync(table)
-    {:reply, :ok, table}
+    :ok = :dets.delete_all_objects(state.table)
+    :ok = :dets.sync(state.table)
+    {:reply, :ok, state}
   end
 
-  def handle_call(:flush, _from, table) do
-    :ok = persist_batch(table)
-    {:reply, :ok, table}
+  def handle_call(:flush, _from, state) do
+    :ok = persist_pending(state)
+    {:reply, :ok, state}
   end
 
   @impl true
-  def handle_info(:flush, table) do
-    :ok = persist_batch(table)
+  def handle_info(:flush, state) do
+    keys = :dirty |> marked_keys() |> Enum.take(@batch_size)
+    :ok = persist_batch(state, keys)
     schedule_flush()
-    {:noreply, table}
+    {:noreply, state}
   end
 
   @impl true
-  def terminate(_reason, table) do
-    :ok = persist_batch(table)
-    :dets.close(table)
+  def terminate(_reason, state) do
+    :ok = persist_pending(state)
+    :dets.close(state.table)
+  end
+
+  # A crash can leave event batches on disk ahead of the sequence metadata.
+  defp restore_event_sequence do
+    sequence = :ets.update_counter(@mirror, @sequence_key, 0, {@sequence_key, 0})
+    true = :ets.insert(@mirror, {@sequence_key, last_event_sequence(sequence)})
   end
 
   defp reset_schedule_generation do
@@ -209,32 +235,62 @@ defmodule CadenceSimulator.Provider.Store do
 
   defp schedule_flush, do: Process.send_after(self(), :flush, @flush_interval_ms)
 
-  defp persist_batch(table) do
-    objects = Enum.flat_map(take_marked(:dirty), &:ets.lookup(@mirror, &1))
-
-    case objects do
-      [] ->
-        :ok
-
-      [_ | _] ->
-        :ok = :dets.insert(table, objects)
-        :dets.sync(table)
-    end
+  # A flush barrier snapshots the pending keys. Writes arriving during the barrier
+  # can leave fresh markers for the next tick.
+  defp persist_pending(state) do
+    :dirty
+    |> marked_keys()
+    |> Enum.chunk_every(@batch_size)
+    |> Enum.each(&persist_batch(state, &1))
   end
 
-  defp take_marked(marker), do: take_marked(marker, :ets.next(@mirror, {marker, 0}), [])
+  defp persist_batch(_state, []), do: :ok
 
-  defp take_marked(marker, {marker, key} = tagged, keys) do
-    keys =
-      case :ets.take(@mirror, tagged) do
-        [_] -> [key | keys]
-        [] -> keys
-      end
+  defp persist_batch(state, keys) do
+    started = now_us()
 
-    take_marked(marker, :ets.next(@mirror, tagged), keys)
+    {objects, oldest_write} =
+      Enum.reduce(keys, {[], started}, fn key, {objects, oldest} ->
+        [{{:dirty, ^key}, written_at}] = :ets.take(@mirror, {:dirty, key})
+        [object] = :ets.lookup(@mirror, key)
+        {[object | objects], min(oldest, written_at)}
+      end)
+
+    prepared = now_us()
+    :ok = :dets.insert(state.table, objects)
+    inserted = now_us()
+    :ok = :dets.sync(state.table)
+    synced = now_us()
+
+    observe(state.batch_observer, %{
+      keys: length(keys),
+      prepare_us: prepared - started,
+      insert_us: inserted - prepared,
+      sync_us: synced - inserted,
+      duration_us: synced - started,
+      oldest_write_lag_us: synced - oldest_write
+    })
   end
 
-  defp take_marked(_marker, _next, keys), do: keys
+  defp marked_keys(marker) do
+    Stream.unfold(:ets.next(@mirror, {marker, 0}), fn
+      {^marker, key} = tagged -> {key, :ets.next(@mirror, tagged)}
+      _other -> nil
+    end)
+  end
+
+  defp count_keys(kind), do: :ets.select_count(@mirror, [{{{kind, :_}, :_}, [], [true]}])
+
+  defp dirty_marker(key), do: {{:dirty, key}, now_us()}
+
+  defp observe(nil, _sample), do: :ok
+
+  defp observe(pid, sample) do
+    send(pid, {:provider_store_batch, sample})
+    :ok
+  end
+
+  defp now_us, do: System.monotonic_time(:microsecond)
 
   # Events after `cursor`, in sequence order, read lazily in chunks.
   defp events_after(cursor) do

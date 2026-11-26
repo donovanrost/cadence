@@ -26,9 +26,13 @@ defmodule Cadence.Dev.ReflectOrbital.LiveContacts do
 
     sites = F.sites() |> List.to_tuple()
     selected = MapSet.new(scids)
+    crafts = Enum.filter(F.spacecraft(), &MapSet.member?(selected, &1.scid))
+
+    if length(crafts) != length(scids),
+      do: raise("Requested craft exceed the seeded fixture fleet")
 
     contacts =
-      for craft <- F.spacecraft(Enum.max(scids)), MapSet.member?(selected, craft.scid) do
+      for craft <- crafts do
         site = elem(sites, rem(craft.scid - 1, tuple_size(sites)))
         source = "spacecraft_runtime:#{craft.spacecraft_id}"
         port = rehearsal_port(craft.scid, site, tuple_size(sites))

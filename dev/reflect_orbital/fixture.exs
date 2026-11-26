@@ -32,8 +32,8 @@ defmodule Cadence.Dev.ReflectOrbital.Fixture do
 
   def metadata, do: %{"synthetic" => true, "fixture" => "reflect-orbital-v1"}
 
-  def spacecraft(count \\ 500) do
-    Enum.map(1..count, fn index ->
+  def spacecraft do
+    Enum.map(1..500, fn index ->
       plane = div(index - 1, 25)
       slot = rem(index - 1, 25)
       name = "EARENDIL-#{String.pad_leading(Integer.to_string(index), 3, "0")}"

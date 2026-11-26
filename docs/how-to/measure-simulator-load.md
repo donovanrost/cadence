@@ -41,6 +41,13 @@ The app can report a TCP resource error when the process open-file limit is
 below its socket requirement. At 1,000 paths, the simulator and sink use about 2,000
 connected sockets plus ten listeners.
 
+Every tenth JSONL row includes the provider mirror's entry count and memory,
+dirty-key count, event count, DETS file size, and BEAM memory breakdown. It
+also includes any nonempty persistence batches since the previous sample,
+with the key count, prepare, insert, and sync durations, and the oldest write
+lag. The terminal log records initialization and shutdown diagnostics, including
+the time spent closing contacts and the time spent on the final flush.
+
 The simulator load measurement is the producer baseline for the Cadence
 ingest run tracked in [#717](https://github.com/donovanrost/cadence/issues/717)
 and the scorecard in [#686](https://github.com/donovanrost/cadence/issues/686).
@@ -64,9 +71,9 @@ sample was 414.7 MiB. The first and last two-minute medians were 302.5 and
 424.7 MiB.
 
 An independent 600-second run completed at 12,969.5 frames/s. The memory
-capture finished sampling and reached the former five-second store flush
-timeout during contact shutdown. The command now gives the final batch up
-to 60 seconds to persist.
+capture finished sampling and reached the five-second store flush timeout
+during contact shutdown. Store persistence now uses batches of at most 256
+keys, including the final flush.
 
 The 1,000-craft average fixture with 16 per site activated 160 paths and
 delivered 2,079.9 frames/s over 15 seconds.
