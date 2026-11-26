@@ -5,8 +5,7 @@ member, one file per screen. Fixes go to the screen's owner; kit-level fixes go 
 
 ## Method
 
-- **Where:** :4011, real data (the Earendil demo), headless system Chrome, one page at a time
-  through `scripts/check-slot.sh` (lead's load rule). Read-only: pages are loaded and Tab is pressed;
+- **Where:** :4011, real data (the Earendil demo), headless system Chrome, one page at a time. Read-only: pages are loaded and Tab is pressed;
   nothing is clicked or typed.
 - **Who:** `admin` = `qa-org-admin` (organization admin), `member` = `qa-operator` (member).
 - **Widths:** 1440×900 and 390×844.
