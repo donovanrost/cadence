@@ -30,6 +30,12 @@ for attempt in $(seq 1 100); do
 done
 trap 'rmdir "$lock"' EXIT
 touch "$registry"
+# Free the slots of worktrees that no longer exist (removed or moved to the other laptop).
+pruned=$registry.pruned
+while IFS="$(printf '\t')" read -r path assigned; do
+  if [ -d "$path" ]; then printf '%s\t%s\n' "$path" "$assigned"; fi
+done < "$registry" > "$pruned"
+mv "$pruned" "$registry"
 slot=$(awk -F '\t' -v path="$root" '$1 == path {print $2}' "$registry" | tail -1)
 if [ -z "$slot" ]; then
   for candidate in $(seq 1 40); do
