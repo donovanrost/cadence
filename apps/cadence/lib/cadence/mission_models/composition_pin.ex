@@ -1,4 +1,4 @@
-defmodule Cadence.Spacecraft.ConfigKinds.CompositionPin do
+defmodule Cadence.MissionModels.CompositionPin do
   @moduledoc """
   D3's pin rules (#544; design §3), shared by the profile and the per-craft override. The pin is
   `composition_id`, and only the client sets it. `catalog_revision_id` is the composition's
@@ -18,7 +18,8 @@ defmodule Cadence.Spacecraft.ConfigKinds.CompositionPin do
     and the numbers so the console can rebuild the line.
   """
 
-  alias Cadence.MissionModels.{CatalogPins, Compositions, Selection}
+  alias Cadence.Catalog.CompositionPins
+  alias Cadence.MissionModels.{Compositions, Selection}
   alias Cadence.Platform.ConfigFields, as: F
 
   @type pin :: {binary() | nil, binary() | nil}
@@ -46,7 +47,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.CompositionPin do
   end
 
   defp provenance(organization_id, mission_id, composition) when is_binary(composition),
-    do: CatalogPins.catalog_revision_for(organization_id, mission_id, composition)
+    do: CompositionPins.catalog_revision_for(organization_id, mission_id, composition)
 
   defp provenance(_organization_id, _mission_id, _composition), do: nil
 
@@ -106,13 +107,15 @@ defmodule Cadence.Spacecraft.ConfigKinds.CompositionPin do
   defp subject(_pin), do: "This composition"
 
   defp pin_details(organization_id, mission_id, composition) do
-    catalog = CatalogPins.catalog_revision_for(organization_id, mission_id, composition)
+    catalog = CompositionPins.catalog_revision_for(organization_id, mission_id, composition)
 
     %{
       composition_id: composition,
       catalog_revision_id: catalog,
-      catalog_revision_number: CatalogPins.catalog_number(organization_id, mission_id, catalog),
-      composition_number: CatalogPins.composition_number(organization_id, mission_id, composition)
+      catalog_revision_number:
+        CompositionPins.catalog_number(organization_id, mission_id, catalog),
+      composition_number:
+        CompositionPins.composition_number(organization_id, mission_id, composition)
     }
   end
 

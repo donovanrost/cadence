@@ -8,13 +8,13 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
   alias Cadence.Applications.SpacecraftConfiguration.{Drafts, Review}
   alias Cadence.Applications.TelemetryDecom
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
+  alias Cadence.Catalog.CompositionPins
   alias Cadence.Catalog.SpacecraftConfigurationInput
   alias Cadence.CompositionFixtures
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Control.Configuration
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Activations
-  alias Cadence.MissionModels.CatalogPins
   alias Cadence.SpacecraftStore
 
   @fleet String.to_integer(System.get_env("ROLLOUT_FLEET", "500"))
@@ -99,7 +99,7 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
 
     # Every spacecraft's stored decom config follows the move (11-15: it kept the old catalog).
     [%{changes: [%{value: composition}]}] = ops
-    rev2 = CatalogPins.catalog_revision_for(c.org, c.mission.mission_id, composition)
+    rev2 = CompositionPins.catalog_revision_for(c.org, c.mission.mission_id, composition)
 
     assert c.org
            |> TelemetryDecom.list_configs(c.mission.mission_id)

@@ -2,10 +2,11 @@ defmodule Cadence.Control.SpacecraftModelBindings do
   @moduledoc "Admits the exact model assigned to each spacecraft in an activation generation."
 
   alias Cadence.Catalog
+  alias Cadence.Catalog.CompositionPins
   alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Control.MissionModelPromotion
   alias Cadence.MissionModels
-  alias Cadence.MissionModels.{CatalogPins, Compositions}
+  alias Cadence.MissionModels.Compositions
   alias Cadence.SourceEndpoints
   alias Cadence.SpacecraftStore
 
@@ -60,7 +61,7 @@ defmodule Cadence.Control.SpacecraftModelBindings do
   defp catalog_model?(organization_id, mission_id, catalog, revision_id)
        when is_binary(revision_id) do
     with {:ok, composition} <-
-           CatalogPins.for_catalog_revision(
+           CompositionPins.for_catalog_revision(
              organization_id,
              mission_id,
              catalog.catalog_revision_id

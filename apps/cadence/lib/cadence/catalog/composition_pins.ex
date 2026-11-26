@@ -1,7 +1,9 @@
-defmodule Cadence.MissionModels.CatalogPins do
+defmodule Cadence.Catalog.CompositionPins do
   @moduledoc """
   Between a catalog revision and the one-layer composition it imported (D3, #544): the
-  provenance catalog revision of a composition pin, and the composition a catalog rollout pins. A composition of more than one layer (D4) has no catalog revision.
+  provenance catalog revision of a composition pin, and the composition a catalog rollout pins.
+  A composition of more than one layer (D4) has no catalog revision. In the catalog context
+  because it reads catalog revision rows.
   """
 
   import Ecto.Query

@@ -12,8 +12,9 @@ defmodule Cadence.Reads.CatalogOverview do
   alias Cadence.Applications.SpacecraftConfiguration.Drafts
   alias Cadence.Catalog
   alias Cadence.Catalog.{Artifact, ImportRun, Revision}
+  alias Cadence.Catalog.CompositionPins
   alias Cadence.MissionModels
-  alias Cadence.MissionModels.{CatalogPins, CompositionViews}
+  alias Cadence.MissionModels.CompositionViews
   alias Cadence.Reads.Catalog.{Requesters, RevisionBase}
   alias Cadence.Reads.CatalogDiff
 
@@ -295,7 +296,7 @@ defmodule Cadence.Reads.CatalogOverview do
   end
 
   defp composition_id(organization_id, mission_id, %Revision{catalog_revision_id: id}) do
-    case CatalogPins.for_catalog_revision(organization_id, mission_id, id) do
+    case CompositionPins.for_catalog_revision(organization_id, mission_id, id) do
       {:ok, composition_id} -> composition_id
       {:error, :none} -> nil
     end

@@ -5,13 +5,14 @@ defmodule Cadence.CompositionFixtures do
   and a link for it.
   """
 
-  alias Cadence.MissionModels.{CatalogPins, Compositions}
+  alias Cadence.Catalog.CompositionPins
+  alias Cadence.MissionModels.Compositions
   alias Cadence.Repo
 
   @doc "The catalog revision's one-layer composition: what a profile or override pins (D3, #544)."
   def pin!(org, mission_id, catalog_revision_id) do
     {:ok, composition_id} =
-      CatalogPins.for_catalog_revision(org, mission_id, catalog_revision_id)
+      CompositionPins.for_catalog_revision(org, mission_id, catalog_revision_id)
 
     composition_id
   end
@@ -57,7 +58,7 @@ defmodule Cadence.CompositionFixtures do
 
     Repo.query!(
       # Inserted after the original, so the composition's provenance (the earliest catalog
-      # revision, CatalogPins.catalog_revision_for/3) stays the original import.
+      # revision, CompositionPins.catalog_revision_for/3) stays the original import.
       "INSERT INTO catalog_revisions SELECT (jsonb_populate_record(NULL::catalog_revisions, " <>
         "to_jsonb(t) || jsonb_build_object('catalog_revision_id', $2::text, " <>
         "'mission_model_revision_id', $3::text, 'revision_number', t.revision_number + $5::int, " <>

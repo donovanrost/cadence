@@ -12,7 +12,6 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftOverride do
   @behaviour Cadence.Platform.ConfigKind
 
   alias Cadence.Platform.ConfigFields, as: F
-  alias Cadence.Spacecraft.ConfigKinds.CompositionPin
   alias Cadence.Spacecraft.ConfigKinds.SpacecraftProfile
   alias Cadence.SpacecraftStore
   alias Cadence.SpacecraftStore.Overrides
@@ -94,7 +93,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftOverride do
         end
       end) ++
         apids_errors(organization_id, mission_id, entity_id, proposed) ++
-        CompositionPin.errors(
+        pins().errors(
           organization_id,
           mission_id,
           pin(previous),
@@ -112,7 +111,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftOverride do
   # with the composition override's reason.
   def translate(organization_id, mission_id, _previous, proposed, touched) do
     with {:ok, {catalog, composition}} <-
-           CompositionPin.derive(
+           pins().derive(
              organization_id,
              mission_id,
              value(proposed, "composition_id"),
@@ -246,4 +245,8 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftOverride do
       _no_profile -> nil
     end
   end
+
+  # D3's pin rules (#544) live with the mission model (Cadence.MissionModels.CompositionPin),
+  # configured so this kind has no compile-time edge to the catalog context.
+  defp pins, do: Application.fetch_env!(:cadence, :composition_pins)
 end

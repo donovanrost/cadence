@@ -6,14 +6,14 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
   alias Cadence.Applications.SpacecraftConfiguration.{CatalogAuthority, Drafts, Review}
   alias Cadence.Applications.TelemetryDecom
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
-  alias Cadence.Catalog.{FleetSnapshot, SpacecraftConfigurationInput}
+  alias Cadence.Catalog.{CompositionPins, FleetSnapshot, SpacecraftConfigurationInput}
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Control.{Configuration, ConfigurationRollback, ModelApprovalGate}
   alias Cadence.Control.MissionRuntime, as: ControlMissionRuntime
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Activations
   alias Cadence.MissionModelApproval
-  alias Cadence.MissionModels.{CatalogPins, TelemetryProjection}
+  alias Cadence.MissionModels.TelemetryProjection
   alias Cadence.Runtime.{MissionCoordinator, MissionModelPlanDecoder, MissionRuntimeSpec}
   alias Cadence.Telemetry.PacketDefinition
 
@@ -581,7 +581,7 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
   # catalog revision from it.
   defp pin!(c, catalog) do
     {:ok, composition} =
-      CatalogPins.for_catalog_revision(c.org, c.mission.mission_id, catalog)
+      CompositionPins.for_catalog_revision(c.org, c.mission.mission_id, catalog)
 
     composition
   end

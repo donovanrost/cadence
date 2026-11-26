@@ -46,6 +46,22 @@ defmodule Cadence.SpacecraftStore.Overrides do
     |> Map.new(fn {id, rows} -> {id, Map.new(rows, &{&1.path, view(&1)})} end)
   end
 
+  @doc """
+  The distinct values the mission's overrides set at `path`, as text (nil-free): e.g. the catalog
+  revisions per-craft overrides pin (D3, #544). One query.
+  """
+  @spec text_values_at(String.t(), String.t(), String.t()) :: [String.t()]
+  def text_values_at(organization_id, mission_id, path) do
+    from(o in OverrideRow,
+      where:
+        o.organization_id == ^organization_id and o.mission_id == ^mission_id and o.path == ^path,
+      distinct: true,
+      select: fragment("? ->> 'value'", o.value)
+    )
+    |> Repo.all()
+    |> Enum.reject(&is_nil/1)
+  end
+
   @doc "Sets (or replaces) one override."
   @spec put(String.t(), String.t(), String.t(), String.t(), term(), map()) ::
           {:ok, override()} | {:error, term()}

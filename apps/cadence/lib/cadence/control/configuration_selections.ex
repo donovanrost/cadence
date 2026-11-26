@@ -12,13 +12,11 @@ defmodule Cadence.Control.ConfigurationSelections do
     `{:restage_needed, entries}` and nothing is written.
   """
 
-  import Ecto.Query
-
+  alias Cadence.Catalog.CompositionPins
   alias Cadence.MissionModels
-  alias Cadence.MissionModels.{CatalogPins, Selection}
-  alias Cadence.Repo
-  alias Cadence.SpacecraftStore.OverrideRow
-  alias Cadence.SpacecraftTypeStore.SpacecraftTypeRow
+  alias Cadence.MissionModels.Selection
+  alias Cadence.SpacecraftStore.Overrides
+  alias Cadence.SpacecraftTypeStore
 
   @type answer :: binary()
   @type entry :: %{
@@ -40,7 +38,7 @@ defmodule Cadence.Control.ConfigurationSelections do
       for catalog <- Enum.uniq(catalogs),
           is_binary(catalog),
           {:ok, composition} <- [
-            CatalogPins.for_catalog_revision(organization_id, mission_id, catalog)
+            CompositionPins.for_catalog_revision(organization_id, mission_id, catalog)
           ],
           into: %{},
           do: {catalog, composition}
@@ -57,27 +55,8 @@ defmodule Cadence.Control.ConfigurationSelections do
   @doc "Every catalog revision a profile or a catalog override in the mission pins (two queries)."
   @spec pinned_catalogs(binary(), binary()) :: [binary()]
   def pinned_catalogs(organization_id, mission_id) do
-    profiles =
-      from(profile in SpacecraftTypeRow,
-        where:
-          profile.organization_id == ^organization_id and profile.mission_id == ^mission_id and
-            not is_nil(profile.catalog_revision_id),
-        distinct: true,
-        select: profile.catalog_revision_id
-      )
-      |> Repo.all()
-
-    overrides =
-      from(override in OverrideRow,
-        where:
-          override.organization_id == ^organization_id and override.mission_id == ^mission_id and
-            override.path == "catalog_revision_id",
-        distinct: true,
-        select: fragment("? ->> 'value'", override.value)
-      )
-      |> Repo.all()
-
-    Enum.reject(profiles ++ overrides, &is_nil/1)
+    SpacecraftTypeStore.pinned_catalog_revision_ids(organization_id, mission_id) ++
+      Overrides.text_values_at(organization_id, mission_id, "catalog_revision_id")
   end
 
   defp answer({:ok, revision_id}), do: revision_id
@@ -120,11 +99,13 @@ defmodule Cadence.Control.ConfigurationSelections do
   # What the words name the pin by (U109): its catalog revision's number while it's one layer,
   # else the composition's display number. Display only.
   defp numbers(organization_id, mission_id, composition) do
-    catalog = CatalogPins.catalog_revision_for(organization_id, mission_id, composition)
+    catalog = CompositionPins.catalog_revision_for(organization_id, mission_id, composition)
 
     %{
-      catalog_revision_number: CatalogPins.catalog_number(organization_id, mission_id, catalog),
-      composition_number: CatalogPins.composition_number(organization_id, mission_id, composition)
+      catalog_revision_number:
+        CompositionPins.catalog_number(organization_id, mission_id, catalog),
+      composition_number:
+        CompositionPins.composition_number(organization_id, mission_id, composition)
     }
   end
 

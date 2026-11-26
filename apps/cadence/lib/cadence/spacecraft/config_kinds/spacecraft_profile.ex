@@ -18,7 +18,6 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
 
   alias Cadence.Platform.ConfigFields, as: F
   alias Cadence.Platform.ConfigurationSettings
-  alias Cadence.Spacecraft.ConfigKinds.CompositionPin
   alias Cadence.Spacecraft.ConfigKinds.Spacecraft, as: SpacecraftKind
   alias Cadence.SpacecraftStore
   alias Cadence.SpacecraftStore.Overrides
@@ -148,7 +147,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
         else: catalog_exists(organization_id, mission_id, catalog, "catalog_revision_id")
 
     pin_errors =
-      CompositionPin.errors(
+      pins().errors(
         organization_id,
         mission_id,
         pin(previous),
@@ -174,7 +173,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
   # D3 (#544): the client pins the composition; Cadence derives its provenance catalog revision.
   def translate(organization_id, mission_id, _previous, proposed, touched) do
     with {:ok, {catalog, composition}} <-
-           CompositionPin.derive(
+           pins().derive(
              organization_id,
              mission_id,
              proposed["composition_id"],
@@ -507,4 +506,8 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
       {:error, _not_found} -> {:error, [F.error(path, "That catalog revision doesn't exist")]}
     end
   end
+
+  # D3's pin rules (#544) live with the mission model (Cadence.MissionModels.CompositionPin),
+  # configured so this kind has no compile-time edge to the catalog context.
+  defp pins, do: Application.fetch_env!(:cadence, :composition_pins)
 end
