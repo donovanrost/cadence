@@ -6,7 +6,10 @@ defmodule CadenceWeb.Console.FleetPushTest do
   require Phoenix.ChannelTest
 
   alias Cadence.Platform.ScopedReadUpdates
+  import ExUnit.CaptureLog
+
   alias CadenceWeb.Console.FleetPush
+  alias CadenceWeb.Console.FleetSource
   alias CadenceWeb.Console.FleetSources
   alias CadenceWeb.ConsoleSocket
   alias CadenceWeb.TestFixtures
@@ -197,6 +200,61 @@ defmodule CadenceWeb.Console.FleetPushTest do
       send(new, :tick)
       assert_push("fleet", %{seq: 2, full: false}, @load_ms)
       refute_push("fleet", %{seq: 1}, 200)
+    end
+  end
+
+  # console's #820 review: a read that keeps failing must not crash the source, or every channel
+  # follows a fresh one at once and the reads fail again as fast as they can.
+  describe "a failing fleet read" do
+    setup do
+      org = TestFixtures.persist_org!()
+      user = TestFixtures.persist_user!()
+      TestFixtures.grant_membership!(user, org)
+      mission = TestFixtures.persist_mission!(org)
+      %{org: org, mission: mission, token: TestFixtures.member_session_token!(user)}
+    end
+
+    test "keeps the source and its subscriber, logs once, skips ticks, and recovers", c do
+      reads = :counters.new(1, [])
+      row = %{id: "spacecraft-qa-1", name: "QA-1", state: "nominal", last_received_at: nil}
+      shared = %{counts: %{total: 1}, limits: %{configured: false}, spacecraft: [row]}
+
+      # Fails twice, then reads.
+      load = fn _organization_id, _mission_id ->
+        :counters.add(reads, 1, 1)
+        if :counters.get(reads, 1) <= 2, do: raise("qa: the fleet read failed"), else: shared
+      end
+
+      key = {c.org.organization_id, c.mission.mission_id}
+      source = start_supervised!({FleetSource, key: key, load: load})
+
+      log =
+        capture_log(fn ->
+          socket = join!(c.token, c.mission)
+          ref = Phoenix.ChannelTest.push(socket, "fleet:subscribe", %{})
+          assert_reply(ref, :ok, %{})
+
+          # The subscription's read fails: no snapshot, and no read until the next tick.
+          refute_push("fleet", _payload, 300)
+          assert :counters.get(reads, 1) == 1
+
+          # A tick while reads fail pushes nothing, not even the heartbeat.
+          send(source, :tick)
+          refute_push("fleet", _payload, 300)
+
+          # The third read succeeds: the waiting socket gets its snapshot.
+          send(source, :tick)
+
+          assert_push(
+            "fleet",
+            %{seq: 1, full: true, spacecraft: [%{id: "spacecraft-qa-1"}]},
+            @load_ms
+          )
+        end)
+
+      assert source(c) == source
+      assert :counters.get(reads, 1) == 3
+      assert length(Regex.scan(~r/couldn't read the fleet/, log)) == 1
     end
   end
 
