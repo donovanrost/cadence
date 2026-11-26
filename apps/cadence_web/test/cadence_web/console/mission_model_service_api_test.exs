@@ -180,4 +180,53 @@ defmodule CadenceWeb.Console.MissionModelServiceAPITest do
              "#{method} #{path}"
     end
   end
+
+  # commanding's review of #748: a service import keeps four-eyes. The person who issued the
+  # service identity counts as the importer, so they can't approve its revision; another admin can.
+  test "the service's issuer can't approve the revision it imported; another admin can", c do
+    org = %Cadence.Organizations.Organization{organization_id: c.mission.organization_id}
+    issuer = TestFixtures.persist_user!(display_name: "Ivo P.")
+    other = TestFixtures.persist_user!(display_name: "Ana R.")
+
+    for user <- [issuer, other],
+        do: TestFixtures.grant_membership!(user, org, role: :organization_admin)
+
+    {:ok, %{api_token: token}} =
+      Cadence.Auth.issue_service_identity(
+        ServiceIdentity.new(%{
+          service_identity_id: "svc-issued-#{System.unique_integer([:positive])}",
+          organization_id: c.mission.organization_id,
+          mission_id: c.mission.mission_id,
+          display_name: "Issued pipeline",
+          capabilities: [:mission_admin]
+        }),
+        %Cadence.Auth.Scope{
+          actor_kind: :user,
+          organization_id: c.mission.organization_id,
+          user: %Cadence.Accounts.User{user_id: issuer.user_id}
+        }
+      )
+
+    run = imported!(%{c | token: token})
+    model = TestFixtures.fetch_catalog_revision_for_run!(run).mission_model_revision_id
+    path = "#{c.base}/mission-model-revisions/#{model}"
+
+    decide = fn user ->
+      report =
+        user
+        |> TestFixtures.member_conn()
+        |> post(path <> "/comparison", %{})
+        |> json_response(201)
+        |> get_in(["data", "report_id"])
+
+      user
+      |> TestFixtures.member_conn()
+      |> post(path <> "/approve", %{"comparison_report_id" => report})
+    end
+
+    assert json_response(decide.(issuer), 403)["error"]["code"] ==
+             "mission_model_self_approval_forbidden"
+
+    assert %{"data" => %{"status" => "approved"}} = json_response(decide.(other), 200)
+  end
 end
