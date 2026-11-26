@@ -32,7 +32,9 @@ defmodule Cadence.Dev.ReflectOrbital.Activation do
       )
 
     fleet = Cadence.SpacecraftStore.list_spacecraft(F.organization_id(), F.mission_id())
-    500 = length(fleet)
+    # Runs inside the live node (RPC), which needn't carry EARENDIL_SPACECRAFT_COUNT: the fleet
+    # that was seeded is the expected size.
+    true = fleet != []
     snapshots = Map.new(fleet, &{&1.spacecraft_id, Drafts.snapshot(mission, &1)})
 
     verify_drafts!(snapshots, revision)
@@ -74,7 +76,7 @@ defmodule Cadence.Dev.ReflectOrbital.Activation do
     unless already_active? do
       policy = ActivationPolicy.load(F.organization_id(), F.mission_id())
       tokens = Map.new(snapshots, fn {id, snapshot} -> {id, snapshot.token} end)
-      IO.puts("Preparing one exact activation review for 500 spacecraft")
+      IO.puts("Preparing one exact activation review for #{length(fleet)} spacecraft")
 
       {:ok, request} =
         Review.request_many(scope, F.mission_id(), tokens,
@@ -105,8 +107,9 @@ defmodule Cadence.Dev.ReflectOrbital.Activation do
 
   defp verify(mission, fleet, revision) do
     {:ok, active} = Active.load(mission)
-    500 = map_size(active.entries)
-    # The complete 500-spacecraft specification can exceed the ordinary five-
+    n = length(fleet)
+    ^n = map_size(active.entries)
+    # The complete fleet specification (500-1,000 spacecraft) can exceed the ordinary five-
     # second observation timeout while a release is recovering the fleet.
     {:ok, spec} =
       GenServer.call(
@@ -116,7 +119,8 @@ defmodule Cadence.Dev.ReflectOrbital.Activation do
       )
 
     true = spec.generation == active.activation.generation
-    5_000 = length(spec.binding_set.capability_instances)
+    # Ten capability instances per spacecraft.
+    true = length(spec.binding_set.capability_instances) == 10 * n
     verify_routes(fleet, active.entries)
 
     {:ok, verified} =
@@ -186,7 +190,10 @@ defmodule Cadence.Dev.ReflectOrbital.Activation do
       true = Enum.all?(routes, &(&1.source_endpoint_id == source))
 
       if rem(index, 100) == 0,
-        do: IO.puts("Verified decoder and both provider routes for #{index}/500 spacecraft")
+        do:
+          IO.puts(
+            "Verified decoder and both provider routes for #{index}/#{length(fleet)} spacecraft"
+          )
     end)
   end
 
