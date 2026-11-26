@@ -2,12 +2,21 @@ import type { Page, WebSocketRoute } from "@playwright/test";
 import { missionApi } from "./console.ts";
 import { DEMO } from "./env.ts";
 import { changedFleet, isJson, numberOf, scaleFleet, type Json } from "./scale-fleet.ts";
+import {
+  countsOf,
+  PASS_PAGE,
+  passPage,
+  passesOf,
+  scalePasses,
+  schedulePasses,
+} from "./scale-passes.ts";
 
 /**
  * Fleet-scale fixtures and probes (#176). The seeded demo mission has 500 spacecraft; a larger
  * fleet clones its real rows with new ids, SCIDs, names and slots, so profiles, states and values
  * stay the seeded ones. Both GET /fleet and the live `fleet` push are scaled, so a screen sees one
- * consistent fleet whichever arrives first.
+ * consistent fleet whichever arrives first. GET /passes is scaled with it (#909): each clone gets
+ * its seeded craft's passes, served in cursor pages of 500.
  */
 
 /** What the in-page probe records (installScaleProbes). */
@@ -64,6 +73,7 @@ export async function serveScaledFleet(page: Page, size: number): Promise<Scaled
   await page.route(missionApi("fleet"), async (route) => {
     await route.fulfill({ json: { data: await fleet() } }).catch(() => undefined);
   });
+  await servePasses(page, fleet);
 
   const topic = `mission:${DEMO.missionId}`;
   let socket: WebSocketRoute | null = null;
@@ -104,6 +114,66 @@ export async function serveScaledFleet(page: Page, size: number): Promise<Scaled
       socket.send(JSON.stringify([joinRef, null, topic, "fleet", payload]));
     },
   };
+}
+
+type PassWindow = Readonly<{ from: unknown; to: unknown; counts: Json; passes: Json[] }>;
+
+/** The most pages of the real window the fixture walks (as fetchPasses' ceiling). */
+const MAX_PASS_PAGES = 100;
+
+/**
+ * #909: GET /passes at fleet scale. Each window (its query without cursor and limit) is read from
+ * the server once, every page; its passes are repeated for the fleet's clones and a booked
+ * schedule for every craft is added (`schedulePasses`); and it is served in pages of 500 with an
+ * offset cursor, so the console walks it as it walks the server's. GET /passes/:id isn't routed.
+ */
+async function servePasses(page: Page, fleet: () => Promise<Json>): Promise<void> {
+  const windows = new Map<string, Promise<PassWindow>>();
+  const windowOf = async (query: URLSearchParams): Promise<PassWindow> => {
+    const path = `/api/v1/missions/${DEMO.missionId}/passes`;
+    const passes: Json[] = [];
+    let first: Json | null = null;
+    let cursor: string | null = null;
+    for (let pages = 0; pages < MAX_PASS_PAGES; pages += 1) {
+      const q = new URLSearchParams(query);
+      q.set("limit", String(PASS_PAGE));
+      if (cursor !== null) q.set("cursor", cursor);
+      const body: unknown = await (await page.request.get(`${path}?${q.toString()}`)).json();
+      if (!isJson(body) || !isJson(body["data"]))
+        throw new Error("scale fixture: unexpected passes");
+      first ??= body["data"];
+      passes.push(...passesOf(body["data"]));
+      const meta = isJson(body["meta"]) ? body["meta"] : {};
+      cursor = typeof meta["next_cursor"] === "string" ? meta["next_cursor"] : null;
+      if (cursor === null) break;
+    }
+    if (first === null) throw new Error("scale fixture: no passes page");
+    const fleetRows = (await fleet())["spacecraft"];
+    const rows = Array.isArray(fleetRows) ? fleetRows.filter(isJson) : [];
+    const now = Date.now();
+    const from = Date.parse(String(first["from"]));
+    const to = Date.parse(String(first["to"]));
+    // The window's own filters apply to the schedule too (Investigate reads one craft's passes).
+    const craft = query.get("spacecraft_id");
+    const station = query.get("station");
+    const grown = [...scalePasses(passes, rows), ...schedulePasses(rows, from, to, now)]
+      .filter((p) => craft === null || p["spacecraft_id"] === craft)
+      .filter((p) => station === null || !isJson(p["station"]) || p["station"]["ref"] === station)
+      .sort((a, b) => String(a["starts_at"]).localeCompare(String(b["starts_at"])));
+    return { from: first["from"], to: first["to"], counts: countsOf(grown, now), passes: grown };
+  };
+  await page.route(new RegExp(`/api/v1/missions/${DEMO.missionId}/passes\\?`), async (route) => {
+    const url = new URL(route.request().url());
+    const cursor = url.searchParams.get("cursor");
+    const limit = Number(url.searchParams.get("limit") ?? PASS_PAGE);
+    const query = new URLSearchParams(url.searchParams);
+    query.delete("cursor");
+    query.delete("limit");
+    const key = query.toString();
+    const window = windows.get(key) ?? windowOf(query);
+    windows.set(key, window);
+    await route.fulfill({ json: passPage(await window, cursor, limit) }).catch(() => undefined);
+  });
 }
 
 /**
