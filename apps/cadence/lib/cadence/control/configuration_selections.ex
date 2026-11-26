@@ -77,9 +77,10 @@ defmodule Cadence.Control.ConfigurationSelections do
     # selection between the two reads, what's selected now isn't held, so it's refused too.
     against = if current == first, do: recorded || %{}, else: first
 
-    case differences(organization_id, mission_id, against, current, opts) do
+    case differences(organization_id, mission_id, against, current, opts) ++
+           unselectable(organization_id, mission_id, current) do
       [] -> {:ok, {current, pins}}
-      entries -> {:error, {:restage_needed, entries}}
+      entries -> {:error, {:restage_needed, Enum.uniq_by(entries, & &1.composition_id)}}
     end
   end
 
@@ -100,6 +101,24 @@ defmodule Cadence.Control.ConfigurationSelections do
       }
       |> Map.merge(numbers(organization_id, mission_id, composition))
       |> put_decision(organization_id, mission_id, composition, why)
+    end
+  end
+
+  # commanding's review of E2a (#546): a pinned composition whose approval was withdrawn refuses,
+  # even when the submit recorded the same answer. There's no fallback to the catalog's own
+  # revision, which would put an unchanged pin back on the withdrawn revision. A model nobody
+  # approved that already runs stays grandfathered, as the gate's own rule (`not_approved` isn't
+  # refused here).
+  defp unselectable(organization_id, mission_id, current) do
+    for {composition, "withdrawn"} <- Enum.sort(current) do
+      %{
+        composition_id: composition,
+        recorded_revision_id: nil,
+        current_revision_id: nil,
+        current_reason: "withdrawn"
+      }
+      |> Map.merge(numbers(organization_id, mission_id, composition))
+      |> put_decision(organization_id, mission_id, composition, "withdrawn")
     end
   end
 

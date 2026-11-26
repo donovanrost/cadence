@@ -4,13 +4,23 @@ defmodule Cadence.Repo.Migrations.MissionModelDecisions do
   # E2 (#546; design §5, CB-15): a withdrawn model approval is a pure decision record, append-only
   # like the other decision tables (DecisionRecord.tables/0). The revision row's status moves to
   # 'withdrawn' beside it, and that status is terminal. Approvals still live on the revision row;
-  # #600 moves them here additively.
+  # #878 moves them here additively.
   def up do
     create table(:mission_model_decisions, primary_key: false) do
       add(:decision_id, :string, primary_key: true)
       add(:organization_id, :string, null: false)
       add(:mission_id, :string, null: false)
-      add(:revision_id, :string, null: false)
+
+      add(
+        :revision_id,
+        references(:mission_model_revisions,
+          column: :revision_id,
+          type: :string,
+          on_delete: :restrict
+        ),
+        null: false
+      )
+
       add(:composition_id, :string)
       add(:decision, :string, null: false)
       add(:actor, :map, null: false)

@@ -16,11 +16,15 @@ defmodule Cadence.MissionModels.WithdrawalTest do
   import Ecto.Query
 
   alias Cadence.Accounts.User
+  alias Cadence.Applications.SpacecraftConfiguration.{Drafts, Review}
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Auth.Scope
+  alias Cadence.Catalog.SpacecraftConfigurationInput
   alias Cadence.CompositionFixtures
+  alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Control.{Configuration, ConfigurationSelections, ModelWithdrawal}
   alias Cadence.Governance.ActivationPolicy
+  alias Cadence.Management.Activations
   alias Cadence.MissionModels
   alias Cadence.MissionModels.{Compositions, DecisionRow, RevisionRow, Selection}
 
@@ -190,6 +194,105 @@ defmodule Cadence.MissionModels.WithdrawalTest do
              } = entry
     end
   end
+
+  describe "the apply's own check" do
+    test "a recorded withdrawn answer still refuses: no fallback to the catalog's revision", c do
+      {:ok, _} = withdraw(c, c.model)
+      recorded = %{c.composition => "withdrawn"}
+
+      assert {:error, {:restage_needed, [entry]}} =
+               ConfigurationSelections.check(c.org, c.mid, recorded, [
+                 c.catalog.catalog_revision_id
+               ])
+
+      assert %{current_revision_id: nil, current_reason: "withdrawn", decision: %{}} = entry
+    end
+  end
+
+  describe "an unchanged pin on a withdrawn composition (commanding's review of #881)" do
+    test "a change set touching its craft for another reason is refused, not regenerated", c do
+      configure!(c)
+      profile = profile!(c)
+      {:ok, _} = withdraw(c, c.model)
+
+      {:ok, staged} =
+        Configuration.stage(c.scope, c.mid, %{summary: "Frame size"}, [
+          %{
+            kind: "spacecraft_profile",
+            action: :update,
+            entity_id: profile,
+            changes: [%{path: "frame_parameters.frame_size", value: 1024}]
+          }
+        ])
+
+      # A profile change regenerates the craft's entry without a catalog change, so it never reaches
+      # the selection check: the gate's own check refuses the withdrawn revision it already runs.
+      model = c.model
+      assert {:error, {:mission_model_revision_not_approved, [^model]}} = submit(c, staged)
+      assert {:ok, %{status: :withdrawn}} = MissionModels.fetch_revision(c.org, c.mid, model)
+    end
+  end
+
+  # An active generation for the craft on the fixture's catalog (the paths test's configure!/2).
+  defp configure!(c) do
+    {:ok, mission} = Cadence.Missions.fetch_mission(c.org, c.mid)
+    current = Drafts.snapshot(mission, c.craft)
+
+    endpoint =
+      Cadence.SourceEndpoints.list_source_endpoints(c.org, c.mid)
+      |> Enum.find(&(&1.spacecraft_id == c.craft.spacecraft_id))
+
+    document =
+      Map.merge(SpacecraftConfigurationInput.empty(), %{
+        "catalog_revision_id" => c.catalog.catalog_revision_id,
+        "telemetry_enabled" => true,
+        "commanding_enabled" => true,
+        "handled_apids" => [42],
+        "telemetry_source_endpoint_id" => endpoint && endpoint.source_endpoint_id
+      })
+
+    :ok = Fixtures.change_set_switches!(c.org, c.mid, c.craft.spacecraft_id, document)
+    {:ok, _} = Drafts.save(c.scope, c.mid, c.craft.spacecraft_id, current.token, document)
+    token = Drafts.snapshot(mission, c.craft).token
+
+    {:ok, request} = Review.request_many(c.scope, c.mid, %{c.craft.spacecraft_id => token})
+    {:ok, approved} = Activations.fetch_approved(request.activation_request_id)
+    {:ok, %{status: :succeeded}} = ControlActivations.execute(approved)
+  end
+
+  defp profile!(c) do
+    id = "profile-withdraw-#{System.unique_integer([:positive])}"
+    {:ok, _} = apply!(c, [create_profile(c.composition) |> Map.put(:entity_id, id)])
+
+    {:ok, _} =
+      apply!(c, [
+        %{
+          kind: "spacecraft",
+          action: :update,
+          entity_id: c.craft.spacecraft_id,
+          changes: [
+            %{path: "spacecraft_type_id", value: id},
+            %{path: "spacecraft_type_version", value: 1}
+          ]
+        }
+      ])
+
+    id
+  end
+
+  defp apply!(c, ops) do
+    {:ok, staged} = Configuration.stage(c.scope, c.mid, %{summary: "Withdraw test"}, ops)
+    {:ok, %{state: :applied} = applied} = submit(c, staged)
+    {:ok, applied}
+  end
+
+  defp submit(c, staged),
+    do:
+      Configuration.submit(c.scope, c.mid, staged.change_set_id, %{
+        reason: "Withdrawal test",
+        expected_version: staged.version,
+        acknowledged_holds: true
+      })
 
   defp ctx(c), do: %{org: c.org, mid: c.mid, revision_id: c.model, catalog: c.catalog}
 
