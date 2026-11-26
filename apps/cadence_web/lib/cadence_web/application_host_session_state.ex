@@ -37,9 +37,14 @@ defmodule CadenceWeb.ApplicationHostSessionState do
   @doc "Whether the id is this browser session's console host session id."
   @spec console_session?(Plug.Conn.t(), binary() | nil) :: boolean()
   def console_session?(conn, header_id) when is_binary(header_id) and header_id != "",
-    do: header_id == get_session(conn, @console_session_key)
+    do: secure_equal?(header_id, get_session(conn, @console_session_key))
 
   def console_session?(_conn, _header_id), do: false
+
+  defp secure_equal?(left, right) when is_binary(left) and is_binary(right),
+    do: Plug.Crypto.secure_compare(left, right)
+
+  defp secure_equal?(_left, _right), do: false
 
   @doc "Pins a host scope the bridge's query and actions may name (the most recent first)."
   @spec pin_scope(Plug.Conn.t(), map(), binary() | nil) :: Plug.Conn.t()
