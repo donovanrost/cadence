@@ -1,8 +1,8 @@
 import { mount } from "@vue/test-utils";
-import { h } from "vue";
+import { defineComponent, h, ref } from "vue";
 import { describe, expect, it } from "vite-plus/test";
 import ApTable from "./ApTable.vue";
-import { rowWindow } from "./lib/virtualRows.ts";
+import { rowWindow, useRowWindow } from "./lib/virtualRows.ts";
 
 /** ApTable's opt-in windowing (lead's kit, 11-15). */
 describe("rowWindow", () => {
@@ -192,5 +192,58 @@ describe("ApTable virtual", () => {
     w.unmount();
     small.remove();
     tall.remove();
+  });
+});
+
+/** #868: a list (Fleet's phone rows) windows through the same helper; its items carry data-row-index. */
+describe("useRowWindow on a list", () => {
+  const List = defineComponent({
+    props: { scroller: { type: Object, required: true } },
+    setup(props) {
+      const list = ref<HTMLElement | null>(null);
+      const win = useRowWindow(
+        list,
+        ref(rows.length),
+        ref({ rowHeight: 40, overscan: 5 }),
+        ref(props.scroller as HTMLElement),
+      );
+      return () => {
+        const w = win.value ?? { start: 0, end: 0, before: 0, after: 0 };
+        return h(
+          "ul",
+          { ref: list },
+          rows
+            .slice(w.start, w.end)
+            .map((r, i) =>
+              h("li", { key: r.id, "data-row-index": w.start + i }, [
+                h("a", { href: `#${r.id}` }, r.name),
+              ]),
+            ),
+        );
+      };
+    },
+  });
+
+  it("keeps a focused item and its next one rendered after scrolling away", async () => {
+    const scroller = scrollerOf(400);
+    const w = mount(List, { attachTo: scroller, props: { scroller } });
+    w.find("ul").element.getBoundingClientRect = () => new DOMRect(0, -scroller.scrollTop, 800, 0);
+    scroller.dispatchEvent(new Event("scroll"));
+    await frame();
+    const items = () => w.findAll("li").map((li) => Number(li.attributes("data-row-index")));
+    expect(items()).toHaveLength(16);
+    const link = w.findAll("li")[3]?.find("a").element;
+    if (!link) throw new Error("no item");
+    link.focus();
+    link.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    scroller.scrollTop = 20_000;
+    scroller.dispatchEvent(new Event("scroll"));
+    await frame();
+    expect(items()).toContain(3);
+    expect(items()).toContain(4);
+    expect(items()).toContain(500);
+    expect(document.activeElement).toBe(link);
+    w.unmount();
+    scroller.remove();
   });
 });

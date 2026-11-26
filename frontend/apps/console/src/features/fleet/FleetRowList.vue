@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
-import { formatCount, formatDuration, ApStatusMark } from "@/ui";
+import { formatCount, formatDuration, useRowWindow, ApStatusMark } from "@/ui";
 import { useCoarseNow } from "./coarseClock.ts";
 import type { FleetSpacecraft } from "./api.ts";
 import { fleetOpState, fleetStateWord } from "./matrix.ts";
@@ -8,8 +9,32 @@ import { fleetOpState, fleetStateWord } from "./matrix.ts";
 /**
  * Fleet rows under 768px (ux pass 1 #3): two lines per spacecraft, no table, ids never wrap.
  * Line 1: name (the link, ≥44px tall) + state; line 2: SCID · plane · slot · last TLM in mono.
+ *
+ * Windowed like FleetTable (#868): only the rows in view plus overscan render, through the kit's
+ * `useRowWindow`, with the skipped rows' height as the list's padding. Every item is ROW_HEIGHT
+ * tall (both lines are nowrap). A focused row stays rendered, so Tab order and focus hold.
  */
-defineProps<{ rows: readonly FleetSpacecraft[]; total: number }>();
+const props = defineProps<{ rows: readonly FleetSpacecraft[]; total: number }>();
+/** 1 border + 4 + 44 (name line) + 16 (meta line) + 6 + 4. */
+const ROW_HEIGHT = 75;
+/** Before the first measurement, only this many rows (a phone screen and some), never all. */
+const FIRST_PAINT = 20;
+const list = ref<HTMLElement | null>(null);
+const win = useRowWindow(
+  list,
+  computed(() => props.rows.length),
+  ref({ rowHeight: ROW_HEIGHT }),
+  ref(null),
+);
+const shown = computed(() => {
+  const w = win.value ?? {
+    start: 0,
+    end: Math.min(props.rows.length, FIRST_PAINT),
+    before: 0,
+    after: Math.max(0, props.rows.length - FIRST_PAINT) * ROW_HEIGHT,
+  };
+  return { ...w, rows: props.rows.slice(w.start, w.end) };
+});
 /** §2: Last TLM and Next contact move on the fleet's 10 s tick, not the 1 Hz clock. */
 const now = useCoarseNow();
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -35,11 +60,21 @@ const tint = (sc: FleetSpacecraft) =>
 
 <template>
   <div>
-    <ul class="m-0 list-none p-0" aria-label="Fleet">
+    <ul
+      ref="list"
+      class="m-0 list-none px-0"
+      aria-label="Fleet"
+      :style="{ paddingTop: `${shown.before}px`, paddingBottom: `${shown.after}px` }"
+    >
       <li
-        v-for="sc in rows"
+        v-for="(sc, i) in shown.rows"
         :key="sc.id"
-        class="border-t border-hairline px-4 py-1 first:border-t-0"
+        :data-row-index="shown.start + i"
+        :aria-posinset="shown.start + i + 1"
+        :aria-setsize="rows.length"
+        class="overflow-hidden border-hairline px-4 py-1"
+        :class="shown.start + i === 0 ? '' : 'border-t'"
+        :style="{ height: `${ROW_HEIGHT}px` }"
       >
         <div class="flex min-h-11 items-center justify-between gap-3">
           <RouterLink
@@ -51,7 +86,9 @@ const tint = (sc: FleetSpacecraft) =>
             <ApStatusMark :state="fleetOpState(sc.state)" />{{ fleetStateWord(sc.state) }}
           </span>
         </div>
-        <p class="m-0 pb-1.5 font-mono text-xs whitespace-nowrap text-text-3">{{ meta(sc) }}</p>
+        <p class="m-0 pb-1.5 font-mono text-xs leading-4 whitespace-nowrap text-text-3">
+          {{ meta(sc) }}
+        </p>
       </li>
     </ul>
     <p class="m-0 border-t border-hairline px-4 py-2.5 font-mono text-xs text-text-4 uppercase">

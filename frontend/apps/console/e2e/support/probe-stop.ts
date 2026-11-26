@@ -48,13 +48,23 @@ export function probeStop(exclude: readonly string[]): ProbedStop | null {
     const name = mark.getAttribute("aria-label") ?? "";
     return name ? `${role} '${name}'` : role;
   };
-  // Stable identity across stops: the element's path from <html>.
+  // Stable identity across stops: the element's path from <html>. A windowed row (#868: the kit's
+  // useRowWindow) is named by its place in the whole list, not its child index, which shifts as
+  // the window moves: two rows at the same child index are different stops.
+  const placeOf = (n: Element): string | null =>
+    n.getAttribute("data-row-index") ??
+    n.getAttribute("aria-posinset") ??
+    (n.tagName === "TR" ? n.getAttribute("aria-rowindex") : null);
   const keyOf = (node: Element): string => {
     const parts: string[] = [];
-    for (let n: Element | null = node; n && n !== document.documentElement; n = n.parentElement)
+    for (let n: Element | null = node; n && n !== document.documentElement; n = n.parentElement) {
+      const place = placeOf(n);
       parts.unshift(
-        `${n.tagName}:${Array.prototype.indexOf.call(n.parentElement?.children ?? [], n)}`,
+        place === null
+          ? `${n.tagName}:${Array.prototype.indexOf.call(n.parentElement?.children ?? [], n)}`
+          : `${n.tagName}@${place}`,
       );
+    }
     return parts.join("/");
   };
 
