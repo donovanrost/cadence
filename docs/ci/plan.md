@@ -108,7 +108,7 @@ written.
 | `test-packages` ×1 | ccsds (295), xtce (11), cadence_catalog (30), cadence_simulator (144), `mix test.planes` (4 planes), `mix test.cluster` | sequential in one job | Small suites; four more runners would cost more setup than they save. |
 
 - Each job has its own Postgres service, so `MIX_TEST_PARTITION` only names the DB, the
-  ingress-journal dir and the simulator DETS file. What actually splits the work is
+  ingress-journal dir and the simulator snapshot file. What actually splits the work is
   `--partitions N`.
 - ExUnit splits **files** round-robin, not by duration, and `async: false` files run serially
   within each shard. The first green run prints `--slowest-modules 10` per shard, and I tune N
@@ -273,7 +273,7 @@ Services: `postgres:17` (tmpfs) and `questdb/questdb:9.4.3`. Then, in order, wit
 1. Restore the `_build/dev`, deps, pnpm and npm caches; `npm ci` in `apps/cadence_web` (the
    LiveView sign-in page's Vite); download the console artifact; `mix compile`.
 2. `ecto.create` + `ecto.migrate -r Cadence.Repo` and `cadence.questdb.migrate`, while the
-   simulator starts in the background (`--sname ci_sim`, clean DETS dir).
+   simulator starts in the background (`--sname ci_sim`, clean snapshot dir).
 3. Phoenix in the background (`elixir --sname cadence_ci -S mix phx.server`), with a readiness
    poll on `/sign-in`.
 4. Seeds: `reflect_orbital_demo.exs` (500 spacecraft), `apogee_qa_personas.exs`,

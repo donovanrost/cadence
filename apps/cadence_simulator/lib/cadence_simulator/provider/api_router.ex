@@ -115,13 +115,9 @@ defmodule CadenceSimulator.Provider.ApiRouter do
           request_id: request_id(conn)
         )
 
-      maybe_drop_contact_response_after_commit(
-        run,
-        result,
-        "contact_response_loss_after_commit_count"
+      respond_contact_mutation(conn, run, result, "contact_response_loss_after_commit_count",
+        status: 201
       )
-
-      respond(conn, result, status: 201)
     end)
   end
 
@@ -159,13 +155,12 @@ defmodule CadenceSimulator.Provider.ApiRouter do
           request_id: request_id(conn)
         )
 
-      maybe_drop_contact_response_after_commit(
+      respond_contact_mutation(
+        conn,
         run,
         result,
         "contact_modification_response_loss_after_commit_count"
       )
-
-      respond(conn, result)
     end)
   end
 
@@ -253,22 +248,29 @@ defmodule CadenceSimulator.Provider.ApiRouter do
 
   defp request_header(conn, name), do: Plug.Conn.get_req_header(conn, name) |> List.first()
 
-  defp maybe_drop_contact_response_after_commit(run, {:ok, _contact}, fault_key) do
-    limit =
-      get_in(run, [
-        "scenario_snapshot",
-        "fault_profile",
-        fault_key
-      ]) ||
-        0
-
-    if Store.consume_fault(run["id"], fault_key, limit) do
-      :ok = Store.flush()
-      Process.exit(self(), :kill)
+  defp respond_contact_mutation(conn, run, result, fault_key, opts \\ []) do
+    case maybe_drop_contact_response_after_commit(
+           conn.private[:provider_store_token],
+           run,
+           result,
+           fault_key
+         ) do
+      :ok -> respond(conn, result, opts)
+      {:error, _reason} -> conn |> Contract.persistence_unavailable_response() |> send_resp()
     end
   end
 
-  defp maybe_drop_contact_response_after_commit(_run, _result, _fault_key), do: :ok
+  defp maybe_drop_contact_response_after_commit(token, run, {:ok, _contact}, fault_key) do
+    limit = get_in(run, ["scenario_snapshot", "fault_profile", fault_key]) || 0
+
+    if Store.consume_fault(run["id"], fault_key, limit) do
+      with :ok <- Store.await_persisted(token), do: Process.exit(self(), :kill)
+    else
+      :ok
+    end
+  end
+
+  defp maybe_drop_contact_response_after_commit(_token, _run, _result, _fault_key), do: :ok
 
   defp parse_integer(nil, default), do: default
 

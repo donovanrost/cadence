@@ -10,7 +10,7 @@ defmodule CadenceSimulator.Provider.ConfigurationTest do
         provider_auth_required: true,
         provider_admin_api_token: "admin-token",
         provider_api_token: "provider-token",
-        provider_store: [path: "/tmp/provider-configuration-test.dets"],
+        provider_store: [path: "/tmp/provider-configuration-test.ets"],
         provider_defaults: [definitions_path: "/tmp/provider-definitions.yaml"]
       )
 

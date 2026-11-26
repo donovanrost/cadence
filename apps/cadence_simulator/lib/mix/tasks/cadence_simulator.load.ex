@@ -13,7 +13,8 @@ defmodule Mix.Tasks.CadenceSimulator.Load do
       mix cadence_simulator.load --craft 1000 --shape peak --duration 600
 
   Options include `--per-site 8|16` for the average shape and
-  `--output PATH` for the per-path JSONL results.
+  `--output PATH` for the per-path JSONL results. Use `--binary-owners` to include
+  per-process binary references in the ten-second diagnostics.
   """
 
   @impl true
@@ -26,7 +27,8 @@ defmodule Mix.Tasks.CadenceSimulator.Load do
              shape: :string,
              duration: :integer,
              per_site: :integer,
-             output: :string
+             output: :string,
+             binary_owners: :boolean
            ]
          ) do
       {opts, [], []} -> execute(opts)
@@ -40,7 +42,8 @@ defmodule Mix.Tasks.CadenceSimulator.Load do
       shape: Keyword.get(opts, :shape, "peak"),
       duration: Keyword.get(opts, :duration, 600),
       per_site: Keyword.get(opts, :per_site, 8),
-      output: Keyword.get(opts, :output, @default_output)
+      output: Keyword.get(opts, :output, @default_output),
+      binary_owners?: Keyword.get(opts, :binary_owners, false)
     }
 
     if config.duration < 1, do: Mix.raise("--duration must be a positive number of seconds")

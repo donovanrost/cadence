@@ -97,7 +97,7 @@ end
 Application.put_env(:cadence_simulator, :provider_http, enabled: false)
 
 Application.put_env(:cadence_simulator, :provider_store,
-  path: Path.expand("../var/reflect_orbital/dashboard_feed.dets", __DIR__)
+  path: Path.expand("../var/reflect_orbital/dashboard_feed.ets", __DIR__)
 )
 
 {:ok, _} = Application.ensure_all_started(:cadence_simulator)

@@ -22,15 +22,25 @@ defmodule CadenceSimulator.Provider.Router do
     Contract.error(conn, 404, "not_found", "resource not found")
   end
 
-  # Persist all writes from one API operation before acknowledging it.
-  defp flush_mutations(%{method: method} = conn, _opts) when method in ["POST", "PATCH"] do
-    register_before_send(conn, fn conn ->
-      if conn.status in 200..299, do: :ok = Store.flush()
-      conn
-    end)
+  defp flush_mutations(%{method: method} = conn, _opts)
+       when method in ["POST", "PUT", "PATCH", "DELETE"] do
+    token = Store.persistence_token()
+
+    conn
+    |> put_private(:provider_store_token, token)
+    |> register_before_send(&await_mutations(&1, token))
   end
 
   defp flush_mutations(conn, _opts), do: conn
+
+  defp await_mutations(%{status: status} = conn, token) when status in 200..299 do
+    case Store.await_persisted(token) do
+      :ok -> conn
+      {:error, _reason} -> Contract.persistence_unavailable_response(conn)
+    end
+  end
+
+  defp await_mutations(conn, _token), do: conn
 
   defp json(conn, status, body) do
     conn
