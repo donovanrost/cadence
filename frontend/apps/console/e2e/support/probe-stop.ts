@@ -10,8 +10,9 @@ export function probeStop(exclude: readonly string[]): ProbedStop | null {
   const el = document.activeElement;
   if (!(el instanceof HTMLElement) || el === document.body) return null;
 
+  // A region is a landmark only when it has a name (ARIA), e.g. the staged-changes bar (#928).
   const LANDMARKS =
-    "main, nav, header, footer, aside, [role=main], [role=navigation], [role=banner], [role=contentinfo], [role=complementary], [role=search]";
+    "main, nav, header, footer, aside, [role=main], [role=navigation], [role=banner], [role=contentinfo], [role=complementary], [role=search], [role=region][aria-label], [role=region][aria-labelledby], section[aria-label], section[aria-labelledby]";
   const text = (node: Element | null) => (node?.textContent ?? "").replace(/\s+/g, " ").trim();
   const nameOf = (node: Element): string => {
     const labelledBy = node.getAttribute("aria-labelledby");
@@ -43,9 +44,19 @@ export function probeStop(exclude: readonly string[]): ProbedStop | null {
       NAV: "navigation",
       MAIN: "main",
       ASIDE: "complementary",
+      SECTION: "region",
     };
     const role = mark.getAttribute("role") ?? implicit[mark.tagName] ?? mark.tagName.toLowerCase();
-    const name = mark.getAttribute("aria-label") ?? "";
+    const labelledBy = mark.getAttribute("aria-labelledby");
+    const name =
+      mark.getAttribute("aria-label") ??
+      (labelledBy
+        ? labelledBy
+            .split(/\s+/)
+            .map((id) => text(document.getElementById(id)))
+            .join(" ")
+            .trim()
+        : "");
     return name ? `${role} '${name}'` : role;
   };
   // Stable identity across stops: the element's path from <html>. A windowed row (#868: the kit's
