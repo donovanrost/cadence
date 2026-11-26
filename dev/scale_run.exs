@@ -32,7 +32,8 @@ defmodule Cadence.Dev.ScaleRun do
 
     env = [{"EARENDIL_SPACECRAFT_COUNT", Integer.to_string(opts[:spacecraft])}]
     stack_command = if opts[:reset], do: "reset", else: "up"
-    command!("dev/stack", [stack_command], env)
+    # System.cmd resolves a relative program through PATH only, so give dev/stack's full path.
+    command!(Path.join(@root, "dev/stack"), [stack_command], env)
 
     command!("mise", ["exec", "--", "bash", "-c", @measure_command, "scale" | args], env)
   end
@@ -188,14 +189,17 @@ defmodule Cadence.Dev.ScaleRun do
       capacity_heading(load.summary.host_capacity, meta.host.logical_cpus, opts[:label]),
       "- Fleet size #{opts[:spacecraft]}, #{sites} sites, #{opts[:shape]} load shape\n",
       per_site_line(opts),
-      "- Requested duration #{opts[:duration]} s, #{seconds} sampler rows\n",
+      "- Requested duration #{opts[:duration]} s, #{seconds} sampler rows " <>
+        "(#{Float.round(opts[:duration] / max(seconds, 1), 2)} s per row on average)\n",
       "- Simulator paths sending #{load.paths_sending}/#{load.paths_expected}\n",
       "- Simulator frames sent #{load.frames_sent}, target #{load.frames_per_second_expected} frames/s\n",
       "- Per-second JSONL \`#{Path.relative_to(out, @root)}\`\n",
       "- Summary JSON \`#{Path.relative_to(load.summary_path, @root)}\`\n\n",
       "## Run settings\n\n| Setting | Value |\n| --- | --- |\n",
       meta_rows(meta),
-      "\n## Per-second metrics\n\n| Metric | p50 | p99 | Max |\n| --- | ---: | ---: | ---: |\n",
+      # Counts are per sampler row, which covers about a second only on an unloaded host.
+      "\n## Per-sample metrics\n\nOne row per sampler tick; counts (frames, batches, bytes) are " <>
+        "per row, not per second.\n\n| Metric | p50 | p99 | Max |\n| --- | ---: | ---: | ---: |\n",
       for {key, stats} <- Enum.sort(metrics) do
         "| \`#{key}\` | #{cell(stats.p50)} | #{cell(stats.p99)} | #{cell(stats.max)} |\n"
       end,
@@ -217,7 +221,11 @@ defmodule Cadence.Dev.ScaleRun do
       if capacity.classification == :baseline, do: "Baseline", else: "Ceiling check"
 
     load = capacity.max_load_one || "unavailable"
-    swap = if capacity.max_swap_percent, do: "#{capacity.max_swap_percent}%", else: "unavailable"
+
+    swap =
+      if capacity.max_swap_percent,
+        do: "#{Float.round(capacity.max_swap_percent * 1.0, 1)}%",
+        else: "unavailable"
 
     "# #{classification} — max 1-min load #{load} (#{cores} logical cores), max swap #{swap} — #{label}\n\n"
   end

@@ -194,7 +194,9 @@ defmodule Mix.Tasks.Cadence.Scale.Run do
   end
 
   defp print(%{seconds: seconds, metrics: metrics, storage: storage}, path) do
-    Mix.shell().info("\n#{seconds} s sampled. Per-second p50 / p99 / max:")
+    Mix.shell().info(
+      "\n#{seconds} rows sampled. Per-row p50 / p99 / max (counts are per row; a row covers about 1 s only on an idle host):"
+    )
 
     for key <- @headline, stats = metrics[key], stats != nil do
       Mix.shell().info(
