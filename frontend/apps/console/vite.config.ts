@@ -18,6 +18,7 @@ export default defineConfig({
   server: { ...developmentServer("console"), cors: true },
   preview: developmentPreview("console"),
   build: { outDir: phoenixOutput, emptyOutDir: true, target: "es2022" },
-  test: { environment: "happy-dom", include: ["src/**/*.test.ts"] },
+  // e2e/support: the in-page probes the browser specs run (#189).
+  test: { environment: "happy-dom", include: ["src/**/*.test.ts", "e2e/support/*.test.ts"] },
   plugins: lazyPlugins(() => [tailwindcss(), vue()]) ?? [],
 });
