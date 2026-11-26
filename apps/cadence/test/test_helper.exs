@@ -1,5 +1,6 @@
 # :questdb tests need a real QuestDB; CI's questdb-integration job runs them (--only questdb).
 ExUnit.start(exclude: [:questdb, :scale])
+Code.require_file("../../../test/support/content_basis_canary.exs", __DIR__)
 Logger.configure(level: Application.get_env(:logger, :level, :warning))
 
 case System.get_env("CADENCE_TEST_PLANE") do
