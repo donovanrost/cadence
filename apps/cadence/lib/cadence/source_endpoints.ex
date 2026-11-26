@@ -10,6 +10,7 @@ defmodule Cadence.SourceEndpoints do
 
   alias Ecto.Changeset
 
+  alias Cadence.Ids
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Listing
   alias Cadence.Missions
@@ -502,7 +503,11 @@ defmodule Cadence.SourceEndpoints do
 
   @doc "The id of the spacecraft's managed source endpoint, which every route materializes on."
   @spec managed_source_endpoint_id(binary()) :: binary()
-  def managed_source_endpoint_id(spacecraft_id), do: "spacecraft_runtime:" <> spacecraft_id
+  defdelegate managed_source_endpoint_id(spacecraft_id), to: Ids
+
+  @doc "Returns the spacecraft ID encoded in a managed source endpoint ID."
+  @spec spacecraft_id_from_managed_source_endpoint(term()) :: binary() | nil
+  defdelegate spacecraft_id_from_managed_source_endpoint(endpoint_id), to: Ids
 
   defp update_managed_source_endpoint(
          %SourceEndpointRow{} = row,

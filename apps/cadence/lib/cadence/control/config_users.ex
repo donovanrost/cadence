@@ -19,6 +19,7 @@ defmodule Cadence.Control.ConfigUsers do
 
   alias Cadence.Comms.{GroundStationStore, RoutingRuleStore, StationRefs, TransportStore}
   alias Cadence.Contacts.{OpenContacts, ReservationActivity}
+  alias Cadence.SourceEndpoints
   alias Cadence.SpacecraftStore
   alias Cadence.SpacecraftTypeStore
 
@@ -209,10 +210,10 @@ defmodule Cadence.Control.ConfigUsers do
 
   defp spacecraft_id(contact),
     do:
-      Enum.find_value(contact.source_endpoint_refs || [], fn
-        "spacecraft_runtime:" <> id -> id
-        _other -> nil
-      end)
+      Enum.find_value(
+        contact.source_endpoint_refs || [],
+        &SourceEndpoints.spacecraft_id_from_managed_source_endpoint/1
+      )
 
   # The full count; at most @listed items, only those with the name their line needs.
   defp listed(uses, item) do
