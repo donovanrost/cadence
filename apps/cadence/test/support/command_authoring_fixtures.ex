@@ -13,6 +13,8 @@ defmodule Cadence.CommandAuthoringFixtures do
   end
 
   def target!(org, mission, attrs \\ %{}) do
+    endpoint_id = Ids.new("authoring_target")
+
     {:ok, target} =
       Cadence.SourceEndpointFixtures.persist(
         org,
@@ -21,9 +23,9 @@ defmodule Cadence.CommandAuthoringFixtures do
             %{
               organization_id: org,
               mission_id: mission,
-              source_endpoint_id: Ids.new("authoring_target"),
+              source_endpoint_id: endpoint_id,
               display_name: "Flight command endpoint",
-              source_ref: "fixture:uplink",
+              source_ref: "fixture:uplink:#{endpoint_id}",
               scid: 7,
               metadata: %{"private" => "target-secret"}
             },
