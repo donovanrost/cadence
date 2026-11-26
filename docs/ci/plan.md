@@ -64,6 +64,9 @@ ci-ok  (needs: all of the above; if: always(); fails if any needed job failed or
 - **`ci-ok` is the one required check** for branch protection. Jobs skipped by the path filter
   count as success, so docs-only PRs pass quickly, and adding or removing jobs never means
   editing branch protection.
+- Repository hygiene is a `ci.yml` job in `ci-ok`'s `needs`. It verifies that
+  `mise.local.toml` stays ignored and scans only PR commits with a checksum-pinned
+  gitleaks binary and the reviewed rules in `.gitleaks.toml`.
 - `concurrency: ci-${{ github.ref }}` with `cancel-in-progress: true` on PRs (not on pushes to
   `develop`, which write the caches).
 - `permissions: contents: read`; `persist-credentials: false` on checkout, as `frontend.yml` does.

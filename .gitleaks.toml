@@ -1,0 +1,133 @@
+title = "Cadence committed-secret checks"
+
+[extend]
+useDefault = true
+
+# TOML, JSON, and Elixir literal assignments. The value is
+# the secret group so gitleaks redacts it while retaining the source location.
+[[rules]]
+id = "cadence-secret-assignment"
+description = "Literal assigned to a credential-like key"
+path = '''(?i)\.(?:toml|exs|json)$'''
+regex = '''(?i)["']?[a-z0-9_.-]*(?:password|passwd|secret|token|api[_-]?key|private[_-]?key|cookie|credential)["']?[ \t]*(?:=|:|=>)[ \t]*["'`]([^"'`\r\n]{8,})["'`]'''
+secretGroup = 1
+
+    [[rules.allowlists]]
+    description = "Reviewed existing literal test fixtures"
+    condition = "AND"
+    regexTarget = "secret"
+    paths = [ '''(^|/)(?:test|browser_test)/''' ]
+    regexes = [
+      '''^#\{set\}-#\{phase\}$''',
+      '''^\[REDACTED\]$''',
+      '''^a token/with\+reserved chars$''',
+      '''^a-long-enough-password$''',
+      '''^a-long-new-password$''',
+      '''^a-new-password-1$''',
+      '''^a-password$''',
+      '''^admin-secret$''',
+      '''^admin-token$''',
+      '''^anything$''',
+      '''^browser-session-token$''',
+      '''^catalog-csrf$''',
+      '''^different$''',
+      '''^do-not-render$''',
+      '''^durable-password-123$''',
+      '''^ephemeral-provider-token$''',
+      '''^execution-token$''',
+      '''^manager-secret$''',
+      '''^must-be-redacted$''',
+      '''^must-not-leak$''',
+      '''^must-not-persist$''',
+      '''^must-not-reach-browser$''',
+      '''^nested-secret$''',
+      '''^not a UI field$''',
+      '''^not exported$''',
+      '''^not rendered$''',
+      '''^not-a-real-token$''',
+      '''^not-a-token$''',
+      '''^password$''',
+      '''^plaintext$''',
+      '''^private-adapter-detail$''',
+      '''^private-details-secret$''',
+      '''^private-plan-secret$''',
+      '''^private-request-secret$''',
+      '''^private-sample-marker$''',
+      '''^private-token$''',
+      '''^provider-secret$''',
+      '''^provider-token$''',
+      '''^quest-password$''',
+      '''^raw-secret$''',
+      '''^reader-default-scan-csrf$''',
+      '''^reader-host-csrf$''',
+      '''^secret-arg$''',
+      '''^secret-bearer$''',
+      '''^secret-manager-auth-token$''',
+      '''^secret-password$''',
+      '''^secret-token$''',
+      '''^should-never-persist$''',
+      '''^tok-#\{n\}$''',
+      '''^token-alpha$''',
+      '''^wrong-password-1$''',
+    ]
+
+    [[rules.allowlists]]
+    description = "Public local Postgres default in dev and test config"
+    condition = "AND"
+    regexTarget = "secret"
+    paths = [ '''(?:^|/)apps/cadence/config/(?:dev|test)\.exs$''' ]
+    regexes = [ '''^postgres$''' ]
+
+# Elixir module attributes use whitespace instead of an assignment operator.
+[[rules]]
+id = "cadence-elixir-secret-attribute"
+description = "Literal credential in an Elixir module attribute"
+path = '''\.exs$'''
+regex = '''(?i)@[a-z0-9_]*(?:password|passwd|secret|token|api_key|private_key|cookie|credential)[ \t]+["']([^"'\r\n]{8,})["']'''
+secretGroup = 1
+
+    [[rules.allowlists]]
+    description = "Reviewed existing literal test fixtures"
+    condition = "AND"
+    regexTarget = "secret"
+    paths = [ '''(^|/)(?:test|browser_test)/''' ]
+    regexes = [
+      '''^a-brand-new-password$''',
+      '''^environment-admin-password-123$''',
+      '''^existing-password-123$''',
+      '''^frontend-release-publisher-test-token$''',
+      '''^provider-credential-retire$''',
+    ]
+
+    [[rules.allowlists]]
+    description = "Public loopback simulator admin fixture"
+    condition = "AND"
+    regexTarget = "secret"
+    paths = [ '''(?:^|/)dev/seed/earendil\.exs$''' ]
+    regexes = [ '''^earendil-local-admin$''' ]
+
+# An environment lookup with a literal fallback is still a committed value.
+[[rules]]
+id = "cadence-secret-environment-fallback"
+description = "Literal fallback for a credential environment variable"
+path = '''(?i)\.(?:exs|[cm]?[jt]sx?)$'''
+regex = '''(?i)(?:System\.get_env\([ \t]*["'][A-Z0-9_]*(?:PASSWORD|SECRET|TOKEN|API_KEY|PRIVATE_KEY|COOKIE|CREDENTIAL)[A-Z0-9_]*["'][ \t]*,[ \t]*|process\.env(?:\.[A-Z0-9_]*(?:PASSWORD|SECRET|TOKEN|API_KEY|PRIVATE_KEY|COOKIE|CREDENTIAL)[A-Z0-9_]*|\[["'][A-Z0-9_]*(?:PASSWORD|SECRET|TOKEN|API_KEY|PRIVATE_KEY|COOKIE|CREDENTIAL)[A-Z0-9_]*["']\])[ \t]*(?:\?\?|\|\|)[ \t]*)["'`]([^"'`\r\n]{8,})["'`]'''
+secretGroup = 1
+
+# These two default-rule hits are synthetic historical evidence and a browser fixture.
+[[rules]]
+id = "generic-api-key"
+
+    [[rules.allowlists]]
+    description = "Reviewed synthetic value in docs/apogee/domain/repairs/2026-11-12-gen8-rows-before.txt"
+    condition = "AND"
+    regexTarget = "secret"
+    paths = [ '''(?:^|/)docs/apogee/domain/repairs/2026-11-12-gen8-rows-before\.txt$''' ]
+    regexes = [ '''^af12d1279a1bbbb1c750db60ef26d4e5054b1b04ff602ee06d5ef1beec507e4f$''' ]
+
+    [[rules.allowlists]]
+    description = "Reviewed synthetic value in frontend/tools/phoenix/federation_browser_smoke_contract.test.mjs"
+    condition = "AND"
+    regexTarget = "secret"
+    paths = [ '''(?:^|/)frontend/tools/phoenix/federation_browser_smoke_contract\.test\.mjs$''' ]
+    regexes = [ '''^01234567-89ab-cdef-0123-456789abcdef$''' ]
