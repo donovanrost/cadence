@@ -4,7 +4,16 @@ defmodule CadenceWeb.Console.FleetJSON do
   alias CadenceWeb.Console.WireValue
 
   @spec fleet(map(), map(), boolean()) :: map()
-  def fleet(fleet, commands, limits_configured?) do
+  def fleet(fleet, commands, limits_configured?),
+    do: fleet |> mission(limits_configured?) |> Map.put(:commands, commands)
+
+  @doc """
+  The fleet without the viewer's command counts: the part every viewer of the mission shares.
+  The live push builds it once per mission (`CadenceWeb.Console.FleetSource`) and each socket
+  adds its own `commands`.
+  """
+  @spec mission(map(), boolean()) :: map()
+  def mission(fleet, limits_configured?) do
     %{
       observed_at: fleet.observed_at,
       stale_after_s: fleet.stale_after_s,
@@ -14,7 +23,6 @@ defmodule CadenceWeb.Console.FleetJSON do
       last_received_at: fleet.last_received_at,
       # Not tracked yet: limit-transition history.
       counts: Map.put(fleet.counts, :critical_delta_1h, nil),
-      commands: commands,
       limits: %{configured: limits_configured?},
       spacecraft: Enum.map(fleet.spacecraft, &spacecraft/1)
     }
