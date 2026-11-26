@@ -28,7 +28,7 @@ defmodule Cadence.IngressJournal.FileSystem do
 
   require Logger
 
-  alias Cadence.IngressJournal.{Entry, Identity}
+  alias Cadence.IngressJournal.{Entry, Identity, IngestTelemetry}
   alias Cadence.Platform.DurableFile
   alias Cadence.Platform.SnapshotCall
 
@@ -467,6 +467,8 @@ defmodule Cadence.IngressJournal.FileSystem do
         appended_bytes: recovered.next_offset,
         max_appended_entry_bytes: max_entry_bytes(recovered.entries),
         reclaimed_segments: recovered.reclaimed_segments,
+        # #686: when the processing backlog was last reported (monotonic ms), at most once a second.
+        backlog_reported_at: nil,
         full_count: 0,
         recovery_truncations: recovered.recovery_truncations,
         last_append_at: nil,
@@ -698,7 +700,7 @@ defmodule Cadence.IngressJournal.FileSystem do
       )
 
     schedule_checkpoint(state.checkpoint_interval_ms)
-    {:noreply, next_state}
+    {:noreply, maybe_report_backlog(next_state)}
   end
 
   def handle_info(
@@ -1265,6 +1267,36 @@ defmodule Cadence.IngressJournal.FileSystem do
 
   # What the processing consumer hasn't durably passed (DECISIONS #71): a restart resumes from
   # the durable cursor, so that is where the not-yet-stored entries start.
+  # #686: the processing backlog as a :telemetry event, at most once a second. O(1) bytes and one
+  # O(log n) lookup for the oldest unacknowledged entry: never the entry count, which walks the
+  # whole backlog (`processing_backlog/1`, for snapshots only).
+  @backlog_report_ms 1_000
+
+  defp maybe_report_backlog(state) do
+    now = System.monotonic_time(:millisecond)
+
+    cond do
+      not MapSet.member?(state.consumers, :processing) ->
+        state
+
+      is_integer(state.backlog_reported_at) and
+          now - state.backlog_reported_at < @backlog_report_ms ->
+        state
+
+      true ->
+        cursor = Map.get(state.cursors, :processing, state.next_offset)
+
+        oldest =
+          case :gb_trees.next(:gb_trees.iterator_from(cursor, state.entries)) do
+            {_offset, %Entry{receipt_time: receipt_time}, _next} -> receipt_time
+            :none -> nil
+          end
+
+        IngestTelemetry.journal_backlog(state.context, max(state.next_offset - cursor, 0), oldest)
+        %{state | backlog_reported_at: now}
+    end
+  end
+
   defp processing_backlog(state) do
     from =
       [Map.get(state.durable_cursors, :processing), Map.get(state.cursors, :processing)]

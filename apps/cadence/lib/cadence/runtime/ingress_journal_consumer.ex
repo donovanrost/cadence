@@ -12,7 +12,7 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
 
   require Logger
 
-  alias Cadence.IngressJournal.{Entry, Evidence, FileSystem}
+  alias Cadence.IngressJournal.{Entry, Evidence, FileSystem, IngestTelemetry}
   alias Cadence.Platform.SnapshotCall
   alias Cadence.Runtime.ProviderIngressExecutor
 
@@ -251,7 +251,8 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
         phase: :acknowledge,
         resume: Map.get(progress, :resume_offset),
         incomplete: Map.get(progress, :incomplete),
-        scid_check: Map.get(progress, :scid_check)
+        scid_check: Map.get(progress, :scid_check),
+        counts: Map.get(progress, :counts)
       })
 
     acknowledge_batch(%{state | in_flight: batch})
@@ -292,7 +293,10 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
       entry_count: entry_count,
       byte_count: byte_count,
       phase: :retry,
-      ref: nil
+      ref: nil,
+      # #686: when the batch went to the executor, and what its result carried.
+      delivered_at: nil,
+      counts: nil
     }
 
     state = %{state | in_flight: batch} |> load_resume_slice()
@@ -313,7 +317,12 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
       {:noreply,
        %{
          state
-         | in_flight: %{batch | ref: ref, phase: :processing},
+         | in_flight: %{
+             batch
+             | ref: ref,
+               phase: :processing,
+               delivered_at: System.monotonic_time()
+           },
            delivered_batches: state.delivered_batches + 1,
            delivered_entries: state.delivered_entries + entry_count,
            delivered_bytes: state.delivered_bytes + byte_count,
@@ -360,6 +369,7 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
          ) do
       :ok ->
         send(self(), :consume)
+        IngestTelemetry.batch_acknowledged(batch, state)
 
         {:noreply,
          %{
