@@ -60,6 +60,9 @@ config :cadence, protocol_record_archive: [module: Cadence.Protocol.RecordArchiv
 config :cadence,
   telemetry_current_value_store: [module: Cadence.Telemetry.CurrentValueStore.Postgres]
 
+# The fleet read asks the durable history store every time in tests (the cache is tested on its own).
+config :cadence, fleet_durable_receipts_ttl_ms: 0
+
 config :cadence,
   telemetry_storage: [
     # The Postgres read model, except while a test turns on an outage (DECISIONS #71).

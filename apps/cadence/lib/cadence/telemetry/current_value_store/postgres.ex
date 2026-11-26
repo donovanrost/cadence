@@ -120,6 +120,17 @@ defmodule Cadence.Telemetry.CurrentValueStore.Postgres do
   defp maybe_filter_points(query, ids), do: where(query, [row], row.point_id in ^ids)
 
   @impl true
+  def last_receipts(mission_id, _backend_opts) do
+    from(row in TelemetryLatestValueRow,
+      where: row.mission_id == ^mission_id and row.spacecraft_scope_id != ^@mission_scope_key,
+      group_by: row.spacecraft_scope_id,
+      select: {row.spacecraft_scope_id, max(row.receipt_time)}
+    )
+    |> Repo.all()
+    |> Map.new()
+  end
+
+  @impl true
   def reset do
     _ = Repo.delete_all(TelemetryLatestValueRow)
     :ok

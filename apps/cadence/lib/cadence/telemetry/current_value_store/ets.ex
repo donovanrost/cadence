@@ -44,8 +44,21 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
         write_concurrency: true
       ])
 
+    # The newest receipt time per (mission, spacecraft), kept as values are recorded, so the fleet
+    # read asks for it instead of reading every value (#798).
+    _receipts =
+      :ets.new(receipts_table_name(table_name), [
+        :named_table,
+        :public,
+        :set,
+        read_concurrency: true,
+        write_concurrency: true
+      ])
+
     {:ok, table_name}
   end
+
+  defp receipts_table_name(table_name), do: :"#{table_name}_receipts"
 
   @impl true
   def record_samples(samples) when is_list(samples), do: record_samples(samples, [])
@@ -59,9 +72,43 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
     |> latest_per_key()
     |> Enum.each(fn {key, sample} ->
       maybe_store_sample(table, key, sample)
+      note_receipt(backend_opts, sample)
     end)
 
     :ok
+  end
+
+  # An atomic max: replace the stored time only when the new one is later, else insert if absent.
+  defp note_receipt(backend_opts, %Sample{receipt_time: %DateTime{} = at} = sample) do
+    table = receipts_table(backend_opts)
+    key = {sample.mission_id, spacecraft_scope_id(sample.spacecraft_id)}
+    micros = DateTime.to_unix(at, :microsecond)
+
+    replaced =
+      :ets.select_replace(table, [
+        {{key, :"$1"}, [{:<, :"$1", micros}], [{{{:const, key}, micros}}]}
+      ])
+
+    if replaced == 0, do: :ets.insert_new(table, {key, micros})
+    :ok
+  end
+
+  defp note_receipt(_backend_opts, _sample), do: :ok
+
+  defp receipts_table(backend_opts) do
+    backend_opts |> Keyword.get(:table_name, @table_name) |> receipts_table_name()
+  end
+
+  @impl true
+  def last_receipts(mission_id, backend_opts) when is_binary(mission_id) do
+    _ = ensure_table!(backend_opts)
+
+    backend_opts
+    |> receipts_table()
+    |> :ets.select([
+      {{{mission_id, :"$1"}, :"$2"}, [{:"=/=", :"$1", @mission_scope_key}], [{{:"$1", :"$2"}}]}
+    ])
+    |> Map.new(fn {scope_id, micros} -> {scope_id, DateTime.from_unix!(micros, :microsecond)} end)
   end
 
   @impl true
@@ -90,6 +137,7 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
     with :ok <- validate_replacement_scope(mission_id, point_id, sample) do
       table = ensure_table!(backend_opts)
       true = :ets.insert(table, {key(sample), sample})
+      note_receipt(backend_opts, sample)
       :ok
     end
   end
@@ -127,6 +175,7 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
 
     Enum.each(samples, fn %Sample{} = sample ->
       true = :ets.insert(table, {key(sample), sample})
+      note_receipt(backend_opts, sample)
     end)
 
     :ok
@@ -205,12 +254,14 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
   def reset(:all, backend_opts) when is_list(backend_opts) do
     table = ensure_table!(backend_opts)
     true = :ets.delete_all_objects(table)
+    true = :ets.delete_all_objects(receipts_table(backend_opts))
     :ok
   end
 
   def reset(mission_id, backend_opts) when is_binary(mission_id) and is_list(backend_opts) do
     table = ensure_table!(backend_opts)
     true = :ets.match_delete(table, {{mission_id, :_, :_, :_, :_, :_}, :_})
+    true = :ets.match_delete(receipts_table(backend_opts), {{mission_id, :_}, :_})
     :ok
   end
 
