@@ -1,7 +1,6 @@
 defmodule Cadence.Control.Providers.FleetOpportunitySearch do
   @moduledoc false
 
-  alias Cadence.Contacts.ProviderClients.SimulatorHTTP
   alias Cadence.Contacts.ProviderScheduling
   alias Cadence.Control.Providers
   alias Cadence.GroundNetworks.Opportunity
@@ -9,8 +8,8 @@ defmodule Cadence.Control.Providers.FleetOpportunitySearch do
   @spacecraft_per_batch 16
 
   @doc """
-  Searches an exact window. The simulator's multi-spacecraft response has shared
-  orbit evidence and a globally sorted page. Split a truncated page until every
+  Searches exact windows using the provider's declared spacecraft limit. Split
+  a truncated multi-spacecraft page until every
   spacecraft has a complete page or can get its normal single-spacecraft limit.
   """
   def search(routes_by_window, providers, concurrency, opts) do
@@ -60,8 +59,17 @@ defmodule Cadence.Control.Providers.FleetOpportunitySearch do
     |> Enum.map(&{window, search, &1, page_size})
   end
 
-  defp limits({:ok, %{client: SimulatorHTTP, capabilities: %{search: limits}}}, _opts) do
-    {min(@spacecraft_per_batch, limits.spacecraft_batch_limit), limits.page_size_limit}
+  defp limits(
+         {:ok,
+          %{
+            capabilities: %{
+              search: %{spacecraft_batch_limit: spacecraft_limit, page_size_limit: page_size}
+            }
+          }},
+         _opts
+       )
+       when spacecraft_limit > 1 do
+    {min(@spacecraft_per_batch, spacecraft_limit), page_size}
   end
 
   defp limits(_search, opts), do: {1, ProviderScheduling.result_limit(opts)}
