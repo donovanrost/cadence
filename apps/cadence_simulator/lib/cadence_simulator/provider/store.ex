@@ -14,14 +14,15 @@ defmodule CadenceSimulator.Provider.Store do
 
   @mirror :cadence_simulator_provider_store_mirror
   @metadata :cadence_simulator_provider_store_metadata
-  @resource_kinds [:scenario, :run, :reservation, :delivery_profile, :opportunity, :contact]
+  @search_faults :cadence_simulator_provider_search_faults
+  @resource_kinds [:scenario, :run, :reservation, :delivery_profile, :contact]
   @scheduled_kinds [:run, :reservation, :contact]
   @sequence_key {:metadata, :event_sequence}
   @dirty_key {:snapshot, :dirty}
   @snapshot_interval_ms 1_000
 
   @type resource_kind ::
-          :scenario | :run | :reservation | :delivery_profile | :opportunity | :contact
+          :scenario | :run | :reservation | :delivery_profile | :contact
 
   def start_link(opts) when is_list(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -113,18 +114,29 @@ defmodule CadenceSimulator.Provider.Store do
   @spec consume_fault(binary(), binary(), non_neg_integer()) :: boolean()
   def consume_fault(run_id, fault, limit)
       when is_binary(run_id) and is_binary(fault) and is_integer(limit) and limit >= 0 do
-    key = {:fault_counter, run_id, fault}
-
-    # One atomic step: read the count, then add 1 capped at `limit`.
-    [consumed, _capped] =
-      :ets.update_counter(@mirror, key, [{2, 0}, {2, 1, limit, limit}], {key, 0})
-
-    if consumed < limit do
+    if take_fault(@mirror, {:fault_counter, run_id, fault}, limit) do
       true = :ets.insert(@mirror, {@dirty_key, true})
       true
     else
       false
     end
+  end
+
+  @doc "Consumes a search throttle without adding to the snapshot. Restart resets the throttle."
+  @spec consume_search_fault(binary(), binary(), non_neg_integer()) :: boolean()
+  def consume_search_fault(run_id, fault, limit)
+      when is_binary(run_id) and is_binary(fault) and is_integer(limit) and limit >= 0 do
+    take_fault(@search_faults, {run_id, fault}, limit)
+  end
+
+  defp take_fault(_table, _key, 0), do: false
+
+  defp take_fault(table, key, limit) do
+    # One atomic step: read the count, then add 1 capped at `limit`.
+    [consumed, _capped] =
+      :ets.update_counter(table, key, [{2, 0}, {2, 1, limit, limit}], {key, 0})
+
+    consumed < limit
   end
 
   @doc false
@@ -196,6 +208,7 @@ defmodule CadenceSimulator.Provider.Store do
         :ets.select_delete(@mirror, [{{{:schedule_change, :_}, :_}, [], [true]}])
         restore_event_sequence()
         :ets.new(@metadata, [:named_table])
+        :ets.new(@search_faults, [:named_table, :public, write_concurrency: true])
         reset_schedule_generation()
         schedule_snapshot()
         {:ok, %{path: path, snapshot_observer: opts[:snapshot_observer], waiters: []}}
@@ -247,6 +260,7 @@ defmodule CadenceSimulator.Provider.Store do
   def handle_call(:clear, _from, state) do
     state = reply_waiters(state, {:error, :store_replaced})
     true = :ets.delete_all_objects(@mirror)
+    true = :ets.delete_all_objects(@search_faults)
     reset_schedule_generation()
     true = :ets.insert(@mirror, {@dirty_key, true})
     {:reply, persist_pending(state), state}

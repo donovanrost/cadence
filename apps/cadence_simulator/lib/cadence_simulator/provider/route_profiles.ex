@@ -66,7 +66,7 @@ defmodule CadenceSimulator.Provider.RouteProfiles do
 
       fault_key = "route_rate_limit:#{profile["id"]}"
 
-      if Store.consume_fault(
+      if Store.consume_search_fault(
            run["id"],
            fault_key,
            profile["rate_limit_response_count"]
