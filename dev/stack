@@ -226,5 +226,6 @@ case "$command" in
       fi
     done
     MIX_INSTALL_DIR="$state/mix-install" mise exec -- elixir "$root/dev/seed/earendil.exs"
+    MIX_INSTALL_DIR="$state/mix-install" mise exec -- elixir "$root/dev/seed/qa.exs"
     ;;
 esac

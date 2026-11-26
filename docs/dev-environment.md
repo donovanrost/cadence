@@ -14,7 +14,7 @@ Elixir dependencies (`mise exec -- mix workspace.run -t deps.get`), and frontend
 ```sh
 dev/stack up       # create and migrate both stores, start services, seed data
 dev/stack up --no-seed     # start services without any data seeds
-dev/stack seed-rest        # run the REST Earendil harness against a running unseeded stack
+dev/stack seed-rest        # run the REST Earendil and QA harness against a running unseeded stack
 dev/stack status   # show this slot's names, ports, and process state
 dev/stack down     # stop this worktree's processes and QuestDB container
 dev/stack reset    # drop this worktree's DB and QuestDB data, then rebuild
@@ -55,7 +55,15 @@ stable IDs referenced by the six documents in `dev/seed/earendil_dashboards.exs`
 enters independent review. Once the first ten
 spacecraft are applied, the client imports those dashboards through `POST /dashboards` with
 `identity: "keep"`; an identical rerun reuses them. Until then, it reports the #745 approval wait.
-Invitation delivery and a second person's session also wait on #745. Per-spacecraft configuration
+The next REST step invites the four QA personas, saves the Earendil planning policy as a draft,
+and creates recurring templates for any already applied spacecraft. It creates both QA missions,
+imports their candidate catalogs, and submits their profile and spacecraft change sets for review.
+The first QA mission also gets its simulator provider account, grant, and mission provider.
+Rerunning these steps reuses existing records and pending change sets. The missing mailbox JSON
+endpoint (#745) prevents the client from accepting the invitations and using a second person's
+session to approve those change sets. Source endpoints, Telemetry Decom installations, and the
+QA direct route follow the approvals.
+Per-spacecraft configuration
 drafts need an applied fleet; the bulk review path waits on #734. Orbit elements wait on #732.
 Do not run `seed-rest` on a database seeded by default `up`. Use `reset` when switching between
 the full demo and REST harness.
@@ -77,9 +85,9 @@ Default `up` retains these direct seeds until the REST harness reaches parity:
 | Direct seed step | Remaining REST work |
 | --- | --- |
 | `reflect_orbital_demo.exs` | Independent fleet and model approval need a second person (#745); orbital elements need #732; bulk spacecraft configuration review needs #734. |
-| `apogee_qa_personas.exs` | Invite and sign in the four QA people using the dev mailbox (#745). |
-| `reflect_orbital_planning.exs` | Seed planning policy and recurring templates over REST; its second-person policy approval needs #745. |
-| `apogee_qa_mission.exs` | Build both QA missions through REST after the QA people can join by invitation (#745). |
+| `apogee_qa_personas.exs` | Accept the four pending invitations and sign in the QA people through the dev mailbox (#745). |
+| `reflect_orbital_planning.exs` | Create templates after the fleet applies; the policy's second-person approval needs #745. |
+| `apogee_qa_mission.exs` | Approve profile and spacecraft changes, then install source endpoints and Telemetry Decom; apply the QA direct route with a second person's session (#745). |
 
 `mise run earendil-live` imports the shared dashboard documents and playlist through REST. Its
 contact setup still uses the fixture and live contact scripts required by the scale harness.
