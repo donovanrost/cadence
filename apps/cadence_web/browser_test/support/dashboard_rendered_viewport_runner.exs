@@ -236,14 +236,6 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportRunner do
     end
   end
 
-  def rendered_dashboard_artifact!(html, app_root) do
-    path =
-      Path.join(System.tmp_dir!(), "cadence-rendered-dashboard-#{System.unique_integer()}.html")
-
-    File.write!(path, rendered_dashboard_document(html, app_root))
-    path
-  end
-
   def rendered_dashboard_document(html, app_root) do
     """
     <!doctype html>

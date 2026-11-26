@@ -915,7 +915,7 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
       file_path =
         Path.join(
           System.tmp_dir!(),
-          ".cadence_frontend_release_worker_#{System.unique_integer([:positive])}"
+          ".cadence_frontend_release_worker_#{Base.encode32(:crypto.strong_rand_bytes(10), padding: false)}"
         )
 
       File.write!(file_path, bytes)

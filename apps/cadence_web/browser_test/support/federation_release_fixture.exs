@@ -1010,7 +1010,7 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
     root =
       Path.join(
         System.tmp_dir!(),
-        ".cadence-federation-browser-active-generation-r1-#{System.unique_integer([:positive])}"
+        "cadence-federation-#{Base.encode32(:crypto.strong_rand_bytes(10), padding: false)}"
       )
 
     File.mkdir!(root)
