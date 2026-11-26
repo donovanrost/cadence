@@ -25,7 +25,8 @@ export function rolloutGate(r: ModelRevision): RolloutGate {
   if (!cr) return { kind: "none" };
   switch (r.status) {
     case "approved": {
-      // D3 (#544): C3 pins the revision's composition; without one there's nothing to pin.
+      // D3 (#544): C3 pins the revision's composition. Every import links its usable revision to
+      // one (D1), so an approved revision without one is a defensive fallback, not a real path.
       const compositionId = r.composition?.composition_id;
       if (!compositionId) return { kind: "none" };
       return {

@@ -10,11 +10,11 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Catalog.SpacecraftConfigurationInput
   alias Cadence.CompositionFixtures
-  alias Cadence.MissionModels.CatalogPins
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Control.Configuration
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Activations
+  alias Cadence.MissionModels.CatalogPins
   alias Cadence.SpacecraftStore
 
   @fleet String.to_integer(System.get_env("ROLLOUT_FLEET", "500"))
