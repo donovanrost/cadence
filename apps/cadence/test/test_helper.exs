@@ -1,5 +1,5 @@
 # :questdb tests need a real QuestDB; CI's questdb-integration job runs them (--only questdb).
-ExUnit.start(exclude: [:questdb])
+ExUnit.start(exclude: [:questdb, :scale])
 Logger.configure(level: Application.get_env(:logger, :level, :warning))
 
 case System.get_env("CADENCE_TEST_PLANE") do

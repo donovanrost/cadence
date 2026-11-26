@@ -6,7 +6,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
   alias Cadence.Applications.{HostContext, JSONBoundary, SurfaceQueryRequest}
   alias Cadence.Applications.OpsConsole, as: OpsDefinition
   alias Cadence.Auth.{Policy, Scope}
-  alias Cadence.Reads.ActivationApprovals
   alias Cadence.Reads.ApplicationSurfaces.OpsConsole.Presentation
 
   alias Cadence.Reads.ApplicationSurfaces.Planning.{
@@ -347,13 +346,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
     do:
       envelope("OpsDataOperations", Presentation.data_operations(scope, mission, params, :manage))
 
-  defp dispatch("activation_requests", scope, mission, _params) do
-    case ActivationApprovals.load(scope, mission.mission_id) do
-      {:ok, data} -> envelope("OpsActivationRequests", data)
-      {:error, _reason} -> throw(:activation_inbox_unavailable)
-    end
-  end
-
   defp dispatch("contact_schedule", scope, mission, params) do
     case ContactSchedule.load(scope, mission, params) do
       {:ok, model} -> envelope("OpsContactSchedule", model)
@@ -480,7 +472,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
   defp component_name("fleet_planning"), do: "OpsFleetPlanning"
   defp component_name("fleet_planning_new"), do: "OpsFleetPlanningNew"
   defp component_name("fleet_planning_run"), do: "OpsFleetPlanningRun"
-  defp component_name("activation_requests"), do: "OpsActivationRequests"
   defp component_name("commands"), do: "OpsCommands"
   defp component_name("telemetry_explore"), do: "OpsTelemetryExplore"
   defp component_name("data_operations"), do: "OpsDataOperations"

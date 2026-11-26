@@ -57,6 +57,7 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/control/command_brief.ex" => :composition,
     "lib/cadence/control/plan_resubmission.ex" => :composition,
     "lib/cadence/control/plan_approval.ex" => :composition,
+    "lib/cadence/control/plan_skipped_passes.ex" => :composition,
     "lib/cadence/control/scheduling.ex" => :composition,
     "lib/cadence/control/planning_policy.ex" => :composition,
     "lib/cadence/control/planning_templates.ex" => :composition,
@@ -76,7 +77,6 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/control/pass_results_close_out.ex" => :composition,
     "lib/cadence/control/semantic_commit_retirement.ex" => :composition,
     # #359: composes telemetry's identity state retention rule with the contacts journal's window.
-    "lib/cadence/control/identity_state_retention.ex" => :composition,
     "lib/cadence/control/spacecraft_traffic.ex" => :composition,
     "lib/cadence/control/scid_sharing.ex" => :composition,
     "lib/cadence/control/config_users.ex" => :composition,

@@ -55,6 +55,42 @@ defmodule Cadence.ContactPlanning.ContactRequirements do
     :max_gap_seconds
   ]
 
+  @doc "Persists a prepared fleet materialization batch inside the caller's transaction."
+  def insert_materialized_batch([]), do: :ok
+
+  def insert_materialized_batch(items) when is_list(items) do
+    case insert_materialized_rows(ContactRequirementRow, items, & &1.requirement) do
+      :ok -> insert_materialized_rows(ContactRequirementVersionRow, items, & &1.version)
+      error -> error
+    end
+  end
+
+  defp insert_materialized_rows(schema, items, selector) do
+    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+
+    rows =
+      Enum.map(items, fn item ->
+        item
+        |> selector.()
+        |> schema.changeset()
+        |> Changeset.apply_action!(:insert)
+        |> Map.from_struct()
+        |> Map.take(schema.__schema__(:fields))
+        |> maybe_add_timestamps(schema, now)
+      end)
+
+    {count, _} = Repo.insert_all(schema, rows)
+    if count == length(items), do: :ok, else: {:error, :fleet_planning_review_changed}
+  end
+
+  defp maybe_add_timestamps(attrs, schema, now) do
+    if :inserted_at in schema.__schema__(:fields) do
+      Map.merge(attrs, %{inserted_at: now, updated_at: now})
+    else
+      attrs
+    end
+  end
+
   @spec create(Scope.t(), binary(), map(), keyword()) ::
           {:ok, ContactRequirement.t(), ContactRequirementVersion.t()} | {:error, term()}
   def create(%Scope{} = current_scope, mission_id, attrs, opts \\ []) do
@@ -361,25 +397,39 @@ defmodule Cadence.ContactPlanning.ContactRequirements do
   def fetch_many(_organization_id, _mission_id, []), do: %{}
 
   def fetch_many(organization_id, mission_id, ids) do
-    ContactRequirementRow
-    |> join(:inner, [requirement], version in ContactRequirementVersionRow,
-      on:
-        version.organization_id == requirement.organization_id and
-          version.mission_id == requirement.mission_id and
-          version.contact_requirement_id == requirement.contact_requirement_id and
-          version.version == requirement.current_version
-    )
-    |> where(
-      [requirement],
-      requirement.organization_id == ^organization_id and requirement.mission_id == ^mission_id and
-        requirement.contact_requirement_id in ^ids
-    )
-    |> select([requirement, version], {requirement, version})
-    |> Repo.all()
-    |> Map.new(fn {requirement, version} ->
-      {requirement.contact_requirement_id,
-       {ContactRequirementRow.to_domain(requirement),
-        ContactRequirementVersionRow.to_domain(version)}}
+    requirements =
+      ContactRequirementRow
+      |> where(
+        [r],
+        r.organization_id == ^organization_id and r.mission_id == ^mission_id and
+          r.contact_requirement_id in ^ids
+      )
+      |> Repo.all()
+
+    current_versions = Map.new(requirements, &{&1.contact_requirement_id, &1.current_version})
+
+    versions =
+      ContactRequirementVersionRow
+      |> where(
+        [v],
+        v.organization_id == ^organization_id and v.mission_id == ^mission_id and
+          v.contact_requirement_id in ^Map.keys(current_versions) and
+          v.version in ^Enum.uniq(Map.values(current_versions))
+      )
+      |> Repo.all()
+      |> Map.new(&{{&1.contact_requirement_id, &1.version}, &1})
+
+    Enum.reduce(requirements, %{}, fn requirement, found ->
+      case Map.get(versions, {requirement.contact_requirement_id, requirement.current_version}) do
+        nil ->
+          found
+
+        version ->
+          Map.put(found, requirement.contact_requirement_id, {
+            ContactRequirementRow.to_domain(requirement),
+            ContactRequirementVersionRow.to_domain(version)
+          })
+      end
     end)
   end
 

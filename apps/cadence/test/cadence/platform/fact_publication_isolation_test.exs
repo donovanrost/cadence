@@ -12,7 +12,6 @@ defmodule Cadence.Platform.FactPublicationIsolationTest do
 
   alias Cadence.Telemetry.{
     CurrentValueStore,
-    ObservationIdentityStateChanged,
     ObservationsCommitted,
     Sample,
     Storage
@@ -121,7 +120,8 @@ defmodule Cadence.Platform.FactPublicationIsolationTest do
                publish_facts?: true
              )
 
-    assert_fact(:bus_a, {:cadence, :telemetry, :facts}, ObservationIdentityStateChanged)
+    # A canonical first sighting stores no identity row, so it publishes no identity-state fact
+    # (#689); the committed observations and the watermark are what readers hear.
     assert_fact(:bus_a, {:cadence, :telemetry, :facts}, ObservationsCommitted)
 
     # The watermark is coalesced (#690): its fact goes out, on the batch's own bus, at the flush.
@@ -146,7 +146,6 @@ defmodule Cadence.Platform.FactPublicationIsolationTest do
                publish_facts?: true
              )
 
-    assert_fact(:bus_b, {:cadence, :telemetry, :facts}, ObservationIdentityStateChanged)
     assert_fact(:bus_b, {:cadence, :telemetry, :facts}, ObservationsCommitted)
 
     # The watermark is coalesced (#690): its fact goes out, on the batch's own bus, at the flush.

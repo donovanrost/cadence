@@ -94,8 +94,7 @@ defmodule Cadence.Control.Supervisor do
         provider_event_ingestion_children(composition) ++
         uplink_qualification_children(composition) ++
         pass_results_close_out_children(composition.control_process_namespace) ++
-        semantic_commit_retirement_children(composition.control_process_namespace) ++
-        identity_state_retention_children(composition.control_process_namespace)
+        semantic_commit_retirement_children(composition.control_process_namespace)
     else
       []
     end
@@ -111,11 +110,6 @@ defmodule Cadence.Control.Supervisor do
        do: [{Cadence.Control.SemanticCommitRetirement, name: name}]
 
   defp semantic_commit_retirement_children(_namespace), do: []
-
-  defp identity_state_retention_children(%{identity_state_retention: name}) when not is_nil(name),
-    do: [{Cadence.Control.IdentityStateRetention, name: name}]
-
-  defp identity_state_retention_children(_namespace), do: []
 
   # Provider-attested uplink qualification runs only when that policy is configured (#44 D2).
   defp uplink_qualification_children(

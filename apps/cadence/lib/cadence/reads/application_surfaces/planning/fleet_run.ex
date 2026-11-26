@@ -86,8 +86,8 @@ defmodule Cadence.Reads.ApplicationSurfaces.Planning.FleetRun do
 
     pins =
       Map.new(
-        snapshot.run.input_document["requirements"],
-        &{&1["contact_requirement_id"], &1["content_sha256"]}
+        selected,
+        &{&1.contact_requirement_id, &1.input_content_sha256}
       )
 
     with {:ok, rows} <- traverse(selected, fn ref -> requirement(snapshot.run, ref, pins) end) do

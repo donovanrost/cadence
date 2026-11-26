@@ -26,9 +26,7 @@ defmodule Cadence.Control.ProcessNamespace do
     # `new!/1` (tests) don't unless they name one, so two roots never claim the same name.
     pass_results_close_out: nil,
     # Optional, likewise: a root that names it runs the semantic commit retirement (#94).
-    semantic_commit_retirement: nil,
-    # Optional, likewise: a root that names it runs the identity state retention (#359).
-    identity_state_retention: nil
+    semantic_commit_retirement: nil
   ]
 
   @type t :: %__MODULE__{
@@ -39,8 +37,7 @@ defmodule Cadence.Control.ProcessNamespace do
           contact_fact_consumer: atom(),
           runtime_fact_consumer: atom(),
           pass_results_close_out: atom() | nil,
-          semantic_commit_retirement: atom() | nil,
-          identity_state_retention: atom() | nil
+          semantic_commit_retirement: atom() | nil
         }
 
   @spec default() :: t()
@@ -53,8 +50,7 @@ defmodule Cadence.Control.ProcessNamespace do
       contact_fact_consumer: Cadence.Control.ContactFactConsumer,
       runtime_fact_consumer: Cadence.Control.RuntimeFactConsumer,
       pass_results_close_out: Cadence.Control.PassResultsCloseOut,
-      semantic_commit_retirement: Cadence.Control.SemanticCommitRetirement,
-      identity_state_retention: Cadence.Control.IdentityStateRetention
+      semantic_commit_retirement: Cadence.Control.SemanticCommitRetirement
     }
   end
 

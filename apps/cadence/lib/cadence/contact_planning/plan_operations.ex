@@ -11,6 +11,9 @@ defmodule Cadence.ContactPlanning.PlanOperations do
   sorted by requirement id with each reason trimmed. The digest is a SHA-256 of a canonical JSON
   list (fixed positions, no maps), so it stays stable across OTP and library versions; a golden
   test pins it (DECISIONS #108: a stored hash that is recomputed).
+
+  Layout: `[2, action, expected_version, note, acknowledgements, expected_expired_digest]`, the
+  last being the plan read's opaque `expired_digest` the approver saw (#273; absent is `nil`).
   """
 
   use Ecto.Schema
@@ -103,18 +106,24 @@ defmodule Cadence.ContactPlanning.PlanOperations do
 
   @doc "The normalized request's digest (see the moduledoc)."
   @spec digest(action(), request()) :: binary()
-  def digest(action, request) do
+  def digest(action, request),
+    do: sha([2 | fields(action, request)] ++ [blank_nil(request[:expected_expired_digest])])
+
+  defp fields(action, request) do
     acknowledgements =
       (request[:acknowledgements] || [])
       |> Enum.map(&[&1.requirement_id, trim(&1.reason)])
       |> Enum.sort()
 
-    # Canonical JSON: a list by position (version 1 of this layout), no maps, no key order.
-    [1, Atom.to_string(action), request.expected_version, trim(request[:note]), acknowledgements]
-    |> Jason.encode!()
-    |> then(&:crypto.hash(:sha256, &1))
-    |> Base.encode16(case: :lower)
+    [Atom.to_string(action), request.expected_version, trim(request[:note]), acknowledgements]
   end
+
+  # Canonical JSON: a list by position, no maps, no key order.
+  defp sha(list),
+    do: list |> Jason.encode!() |> then(&:crypto.hash(:sha256, &1)) |> Base.encode16(case: :lower)
+
+  defp blank_nil(value) when is_binary(value) and value != "", do: value
+  defp blank_nil(_value), do: nil
 
   defp compare(%{contact_plan_id: plan_id} = record, plan_id, action, actor_id, sha) do
     if record.action == Atom.to_string(action) and record.actor_id == actor_id and

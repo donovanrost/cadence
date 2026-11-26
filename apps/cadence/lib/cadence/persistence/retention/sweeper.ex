@@ -101,8 +101,14 @@ defmodule Cadence.Persistence.Retention.Sweeper do
     {report, %{state | cursor: next}}
   end
 
-  defp schedule(%{opts: opts} = state) do
-    interval = Keyword.get(opts, :interval_ms) || Retention.settings()[:interval_ms]
+  defp schedule(%{rule: rule, opts: opts} = state) do
+    settings = Retention.settings()
+
+    interval =
+      Keyword.get(opts, :interval_ms) ||
+        if(function_exported?(rule, :interval_ms, 1), do: rule.interval_ms(settings)) ||
+        settings[:interval_ms]
+
     Process.send_after(self(), :tick, interval)
     state
   end

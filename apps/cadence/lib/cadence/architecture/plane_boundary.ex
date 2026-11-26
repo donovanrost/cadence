@@ -136,7 +136,6 @@ defmodule Cadence.Architecture.PlaneBoundary do
                         "lib/cadence/applications/ops_console/actions/fleet_planning.ex",
                         "lib/cadence/applications/ops_console/actions/historical_workflow_actions.ex",
                         "lib/cadence/applications/ops_console/actions/historical_workflow_request.ex",
-                        "lib/cadence/applications/ops_console/actions/mission_operations.ex",
                         "lib/cadence/applications/ops_console/actions/plan_decisions.ex",
                         "lib/cadence/applications/ops_console/actions/plan_review_workflow.ex",
                         "lib/cadence/applications/ops_console/actions/provider_change_decisions.ex",
@@ -488,6 +487,10 @@ defmodule Cadence.Architecture.PlaneBoundary do
                               "lib/cadence/control/alarms.ex",
                               # #472 (lead 11-20): the shared #146 actor-naming helper, read-only.
                               "lib/cadence/control/actor_ref.ex",
+                              # #273 (api 11-19): one description of a plan's skipped passes
+                              # (booking window closed), shared by the plan read, the approve
+                              # answer and the plan history, so the three never disagree.
+                              "lib/cadence/control/plan_skipped_passes.ex",
                               "lib/cadence/control/activations/activation_execution.ex",
                               "lib/cadence/applications/telemetry_decom.ex",
                               "lib/cadence/management/activations/approved_activation.ex",

@@ -52,13 +52,6 @@ const routeSurfaces = [
     "cadence.ops.fleet_planning_run",
     ["refresh-fleet-run", "repair-fleet-run"],
   ],
-  [
-    "activation_requests",
-    "operations",
-    "Activation Requests",
-    "cadence.ops.activation_requests",
-    ["decide"],
-  ],
   ["commands", "operations", "Commands", "cadence.ops.commands", []],
   [
     "telemetry_explore",

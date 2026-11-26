@@ -3,6 +3,7 @@ defmodule Cadence.Runtime.PartitionStreamKeys.RetentionTest do
 
   alias Cadence.Persistence.Retention.Sweeper
   alias Cadence.Repo
+  alias Cadence.Runtime.PartitionStreamKeys
   alias Cadence.Runtime.PartitionStreamKeys.Retention, as: Rule
 
   @now ~U[2026-11-26 12:00:00Z]
@@ -68,15 +69,23 @@ defmodule Cadence.Runtime.PartitionStreamKeys.RetentionTest do
 
   test "the reserved timer and init keys survive however old they are", c do
     keys =
-      for stream <- ["timer", "init", "timer:capability-123", "init:capability-123"],
+      for stream <- [
+            PartitionStreamKeys.timer_stream(),
+            PartitionStreamKeys.init_stream(),
+            PartitionStreamKeys.timer_stream() <> ":capability-123",
+            PartitionStreamKeys.init_stream() <> ":capability-123"
+          ],
           do: key(c.mission, stream, 400)
 
     old = key(c.mission, "stream-ancient", 400)
+    # A journal stream that merely starts with the word is a journal stream, not a reserved key.
+    lookalike = key(c.mission, "timer-lookalike-stream", 400)
 
     sweep()
 
     assert Enum.all?(keys, &present?/1)
     refute present?(old)
+    refute present?(lookalike)
   end
 
   test "it deletes in chunks of at most chunk_rows", c do

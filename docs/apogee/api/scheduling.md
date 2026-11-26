@@ -239,6 +239,9 @@ transaction as the submit or the decision, after the plan row lock: (organizatio
 known gets the original answer with `replayed: true` when the action, plan, actor and body digest
 match; otherwise `409 duplicate_operation` (`409 operation_conflict` for another plan). A replay
 starts nothing again. A rolled-back request records no operation, so its retry runs for real.
+Since #273 the approve's digest also covers `expected_expired_digest`. A replay returns the
+ORIGINAL answer, including the `expired` set it carried, even if more booking windows have closed
+since.
 
 ### `POST /contact-plans/:plan_id/approve` (#257)
 
@@ -247,18 +250,40 @@ Org admins (`approve_contact_plans`), checked **first** (#278): before the opera
 and the version, so a replay, a reused operation id or an unknown plan from someone who may not
 approve now answers `403 forbidden`, never an earlier `202` (not `409` either). A person's session
 only; a service approves under its automation grant elsewhere. Body `{expected_version,
-operation_id, decision_note?, acknowledgements?}`:
+operation_id, decision_note?, acknowledgements?, expected_expired_digest?}`:
 - `expected_version`: the version the approver saw (after a submit, the `version` it returned).
 - `decision_note`: optional, at most 2,000 characters after trimming; recorded as the approval's
   reason, `NULL` when blank or absent (U76).
 - `acknowledgements`: the **approver's** acknowledgements of unmet requirements, recorded on the
   approval (`approval.exceptions`). Required when the version has unmet requirements.
+- `expected_expired_digest` (#273): the plan read's `expired_digest`, sent back unchanged. It's an
+  opaque string; clients never compute it. Absent means "saw none" (the empty set), so an older
+  client is refused whenever a pass's booking window has closed.
 
-`202 {plan_id, version, state: "executing", outcome: "approved", replayed: false}` once the
-approval is committed, then booking runs **off the request** (`scheduling_progress {kind:
+`202 {plan_id, version, state: "executing", outcome: "approved", replayed: false, expired}` once
+the approval is committed, then booking runs **off the request** (`scheduling_progress {kind:
 "execute"}`). The approval records the approval policy in force, from the same read as the
 separation check (#226(b)). The `contact_plans` channel update goes out once the approval has
 committed (#278), never for a replay or a refusal.
+
+**Closed booking windows (#273).** A selected pass whose provider offer has expired (the
+domain's one rule, `ContactPlanApprovals.expired_set/5`, which applies a 60 s lookahead) can't be
+booked. The approval leaves those passes out and records them as **skipped** on the decision;
+execution books the approved passes minus the skipped. The set is computed once per decision,
+under the plan row lock:
+- `expired` on the 202 is exactly the set the decision recorded: `null` | `{count,
+  reservable_count, items: [{snapshot_id, spacecraft: {id, name, scid} | null, station: {id,
+  code, name} | null, aos, expires_at | null, reason: "opportunity_expired" |
+  "no_booking_window"}]}`. Items are in AOS order and capped at 5,000; `count` isn't capped.
+  `no_booking_window`: the provider gave no window, so the pass fails closed and counts as closed.
+- `409 contact_plan_all_opportunities_expired` (checked first): every selected pass has closed,
+  so nothing can be booked. `details: {expired, expired_digest}`. Nothing is recorded.
+- `409 contact_plan_expired_passes_changed`: the closed set differs from the one the approver saw
+  (`expected_expired_digest`). `details: {expired, expired_digest}` (the current set). Nothing is
+  recorded. Show the new list; the approver approves again with the new digest (never an
+  automatic retry).
+- The plan detail shows the set before anyone decides; see "Closed booking windows on the plan
+  read" below.
 
 Errors:
 - `403 contact_plan_self_approval_forbidden`, `details: {because: "submitted" | "edited",
@@ -283,14 +308,19 @@ Errors:
   draft). A second, concurrent approve of the same plan gets this (the plan row lock serialises
   them), unless it is the same request, which replays.
 - `409 plan_changed`: `expected_version` isn't current, or the content changed.
-- `409 contact_plan_opportunity_expired` (#273, 2026-11-19; was a generic `422`): the booking
-  window has closed for at least one selected pass, so the plan can't be approved as it is.
-  Nothing is recorded. No details yet; the console uses ux's countless line. This is temporary:
-  once domain's rule change lands, an approval leaves those passes out instead (skipped), and
-  only a plan whose every pass has closed is refused, as `contact_plan_all_opportunities_expired`.
 - `409 duplicate_operation`, `409 operation_conflict`: as for submit.
 - `422 plan_not_ready` (`details: {unmet, conflicts}`), `422 acknowledgements_required`
   (`details.missing`), `409 plan_superseded`, `422 invalid_params`, `404 plan_not_found`.
+
+**Closed booking windows on the plan read (#273).** The plan detail (`GET /contact-plans/:id`,
+so Re-plan's proposal too) carries:
+- `expired`: the shape above, from the domain's rule at read time.
+- `expired_digest`: send it back unchanged as `expected_expired_digest`. It's opaque, and the
+  domain's `expired_set/5` and its golden test are its only definition.
+- `next_expiry_at`: when the set next changes, with the margin already applied, or `null`. When now
+  passes it, say a window has closed since the page loaded and offer a reload; never edit the
+  list.
+- `expiry_margin_seconds`: `60`.
 
 **`approval_setting`** (#257): the plan detail and each plans-list row carry the mission's
 approval setting at read time, `"direct"` or `"independent"`, so the console offers the right
@@ -364,8 +394,11 @@ entry per day in order, days without a plan included.
   requirement_label, spacecraft: {id, name} | null, requirement_window: {from, to} | null, reason}]
   (submits), exceptions: [{requirement_id, requirement_version, requirement_label, spacecraft,
   requirement_window, reason}] (decisions),
-  automation_grant_id | null (a decision made under an automation approval policy)}`. The words
-  match detail's `submission` / `approval`.
+  automation_grant_id | null (a decision made under an automation approval policy), skipped}`.
+  The words match detail's `submission` / `approval`.
+- `skipped` (#273): on an approval, the passes it left out because their booking window had
+  closed, exactly as the decision recorded them, in the `expired` shape (approve, above). `null`
+  when none were skipped, for every decision made before #273, and for submits and send-backs.
 - `requirement_label` (ux U73): a requirement has no name of its own, so it's its template's name
   when a template generated it ("Block 1 daily"), else its rule in words ("2 downlink contacts of
   at least 10 min", as `demand.rules[].text`); `null` only when the requirement can't be read.

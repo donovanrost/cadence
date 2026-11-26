@@ -31,16 +31,13 @@ test("mission landing and Ops rail expose approvals to operators regardless of b
       group.items.map((item) => item.href),
     );
   expect(wrapper.findAll("nav a").map((link) => link.attributes("href"))).toEqual(rail(false));
-  expect(wrapper.find("#ops-entry-activations").exists()).toBe(true);
+  expect(wrapper.find("#ops-entry-activations").exists()).toBe(false);
   expect(wrapper.get("#ops-entry-commands").attributes("data-phx-link")).toBe("redirect");
   expect(wrapper.text()).toContain("Choose a workspace to observe, plan or act on this mission.");
   expect(wrapper.text()).not.toContain("components available");
   expect(wrapper.text()).not.toContain("Server authority connected");
   await wrapper.setProps(props({ ...model, can_administer: true }));
   expect(wrapper.findAll("nav a").map((link) => link.attributes("href"))).toEqual(rail(true));
-  expect(wrapper.get("#ops-entry-activations").attributes("href")).toBe(
-    "/missions/mission-1/ops/activations",
-  );
   wrapper.unmount();
 });
 
@@ -99,7 +96,7 @@ test("actual producer renders scoped navigation without accepting server supplie
   expect(wrapper.get("#ops-entry-dashboards").attributes("href")).toBe(
     `/missions/${encodeURIComponent(model.context.mission_id)}/ops/dashboards`,
   );
-  expect(wrapper.find("#ops-entry-activations").exists()).toBe(true);
+  expect(wrapper.find("#ops-entry-activations").exists()).toBe(false);
   expect(
     wrapper
       .findAll("a")

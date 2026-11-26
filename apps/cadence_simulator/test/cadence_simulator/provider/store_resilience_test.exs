@@ -173,6 +173,19 @@ defmodule CadenceSimulator.Provider.StoreResilienceTest do
       :ok
     end
 
+    test "allocates after recovered events when a batch reached disk before the sequence" do
+      :ok = Store.flush()
+      :ok = :dets.insert(@dets, {{:metadata, :event_sequence}, 4})
+      :ok = :dets.sync(@dets)
+
+      store = Process.whereis(Store)
+      Process.exit(store, :kill)
+      _restarted = StoreRestart.await(store)
+
+      assert {:ok, %{"sequence" => 6}} = Store.append_event(%{"run_id" => "run-a"})
+      assert %{data: [%{"sequence" => 5}, %{"sequence" => 6}]} = Store.events(4, 10)
+    end
+
     test "page in sequence order after the cursor" do
       assert %{data: data, next_cursor: 3} = Store.events(1, 2)
       assert [2, 3] = Enum.map(data, & &1["sequence"])

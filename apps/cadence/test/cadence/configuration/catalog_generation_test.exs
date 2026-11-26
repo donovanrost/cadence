@@ -477,12 +477,14 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
              Enum.all?(configured.fields, &is_binary(&1.parameter_id))
            end)
 
+    assert {:ok, definitions} =
+             MissionModelPlanDecoder.telemetry_packet_definitions(spec.runtime_plans)
+
     for configured <- telemetry do
-      assert {:ok, resolved} =
-               MissionModelPlanDecoder.resolve_telemetry_configuration(
-                 spec.runtime_plans,
-                 configured
-               )
+      resolved =
+        Enum.find(definitions, &(&1.packet_definition_id == configured.packet_definition_id))
+
+      assert resolved
 
       assert Enum.map(resolved.fields, & &1.parameter_id) ==
                Enum.map(configured.fields, & &1.parameter_id)

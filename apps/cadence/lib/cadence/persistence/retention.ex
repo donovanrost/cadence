@@ -18,7 +18,9 @@ defmodule Cadence.Persistence.Retention do
     * `ingress_archive_days`, `protocol_archive_days` and `watermark_event_days`: how long the
       archives keep what they index and how long the watermark history is kept; all default to the
       observation retention, so the stores can't drift apart;
-    * `stream_key_margin_days` (7): added to the replay horizon below.
+    * `stream_key_margin_days` (7): added to the replay horizon below;
+    * `identity_state_settlement_allowance_hours` (24) and `identity_state_interval_ms` (1 h): the
+      identity-state rule (`Cadence.Telemetry.Storage.ObservationIdentityStates.Retention`).
 
   The observation retention is `:telemetry_observation_retention`'s `retention_days` (30), the
   same setting QuestDB's day-partition retention uses.
@@ -38,7 +40,9 @@ defmodule Cadence.Persistence.Retention do
     pause_ms: 100,
     budget_ms: 60_000,
     interval_ms: 600_000,
-    stream_key_margin_days: 7
+    stream_key_margin_days: 7,
+    identity_state_settlement_allowance_hours: 24,
+    identity_state_interval_ms: 3_600_000
   ]
 
   @default_observation_days 30
@@ -72,17 +76,18 @@ defmodule Cadence.Persistence.Retention do
   def watermark_event_days(settings \\ settings()),
     do: Keyword.get(settings, :watermark_event_days) || observation_days()
 
+  @doc "How long the journal keeps a settled stream, in milliseconds."
+  @spec journal_retention_ms() :: pos_integer()
+  def journal_retention_ms do
+    :cadence
+    |> Application.get_env(:ingress_journal, [])
+    |> Map.new()
+    |> Map.get(:completed_stream_retention_ms, @default_journal_ms)
+  end
+
   @doc "How long the journal keeps a settled stream, in whole days (rounded up)."
   @spec journal_days() :: pos_integer()
-  def journal_days do
-    ms =
-      :cadence
-      |> Application.get_env(:ingress_journal, [])
-      |> Map.new()
-      |> Map.get(:completed_stream_retention_ms, @default_journal_ms)
-
-    max(div(ms + @day_ms - 1, @day_ms), 1)
-  end
+  def journal_days, do: max(div(journal_retention_ms() + @day_ms - 1, @day_ms), 1)
 
   @doc "How many days a journal stream can still be replayed from, plus the margin."
   @spec replay_horizon_days(keyword()) :: pos_integer()
