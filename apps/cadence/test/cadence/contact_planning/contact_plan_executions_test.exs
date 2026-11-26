@@ -231,6 +231,24 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
     assert_received {:provider_mutation, _first}
     assert_received {:provider_mutation, _second}
 
+    assert %{execution: execution} =
+             PlanConfirmation.detail(
+               context.organization_id,
+               context.mission_id,
+               context.plan.contact_plan_id
+             )
+
+    assert execution == %{
+             requested: 2,
+             sent: 2,
+             never_sent: 0,
+             confirmed: 2,
+             uncertain: 0,
+             rejected: 0,
+             failed: 0,
+             provider_names: ["Ground Network Simulator"]
+           }
+
     Enum.each(result.items, fn item ->
       assert {:ok, reservation} =
                ProviderReservations.fetch(

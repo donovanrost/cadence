@@ -1,8 +1,8 @@
 defmodule Cadence.ContactPlanning.TemplateDayReview do
   @moduledoc """
   The template edit's dry run (U48, DECISIONS #86): which of the template's days an edit won't
-  regenerate, by `TemplateDays.classify/6` with the next version number, so the preview, the
-  materialize and the fleet start agree.
+  regenerate. The SQL groups the latest generated requirement of each slot using the same
+  lifecycle rules as `TemplateDays.classify/6`.
 
   The days looked at are the template's generated occurrences from the current version's catch-up
   lookback onward (older days aren't materialized again). Groups, each a list of
@@ -13,59 +13,70 @@ defmodule Cadence.ContactPlanning.TemplateDayReview do
       target are regenerated, so they aren't listed.
   """
 
-  alias Cadence.ContactPlanning.{ContactRequirementTemplates, TemplateDays}
+  alias Cadence.ContactPlanning.{ContactPlans, ContactRequirementTemplates, TemplateDays}
+
+  alias Cadence.Management.Contacts.Store.TemplateDayCounts
 
   @empty %{planned_or_started: [], closed: [], canceled: []}
+  @empty_counts %{days: 0, requirements: 0, dates: [], first_date: nil, last_date: nil}
 
   @spec decided(binary(), binary(), binary(), DateTime.t()) :: map()
-  def decided(org, mission, template_id, %DateTime{} = now) do
+  def decided(org, mission, template_id, %DateTime{} = now),
+    do: review(org, mission, template_id, now).decided
+
+  @doc "The existing occurrence lists and exact UTC day and requirement counts per group."
+  def review(org, mission, template_id, %DateTime{} = now) do
     case ContactRequirementTemplates.fetch(org, mission, template_id) do
       {:ok, template, version} ->
         lookback = version.catch_up_policy_document["maximum_lookback_seconds"] || 0
         since = DateTime.add(now, -lookback, :second)
-        days = ContactRequirementTemplates.generated_days(org, mission, template_id, since)
 
         org
-        |> TemplateDays.classify(mission, template_id, template.current_version + 1, days,
-          now: now
+        |> TemplateDayCounts.list(mission, template_id, template.current_version, since,
+          now: now,
+          taken_up: ContactPlans.taken_up_requirements_query(org, mission),
+          superseded_prefixes: TemplateDays.superseded_prefixes()
         )
-        |> group(days)
+        |> summarize()
 
       {:error, _not_found} ->
-        @empty
+        empty_review()
     end
   end
 
-  defp group(classified, days) do
-    by_group =
-      days
-      |> Enum.flat_map(fn {at, spacecraft_id} ->
-        case group_of(classified[TemplateDays.key(at, spacecraft_id)]) do
-          nil -> []
-          name -> [{name, at, spacecraft_id}]
-        end
-      end)
-      |> Enum.group_by(&elem(&1, 0), &Tuple.delete_at(&1, 0))
+  defp summarize(groups) do
+    groups
+    |> Enum.reduce(empty_review(), fn {kind, entries, days, requirements, dates}, result ->
+      key = group_key(kind)
+      dates = Enum.map(dates, &Date.to_iso8601/1)
 
-    Map.new(@empty, fn {name, []} -> {name, entries(Map.get(by_group, name, []))} end)
+      counts = %{
+        days: days,
+        requirements: requirements,
+        first_date: List.first(dates),
+        last_date: List.last(dates),
+        dates: if(days <= 3, do: dates, else: [])
+      }
+
+      result
+      |> put_in([:decided, key], Enum.map(entries, &entry/1))
+      |> put_in([:decided_counts, key], counts)
+    end)
   end
 
-  defp group_of(%{outcome: :kept}), do: :planned_or_started
-  defp group_of(%{outcome: :done, why: :closed}), do: :closed
-  defp group_of(%{outcome: :done, why: :canceled}), do: :canceled
-  defp group_of(_generate), do: nil
+  defp group_key("planned_or_started"), do: :planned_or_started
+  defp group_key("closed"), do: :closed
+  defp group_key("canceled"), do: :canceled
 
-  # One entry per instant; sorted here, spacecraft bytewise (#56).
-  defp entries(pairs) do
-    pairs
-    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
-    |> Enum.sort_by(fn {at, _ids} -> DateTime.to_unix(at, :microsecond) end)
-    |> Enum.map(fn {at, ids} ->
-      %{
-        occurrence_at: at,
-        date: at |> DateTime.to_date() |> Date.to_iso8601(),
-        spacecraft_ids: ids |> Enum.uniq() |> Enum.sort()
-      }
-    end)
+  defp empty_review,
+    do: %{
+      decided: @empty,
+      decided_counts: Map.new(@empty, fn {kind, _} -> {kind, @empty_counts} end)
+    }
+
+  defp entry(row) do
+    {:ok, at, _} = DateTime.from_iso8601(row["occurrence_at"])
+    at = at |> DateTime.to_unix(:microsecond) |> DateTime.from_unix!(:microsecond)
+    %{occurrence_at: at, date: row["date"], spacecraft_ids: row["spacecraft_ids"]}
   end
 end

@@ -108,6 +108,48 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
 
   @spec list(binary(), binary(), binary(), pos_integer()) :: [ContactPlanExecutionItem.t()]
   def list(organization_id, mission_id, plan_id, plan_version) do
+    organization_id
+    |> execution_items(mission_id, plan_id, plan_version)
+    |> Repo.all()
+    |> Enum.map(&ContactPlanExecutionItemRow.to_domain/1)
+  end
+
+  @doc "Booking rows and their SQL counts from the same snapshot of the plan version."
+  def list_with_counts(org, mission, plan_id, version) do
+    rows =
+      org
+      |> execution_items(mission, plan_id, version)
+      |> select(
+        [i],
+        {i,
+         %{
+           requested: over(count(), []),
+           confirmed: over(filter(count(), i.lifecycle_state == "reserved"), []),
+           uncertain: over(filter(count(), i.lifecycle_state == "uncertain"), []),
+           rejected: over(filter(count(), i.lifecycle_state == "rejected"), []),
+           failed:
+             over(
+               filter(
+                 count(),
+                 i.lifecycle_state == "failed" and
+                   not is_nil(i.provider_reservation_id) and i.provider_reservation_id != ""
+               ),
+               []
+             )
+         }}
+      )
+      |> Repo.all()
+
+    case rows do
+      [] ->
+        {[], nil}
+
+      [{_, counts} | _] ->
+        {Enum.map(rows, fn {row, _} -> ContactPlanExecutionItemRow.to_domain(row) end), counts}
+    end
+  end
+
+  defp execution_items(organization_id, mission_id, plan_id, plan_version) do
     ContactPlanExecutionItemRow
     |> where(
       [item],
@@ -115,8 +157,6 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
         item.contact_plan_id == ^plan_id and item.contact_plan_version == ^plan_version
     )
     |> order_by([item], asc: item.inserted_at, asc: item.contact_plan_execution_item_id)
-    |> Repo.all()
-    |> Enum.map(&ContactPlanExecutionItemRow.to_domain/1)
   end
 
   @doc "One execution item, scoped to its mission."

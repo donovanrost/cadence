@@ -32,6 +32,7 @@ defmodule Cadence.Contacts.ProviderReservations do
   alias Cadence.Control.Contacts.Store.ProviderReservationRow
   alias Cadence.GroundNetworks.Validation
   alias Cadence.Missions
+  alias Cadence.Persistence.BulkLookup
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Platform.ScopedReadUpdates
   alias Cadence.Repo
@@ -448,6 +449,18 @@ defmodule Cadence.Contacts.ProviderReservations do
   defdelegate list_in_window(org, mission, from, to, opts \\ []),
     to: Cadence.Contacts.PassWindows,
     as: :reservations
+
+  @doc "Provider and timing for a set of reservations on one mission, in bounded batches."
+  def booking_display_fields(org, mission, ids) do
+    ProviderReservationRow
+    |> where([r], r.organization_id == ^org and r.mission_id == ^mission)
+    |> select(
+      [r],
+      {r.provider_reservation_id, %{provider_id: r.provider_id, starts_at: r.starts_at}}
+    )
+    |> BulkLookup.by_id(:provider_reservation_id, ids)
+    |> Map.new()
+  end
 
   @doc """
   The passes live at `now` on these missions (AOS <= now < LOS, active or in the pass phase, not

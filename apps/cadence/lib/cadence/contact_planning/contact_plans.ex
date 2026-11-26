@@ -155,21 +155,22 @@ defmodule Cadence.ContactPlanning.ContactPlans do
     |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
   end
 
+  @doc "A scoped query of requirement IDs held by at least one plan past draft."
+  def taken_up_requirements_query(org, mission) do
+    org
+    |> referencing_plan_rows(mission)
+    |> where([_ref, plan], plan.lifecycle_state in ^@taken_up)
+    |> distinct(true)
+    |> select([ref, _plan], %{requirement_id: ref.contact_requirement_id})
+  end
+
   defp referencing_plans(_organization_id, _mission_id, [], _lock?), do: []
 
   defp referencing_plans(organization_id, mission_id, requirement_ids, lock?) do
     query =
-      ContactPlanRequirementRefRow
-      |> join(:inner, [ref], plan in ContactPlanRow,
-        on:
-          plan.organization_id == ref.organization_id and plan.mission_id == ref.mission_id and
-            plan.contact_plan_id == ref.contact_plan_id
-      )
-      |> where(
-        [ref, _plan],
-        ref.organization_id == ^organization_id and ref.mission_id == ^mission_id and
-          ref.contact_requirement_id in ^requirement_ids
-      )
+      organization_id
+      |> referencing_plan_rows(mission_id)
+      |> where([ref, _plan], ref.contact_requirement_id in ^requirement_ids)
       # A stable order, so concurrent lockers take the plans in the same order.
       |> order_by([_ref, plan], asc: plan.contact_plan_id)
       |> select(
@@ -179,6 +180,16 @@ defmodule Cadence.ContactPlanning.ContactPlans do
 
     query = if lock?, do: lock(query, [_ref, plan], fragment("FOR SHARE OF ?", plan)), else: query
     Repo.all(query)
+  end
+
+  defp referencing_plan_rows(org, mission) do
+    ContactPlanRequirementRefRow
+    |> join(:inner, [ref], plan in ContactPlanRow,
+      on:
+        plan.organization_id == ref.organization_id and plan.mission_id == ref.mission_id and
+          plan.contact_plan_id == ref.contact_plan_id
+    )
+    |> where([ref, _plan], ref.organization_id == ^org and ref.mission_id == ^mission)
   end
 
   @spec submit(Scope.t(), binary(), binary(), pos_integer(), binary(), keyword()) ::

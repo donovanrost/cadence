@@ -58,6 +58,43 @@ defmodule Cadence.Contacts.UplinkLegs do
     |> Enum.find_value(&leg(&1, ground_station_ref, provider_id))
   end
 
+  @doc "The `{spacecraft_id, station_ref, provider_id}` keys with a bookable primary uplink."
+  def booking_keys(_org, _mission, []), do: MapSet.new()
+
+  def booking_keys(org, mission, ids) do
+    rules =
+      org
+      |> RoutingRuleStore.list_routing_rules_for_spacecrafts(mission, ids)
+      |> Map.values()
+      |> List.flatten()
+      |> Enum.filter(&primary_uplink?/1)
+
+    transports =
+      TransportStore.fetch_transport_versions(
+        org,
+        mission,
+        Enum.map(rules, &{&1.transport_id, &1.transport_version})
+      )
+
+    assignments =
+      LinkAssignmentStore.fetch_many(org, mission, Enum.flat_map(rules, &assignment_ids/1))
+
+    for rule <- rules,
+        %Transport{origin: :provider_managed} = transport <- [
+          transports[{rule.transport_id, rule.transport_version}]
+        ],
+        Enum.any?(
+          assignment_ids(rule),
+          &match?(%LinkAssignment{direction: :uplink}, assignments[&1])
+        ),
+        into: MapSet.new() do
+      {rule.spacecraft_id, rule.ground_station_id || transport.ground_station_id,
+       transport.mission_provider_id}
+    end
+  end
+
+  defp assignment_ids(rule), do: Map.get(rule.metadata, "materialized_link_assignment_ids", [])
+
   @doc """
   The scheduled-contact fields for a confirmed reservation: `{extra_path_ids, extra_refs,
   intents, metadata}`.
@@ -221,8 +258,8 @@ defmodule Cadence.Contacts.UplinkLegs do
   end
 
   defp uplink_assignment(rule) do
-    rule.metadata
-    |> Map.get("materialized_link_assignment_ids", [])
+    rule
+    |> assignment_ids()
     |> Enum.find_value({:error, :no_uplink_assignment}, fn id ->
       case LinkAssignmentStore.fetch(rule.organization_id, rule.mission_id, id) do
         {:ok, %LinkAssignment{direction: :uplink} = assignment} -> {:ok, assignment}
