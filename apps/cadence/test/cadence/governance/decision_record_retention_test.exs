@@ -23,7 +23,10 @@ defmodule Cadence.Governance.DecisionRecordRetentionTest do
     "contact_plan_approvals" => "ContactPlanApprovalRow",
     "contact_plan_submissions" => "PlanSubmissions",
     "fleet_planning_policy_approvals" => "FleetPlanningPolicyApprovalRow",
-    "provider_change_approvals" => "ProviderChangeApprovalRow"
+    "provider_change_approvals" => "ProviderChangeApprovalRow",
+    "spacecraft_configuration_reviews" => "ConfigurationReviews.SetRow",
+    "spacecraft_configuration_review_members" => "ConfigurationReviews.MemberRow",
+    "activation_change_set_spacecraft" => "ChangeSetSpacecraft.Row"
   }
 
   test "every pure decision table carries the row and truncate triggers" do
