@@ -41,8 +41,9 @@ const alarm = computed(() => {
 // the right alarm and an id that doesn't exist can't page through the whole list (#827). Past the
 // bound the "Showing N of M" line and Load more are what the person has.
 const autoPages = ref(0);
+// Reset by value: the key is the link itself, so any other query change leaves the count alone.
 watch(
-  () => [route.query.alarm, route.query.point],
+  () => `${String(route.query.alarm ?? "")}|${String(route.query.point ?? "")}`,
   () => {
     autoPages.value = 0;
   },

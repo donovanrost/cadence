@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ApButton } from "@/ui";
+import { ApButton, formatCount } from "@/ui";
 
 /**
  * "Showing 200 of 1,204 active alarms, worst first" with Load more (#827): shown whenever a paged
@@ -21,8 +21,7 @@ defineEmits<{ more: [] }>();
 <template>
   <div class="flex flex-wrap items-center gap-3">
     <p class="m-0 font-mono text-xs text-text-3 uppercase">
-      Showing {{ shown.toLocaleString("en-US") }} of {{ total.toLocaleString("en-US") }} {{ what }},
-      worst first
+      Showing {{ formatCount(shown) }} of {{ formatCount(total) }} {{ what }}, worst first
     </p>
     <ApButton
       size="compact"
