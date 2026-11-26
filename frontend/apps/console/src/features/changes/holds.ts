@@ -97,7 +97,11 @@ export type AppHold = Readonly<{
 /** How many names an app hold shows before saying "and N more". */
 const SAMPLE_SHOWN = 5;
 
-/** U63: holds that name an app to install (telemetry_app_not_installed), merged per app. */
+/**
+ * U63: holds that name an app to install (telemetry_app_not_installed), merged per app. The server
+ * sends one such item per preview for the whole set of craft (switch_compatibility), so the counts
+ * of an app's items add up without overlap.
+ */
 export function appHolds(preview: Preview): readonly AppHold[] {
   const byKey = new Map<
     string,
@@ -112,10 +116,11 @@ export function appHolds(preview: Preview): readonly AppHold[] {
         count: 0,
         sample: new Map<string, string>(),
       };
-      // An item for one craft may carry only its entity; a fleet item carries the count and sample.
+      // A fleet item carries the count and sample; one for a lone craft may carry only its entity,
+      // and a craft with no name reads "Unknown spacecraft", never its id (#237).
       const sample =
         i.spacecraft_sample ??
-        (i.entity_id ? [{ id: i.entity_id, name: i.entity_name ?? i.entity_id }] : []);
+        (i.entity_id ? [{ id: i.entity_id, name: i.entity_name ?? "Unknown spacecraft" }] : []);
       entry.count += i.spacecraft_count ?? sample.length;
       for (const craft of sample) entry.sample.set(craft.id, craft.name);
       byKey.set(key, entry);

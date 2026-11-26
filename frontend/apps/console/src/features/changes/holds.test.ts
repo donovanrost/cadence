@@ -83,6 +83,20 @@ describe("telemetry_app_not_installed (U63, domain e587668da)", () => {
     ]);
   });
 
+  it("never shows an id for a craft the server sent without a name (#237)", () => {
+    const lone = {
+      ...hold,
+      spacecraft_count: undefined,
+      spacecraft_sample: undefined,
+      entity_name: undefined,
+      entity_id: "sc_9",
+    };
+    expect(appHolds(preview([lone]))[0]).toMatchObject({
+      spacecraftCount: 1,
+      spacecraftSample: [{ id: "sc_9", name: "Unknown spacecraft" }],
+    });
+  });
+
   it("adds up the craft of several items for one app, and names a lone entity", () => {
     const one = {
       ...hold,

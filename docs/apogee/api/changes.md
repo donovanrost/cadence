@@ -203,7 +203,7 @@ holds) carries `spacecraft_count` (how many) and `spacecraft_sample` (`[{id, nam
 name, at most), **not** an id list: a 1,200-craft change doesn't send 1,200 ids or need a fleet read
 to name them. Say "EARENDIL-001, EARENDIL-002 and 1,198 more". The count is what the check
 counted; the sample leaves out an id that isn't the mission's. This holds for every preview the API
-returns, including the `409 holds_blocking` details.
+returns, including the `409 holds_blocking` details. A preview has one `telemetry_app_not_installed` item (every craft that lacks the app), so a screen that adds the counts of an app's items never double-counts.
 
 Submitting while a blocking item stands answers `409 holds_blocking` with the preview as
 `details` (show the blocking items: "can't apply yet"). Approving does too, when a blocking item
