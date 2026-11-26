@@ -12,7 +12,7 @@ defmodule Cadence.SemanticRuntimeSnapshotTest do
     {spec, input_id} = Fixture.runtime_spec()
     key = PartitionKey.new(%{affinity: :source_endpoint, value: "snapshot"})
     plan = PlanDecoder.decode(spec.runtime_plans)
-    {:ok, empty, writer} = Store.recover_writer(spec, key, plan)
+    {:ok, empty, writer, _resume} = Store.recover(spec, key)
     %{spec: spec, input_id: input_id, key: key, plan: plan, empty: empty, writer: writer}
   end
 
@@ -51,7 +51,7 @@ defmodule Cadence.SemanticRuntimeSnapshotTest do
     {state, _} = run(empty, input_id, plan, 1..2)
 
     # A new owner takes the partition: the old writer is fenced.
-    assert {:ok, _state, writer} = Store.recover_writer(spec, key, plan)
+    assert {:ok, _state, writer, _resume} = Store.recover(spec, key)
     assert :ok = Store.snapshot(spec, key, writer, state, %{"stream-a" => 10})
 
     assert {:error, :semantic_runtime_fenced} =

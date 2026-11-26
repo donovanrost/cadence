@@ -3,7 +3,7 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
   DECISIONS #99, the end-to-end test (lead 11-17: required before #99's restart). A live mission
   runtime with a catalog limit takes journal-positioned TM frames; the limit fires and the alarm
   episode and event are written with replay-safe ids. Then the crash window #99 exists for: the
-  effects were written but the partition's semantic commit didn't survive. The partition owner is
+  effects were written but the partition's semantic state didn't survive. The partition owner is
   killed and recovers from the store (state from before the input), and the journal replays the
   same bytes, once as the same evidence and once re-cut mid-frame (another batching). Each replay
   re-derives the same transition and finds the same ids: no new rows, no MM_REPLAY_ID_CONFLICT.
@@ -177,6 +177,113 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
     assert offset == byte_size(bytes)
   end
 
+  # #692, the crash test for the snapshot design: a partition is killed mid-window, between two
+  # snapshots. It recovers from the snapshot, the journal replays from the snapshot's offset (and,
+  # to be sure, also from before it), and the state ends identical to the uninterrupted partition's,
+  # with no new effect rows.
+  test "a partition killed between snapshots recovers from the snapshot and the journal replay",
+       c do
+    raise_frames = frames(mode: 50, aux: 0, sequence: 1)
+    clear_frames = frames(mode: 0, aux: 0, sequence: 2)
+    clear_at = byte_size(raise_frames)
+    # The journal's replay hands over the same evidence (its id derives from stream and offsets).
+    raise_evidence = evidence(c, raise_frames, 0)
+    clear_evidence = evidence(c, clear_frames, clear_at)
+
+    log =
+      capture_log(fn ->
+        assert transition?(ingest!(raise_evidence), :critical)
+        snapshot_now!(c)
+
+        # After the snapshot, never snapshotted: the clear, and the effects it wrote.
+        assert transition?(ingest!(clear_evidence), :normal)
+        uninterrupted = semantic_state(c)
+        effects = effect_ids(c)
+        assert [%{resume: %{@stream => ^clear_at}}] = snapshot_rows(c)
+        assert [_episode] = effects.episodes
+
+        kill_partition!(c)
+
+        # The recovered owner holds what the snapshot did: the raise, not the clear.
+        recovered = semantic_state(c)
+        refute recovered == uninterrupted
+        assert recovered.sequence < uninterrupted.sequence
+
+        # The journal replays from the snapshot's offset: the clear, again.
+        assert transition?(ingest!(clear_evidence), :normal)
+        assert semantic_state(c) == uninterrupted
+        assert effect_ids(c) == effects
+
+        # The journal replaying frames the snapshot already holds changes nothing: the state is
+        # not applied to twice, and the same effects are found.
+        ingest!(raise_evidence)
+        assert semantic_state(c) == uninterrupted
+        assert effect_ids(c) == effects
+        assert [%{state: "cleared"}] = episodes(c)
+      end)
+
+    refute log =~ "MM_REPLAY_ID_CONFLICT"
+  end
+
+  # Journal off (DECISIONS #95): there is no journal to replay, and no per-batch log. A crash loses
+  # the semantic memory since the last snapshot, at most 60 s of it; recovery is the snapshot. This
+  # pins what is lost (latest values, algorithm memory, monitoring since the snapshot) and what is
+  # not (the alarm episode, which is a projection written with the batch).
+  test "with no journal to replay, a crash loses the semantic memory since the last snapshot",
+       c do
+    raise_frames = frames(mode: 50, aux: 0, sequence: 1)
+
+    capture_log(fn ->
+      assert transition?(ingest!(evidence(c, raise_frames, 0)), :critical)
+      before = semantic_state(c)
+      assert map_size(before.latest) > 0
+      assert snapshot_rows(c) == []
+      assert [%{state: "active"}] = episodes(c)
+
+      kill_partition!(c)
+
+      lost = semantic_state(c)
+      assert lost.latest == %{}
+      assert lost.algorithm_state == %{}
+      assert lost.sequence == 0
+      # The projected alarm survives; the monitoring prior is re-seeded from it.
+      assert [%{state: "active"}] = episodes(c)
+      assert Enum.all?(Map.values(lost.monitoring_state), &(&1.effective_state != :normal))
+    end)
+  end
+
+  # A snapshot when the cadence would not take one yet (60 s, or 2 s idle): the tick says due.
+  defp snapshot_now!(c) do
+    key = %PartitionKey{affinity: :source_endpoint, value: c.endpoint.source_endpoint_id}
+    {:ok, owner} = PartitionOwner.lookup(c.mission.mission_id, key)
+
+    :sys.replace_state(owner, fn state ->
+      %{
+        state
+        | semantic_snapshot_config: Keyword.put(state.semantic_snapshot_config, :idle_ms, 0)
+      }
+    end)
+
+    send(owner, :semantic_snapshot_tick)
+    _ = :sys.get_state(owner)
+    assert [_snapshot] = snapshot_rows(c)
+  end
+
+  defp snapshot_rows(c) do
+    Repo.all(
+      from(s in "semantic_runtime_snapshots",
+        where: s.mission_id == ^c.mission.mission_id,
+        select: %{resume: s.resume}
+      )
+    )
+  end
+
+  defp semantic_state(c) do
+    key = %PartitionKey{affinity: :source_endpoint, value: c.endpoint.source_endpoint_id}
+    {:ok, owner} = PartitionOwner.lookup(c.mission.mission_id, key)
+    :sys.get_state(owner).semantic_state
+  end
+
   # api-ops' wedge (review 11-17). A partition that starts EMPTY (its checkpoint missing, or a
   # basis change) is seeded from the latest alarm states, which hold only NON-normal states and
   # can be later than the frame the journal replays. F1 raises mode and aux; F2 clears aux. After
@@ -208,12 +315,7 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
     refute log =~ "MM_REPLAY_ID_CONFLICT"
   end
 
-  @semantic_tables [
-    "semantic_runtime_commits",
-    "semantic_runtime_heads",
-    "semantic_runtime_checkpoints",
-    "semantic_runtime_snapshots"
-  ]
+  @semantic_tables ["semantic_runtime_heads", "semantic_runtime_snapshots"]
 
   defp drop_semantic_rows!(c) do
     for table <- Enum.reverse(@semantic_tables) do

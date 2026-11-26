@@ -266,6 +266,23 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
   def handle_info({:semantic_snapshot_durable, _partition, _stream_id, _offset}, state),
     do: {:noreply, state}
 
+  # A partition recovered from a snapshot: if this consumer has processed its stream past what the
+  # snapshot includes, the state lacks those batches. Restart, which reads the stream again from the
+  # durable resume point; the partition skips the frames its snapshot already holds.
+  def handle_info({:semantic_partition_recovered, partition, resume}, state) do
+    if replay_from_snapshot?(state, partition, resume) do
+      Logger.warning(
+        "Ingress journal consumer replays from a recovered semantic snapshot of #{partition}",
+        mission_id: state.mission_id,
+        path_id: state.path_id
+      )
+
+      {:stop, {:shutdown, :semantic_replay}, state}
+    else
+      {:noreply, state}
+    end
+  end
+
   # A partition stopped after its final snapshot: it must not pin the durable cursor for good.
   def handle_info({:semantic_snapshot_stopped, partition, stream_id}, state)
       when stream_id == state.stream_id do
@@ -403,7 +420,9 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
     # of a frame or packet still incomplete (domain's partial-frame fix, 11-15). The journal's
     # durable resume point is that, held back to the partitions' last snapshots (SnapshotGate).
     finished = batch_resume(batch, state.resume_floor) || batch.last.end_offset
-    gate = SnapshotGate.note(state.snapshot_gate, Map.get(batch, :snapshot_partition))
+    partition = Map.get(batch, :snapshot_partition)
+    if partition, do: SemanticSnapshotNotifier.subscribe_partition(partition)
+    gate = SnapshotGate.note(state.snapshot_gate, partition)
     resume = SnapshotGate.limit(gate, finished, state.resume_floor)
 
     case FileSystem.acknowledge(
@@ -438,6 +457,15 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
       {:error, reason} ->
         # Processing has completed. Retry custody acknowledgement, not decoding.
         {:noreply, retry_after_failure(state, reason)}
+    end
+  end
+
+  defp replay_from_snapshot?(state, partition, resume) do
+    with true <- MapSet.member?(state.snapshot_gate.partitions, partition),
+         {_end_offset, finished} <- state.last_finished do
+      finished > Map.get(resume, state.stream_id, state.resume_floor)
+    else
+      _no_gate_or_nothing_processed -> false
     end
   end
 

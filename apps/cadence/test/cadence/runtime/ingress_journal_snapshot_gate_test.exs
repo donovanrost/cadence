@@ -133,6 +133,39 @@ defmodule Cadence.Runtime.IngressJournalSnapshotGateTest do
   end
 
   @tag :tmp_dir
+  test "a consumer that processed past a recovered partition's snapshot replays from it", ctx do
+    %{consumer: consumer, entries: [a, b]} = start_stream(ctx.tmp_dir, 2)
+    {_raw, ref} = next_batch()
+    persisted(consumer, ref, "p1")
+    {_raw, ref} = next_batch()
+    persisted(consumer, ref, "p1")
+    monitor = Process.monitor(consumer)
+
+    # The partition recovered from a snapshot that includes only the first batch.
+    send(consumer, {:semantic_partition_recovered, "p1", %{a.stream_id => a.end_offset}})
+    assert_receive {:DOWN, ^monitor, :process, ^consumer, {:shutdown, :semantic_replay}}
+    assert b.end_offset > a.end_offset
+  end
+
+  @tag :tmp_dir
+  test "a consumer the recovered snapshot already covers, or another partition's, keeps going",
+       ctx do
+    %{consumer: consumer, entries: [_a, b]} = start_stream(ctx.tmp_dir, 2)
+    {_raw, ref} = next_batch()
+    persisted(consumer, ref, "p1")
+    {_raw, ref} = next_batch()
+    persisted(consumer, ref, "p1")
+    monitor = Process.monitor(consumer)
+    stream = :sys.get_state(consumer).stream_id
+
+    send(consumer, {:semantic_partition_recovered, "p1", %{stream => b.end_offset}})
+    send(consumer, {:semantic_partition_recovered, "other-partition", %{stream => 0}})
+    _ = :sys.get_state(consumer)
+    refute_received {:DOWN, ^monitor, :process, ^consumer, _}
+    assert Process.alive?(consumer)
+  end
+
+  @tag :tmp_dir
   test "a partition that reports no gate does not hold the journal", ctx do
     %{journal: journal, consumer: consumer, entries: [a, b]} = start_stream(ctx.tmp_dir, 2)
 

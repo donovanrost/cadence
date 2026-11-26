@@ -8,10 +8,10 @@ defmodule Cadence.Runtime.PartitionOwner.MonitoringSeed do
   Only active (non-normal) states are seeded, since normal is the default prior, for the plan's
   policies in every spacecraft scope of the mission: a handful of rows. A partition only ever
   evaluates its own evidence's scopes, so another craft's entry is never consulted, and an endpoint
-  that carries several spacecraft gets all of theirs. The seed is committed through
-  `Store.seed/6`, so a replay from genesis reproduces it.
+  that carries several spacecraft gets all of theirs. The seed is applied with
+  `SemanticRuntime.seed_monitoring/2` and held by the partition's next snapshot.
 
-  `semantic_latest_alarm_states` is a projection, written AFTER the semantic commit: the ingress
+  `semantic_latest_alarm_states` is a projection, written AFTER the batch is evaluated: the ingress
   persistence projector persists each processed batch (`Runtime.Persistence`, then
   `SemanticObservations.persist_many/1`, which writes the transition, the latest state and the
   episode in one transaction). So a seed taken right after a basis change can be one step stale
@@ -29,14 +29,15 @@ defmodule Cadence.Runtime.PartitionOwner.MonitoringSeed do
   alias Cadence.Repo
   alias Cadence.Runtime.PartitionKey
   alias Cadence.SemanticObservations.LatestAlarmStateRow
-  alias Cadence.SemanticRuntime.{Scope, State, Store}
+  alias Cadence.SemanticRuntime
+  alias Cadence.SemanticRuntime.{Scope, State}
 
   @active ~w(watch warning distress critical severe disabled unknown)
 
   @doc """
-  `{:ok, state, writer}`, seeded when the recovered state knows no policy yet; otherwise unchanged.
+  `{:ok, state}`, seeded when the recovered state knows no policy yet; otherwise unchanged.
   """
-  def maybe_seed(activation, %PartitionKey{} = key, plan, %State{} = state, writer) do
+  def maybe_seed(activation, %PartitionKey{} = key, plan, %State{} = state) do
     if plan.monitoring != [] and state.monitoring_state == %{} do
       entries = entries(activation, plan)
 
@@ -46,12 +47,9 @@ defmodule Cadence.Runtime.PartitionOwner.MonitoringSeed do
           "#{PartitionKey.identifier(key)} (#{activation.mission_id})"
       )
 
-      with {:ok, _result, seeded, next_writer} <-
-             Store.seed(activation, key, writer, state, entries, plan) do
-        {:ok, seeded, next_writer}
-      end
+      {:ok, SemanticRuntime.seed_monitoring(state, Enum.sort(entries))}
     else
-      {:ok, state, writer}
+      {:ok, state}
     end
   end
 

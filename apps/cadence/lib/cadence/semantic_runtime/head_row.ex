@@ -10,6 +10,5 @@ defmodule Cadence.SemanticRuntime.HeadRow do
     field(:runtime_basis_sha256, :string)
     field(:generation, :integer)
     field(:ownership_epoch, :integer, default: 0)
-    field(:commit_sequence, :integer, default: 0)
   end
 end
