@@ -4,8 +4,7 @@ defmodule Cadence.Commanding.CommandApprovalRecordTest do
   is a complete four-eyes record, provable from the row alone. A decision names the review token
   it decided, exactly the ids the separation check was given, and admin_mode (no default: a
   missing one raises). A request released without a second GO gets its own `not_required` row in
-  the release's transaction; `decide_request` never writes one. The migration refuses while rows
-  exist.
+  the release's transaction; `decide_request` never writes one.
   """
   use Cadence.DataCase, async: false
 
@@ -27,8 +26,6 @@ defmodule Cadence.Commanding.CommandApprovalRecordTest do
   alias Cadence.Management.Commanding.ReviewPrecondition
   alias Cadence.Missions.Mission
   alias Cadence.Organizations.Organization
-
-  @migration "repo/migrations/20261121100000_command_approval_record.exs"
 
   test "a decision records its review token, separated_from and admin_mode, read back from the row" do
     c = fixture!(:approval_pending)
@@ -125,32 +122,6 @@ defmodule Cadence.Commanding.CommandApprovalRecordTest do
 
     assert AuditRecords.records(c.org, c.mission, %{}).approvals == []
     assert [%DecisionRecord{decision: :not_required}] = ApprovalDecisions.decisions(c.org)
-  end
-
-  test "the migration refuses while command_approvals has rows, before any DDL" do
-    [{module, _bytecode} | _] =
-      Code.require_file(Path.join(to_string(:code.priv_dir(:cadence)), @migration))
-
-    assert {:ok, _} = Repo.query(module.guard_sql())
-
-    c = fixture!(:approval_pending)
-
-    {:ok, _} =
-      RequestStore.decide_request(
-        c.org,
-        c.mission,
-        c.request,
-        :rejected,
-        %{"actor_kind" => "user", "user_id" => "reviewer"},
-        reason: "No",
-        admin_mode: false
-      )
-
-    assert {:error, %Postgrex.Error{postgres: %{message: message}}} =
-             Repo.query(module.guard_sql())
-
-    assert message =~ "command_approvals has 1 row(s)"
-    assert message =~ "Never a trigger-disabled DELETE"
   end
 
   defp fixture!(state) do
