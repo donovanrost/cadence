@@ -249,3 +249,116 @@ describe("usePagedQuery (#176)", () => {
     t.scope.stop();
   });
 });
+
+/** #903: a key with a filter (a search box) keeps its rows while a new filter's first page loads. */
+describe("usePagedQuery with scopeOf", () => {
+  type Key = Readonly<{ mission: string; q: string }>;
+  type KeyedCall = Readonly<{
+    key: Key;
+    cursor: string | null;
+    resolve: (value: ApiResult<Page<Row, string>>) => void;
+  }>;
+  function filtered(initial: Key, withScope = true) {
+    const calls: KeyedCall[] = [];
+    const key = ref<Key | null>(initial);
+    const scope = effectScope();
+    const query = scope.run(() =>
+      usePagedQuery(
+        key,
+        (k: Key, cursor: string | null) =>
+          new Promise<ApiResult<Page<Row, string>>>((resolve) =>
+            calls.push({ key: k, cursor, resolve }),
+          ),
+        (r) => r.id,
+        withScope ? { scopeOf: (k: Key) => k.mission } : {},
+      ),
+    );
+    if (!query) throw new Error("no query");
+    return { calls, key, scope, query };
+  }
+  const shown = (q: ReturnType<typeof filtered>["query"]) =>
+    q.state.value.status === "ready"
+      ? q.state.value.value.items.map((r) => r.id)
+      : q.state.value.status;
+
+  it("a filter change keeps the rows, ready and pending, until the new first page replaces them", async () => {
+    const t = filtered({ mission: "m1", q: "" });
+    t.calls[0]?.resolve(page(rows("a", "b"), "c2"));
+    await flush();
+    t.key.value = { mission: "m1", q: "b" };
+    await flush();
+    expect(shown(t.query)).toEqual(["a", "b"]);
+    expect(t.query.pending.value).toBe(true);
+    expect(t.calls[1]?.key.q).toBe("b");
+    t.calls[1]?.resolve(page(rows("b"), null));
+    await flush();
+    expect(shown(t.query)).toEqual(["b"]);
+    expect(t.query.pending.value).toBe(false);
+    t.scope.stop();
+  });
+
+  it("a scope change starts over, showing loading", async () => {
+    const t = filtered({ mission: "m1", q: "" });
+    t.calls[0]?.resolve(page(rows("a"), null));
+    await flush();
+    t.key.value = { mission: "m2", q: "" };
+    await flush();
+    expect(shown(t.query)).toBe("loading");
+    expect(t.query.pending.value).toBe(false);
+    t.scope.stop();
+  });
+
+  it("without scopeOf, a filter change shows loading as before", async () => {
+    const t = filtered({ mission: "m1", q: "" }, false);
+    t.calls[0]?.resolve(page(rows("a"), null));
+    await flush();
+    t.key.value = { mission: "m1", q: "a" };
+    await flush();
+    expect(shown(t.query)).toBe("loading");
+    t.scope.stop();
+  });
+
+  it("a failed filter page is the state's failure: the old rows don't match the new filter", async () => {
+    const t = filtered({ mission: "m1", q: "" });
+    t.calls[0]?.resolve(page(rows("a"), null));
+    await flush();
+    t.key.value = { mission: "m1", q: "zz" };
+    await flush();
+    t.calls[1]?.resolve(failed);
+    await flush();
+    expect(shown(t.query)).toBe("failed");
+    expect(t.query.pending.value).toBe(false);
+    t.scope.stop();
+  });
+
+  it("Load more waits while a filter change is pending, and a late old-filter page is dropped", async () => {
+    const t = filtered({ mission: "m1", q: "" });
+    t.calls[0]?.resolve(page(rows("a"), "c2"));
+    await flush();
+    t.key.value = { mission: "m1", q: "a" };
+    await flush();
+    await t.query.more();
+    expect(t.calls).toHaveLength(2);
+    t.calls[1]?.resolve(page(rows("a"), null));
+    await flush();
+    expect(shown(t.query)).toEqual(["a"]);
+    t.scope.stop();
+  });
+
+  it("a live refresh during a filter change is still that change's first page", async () => {
+    const t = filtered({ mission: "m1", q: "" });
+    t.calls[0]?.resolve(page(rows("a", "b"), null));
+    await flush();
+    t.key.value = { mission: "m1", q: "b" };
+    await flush();
+    t.query.refetch();
+    await flush();
+    expect(t.calls[2]?.key.q).toBe("b");
+    expect(t.calls[2]?.cursor).toBeNull();
+    t.calls[2]?.resolve(failed);
+    await flush();
+    expect(shown(t.query)).toBe("failed");
+    expect(t.query.refreshError.value).toBeNull();
+    t.scope.stop();
+  });
+});
