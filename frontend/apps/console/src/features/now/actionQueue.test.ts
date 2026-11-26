@@ -121,6 +121,14 @@ describe("action queue (M6)", () => {
     expect(big[0]?.action.to).toEqual({ name: "ops.alarms", query: { point: "EPS.VBAT" } });
   });
 
+  it("reads an alarm item over 1,000 spacecraft as one grouped row (#847)", () => {
+    const members = Array.from({ length: 1_500 }, (_, i) => member(i + 1));
+    const rows = present([item({ id: "alarm:fleet", ...vbat, count: 1_500, spacecraft: members })]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.title).toBe("1,500 spacecraft · VBAT below red limit");
+    expect(rows[0]?.spacecraftIds).toHaveLength(1_500);
+  });
+
   it("keeps server order and maps every kind", () => {
     const rows = present([
       item({
