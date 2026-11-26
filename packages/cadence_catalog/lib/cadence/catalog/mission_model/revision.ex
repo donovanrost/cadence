@@ -118,7 +118,10 @@ defmodule Cadence.Catalog.MissionModel.Revision do
 
   # Explicit lists, not the atom table (2026-11-12): an edge carries its reference's role, so a
   # fresh VM must decode `criteria` without an importer loaded.
-  @statuses_by_name Map.new(~w(candidate approved rejected retired withdrawn)a, &{Atom.to_string(&1), &1})
+  @statuses_by_name Map.new(
+                      ~w(candidate approved rejected retired withdrawn)a,
+                      &{Atom.to_string(&1), &1}
+                    )
   @edge_roles_by_name Map.new(
                         [:algorithm_dependency | Reference.roles()],
                         &{Atom.to_string(&1), &1}
