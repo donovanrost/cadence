@@ -507,5 +507,6 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
 
   @doc false
   @spec received_frames(binary(), [binary()]) :: %{binary() => non_neg_integer()}
-  defdelegate received_frames(mission_id, realized_contact_ids), to: Index
+  def received_frames(mission_id, realized_contact_ids),
+    do: Index.received_frames(mission_id, realized_contact_ids, configured_backend_opts())
 end

@@ -37,8 +37,9 @@ defmodule Cadence.Repo.Migrations.NarrowProtocolArchiveIndex do
 
     create index(:protocol_archive_segments, [:evidence_ids], using: :gin)
 
-    # `receipt_date` is the day the record's segment belongs to, so the table can later be
-    # partitioned by day (a partitioned unique key must include it) and a day dropped at once.
+    # Retention drops a day by deleting its segments; the cascade removes their identity rows.
+    # Not partitioned by day: a partitioned unique key would have to include the day, which would
+    # let a replay on a later day slip past the identity-conflict check.
     create table(:protocol_archive_record_identities, primary_key: false) do
       add :record_kind, :string, null: false, primary_key: true
       add :record_id, :string, null: false, primary_key: true
@@ -47,7 +48,6 @@ defmodule Cadence.Repo.Migrations.NarrowProtocolArchiveIndex do
       add :segment_id, references(:protocol_archive_segments, on_delete: :delete_all),
         null: false
 
-      add :receipt_date, :date, null: false
     end
 
     create index(:protocol_archive_record_identities, [:segment_id])

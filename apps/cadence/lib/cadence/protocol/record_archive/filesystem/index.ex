@@ -10,12 +10,19 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Index do
   identity-conflict check and the replay dedupe stand on.
 
   A record id that is already indexed was archived before when it is the same record and its
-  segment object is on disk. `content_sha256` decides "the same record". For a transfer frame or a
-  packet it is the hash of its identity columns, not of the whole entry: a replay may group the
-  same journal records into different evidence than the run that archived them (evidence id,
-  receipt time, batch metadata), and 11-14's pass, interrupted mid-batch, replayed into a permanent
-  conflict that stalled the mission's ingest. Another record at the same id (another frame
-  sequence, another APID) has another digest, which is a real conflict.
+  segment object is on disk. `content_sha256` decides "the same record", and is `digest/1`: a
+  versioned, explicit encoding of the record's identity columns and the hash of its payload bytes.
+  It is persisted and recomputed on every replay, so it must never depend on Erlang's term format
+  (DECISIONS #108): an OTP upgrade must not turn every replay into a conflict. The transport fields
+  (evidence id, receipt time, batch metadata) are left out on purpose: a replay may group the same
+  journal records into different evidence than the run that archived them, and 11-14's pass,
+  interrupted mid-batch, replayed into a permanent conflict that stalled the mission's ingest.
+  Another frame sequence, another APID, or other packet bytes at the same id has another digest,
+  which is a real conflict.
+
+  A transfer frame's entry carries no payload bytes (the evidence's bytes live in the ingress
+  archive, and its hash changes when a replay regroups the journal), so its digest covers its
+  identity columns and its lengths.
   """
 
   import Ecto.Query
@@ -95,10 +102,10 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Index do
   end
 
   @doc "Transfer frames archived per realized contact, from the segments' own counts."
-  @spec received_frames(binary(), [binary()]) :: %{binary() => non_neg_integer()}
-  def received_frames(_mission_id, []), do: %{}
+  @spec received_frames(binary(), [binary()], keyword()) :: %{binary() => non_neg_integer()}
+  def received_frames(_mission_id, [], _opts), do: %{}
 
-  def received_frames(mission_id, realized_contact_ids) do
+  def received_frames(mission_id, realized_contact_ids, opts) do
     SegmentRow
     |> where([s], s.mission_id == ^mission_id and s.frame_count > 0)
     |> where(
@@ -106,7 +113,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Index do
       fragment("? && ?", s.realized_contact_ids, type(^realized_contact_ids, {:array, :string}))
     )
     |> select([s], s.frames_by_contact)
-    |> Repo.all()
+    |> repo(opts).all()
     |> Enum.reduce(%{}, fn by_contact, acc ->
       by_contact
       |> Map.take(realized_contact_ids)
@@ -137,26 +144,38 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Index do
     do: where(query, [s], fragment("? && ?", field(s, ^field), type(^values, {:array, :string})))
 
   defp record(entry, opts) do
-    receipt_time = receipt_time(entry)
-
     %{
       record_kind: Map.fetch!(entry, "record_kind"),
       record_id: FileSystem.entry_index_record_id(entry, opts),
-      content_sha256: content_hash(entry),
-      receipt_date: DateTime.to_date(receipt_time),
+      content_sha256: digest(entry),
       entry: entry
     }
   end
 
-  defp content_hash(%{"record_kind" => @frame_kind} = entry),
-    do: digest(Map.take(entry, @frame_identity))
+  @digest_version "archive_identity_v1"
 
-  defp content_hash(%{"record_kind" => @packet_kind} = entry),
-    do: digest(Map.take(entry, @packet_identity))
+  # sha256(version <> canonical JSON of [[name, value], ...] in a fixed order <> sha256 of the payload)
+  @doc false
+  @spec digest(map()) :: binary()
+  def digest(%{"record_kind" => @frame_kind} = entry),
+    do: digest(entry, @frame_identity ++ ~w(raw_frame_length_bytes payload_length_bytes), <<>>)
 
-  defp content_hash(entry), do: digest(entry)
+  def digest(%{"record_kind" => @packet_kind} = entry),
+    do: digest(entry, @packet_identity, packet_bytes(entry))
 
-  defp digest(term), do: :crypto.hash(:sha256, :erlang.term_to_binary(term, [:deterministic]))
+  def digest(entry), do: digest(entry, ~w(mission_id record_kind record_id), <<>>)
+
+  defp digest(entry, fields, payload) do
+    named = Jason.encode!(Enum.map(fields, &[&1, Map.get(entry, &1)]))
+    :crypto.hash(:sha256, [@digest_version, named, :crypto.hash(:sha256, payload)])
+  end
+
+  defp packet_bytes(entry) do
+    case entry |> Map.get("packet_data_base64", "") |> Base.decode64() do
+      {:ok, bytes} -> bytes
+      :error -> raise ArgumentError, "invalid archive packet data for #{entry["record_id"]}"
+    end
+  end
 
   defp receipt_time(entry) do
     {:ok, time, _offset} = entry |> Map.fetch!("receipt_time") |> DateTime.from_iso8601()
@@ -208,7 +227,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Index do
 
   defp insert_chunk(repo, segment_id, chunk, opts) do
     identities =
-      Enum.map(chunk, &Map.take(&1, [:record_kind, :record_id, :content_sha256, :receipt_date]))
+      Enum.map(chunk, &Map.take(&1, [:record_kind, :record_id, :content_sha256]))
       |> Enum.map(&Map.put(&1, :segment_id, segment_id))
 
     # A backlog-sized VALUES plan can retain megabytes in every pool connection after the flush.

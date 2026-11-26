@@ -10,6 +10,5 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.IdentityRow do
     field(:record_id, :string, primary_key: true)
     field(:content_sha256, :binary)
     field(:segment_id, :integer)
-    field(:receipt_date, :date)
   end
 end

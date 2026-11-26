@@ -101,7 +101,6 @@ defmodule Cadence.Protocol.RecordArchive.IndexTest do
     identities = Repo.all(from(i in IdentityRow, where: i.segment_id == ^segment.id))
     assert length(identities) == 3
     assert Enum.all?(identities, &(byte_size(&1.content_sha256) == 32))
-    assert Enum.all?(identities, &(&1.receipt_date == ~D[2026-11-25]))
   end
 
   test "a replayed frame resolves to its original and is counted once", ctx do
@@ -182,5 +181,100 @@ defmodule Cadence.Protocol.RecordArchive.IndexTest do
 
     assert File.regular?(Path.join(ctx.base_path, object_key))
     assert Repo.aggregate(from(s in SegmentRow, where: s.object_key == ^object_key), :count) == 1
+  end
+
+  test "the same record id carrying different bytes is an identity conflict, not a replay", ctx do
+    ev = evidence(ctx.mission_id, "ev-bytes", ~U[2026-11-25 10:00:00Z])
+    packet = packet(ev, "packet-same-id", <<1, 2, 3, 4>>)
+    archive(ctx.policy, ev, [], [packet])
+
+    # The same packet re-grouped into other evidence is the same record (11-14's replay).
+    replay = evidence(ctx.mission_id, "ev-bytes-replay", ~U[2026-11-25 10:30:00Z])
+
+    archive(ctx.policy, replay, [], [
+      %{packet | evidence_id: replay.evidence_id, receipt_time: replay.receipt_time}
+    ])
+
+    # Other bytes under the same id: a conflict #88 quarantines, whose segment is never indexed.
+    other = evidence(ctx.mission_id, "ev-bytes-other", ~U[2026-11-25 11:00:00Z])
+
+    entries =
+      FileSystem.build_entries(other, [], [packet(other, "packet-same-id", <<9, 9, 9, 9>>)])
+
+    assert {:error, {:protocol_archive_record_identity_conflict, ["packet-same-id"]}} =
+             FileSystem.persist_segment("other-bytes", entries,
+               object_key: "#{ctx.mission_id}/other-bytes.bin"
+             )
+  end
+
+  describe "digest/1 (persisted, so pinned: DECISIONS #108)" do
+    @packet %{
+      "record_kind" => "packet_record",
+      "record_id" => "packet-golden",
+      "mission_id" => "mission-golden",
+      "spacecraft_id" => "sc-1",
+      "protocol_family" => "tm",
+      "direction" => "downlink",
+      "apid" => 42,
+      "packet_kind" => "space_packet",
+      "packet_data_base64" => "AQIDBA==",
+      "evidence_id" => "ignored"
+    }
+
+    @frame %{
+      "record_kind" => "transfer_frame_record",
+      "record_id" => "frame-golden",
+      "mission_id" => "mission-golden",
+      "spacecraft_id" => "sc-1",
+      "protocol_family" => "tm",
+      "direction" => "downlink",
+      "scid" => 11,
+      "vcid" => 2,
+      "map_id" => nil,
+      "frame_seq" => 7,
+      "raw_frame_length_bytes" => 1115,
+      "payload_length_bytes" => 1109,
+      "evidence_id" => "ignored"
+    }
+
+    test "is sha256(\"archive_identity_v1\" <> JSON of the named fields <> sha256(payload))" do
+      # Computed independently of the implementation (Python's hashlib and json), so a change to
+      # the encoding, the field order or the version prefix fails here before it stalls a replay.
+      assert hex(Index.digest(@packet)) ==
+               "fc84c51687960d99c9335b1e62a93a2faa7bc1a125f83165effc73fc39318932"
+
+      assert hex(Index.digest(@frame)) ==
+               "a589534911912cb8d72faf3be60bc4937ff2b7a9440568ab720789133baf3ed5"
+    end
+
+    test "ignores the transport fields and covers the bytes" do
+      moved =
+        Map.merge(@packet, %{"evidence_id" => "other", "receipt_time" => "2026-01-01T00:00:00Z"})
+
+      assert Index.digest(moved) == Index.digest(@packet)
+
+      assert Index.digest(%{@packet | "packet_data_base64" => Base.encode64(<<4, 3, 2, 1>>)}) !=
+               Index.digest(@packet)
+
+      assert Index.digest(%{@packet | "apid" => 43}) != Index.digest(@packet)
+      assert Index.digest(%{@frame | "frame_seq" => 8}) != Index.digest(@frame)
+    end
+
+    defp hex(binary), do: Base.encode16(binary, case: :lower)
+  end
+
+  defp packet(evidence, id, bytes) do
+    %PacketRecord{
+      packet_id: id,
+      evidence_id: evidence.evidence_id,
+      mission_id: evidence.mission_id,
+      spacecraft_id: "sc-1",
+      protocol_family: :tm,
+      packet_kind: :space_packet,
+      apid: 42,
+      packet_data: bytes,
+      receipt_time: evidence.receipt_time,
+      provenance: %{}
+    }
   end
 end
