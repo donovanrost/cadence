@@ -326,8 +326,9 @@ const short = (iso: string) => {
             @retry="events.refetch"
           >
             <template #default="{ value }">
-              <p v-if="stale" role="status" class="m-0 px-4 py-2 text-sm text-caution-text">
-                {{ stale }}
+              <!-- Always mounted, like the alerts, so the line is announced when it appears. -->
+              <p role="status" class="m-0 px-4 text-sm text-caution-text" :class="stale && 'py-2'">
+                {{ stale ?? "" }}
               </p>
               <ApEmptyState
                 v-if="(shownEvents ?? value.items).length === 0"
