@@ -4,6 +4,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningScaleTest do
   alias Cadence.ContactPlanning.{
     ContactRequirements,
     ContactRequirementTemplates,
+    FleetOptimizer,
     FleetPlanningPolicies,
     FleetPlanningRuns,
     FleetPlanningStarts
@@ -15,16 +16,19 @@ defmodule Cadence.ContactPlanning.FleetPlanningScaleTest do
 
   @moduletag timeout: 600_000
   @moduletag sandbox_ownership_timeout: 600_000
-  @moduletag :scale
   @start ~U[2030-07-17 04:00:00.000000Z]
   @week_seconds 7 * 24 * 3_600
 
   setup do: Fixtures.setup_start()
 
+  @tag :scale
+  @tag timeout: 1_800_000
   test "500 spacecraft at four daily contacts start 14,000 requirements", context do
     assert_scale_start(context, 500)
   end
 
+  @tag :scale
+  @tag timeout: 1_800_000
   test "1,000 spacecraft at four daily contacts start 28,000 requirements", context do
     assert_scale_start(context, 1_000)
   end
@@ -63,7 +67,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningScaleTest do
              )
 
     ids = spacecraft_ids(context, spacecraft_count)
-    approve_week_policy(context)
+    policy = approve_week_policy(context)
 
     for hour <- [0, 6, 12, 18] do
       schedule = %{
@@ -100,12 +104,16 @@ defmodule Cadence.ContactPlanning.FleetPlanningScaleTest do
     assert {:ok, review} = FleetPlanningStarts.preview(context.scope, context.mission_id, params)
     assert review.occurrence_count == expected
 
-    assert {:ok, run, refs} =
-             FleetPlanningStarts.create(
-               context.scope,
-               context.mission_id,
-               Map.put(params, "evidence", review.evidence)
-             )
+    {start_ms, start_peak_bytes, start_result} =
+      measure(fn ->
+        FleetPlanningStarts.create(
+          context.scope,
+          context.mission_id,
+          Map.put(params, "evidence", review.evidence)
+        )
+      end)
+
+    assert {:ok, run, refs} = start_result
 
     assert run.input_document["requirement_count"] == expected
     assert run.input_document["template_materialization"]["created_count"] == expected
@@ -120,6 +128,50 @@ defmodule Cadence.ContactPlanning.FleetPlanningScaleTest do
                run.fleet_planning_run_id
              )
            ) == expected
+
+    versions =
+      refs
+      |> Stream.chunk_every(500)
+      |> Enum.flat_map(fn batch ->
+        ids = Enum.map(batch, & &1.contact_requirement_id)
+        found = ContactRequirements.fetch_many(context.organization_id, context.mission_id, ids)
+        Enum.map(batch, fn ref -> found |> Map.fetch!(ref.contact_requirement_id) |> elem(1) end)
+      end)
+
+    {optimizer_ms, optimizer_peak_bytes, optimization} =
+      measure(fn -> FleetOptimizer.optimize(versions, [], policy, now: @start) end)
+
+    assert {:ok, result} = optimization
+    assert map_size(result.coverage_by_requirement) == expected
+
+    IO.puts(
+      "fleet scale #{spacecraft_count}: start_ms=#{start_ms} start_process_peak_bytes=#{start_peak_bytes} " <>
+        "optimizer_no_opportunities_ms=#{optimizer_ms} optimizer_process_peak_bytes=#{optimizer_peak_bytes}"
+    )
+  end
+
+  defp measure(fun) do
+    owner = self()
+    sampler = Task.async(fn -> sample_peak(owner, 0) end)
+    started = System.monotonic_time(:millisecond)
+    result = fun.()
+    elapsed = System.monotonic_time(:millisecond) - started
+    send(sampler.pid, :stop)
+    {elapsed, Task.await(sampler, 5_000), result}
+  end
+
+  defp sample_peak(owner, previous) do
+    current =
+      case Process.info(owner, :memory) do
+        {:memory, bytes} -> max(previous, bytes)
+        nil -> previous
+      end
+
+    receive do
+      :stop -> current
+    after
+      100 -> sample_peak(owner, current)
+    end
   end
 
   defp spacecraft_ids(context, count) do
@@ -167,5 +219,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningScaleTest do
                version.content_sha256,
                "Scale planning boundary"
              )
+
+    version
   end
 end

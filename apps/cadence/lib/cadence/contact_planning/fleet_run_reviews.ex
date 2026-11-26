@@ -82,19 +82,5 @@ defmodule Cadence.ContactPlanning.FleetRunReviews do
   defp matching_inputs?(%{"requirements_sha256" => expected}, actual),
     do: expected == ContentHash.sha256(Enum.sort(actual))
 
-  defp matching_inputs?(%{"requirements" => expected}, actual) when is_list(expected) do
-    if length(expected) == length(actual) and Enum.all?(expected, &is_map/1) do
-      legacy =
-        Enum.map(expected, fn ref ->
-          {ref["contact_requirement_id"], ref["contact_requirement_version"],
-           ref["content_sha256"]}
-        end)
-
-      Enum.sort(legacy) == Enum.sort(actual)
-    else
-      false
-    end
-  end
-
   defp matching_inputs?(_, _), do: false
 end

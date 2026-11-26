@@ -12,40 +12,9 @@ defmodule Cadence.ContactPlanning.FleetRunReviewsTest do
   }
 
   alias Cadence.FleetRunFixtures, as: Fixtures
-  alias Cadence.Management.Contacts.Store.FleetPlanningRunRow
   alias Cadence.PolicyReviewer
   alias Cadence.Repo
   setup do: Fixtures.setup_run()
-
-  test "legacy run documents remain reviewable after hash pins move to refs", c do
-    [ref] =
-      FleetPlanningRuns.list_requirement_refs(
-        c.organization_id,
-        c.mission_id,
-        c.run.fleet_planning_run_id
-      )
-
-    document =
-      c.run.input_document
-      |> Map.delete("requirements_sha256")
-      |> Map.put("requirements", [
-        %{
-          "contact_requirement_id" => ref.contact_requirement_id,
-          "contact_requirement_version" => ref.contact_requirement_version,
-          "content_sha256" => ref.input_content_sha256
-        }
-      ])
-
-    c.run.fleet_planning_run_id
-    |> then(&Repo.get!(FleetPlanningRunRow, &1))
-    |> Ecto.Changeset.change(input_document: document)
-    |> Repo.update!()
-
-    assert {:ok, review} =
-             FleetRunReviews.load(c.scope, c.mission_id, c.run.fleet_planning_run_id)
-
-    assert review.refs == [ref]
-  end
 
   test "scoped review is read-only and continuation requires exact observed evidence", c do
     id = c.run.fleet_planning_run_id
