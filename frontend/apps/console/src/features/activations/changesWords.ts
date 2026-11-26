@@ -210,9 +210,12 @@ export function namesLine(g: ChangeGroup): string {
   return `${listed.join(", ")} and ${formatCount(g.count - listed.length)} more`;
 }
 
-/** `Show all 300`, when the line doesn't list every name; null otherwise. */
-export const showAllLabel = (g: ChangeGroup) =>
-  g.count > NAMES_LISTED ? `Show all ${formatCount(g.count)}` : null;
+/**
+ * The names disclosure's label (#176: it pages the names in, so it no longer says "all"):
+ * `Show names (300)` / `Hide names`, when the line doesn't list every name; null otherwise.
+ */
+export const showNamesLabel = (g: ChangeGroup, open: boolean) =>
+  g.count > NAMES_LISTED ? (open ? "Hide names" : `Show names (${formatCount(g.count)})`) : null;
 
 /** U90/U94's first-start line, for a group of one or many. */
 export const firstStartLine = (g: ChangeGroup) =>
