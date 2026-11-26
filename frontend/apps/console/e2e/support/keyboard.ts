@@ -170,7 +170,12 @@ function probeStop(exclude: readonly string[]): ProbedStop | null {
   const y = rect.top + rect.height / 2;
   if (problems.length === 0) {
     if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) {
-      problems.push("off screen when focused");
+      // The geometry says which way it left: a tall stop's centre below the fold, or a link
+      // left outside a sideways strip (#189 sweep).
+      const box = `${Math.round(rect.left)},${Math.round(rect.top)} ${Math.round(rect.width)}×${Math.round(rect.height)}`;
+      problems.push(
+        `off screen when focused (at ${box} in ${window.innerWidth}×${window.innerHeight})`,
+      );
     } else {
       const top = document.elementFromPoint(x, y);
       // An excluded overlay (the dev-only toolbar) isn't in production, so it doesn't count.
