@@ -14,7 +14,7 @@ here and reviews them. Change this file in the same PR as the pattern it describ
 | Shell, router, API client, live socket | `src/{shell,router,api,live}/**`                                                                                                                                                 |
 | Browser tests                          | `e2e/` (Playwright; `e2e/a11y/` holds the axe passes)                                                                                                                            |
 | Build output                           | `apps/cadence_web/priv/static/console/` (gitignored)                                                                                                                             |
-| Phoenix glue                           | `CadenceWeb.Console.Shell` (serves the index), the `/api/v1` scope, `CadenceWeb.ConsoleSocket` at `/socket`                                                              |
+| Phoenix glue                           | `CadenceWeb.Console.Shell` (serves the index), the `/api/v1` scope, `CadenceWeb.ConsoleSocket` at `/socket`                                                                      |
 
 Features import shared code only through the public entries:
 
