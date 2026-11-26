@@ -15,7 +15,7 @@ defmodule Cadence.Contacts.LinkAssignmentStore do
   alias Cadence.Contacts.ProfileStore
   alias Cadence.Listing
   alias Cadence.Missions
-  alias Cadence.Persistence.BulkLookup
+  alias Cadence.Persistence.{BulkInsert, BulkLookup, JsonDocument}
   alias Cadence.Repo
   alias Cadence.SourceEndpoints
   alias Cadence.SpacecraftStore
@@ -164,6 +164,48 @@ defmodule Cadence.Contacts.LinkAssignmentStore do
 
       {:ok, %LinkAssignment{assignment | lifecycle_state: :deleted, metadata: metadata}}
     end
+  end
+
+  @doc false
+  def persist_route_assignments(assignments) do
+    BulkInsert.changesets(
+      LinkAssignmentRow,
+      Stream.map(assignments, &LinkAssignmentRow.changeset/1)
+    )
+  end
+
+  @doc false
+  def retire_route_assignments(organization_id, mission_id, retired_by) do
+    now = DateTime.utc_now() |> DateTime.to_iso8601()
+
+    LinkAssignmentRow
+    |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
+    |> BulkLookup.by_id(:link_assignment_id, Map.keys(retired_by))
+    |> Enum.reject(&(&1.lifecycle_state == "deleted"))
+    |> Enum.map(fn row ->
+      metadata =
+        row.metadata
+        |> JsonDocument.unwrap_value()
+        |> Map.put("retired_by_routing_rule", Map.fetch!(retired_by, row.link_assignment_id))
+        |> Map.put("deleted_at", now)
+        |> JsonDocument.wrap_value()
+
+      %{id: row.link_assignment_id, metadata: metadata}
+    end)
+    |> Enum.chunk_every(500)
+    |> Enum.each(fn updates ->
+      types = %{id: :string, metadata: :map}
+
+      from(row in LinkAssignmentRow,
+        join: retired in values(updates, types),
+        on: row.link_assignment_id == retired.id,
+        where: row.organization_id == ^organization_id and row.mission_id == ^mission_id,
+        update: [set: [lifecycle_state: "deleted", metadata: retired.metadata]]
+      )
+      |> Repo.update_all([])
+    end)
+
+    :ok
   end
 
   defp validate(%LinkAssignment{} = assignment) do

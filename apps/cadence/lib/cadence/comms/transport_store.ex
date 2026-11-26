@@ -154,6 +154,27 @@ defmodule Cadence.Comms.TransportStore do
     |> Map.new(&{{&1.transport_id, &1.version}, TransportRow.to_domain(&1)})
   end
 
+  @doc false
+  def route_transports(organization_id, mission_id, station_ids, transport_ids) do
+    latest =
+      from(row in TransportRow,
+        where: row.organization_id == ^organization_id and row.mission_id == ^mission_id,
+        distinct: row.transport_id,
+        order_by: [desc: row.version]
+      )
+
+    active = from(row in subquery(latest), where: row.lifecycle_state == "active")
+
+    at_stations = BulkLookup.by_id(active, :ground_station_id, station_ids)
+    loaded = MapSet.new(at_stations, & &1.transport_id)
+    missing = Enum.reject(transport_ids, &MapSet.member?(loaded, &1))
+    named = BulkLookup.by_id(active, :transport_id, missing)
+
+    (at_stations ++ named)
+    |> Enum.uniq_by(& &1.transport_id)
+    |> Enum.map(&TransportRow.to_domain/1)
+  end
+
   @doc "A mission's transports (latest versions); archived ones only with `include_archived: true` (U82)."
   @spec list_transports(binary(), binary(), keyword()) :: [Transport.t()]
   def list_transports(organization_id, mission_id, opts \\ [])

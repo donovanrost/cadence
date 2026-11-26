@@ -23,6 +23,7 @@ defmodule Cadence.Comms.ConfigKinds.SpacecraftRoute do
   @behaviour Cadence.Platform.ConfigKind
 
   alias Cadence.Comms.{GroundStationStore, RoutePlan, RoutingRuleStore, TransportStore}
+  alias Cadence.Comms.RoutingRuleStore.Batch
   alias Cadence.Platform.ConfigFields, as: F
   alias Cadence.SpacecraftStore
 
@@ -39,12 +40,146 @@ defmodule Cadence.Comms.ConfigKinds.SpacecraftRoute do
 
   @impl true
   def load(organization_id, mission_id, ids) do
-    organization_id
-    |> RoutingRuleStore.list_routing_rules(mission_id)
-    |> Enum.filter(&(&1.origin == :spacecraft and &1.profile_rule_id in ids))
-    |> Enum.group_by(& &1.profile_rule_id)
-    |> Map.new(fn {id, rows} -> {id, document(rows)} end)
+    {documents, _rows} = load_batch(organization_id, mission_id, ids)
+    documents
   end
+
+  @impl true
+  def batchable?(op), do: replaces(Map.get(op.payload, "options", %{})) == []
+
+  @impl true
+  def load_batch(organization_id, mission_id, ids) do
+    rows = RoutingRuleStore.extra_route_rows(organization_id, mission_id, ids)
+
+    documents =
+      for {id, legs} <- rows,
+          current = document(active_rows(legs)),
+          current != nil,
+          into: %{},
+          do: {id, current}
+
+    {documents, rows}
+  end
+
+  @impl true
+  def write_batch(_org, _mission, [], _rows), do: {:ok, []}
+
+  def write_batch(org, mission, transitions, rows) do
+    documents = Enum.map(transitions, & &1.proposed) |> Enum.reject(&is_nil/1)
+    spacecraft_ids = Enum.map(documents, & &1["spacecraft_id"]) |> Enum.reject(&is_nil/1)
+    station_ids = Enum.map(documents, & &1["ground_station_id"]) |> Enum.reject(&is_nil/1)
+    transport_ids = Enum.map(documents, & &1["transport_id"]) |> Enum.reject(&is_nil/1)
+    {:ok, spacecraft} = SpacecraftStore.fetch_spacecrafts_in_batches(org, mission, spacecraft_ids)
+
+    context =
+      GroundStationStore.fetch_ground_stations(org, mission, station_ids)
+      |> RoutePlan.context(
+        TransportStore.route_transports(org, mission, station_ids, transport_ids)
+      )
+      |> Map.put(:spacecraft, spacecraft)
+      |> Map.put(:profile_choices, RoutingRuleStore.profile_choices(org, mission, spacecraft_ids))
+
+    {outcomes, planned} =
+      Enum.map_reduce(transitions, [], fn change, planned ->
+        case plan_batch_change(org, change, context, Map.get(rows, change.id, [])) do
+          {:ok, stored, legs} -> {{:ok, stored}, Enum.reverse(legs, planned)}
+          {:error, fields} -> {{:invalid, fields}, planned}
+        end
+      end)
+
+    with :ok <- Batch.persist(org, mission, Enum.reverse(planned), context) do
+      {:ok, outcomes}
+    end
+  end
+
+  defp plan_batch_change(_org, %{action: :delete}, _context, rows) do
+    {:ok, nil, Enum.map(active_rows(rows), &RoutingRuleStore.planned_archive/1)}
+  end
+
+  defp plan_batch_change(
+         _org,
+         %{
+           action: :update,
+           current: %{"spacecraft_id" => from},
+           proposed: %{"spacecraft_id" => to}
+         },
+         _context,
+         _rows
+       )
+       when from != to,
+       do: cannot_move()
+
+  defp plan_batch_change(org, change, context, rows) do
+    with {:ok, spacecraft} <- batch_spacecraft(context, change.proposed),
+         :ok <- transport_errors(context, change.proposed),
+         {:ok, routes} <- plan(context, spacecraft, change.id, change.proposed),
+         :ok <-
+           check_profile(
+             spacecraft,
+             routes,
+             Map.get(context.profile_choices, spacecraft.spacecraft_id, MapSet.new())
+           ) do
+      {:ok, written(change.proposed), plan_legs(org, change.proposed, rows, routes)}
+    end
+  end
+
+  defp plan_legs(org, document, rows, routes) do
+    current = Map.new(rows, &{&1.routing_rule_id, &1})
+    wanted = MapSet.new(routes, & &1.routing_rule_id)
+
+    updates =
+      for route <- routes,
+          rule = authored(%{route | organization_id: org}, document),
+          update = RoutingRuleStore.planned_change(Map.get(current, rule.routing_rule_id), rule),
+          update != nil,
+          do: update
+
+    archives =
+      rows
+      |> active_rows()
+      |> Enum.reject(&MapSet.member?(wanted, &1.routing_rule_id))
+      |> Enum.map(&RoutingRuleStore.planned_archive/1)
+
+    updates ++ archives
+  end
+
+  defp batch_spacecraft(context, proposed) do
+    case Map.fetch(context.spacecraft, proposed["spacecraft_id"]) do
+      {:ok, spacecraft} -> {:ok, spacecraft}
+      :error -> unknown_spacecraft()
+    end
+  end
+
+  defp active_rows(rows), do: Enum.reject(rows, &(&1.lifecycle_state == :archived))
+
+  defp cannot_move do
+    {:error,
+     [
+       F.error(
+         "spacecraft_id",
+         "An extra route can't move to another spacecraft; remove it and add one there"
+       )
+     ]}
+  end
+
+  defp unknown_spacecraft,
+    do: {:error, [F.error("spacecraft_id", "That spacecraft doesn't exist")]}
+
+  defp check_profile(spacecraft, routes, profile) do
+    if Enum.any?(routes, &MapSet.member?(profile, route_choice(&1))),
+      do:
+        {:error,
+         [
+           F.error(
+             "ground_station_id",
+             "#{spacecraft.display_name} already has this route from its profile."
+           )
+         ]},
+      else: :ok
+  end
+
+  defp route_choice(rule),
+    do: {rule.transport_id, Atom.to_string(rule.direction), Atom.to_string(rule.role)}
 
   @impl true
   def normalize(:delete, _id, nil), do: {:ok, nil}
@@ -74,14 +209,7 @@ defmodule Cadence.Comms.ConfigKinds.SpacecraftRoute do
 
   def validate(_org, _mission, :update, _id, %{"spacecraft_id" => from}, %{"spacecraft_id" => to})
       when from != to,
-      do:
-        {:error,
-         [
-           F.error(
-             "spacecraft_id",
-             "An extra route can't move to another spacecraft; remove it and add one there"
-           )
-         ]}
+      do: cannot_move()
 
   def validate(organization_id, mission_id, _action, id, _previous, proposed) do
     context = context(organization_id, mission_id)
@@ -168,7 +296,7 @@ defmodule Cadence.Comms.ConfigKinds.SpacecraftRoute do
   defp spacecraft(organization_id, mission_id, %{"spacecraft_id" => spacecraft_id}) do
     case SpacecraftStore.fetch_spacecraft(organization_id, mission_id, spacecraft_id) do
       {:ok, spacecraft} -> {:ok, spacecraft}
-      {:error, _missing} -> {:error, [F.error("spacecraft_id", "That spacecraft doesn't exist")]}
+      {:error, _missing} -> unknown_spacecraft()
     end
   end
 
@@ -253,18 +381,9 @@ defmodule Cadence.Comms.ConfigKinds.SpacecraftRoute do
         spacecraft.spacecraft_id
       )
       |> Enum.filter(&(&1.origin == :profile))
-      |> MapSet.new(&{&1.transport_id, &1.direction, &1.role})
+      |> MapSet.new(&route_choice/1)
 
-    if Enum.any?(routes, &MapSet.member?(profile, {&1.transport_id, &1.direction, &1.role})),
-      do:
-        {:error,
-         [
-           F.error(
-             "ground_station_id",
-             "#{spacecraft.display_name} already has this route from its profile."
-           )
-         ]},
-      else: :ok
+    check_profile(spacecraft, routes, profile)
   end
 
   defp replaces(options), do: Map.get(options || %{}, "replaces", [])

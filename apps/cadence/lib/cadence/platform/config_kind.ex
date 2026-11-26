@@ -172,6 +172,17 @@ defmodule Cadence.Platform.ConfigKind do
               touched :: [String.t()]
             ) :: {:ok, document()} | {:error, [field_error()]}
 
+  @doc """
+  Optionally runs a consecutive group of distinct entities together. Earlier operations are
+  already visible in the transaction. The pipeline still checks bases and records revisions.
+  """
+  @callback load_batch(String.t(), String.t(), [String.t()]) :: {map(), term()}
+  @callback write_batch(String.t(), String.t(), [map()], term()) ::
+              {:ok, [{:ok, document() | nil} | {:invalid, [field_error()]}]}
+              | {:error, String.t(), term()}
+              | {:error, term()}
+  @callback batchable?(map()) :: boolean()
+
   @optional_callbacks stage_check: 5,
                       stage_conflicts: 4,
                       translate: 5,
@@ -181,5 +192,8 @@ defmodule Cadence.Platform.ConfigKind do
                       finalize: 3,
                       holds: 3,
                       after_commit: 3,
-                      create_entity_id: 1
+                      create_entity_id: 1,
+                      load_batch: 3,
+                      write_batch: 4,
+                      batchable?: 1
 end
