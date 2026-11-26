@@ -15,8 +15,9 @@ defmodule Cadence.Persistence.Retention do
       an archive (rows or whole segments);
     * `pause_ms` (100): between chunks; `budget_ms` (60,000): the most one sweep runs; and
       `interval_ms` (600,000): between sweeps;
-    * `ingress_archive_days` and `protocol_archive_days`: how long the archives keep what they
-      index; both default to the observation retention, so the stores can't drift apart;
+    * `ingress_archive_days`, `protocol_archive_days` and `watermark_event_days`: how long the
+      archives keep what they index and how long the watermark history is kept; all default to the
+      observation retention, so the stores can't drift apart;
     * `stream_key_margin_days` (7): added to the replay horizon below.
 
   The observation retention is `:telemetry_observation_retention`'s `retention_days` (30), the
@@ -65,6 +66,11 @@ defmodule Cadence.Persistence.Retention do
   @spec protocol_archive_days(keyword()) :: pos_integer()
   def protocol_archive_days(settings \\ settings()),
     do: Keyword.get(settings, :protocol_archive_days) || observation_days()
+
+  @doc "How long the watermark event history is kept."
+  @spec watermark_event_days(keyword()) :: pos_integer()
+  def watermark_event_days(settings \\ settings()),
+    do: Keyword.get(settings, :watermark_event_days) || observation_days()
 
   @doc "How long the journal keeps a settled stream, in whole days (rounded up)."
   @spec journal_days() :: pos_integer()
