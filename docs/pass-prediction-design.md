@@ -35,15 +35,15 @@ latitudes from 78°N to 72°S, a 5° mask, a 60 s coarse step, and refinement to
 
 | Fleet × 15 stations × 7 days | Wall time | Passes | SGP4 evaluations |
 | --- | --- | --- | --- |
-| 500 spacecraft | 4.97 s | 271,131 | 18.0 M |
-| 1,000 spacecraft | 11.48 s | 542,273 | 36.0 M |
+| 500 spacecraft | 4.97 s | 271,131 | 13.0 M |
+| 1,000 spacecraft | 11.48 s | 542,273 | 25.9 M |
 
 These are laptop 1 numbers: M1, 8 cores, OTP 29, under memory pressure. Following the #217
 measurement rule, the recorded pair will be re-run on laptop 2 and posted on #177.
 
 - **CPU cost.** About 80 ms of CPU per spacecraft-week across 15 stations, so re-predicting one
   spacecraft after a new element set takes well under a second.
-- **Where the time goes.** Refinement is 72% of the evaluations (AOS and LOS bisection, TCA by
+- **Where the time goes.** Refinement is 61% of the evaluations (AOS and LOS bisection, TCA by
   golden section). Brent's method or parabolic TCA would cut that if we ever need to, but the
   budget doesn't ask for it.
 - **A Rust NIF would be faster still**, roughly an order of magnitude per evaluation. That would

@@ -444,5 +444,5 @@ calls = results |> Enum.map(&elem(&1, 1)) |> Enum.sum()
 coarse = n * trunc(span / step)
 
 IO.puts(
-  "elixir n=#{n} days=#{days} step=#{step_s}s conc=#{conc} stations=15: #{Float.round(us / 1.0e6, 2)} s, passes=#{passes}, sgp4 calls=#{coarse + calls} (coarse #{coarse}, refine #{calls}), otp=#{System.otp_release()}"
+  "elixir n=#{n} days=#{days} step=#{step_s}s conc=#{conc} stations=15: #{Float.round(us / 1.0e6, 2)} s, passes=#{passes}, sgp4 calls=#{calls} (coarse #{coarse}, refine #{calls - coarse}), otp=#{System.otp_release()}"
 )
