@@ -328,7 +328,12 @@ defmodule Cadence.Comms.RoutingRuleStore do
         select: %{
           spacecraft_id: r.spacecraft_id,
           enabled: filter(count(), r.enabled),
-          uplinks: filter(count(), r.enabled and r.direction in ["outbound", "bidirectional"]),
+          # UplinkResolution treats all stations on one authored rule as a single choice.
+          primary_uplinks:
+            filter(
+              count(coalesce(r.profile_rule_id, r.routing_rule_id), :distinct),
+              r.enabled and r.role == "primary" and r.direction in ["outbound", "bidirectional"]
+            ),
           downlinks: filter(count(), r.enabled and r.direction in ["inbound", "bidirectional"]),
           disabled: filter(count(), not r.enabled)
         }
@@ -340,7 +345,7 @@ defmodule Cadence.Comms.RoutingRuleStore do
     |> select([_s, r], %{
       routing_rule_count: fragment("COALESCE(SUM(?), 0)::bigint", r.enabled),
       without_routing: filter(count(), coalesce(r.enabled, 0) == 0),
-      multiple_uplinks: filter(count(), r.uplinks > 1),
+      multiple_uplinks: filter(count(), r.primary_uplinks > 1),
       without_downlink: filter(count(), r.enabled > 0 and r.downlinks == 0),
       disabled_route: filter(count(), r.disabled > 0)
     })

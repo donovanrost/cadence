@@ -510,7 +510,9 @@ Rules (v1), by area:
 - Units are singular when the count is 1.
 - `affected_count` is 0 for findings that aren't about a set of items.
 - Route findings count affected active spacecraft once per cause across materialized profile and
-  extra routes. Enabled bidirectional legs count toward both uplink and downlink. The downlink
+  extra routes. The multiple-uplinks finding counts distinct enabled primary routes with an
+  outbound or bidirectional leg. One rule across several stations is a single uplink choice.
+  The downlink
   blocker applies to spacecraft with an enabled route. Spacecraft without enabled routes use
   `spacecraft_without_routing_rule`. The disabled-route finding covers active disabled rows.
   Archived routes and profile routes excluded by an override are outside these counts.

@@ -192,8 +192,8 @@ defmodule Cadence.Reads.Readiness.Rules do
         :caution,
         :spacecraft_with_multiple_uplinks,
         routing.multiple_uplinks,
-        "have more than one uplink route",
-        "Review which route should carry commands.",
+        "have more than one primary uplink route",
+        "Cadence can't choose which route carries commands.",
         fix(:comms)
       ),
       count_finding(

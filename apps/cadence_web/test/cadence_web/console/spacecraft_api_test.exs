@@ -247,8 +247,27 @@ defmodule CadenceWeb.Console.SpacecraftAPITest do
         readiness_route(craft, direction, origin, enabled, state, now)
       end
 
+    single_primary_routes =
+      for craft <- Enum.slice(spacecraft, 100, 100),
+          {station_id, role} <- [
+            {"second", "primary"},
+            {"third", "primary"},
+            {"fourth", "candidate"},
+            {"fifth", "contributing"}
+          ] do
+        route = readiness_route(craft, "outbound", "profile", true, "active", now)
+
+        %{
+          route
+          | routing_rule_id: "#{route.routing_rule_id}-#{station_id}",
+            ground_station_id: station_id,
+            profile_rule_id: if(role == "primary", do: route.profile_rule_id, else: role),
+            role: role
+        }
+      end
+
     archived_route = readiness_route(archived, "outbound", "spacecraft", true, "active", now)
-    Repo.insert_all(RoutingRuleRow, [archived_route | routes])
+    Repo.insert_all(RoutingRuleRow, [archived_route | routes ++ single_primary_routes])
 
     data =
       c.user
@@ -273,7 +292,7 @@ defmodule CadenceWeb.Console.SpacecraftAPITest do
              } = findings[cause]
     end
 
-    assert %{"status" => "blocker", "secondary_count" => 500} =
+    assert %{"status" => "blocker", "secondary_count" => 900} =
              Enum.find(data["areas"], &(&1["key"] == "comms"))
   end
 
@@ -304,6 +323,8 @@ defmodule CadenceWeb.Console.SpacecraftAPITest do
       spacecraft_id: craft.spacecraft_id,
       spacecraft_type_id: if(origin == "profile", do: craft.spacecraft_type_id),
       spacecraft_type_version: if(origin == "profile", do: craft.spacecraft_type_version),
+      profile_rule_id: if(origin == "profile", do: "profile-#{direction}"),
+      ground_station_id: "first",
       lifecycle_state: state,
       display_name: "Fleet route",
       purpose_label: "Readiness",
