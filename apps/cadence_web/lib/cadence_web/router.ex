@@ -568,6 +568,8 @@ defmodule CadenceWeb.Router do
       post("/attention/provider_change/:id/approve", ProviderChangeController, :approve)
       post("/attention/provider_change/:id/reject", ProviderChangeController, :reject)
       post("/attention/provider_change/:id/acknowledge", ProviderChangeController, :acknowledge)
+      # U37 (#847): one pass's open settlement item, without reading the action queue.
+      get("/attention/contact_settlement", AttentionController, :settlement)
       post("/attention/:source/:id/acknowledge", AttentionController, :acknowledge)
       post("/attention/:source/:id/resolve", AttentionController, :resolve)
       post("/attention/:source/:id/retry", AttentionController, :retry)
