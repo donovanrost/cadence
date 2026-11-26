@@ -35,20 +35,20 @@ defmodule Cadence.Runtime.PartitionOwner.CurrentValueSeed do
   def start(state, opts \\ []) do
     history = Keyword.get_lazy(opts, :history_store_policy, &HistoryStore.configured_policy/0)
 
-    if applies?(state, history) do
-      spread = Keyword.get(opts, :spread_ms, @default_spread_ms)
-      notify = Keyword.get(opts, :notify)
-      job = job(state, history)
-
-      {:ok, _pid} =
-        Task.start(fn ->
-          if spread > 0, do: Process.sleep(:rand.uniform(spread))
-          result = seed(job)
-          if notify, do: send(notify, {:current_values_seeded, result})
-        end)
-    end
-
+    if applies?(state, history), do: spawn_seed(job(state, history), opts)
     :ok
+  end
+
+  defp spawn_seed(job, opts) do
+    spread = Keyword.get(opts, :spread_ms, @default_spread_ms)
+    notify = Keyword.get(opts, :notify)
+
+    {:ok, _pid} =
+      Task.start(fn ->
+        if spread > 0, do: Process.sleep(:rand.uniform(spread))
+        result = seed(job)
+        if notify, do: send(notify, {:current_values_seeded, result})
+      end)
   end
 
   defp applies?(

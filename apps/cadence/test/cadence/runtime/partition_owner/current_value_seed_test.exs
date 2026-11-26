@@ -6,8 +6,8 @@ defmodule Cadence.Runtime.PartitionOwner.CurrentValueSeedTest do
   """
   use Cadence.DataCase, async: false
 
-  alias Cadence.Runtime.PartitionOwner.CurrentValueSeed
   alias Cadence.Runtime.PartitionKey
+  alias Cadence.Runtime.PartitionOwner.CurrentValueSeed
   alias Cadence.Telemetry.{CurrentValueStore, HistoryStore, Sample, Storage}
   alias Cadence.Telemetry.CurrentValueStore.ETS
   alias Cadence.Telemetry.Storage.QuestDB.ObservationReader

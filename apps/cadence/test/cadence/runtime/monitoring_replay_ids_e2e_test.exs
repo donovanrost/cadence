@@ -253,33 +253,72 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
   end
 
   # #831: after a node restart the ETS current-value store is empty until each spacecraft's next
-  # frame. A starting owner puts its snapshot's latest values in it, with their own times. (The
-  # test runtime records into the Postgres store, so the restarted owner is started by hand, under
-  # an ETS store, taking the partition over from the one that wrote the snapshot.)
-  test "a starting owner seeds the ETS store from its snapshot before any new frame", c do
-    alias Cadence.Telemetry.CurrentValueStore
+  # frame. A starting owner seeds it from QuestDB's latest values for its source endpoint, before
+  # any new frame, each with its own (old) time. (The test runtime records into Postgres and has no
+  # QuestDB, so the owner is started by hand under an ETS store with a QuestDB answer injected.)
+  test "a starting owner seeds the ETS store from the history store before any new frame", c do
+    alias Cadence.Telemetry.{CurrentValueStore, HistoryStore}
     alias Cadence.Telemetry.CurrentValueStore.ETS
+    alias Cadence.Telemetry.Storage.QuestDB.ObservationReader
 
     mission = c.mission.mission_id
-    key = %PartitionKey{affinity: :source_endpoint, value: c.endpoint.source_endpoint_id}
-    raised = frames(mode: 50, aux: 7, sequence: 1)
+    endpoint = c.endpoint.source_endpoint_id
+    key = %PartitionKey{affinity: :source_endpoint, value: endpoint}
+    old = ~U[2026-11-20 10:00:00Z]
 
-    capture_log(fn ->
-      assert transition?(ingest!(evidence(c, raised, 0)), :critical)
-      snapshot_now!(c)
+    columns = ObservationReader.select_columns()
 
-      cache = CurrentValueStore.policy(module: ETS)
-      start_supervised!(CurrentValueStore.child_spec(cache))
-      assert CurrentValueStore.latest_values_for_mission(cache, mission, []) == []
-
-      {:ok, spec} = MissionCoordinator.active_spec(mission)
-      configured = Persistence.configured_policy()
-
-      policy = %{
-        configured
-        | telemetry_storage: %{configured.telemetry_storage | current_value_store_policy: cache}
+    row = fn point, value ->
+      values = %{
+        "sample_id" => "q-#{point}",
+        "mission_id" => mission,
+        "spacecraft_id" => c.craft.spacecraft_id,
+        "point_id" => point,
+        "point_name" => point,
+        "packet_definition_id" => "pd",
+        "packet_definition_version" => 1,
+        "packet_id" => "pk",
+        "evidence_id" => "ev",
+        "value_kind" => "double",
+        "value_double" => value,
+        "quality_state" => "good",
+        "generation_time" => DateTime.to_iso8601(old),
+        "receipt_time" => DateTime.to_iso8601(old),
+        "realm" => "flight",
+        "data_source_id" => "managed_questdb_primary",
+        "binding_id" => "default_flight_telemetry",
+        "source_endpoint_id" => endpoint,
+        "validity_state" => "canonical"
       }
 
+      Enum.map(columns, &Map.get(values, &1))
+    end
+
+    exec = fn _sql, _opts ->
+      {:ok,
+       %{
+         "columns" => Enum.map(columns, &%{"name" => &1}),
+         "dataset" => [
+           row.("HEALTH.mode", 50.0),
+           row.("HEALTH.aux", 7.0),
+           row.("HEALTH.other", 1.0)
+         ]
+       }}
+    end
+
+    cache = CurrentValueStore.policy(module: ETS)
+    start_supervised!(CurrentValueStore.child_spec(cache))
+    assert CurrentValueStore.latest_values_for_mission(cache, mission, []) == []
+
+    {:ok, spec} = MissionCoordinator.active_spec(mission)
+    configured = Persistence.configured_policy()
+
+    policy = %{
+      configured
+      | telemetry_storage: %{configured.telemetry_storage | current_value_store_policy: cache}
+    }
+
+    capture_log(fn ->
       {:ok, owner} =
         PartitionOwner.start_link(
           mission_id: mission,
@@ -287,22 +326,33 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
           active_activation: spec,
           binding_set: spec.binding_set,
           persistence_policy: policy,
-          register?: false
+          register?: false,
+          current_value_seed: [
+            history_store_policy: %{
+              backend: HistoryStore.QuestDB,
+              backend_opts: [exec_fun: exec]
+            },
+            spread_ms: 0,
+            notify: self()
+          ]
         )
 
       on_exit(fn -> if Process.alive?(owner), do: Process.exit(owner, :kill) end)
 
-      # Before any frame: the values are there, as old as they are.
+      # Before any frame: every point the endpoint wrote is back, as old as it is.
+      assert_receive {:current_values_seeded, {:ok, 3}}, 2_000
+
       values =
         Map.new(
           CurrentValueStore.latest_values_for_mission(cache, mission, []),
           &{&1.point_id, &1}
         )
 
-      assert %{engineering_value: 50, receipt_time: at} = values["HEALTH.mode"]
-      assert %{engineering_value: 7} = values["HEALTH.aux"]
-      assert DateTime.compare(at, ~U[2026-11-17 02:00:00Z]) == :lt
-      assert %{seeded_from: "semantic_snapshot"} = values["HEALTH.mode"].provenance
+      assert %{engineering_value: 50.0, receipt_time: at} = values["HEALTH.mode"]
+      assert DateTime.compare(at, old) == :eq
+      assert %{engineering_value: 7.0} = values["HEALTH.aux"]
+      # A point no semantic plan evaluates is seeded too.
+      assert %{engineering_value: 1.0} = values["HEALTH.other"]
     end)
   end
 
