@@ -44,9 +44,10 @@ defmodule Cadence.Protocol.TMFrameIngress do
          {:ok, pipeline_state, frame_remainder, next_continuity_state} <-
            prepare_receive_stream(raw_evidence, pipeline_state, continuity_state, frame_remainder),
          absolute_base_offset = absolute_base_offset(raw_evidence, frame_remainder),
+         buffer = frame_remainder <> raw_evidence.raw,
          {:ok, sdu_octets, frame_infos, decode_anomalies, rest, next_pipeline_state, scid_check} <-
            TMFramePipeline.decode_sdu_octets_checked(
-             frame_remainder <> raw_evidence.raw,
+             buffer,
              codec_opts,
              pipeline_state,
              decode_context(raw_evidence, absolute_base_offset)
@@ -54,7 +55,7 @@ defmodule Cadence.Protocol.TMFrameIngress do
          {:ok, packet_records} <-
            build_packet_records(raw_evidence, sdu_octets, absolute_base_offset) do
       transfer_frame_records =
-        build_transfer_frame_records(raw_evidence, frame_infos, absolute_base_offset)
+        build_transfer_frame_records(raw_evidence, frame_infos, absolute_base_offset, buffer)
 
       protocol_anomalies =
         build_pipeline_anomalies(raw_evidence, decode_anomalies, absolute_base_offset)
@@ -239,10 +240,13 @@ defmodule Cadence.Protocol.TMFrameIngress do
     end
   end
 
+  # `buffer` is the bytes the frames were decoded from (a remainder, then this evidence's), which
+  # their offsets index: each frame's own bytes are hashed here, where they are in hand.
   defp build_transfer_frame_records(
          %RawEvidence{} = raw_evidence,
          frame_infos,
-         absolute_base_offset
+         absolute_base_offset,
+         buffer
        )
        when is_list(frame_infos) do
     Enum.map(frame_infos, fn frame_info ->
@@ -269,6 +273,15 @@ defmodule Cadence.Protocol.TMFrameIngress do
         raw_frame_offset_bytes: absolute_offset,
         raw_frame_length_bytes: frame_info.raw_frame_length_bytes,
         payload_length_bytes: byte_size(frame.payload_octets),
+        frame_sha256:
+          :crypto.hash(
+            :sha256,
+            binary_part(
+              buffer,
+              frame_info.raw_frame_offset_bytes,
+              frame_info.raw_frame_length_bytes
+            )
+          ),
         first_header_pointer: Map.get(frame.meta, :fhp),
         quality: frame.quality,
         source_time: frame.timestamp || raw_evidence.source_time,
