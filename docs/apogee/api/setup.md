@@ -1591,5 +1591,6 @@ ingress identity mappings. POST requests require the session's CSRF token.
 
 Lists accept `page` (default 1) and `page_size` (default 50, maximum 100). The response contains
 `data` and `meta` with `page`, `page_size`, and `total_count`. Creation accepts a
-`source_endpoint` object with `source_endpoint_id`, `source_ref`, `display_name`, optional
-`scid` and `metadata`, and an optional `spacecraft_id` on the mission route.
+`source_endpoint` object with `source_ref`, `display_name`, optional `scid` and `metadata`, and
+an optional `spacecraft_id` on the mission route. The server generates `source_endpoint_id` and
+returns it with the stored endpoint. Supplying the ID on create returns `422 invalid_params`.

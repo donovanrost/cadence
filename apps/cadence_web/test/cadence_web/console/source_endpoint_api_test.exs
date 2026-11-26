@@ -1,11 +1,15 @@
 defmodule CadenceWeb.Console.SourceEndpointAPITest do
   use CadenceWeb.ConnCase, async: true
 
+  alias Cadence.Organizations
+  alias Cadence.Organizations.Organization
+  alias Cadence.SourceEndpoints
+  alias Cadence.SourceEndpoints.SourceEndpoint
   alias CadenceWeb.{ControlPlaneApiFixtures, TestFixtures}
 
   setup %{conn: conn} do
     fixture = ControlPlaneApiFixtures.bootstrap(conn)
-    {:ok, organization} = Cadence.Organizations.fetch_organization(fixture.organization_id)
+    {:ok, organization} = Organizations.fetch_organization(fixture.organization_id)
     admin = TestFixtures.persist_user!()
     TestFixtures.grant_membership!(admin, organization, role: :organization_admin)
 
@@ -31,28 +35,30 @@ defmodule CadenceWeb.Console.SourceEndpointAPITest do
     spacecraft_path = context.path <> "/spacecraft/#{context.spacecraft_id}/source-endpoints"
     conn = session_conn(context.session)
 
-    assert %{"data" => %{"source_endpoint_id" => "endpoint-mission", "spacecraft_id" => nil}} =
+    assert %{"data" => %{"source_endpoint_id" => mission_endpoint_id, "spacecraft_id" => nil}} =
              conn
              |> post(mission_path, endpoint("endpoint-mission"))
              |> json_response(201)
 
-    assert %{"data" => %{"source_endpoint_id" => "endpoint-spacecraft", "spacecraft_id" => id}} =
+    assert %{"data" => %{"source_endpoint_id" => spacecraft_endpoint_id, "spacecraft_id" => id}} =
              conn
              |> post(spacecraft_path, endpoint("endpoint-spacecraft"))
              |> json_response(201)
 
     assert id == context.spacecraft_id
+    assert mission_endpoint_id != spacecraft_endpoint_id
+    [_first, second] = Enum.sort([mission_endpoint_id, spacecraft_endpoint_id])
 
     assert %{
-             "data" => [%{"source_endpoint_id" => "endpoint-spacecraft"}],
+             "data" => [%{"source_endpoint_id" => ^second}],
              "meta" => %{"page" => 2, "page_size" => 1, "total_count" => 2}
            } = conn |> get(mission_path <> "?page=2&page_size=1") |> json_response(200)
 
-    assert %{"data" => [%{"source_endpoint_id" => "endpoint-spacecraft"}]} =
+    assert %{"data" => [%{"source_endpoint_id" => ^spacecraft_endpoint_id}]} =
              conn |> get(spacecraft_path) |> json_response(200)
 
     assert %{"data" => %{"display_name" => "endpoint-spacecraft"}} =
-             conn |> get(mission_path <> "/endpoint-spacecraft") |> json_response(200)
+             conn |> get(mission_path <> "/#{spacecraft_endpoint_id}") |> json_response(200)
   end
 
   test "requires CSRF, denies services and removes the bearer route", context do
@@ -101,13 +107,80 @@ defmodule CadenceWeb.Console.SourceEndpointAPITest do
              |> json_response(403)
   end
 
+  test "client IDs cannot probe endpoints owned by another organization", context do
+    {:ok, other} =
+      Organizations.persist_organization(
+        Organization.new(%{
+          organization_id: "org-other-source",
+          slug: "org-other-source",
+          display_name: "Other source organization"
+        })
+      )
+
+    mission =
+      ControlPlaneApiFixtures.persist_mission!(other.organization_id, "mission-other-source")
+
+    {:ok, theirs} =
+      SourceEndpoints.persist_source_endpoint(
+        other.organization_id,
+        SourceEndpoint.new(%{
+          mission_id: mission.mission_id,
+          source_ref: "other-source"
+        })
+      )
+
+    conn = session_conn(context.session)
+    path = context.path <> "/source-endpoints"
+    their_id = theirs.source_endpoint_id
+
+    assert %{"error" => %{"code" => "source_endpoint_not_found"}} =
+             conn |> get(path <> "/#{their_id}") |> json_response(404)
+
+    rejection = fn id ->
+      attrs = put_in(endpoint("probe"), ["source_endpoint", "source_endpoint_id"], id)
+      conn |> post(path, attrs) |> json_response(422)
+    end
+
+    assert rejection.(their_id) == rejection.("unknown-id")
+
+    assert %{
+             "error" => %{
+               "code" => "invalid_params",
+               "details" => %{"field" => "source_endpoint_id"}
+             }
+           } = rejection.(their_id)
+  end
+
+  test "repeated creates use server IDs and cannot echo an update to an existing row", context do
+    conn = session_conn(context.session)
+    path = context.path <> "/source-endpoints"
+
+    assert %{"data" => %{"source_endpoint_id" => original_id, "display_name" => "original"}} =
+             conn |> post(path, endpoint("original")) |> json_response(201)
+
+    attrs = put_in(endpoint("changed"), ["source_endpoint", "source_endpoint_id"], original_id)
+
+    assert %{"error" => %{"code" => "invalid_params"}} =
+             conn |> post(path, attrs) |> json_response(422)
+
+    assert %{"data" => %{"source_endpoint_id" => second_id, "display_name" => "changed"}} =
+             conn |> post(path, endpoint("changed")) |> json_response(201)
+
+    assert original_id != second_id
+
+    assert %{"data" => %{"display_name" => "original"}} =
+             conn |> get(path <> "/#{original_id}") |> json_response(200)
+
+    assert %{"data" => %{"display_name" => "changed"}} =
+             conn |> get(path <> "/#{second_id}") |> json_response(200)
+  end
+
   defp session_conn(session),
     do: Plug.Test.init_test_session(build_conn(), %{user_session_token: session})
 
   defp endpoint(id) do
     %{
       "source_endpoint" => %{
-        "source_endpoint_id" => id,
         "source_ref" => id,
         "display_name" => id,
         "scid" => 23

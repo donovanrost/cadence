@@ -13,7 +13,6 @@ defmodule CadenceWeb.Console.SourceEndpointParams do
          {:ok, spacecraft_id} <- resolve_spacecraft_id(params, scoped_spacecraft_id) do
       {:ok,
        SourceEndpoint.new(%{
-         source_endpoint_id: string_value(params, "source_endpoint_id"),
          organization_id: organization_id,
          mission_id: mission_id,
          spacecraft_id: spacecraft_id,

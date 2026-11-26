@@ -46,10 +46,11 @@ defmodule CadenceWeb.Console.SourceEndpointController do
     end
   end
 
-  def create(conn, %{"source_endpoint" => attrs}) when is_map(attrs) do
+  def create(conn, %{"source_endpoint" => attrs} = params) when is_map(attrs) do
     spacecraft_id = Map.get(conn.path_params, "spacecraft_id")
 
     with :ok <- authorize(conn),
+         :ok <- reject_supplied_id(params, attrs),
          :ok <- ensure_spacecraft(conn, spacecraft_id),
          {:ok, endpoint} <-
            SourceEndpointParams.source_endpoint(
@@ -58,7 +59,13 @@ defmodule CadenceWeb.Console.SourceEndpointController do
              spacecraft_id,
              attrs
            ),
-         {:ok, saved} <- SourceEndpoints.persist_source_endpoint(org_id(conn), endpoint) do
+         {:ok, _created} <- SourceEndpoints.persist_source_endpoint(org_id(conn), endpoint),
+         {:ok, saved} <-
+           SourceEndpoints.fetch_source_endpoint(
+             org_id(conn),
+             mission_id(conn),
+             endpoint.source_endpoint_id
+           ) do
       conn |> put_status(:created) |> json(%{data: encode(saved)})
     else
       error -> failure(conn, error)
@@ -66,6 +73,12 @@ defmodule CadenceWeb.Console.SourceEndpointController do
   end
 
   def create(conn, _params), do: Problem.respond(conn, :invalid_params)
+
+  defp reject_supplied_id(params, attrs) do
+    if Map.has_key?(params, "source_endpoint_id") or Map.has_key?(attrs, "source_endpoint_id"),
+      do: {:error, {:invalid_param, "source_endpoint_id", :server_generated}},
+      else: :ok
+  end
 
   defp authorize(conn) do
     Policy.authorize(conn.assigns.current_scope, :manage_mission, %{
