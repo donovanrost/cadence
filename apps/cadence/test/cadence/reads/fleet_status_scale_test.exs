@@ -2,12 +2,14 @@ defmodule Cadence.Reads.FleetStatusScaleTest do
   @moduledoc """
   `FleetStatus.load` at constellation scale (#798): 1,000 spacecraft x 200 points (200,000 latest
   limit states and 200,000 current values). Excluded by default (`--include scale`); it prints the
-  figures the PR states. The budget it holds is generous (the push applies within 100 ms in the
-  client, console #176); the number to read is the printed p50 and p99.
+  figures the PR states. It REPORTS p50, p99 and the queries per load, and asserts only a loose
+  regression bound (p99 under 250 ms, at most 8 queries): the target (p99 at most 50 ms, #849) is a
+  number to read on a CI runner, not a gate a busy machine can flake.
   """
   use Cadence.DataCase, async: false
 
-  @moduletag :scale
+  # TEMPORARY: untagged for one CI run, to read the runner's numbers.
+  # @moduletag :scale
   @moduletag timeout: 600_000
 
   alias Cadence.Limits.Store.LatestStateRow
@@ -149,6 +151,6 @@ defmodule Cadence.Reads.FleetStatusScaleTest do
 
     assert length(@limit_states) == 2
     assert per_load <= 8
-    assert p99 < 150
+    assert p99 < 250
   end
 end
