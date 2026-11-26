@@ -14,7 +14,7 @@ import {
 import { passChangeReader } from "@/features/now/index.ts";
 import { passAttention, passAttentionList, withPassAttentions } from "./passAttentionReader.ts";
 import { listenerOverlapKey } from "./listenerOverlap.ts";
-import { passListReader } from "./passList.ts";
+import type { PassWindow } from "./passList.ts";
 import { passReadinessReader } from "./readiness.ts";
 
 /** Contract: docs/apogee/api/contacts.md, `GET /missions/:mission_id/passes` (M7 / S1). */
@@ -328,8 +328,7 @@ export function fetchPassTechnical(missionId: MissionId, passId: string, signal?
   );
 }
 
-export const passesReader = passListReader(pass);
-export type Passes = Decoded<typeof passesReader>;
+export type Passes = PassWindow<Pass>;
 export type Pass = Decoded<typeof pass>;
 
 /** One pass in any window (8329ec68): Review from Now can name a pass days out. 404 pass_not_found. */
@@ -341,24 +340,6 @@ export function fetchPass(
   return request(
     `/missions/${encodeURIComponent(missionId)}/passes/${encodeURIComponent(passId)}`,
     pass,
-    signal ? { signal } : {},
-  );
-}
-
-export function fetchPasses(
-  missionId: MissionId,
-  query: Readonly<{ from: Date; to: Date; spacecraftId?: string; station?: string }>,
-  signal?: AbortSignal,
-): Promise<ApiResult<Passes>> {
-  const params = new URLSearchParams({
-    from: query.from.toISOString(),
-    to: query.to.toISOString(),
-  });
-  if (query.spacecraftId) params.set("spacecraft_id", query.spacecraftId);
-  if (query.station) params.set("station", query.station);
-  return request(
-    `/missions/${encodeURIComponent(missionId)}/passes?${params.toString()}`,
-    passesReader,
     signal ? { signal } : {},
   );
 }

@@ -2,7 +2,8 @@ import { mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { decode } from "@/api/index.ts";
 import PassResolutionsCallout from "@/features/scheduling/PassResolutionsCallout.vue";
-import { passesReader, type Pass } from "./api.ts";
+import type { Pass } from "./api.ts";
+import { passesPageReader } from "./passes-api.ts";
 import { passAttentions, passAttentionTag, passUnshown } from "./passAttention.ts";
 
 /** An open item as the pass carries it (the queue's object). */
@@ -43,10 +44,10 @@ const pass = (id: string, o: Record<string, unknown> = {}) => ({
   ...o,
 });
 const passesOf = (...passes: unknown[]): readonly Pass[] => {
-  const r = decode(passesReader, {
+  const r = decode(passesPageReader, {
     from: "2026-11-17T00:00:00Z",
     to: "2026-11-18T00:00:00Z",
-    truncated: false,
+    counts: { total: 0, booked: 0, hand_started: 0, in_contact: 0, upcoming: 0, synthetic: 0 },
     passes,
   });
   if (!r.ok) throw new Error(r.error.message);

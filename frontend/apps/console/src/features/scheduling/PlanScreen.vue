@@ -92,7 +92,6 @@ const hits = computed(() =>
 );
 /** U20: an interrupted execution's callout and how many requests are left. */
 const stopped = useBookingStopped(
-  missionId,
   computed(() => (view.value.kind === "plan" ? view.value.plan : null)),
 );
 /** U73: `?version=N` of an older version is read-only (the latest version's number, else null). */

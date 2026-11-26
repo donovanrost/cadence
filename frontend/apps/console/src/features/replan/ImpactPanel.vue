@@ -77,11 +77,10 @@ defineEmits<{ retry: [] }>();
             </li>
           </ul>
           <p
-            v-if="impact.truncated || impact.rows.length > 40"
+            v-if="impact.rows.length > 40"
             class="m-0 border-t border-hairline px-4 py-2 text-sm text-text-3"
           >
-            Showing {{ Math.min(40, impact.rows.length) }} of {{ impact.passes
-            }}{{ impact.truncated ? "; the window was truncated by the server" : "" }}.
+            Showing 40 of {{ impact.passes }}.
           </p>
         </template>
       </template>

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { decode } from "@/api/index.ts";
 import { unshownWords } from "@/features/now/unshown.ts";
-import { passesReader } from "./api.ts";
+import { passesPageReader } from "./passes-api.ts";
 
 const pass = (id: string, o: Record<string, unknown> = {}) => ({
   id,
@@ -23,10 +23,10 @@ const pass = (id: string, o: Record<string, unknown> = {}) => ({
   ...o,
 });
 const read = (passes: unknown[]) =>
-  decode(passesReader, {
+  decode(passesPageReader, {
     from: "2026-11-17T00:00:00Z",
     to: "2026-11-18T00:00:00Z",
-    truncated: false,
+    counts: { total: 0, booked: 0, hand_started: 0, in_contact: 0, upcoming: 0, synthetic: 0 },
     passes,
   });
 
@@ -42,9 +42,14 @@ describe("the passes list, read pass by pass (U86)", () => {
   });
 
   it("the list itself stays strict, and nothing dropped reads empty", () => {
-    expect(decode(passesReader, { from: "x", to: "y", truncated: false, passes: [] }).ok).toBe(
-      false,
-    );
+    expect(
+      decode(passesPageReader, {
+        from: "x",
+        to: "y",
+        counts: { total: 0, booked: 0, hand_started: 0, in_contact: 0, upcoming: 0, synthetic: 0 },
+        passes: [],
+      }).ok,
+    ).toBe(false);
     const r = read([pass("pass-1")]);
     expect(r.ok && r.value.unshown).toEqual([]);
   });
