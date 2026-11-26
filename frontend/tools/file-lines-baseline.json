@@ -40,7 +40,7 @@
     "owner": "legacy (#80): frozen, leaves with its row"
   },
   "apps/host/src/shell/BrowserHost.vue": {
-    "lines": 515,
+    "lines": 486,
     "owner": "legacy (#80): frozen, leaves with its row"
   },
   "apps/storybook/src/CommandWorkspaceExample.vue": {
