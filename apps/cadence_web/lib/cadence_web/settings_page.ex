@@ -9,7 +9,6 @@ defmodule CadenceWeb.SettingsPage do
   alias Cadence.Platform.ScopedReadUpdates
 
   @consumers [
-    "/missions/:mission_id/spacecraft/:spacecraft_id",
     "/missions/:mission_id/ops/commands/workspace"
   ]
 

@@ -3,18 +3,14 @@ defmodule CadenceWeb.HostPageLive do
   use CadenceWeb, :live_view
 
   alias CadenceWeb.SettingsPage
-  alias CadenceWeb.SpacecraftConfigurationPage
 
-  alias Cadence.Catalog.Reimport
   alias Cadence.Reads.OperationalContext
 
   alias CadenceWeb.{
-    CatalogPage,
     HostContext,
     HostPageAuthorization,
     OpsLandingPage,
-    OpsTimelinePage,
-    SpacecraftPage
+    OpsTimelinePage
   }
 
   alias Plug.Conn.{InvalidQueryError, Query}
@@ -435,107 +431,11 @@ defmodule CadenceWeb.HostPageLive do
     end
   end
 
-  def handle_event("host:catalog", %{"path" => path, "event" => "reimport"}, socket) do
-    with true <- path == socket.assigns.host_path,
-         {:ok, %{route: "/missions/:mission_id/catalog/artifacts/:artifact_id", params: params}} <-
-           resolve_path(path),
-         {:ok, socket} <- prepare_context(socket, path),
-         {:ok, result} <-
-           Reimport.execute(
-             socket.assigns.current_scope,
-             params["mission_id"],
-             params["artifact_id"]
-           ) do
-      {:reply, %{ok: true, snapshot: %{href: result["href"]}}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _invalid -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event(
-        "host:spacecraft",
-        %{"path" => path, "event" => event, "input" => input, "token" => token},
-        socket
-      )
-      when event in ["validate", "save"] do
-    with true <- path == socket.assigns.host_path,
-         true <- SpacecraftPage.matches?(socket, token),
-         {:ok, info} <- resolve_path(path),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- SpacecraftPage.matches?(socket, token) do
-      result =
-        SpacecraftPage.action(
-          socket.assigns.current_scope,
-          socket.assigns.spacecraft_identity_session,
-          event,
-          input
-        )
-
-      socket =
-        if event == "save" and result.status == "ok",
-          do: assign(socket, :spacecraft_identity_session, nil),
-          else: socket
-
-      {:reply, %{ok: true, snapshot: result}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _invalid -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event(
-        "host:spacecraft-configuration",
-        %{"path" => path, "event" => event, "input" => input},
-        socket
-      )
-      when event in ["save", "review", "activate", "decide", "catalog"] do
-    with true <- path == socket.assigns.host_path,
-         {:ok, info} <- resolve_path(path),
-         true <- SpacecraftConfigurationPage.route?(info.route),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params) do
-      result =
-        SpacecraftConfigurationPage.action(
-          socket.assigns.current_scope,
-          info.params,
-          event,
-          input
-        )
-
-      case prepare_context(socket, path) do
-        {:ok, socket} ->
-          {:reply, %{ok: true, snapshot: Map.put(result, :host, snapshot(socket.assigns))},
-           socket}
-
-        {:halt, socket} ->
-          {:noreply, socket}
-
-        :error ->
-          {:reply, %{ok: false}, socket}
-      end
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
   def handle_event(_event, _params, socket), do: {:reply, %{ok: false}, socket}
 
   @impl true
   def handle_info({:settings_changed, org, mission}, socket) do
     if SettingsPage.relevant?(socket, org, mission) do
-      case prepare_context(socket, socket.assigns.host_path) do
-        {:ok, socket} -> {:noreply, socket}
-        {:halt, socket} -> {:noreply, socket}
-        :error -> {:noreply, socket}
-      end
-    else
-      {:noreply, socket}
-    end
-  end
-
-  def handle_info({:spacecraft_configuration_changed, org, mission}, socket) do
-    if socket.assigns[:spacecraft_configuration_subscription] == {org, mission} do
       case prepare_context(socket, socket.assigns.host_path) do
         {:ok, socket} -> {:noreply, socket}
         {:halt, socket} -> {:noreply, socket}
@@ -569,18 +469,8 @@ defmodule CadenceWeb.HostPageLive do
       socket =
         assign(socket,
           ops_landing_page: OpsLandingPage.load(socket.assigns.current_scope, info),
-          timeline_page: OpsTimelinePage.load(socket.assigns.current_scope, info),
-          spacecraft_page: SpacecraftPage.load(socket.assigns.current_scope, info),
-          spacecraft_identity_session:
-            SpacecraftPage.identity_session(
-              socket.assigns[:spacecraft_identity_session],
-              socket.assigns.current_scope,
-              info,
-              path
-            ),
-          catalog: CatalogPage.load(socket.assigns.current_scope, info)
+          timeline_page: OpsTimelinePage.load(socket.assigns.current_scope, info)
         )
-        |> SpacecraftConfigurationPage.subscribe(info)
         |> CadenceWeb.OpsExplorationPage.prepare(info, path)
         |> CadenceWeb.OpsCommandPage.prepare(info, path)
         |> CadenceWeb.OpsCommandHistoryPage.prepare(info, path)
@@ -642,10 +532,8 @@ defmodule CadenceWeb.HostPageLive do
         assigns
         |> HostContext.from_assigns()
         |> Map.drop([:nav_context, :nav_item, :ops_nav_item, :active_dashboard_id]),
-      catalog: assigns[:catalog],
       timeline_page: assigns[:timeline_page],
       ops_landing_page: assigns[:ops_landing_page],
-      spacecraft_page: SpacecraftPage.presentation(assigns),
       ops_page: assigns[:ops_page]
     }
   end

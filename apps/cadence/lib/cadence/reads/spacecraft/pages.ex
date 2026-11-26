@@ -1,17 +1,13 @@
 defmodule Cadence.Reads.Spacecraft.Pages do
   @moduledoc "Authorized host reads for core spacecraft features, independent of frontend delivery."
 
-  alias Cadence.Reads.Spacecraft.Configuration, as: ConfigurationRead
-
   alias Cadence.Applications.JSONBoundary
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Missions
 
   alias Cadence.Reads.Spacecraft.{
     Directory,
-    IdentityForm,
     Overview,
-    ProfileForm,
     Profiles,
     Readiness
   }
@@ -41,15 +37,6 @@ defmodule Cadence.Reads.Spacecraft.Pages do
   defp read(_scope, mission, "profile_list", params) when map_size(params) == 0,
     do: {:ok, Profiles.directory(mission)}
 
-  defp read(_scope, mission, "spacecraft_new", params) when map_size(params) == 0,
-    do: {:ok, IdentityForm.new(mission)}
-
-  defp read(_scope, mission, "profile_new", params) when map_size(params) == 0,
-    do: {:ok, ProfileForm.new(mission)}
-
-  defp read(_scope, mission, "spacecraft_edit", %{"spacecraft_id" => id} = params)
-       when map_size(params) == 1 and is_binary(id), do: IdentityForm.edit(mission, id)
-
   defp read(_scope, mission, "profile_show", %{"profile_id" => profile_id} = params)
        when map_size(params) == 1 and is_binary(profile_id) and byte_size(profile_id) in 1..255,
        do: Profiles.detail(mission, profile_id)
@@ -59,16 +46,6 @@ defmodule Cadence.Reads.Spacecraft.Pages do
   defp read(scope, mission, "spacecraft_show", %{"spacecraft_id" => id} = params)
        when map_size(params) == 1 and is_binary(id),
        do: Overview.load(scope, mission, id)
-
-  defp read(scope, mission, "spacecraft_configuration", %{"spacecraft_id" => id} = params)
-       when map_size(params) <= 2 and is_binary(id),
-       do:
-         ConfigurationRead.load(
-           scope,
-           mission,
-           id,
-           Map.get(params, "section", "overview")
-         )
 
   defp read(scope, mission, "spacecraft_readiness", %{"spacecraft_id" => id} = params)
        when map_size(params) == 1 and is_binary(id),

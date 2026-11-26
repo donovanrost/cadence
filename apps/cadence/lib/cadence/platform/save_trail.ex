@@ -4,7 +4,7 @@ defmodule Cadence.Platform.SaveTrail do
   2026-11-16; DECISIONS #77/#93, sweep row 3). Stored in the new version's metadata:
 
     * `"saved_by"`: the actor, `Scope.audit_actor/1`'s `%{"kind", "id"}`;
-    * `"via"`: `"console"`, `"legacy_host"` or `"change_set"`.
+    * `"via"`: `"console"` or `"change_set"`.
 
   Time is the version's own `inserted_at`; before and after are the previous and the new
   immutable version, so nothing else is copied here.
@@ -15,7 +15,7 @@ defmodule Cadence.Platform.SaveTrail do
   """
 
   @keys ["saved_by", "via"]
-  @vias ["console", "legacy_host", "change_set"]
+  @vias ["console", "change_set"]
 
   @spec put(map() | nil, map(), binary()) :: map()
   def put(metadata, %{"kind" => kind, "id" => id}, via)

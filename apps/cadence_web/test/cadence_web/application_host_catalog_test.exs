@@ -85,7 +85,7 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
              "/assets/application-host/telemetry-decom/mf-manifest.json"
   end
 
-  test "generic catalog and fallback routing support a second registry application", %{
+  test "the generic catalog supports a second registry application", %{
     conn: _conn
   } do
     {scope, route_context} = installed_telemetry_context()
@@ -109,16 +109,6 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
     assert application["applicationKey"] == "telemetry_decom"
     assert application["surface"]["surfaceId"] == "packet_bindings"
     assert application["release"]["releaseId"] == "telemetry-decom-v1"
-
-    assert {:ok, fallback} =
-             ApplicationHostCatalog.fallback_href(
-               route_context,
-               "telemetry_decom",
-               "packet_bindings"
-             )
-
-    assert fallback ==
-             "/missions/#{route_context.mission.mission_id}/spacecraft/#{route_context.spacecraft.spacecraft_id}/applications/telemetry_decom/packet_bindings"
   end
 
   test "mission catalogs include platform modules without installations", %{conn: _conn} do
@@ -197,8 +187,8 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
              )
   end
 
-  test "admits the canonical Comms release and retains native semantic fallbacks" do
-    {scope, %{mission: mission} = route_context} = installed_comms_context()
+  test "admits the canonical Comms release" do
+    {scope, route_context} = installed_comms_context()
 
     for surface_id <- @comms_surfaces do
       assert {:ok, %{release: release}} =
@@ -213,48 +203,6 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
       assert release.remote_name == "cadence_comms"
       assert release.exposed_module == "./Application"
     end
-
-    assert {:ok, "/missions/#{mission.mission_id}/applications/comms/overview/federated"} ==
-             ApplicationHostCatalog.workspace_href(scope, route_context, "comms", now: @now)
-
-    assert {:ok, workspace_href} =
-             ApplicationHostCatalog.workspace_href(scope, route_context, "comms", now: @now)
-
-    assert workspace_href =~ "/federated"
-
-    assert {:ok, "/missions/#{mission.mission_id}/comms"} ==
-             ApplicationHostCatalog.fallback_href(route_context, "comms", "overview")
-
-    assert {:ok, "/missions/#{mission.mission_id}/comms/validation"} ==
-             ApplicationHostCatalog.fallback_href(route_context, "comms", "validation")
-
-    assert {:ok, "/missions/#{mission.mission_id}/comms/transports/transport-1"} ==
-             ApplicationHostCatalog.fallback_href(
-               route_context,
-               "comms",
-               "transport",
-               "transport-1"
-             )
-
-    assert {:ok, "/missions/#{mission.mission_id}/comms/routing/routing-rule-1"} ==
-             ApplicationHostCatalog.fallback_href(
-               route_context,
-               "comms",
-               "routing_detail",
-               "routing-rule-1"
-             )
-
-    assert {:ok, "/missions/#{mission.mission_id}/comms/ground-stations/ground-station-1"} ==
-             ApplicationHostCatalog.fallback_href(
-               route_context,
-               "comms",
-               "ground_station",
-               "ground-station-1"
-             )
-
-    result = ApplicationHostCatalog.fallback_href(route_context, "bad/key", "overview")
-    assert result == {:error, :invalid_application_request}
-    refute inspect(result) =~ "/invalid"
   end
 
   test "rejects cross-organization, missing-user, and unauthorized catalog admissions before lookup" do

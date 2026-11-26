@@ -1,10 +1,11 @@
 defmodule CadenceWeb.ApplicationHostController do
   @moduledoc """
-  Phoenix boundary for registry-backed federated application surfaces.
+  Phoenix boundary for the mission and spacecraft application bridge (`query` and `actions`).
 
   The browser session is the source of identity. Route resources, durable
-  application installations, registered surfaces, and frontend release
-  coordinates are resolved before a shell or bridge response is returned.
+  application installations and registered surfaces are resolved before a
+  bridge response is returned. The console mints the host session through its
+  app-surface controller.
   """
 
   use CadenceWeb, :controller
@@ -20,61 +21,13 @@ defmodule CadenceWeb.ApplicationHostController do
   @problem_schema "cadence.application-host-problem.v1"
   @json_content_type "application/json; charset=utf-8"
 
-  @spec federated(Plug.Conn.t(), map()) :: Plug.Conn.t()
-  def federated(conn, %{"application_key" => application_key} = params) do
-    now = request_boundary_now()
-
-    with %Scope{} = current_scope <- conn.assigns.current_scope,
-         :ok <- authorize_route_scope(current_scope, params),
-         {:ok, route_context} <- fetch_route_context(conn, current_scope, params),
-         {:ok, application} <-
-           ApplicationHostCatalog.admit_application(
-             current_scope,
-             route_context,
-             application_key,
-             Map.get(params, "surface_id"),
-             now: now
-           ) do
-      render_shell(
-        conn,
-        current_scope,
-        route_context,
-        application_key,
-        application.surface.surface_id
-      )
-    else
-      _reason -> not_found_html(conn)
-    end
-  end
-
-  def user_federated(conn, params),
-    do: federated(conn, Map.put(params, "host_scope", "user"))
-
-  @spec catalog(Plug.Conn.t(), map()) :: Plug.Conn.t()
-  def catalog(conn, params) when is_map(params) do
-    now = request_boundary_now()
-
-    with %Scope{} = current_scope <- conn.assigns.current_scope,
-         :ok <- authorize_route_scope(current_scope, params),
-         {:ok, route_context} <- fetch_route_context(conn, current_scope, params),
-         {:ok, catalog} <- build_catalog(conn, current_scope, route_context, params, now) do
-      conn
-      |> put_host_session(current_scope, route_context)
-      |> put_resp_header("cache-control", "no-store")
-      |> json(catalog)
-    else
-      {:error, reason} -> catalog_problem(conn, reason)
-      _other -> catalog_problem(conn, :application_catalog_unavailable)
-    end
-  end
-
   @spec query(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def query(conn, params) when is_map(params) do
     now = request_boundary_now()
 
     with %Scope{} = current_scope <- conn.assigns.current_scope,
-         :ok <- authorize_route_scope(current_scope, params),
-         {:ok, route_context} <- fetch_route_context(conn, current_scope, params),
+         :ok <- authorize_route_scope(current_scope, conn.path_params),
+         {:ok, route_context} <- fetch_route_context(current_scope, conn.path_params),
          :ok <- validate_host_context(conn, current_scope, route_context),
          :ok <- validate_request_scope(params, current_scope, route_context),
          {:ok, response} <-
@@ -126,8 +79,8 @@ defmodule CadenceWeb.ApplicationHostController do
     now = request_boundary_now()
 
     with %Scope{} = current_scope <- conn.assigns.current_scope,
-         :ok <- authorize_route_scope(current_scope, params),
-         {:ok, route_context} <- fetch_route_context(conn, current_scope, params),
+         :ok <- authorize_route_scope(current_scope, conn.path_params),
+         {:ok, route_context} <- fetch_route_context(current_scope, conn.path_params),
          :ok <- validate_host_context(conn, current_scope, route_context),
          :ok <- validate_request_scope(params, current_scope, route_context),
          {:ok, idempotency_key} <- idempotency_key(conn),
@@ -269,175 +222,23 @@ defmodule CadenceWeb.ApplicationHostController do
     |> send_resp(status, body)
   end
 
-  defp render_shell(
-         conn,
-         current_scope,
-         route_context,
-         application_key,
-         surface_id,
-         fallback_override \\ nil
-       ) do
-    fallback_result =
-      case fallback_override do
-        nil -> ApplicationHostCatalog.fallback_href(route_context, application_key, surface_id)
-        path when is_binary(path) -> {:ok, path}
-        _invalid -> {:error, :invalid_application_request}
-      end
-
-    with {:ok, fallback_href} <- fallback_result,
-         {:ok, query_params_json} <- shell_query_params(conn) do
-      render(conn, :federated,
-        flash: conn.assigns.flash,
-        current_scope: current_scope,
-        organization_id: route_context.host_context.organization_id,
-        user_id: route_context.host_context.user_id,
-        mission_id: route_context.host_context.mission_id,
-        spacecraft_id: route_context.host_context.spacecraft_id,
-        host_scope: Atom.to_string(route_context.host_context.placement),
-        application_key: application_key,
-        surface_id: surface_id,
-        catalog_url: catalog_url(route_context, application_key, surface_id),
-        query_params_json: query_params_json,
-        fallback_href: fallback_href
-      )
-    else
-      {:error, :invalid_application_request} ->
-        not_found_html(conn)
-    end
-  end
-
-  # The generic shell transports URL selectors; native readers still admit their
-  # surface-specific meaning. Never drop an invalid selector into an empty query.
-  defp shell_query_params(conn) do
-    params = conn.query_params
-
-    with true <- byte_size(conn.query_string) <= 65_536,
-         entries = conn.query_string |> URI.query_decoder() |> Enum.take(65),
-         true <- length(entries) <= 64 and length(entries) == map_size(Map.new(entries)),
-         true <- is_map(params) and map_size(params) <= 64,
-         true <- Enum.all?(params, &shell_query_entry?/1),
-         {:ok, encoded} <- Jason.encode(params),
-         true <- byte_size(encoded) <= 16_384 do
-      {:ok, encoded}
-    else
-      _ -> {:error, :invalid_application_request}
-    end
-  rescue
-    _ -> {:error, :invalid_application_request}
-  end
-
-  defp shell_query_entry?({key, value}) do
-    key not in ["__proto__", "constructor", "prototype"] and
-      Enum.all?([key, value], fn text ->
-        is_binary(text) and byte_size(text) <= 256 and String.valid?(text) and
-          not Regex.match?(~r/[\x00-\x1f\x7f]/u, text)
-      end)
-  end
-
-  defp build_catalog(conn, current_scope, route_context, params, now) do
-    # These artifacts are served by this request's origin. The endpoint URL may
-    # use a different hostname or port, which would require cross-origin access.
-    request_origin = %URI{scheme: Atom.to_string(conn.scheme), host: conn.host, port: conn.port}
-
-    opts = [
-      session_id: conn.assigns.application_host_session_id,
-      csrf_token: get_csrf_token(),
-      bridge_base_url: ApplicationHostCatalog.bridge_base_path(route_context),
-      manifest_url: fn manifest_path -> unverified_url(request_origin, manifest_path) end,
-      now: now
-    ]
-
-    opts =
-      case Map.get(params, "application_key") do
-        application_key when is_binary(application_key) ->
-          Keyword.put(opts, :application_key, application_key)
-
-        _missing ->
-          opts
-      end
-
-    opts =
-      case Map.get(params, "surface_id") do
-        surface_id when is_binary(surface_id) -> Keyword.put(opts, :surface_id, surface_id)
-        _missing -> opts
-      end
-
-    ApplicationHostCatalog.build(current_scope, route_context, opts)
-  end
-
   defp request_boundary_now do
     DateTime.utc_now()
     |> DateTime.truncate(:millisecond)
     |> DateTime.to_iso8601()
   end
 
-  defp fetch_route_context(conn, %Scope{} = current_scope, params) do
-    # Query filters may have resource-shaped names (for example spacecraft_id).
-    # Only path captures establish mission/spacecraft authority.
-    case Map.get(conn.path_params, "mission_id") do
-      mission_id when is_binary(mission_id) ->
-        fetch_route_context(current_scope, conn.path_params)
-
-      _missing ->
-        fetch_generic_route_context(current_scope, Map.merge(params, conn.path_params))
-    end
-  end
-
-  defp fetch_route_context(
-         %Scope{} = current_scope,
-         %{"mission_id" => mission_id} = params
-       ) do
+  defp fetch_route_context(%Scope{} = current_scope, %{"mission_id" => mission_id} = params) do
     with {:ok, %Mission{} = mission} <- fetch_mission(current_scope, mission_id) do
       fetch_host_context(current_scope, mission, Map.get(params, "spacecraft_id"))
     end
   end
 
-  defp fetch_route_context(%Scope{} = current_scope, params) do
-    fetch_generic_route_context(current_scope, params)
-  end
-
-  defp fetch_generic_route_context(%Scope{} = current_scope, params) do
-    case requested_scope(params) do
-      "user" ->
-        fetch_user_route_context(current_scope, params)
-
-      _other ->
-        {:error, :scope_mismatch}
-    end
-  end
-
-  defp fetch_user_route_context(%Scope{actor_kind: :user, user: %{user_id: user_id}}, params) do
-    requested_user_id = Map.get(params, "user_id")
-
-    if generic_scope_ids_match?(params, user_id) and
-         (is_nil(requested_user_id) or requested_user_id == user_id) do
-      {:ok, %{host_context: HostContext.user(user_id), mission: nil, spacecraft: nil}}
-    else
-      {:error, :scope_mismatch}
-    end
-  end
-
-  defp fetch_user_route_context(%Scope{}, _params),
-    do: {:error, :authenticated_user_required}
-
-  defp authorize_route_scope(
-         %Scope{} = current_scope,
-         %{"mission_id" => mission_id}
-       ) do
+  defp authorize_route_scope(%Scope{} = current_scope, %{"mission_id" => mission_id}) do
     Policy.authorize(current_scope, :read_application_catalog, %{
       organization_id: current_scope.organization_id,
       mission_id: mission_id
     })
-  end
-
-  defp authorize_route_scope(%Scope{} = current_scope, params) do
-    case requested_scope(params) do
-      "user" when current_scope.actor_kind == :user ->
-        :ok
-
-      _other ->
-        {:error, :scope_mismatch}
-    end
   end
 
   defp fetch_host_context(%Scope{}, %Mission{} = mission, nil) do
@@ -498,30 +299,6 @@ defmodule CadenceWeb.ApplicationHostController do
     else
       {:invalid_scope, :host_session_mismatch}
     end
-  end
-
-  defp put_host_session(conn, current_scope, route_context) do
-    CadenceWeb.ApplicationHostSessionState.pin_scope(
-      conn,
-      ApplicationHostCatalog.scope_document(current_scope, route_context),
-      route_context.host_context.mission_id
-    )
-  end
-
-  defp requested_scope(%{"host_scope" => scope}) when is_binary(scope), do: scope
-  defp requested_scope(%{"scope" => scope}) when is_binary(scope), do: scope
-
-  defp requested_scope(%{"scope" => %{"scope" => scope}}) when is_binary(scope),
-    do: scope
-
-  defp requested_scope(_params), do: nil
-
-  defp generic_scope_ids_match?(params, expected_user_id) do
-    Enum.all?(["organization_id", "user_id", "mission_id", "spacecraft_id"], fn key ->
-      value = Map.get(params, key)
-
-      if key == "user_id", do: value in [nil, expected_user_id], else: is_nil(value)
-    end)
   end
 
   defp idempotency_key(conn) do
@@ -712,59 +489,6 @@ defmodule CadenceWeb.ApplicationHostController do
     problem(conn, :unprocessable_entity, "invalid_input", "The application request is invalid.")
   end
 
-  defp catalog_url(
-         %{host_context: %HostContext{placement: :user, user_id: user_id}} = route_context,
-         application_key,
-         surface_id
-       )
-       when is_binary(application_key) and is_binary(surface_id) do
-    base = ApplicationHostCatalog.bridge_base_path(route_context) <> "/catalog"
-
-    query = %{
-      "scope" => "user",
-      "user_id" => user_id,
-      "application_key" => application_key,
-      "surface_id" => surface_id
-    }
-
-    base <> "?" <> URI.encode_query(query)
-  end
-
-  defp catalog_url(route_context, application_key, surface_id)
-       when is_binary(application_key) and is_binary(surface_id) do
-    base = ApplicationHostCatalog.bridge_base_path(route_context) <> "/catalog"
-    query = URI.encode_query(%{"application_key" => application_key, "surface_id" => surface_id})
-
-    base <> "?" <> query
-  end
-
-  defp catalog_problem(conn, :unknown_application_release) do
-    problem(
-      conn,
-      :not_found,
-      "application_release_unavailable",
-      "The requested application release is not available."
-    )
-  end
-
-  defp catalog_problem(conn, :unknown_surface) do
-    problem(
-      conn,
-      :not_found,
-      "surface_not_found",
-      "The requested application surface is not declared."
-    )
-  end
-
-  defp catalog_problem(conn, :forbidden) do
-    problem(
-      conn,
-      :forbidden,
-      "forbidden",
-      "You do not have authority to access this application catalog."
-    )
-  end
-
   defp catalog_problem(conn, :no_history) do
     problem(
       conn,
@@ -782,42 +506,6 @@ defmodule CadenceWeb.ApplicationHostController do
       :service_unavailable,
       "application_catalog_unavailable",
       "The application catalog is temporarily unavailable."
-    )
-  end
-
-  defp catalog_problem(conn, reason)
-       when reason in [
-              :application_catalog_bounds_exceeded,
-              :application_installation_bounds_exceeded,
-              :application_not_installed,
-              :application_installation_disabled,
-              :application_installation_uninstalled,
-              :application_installation_scope_required,
-              :application_unavailable,
-              :invalid_application_request,
-              :scope_mismatch,
-              :authenticated_user_required
-            ] do
-    problem(
-      conn,
-      :not_found,
-      "application_unavailable",
-      "The requested application is not available in this scope."
-    )
-  end
-
-  defp catalog_problem(conn, _reason),
-    do: problem(conn, :not_found, "mission_not_found", mission_not_found_message())
-
-  defp not_found_html(conn) do
-    conn
-    |> put_flash(:error, "Application not found.")
-    |> redirect(
-      to:
-        CadenceWeb.ConsolePaths.organization(
-          conn.assigns.current_scope && conn.assigns.current_scope.organization_id,
-          "/org/missions"
-        )
     )
   end
 

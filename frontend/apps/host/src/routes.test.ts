@@ -2,8 +2,6 @@ import { hostRoute } from "./shell/host-navigation";
 import { required } from "../../../test-support/required";
 import { expect, test } from "vite-plus/test";
 import routes from "./routes.json";
-import { catalogPages } from "./catalog/pages";
-import { spacecraftPages } from "./mission-and-spacecraft/spacecraft-pages";
 import { loadedOpsPages as opsPages } from "./module-pages.test-support";
 test("plan review retains the exact version and independently paged evidence", () => {
   const route = required(
@@ -81,19 +79,6 @@ test("each core host route resolves to its registered owner", () => {
       expect(route).not.toHaveProperty("surface");
       continue;
     }
-    if (route.kind === "spacecraft") {
-      expect(spacecraftPages[required(route.spacecraftPage)], route.path).toBeDefined();
-      expect(route).not.toHaveProperty("application");
-      expect(route).not.toHaveProperty("surface");
-      continue;
-    }
-    if (route.kind === "catalog") {
-      expect(catalogPages[required(route.catalogPage)], route.path).toBeDefined();
-      expect(route.scope).toBe("mission");
-      expect(route).not.toHaveProperty("application");
-      expect(route).not.toHaveProperty("surface");
-      continue;
-    }
     if (route.kind === "ops_workspace") {
       if (route.workspacePage === "landing") {
         expect(route.path).toBe("/missions/:mission_id/ops");
@@ -122,10 +107,15 @@ test("each core host route resolves to its registered owner", () => {
       ]);
       continue;
     }
-    if (route.kind === "application_surface") {
-      // Served by the Phoenix application host; catalogued only for typed headers.
+    if (
+      route.kind === "application_surface" ||
+      route.kind === "spacecraft" ||
+      route.kind === "catalog"
+    ) {
+      // Not served by this host: catalogued only so the components that still render these pages
+      // (federated apps, trusted application surfaces) can type their header by the path.
       expect(hostRoute(new URL(route.path, "https://cadence.test"))).toBeUndefined();
-      expect(["mission", "spacecraft"]).toContain(route.scope);
+      expect(route).not.toHaveProperty("application");
       continue;
     }
     throw new Error(`Unregistered core route kind: ${route.kind} (${route.path})`);
