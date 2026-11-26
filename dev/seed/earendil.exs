@@ -5,6 +5,28 @@ defmodule EarendilSeed do
 
   @api_base "/api/v1"
   @batch_size 100
+  @sim_admin_token "earendil-local-admin"
+  @run_id "run-earendil-demo-v1"
+  @scenario_id "scenario-earendil-demo-v1"
+  @provider_name "Earendil Demo Ground Network"
+  @account_name "Earendil Demo Ground Network"
+  @site_rows [
+    {"svalbard", "Svalbard", "Norway / Arctic", "SVA", 78.23, 15.41, 6},
+    {"troll", "Troll", "Antarctica", "TRL", -72.01, 2.54, 4},
+    {"fairbanks", "Fairbanks", "Alaska / North America", "FAI", 64.84, -147.72, 4},
+    {"kiruna", "Kiruna", "Sweden / Europe", "KIR", 67.86, 20.23, 4},
+    {"hawaii", "Hawaii", "Pacific / North America", "HAW", 19.82, -155.47, 3},
+    {"santiago", "Santiago", "Chile / South America", "SCL", -33.45, -70.67, 3},
+    {"punta-arenas", "Punta Arenas", "Chile / Southern hemisphere", "PUQ", -53.16, -70.91, 4},
+    {"hartebeesthoek", "Hartebeesthoek", "South Africa", "HBK", -25.89, 27.69, 3},
+    {"perth", "Perth", "Australia / Indian Ocean", "PER", -31.95, 115.86, 3},
+    {"invercargill", "Invercargill", "New Zealand / South Pacific", "INV", -46.41, 168.35, 4},
+    {"singapore", "Singapore", "Southeast Asia", "SIN", 1.35, 103.82, 3},
+    {"mauritius", "Mauritius", "Indian Ocean", "MRU", -20.16, 57.5, 3},
+    {"azores", "Azores", "North Atlantic", "AZO", 37.74, -25.67, 3},
+    {"dubai", "Dubai", "Middle East", "DXB", 25.2, 55.27, 3},
+    {"alice-springs", "Alice Springs", "Australia / Interior", "ASP", -23.7, 133.88, 3}
+  ]
 
   def run do
     started = now()
@@ -20,15 +42,23 @@ defmodule EarendilSeed do
     {client, organization_id, mission_id} =
       phase("organization and mission", fn -> scope(client, email) end)
 
-    {client, _revision_id} = phase("catalog import", fn -> seed_catalog(client, mission_id) end)
-    seed_fleet(client, mission_id, count)
+    {client, revision_id} = phase("catalog import", fn -> seed_catalog(client, mission_id) end)
+    site_rows = Enum.take(@site_rows, sites)
+    phase("simulator run", fn -> ensure_simulator(count, site_rows) end)
+
+    {client, _provider_id} =
+      phase("provider account and mission provider", fn ->
+        ensure_provider(client, organization_id, mission_id)
+      end)
+
+    seed_fleet(client, mission_id, count, site_rows, revision_id)
 
     IO.puts("Earendil: organization #{organization_id}, mission #{mission_id}")
 
     IO.puts("  orbit elements wait on #732; dashboards await an applied fleet and #745")
-    IO.puts("  #{sites} requested sites, provider and profile setup remain in later REST phases")
-    IO.puts("  bulk spacecraft configuration review waits on #734")
+    IO.puts("  #{sites} station and profile changes await the fleet's independent review")
     IO.puts("  second-person invitations and approval wait on #745")
+    IO.puts("  spacecraft configuration drafts wait on an applied fleet and bulk review #734")
     IO.puts("total: #{elapsed(started)}")
   end
 
@@ -129,7 +159,165 @@ defmodule EarendilSeed do
     end)
   end
 
-  defp seed_fleet(client, mission_id, count) do
+  defp ensure_simulator(count, site_rows) do
+    case sim_request(:get, "/admin/v1/runs/#{@run_id}") do
+      {200, %{"state" => "running"}} ->
+        :ok
+
+      {200, %{"state" => "paused"}} ->
+        {200, _run} = sim_request(:post, "/admin/v1/runs/#{@run_id}/resume", %{})
+        :ok
+
+      {404, _missing} ->
+        create_simulator_run(count, site_rows)
+
+      other ->
+        fail!("simulator run", other)
+    end
+  end
+
+  defp create_simulator_run(count, site_rows) do
+    case sim_request(:get, "/admin/v1/scenarios/#{@scenario_id}") do
+      {200, _scenario} ->
+        :ok
+
+      {404, _missing} ->
+        scenario = %{
+          id: @scenario_id,
+          name: "Earendil synthetic rehearsal",
+          spacecraft_count: count,
+          spacecraft_prefix: "EARENDIL",
+          ground_stations: site_maps(site_rows),
+          orbit_readiness: %{
+            status: "current",
+            source_kind: "synthetic",
+            ephemeris_ref: "earendil-demo-orbits-v1",
+            version: 1,
+            validity_seconds: 604_800
+          }
+        }
+
+        {201, _scenario} = sim_request(:post, "/admin/v1/scenarios", scenario)
+    end
+
+    {201, _run} =
+      sim_request(:post, "/admin/v1/scenarios/#{@scenario_id}/runs", %{
+        id: @run_id,
+        seed: 20_261_019,
+        speed: 1.0
+      })
+
+    :ok
+  end
+
+  defp site_maps(rows) do
+    ingress = System.fetch_env!("EARENDIL_INGRESS_BASE_PORT") |> String.to_integer()
+    uplink = System.fetch_env!("EARENDIL_UPLINK_BASE_PORT") |> String.to_integer()
+
+    rows
+    |> Enum.with_index()
+    |> Enum.map(fn {{slug, name, region, _code, latitude, longitude, antennas}, index} ->
+      %{
+        id: "earendil-#{slug}",
+        name: "#{name} (Demo)",
+        region: region,
+        latitude_deg: latitude,
+        longitude_deg: longitude,
+        antenna_count: antennas,
+        ingress_port: ingress + index,
+        uplink_port: uplink + index,
+        synthetic: true
+      }
+    end)
+  end
+
+  defp sim_request(method, path, body \\ nil) do
+    base = System.fetch_env!("EARENDIL_PROVIDER_URL")
+    headers = [{"authorization", "Bearer #{@sim_admin_token}"}]
+    options = [method: method, url: base <> path, headers: headers, retry: false]
+    options = if body, do: Keyword.put(options, :json, body), else: options
+
+    case Req.request(options) do
+      {:ok, response} when response.status in [200, 201, 404] ->
+        {response.status, Map.get(response.body, "data", response.body)}
+
+      {:ok, response} ->
+        fail!("simulator #{method} #{path}", {response.status, response.body})
+
+      {:error, reason} ->
+        fail!("simulator #{method} #{path}", Exception.message(reason))
+    end
+  end
+
+  defp ensure_provider(client, organization_id, mission_id) do
+    account_path = "/organizations/#{organization_id}/provider-accounts"
+    {client, listing} = request!(client, :get, account_path)
+    account = Enum.find(listing["accounts"], &(&1["name"] == @account_name))
+
+    {client, account_id} =
+      if account do
+        {client, account["id"]}
+      else
+        request!(client, :post, account_path, %{
+          provider_key: "simulator",
+          name: @account_name,
+          settings: %{
+            base_url: System.fetch_env!("EARENDIL_PROVIDER_URL"),
+            environment_ref: @run_id
+          },
+          credential: %{backend: "env", key: "EARENDIL_DEMO_PROVIDER_TOKEN"}
+        })
+        |> then(fn {client, created} -> {client, created["id"]} end)
+      end
+
+    {client, detail} = request!(client, :get, account_path <> "/#{account_id}")
+
+    grant =
+      Enum.find(
+        detail["grants"],
+        &(&1["state"] == "active" and &1["mission"]["id"] == mission_id)
+      )
+
+    {client, grant_id} =
+      if grant do
+        {client, grant["id"]}
+      else
+        {client, created} =
+          request!(client, :post, account_path <> "/#{account_id}/grants", %{
+            mission_id: mission_id,
+            expected_account_version: detail["account"]["version"],
+            reason: "Synthetic Earendil demo"
+          })
+
+        {client, created["grant"]["id"]}
+      end
+
+    provider_path = "/missions/#{mission_id}/providers"
+    {client, listing} = request!(client, :get, provider_path)
+    provider = Enum.find(listing["providers"], &(&1["name"] == @provider_name))
+
+    {client, provider_id} =
+      if provider do
+        {client, provider["id"]}
+      else
+        {client, created} =
+          request!(client, :post, provider_path, %{
+            grant_id: grant_id,
+            display_name: @provider_name,
+            policy_mode: "approval_required"
+          })
+
+        {client, created["provider"]["id"]}
+      end
+
+    {client, validate} = request!(client, :post, provider_path <> "/#{provider_id}/validate", %{})
+    unless validate["result"]["ok"], do: fail!("provider validate", validate["result"])
+    {client, sync} = request!(client, :post, provider_path <> "/#{provider_id}/sync", %{})
+    unless sync["result"]["ok"], do: fail!("provider sync", sync["result"])
+    {client, provider_id}
+  end
+
+  defp seed_fleet(client, mission_id, count, site_rows, revision_id) do
     {client, existing} =
       phase("fleet read", fn ->
         {client, body} = request!(client, :get, "/missions/#{mission_id}/spacecraft")
@@ -147,16 +335,21 @@ defmodule EarendilSeed do
         IO.puts("Earendil fleet: a change set is open; review it before rerunning the seed")
 
       true ->
-        stage_fleet(client, mission_id, missing)
+        stage_fleet(client, mission_id, missing, site_rows, revision_id)
     end
   end
 
-  defp stage_fleet(client, mission_id, missing) do
+  defp stage_fleet(client, mission_id, missing, site_rows, revision_id) do
+    {client, setup} =
+      phase("stage sites and profile", fn ->
+        stage_setup(client, mission_id, site_rows, revision_id)
+      end)
+
     {client, staged} =
       phase("stage #{length(missing)} spacecraft", fn ->
-        Enum.reduce(Enum.chunk_every(missing, @batch_size), {client, nil}, fn batch,
-                                                                              {client, _last} ->
-          stage_batch(client, mission_id, batch)
+        Enum.reduce(Enum.chunk_every(missing, @batch_size), {client, setup}, fn batch,
+                                                                                {client, _last} ->
+          stage_batch(client, mission_id, batch, revision_id)
         end)
       end)
 
@@ -179,11 +372,66 @@ defmodule EarendilSeed do
         IO.puts("  approval waits on #745: invite a second person and use that person's session")
   end
 
-  defp stage_batch(client, mission_id, batch) do
+  defp stage_setup(client, mission_id, site_rows, revision_id) do
+    station_ops = Enum.map(site_rows, &station_op/1)
+
+    ops = station_ops ++ [profile_op(revision_id)]
+    path = "/missions/#{mission_id}/config"
+    {client, preview} = request!(client, :post, path <> "/preview", %{ops: ops})
+    unless preview["verdict"] == "go", do: fail!("setup preview", preview)
+
+    request!(client, :post, path <> "/stage", %{
+      summary: "Seed Earendil sites and profile",
+      source: %{kind: "dev_seed", name: "earendil"},
+      ops: ops
+    })
+  end
+
+  defp profile_op(revision_id) do
+    %{
+      kind: "spacecraft_profile",
+      action: "create",
+      entity_id: "spacecraft_type_earendil_demo",
+      document: %{
+        display_name: "Earendil Block 1 — Demo",
+        downlink_protocol: "tm",
+        uplink_protocol: "tc",
+        frame_parameters: %{frame_size: 1115, ocf_length: 0, fecf: false},
+        applications: %{telemetry_decom: %{}},
+        catalog_revision_id: revision_id,
+        metadata: %{"synthetic" => true, "fixture" => "reflect-orbital-v1"}
+      }
+    }
+  end
+
+  defp station_op({slug, name, region, code, latitude, longitude, antennas}) do
+    %{
+      kind: "ground_station",
+      action: "create",
+      entity_id: "ground_station_earendil_#{String.replace(slug, "-", "_")}",
+      document: %{
+        display_name: "#{name} (Demo)",
+        code: code,
+        provider: @provider_name,
+        region: region,
+        metadata: %{
+          "provider_ground_station_ref" => "earendil-#{slug}",
+          "latitude_deg" => latitude,
+          "longitude_deg" => longitude,
+          "antenna_count" => antennas,
+          "synthetic" => true
+        }
+      }
+    }
+  end
+
+  defp stage_batch(client, mission_id, batch, revision_id) do
     ops = Enum.map(batch, &spacecraft_op/1)
 
     {client, preview} =
-      request!(client, :post, "/missions/#{mission_id}/config/preview", %{ops: ops})
+      request!(client, :post, "/missions/#{mission_id}/config/preview", %{
+        ops: [profile_op(revision_id) | ops]
+      })
 
     unless preview["verdict"] == "go", do: fail!("fleet preview", preview)
 
@@ -263,6 +511,8 @@ defmodule EarendilSeed do
       document: %{
         display_name: name,
         scid: index,
+        spacecraft_type_id: "spacecraft_type_earendil_demo",
+        spacecraft_type_version: 1,
         metadata: %{
           "synthetic" => true,
           "fixture" => "reflect-orbital-v1",
