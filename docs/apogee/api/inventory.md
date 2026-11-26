@@ -48,7 +48,6 @@ on success. JSON views are in `W/api/*_json.ex`. Every `…` row passes `authori
 | Catalog | `GET`, `POST …/packet_definitions` | PacketDefinition | `Governance.list_packet_definitions`, `persist_packet_definition` | |
 | Catalog | `POST …/binding_sets`; `GET …/binding_sets/:id/versions/:v` | BindingSet | `Governance.persist_binding_set`, `fetch_binding_set` | |
 | Spacecraft | `GET …/spacecraft`; `GET …/spacecraft/:id` (the REST `POST …/spacecraft` was retired by #328: spacecraft are created through the console's change sets) | Spacecraft | `SpacecraftStore.list_spacecraft`, `fetch_spacecraft` | full list, no paging. Plane/slot only in `metadata` |
-| Spacecraft | `GET`, `POST …/spacecraft/:id/source_endpoints`; `GET`, `POST …/source_endpoints`; `GET …/source_endpoints/:id` | SourceEndpoint | `SourceEndpoints.list_*`, `persist_*`, `fetch_*` | the spacecraft variant uses `authorize_spacecraft` |
 | Comms | provider_profiles: `GET`, `POST` collection; `GET`, `PATCH`, `DELETE /:id`; `GET /:id/versions`; `GET /:id/versions/:v` | ProviderProfile | `Contacts.{list,persist,fetch,version,delete}_provider_profile*` | legacy versioned model (pre-Transports) |
 | Comms | transport_profiles: same 7 routes | TransportProfile | `Contacts.*_transport_profile*` | legacy model. The current UI uses Transports via the bridge |
 | Comms | path_templates: same 7 routes, plus `POST /:id/link_assignments` | PathTemplate, LinkAssignment | `Contacts.*_path_template*`, `apply_link_template` | legacy "link template" model |

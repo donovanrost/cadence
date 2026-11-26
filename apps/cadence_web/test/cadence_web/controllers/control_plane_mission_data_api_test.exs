@@ -187,6 +187,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
       api_token: api_token,
       organization_id: organization_id,
       mission_id: mission_id,
+      source_endpoint_id: source_endpoint_id,
       mission_model_revision_id: mission_model_revision_id,
       noop_command_id: noop_command_id,
       set_mode_command_id: set_mode_command_id
@@ -235,7 +236,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
         %{
           "staged_command_item" => %{
             "staged_command_item_id" => "staged-command-item-alpha",
-            "source_endpoint_ref" => "source-endpoint-commanding-001",
+            "source_endpoint_ref" => source_endpoint_id,
             "mission_model_revision_id" => mission_model_revision_id,
             "command_id" => set_mode_command_id,
             "argument_values" => %{"mode" => 2},
@@ -387,7 +388,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
              "data" => %{
                "queue_entry" => %{
                  "command_queue_entry_id" => staged_queue_entry_id,
-                 "queue_lane_key" => "source-endpoint-commanding-001",
+                 "queue_lane_key" => ^source_endpoint_id,
                  "priority" => 2
                },
                "command_request" => %{
@@ -403,7 +404,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
       |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/command_requests", %{
         "command_request" => %{
           "command_request_id" => "command-request-noop",
-          "source_endpoint_ref" => "source-endpoint-commanding-001",
+          "source_endpoint_ref" => source_endpoint_id,
           "mission_model_revision_id" => mission_model_revision_id,
           "command_id" => noop_command_id,
           "priority" => 1
@@ -462,7 +463,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
       |> authorize(api_token)
       |> get(
         "/api/organizations/#{organization_id}/missions/#{mission_id}/command_queue_entries",
-        %{"queue_lane_key" => "source-endpoint-commanding-001"}
+        %{"queue_lane_key" => source_endpoint_id}
       )
 
     assert %{
@@ -641,21 +642,26 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
       scid: 31
     })
 
+    admin = TestFixtures.persist_user!()
+
+    TestFixtures.grant_membership!(admin, %Organization{organization_id: organization_id},
+      role: :organization_admin
+    )
+
     source_endpoint_conn =
-      conn
-      |> authorize(api_token)
+      admin
+      |> TestFixtures.member_conn()
       |> post(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/spacecraft/spacecraft-commanding-001/source_endpoints",
+        "/api/v1/missions/#{mission_id}/spacecraft/spacecraft-commanding-001/source-endpoints",
         %{
           "source_endpoint" => %{
-            "source_endpoint_id" => "source-endpoint-commanding-001",
             "source_ref" => "sc-cmd-001",
             "display_name" => "SC Commanding Endpoint"
           }
         }
       )
 
-    assert %{"data" => %{"source_endpoint_id" => "source-endpoint-commanding-001"}} =
+    assert %{"data" => %{"source_endpoint_id" => source_endpoint_id}} =
              json_response(source_endpoint_conn, 201)
 
     artifact_conn =
@@ -785,6 +791,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
         api_token: api_token,
         organization_id: organization_id,
         mission_id: mission_id,
+        source_endpoint_id: source_endpoint_id,
         mission_model_revision_id: mission_model_revision_id,
         noop_command_id: noop_command_id,
         set_mode_command_id: set_mode_command_id
@@ -794,7 +801,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
       persist_active_uplink_contact_for_command_release(
         organization_id,
         mission_id,
-        "source-endpoint-commanding-001"
+        source_endpoint_id
       )
 
     release_queue_entry_conn =

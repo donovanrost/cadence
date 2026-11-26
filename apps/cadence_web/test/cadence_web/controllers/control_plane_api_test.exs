@@ -257,61 +257,6 @@ defmodule CadenceWeb.ControlPlaneApiTest do
              }
            } = json_response(packet_definition_conn, 201)
 
-    source_endpoint_conn =
-      conn
-      |> authorize(api_token)
-      |> post(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/spacecraft/spacecraft-001/source_endpoints",
-        %{
-          "source_endpoint" => %{
-            "source_endpoint_id" => "source-endpoint-001",
-            "source_ref" => "sc-001",
-            "scid" => 23,
-            "display_name" => "SC-001 Primary Endpoint"
-          }
-        }
-      )
-
-    assert %{
-             "data" => %{
-               "source_endpoint_id" => "source-endpoint-001",
-               "organization_id" => ^organization_id,
-               "mission_id" => ^mission_id,
-               "spacecraft_id" => "spacecraft-001"
-             }
-           } = json_response(source_endpoint_conn, 201)
-
-    spacecraft_source_endpoints_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/spacecraft/spacecraft-001/source_endpoints"
-      )
-
-    assert %{
-             "data" => [
-               %{
-                 "source_endpoint_id" => "source-endpoint-001",
-                 "spacecraft_id" => "spacecraft-001"
-               }
-             ]
-           } = json_response(spacecraft_source_endpoints_conn, 200)
-
-    source_endpoint_show_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/source_endpoints/source-endpoint-001"
-      )
-
-    assert %{
-             "data" => %{
-               "source_endpoint_id" => "source-endpoint-001",
-               "display_name" => "SC-001 Primary Endpoint",
-               "spacecraft_id" => "spacecraft-001"
-             }
-           } = json_response(source_endpoint_show_conn, 200)
-
     assert_binding_set_activation(conn, api_token, organization_id, mission_id)
   end
 end
