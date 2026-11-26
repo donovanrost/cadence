@@ -4,6 +4,7 @@ defmodule Cadence.IngressArchive.RetentionTest do
   alias Cadence.IngressArchive.Retention, as: Rule
   alias Cadence.Persistence.Retention.Sweeper
   alias Cadence.Repo
+  alias Cadence.TestSupport.RetentionLock
 
   @now ~U[2026-11-26 12:00:00Z]
 
@@ -85,7 +86,15 @@ defmodule Cadence.IngressArchive.RetentionTest do
   defp file?(c, key), do: File.exists?(Path.join(c.base, key))
 
   defp sweep(opts),
-    do: Sweeper.sweep(Rule, Rule.initial_cursor(), Keyword.merge([now: @now, pause_ms: 0], opts))
+    do:
+      Sweeper.sweep(
+        Rule,
+        Rule.initial_cursor(),
+        Keyword.merge(
+          [now: @now, pause_ms: 0, lock_key: RetentionLock.key(Rule)],
+          opts
+        )
+      )
 
   test "an expired segment's rows and file go; a newer segment is untouched", c do
     old = segment(c, "old", 40)
