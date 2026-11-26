@@ -187,8 +187,9 @@ that every provider accepts an idempotency header.
 
 Scenario and run definitions, reservations, and events live in ETS. The
 simulator saves a verified snapshot after changes on a one-second timer and at
-clean shutdown. An abrupt exit can lose writes after the last published
-snapshot. High-rate telemetry remains exclusively in Cadence.
+clean shutdown. Successful HTTP mutations wait for the snapshot to be
+published, so concurrent requests can share one disk write. An abrupt exit can
+lose unpublished writes. High-rate telemetry remains exclusively in Cadence.
 
 ## Cadence provider configuration
 

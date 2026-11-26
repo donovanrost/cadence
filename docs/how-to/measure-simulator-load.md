@@ -141,8 +141,9 @@ file, synced it, and renamed it into place.
 | 3 | 255.5 | 0.005 | 0.147 | 70.6 |
 
 The provider now publishes verified ETS snapshots once per second when there
-are changes, and on clean shutdown. A restart opens the last atomically
-published snapshot. An abrupt exit can lose changes since that publication.
+are changes, and on clean shutdown. Successful HTTP mutations wait for a
+snapshot to publish their writes. A restart opens the last atomically
+published snapshot, so an abrupt exit can lose unpublished changes.
 
 A snapshot-backed 1,000-path run completed 600 seconds at 12,973.5 frames/s.
 All diagnostic rows showed the same 6,147,770-byte published snapshot during

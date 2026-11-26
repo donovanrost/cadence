@@ -4,7 +4,8 @@ defmodule CadenceSimulator.Provider.Store do
 
   Writes are visible immediately. The store publishes a verified snapshot after
   changes on a one-second timer and on clean shutdown. A restart loads the last
-  atomically published snapshot.
+  atomically published snapshot. A restore may require reconciliation because
+  a snapshot can capture concurrent updates to related keys at different times.
   """
 
   use GenServer
@@ -151,6 +152,27 @@ defmodule CadenceSimulator.Provider.Store do
     }
   end
 
+  @doc "Captures the store generation before an API mutation."
+  @spec persistence_token() :: {pid(), reference()} | nil
+  def persistence_token do
+    case :ets.lookup(@metadata, :schedule_generation) do
+      [{:schedule_generation, generation, owner}] -> {owner, generation}
+      [] -> nil
+    end
+  rescue
+    ArgumentError -> nil
+  end
+
+  @doc "Waits for the store to publish the writes completed before this call."
+  @spec await_persisted({pid(), reference()} | nil) :: :ok | {:error, term()}
+  def await_persisted(nil), do: {:error, :store_unavailable}
+
+  def await_persisted({owner, generation}) do
+    GenServer.call(owner, {:await_persisted, generation})
+  catch
+    :exit, _reason -> {:error, :store_unavailable}
+  end
+
   @doc false
   def clear do
     GenServer.call(__MODULE__, :clear)
@@ -176,7 +198,7 @@ defmodule CadenceSimulator.Provider.Store do
         :ets.new(@metadata, [:named_table])
         reset_schedule_generation()
         schedule_snapshot()
-        {:ok, %{path: path, snapshot_observer: opts[:snapshot_observer]}}
+        {:ok, %{path: path, snapshot_observer: opts[:snapshot_observer], waiters: []}}
 
       {:ok, unexpected_table} ->
         {:stop, {:provider_store_unexpected_table, path, unexpected_table}}
@@ -207,7 +229,23 @@ defmodule CadenceSimulator.Provider.Store do
   end
 
   @impl true
+  def handle_call({:await_persisted, generation}, from, state) do
+    cond do
+      generation != schedule_generation() ->
+        {:reply, {:error, :store_replaced}, state}
+
+      # This call runs outside the snapshot callback. The dirty flag therefore
+      # covers any writes the last published snapshot could have missed.
+      :ets.member(@mirror, @dirty_key) ->
+        {:noreply, %{state | waiters: [from | state.waiters]}}
+
+      true ->
+        {:reply, :ok, state}
+    end
+  end
+
   def handle_call(:clear, _from, state) do
+    state = reply_waiters(state, {:error, :store_replaced})
     true = :ets.delete_all_objects(@mirror)
     reset_schedule_generation()
     true = :ets.insert(@mirror, {@dirty_key, true})
@@ -215,14 +253,20 @@ defmodule CadenceSimulator.Provider.Store do
   end
 
   def handle_call(:flush, _from, state) do
-    {:reply, persist_pending(state), state}
+    result = persist_pending(state)
+    {:reply, result, reply_waiters(state, result)}
   end
 
   @impl true
   def handle_info(:snapshot, state) do
-    persist_pending(state)
+    result = persist_pending(state)
     schedule_snapshot()
-    {:noreply, state}
+    {:noreply, reply_waiters(state, result)}
+  end
+
+  defp reply_waiters(state, result) do
+    Enum.each(state.waiters, &GenServer.reply(&1, result))
+    %{state | waiters: []}
   end
 
   @impl true
@@ -244,7 +288,7 @@ defmodule CadenceSimulator.Provider.Store do
   end
 
   defp reset_schedule_generation do
-    true = :ets.insert(@metadata, {:schedule_generation, make_ref()})
+    true = :ets.insert(@metadata, {:schedule_generation, make_ref(), self()})
   end
 
   defp schedule_snapshot, do: Process.send_after(self(), :snapshot, @snapshot_interval_ms)

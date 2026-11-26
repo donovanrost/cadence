@@ -5,7 +5,7 @@ defmodule CadenceSimulator.Provider.StoreResilienceTest do
   use CadenceSimulator.Case, async: false
 
   alias CadenceSimulator.Provider
-  alias CadenceSimulator.Provider.{Orchestrator, Store}
+  alias CadenceSimulator.Provider.{Orchestrator, Router, Store}
   alias CadenceSimulator.StoreRestart
 
   @definitions Path.expand(
@@ -167,19 +167,55 @@ defmodule CadenceSimulator.Provider.StoreResilienceTest do
       assert {:ok, %{"id" => "periodic"}} = Store.fetch(:scenario, "periodic")
     end
 
-    test "loads the last published snapshot after an interrupted replacement" do
-      {:ok, _scenario} = Store.put(:scenario, %{"id" => "published"})
-      :ok = Store.flush()
+    test "acknowledged POSTs share a snapshot and survive a hard restart" do
+      server =
+        start_supervised!(
+          {Bandit, plug: {Router, provider_auth: []}, scheme: :http, ip: {127, 0, 0, 1}, port: 0}
+        )
 
-      :ok = :sys.suspend(Store)
-      {:ok, _scenario} = Store.put(:scenario, %{"id" => "unpublished"})
-      File.write!(snapshot_path() <> ".tmp", "incomplete snapshot")
-
+      {:ok, {_address, port}} = ThousandIsland.listener_info(server)
+      url = "http://127.0.0.1:#{port}/admin/v1/scenarios"
       store = Process.whereis(Store)
-      Process.exit(store, :kill)
+      observer = self()
+      :sys.replace_state(store, &Map.put(&1, :snapshot_observer, observer))
+
+      ids = ["published-first", "published-second"]
+      :ok = :sys.suspend(store)
+      requests = Enum.map(ids, &post_scenario(url, &1))
+
+      try do
+        await_scenarios(ids)
+        assert Enum.all?(Task.yield_many(requests, 50), fn {_task, result} -> is_nil(result) end)
+      after
+        :ok = :sys.resume(store)
+      end
+
+      responses = Task.await_many(requests)
+      assert Enum.map(responses, & &1.status) == [201, 201]
+      assert Enum.map(responses, &get_in(&1.body, ["data", "id"])) == ids
+      assert_received {:provider_store_snapshot, _timing}
+      refute_received {:provider_store_snapshot, _timing}
+
+      :ok = :sys.suspend(store)
+      unacknowledged = post_scenario(url, "unpublished")
+
+      try do
+        await_scenarios(["unpublished"])
+        File.write!(snapshot_path() <> ".tmp", "incomplete snapshot")
+        Process.exit(store, :kill)
+      after
+        resume(store)
+      end
+
+      assert %{status: 503, body: %{"error" => %{"retryable" => true}}} =
+               Task.await(unacknowledged)
+
       StoreRestart.await(store)
 
-      assert {:ok, %{"id" => "published"}} = Store.fetch(:scenario, "published")
+      for id <- ids do
+        assert {:ok, %{"id" => ^id}} = Store.fetch(:scenario, id)
+      end
+
       assert {:error, :not_found} = Store.fetch(:scenario, "unpublished")
     end
 
@@ -237,6 +273,25 @@ defmodule CadenceSimulator.Provider.StoreResilienceTest do
     :ok = Store.flush()
     reload_store()
     refute Store.consume_fault("run-a", "drop", 2)
+  end
+
+  defp post_scenario(url, id) do
+    Task.async(fn ->
+      Req.post!(url, json: %{"id" => id, "spacecraft_count" => 1}, retry: false)
+    end)
+  end
+
+  defp await_scenarios(ids, attempts \\ 100)
+
+  defp await_scenarios(ids, 0) do
+    Enum.each(ids, fn id -> assert {:ok, _scenario} = Store.fetch(:scenario, id) end)
+  end
+
+  defp await_scenarios(ids, attempts) do
+    unless Enum.all?(ids, &match?({:ok, _scenario}, Store.fetch(:scenario, &1))) do
+      Process.sleep(10)
+      await_scenarios(ids, attempts - 1)
+    end
   end
 
   defp snapshot_path do

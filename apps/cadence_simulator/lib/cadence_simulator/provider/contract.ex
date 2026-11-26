@@ -29,6 +29,19 @@ defmodule CadenceSimulator.Provider.Contract do
 
   @spec error(Plug.Conn.t(), Plug.Conn.status(), binary(), binary(), keyword()) :: Plug.Conn.t()
   def error(conn, status, code, detail, opts \\ []) do
+    conn
+    |> error_response(status, code, detail, opts)
+    |> send_resp()
+  end
+
+  @doc false
+  def persistence_unavailable_response(conn) do
+    error_response(conn, 503, "provider_error", "provider persistence is unavailable",
+      retryable: true
+    )
+  end
+
+  defp error_response(conn, status, code, detail, opts) do
     error =
       %{
         "code" => code,
@@ -39,7 +52,7 @@ defmodule CadenceSimulator.Provider.Contract do
       }
       |> maybe_put("evidence", Keyword.get(opts, :evidence))
 
-    json(conn, status, %{"error" => error, "meta" => metadata(conn)})
+    json_response(conn, status, %{"error" => error, "meta" => metadata(conn)})
   end
 
   @spec sanitize(term()) :: term()
@@ -78,9 +91,11 @@ defmodule CadenceSimulator.Provider.Contract do
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, sanitize(value))
 
-  defp json(conn, status, body) do
+  defp json(conn, status, body), do: conn |> json_response(status, body) |> send_resp()
+
+  defp json_response(conn, status, body) do
     conn
     |> put_resp_content_type("application/json")
-    |> send_resp(status, Jason.encode!(body))
+    |> resp(status, Jason.encode!(body))
   end
 end

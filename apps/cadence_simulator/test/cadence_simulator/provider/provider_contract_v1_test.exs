@@ -351,21 +351,6 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
   test "a profile-backed Contact streams telemetry and records delivery counters", context do
     {:ok, listener} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])
     {:ok, {_address, port}} = :inet.sockname(listener)
-    parent = self()
-
-    acceptor =
-      spawn_link(fn ->
-        {:ok, socket} = :gen_tcp.accept(listener, 2_000)
-        {:ok, bytes} = :gen_tcp.recv(socket, 0, 2_000)
-        <<0::2, scid::10, vcid::3, _rest::bitstring>> = bytes
-        send(parent, {:provider_v1_telemetry, byte_size(bytes), scid, vcid})
-        drain_socket(socket)
-      end)
-
-    on_exit(fn ->
-      :gen_tcp.close(listener)
-      if Process.alive?(acceptor), do: Process.exit(acceptor, :normal)
-    end)
 
     {:ok, scenario} =
       Provider.create_scenario(%{
@@ -405,6 +390,22 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
     %{"data" => %{"id" => contact_id}} = Jason.decode!(response.resp_body)
     {:ok, starts_at, _offset} = DateTime.from_iso8601(opportunity["starts_at"])
     {:ok, ends_at, _offset} = DateTime.from_iso8601(opportunity["ends_at"])
+
+    parent = self()
+
+    acceptor =
+      spawn_link(fn ->
+        {:ok, socket} = :gen_tcp.accept(listener, 2_000)
+        {:ok, bytes} = :gen_tcp.recv(socket, 0, 2_000)
+        <<0::2, scid::10, vcid::3, _rest::bitstring>> = bytes
+        send(parent, {:provider_v1_telemetry, byte_size(bytes), scid, vcid})
+        drain_socket(socket)
+      end)
+
+    on_exit(fn ->
+      :gen_tcp.close(listener)
+      if Process.alive?(acceptor), do: Process.exit(acceptor, :normal)
+    end)
 
     :ok = Orchestrator.reconcile(DateTime.add(starts_at, -5))
     :ok = Orchestrator.reconcile(DateTime.add(starts_at, -2))
