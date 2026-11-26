@@ -28,11 +28,7 @@ defmodule Cadence.Spacecraft.StagedScids do
   @doc "Every SCID in use in the mission: live, archived and staged; sorted, deduplicated."
   @spec in_use(String.t(), String.t()) :: [non_neg_integer()]
   def in_use(organization_id, mission_id) do
-    live =
-      organization_id
-      |> SpacecraftStore.list_spacecraft(mission_id, include_archived: true)
-      |> Enum.map(& &1.scid)
-
+    live = SpacecraftStore.scids(organization_id, mission_id)
     staged = mission_id |> staged_ops() |> Enum.map(&scid/1)
 
     (live ++ staged) |> Enum.filter(&is_integer/1) |> Enum.uniq() |> Enum.sort()
@@ -54,14 +50,12 @@ defmodule Cadence.Spacecraft.StagedScids do
   @spec conflicts(String.t(), String.t(), String.t(), [map()], [map()]) ::
           :ok | {:error, {:invalid_op, non_neg_integer(), [map()]}}
   def conflicts(organization_id, mission_id, set_state, staged, prepared) do
-    staged = holders(Enum.filter(staged, &spacecraft?/1))
-
-    names =
-      live_names(organization_id, mission_id, staged ++ Enum.filter(prepared, &spacecraft?/1))
-
-    in_review = set_state == "in_review"
-
-    context = %{staged: staged, names: names, in_review: in_review}
+    context = %{
+      organization_id: organization_id,
+      mission_id: mission_id,
+      staged: holders(Enum.filter(staged, &spacecraft?/1)),
+      in_review: set_state == "in_review"
+    }
 
     prepared
     |> Enum.with_index()
@@ -77,7 +71,7 @@ defmodule Cadence.Spacecraft.StagedScids do
     with true <- spacecraft?(op),
          scid when is_integer(scid) <- scid(op),
          {source, holder} <- clash(op, scid, context.staged, earlier) do
-      error = refusal(scid, name(holder, context.names), source, context.in_review)
+      error = refusal(scid, name(holder, context), source, context.in_review)
       {:halt, {:error, {:invalid_op, index, [error]}}}
     else
       nil -> {:cont, Map.put_new(earlier, scid(op), op)}
@@ -123,16 +117,14 @@ defmodule Cadence.Spacecraft.StagedScids do
   defp where(true), do: "a change set under review"
   defp where(false), do: "the open change set"
 
-  # The op's own name when it stages one (a create, or an update renaming), else the live one.
-  defp name(op, live_names), do: staged_name(op) || Map.get(live_names, op.entity_id)
+  # The op's own name when it stages one (a create, or an update renaming), else the live one:
+  # one row, read only for the holder a refusal names.
+  defp name(op, context), do: staged_name(op) || live_name(op.entity_id, context)
 
-  defp live_names(organization_id, mission_id, ops) do
-    if Enum.any?(ops, &(staged_name(&1) == nil)) do
-      organization_id
-      |> SpacecraftStore.list_spacecraft(mission_id, include_archived: true)
-      |> Map.new(&{&1.spacecraft_id, &1.display_name})
-    else
-      %{}
+  defp live_name(spacecraft_id, %{organization_id: organization_id, mission_id: mission_id}) do
+    case SpacecraftStore.display_names(organization_id, mission_id, [spacecraft_id]) do
+      {:ok, [%{"name" => name}]} -> present(name)
+      _none -> nil
     end
   end
 
