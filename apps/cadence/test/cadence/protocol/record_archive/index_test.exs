@@ -207,6 +207,36 @@ defmodule Cadence.Protocol.RecordArchive.IndexTest do
              )
   end
 
+  test "another frame's bytes under the same frame id is an identity conflict, not a replay",
+       ctx do
+    ev = evidence(ctx.mission_id, "ev-frame-bytes", ~U[2026-11-25 10:00:00Z])
+    original = %{frame(ev, 1) | frame_sha256: :crypto.hash(:sha256, "the frame's bytes")}
+    archive(ctx.policy, ev, [original])
+
+    # The same frame re-grouped into other evidence (same bytes, so the same hash): a replay.
+    replay = evidence(ctx.mission_id, "ev-frame-bytes-replay", ~U[2026-11-25 10:30:00Z])
+
+    regrouped = %{
+      original
+      | evidence_id: replay.evidence_id,
+        receipt_time: replay.receipt_time
+    }
+
+    archive(ctx.policy, replay, [regrouped])
+
+    # Other bytes under the same id: a conflict, and the segment is not indexed.
+    other = evidence(ctx.mission_id, "ev-frame-bytes-other", ~U[2026-11-25 11:00:00Z])
+    different = %{original | frame_sha256: :crypto.hash(:sha256, "other bytes")}
+    entries = FileSystem.build_entries(other, [different], [])
+
+    assert {:error, {:protocol_archive_record_identity_conflict, [id]}} =
+             FileSystem.persist_segment("other-frame", entries,
+               object_key: "#{ctx.mission_id}/other-frame.bin"
+             )
+
+    assert id == original.frame_record_id
+  end
+
   describe "digest/1 (persisted, so pinned: DECISIONS #108)" do
     @packet %{
       "record_kind" => "packet_record",
@@ -234,17 +264,18 @@ defmodule Cadence.Protocol.RecordArchive.IndexTest do
       "frame_seq" => 7,
       "raw_frame_length_bytes" => 1115,
       "payload_length_bytes" => 1109,
+      "frame_sha256" => String.duplicate("ab", 32),
       "evidence_id" => "ignored"
     }
 
-    test "is sha256(\"archive_identity_v1\" <> JSON of the named fields <> sha256(payload))" do
+    test "is sha256(\"archive_identity_v2\" <> JSON of the named fields <> sha256(payload))" do
       # Computed independently of the implementation (Python's hashlib and json), so a change to
       # the encoding, the field order or the version prefix fails here before it stalls a replay.
       assert hex(Index.digest(@packet)) ==
-               "fc84c51687960d99c9335b1e62a93a2faa7bc1a125f83165effc73fc39318932"
+               "82c769df03cad59fd5ab68d78ce70913851679cf3ecf059eca97bd3d895f449e"
 
       assert hex(Index.digest(@frame)) ==
-               "a589534911912cb8d72faf3be60bc4937ff2b7a9440568ab720789133baf3ed5"
+               "b539d3ec126b162b2ceaf7da55894144bbd4814cd7280dc6174315fb97a03821"
     end
 
     test "ignores the transport fields and covers the bytes" do
@@ -258,6 +289,10 @@ defmodule Cadence.Protocol.RecordArchive.IndexTest do
 
       assert Index.digest(%{@packet | "apid" => 43}) != Index.digest(@packet)
       assert Index.digest(%{@frame | "frame_seq" => 8}) != Index.digest(@frame)
+
+      # The frame's own bytes are covered (#738): another hash under the same id is another frame.
+      assert Index.digest(%{@frame | "frame_sha256" => String.duplicate("cd", 32)}) !=
+               Index.digest(@frame)
     end
 
     defp hex(binary), do: Base.encode16(binary, case: :lower)
