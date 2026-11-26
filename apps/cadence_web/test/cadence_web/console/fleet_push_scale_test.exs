@@ -28,7 +28,7 @@ defmodule CadenceWeb.Console.FleetPushScaleTest do
   alias CadenceWeb.TestFixtures
   alias Phoenix.Socket.Message
 
-  @moduletag :scale
+  # MEASUREMENT ONLY (#798, do not merge): untagged so it runs in CI's core tests.
   @moduletag timeout: 600_000
 
   @crafts 1_000
