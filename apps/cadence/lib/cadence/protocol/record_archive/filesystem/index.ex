@@ -44,15 +44,26 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Index do
 
   @doc """
   Indexes one segment object: its summary row and an identity row per new record, in one
-  transaction. `:ok`, or `{:error, {:protocol_archive_record_identity_conflict, ids}}`. A segment
-  whose every record was archived before is not indexed and its object is removed.
+  transaction. `:ok`, `{:error, {:protocol_archive_record_identity_conflict, ids}}`, or
+  `{:error, {:protocol_archive_invalid_entries, ids}}` for entries whose bytes cannot be read. A
+  segment whose every record was archived before is not indexed and its object is removed.
   """
   @spec persist_segment(binary(), [map()], keyword()) :: :ok | {:error, term()}
   def persist_segment(_segment_ref, entries, opts) do
     object_key = Keyword.fetch!(opts, :object_key)
     repo = repo(opts)
-    rows = Enum.map(entries, &record(&1, opts))
+    invalid = Enum.reject(entries, &valid_payload?/1)
 
+    if invalid == [] do
+      index_entries(repo, entries, Enum.map(entries, &record(&1, opts)), object_key, opts)
+    else
+      # Entries that can never be indexed are named so #88 quarantines them, not raised.
+      ids = Enum.map(invalid, &FileSystem.entry_index_record_id(&1, opts))
+      {:error, {:protocol_archive_invalid_entries, ids}}
+    end
+  end
+
+  defp index_entries(repo, entries, rows, object_key, opts) do
     result =
       repo.transaction(fn ->
         if segment_indexed?(repo, object_key),
@@ -66,6 +77,12 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Index do
       {:error, reason} -> {:error, reason}
     end
   end
+
+  # A packet whose stored bytes are not valid base64 cannot be digested.
+  defp valid_payload?(%{"record_kind" => @packet_kind} = entry),
+    do: match?({:ok, _bytes}, entry |> Map.get("packet_data_base64", "") |> Base.decode64())
+
+  defp valid_payload?(_entry), do: true
 
   # A retry of a segment that is already indexed has nothing to do (and must not remove its object).
   defp segment_indexed?(repo, object_key),
