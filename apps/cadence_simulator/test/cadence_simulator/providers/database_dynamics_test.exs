@@ -163,7 +163,7 @@ defmodule CadenceSimulator.Providers.DatabaseDynamicsTest do
   test "the demo spacecraft database changes mode telemetry after SET_MODE" do
     demo_path =
       Path.expand(
-        "../../../../../legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml",
+        "../../../../../dev/catalogs/demo_spacecraft.yaml",
         __DIR__
       )
 
