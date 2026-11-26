@@ -47,3 +47,32 @@ describe("probeStop: is the focused stop on screen?", () => {
     ]);
   });
 });
+
+/** #868: a windowed list's rows are keyed by their place in the list, not their child index. */
+describe("probeStop: stop identity", () => {
+  function focusRow(place: number, childIndex: number) {
+    document.body.replaceChildren();
+    const ul = document.createElement("ul");
+    for (let i = 0; i <= childIndex; i++) {
+      const li = document.createElement("li");
+      li.setAttribute("data-row-index", String(place - childIndex + i));
+      const a = document.createElement("a");
+      a.href = `#${place - childIndex + i}`;
+      a.textContent = "craft";
+      li.append(a);
+      ul.append(li);
+    }
+    document.body.append(ul);
+    const link = ul.lastElementChild?.querySelector("a");
+    if (!(link instanceof HTMLElement)) throw new Error("no link");
+    vi.spyOn(link, "getBoundingClientRect").mockReturnValue(new DOMRect(10, 10, 100, 40));
+    vi.spyOn(document, "elementFromPoint").mockReturnValue(link);
+    link.focus();
+    return probeStop([])?.key;
+  }
+
+  it("tells apart two rows that the window put at the same child index", () => {
+    expect(focusRow(24, 3)).not.toBe(focusRow(25, 3));
+    expect(focusRow(25, 3)).toBe(focusRow(25, 7));
+  });
+});
