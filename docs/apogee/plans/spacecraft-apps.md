@@ -11,7 +11,7 @@ fe-setup, 2026-11-13. BACKLOG §11 L19. ux `screens/AppSurfaces.md` routes: spac
 - **A1 lists mission scope only**: `Reads.MissionApps.load/2` uses `Registry.available_for_scope(:mission)` and the
   mission's installations, so a spacecraft's apps and their per-spacecraft status have no read.
 
-## Proposed: one read (`/api/console/v1/missions/:mission_id/spacecraft/:spacecraft_id/apps`)
+## Proposed: one read (`/api/v1/missions/:mission_id/spacecraft/:spacecraft_id/apps`)
 ```
 GET → {apps: [<A1 row> for the apps available at spacecraft scope, with
                status and installation for THIS spacecraft, and only surfaces with scope: "spacecraft">],

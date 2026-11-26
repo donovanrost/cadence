@@ -30,7 +30,7 @@ defmodule CadenceWeb.Console.RequirementHeldByAPITest do
     c.user
     |> TestFixtures.member_conn()
     |> get(
-      "/api/console/v1/missions/#{c.mission.mission_id}/contact-planning/requirements/#{requirement_id}"
+      "/api/v1/missions/#{c.mission.mission_id}/contact-planning/requirements/#{requirement_id}"
     )
     |> json_response(200)
     |> get_in(["data", "held_by"])

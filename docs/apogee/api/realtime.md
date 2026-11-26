@@ -16,7 +16,7 @@ socket.connect();
   refused (the client sees repeated connection errors).
 - Websocket only (no longpoll).
 - Sign-out disconnects the socket. When the socket keeps failing to reconnect, call
-  `GET /api/console/v1/session`. A `401` there means the session is gone, so redirect to sign-in.
+  `GET /api/v1/session`. A `401` there means the session is gone, so redirect to sign-in.
 
 ## Topic `mission:<mission_id>`
 

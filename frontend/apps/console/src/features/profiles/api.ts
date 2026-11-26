@@ -3,7 +3,7 @@ import { actor, decoders, orNull, request, type ApiResult, type Decoded, type Re
 import { formatShort } from "@/ui";
 import { compositionKey, type Composition } from "@/features/catalog/composition.ts";
 
-/** Contract: docs/apogee/api/setup.md, `GET /api/console/v1/missions/:mission_id/profiles`. */
+/** Contract: docs/apogee/api/setup.md, `GET /api/v1/missions/:mission_id/profiles`. */
 const { array, integer, nullable, object, string, token } = decoders;
 
 /**

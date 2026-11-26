@@ -56,7 +56,7 @@ How the console is built: `frontend/apps/console/ARCHITECTURE.md`.
 **Domain layering:** `Cadence` facade → `Cadence.Auth` → `Cadence.Accounts`. Controllers and the
 console API call the facade.
 
-**Console API:** `/api/console/v1` (session-cookie authenticated, CSRF header on writes, JSON 401),
+**Console API:** `/api/v1` (session-cookie authenticated, CSRF header on writes, JSON 401),
 the console socket at `/socket/console`. The server checks org/mission scope and authorization on
 every endpoint; client capability checks only hide affordances.
 

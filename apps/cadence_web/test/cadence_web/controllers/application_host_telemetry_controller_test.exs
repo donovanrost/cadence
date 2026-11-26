@@ -562,7 +562,7 @@ defmodule CadenceWeb.ApplicationHostTelemetryControllerTest do
 
   defp host_path(context),
     do:
-      "/api/console/v1/missions/#{context.mission.mission_id}/apps/telemetry_decom/surfaces/packet_bindings/host" <>
+      "/api/v1/missions/#{context.mission.mission_id}/apps/telemetry_decom/surfaces/packet_bindings/host" <>
         "?spacecraft_id=#{context.spacecraft.spacecraft_id}"
 
   defp query_path(context, spacecraft_id \\ nil) do

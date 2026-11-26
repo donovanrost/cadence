@@ -28,7 +28,7 @@ defmodule CadenceWeb.Console.CommandEncodingAPITest do
       org: org,
       mission: mission,
       requester: requester,
-      base: "/api/console/v1/missions/#{mission.mission_id}",
+      base: "/api/v1/missions/#{mission.mission_id}",
       ids: model.commands_by_name,
       spacecraft_id: craft.spacecraft_id,
       target: %{

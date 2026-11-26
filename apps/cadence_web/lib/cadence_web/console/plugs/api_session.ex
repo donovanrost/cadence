@@ -1,6 +1,6 @@
 defmodule CadenceWeb.Console.Plugs.APISession do
   @moduledoc """
-  Authentication for the console API (`/api/console/v1`, the one public API; #747, #753).
+  Authentication for the console API (`/api/v1`, the one public API; #747, #753).
 
   - **A service identity** sends `Authorization: Bearer <token>`. That request is authenticated by
     the token alone: no CSRF, and the session cookie is ignored. An invalid token is 401 and never

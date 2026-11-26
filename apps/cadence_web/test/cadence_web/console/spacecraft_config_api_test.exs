@@ -15,7 +15,7 @@ defmodule CadenceWeb.Console.SpacecraftConfigAPITest do
       member: member,
       mission: mission,
       craft: craft,
-      base: "/api/console/v1/missions/#{mission.mission_id}"
+      base: "/api/v1/missions/#{mission.mission_id}"
     }
   end
 

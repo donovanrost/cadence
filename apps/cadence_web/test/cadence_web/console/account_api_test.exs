@@ -23,7 +23,7 @@ defmodule CadenceWeb.Console.AccountAPITest do
   test "a password change needs the current one and signs out other sessions", c do
     mine = TestFixtures.member_session_token!(c.user)
     other = TestFixtures.member_session_token!(c.user)
-    put_password = &(mine |> conn_for() |> put("/api/console/v1/account/password", &1))
+    put_password = &(mine |> conn_for() |> put("/api/v1/account/password", &1))
 
     assert %{"error" => %{"code" => "current_password_incorrect"}} =
              put_password.(%{"current_password" => "wrong", "new_password" => "a-new-password-1"})
@@ -55,7 +55,7 @@ defmodule CadenceWeb.Console.AccountAPITest do
     sessions =
       mine
       |> conn_for()
-      |> get("/api/console/v1/account/sessions")
+      |> get("/api/v1/account/sessions")
       |> json_response(200)
       |> get_in(["data", "sessions"])
 
@@ -66,7 +66,7 @@ defmodule CadenceWeb.Console.AccountAPITest do
     second_id =
       second
       |> conn_for()
-      |> get("/api/console/v1/account/sessions")
+      |> get("/api/v1/account/sessions")
       |> json_response(200)
       |> get_in(["data", "sessions"])
       |> Enum.find(& &1["current"])
@@ -74,7 +74,7 @@ defmodule CadenceWeb.Console.AccountAPITest do
 
     assert mine
            |> conn_for()
-           |> delete("/api/console/v1/account/sessions/#{second_id}")
+           |> delete("/api/v1/account/sessions/#{second_id}")
            |> response(204)
 
     refute signed_in?(second)
@@ -82,19 +82,19 @@ defmodule CadenceWeb.Console.AccountAPITest do
     assert %{"error" => %{"code" => "session_not_found"}} =
              mine
              |> conn_for()
-             |> delete("/api/console/v1/account/sessions/#{second_id}")
+             |> delete("/api/v1/account/sessions/#{second_id}")
              |> json_response(404)
 
     assert %{"data" => %{"revoked" => 1}} =
              mine
              |> conn_for()
-             |> delete("/api/console/v1/account/sessions")
+             |> delete("/api/v1/account/sessions")
              |> json_response(200)
 
     assert [%{"id" => ^current_id, "current" => true}] =
              mine
              |> conn_for()
-             |> get("/api/console/v1/account/sessions")
+             |> get("/api/v1/account/sessions")
              |> json_response(200)
              |> get_in(["data", "sessions"])
   end
@@ -102,7 +102,7 @@ defmodule CadenceWeb.Console.AccountAPITest do
   test "wrong current passwords are held back with 429 and retry_after; an operator can clear it",
        c do
     mine = TestFixtures.member_session_token!(c.user)
-    put_password = &(mine |> conn_for() |> put("/api/console/v1/account/password", &1))
+    put_password = &(mine |> conn_for() |> put("/api/v1/account/password", &1))
     wrong = %{"current_password" => "wrong", "new_password" => "a-new-password-1"}
     right = %{wrong | "current_password" => TestFixtures.default_password()}
 
@@ -136,7 +136,7 @@ defmodule CadenceWeb.Console.AccountAPITest do
     other_id =
       other
       |> conn_for()
-      |> get("/api/console/v1/account/sessions")
+      |> get("/api/v1/account/sessions")
       |> json_response(200)
       |> get_in(["data", "sessions"])
       |> Enum.find(& &1["current"])
@@ -144,12 +144,12 @@ defmodule CadenceWeb.Console.AccountAPITest do
 
     assert mine
            |> conn_for()
-           |> delete("/api/console/v1/account/sessions/#{other_id}")
+           |> delete("/api/v1/account/sessions/#{other_id}")
            |> response(204)
 
     assert mine
            |> conn_for()
-           |> put("/api/console/v1/account/password", %{
+           |> put("/api/v1/account/password", %{
              "current_password" => TestFixtures.default_password(),
              "new_password" => "a-new-password-1"
            })
@@ -158,7 +158,7 @@ defmodule CadenceWeb.Console.AccountAPITest do
     body =
       admin
       |> TestFixtures.member_conn()
-      |> get("/api/console/v1/organizations/#{c.org.organization_id}/audit?kinds=account")
+      |> get("/api/v1/organizations/#{c.org.organization_id}/audit?kinds=account")
       |> response(200)
 
     events = body |> Jason.decode!() |> get_in(["data", "events"])

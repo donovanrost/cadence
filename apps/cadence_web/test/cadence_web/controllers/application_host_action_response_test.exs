@@ -26,7 +26,7 @@ defmodule CadenceWeb.ApplicationHostActionResponseTest do
     catalog_conn =
       get(
         member_conn,
-        "/api/console/v1/missions/#{mission.mission_id}/apps/comms/surfaces/routing_new/host"
+        "/api/v1/missions/#{mission.mission_id}/apps/comms/surfaces/routing_new/host"
       )
 
     %{

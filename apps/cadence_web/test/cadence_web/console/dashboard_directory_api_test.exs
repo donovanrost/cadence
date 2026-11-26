@@ -10,7 +10,7 @@ defmodule CadenceWeb.Console.DashboardDirectoryAPITest do
 
   setup do: dashboard_page_setup()
 
-  defp base(c), do: "/api/console/v1/missions/#{c.mission.mission_id}/dashboards"
+  defp base(c), do: "/api/v1/missions/#{c.mission.mission_id}/dashboards"
   defp conn(c), do: TestFixtures.member_conn(c.user)
   defp list(c, query \\ ""), do: c |> conn() |> get(base(c) <> query) |> json_response(200)
   defp path(c, suffix), do: base(c) <> "/#{c.document.dashboard_id}" <> suffix
@@ -92,7 +92,7 @@ defmodule CadenceWeb.Console.DashboardDirectoryAPITest do
     actions =
       admin
       |> TestFixtures.member_conn()
-      |> get("/api/console/v1/organizations/#{c.org.organization_id}/audit?kinds=config")
+      |> get("/api/v1/organizations/#{c.org.organization_id}/audit?kinds=config")
       |> json_response(200)
       |> get_in(["data", "events"])
       |> Enum.filter(&(get_in(&1, ["target", "kind"]) == "dashboard"))

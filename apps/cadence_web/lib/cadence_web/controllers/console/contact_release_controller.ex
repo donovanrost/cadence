@@ -1,6 +1,6 @@
 defmodule CadenceWeb.Console.ContactReleaseController do
   @moduledoc """
-  U46 named release (DECISIONS #84): `POST /api/console/v1/missions/:mission_id/contacts/
+  U46 named release (DECISIONS #84): `POST /api/v1/missions/:mission_id/contacts/
   :realized_contact_id/release` sends armed command groups over a contact the operator names, a
   hand-started one included after ux's danger sheet (`confirm_unbooked: true`). Contract:
   docs/apogee/api/commanding.md §Named release.

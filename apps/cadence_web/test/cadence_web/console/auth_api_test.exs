@@ -30,14 +30,14 @@ defmodule CadenceWeb.Console.AuthAPITest do
   end
 
   defp email, do: "invitee-#{System.unique_integer([:positive])}@example.com"
-  defp link(token), do: "/api/console/v1/auth/invitations/#{token}"
+  defp link(token), do: "/api/v1/auth/invitations/#{token}"
   defp signed_in?(conn), do: is_binary(get_session(conn, :user_session_token))
 
   describe "sign-in" do
     test "a right pair starts a fresh session and goes to a safe return_to", c do
       conn =
         build_conn()
-        |> post("/api/console/v1/auth/sign-in", %{
+        |> post("/api/v1/auth/sign-in", %{
           "email" => c.inviter.email,
           "password" => TestFixtures.default_password(),
           "return_to" => "/console/m/earendil/now?x=1"
@@ -49,7 +49,7 @@ defmodule CadenceWeb.Console.AuthAPITest do
       assert signed_in?(conn)
       assert get_session(conn, :current_organization_id) == c.org.organization_id
 
-      session = conn |> recycle() |> get("/api/console/v1/session") |> json_response(200)
+      session = conn |> recycle() |> get("/api/v1/session") |> json_response(200)
       assert session["data"]["user"]["email"] == c.inviter.email
     end
 
@@ -62,7 +62,7 @@ defmodule CadenceWeb.Console.AuthAPITest do
             "nope"
           ] do
         conn =
-          post(build_conn(), "/api/console/v1/auth/sign-in", %{
+          post(build_conn(), "/api/v1/auth/sign-in", %{
             "email" => c.inviter.email,
             "password" => TestFixtures.default_password(),
             "return_to" => target
@@ -75,7 +75,7 @@ defmodule CadenceWeb.Console.AuthAPITest do
     test "a wrong password and an unknown email get the same answer; repeats are held back", c do
       for email <- [c.inviter.email, email()] do
         response =
-          post(build_conn(), "/api/console/v1/auth/sign-in", %{
+          post(build_conn(), "/api/v1/auth/sign-in", %{
             "email" => email,
             "password" => "wrong-1"
           })
@@ -85,14 +85,14 @@ defmodule CadenceWeb.Console.AuthAPITest do
       end
 
       for _ <- 1..6 do
-        post(build_conn(), "/api/console/v1/auth/sign-in", %{
+        post(build_conn(), "/api/v1/auth/sign-in", %{
           "email" => c.inviter.email,
           "password" => "wrong-1"
         })
       end
 
       held =
-        post(build_conn(), "/api/console/v1/auth/sign-in", %{
+        post(build_conn(), "/api/v1/auth/sign-in", %{
           "email" => c.inviter.email,
           "password" => TestFixtures.default_password()
         })

@@ -27,7 +27,7 @@ defmodule CadenceWeb.ApplicationHostDerivedControllerTest do
     response =
       get(
         TestFixtures.member_conn(user),
-        "/api/console/v1/missions/#{mission.mission_id}/apps/derived_telemetry/surfaces/manage/host"
+        "/api/v1/missions/#{mission.mission_id}/apps/derived_telemetry/surfaces/manage/host"
       )
 
     catalog = json_response(response, 200)["data"]["catalog"]

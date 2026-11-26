@@ -18,7 +18,7 @@ defmodule CadenceWeb.Console.SpacecraftAPITest do
     data =
       c.user
       |> TestFixtures.member_conn()
-      |> get("/api/console/v1/missions/#{c.mission.mission_id}/spacecraft")
+      |> get("/api/v1/missions/#{c.mission.mission_id}/spacecraft")
       |> json_response(200)
       |> Map.fetch!("data")
 
@@ -41,7 +41,7 @@ defmodule CadenceWeb.Console.SpacecraftAPITest do
     data =
       c.user
       |> TestFixtures.member_conn()
-      |> get("/api/console/v1/missions/#{c.mission.mission_id}/spacecraft")
+      |> get("/api/v1/missions/#{c.mission.mission_id}/spacecraft")
       |> json_response(200)
       |> Map.fetch!("data")
 
@@ -62,7 +62,7 @@ defmodule CadenceWeb.Console.SpacecraftAPITest do
     data =
       c.user
       |> TestFixtures.member_conn()
-      |> get("/api/console/v1/missions/#{c.mission.mission_id}/spacecraft/#{craft.spacecraft_id}")
+      |> get("/api/v1/missions/#{c.mission.mission_id}/spacecraft/#{craft.spacecraft_id}")
       |> json_response(200)
       |> Map.fetch!("data")
 
@@ -81,7 +81,7 @@ defmodule CadenceWeb.Console.SpacecraftAPITest do
     conn =
       c.user
       |> TestFixtures.member_conn()
-      |> get("/api/console/v1/missions/#{c.mission.mission_id}/spacecraft/nope")
+      |> get("/api/v1/missions/#{c.mission.mission_id}/spacecraft/nope")
 
     assert json_response(conn, 404)["error"]["code"] == "spacecraft_not_found"
   end
@@ -97,9 +97,7 @@ defmodule CadenceWeb.Console.SpacecraftAPITest do
     data =
       c.user
       |> TestFixtures.member_conn()
-      |> get(
-        "/api/console/v1/missions/#{c.mission.mission_id}/profiles/#{profile.spacecraft_type_id}"
-      )
+      |> get("/api/v1/missions/#{c.mission.mission_id}/profiles/#{profile.spacecraft_type_id}")
       |> json_response(200)
       |> Map.fetch!("data")
 
@@ -157,7 +155,7 @@ defmodule CadenceWeb.Console.SpacecraftAPITest do
     conn =
       c.user
       |> TestFixtures.member_conn()
-      |> get("/api/console/v1/missions/#{c.mission.mission_id}/profiles/nope")
+      |> get("/api/v1/missions/#{c.mission.mission_id}/profiles/nope")
 
     assert json_response(conn, 404)["error"]["code"] == "profile_not_found"
   end
@@ -168,7 +166,7 @@ defmodule CadenceWeb.Console.SpacecraftAPITest do
     data =
       c.user
       |> TestFixtures.member_conn()
-      |> get("/api/console/v1/missions/#{c.mission.mission_id}/profiles")
+      |> get("/api/v1/missions/#{c.mission.mission_id}/profiles")
       |> json_response(200)
       |> Map.fetch!("data")
 
@@ -188,7 +186,7 @@ defmodule CadenceWeb.Console.SpacecraftAPITest do
     data =
       c.user
       |> TestFixtures.member_conn()
-      |> get("/api/console/v1/missions/#{c.mission.mission_id}/readiness")
+      |> get("/api/v1/missions/#{c.mission.mission_id}/readiness")
       |> json_response(200)
       |> Map.fetch!("data")
 
@@ -216,7 +214,7 @@ defmodule CadenceWeb.Console.SpacecraftAPITest do
     conn =
       c.user
       |> TestFixtures.member_conn()
-      |> get("/api/console/v1/missions/#{stranger.mission_id}/spacecraft")
+      |> get("/api/v1/missions/#{stranger.mission_id}/spacecraft")
 
     assert json_response(conn, 404)["error"]["code"] == "mission_not_found"
   end

@@ -33,7 +33,7 @@ defmodule CadenceWeb.Console.SingleBookingAPITest do
       restore(:ground_network_credentials, credentials)
     end)
 
-    Map.merge(c, %{user: user, base: "/api/console/v1/missions/#{c.mission_id}"})
+    Map.merge(c, %{user: user, base: "/api/v1/missions/#{c.mission_id}"})
   end
 
   defp post_json(c, path, body),

@@ -32,7 +32,7 @@ defmodule CadenceWeb.Console.ChangeSetApproveRefusalsTest do
     Application.put_env(:cadence, :activation_governance, approval_required: true)
     on_exit(fn -> Application.put_env(:cadence, :activation_governance, previous) end)
 
-    %{alice: alice, bob: bob, base: "/api/console/v1/missions/#{mission.mission_id}/config"}
+    %{alice: alice, bob: bob, base: "/api/v1/missions/#{mission.mission_id}/config"}
   end
 
   test "an approve whose checks can't run is 503 preview_failed; the set stays in review", c do

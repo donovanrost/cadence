@@ -1,7 +1,7 @@
 defmodule CadenceWeb.Console.ContactPlanningController do
   @moduledoc """
   Contact planning setup (CP2 policy) under
-  `/api/console/v1/missions/:mission_id/contact-planning`. Contract:
+  `/api/v1/missions/:mission_id/contact-planning`. Contract:
   docs/apogee/api/scheduling.md.
   """
 

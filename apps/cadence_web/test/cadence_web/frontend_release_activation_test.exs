@@ -2076,7 +2076,7 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     conn =
       get(
         member_conn,
-        "/api/console/v1/missions/#{mission_id}/apps/limits/surfaces/manage/host"
+        "/api/v1/missions/#{mission_id}/apps/limits/surfaces/manage/host"
       )
 
     {conn, json_response(conn, 200)["data"]["catalog"]}

@@ -1,6 +1,6 @@
 defmodule CadenceWeb.Console.SpacecraftConfigController do
   @moduledoc """
-  `GET /api/console/v1/missions/:mission_id/spacecraft/:spacecraft_id/configuration`
+  `GET /api/v1/missions/:mission_id/spacecraft/:spacecraft_id/configuration`
   (Investigate's Configuration tab). Contract: docs/apogee/api/ops.md.
   """
 

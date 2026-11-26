@@ -1,7 +1,7 @@
 defmodule CadenceWeb.Console.ProviderAccountGrantController do
   @moduledoc """
   L13 (owner: api-ops): one provider account's detail (PA2), its mission grants and its
-  credential revoke, under `/api/console/v1/organizations/:organization_id/provider-accounts/:id`.
+  credential revoke, under `/api/v1/organizations/:organization_id/provider-accounts/:id`.
   Contract: docs/apogee/api/setup.md §Provider-account grants (L13). Org admins only.
   """
 

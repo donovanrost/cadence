@@ -10,7 +10,7 @@ defmodule CadenceWeb.Console.DashboardImportAPITest do
   setup do: dashboard_page_setup()
 
   defp base(c, mission \\ nil),
-    do: "/api/console/v1/missions/#{mission || c.mission.mission_id}/dashboards"
+    do: "/api/v1/missions/#{mission || c.mission.mission_id}/dashboards"
 
   defp member(c), do: TestFixtures.member_conn(c.user)
   defp post_json(conn, path, body), do: post(conn, path, body)

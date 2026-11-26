@@ -13,7 +13,7 @@ defmodule CadenceWeb.Console.PeopleWritesAPITest do
     TestFixtures.grant_membership!(admin, org, role: :organization_admin)
     TestFixtures.grant_membership!(member, org, role: :member)
 
-    %{admin: admin, member: member, base: "/api/console/v1/organizations/#{org.organization_id}"}
+    %{admin: admin, member: member, base: "/api/v1/organizations/#{org.organization_id}"}
   end
 
   defp conn(user), do: TestFixtures.member_conn(user)

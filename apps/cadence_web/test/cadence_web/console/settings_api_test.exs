@@ -15,8 +15,8 @@ defmodule CadenceWeb.Console.SettingsAPITest do
     %{
       admin: admin,
       member: member,
-      mission_base: "/api/console/v1/missions/#{mission.mission_id}/settings",
-      org_base: "/api/console/v1/organizations/#{org.organization_id}/settings"
+      mission_base: "/api/v1/missions/#{mission.mission_id}/settings",
+      org_base: "/api/v1/organizations/#{org.organization_id}/settings"
     }
   end
 

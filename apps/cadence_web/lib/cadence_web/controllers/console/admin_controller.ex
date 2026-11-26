@@ -1,6 +1,6 @@
 defmodule CadenceWeb.Console.AdminController do
   @moduledoc """
-  The console admin area (L7, `/api/console/v1/admin`), platform administrators in admin mode
+  The console admin area (L7, `/api/v1/admin`), platform administrators in admin mode
   only: `403 admin_mode_required` otherwise (admin mode lapsed, or the capability is gone).
   Writes are recorded in the platform audit. Contract: docs/apogee/api/admin.md.
   """

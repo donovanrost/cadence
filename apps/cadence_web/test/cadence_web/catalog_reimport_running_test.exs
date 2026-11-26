@@ -46,7 +46,7 @@ defmodule CadenceWeb.CatalogReimportRunningTest do
       c.user
       |> TestFixtures.member_conn()
       |> post(
-        "/api/console/v1/missions/#{c.mission.mission_id}/catalog/artifacts/#{c.running.artifact_id}/reimport",
+        "/api/v1/missions/#{c.mission.mission_id}/catalog/artifacts/#{c.running.artifact_id}/reimport",
         %{}
       )
 

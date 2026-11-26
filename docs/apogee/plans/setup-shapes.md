@@ -5,7 +5,7 @@ lands, the console decoders in `frontend/apps/console/src/features/{readiness,sp
 match these shapes exactly. Conventions follow `docs/apogee/api/README.md` (snake_case, null not
 omitted, server-decided staleness). Sources are in `plans/setup.md`.
 
-## R · `GET /api/console/v1/missions/:mission_id/readiness`
+## R · `GET /api/v1/missions/:mission_id/readiness`
 
 ```json
 {"data": {
@@ -46,7 +46,7 @@ omitted, server-decided staleness). Sources are in `plans/setup.md`.
 - Empty mission: `fleet` is `blocker` with count 0, plus a `blocker` finding "No spacecraft" with
   `fix.kind = spacecraft_new`. Same for no catalog (`catalog_import`).
 
-## S · `GET /api/console/v1/missions/:mission_id/spacecraft`
+## S · `GET /api/v1/missions/:mission_id/spacecraft`
 
 The Setup spacecraft directory. It's unpaginated like `/fleet` (one mission is at most a few
 thousand rows), and the client filters.
@@ -71,7 +71,7 @@ thousand rows), and the client filters.
 - `last_received_at`: timestamp or null (never heard: "Awaiting first AOS"). It comes from the same
   freshness read as `/fleet` (api, 2026-11-08).
 
-## P · `GET /api/console/v1/missions/:mission_id/profiles`
+## P · `GET /api/v1/missions/:mission_id/profiles`
 
 The Profiles list (rail 03). Active profiles only. The latest version is the one shown, and the
 counts cover spacecraft pinned to any version.
@@ -91,7 +91,7 @@ counts cover spacecraft pinned to any version.
   catalog onto the profile (profile-routing.md §3 lists it as a profile field).
 - `spacecraft_on_older_versions`: how many of `spacecraft_count` pin a version below `version`.
 
-## PD · `GET /api/console/v1/missions/:mission_id/profiles/:profile_id`
+## PD · `GET /api/v1/missions/:mission_id/profiles/:profile_id`
 
 Shape = domain `profile_detail` (`docs/apogee/domain/profile-routing.md` §5) in snake_case. Two
 things it adds:
@@ -102,7 +102,7 @@ Before profile routing and overrides land, return `rules: []` and `overrides: []
 `"routing_model": "per_spacecraft"`, so the UI can say routing is still per spacecraft. Don't
 return them empty without that flag.
 
-## SD · `GET /api/console/v1/missions/:mission_id/spacecraft/:spacecraft_id`
+## SD · `GET /api/v1/missions/:mission_id/spacecraft/:spacecraft_id`
 
 ```json
 {"data": {
@@ -194,7 +194,7 @@ with these conventions:
 - revision numbers are integers (the UI renders `rN`);
 - `doc`/`payload`/`value` stay raw JSON.
 
-All routes sit under `/api/console/v1/missions/:mission_id/config`.
+All routes sit under `/api/v1/missions/:mission_id/config`.
 
 | Route | Facade | Notes |
 | --- | --- | --- |
@@ -230,7 +230,7 @@ generic 409/422.
   `change-sets:<id>`).
 - `config_runtime` `{revision, activation_id, generation, runtime, degraded_partitions}`.
 
-## O · People & access (`ux/screens/People.md`), under `/api/console/v1/organizations/:organization_id`
+## O · People & access (`ux/screens/People.md`), under `/api/v1/organizations/:organization_id`
 
 ### O1 · `GET /people`
 
@@ -328,7 +328,7 @@ stay direct? If direct: `POST /apps/:key/install|disable|uninstall` returning th
 
 ## CP · Contact planning (`ux/screens/ContactPlanning.md`, DECISIONS #27)
 
-All routes sit under `/api/console/v1/missions/:mission_id/contact-planning`. Field schemas use
+All routes sit under `/api/v1/missions/:mission_id/contact-planning`. Field schemas use
 the kind-schema field shape (`path, label, type, unit, enum, range, default, required, help,
 visible_when`), plus `group` (the panel key) and `advanced: boolean`.
 

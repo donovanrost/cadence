@@ -72,7 +72,7 @@ defmodule CadenceWeb.Console.ArchiveQuarantineAPITest do
 
     %{
       conn: TestFixtures.member_conn(user),
-      base: "/api/console/v1/missions/#{mission}",
+      base: "/api/v1/missions/#{mission}",
       reservation: reservation,
       archived: archived
     }

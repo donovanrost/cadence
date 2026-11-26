@@ -34,7 +34,7 @@ defmodule CadenceWeb.ApplicationHostOriginTest do
     console =
       get(
         TestFixtures.member_conn(user),
-        "/api/console/v1/missions/#{mission.mission_id}/apps/limits/surfaces/manage/host"
+        "/api/v1/missions/#{mission.mission_id}/apps/limits/surfaces/manage/host"
       )
 
     %{

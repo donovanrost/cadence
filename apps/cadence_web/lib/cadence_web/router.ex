@@ -217,14 +217,8 @@ defmodule CadenceWeb.Router do
     end
   end
 
-  scope "/api", CadenceWeb do
-    pipe_through(:api)
-
-    get("/health", HealthController, :show)
-  end
-
   # L5 auth JSON (owner: api-ops). Contract: docs/apogee/api/session.md
-  scope "/api/console/v1/auth", CadenceWeb.Console do
+  scope "/api/v1/auth", CadenceWeb.Console do
     pipe_through(:console_auth_api)
 
     post("/sign-in", SignInController, :create)
@@ -233,7 +227,7 @@ defmodule CadenceWeb.Router do
     post("/invitations/:token/decline", InvitationLinkController, :decline)
   end
 
-  scope "/api/console/v1", CadenceWeb.Console do
+  scope "/api/v1", CadenceWeb.Console do
     pipe_through(:console_api)
 
     get("/session", SessionController, :show)

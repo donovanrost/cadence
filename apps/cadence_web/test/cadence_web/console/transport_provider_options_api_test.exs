@@ -19,8 +19,7 @@ defmodule CadenceWeb.Console.TransportProviderOptionsAPITest do
     %{
       conn: TestFixtures.member_conn(user),
       provider: provider,
-      path:
-        "/api/console/v1/missions/#{mission.mission_id}/config/kinds/transport/provider-options"
+      path: "/api/v1/missions/#{mission.mission_id}/config/kinds/transport/provider-options"
     }
   end
 
@@ -104,7 +103,7 @@ defmodule CadenceWeb.Console.TransportProviderOptionsAPITest do
              stranger
              |> TestFixtures.member_conn()
              |> get(
-               "/api/console/v1/missions/#{other.mission_id}/config/kinds/transport/provider-options"
+               "/api/v1/missions/#{other.mission_id}/config/kinds/transport/provider-options"
              )
              |> json_response(404)
   end

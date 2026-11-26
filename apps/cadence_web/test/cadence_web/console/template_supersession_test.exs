@@ -164,7 +164,7 @@ defmodule CadenceWeb.Console.TemplateSupersessionTest do
       )
 
     path =
-      "/api/console/v1/missions/#{c.mission.mission_id}/contact-plans/#{fixture.plan.contact_plan_id}"
+      "/api/v1/missions/#{c.mission.mission_id}/contact-plans/#{fixture.plan.contact_plan_id}"
 
     read = fn ->
       c.user
@@ -351,7 +351,7 @@ defmodule CadenceWeb.Console.TemplateSupersessionTest do
         }
       )
 
-    base = "/api/console/v1/missions/#{c.mission.mission_id}/contact-planning"
+    base = "/api/v1/missions/#{c.mission.mission_id}/contact-planning"
 
     read = fn path ->
       c.user |> TestFixtures.member_conn() |> get(base <> path) |> json_response(200)

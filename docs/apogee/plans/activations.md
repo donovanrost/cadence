@@ -33,7 +33,7 @@ and on Now as "awaits your GO" for the approver. Replaces the LiveView `/ops/act
    The console endpoint should use `:approve_activation` (as the domain) and the rule should be settled for Cedar.
    Also `Management.Activations.fetch/2` checks only the org: the endpoint must compare `mission_id`.
 
-## Proposed (`/api/console/v1/missions/:mission_id/activations`)
+## Proposed (`/api/v1/missions/:mission_id/activations`)
 ```
 GET  /?state=pending|decided&before=   → {requests: [<row>], next|null, permissions: ["activations.approve"]}
 <row> = {id, kind: telemetry_decom | spacecraft_configuration, app: {key, name} | null,

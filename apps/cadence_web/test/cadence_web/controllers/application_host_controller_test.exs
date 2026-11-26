@@ -230,7 +230,7 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     do: ApplicationInstallations.install(scope, HostContext.mission(mission.mission_id), "limits")
 
   defp host_path(mission_id),
-    do: "/api/console/v1/missions/#{mission_id}/apps/limits/surfaces/manage/host"
+    do: "/api/v1/missions/#{mission_id}/apps/limits/surfaces/manage/host"
 
   # The console's surface host mints the host session id, CSRF token and pinned scope.
   defp fetch_catalog(conn, %Mission{mission_id: mission_id}) do

@@ -9,7 +9,7 @@ defmodule CadenceWeb.Console.AppAPITest do
     user = TestFixtures.persist_user!()
     TestFixtures.grant_membership!(user, org)
     mission = TestFixtures.persist_mission!(org)
-    %{user: user, mission: mission, base: "/api/console/v1/missions/#{mission.mission_id}/apps"}
+    %{user: user, mission: mission, base: "/api/v1/missions/#{mission.mission_id}/apps"}
   end
 
   defp get_data(c),

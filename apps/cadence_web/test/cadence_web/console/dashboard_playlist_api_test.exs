@@ -7,7 +7,7 @@ defmodule CadenceWeb.Console.DashboardPlaylistAPITest do
 
   setup do: authoring_draft_setup()
 
-  defp base(c), do: "/api/console/v1/missions/#{c.mission.mission_id}/dashboard-playlists"
+  defp base(c), do: "/api/v1/missions/#{c.mission.mission_id}/dashboard-playlists"
 
   defp call(c, method, suffix, body \\ %{}) do
     conn = TestFixtures.member_conn(c.user)

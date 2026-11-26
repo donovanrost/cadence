@@ -16,7 +16,7 @@ defmodule CadenceWeb.Console.DataSourceWritesAPITest do
     %{org: org, user: user, mission: mission, conn: TestFixtures.member_conn(user)}
   end
 
-  defp api(c, path), do: "/api/console/v1/missions/#{c.mission.mission_id}" <> path
+  defp api(c, path), do: "/api/v1/missions/#{c.mission.mission_id}" <> path
 
   defp register!(c, name) do
     c.conn
