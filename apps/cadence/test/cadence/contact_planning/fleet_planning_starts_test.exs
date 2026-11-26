@@ -165,6 +165,42 @@ defmodule Cadence.ContactPlanning.FleetPlanningStartsTest do
            ) == 5
   end
 
+  test "a second reviewed start reuses generated occurrences", c do
+    assert {:ok, template, _} =
+             ContactRequirementTemplates.create(c.admin, c.mission_id, Fixtures.template_attrs())
+
+    params = Fixtures.params(true)
+    assert {:ok, review} = FleetPlanningStarts.preview(c.scope, c.mission_id, params)
+
+    assert {:ok, _first, _refs} =
+             FleetPlanningStarts.create(
+               c.scope,
+               c.mission_id,
+               Map.put(params, "evidence", review.evidence)
+             )
+
+    assert {:ok, second_review} = FleetPlanningStarts.preview(c.scope, c.mission_id, params)
+
+    assert {:ok, second, refs} =
+             FleetPlanningStarts.create(
+               c.scope,
+               c.mission_id,
+               Map.put(params, "evidence", second_review.evidence)
+             )
+
+    assert second.input_document["template_materialization"]["existing_count"] == 5
+    assert second.input_document["template_materialization"]["created_count"] == 0
+    assert length(refs) == 5
+
+    assert length(
+             ContactRequirementTemplates.list_occurrences(
+               c.organization_id,
+               c.mission_id,
+               template.contact_requirement_template_id
+             )
+           ) == 5
+  end
+
   test "failure after recurring materialization rolls back every generated requirement", c do
     assert {:ok, _} =
              ContactRequirements.cancel(

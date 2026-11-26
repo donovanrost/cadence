@@ -38,3 +38,6 @@ config :cadence, :provider_outbound, allow: ["127.0.0.1/32", "::1/128"]
 config :cadence, :env_credentials,
   allow: ["EARENDIL_DEMO_PROVIDER_TOKEN"],
   allow_prefixes: []
+
+# The dev store keeps two days of observations: Cadence's own retention job now drops the rest.
+config :cadence, :telemetry_observation_retention, enabled?: true, retention_days: 2

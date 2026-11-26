@@ -25,5 +25,5 @@ configured =
   )
 
 IO.puts(
-  "Saved 500 configurations against catalog revision #{configured.revision.catalog_revision_id}"
+  "Saved #{length(configured.fleet)} configurations against catalog revision #{configured.revision.catalog_revision_id}"
 )

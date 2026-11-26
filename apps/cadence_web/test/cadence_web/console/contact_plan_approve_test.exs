@@ -82,35 +82,6 @@ defmodule CadenceWeb.Console.ContactPlanApproveTest do
       assert %{"separation_of_duties" => true} = policy_document(c, plan_id)
     end
 
-    # #273 step 1: until domain's rule change approves the rest, a closed booking window on any
-    # selected pass refuses the approval, now as its own 409 instead of a generic 422.
-    test "a pass whose booking window has closed refuses the approval with 409, recording nothing",
-         c do
-      plan_id = member_plan(c)
-      submit!(c, c.member, plan_id, "op-member")
-
-      %{"passes" => [%{"snapshot_id" => snapshot_id} | _]} =
-        get_as(c, c.admin, "/#{plan_id}")["data"]
-
-      past = DateTime.utc_now() |> DateTime.add(-60) |> DateTime.truncate(:microsecond)
-
-      Repo.update_all(
-        from(s in ContactOpportunitySnapshotRow,
-          where: s.contact_opportunity_snapshot_id == ^snapshot_id
-        ),
-        set: [expires_at: past]
-      )
-
-      conn = post_as(c, c.admin, plan_id, "approve", %{"operation_id" => "op-closed"})
-
-      assert %{"code" => "contact_plan_opportunity_expired", "message" => message} =
-               json_response(conn, 409)["error"]
-
-      assert message =~ "booking window has closed"
-      assert approvals(c, plan_id) == []
-      assert plan_state(c, plan_id) == "pending_approval"
-    end
-
     test "the submitter's approve is refused (because: submitted) and records nothing", c do
       plan_id = admin_plan(c)
       submit!(c, c.admin, plan_id, "op-self")
@@ -356,6 +327,124 @@ defmodule CadenceWeb.Console.ContactPlanApproveTest do
     end
   end
 
+  describe "closed booking windows (#273)" do
+    setup c do
+      fixture =
+        ContactPlanningFixtures.plan_fixture(c.org, c.member, c.member_membership, c.mission,
+          opportunities: 2
+        )
+
+      plan_id = fixture.plan.contact_plan_id
+      submit!(c, c.member, plan_id, "op-member")
+      passes = get_as(c, c.admin, "/#{plan_id}")["data"]["passes"]
+      assert length(passes) == 2
+      %{plan_id: plan_id, closed: hd(passes)["snapshot_id"]}
+    end
+
+    test "the plan read gives the closed set, its digest and when it next changes", c do
+      open = get_as(c, c.admin, "/#{c.plan_id}")["data"]
+
+      assert %{"expired" => nil, "expiry_margin_seconds" => 60} = open
+      assert open["expired_digest"] =~ ~r/^[0-9a-f]{64}$/
+      assert is_binary(open["next_expiry_at"])
+
+      close!(c.closed)
+      after_close = get_as(c, c.admin, "/#{c.plan_id}")["data"]
+      closed = c.closed
+
+      assert %{
+               "count" => 1,
+               "reservable_count" => 1,
+               "items" => [%{"snapshot_id" => ^closed, "reason" => "opportunity_expired"} = item]
+             } = after_close["expired"]
+
+      assert %{"spacecraft" => %{"id" => _}, "aos" => _, "expires_at" => _} = item
+      refute after_close["expired_digest"] == open["expired_digest"]
+    end
+
+    test "approving with the read's digest leaves the closed pass out, records it and answers it; a replay answers the same",
+         c do
+      close!(c.closed)
+      digest = get_as(c, c.admin, "/#{c.plan_id}")["data"]["expired_digest"]
+
+      body = %{"operation_id" => "op-skip", "expected_expired_digest" => digest}
+
+      data =
+        c
+        |> post_as(c.admin, c.plan_id, "approve", body)
+        |> json_response(202)
+        |> Map.fetch!("data")
+
+      await_execution(c.plan_id)
+      closed = c.closed
+
+      assert %{"count" => 1, "reservable_count" => 1, "items" => [%{"snapshot_id" => ^closed}]} =
+               data["expired"]
+
+      # The decision records exactly that set (the director's condition 1).
+      assert [%{decision: :approved, skipped: [%{"snapshot_id" => ^closed}]}] =
+               approvals(c, c.plan_id)
+
+      assert %{"skipped" => %{"count" => 1, "items" => [%{"snapshot_id" => ^closed}]}} =
+               approved_history_entry(c, c.plan_id)
+
+      replay =
+        c
+        |> post_as(c.admin, c.plan_id, "approve", body)
+        |> json_response(202)
+        |> Map.fetch!("data")
+
+      assert replay["replayed"] == true
+      assert replay["expired"] == data["expired"]
+    end
+
+    test "an older client that sends no digest is refused when a pass has closed, recording nothing",
+         c do
+      close!(c.closed)
+      conn = post_as(c, c.admin, c.plan_id, "approve", %{"operation_id" => "op-old"})
+
+      assert %{
+               "code" => "contact_plan_expired_passes_changed",
+               "details" => %{"expired" => %{"count" => 1}, "expired_digest" => digest}
+             } = json_response(conn, 409)["error"]
+
+      assert digest =~ ~r/^[0-9a-f]{64}$/
+      assert approvals(c, c.plan_id) == []
+    end
+
+    # api-ops' review: authorization comes before the closed-set checks, so neither 409 (which
+    # carries the set) can answer someone who may not approve.
+    test "a member's approve with a closed pass is 403 forbidden, not a 409 with the set", c do
+      close!(c.closed)
+      conn = post_as(c, c.member, c.plan_id, "approve", %{"operation_id" => "op-member-closed"})
+
+      assert %{"code" => "forbidden"} = error = json_response(conn, 403)["error"]
+      refute Map.has_key?(error["details"] || %{}, "expired")
+      assert approvals(c, c.plan_id) == []
+    end
+
+    test "a decision with nothing skipped shows no skipped set in the history", c do
+      approve!(c, c.admin, c.plan_id, "op-none")
+      assert %{"skipped" => nil} = approved_history_entry(c, c.plan_id)
+    end
+  end
+
+  test "when every pass's booking window has closed, that refusal comes first (#273)", c do
+    plan_id = member_plan(c)
+    submit!(c, c.member, plan_id, "op-member")
+    [%{"snapshot_id" => only}] = get_as(c, c.admin, "/#{plan_id}")["data"]["passes"]
+    close!(only)
+
+    conn = post_as(c, c.admin, plan_id, "approve", %{"operation_id" => "op-all"})
+
+    assert %{
+             "code" => "contact_plan_all_opportunities_expired",
+             "details" => %{"expired" => %{"count" => 1, "reservable_count" => 0}}
+           } = json_response(conn, 409)["error"]
+
+    assert approvals(c, plan_id) == []
+  end
+
   describe "params" do
     test "submit refuses a decision_note (422): approving is its own action", c do
       plan_id = member_plan(c)
@@ -432,6 +521,23 @@ defmodule CadenceWeb.Console.ContactPlanApproveTest do
         o.operation_id == ^operation_id
     )
     |> Repo.all()
+  end
+
+  # #273: the snapshot's offer has expired (before the 60 s margin too).
+  defp close!(snapshot_id) do
+    past = DateTime.utc_now() |> DateTime.add(-120) |> DateTime.truncate(:microsecond)
+
+    Repo.update_all(
+      from(s in ContactOpportunitySnapshotRow,
+        where: s.contact_opportunity_snapshot_id == ^snapshot_id
+      ),
+      set: [expires_at: past]
+    )
+  end
+
+  defp approved_history_entry(c, plan_id) do
+    get_as(c, c.admin, "/#{plan_id}/history")["data"]["decisions"]
+    |> Enum.find(&(&1["kind"] == "approved"))
   end
 
   defp approvals(c, plan_id),

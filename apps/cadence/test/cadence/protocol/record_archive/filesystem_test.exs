@@ -5,11 +5,9 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
 
   alias Cadence.Ingress.RawEvidence
 
-  alias Cadence.Protocol.RecordArchive.FileSystem.RecordEntryRow,
-    as: ProtocolArchiveRecordEntryRow
-
   alias Cadence.Protocol.{PacketRecord, RecordArchive, TransferFrameRecord}
   alias Cadence.Protocol.RecordArchive.FileSystem
+  alias Cadence.Protocol.RecordArchive.FileSystem.{IdentityRow, SegmentRow}
   alias Cadence.Replay.Scope
   alias Cadence.Repo
 
@@ -254,19 +252,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
                object_key: "mission-alpha/segment-collision.bin"
              )
 
-    assert Repo.get!(ProtocolArchiveRecordEntryRow, "packet_record:packet-idempotent").object_key ==
-             "mission-alpha/segment-alpha.bin"
-
-    # Legacy writers can still populate the nullable column during a rollout,
-    # but their rows are not evidence of content equality for a new writer.
-    ProtocolArchiveRecordEntryRow
-    |> where([row], row.record_id == "packet-idempotent")
-    |> Repo.update_all(set: [content_sha256: nil])
-
-    assert {:error, {:protocol_archive_record_identity_conflict, _ids}} =
-             FileSystem.persist_segment("segment-legacy", entries,
-               object_key: "mission-alpha/segment-legacy.bin"
-             )
+    assert object_key("packet_record", "packet-idempotent") == "mission-alpha/segment-alpha.bin"
   end
 
   describe "a replay that groups the journal into different evidence (11-14, 008's pass)" do
@@ -309,10 +295,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
 
       # The index keeps the original archive's rows.
       for frame <- frames do
-        assert Repo.get!(
-                 ProtocolArchiveRecordEntryRow,
-                 "transfer_frame_record:" <> frame.frame_record_id
-               ).object_key ==
+        assert object_key("transfer_frame_record", frame.frame_record_id) ==
                  "#{mission_id}/segment-run.bin"
       end
 
@@ -472,7 +455,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
                SELECT count(*) FROM pg_prepared_statements
                WHERE name = $1 AND cardinality(parameter_types) >= 1000
                """,
-               ["ecto_insert_all_protocol_archive_record_entries"]
+               ["ecto_insert_all_protocol_archive_record_identities"]
              )
   end
 
@@ -523,7 +506,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
 
       assert count >= 2
       assert mission_writer(mission_id) == writer
-      refute Repo.get(ProtocolArchiveRecordEntryRow, "packet_record:#{packet.packet_id}")
+      refute object_key("packet_record", packet.packet_id)
 
       if index == 1 do
         assert :ok = RecordArchive.reset_stats(policy, mission_id)
@@ -541,8 +524,8 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
       assert %{queue_depth: 1} = RecordArchive.stats(policy, mission_id)
 
       Cadence.ProtocolArchiveFaultRepo.recover()
-      # The transaction yields the number of index rows it inserted.
-      assert_receive {:archive_write_completed, {:ok, 1}}, 2_000
+      # The transaction yields the segment it indexed.
+      assert_receive {:archive_write_completed, {:ok, %SegmentRow{}}}, 2_000
 
       assert %{queue_depth: 0, backpressured?: false, flushed_count: ^index} =
                RecordArchive.stats(policy, mission_id)
@@ -617,8 +600,16 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
   defp archive_entry_count(entries) when is_list(entries) do
     record_ids = Enum.map(entries, &Map.fetch!(&1, "record_id"))
 
-    ProtocolArchiveRecordEntryRow
+    IdentityRow
     |> where([row], row.record_id in ^record_ids)
-    |> Repo.aggregate(:count, :entry_id)
+    |> Repo.aggregate(:count)
+  end
+
+  defp object_key(record_kind, record_id) do
+    SegmentRow
+    |> join(:inner, [s], i in IdentityRow, on: i.segment_id == s.id)
+    |> where([_s, i], i.record_kind == ^record_kind and i.record_id == ^record_id)
+    |> select([s], s.object_key)
+    |> Repo.one()
   end
 end

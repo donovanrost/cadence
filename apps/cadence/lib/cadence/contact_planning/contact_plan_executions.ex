@@ -7,6 +7,7 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
 
   alias Cadence.ContactPlanning.{
     ContactPlanExecutionItem,
+    ContactPlans,
     ContentHash,
     FleetRunLock,
     Planner,
@@ -491,21 +492,33 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
   defp announce_uncertain(_row, item), do: item
 
   @doc false
+  # #279 (folded into #273): the plan row is locked BEFORE its items are read, in the same
+  # transaction as the write. Two projections of one plan (execute's last one and a late
+  # booking_settled's) then run one after the other, and the later one reads every item the
+  # earlier committed, so an older read can never land last and leave a fully booked plan reading
+  # 'partially_reserved'.
   def project_plan(organization_id, mission_id, plan_id, plan_version, opts) do
-    items = list(organization_id, mission_id, plan_id, plan_version)
-    state = projection_state(items)
-
-    ManagementContacts.update_execution_projection(
-      organization_id,
-      mission_id,
-      plan_id,
-      plan_version,
-      state,
-      projection_reason(items),
-      now(opts)
-    )
+    Repo.transaction(fn ->
+      with {:ok, _plan, _version} <-
+             ContactPlans.fetch_locked(organization_id, mission_id, plan_id),
+           items = list(organization_id, mission_id, plan_id, plan_version),
+           {:ok, plan} <-
+             ManagementContacts.update_execution_projection(
+               organization_id,
+               mission_id,
+               plan_id,
+               plan_version,
+               projection_state(items),
+               projection_reason(items),
+               now(opts)
+             ) do
+        {plan, items}
+      else
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
     |> case do
-      {:ok, plan} -> {:ok, plan, items}
+      {:ok, {plan, items}} -> {:ok, plan, items}
       {:error, reason} -> {:error, reason}
     end
   end

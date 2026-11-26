@@ -10,8 +10,6 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
 
   import Ecto.Query
 
-  require Logger
-
   alias Ecto.Multi
 
   alias Cadence.Ids
@@ -19,10 +17,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
   alias Cadence.Platform.DurableFile
   alias Cadence.Protocol.{PacketRecord, TransferFrameRecord}
 
-  alias Cadence.Protocol.RecordArchive.FileSystem.RecordEntryRow,
-    as: ProtocolArchiveRecordEntryRow
-
-  alias Cadence.Protocol.RecordArchive.FileSystem.Writer
+  alias Cadence.Protocol.RecordArchive.FileSystem.{Index, SegmentRow, Writer}
   alias Cadence.Replay.Scope
   alias Cadence.Repo
 
@@ -136,7 +131,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
     repo = repo(backend_opts)
 
     _ =
-      ProtocolArchiveRecordEntryRow
+      SegmentRow
       |> where([row], row.archive_backend == ^archive_backend)
       |> repo.delete_all()
 
@@ -167,118 +162,8 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
 
   @spec persist_segment(binary(), [map()], keyword()) :: :ok | {:error, term()}
   def persist_segment(segment_id, entries, opts \\ [])
-      when is_binary(segment_id) and is_list(entries) do
-    object_key = Keyword.fetch!(opts, :object_key)
-    archive_backend = archive_backend(opts)
-    repo = repo(opts)
-    inserted_at = normalize_datetime(DateTime.utc_now())
-
-    rows =
-      Enum.map(entries, fn entry ->
-        record_id = index_record_id(Map.fetch!(entry, "record_id"), archive_backend)
-
-        %{
-          entry_id: entry_id(entry, record_id),
-          record_kind: Map.fetch!(entry, "record_kind"),
-          record_id: record_id,
-          content_sha256: content_hash(entry),
-          segment_id: segment_id,
-          object_key: object_key,
-          archive_backend: archive_backend,
-          mission_id: Map.fetch!(entry, "mission_id"),
-          organization_id: Keyword.get(opts, :organization_id),
-          evidence_id: Map.fetch!(entry, "evidence_id"),
-          source_endpoint_ref: Map.get(entry, "source_endpoint_ref"),
-          spacecraft_id: Map.get(entry, "spacecraft_id"),
-          protocol_family: Map.fetch!(entry, "protocol_family"),
-          direction: Map.get(entry, "direction"),
-          source_time: normalize_datetime(decode_datetime(Map.get(entry, "source_time"))),
-          receipt_time: normalize_datetime(decode_datetime(Map.fetch!(entry, "receipt_time"))),
-          source_ref: Map.get(entry, "source_ref"),
-          realized_contact_id: get_in(entry, ["metadata", "realized_contact_id"]),
-          path_id: get_in(entry, ["metadata", "path_id"]),
-          provider_binding_id: get_in(entry, ["metadata", "provider_binding_id"]),
-          apid: Map.get(entry, "apid"),
-          packet_kind: Map.get(entry, "packet_kind"),
-          scid: Map.get(entry, "scid"),
-          vcid: Map.get(entry, "vcid"),
-          map_id: Map.get(entry, "map_id"),
-          frame_seq: Map.get(entry, "frame_seq"),
-          metadata: Map.get(entry, "metadata", %{}),
-          inserted_at: inserted_at
-        }
-      end)
-
-    # A backlog can produce a large segment. Bound each statement below
-    # PostgreSQL's 65,535 parameter limit while keeping the index write atomic.
-    case repo.transaction(fn ->
-           rows
-           |> Enum.chunk_every(1_000)
-           |> Enum.reduce(0, fn chunk, inserted ->
-             case persist_index_rows(repo, chunk, opts) do
-               {:ok, count} -> inserted + count
-               {:error, reason} -> repo.rollback(reason)
-             end
-           end)
-         end) do
-      {:ok, 0} -> drop_unreferenced_object(object_key, opts)
-      {:ok, _inserted} -> :ok
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  # Every record was already archived (a replay of frames archived before a stop): no index row
-  # points at this segment, so its object would be duplicate bytes nobody can reach (#71 follow-up).
-  defp drop_unreferenced_object(object_key, opts) do
-    case Keyword.fetch(opts, :base_path) do
-      {:ok, base_path} ->
-        path = Path.join(base_path, object_key)
-
-        case File.rm(path) do
-          :ok ->
-            :ok
-
-          {:error, :enoent} ->
-            :ok
-
-          {:error, reason} ->
-            Logger.warning(
-              "could not remove unreferenced archive segment #{path}: #{inspect(reason)}"
-            )
-        end
-
-      :error ->
-        :ok
-    end
-
-    :ok
-  end
-
-  defp persist_index_rows(repo, rows, opts) do
-    case repo.insert_all(
-           ProtocolArchiveRecordEntryRow,
-           rows,
-           # A backlog-sized VALUES plan can retain megabytes in every pool
-           # connection after the flush. These variable-size batches are transient.
-           cache_statement: false,
-           on_conflict: :nothing,
-           conflict_target: [:record_kind, :record_id]
-         ) do
-      {count, _rows} when count == length(rows) ->
-        {:ok, count}
-
-      {count, _rows} ->
-        # Name only the records that really conflict (DECISIONS #88 quarantines exactly those).
-        case conflicting_rows(rows, opts) do
-          [] ->
-            {:ok, count}
-
-          conflicts ->
-            {:error,
-             {:protocol_archive_record_identity_conflict, Enum.map(conflicts, & &1.record_id)}}
-        end
-    end
-  end
+      when is_binary(segment_id) and is_list(entries),
+      do: Index.persist_segment(segment_id, entries, opts)
 
   @doc "The record id an entry is indexed under (what an identity conflict names)."
   @spec entry_index_record_id(map(), keyword()) :: binary()
@@ -421,8 +306,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
 
   defp fetch_records(mission_id, %Scope{} = scope, record_kind, backend_opts) do
     with :ok <- flush(mission_id, backend_opts),
-         rows <- query_rows(mission_id, scope, record_kind, backend_opts),
-         {:ok, records} <- load_records(rows, scope, record_kind, backend_opts) do
+         {:ok, records} <- load_records(mission_id, scope, record_kind, backend_opts) do
       case scope.evidence_ids do
         evidence_ids when is_list(evidence_ids) and evidence_ids != [] ->
           missing_evidence_ids = missing_evidence_ids(records, evidence_ids)
@@ -442,115 +326,61 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
     end
   end
 
-  defp query_rows(mission_id, %Scope{} = scope, record_kind, backend_opts) do
-    archive_backend = archive_backend(backend_opts)
-
-    ProtocolArchiveRecordEntryRow
-    |> where(
-      [row],
-      row.archive_backend == ^archive_backend and row.mission_id == ^mission_id and
-        row.record_kind == ^record_kind
-    )
-    |> maybe_filter_scope(scope)
-    |> order_by([row], asc: row.receipt_time, asc: row.record_id)
-    |> maybe_limit_scope(scope.limit)
-    |> repo(backend_opts).all()
-  end
-
-  defp maybe_filter_scope(query, %Scope{} = scope) do
-    query
-    |> maybe_filter_evidence_ids(scope.evidence_ids)
-    |> maybe_filter_from_receipt_time(scope.from_receipt_time)
-    |> maybe_filter_to_receipt_time(scope.to_receipt_time)
-    |> maybe_filter_spacecraft(scope.spacecraft_id)
-    |> maybe_filter_source_ref(scope.source_ref)
-    |> maybe_filter_realized_contact_id(scope.realized_contact_id)
-    |> maybe_filter_metadata_match(scope.metadata_match)
-  end
-
-  defp maybe_filter_evidence_ids(query, nil), do: query
-
-  defp maybe_filter_evidence_ids(query, evidence_ids)
-       when is_list(evidence_ids) and evidence_ids != [] do
-    where(query, [row], row.evidence_id in ^Enum.uniq(evidence_ids))
-  end
-
-  defp maybe_filter_from_receipt_time(query, nil), do: query
-
-  defp maybe_filter_from_receipt_time(query, %DateTime{} = from_receipt_time) do
-    where(query, [row], row.receipt_time >= ^from_receipt_time)
-  end
-
-  defp maybe_filter_to_receipt_time(query, nil), do: query
-
-  defp maybe_filter_to_receipt_time(query, %DateTime{} = to_receipt_time) do
-    where(query, [row], row.receipt_time <= ^to_receipt_time)
-  end
-
-  defp maybe_filter_spacecraft(query, nil), do: query
-
-  defp maybe_filter_spacecraft(query, spacecraft_id) when is_binary(spacecraft_id) do
-    where(query, [row], row.spacecraft_id == ^spacecraft_id)
-  end
-
-  defp maybe_filter_source_ref(query, nil), do: query
-
-  defp maybe_filter_source_ref(query, source_ref) when is_binary(source_ref) do
-    where(query, [row], row.source_ref == ^source_ref)
-  end
-
-  defp maybe_filter_realized_contact_id(query, nil), do: query
-
-  defp maybe_filter_realized_contact_id(query, realized_contact_id)
-       when is_binary(realized_contact_id) do
-    where(query, [row], row.realized_contact_id == ^realized_contact_id)
-  end
-
-  defp maybe_filter_metadata_match(query, nil), do: query
-
-  defp maybe_filter_metadata_match(query, metadata_match)
-       when is_map(metadata_match) and map_size(metadata_match) > 0 do
-    Enum.reduce(metadata_match, query, fn {key, value}, acc ->
-      where(acc, [row], fragment("? ->> ? = ?", row.metadata, ^to_string(key), ^to_string(value)))
-    end)
-  end
-
-  defp maybe_filter_metadata_match(query, _metadata_match), do: query
-
-  defp maybe_limit_scope(query, nil), do: query
-  defp maybe_limit_scope(query, limit), do: limit(query, ^limit)
-
-  defp load_records(rows, %Scope{} = scope, record_kind, backend_opts) do
-    archive_backend = archive_backend(backend_opts)
-
-    rows
-    |> Enum.group_by(& &1.object_key)
-    |> Enum.reduce_while({:ok, []}, fn {object_key, grouped_rows}, {:ok, acc} ->
-      case load_segment_object(object_key, backend_opts) do
-        {:ok, entries} ->
-          selected_ids =
-            MapSet.new(Enum.map(grouped_rows, &domain_record_id(&1.record_id, archive_backend)))
-
-          selected_records =
-            entries
-            |> Enum.filter(
-              &selected_record_entry?(&1, record_kind, selected_ids, scope.metadata_match)
-            )
-            |> Enum.map(&decode_record/1)
-
-          {:cont, {:ok, selected_records ++ acc}}
-
-        {:error, reason} ->
-          {:halt, {:error, reason}}
+  defp load_records(mission_id, %Scope{} = scope, record_kind, backend_opts) do
+    mission_id
+    |> Index.candidate_segments(scope, record_kind, backend_opts)
+    |> Enum.reduce_while({:ok, {[], MapSet.new()}}, fn segment, {:ok, acc} ->
+      case load_segment_object(segment.object_key, backend_opts) do
+        {:ok, entries} -> {:cont, {:ok, select_entries(entries, scope, record_kind, acc)}}
+        {:error, reason} -> {:halt, {:error, reason}}
       end
     end)
     |> case do
-      {:ok, records} ->
-        {:ok, Enum.sort_by(records, &record_sort_key/1)}
+      {:ok, {records, _seen}} ->
+        sorted = Enum.sort_by(records, &record_sort_key/1)
+        {:ok, if(scope.limit, do: Enum.take(sorted, scope.limit), else: sorted)}
 
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  # Segments arrive oldest first, so a record archived twice (a replay) resolves to the original.
+  defp select_entries(entries, scope, record_kind, {records, seen}) do
+    Enum.reduce(entries, {records, seen}, fn entry, {records, seen} ->
+      key = {Map.get(entry, "record_kind"), Map.get(entry, "record_id")}
+
+      if Map.get(entry, "record_kind") == record_kind and not MapSet.member?(seen, key) and
+           in_scope?(entry, scope) do
+        {[decode_record(entry) | records], MapSet.put(seen, key)}
+      else
+        {records, seen}
+      end
+    end)
+  end
+
+  defp in_scope?(entry, scope) do
+    in_time_range?(entry, scope) and in_evidence?(entry, scope.evidence_ids) and
+      matches?(entry, "spacecraft_id", scope.spacecraft_id) and
+      matches?(entry, "source_ref", scope.source_ref) and
+      (is_nil(scope.realized_contact_id) or
+         get_in(entry, ["metadata", "realized_contact_id"]) == scope.realized_contact_id) and
+      matches_metadata_scope?(entry, scope.metadata_match)
+  end
+
+  defp in_evidence?(_entry, evidence_ids) when evidence_ids in [nil, []], do: true
+  defp in_evidence?(entry, evidence_ids), do: Map.get(entry, "evidence_id") in evidence_ids
+
+  defp matches?(_entry, _key, nil), do: true
+  defp matches?(entry, key, value), do: Map.get(entry, key) == value
+
+  defp in_time_range?(entry, scope) do
+    receipt_time = decode_datetime(Map.get(entry, "receipt_time"))
+
+    (is_nil(scope.from_receipt_time) or
+       DateTime.compare(receipt_time, scope.from_receipt_time) != :lt) and
+      (is_nil(scope.to_receipt_time) or
+         DateTime.compare(receipt_time, scope.to_receipt_time) != :gt)
   end
 
   defp matches_metadata_scope?(_entry, nil), do: true
@@ -561,12 +391,6 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
     Enum.all?(metadata_match, fn {key, value} ->
       Map.get(metadata, to_string(key)) == value or Map.get(metadata, key) == value
     end)
-  end
-
-  defp selected_record_entry?(entry, record_kind, selected_ids, metadata_match) do
-    Map.get(entry, "record_kind") == record_kind and
-      MapSet.member?(selected_ids, Map.get(entry, "record_id")) and
-      matches_metadata_scope?(entry, metadata_match)
   end
 
   defp decode_record(%{"record_kind" => @packet_record_kind} = entry) do
@@ -639,23 +463,10 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
     end
   end
 
-  defp normalize_datetime(nil), do: nil
-
-  defp normalize_datetime(%DateTime{} = value) do
-    naive = DateTime.to_naive(value)
-    {microsecond, _precision} = naive.microsecond
-    with_usec = %{naive | microsecond: {microsecond, 6}}
-    DateTime.from_naive!(with_usec, "Etc/UTC")
-  end
-
   defp encode_atom(nil), do: nil
   defp encode_atom(value) when is_atom(value), do: Atom.to_string(value)
   defp decode_atom(nil), do: nil
   defp decode_atom(value) when is_binary(value), do: String.to_existing_atom(value)
-
-  defp entry_id(entry, record_id) do
-    "#{Map.fetch!(entry, "record_kind")}:#{record_id}"
-  end
 
   defp missing_evidence_ids(records, evidence_ids) do
     found_ids = MapSet.new(Enum.map(records, & &1.evidence_id))
@@ -666,103 +477,6 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
     :cadence
     |> Application.get_env(:protocol_record_archive, [])
     |> Keyword.delete(:module)
-  end
-
-  # A record whose id is already indexed was archived before when it is the same record and its
-  # segment object is on disk.
-  #
-  # A transfer frame's id is its journal position (stream, offset, length), which pins its bytes,
-  # so it is the same frame when its decoded identity columns agree. Its entry's provenance can
-  # legitimately differ: a replay may group the same journal records into different evidence than
-  # the run that archived them (evidence_id, evidence_sha256, receipt_time, the batch's metadata).
-  # 11-14: 008's pass, interrupted mid-batch, replayed into a permanent conflict that stalled the
-  # mission's ingest. The columns are compared, not a hash, so rows indexed before this change
-  # (whose content_sha256 hashes the whole entry) match too.
-  #
-  # A packet's id already digests its evidence, so a re-batched replay gives it a new id rather
-  # than a conflict; packets keep the whole-entry content check.
-  @frame_identity_columns [
-    :mission_id,
-    :spacecraft_id,
-    :protocol_family,
-    :direction,
-    :scid,
-    :vcid,
-    :map_id,
-    :frame_seq
-  ]
-
-  # A packet's record id is its journal position and bytes (#71 follow-up), so a re-batched replay
-  # sends the same id with different evidence fields; like a frame, it matches on its columns.
-  @packet_identity_columns [
-    :mission_id,
-    :spacecraft_id,
-    :protocol_family,
-    :direction,
-    :apid,
-    :packet_kind
-  ]
-
-  defp conflicting_rows(rows, opts) do
-    archive_backend = archive_backend(opts)
-    repo = repo(opts)
-
-    expected = Map.new(rows, &{{&1.record_kind, &1.record_id}, &1})
-    record_kinds = expected |> Map.keys() |> Enum.map(&elem(&1, 0)) |> Enum.uniq()
-    record_ids = expected |> Map.keys() |> Enum.map(&elem(&1, 1)) |> Enum.uniq()
-
-    found =
-      ProtocolArchiveRecordEntryRow
-      |> where(
-        [row],
-        row.archive_backend == ^archive_backend and row.record_kind in ^record_kinds and
-          row.record_id in ^record_ids
-      )
-      |> select(
-        [row],
-        map(
-          row,
-          ^Enum.uniq(
-            [:record_kind, :record_id, :content_sha256, :object_key] ++
-              @frame_identity_columns ++ @packet_identity_columns
-          )
-        )
-      )
-      |> repo.all()
-      |> Map.new(&{{&1.record_kind, &1.record_id}, &1})
-
-    expected
-    |> Enum.reject(fn {key, row} ->
-      case Map.fetch(found, key) do
-        {:ok, existing} -> same_record?(row, existing) and segment_present?(existing, opts)
-        :error -> false
-      end
-    end)
-    |> Enum.map(&elem(&1, 1))
-    |> Enum.sort_by(&{&1.record_kind, &1.record_id})
-  end
-
-  defp same_record?(%{record_kind: @transfer_frame_record_kind} = row, existing),
-    do: Map.take(row, @frame_identity_columns) == Map.take(existing, @frame_identity_columns)
-
-  # A legacy row without a content hash still isn't evidence it holds this packet.
-  defp same_record?(%{record_kind: @packet_record_kind} = row, existing),
-    do:
-      is_binary(existing.content_sha256) and
-        Map.take(row, @packet_identity_columns) == Map.take(existing, @packet_identity_columns)
-
-  defp same_record?(row, existing),
-    do: is_binary(existing.content_sha256) and existing.content_sha256 == row.content_sha256
-
-  defp segment_present?(%{object_key: object_key}, opts) do
-    case Keyword.fetch(opts, :base_path) do
-      {:ok, base_path} -> File.regular?(Path.join(base_path, object_key))
-      :error -> true
-    end
-  end
-
-  defp content_hash(entry) do
-    entry |> :erlang.term_to_binary([:deterministic]) |> then(&:crypto.hash(:sha256, &1))
   end
 
   defp instance_archive_backend(nil), do: @archive_backend
@@ -789,37 +503,10 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
     @instance_record_id_prefix <> encoded
   end
 
-  defp domain_record_id(record_id, @archive_backend), do: record_id
-
-  defp domain_record_id(@instance_record_id_prefix <> encoded, archive_backend) do
-    with {:ok, payload} <- Base.url_decode64(encoded, padding: false),
-         {^archive_backend, record_id} <- :erlang.binary_to_term(payload, [:safe]),
-         true <- is_binary(record_id) do
-      record_id
-    else
-      _other ->
-        raise "invalid protocol archive instance record id #{inspect(encoded)}"
-    end
-  end
-
-  defp domain_record_id(record_id, archive_backend) do
-    raise "protocol archive record id #{inspect(record_id)} does not belong to #{inspect(archive_backend)}"
-  end
-
   defp repo(opts), do: Keyword.get(opts, :repo, Repo)
 
   @doc false
   @spec received_frames(binary(), [binary()]) :: %{binary() => non_neg_integer()}
-  def received_frames(mission_id, realized_contact_ids) do
-    ProtocolArchiveRecordEntryRow
-    |> where(
-      [e],
-      e.mission_id == ^mission_id and e.realized_contact_id in ^realized_contact_ids and
-        e.record_kind == "transfer_frame_record"
-    )
-    |> group_by([e], e.realized_contact_id)
-    |> select([e], {e.realized_contact_id, count(e.record_id)})
-    |> Cadence.Repo.all()
-    |> Map.new()
-  end
+  def received_frames(mission_id, realized_contact_ids),
+    do: Index.received_frames(mission_id, realized_contact_ids, configured_backend_opts())
 end

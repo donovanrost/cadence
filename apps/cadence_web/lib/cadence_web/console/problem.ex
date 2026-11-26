@@ -46,11 +46,13 @@ defmodule CadenceWeb.Console.Problem do
     plan_not_pending: {409, "The plan isn't waiting for approval."},
     # #257: submit only submits; a plan already waiting for approval changes nothing.
     plan_already_submitted: {409, "The plan is already waiting for approval."},
-    # #273 step 1 (until domain's rule approves the rest): the approval is refused while any
-    # selected pass's booking window has closed; nothing is recorded. ux's words (U97).
-    contact_plan_opportunity_expired:
+    # #273: the closed set changed since the approver saw it; every pass's window closed.
+    contact_plan_expired_passes_changed:
       {409,
-       "The booking window has closed for some of this plan's passes, so it can't be approved as it is. Nothing was recorded."},
+       "The booking window closed for more of this plan's passes after you opened it. Nothing was recorded; check the list and approve again."},
+    contact_plan_all_opportunities_expired:
+      {409,
+       "The booking window has closed for all of this plan's passes, so nothing can be booked. Nothing was recorded."},
     contact_plan_self_approval_forbidden:
       {403,
        "You submitted this plan or drafted a version of it since it was last approved, so another org admin approves it."},
@@ -279,6 +281,9 @@ defmodule CadenceWeb.Console.Problem do
     fleet_planning_occurrence_limit_exceeded:
       {422,
        "This start goes over the limit of template requirements. Include fewer templates, or narrow their targets."},
+    fleet_planning_run_requirement_limit_exceeded:
+      {422,
+       "This start includes too many requirements. Narrow the planning window or the template targets."},
     # U55: cancel or end a pass's contact (the console words each state itself).
     # U65: the model approval gate (words: ux; codes: domain's).
     human_mission_model_approver_required:

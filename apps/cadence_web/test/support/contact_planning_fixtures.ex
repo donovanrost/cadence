@@ -44,7 +44,8 @@ defmodule CadenceWeb.ContactPlanningFixtures do
   @doc """
   A spacecraft with one minimum-duration downlink requirement, a planning run
   that found one synthetic opportunity, and a draft plan selecting it.
-  Options: `:select?` (default true) to leave the plan without the pass.
+  Options: `:select?` (default true) to leave the plan without the pass; `:opportunities` (default
+  1) for a plan with that many non-overlapping passes (#273).
   """
   def plan_fixture(org, user, membership, mission, opts \\ []) do
     scope =
@@ -84,7 +85,10 @@ defmodule CadenceWeb.ContactPlanningFixtures do
         list_routes: fn _, _, _ ->
           {:ok, %{routes: [route(craft.spacecraft_id)], findings: []}}
         end,
-        search_opportunities: fn _, _, _, _, _ -> {:ok, %{opportunities: [opportunity()]}} end
+        search_opportunities: fn _, _, _, _, _ ->
+          {:ok,
+           %{opportunities: Enum.map(1..Keyword.get(opts, :opportunities, 1), &opportunity/1)}}
+        end
       )
 
     selected =
@@ -196,16 +200,25 @@ defmodule CadenceWeb.ContactPlanningFixtures do
       route_display_name: "Review route"
     }
 
-  def opportunity,
+  def opportunity, do: opportunity(1)
+
+  @doc """
+  The `n`th synthetic opportunity: the first is the original one; each later one starts two hours
+  after the one before it (no overlap), with its own id (#273's multi-pass plans).
+  """
+  def opportunity(1), do: base_opportunity("opportunity-review", 0)
+  def opportunity(n) when n > 1, do: base_opportunity("opportunity-review-#{n}", (n - 1) * 7_200)
+
+  defp base_opportunity(id, shift),
     do: %{
-      "id" => "opportunity-review",
+      "id" => id,
       "spacecraft_ref" => "SC-review",
       "ground_station_ref" => "station-review",
       "antenna_or_service_pool_ref" => "pool-review",
       "service_profile_ref" => "service-review",
-      "starts_at" => iso(3600),
-      "ends_at" => iso(4500),
-      "expires_at" => iso(18_000),
+      "starts_at" => iso(3600 + shift),
+      "ends_at" => iso(4500 + shift),
+      "expires_at" => iso(18_000 + shift),
       "availability" => "available",
       "estimated_capacity" => %{"bytes" => 2_000_000_000},
       "synthetic" => true,

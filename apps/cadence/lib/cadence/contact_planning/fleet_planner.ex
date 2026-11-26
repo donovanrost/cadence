@@ -155,7 +155,7 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
                    "snapshots_selected" => length(optimization.selected_snapshot_ids)
                  }),
                result_summary_document: %{
-                 "coverage" => optimization.coverage_by_requirement,
+                 "coverage_counts" => coverage_counts(optimization.coverage_by_requirement),
                  "resources" => optimization.resource_summary,
                  "budgets" => optimization.budget_summary,
                  "termination" => optimization.termination_document
@@ -245,35 +245,45 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
         run.fleet_planning_run_id
       )
 
-    results =
-      refs
-      |> Task.async_stream(
-        &search_requirement(scope, run, &1, policy, opts),
-        ordered: true,
-        max_concurrency: policy.horizon_document["requirement_concurrency"],
-        timeout: :infinity
-      )
-      |> Enum.map(fn
-        {:ok, result} -> result
-        {:exit, _reason} -> {:error, :fleet_requirement_search_worker_exit}
-      end)
+    refs
+    |> Task.async_stream(
+      &search_requirement(scope, run, &1, policy, opts),
+      ordered: true,
+      max_concurrency: policy.horizon_document["requirement_concurrency"],
+      timeout: :infinity
+    )
+    |> Enum.reduce_while(
+      {:ok,
+       %{
+         "requirements_total" => length(refs),
+         "requirements_searched" => 0,
+         "requirements_failed" => 0,
+         "snapshots_considered" => 0,
+         "snapshots_selected" => 0
+       }},
+      fn
+        {:ok, {:ok, result}}, {:ok, summary} ->
+          summary =
+            summary
+            |> Map.update!(
+              "requirements_searched",
+              &(&1 + if(result.input_state == :searched, do: 1, else: 0))
+            )
+            |> Map.update!(
+              "requirements_failed",
+              &(&1 + if(result.input_state == :failed, do: 1, else: 0))
+            )
+            |> Map.update!("snapshots_considered", &(&1 + result.snapshot_count))
 
-    case Enum.find(results, &match?({:error, _}, &1)) do
-      nil ->
-        completed = Enum.map(results, fn {:ok, result} -> result end)
+          {:cont, {:ok, summary}}
 
-        {:ok,
-         %{
-           "requirements_total" => length(refs),
-           "requirements_searched" => Enum.count(completed, &(&1.input_state == :searched)),
-           "requirements_failed" => Enum.count(completed, &(&1.input_state == :failed)),
-           "snapshots_considered" => completed |> Enum.map(& &1.snapshot_count) |> Enum.sum(),
-           "snapshots_selected" => 0
-         }}
+        {:ok, {:error, reason}}, _ ->
+          {:halt, {:error, reason}}
 
-      {:error, reason} ->
-        {:error, reason}
-    end
+        {:exit, _reason}, _ ->
+          {:halt, {:error, :fleet_requirement_search_worker_exit}}
+      end
+    )
   end
 
   defp search_requirement(scope, run, ref, policy, opts) do
@@ -569,8 +579,7 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
            active_version.fleet_planning_policy_id == policy.fleet_planning_policy_id and
              active_version.version == policy.version and
              active_version.content_sha256 == policy.content_sha256,
-         {:ok, requirements} <- exact_requirements(run),
-         true <- Enum.all?(requirements, &current_requirement?/1) do
+         {:ok, _requirements} <- exact_requirements(run) do
       :ok
     else
       false -> {:error, :fleet_planning_input_drift}
@@ -588,36 +597,34 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
   end
 
   defp exact_requirements(run) do
-    results =
-      run.organization_id
-      |> FleetPlanningRuns.list_requirement_refs(run.mission_id, run.fleet_planning_run_id)
-      |> Enum.map(fn ref ->
-        ContactRequirements.fetch_version(
-          run.organization_id,
-          run.mission_id,
-          ref.contact_requirement_id,
-          ref.contact_requirement_version
-        )
-      end)
-
-    case Enum.find(results, &match?({:error, _}, &1)) do
-      nil -> {:ok, Enum.map(results, fn {:ok, requirement} -> requirement end)}
-      {:error, reason} -> {:error, reason}
+    run.organization_id
+    |> FleetPlanningRuns.list_requirement_refs(run.mission_id, run.fleet_planning_run_id)
+    |> Stream.chunk_every(500)
+    |> Enum.reduce_while({:ok, []}, &fetch_requirement_batch(&1, &2, run))
+    |> case do
+      {:ok, batches} -> {:ok, batches |> Enum.reverse() |> List.flatten()}
+      error -> error
     end
   end
 
-  defp current_requirement?(version) do
-    case ContactRequirements.fetch(
-           version.organization_id,
-           version.mission_id,
-           version.contact_requirement_id
-         ) do
-      {:ok, %{lifecycle_state: :active, current_version: current}, current_version}
-      when current == version.version ->
-        current_version.content_sha256 == version.content_sha256
+  defp fetch_requirement_batch(refs, {:ok, batches}, run) do
+    ids = Enum.map(refs, & &1.contact_requirement_id)
+    found = ContactRequirements.fetch_many(run.organization_id, run.mission_id, ids)
+    versions = Enum.map(refs, &current_version_for_ref(&1, found))
 
-      _result ->
-        false
+    if Enum.any?(versions, &is_nil/1),
+      do: {:halt, {:error, :fleet_planning_input_drift}},
+      else: {:cont, {:ok, [versions | batches]}}
+  end
+
+  defp current_version_for_ref(ref, found) do
+    case Map.get(found, ref.contact_requirement_id) do
+      {%{lifecycle_state: :active, current_version: version}, current}
+      when version == ref.contact_requirement_version ->
+        if current.content_sha256 == ref.input_content_sha256, do: current
+
+      _ ->
+        nil
     end
   end
 
@@ -673,13 +680,24 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
 
   defp occupied(_run), do: []
 
-  defp fleet_outcome(%{"coverage" => coverage}) when is_map(coverage) do
-    if Enum.all?(coverage, fn {_id, result} -> result["state"] == "satisfied" end),
+  defp fleet_outcome(%{"coverage_counts" => counts}) when is_map(counts) do
+    if counts["satisfied"] == counts["total"],
       do: :completed,
       else: :partial
   end
 
   defp fleet_outcome(_summary), do: :partial
+
+  defp coverage_counts(coverage) do
+    Enum.reduce(
+      coverage,
+      %{"total" => 0, "satisfied" => 0, "partial" => 0, "unsatisfied" => 0},
+      fn {_id, result}, counts ->
+        state = result["state"]
+        counts |> Map.update!("total", &(&1 + 1)) |> Map.update!(state, &(&1 + 1))
+      end
+    )
+  end
 
   defp candidate_plan(%{candidate_contact_plan_id: nil}),
     do: {:error, :fleet_planning_candidate_plan_not_linked}
