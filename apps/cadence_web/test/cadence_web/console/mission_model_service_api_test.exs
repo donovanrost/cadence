@@ -7,6 +7,7 @@ defmodule CadenceWeb.Console.MissionModelServiceAPITest do
   decisions).
   """
   use CadenceWeb.ConnCase, async: false
+  @moduletag :tmp_dir
 
   alias Cadence.Auth.ServiceIdentity
   alias CadenceWeb.TestFixtures
@@ -65,9 +66,8 @@ defmodule CadenceWeb.Console.MissionModelServiceAPITest do
   defp person(c), do: TestFixtures.member_conn(c.user)
 
   defp upload(conn, c) do
-    path = Path.join(System.tmp_dir!(), "catalog-748-#{System.unique_integer([:positive])}.yaml")
+    path = Path.join(c.tmp_dir, "catalog-#{System.unique_integer([:positive])}.yaml")
     File.write!(path, @yaml)
-    on_exit(fn -> File.rm(path) end)
 
     post(conn, "#{c.base}/catalog/imports", %{
       "name" => "Pipeline catalog",

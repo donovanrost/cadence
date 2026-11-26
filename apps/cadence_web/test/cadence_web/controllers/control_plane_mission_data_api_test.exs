@@ -2,6 +2,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
   use CadenceWeb.ConnCase, async: false
 
   @moduletag :runtime
+  @moduletag :tmp_dir
 
   import CadenceWeb.ControlPlaneApiFixtures
 
@@ -162,7 +163,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
 
   # #748: the catalog goes in through the one API (/api/v1) as a mission-pinned service, an
   # opted-in action; the run's result document is read back from the domain, as the console read omits it.
-  defp import_catalog!(conn, organization_id, mission_id, file_name, yaml) do
+  defp import_catalog!(conn, tmp_dir, organization_id, mission_id, file_name, yaml) do
     # /api/v1 admits a mission-pinned service only; the bootstrap identity spans the organization.
     {:ok, %{api_token: api_token}} =
       Cadence.Auth.issue_service_identity(
@@ -180,9 +181,8 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
         }
       )
 
-    path = Path.join(System.tmp_dir!(), "#{System.unique_integer([:positive])}-#{file_name}")
+    path = Path.join(tmp_dir, file_name)
     File.write!(path, yaml)
-    on_exit(fn -> File.rm(path) end)
 
     import_conn =
       conn
@@ -339,7 +339,8 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
 
   test "authenticated mission API activates an imported Mission Model and ingests dev space packets",
        %{
-         conn: conn
+         conn: conn,
+         tmp_dir: tmp_dir
        } do
     %{conn: conn, organization_id: organization_id, mission_id: mission_id} =
       bootstrap(conn)
@@ -368,7 +369,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
 
     {import_run_id,
      %{"mission_model" => %{"revision_id" => mission_model_revision_id}} = result_document} =
-      import_catalog!(conn, organization_id, mission_id, "mission-alpha-dev.yaml", yaml)
+      import_catalog!(conn, tmp_dir, organization_id, mission_id, "mission-alpha-dev.yaml", yaml)
 
     assert {:ok, plans} =
              Cadence.MissionModels.fetch_runtime_plans(
@@ -435,7 +436,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
   end
 
   test "authenticated mission API manages command stages and their items",
-       %{conn: conn} do
+       %{conn: conn, tmp_dir: tmp_dir} do
     %{conn: conn, api_token: api_token, organization_id: organization_id, mission_id: mission_id} =
       bootstrap(conn)
 
@@ -513,7 +514,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
 
     {_import_run_id,
      %{"mission_model" => %{"revision_id" => mission_model_revision_id}} = result_document} =
-      import_catalog!(conn, organization_id, mission_id, "commanding-api.yaml", yaml)
+      import_catalog!(conn, tmp_dir, organization_id, mission_id, "commanding-api.yaml", yaml)
 
     assert {:ok, runtime_plans} =
              Cadence.MissionModels.fetch_runtime_plans(

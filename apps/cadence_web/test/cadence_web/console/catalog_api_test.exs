@@ -1,5 +1,6 @@
 defmodule CadenceWeb.Console.CatalogAPITest do
   use CadenceWeb.ConnCase, async: false
+  @moduletag :tmp_dir
 
   alias CadenceWeb.TestFixtures
 
@@ -80,11 +81,8 @@ defmodule CadenceWeb.Console.CatalogAPITest do
   end
 
   defp upload(c, file_name, contents, fields) do
-    path =
-      Path.join(System.tmp_dir!(), "catalog-#{System.unique_integer([:positive])}-#{file_name}")
-
+    path = Path.join(c.tmp_dir, "#{System.unique_integer([:positive])}-#{file_name}")
     File.write!(path, contents)
-    on_exit(fn -> File.rm(path) end)
 
     c.user
     |> TestFixtures.member_conn()

@@ -5,6 +5,7 @@ defmodule CadenceWeb.Console.ArchiveQuarantineAPITest do
   synchronous retry `{item, indexed, still_failing}`.
   """
   use CadenceWeb.ConnCase, async: false
+  @moduletag :tmp_dir
 
   import Ecto.Query
 
@@ -18,10 +19,7 @@ defmodule CadenceWeb.Console.ArchiveQuarantineAPITest do
   alias Cadence.Repo
   alias CadenceWeb.TestFixtures
 
-  setup do
-    base_path =
-      Path.join(System.tmp_dir!(), "cadence_quarantine_api_#{System.unique_integer([:positive])}")
-
+  setup %{tmp_dir: base_path} do
     config = [
       module: FileSystem,
       base_path: base_path,
@@ -36,7 +34,6 @@ defmodule CadenceWeb.Console.ArchiveQuarantineAPITest do
 
     on_exit(fn ->
       Application.put_env(:cadence, :protocol_record_archive, previous)
-      File.rm_rf!(base_path)
     end)
 
     booked = ProviderChangeFixtures.setup_contact()

@@ -70,16 +70,12 @@ defmodule XTCETest do
              XTCE.parse(valid_document(), max_nodes: 2)
   end
 
-  test "parses and validates files" do
-    path = Path.join(System.tmp_dir!(), "xtce_test_#{System.unique_integer([:positive])}.xml")
-
-    try do
-      File.write!(path, valid_document())
-      assert {:ok, %Document{}} = XTCE.parse_file(path)
-      assert :ok = XTCE.validate_file(path)
-    after
-      File.rm(path)
-    end
+  @tag :tmp_dir
+  test "parses and validates files", %{tmp_dir: tmp_dir} do
+    path = Path.join(tmp_dir, "sample.xml")
+    File.write!(path, valid_document())
+    assert {:ok, %Document{}} = XTCE.parse_file(path)
+    assert :ok = XTCE.validate_file(path)
   end
 
   test "reports file read failures without raising" do
