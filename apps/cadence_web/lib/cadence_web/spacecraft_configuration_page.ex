@@ -163,6 +163,10 @@ defmodule CadenceWeb.SpacecraftConfigurationPage do
   defp message(:spacecraft_configuration_review_unavailable),
     do: "Save your current configuration and resolve external changes before submitting it."
 
+  defp message({:spacecraft_configuration_review_is_fleet, _details}),
+    do:
+      "This review covers several spacecraft. Decide it from the activation, where every spacecraft in it is shown."
+
   defp message(:spacecraft_configuration_review_stale),
     do: "The active fleet configuration changed. Review the latest state and submit again."
 

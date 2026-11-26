@@ -6,6 +6,7 @@ defmodule Cadence.Activations.FleetConfigurationTest do
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Catalog.SpacecraftConfigurationInput
   alias Cadence.Control.Activations, as: ControlActivations
+  alias Cadence.Control.SpacecraftConfiguration, as: SpacecraftConfigurationControl
   alias Cadence.Control.SpacecraftModelBindings
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Activations
@@ -178,6 +179,24 @@ defmodule Cadence.Activations.FleetConfigurationTest do
 
     assert {:error, :activation_self_approval_forbidden} =
              Activations.approve(c.scope, request.activation_request_id, "Reviewed fleet")
+
+    # Deciding through one craft's route would approve the other craft unseen (commanding, #734):
+    # a review of several spacecraft is decided from the activation, which shows every member.
+    reviewer = Fixtures.user_scope(c.org, "reviewer")
+    request_id = request.activation_request_id
+
+    assert {:error, {:spacecraft_configuration_review_is_fleet, %{request_id: ^request_id}}} =
+             SpacecraftConfigurationControl.decide(
+               reviewer,
+               c.mission.mission_id,
+               c.first.spacecraft_id,
+               tokens[c.first.spacecraft_id],
+               request_id,
+               "Looked at one craft",
+               "approved"
+             )
+
+    assert {:ok, %{state: :approval_pending}} = Activations.fetch(c.scope, request_id)
 
     assert {:ok, execution} =
              ControlActivations.approve_and_execute(

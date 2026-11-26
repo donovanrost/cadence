@@ -72,48 +72,53 @@ defmodule Cadence.Catalog.ConfigurationReviews do
 
   def count(_metadata), do: nil
 
-  @doc "The reviewed spacecraft ids, sorted."
+  @doc """
+  The reviewed spacecraft ids, sorted. The members are re-hashed against the reference's sha (see
+  `evidence/3`).
+  """
   @spec spacecraft_ids(String.t(), String.t(), map()) ::
           {:ok, [String.t()]} | {:error, :spacecraft_configuration_review_stale}
   def spacecraft_ids(organization_id, mission_id, metadata) do
-    with {:ok, query, _count} <- members_query(organization_id, mission_id, metadata) do
+    with {:ok, rows} <- verified(organization_id, mission_id, metadata) do
       # Sorted in Elixir (bytewise), whatever the database's text collation (#56).
-      {:ok, query |> select([m], m.spacecraft_id) |> Repo.all() |> Enum.sort()}
+      {:ok, rows |> Enum.map(&elem(&1, 0)) |> Enum.sort()}
     end
   end
 
   @doc """
   Every reviewed spacecraft's evidence, `spacecraft_id => %{"spacecraft_id", "configuration_revision_id",
-  "configuration_token", "base_activation_id"}`: one query.
+  "configuration_token", "base_activation_id"}`: one query. The evidence an approval rests on is
+  verified: the members are re-hashed (`ContentHash.term_sha256` over the sorted `{id, revision,
+  token}` tuples, as `store/3` hashed them) and compared with the reference's sha, so a row changed
+  or swapped after the review reads as stale, not as what was approved.
   """
   @spec evidence(String.t(), String.t(), map()) ::
           {:ok, %{String.t() => map()}} | {:error, :spacecraft_configuration_review_stale}
   def evidence(organization_id, mission_id, metadata) do
-    with {:ok, query, count} <- members_query(organization_id, mission_id, metadata) do
+    with {:ok, rows} <- verified(organization_id, mission_id, metadata) do
       base = get_in(metadata, ["configuration_review", "base_activation_id"])
 
-      evidence =
-        query
-        |> select([m], {m.spacecraft_id, m.configuration_revision_id, m.configuration_token})
-        |> Repo.all()
-        |> Map.new(fn {id, revision_id, token} ->
-          {id,
-           %{
-             "spacecraft_id" => id,
-             "configuration_revision_id" => revision_id,
-             "configuration_token" => token,
-             "base_activation_id" => base
-           }}
-        end)
-
-      if map_size(evidence) == count, do: {:ok, evidence}, else: @stale
+      {:ok,
+       Map.new(rows, fn {id, revision_id, token} ->
+         {id,
+          %{
+            "spacecraft_id" => id,
+            "configuration_revision_id" => revision_id,
+            "configuration_token" => token,
+            "base_activation_id" => base
+          }}
+       end)}
     end
   end
 
-  @doc "One spacecraft's evidence (shape of `evidence/1`), or nil when it wasn't reviewed."
+  @doc """
+  One spacecraft's evidence (shape of `evidence/3`), or nil when it wasn't reviewed. A display and
+  staleness read of one row: it doesn't re-hash the set, so an approval or admission reads
+  `evidence/3`.
+  """
   @spec evidence_for(String.t(), String.t(), map(), String.t()) :: map() | nil
   def evidence_for(organization_id, mission_id, metadata, spacecraft_id) do
-    with {:ok, query, _count} <- members_query(organization_id, mission_id, metadata),
+    with {:ok, query, _count, _sha} <- members_query(organization_id, mission_id, metadata),
          {revision_id, token} <-
            query
            |> where([m], m.spacecraft_id == ^spacecraft_id)
@@ -156,6 +161,21 @@ defmodule Cadence.Catalog.ConfigurationReviews do
 
   def sha(_metadata), do: nil
 
+  # Loads the set and checks it is what the reference names: the count and the content hash.
+  defp verified(organization_id, mission_id, metadata) do
+    with {:ok, query, count, sha} <- members_query(organization_id, mission_id, metadata) do
+      rows =
+        query
+        |> select([m], {m.spacecraft_id, m.configuration_revision_id, m.configuration_token})
+        |> Repo.all()
+        |> Enum.sort()
+
+      if length(rows) == count and ContentHash.term_sha256(rows) == sha,
+        do: {:ok, rows},
+        else: @stale
+    end
+  end
+
   defp members_query(organization_id, mission_id, %{
          "configuration_review" => %{
            "review" => %{"mission_id" => mission_id, "sha256" => sha, "count" => count}
@@ -169,7 +189,7 @@ defmodule Cadence.Catalog.ConfigurationReviews do
        [m],
        m.organization_id == ^organization_id and m.mission_id == ^mission_id and
          m.review_sha256 == ^sha
-     ), count}
+     ), count, sha}
   end
 
   # Anything else, including a reference that names another mission, is not this request's.
