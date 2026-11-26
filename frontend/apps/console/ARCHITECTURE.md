@@ -84,7 +84,9 @@ params are in `src/router/route-map*.ts`, and `route-map.test.ts` checks the two
   with an always-mounted `role="status"` line). A key that carries a filter (a search box) passes
   `{ scopeOf }`, the key without its filters: a filter change then keeps the rows, `state` stays
   ready and `pending` is set until the new first page lands, so a field above the list never
-  unmounts while someone types. Show `pending` as "Updating…".
+  unmounts while someone types. Show `pending` as "Updating…". A filter page that fails is the
+  state's failure (the old rows don't match the new filter), so render the field outside
+  `ApRemote` and outside any `state.status === 'ready'` gate, or it unmounts on that failure.
 
 ## Session, scope and auth
 
