@@ -93,6 +93,7 @@ defmodule Cadence.Control.SpacecraftConfiguration do
     with {:ok, mission, spacecraft} <- Drafts.authorize(scope, mission_id, spacecraft_id),
          {:ok, request} <- Activations.fetch(scope, request_id),
          true <- request.mission_id == mission_id,
+         :ok <- single_spacecraft(request),
          %{"configuration_token" => reviewed_token} <-
            ConfigurationReviews.evidence_for(
              mission.organization_id,
@@ -119,4 +120,15 @@ defmodule Cadence.Control.SpacecraftConfiguration do
   end
 
   def decide(_, _, _, _, _, _, _), do: {:error, :invalid_activation_decision}
+
+  # An approval decides everything the review covers, so an approver sees what they decide: a
+  # review of several spacecraft is decided from the activation, which shows every member (#734,
+  # commanding's review). Deciding through one craft's route would approve the others unseen.
+  defp single_spacecraft(request) do
+    if (ConfigurationReviews.count(request.metadata) || 1) > 1,
+      do:
+        {:error,
+         {:spacecraft_configuration_review_is_fleet, %{request_id: request.activation_request_id}}},
+      else: :ok
+  end
 end

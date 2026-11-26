@@ -6,6 +6,14 @@ defmodule Cadence.Repo.Migrations.CreateSpacecraftConfigurationReviews do
   # token) is stored once per set, by its hash, like the fleet (activation_fleets); a change set's
   # generation names its changed spacecraft in a table keyed by change set id and revision. The
   # activation metadata carries only the reference, so it stays constant-size.
+  # The evidence an approval rests on is insert-only and never deleted (DECISIONS #107), with the
+  # decision records' own function and test-only purge (migration 20261117160000).
+  @append_only ~w(
+    spacecraft_configuration_reviews
+    spacecraft_configuration_review_members
+    activation_change_set_spacecraft
+  )
+
   def up do
     create table(:spacecraft_configuration_reviews, primary_key: false) do
       add(:mission_id, :string, primary_key: true)
@@ -74,9 +82,28 @@ defmodule Cadence.Repo.Migrations.CreateSpacecraftConfigurationReviews do
       EXECUTE FUNCTION cadence_sync_organization_id_from_mission()
       """)
     end
+
+    for table <- @append_only do
+      execute("""
+      CREATE TRIGGER #{table}_append_only_rows
+        BEFORE UPDATE OR DELETE ON #{table}
+        FOR EACH ROW EXECUTE FUNCTION cadence_decision_record_append_only();
+      """)
+
+      execute("""
+      CREATE TRIGGER #{table}_append_only_truncate
+        BEFORE TRUNCATE ON #{table}
+        FOR EACH STATEMENT EXECUTE FUNCTION cadence_decision_record_append_only();
+      """)
+    end
   end
 
   def down do
+    for table <- @append_only do
+      execute("DROP TRIGGER IF EXISTS #{table}_append_only_truncate ON #{table};")
+      execute("DROP TRIGGER IF EXISTS #{table}_append_only_rows ON #{table};")
+    end
+
     execute("DROP INDEX activation_requests_review_sha256_idx")
     drop(table(:activation_change_set_spacecraft))
     drop(table(:spacecraft_configuration_review_members))

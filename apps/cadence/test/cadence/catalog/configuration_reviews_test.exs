@@ -5,6 +5,7 @@ defmodule Cadence.Catalog.ConfigurationReviewsTest do
 
   alias Cadence.Catalog.ConfigurationReviews
   alias Cadence.Catalog.ConfigurationReviews.{MemberRow, SetRow}
+  alias Cadence.TestSupport.DecisionRecordPurge
 
   setup do
     %{organization_id: org, mission_id: mission} = configuration_mission("review-evidence")
@@ -168,5 +169,70 @@ defmodule Cadence.Catalog.ConfigurationReviewsTest do
 
     assert {:error, :spacecraft_configuration_review_stale} =
              ConfigurationReviews.evidence(c.org, c.mission, meta(unknown))
+  end
+
+  describe "the evidence an approval rests on is immutable (commanding's review, DECISIONS #107)" do
+    test "the review tables and the change-set rows refuse UPDATE, DELETE and TRUNCATE", c do
+      {:ok, _} = ConfigurationReviews.store(c.org, c.mission, items(2))
+      {:ok, _} = Cadence.Catalog.ChangeSetSpacecraft.store(c.org, c.mission, "cs-1", 1, ["sc-1"])
+
+      for sql <- [
+            "UPDATE spacecraft_configuration_review_members SET configuration_token = 'x'",
+            "DELETE FROM spacecraft_configuration_review_members",
+            "TRUNCATE spacecraft_configuration_review_members",
+            "UPDATE spacecraft_configuration_reviews SET spacecraft_count = 9",
+            "DELETE FROM spacecraft_configuration_reviews",
+            "TRUNCATE spacecraft_configuration_reviews",
+            "UPDATE activation_change_set_spacecraft SET spacecraft_id = 'x'",
+            "DELETE FROM activation_change_set_spacecraft",
+            "TRUNCATE activation_change_set_spacecraft"
+          ] do
+        assert_raise Postgrex.Error, ~r/decision records are append-only/, fn ->
+          Repo.transaction(fn -> Repo.query!(sql) end)
+        end
+      end
+
+      assert Repo.aggregate(where(MemberRow, mission_id: ^c.mission), :count) == 2
+    end
+
+    test "a changed token or revision reads as stale, never as what was approved", c do
+      {:ok, ref} = ConfigurationReviews.store(c.org, c.mission, items(3))
+      metadata = meta(ref)
+      assert {:ok, _} = ConfigurationReviews.evidence(c.org, c.mission, metadata)
+
+      # Only a test database's purge setting gets past the trigger.
+      {:ok, _} =
+        DecisionRecordPurge.run(fn ->
+          Repo.query!(
+            "UPDATE spacecraft_configuration_review_members SET configuration_token = 'evil' WHERE spacecraft_id = 'sc-2'"
+          )
+        end)
+
+      assert {:error, :spacecraft_configuration_review_stale} =
+               ConfigurationReviews.evidence(c.org, c.mission, metadata)
+
+      assert {:error, :spacecraft_configuration_review_stale} =
+               ConfigurationReviews.spacecraft_ids(c.org, c.mission, metadata)
+    end
+
+    test "a member swapped at the same count reads as stale", c do
+      {:ok, ref} = ConfigurationReviews.store(c.org, c.mission, items(3))
+      metadata = meta(ref)
+
+      {:ok, _} =
+        DecisionRecordPurge.run(fn ->
+          Repo.query!(
+            "UPDATE spacecraft_configuration_review_members SET spacecraft_id = 'sc-other' WHERE spacecraft_id = 'sc-3'"
+          )
+        end)
+
+      assert length(Repo.all(from(m in MemberRow, where: m.mission_id == ^c.mission))) == 3
+
+      assert {:error, :spacecraft_configuration_review_stale} =
+               ConfigurationReviews.evidence(c.org, c.mission, metadata)
+
+      assert {:error, :spacecraft_configuration_review_stale} =
+               ConfigurationReviews.spacecraft_ids(c.org, c.mission, metadata)
+    end
   end
 end
