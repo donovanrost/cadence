@@ -30,3 +30,6 @@ config :cadence_web,
     source_execution_max_concurrency: 1,
     source_execution_timeout_ms: :infinity
   ]
+
+# #780: the development ingest routes exist in dev and test only; prod never sets this.
+config :cadence_web, :dev_ingest_routes, true

@@ -253,17 +253,6 @@ defmodule CadenceWeb.API.ParamParser do
     end
   end
 
-  def telemetry_history_order(params) when is_map(params) do
-    case Map.get(params, "order") do
-      nil -> {:ok, nil}
-      :asc -> {:ok, :asc}
-      "asc" -> {:ok, :asc}
-      :desc -> {:ok, :desc}
-      "desc" -> {:ok, :desc}
-      _other -> {:error, {:invalid_param, "order", :unknown_atom}}
-    end
-  end
-
   def string_or_string_list(params, key) do
     case Map.get(params, key) do
       nil ->

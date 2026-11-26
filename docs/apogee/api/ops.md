@@ -862,3 +862,19 @@ resolved bindings) and its allowlisted projection.
 - Errors: `422 invalid_params` (`point_id` / `spacecraft_id` missing, `receipt_time` or `at` not
   ISO-8601);
   `404 mission_not_found`. The read authorizes like Explore did (operate the mission).
+
+## `POST /api/v1/missions/:mission_id/dev/space_packets` and `.../dev/tm_frames` (dev and test only, #780)
+
+Development ingest: one packet or frame through the real ingest path, for seeding a dev mission and
+for tests. **The routes exist only in dev and test**: `config :cadence_web, :dev_ingest_routes, true`
+in `config/dev.exs` and `config/test.exs`, read at compile time by the router
+(`CadenceWeb.Console.DevIngestRoutes`), so a prod release has no such route (a test builds a router
+the prod way and finds none). A person's session and CSRF only; a service identity is refused
+(`service_not_allowed`), like everywhere on this API, because no named caller needs one.
+
+Body `{"space_packet": {"packet_hex" | "packet_base64", "source_ref"?, "source_endpoint_ref"?,
+"spacecraft_id"?, "direction"?, "source_time"?, "receipt_time"?, "metadata"?}}`, or
+`{"tm_frame": {"frame_hex" | "frame_base64", "frame_size"?, "secondary_header_length"?,
+"ocf_length"?, ...}}`. 200 `{data: {raw_evidence, packet_records, transfer_frame_records,
+protocol_anomalies, dispatch_decisions, outputs}}`. 422 `invalid_params` for a missing or malformed
+body, or when the ingest refuses it (`details.ingest`, for example no active binding set).
