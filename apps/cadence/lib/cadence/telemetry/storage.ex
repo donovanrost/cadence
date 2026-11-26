@@ -333,6 +333,22 @@ defmodule Cadence.Telemetry.Storage do
     )
   end
 
+  @doc """
+  Seeds the current-value store with samples that are already known (a partition's recovered
+  snapshot, DECISIONS #96), exactly as ingest would have recorded them (same source identity, so
+  they share the live samples' keys) but with nothing else: no observation is written, no fact is
+  published. The samples keep their OWN generation and receipt times, so staleness stays honest,
+  and the store keeps a newer value it already has.
+  """
+  @spec seed_current_values(policy(), [Sample.t()], keyword()) :: :ok | {:error, term()}
+  def seed_current_values(_policy, [], _opts), do: :ok
+
+  def seed_current_values(policy, [%Sample{} | _rest] = samples, opts) when is_list(opts) do
+    with {:ok, enriched} <- enrich_mission_samples(policy, samples, opts) do
+      CurrentValueStore.record_samples(policy.current_value_store_policy, enriched)
+    end
+  end
+
   defp persist_mission_samples(_policy, [], _opts), do: :ok
 
   defp persist_mission_samples(policy, [%Sample{} | _rest] = samples, opts) do

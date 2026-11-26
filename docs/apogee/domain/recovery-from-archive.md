@@ -128,6 +128,16 @@ frames its snapshot already includes (`SemanticSnapshots.skip_replayed?/2`), so 
 nothing twice. Journal off: nothing replays, and a crash loses the memory since the last snapshot
 (pinned by `monitoring_replay_ids_e2e_test.exs`).
 
+**The ETS current-value store is seeded from the snapshot (#831, DECISIONS #96).** A starting owner
+puts its recovered snapshot's `latest` values into the store (`PartitionOwner.CurrentValueSeed`,
+`Storage.seed_current_values/3`) before it takes a frame: each with its OWN generation and receipt
+time, so the staleness rules still say stale; under the same source identity as ingest, so a live
+value replaces it; never over a newer value already there; no observation written, no fact
+published. Only what the snapshot holds can be seeded: the parameters the mission model's semantic
+plan evaluates (monitoring and algorithms), not every telemetry point; a snapshot written before
+updates carried their point is skipped until its next snapshot. ETS only (the Postgres store is
+not a cache).
+
 **A superseded owner is fenced at its next snapshot, not its next batch** (accepted, #692 review):
 the previous owner keeps processing until its next snapshot write (one interval, 60 s) fails on the
 new epoch and it stops. Its snapshot cannot overwrite the new owner's; its effects are insert-or-get

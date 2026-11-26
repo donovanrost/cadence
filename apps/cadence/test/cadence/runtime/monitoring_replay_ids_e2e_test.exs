@@ -252,6 +252,60 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
     end)
   end
 
+  # #831: after a node restart the ETS current-value store is empty until each spacecraft's next
+  # frame. A starting owner puts its snapshot's latest values in it, with their own times. (The
+  # test runtime records into the Postgres store, so the restarted owner is started by hand, under
+  # an ETS store, taking the partition over from the one that wrote the snapshot.)
+  test "a starting owner seeds the ETS store from its snapshot before any new frame", c do
+    alias Cadence.Telemetry.CurrentValueStore
+    alias Cadence.Telemetry.CurrentValueStore.ETS
+
+    mission = c.mission.mission_id
+    key = %PartitionKey{affinity: :source_endpoint, value: c.endpoint.source_endpoint_id}
+    raised = frames(mode: 50, aux: 7, sequence: 1)
+
+    capture_log(fn ->
+      assert transition?(ingest!(evidence(c, raised, 0)), :critical)
+      snapshot_now!(c)
+
+      cache = CurrentValueStore.policy(module: ETS)
+      start_supervised!(CurrentValueStore.child_spec(cache))
+      assert CurrentValueStore.latest_values_for_mission(cache, mission, []) == []
+
+      {:ok, spec} = MissionCoordinator.active_spec(mission)
+      configured = Persistence.configured_policy()
+
+      policy = %{
+        configured
+        | telemetry_storage: %{configured.telemetry_storage | current_value_store_policy: cache}
+      }
+
+      {:ok, owner} =
+        PartitionOwner.start_link(
+          mission_id: mission,
+          partition_key: key,
+          active_activation: spec,
+          binding_set: spec.binding_set,
+          persistence_policy: policy,
+          register?: false
+        )
+
+      on_exit(fn -> if Process.alive?(owner), do: Process.exit(owner, :kill) end)
+
+      # Before any frame: the values are there, as old as they are.
+      values =
+        Map.new(
+          CurrentValueStore.latest_values_for_mission(cache, mission, []),
+          &{&1.point_id, &1}
+        )
+
+      assert %{engineering_value: 50, receipt_time: at} = values["HEALTH.mode"]
+      assert %{engineering_value: 7} = values["HEALTH.aux"]
+      assert DateTime.compare(at, ~U[2026-11-17 02:00:00Z]) == :lt
+      assert %{seeded_from: "semantic_snapshot"} = values["HEALTH.mode"].provenance
+    end)
+  end
+
   # A snapshot when the cadence would not take one yet (60 s, or 2 s idle): the tick says due.
   defp snapshot_now!(c) do
     key = %PartitionKey{affinity: :source_endpoint, value: c.endpoint.source_endpoint_id}
