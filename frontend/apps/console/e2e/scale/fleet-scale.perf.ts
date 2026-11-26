@@ -17,9 +17,10 @@ import { median } from "../support/scale-fleet.ts";
 // `SCALE {json}` line with its budgets beside the numbers, so a CI log shows them even when a
 // budget holds.
 //
-// Only the fleet is scaled (`scaled: ["fleet"]` in each line). A screen's own per-spacecraft
-// reads (Alarms' episodes, Contacts' passes) still serve the seeded 500, so "Alarms · 1000" means
-// the fleet at 1,000, not every read. Scaling those follows the paged endpoints (#793, #794).
+// The fleet and the passes are scaled (`scaled: ["fleet", "passes"]` in each line; #909: each
+// clone gets its seeded craft's passes, served in cursor pages of 500 as the server does). Other
+// per-spacecraft reads (Alarms' episodes) still serve the seeded 500, so "Alarms · 1000" means
+// the fleet at 1,000, not every read.
 
 /** Console's budgets on a CI runner (#176). 500 is the floor, so meeting them at 1,000 covers it. */
 const BUDGET = {
@@ -34,7 +35,7 @@ const PHONE = { width: 390, height: 844 } as const;
 const SIZES = [500, 1_000] as const;
 
 /** What this spec scales; every SCALE line says so. */
-const SCALED = ["fleet"] as const;
+const SCALED = ["fleet", "passes"] as const;
 
 /**
  * `live`: the screen subscribes to the `fleet` push (useFleet without `live: false`), so it gets
