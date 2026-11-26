@@ -9,6 +9,7 @@ defmodule Cadence.Reads.SpacecraftDirectory do
   """
 
   alias Cadence.Comms.RoutingRule
+  alias Cadence.Configuration.ChangeSetStore
   alias Cadence.Reads.FleetStatus
   alias Cadence.Reads.OperationalState
   alias Cadence.Reads.SpacecraftMetadata
@@ -46,8 +47,17 @@ defmodule Cadence.Reads.SpacecraftDirectory do
 
   # S9 (#313, U20): the SCIDs a new spacecraft can't take, and the one to suggest.
   defp scids(organization_id, mission_id) do
-    in_use = StagedScids.in_use(organization_id, mission_id)
+    in_use = StagedScids.in_use(organization_id, mission_id, active_staged_ops(mission_id))
     %{scids_in_use: in_use, next_free_scid: StagedScids.next_free(in_use)}
+  end
+
+  # The mission's open change set's staged ops, by any author (the read composes configuration;
+  # StagedScids stays in the identity context).
+  defp active_staged_ops(mission_id) do
+    case ChangeSetStore.active(mission_id) do
+      nil -> []
+      set -> ChangeSetStore.staged_ops(set.change_set_id)
+    end
   end
 
   @doc "Pure builder; see `load/2` for the inputs."

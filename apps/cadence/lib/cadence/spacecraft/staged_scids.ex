@@ -3,14 +3,14 @@ defmodule Cadence.Spacecraft.StagedScids do
   The SCIDs a mission can't give a new spacecraft, and the stage-time refusal of one another
   staged change already uses (S9, #313; ux U20: a browser's guess can collide).
 
-  **In use** (`in_use/2`): every live spacecraft's SCID, archived ones included (they keep theirs:
+  **In use** (`in_use/3`): every live spacecraft's SCID, archived ones included (they keep theirs:
   the mission's unique index has no archive filter), plus every SCID a staged op of the mission's
   active change set gives a spacecraft (a create's document, or an update's `scid` change), by
   any author. A staged update that moves a live spacecraft to another SCID holds both until it
   applies.
 
   **Next free** (`next_free/1`): the lowest of 1..1023 not in use; never 0 (it stays accepted when
-  typed); nil when none is free. Defined from `in_use/2`, so the two can't disagree.
+  typed); nil when none is free. Defined from `in_use/3`, so the two can't disagree.
 
   **At stage** (`conflicts/4`, `ConfigKind.stage_conflicts/4`): a spacecraft op whose SCID another
   spacecraft's staged op holds, or an earlier op of the same request gives to another spacecraft,
@@ -19,17 +19,16 @@ defmodule Cadence.Spacecraft.StagedScids do
   ("already used in this mission") stays validate/6's, at preview and apply.
   """
 
-  alias Cadence.Configuration.ChangeSetStore
   alias Cadence.SpacecraftStore
 
   @kind "spacecraft"
   @suggested 1..1023
 
   @doc "Every SCID in use in the mission: live, archived and staged; sorted, deduplicated."
-  @spec in_use(String.t(), String.t()) :: [non_neg_integer()]
-  def in_use(organization_id, mission_id) do
+  @spec in_use(String.t(), String.t(), [map()]) :: [non_neg_integer()]
+  def in_use(organization_id, mission_id, staged_ops) do
     live = SpacecraftStore.scids(organization_id, mission_id)
-    staged = mission_id |> staged_ops() |> Enum.map(&scid/1)
+    staged = staged_ops |> Enum.filter(&spacecraft?/1) |> Enum.map(&scid/1)
 
     (live ++ staged) |> Enum.filter(&is_integer/1) |> Enum.uniq() |> Enum.sort()
   end
@@ -124,13 +123,6 @@ defmodule Cadence.Spacecraft.StagedScids do
     case SpacecraftStore.display_names(organization_id, mission_id, [spacecraft_id]) do
       {:ok, [%{"name" => name}]} -> present(name)
       _none -> nil
-    end
-  end
-
-  defp staged_ops(mission_id) do
-    case ChangeSetStore.active(mission_id) do
-      nil -> []
-      set -> set.change_set_id |> ChangeSetStore.staged_ops() |> Enum.filter(&spacecraft?/1)
     end
   end
 
