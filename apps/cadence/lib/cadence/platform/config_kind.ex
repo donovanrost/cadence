@@ -177,6 +177,12 @@ defmodule Cadence.Platform.ConfigKind do
   already visible in the transaction. The pipeline still checks bases and records revisions.
   """
   @callback load_batch(String.t(), String.t(), [String.t()]) :: {map(), term()}
+
+  @doc """
+  Validates and writes the batch. Return one outcome per transition, in order, including
+  `{:invalid, fields}` for every transition that `validate/6` would reject. The pipeline delegates
+  validation to this callback and runs kinds that export `effect/7` through the single-op path.
+  """
   @callback write_batch(String.t(), String.t(), [map()], term()) ::
               {:ok, [{:ok, document() | nil} | {:invalid, [field_error()]}]}
               | {:error, String.t(), term()}

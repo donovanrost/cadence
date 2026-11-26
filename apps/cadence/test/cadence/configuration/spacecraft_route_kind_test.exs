@@ -142,6 +142,48 @@ defmodule Cadence.Configuration.SpacecraftRouteKindTest do
     assert error.message == "EARENDIL-001 already has this route from its profile."
   end
 
+  test "batch planning reports the same field errors as single route validation", ctx do
+    [other] =
+      apply_ops(ctx, "Second spacecraft", [
+        create("spacecraft", spacecraft_doc("EARENDIL-002", 2, {ctx.ids.profile, 1}))
+      ])
+
+    [route_id] = apply_ops(ctx, "Recovery via Inuvik", [create("spacecraft_route", extra(ctx))])
+    current = Map.fetch!(SpacecraftRoute.load(ctx.org, ctx.mission, [route_id]), route_id)
+
+    transitions = [
+      %{
+        action: :create,
+        id: unique("covered-by-profile"),
+        current: nil,
+        proposed: %{extra(ctx) | "ground_station_id" => ctx.ids.svb, "uplink" => "none"}
+      },
+      %{
+        action: :create,
+        id: unique("missing-transport"),
+        current: nil,
+        proposed: Map.put(extra(ctx), "transport_id", "missing-transport")
+      },
+      %{
+        action: :update,
+        id: route_id,
+        current: current,
+        proposed: %{current | "spacecraft_id" => other}
+      }
+    ]
+
+    expected =
+      for %{action: action, id: id, current: current, proposed: proposed} <- transitions do
+        assert {:error, fields} =
+                 SpacecraftRoute.validate(ctx.org, ctx.mission, action, id, current, proposed)
+
+        {:invalid, fields}
+      end
+
+    {_, rows} = SpacecraftRoute.load_batch(ctx.org, ctx.mission, Enum.map(transitions, & &1.id))
+    assert {:ok, ^expected} = SpacecraftRoute.write_batch(ctx.org, ctx.mission, transitions, rows)
+  end
+
   test "a leg the station's transport can't carry is refused", ctx do
     # Svalbard's only transport is inbound: no uplink leg there.
     doc = %{extra(ctx) | "ground_station_id" => ctx.ids.svb, "downlink" => "none"}

@@ -62,34 +62,44 @@ defmodule Cadence.Comms.ConfigKinds.SpacecraftRoute do
   end
 
   @impl true
-  def write_batch(_org, _mission, [], _rows), do: {:ok, []}
-
   def write_batch(org, mission, transitions, rows) do
+    with {:ok, context} <- load_batch_context(org, mission, transitions),
+         {outcomes, planned} = plan_batch(org, transitions, rows, context),
+         :ok <- Batch.persist(org, mission, Enum.reverse(planned), context) do
+      {:ok, outcomes}
+    end
+  end
+
+  defp load_batch_context(org, mission, transitions) do
     documents = Enum.map(transitions, & &1.proposed) |> Enum.reject(&is_nil/1)
     spacecraft_ids = Enum.map(documents, & &1["spacecraft_id"]) |> Enum.reject(&is_nil/1)
     station_ids = Enum.map(documents, & &1["ground_station_id"]) |> Enum.reject(&is_nil/1)
     transport_ids = Enum.map(documents, & &1["transport_id"]) |> Enum.reject(&is_nil/1)
-    {:ok, spacecraft} = SpacecraftStore.fetch_spacecrafts_in_batches(org, mission, spacecraft_ids)
 
-    context =
-      GroundStationStore.fetch_ground_stations(org, mission, station_ids)
-      |> RoutePlan.context(
-        TransportStore.route_transports(org, mission, station_ids, transport_ids)
-      )
-      |> Map.put(:spacecraft, spacecraft)
-      |> Map.put(:profile_choices, RoutingRuleStore.profile_choices(org, mission, spacecraft_ids))
+    with {:ok, spacecraft} <-
+           SpacecraftStore.fetch_spacecrafts_in_batches(org, mission, spacecraft_ids) do
+      context =
+        GroundStationStore.fetch_ground_stations(org, mission, station_ids)
+        |> RoutePlan.context(
+          TransportStore.route_transports(org, mission, station_ids, transport_ids)
+        )
+        |> Map.put(:spacecraft, spacecraft)
+        |> Map.put(
+          :profile_choices,
+          RoutingRuleStore.profile_choices(org, mission, spacecraft_ids)
+        )
 
-    {outcomes, planned} =
-      Enum.map_reduce(transitions, [], fn change, planned ->
-        case plan_batch_change(org, change, context, Map.get(rows, change.id, [])) do
-          {:ok, stored, legs} -> {{:ok, stored}, Enum.reverse(legs, planned)}
-          {:error, fields} -> {{:invalid, fields}, planned}
-        end
-      end)
-
-    with :ok <- Batch.persist(org, mission, Enum.reverse(planned), context) do
-      {:ok, outcomes}
+      {:ok, context}
     end
+  end
+
+  defp plan_batch(org, transitions, rows, context) do
+    Enum.map_reduce(transitions, [], fn change, planned ->
+      case plan_batch_change(org, change, context, Map.get(rows, change.id, [])) do
+        {:ok, stored, legs} -> {{:ok, stored}, Enum.reverse(legs, planned)}
+        {:error, fields} -> {{:invalid, fields}, planned}
+      end
+    end)
   end
 
   defp plan_batch_change(_org, %{action: :delete}, _context, rows) do

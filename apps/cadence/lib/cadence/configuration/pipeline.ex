@@ -88,9 +88,10 @@ defmodule Cadence.Configuration.Pipeline do
   defp operation_group(op) do
     kind = Kinds.fetch!(op.kind)
 
-    if function_exported?(kind, :batchable?, 1) and kind.batchable?(op),
-      do: {:batch, kind},
-      else: :single
+    if function_exported?(kind, :batchable?, 1) and
+         not function_exported?(kind, :effect, 7) and kind.batchable?(op),
+       do: {:batch, kind},
+       else: :single
   end
 
   defp run_group(org, mission, base, [first | _] = ops, acc) do
@@ -148,8 +149,12 @@ defmodule Cadence.Configuration.Pipeline do
         end
       end)
 
-    transitions = Enum.reverse(transitions)
+    write_batch(Enum.reverse(transitions), kind, org, mission, context, acc)
+  end
 
+  defp write_batch([], _kind, _org, _mission, _context, acc), do: acc
+
+  defp write_batch(transitions, kind, org, mission, context, acc) do
     case kind.write_batch(org, mission, transitions, context) do
       {:ok, outcomes} ->
         Enum.zip(transitions, outcomes)
