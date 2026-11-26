@@ -2,6 +2,7 @@ defmodule Cadence.Management.Commanding.FleetCatalogTest do
   use Cadence.DataCase, async: false
 
   alias Cadence.Activations.ActiveBindingSetRow
+  alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Catalog.SpacecraftConfigurationInput
   alias Cadence.CommandAuthoringFixtures
   alias Cadence.ExactCommandAuthoringFixtures
@@ -144,10 +145,8 @@ defmodule Cadence.Management.Commanding.FleetCatalogTest do
   defp activate_entries(c, entries) do
     row = Repo.get!(ActiveBindingSetRow, c.mission)
 
-    metadata = %{
-      "spacecraft_configuration_version" => 1,
-      "spacecraft_configurations" => entries
-    }
+    {:ok, fleet} = FleetSnapshot.store(c.mission, entries)
+    metadata = FleetSnapshot.metadata(fleet, nil)
 
     Repo.update!(change(row, metadata: JsonDocument.wrap_value(metadata)))
   end

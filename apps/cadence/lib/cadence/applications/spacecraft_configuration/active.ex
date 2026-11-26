@@ -41,7 +41,7 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Active do
   end
 
   defp entries(_mission, %{metadata: metadata}, _binding_set)
-       when is_map_key(metadata, "spacecraft_configurations") or is_map_key(metadata, "fleet"),
+       when is_map_key(metadata, "fleet"),
        do: FleetSnapshot.entries(metadata)
 
   defp entries(_mission, %{metadata: metadata}, _binding_set)

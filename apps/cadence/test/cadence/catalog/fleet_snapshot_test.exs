@@ -60,13 +60,19 @@ defmodule Cadence.Catalog.FleetSnapshotTest do
     assert Repo.aggregate(where(MemberRow, mission_id: ^mission), :count) == 6
   end
 
-  test "inline (v1) metadata stays readable", %{mission: mission} do
-    _ = mission
+  test "inline (v1) metadata is no longer a fleet" do
     metadata = %{"spacecraft_configuration_version" => 1, "spacecraft_configurations" => fleet(2)}
 
-    assert FleetSnapshot.fleet?(metadata)
-    assert {:ok, %{"source_endpoint_ids" => ["src-2"]}} = FleetSnapshot.entry(metadata, "sc-2")
-    assert {:ok, _} = FleetSnapshot.entry_for_source(metadata, "src-1")
+    refute FleetSnapshot.fleet?(metadata)
+    assert {:error, :invalid_spacecraft_model_bindings} = FleetSnapshot.entries(metadata)
+    assert {:error, :spacecraft_model_not_active} = FleetSnapshot.entry(metadata, "sc-2")
+
+    assert {:error, :spacecraft_model_not_active} =
+             FleetSnapshot.entry_for_source(metadata, "src-1")
+  end
+
+  test "a fleet has no size cap", %{mission: mission} do
+    assert {:ok, %{"count" => 2_100}} = FleetSnapshot.store(mission, fleet(2_100))
   end
 
   test "invalid fleets are refused before anything is stored", %{mission: mission} do

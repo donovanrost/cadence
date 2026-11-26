@@ -12,7 +12,6 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
   alias Cadence.Platform.ContentHash
   alias Cadence.Runtime.BindingSetIndex
   alias Cadence.Runtime.MissionModelPlanDecoder
-  alias Cadence.Runtime.PartitionMetadata
   alias Cadence.Runtime.SourceRuntimeBases
   alias Cadence.SemanticRuntime.PlanDecoder
   alias Cadence.SemanticRuntime.RegisteredRegistry
@@ -230,7 +229,6 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
        %{
          selected
          | binding_set: BindingSetIndex.select(selected.binding_set, partition),
-           metadata: PartitionMetadata.project(selected.metadata, partition),
            source_runtime_bases: source_bases
        }}
     end

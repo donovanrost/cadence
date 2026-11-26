@@ -5,6 +5,7 @@ defmodule Cadence.Activations.FleetConfigurationTest do
   alias Cadence.Applications.TelemetryDecom
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Catalog.SpacecraftConfigurationInput
+  alias Cadence.Control.ActivationRequests
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Control.SpacecraftModelBindings
   alias Cadence.Governance.ActivationPolicy
@@ -43,7 +44,8 @@ defmodule Cadence.Activations.FleetConfigurationTest do
 
     tokens = Map.new(fleet, fn craft -> {craft.spacecraft_id, save(c, craft)} end)
     assert {:ok, request} = Review.request_many(c.scope, c.mission.mission_id, tokens)
-    assert byte_size(Jason.encode!(request.metadata)) > 65_536
+    # The metadata is a fleet reference and a review reference (#734), not 500 entries.
+    assert byte_size(Jason.encode!(request.metadata)) < 2_000
     assert {:ok, approved} = Activations.fetch_approved(request.activation_request_id)
 
     {{:ok, execution}, queries, rows} =
@@ -99,7 +101,7 @@ defmodule Cadence.Activations.FleetConfigurationTest do
   end
 
   @tag timeout: 300_000
-  test "a 550-spacecraft fleet activates in two review batches", c do
+  test "a 550-spacecraft fleet is one review: there is no batch cap (#734)", c do
     fleet = [
       c.first
       | Enum.map(2..550, fn i ->
@@ -107,19 +109,15 @@ defmodule Cadence.Activations.FleetConfigurationTest do
         end)
     ]
 
-    {block1, block2} = Enum.split(fleet, 500)
-
-    for batch <- [block1, block2] do
-      tokens = Map.new(batch, fn craft -> {craft.spacecraft_id, save(c, craft)} end)
-      assert {:ok, request} = Review.request_many(c.scope, c.mission.mission_id, tokens)
-      assert {:ok, approved} = Activations.fetch_approved(request.activation_request_id)
-      assert {:ok, %{status: :succeeded}} = ControlActivations.execute(approved)
-    end
+    tokens = Map.new(fleet, fn craft -> {craft.spacecraft_id, save(c, craft)} end)
+    assert {:ok, request} = Review.request_many(c.scope, c.mission.mission_id, tokens)
+    assert {:ok, approved} = Activations.fetch_approved(request.activation_request_id)
+    assert {:ok, %{status: :succeeded}} = ControlActivations.execute(approved)
 
     assert {:ok, active} = Active.load(c.mission)
     assert map_size(active.entries) == 550
 
-    last = List.last(block2)
+    last = List.last(fleet)
     source = hd(active.entries[last.spacecraft_id]["source_endpoint_ids"])
 
     assert {:ok, _basis} =
@@ -182,12 +180,28 @@ defmodule Cadence.Activations.FleetConfigurationTest do
     assert {:error, :activation_self_approval_forbidden} =
              Activations.approve(c.scope, request.activation_request_id, "Reviewed fleet")
 
-    assert {:ok, execution} =
-             ControlActivations.approve_and_execute(
-               Fixtures.user_scope(c.org, "reviewer"),
+    # A review of several spacecraft is decided from the activation, which shows every member
+    # (#734, commanding's review): the activation route is the one decision path.
+    assert {:error, {:activation_self_approval_forbidden, _via}} =
+             ActivationRequests.approve(
+               c.scope,
+               c.mission.mission_id,
                request.activation_request_id,
-               "Reviewed both spacecraft"
+               %{
+                 "reason" => "Reviewed fleet"
+               }
              )
+
+    assert {:ok, %{outcome: "applied"}} =
+             ActivationRequests.approve(
+               Fixtures.user_scope(c.org, "reviewer"),
+               c.mission.mission_id,
+               request.activation_request_id,
+               %{"reason" => "Reviewed both spacecraft"}
+             )
+
+    assert {:ok, execution} =
+             ControlActivations.fetch_execution(request.activation_request_id)
 
     assert execution.status == :succeeded
   end
@@ -209,14 +223,9 @@ defmodule Cadence.Activations.FleetConfigurationTest do
     refute first.metadata["spacecraft_configuration_revision_id"]
   end
 
-  test "an empty or oversized review is rejected", c do
+  test "an empty review is rejected", c do
     assert {:error, :spacecraft_configuration_review_unavailable} =
              Review.request_many(c.scope, c.mission.mission_id, %{})
-
-    tokens = Map.new(1..501, &{"spacecraft-#{&1}", "token"})
-
-    assert {:error, :spacecraft_configuration_review_unavailable} =
-             Review.request_many(c.scope, c.mission.mission_id, tokens)
   end
 
   # Queries the calling process runs inside `fun`, and the rows they return.

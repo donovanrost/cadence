@@ -621,11 +621,8 @@ defmodule Cadence.Applications.TelemetryDecom do
   end
 
   @doc "Records the applied state produced by a governed Telemetry Decom activation."
-  @spec activation_applied(BindingSet.t(), map()) :: :ok | {:error, term()}
-  def activation_applied(%BindingSet{} = binding_set, %{
-        "spacecraft_configuration_version" => 1,
-        "spacecraft_configurations" => entries
-      }) do
+  @spec activation_applied(BindingSet.t(), map() | {:fleet, map()}) :: :ok | {:error, term()}
+  def activation_applied(%BindingSet{} = binding_set, {:fleet, entries}) when is_map(entries) do
     ConfigurationLock.run(binding_set.organization_id, binding_set.mission_id, fn ->
       apply_spacecraft_configuration_state(binding_set, entries)
     end)

@@ -21,6 +21,7 @@ defmodule Cadence.Control.ActivationAuthorSeparationTest do
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Auth
   alias Cadence.Auth.{ServiceAccountableRow, ServiceIdentity}
+  alias Cadence.Catalog.ConfigurationReviews
   alias Cadence.Catalog.SpacecraftConfigurationInput
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Governance.ActivationPolicy
@@ -86,14 +87,16 @@ defmodule Cadence.Control.ActivationAuthorSeparationTest do
 
   test "authors fail closed: a review whose version can't be found can't be approved by anyone",
        c do
-    review = %{
-      "configuration_review" => %{
-        "spacecraft_id" => c.craft.spacecraft_id,
-        "configuration_revision_id" => "no-such-revision",
-        "configuration_token" => "x",
-        "base_activation_id" => nil
-      }
-    }
+    {:ok, stored} =
+      ConfigurationReviews.store(c.mission.organization_id, c.mission.mission_id, [
+        %{
+          id: c.craft.spacecraft_id,
+          configuration_revision_id: "no-such-revision",
+          configuration_token: "x"
+        }
+      ])
+
+    review = %{"configuration_review" => ConfigurationReviews.metadata(stored, nil)}
 
     id = c.craft.spacecraft_id
 
@@ -181,15 +184,16 @@ defmodule Cadence.Control.ActivationAuthorSeparationTest do
       |> Enum.with_index()
       |> Map.new(fn {id, i} -> {id, if(rem(i, 2) == 0, do: 2, else: 1)} end)
 
-    metadata = %{
-      "configuration_review" => %{
-        "base_activation_id" => nil,
-        "spacecraft_reviews" =>
-          Map.new(reviewed, fn {id, v} ->
-            {id, %{"configuration_revision_id" => "#{id}-v#{v}"}}
-          end)
-      }
-    }
+    {:ok, stored} =
+      ConfigurationReviews.store(
+        c.mission.organization_id,
+        c.mission.mission_id,
+        Enum.map(reviewed, fn {id, v} ->
+          %{id: id, configuration_revision_id: "#{id}-v#{v}", configuration_token: "t-#{id}"}
+        end)
+      )
+
+    metadata = %{"configuration_review" => ConfigurationReviews.metadata(stored, nil)}
 
     {queries, result} = count_queries(fn -> Authors.by_spacecraft(c.mission, metadata) end)
     assert {:ok, authors} = result
@@ -200,8 +204,8 @@ defmodule Cadence.Control.ActivationAuthorSeparationTest do
       assert Enum.sort(authors[id]) == expected
     end
 
-    # Active.load's own read(s) plus Authors' two, whatever the fleet size.
-    assert queries <= 4
+    # Active.load's own read(s), the review's evidence and Authors' two, whatever the fleet size.
+    assert queries <= 5
   end
 
   describe "#280: a version saved under a service identity's id (a change set's applier)" do

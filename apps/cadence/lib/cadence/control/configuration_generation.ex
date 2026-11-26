@@ -36,6 +36,7 @@ defmodule Cadence.Control.ConfigurationGeneration do
   }
 
   alias Cadence.Catalog
+  alias Cadence.Catalog.ChangeSetSpacecraft
   alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Commanding.{Cancellation, RequestActivity}
 
@@ -560,7 +561,8 @@ defmodule Cadence.Control.ConfigurationGeneration do
              binding_set
            ),
          {:ok, fleet} <- FleetSnapshot.store(mission_id, Map.merge(active.entries, changed)),
-         metadata = metadata(fleet, input, changed),
+         {:ok, change_set} <- store_changed(input, changed),
+         metadata = metadata(fleet, change_set),
          {:ok, request} <-
            ManagementActivations.request_from_change_set(%{
              binding_set: binding_set,
@@ -583,14 +585,22 @@ defmodule Cadence.Control.ConfigurationGeneration do
     end
   end
 
-  defp metadata(fleet, input, changed) do
+  # The changed spacecraft live in their own table, keyed by change set and revision (#734): the
+  # metadata carries the reference and the count, so it is constant-size at any fleet size.
+  defp store_changed(input, changed) do
+    ChangeSetSpacecraft.store(
+      input.set.organization_id,
+      input.set.mission_id,
+      input.set.change_set_id,
+      input.revision,
+      Map.keys(changed)
+    )
+  end
+
+  defp metadata(fleet, change_set) do
     fleet
     |> FleetSnapshot.metadata(nil)
-    |> Map.put("change_set", %{
-      "id" => input.set.change_set_id,
-      "revision" => input.revision,
-      "spacecraft_ids" => changed |> Map.keys() |> Enum.sort()
-    })
+    |> Map.put("change_set", change_set)
   end
 
   # Spacecraft whose effective profile config the set may have changed: pins moved (directly or
