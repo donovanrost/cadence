@@ -33,18 +33,20 @@ simulator, Phoenix, and console before the standalone REST client. The environme
 `mise.local.toml` is the only bootstrap credential; the client signs in through the console and
 uses its session. Set `EARENDIL_SPACECRAFT_COUNT` to 500 (default) or 1000. The client also accepts
 `EARENDIL_SITE_COUNT` (2–15) for the future site phase; it does not create sites yet. It prints
-wall time for each phase. Fleet changes enter review and await a second person's session and
-invitation delivery (#745). Site/provider and profile configuration, orbit elements, and dashboard
-import await #734, #732, and #746. Do not run `seed-rest` on a database seeded by default `up`.
+wall time for each phase. It imports the Earendil command and telemetry YAML catalog through the
+console upload route. Fleet changes enter review and await a second person's session and
+invitation delivery (#745). Site, provider, profile, and dashboard setup remain in later REST
+seed slices. Bulk spacecraft configuration review awaits #734; orbit elements await #732.
+Do not run `seed-rest` on a database seeded by default `up`.
 Use `reset` when switching between the full demo and REST harness.
 
-Fresh `reset --no-seed` + `seed-rest` measurements on the Platform worktree (2026-11-25;
+Fresh `reset --no-seed` + `seed-rest` measurements on the Platform worktree (2026-11-26;
 100 spacecraft per REST batch; timings exclude stack startup):
 
-| Spacecraft | Sign-in | Org + mission | Fleet read | Preview + stage | Submit for review | Total |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 500 | 0.11 s | 0.10 s | 0.08 s | 2.69 s | 2.26 s | 5.28 s |
-| 1,000 | 0.26 s | 0.11 s | 0.15 s | 19.59 s | 5.45 s | 25.60 s |
+| Spacecraft | Sign-in | Org + mission | Catalog import | Fleet read | Stage | Submit for review | Total |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 500 | 0.11 s | 0.13 s | 0.68 s | 0.11 s | 2.95 s | 2.38 s | 6.40 s |
+| 1,000 | 0.10 s | 0.11 s | 0.68 s | 0.06 s | 5.92 s | 5.10 s | 12.01 s |
 
 Both runs reached `in_review`; the mission's default independent approval policy prevents the
 spacecraft from becoming active until #745 supplies a second person.
