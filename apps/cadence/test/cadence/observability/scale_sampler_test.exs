@@ -68,6 +68,8 @@ defmodule Cadence.Observability.ScaleSamplerTest do
              }
 
       assert ScaleSampler.Storage.questdb_wal_lag(fn _sql -> {:error, :down} end) == nil
+      assert ScaleSampler.Storage.questdb_wal_lag(fn _sql -> raise "boom" end) == nil
+      assert ScaleSampler.Storage.questdb_wal_lag(fn _sql -> exit(:gone) end) == nil
     end
 
     test "a QuestDB that hangs answers nil within the bound, not after its retries" do

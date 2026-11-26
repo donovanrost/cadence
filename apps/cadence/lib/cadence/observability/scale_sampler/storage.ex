@@ -117,7 +117,17 @@ defmodule Cadence.Observability.ScaleSampler.Storage do
   @questdb_timeout_ms 500
 
   defp questdb(exec, sql) do
-    task = Task.async(fn -> exec.(sql) end)
+    # The task is linked to the sampler, so it must not crash: a raising exec becomes an error.
+    task =
+      Task.async(fn ->
+        try do
+          exec.(sql)
+        rescue
+          exception -> {:error, exception}
+        catch
+          kind, reason -> {:error, {kind, reason}}
+        end
+      end)
 
     case Task.yield(task, @questdb_timeout_ms) || Task.shutdown(task, :brutal_kill) do
       {:ok, {:ok, %{"dataset" => rows}}} -> {:ok, rows}
