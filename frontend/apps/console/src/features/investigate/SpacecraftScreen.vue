@@ -3,7 +3,7 @@ import { scidParam } from "@/api/index.ts";
 import type { SpacecraftTab } from "@/shell";
 import { computed } from "vue";
 import { useRoute } from "vue-router";
-import { useMissionScope } from "@/shell/index.ts";
+import { useFleetPosture, useMissionScope } from "@/shell/index.ts";
 import { ApButton, ApEmptyState, ApPanel, ApRemote } from "@/ui";
 import { useFleet } from "@/features/fleet/index.ts";
 import InvestigateTab from "./InvestigateTab.vue";
@@ -22,6 +22,8 @@ const scope = useMissionScope();
 const route = useRoute("ops.spacecraft");
 const missionId = computed(() => scope.value.mission.id);
 const fleet = useFleet(missionId);
+/** Ground limits configured, from the shell's /counts posture (#847); assumed until it answers. */
+const posture = useFleetPosture();
 
 const scid = computed(() => scidParam(route.params.scId));
 const tab = computed((): SpacecraftTab => route.params.tab || "investigate");
@@ -71,9 +73,7 @@ const lookup = computed(() => {
               busy: alarms.moreBusy.value,
               failed: alarms.moreError.value !== null,
             }"
-            :limits-configured="
-              fleet.state.value.status !== 'ready' || fleet.state.value.value.limits.configured
-            "
+            :limits-configured="posture?.limits_configured !== false"
             :fleet="fleet.state.value.status === 'ready' ? fleet.state.value.value.spacecraft : []"
             @retry="alarms.refetch"
           />
