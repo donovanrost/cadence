@@ -64,8 +64,8 @@ defmodule Cadence.Reads.CommandPreflight.VerifierGroups do
     shaped =
       Enum.map(live, fn member ->
         %{
-          target_index: member.metadata["group"]["target_index"],
-          position: member.metadata["group"]["position"],
+          target_index: member.group_target_index,
+          position: member.group_position,
           request: %{mission_model_revision_id: member.mission_model_revision_id},
           verifier_plans: Map.get(plans, plan_key(member), [])
         }

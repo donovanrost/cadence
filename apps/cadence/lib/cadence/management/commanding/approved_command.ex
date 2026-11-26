@@ -136,11 +136,6 @@ defmodule Cadence.Management.Commanding.ApprovedCommand do
 
   def from_automatic_policy(%CommandRequest{}), do: {:error, :command_not_approved}
 
-  @spec matches_request?(t(), CommandRequest.t()) :: boolean()
-  def matches_request?(%__MODULE__{} = approved_command, %CommandRequest{} = request) do
-    ContentHash.term_sha256(basis(request)) == approved_command.content_sha256
-  end
-
   defp basis(%CommandRequest{} = request) do
     %{
       command_request_id: request.command_request_id,

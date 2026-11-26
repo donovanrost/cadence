@@ -100,19 +100,20 @@ defmodule Cadence.Control.Commanding.GroupAbort do
   end
 
   defp record_member_cancel(org, mission, request_id, reason, actor) do
-    with {:ok, request} <- Cadence.Commanding.fetch_command_request(org, mission, request_id),
-         %{"id" => group_id} <- request.metadata["group"] do
-      GroupStore.append_events([
-        %{
-          command_group_id: group_id,
-          mission_id: mission,
-          kind: :member_canceled,
-          actor: actor,
-          payload: %{"command_request_id" => request_id, "reason" => reason}
-        }
-      ])
-    else
-      _not_a_member -> :ok
+    case Cadence.Commanding.fetch_command_request(org, mission, request_id) do
+      {:ok, request} ->
+        GroupStore.append_events([
+          %{
+            command_group_id: request.command_group_id,
+            mission_id: mission,
+            kind: :member_canceled,
+            actor: actor,
+            payload: %{"command_request_id" => request_id, "reason" => reason}
+          }
+        ])
+
+      {:error, _unreadable} ->
+        :ok
     end
   end
 

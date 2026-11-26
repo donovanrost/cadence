@@ -1,7 +1,8 @@
 defmodule Cadence.Commanding.CommandRequest do
   @moduledoc """
-  Durable formal command intent record created from staged items or direct
-  commanding flows.
+  Durable formal command intent record. Every request is a member of a command group (DECISIONS
+  #61, #62): `command_group_id` and its place in the group (`group_target_index`, `group_position`)
+  are required to persist one.
   """
 
   alias Cadence.Ids
@@ -50,9 +51,13 @@ defmodule Cadence.Commanding.CommandRequest do
           service_subtype: non_neg_integer() | nil,
           opcode: term() | nil,
           requested_at: DateTime.t() | nil,
+          command_group_id: binary() | nil,
+          group_target_index: non_neg_integer() | nil,
+          group_position: non_neg_integer() | nil,
           metadata: map()
         }
 
+  # credo:disable-for-next-line Credo.Check.Warning.StructFieldAmount
   defstruct [
     :command_request_id,
     :organization_id,
@@ -77,6 +82,9 @@ defmodule Cadence.Commanding.CommandRequest do
     :service_subtype,
     :opcode,
     :requested_at,
+    :command_group_id,
+    :group_target_index,
+    :group_position,
     requested_by: %{},
     lifecycle_state: :draft,
     priority: 3,
@@ -142,6 +150,9 @@ defmodule Cadence.Commanding.CommandRequest do
       service_subtype: Map.get(attrs, :service_subtype, Map.get(attrs, "service_subtype")),
       opcode: Map.get(attrs, :opcode, Map.get(attrs, "opcode")),
       requested_at: Map.get(attrs, :requested_at, Map.get(attrs, "requested_at")),
+      command_group_id: Map.get(attrs, :command_group_id),
+      group_target_index: Map.get(attrs, :group_target_index),
+      group_position: Map.get(attrs, :group_position),
       metadata: Map.get(attrs, :metadata, Map.get(attrs, "metadata", %{}))
     }
   end

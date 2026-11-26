@@ -10,7 +10,8 @@ defmodule Cadence.ExactCommandAuthoringFixtures do
 
   alias Cadence.Catalog.Importers.CadenceYamlDatabase
   alias Cadence.Catalog.Source
-  alias Cadence.Management.Commanding.RequestAuthoring
+  alias Cadence.Commanding.{CommandRequest, RequestValidation}
+  alias Cadence.Repo
   @maximum 18_446_744_073_709_551_615
 
   def fixture! do
@@ -22,18 +23,41 @@ defmodule Cadence.ExactCommandAuthoringFixtures do
     })
   end
 
-  def input(c, command, values) do
-    {:ok, catalog} = RequestAuthoring.load(c.scope, c.mission, %{})
+  @doc """
+  Validates `values` for the command (by name) against the active catalog, as a group's preflight
+  does for each member: `{:ok, %{request: enriched}}` or `{:error, reason}`.
+  """
+  def validate(c, command, values) do
+    command_id =
+      case c do
+        %{model: %{commands_by_name: names}} -> Map.get(names, command, command)
+        _ -> command
+      end
 
-    %{
-      "expected_basis" => catalog["basis"]["token"],
-      "source_endpoint_ref" => c.target.source_endpoint_id,
-      "command_id" => c.model.commands_by_name[command],
-      "argument_values_json" => Jason.encode!(values),
-      "priority" => 3,
-      "not_before" => nil,
-      "expires_at" => nil
-    }
+    request =
+      CommandRequest.new(%{
+        organization_id: c.org,
+        mission_id: c.mission,
+        source_endpoint_ref: c.target.source_endpoint_id,
+        command_id: command_id,
+        mission_model_revision_id: nil,
+        argument_values: values,
+        priority: 3,
+        requested_at: DateTime.utc_now(),
+        requested_by: %{"actor_kind" => "user", "user_id" => c.user.user_id}
+      })
+
+    result =
+      Repo.transaction(fn ->
+        with {:ok, snapshot} <- RequestValidation.authoring_snapshot(c.org, c.mission),
+             {:ok, enriched, _state} <- RequestValidation.validate_on_snapshot(request, snapshot) do
+          enriched
+        else
+          {:error, reason} -> Repo.rollback(reason)
+        end
+      end)
+
+    with {:ok, enriched} <- result, do: {:ok, %{request: enriched}}
   end
 
   def activate!(org, mission, extra_commands \\ "") do

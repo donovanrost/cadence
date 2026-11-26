@@ -1,84 +1,19 @@
 defmodule Cadence.Commanding.RequestStore do
   @moduledoc """
-  Management-owned persistence boundary for command requests and approval
-  decisions.
+  Reads of command requests and approval decisions. A request is written only as a command
+  group's member (`Groups.GroupStore`).
   """
 
   import Ecto.Query
-
-  alias Ecto.Changeset
 
   alias Cadence.Commanding.{
     CommandApproval,
     CommandApprovalRow,
     CommandRequest,
-    CommandRequestRow,
-    LifecyclePolicy,
-    RequestValidation
+    CommandRequestRow
   }
 
-  alias Cadence.Management.Commanding.ReviewPrecondition
-  alias Cadence.Platform.ScopedReadUpdates, as: ReadUpdates
   alias Cadence.Repo
-
-  @spec persist_request(binary(), CommandRequest.t()) ::
-          {:ok, CommandRequest.t()} | {:error, term()}
-  def persist_request(organization_id, %CommandRequest{} = command_request)
-      when is_binary(organization_id) do
-    with :ok <- refuse_group_marker(command_request),
-         {:ok, scoped_request} <- put_organization_scope(command_request, organization_id),
-         {:ok, validated_request} <- RequestValidation.validate_and_enrich(scoped_request),
-         {:ok, %CommandRequestRow{} = row} <-
-           Repo.insert(CommandRequestRow.changeset(validated_request)) do
-      ReadUpdates.publish_result(
-        {:ok, CommandRequestRow.to_domain(row)},
-        :commanding_changed,
-        row.organization_id,
-        row.mission_id
-      )
-    else
-      {:error, %Changeset{} = changeset} -> {:error, changeset}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  @doc "Strictly inserts the exact preview after revalidation under model and target locks."
-  def persist_reviewed_request(
-        organization_id,
-        request,
-        expected_basis,
-        expected_target,
-        before_insert
-      ) do
-    with :ok <- refuse_group_marker(request),
-         {:ok, scoped} <- put_organization_scope(request, organization_id) do
-      RequestValidation.with_authoring_request(
-        scoped,
-        expected_basis,
-        expected_target,
-        fn enriched, _ -> insert_reviewed(enriched, scoped, before_insert) end
-      )
-      |> ReadUpdates.publish_result(:commanding_changed, organization_id, scoped.mission_id)
-    end
-  end
-
-  defp insert_reviewed(request, request, before_insert) do
-    with :ok <- before_insert.(),
-         :ok <- LifecyclePolicy.ensure_request_not_expired(request),
-         {:ok, row} <- Repo.insert(CommandRequestRow.changeset(request)) do
-      {:ok, CommandRequestRow.to_domain(row)}
-    end
-  end
-
-  defp insert_reviewed(_, _, _), do: {:error, :command_authoring_preview_changed}
-
-  # Group membership is set only by group submission (`Groups.GroupStore.insert_members/1`). The row
-  # mirrors `metadata["group"]` into its group columns, so a standalone request naming a group in its
-  # metadata would join that group's members (four-eyes audit 11-17, P0).
-  defp refuse_group_marker(%{metadata: %{"group" => _marker}}),
-    do: {:error, :command_request_group_reserved}
-
-  defp refuse_group_marker(_request), do: :ok
 
   @spec fetch_request(binary(), binary(), binary()) ::
           {:ok, CommandRequest.t()} | {:error, term()}
@@ -104,90 +39,6 @@ defmodule Cadence.Commanding.RequestStore do
     |> order_by([row], asc: row.requested_at, asc: row.command_request_id)
     |> Repo.all()
     |> Enum.map(&CommandRequestRow.to_domain/1)
-  end
-
-  @spec decide_request(binary(), binary(), binary(), :approved | :rejected, map(), keyword()) ::
-          {:ok, %{approval: CommandApproval.t(), command_request: CommandRequest.t()}}
-          | {:error, term()}
-  def decide_request(
-        organization_id,
-        mission_id,
-        command_request_id,
-        decision,
-        decided_by,
-        opts
-      )
-      when decision in [:approved, :rejected] do
-    Repo.transaction(fn ->
-      with {:ok, %CommandRequestRow{} = request_row} <-
-             lock_request_row(organization_id, mission_id, command_request_id),
-           :ok <- LifecyclePolicy.ensure_request_not_in_group(request_row),
-           # #117 step 4a (api-ops on #631): the human-approver refusal comes first, so a service
-           # gets its 403 whatever token it sent; then the token (required, well-formed, current).
-           :ok <- LifecyclePolicy.ensure_human_approval_actor(decided_by, command_request_id),
-           :ok <- ReviewPrecondition.required(opts),
-           :ok <- ReviewPrecondition.check(request_row, opts),
-           :ok <- LifecyclePolicy.ensure_request_pending_approval(request_row),
-           :ok <- LifecyclePolicy.ensure_not_self_approval(request_row, decided_by),
-           approval =
-             CommandApproval.new(%{
-               organization_id: organization_id,
-               mission_id: mission_id,
-               command_request_id: command_request_id,
-               decision: decision,
-               decided_by: decided_by,
-               decided_at: Keyword.get(opts, :decided_at, DateTime.utc_now()),
-               reason: Keyword.get(opts, :reason),
-               metadata: Keyword.get(opts, :metadata, %{}),
-               # #117 step 4b: the record. admin_mode has no default (#112, ca-security): every
-               # caller passes it, so a missing one raises rather than claiming false.
-               subject_digest:
-                 ReviewPrecondition.digest(CommandRequestRow.to_domain(request_row)),
-               separated_from: LifecyclePolicy.separated_from(request_row),
-               admin_mode: Keyword.fetch!(opts, :admin_mode)
-             }),
-           {:ok, approval_row} <- Repo.insert(CommandApprovalRow.changeset(approval)),
-           {:ok, updated_request_row} <-
-             Repo.update(CommandRequestRow.lifecycle_changeset(request_row, decision)),
-           result = %{
-             approval: CommandApprovalRow.to_domain(approval_row),
-             command_request: CommandRequestRow.to_domain(updated_request_row)
-           },
-           {:ok, additions} <- before_commit(opts, result) do
-        Map.merge(result, additions)
-      else
-        {:error, reason} -> Repo.rollback(reason)
-      end
-    end)
-    |> ReadUpdates.publish_result(:commanding_changed, organization_id, mission_id)
-  end
-
-  # #263: a check of the decided request and its approval that must hold for the decision to be
-  # recorded (the management plane's approved command). It runs inside the transaction, after the
-  # writes and before the commit, so a failure refuses with nothing written: an answer after the
-  # commit is always the decision that was recorded. `{:ok, additions}` merges into the result.
-  defp before_commit(opts, result) do
-    case Keyword.get(opts, :before_commit) do
-      nil -> {:ok, %{}}
-      check when is_function(check, 1) -> check.(result)
-    end
-  end
-
-  defp lock_request_row(organization_id, mission_id, command_request_id) do
-    row =
-      CommandRequestRow
-      |> where(
-        [row],
-        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-          row.command_request_id == ^command_request_id
-      )
-      |> lock("FOR UPDATE")
-      |> Repo.one()
-
-    case row do
-      nil -> {:error, :command_request_not_found}
-      %CommandRequestRow{} = row -> {:ok, row}
-    end
   end
 
   @spec fetch_approval(binary(), binary(), binary()) ::
@@ -253,21 +104,5 @@ defmodule Cadence.Commanding.RequestStore do
 
   defp maybe_filter_equals(query, field, value) when is_binary(value) do
     where(query, [row], field(row, ^field) == ^value)
-  end
-
-  defp put_organization_scope(%CommandRequest{} = command_request, organization_id)
-       when is_binary(organization_id) and organization_id != "" do
-    case command_request.organization_id do
-      nil ->
-        {:ok, %CommandRequest{command_request | organization_id: organization_id}}
-
-      ^organization_id ->
-        {:ok, command_request}
-
-      existing_organization_id ->
-        {:error,
-         {:organization_mission_mismatch, existing_organization_id, organization_id,
-          command_request.mission_id}}
-    end
   end
 end

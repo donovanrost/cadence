@@ -36,7 +36,7 @@ defmodule Cadence.Commanding.TransportVerifierRaceTest do
     persist_mission_scope(@org, @mission)
 
     Repo.insert!(
-      CommandRequestRow.changeset(
+      Cadence.CommandMemberFixtures.changeset(
         CommandRequest.new(%{
           command_request_id: @request,
           mission_id: @mission,

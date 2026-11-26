@@ -661,15 +661,18 @@ autosave from another tab survives.
 
 Every row in `command_approvals` is a complete decision record (DECISIONS #112; the fields are
 required, so this lands only on a fresh database at a reset):
-- `subject_digest`: the request's review token at decision. For a group member, that's its own
-  token. For a release, it's the token at release.
+- `subject_digest`: the request's review token at decision (`Commanding.RequestDigest.digest/1`).
+  For a group member, that's its own token. For a release, it's the token at release. **Basis
+  version 3 (#708, DECISIONS #112):** the member's group (`command_group_id`, `group_target_index`,
+  `group_position`) is part of what's reviewed, so every digest differs from version 2's; a
+  decision record carries the digest it was decided on, and the database is reseeded.
 - `separated_from`: exactly the ids the separation check was given (the requester; a service by its
   own id). It's `[]` on a `not_required` row, since no check ran.
 - `admin_mode`: whether the decider or releaser acted as a platform admin, from their scope. It
   has no default: a path that omits it fails, and never records `false` by default.
 - `decision`: `approved | rejected | not_required`.
   - **`not_required`** is written only when a request is released without a second GO (its policy
-    needs none): a single request's release (`enqueue`), or a group submitted under such a policy.
+    needs none): a group submitted under such a policy.
     It's written in the release's own transaction, with the releaser as actor.
   - A decision path never writes it.
   - **No existing read shows it** (api-ops on #639): the org audit's command approvals, REST

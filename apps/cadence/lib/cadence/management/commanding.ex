@@ -15,7 +15,7 @@ defmodule Cadence.Management.Commanding do
     StageStore
   }
 
-  alias Cadence.Management.Commanding.{ApprovedCommand, ReviewAccess}
+  alias Cadence.Management.Commanding.ReviewAccess
 
   @doc "`command.request` / `command.approve` from the enforcing review policy (DECISIONS #38)."
   @spec capabilities(Cadence.Auth.Scope.t()) :: [binary()]
@@ -67,22 +67,6 @@ defmodule Cadence.Management.Commanding do
     to: StageStore,
     as: :list_items
 
-  @spec persist_command_request(binary(), CommandRequest.t()) ::
-          {:ok, CommandRequest.t()} | {:error, term()}
-  defdelegate persist_command_request(organization_id, command_request),
-    to: RequestStore,
-    as: :persist_request
-
-  @doc "Persists one exact server-reviewed request without enqueueing or releasing it."
-  defdelegate persist_reviewed_request(
-                organization_id,
-                request,
-                expected_basis,
-                expected_target,
-                before_insert
-              ),
-              to: RequestStore
-
   @spec fetch_command_request(binary(), binary(), binary()) ::
           {:ok, CommandRequest.t()} | {:error, term()}
   defdelegate fetch_command_request(organization_id, mission_id, command_request_id),
@@ -104,85 +88,4 @@ defmodule Cadence.Management.Commanding do
   defdelegate list_command_approvals(organization_id, mission_id, opts \\ []),
     to: RequestStore,
     as: :list_approvals
-
-  @spec reject_command_request(binary(), binary(), binary(), map(), keyword()) ::
-          {:ok, %{approval: CommandApproval.t(), command_request: CommandRequest.t()}}
-          | {:error, term()}
-  def reject_command_request(
-        organization_id,
-        mission_id,
-        command_request_id,
-        rejected_by,
-        opts \\ []
-      ) do
-    RequestStore.decide_request(
-      organization_id,
-      mission_id,
-      command_request_id,
-      :rejected,
-      rejected_by,
-      opts
-    )
-  end
-
-  @spec approve_command_request(binary(), binary(), binary(), map(), keyword()) ::
-          {:ok, map()} | {:error, term()}
-  def approve_command_request(
-        organization_id,
-        mission_id,
-        command_request_id,
-        approved_by,
-        opts \\ []
-      ) do
-    # #263 (api-ops): the approved command is built from the request and its approval BEFORE the
-    # decision commits, so a failure refuses with nothing recorded; once the decision commits the
-    # answer is that it was recorded. Enqueue re-derives and re-checks it. `:approved_command` is
-    # a test seam (default `ApprovedCommand.new/2`).
-    {build, opts} = Keyword.pop(opts, :approved_command, &ApprovedCommand.new/2)
-
-    check = fn %{command_request: request, approval: approval} ->
-      case build.(request, approval) do
-        {:ok, %ApprovedCommand{} = approved_command} ->
-          {:ok, %{approved_command: approved_command}}
-
-        {:error, reason} ->
-          {:error, reason}
-      end
-    end
-
-    RequestStore.decide_request(
-      organization_id,
-      mission_id,
-      command_request_id,
-      :approved,
-      approved_by,
-      Keyword.put(opts, :before_commit, check)
-    )
-  end
-
-  @spec fetch_approved_command(binary(), binary(), binary()) ::
-          {:ok, ApprovedCommand.t()} | {:error, term()}
-  def fetch_approved_command(organization_id, mission_id, command_request_id) do
-    with {:ok, request} <-
-           RequestStore.fetch_request(
-             organization_id,
-             mission_id,
-             command_request_id
-           ) do
-      approved_handoff(request)
-    end
-  end
-
-  defp approved_handoff(request) do
-    request.organization_id
-    |> RequestStore.list_approvals(request.mission_id,
-      command_request_id: request.command_request_id,
-      decision: :approved
-    )
-    |> List.last()
-    |> case do
-      nil -> ApprovedCommand.from_automatic_policy(request)
-      approval -> ApprovedCommand.new(%{request | lifecycle_state: :approved}, approval)
-    end
-  end
 end

@@ -120,7 +120,7 @@ defmodule Cadence.Reads.CommandGroups do
       members = GroupStore.members(org, mission, id)
       rows = command_rows(org, mission, members)
       held = held_lanes(org, mission, members)
-      lanes = Map.new(members, &{&1.metadata["group"]["target_index"], &1.source_endpoint_ref})
+      lanes = Map.new(members, &{&1.group_target_index, &1.source_endpoint_ref})
       events = GroupStore.events(mission, id)
 
       targets =
@@ -247,12 +247,11 @@ defmodule Cadence.Reads.CommandGroups do
   defp excluded_indexes(_group), do: MapSet.new()
 
   defp member(request, row, excluded) do
-    group = request.metadata["group"]
-    stage = stage(request, row, MapSet.member?(excluded, group["target_index"]))
+    stage = stage(request, row, MapSet.member?(excluded, request.group_target_index))
 
     %{
-      position: group["position"],
-      target_index: group["target_index"],
+      position: request.group_position,
+      target_index: request.group_target_index,
       request_id: request.command_request_id,
       command_id: request.command_id,
       command_name: request.command_name,

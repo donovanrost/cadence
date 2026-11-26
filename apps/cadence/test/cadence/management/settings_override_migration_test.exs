@@ -4,7 +4,6 @@ defmodule Cadence.Management.SettingsOverrideMigrationTest do
   alias Cadence.Accounts.{OrganizationMembership, User}
   alias Cadence.Auth.Scope
   alias Cadence.Governance.ActivationPolicy
-  alias Cadence.Management.Commanding.WorkspaceSettings
   alias Cadence.Management.{PassReviewSettingsSection, SettingsOverrideMigration}
   alias Cadence.Platform.{PassReviewSettings, ScopedSettings}
   alias Cadence.Reads.OrganizationAudit.SettingsEvents
@@ -28,7 +27,7 @@ defmodule Cadence.Management.SettingsOverrideMigrationTest do
     })
 
     # Today's full-copy overrides: Governance equal to the org, Pass review with one field
-    # changed, Commanding equal to the default.
+    # changed.
     save(scope, mission, ActivationPolicy, %{
       "value" => %{"approval_requirement" => "independent"}
     })
@@ -36,8 +35,6 @@ defmodule Cadence.Management.SettingsOverrideMigrationTest do
     save(scope, mission, PassReviewSettingsSection, %{
       "value" => %{"pass_realized_threshold" => 0.9, "realization_target" => 0.98}
     })
-
-    save(scope, mission, WorkspaceSettings, %{"value" => %{"shelf" => "expanded"}})
 
     %{org: org, mission: mission, scope: scope}
   end
@@ -51,15 +48,13 @@ defmodule Cadence.Management.SettingsOverrideMigrationTest do
 
     assert [
              %{section_id: "cadence.governance", status: :unchanged, inheriting: []} = governance,
-             %{section_id: "cadence.pass_review", status: :rewrite} = pass_review,
-             %{section_id: "commanding.defaults", status: :rewrite} = commanding
+             %{section_id: "cadence.pass_review", status: :rewrite} = pass_review
            ] = sections
 
     assert governance.kept == ["approval_requirement"]
     assert governance.governance_kept == ["approval_requirement"]
     assert pass_review.kept == ["pass_realized_threshold"]
     assert pass_review.inheriting == ["realization_target"]
-    assert {commanding.kept, commanding.inheriting} == {[], ["shelf"]}
 
     assert report =~ "kept explicitly (governance, equals the org): approval_requirement"
     assert report =~ "kept (differs): pass_realized_threshold = 0.9 (organization: 0.95)"
@@ -71,7 +66,7 @@ defmodule Cadence.Management.SettingsOverrideMigrationTest do
     governance = ActivationPolicy.load(c.org, c.mission)
     %{plan: plan} = SettingsOverrideMigration.dry_run()
 
-    assert [%{written: ["cadence.pass_review", "commanding.defaults"], stale: []}] =
+    assert [%{written: ["cadence.pass_review"], stale: []}] =
              plan |> only(c.mission) |> SettingsOverrideMigration.run()
 
     # Governance isn't written: its token (pending approvals' evidence) is unchanged.
@@ -84,8 +79,6 @@ defmodule Cadence.Management.SettingsOverrideMigrationTest do
              "pass_realized_threshold" => 0.9,
              "realization_target" => 0.98
            }
-
-    assert WorkspaceSettings.load(c.org, c.mission).source == "inherited"
 
     save(c.scope, nil, PassReviewSettingsSection, %{
       "value" => %{"pass_realized_threshold" => 0.95, "realization_target" => 0.97},
@@ -112,19 +105,24 @@ defmodule Cadence.Management.SettingsOverrideMigrationTest do
              "Settings now follow the organization except the fields set for this mission. " <>
                "Approval settings stay set for this mission, even where they match the organization."
 
-    # The three earlier saves stay as their own entries.
-    assert length(events) == 4
+    # The two earlier saves stay as their own entries.
+    assert length(events) == 3
   end
 
   test "a section that moved since the plan is left alone", c do
     %{plan: plan} = SettingsOverrideMigration.dry_run()
 
-    save(c.scope, c.mission, WorkspaceSettings, %{"value" => %{"shelf" => "minimized"}})
+    save(c.scope, c.mission, PassReviewSettingsSection, %{
+      "value" => %{"pass_realized_threshold" => 0.8, "realization_target" => 0.98}
+    })
 
-    assert [%{written: ["cadence.pass_review"], stale: ["commanding.defaults"]}] =
+    assert [%{written: [], stale: ["cadence.pass_review"]}] =
              plan |> only(c.mission) |> SettingsOverrideMigration.run()
 
-    assert WorkspaceSettings.load(c.org, c.mission).saved == %{"shelf" => "minimized"}
+    assert PassReviewSettings.load(c.org, c.mission).saved == %{
+             "pass_realized_threshold" => 0.8,
+             "realization_target" => 0.98
+           }
   end
 
   # The live :4011 case (director 11-13): only a differing governance field, so the run is a no-op.

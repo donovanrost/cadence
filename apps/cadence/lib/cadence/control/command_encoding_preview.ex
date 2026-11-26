@@ -15,7 +15,7 @@ defmodule Cadence.Control.CommandEncodingPreview do
   alias Cadence.Commanding
   alias Cadence.Commanding.RequestValidation
   alias Cadence.Control.Commanding, as: ControlCommanding
-  alias Cadence.Management.Commanding.RequestReview
+  alias Cadence.Management.Commanding.ReviewAccess
 
   # todo(authz): Cedar should decide who may see encoded command bytes (today: anyone who may
   # review the mission's requests, :operate_mission since #62).
@@ -46,7 +46,7 @@ defmodule Cadence.Control.CommandEncodingPreview do
   end
 
   defp authorize(scope, mission_id) do
-    case RequestReview.authorize(scope, mission_id) do
+    case ReviewAccess.authorize(scope, mission_id) do
       {:ok, _fresh, _} -> :ok
       _denied -> {:error, :forbidden}
     end

@@ -24,7 +24,7 @@ defmodule Cadence.Commanding.ReleaseRecoveryTest do
       })
 
     {:ok, %{queue_entry: entry}} =
-      RequestQueueStore.enqueue_request(
+      Cadence.CommandMemberFixtures.enqueue(
         c.org,
         c.mission,
         request.command_request_id,

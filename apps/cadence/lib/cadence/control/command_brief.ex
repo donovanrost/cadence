@@ -15,7 +15,7 @@ defmodule Cadence.Control.CommandBrief do
   alias Cadence.Commanding
   alias Cadence.Commanding.{ReleaseTargetGuard, RequestValidation}
   alias Cadence.Contacts
-  alias Cadence.Management.Commanding.RequestReview
+  alias Cadence.Management.Commanding.ReviewAccess
   alias Cadence.MissionModels
   alias Cadence.Telemetry.CurrentValueStore
 
@@ -28,7 +28,7 @@ defmodule Cadence.Control.CommandBrief do
   def brief(%Scope{} = scope, mission_id, command_request_id) do
     organization_id = scope.organization_id
 
-    with {:ok, _fresh, _} <- RequestReview.authorize(scope, mission_id),
+    with {:ok, _fresh, _} <- ReviewAccess.authorize(scope, mission_id),
          {:ok, request} <-
            Commanding.fetch_command_request(organization_id, mission_id, command_request_id) do
       spacecraft_id = spacecraft_id(organization_id, mission_id, request)
@@ -173,7 +173,7 @@ defmodule Cadence.Control.CommandBrief do
     |> Enum.map(
       &%{
         command_request_id: &1.command_request_id,
-        command_group_id: get_in(&1.metadata || %{}, ["group", "id"]),
+        command_group_id: &1.command_group_id,
         arguments_json: json(&1.resolved_argument_values || %{}),
         state: &1.lifecycle_state,
         requested_at: &1.requested_at,

@@ -3,7 +3,6 @@
   "sections": [
     { "key": "cadence.governance", "owner": "cadence", "scopes": ["organization", "mission"], "host": true },
     { "key": "cadence.pass_review", "owner": "cadence", "scopes": ["organization", "mission"], "host": false },
-    { "key": "commanding.defaults", "owner": "ops_console", "scopes": ["organization", "mission"], "host": true },
     { "key": "cadence.configuration", "owner": "console", "scopes": ["organization", "mission"], "host": false }
   ]
 }

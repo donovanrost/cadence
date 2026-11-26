@@ -30,7 +30,7 @@ From a full read of the pipeline (2026-11-09):
 | Today | Consequence |
 | --- | --- |
 | `CommandRequest` states `draft · validated · approval_pending · approved · rejected · queued · released · canceled`; insert as `validated` or `approval_pending` (`RequestValidation.request_lifecycle_state`) | Members reuse these states. Group policy must be able to **force** `approval_pending` (fleet reach). |
-| Approval is per request (`RequestStore.decide_request`: expected-review digest, human actor, no self-approval) and does **not** enqueue; enqueue is a separate step (`Control.Commanding.enqueue/3` with an `ApprovedCommand` guard) | Group approval decides all members in one transaction, then enqueues them in stack order. Members can't be decided one by one. |
+| (Before #708) Approval was per request (`RequestStore.decide_request`: expected-review digest, human actor, no self-approval) and did **not** enqueue; enqueue was a separate step (`Control.Commanding.enqueue/3` with an `ApprovedCommand` guard). Both are gone: only a group is decided | Group approval decides all members in one transaction, then enqueues them in stack order. Members can't be decided one by one. |
 | Queue lanes are **per target** (`queue_lane_key = source_endpoint_ref`), ordered `priority, queue_sequence`; one `release_pending` entry holds its lane | A target's K members share its lane, so the stack runs **in order at that target's contact**, back-to-back. |
 | Release fires on contact facts / lane kicks; release re-validates the **exact revision** (`resolve_basis`) | A revision change after submit makes a member un-releasable. Today that entry **sits at the head of its lane forever** (no failure, no sweep). Abort/cancel fixes that by hand; the Uplink read flags it. |
 | `canceled` is only set by release-resolution `not_sent`; **no operator cancel** exists; expired entries stay `pending` | M20 adds an operator cancel for not-yet-started members. |
@@ -75,8 +75,9 @@ command_requests  (+ columns, nullable for existing requests)
 ```
 
 Members are the N×K cross product, ordered by `(group_target_index, group_position)`. A member
-records `metadata.group = {id, target_index, position}` too, so existing reads show it. A member
-that ends without radiating carries `metadata.group.end_reason` (`earlier_command_failed |
+carries its group (`command_group_id`, `group_target_index`, `group_position`), all required and the
+group a foreign key (#708: every request is a group's member; the group was also mirrored into
+`metadata.group` before, which is gone). A member that ends without radiating reads an `end_reason` (`earlier_command_failed |
 excluded_at_review | expired | aborted | not_sent | release_basis_changed`) and, for
 `earlier_command_failed`, the triggering member id (`caused_by`).
 
@@ -94,9 +95,9 @@ queued / approval_pending ──abort──► aborted (not-started members canc
 
 - **Submit** (one transaction, under `ActiveBasis.with_command_catalog`'s locked basis): re-resolve
   each target's basis (`ActiveBasis.for_target`), validate and create every member through the
-  existing exact-preview path (`RequestAuthoring.preview`/`create`), in chunks of 25 so each
+  exact snapshot validation (`RequestValidation.validate_on_snapshot`), in chunks of 25 so each
   validation stays bounded; then either enqueue in stack order (no second GO) or leave members
-  `approval_pending`. Read updates + lane kicks after commit, as `WorkspaceSubmission` does.
+  `approval_pending`. Read updates + lane kicks after commit.
   The submit carries the **preflight digest** it was shown; a changed basis or target set →
   `409 preflight_stale` (the UI re-runs preflight).
 - **Decide** (approver, session actor only): `expected_review` = digest of the group + its last

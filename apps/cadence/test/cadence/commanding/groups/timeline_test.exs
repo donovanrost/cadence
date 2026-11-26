@@ -89,7 +89,7 @@ defmodule Cadence.Commanding.Groups.TimelineTest do
 
   test "a failed verification writes member_failed, counting the later members it stops", c do
     {group, [first, second | _]} = submit(c, [signed(c, 1), signed(c, 2)])
-    assert first.metadata["group"]["target_index"] == second.metadata["group"]["target_index"]
+    assert first.group_target_index == second.group_target_index
 
     released!(first, "failed")
     Timeline.settle_requests(c.org, c.mission, [first.command_request_id])

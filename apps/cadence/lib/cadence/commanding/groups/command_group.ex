@@ -2,7 +2,7 @@ defmodule Cadence.Commanding.Groups.CommandGroup do
   @moduledoc """
   One operator intent: N targets x K commands, reviewed, approved and aborted
   as a unit (docs/apogee/domain/group-requests.md). Members are ordinary
-  `Cadence.Commanding.CommandRequest`s carrying `metadata["group"]`.
+  `Cadence.Commanding.CommandRequest`s carrying `command_group_id`, `group_target_index` and `group_position`.
   """
 
   alias Cadence.Ids

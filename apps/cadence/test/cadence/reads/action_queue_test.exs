@@ -1,7 +1,6 @@
 defmodule Cadence.Reads.ActionQueueTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.Commanding.CommandRequest
   alias Cadence.Reads.ActionQueue
 
   @now ~U[2026-11-08 02:41:17Z]
@@ -53,15 +52,6 @@ defmodule Cadence.Reads.ActionQueueTest do
       requested_at: Keyword.get(opts, :requested_at, ago(600)),
       status: status,
       occurred_at: Keyword.get(opts, :occurred_at, ago(300))
-    }
-  end
-
-  defp request(id, state, requester) do
-    %CommandRequest{
-      command_request_id: id,
-      mission_id: "m1",
-      lifecycle_state: state,
-      requested_by: %{"id" => requester}
     }
   end
 
@@ -263,18 +253,12 @@ defmodule Cadence.Reads.ActionQueueTest do
       assert result.counts.spacecraft_p1 == 1
     end
 
-    test "a command group awaiting the viewer is one decision; its members aren't counted" do
-      group_member = %{
-        request("member", :approval_pending, "other")
-        | metadata: %{"group" => %{"id" => "g1"}}
-      }
-
+    test "a command group awaiting the viewer is one decision, however many members it has" do
       result =
         build(%{
-          requests: [group_member, request("solo", :approval_pending, "other")],
           command_rows: [
             command_row("member", :approval_pending),
-            command_row("solo", :approval_pending)
+            command_row("other", :approval_pending)
           ],
           groups_awaiting: [
             %{
@@ -288,31 +272,14 @@ defmodule Cadence.Reads.ActionQueueTest do
           ]
         })
 
-      assert [%{id: "approval:viewer", count: 2, since: since} = item] = result.items
+      assert [%{id: "approval:viewer", count: 1, since: since} = item] = result.items
       assert since == ago(900)
-      assert [%{id: "solo"}] = item.command_requests
+      assert item.command_requests == []
       assert [%{id: "g1", member_count: 40}] = item.command_groups
     end
 
-    test "approval-pending requests count only when another operator requested them" do
-      result =
-        build(%{
-          requests: [
-            request("mine", :approval_pending, "viewer"),
-            request("theirs", :approval_pending, "other"),
-            request("queued", :queued, "other")
-          ],
-          command_rows: [
-            command_row("mine", :approval_pending),
-            command_row("theirs", :approval_pending),
-            command_row("queued", :queued)
-          ]
-        })
-
-      assert [%{id: "approval:viewer", priority: 2, count: 1} = item] = result.items
-
-      assert [%{id: "theirs", target: %{id: "ep-1", name: "EARENDIL-001"}}] =
-               item.command_requests
+    test "no group awaiting the viewer is no decision" do
+      assert build(%{command_rows: [command_row("queued", :queued)]}).items == []
     end
   end
 

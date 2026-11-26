@@ -238,7 +238,7 @@ defmodule CadenceWeb.CommandMonitorReadTest do
       metadata: %{secret: "must-not-reach-browser"}
     }
 
-    Repo.insert!(CommandRequestRow.changeset(request))
+    Repo.insert!(Cadence.CommandMemberFixtures.changeset(request))
 
     if evidence? do
       queue = %CommandQueueEntry{

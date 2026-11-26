@@ -14,7 +14,6 @@ defmodule Cadence.Reads.OrganizationAudit.SettingsEvents do
 
   @settings [
     {"cadence.governance", "Governance"},
-    {"commanding.defaults", "Commanding"},
     {"cadence.configuration", "Configuration"},
     {"cadence.pass_review", "Pass review"}
   ]

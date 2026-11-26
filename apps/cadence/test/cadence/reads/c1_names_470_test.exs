@@ -122,7 +122,7 @@ defmodule Cadence.Reads.C1Names470Test do
             revision_id: "settings-470-c1-#{n}",
             organization_id: @org,
             scope_key: "organization",
-            section_id: "commanding.defaults",
+            section_id: "cadence.pass_review",
             version: n,
             document: %{"value" => %{}, "allow_override" => true},
             actor_id: id,
@@ -133,12 +133,12 @@ defmodule Cadence.Reads.C1Names470Test do
 
       actors =
         @org
-        |> SettingsHistory.list(nil, "commanding.defaults")
+        |> SettingsHistory.list(nil, "cadence.pass_review")
         |> Map.new(&{&1.version, &1.actor})
 
       # The raw history carries the id only, never the stored name.
       refute Enum.any?(
-               ScopedSettings.history(@org, nil, "commanding.defaults"),
+               ScopedSettings.history(@org, nil, "cadence.pass_review"),
                &Map.has_key?(&1, :actor)
              )
 

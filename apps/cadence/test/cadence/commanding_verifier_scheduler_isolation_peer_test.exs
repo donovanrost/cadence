@@ -220,7 +220,7 @@ defmodule Cadence.CommandingVerifierSchedulerIsolationPeerTest do
         lifecycle_state: :pending
       })
 
-    Repo.insert!(CommandRequestRow.changeset(command_request))
+    Repo.insert!(Cadence.CommandMemberFixtures.changeset(command_request))
     Repo.insert!(CommandReleaseAttemptRow.changeset(command_release_attempt))
     Repo.insert!(CommandVerifierInstanceRow.changeset(verifier_instance))
 

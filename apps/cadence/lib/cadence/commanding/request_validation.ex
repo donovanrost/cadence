@@ -10,68 +10,15 @@ defmodule Cadence.Commanding.RequestValidation do
 
   alias Cadence.Catalog.Command.{Invocation, WireEncoding}
   alias Cadence.Commanding.CommandRequest
-  alias Cadence.{MissionModels, Missions}
+  alias Cadence.MissionModels
   alias Cadence.Reads.MissionModels.ActiveBasis
   alias Cadence.Runtime.MissionModelPlanDecoder
   alias Cadence.SourceEndpoints
-
-  @spec validate_and_enrich(CommandRequest.t()) ::
-          {:ok, CommandRequest.t()} | {:error, term()}
-  def validate_and_enrich(%CommandRequest{} = command_request) do
-    with {:ok, _mission} <-
-           Missions.fetch_mission(command_request.organization_id, command_request.mission_id),
-         {:ok, _source_endpoint} <-
-           SourceEndpoints.fetch_source_endpoint(
-             command_request.organization_id,
-             command_request.mission_id,
-             command_request.source_endpoint_ref
-           ),
-         {:ok, request_basis} <-
-           resolve_basis(
-             command_request.organization_id,
-             command_request.mission_id,
-             command_request.mission_model_revision_id,
-             command_request.command_id,
-             command_request.source_endpoint_ref
-           ),
-         {:ok, resolved_argument_values} <-
-           Invocation.resolve(
-             request_basis.runtime_definition,
-             command_request.argument_values
-           ),
-         :ok <- WireEncoding.validate(request_basis.runtime_definition, resolved_argument_values),
-         :ok <-
-           validate_choices(
-             command_request,
-             request_basis.runtime_definition,
-             resolved_argument_values
-           ) do
-      {:ok, enrich(command_request, request_basis, resolved_argument_values)}
-    end
-  end
 
   @doc "Runs an authoring snapshot against one locked active generation and bounded command plan."
   defdelegate with_authoring_catalog(organization_id, mission_id, operation),
     to: Cadence.Reads.MissionModels.ActiveBasis,
     as: :with_command_catalog
-
-  @doc "Re-resolves a reviewed request while the model and target remain locked through the operation."
-  def with_authoring_request(
-        %CommandRequest{} = request,
-        expected_basis,
-        expected_target,
-        operation
-      ) do
-    with_authoring_catalog(request.organization_id, request.mission_id, fn snapshot ->
-      with true <- snapshot.token == expected_basis,
-           {:ok, enriched, state} <- resolve_authoring_request(request, snapshot, expected_target) do
-        operation.(enriched, state)
-      else
-        false -> {:error, :command_authoring_basis_changed}
-        {:error, reason} -> {:error, reason}
-      end
-    end)
-  end
 
   @doc "The active command-catalog snapshot, read without the activation lock."
   defdelegate authoring_snapshot(organization_id, mission_id),
@@ -86,67 +33,6 @@ defmodule Cadence.Commanding.RequestValidation do
   """
   def validate_on_snapshot(%CommandRequest{} = request, snapshot, expected_target \\ nil),
     do: resolve_authoring_request(request, snapshot, expected_target)
-
-  @doc "Validates a finite batch under one admitted model and held target identities."
-  def with_authoring_requests(
-        [%CommandRequest{} = first | _] = requests,
-        expected_basis,
-        targets,
-        operation
-      )
-      when length(requests) <= 25 and is_map(targets) do
-    if same_scope?(requests, first) do
-      resolve_authoring_batch(first, requests, expected_basis, targets, operation)
-    else
-      {:error, :invalid_command_authoring_batch}
-    end
-  end
-
-  def with_authoring_requests(_, _, _, _), do: {:error, :invalid_command_authoring_batch}
-
-  defp resolve_authoring_batch(first, requests, expected_basis, targets, operation) do
-    with_authoring_catalog(first.organization_id, first.mission_id, fn snapshot ->
-      with true <- expected_basis == :current or snapshot.token == expected_basis,
-           {:ok, validated} <- resolve_authoring_requests(requests, snapshot, targets) do
-        operation.(validated, snapshot)
-      else
-        false -> {:error, :command_authoring_basis_changed}
-        {:error, reason} -> {:error, reason}
-      end
-    end)
-  end
-
-  defp same_scope?(requests, first) do
-    Enum.all?(requests, fn
-      %CommandRequest{organization_id: org, mission_id: mission} ->
-        org == first.organization_id and mission == first.mission_id
-
-      _ ->
-        false
-    end) and length(Enum.uniq_by(requests, & &1.command_request_id)) == length(requests)
-  end
-
-  defp resolve_authoring_requests(requests, snapshot, targets) do
-    requests
-    |> Enum.reduce_while({:ok, []}, fn request, {:ok, acc} ->
-      case resolve_authoring_request(
-             request,
-             snapshot,
-             Map.get(targets, request.command_request_id)
-           ) do
-        {:ok, enriched, state} ->
-          {:cont, {:ok, [{enriched, state} | acc]}}
-
-        {:error, reason} ->
-          {:halt,
-           {:error, {:command_authoring_request_failed, request.command_request_id, reason}}}
-      end
-    end)
-    |> case do
-      {:ok, reversed} -> {:ok, Enum.reverse(reversed)}
-      error -> error
-    end
-  end
 
   defp resolve_authoring_request(request, snapshot, expected_target) do
     with {:ok, target} <-

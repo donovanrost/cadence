@@ -6,7 +6,5 @@ export const settingsSections = createPageRegistry<SettingsSectionContribution<C
   {
     "cadence.governance": () =>
       import("./features/governance/contribution").then((module) => module.governanceSettings),
-    "commanding.defaults": () =>
-      import("@cadence/commanding/settings").then((module) => module.workspaceSettingsContribution),
   },
 );

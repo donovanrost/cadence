@@ -139,20 +139,6 @@ test("returning after an uncertain save recognizes the already persisted values"
   expect(view().text()).not.toContain("Saved settings changed");
   expect(drafts.hasUnsaved()).toBe(false);
 });
-test("a failed application section leaves navigation and the Governance draft available", async () => {
-  const { drafts } = await open();
-  await view().get('input[value="direct"]').setValue(true);
-  await view().setProps({
-    sectionId: "commanding.defaults",
-    snapshot: settingsFixture(context, "commanding.defaults", {}),
-  });
-  await vi.waitFor(() => expect(view().text()).toContain("Commanding settings are unavailable"));
-  expect(view().find('nav[aria-label="Settings sections"] a').exists()).toBe(true);
-  await view().setProps({ sectionId: "cadence.governance", snapshot: settingsFixture() });
-  await flushPromises();
-  expect(button("Save changes").exists()).toBe(true);
-  expect(drafts.hasUnsaved()).toBe(true);
-});
 test("the settings reader rejects scope substitution and duplicate contribution identities", () => {
   const page = settingsFixture();
   expect(() =>

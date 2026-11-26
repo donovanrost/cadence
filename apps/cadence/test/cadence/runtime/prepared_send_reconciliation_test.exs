@@ -30,7 +30,7 @@ defmodule Cadence.Runtime.PreparedSendReconciliationTest do
       })
 
     {:ok, %{queue_entry: entry}} =
-      RequestQueueStore.enqueue_request(c.org, c.mission, request.command_request_id, %{},
+      Cadence.CommandMemberFixtures.enqueue(c.org, c.mission, request.command_request_id, %{},
         admin_mode: false
       )
 

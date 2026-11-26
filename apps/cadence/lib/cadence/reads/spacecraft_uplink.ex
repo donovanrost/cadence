@@ -238,8 +238,7 @@ defmodule Cadence.Reads.SpacecraftUplink do
 
   defp group_titles(org, mission, requests) do
     requests
-    |> Enum.map(&get_in(&1.metadata || %{}, ["group", "id"]))
-    |> Enum.reject(&is_nil/1)
+    |> Enum.map(& &1.command_group_id)
     |> Enum.uniq()
     |> Map.new(fn id ->
       case GroupStore.fetch(org, mission, id) do
@@ -249,12 +248,8 @@ defmodule Cadence.Reads.SpacecraftUplink do
     end)
   end
 
-  defp group_ref(request, groups) do
-    case get_in(request.metadata || %{}, ["group", "id"]) do
-      nil -> nil
-      id -> %{id: id, title: Map.get(groups, id)}
-    end
-  end
+  defp group_ref(request, groups),
+    do: %{id: request.command_group_id, title: Map.get(groups, request.command_group_id)}
 
   defp route(org, mission, craft) do
     org

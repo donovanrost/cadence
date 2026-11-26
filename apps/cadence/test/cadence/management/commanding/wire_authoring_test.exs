@@ -5,7 +5,7 @@ defmodule Cadence.Management.Commanding.WireAuthoringTest do
   alias Cadence.Catalog.Source
 
   alias Cadence.Commanding.CommandRequestRow
-  alias Cadence.Management.Commanding.RequestAuthoring
+  alias Cadence.ExactCommandAuthoringFixtures, as: Fixtures
 
   alias Cadence.{
     CommandAuthoringFixtures,
@@ -51,61 +51,27 @@ defmodule Cadence.Management.Commanding.WireAuthoringTest do
 
     assert map_size(model.commands_by_name) == 27
 
-    for {name, command} <- model.commands_by_name do
-      assert {:ok, catalog} = RequestAuthoring.load(c.scope, c.mission, %{"command" => command})
-      assert catalog["selected_command"]["supported"], "#{name} must support wire encoding"
-    end
-
-    command = model.commands_by_name["SET_MODE"]
-    assert {:ok, catalog} = RequestAuthoring.load(c.scope, c.mission, %{"command" => command})
-    assert [%{"name" => "mode", "choices" => choices}] = catalog["selected_command"]["arguments"]
-    assert length(choices) == 7
-
     assert {:ok, held} =
-             RequestAuthoring.preview(c.scope, c.mission, %{
-               "expected_basis" => catalog["basis"]["token"],
-               "source_endpoint_ref" => c.target.source_endpoint_id,
-               "command_id" => command,
-               "argument_values_json" => ~s({"mode":3}),
-               "priority" => 3,
-               "not_before" => nil,
-               "expires_at" => nil
-             })
+             Fixtures.validate(Map.put(c, :model, model), "SET_MODE", %{"mode" => 3})
 
     assert held.request.resolved_argument_values == %{"mode" => 3}
   end
 
-  test "an imported but unsupported float width is unavailable for authoring", c do
+  test "an imported but unsupported float width is refused", c do
     c = activate(c, "float", 16)
-    assert {:ok, catalog} = RequestAuthoring.load(c.scope, c.mission, %{"command" => c.command})
-    refute catalog["selected_command"]["supported"]
 
     assert {:error, :unsupported_command_wire_definition} =
-             RequestAuthoring.preview(c.scope, c.mission, input(c, catalog, 1.0))
+             Fixtures.validate(c, c.command, %{"value" => 1.0})
 
     refute Repo.exists?(CommandRequestRow)
   end
 
   test "native float32 requests reject overflow while preserving representable values", c do
     c = activate(c, "float", 32)
-    assert {:ok, catalog} = RequestAuthoring.load(c.scope, c.mission, %{"command" => c.command})
-    assert catalog["selected_command"]["supported"]
-    assert {:error, _} = RequestAuthoring.preview(c.scope, c.mission, input(c, catalog, 1.0e100))
+    assert {:error, _} = Fixtures.validate(c, c.command, %{"value" => 1.0e100})
     refute Repo.exists?(CommandRequestRow)
-    assert {:ok, held} = RequestAuthoring.preview(c.scope, c.mission, input(c, catalog, 1.5))
+    assert {:ok, held} = Fixtures.validate(c, c.command, %{"value" => 1.5})
     assert held.request.resolved_argument_values == %{"value" => 1.5}
-  end
-
-  defp input(c, catalog, value) do
-    %{
-      "expected_basis" => catalog["basis"]["token"],
-      "source_endpoint_ref" => c.target.source_endpoint_id,
-      "command_id" => c.command,
-      "argument_values_json" => Jason.encode!(%{"value" => value}),
-      "priority" => 3,
-      "not_before" => nil,
-      "expires_at" => nil
-    }
   end
 
   defp activate(c, type, bits) do

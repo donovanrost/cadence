@@ -51,8 +51,8 @@ defmodule Cadence.Reads.CommandPreflight.ResolvedArguments do
     |> Enum.reject(&(&1.lifecycle_state == :rejected))
     |> Enum.map(fn request ->
       %{
-        position: request.metadata["group"]["position"],
-        spacecraft_id: Map.get(spacecraft, request.metadata["group"]["target_index"]),
+        position: request.group_position,
+        spacecraft_id: Map.get(spacecraft, request.group_target_index),
         request: request
       }
     end)

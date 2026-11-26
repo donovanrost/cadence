@@ -57,7 +57,7 @@ defmodule Cadence.CommandingDispatcherTest do
       })
 
     assert {:ok, %{queue_entry: low_priority_queue_entry}} =
-             Cadence.Commanding.enqueue_command_request(
+             Cadence.CommandMemberFixtures.enqueue_and_kick(
                dispatcher_scope.organization_id,
                dispatcher_scope.mission_id,
                low_priority_request.command_request_id,
@@ -67,7 +67,7 @@ defmodule Cadence.CommandingDispatcherTest do
              )
 
     assert {:ok, %{queue_entry: high_priority_queue_entry}} =
-             Cadence.Commanding.enqueue_command_request(
+             Cadence.CommandMemberFixtures.enqueue_and_kick(
                dispatcher_scope.organization_id,
                dispatcher_scope.mission_id,
                high_priority_request.command_request_id,
@@ -155,7 +155,7 @@ defmodule Cadence.CommandingDispatcherTest do
       })
 
     assert {:ok, %{queue_entry: queue_entry}} =
-             Cadence.Commanding.enqueue_command_request(
+             Cadence.CommandMemberFixtures.enqueue_and_kick(
                dispatcher_scope.organization_id,
                dispatcher_scope.mission_id,
                command_request.command_request_id,
@@ -349,7 +349,7 @@ defmodule Cadence.CommandingDispatcherTest do
       })
 
     assert {:ok, persisted_request} =
-             Cadence.Commanding.persist_command_request(
+             Cadence.CommandMemberFixtures.persist(
                dispatcher_scope.organization_id,
                command_request
              )
