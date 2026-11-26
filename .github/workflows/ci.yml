@@ -617,7 +617,7 @@ jobs:
           corepack pnpm exec playwright test --shard=${{ matrix.shard }}/2
           --project=desktop --project=a11y-desktop-admin --project=a11y-desktop-member
           --project=a11y-phone-admin --project=a11y-phone-member
-      # ci-handoff.md §1: the specs that stage a change set run alone, on one shard.
+      # docs/apogee/qa/e2e.md §1: specs that stage a change set run alone, on one shard.
       # A second playwright run clears test-results and rewrites playwright-report, so the main run's
       # evidence (traces, snapshots, its report) moves aside first and both sets are scanned and
       # uploaded (found on #652: shard 1 uploaded only the serial run).
