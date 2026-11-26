@@ -16,7 +16,9 @@ defmodule Cadence.Dev.ReflectOrbital.Activation do
     SourceRuntimeBases
   }
 
-  def run(single_operator?) do
+  # `expected` is the fleet size from the caller's environment (EARENDIL_SPACECRAFT_COUNT): this
+  # runs inside the live node over RPC, which needn't carry that variable.
+  def run(single_operator?, expected) do
     unless F.chaos_lab?() or
              Application.get_env(:cadence_web, CadenceWeb.Endpoint, [])[:code_reloader] == true,
            do: raise("Earendil activation requires development mode or the isolated chaos lab")
@@ -32,9 +34,7 @@ defmodule Cadence.Dev.ReflectOrbital.Activation do
       )
 
     fleet = Cadence.SpacecraftStore.list_spacecraft(F.organization_id(), F.mission_id())
-    # Runs inside the live node (RPC), which needn't carry EARENDIL_SPACECRAFT_COUNT: the fleet
-    # that was seeded is the expected size.
-    true = fleet != []
+    ^expected = length(fleet)
     snapshots = Map.new(fleet, &{&1.spacecraft_id, Drafts.snapshot(mission, &1)})
 
     verify_drafts!(snapshots, revision)

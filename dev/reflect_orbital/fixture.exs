@@ -54,19 +54,18 @@ defmodule Cadence.Dev.ReflectOrbital.Fixture do
   end
 
   # The simulator names craft PREFIX-<index padded to max(3, digits(count))>; match it.
-  def spacecraft_name(index) do
-    width = max(3, fleet_size() |> Integer.to_string() |> String.length())
-    "EARENDIL-" <> (index |> Integer.to_string() |> String.pad_leading(width, "0"))
-  end
+  defp spacecraft_name(index, width),
+    do: "EARENDIL-" <> (index |> Integer.to_string() |> String.pad_leading(width, "0"))
 
   def spacecraft do
     count = fleet_size()
+    width = max(3, count |> Integer.to_string() |> String.length())
     commissioning_from = count - div(count, 20)
 
     Enum.map(1..count, fn index ->
       plane = div(index - 1, @spacecraft_per_plane)
       slot = rem(index - 1, @spacecraft_per_plane)
-      name = spacecraft_name(index)
+      name = spacecraft_name(index, width)
 
       %{
         spacecraft_id: "spacecraft-#{String.downcase(name)}",
@@ -150,7 +149,8 @@ defmodule Cadence.Dev.ReflectOrbital.Fixture do
   ]
 
   def site_count do
-    "EARENDIL_SITE_COUNT" |> System.get_env("15") |> bounded!(1, length(@sites))
+    # At least two: a craft's candidate site must differ from its primary.
+    "EARENDIL_SITE_COUNT" |> System.get_env("15") |> bounded!(2, length(@sites))
   end
 
   def sites do
@@ -173,11 +173,13 @@ defmodule Cadence.Dev.ReflectOrbital.Fixture do
   end
 
   def scenario do
+    fleet = spacecraft()
+
     %{
       "id" => scenario_id(),
-      "name" => "Earendil — #{fleet_size()}-spacecraft rehearsal",
+      "name" => "Earendil — #{length(fleet)}-spacecraft rehearsal",
       "description" => "Synthetic fleet and ground sites for a Cadence interview demonstration.",
-      "spacecraft_count" => fleet_size(),
+      "spacecraft_count" => length(fleet),
       "spacecraft_prefix" => "EARENDIL",
       "ground_stations" => sites(),
       "orbit_readiness" => %{
@@ -196,7 +198,7 @@ defmodule Cadence.Dev.ReflectOrbital.Fixture do
         "rate_hz" => 1.0,
         "noise_amplitude" => 0.05,
         "spacecraft_frames" =>
-          Map.new(spacecraft(), &{&1.display_name, %{"scid" => &1.scid, "vcid" => 0}})
+          Map.new(fleet, &{&1.display_name, %{"scid" => &1.scid, "vcid" => 0}})
       },
       "fault_profile" => %{}
     }
