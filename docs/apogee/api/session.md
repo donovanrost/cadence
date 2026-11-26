@@ -159,6 +159,9 @@ The signed-in user's own account, under `/api/v1/account` (no organization or mi
 - `DELETE /account/sessions/:id` → `204`: signs that session out. Revoking the current one signs
   you out here too (the session cookie is dropped). Errors: `404 session_not_found`.
 - `DELETE /account/sessions` → `{revoked: n}`: signs out every session except the current one.
+- Every session these sign out (one, the others, or the others on a password change) also has its
+  live console sockets disconnected once the change has committed (#876), and its reconnect is
+  refused. The session making the request keeps its sockets unless it revoked itself.
 
 ### Attempt limit (api-ops)
 

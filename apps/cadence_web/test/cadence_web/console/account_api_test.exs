@@ -4,8 +4,12 @@ defmodule CadenceWeb.Console.AccountAPITest do
 
   @moduletag :capture_log
 
-  alias Cadence.Accounts.AttemptLimit
-  alias CadenceWeb.TestFixtures
+  import Phoenix.ChannelTest, except: [connect: 2, connect: 3]
+  require Phoenix.ChannelTest
+
+  alias Cadence.Accounts.{AttemptLimit, Token}
+  alias CadenceWeb.{ConsoleSocket, Endpoint, TestFixtures}
+  alias Phoenix.Socket.Broadcast
 
   setup do
     org = TestFixtures.persist_org!()
@@ -172,5 +176,125 @@ defmodule CadenceWeb.Console.AccountAPITest do
     assert actor_id == c.user.user_id
     refute body =~ "a-new-password-1"
     refute body =~ mine
+  end
+
+  # #876: every Account path that signs sessions out disconnects exactly those sessions' live
+  # sockets (after the transaction commits) and never the session making the request.
+  describe "live sockets of revoked sessions" do
+    defp watch(token) do
+      topic = ConsoleSocket.id_for_session_token(token)
+      :ok = Endpoint.subscribe(topic)
+      topic
+    end
+
+    defp reconnect(token),
+      do:
+        Phoenix.ChannelTest.connect(ConsoleSocket, %{},
+          connect_info: %{session: %{"user_session_token" => token}}
+        )
+
+    defp assert_signed_out(token, topic) do
+      assert_receive %Broadcast{topic: ^topic, event: "disconnect"}
+      assert :error = reconnect(token)
+
+      assert %{"error" => %{"code" => "unauthenticated"}} =
+               token |> conn_for() |> get("/api/v1/session") |> json_response(401)
+    end
+
+    defp session_id(token) do
+      token
+      |> conn_for()
+      |> get("/api/v1/account/sessions")
+      |> json_response(200)
+      |> get_in(["data", "sessions"])
+      |> Enum.find(& &1["current"])
+      |> Map.fetch!("id")
+    end
+
+    test "one socket id per session, from its stored digest", c do
+      token = TestFixtures.member_session_token!(c.user)
+
+      assert ConsoleSocket.id_for_session_token(token) ==
+               ConsoleSocket.id_for_token_digest(Token.digest(token))
+
+      assert {:ok, socket} = reconnect(token)
+      assert ConsoleSocket.id(socket) == ConsoleSocket.id_for_session_token(token)
+    end
+
+    test "revoking another session disconnects it, not mine", c do
+      mine = TestFixtures.member_session_token!(c.user)
+      other = TestFixtures.member_session_token!(c.user)
+      [mine_topic, other_topic] = Enum.map([mine, other], &watch/1)
+
+      assert mine
+             |> conn_for()
+             |> delete("/api/v1/account/sessions/#{session_id(other)}")
+             |> response(204)
+
+      assert_signed_out(other, other_topic)
+      refute_received %Broadcast{topic: ^mine_topic}
+      assert {:ok, _socket} = reconnect(mine)
+    end
+
+    test "revoking the current session disconnects it", c do
+      mine = TestFixtures.member_session_token!(c.user)
+      topic = watch(mine)
+
+      assert mine
+             |> conn_for()
+             |> delete("/api/v1/account/sessions/#{session_id(mine)}")
+             |> response(204)
+
+      assert_signed_out(mine, topic)
+    end
+
+    test "signing out the others disconnects each of them, not mine", c do
+      mine = TestFixtures.member_session_token!(c.user)
+      others = for _ <- 1..2, do: TestFixtures.member_session_token!(c.user)
+      mine_topic = watch(mine)
+      topics = Enum.map(others, &watch/1)
+
+      assert %{"data" => %{"revoked" => 2}} =
+               mine |> conn_for() |> delete("/api/v1/account/sessions") |> json_response(200)
+
+      Enum.zip(others, topics)
+      |> Enum.each(fn {token, topic} -> assert_signed_out(token, topic) end)
+
+      refute_received %Broadcast{topic: ^mine_topic}
+    end
+
+    test "a password change disconnects the other sessions, not mine", c do
+      mine = TestFixtures.member_session_token!(c.user)
+      other = TestFixtures.member_session_token!(c.user)
+      [mine_topic, other_topic] = Enum.map([mine, other], &watch/1)
+
+      assert mine
+             |> conn_for()
+             |> put("/api/v1/account/password", %{
+               "current_password" => TestFixtures.default_password(),
+               "new_password" => "a-new-password-1"
+             })
+             |> response(204)
+
+      assert_signed_out(other, other_topic)
+      refute_received %Broadcast{topic: ^mine_topic}
+    end
+
+    test "a refused password change disconnects nobody", c do
+      mine = TestFixtures.member_session_token!(c.user)
+      other = TestFixtures.member_session_token!(c.user)
+      Enum.each([mine, other], &watch/1)
+
+      assert mine
+             |> conn_for()
+             |> put("/api/v1/account/password", %{
+               "current_password" => TestFixtures.default_password(),
+               "new_password" => "short"
+             })
+             |> response(422)
+
+      refute_received %Broadcast{event: "disconnect"}
+      assert {:ok, _socket} = reconnect(other)
+    end
   end
 end

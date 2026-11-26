@@ -121,7 +121,7 @@ if Mix.env() in [:dev, :test] do
            %{metadata: %{"fixture" => @fixture}} <- UserRow.to_domain(row),
            :ok <-
              store.(Repo, user_id, password, %{"fixture" => @fixture}),
-           :ok <- Authentication.revoke_all_user_sessions(Repo, user_id) do
+           {:ok, _signed_out} <- Authentication.revoke_all_user_sessions(Repo, user_id) do
         AccountEvents.record(user_id, @actor, "password_changed", %{
           "all_sessions_signed_out" => true
         })
