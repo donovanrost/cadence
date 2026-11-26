@@ -124,6 +124,12 @@ jobs:
           fi
           echo "::warning title=Incremental compile failed::Checking again with a forced full build (stale build-cache types can cause false warnings)."
           mix workspace.run -t compile --order postorder --early-stop --env-var MIX_ENV=test -- --force --warnings-as-errors
+      - name: Compile dev scripts without running entrypoints
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        working-directory: apps/cadence_simulator
+        env:
+          MIX_ENV: test
+        run: mix run --no-start --no-compile ../../scripts/ci/check_dev_scripts.exs
       - name: Format
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: mix format.all --check-formatted

@@ -23,8 +23,6 @@ defmodule Cadence.Dev.SreObservabilityDemo do
   alias Cadence.Telemetry.PacketDefinition
   alias Cadence.Telemetry.Profiler
 
-  require Logger
-
   @definitions """
   version: "1.0.0"
   packets:
@@ -200,8 +198,7 @@ defmodule Cadence.Dev.SreObservabilityDemo do
       end
     else
       nil -> :ok
-      {:error, :not_found} -> :ok
-      {:error, reason} -> {:error, reason}
+      {:error, :user_not_found} -> :ok
     end
   end
 
@@ -681,7 +678,7 @@ defmodule Cadence.Dev.SreObservabilityDemo do
         organization_id: ids.organization_id,
         mission_id: ids.mission_id,
         source_endpoint_ref: ids.source_endpoint_id,
-        command_snapshot_id: "#{ids.mission_id}-command-snapshot",
+        mission_model_revision_id: "#{ids.mission_id}-demo-model-revision",
         command_id: "EPS_SET_CHARGE_MODE",
         command_name: "EPS_SET_CHARGE_MODE",
         command_display_name: "Set battery charge mode",

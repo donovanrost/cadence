@@ -107,6 +107,8 @@ Laptop 1 worktrees live in `~/.herdr/worktrees/cadence/<handle>`. The new agent 
 - **Local checks before a PR:** `mix format`, compile with `--warnings-as-errors` for the apps you touched,
   `mix credo --strict` on touched files, the tests for the area you touched. Frontend: lint, typecheck and the
   tests for touched files. **Full suites run in CI**, not locally (16 GB laptops).
+- **Dev scripts:** when a change affects `dev/`, run `MIX_ENV=test mix run --no-start --no-compile ../../scripts/ci/check_dev_scripts.exs`
+  from `apps/cadence_simulator` after compiling the apps. The check compiles scripts without running entrypoints.
 - **Dev stack:** per worktree, when you need one: your own database name, port and simulator. Nobody depends
   on a shared stack. Platform owns the scripts.
 - **Board:** GitHub project 3 (https://github.com/users/donovanrost/projects/3). Issues live under their epic
