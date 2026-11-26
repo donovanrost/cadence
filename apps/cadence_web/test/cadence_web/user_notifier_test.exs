@@ -7,7 +7,7 @@ defmodule CadenceWeb.UserNotifierTest do
     inviter = TestFixtures.persist_user!()
     organization = TestFixtures.persist_org!(display_name: "Cadence Operations")
 
-    assert {:ok, %{mode: :invited, invitation_token: token}} =
+    assert {:ok, %{mode: :invited, invitation: invitation}} =
              Cadence.Accounts.establish_organization_access(
                "invitee-#{System.unique_integer([:positive])}@example.com",
                organization.organization_id,
@@ -15,7 +15,9 @@ defmodule CadenceWeb.UserNotifierTest do
                force_invitation: true
              )
 
-    assert_received {:email, email}
+    token = "a token/with+reserved chars"
+
+    assert {:ok, email} = CadenceWeb.UserNotifier.deliver(invitation, organization, token)
 
     assert email.text_body =~
              CadenceWeb.Endpoint.url() <> "/console/invitations/" <> URI.encode_www_form(token)
