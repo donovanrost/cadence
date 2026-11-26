@@ -13,29 +13,34 @@ defmodule CadenceSimulator.Provider.StoreResilienceTest do
                  __DIR__
                )
   @mirror :cadence_simulator_provider_store_mirror
+  @moduletag :tmp_dir
 
-  setup do
-    :ok = Store.clear()
+  setup %{tmp_dir: tmp_dir} do
+    # The fixture restores the shared store before this callback reconciles streams.
+    on_exit(fn ->
+      :ok = Orchestrator.reconcile()
+      0 = Orchestrator.active_stream_count()
+    end)
+
+    store_fixture = StoreRestart.isolate!(tmp_dir)
     {:ok, listener} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])
     {:ok, {_address, port}} = :inet.sockname(listener)
     acceptor = spawn_link(fn -> accept_connections(listener) end)
 
     on_exit(fn ->
-      resume(Process.whereis(Store))
-      # Leave no stream running for the next test: with nothing stored, the sweep stops all.
-      :ok = Store.clear()
-      :ok = Orchestrator.reconcile()
-      0 = Orchestrator.active_stream_count()
       :gen_tcp.close(listener)
       if Process.alive?(acceptor), do: Process.exit(acceptor, :normal)
     end)
 
-    %{port: port}
+    %{port: port, store_fixture: store_fixture}
   end
 
   describe "the Orchestrator tick" do
     @tag timeout: 60_000
-    test "keeps running and sweeps while the Store process is stuck", %{port: port} do
+    test "keeps running and sweeps while the Store process is stuck", %{
+      port: port,
+      store_fixture: store_fixture
+    } do
       now = DateTime.utc_now()
       reservation = active_reservation(port, now)
       orchestrator = Process.whereis(Orchestrator)
@@ -56,27 +61,26 @@ defmodule CadenceSimulator.Provider.StoreResilienceTest do
       :ok = :sys.resume(Store)
       :ok = Store.flush()
 
-      reload_store()
+      StoreRestart.reload(store_fixture)
 
       assert {:ok, %{"status" => "canceled"}} = Provider.fetch_reservation(reservation["id"])
     end
 
     @tag timeout: 60_000
-    test "skips, without stopping streams, while the Store's tables are gone", %{port: port} do
+    test "skips, without stopping streams, while the Store's tables are gone", %{
+      port: port,
+      store_fixture: store_fixture
+    } do
       now = DateTime.utc_now()
       _reservation = active_reservation(port, now)
       orchestrator = Process.whereis(Orchestrator)
 
-      :ok = Supervisor.terminate_child(CadenceSimulator.Supervisor, Store)
+      :ok = Supervisor.terminate_child(store_fixture.supervisor, Store)
 
-      try do
-        assert :ok = Orchestrator.reconcile(DateTime.add(now, 2))
-        assert Process.whereis(Orchestrator) == orchestrator
-        # The sweep couldn't read the active set, so it kept the stream.
-        assert Orchestrator.active_stream_count() == 1
-      after
-        {:ok, _store} = Supervisor.restart_child(CadenceSimulator.Supervisor, Store)
-      end
+      assert :ok = Orchestrator.reconcile(DateTime.add(now, 2))
+      assert Process.whereis(Orchestrator) == orchestrator
+      # The sweep couldn't read the active set, so it kept the stream.
+      assert Orchestrator.active_stream_count() == 1
     end
 
     @tag timeout: 60_000
@@ -123,51 +127,57 @@ defmodule CadenceSimulator.Provider.StoreResilienceTest do
   end
 
   describe "reads and writes" do
-    test "don't wait on the Store process, and persist once it runs again" do
+    test "don't wait on the Store process, and persist once it runs again", %{
+      store_fixture: store_fixture
+    } do
+      :ok = Store.clear()
       :ok = :sys.suspend(Store)
-      snapshot = File.read!(snapshot_path())
+      snapshot = File.read!(store_fixture.path)
 
       assert {:ok, _scenario} = Store.put(:scenario, %{"id" => "scenario-stuck"})
       assert {:ok, %{"id" => "scenario-stuck"}} = Store.fetch(:scenario, "scenario-stuck")
       assert [%{"id" => "scenario-stuck"}] = Store.list(:scenario)
       assert {:ok, %{"sequence" => sequence}} = Store.append_event(%{"run_id" => "run-a"})
-      assert File.read!(snapshot_path()) == snapshot
+      assert File.read!(store_fixture.path) == snapshot
 
       :ok = :sys.resume(Store)
       :ok = Store.flush()
-      reload_store()
+      StoreRestart.reload(store_fixture)
 
       assert {:ok, %{"id" => "scenario-stuck"}} = Store.fetch(:scenario, "scenario-stuck")
       assert %{data: [%{"sequence" => ^sequence}]} = Store.events()
     end
 
-    test "a clean stop persists writes still queued, and a restart reloads them" do
+    test "a clean stop persists writes still queued, and a restart reloads them", %{
+      store_fixture: store_fixture
+    } do
       orchestrator = Process.whereis(Orchestrator)
       store = Process.whereis(Store)
       :ok = :sys.suspend(store)
       {:ok, _run} = Store.put(:run, %{"id" => "run-queued", "state" => "running"})
 
       :ok = GenServer.stop(store)
-      # #331: back under its name AND past init/1, so its ETS mirror exists before the read.
-      restarted = StoreRestart.await(store)
+      restarted = StoreRestart.await(store_fixture)
 
       assert restarted != store
       assert {:ok, %{"state" => "running"}} = Store.fetch(:run, "run-queued")
       assert Process.whereis(Orchestrator) == orchestrator
     end
 
-    test "publishes changes on the snapshot timer" do
+    test "publishes changes on the snapshot timer", %{store_fixture: store_fixture} do
       observer = self()
       :sys.replace_state(Store, &Map.put(&1, :snapshot_observer, observer))
       {:ok, _scenario} = Store.put(:scenario, %{"id" => "periodic"})
 
       assert_receive {:provider_store_snapshot, _timing}, 3_000
-      reload_store()
+      StoreRestart.reload(store_fixture)
 
       assert {:ok, %{"id" => "periodic"}} = Store.fetch(:scenario, "periodic")
     end
 
-    test "acknowledged POSTs share a snapshot and survive a hard restart" do
+    test "acknowledged POSTs share a snapshot and survive a hard restart", %{
+      store_fixture: store_fixture
+    } do
       server =
         start_supervised!(
           {Bandit, plug: {Router, provider_auth: []}, scheme: :http, ip: {127, 0, 0, 1}, port: 0}
@@ -201,7 +211,7 @@ defmodule CadenceSimulator.Provider.StoreResilienceTest do
 
       try do
         await_scenarios(["unpublished"])
-        File.write!(snapshot_path() <> ".tmp", "incomplete snapshot")
+        File.write!(store_fixture.path <> ".tmp", "incomplete snapshot")
         Process.exit(store, :kill)
       after
         resume(store)
@@ -210,13 +220,29 @@ defmodule CadenceSimulator.Provider.StoreResilienceTest do
       assert %{status: 503, body: %{"error" => %{"retryable" => true}}} =
                Task.await(unacknowledged)
 
-      StoreRestart.await(store)
+      StoreRestart.await(store_fixture)
 
       for id <- ids do
         assert {:ok, %{"id" => ^id}} = Store.fetch(:scenario, id)
       end
 
       assert {:error, :not_found} = Store.fetch(:scenario, "unpublished")
+    end
+
+    @tag capture_log: true
+    test "a failed snapshot restore leaves the shared supervisor running", %{
+      store_fixture: %{supervisor: supervisor, path: path}
+    } do
+      shared_supervisor = Process.whereis(CadenceSimulator.Supervisor)
+      monitor = Process.monitor(supervisor)
+      store = Process.whereis(Store)
+      :ok = :sys.suspend(store)
+      File.write!(path, "invalid snapshot")
+      Process.exit(store, :kill)
+
+      assert_receive {:DOWN, ^monitor, :process, ^supervisor, :shutdown}, 10_000
+      assert Process.alive?(shared_supervisor)
+      assert Process.whereis(Store) == nil
     end
 
     test "list returns one kind, newest first" do
@@ -237,10 +263,12 @@ defmodule CadenceSimulator.Provider.StoreResilienceTest do
       :ok
     end
 
-    test "allocates after recovered events when the saved sequence trails them" do
+    test "allocates after recovered events when the saved sequence trails them", %{
+      store_fixture: store_fixture
+    } do
       true = :ets.insert(@mirror, {{:metadata, :event_sequence}, 4})
       :ok = Store.flush()
-      reload_store()
+      StoreRestart.reload(store_fixture)
 
       assert {:ok, %{"sequence" => 6}} = Store.append_event(%{"run_id" => "run-a"})
       assert %{data: [%{"sequence" => 5}, %{"sequence" => 6}]} = Store.events(4, 10)
@@ -263,7 +291,7 @@ defmodule CadenceSimulator.Provider.StoreResilienceTest do
     end
   end
 
-  test "a fault counter is consumed exactly up to its limit" do
+  test "a fault counter is consumed exactly up to its limit", %{store_fixture: store_fixture} do
     assert Store.consume_fault("run-a", "drop", 2)
     assert Store.consume_fault("run-a", "drop", 2)
     refute Store.consume_fault("run-a", "drop", 2)
@@ -271,7 +299,7 @@ defmodule CadenceSimulator.Provider.StoreResilienceTest do
     refute Store.consume_fault("run-a", "never", 0)
 
     :ok = Store.flush()
-    reload_store()
+    StoreRestart.reload(store_fixture)
     refute Store.consume_fault("run-a", "drop", 2)
   end
 
@@ -292,17 +320,6 @@ defmodule CadenceSimulator.Provider.StoreResilienceTest do
       Process.sleep(10)
       await_scenarios(ids, attempts - 1)
     end
-  end
-
-  defp snapshot_path do
-    :cadence_simulator
-    |> Application.fetch_env!(:provider_store)
-    |> Keyword.fetch!(:path)
-  end
-
-  defp reload_store do
-    :ok = Supervisor.terminate_child(CadenceSimulator.Supervisor, Store)
-    {:ok, _store} = Supervisor.restart_child(CadenceSimulator.Supervisor, Store)
   end
 
   defp active_reservation(port, now) do

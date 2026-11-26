@@ -94,7 +94,12 @@ defmodule CadenceSimulator.ProviderScaleTest do
   end
 
   @tag timeout: 60_000
-  test "stage five fleet scenario models shared capacity, deterministic rejection, and replay" do
+  @tag :tmp_dir
+  test "stage five fleet scenario models shared capacity, deterministic rejection, and replay", %{
+    tmp_dir: tmp_dir
+  } do
+    store_fixture = StoreRestart.isolate!(tmp_dir)
+
     assert {:ok, scenario} =
              FleetScenarios.stage_five(spacecraft_count: 300)
              |> Provider.create_scenario()
@@ -204,8 +209,7 @@ defmodule CadenceSimulator.ProviderScaleTest do
     :ok = Store.flush()
     previous_store = Process.whereis(Store)
     Process.exit(previous_store, :kill)
-    # #331: back under its name AND past init/1, so its ETS mirror exists before the read.
-    _restarted = StoreRestart.await(previous_store)
+    _restarted = StoreRestart.await(store_fixture)
 
     after_restart = Store.events_for_run(run["id"], 0, 500)
 
