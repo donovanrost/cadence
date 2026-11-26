@@ -268,7 +268,6 @@ export const planDetailReader = d.object({
    * #273 (api's final shape): the selected passes whose booking window has closed, read before
    * deciding (null: none); `expired_digest` goes back unchanged on approve (opaque, never computed
    * here); `next_expiry_at`: when the server's set next changes (margin applied), for the live line.
-   * All optional until api's read lands.
    */
   expired: d.optional(expiredReader),
   expired_digest: d.optional(d.string),

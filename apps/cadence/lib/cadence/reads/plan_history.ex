@@ -19,6 +19,7 @@ defmodule Cadence.Reads.PlanHistory do
   alias Cadence.Auth
   alias Cadence.ContactPlanning.{ContactPlanApprovals, ContactPlans, PlanSubmissions}
   alias Cadence.Control.ActorRef
+  alias Cadence.Control.PlanSkippedPasses
   alias Cadence.Reads.{PlanApproval, RequirementLabels}
 
   @max_versions 200
@@ -31,7 +32,11 @@ defmodule Cadence.Reads.PlanHistory do
         versions = ContactPlans.list_versions(org, mission, plan_id)
         approvals = ContactPlanApprovals.list(org, mission, plan_id)
         rounds = PlanSubmissions.list(org, mission, plan_id)
-        decisions = org |> decisions_with_labels(mission, rounds, approvals)
+
+        decisions =
+          org
+          |> decisions_with_labels(mission, rounds, approvals)
+          |> Enum.map(&with_skipped(&1, org, mission, plan_id))
 
         {:ok,
          %{
@@ -145,7 +150,8 @@ defmodule Cadence.Reads.PlanHistory do
               &%{requirement_id: &1["requirement_id"], reason: &1["reason"]}
             ),
           exceptions: [],
-          automation_grant_id: nil
+          automation_grant_id: nil,
+          skipped: nil
         }
       end)
 
@@ -163,12 +169,29 @@ defmodule Cadence.Reads.PlanHistory do
           unchanged: nil,
           acknowledgements: [],
           exceptions: view.exceptions,
-          automation_grant_id: approval.automation_grant_id
+          automation_grant_id: approval.automation_grant_id,
+          # #273: what this decision recorded as skipped; described in load/3.
+          skipped: approval.skipped
         }
       end)
 
     Enum.sort_by(submits ++ decided, &DateTime.to_unix(&1.at, :microsecond), :desc)
   end
+
+  # #273: an approval's recorded skipped passes in the console's shape (null when none). Never
+  # recomputed: the ids are what the decision recorded.
+  defp with_skipped(
+         %{kind: "approved", skipped: [_ | _] = skipped} = decision,
+         org,
+         mission,
+         plan
+       ),
+       do: %{
+         decision
+         | skipped: PlanSkippedPasses.describe(org, mission, plan, decision.version, skipped)
+       }
+
+  defp with_skipped(decision, _org, _mission, _plan), do: %{decision | skipped: nil}
 
   defp actor(%{} = doc, names), do: ActorRef.document(doc, names)
   defp actor(_none, _names), do: nil

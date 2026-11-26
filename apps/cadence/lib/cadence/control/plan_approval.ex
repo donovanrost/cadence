@@ -19,11 +19,26 @@ defmodule Cadence.Control.PlanApproval do
   approver's acknowledgements of the plan's gaps on the approval. The approved plan's execution
   items are accepted, and the operation and its answer are recorded, in the same transaction.
   Execution itself runs off the request (the caller starts it on `{:approved, …}`).
+
+  #273: the approver's `expected_expired_digest` (the plan read's digest; absent means "saw none")
+  goes to the domain, which leaves the closed passes out as skipped, or refuses with
+  `contact_plan_all_opportunities_expired` or `contact_plan_expired_passes_changed`, recording
+  nothing. The answer's `expired` is what the decision RECORDED (`approval.skipped`, read back in
+  the same transaction), described by `PlanSkippedPasses`, never recomputed.
   """
 
   alias Cadence.Auth.{Policy, Scope}
-  alias Cadence.ContactPlanning.{ContactPlan, ContactPlans, PlanOperations, PlanUpdates}
+
+  alias Cadence.ContactPlanning.{
+    ContactPlan,
+    ContactPlanApprovals,
+    ContactPlans,
+    PlanOperations,
+    PlanUpdates
+  }
+
   alias Cadence.Control.Contacts, as: ControlContacts
+  alias Cadence.Control.PlanSkippedPasses
   alias Cadence.Repo
 
   @typedoc "`params`: operation_id, expected_version, note (the decision note), acknowledgements."
@@ -31,7 +46,8 @@ defmodule Cadence.Control.PlanApproval do
           required(:operation_id) => binary(),
           required(:expected_version) => pos_integer(),
           optional(:note) => binary() | nil,
-          optional(:acknowledgements) => [map()]
+          optional(:acknowledgements) => [map()],
+          optional(:expected_expired_digest) => binary() | nil
         }
 
   @doc """
@@ -74,7 +90,8 @@ defmodule Cadence.Control.PlanApproval do
            :new <- operation(scope, mission_id, plan_id, params),
            :ok <- expected(version.version, params.expected_version),
            {:ok, _approved} <- decide(scope, mission_id, plan, version, params),
-           answer = {202, body(plan_id, version.version)},
+           expired = recorded_skipped(scope.organization_id, mission_id, plan_id, version.version),
+           answer = {202, body(plan_id, version.version, expired)},
            :ok <- PlanOperations.record(attrs(scope, mission_id, plan_id, params), answer) do
         {:approved, answer, version.version, version.content_sha256}
       else
@@ -82,6 +99,15 @@ defmodule Cadence.Control.PlanApproval do
         {:error, reason} -> Repo.rollback(reason)
       end
     end)
+    |> case do
+      # #273: the domain's refusal rolled the transaction back, so the set is described after it.
+      {:error, {code, %{skipped: _, digest: _} = set}}
+      when code in [:contact_plan_all_opportunities_expired, :contact_plan_expired_passes_changed] ->
+        {:error, {code, refusal_details(scope.organization_id, mission_id, plan_id, params, set)}}
+
+      other ->
+        other
+    end
   end
 
   defp decide(scope, mission_id, plan, version, params) do
@@ -93,7 +119,8 @@ defmodule Cadence.Control.PlanApproval do
            version.content_sha256,
            params[:note],
            acknowledged_exceptions: params[:acknowledgements] || [],
-           publish: false
+           publish: false,
+           expected_expired_digest: params[:expected_expired_digest]
          ) do
       {:error, :contact_plan_self_approval_forbidden} ->
         {:error,
@@ -150,12 +177,42 @@ defmodule Cadence.Control.PlanApproval do
     }
   end
 
-  defp body(plan_id, version),
+  defp body(plan_id, version, expired),
     do: %{
       "plan_id" => plan_id,
       "version" => version,
       "state" => "executing",
-      "outcome" => "approved"
+      "outcome" => "approved",
+      "expired" => expired
+    }
+
+  # #273: what the decision recorded (read back in its own transaction), never recomputed.
+  defp recorded_skipped(organization_id, mission_id, plan_id, version) do
+    skipped =
+      organization_id
+      |> ContactPlanApprovals.list(mission_id, plan_id)
+      |> Enum.find(&(&1.contact_plan_version == version and &1.decision == :approved))
+      |> case do
+        %{skipped: skipped} -> skipped
+        nil -> nil
+      end
+
+    PlanSkippedPasses.describe(organization_id, mission_id, plan_id, version, skipped)
+  end
+
+  # #273: a refusal carries the CURRENT set (the domain's, at the decision's now) and its digest.
+  # The version is the one the approver saw, which the version check had just confirmed current.
+  defp refusal_details(organization_id, mission_id, plan_id, params, set),
+    do: %{
+      expired:
+        PlanSkippedPasses.describe(
+          organization_id,
+          mission_id,
+          plan_id,
+          params.expected_version,
+          set.skipped
+        ),
+      expired_digest: set.digest
     }
 
   defp expected(version, version), do: :ok
