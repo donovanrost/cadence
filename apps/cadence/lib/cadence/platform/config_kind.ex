@@ -153,13 +153,12 @@ defmodule Cadence.Platform.ConfigKind do
   @callback stage_conflicts(
               organization_id :: String.t(),
               mission_id :: String.t(),
-              set_state :: String.t(),
               staged :: [map()],
               prepared :: [map()]
             ) :: :ok | {:error, {:invalid_op, non_neg_integer(), [field_error()]}}
 
   @optional_callbacks stage_check: 5,
-                      stage_conflicts: 5,
+                      stage_conflicts: 4,
                       absent_errors: 3,
                       effect: 7,
                       normalize_options: 2,

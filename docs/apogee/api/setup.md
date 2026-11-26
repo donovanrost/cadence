@@ -46,7 +46,7 @@ The Setup spacecraft directory. It is unpaginated (the client filters) and sorte
 - `next_free_scid`: the lowest of 1..1023 not in `scids_in_use`, so the two can't disagree. It's
   never 0 (0 is still accepted when typed), and `null` when none is free. It's a suggestion: staging
   refuses a SCID another staged op holds (`invalid_op` on `scid`, details `{scid, spacecraft_name,
-  source: "staged" | "request", in_review}`), and preview/apply refuses a live one.
+  source: "staged" | "request"}`), and preview/apply refuses a live one.
 - Neither field is refreshed by staging: staging invalidates `configuration`, not `spacecraft`.
 
 - `scid`: integer or null. `norad_id`, `plane` and `slot` are integers or null, read from

@@ -12,7 +12,7 @@ defmodule Cadence.Spacecraft.StagedScids do
   **Next free** (`next_free/1`): the lowest of 1..1023 not in use; never 0 (it stays accepted when
   typed); nil when none is free. Defined from `in_use/2`, so the two can't disagree.
 
-  **At stage** (`conflicts/5`, `ConfigKind.stage_conflicts/5`): a spacecraft op whose SCID another
+  **At stage** (`conflicts/4`, `ConfigKind.stage_conflicts/4`): a spacecraft op whose SCID another
   spacecraft's staged op holds, or an earlier op of the same request gives to another spacecraft,
   is refused on its `scid` field with mms-ux's words (11-19). An op never collides with a staged
   op for the same spacecraft: re-staging replaces one's own op (fe-setup). The live collision
@@ -44,17 +44,16 @@ defmodule Cadence.Spacecraft.StagedScids do
   @doc """
   `:ok`, or `{:error, {:invalid_op, index, [field_error]}}` for the first op of `prepared` (in
   request order) whose SCID another spacecraft's staged op holds, or an earlier op of the same
-  request gives to another spacecraft. `set_state` words "the open change set" or "a change set
-  under review".
+  request gives to another spacecraft. Staging runs only on an open set (`Staging` refuses one in
+  review first), so the words always name the open change set.
   """
-  @spec conflicts(String.t(), String.t(), String.t(), [map()], [map()]) ::
+  @spec conflicts(String.t(), String.t(), [map()], [map()]) ::
           :ok | {:error, {:invalid_op, non_neg_integer(), [map()]}}
-  def conflicts(organization_id, mission_id, set_state, staged, prepared) do
+  def conflicts(organization_id, mission_id, staged, prepared) do
     context = %{
       organization_id: organization_id,
       mission_id: mission_id,
-      staged: holders(Enum.filter(staged, &spacecraft?/1)),
-      in_review: set_state == "in_review"
+      staged: by_scid(staged)
     }
 
     prepared
@@ -71,7 +70,7 @@ defmodule Cadence.Spacecraft.StagedScids do
     with true <- spacecraft?(op),
          scid when is_integer(scid) <- scid(op),
          {source, holder} <- clash(op, scid, context.staged, earlier) do
-      error = refusal(scid, name(holder, context), source, context.in_review)
+      error = refusal(scid, name(holder, context), source)
       {:halt, {:error, {:invalid_op, index, [error]}}}
     else
       nil -> {:cont, Map.put_new(earlier, scid(op), op)}
@@ -82,7 +81,7 @@ defmodule Cadence.Spacecraft.StagedScids do
   # A staged op holds its SCID against every OTHER spacecraft; the same spacecraft's own op is
   # replaced by this stage, so it never counts.
   defp clash(op, scid, staged, earlier) do
-    case other_holder(staged, scid, op) do
+    case staged |> Map.get(scid, []) |> Enum.find(&(&1.entity_id != op.entity_id)) do
       nil -> request_clash(other(Map.get(earlier, scid), op))
       holder -> {"staged", holder}
     end
@@ -91,31 +90,31 @@ defmodule Cadence.Spacecraft.StagedScids do
   defp request_clash(nil), do: nil
   defp request_clash(holder), do: {"request", holder}
 
-  defp other_holder(staged, scid, op),
-    do: staged |> Enum.filter(&(scid(&1) == scid)) |> Enum.find(&(&1.entity_id != op.entity_id))
-
   defp other(nil, _op), do: nil
   defp other(holder, op), do: if(holder.entity_id != op.entity_id, do: holder)
 
-  defp holders(staged), do: Enum.filter(staged, &is_integer(scid(&1)))
+  # The set's staged spacecraft ops by the SCID they give, built once per stage (500-craft floor:
+  # each request op then looks up only its own SCID's holders).
+  defp by_scid(staged) do
+    staged
+    |> Enum.filter(&(spacecraft?(&1) and is_integer(scid(&1))))
+    |> Enum.group_by(&scid/1)
+  end
 
   # mms-ux 11-19 (field errors take no final period; U25: no name for another spacecraft).
-  defp refusal(scid, name, source, in_review) do
+  defp refusal(scid, name, source) do
     %{
       path: "scid",
-      message: message(scid, name || "another spacecraft", source, in_review),
-      details: %{scid: scid, spacecraft_name: name, source: source, in_review: in_review}
+      message: message(scid, name || "another spacecraft", source),
+      details: %{scid: scid, spacecraft_name: name, source: source}
     }
   end
 
-  defp message(scid, holder, "request", _in_review),
+  defp message(scid, holder, "request"),
     do: "SCID #{scid} is also given to #{holder} in this batch; choose another"
 
-  defp message(scid, holder, "staged", in_review),
-    do: "SCID #{scid} is already staged for #{holder} in #{where(in_review)}; choose another"
-
-  defp where(true), do: "a change set under review"
-  defp where(false), do: "the open change set"
+  defp message(scid, holder, "staged"),
+    do: "SCID #{scid} is already staged for #{holder} in the open change set; choose another"
 
   # The op's own name when it stages one (a create, or an update renaming), else the live one:
   # one row, read only for the holder a refusal names.

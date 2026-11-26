@@ -170,8 +170,8 @@ defmodule Cadence.Spacecraft.ConfigKinds.Spacecraft do
     do: [F.error("spacecraft_type_version", "Choose a profile and its version together")]
 
   @impl true
-  def stage_conflicts(organization_id, mission_id, set_state, staged, prepared),
-    do: StagedScids.conflicts(organization_id, mission_id, set_state, staged, prepared)
+  def stage_conflicts(organization_id, mission_id, staged, prepared),
+    do: StagedScids.conflicts(organization_id, mission_id, staged, prepared)
 
   defp scid_free(_organization_id, _mission_id, _previous, %{"scid" => nil}), do: []
 

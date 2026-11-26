@@ -328,12 +328,12 @@ defmodule Cadence.Configuration.Staging do
     }
   end
 
-  # ConfigKind.stage_conflicts/5 for the kinds this request stages (e.g. a SCID another staged
+  # ConfigKind.stage_conflicts/4 for the kinds this request stages (e.g. a SCID another staged
   # spacecraft holds, S9), against what the set has staged once this author's overlaps are replaced.
   defp stage_conflicts(set, prepared) do
     kinds = prepared |> Enum.map(& &1.kind) |> Enum.uniq() |> Enum.map(&Kinds.fetch!/1)
 
-    case Enum.filter(kinds, &function_exported?(&1, :stage_conflicts, 5)) do
+    case Enum.filter(kinds, &function_exported?(&1, :stage_conflicts, 4)) do
       [] ->
         :ok
 
@@ -344,7 +344,7 @@ defmodule Cadence.Configuration.Staging do
   end
 
   defp kind_conflicts(kind, set, staged, prepared) do
-    case kind.stage_conflicts(set.organization_id, set.mission_id, set.state, staged, prepared) do
+    case kind.stage_conflicts(set.organization_id, set.mission_id, staged, prepared) do
       :ok -> nil
       {:error, _} = error -> error
     end

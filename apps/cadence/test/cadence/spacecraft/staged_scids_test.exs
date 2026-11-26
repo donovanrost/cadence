@@ -73,8 +73,7 @@ defmodule Cadence.Spacecraft.StagedScidsTest do
       assert error.details == %{
                scid: 312,
                spacecraft_name: "EARENDIL-313",
-               source: "staged",
-               in_review: false
+               source: "staged"
              }
     end
 
@@ -100,8 +99,7 @@ defmodule Cadence.Spacecraft.StagedScidsTest do
       assert error.details == %{
                scid: 312,
                spacecraft_name: "EARENDIL-313",
-               source: "request",
-               in_review: false
+               source: "request"
              }
 
       # Nothing was staged.

@@ -289,8 +289,7 @@ defmodule CadenceWeb.Console.ConfigAPITest do
                    "details" => %{
                      "scid" => 312,
                      "spacecraft_name" => "EARENDIL-313",
-                     "source" => "staged",
-                     "in_review" => false
+                     "source" => "staged"
                    }
                  }
                ]
