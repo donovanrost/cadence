@@ -12,10 +12,17 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
 
   require Logger
 
-  alias Cadence.Commanding.{Dispatcher, Drafts, ProcessNamespace, RequestValidation}
+  alias Cadence.Commanding.{
+    CommandApproval,
+    Dispatcher,
+    Drafts,
+    ProcessNamespace,
+    RequestValidation
+  }
+
   alias Cadence.Commanding.Groups.{Admission, CommandGroup, GroupStore, Validation}
   alias Cadence.Comms.UplinkResolution
-  alias Cadence.Management.Commanding.{ApprovedCommand, RequestAuthoring}
+  alias Cadence.Management.Commanding.{ApprovedCommand, RequestAuthoring, RequestReview}
   alias Cadence.Platform.ScopedReadUpdates
 
   @spec submit(Cadence.Auth.Scope.t(), binary(), map(), keyword()) ::
@@ -31,6 +38,9 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
          draft = %{draft | targets: UplinkResolution.annotate(org, mission_id, draft.targets)},
          {:ok, validated} <- Validation.validate(org, mission_id, actor, draft),
          :ok <- admissible(validated, draft, Keyword.get(opts, :preflight_digest)) do
+      # #117 step 4b: a not_required record's admin_mode, from the submitter's own scope.
+      opts = Keyword.put(opts, :admin_mode, fresh.admin_mode? == true)
+
       org
       |> admit(mission_id, actor, draft, validated, opts)
       |> after_commit(org, mission_id)
@@ -106,7 +116,8 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
     with {:ok, group} <- GroupStore.insert_group(group),
          :ok <- GroupStore.insert_members(members),
          :ok <-
-           Drafts.consume({org, mission, actor["user_id"]}, Keyword.get(opts, :draft_revision)) do
+           Drafts.consume({org, mission, actor["user_id"]}, Keyword.get(opts, :draft_revision)),
+         :ok <- record_not_required(members, actor, second_go?, opts) do
       queued =
         if second_go?, do: [], else: Admission.enqueue(members, actor, &auto_approved_hash/1)
 
@@ -195,6 +206,34 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
 
   # Members that need no second GO carry the policy approval's content hash, as single
   # workspace submissions do.
+  # #117 step 4b: members released without a second GO (the policy needs none) each get their own
+  # not_required record, in this submission's transaction. The actor is the submitter (a person
+  # acted); ApprovedCommand's approved_by stays the safety policy (commanding.md says why both).
+  # admin_mode has no default (#112): Keyword.fetch! raises if a caller omits it.
+  defp record_not_required(_members, _actor, true, _opts), do: :ok
+
+  defp record_not_required(members, actor, false, opts) do
+    now = DateTime.utc_now()
+    admin_mode = Keyword.fetch!(opts, :admin_mode)
+
+    members
+    |> Enum.map(fn member ->
+      CommandApproval.new(%{
+        organization_id: member.organization_id,
+        mission_id: member.mission_id,
+        command_request_id: member.command_request_id,
+        decision: :not_required,
+        decided_by: actor,
+        decided_at: now,
+        metadata: %{"command_group_id" => member.metadata["group"]["id"]},
+        subject_digest: RequestReview.review_token(member),
+        separated_from: [],
+        admin_mode: admin_mode
+      })
+    end)
+    |> GroupStore.insert_approvals()
+  end
+
   defp auto_approved_hash(request) do
     {:ok, approved} =
       ApprovedCommand.from_automatic_policy(%{request | lifecycle_state: :validated})

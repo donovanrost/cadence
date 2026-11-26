@@ -236,6 +236,12 @@ defmodule CadenceWeb.Console.ContactDraftController do
         limit: limit
       })
 
+  defp error(conn, {:error, :fleet_planning_run_requirement_limit_exceeded}),
+    do:
+      Problem.respond(conn, :fleet_planning_run_requirement_limit_exceeded, %{
+        limit: FleetPlanningRuns.maximum_requirements()
+      })
+
   defp error(conn, {:error, :fleet_planning_review_changed}),
     do: Problem.respond(conn, :inputs_changed)
 

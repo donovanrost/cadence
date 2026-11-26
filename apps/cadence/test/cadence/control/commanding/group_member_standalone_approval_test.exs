@@ -70,7 +70,8 @@ defmodule Cadence.Control.Commanding.GroupMemberStandaloneApprovalTest do
                  c.mission,
                  c.member.command_request_id,
                  user(c.other),
-                 reason: "rejecting one member alone"
+                 reason: "rejecting one member alone",
+                 admin_mode: false
                )
 
       assert_member_untouched(c)
@@ -121,7 +122,8 @@ defmodule Cadence.Control.Commanding.GroupMemberStandaloneApprovalTest do
                    c.mission,
                    c.member.command_request_id,
                    user(c.other),
-                   metadata: metadata
+                   metadata: metadata,
+                   admin_mode: false
                  )
 
         assert {:error, :command_request_in_group} =
@@ -141,7 +143,8 @@ defmodule Cadence.Control.Commanding.GroupMemberStandaloneApprovalTest do
                  c.mission,
                  standalone.command_request_id,
                  user(c.other),
-                 metadata: forged
+                 metadata: forged,
+                 admin_mode: false
                )
 
       assert approval.decision == :approved
@@ -349,12 +352,18 @@ defmodule Cadence.Control.Commanding.GroupMemberStandaloneApprovalTest do
       c.mission,
       c.member.command_request_id,
       actor,
-      []
+      admin_mode: false
     )
   end
 
   defp enqueue(c, request_id, opts \\ []) do
-    Commanding.enqueue_command_request(c.org, c.mission, request_id, user(c.other), opts)
+    Commanding.enqueue_command_request(
+      c.org,
+      c.mission,
+      request_id,
+      user(c.other),
+      Keyword.put_new(opts, :admin_mode, false)
+    )
   end
 
   defp user(scope), do: %{"actor_kind" => "user", "user_id" => scope.user.user_id}

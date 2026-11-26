@@ -237,6 +237,122 @@ defmodule Cadence.SemanticRuntimeTest do
     assert state.sequence == 1
   end
 
+  # DECISIONS #99: a derived update's monitoring effects are keyed on its TRIGGER's input, never
+  # on the frame of the input whose metadata it copies (which can be older, its ids taken).
+  test "a derived update carries its trigger's effect source, a timer its own stream" do
+    plan = %{
+      algorithms: [
+        AlgorithmPlan.new(%{
+          algorithm_id: "algorithm:sum",
+          input_parameter_ids: ["parameter:raw", "parameter:other"],
+          outputs: [
+            %{
+              parameter_id: "parameter:sum",
+              qualified_name: "/parameters/sum",
+              expression:
+                expression(
+                  {:+, {:parameter, "parameter:raw"}, {:parameter, "parameter:other"}},
+                  :number
+                )
+            }
+          ]
+        })
+      ],
+      monitoring: []
+    }
+
+    at = ~U[2026-11-17 01:00:00.000000Z]
+    older = framed(%{update("a-other", 1, at) | parameter_id: "parameter:other"}, 14, at)
+    {:ok, _result, state} = Cadence.SemanticRuntime.process(%State{}, [older], plan)
+
+    later = DateTime.add(at, 1, :second)
+    trigger = framed(update("raw:2", 2, later), 28, later)
+    {:ok, result, _state} = Cadence.SemanticRuntime.process(state, [trigger], plan)
+
+    assert [sum] = Enum.filter(result.parameter_updates, &(&1.parameter_id == "parameter:sum"))
+    assert sum.metadata.effect_source == trigger.metadata.effect_source
+
+    heartbeat = %{
+      algorithms: [
+        AlgorithmPlan.new(%{
+          algorithm_id: "algorithm:heartbeat",
+          input_parameter_ids: [],
+          triggers: [%{kind: :periodic, interval_ms: 1_000}],
+          outputs: [
+            %{
+              parameter_id: "parameter:heartbeat",
+              qualified_name: "/parameters/heartbeat",
+              expression: expression({:literal, 1}, :number)
+            }
+          ]
+        })
+      ],
+      monitoring: []
+    }
+
+    {:ok, %{parameter_updates: [tick]}, _state} =
+      Cadence.SemanticRuntime.timer(
+        %State{},
+        {"mission", "sc"},
+        "algorithm:heartbeat",
+        at,
+        heartbeat
+      )
+
+    assert tick.metadata.effect_source ==
+             ["timer:algorithm:heartbeat", 0, DateTime.to_unix(at, :microsecond)]
+  end
+
+  # #161/#162: an algorithm output's id derives from its trigger's update id (the sample id, which
+  # comes from the packet), never from the evidence its inputs arrived in. A replay that batches
+  # the journal differently re-derives the same output ids, and the monitoring rows over them.
+  test "an algorithm output's id doesn't depend on the evidence its inputs arrived in" do
+    plan = %{
+      algorithms: [
+        AlgorithmPlan.new(%{
+          algorithm_id: "algorithm:double",
+          input_parameter_ids: ["parameter:raw"],
+          outputs: [
+            %{
+              parameter_id: "parameter:double",
+              qualified_name: "/parameters/double",
+              expression: expression({:*, {:parameter, "parameter:raw"}, {:literal, 2}}, :number)
+            }
+          ]
+        })
+      ],
+      monitoring: []
+    }
+
+    at = ~U[2026-11-19 21:00:00.000000Z]
+
+    output_ids = fn evidence_id ->
+      input = %{
+        update("sample_raw", 21, at)
+        | metadata: %{evidence_id: evidence_id, packet_id: "packet-1"}
+      }
+
+      {:ok, result, _state} = Cadence.SemanticRuntime.process(%State{}, [input], plan)
+
+      for %{parameter_id: "parameter:double"} = output <- result.parameter_updates,
+          do: output.update_id
+    end
+
+    assert [id] = output_ids.("evidence-whole")
+    assert output_ids.("evidence-rebatched") == [id]
+  end
+
+  defp framed(update, offset, at),
+    do: %{
+      update
+      | metadata:
+          Map.put(update.metadata || %{}, :effect_source, [
+            "journal-1",
+            offset,
+            DateTime.to_unix(at, :microsecond)
+          ])
+    }
+
   defp expression(node, type), do: Expression.new(%{node: node, result_type: type})
 
   defp update(id, value, at) do

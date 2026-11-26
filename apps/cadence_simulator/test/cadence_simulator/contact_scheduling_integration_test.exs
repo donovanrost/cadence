@@ -46,7 +46,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
   alias CadenceSimulator.Provider.{FleetScenarios, Orchestrator, Router, Store}
 
   @definitions Path.expand(
-                 "../../../../legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml",
+                 "../../../../dev/catalogs/demo_spacecraft.yaml",
                  __DIR__
                )
 
@@ -111,7 +111,9 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
       |> provision_provider_transport(context.telemetry_port)
       |> persist_spacecraft_routing(telemetry?: true)
 
-    search_starts_at = DateTime.utc_now() |> DateTime.add(30) |> DateTime.truncate(:second)
+    # #273: an offer counts as closed within the 60 s lookahead of the approval, and with no route
+    # profile the simulator's offers expire at their pass's start, so the pass starts beyond it.
+    search_starts_at = DateTime.utc_now() |> DateTime.add(120) |> DateTime.truncate(:second)
     search_ends_at = DateTime.add(search_starts_at, 180)
 
     scope = admin_scope(setup)

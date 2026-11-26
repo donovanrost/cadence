@@ -127,6 +127,9 @@ config :cadence,
     flush_interval_ms: 250,
     flush_count: 250
   ],
+  # Retention for the tables nothing else cleans (#694; Cadence.Persistence.Retention): chunk size,
+  # pause, budget and interval are its defaults; the archives follow the observation retention.
+  retention: [enabled?: true],
   telemetry_current_value_store: [module: Cadence.Telemetry.CurrentValueStore.ETS],
   telemetry_storage: [
     writer: Cadence.Telemetry.Storage.Writers.QuestDB,

@@ -142,9 +142,10 @@ defmodule Cadence.Protocol.RecordArchive.WriterTest do
     assert :ok = RecordArchive.flush(policy, mission_id)
     [{pid, _}] = Registry.lookup(registry, {mission_id, nil})
 
-    send(pid, :idle_check)
-    send(pid, :idle_check)
+    # Monitor before nudging: a writer that exits first would otherwise report :noproc.
     ref = Process.monitor(pid)
+    send(pid, :idle_check)
+    send(pid, :idle_check)
     assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, 1_000
 
     assert :ok = RecordArchive.persist_records_many(policy, [batch(mission_id, 2)])

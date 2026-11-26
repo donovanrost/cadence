@@ -44,7 +44,14 @@ defmodule Cadence.Telemetry.Storage.IdentitySelectionByIdTest do
       envelope("other-point", minute: 1, point_id: "HK.other")
     ]
 
-    envelopes = plain ++ [initial, correction, decided, decided_conflict, excluded] ++ others
+    # An advisory sighting of plain-2's identity: an undecided state row (first-seen rule, 11-17),
+    # so the id lookup still has to load a state no decision made. Not a QuestDB row below.
+    plain_2_advisory = envelope("plain-2-advisory", minute: 2, validity_state: :advisory)
+
+    envelopes =
+      plain ++
+        [initial, correction, decided, decided_conflict, excluded, plain_2_advisory] ++ others
+
     assert :ok = ObservationIdentityStates.record_envelopes(envelopes)
 
     decide!(decided, :mark_canonical,
@@ -66,9 +73,10 @@ defmodule Cadence.Telemetry.Storage.IdentitySelectionByIdTest do
     full = ObservationIdentityStates.list_for_selection(@mission, @filters)
     by_id = by_id(samples)
 
-    # The full query also loaded the states the rows never needed; by id loads one per identity.
-    assert length(by_id) == 6
-    assert length(full) == 6
+    # First-seen rule (11-17): rows exist for the decided identities (decided, excluded) and the
+    # advisory sighting (plain-2); the other canonical sightings wrote none.
+    assert length(by_id) == 3
+    assert length(full) == 3
 
     selected = selected(samples, full)
     assert selected(samples, by_id) == selected
@@ -88,6 +96,7 @@ defmodule Cadence.Telemetry.Storage.IdentitySelectionByIdTest do
     window = Enum.filter(samples, &(&1.sample_id =~ ~r/^(decided|excluded|plain-2)/))
     full = ObservationIdentityStates.list_for_selection(@mission, @filters)
 
+    # decided and excluded (decisions) and plain-2 (its advisory sighting) have rows.
     assert length(by_id(window)) == 3
     assert selected(window, by_id(window)) == selected(window, full)
   end
@@ -147,7 +156,14 @@ defmodule Cadence.Telemetry.Storage.IdentitySelectionByIdTest do
                  binding_id: envelope.binding_id,
                  decision_reason: "operator_#{decision}",
                  decided_at: ~U[2026-06-22 12:10:00Z],
-                 operator_id: "ops-1"
+                 operator_id: "ops-1",
+                 # First-seen rule: an identity without a row is decided from its stored row.
+                 point_id: envelope.point_id,
+                 sample_id: envelope.sample_id,
+                 observed_at: envelope.generation_time || envelope.receipt_time,
+                 fetch_sample_fun: fn _query, _opts ->
+                   {:ok, ObservationEnvelope.to_sample(envelope)}
+                 end
                ] ++ extra
              )
   end

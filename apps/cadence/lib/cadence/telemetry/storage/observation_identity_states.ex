@@ -6,15 +6,15 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates do
   the current canonical row and revision counters per logical observation
   identity so consumers can ask what Cadence currently considers canonical
   without mutating the physical TSDB row.
-  """
 
-  alias Ecto.Multi
+  A row exists only for an identity something has been said about (the first-seen rule, 11-17):
+  a decision, or a non-canonical sighting. A canonical sighting of an identity with no row writes
+  nothing; readers treat such a sample by its own validity. `EnvelopeWrites` holds the batch
+  write path, `Decisions` and `DecisionSeed` the decision path.
+  """
 
   import Ecto.Query
 
-  alias Cadence.Ids
-  alias Cadence.OperationalEvents
-  alias Cadence.OperationalEvents.Event, as: OperationalEvent
   alias Cadence.Platform.EventBus
 
   alias Cadence.Repo
@@ -33,22 +33,23 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates do
   alias Cadence.Telemetry.Storage.ObservationIdentityStates.DecisionEventRow,
     as: TelemetryObservationIdentityDecisionEventRow
 
+  alias Cadence.Telemetry.Storage.ObservationIdentityStates.Decisions
+  alias Cadence.Telemetry.Storage.ObservationIdentityStates.EnvelopeWrites
   alias Cadence.Telemetry.Storage.ObservationIdentityStates.TelemetryObservationIdentityStateRow
-
-  @decisions [:mark_canonical, :mark_conflict, :mark_superseded, :mark_advisory]
 
   @spec record_envelopes([ObservationEnvelope.t()], keyword()) :: :ok | {:error, term()}
   def record_envelopes(envelopes, opts \\ []) when is_list(envelopes) and is_list(opts) do
     opts = Keyword.put_new(opts, :event_bus, EventBus)
 
     Repo.transaction(fn ->
-      inserted = insert_initial_states(envelopes)
-
-      Enum.reduce(envelopes, inserted, &record_existing_state/2)
+      case EnvelopeWrites.record(Repo, envelopes) do
+        {:ok, changed} -> changed
+        {:error, reason} -> Repo.rollback(reason)
+      end
     end)
     |> case do
-      {:ok, _changes} ->
-        publish_envelope_state_changes(envelopes, opts)
+      {:ok, changed} ->
+        publish_envelope_state_changes(envelopes, changed, opts)
         :ok
 
       {:error, reason} ->
@@ -73,11 +74,9 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates do
       when is_binary(observation_identity_id) and is_atom(decision) and is_list(opts) do
     opts = Keyword.put_new(opts, :event_bus, EventBus)
 
-    with :ok <- require_decision(decision),
-         :ok <- require_decision_context(opts),
-         {:ok, row} <- fetch_row_for_decision(observation_identity_id, opts),
-         {:ok, attrs} <- decision_attrs(row, decision, opts),
-         {:ok, updated_row} <- persist_decision(row, attrs, decision, opts) do
+    with :ok <- Decisions.validate(decision, opts),
+         {:ok, seed} <- Decisions.seed(observation_identity_id, opts),
+         {:ok, updated_row} <- Decisions.persist(observation_identity_id, seed, decision, opts) do
       state = TelemetryObservationIdentityStateRow.to_domain(updated_row)
 
       publish_state_changed(state, opts)
@@ -242,477 +241,8 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates do
     |> Enum.map(&TelemetryObservationIdentityStateRow.to_domain/1)
   end
 
-  # Most incoming identities are new. Seed them in bounded batches, then retain
-  # ordered revision handling for existing identities and later batch entries.
-  # ON CONFLICT leaves concurrent writes and operator decisions intact.
-  defp insert_initial_states(envelopes) do
-    now = DateTime.utc_now()
-
-    envelopes
-    |> Enum.uniq_by(& &1.observation_identity_id)
-    |> Enum.sort_by(& &1.observation_identity_id)
-    |> Enum.map(fn envelope ->
-      changeset =
-        TelemetryObservationIdentityStateRow.changeset(
-          %TelemetryObservationIdentityStateRow{},
-          initial_attrs(envelope)
-        )
-
-      case Ecto.Changeset.apply_action(changeset, :insert) do
-        {:ok, row} ->
-          row
-          |> Map.from_struct()
-          |> Map.take(schema_fields())
-          |> Map.merge(%{inserted_at: now, updated_at: now})
-
-        {:error, changeset} ->
-          Repo.rollback(changeset)
-      end
-    end)
-    |> Enum.chunk_every(1_000)
-    |> Enum.flat_map(fn rows ->
-      {_count, inserted} =
-        Repo.insert_all(TelemetryObservationIdentityStateRow, rows,
-          cache_statement: false,
-          on_conflict: :nothing,
-          conflict_target: [:observation_identity_id],
-          returning: [:observation_identity_id]
-        )
-
-      Enum.map(inserted, & &1.observation_identity_id)
-    end)
-    |> MapSet.new()
-  end
-
-  defp record_existing_state(envelope, pending) do
-    identity = envelope.observation_identity_id
-
-    if MapSet.member?(pending, identity) do
-      MapSet.delete(pending, identity)
-    else
-      case upsert_state(Repo, envelope) do
-        {:ok, _row} -> pending
-        {:error, reason} -> Repo.rollback(reason)
-      end
-    end
-  end
-
-  defp upsert_state(repo, %ObservationEnvelope{} = envelope) do
-    row =
-      TelemetryObservationIdentityStateRow
-      |> where([row], row.observation_identity_id == ^envelope.observation_identity_id)
-      |> lock("FOR UPDATE")
-      |> repo.one()
-
-    case row do
-      nil ->
-        insert_state(repo, envelope)
-
-      %TelemetryObservationIdentityStateRow{} = row
-      when row.latest_observation_id == envelope.observation_id or
-             row.canonical_observation_id == envelope.observation_id ->
-        {:ok, row}
-
-      %TelemetryObservationIdentityStateRow{} = row ->
-        update_state(repo, row, envelope)
-    end
-  end
-
-  defp insert_state(repo, %ObservationEnvelope{} = envelope) do
-    %TelemetryObservationIdentityStateRow{}
-    |> TelemetryObservationIdentityStateRow.changeset(initial_attrs(envelope))
-    |> repo.insert()
-  end
-
-  defp update_state(
-         repo,
-         %TelemetryObservationIdentityStateRow{} = row,
-         %ObservationEnvelope{} = envelope
-       ) do
-    row
-    |> TelemetryObservationIdentityStateRow.changeset(updated_attrs(row, envelope))
-    |> repo.update()
-  end
-
-  defp initial_attrs(%ObservationEnvelope{} = envelope) do
-    base_attrs(envelope)
-    |> Map.merge(count_attrs(envelope))
-    |> maybe_put_canonical(envelope, canonical_envelope?(envelope))
-    |> Map.put(:validity_state, validity_state(nil, envelope))
-  end
-
-  defp updated_attrs(
-         %TelemetryObservationIdentityStateRow{} = row,
-         %ObservationEnvelope{} = envelope
-       ) do
-    row
-    |> Map.from_struct()
-    |> Map.take(schema_fields())
-    |> Map.merge(base_attrs(envelope))
-    |> merge_counts(envelope)
-    |> maybe_put_canonical(envelope, promote_canonical?(row, envelope))
-    |> Map.put(:validity_state, validity_state(row, envelope))
-    |> Map.put(:first_seen_at, earliest(row.first_seen_at, envelope.ingested_at))
-    |> Map.put(:last_seen_at, latest(row.last_seen_at, envelope.ingested_at))
-    |> Map.put(:payload, payload(envelope))
-  end
-
-  defp base_attrs(%ObservationEnvelope{} = envelope) do
-    %{
-      observation_identity_id: envelope.observation_identity_id,
-      organization_id: envelope.organization_id,
-      mission_id: envelope.mission_id,
-      realm: enum_string(envelope.realm),
-      replay_run_id: envelope.replay_run_id,
-      data_source_id: envelope.data_source_id,
-      binding_id: envelope.binding_id,
-      observable_id: envelope.observable_id,
-      point_id: envelope.point_id,
-      spacecraft_id: envelope.spacecraft_id,
-      latest_observation_id: envelope.observation_id,
-      latest_sample_id: envelope.sample_id,
-      latest_revision: envelope.revision,
-      first_seen_at: envelope.ingested_at,
-      last_seen_at: envelope.ingested_at,
-      payload: payload(envelope)
-    }
-  end
-
-  defp count_attrs(%ObservationEnvelope{} = envelope) do
-    %{
-      canonical_count: count(envelope, :canonical),
-      duplicate_count: count(envelope, :duplicate),
-      conflict_count: count(envelope, :conflict),
-      superseded_count: count(envelope, :superseded),
-      advisory_count: count(envelope, :advisory)
-    }
-  end
-
-  defp merge_counts(attrs, %ObservationEnvelope{} = envelope) do
-    attrs
-    |> Map.update!(:canonical_count, &(&1 + count(envelope, :canonical)))
-    |> Map.update!(:duplicate_count, &(&1 + count(envelope, :duplicate)))
-    |> Map.update!(:conflict_count, &(&1 + count(envelope, :conflict)))
-    |> Map.update!(:superseded_count, &(&1 + count(envelope, :superseded)))
-    |> Map.update!(:advisory_count, &(&1 + count(envelope, :advisory)))
-  end
-
-  defp count(%ObservationEnvelope{validity_state: state}, state), do: 1
-  defp count(%ObservationEnvelope{}, _state), do: 0
-
-  defp maybe_put_canonical(attrs, %ObservationEnvelope{} = envelope, true) do
-    attrs
-    |> Map.put(:canonical_observation_id, envelope.observation_id)
-    |> Map.put(:canonical_sample_id, envelope.sample_id)
-    |> Map.put(:canonical_revision, envelope.revision)
-    |> Map.put(:decided_at, envelope.ingested_at)
-    |> Map.put(:decision_reason, decision_reason(envelope))
-  end
-
-  defp maybe_put_canonical(attrs, %ObservationEnvelope{}, false), do: attrs
-
-  defp canonical_envelope?(%ObservationEnvelope{validity_state: :canonical}), do: true
-  defp canonical_envelope?(%ObservationEnvelope{}), do: false
-
-  defp promote_canonical?(
-         %TelemetryObservationIdentityStateRow{} = row,
-         %ObservationEnvelope{validity_state: :canonical} = envelope
-       ) do
-    is_nil(row.canonical_revision) or envelope.revision >= row.canonical_revision
-  end
-
-  defp promote_canonical?(
-         %TelemetryObservationIdentityStateRow{},
-         %ObservationEnvelope{}
-       ),
-       do: false
-
-  defp validity_state(_row, %ObservationEnvelope{validity_state: :conflict}), do: "conflict"
-
-  defp validity_state(%TelemetryObservationIdentityStateRow{conflict_count: count}, _envelope)
-       when count > 0,
-       do: "conflict"
-
-  defp validity_state(_row, %ObservationEnvelope{validity_state: :canonical}), do: "canonical"
-
-  defp validity_state(%TelemetryObservationIdentityStateRow{validity_state: state}, _envelope),
-    do: state
-
-  defp validity_state(nil, %ObservationEnvelope{validity_state: state}), do: enum_string(state)
-
-  defp decision_reason(%ObservationEnvelope{validity_state: :canonical, revision: 1}),
-    do: "initial_canonical"
-
-  defp decision_reason(%ObservationEnvelope{validity_state: :canonical}),
-    do: "canonical_revision"
-
-  # #359 (b): a recorded state's payload keeps only what no column holds: a correction's
-  # supersession link (`supersedes_observation_id`, present only on a revision). It used to copy
-  # six more fields on every row: three of this row's own columns (latest_observation_id,
-  # latest_sample_id, the latest validity) and three of the observation's (source_endpoint_id,
-  # evidence_id, packet_id). No reader takes those from the payload (re-delivery compares
-  # columns; selection reads only the payload's "decision", which a decision adds), and they were
-  # most of the payload's ~494 of the row's 1,083 bytes. Rows written before keep their copies
-  # until a revision rewrites them; they read the same.
-  defp payload(%ObservationEnvelope{supersedes_observation_id: nil}), do: %{}
-
-  defp payload(%ObservationEnvelope{supersedes_observation_id: superseded}),
-    do: %{supersedes_observation_id: superseded}
-
-  defp schema_fields do
-    [
-      :observation_identity_id,
-      :organization_id,
-      :mission_id,
-      :realm,
-      :replay_run_id,
-      :data_source_id,
-      :binding_id,
-      :observable_id,
-      :point_id,
-      :spacecraft_id,
-      :canonical_observation_id,
-      :canonical_sample_id,
-      :canonical_revision,
-      :latest_observation_id,
-      :latest_sample_id,
-      :latest_revision,
-      :validity_state,
-      :canonical_count,
-      :duplicate_count,
-      :conflict_count,
-      :superseded_count,
-      :advisory_count,
-      :first_seen_at,
-      :last_seen_at,
-      :decided_at,
-      :decision_reason,
-      :payload
-    ]
-  end
-
   defp enum_string(value) when is_atom(value), do: Atom.to_string(value)
   defp enum_string(value), do: value
-
-  defp require_decision(decision) when decision in @decisions, do: :ok
-  defp require_decision(decision), do: {:error, {:unsupported_decision, decision}}
-
-  defp require_decision_context(opts) do
-    cond do
-      not present?(Keyword.get(opts, :organization_id)) ->
-        {:error, {:missing_field, :organization_id}}
-
-      not present?(Keyword.get(opts, :mission_id)) ->
-        {:error, {:missing_field, :mission_id}}
-
-      true ->
-        :ok
-    end
-  end
-
-  defp fetch_row_for_decision(observation_identity_id, opts) do
-    TelemetryObservationIdentityStateRow
-    |> where([row], row.observation_identity_id == ^observation_identity_id)
-    |> filter(:organization_id, Keyword.fetch!(opts, :organization_id))
-    |> filter(:mission_id, Keyword.fetch!(opts, :mission_id))
-    |> filter(:realm, Keyword.get(opts, :realm))
-    |> filter(:replay_run_id, Keyword.get(opts, :replay_run_id))
-    |> filter(:data_source_id, Keyword.get(opts, :data_source_id))
-    |> filter(:binding_id, Keyword.get(opts, :binding_id))
-    |> Repo.one()
-    |> case do
-      %TelemetryObservationIdentityStateRow{} = row -> {:ok, row}
-      nil -> {:error, :observation_identity_state_not_found}
-    end
-  end
-
-  defp decision_attrs(%TelemetryObservationIdentityStateRow{} = row, decision, opts) do
-    decided_at = Keyword.get(opts, :decided_at, DateTime.utc_now())
-    reason = decision_reason(decision, opts)
-    decision_event_id = decision_event_id(opts)
-
-    attrs =
-      row
-      |> Map.from_struct()
-      |> Map.take(schema_fields())
-      |> Map.merge(%{
-        validity_state: decision_validity_state(decision),
-        decided_at: decided_at,
-        decision_event_id: decision_event_id,
-        decision_reason: reason,
-        payload: decision_payload(row, decision, reason, decided_at, opts)
-      })
-      |> maybe_merge_canonical_decision(decision, opts)
-
-    with :ok <- validate_canonical_decision(attrs, decision) do
-      {:ok, attrs}
-    end
-  end
-
-  defp persist_decision(%TelemetryObservationIdentityStateRow{} = row, attrs, decision, opts) do
-    Multi.new()
-    |> Multi.update(
-      :observation_identity_state,
-      TelemetryObservationIdentityStateRow.changeset(row, attrs)
-    )
-    |> Multi.insert(:observation_identity_decision_event, fn %{
-                                                               observation_identity_state:
-                                                                 updated_row
-                                                             } ->
-      row
-      |> decision_event(updated_row, decision, opts)
-      |> TelemetryObservationIdentityDecisionEventRow.changeset()
-    end)
-    |> Multi.run(:operational_event, fn repo, %{observation_identity_decision_event: event_row} ->
-      event_row
-      |> TelemetryObservationIdentityDecisionEventRow.to_domain()
-      |> OperationalEvent.from_observation_identity_decision_event()
-      |> then(&OperationalEvents.persist_event(repo, &1))
-    end)
-    |> Repo.transaction()
-    |> case do
-      {:ok, %{observation_identity_state: updated_row}} ->
-        {:ok, updated_row}
-
-      {:error, _operation, reason, _changes_so_far} ->
-        {:error, reason}
-    end
-  end
-
-  defp decision_validity_state(:mark_canonical), do: "canonical"
-  defp decision_validity_state(:mark_conflict), do: "conflict"
-  defp decision_validity_state(:mark_superseded), do: "superseded"
-  defp decision_validity_state(:mark_advisory), do: "advisory"
-
-  defp decision_reason(decision, opts) do
-    Keyword.get(opts, :decision_reason) ||
-      Keyword.get(opts, :reason) ||
-      Atom.to_string(decision)
-  end
-
-  defp decision_event_id(opts) do
-    Keyword.get(opts, :decision_event_id) ||
-      Keyword.get(opts, :telemetry_observation_identity_decision_event_id) ||
-      Ids.new("telemetry_observation_identity_decision_event")
-  end
-
-  defp maybe_merge_canonical_decision(attrs, :mark_canonical, opts) do
-    attrs
-    |> maybe_put_opt(:canonical_observation_id, opts)
-    |> maybe_put_opt(:canonical_sample_id, opts)
-    |> maybe_put_opt(:canonical_revision, opts)
-  end
-
-  defp maybe_merge_canonical_decision(attrs, _decision, _opts), do: attrs
-
-  defp maybe_put_opt(attrs, field, opts) do
-    case Keyword.get(opts, field) do
-      nil -> attrs
-      value -> Map.put(attrs, field, value)
-    end
-  end
-
-  defp validate_canonical_decision(attrs, :mark_canonical) do
-    cond do
-      not present?(Map.get(attrs, :canonical_observation_id)) ->
-        {:error, {:missing_field, :canonical_observation_id}}
-
-      not present?(Map.get(attrs, :canonical_sample_id)) ->
-        {:error, {:missing_field, :canonical_sample_id}}
-
-      not is_integer(Map.get(attrs, :canonical_revision)) ->
-        {:error, {:missing_field, :canonical_revision}}
-
-      Map.get(attrs, :canonical_revision) <= 0 ->
-        {:error, {:invalid_field, :canonical_revision}}
-
-      true ->
-        :ok
-    end
-  end
-
-  defp validate_canonical_decision(_attrs, _decision), do: :ok
-
-  defp decision_payload(
-         %TelemetryObservationIdentityStateRow{} = row,
-         decision,
-         reason,
-         decided_at,
-         opts
-       ) do
-    row.payload
-    |> ensure_map()
-    |> Map.put("decision", %{
-      "decision" => Atom.to_string(decision),
-      "reason" => reason,
-      "decided_at" => DateTime.to_iso8601(decided_at),
-      "operator_id" => Keyword.get(opts, :operator_id),
-      "evidence_ref" => Keyword.get(opts, :evidence_ref)
-    })
-  end
-
-  defp decision_event(
-         %TelemetryObservationIdentityStateRow{} = previous_row,
-         %TelemetryObservationIdentityStateRow{} = updated_row,
-         decision,
-         opts
-       ) do
-    updated_state = TelemetryObservationIdentityStateRow.to_domain(updated_row)
-    actor_id = Keyword.get(opts, :actor_id) || Keyword.get(opts, :operator_id)
-
-    ObservationIdentityDecisionEvent.new(%{
-      decision_event_id: updated_row.decision_event_id,
-      observation_identity_id: updated_row.observation_identity_id,
-      organization_id: updated_row.organization_id,
-      mission_id: updated_row.mission_id,
-      realm: updated_row.realm,
-      replay_run_id: updated_row.replay_run_id,
-      data_source_id: updated_row.data_source_id,
-      binding_id: updated_row.binding_id,
-      observable_id: updated_row.observable_id,
-      point_id: updated_row.point_id,
-      spacecraft_id: updated_row.spacecraft_id,
-      decision: decision,
-      decision_reason: updated_row.decision_reason,
-      actor_id: actor_id,
-      actor_kind: actor_kind(opts, actor_id),
-      evidence_ref: evidence_ref(opts),
-      previous_state: state_snapshot(previous_row),
-      new_state: state_snapshot(updated_state),
-      occurred_at: updated_row.decided_at || DateTime.utc_now()
-    })
-  end
-
-  defp actor_kind(opts, actor_id) do
-    cond do
-      present?(Keyword.get(opts, :actor_kind)) -> Keyword.get(opts, :actor_kind)
-      present?(actor_id) -> "operator"
-      true -> "system"
-    end
-  end
-
-  defp evidence_ref(opts) do
-    case Keyword.get(opts, :evidence_ref, %{}) do
-      nil -> %{}
-      evidence_ref -> evidence_ref
-    end
-  end
-
-  defp state_snapshot(%TelemetryObservationIdentityStateRow{} = row) do
-    row
-    |> TelemetryObservationIdentityStateRow.to_domain()
-    |> state_snapshot()
-  end
-
-  defp state_snapshot(%ObservationIdentityState{} = state) do
-    state
-    |> Map.from_struct()
-    |> Map.delete(:payload)
-    |> Map.put(:payload, state.payload || %{})
-  end
-
-  defp ensure_map(map) when is_map(map), do: map
-  defp ensure_map(_value), do: %{}
 
   defp publish_latest_value_refresh(%ObservationIdentityState{} = state, opts) do
     if Keyword.get(opts, :refresh_latest_value?, true) do
@@ -733,9 +263,12 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates do
     :ok
   end
 
-  defp publish_envelope_state_changes(envelopes, opts) do
-    if publish_state_facts?(opts) do
+  # One fact per identity whose stored state this batch changed (#689), not one per sample: a
+  # batch that stored nothing publishes nothing. Each fact is a call into the node's event bus.
+  defp publish_envelope_state_changes(envelopes, changed, opts) do
+    if publish_state_facts?(opts) and MapSet.size(changed) > 0 do
       envelopes
+      |> Enum.filter(&MapSet.member?(changed, &1.observation_identity_id))
       |> Enum.uniq_by(& &1.observation_identity_id)
       |> Enum.each(fn %ObservationEnvelope{} = envelope ->
         Facts.publish(Keyword.fetch!(opts, :event_bus), %ObservationIdentityStateChanged{
@@ -840,16 +373,4 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates do
     |> min(1_000)
     |> max(1)
   end
-
-  defp earliest(nil, candidate), do: candidate
-  defp earliest(current, nil), do: current
-
-  defp earliest(current, candidate),
-    do: if(DateTime.compare(candidate, current) == :lt, do: candidate, else: current)
-
-  defp latest(nil, candidate), do: candidate
-  defp latest(current, nil), do: current
-
-  defp latest(current, candidate),
-    do: if(DateTime.compare(candidate, current) == :gt, do: candidate, else: current)
 end

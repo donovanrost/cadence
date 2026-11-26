@@ -47,6 +47,11 @@ const installedCount = computed(() =>
               :mission-id="missionId"
               :app="a"
               :can-install="value.permissions.includes('apps.install')"
+              :uninstall-scope="{
+                kind: 'mission',
+                missionName: scope.mission.name,
+                spacecraftCount: value.spacecraft_count,
+              }"
               @changed="refetch"
             />
           </ul>

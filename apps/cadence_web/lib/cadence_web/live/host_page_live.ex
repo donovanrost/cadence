@@ -36,7 +36,7 @@ defmodule CadenceWeb.HostPageLive do
     case prepare_context(socket, path) do
       {:ok, socket} -> {:noreply, socket}
       {:halt, socket} -> {:noreply, socket}
-      :error -> {:noreply, redirect(socket, to: "/")}
+      :error -> {:noreply, redirect(socket, to: "/console")}
     end
   end
 

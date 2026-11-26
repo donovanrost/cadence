@@ -60,10 +60,20 @@ Each agent gets its own worktree off `origin/develop` and its own hc terminal, n
 git -C <repo> fetch origin && git -C <repo> worktree add --detach <worktrees>/<handle> origin/develop
 (cd <worktrees>/<handle> && mise trust)        # without this, node is missing and hooks fail
 # start a login shell (so mise's PATH applies), then the agent inside it
+# herdr.space makes the terminal visible in the user's herdr-app: laptop 1 sp58a63cab3ed4d89afb805669510138a9
+# (Apogee team), laptop 2 sp1603e397e561f3fd4f4373b657db0f1d. Forgot it? hc label <handle> herdr.space=<id>.
 hc run --bg --name <handle> --no-parent --no-notify --keep --label team=cadence --label head=<your handle> \
-  --cwd <worktrees>/<handle>
+  --label herdr.space=<id> --cwd <worktrees>/<handle>
 hc send <handle> "claude --model <model> --effort <level> --permission-mode auto"
-# Codex instead: hc send <handle> "codex -c model_reasoning_effort=high"
+# Codex instead: sandboxed to its worktree, approvals off (it never blocks on a dialog). <git> is the
+# main repo's .git (~/projects/cadence/cadence/.git on both laptops); a worktree's HEAD,
+# refs, config and objects live there. Verified in the sandbox: gh, mix deps.get, git commit/push/branch -D, docker,
+# a targeted mix test against local Postgres.
+# Its sandbox lets it push anywhere the account can: its brief must say "push only <handle>/* branches;
+# never push develop or main" (until #206 protects them).
+# hc send <handle> "codex -s workspace-write -a never -c model_reasoning_effort=high \
+#   -c sandbox_workspace_write.network_access=true \
+#   -c 'sandbox_workspace_write.writable_roots=[\"<git>\",\"<git>/worktrees/<handle>\",\"$HOME/.hex\",\"$HOME/.mix\",\"$HOME/.cache\",\"$HOME/Library/pnpm\"]'"
 hc send <handle> "<brief: role, area, first task, pointer to docs/TEAM.md>"
 ```
 
@@ -87,6 +97,9 @@ Laptop 1 worktrees live in `~/.herdr/worktrees/cadence/<handle>`. The new agent 
   (squash). The Head reviews their hires' PRs; Heads review each other's.
 - **Closing:** `Closes #N` in the PR body is fine. Merged means done; there is no separate landing step.
 - **Red develop:** Platform owns it. A PR that turned develop red is reverted first and fixed after.
+- **CI is the scarce resource** (about 20 runner slots for the whole team). Open every PR as a
+  **draft**; drafts run no CI. Mark it ready for review when you want CI and a review. Push in batches,
+  not commit by commit. Rebase a stale PR only when it's about to merge.
 - **Local checks before a PR:** `mix format`, compile with `--warnings-as-errors` for the apps you touched,
   `mix credo --strict` on touched files, the tests for the area you touched. Frontend: lint, typecheck and the
   tests for touched files. **Full suites run in CI**, not locally (16 GB laptops).
@@ -101,6 +114,8 @@ Laptop 1 worktrees live in `~/.herdr/worktrees/cadence/<handle>`. The new agent 
 - `hc send <handle> "[from <you>] <message>"`. From laptop 1, laptop-2 agents are `donovans-macbook-pro-1/<handle>`;
   from laptop 2, laptop-1 agents are `laptop1/<handle>` (the CTO is `laptop1/t11`).
   Keep it to a few lines; longer things go in the issue or PR and you send the link.
+- Never ask a question as a dialog in your own terminal; nobody watches it. Send it to whoever decides with
+  `hc send`. For the CTO that's `t11`, or `laptop1/t11` from laptop 2.
 - Tell the CTO (`t11` on laptop 1, handle `cto`) about: a milestone done, a blocker you can't clear, a decision
   above your area, a hire or fire. Not routine progress; that goes on the board.
 - If a session dies or the machine reboots, each agent's worktree and branch are the recovery point.
@@ -124,11 +139,17 @@ Laptop 1 worktrees live in `~/.herdr/worktrees/cadence/<handle>`. The new agent 
 | cto | CTO | laptop 1 | `t11` | Claude Opus 5.5 | 2026-11-25 |
 | platform | Head of Platform | laptop 1 | `platform` | Claude Opus 5.5, high | 2026-11-25 |
 | console | Head of Console | laptop 1 | `console` | Claude Opus 5.5, high | 2026-11-25 |
+| console-eng | Frontend engineer, Console (head: console) | laptop 1 | `console-eng` | Claude Opus 5.5, high | 2026-11-25 |
 | ground | Head of Ground & Comms | laptop 1 | `ground` | Claude Opus 5.5, high | 2026-11-25 |
+| ground-scale | Ground & Comms backend and scale engineer (reports to ground) | laptop 1 | `ground-scale` | Codex, high | 2026-11-25 |
 | commanding | Head of Commanding & Approvals | laptop 2 | `donovans-macbook-pro-1/commanding` | Claude Opus 5.5, high | 2026-11-25 |
 | mission-model | Head of Mission Model & Spacecraft | laptop 2 | `donovans-macbook-pro-1/mission-model` | Claude Opus 5.5, high | 2026-11-25 |
 | telemetry | Head of Telemetry & Data | laptop 2 | `donovans-macbook-pro-1/telemetry` | Claude Opus 5.5, high | 2026-11-25 |
 | mm-engineer | Engineer, Mission Model & Spacecraft (head: mission-model) | laptop 2 | `donovans-macbook-pro-1/mm-engineer` | Claude Sonnet, high | 2026-11-25 |
 | telemetry-eng | Engineer, Telemetry & Data (head: telemetry) | laptop 2 | `donovans-macbook-pro-1/telemetry-eng` | Claude Sonnet, high | 2026-11-26 |
+| commanding-eng | Engineer, Commanding & Approvals (head: commanding) | laptop 2 | `donovans-macbook-pro-1/commanding-eng` | Claude Sonnet 5.5, high | 2026-11-26 |
+| platform-eng | Engineer, Platform (head: platform) | laptop 1 | `platform-eng` | Codex, high | 2026-11-25 |
+| platform-sim | Engineer, Platform (head: platform) | laptop 2 | `donovans-macbook-pro-1/platform-sim` | Codex, high | 2026-11-26 |
 
-Codex is installed and signed in on laptop 1 only. Until laptop 2 has it, Codex hires run on laptop 1.
+Codex (0.172.0) is installed and signed in on both laptops, under the node version `mise.toml` pins; a Codex
+hire can go on either machine. If that pin moves, install Codex for the new node version too.

@@ -37,12 +37,15 @@ defmodule Cadence.Application do
     children =
       [
         {Cadence.Platform.Supervisor, root_composition: root_composition},
+        # Node-wide, and after the repo: it writes pending watermarks when it stops (#690).
+        Cadence.Telemetry.Storage.WatermarkCoalescer,
         Cadence.Management.Supervisor,
         {Cadence.Runtime.Supervisor, root_composition: root_composition},
         {Cadence.Control.Supervisor, control_supervisor_opts},
         {Cadence.Projections.Supervisor, root_composition: root_composition}
       ] ++
         background_job_children(root_composition) ++
+        retention_children() ++
         [{Drain, callback: fn -> drain_runtime(root_composition) end}]
 
     opts = [strategy: :one_for_one, name: Cadence.Supervisor]
@@ -95,6 +98,14 @@ defmodule Cadence.Application do
     end
 
     :ok
+  end
+
+  # Retention for the tables nothing else cleans (#694): one chunked sweeper per rule.
+  defp retention_children do
+    Cadence.Persistence.Retention.children([
+      Cadence.Runtime.PartitionStreamKeys.Retention,
+      Cadence.IngressArchive.Retention
+    ])
   end
 
   defp background_job_children(%RootComposition{} = root_composition) do

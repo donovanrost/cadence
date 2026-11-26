@@ -42,6 +42,7 @@ const notProvided = computed(
             :mission-id="missionId"
             :app="a"
             :can-install="value.permissions.includes('apps.install')"
+            :uninstall-scope="{ kind: 'spacecraft' }"
             :spacecraft-id="spacecraftId"
             @changed="apps.refetch"
           />

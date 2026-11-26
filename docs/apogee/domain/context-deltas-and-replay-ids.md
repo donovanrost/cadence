@@ -70,7 +70,7 @@ the index's right edge; the other N-1 split interior pages 50/50 and leave them 
 ```
 
 All four fields are fixed-width base32hex (`0-9a-v`). The columns use C collation, so the id sorts
-like the numbers. That is **30 bytes**: today's ids are 39 (action requests), 30 (episodes) and 28
+like the numbers. That is **30 bytes** (as built: 31, a 3-digit index; see "As built"): today's ids are 39 (action requests), 30 (episodes) and 28
 (events).
 - `kind`: `mar` (managed action request), `aep` (alarm episode), `aev` (episode event).
 - `receipt µs`: the input frame's receipt time, in µs since 2020-01-01 (2^50 µs is about 35 years).
@@ -134,6 +134,129 @@ receipt times**, along with the offsets and the stream ordinal. A required test 
 work): run a pass and record every effect id; crash the partition; recover from snapshot + archive;
 assert the replayed effects' ids are **byte-identical**, and that no new rows appear. Timer
 effects: the same assertion across a restart, with fire times.
+
+**As built (domain, 11-17, branch `domain/replay-ids`; lead's three rulings).**
+
+- **The input is the frame, not the evidence batch.** A raw evidence's start offset changes when a
+  replay batches the journal differently, so effects are keyed on the frame that completed the
+  packet: (journal stream, the frame's absolute offset). Frame ingress already computes that offset
+  for `journal_packet_id` (#71); it is now carried as `PacketRecord.journal_frame` →
+  `Sample.journal_frame` → the semantic update's metadata (`effect_source`). The receipt time in
+  the id is that of the journal record holding the frame's **last** byte (its first byte can sit
+  in an earlier evidence, whose records a different batch doesn't have).
+- **Not stored, not archived.** `journal_frame` is a struct field, not provenance: the archive
+  entry, `journal_packet_id` and the stored observation (provenance, row, identity) are unchanged,
+  so a pre-#99 archived range replays with no conflict and B's residual stays null for packet rows.
+- **A derived update is keyed on its trigger**, never on the frame of the input whose metadata it
+  copies (that can be older, its ids already taken). A timer-triggered algorithm uses the stream
+  `timer:<algorithm>` and its fire time.
+- **The index is per input, and stable whatever recovery restored.** Action requests are numbered
+  per (stream, offset) in deterministic order after the input is processed, across all of a
+  frame's packets and every capability that answers them (two capabilities on one frame get 0 and
+  1, not 0 and 0). Alarm effects are numbered over the frame's monitoring EVALUATIONS (every
+  monitored update x policy, emitted whatever the state), and a transition takes its evaluation's
+  index. Not over the transitions: which of them a replay re-derives depends on the monitoring
+  state recovery restored. A partition that starts empty is seeded with only the NON-normal latest
+  states, so a replay can re-derive a subset, and numbering transitions would hand one subject
+  another's stored id and wedge the partition on MM_REPLAY_ID_CONFLICT (api-ops' review; the
+  two-subject end-to-end test reproduces it on transition numbering and passes on evaluation
+  numbering).
+- **The index is 3 base32hex digits (32,768 per input per kind)**, so ids are **31 bytes**. A
+  frame's evaluations are bounded by its bits: a 1,115-byte TM frame of 8-bit fields is ~1,100
+  updates, x 3 policies ~3,300; a 2,048-byte AOS frame ~6,100. Past 32,768 an effect keeps an
+  `Ids.new` id (no replay dedupe), logged as `MM_REPLAY_ID_INDEX_OVERFLOW` and counted as the
+  telemetry event `[:cadence, :replay_id, :index_overflow]`.
+- **Timers and initialization have their own allocated streams**, so they never share an ordinal
+  by chance: a managed timer `timer:<capability>:<timer key>` at its fire time; a managed
+  application's **initialization** `init:<activation>:<capability>` with offset = the binding set
+  version and a fixed receipt time. A restart re-runs init and gets the existing request back
+  (insert-or-get); it never re-issues it. Only a new activation or a new binding set version gives
+  a new id.
+- **Writing:** action requests in one `insert_all ... ON CONFLICT DO NOTHING RETURNING` per batch
+  (one statement, fewer than today's one per request). Episodes and events: the episode (on open)
+  and the event are insert-or-get; a stored id means a replay and the episode change is skipped
+  (`seen?` isn't read for keyed observations). Inputs without a journal position, ground limits
+  and acknowledgements keep `Ids.new`.
+- **The tripwire compares what derives from the input:** an episode's or event's subject and
+  observation time (not its source ref: a transition's id derives from its sample id, which
+  included the evidence id until #161, and that changed when a replay batched the journal
+  differently; the tripwire stays on subject and time either way; not
+  the event kind or payload either: an honest replay can decide a different kind because the
+  episode moved on, and the payload holds acknowledgement state); an action request's kind, timer
+  key and delay (not its metadata, which is the capability's and could carry batch-dependent ids).
+  Today's managed request kinds are schedule and cancel timer. A kind that sets no timer would be
+  compared on its kind alone: safe (no false trips) but weak, so a new request kind brings its own
+  input projection (api-ops' review note). A mismatch is `MM_REPLAY_ID_CONFLICT`, an error that rolls the batch back.
+- **The end-to-end test** (`monitoring_replay_ids_e2e_test.exs`): a live mission runtime with a
+  catalog limit; a frame raises it, a later frame clears it. Then the crash window (the
+  partition's semantic rows and the monitoring seed's latest alarm state dropped, the owner
+  killed) and the journal replays the raise, as the same evidence and re-cut mid-frame:
+  monitoring re-derives the raise and, with no open episode, would open a second one (what an
+  `Ids.new` id did); the stored episode id stops it. It found the source-ref tripwire problem
+  above. Two more: the two-subject wedge (an empty start, seeded, replays a frame where only one of
+  two subjects re-derives), and a managed application's request re-emitted after a restart and a
+  re-cut replay (one row, the same id).
+- **Fixed by #161/#162 (api, 11-19; was "known, not #99"):** the transition and evaluation rows
+  keep content ids over the sample id, and the sample id now hashes the packet id (a journaled
+  packet's journal position, #71) instead of the evidence id. A replay that batches differently
+  re-derives the same sample ids, so it writes no evaluation or transition twice; the observation
+  id leaves out the evidence too (domain's design A), so identity states see a no-op. The e2e's
+  third test replays a re-cut frame and finds the same sample ids and no new monitoring rows. No
+  legacy form or cutover (DECISIONS #112); it rides the dev reset.
+
+**Measured, A/B (domain, 11-17; the director's landing condition 3).** Base `2dec10bc2` against
+built `16e80e241` (the code as approved at `e80f6cbc6`). Both benches ran interleaved, built x3,
+base x3, built x3, each phase one gated job (a force compile, then the bench) on test partition
+12. WAL comes from `pg_waldump`, filtered to the test database and summed per relation inside each
+run's LSN window. Statements are counted from the repo's query telemetry, per source table. Id
+bytes are `pg_column_size`. Figures are means of the per-run figures: 6 built runs, 3 base.
+
+*1. Alarm effects, through the live pipeline (03:56-03:59Z).* A real mission runtime with catalog
+limits on two parameters (the end-to-end test's setup): 10 warm-up frames, then 1,000 timed frames
+per run. Both limits flap on every frame (two raises, then two clears), so a run writes 1,010
+episodes and 2,020 events, two transitions per frame: the worst case. Decode-to-commit is the wall
+time of `Cadence.process_telemetry_ingress/1` plus the projector's
+`Persistence.persist_semantic_processing_results/1`, made synchronously, per frame.
+
+| | Base | Built | Delta |
+|---|---|---|---|
+| Decode-to-commit p50 / p95 / p99 | 13.8 / 21.7 / 27.1 ms | 13.9 / 22.8 / 28.3 ms | within run-to-run spread (built p50 12.1-16.9, base 12.6-15.0; run medians 13.7 vs 13.9) |
+| Statements per frame | 45 | 43 | -2 (`alarm_episode_events` 4 to 2: a keyed episode skips `seen?`; `alarm_episodes` 5 both) |
+| Id bytes, `episode_id` / `event_id` | 29.0 / 27.0 | 32.0 / 32.0 | +3 / +5 |
+| WAL, `alarm_episodes` + `alarm_episode_events`, per 1,000 frames | 4.99 MB | 5.13 MB | +134 KB (+2.7%), ~+44 B per effect row |
+
+Where the WAL comes from: insert-or-get (`ON CONFLICT DO NOTHING`) is a speculative insert plus a
+confirm record, so the heap WAL records double on those rows (events 2,000 to 4,000 records,
++112 KB; episodes +53 KB). Primary-key WAL is LOWER (events 257 to 229 KB, episodes 257 to 224 KB)
+because the time-first ids append at the right edge. The director accepted this row as measured.
+
+*2. Managed action requests, through the partition owner's writer path (04:02-04:05Z; the
+director's condition).* Per batch, as the owner builds it: 25 frames x 2 capabilities x 2 timer
+requests each = 100 requests (plus 50 capability records), from `RuntimeRecords.for_execution/7`
+per (packet, capability), merged; then on built `EffectIds.assign/1`; then
+`Persistence.persist_managed_runtime_records/3`. 10 warm-up batches, then 200 timed batches per
+run (20,000 requests). Base writes one insert per request; built writes one
+`insert_all ... ON CONFLICT DO NOTHING RETURNING` per batch. All 21,000 built rows carry replay ids.
+
+| | Base | Built | Delta |
+|---|---|---|---|
+| Batch write p50 / p95 / p99 (100 requests) | 55.3 / 67.6 / 70.9 ms | 43.9 / 52.5 / 62.0 ms | **-21% / -22% / -13%** (built p50 43.1-44.7 in every run, base 52.2-57.0) |
+| Statements per batch | 502 | 403 | -99 (`managed_action_requests` 100 to 1; the capability-record, mission and event statements are identical) |
+| `action_request_id` bytes | 38.0-39.0 | 32.0 | -6.5 |
+| WAL, `managed_action_requests` (heap + 4 indexes), per 20,000 requests | 15.8 MB | 15.7 MB (15.4-16.2) | **-0.5%, neutral** |
+
+Base WAL is the two base runs without a checkpoint. The third base run (19.0 MB) took a
+checkpoint's full-page writes and is left out; counting it, built is 6.7% lower. Inside the total:
+the heap is +800 KB (+40 B per request; the speculative insert's confirm record, 20,000 to 40,000
+records), and the primary key is about -720 KB (2.93 to 2.21 MB, -24%: shorter ids appended at the
+right edge). The other three indexes don't change.
+
+*Not covered:* index growth per run. Sandbox rollbacks leave free pages behind, so it reads 0 to
+188 KB at random; the SQL-level bench above (100k rows per table) stands for primary-key bytes.
+*Caveats:* the test sandbox runs one transaction per test, so neither side pays a commit fsync.
+The machine was shared with the live :4011 stack. Bench 1 is the worst-case flapping workload.
+qa's 06:01Z baseline is for scale only; the live after-numbers come from qa's `measure-98-99` once
+#99 lands.
 
 *Transitions and evaluations* keep their content ids for now (see the volumes below). They are
 replay-stable only if `update_id` (the sample id) is: that is on the identity-v2 audit

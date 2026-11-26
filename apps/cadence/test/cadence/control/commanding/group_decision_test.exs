@@ -9,6 +9,7 @@ defmodule Cadence.Control.Commanding.GroupDecisionTest do
   alias Cadence.Commanding.{CommandApprovalRow, CommandQueueEntryRow}
   alias Cadence.Commanding.Groups.GroupStore
   alias Cadence.Control.Commanding.{GroupDecision, GroupSubmission}
+  alias Cadence.Management.Commanding.RequestReview
 
   setup do
     c = setup!(3)
@@ -60,7 +61,8 @@ defmodule Cadence.Control.Commanding.GroupDecisionTest do
              decide(c, c.approver, %{
                kind: :go_excluding,
                excluded: ["sc-2"],
-               note: "sc-2 in safe mode"
+               note: "sc-2 in safe mode",
+               expected_review: GroupDecision.review_token(c.group)
              })
 
     by_target = Enum.group_by(members(c), & &1.metadata["group"]["target_index"])
@@ -154,6 +156,70 @@ defmodule Cadence.Control.Commanding.GroupDecisionTest do
   defp review(c) do
     {:ok, group} = GroupStore.fetch(c.org, c.mission, c.group.command_group_id)
     GroupDecision.review_token(group)
+  end
+
+  # #117 step 4a (domain, ca-security): GO must carry the token, and the token covers WHICH
+  # requests are members, not only how many (the members digest).
+  test "a GO without the review token is refused, fail closed", c do
+    assert {:error, :command_group_review_stale} = decide(c, c.approver, %{kind: :go})
+
+    assert {:error, :command_group_review_stale} =
+             decide(c, c.approver, %{kind: :go_excluding, excluded: ["sc-2"], note: "x"})
+  end
+
+  test "swapping one member for another at the same count changes the token, so GO is refused",
+       c do
+    token = GroupDecision.review_token(c.group)
+    digest = GroupDecision.members_digest(c.group)
+    [first | _] = members(c)
+
+    # Another request takes the first member's place: same count, different members.
+    Repo.update_all(
+      from(r in "command_requests", where: r.command_request_id == ^first.command_request_id),
+      set: [command_request_id: first.command_request_id <> "-swapped"]
+    )
+
+    refute GroupDecision.members_digest(c.group) == digest
+
+    assert {:error, :command_group_review_stale} =
+             decide(c, c.approver, %{kind: :go, expected_review: token})
+  end
+
+  # #117 step 4b: each member approval is a complete record, and the group's decision names which
+  # members were decided and which a GO excluded.
+  test "a GO's records: each member's token, separated_from, admin_mode; the members digest and excluded ids",
+       c do
+    before = members(c)
+    tokens = Map.new(before, &{&1.command_request_id, RequestReview.review_token(&1)})
+    digest = GroupDecision.members_digest(c.group)
+
+    assert {:ok, decided} =
+             decide(c, c.approver, %{
+               kind: :go_excluding,
+               excluded: ["sc-2"],
+               note: "sc-2 in safe mode",
+               expected_review: GroupDecision.review_token(c.group)
+             })
+
+    rows =
+      Repo.all(from(a in CommandApprovalRow, where: a.command_request_id in ^Map.keys(tokens)))
+
+    assert length(rows) == length(before)
+
+    for row <- rows do
+      assert row.subject_digest == Map.fetch!(tokens, row.command_request_id)
+      assert row.separated_from == [c.scope.user.user_id]
+      assert row.admin_mode == (c.approver.admin_mode? == true)
+    end
+
+    excluded =
+      before
+      |> Enum.filter(&(&1.metadata["group"]["target_index"] == 1))
+      |> Enum.map(& &1.command_request_id)
+      |> Enum.sort()
+
+    assert decided.decision["members_digest"] == digest
+    assert decided.decision["excluded_request_ids"] == excluded
   end
 
   test "a stale review token is refused", c do

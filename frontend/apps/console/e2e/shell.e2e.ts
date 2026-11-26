@@ -3,7 +3,7 @@ import { missionPath, openConsole } from "./support/console.ts";
 import { DEMO, storageStateFor } from "./support/env.ts";
 import { allow, expect, test } from "./support/fixtures.ts";
 
-// Shell contract: docs/apogee/ARCHITECTURE.md "Shell contract", docs/apogee/qa/e2e.md.
+// Shell contract: frontend/apps/console/ARCHITECTURE.md "Building a screen".
 test.describe("console shell", () => {
   test("a signed-in operator lands on /console with real org and mission context", async ({
     page,
@@ -71,13 +71,12 @@ test.describe("console shell, platform admin without a membership", () => {
 test.describe("console shell, signed out", () => {
   test.use({
     storageState: { cookies: [], origins: [] },
-    // The bounce passes through the old /sign-in (no favicon outside the console; qa issues #2),
-    // and a signed-out console's session read answers 401, which it reads as anonymous.
-    allowedDiagnostics: allow(/\/favicon\.ico/, /\/api\/console\/v1\/session/),
+    // A signed-out console's session read answers 401, which it reads as anonymous.
+    allowedDiagnostics: allow(/\/api\/console\/v1\/session/),
   });
 
   test("redirects to the console sign-in screen", async ({ page }) => {
-    // /console → /sign-in → 302 /console/sign-in (L5, api-ops ecdddab10).
+    // /console → 302 /console/sign-in.
     await page.goto("/console");
     await expect(page).toHaveURL(/\/console\/sign-in(?:[/?#]|$)/);
     await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible();

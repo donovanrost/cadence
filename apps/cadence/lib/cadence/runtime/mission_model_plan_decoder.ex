@@ -35,27 +35,6 @@ defmodule Cadence.Runtime.MissionModelPlanDecoder do
     end
   end
 
-  @spec resolve_telemetry_configuration(map(), term()) ::
-          {:ok, term()} | {:error, term()}
-  def resolve_telemetry_configuration(plans, %PacketDefinition{} = configured) do
-    with {:ok, packet_definitions} <- telemetry_packet_definitions(plans) do
-      find_telemetry_configuration(packet_definitions, configured)
-    end
-  end
-
-  def resolve_telemetry_configuration(_plans, configuration),
-    do: {:error, {:invalid_mission_model_telemetry_binding, configuration}}
-
-  defp find_telemetry_configuration(definitions, configured) do
-    case Enum.find(definitions, &(&1.packet_definition_id == configured.packet_definition_id)) do
-      %PacketDefinition{} = definition ->
-        {:ok, definition}
-
-      nil ->
-        {:error, {:mission_model_packet_definition_not_found, configured.packet_definition_id}}
-    end
-  end
-
   @spec telemetry_packet_definitions(map()) ::
           {:ok, [PacketDefinition.t()]} | {:error, term()}
   def telemetry_packet_definitions(plans) when is_map(plans) do

@@ -76,8 +76,8 @@ async function load() {
         createHttpHostBridge(session, app, { navigate, queryParams: params.value }),
       repin: props.repin,
       navigate,
-      onReceipt: (actionId, receipt) => {
-        const outcome = saveOutcome(app.applicationKey, actionId, receipt);
+      onReceipt: (actionId) => {
+        const outcome = saveOutcome(app.applicationKey, actionId);
         if (outcome) emit("outcome", outcome);
       },
       onLost: () => (lost.value = true),

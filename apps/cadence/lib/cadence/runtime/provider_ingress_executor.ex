@@ -13,6 +13,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
   alias Cadence.Runtime.Persistence, as: RuntimePersistence
 
   alias Cadence.Ingress.RawEvidence
+  alias Cadence.IngressJournal.IngestTelemetry
   alias Cadence.Observability
   alias Cadence.Observability.AsyncContext
   alias Cadence.Runtime, as: RuntimeBoundary
@@ -1067,7 +1068,8 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
              %{
                resume_offset: resume_offset(result),
                incomplete: incomplete(result),
-               scid_check: scid_check(result)
+               scid_check: scid_check(result),
+               counts: IngestTelemetry.counts(result)
              }}
         ),
       producer_receipts: [{self(), length(entries)}]

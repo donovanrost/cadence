@@ -22,7 +22,7 @@ defmodule CadenceWeb.UserAuthTest do
       assert {:halt, socket} =
                UserAuth.on_mount(:require_user_scope, %{}, %{}, %Phoenix.LiveView.Socket{})
 
-      assert socket.redirected == {:redirect, %{to: "/sign-in", status: 302}}
+      assert socket.redirected == {:redirect, %{to: "/console/sign-in", status: 302}}
     end
 
     test "halts to /sign-in when token is invalid" do
@@ -34,7 +34,7 @@ defmodule CadenceWeb.UserAuthTest do
                  %Phoenix.LiveView.Socket{}
                )
 
-      assert socket.redirected == {:redirect, %{to: "/sign-in", status: 302}}
+      assert socket.redirected == {:redirect, %{to: "/console/sign-in", status: 302}}
     end
   end
 

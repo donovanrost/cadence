@@ -116,7 +116,7 @@ defmodule Cadence.Reads.CommandReview do
       from(row in CommandApprovalRow,
         where:
           row.organization_id == ^org and row.mission_id == ^mission and
-            row.command_request_id == ^request,
+            row.command_request_id == ^request and row.decision != "not_required",
         order_by: [asc: row.command_approval_id],
         limit: 26,
         select:

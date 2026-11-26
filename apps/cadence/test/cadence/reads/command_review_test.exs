@@ -245,7 +245,11 @@ defmodule Cadence.Reads.CommandReviewTest do
         decided_by: %{"user_id" => "reviewer", "private" => "private-approval"},
         decided_at: ~U[2026-09-10 08:01:00Z],
         reason: "Legacy decision",
-        metadata: %{"private" => "private-approval"}
+        metadata: %{"private" => "private-approval"},
+        # #117 step 4b's required record fields.
+        subject_digest: String.duplicate("a", 64),
+        separated_from: [],
+        admin_mode: false
       })
 
     Repo.insert!(CommandApprovalRow.changeset(approval))

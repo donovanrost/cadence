@@ -24,6 +24,7 @@ defmodule Cadence.Configuration.Submission do
     Ledger,
     Pipeline,
     Preview,
+    ReviewRecord,
     ReviewRow,
     Staging
   }
@@ -68,7 +69,7 @@ defmodule Cadence.Configuration.Submission do
          :ok <- state(set, "open"),
          :ok <- expected(set, params),
          :ok <- something_staged(set) do
-      submit_locked(set, actor, reason, policy, preview, revision_id)
+      submit_locked(set, actor, reason, policy, preview, {revision_id, admin_mode(params)})
     else
       {:error, reason} -> Repo.rollback(reason)
     end
@@ -93,7 +94,12 @@ defmodule Cadence.Configuration.Submission do
     proof = %{actor: reviewer, act: :send_back, review_id: review_id()}
 
     locked(set, params, proof, fn set ->
-      insert_review(set, reviewer, "sent_back", comment, proof.review_id)
+      ReviewRecord.write(set, reviewer, "sent_back", comment, proof.review_id, %{
+        digest: set.change_set_id |> ChangeSetStore.staged_ops() |> ReviewRecord.digest(),
+        separated_from: ReviewRecord.separated_from(ReviewRecord.compared(set)),
+        admin_mode: admin_mode(params)
+      })
+
       set = ChangeSetStore.update_set(set, state: "open", policy_document: nil)
       %{state: :open, change_set_id: set.change_set_id, version: set.version}
     end)
@@ -111,15 +117,24 @@ defmodule Cadence.Configuration.Submission do
 
         result =
           locked(set, params, proof, fn set ->
-            review = insert_review(set, reviewer, "approved", comment, proof.review_id)
+            # #117 step 2: the review names the ops it decided (the version pinned by expected/2,
+            # under this lock); the apply below runs them, as the reviewer (applied_by).
+            digest = set.change_set_id |> ChangeSetStore.staged_ops() |> ReviewRecord.digest()
+
+            review =
+              ReviewRecord.write(set, reviewer, "approved", comment, proof.review_id, %{
+                digest: digest,
+                separated_from: ReviewRecord.separated_from(ReviewRecord.compared(set)),
+                admin_mode: admin_mode(params)
+              })
 
             execute_locked(
               set,
-              set.submitted_by,
+              reviewer,
               set.reason,
               set.policy_document,
               [approval(review)],
-              proof.revision_id
+              {proof.revision_id, :reviewed}
             )
           end)
 
@@ -141,7 +156,7 @@ defmodule Cadence.Configuration.Submission do
     end
   end
 
-  defp submit_locked(set, actor, reason, %{"approval_required" => true} = policy, _preview, _rev) do
+  defp submit_locked(set, actor, reason, %{"approval_required" => true} = policy, _preview, _ids) do
     set =
       ChangeSetStore.update_set(set,
         state: "in_review",
@@ -154,19 +169,29 @@ defmodule Cadence.Configuration.Submission do
     %{state: :in_review, change_set_id: set.change_set_id, version: set.version}
   end
 
-  defp submit_locked(set, actor, reason, policy, _preview, revision_id) do
-    set = %{set | submitted_by: actor, reason: reason}
-    execute_locked(set, actor, reason, policy, [], revision_id)
+  # The direct path: the apply writes its own not_required record (#117 step 2).
+  defp submit_locked(set, actor, reason, policy, _preview, {revision_id, admin_mode}) do
+    set = %{set | submitted_by: actor, reason: reason, policy_document: policy}
+
+    execute_locked(
+      set,
+      actor,
+      reason,
+      policy,
+      [],
+      {revision_id, {:direct, admin_mode}}
+    )
   end
 
   # Runs inside the caller's transaction; rolls it back on any failure.
-  defp execute_locked(set, applier, reason, policy, approvals, revision_id) do
+  defp execute_locked(set, applier, reason, policy, approvals, {revision_id, record}) do
     org = set.organization_id
     mission = set.mission_id
 
     with :ok <- ActivationPolicy.validate(org, mission, policy),
          head = Ledger.lock_head(org, mission),
          ops = ChangeSetStore.staged_ops(set.change_set_id),
+         :ok <- record_direct(set, applier, ops, record),
          result = Pipeline.run(org, mission, set.base_revision_number, ops, actor: applier),
          :ok <- clean(result),
          changes = ChangeSetStore.changes(set.change_set_id),
@@ -249,6 +274,7 @@ defmodule Cadence.Configuration.Submission do
         applied_at: DateTime.utc_now(),
         reason: reason,
         approvals: approvals,
+        submitted_by: set.submitted_by || applier,
         summary: summary(changes),
         content_sha256: content_sha256(ops),
         activation_id: generation && generation.activation.activation_id,
@@ -391,8 +417,8 @@ defmodule Cadence.Configuration.Submission do
   #   sending byte-identical submits both get 200, which misattributes nothing;
   # - a submit that applied: the set's revision is the one with this request's revision id;
   # - a send back: this request's review row (its id), sent_back, by this actor, and the set open;
-  # - an approve: this request's review row, approved, by this actor, and the set applied (the
-  #   revision's applied_by is the submitter, so the review row is the proof).
+  # - an approve: this request's review row, approved, by this actor, and the set applied (since
+  #   #117 step 2 the revision's applied_by is this reviewer too; the review row is the proof).
   # Anything else is `apply_interrupted` (503, changes.md).
   @doc false
   @spec landed(ChangeSetRow.t(), map()) :: {:ok, map()} | {:error, :apply_interrupted}
@@ -555,14 +581,11 @@ defmodule Cadence.Configuration.Submission do
   # (issuer and rotators). No console route lets a service stage today, but the domain allows it;
   # an unknown set refuses with its own code (fail closed), never as if the reviewer authored it.
   defp independent(set, %{"kind" => "user", "id" => reviewer_id}) do
-    authors =
-      set.change_set_id
-      |> ChangeSetStore.changes()
-      |> Enum.map(&author_actor(&1.author_key))
-
-    case Accountability.separate(set.organization_id, {:user, reviewer_id}, [
-           set.submitted_by | authors
-         ]) do
+    case Accountability.separate(
+           set.organization_id,
+           {:user, reviewer_id},
+           ReviewRecord.compared(set)
+         ) do
       :ok ->
         :ok
 
@@ -576,18 +599,14 @@ defmodule Cadence.Configuration.Submission do
 
   defp independent(_set, _reviewer), do: {:error, :forbidden}
 
-  defp insert_review(set, reviewer, decision, comment, review_id) do
-    Repo.insert!(%ReviewRow{
-      review_id: review_id,
-      change_set_id: set.change_set_id,
-      organization_id: set.organization_id,
-      mission_id: set.mission_id,
-      decision: decision,
-      actor: reviewer,
-      comment: comment,
-      decided_at: DateTime.utc_now()
-    })
-  end
+  # A reviewed apply's record is its review row; a direct apply writes its own not_required row.
+  defp record_direct(_set, _applier, _ops, :reviewed), do: :ok
+
+  defp record_direct(set, applier, ops, {:direct, admin_mode}),
+    do: ReviewRecord.not_required(set, applier, ops, admin_mode, review_id())
+
+  # From the caller's scope (Control.Configuration), never from a request body.
+  defp admin_mode(params), do: Map.get(params, :admin_mode) == true
 
   defp approval(%ReviewRow{} = review) do
     %{
@@ -654,8 +673,4 @@ defmodule Cadence.Configuration.Submission do
         {:error, error}
     end
   end
-
-  defp author_actor("user:" <> id), do: {:user, id}
-  defp author_actor("service:" <> id), do: {:service, id}
-  defp author_actor(_other), do: nil
 end

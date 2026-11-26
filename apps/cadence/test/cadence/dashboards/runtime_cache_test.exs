@@ -15,7 +15,9 @@ defmodule Cadence.Dashboards.RuntimeCacheTest do
     SourceResult
   }
 
+  alias Cadence.Dashboards.Sources.Telemetry.RevisionState
   alias Cadence.DataSources.SourceWatermark
+  alias Cadence.Telemetry.Sample
 
   alias Cadence.DataSources.{DataBinding, DataSource}
 
@@ -346,6 +348,44 @@ defmodule Cadence.Dashboards.RuntimeCacheTest do
     assert {:ok, ^resolved_result} = RuntimeCache.get_source_result(resolved_source_key, cache)
     assert RuntimeCache.get_frame(conflict_frame_key, cache) == :miss
     assert {:ok, ^resolved_frames} = RuntimeCache.get_frame(resolved_frame_key, cache)
+  end
+
+  test "a decision on a first-seen identity (no state row yet) invalidates what read it" do
+    cache = start_supervised!({RuntimeCache, name: nil})
+    identity_id = "identity-first-seen"
+
+    sample = %Sample{
+      sample_id: "sample-first-seen",
+      mission_id: "mission_dashboards",
+      point_id: "battery_voltage",
+      provenance: %{"storage" => %{"observation_identity_id" => identity_id}}
+    }
+
+    {[frame], []} =
+      RevisionState.resolve(
+        [{%Frame{frame_id: "frame_first_seen"}, [sample]}],
+        source_request(:telemetry, []),
+        [],
+        identity_states_fun: fn [^identity_id], _lookup_opts -> [] end
+      )
+
+    # No row: no revision summary, but the identity is still in the dependency.
+    refute Map.has_key?(frame.meta, :revision_state)
+    dependency = RevisionState.dependency([frame])
+    assert dependency.observation_identity_ids == [identity_id]
+
+    source_key = source_result_key(:telemetry, request_id: "source_req_first_seen")
+    frame_key = frame_key(:telemetry, telemetry_revision_dependency: dependency)
+    result = source_result(:telemetry, telemetry_revision_dependency: dependency)
+    assert :ok = RuntimeCache.put_source_result(source_key, result, cache)
+    assert :ok = RuntimeCache.put_frame(frame_key, [frame], cache)
+
+    # A decision publishes its identity's state change with this filter.
+    filter = [observation_identity_id: identity_id]
+    assert {:ok, 1} = RuntimeCache.invalidate_source_results(cache, filter)
+    assert {:ok, 1} = RuntimeCache.invalidate_frames(cache, filter)
+    assert RuntimeCache.get_source_result(source_key, cache) == :miss
+    assert RuntimeCache.get_frame(frame_key, cache) == :miss
   end
 
   test "invalidating a data source clears only source results for that source" do

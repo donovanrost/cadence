@@ -443,6 +443,22 @@ defmodule Cadence.Dashboards.DocumentStore do
     if OpsDashboardRow.archived?(row), do: {:error, :dashboard_archived}, else: :ok
   end
 
+  @doc """
+  Who owns `dashboard_id`. A dashboard id is the table's primary key, so it is unique across every
+  organization and mission: an import that keeps an id must know whether it is taken, and where.
+  """
+  @spec dashboard_owner(binary()) ::
+          {:ok, %{organization_id: binary(), mission_id: binary()}} | :error
+  def dashboard_owner(dashboard_id) when is_binary(dashboard_id) do
+    case Repo.get(OpsDashboardRow, dashboard_id) do
+      %OpsDashboardRow{} = row ->
+        {:ok, %{organization_id: row.organization_id, mission_id: row.mission_id}}
+
+      nil ->
+        :error
+    end
+  end
+
   defp get_row(organization_id, mission_id, dashboard_id) do
     Repo.get_by(OpsDashboardRow,
       organization_id: organization_id,

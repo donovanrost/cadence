@@ -2,6 +2,7 @@ defmodule Cadence.Commanding.RequestReviewDecisionTest do
   use Cadence.DataCase, async: false
 
   alias Cadence.Commanding.{
+    CommandApproval,
     CommandApprovalRow,
     CommandRequest,
     CommandRequestRow,
@@ -34,7 +35,8 @@ defmodule Cadence.Commanding.RequestReviewDecisionTest do
                c.request,
                :approved,
                %{"service_identity_id" => "service"},
-               expected_review: review
+               expected_review: review,
+               admin_mode: false
              )
 
     assert RequestStore.list_approvals(c.org, c.mission, []) == []
@@ -46,6 +48,65 @@ defmodule Cadence.Commanding.RequestReviewDecisionTest do
              decide(c, :rejected, "other-reviewer", expected_review: review)
 
     assert length(RequestStore.list_approvals(c.org, c.mission, [])) == 1
+  end
+
+  # #117 step 4a (four-eyes design B): a caller that requires the token (REST approve and reject)
+  # is refused without it, and only after the human-approver check (api-ops), recording nothing.
+  test "a required review token: absent is refused after the human check; present decides" do
+    c = fixture!()
+    assert {:ok, request} = RequestStore.fetch_request(c.org, c.mission, c.request)
+
+    assert {:error, {:command_request_approval_requires_user_actor, _}} =
+             RequestStore.decide_request(
+               c.org,
+               c.mission,
+               c.request,
+               :approved,
+               %{"service_identity_id" => "service"},
+               require_review: true,
+               admin_mode: false
+             )
+
+    assert {:error, :command_review_required} =
+             decide(c, :approved, "reviewer", require_review: true)
+
+    # api-ops on #631: a token that isn't one is malformed (422), not stale; and a service gets
+    # its human-approver refusal first, whatever token it sends.
+    assert {:error, :command_review_invalid} =
+             decide(c, :approved, "reviewer", require_review: true, expected_review: "junk")
+
+    assert {:error, {:command_request_approval_requires_user_actor, _}} =
+             RequestStore.decide_request(
+               c.org,
+               c.mission,
+               c.request,
+               :approved,
+               %{"service_identity_id" => "service"},
+               require_review: true,
+               expected_review: String.duplicate("0", 64),
+               admin_mode: false
+             )
+
+    assert RequestStore.list_approvals(c.org, c.mission, []) == []
+
+    assert {:ok, _} =
+             decide(c, :rejected, "reviewer",
+               require_review: true,
+               expected_review: ReviewPrecondition.digest(request)
+             )
+  end
+
+  test "an unknown approval decision never reads as approved (#117 step 4a; not_required is known since 4b)" do
+    assert_raise ArgumentError, ~r/unknown command approval decision/, fn ->
+      CommandApproval.new(%{
+        organization_id: "org",
+        mission_id: "mission",
+        command_request_id: "request",
+        decision: "bogus",
+        decided_by: %{},
+        decided_at: DateTime.utc_now()
+      })
+    end
   end
 
   test "two independent database connections cannot both decide the same pending request" do
@@ -124,7 +185,8 @@ defmodule Cadence.Commanding.RequestReviewDecisionTest do
       c.request,
       decision,
       %{"actor_kind" => "user", "user_id" => reviewer},
-      opts
+      # #117 step 4b: an explicit choice; the missing-admin_mode test calls decide_request itself.
+      Keyword.put_new(opts, :admin_mode, false)
     )
   end
 

@@ -16,12 +16,21 @@ const app = object({
   /** Installed version (an integer today), shown as text; null when not installed. */
   version: (v: unknown, path = "") =>
     typeof v === "number" ? String(v) : nullable(string)(v === undefined ? null : v, path),
+  /** The version this deployment ships (#679); set on every row. */
+  available_version: decoders.integer,
+  /** The server's word, by the registry's ordering, that `available_version` is newer (#191). */
+  update_available: boolean,
   consequence_if_missing: nullable(string),
   /** L9 (A1 extension, asked of api): the app's status and its surfaces; absent on older servers. */
   status: (v: unknown, path = "") => (v === undefined ? null : nullable(appStatus)(v, path)),
   surfaces: (v: unknown, path = "") => (v === undefined ? [] : array(surfaceRow, 50)(v, path)),
 });
-export const appsReader = object({ apps: array(app, 200), permissions: array(token, 50) });
+export const appsReader = object({
+  apps: array(app, 200),
+  /** Spacecraft an installation covers: the mission's active spacecraft, 1 under a spacecraft. */
+  spacecraft_count: decoders.integer,
+  permissions: array(token, 50),
+});
 export type Apps = Decoded<typeof appsReader>;
 export type App = Decoded<typeof app>;
 

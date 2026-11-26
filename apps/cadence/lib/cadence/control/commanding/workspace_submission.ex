@@ -102,6 +102,8 @@ defmodule Cadence.Control.Commanding.WorkspaceSubmission do
              mission,
              request.command_request_id,
              request.requested_by,
+             # #117 step 4b: a not_required record's admin_mode, from the releaser's scope.
+             admin_mode: scope.admin_mode? == true,
              metadata: %{
                "workspace_preview" => token,
                "approved_content_sha256" => approved.content_sha256
