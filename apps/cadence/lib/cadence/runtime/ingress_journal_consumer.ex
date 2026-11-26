@@ -111,6 +111,7 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
         positive_option(opts, config, :processing_max_batch_bytes, @default_max_batch_bytes),
       retry_initial_ms: positive_option(opts, config, :retry_initial_ms, 250),
       retry_max_ms: positive_option(opts, config, :retry_max_ms, 30_000),
+      retry_scheduler: Keyword.get(opts, :retry_scheduler, &Process.send_after/3),
       retry_ref: nil,
       retry_delay_ms: 0,
       consecutive_failures: 0,
@@ -501,7 +502,7 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
         else: min(state.retry_delay_ms * 2, state.retry_max_ms)
 
     ref = make_ref()
-    Process.send_after(self(), {:retry, ref}, delay)
+    state.retry_scheduler.(self(), {:retry, ref}, delay)
     phase = if state.in_flight, do: state.in_flight.phase, else: :read
 
     range =
