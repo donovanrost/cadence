@@ -43,12 +43,16 @@ defmodule Cadence.Comms.FramingDrift do
       |> Enum.filter(&(only == :all or &1.spacecraft_id in only))
 
     ids = Enum.map(spacecraft, & &1.spacecraft_id)
+    profiles = profiles(organization_id, mission_id, spacecraft)
     overrides = Overrides.list(organization_id, mission_id, ids)
     rules = RoutingRuleStore.list_routing_rules_for_spacecrafts(organization_id, mission_id, ids)
 
     spacecraft
     |> Enum.flat_map(
-      &drifts(organization_id, &1, Map.get(overrides, &1.spacecraft_id, %{}), {transports, rules})
+      &drifts(&1, profiles[profile_pin(&1)], Map.get(overrides, &1.spacecraft_id, %{}), {
+        transports,
+        rules
+      })
     )
     |> Enum.group_by(fn {profile, transport, differences, _sc} ->
       {profile, transport, differences}
@@ -88,15 +92,19 @@ defmodule Cadence.Comms.FramingDrift do
         Enum.map(spacecraft, & &1.spacecraft_id)
       )
 
+    profiles = profiles(organization_id, mission_id, spacecraft)
+
     spacecraft
-    |> Enum.flat_map(&unverified_cause(organization_id, &1, {transports, rules}))
+    |> Enum.flat_map(&unverified_cause(&1, profiles[profile_pin(&1)], {transports, rules}))
     |> Enum.group_by(fn {profile, cause} -> {profile, cause} end)
     |> Enum.map(fn {{profile, cause}, rows} ->
       %{profile: profile, cause: cause, spacecraft_count: length(rows)}
     end)
   end
 
-  defp unverified_cause(organization_id, spacecraft, feeds) do
+  defp unverified_cause(_spacecraft, nil, _feeds), do: []
+
+  defp unverified_cause(spacecraft, profile, feeds) do
     feeding = feeding_transports(spacecraft, feeds)
 
     cause =
@@ -111,42 +119,38 @@ defmodule Cadence.Comms.FramingDrift do
           nil
       end
 
-    case {cause, profile_ref(organization_id, spacecraft)} do
-      {nil, _} -> []
-      {_, nil} -> []
-      {cause, profile} -> [{profile, cause}]
-    end
+    if cause,
+      do: [{%{id: profile.spacecraft_type_id, name: profile.display_name}, cause}],
+      else: []
   end
 
-  defp profile_ref(organization_id, spacecraft) do
-    case SpacecraftTypeStore.fetch_spacecraft_type_version(
-           organization_id,
-           spacecraft.mission_id,
-           spacecraft.spacecraft_type_id,
-           spacecraft.spacecraft_type_version
-         ) do
-      {:ok, profile} -> %{id: profile.spacecraft_type_id, name: profile.display_name}
-      {:error, _} -> nil
-    end
+  defp profiles(organization_id, mission_id, spacecraft) do
+    pins =
+      for %{spacecraft_type_version: version} = craft <- spacecraft,
+          is_integer(version) and version > 0,
+          uniq: true,
+          do: profile_pin(craft)
+
+    {:ok, profiles} =
+      SpacecraftTypeStore.fetch_spacecraft_type_versions_in_batches(
+        organization_id,
+        mission_id,
+        pins
+      )
+
+    profiles
   end
 
-  defp drifts(organization_id, spacecraft, overrides, feeds) do
-    case SpacecraftTypeStore.fetch_spacecraft_type_version(
-           organization_id,
-           spacecraft.mission_id,
-           spacecraft.spacecraft_type_id,
-           spacecraft.spacecraft_type_version
-         ) do
-      {:ok, profile} ->
-        framing = Effective.resolve(profile, overrides)["frame_parameters"]
+  defp profile_pin(craft), do: {craft.spacecraft_type_id, craft.spacecraft_type_version}
 
-        spacecraft
-        |> feeding_transports(feeds)
-        |> Enum.flat_map(&transport_drift(&1, profile, framing, spacecraft))
+  defp drifts(_spacecraft, nil, _overrides, _feeds), do: []
 
-      {:error, _missing} ->
-        []
-    end
+  defp drifts(spacecraft, profile, overrides, feeds) do
+    framing = Effective.resolve(profile, overrides)["frame_parameters"]
+
+    spacecraft
+    |> feeding_transports(feeds)
+    |> Enum.flat_map(&transport_drift(&1, profile, framing, spacecraft))
   end
 
   # The spacecraft's routing rules come preloaded for the whole set (one query, not one each).

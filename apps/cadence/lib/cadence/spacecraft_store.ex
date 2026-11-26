@@ -544,10 +544,7 @@ defmodule Cadence.SpacecraftStore do
         }
   def fleet_summary(organization_id, mission_id)
       when is_binary(organization_id) and is_binary(mission_id) do
-    base =
-      SpacecraftRow
-      |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
-      |> active()
+    base = active_fleet_query(organization_id, mission_id)
 
     totals =
       base
@@ -570,6 +567,14 @@ defmodule Cadence.SpacecraftStore do
       |> Repo.all()
 
     Map.put(totals, :profile_version_counts, profile_version_counts)
+  end
+
+  @doc "The scoped active fleet for mission-wide aggregate queries."
+  @spec active_fleet_query(binary(), binary()) :: Ecto.Query.t()
+  def active_fleet_query(organization_id, mission_id) do
+    SpacecraftRow
+    |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
+    |> active()
   end
 
   defp apply_search(query, search) when is_binary(search) and search != "" do
