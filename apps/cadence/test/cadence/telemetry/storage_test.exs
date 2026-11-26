@@ -1,4 +1,5 @@
 defmodule Cadence.Telemetry.StorageTest do
+  alias Cadence.Reads.DataSources
   alias Cadence.Reads.Telemetry, as: TelemetryReads
   use Cadence.ConfigCase, async: false
 
@@ -12,8 +13,8 @@ defmodule Cadence.Telemetry.StorageTest do
     SourceResult
   }
 
-  alias Cadence.Projections.DataSources.Watermarks, as: SourceWatermarks
-  alias Cadence.Projections.DataSources.Watermarks.{Coalescer, EventRow}
+  alias Cadence.Projections.DataSources.Watermarks.EventRow
+  alias Cadence.Telemetry.Storage.WatermarkCoalescer
 
   alias Cadence.DataSources.SourceWatermark
 
@@ -317,7 +318,7 @@ defmodule Cadence.Telemetry.StorageTest do
              )
 
     assert [event] =
-             SourceWatermarks.list_source_watermark_events(
+             DataSources.list_source_watermark_events(
                "org-storage",
                "mission-batch-watermark"
              )
@@ -354,13 +355,13 @@ defmodule Cadence.Telemetry.StorageTest do
 
     # Nothing is written per batch: the read flushes the pending window.
     assert [] = Cadence.Repo.all(EventRow)
-    assert [status] = SourceWatermarks.list_source_watermark_statuses("org-storage", mission)
+    assert [status] = DataSources.list_source_watermark_statuses("org-storage", mission)
 
     assert status.sample_count == 3
     assert status.latest_receipt_time == ~U[2026-06-17 12:00:09.000000Z]
     assert status.retention_starts_at == ~U[2026-06-17 12:00:03.000000Z]
 
-    assert [event] = SourceWatermarks.list_source_watermark_events("org-storage", mission)
+    assert [event] = DataSources.list_source_watermark_events("org-storage", mission)
     assert event.sample_count == 3
     assert event.payload["observation_count"] == 3
     assert event.payload["first_sample_id"] == "coalesce-0"
@@ -379,10 +380,10 @@ defmodule Cadence.Telemetry.StorageTest do
                dashboard_runtime_invalidation?: false
              )
 
-    assert :ok = Coalescer.flush()
+    assert :ok = WatermarkCoalescer.flush()
 
     assert [advanced, _first] =
-             SourceWatermarks.list_source_watermark_events("org-storage", mission)
+             DataSources.list_source_watermark_events("org-storage", mission)
 
     assert advanced.event_type == :advanced
     assert advanced.sample_count == 1
@@ -407,7 +408,7 @@ defmodule Cadence.Telemetry.StorageTest do
     assert envelope.replay_run_id == "replay-run-1"
 
     assert [status] =
-             SourceWatermarks.list_source_watermark_statuses(
+             DataSources.list_source_watermark_statuses(
                "org-storage",
                "mission-storage-replay",
                realm: :replay,

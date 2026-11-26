@@ -38,7 +38,7 @@ defmodule Cadence.Application do
       [
         {Cadence.Platform.Supervisor, root_composition: root_composition},
         # Node-wide, and after the repo: it writes pending watermarks when it stops (#690).
-        Cadence.Projections.DataSources.Watermarks.Coalescer,
+        Cadence.Telemetry.Storage.WatermarkCoalescer,
         Cadence.Management.Supervisor,
         {Cadence.Runtime.Supervisor, root_composition: root_composition},
         {Cadence.Control.Supervisor, control_supervisor_opts},

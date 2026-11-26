@@ -1,4 +1,4 @@
-defmodule Cadence.Projections.DataSources.Watermarks.Coalescer do
+defmodule Cadence.Telemetry.Storage.WatermarkCoalescer do
   @moduledoc """
   Coalesces source-watermark observations in memory and writes them in bulk.
 

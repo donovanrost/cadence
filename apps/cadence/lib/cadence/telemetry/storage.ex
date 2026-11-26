@@ -10,7 +10,6 @@ defmodule Cadence.Telemetry.Storage do
   alias Cadence.Persistence.OrganizationScope
   alias Cadence.Platform.EventBus
   alias Cadence.Projections.DataSources.Watermarks, as: SourceWatermarks
-  alias Cadence.Projections.DataSources.Watermarks.Coalescer
 
   alias Cadence.Telemetry.Storage.{
     BackfillLifecycleEvent,
@@ -20,6 +19,7 @@ defmodule Cadence.Telemetry.Storage do
     ObservationIdentityDecisionEvent,
     ObservationIdentityState,
     ObservationIdentityStates,
+    WatermarkCoalescer,
     WriteContext
   }
 
@@ -82,6 +82,18 @@ defmodule Cadence.Telemetry.Storage do
       end
     end)
   end
+
+  @doc """
+  Writes the pending source-watermark window of a mission (the end-of-pass flush of #690): the
+  data plane's entry point for callers outside it, so the coalescer's own module stays internal.
+  """
+  @spec flush_source_watermarks(binary() | nil) :: :ok | {:error, term()}
+  def flush_source_watermarks(mission_id), do: WatermarkCoalescer.flush_mission(mission_id)
+
+  @doc "Writes the pending source-watermark window of one status row."
+  @spec flush_source_watermark(binary()) :: :ok | {:error, term()}
+  def flush_source_watermark(source_watermark_key),
+    do: WatermarkCoalescer.flush_key(source_watermark_key)
 
   @spec enrich_samples([Sample.t()], keyword()) :: {:ok, [Sample.t()]} | {:error, term()}
   def enrich_samples(samples, opts \\ []) when is_list(samples) and is_list(opts) do
@@ -399,7 +411,7 @@ defmodule Cadence.Telemetry.Storage do
       |> Enum.map(fn {_group_key, group} -> source_watermark_attrs(group) end)
 
     # Merged in memory and written in bulk (#690): no database work, and no row shared by paths.
-    Enum.each(attributes, &Coalescer.observe(&1, opts))
+    Enum.each(attributes, &WatermarkCoalescer.observe(&1, opts))
   end
 
   defp record_backfill_lifecycle_events([], _opts), do: :ok

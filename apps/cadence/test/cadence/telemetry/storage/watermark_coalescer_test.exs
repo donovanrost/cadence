@@ -1,8 +1,8 @@
-defmodule Cadence.Projections.DataSources.Watermarks.CoalescerTest do
+defmodule Cadence.Telemetry.Storage.WatermarkCoalescerTest do
   use ExUnit.Case, async: true
 
   alias Cadence.DataSources.SourceWatermarkEvent
-  alias Cadence.Projections.DataSources.Watermarks.Coalescer
+  alias Cadence.Telemetry.Storage.WatermarkCoalescer, as: Coalescer
   alias Ecto.Adapters.SQL.Sandbox
 
   defp attrs(mission_id, seconds, sample_id, count \\ 1) do
