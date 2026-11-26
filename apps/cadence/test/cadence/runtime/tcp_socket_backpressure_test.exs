@@ -11,8 +11,6 @@ defmodule Cadence.Runtime.TCPSocketBackpressureTest do
 
   import Cadence.TestSupport.TCPContactFixture
 
-  alias Cadence.Telemetry.Storage.ObservationIdentityStates
-
   test "frames that arrive while persistence is held are all kept, each with its own time and identity" do
     %{mission_id: mission_id, port: port} = start_tcp_contact!()
     test_pid = self()
@@ -65,8 +63,9 @@ defmodule Cadence.Runtime.TCPSocketBackpressureTest do
     assert Enum.map(rows, & &1.generation_time) == times
     assert DateTime.diff(List.last(times), Enum.at(times, 1), :millisecond) >= 250
 
-    assert mission_id
-           |> ObservationIdentityStates.list_for_selection()
-           |> length() == 8
+    # Each frame its own identity. First-seen rule (11-17): a canonical sighting writes no
+    # identity-state row, so the identities are read from the stored samples.
+    identities = Enum.map(rows, & &1.provenance["storage"]["observation_identity_id"])
+    assert identities |> Enum.reject(&is_nil/1) |> Enum.uniq() |> length() == 8
   end
 end
