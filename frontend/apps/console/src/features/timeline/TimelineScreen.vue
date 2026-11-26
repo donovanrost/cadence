@@ -3,7 +3,7 @@ import type { MissionId } from "@/api/index.ts";
 import { computed, nextTick, ref } from "vue";
 import { useHeldNewest } from "./useHeldNewest.ts";
 import { useRoute, useRouter } from "vue-router";
-import { useRemoteQuery } from "@/api/index.ts";
+import { describeApiError, usePagedQuery, useRemoteQuery } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
 import {
@@ -34,8 +34,7 @@ import {
   eventKinds,
   fetchDensity,
   fetchEvents,
-  fetchEventsPage,
-  fetchOlderEvents,
+  fetchEventPage,
   severityFloors,
   type EventKind,
   type SeverityFloor as Floor,
@@ -55,7 +54,6 @@ import {
   timelineScope,
   withAlertingData,
 } from "./model.ts";
-import { useOlderEvents } from "./useOlderEvents.ts";
 
 /** Timeline (OpsLists §Timeline): fleet-wide events, newest first, with a density strip. */
 const mission = useMissionScope();
@@ -170,22 +168,14 @@ const windowOf = (w: WindowSel) => {
   const r = resolveWindow(w, new Date());
   return { from: new Date(r.from), to: new Date(r.to) };
 };
-const events = useRemoteQuery(key, (k, signal) =>
-  fetchEventsPage(k.m, { ...windowOf(k.w), ...filters(k) }, signal),
-);
-/** A9d: older pages through the first page's cursor; Older events replaces the cap note. */
-const older = useOlderEvents(
+/**
+ * A9d: the window's events in pages (usePagedQuery); Older events loads the next. A live refetch
+ * reloads up to the events shown, so older pages stay and no gap opens; a failed one keeps them.
+ */
+const events = usePagedQuery(
   key,
-  computed(() => (events.state.value.status === "ready" ? events.state.value.value : null)),
-  (cursor) => {
-    const k = key.value;
-    return k
-      ? fetchOlderEvents(k.m, { ...windowOf(k.w), ...filters(k) }, cursor)
-      : Promise.resolve({
-          ok: false,
-          error: { kind: "unavailable", status: 0, message: "No window yet." },
-        });
-  },
+  (k, cursor, signal) => fetchEventPage(k.m, { ...windowOf(k.w), ...filters(k) }, cursor, signal),
+  (e) => e.id,
 );
 const density = useRemoteQuery(key, (k, signal) => {
   const w = windowOf(k.w);
@@ -221,9 +211,13 @@ const dataAlerts = useRemoteQuery(
 );
 /** After Older events, focus the first new row's time (ux U72's Load more rule). */
 async function loadOlder() {
-  const ids = await older.more();
+  const before = events.state.value;
+  const seen = new Set(before.status === "ready" ? before.value.items.map((e) => e.id) : []);
+  await events.more();
   await nextTick();
-  for (const id of ids) {
+  const after = events.state.value;
+  const ids = after.status === "ready" ? after.value.items.filter((e) => !seen.has(e.id)) : [];
+  for (const { id } of ids) {
     const time = document.querySelector<HTMLElement>(
       `li[data-event-id="${CSS.escape(id)}"] button`,
     );
@@ -235,11 +229,7 @@ async function loadOlder() {
 }
 const shownEvents = computed(() => {
   if (events.state.value.status !== "ready") return null;
-  const seen = new Set(events.state.value.value.events.map((e) => e.id));
-  const main = [
-    ...events.state.value.value.events,
-    ...older.older.value.filter((e) => !seen.has(e.id)),
-  ];
+  const main = events.state.value.value.items;
   const d = dataAlerts.state.value;
   return defaultView.value && d.status === "ready" ? withAlertingData(main, d.value.events) : main;
 });
@@ -252,7 +242,9 @@ const { selection, wide } = useTimelineDetail({
   detailSheet,
   missionId,
   shown: shownEvents,
-  page: computed(() => (events.state.value.status === "ready" ? events.state.value.value : null)),
+  page: computed(() =>
+    events.state.value.status === "ready" ? events.state.value.value.meta : null,
+  ),
   setWindow,
 });
 
@@ -294,8 +286,8 @@ const short = (iso: string) => {
         <DensityStrip
           :density="density.state.value.value"
           :window="{
-            from: Date.parse(events.state.value.value.from),
-            to: Date.parse(events.state.value.value.to),
+            from: Date.parse(events.state.value.value.meta.from),
+            to: Date.parse(events.state.value.value.meta.to),
           }"
           :now="now.getTime()"
           @brush="brushTo"
@@ -329,8 +321,8 @@ const short = (iso: string) => {
           >
             <template #default="{ value }">
               <ApEmptyState
-                v-if="(shownEvents ?? value.events).length === 0"
-                :headline="`No events between ${short(value.from)} and ${short(value.to)}.`"
+                v-if="(shownEvents ?? value.items).length === 0"
+                :headline="`No events between ${short(value.meta.from)} and ${short(value.meta.to)}.`"
               />
               <template v-else>
                 <div ref="logAnchor" aria-hidden="true" />
@@ -343,25 +335,28 @@ const short = (iso: string) => {
                   {{ held.pending.value }} new {{ held.pending.value === 1 ? "event" : "events" }} ↑
                 </button>
                 <EventLog
-                  :events="held.shown.value ?? shownEvents ?? value.events"
+                  :events="held.shown.value ?? shownEvents ?? value.items"
                   :selected-id="selection.selectedId.value"
                   @select="selection.toggle"
                 />
                 <div
-                  v-if="older.hasMore.value || older.error.value"
+                  v-if="value.next !== null"
                   class="flex flex-wrap items-center gap-3 border-t border-hairline px-4 py-2"
                 >
                   <ApButton
                     size="compact"
                     variant="secondary"
-                    :disabled="older.busy.value"
+                    :disabled="events.moreBusy.value"
                     disabled-reason="Loading older events…"
                     @click="loadOlder"
                     >Older events</ApButton
                   >
-                  <span v-if="older.error.value" class="text-sm text-caution-text" role="status">
-                    Couldn't load older events: {{ older.error.value }}
-                  </span>
+                  <!-- ux U72, a11y B6: said next to the button as an alert, always mounted. -->
+                  <span role="alert" class="text-sm text-caution-text">{{
+                    events.moreError.value
+                      ? `Couldn't load older events: ${describeApiError(events.moreError.value)}`
+                      : ""
+                  }}</span>
                 </div>
               </template>
             </template>

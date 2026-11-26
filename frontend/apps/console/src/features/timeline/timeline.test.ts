@@ -1,9 +1,9 @@
-import { flushPromises } from "@vue/test-utils";
 import { effectScope, nextTick, ref } from "vue";
 import { useHeldNewest } from "./useHeldNewest.ts";
-import { describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import type { MissionId } from "@/api/index.ts";
 import { scid as scidReader, spacecraftId, decode } from "@/api/index.ts";
-import { eventsReader, type EventsPage, type MissionEvent } from "./api.ts";
+import { eventsReader, fetchEventPage, type MissionEvent } from "./api.ts";
 import {
   byHour,
   densityBars,
@@ -270,61 +270,36 @@ describe("E1 brush (OpsLists §Timeline)", () => {
   });
 });
 
-describe("a full events read is never cut silently (parity D2, now A9d older pages)", () => {
-  const page = (ids: string[], nextCursor: string | null): EventsPage => ({
-    from: "2026-11-15T00:00:00Z",
-    to: "2026-11-16T00:00:00Z",
-    events: ids.map((id) => ev(id, "2026-11-15T10:00:00Z")),
-    nextCursor,
-  });
-  const ok = (p: EventsPage) => Promise.resolve({ ok: true as const, value: p });
-  it("offers older events while the server has a cursor, and appends them", async () => {
-    const { useOlderEvents } = await import("./useOlderEvents.ts");
-    const pages: Record<string, EventsPage> = { c1: page(["b"], "c2"), c2: page(["c"], null) };
-    const o = useOlderEvents(ref("k"), ref(page(["a"], "c1")), (c) =>
-      ok(pages[c] ?? page([], null)),
+describe("a full events read is never cut silently (parity D2, now A9d pages)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("asks for an older page by cursor and splits it into events, next cursor and window", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>();
+    fetch.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: {
+            from: "2026-11-15T00:00:00Z",
+            to: "2026-11-16T00:00:00Z",
+            events: [ev("b", "2026-11-15T10:00:00Z")],
+          },
+          meta: { next_cursor: "c2" },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
     );
-    expect(o.hasMore.value).toBe(true);
-    expect(await o.more()).toEqual(["b"]);
-    await o.more();
-    expect(o.older.value.map((e) => e.id)).toEqual(["b", "c"]);
-    expect(o.hasMore.value).toBe(false);
-  });
-  it("keeps loaded older events through a live refetch, reloading up to what was shown (fe-ops)", async () => {
-    const { useOlderEvents } = await import("./useOlderEvents.ts");
-    const first = ref<EventsPage | null>(page(["a"], "c1"));
-    // After new events arrive, the first page's tail ('a') moves to the next page: no gap.
-    const pages: Record<string, EventsPage> = {
-      c1: page(["b"], null),
-      n1: page(["a", "b"], null),
-    };
-    const o = useOlderEvents(ref("k"), first, (c) => ok(pages[c] ?? page([], null)));
-    await o.more();
-    first.value = page(["new"], "n1");
-    await flushPromises();
-    expect(o.older.value.map((e) => e.id)).toEqual(["a", "b"]);
-  });
-  it("starts over only for other filters or window, and says when a page fails", async () => {
-    const { useOlderEvents } = await import("./useOlderEvents.ts");
-    const key = ref("k1");
-    const first = ref<EventsPage | null>(page(["a"], "c1"));
-    let fail = false;
-    const o = useOlderEvents(key, first, () =>
-      fail
-        ? Promise.resolve({
-            ok: false,
-            error: { kind: "unavailable", status: 503, message: "Down." },
-          })
-        : ok(page(["b"], "c2")),
-    );
-    await o.more();
-    fail = true;
-    await o.more();
-    expect(o.error.value).toBe("Down.");
-    expect(o.busy.value).toBe(false);
-    key.value = "k2";
-    await nextTick();
-    expect(o.older.value).toEqual([]);
-    expect(o.error.value).toBeNull();
+    vi.stubGlobal("fetch", fetch);
+    const query = { from: new Date("2026-11-15T00:00:00Z"), to: new Date("2026-11-16T00:00:00Z") };
+    const r = await fetchEventPage("m1" as MissionId, query, "c1");
+    const input = fetch.mock.calls[0]?.[0];
+    const url = input instanceof Request ? input.url : (input?.toString() ?? "");
+    expect(url).toContain("cursor=c1");
+    expect(url).toContain("limit=500");
+    expect(r.ok && r.value.items.map((e) => e.id)).toEqual(["b"]);
+    expect(r.ok && r.value.next).toBe("c2");
+    expect(r.ok && r.value.meta).toEqual({
+      from: "2026-11-15T00:00:00Z",
+      to: "2026-11-16T00:00:00Z",
+    });
   });
 });
