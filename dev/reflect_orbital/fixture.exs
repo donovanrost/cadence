@@ -149,8 +149,9 @@ defmodule Cadence.Dev.ReflectOrbital.Fixture do
   ]
 
   def site_count do
-    # At least two: a craft's candidate site must differ from its primary.
-    "EARENDIL_SITE_COUNT" |> System.get_env("15") |> bounded!(2, length(@sites))
+    # At least two: a craft's candidate site must differ from its primary. Default 10, the demo and
+    # console e2e set; the scale harness runs 15.
+    "EARENDIL_SITE_COUNT" |> System.get_env("10") |> bounded!(2, length(@sites))
   end
 
   def sites do

@@ -86,43 +86,46 @@ defmodule Cadence.Dev.ReflectOrbital.Activation do
       end)
       |> Enum.sort()
       |> Enum.chunk_every(batch)
-      |> Enum.each(fn chunk ->
-        tokens = Map.new(chunk, fn {id, snapshot} -> {id, snapshot.token} end)
-
-        {ms, request} =
-          :timer.tc(
-            fn ->
-              {:ok, request} =
-                Review.request_many(scope, F.mission_id(), tokens,
-                  expected_policy_token: policy.token,
-                  expected_approval_required: false
-                )
-
-              request
-            end,
-            :millisecond
-          )
-
-        IO.puts("Review for #{map_size(tokens)} spacecraft prepared in #{ms} ms")
-
-        {ms, execution} =
-          :timer.tc(
-            fn ->
-              {:ok, approved} =
-                Cadence.Management.Activations.fetch_approved(request.activation_request_id)
-
-              {:ok, execution} = Cadence.Control.Activations.execute(approved)
-              execution
-            end,
-            :millisecond
-          )
-
-        :succeeded = execution.status
-        IO.puts("Executed fleet request #{request.activation_request_id} in #{ms} ms")
-      end)
+      |> Enum.each(&activate_batch(scope, policy, &1))
     end
 
     verify(mission, fleet, revision)
+  end
+
+  # One review and its execution, with their wall times (#715).
+  defp activate_batch(scope, policy, chunk) do
+    tokens = Map.new(chunk, fn {id, snapshot} -> {id, snapshot.token} end)
+
+    {ms, request} =
+      :timer.tc(
+        fn ->
+          {:ok, request} =
+            Review.request_many(scope, F.mission_id(), tokens,
+              expected_policy_token: policy.token,
+              expected_approval_required: false
+            )
+
+          request
+        end,
+        :millisecond
+      )
+
+    IO.puts("Review for #{map_size(tokens)} spacecraft prepared in #{ms} ms")
+
+    {ms, execution} =
+      :timer.tc(
+        fn ->
+          {:ok, approved} =
+            Cadence.Management.Activations.fetch_approved(request.activation_request_id)
+
+          {:ok, execution} = Cadence.Control.Activations.execute(approved)
+          execution
+        end,
+        :millisecond
+      )
+
+    :succeeded = execution.status
+    IO.puts("Executed fleet request #{request.activation_request_id} in #{ms} ms")
   end
 
   defp verify_drafts!(snapshots, revision) do

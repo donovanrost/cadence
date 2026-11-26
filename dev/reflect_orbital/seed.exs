@@ -1,6 +1,5 @@
 defmodule Cadence.Dev.ReflectOrbital.Seed do
   @moduledoc false
-  alias Cadence.Dev.ReflectOrbital.Approver
   alias Cadence.Auth.Scope
 
   alias Cadence.Comms.{
@@ -14,6 +13,7 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
   }
 
   alias Cadence.Contacts.ProviderScheduling
+  alias Cadence.Dev.ReflectOrbital.Approver
   alias Cadence.Dev.ReflectOrbital.Configuration
   alias Cadence.Dev.ReflectOrbital.Fixture, as: F
   alias Cadence.Dev.ReflectOrbital.Planning
