@@ -2,6 +2,8 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
   use CadenceWeb.ConnCase, async: false
 
   alias Cadence.{CommandAuthoringFixtures, ExactCommandAuthoringFixtures}
+  alias Cadence.Reads.CommandGroups
+  alias CadenceWeb.Console.CommandGroupJSON
   alias CadenceWeb.TestFixtures
 
   setup do
@@ -355,12 +357,12 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
 
     # The paged variants the console moves onto: the first pages, and a push without the lists.
     {:ok, view} =
-      Cadence.Reads.CommandGroups.get(c.org.organization_id, c.mission.mission_id, id, nil)
+      CommandGroups.get(c.org.organization_id, c.mission.mission_id, id, nil)
 
     assert [%{index: 0}, %{index: 1}] =
-             CadenceWeb.Console.CommandGroupJSON.show_first_page(view).targets
+             CommandGroupJSON.show_first_page(view).targets
 
-    pushed = CadenceWeb.Console.CommandGroupJSON.push(view)
+    pushed = CommandGroupJSON.push(view)
     refute Map.has_key?(pushed, :targets) or Map.has_key?(pushed, :events)
     assert %{total: 2} = pushed.targets_page
     assert %{total: 1} = pushed.events_page

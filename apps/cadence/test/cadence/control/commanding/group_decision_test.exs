@@ -10,6 +10,7 @@ defmodule Cadence.Control.Commanding.GroupDecisionTest do
   alias Cadence.Commanding.Groups.GroupStore
   alias Cadence.Commanding.RequestDigest
   alias Cadence.Control.Commanding.{GroupDecision, GroupSubmission}
+  alias Cadence.Management.Commanding.ApprovedCommand
 
   setup do
     c = setup!(3)
@@ -125,12 +126,12 @@ defmodule Cadence.Control.Commanding.GroupDecisionTest do
     [entry] = entries
 
     {:ok, approved} =
-      Cadence.Management.Commanding.ApprovedCommand.new(
+      ApprovedCommand.new(
         %{kept_member | lifecycle_state: :approved},
-        Cadence.Commanding.CommandApprovalRow.to_domain(approvals[kept_member.command_request_id])
+        CommandApprovalRow.to_domain(approvals[kept_member.command_request_id])
       )
 
-    assert Cadence.Commanding.CommandQueueEntryRow.to_domain(entry).metadata[
+    assert CommandQueueEntryRow.to_domain(entry).metadata[
              "approved_content_sha256"
            ] == approved.content_sha256
 
