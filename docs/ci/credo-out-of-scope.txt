@@ -31,9 +31,6 @@ Credo.Check.Design.AliasUsage | dev/reflect_orbital/activation.exs:155 | Nested 
 Credo.Check.Design.AliasUsage | dev/reflect_orbital/activation.exs:166 | Nested modules could be aliased at the top of the invoking module. [trigger: Cadence.Contacts.ProviderScheduling]
 Credo.Check.Design.AliasUsage | dev/reflect_orbital/activation.exs:189 | Nested modules could be aliased at the top of the invoking module. [trigger: Cadence.Auth.Scope]
 Credo.Check.Design.AliasUsage | dev/reflect_orbital/configuration.exs:23 | Nested modules could be aliased at the top of the invoking module. [trigger: Cadence.Contacts.ProviderScheduling]
-Credo.Check.Design.AliasUsage | dev/reflect_orbital/dashboards.exs:61 | Nested modules could be aliased at the top of the invoking module. [trigger: Cadence.Control.DataSources]
-Credo.Check.Design.AliasUsage | dev/reflect_orbital/dashboards.exs:67 | Nested modules could be aliased at the top of the invoking module. [trigger: Cadence.Control.DataSources]
-Credo.Check.Design.AliasUsage | dev/reflect_orbital/dashboards.exs:68 | Nested modules could be aliased at the top of the invoking module. [trigger: Cadence.Control.DataSources]
 Credo.Check.Design.AliasUsage | dev/reflect_orbital/live_contacts.exs:48 | Nested modules could be aliased at the top of the invoking module. [trigger: Cadence.Runtime.MissionRuntime]
 Credo.Check.Design.AliasUsage | dev/reflect_orbital/seed.exs:48 | Nested modules could be aliased at the top of the invoking module. [trigger: Cadence.Dev.ReflectOrbital.Configuration]
 Credo.Check.Design.AliasUsage | dev/reflect_orbital/seed.exs:225 | Nested modules could be aliased at the top of the invoking module. [trigger: Cadence.Comms.TransportStore]
@@ -54,7 +51,6 @@ Credo.Check.Readability.AliasOrder | dev/sre_observability_demo.exs:5 | The alia
 Credo.Check.Warning.IoInspect | dev/chaos/scripts/seed.exs:13 | There should be no calls to `IO.inspect/1`. [trigger: IO.inspect]
 Credo.Check.Warning.IoInspect | dev/chaos/scripts/seed.exs:22 | There should be no calls to `IO.inspect/1`. [trigger: IO.inspect]
 Credo.Check.Warning.IoInspect | dev/reflect_orbital_activate.exs:21 | There should be no calls to `IO.inspect/1`. [trigger: IO.inspect]
-Credo.Check.Warning.IoInspect | dev/reflect_orbital_live.exs:92 | There should be no calls to `IO.inspect/1`. [trigger: IO.inspect]
 
 ## Credo.Check.Readability.PreferImplicitTry (2)
 Credo.Check.Readability.PreferImplicitTry | apps/cadence_web/browser_test/support/dashboard_rendered_viewport_runner.exs:177 | Prefer using an implicit `try` rather than explicit `try`. [trigger: try]

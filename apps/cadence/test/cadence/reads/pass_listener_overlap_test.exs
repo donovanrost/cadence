@@ -40,7 +40,7 @@ defmodule Cadence.Reads.PassListenerOverlapTest do
     {:ok, _} = Cadence.SpacecraftStore.persist_spacecraft(org, craft)
 
     {:ok, endpoint} =
-      Cadence.SourceEndpoints.persist_source_endpoint(
+      Cadence.SourceEndpointFixtures.persist(
         org,
         SourceEndpoint.new(%{
           source_endpoint_id: "ep-" <> suffix,

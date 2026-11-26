@@ -136,7 +136,7 @@ The low-level runtime endpoint is:
 ```bash
 curl -sS \
   -H "authorization: Bearer $API_TOKEN" \
-  http://127.0.0.1:4001/api/organizations/<org>/missions/<mission>/realized_contacts/<contact>/paths/<path>/runtime
+  http://127.0.0.1:4001/api/v1/missions/<mission>/realized-contacts/<contact>/paths/<path>/runtime
 ```
 
 The response includes provider runtime snapshots. For the TCP provider, those

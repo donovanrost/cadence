@@ -61,6 +61,7 @@ defmodule Cadence.Runtime.Supervisor do
         [
           {Cadence.Runtime.CapabilityRegistry, name: process_namespace.capability_registry},
           {Registry, keys: :unique, name: process_namespace.registry, meta: [cluster: cluster]},
+          {Cadence.Runtime.PacketDefinitionCache, process_namespace: process_namespace},
           # #83: watches the contacts' ingest buffers and dropped frames for the attention read.
           {Cadence.Runtime.IngressBackpressureMonitor,
            process_namespace: process_namespace,

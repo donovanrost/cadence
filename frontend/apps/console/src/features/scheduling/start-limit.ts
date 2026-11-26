@@ -51,7 +51,13 @@ const limitDetails = d.object({ count: d.optional(d.integer), limit: d.optional(
 
 /** Start's 422 (the backstop): the same sentence, or null for any other error. */
 export function limitRefusal(error: ApiError | null): string | null {
-  if (!error || !isError(error, "fleet_planning_occurrence_limit_exceeded")) return null;
+  if (!error) return null;
+  if (isError(error, "fleet_planning_run_requirement_limit_exceeded")) {
+    const det = detailsOf(error, limitDetails);
+    const bound = det?.limit == null ? "" : ` of ${formatCount(det.limit)}`;
+    return `This start includes more than the safety limit${bound} requirements. Narrow the planning window or the template targets.`;
+  }
+  if (!isError(error, "fleet_planning_occurrence_limit_exceeded")) return null;
   const det = detailsOf(error, limitDetails);
   return limitSentence(det?.count ?? null, det?.limit ?? null);
 }

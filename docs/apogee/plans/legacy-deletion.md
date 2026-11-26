@@ -56,7 +56,7 @@ the tree moves.
 
 ## L1 · L2 · L3 contact planning (one batch: the legacy pages link to each other)
 **Routes:** L1 R:469, :473, :477; L2 R:465; L3 R:457. All are `HostPageLive` with `host_policy: :ops`. No legacy
-REST route belongs to them. The console's `/api/console/v1/.../contact-planning/*` (R:1003-1075) stays.
+REST route belongs to them. The console's `/api/v1/.../contact-planning/*` (R:1003-1075) stays.
 
 **Delete (only these routes):**
 - **L1:**
@@ -177,10 +177,9 @@ Building it found federated surfaces this manifest missed, which keep these aliv
 - **Legacy frontend:** `frontend/apps/host/src/auth-and-navigation/features/{sign-in,invitation-acceptance,
   organization-access}` and `shell/registry.ts` rows :46, :48, :49.
 
-**Keep in `UserSessionController`:**
-- `delete` (R:141), used by the console's sign-out.
-- `update` (R:142), used by `shell/admin-org.ts`.
-- `too_many_attempts/1`, which `admin_mode_controller` and the invitation controller also use. Move it if those go.
+**`UserSessionController`:** deleted with its root `DELETE /session` and `PUT /session/organization`
+(#664). The console signs out with `DELETE /api/v1/session` and selects organizations with
+`PUT /api/v1/session/organization`.
 
 **Tests:**
 - Delete `controllers/{organization_invitation_controller, user_session_controller, no_organization_controller}_test.exs`,

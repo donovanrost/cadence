@@ -10,7 +10,7 @@ Console endpoints for dashboards (BACKLOG §11e, DECISIONS #76). The plan and th
 missions (`Cadence.Dashboards.Capabilities`). Today that's any mission operator. Authoring routes
 still enforce it per mission. People rows don't carry it.
 
-## D5: `GET /api/console/v1/missions/:mission_id/dashboards/:dashboard_id`
+## D5: `GET /api/v1/missions/:mission_id/dashboards/:dashboard_id`
 
 Query: `from`, `to` (`now-6h` … `now` for a live sliding window, or ISO bounds for a frozen range
 up to 31 days; both or neither) and `spacecraft_id` (one of this mission's spacecraft).
@@ -50,7 +50,7 @@ Stateless on the server (DECISIONS #76; `Cadence.Dashboards.StatelessAuthoring`)
 `remove_section`, `move_section`, `add_widget`, `update_widget`, `remove_widget`, `layout`,
 `runtime_defaults`. `input` never carries `expected_version` (`base_version` is the call's). At
 most 256 commands (`422 too_many_commands`: "Save to keep going"). All of these need
-`dashboard.author`, and live under `/api/console/v1/missions/:mission_id/dashboards/:dashboard_id`.
+`dashboard.author`, and live under `/api/v1/missions/:mission_id/dashboards/:dashboard_id`.
 `runtime` is `{from, to, spacecraft_id}`, admitted like D5's query (`422 invalid_params`
 `details.field` `range` | `spacecraft_id`).
 
@@ -109,7 +109,7 @@ most 256 commands (`422 too_many_commands`: "Save to keep going"). All of these 
   `POST /restore` is un-archive.)
 - Errors common to all: `403 forbidden`, `404 not_found`, `503 dashboard_unavailable`.
 
-## D1: `GET /api/console/v1/missions/:mission_id/dashboards`
+## D1: `GET /api/v1/missions/:mission_id/dashboards`
 
 Query: `q`, `tags=a,b`, `starred=true`, `archived=true`, `sort=updated|name|name_desc`, `page=N`.
 
@@ -162,6 +162,32 @@ dashboard.
   missing id, unknown mode); `403 forbidden` (not an author); `404 not_found` (duplicating an
   unknown dashboard).
 
+## D4b: `POST /dashboards {document, identity?, name?, description?}` (import)
+
+Creates a dashboard from a document: the export bundle `GET /dashboards/:id/export` returns, or a
+raw document. The author is the session user, and the import is the dashboard's first saved version
+(version 1) in one transaction with the readiness check, so a failure leaves nothing behind.
+
+- `identity: "copy"` (the default, for the UI): a new dashboard with a new id, named `name` (else
+  "Copy of …"), with `description` (else the document's). `201 {id, version}`.
+- `identity: "keep"`: the document's own `dashboard_id` (organization and mission are the target's;
+  `name` and `description` are not allowed, since renaming would make it another document). So
+  provisioning can re-run: the same id with an identical document is `200 {id, version, existing:
+  true}` and changes nothing; export, import with `keep`, export returns the same document (apart
+  from its version).
+- Errors: `422 invalid_params` with `details.field` `document` (not a document, or its bundle
+  integrity check fails), `identity`, or `name` (given with `keep`); `422 dashboard_not_ready` with
+  the widget issues (an unknown observable or spacecraft among them); `409 dashboard_import_conflict`
+  (`keep`: that id is a different dashboard here), with `details.differences` `{fields, placements:
+  {added, removed, changed}}`; `409 dashboard_id_in_use` (`keep`: the id is taken). A dashboard id is
+  unique across every mission and organization, so the id may belong to another mission: of this
+  organization, `details.mission_id` names it; of another organization, nothing is named. Import
+  the same document into two missions with `copy` (or give each its own id).
+- Two imports of one id at once: the loser's insert hits the id's primary key, and for `keep` that
+  is answered, not raised: the id is checked again, so an identical document is `200 existing`
+  and a different one is the `409` above.
+- `403 forbidden` (not an author). The document is at most 256 KiB.
+
 ## D6: `POST /dashboards/:id/views`
 
 `204`. Records that the viewer opened it, for `shortcuts.recent`. The viewer sends it once per
@@ -170,7 +196,7 @@ open, not on refresh. `404 not_found` for an unknown or archived dashboard.
 ## D14-D19: settings, sharing, activity, diagnostics, export (owner: api)
 
 From fe-setup's proposal (docs/apogee/plans/dashboards-settings.md). Under
-`/api/console/v1/missions/:mission_id/dashboards/:dashboard_id`.
+`/api/v1/missions/:mission_id/dashboards/:dashboard_id`.
 
 - **D14** `GET /settings?shares_after=&snapshots_after=` (author) → `{dashboard: {id, name,
   description, tags, lifecycle, current_version, published_version}, defaults: {time, scope},
@@ -210,7 +236,7 @@ From fe-setup's proposal (docs/apogee/plans/dashboards-settings.md). Under
 ## D20: shared views (owner: api)
 
 From dashboards' slice 6 (docs/apogee/plans/dashboards-slice6.md). `GET
-/api/console/v1/missions/:mission_id/dashboard-shares/:share_id` and `GET
+/api/v1/missions/:mission_id/dashboard-shares/:share_id` and `GET
 …/dashboard-snapshots/:snapshot_id` (mission operators) → `{kind: share | snapshot, share: <D14
 share> | null, snapshot_row: <D14 snapshot> | null, dashboard: {id, name, description},
 definition: <editor outline, version 3> | null, snapshot: <WorkspaceSnapshot> | null}`.
@@ -234,7 +260,7 @@ definition: <editor outline, version 3> | null, snapshot: <WorkspaceSnapshot> | 
 
 ## D23/D24: playlists (owner: api)
 
-From dashboards' slice 6. Under `/api/console/v1/missions/:mission_id/dashboard-playlists`.
+From dashboards' slice 6. Under `/api/v1/missions/:mission_id/dashboard-playlists`.
 Mission operators read; authors (`dashboard.author`) write. Refetch on `invalidate` with
 `dashboards`.
 
@@ -259,7 +285,7 @@ Mission operators read; authors (`dashboard.author`) write. Refetch on `invalida
 ## D21/D22: the widget library (owner: api)
 
 From fe-ops' slice 8 (docs/apogee/plans/dashboards-library.md). Under
-`/api/console/v1/missions/:mission_id/dashboard-library`. Mission operators read; authors write.
+`/api/v1/missions/:mission_id/dashboard-library`. Mission operators read; authors write.
 Refetch on `invalidate` with `dashboards`.
 
 - **D21** `GET /?q=&page=` → `{items: [{id, name, description, kind, latest_version,

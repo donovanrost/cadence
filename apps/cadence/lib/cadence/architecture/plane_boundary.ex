@@ -136,7 +136,6 @@ defmodule Cadence.Architecture.PlaneBoundary do
                         "lib/cadence/applications/ops_console/actions/fleet_planning.ex",
                         "lib/cadence/applications/ops_console/actions/historical_workflow_actions.ex",
                         "lib/cadence/applications/ops_console/actions/historical_workflow_request.ex",
-                        "lib/cadence/applications/ops_console/actions/mission_operations.ex",
                         "lib/cadence/applications/ops_console/actions/plan_decisions.ex",
                         "lib/cadence/applications/ops_console/actions/plan_review_workflow.ex",
                         "lib/cadence/applications/ops_console/actions/provider_change_decisions.ex",
@@ -167,6 +166,8 @@ defmodule Cadence.Architecture.PlaneBoundary do
     "lib/cadence/catalog/command/compatibility.ex" => :shared,
     "lib/cadence/catalog/spacecraft_configuration_input.ex" => :shared,
     "lib/cadence/catalog/spacecraft_model_bindings.ex" => :shared,
+    # Pure id format (no dependencies): telemetry storage rebuilds binding ids with it (#103).
+    "lib/cadence/catalog/telemetry_binding.ex" => :shared,
     "lib/cadence/commanding/authoring_identity.ex" => :shared,
     "lib/cadence/reads/mission_models/active_basis.ex" => :adapter,
     "lib/cadence/projections/data_sources/health.ex" => :data,
@@ -346,6 +347,7 @@ defmodule Cadence.Architecture.PlaneBoundary do
     "lib/cadence/contact_planning/repair_links.ex" => :management,
     "lib/cadence/contact_planning/fleet_automation.ex" => :control,
     "lib/cadence/contact_planning/fleet_planner.ex" => :control,
+    "lib/cadence/contact_planning/fleet_search.ex" => :control,
     "lib/cadence/contact_planning/fleet_repair_inputs.ex" => :control,
     "lib/cadence/contact_planning/fleet_repairs.ex" => :control,
     "lib/cadence/contact_planning/repair_chain.ex" => :control,
@@ -486,6 +488,10 @@ defmodule Cadence.Architecture.PlaneBoundary do
                               "lib/cadence/control/alarms.ex",
                               # #472 (lead 11-20): the shared #146 actor-naming helper, read-only.
                               "lib/cadence/control/actor_ref.ex",
+                              # #273 (api 11-19): one description of a plan's skipped passes
+                              # (booking window closed), shared by the plan read, the approve
+                              # answer and the plan history, so the three never disagree.
+                              "lib/cadence/control/plan_skipped_passes.ex",
                               "lib/cadence/control/activations/activation_execution.ex",
                               "lib/cadence/applications/telemetry_decom.ex",
                               "lib/cadence/management/activations/approved_activation.ex",

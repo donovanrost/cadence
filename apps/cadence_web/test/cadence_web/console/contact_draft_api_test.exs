@@ -16,7 +16,7 @@ defmodule CadenceWeb.Console.ContactDraftAPITest do
       user: user,
       membership: membership,
       mission: mission,
-      base: "/api/console/v1/missions/#{mission.mission_id}/contact-plans/drafts"
+      base: "/api/v1/missions/#{mission.mission_id}/contact-plans/drafts"
     }
   end
 
@@ -37,7 +37,7 @@ defmodule CadenceWeb.Console.ContactDraftAPITest do
 
   test "re-planning needs a plan that came from a fleet draft and is executing", c do
     fixture = ContactPlanningFixtures.plan_fixture(c.org, c.user, c.membership, c.mission)
-    path = "/api/console/v1/missions/#{c.mission.mission_id}/contact-plans"
+    path = "/api/v1/missions/#{c.mission.mission_id}/contact-plans"
 
     post = fn body ->
       c.user

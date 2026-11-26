@@ -15,7 +15,7 @@ defmodule CadenceWeb.Console.DataSourceAPITest do
     sources =
       user
       |> TestFixtures.member_conn()
-      |> get("/api/console/v1/missions/#{mission.mission_id}/data-sources")
+      |> get("/api/v1/missions/#{mission.mission_id}/data-sources")
       |> json_response(200)
       |> get_in(["data", "sources"])
 

@@ -31,7 +31,10 @@ defmodule CadenceSimulator.Provider.ProviderIntegrationTest do
   end
 
   test "admin controls change run faults and initiate provider Contact changes", context do
-    fixture = TestProviderFixtures.create_contact!()
+    fixture =
+      TestProviderFixtures.create_contact!(%{},
+        search_starts_at: DateTime.add(DateTime.utc_now(), 3_600)
+      )
 
     fault_response =
       Req.patch!("#{context.base_url}/admin/v1/runs/#{fixture.run["id"]}/fault-profile",

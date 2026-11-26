@@ -12,7 +12,7 @@ defmodule Cadence.Configuration.Staging do
 
   import Ecto.Query
 
-  alias Cadence.Configuration.{ChangeRow, ChangeSetStore, Document, Kinds, OpRow}
+  alias Cadence.Configuration.{ChangeRow, ChangeSetStore, Document, Kinds, OpRow, Translation}
   alias Cadence.Ids
   alias Cadence.Repo
 
@@ -47,7 +47,8 @@ defmodule Cadence.Configuration.Staging do
   defp stage_locked(set, actor, summary, source, prepared) do
     with :ok <- not_frozen(set),
          :ok <- rollback_alone(set, source),
-         :ok <- resolve_overlaps(set, actor, prepared) do
+         :ok <- resolve_overlaps(set, actor, prepared),
+         :ok <- stage_conflicts(set, prepared) do
       write(set, actor, summary, source, prepared)
     else
       {:error, reason} -> Repo.rollback(reason)
@@ -181,7 +182,14 @@ defmodule Cadence.Configuration.Staging do
   defp prepare(kind, "create", organization_id, mission_id, op, _deleting) do
     entity_id = Map.get(op, :entity_id) || Ids.new(kind.id_prefix())
 
-    with {:ok, document} <- kind.normalize(:create, entity_id, Document.normalize(op[:document])),
+    with {:ok, document} <-
+           Translation.document(
+             kind,
+             organization_id,
+             mission_id,
+             Document.normalize(op[:document])
+           ),
+         {:ok, document} <- kind.normalize(:create, entity_id, document),
          entity_id = Map.get(op, :entity_id) || create_entity_id(kind, document, entity_id),
          :ok <- not_live(kind, organization_id, mission_id, entity_id, document) do
       {:ok, op_attrs(kind, "create", entity_id, %{"document" => document}, %{}, [])}
@@ -193,7 +201,7 @@ defmodule Cadence.Configuration.Staging do
 
     with {:ok, current} <- current(kind, organization_id, mission_id, entity_id),
          :ok <- stage_check(kind, organization_id, mission_id, action, entity_id, deleting) do
-      prepare_existing(kind, action, entity_id, current, op)
+      prepare_existing(kind, action, {organization_id, mission_id}, entity_id, current, op)
     end
   end
 
@@ -218,14 +226,16 @@ defmodule Cadence.Configuration.Staging do
       else: minted
   end
 
-  defp prepare_existing(kind, "delete", entity_id, current, _op) do
+  defp prepare_existing(kind, "delete", _tenant, entity_id, current, _op) do
     with {:ok, _} <- kind.normalize(:delete, entity_id, nil) do
       {:ok, op_attrs(kind, "delete", entity_id, %{}, %{"sha256" => Document.sha256(current)}, [])}
     end
   end
 
-  defp prepare_existing(kind, "update", entity_id, current, op) do
+  defp prepare_existing(kind, "update", {organization_id, mission_id}, entity_id, current, op) do
     with {:ok, changes} <- changes(op, current),
+         {:ok, changes} <-
+           Translation.changes(kind, organization_id, mission_id, current, changes),
          {:ok, proposed} <- kind.normalize(:update, entity_id, Document.patch(current, changes)) do
       changes = Enum.map(changes, &%{&1 | "value" => Document.get(proposed, &1["path"])})
       paths = Enum.map(changes, & &1["path"])
@@ -325,6 +335,28 @@ defmodule Cadence.Configuration.Staging do
       base: base,
       touched_paths: paths
     }
+  end
+
+  # ConfigKind.stage_conflicts/4 for the kinds this request stages (e.g. a SCID another staged
+  # spacecraft holds, S9), against what the set has staged once this author's overlaps are replaced.
+  defp stage_conflicts(set, prepared) do
+    kinds = prepared |> Enum.map(& &1.kind) |> Enum.uniq() |> Enum.map(&Kinds.fetch!/1)
+
+    case Enum.filter(kinds, &function_exported?(&1, :stage_conflicts, 4)) do
+      [] ->
+        :ok
+
+      checking ->
+        staged = ChangeSetStore.staged_ops(set.change_set_id)
+        Enum.find_value(checking, :ok, &kind_conflicts(&1, set, staged, prepared))
+    end
+  end
+
+  defp kind_conflicts(kind, set, staged, prepared) do
+    case kind.stage_conflicts(set.organization_id, set.mission_id, staged, prepared) do
+      :ok -> nil
+      {:error, _} = error -> error
+    end
   end
 
   defp not_frozen(%{state: "in_review"}), do: {:error, :frozen_in_review}

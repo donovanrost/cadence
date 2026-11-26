@@ -309,7 +309,7 @@ defmodule CadenceSimulator.ContactSchedulingFixtures do
       })
 
     assert {:ok, endpoint} =
-             Cadence.SourceEndpoints.persist_source_endpoint(setup.organization_id, endpoint)
+             Cadence.SourceEndpointFixtures.persist(setup.organization_id, endpoint)
 
     if Keyword.get(opts, :telemetry?, false) do
       persist_telemetry_binding!(setup.organization_id, setup.mission_id, setup.suffix)

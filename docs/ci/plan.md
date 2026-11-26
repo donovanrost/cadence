@@ -53,7 +53,7 @@ changes ──────────┐  dorny/paths-filter: elixir / frontend
 publication ──────┼──────────────┐  frontend build:publication → artifact "application-host"
 quality ──────────┤              │  format · compile --warnings-as-errors · credo gate ·
                   │              │  workspace.check · extensions.check · architecture.check
-test-core [1..4] ─┤              │  apps/cadence, mix test --partitions 4
+test-core [1..2] ─┤              │  apps/cadence, mix test --partitions 2
 test-packages ────┤              │  ccsds · xtce · cadence_catalog · cadence_simulator ·
                   │              │  test.planes · test.cluster
 test-web [1..2] ──┴── needs ─────┘  apps/cadence_web, mix test --partitions 2
@@ -103,12 +103,12 @@ written.
 
 | Job | What | How | Why |
 | --- | --- | --- | --- |
-| `test-core` ×4 | `apps/cadence`, about 2,820 tests in 499 files | `cd apps/cadence && MIX_TEST_PARTITION=$i mix test --partitions 4` | The long pole. Its `test` alias runs `ecto.create` + `ecto.migrate`, and partitioned DB names (`cadence_test$i`) already exist. |
+| `test-core` ×2 | `apps/cadence`, about 2,820 tests in 499 files | `cd apps/cadence && MIX_TEST_PARTITION=$i mix test --partitions 2` | The long pole. Its `test` alias runs `ecto.create` + `ecto.migrate`, and partitioned DB names (`cadence_test$i`) already exist. |
 | `test-web` ×2 | `apps/cadence_web`, about 970 tests in 178 files | same, `--partitions 2`, after explicit `mix ecto.create -r Cadence.Repo && mix ecto.migrate -r Cadence.Repo` | cadence_web has no DB-setup test alias; the root `mix test` relied on cadence running first. |
 | `test-packages` ×1 | ccsds (295), xtce (11), cadence_catalog (30), cadence_simulator (144), `mix test.planes` (4 planes), `mix test.cluster` | sequential in one job | Small suites; four more runners would cost more setup than they save. |
 
 - Each job has its own Postgres service, so `MIX_TEST_PARTITION` only names the DB, the
-  ingress-journal dir and the simulator DETS file. What actually splits the work is
+  ingress-journal dir and the simulator snapshot file. What actually splits the work is
   `--partitions N`.
 - ExUnit splits **files** round-robin, not by duration, and `async: false` files run serially
   within each shard. The first green run prints `--slowest-modules 10` per shard, and I tune N
@@ -249,7 +249,7 @@ keep that rare. Phase 4 adds 3–4 jobs per PR.
 ## Phase 4: Apogee console and full browser e2e
 
 Starts when `ui/apogee-spa` is on develop. Inputs: qa's handoff
-(`docs/apogee/qa/ci-handoff.md` on `ui/apogee-spa`, b2771377) and `e2e.md`/`runbook.md`.
+(`docs/apogee/qa/e2e.md` on `ui/apogee-spa`, b2771377) and `docs/dev-environment.md`.
 
 **Console typecheck, lint and unit tests** come for free. `frontend/apps/console` is a pnpm
 workspace member, so `corepack pnpm verify` (`check` + `-r test`) in the frontend quality job
@@ -273,7 +273,7 @@ Services: `postgres:17` (tmpfs) and `questdb/questdb:9.4.3`. Then, in order, wit
 1. Restore the `_build/dev`, deps, pnpm and npm caches; `npm ci` in `apps/cadence_web` (the
    LiveView sign-in page's Vite); download the console artifact; `mix compile`.
 2. `ecto.create` + `ecto.migrate -r Cadence.Repo` and `cadence.questdb.migrate`, while the
-   simulator starts in the background (`--sname ci_sim`, clean DETS dir).
+   simulator starts in the background (`--sname ci_sim`, clean snapshot dir).
 3. Phoenix in the background (`elixir --sname cadence_ci -S mix phx.server`), with a readiness
    poll on `/sign-in`.
 4. Seeds: `reflect_orbital_demo.exs` (500 spacecraft), `apogee_qa_personas.exs`,

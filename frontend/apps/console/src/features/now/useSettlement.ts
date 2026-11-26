@@ -1,18 +1,35 @@
 import type { MissionId } from "@/api/index.ts";
 import { computed, shallowRef, watch, type Ref } from "vue";
-import { useRemoteQuery } from "@/api/index.ts";
+import { decoders as d, request, useRemoteQuery, type ApiResult } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
-import { fetchActionQueue } from "./actionQueue.ts";
-import { attentionWords, short, type Attention } from "./attention.ts";
+import { attentionReader, attentionWords, short, type Attention } from "./attention.ts";
 
 /**
- * U37 drawer block: the open contact_settlement for one pass, read from the action queue (domain
- * #71 doesn't attach it to the pass row). Matched by the pass's reservation id. Null when none.
+ * `GET …/attention/contact_settlement?reservation_id=` (#847): the open settlement item for one
+ * pass's booking, or null. Contract: docs/apogee/api/contacts.md.
+ */
+export function fetchSettlement(
+  missionId: MissionId,
+  reservationId: string,
+  signal?: AbortSignal,
+): Promise<ApiResult<Attention | null>> {
+  const q = new URLSearchParams({ reservation_id: reservationId });
+  return request(
+    `/missions/${encodeURIComponent(missionId)}/attention/contact_settlement?${q.toString()}`,
+    d.nullable(attentionReader),
+    signal ? { signal } : {},
+  );
+}
+
+/**
+ * U37 drawer block: the open contact_settlement for one pass, by the pass's reservation id (domain
+ * #71 doesn't attach it to the pass row). Its own read, not the whole action queue (#847). Null
+ * when none.
  */
 export function useSettlement(missionId: Ref<MissionId>, passId: Ref<string | null>) {
   const queue = useRemoteQuery(
-    computed(() => (passId.value === null ? null : missionId.value)),
-    (m, signal) => fetchActionQueue(m, signal),
+    computed(() => (passId.value === null ? null : { m: missionId.value, pass: passId.value })),
+    (k, signal) => fetchSettlement(k.m, k.pass, signal),
   );
   useMissionInvalidation(missionId, ["attention"], queue.refetch);
   /** The item a Retry returned (ux: shown at once), until the next read. */
@@ -23,11 +40,8 @@ export function useSettlement(missionId: Ref<MissionId>, passId: Ref<string | nu
   );
   const item = computed(() => {
     const s = queue.state.value;
-    const id = passId.value;
-    if (s.status !== "ready" || id === null) return null;
-    const read = s.value.items
-      .map((i) => i.attention)
-      .find((x) => x?.source === "contact_settlement" && x.backlog && x.reservation_id === id);
+    if (s.status !== "ready" || passId.value === null) return null;
+    const read = s.value;
     const a = patched.value && patched.value.id === read?.id ? patched.value : read;
     if (!a) return null;
     const last = a.last_attempt_at;

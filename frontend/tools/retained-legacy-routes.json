@@ -604,11 +604,11 @@
       "kind": "settings",
       "consumers": [
         {
-          "surface": "storybook Settings story",
+          "surface": "none: SettingsPage.vue is orphaned since storybook was deleted (#661)",
           "file": "apps/host/src/settings/SettingsPage.vue"
         }
       ],
-      "reason": "§11c B redirects this page to the console. Only storybook's Settings story still renders SettingsPage.vue with this header; remove the entry when (C) deletes SettingsPage.vue."
+      "reason": "§11c B redirects this page to the console. Nothing renders SettingsPage.vue since storybook was deleted (#661); remove the entry with SettingsPage.vue when the host goes."
     },
     {
       "path": "/missions/:mission_id/settings/:section_id",
@@ -627,11 +627,11 @@
       "kind": "settings",
       "consumers": [
         {
-          "surface": "storybook Settings story",
+          "surface": "none: SettingsPage.vue is orphaned since storybook was deleted (#661)",
           "file": "apps/host/src/settings/SettingsPage.vue"
         }
       ],
-      "reason": "§11c B redirects this page to the console. Only storybook's Settings story still renders SettingsPage.vue with this header; remove the entry when (C) deletes SettingsPage.vue."
+      "reason": "§11c B redirects this page to the console. Nothing renders SettingsPage.vue since storybook was deleted (#661); remove the entry with SettingsPage.vue when the host goes."
     }
   ]
 }

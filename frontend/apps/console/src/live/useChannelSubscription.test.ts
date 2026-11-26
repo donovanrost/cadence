@@ -69,7 +69,7 @@ describe("useChannelSubscription", () => {
   beforeEach(() => {
     stopSocket();
     created.length = 0;
-    startSocket("/socket/console", "csrf");
+    startSocket("/socket", "csrf");
   });
 
   it("subscribes after every (re)join and unsubscribes on dispose", async () => {

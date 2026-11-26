@@ -33,7 +33,7 @@ defmodule CadenceWeb.Console.ActivationApproveRefusalsAPITest do
       org: org,
       mission: mission,
       scope: scope,
-      base: "/api/console/v1/missions/#{mission.mission_id}/activations"
+      base: "/api/v1/missions/#{mission.mission_id}/activations"
     }
   end
 

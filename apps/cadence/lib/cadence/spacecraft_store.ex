@@ -245,22 +245,60 @@ defmodule Cadence.SpacecraftStore do
     end
   end
 
-  @doc "Curated display names for a bounded set of mission spacecraft; no metadata is loaded."
-  def display_names(organization_id, mission_id, spacecraft_ids) do
+  @doc """
+  Curated display names for a bounded set of mission spacecraft; no metadata is loaded. Rows are
+  `%{"id", "name"}`, plus `"scid"` with `scid: true` (the names read, #847).
+  """
+  def display_names(organization_id, mission_id, spacecraft_ids, opts \\ []) do
     with {:ok, ids} <- bounded_spacecraft_ids(spacecraft_ids) do
-      rows =
-        Repo.all(
-          from(row in SpacecraftRow,
-            where:
-              row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-                row.spacecraft_id in ^ids,
-            select: %{"id" => row.spacecraft_id, "name" => row.display_name}
-          )
+      query =
+        from(row in SpacecraftRow,
+          where:
+            row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+              row.spacecraft_id in ^ids,
+          select: %{"id" => row.spacecraft_id, "name" => row.display_name}
         )
 
-      {:ok, rows}
+      query =
+        if Keyword.get(opts, :scid, false),
+          do: select_merge(query, [row], %{"scid" => row.scid}),
+          else: query
+
+      {:ok, Repo.all(query)}
     end
   end
+
+  @doc """
+  One page of the mission's spacecraft names (#847), the rows `display_names/4` returns with
+  `scid: true`, sorted
+  by name then id so pages are stable: the `limit` rows after `after` (`{name, id}`, the previous
+  page's last row; nil for the first). Archived spacecraft included, since plans still name them.
+  """
+  @spec display_names_page(binary(), binary(), {binary(), binary()} | nil, pos_integer()) :: [
+          map()
+        ]
+  def display_names_page(organization_id, mission_id, after_key, limit)
+      when is_binary(organization_id) and is_binary(mission_id) and is_integer(limit) and
+             limit > 0 do
+    from(row in SpacecraftRow,
+      where: row.organization_id == ^organization_id and row.mission_id == ^mission_id,
+      order_by: [asc: row.display_name, asc: row.spacecraft_id],
+      limit: ^limit,
+      select: %{"id" => row.spacecraft_id, "name" => row.display_name, "scid" => row.scid}
+    )
+    |> after_name(after_key)
+    |> Repo.all()
+  end
+
+  defp after_name(query, nil), do: query
+
+  defp after_name(query, {name, id}),
+    do:
+      where(
+        query,
+        [row],
+        row.display_name > ^name or (row.display_name == ^name and row.spacecraft_id > ^id)
+      )
 
   @doc "Scoped identity-only subquery for composing paged searches without materializing the fleet."
   def display_name_ids_query(organization_id, mission_id, search) do
@@ -312,6 +350,30 @@ defmodule Cadence.SpacecraftStore do
     |> order_by([row], asc: row.spacecraft_id)
     |> Repo.all()
     |> Enum.map(&SpacecraftRow.to_domain/1)
+  end
+
+  @doc "The active mission spacecraft identities needed by contact coverage reads."
+  def active_identities(organization_id, mission_id) do
+    SpacecraftRow
+    |> where([r], r.organization_id == ^organization_id and r.mission_id == ^mission_id)
+    |> active()
+    |> select([r], %{id: r.spacecraft_id, name: r.display_name, scid: r.scid})
+    |> Repo.all()
+  end
+
+  @doc "The SCIDs the mission's spacecraft hold, archived ones included (they keep theirs)."
+  @spec scids(binary(), binary()) :: [non_neg_integer()]
+  def scids(organization_id, mission_id)
+      when is_binary(organization_id) and is_binary(mission_id) do
+    SpacecraftRow
+    |> where(
+      [row],
+      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+        not is_nil(row.scid)
+    )
+    |> select([row], row.scid)
+    |> distinct(true)
+    |> Repo.all()
   end
 
   @doc "Whether another spacecraft of the mission already uses `scid`."
@@ -405,6 +467,16 @@ defmodule Cadence.SpacecraftStore do
       {:version, version}, query -> where(query, [row], row.spacecraft_type_version == ^version)
       {:spacecraft_ids, ids}, query -> where(query, [row], row.spacecraft_id in ^ids)
     end)
+  end
+
+  @doc "Counts a mission's active spacecraft in SQL, without loading their records."
+  @spec count_mission_spacecraft(binary(), binary()) :: non_neg_integer()
+  def count_mission_spacecraft(organization_id, mission_id)
+      when is_binary(organization_id) and is_binary(mission_id) do
+    SpacecraftRow
+    |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
+    |> active()
+    |> Repo.aggregate(:count, :spacecraft_id)
   end
 
   @doc "Counts spacecraft across an organization's missions without loading their records."

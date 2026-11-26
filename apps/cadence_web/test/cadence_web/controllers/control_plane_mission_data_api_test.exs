@@ -6,27 +6,35 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
   import CadenceWeb.ControlPlaneApiFixtures
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet, CapabilityInstance}
+  alias Cadence.Auth.ServiceIdentity
+  alias Cadence.Commanding.ApprovalDecisions
   alias Cadence.Jobs
   alias Cadence.Jobs.Runner, as: JobRunner
   alias Cadence.Management.Commanding, as: ManagementCommanding
+  alias Cadence.Organizations.Organization
   alias Cadence.Runtime.MissionModelPlanDecoder
+  alias CadenceWeb.TestFixtures
 
+  # The dev ingest routes (a person's session, console API; #780) push one packet and one frame
+  # through the real ingest path against an activated imported Mission Model, and the decoded
+  # values are read back through the console API.
   defp assert_dev_telemetry_ingress(
-         conn,
-         api_token,
          organization_id,
          mission_id,
          binding_set_id,
          binding_set_version
        ) do
+    user = TestFixtures.persist_user!()
+    TestFixtures.grant_membership!(user, %Organization{organization_id: organization_id})
+
     packet_hex =
       build_space_packet(42, 3, <<12.5::float-32, 1::size(1), 0::size(7)>>)
       |> Base.encode16(case: :lower)
 
     dev_ingress_conn =
-      conn
-      |> authorize(api_token)
-      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/dev/space_packets", %{
+      user
+      |> TestFixtures.member_conn()
+      |> post("/api/v1/missions/#{mission_id}/dev/space_packets", %{
         "space_packet" => %{
           "source_ref" => "station-a",
           "packet_hex" => packet_hex
@@ -87,9 +95,9 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
       |> Base.encode16(case: :lower)
 
     dev_tm_ingress_conn =
-      conn
-      |> authorize(api_token)
-      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/dev/tm_frames", %{
+      user
+      |> TestFixtures.member_conn()
+      |> post("/api/v1/missions/#{mission_id}/dev/tm_frames", %{
         "tm_frame" => %{
           "source_ref" => "station-b",
           "frame_hex" => tm_frame_hex,
@@ -151,65 +159,69 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
              }
            } = json_response(dev_tm_ingress_conn, 200)
 
-    latest_values_conn =
-      conn
-      |> authorize(api_token)
-      |> get("/api/organizations/#{organization_id}/missions/#{mission_id}/telemetry/latest")
+    assert_console_reads(organization_id, mission_id)
+  end
 
-    assert %{
-             "data" => [
-               %{
-                 "point_id" => "THERM.heater_enabled",
-                 "point_name" => "THERM.heater_enabled",
-                 "engineering_value" => true
-               },
-               %{
-                 "point_id" => "THERM.temperature_c",
-                 "point_name" => "THERM.temperature_c",
-                 "engineering_value" => 12.5
-               }
-             ]
-           } = json_response(latest_values_conn, 200)
-
-    latest_value_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/telemetry/points/THERM.temperature_c/latest"
+  # #748: the catalog goes in through the one API (/api/v1) as a mission-pinned service, an
+  # opted-in action; the run's result document is read back from the domain, as the console read omits it.
+  defp import_catalog!(conn, organization_id, mission_id, file_name, yaml) do
+    # /api/v1 admits a mission-pinned service only; the bootstrap identity spans the organization.
+    {:ok, %{api_token: api_token}} =
+      Cadence.Auth.issue_service_identity(
+        ServiceIdentity.new(%{
+          service_identity_id: "svc-catalog-import-#{System.unique_integer([:positive])}",
+          organization_id: organization_id,
+          mission_id: mission_id,
+          display_name: "Catalog import pipeline",
+          capabilities: [:mission_admin]
+        }),
+        %Cadence.Auth.Scope{
+          actor_kind: :user,
+          organization_id: organization_id,
+          user: %Cadence.Accounts.User{user_id: "user-service-issuer"}
+        }
       )
 
-    assert %{
-             "data" => %{
-               "point_id" => "THERM.temperature_c",
-               "point_name" => "THERM.temperature_c",
-               "raw_value" => 12.5,
-               "engineering_value" => 12.5
-             }
-           } = json_response(latest_value_conn, 200)
+    path = Path.join(System.tmp_dir!(), "#{System.unique_integer([:positive])}-#{file_name}")
+    File.write!(path, yaml)
+    on_exit(fn -> File.rm(path) end)
 
-    history_conn =
+    import_conn =
       conn
       |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/telemetry/points/THERM.temperature_c/history?limit=10&order=desc"
-      )
+      |> post("/api/v1/missions/#{mission_id}/catalog/imports", %{
+        "name" => "API catalog",
+        "file" => %Plug.Upload{path: path, filename: file_name, content_type: "application/yaml"}
+      })
 
-    assert %{
-             "data" => [
-               %{
-                 "point_id" => "THERM.temperature_c",
-                 "point_name" => "THERM.temperature_c",
-                 "raw_value" => 12.5,
-                 "engineering_value" => 12.5
-               },
-               %{
-                 "point_id" => "THERM.temperature_c",
-                 "point_name" => "THERM.temperature_c",
-                 "raw_value" => 12.5,
-                 "engineering_value" => 12.5
-               }
-             ]
-           } = json_response(history_conn, 200)
+    assert %{"data" => %{"import_run_id" => import_run_id}} = json_response(import_conn, 202)
+    assert [claimed_job] = Jobs.claim_jobs(1)
+    assert {:ok, _completed_job} = JobRunner.run_job(claimed_job.job_id)
+
+    assert {:ok, %{result_document: result_document}} =
+             Cadence.Catalog.fetch_import_run(organization_id, mission_id, import_run_id)
+
+    {import_run_id, result_document}
+  end
+
+  defp assert_console_reads(organization_id, mission_id) do
+    org = %Organization{organization_id: organization_id}
+    user = TestFixtures.persist_user!()
+    TestFixtures.grant_membership!(user, org)
+
+    from = DateTime.utc_now() |> DateTime.add(-3_600) |> DateTime.to_iso8601()
+    to = DateTime.utc_now() |> DateTime.add(3_600) |> DateTime.to_iso8601()
+
+    history_path =
+      "/api/v1/missions/#{mission_id}/telemetry/points/THERM.temperature_c/history" <>
+        "?from=#{URI.encode_www_form(from)}&to=#{URI.encode_www_form(to)}"
+
+    # Both ingested samples (the packet and the frame) decode to 12.5.
+    assert %{"data" => %{"point_id" => "THERM.temperature_c", "buckets" => buckets}} =
+             user |> TestFixtures.member_conn() |> get(history_path) |> json_response(200)
+
+    assert buckets |> Enum.map(& &1["count"]) |> Enum.sum() == 2
+    assert Enum.all?(buckets, &(&1["min"] == 12.5 and &1["max"] == 12.5))
   end
 
   defp assert_command_stage_queue_workflow(context) do
@@ -218,6 +230,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
       api_token: api_token,
       organization_id: organization_id,
       mission_id: mission_id,
+      source_endpoint_id: source_endpoint_id,
       mission_model_revision_id: mission_model_revision_id,
       noop_command_id: noop_command_id,
       set_mode_command_id: set_mode_command_id
@@ -266,7 +279,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
         %{
           "staged_command_item" => %{
             "staged_command_item_id" => "staged-command-item-alpha",
-            "source_endpoint_ref" => "source-endpoint-commanding-001",
+            "source_endpoint_ref" => source_endpoint_id,
             "mission_model_revision_id" => mission_model_revision_id,
             "command_id" => set_mode_command_id,
             "argument_values" => %{"mode" => 2},
@@ -380,7 +393,8 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
                mission_id,
                staged_command_request_id,
                %{"actor_kind" => "user", "user_id" => "reviewer-1"},
-               reason: "Reviewed for uplink"
+               reason: "Reviewed for uplink",
+               admin_mode: false
              )
 
     command_approval_id = approval.command_approval_id
@@ -417,7 +431,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
              "data" => %{
                "queue_entry" => %{
                  "command_queue_entry_id" => staged_queue_entry_id,
-                 "queue_lane_key" => "source-endpoint-commanding-001",
+                 "queue_lane_key" => ^source_endpoint_id,
                  "priority" => 2
                },
                "command_request" => %{
@@ -433,7 +447,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
       |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/command_requests", %{
         "command_request" => %{
           "command_request_id" => "command-request-noop",
-          "source_endpoint_ref" => "source-endpoint-commanding-001",
+          "source_endpoint_ref" => source_endpoint_id,
           "mission_model_revision_id" => mission_model_revision_id,
           "command_id" => noop_command_id,
           "priority" => 1
@@ -466,12 +480,33 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
              }
            } = json_response(noop_queue_entry_conn, 200)
 
+    # #117 step 4b (api-ops on #639): the release recorded not_required in the four-eyes record,
+    # but the REST approvals read doesn't show it: decision stays approved | rejected there.
+    assert Enum.any?(
+             ApprovalDecisions.decisions(organization_id),
+             &(&1.decision == :not_required and &1.subject.id == "command-request-noop")
+           )
+
+    for params <- [%{"command_request_id" => "command-request-noop"}, %{}] do
+      approvals_conn =
+        conn
+        |> authorize(api_token)
+        |> get(
+          "/api/organizations/#{organization_id}/missions/#{mission_id}/command_approvals",
+          params
+        )
+
+      assert %{"data" => approvals} = json_response(approvals_conn, 200)
+      assert Enum.all?(approvals, &(&1["decision"] in ["approved", "rejected"]))
+      refute Enum.any?(approvals, &(&1["command_request_id"] == "command-request-noop"))
+    end
+
     command_queue_entries_conn =
       conn
       |> authorize(api_token)
       |> get(
         "/api/organizations/#{organization_id}/missions/#{mission_id}/command_queue_entries",
-        %{"queue_lane_key" => "source-endpoint-commanding-001"}
+        %{"queue_lane_key" => source_endpoint_id}
       )
 
     assert %{
@@ -492,87 +527,34 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
        %{
          conn: conn
        } do
-    %{conn: conn, api_token: api_token, organization_id: organization_id, mission_id: mission_id} =
+    %{conn: conn, organization_id: organization_id, mission_id: mission_id} =
       bootstrap(conn)
 
-    artifact_conn =
-      conn
-      |> authorize(api_token)
-      |> post(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/catalog_artifacts",
-        %{
-          "catalog_artifact" => %{
-            "artifact_id" => "artifact-yaml-alpha",
-            "catalog_family" => "combined",
-            "artifact_name" => "mission-alpha-dev.yaml",
-            "format_key" => "cadence_yaml",
-            "media_type" => "application/yaml",
-            "source_artifact" => %{
-              "yaml" => """
-              version: "1.0.0"
+    yaml = """
+    version: "1.0.0"
 
-              packets:
-                - name: THERM
-                  apid: 42
-                  items:
-                    - name: temperature_c
-                      bit_offset: 0
-                      bit_size: 32
-                      data_type: float
-                      endianness: big
-                    - name: heater_enabled
-                      bit_offset: 32
-                      bit_size: 1
-                      data_type: bool
+    packets:
+      - name: THERM
+        apid: 42
+        items:
+          - name: temperature_c
+            bit_offset: 0
+            bit_size: 32
+            data_type: float
+            endianness: big
+          - name: heater_enabled
+            bit_offset: 32
+            bit_size: 1
+            data_type: bool
 
-              commands:
-                - name: NOOP
-                  opcode: 0x01
-              """
-            }
-          }
-        }
-      )
+    commands:
+      - name: NOOP
+        opcode: 0x01
+    """
 
-    assert %{"data" => %{"artifact_id" => "artifact-yaml-alpha"}} =
-             json_response(artifact_conn, 201)
-
-    import_run_conn =
-      conn
-      |> authorize(api_token)
-      |> post(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/catalog_import_runs",
-        %{
-          "catalog_import_run" => %{
-            "artifact_id" => "artifact-yaml-alpha",
-            "importer_key" => "cadence_yaml"
-          }
-        }
-      )
-
-    assert %{"data" => %{"import_run_id" => import_run_id}} = json_response(import_run_conn, 201)
-
-    assert [{:ok, claimed_job}] =
-             Jobs.claim_jobs(1)
-             |> Enum.map(fn job -> {:ok, job} end)
-
-    assert {:ok, _completed_job} = JobRunner.run_job(claimed_job.job_id)
-
-    import_run_show_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/catalog_import_runs/#{import_run_id}"
-      )
-
-    assert %{
-             "data" => %{
-               "result_document" =>
-                 %{
-                   "mission_model" => %{"revision_id" => mission_model_revision_id}
-                 } = result_document
-             }
-           } = json_response(import_run_show_conn, 200)
+    {import_run_id,
+     %{"mission_model" => %{"revision_id" => mission_model_revision_id}} = result_document} =
+      import_catalog!(conn, organization_id, mission_id, "mission-alpha-dev.yaml", yaml)
 
     assert {:ok, plans} =
              Cadence.MissionModels.fetch_runtime_plans(
@@ -631,8 +613,6 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
     assert activated_model.revision_id == mission_model_revision_id
 
     assert_dev_telemetry_ingress(
-      conn,
-      api_token,
       organization_id,
       mission_id,
       binding_set_id,
@@ -652,120 +632,74 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
       scid: 31
     })
 
+    admin = TestFixtures.persist_user!()
+
+    TestFixtures.grant_membership!(admin, %Organization{organization_id: organization_id},
+      role: :organization_admin
+    )
+
     source_endpoint_conn =
-      conn
-      |> authorize(api_token)
+      admin
+      |> TestFixtures.member_conn()
       |> post(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/spacecraft/spacecraft-commanding-001/source_endpoints",
+        "/api/v1/missions/#{mission_id}/spacecraft/spacecraft-commanding-001/source-endpoints",
         %{
           "source_endpoint" => %{
-            "source_endpoint_id" => "source-endpoint-commanding-001",
             "source_ref" => "sc-cmd-001",
             "display_name" => "SC Commanding Endpoint"
           }
         }
       )
 
-    assert %{"data" => %{"source_endpoint_id" => "source-endpoint-commanding-001"}} =
+    assert %{"data" => %{"source_endpoint_id" => source_endpoint_id}} =
              json_response(source_endpoint_conn, 201)
 
-    artifact_conn =
-      conn
-      |> authorize(api_token)
-      |> post(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/catalog_artifacts",
-        %{
-          "catalog_artifact" => %{
-            "artifact_id" => "artifact-commanding-api",
-            "artifact_name" => "commanding-api.yaml",
-            "catalog_family" => "combined",
-            "format_key" => "cadence_yaml",
-            "media_type" => "application/yaml",
-            "source_artifact" => """
-            version: "1.0.0"
+    yaml = """
+    version: "1.0.0"
 
-            commands:
-              - name: NOOP
-                opcode: 0x01
-                parameters: []
-              - name: SET_MODE
-                opcode: 0x03
-                is_hazardous: true
-                hazard_description: "Mode changes affect safing behavior"
-                requires_confirmation: true
-                parameters:
-                  - name: mode
-                    data_type: uint
-                    required: true
-                    bit_offset: 0
-                    bit_length: 8
-                  - name: delay_s
-                    data_type: uint
-                    required: false
-                    default_value: 5
-                    bit_offset: 8
-                    bit_length: 8
-                verifiers:
-                  - name: Release Accepted
-                    phase: acceptance
-                    timeout_ms: 1000
-                    success_criteria:
-                      criteria_type: comparison
-                      subject_ref: transport:accepted
-                      comparison: equal
-                      value: true
-                  - name: Mode Applied
-                    phase: completion
-                    timeout_ms: 5000
-                    success_criteria:
-                      criteria_type: comparison
-                      subject_ref: mode_state
-                      comparison: equal
-                      value: 3
-            """
-          }
-        }
-      )
+    commands:
+      - name: NOOP
+        opcode: 0x01
+        parameters: []
+      - name: SET_MODE
+        opcode: 0x03
+        is_hazardous: true
+        hazard_description: "Mode changes affect safing behavior"
+        requires_confirmation: true
+        parameters:
+          - name: mode
+            data_type: uint
+            required: true
+            bit_offset: 0
+            bit_length: 8
+          - name: delay_s
+            data_type: uint
+            required: false
+            default_value: 5
+            bit_offset: 8
+            bit_length: 8
+        verifiers:
+          - name: Release Accepted
+            phase: acceptance
+            timeout_ms: 1000
+            success_criteria:
+              criteria_type: comparison
+              subject_ref: transport:accepted
+              comparison: equal
+              value: true
+          - name: Mode Applied
+            phase: completion
+            timeout_ms: 5000
+            success_criteria:
+              criteria_type: comparison
+              subject_ref: mode_state
+              comparison: equal
+              value: 3
+    """
 
-    assert %{"data" => %{"artifact_id" => "artifact-commanding-api"}} =
-             json_response(artifact_conn, 201)
-
-    import_run_conn =
-      conn
-      |> authorize(api_token)
-      |> post(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/catalog_import_runs",
-        %{
-          "catalog_import_run" => %{
-            "artifact_id" => "artifact-commanding-api",
-            "importer_key" => "cadence_yaml"
-          }
-        }
-      )
-
-    assert %{"data" => %{"import_run_id" => import_run_id}} = json_response(import_run_conn, 201)
-
-    assert [{:ok, claimed_job}] =
-             Jobs.claim_jobs(1)
-             |> Enum.map(fn job -> {:ok, job} end)
-
-    assert {:ok, _completed_job} = JobRunner.run_job(claimed_job.job_id)
-
-    import_run_show_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/catalog_import_runs/#{import_run_id}"
-      )
-
-    assert %{
-             "data" => %{
-               "result_document" =>
-                 %{
-                   "mission_model" => %{"revision_id" => mission_model_revision_id}
-                 } = result_document
-             }
-           } = json_response(import_run_show_conn, 200)
+    {_import_run_id,
+     %{"mission_model" => %{"revision_id" => mission_model_revision_id}} = result_document} =
+      import_catalog!(conn, organization_id, mission_id, "commanding-api.yaml", yaml)
 
     assert {:ok, runtime_plans} =
              Cadence.MissionModels.fetch_runtime_plans(
@@ -796,6 +730,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
         api_token: api_token,
         organization_id: organization_id,
         mission_id: mission_id,
+        source_endpoint_id: source_endpoint_id,
         mission_model_revision_id: mission_model_revision_id,
         noop_command_id: noop_command_id,
         set_mode_command_id: set_mode_command_id
@@ -805,7 +740,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
       persist_active_uplink_contact_for_command_release(
         organization_id,
         mission_id,
-        "source-endpoint-commanding-001"
+        source_endpoint_id
       )
 
     release_queue_entry_conn =

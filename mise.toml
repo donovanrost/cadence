@@ -1,10 +1,7 @@
 [env]
 CADENCE_ADMIN_EMAIL = "admin@example.com"
-CADENCE_ADMIN_PASSWORD = "change-me"
 CADENCE_ADMIN_DISPLAY_NAME = "Cadence Administrator"
 CADENCE_ADMIN_MODE_TTL_SECONDS = "3600"
-# Public credential for the loopback-only Earendil demo simulator.
-EARENDIL_DEMO_PROVIDER_TOKEN = "earendil-local-provider"
 OTEL_SERVICE_NAME = "cadence"
 OTEL_RESOURCE_ATTRIBUTES = "deployment.environment.name=development"
 OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4318"
@@ -12,7 +9,7 @@ OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4318"
 
 [tasks.cadence]
 dir = "apps/cadence_web"
-run = "iex --sname cadence --cookie cadence -S mix phx.server"
+run = "ERL_EPMD_ADDRESS=127.0.0.1 elixir --sname cadence_${CADENCE_DEV_SLOT:?run dev/stack env first} --cookie ${CADENCE_ERLANG_COOKIE:?run dev/stack env first} --erl '-kernel inet_dist_use_interface {127,0,0,1}' -S mix phx.server"
 
 [tasks.earendil-simulator]
 description = "Run the local Earendil ground-network simulator"
@@ -20,9 +17,13 @@ dir = "apps/cadence_simulator"
 run = "mix run --no-start --no-halt ../../dev/reflect_orbital_simulator.exs"
 
 [tasks.earendil-live]
-description = "Run ten Earendil telemetry feeds at 1 Hz and save the dashboard suite"
+description = "Run Earendil telemetry feeds at 1 Hz per packet family and save the dashboard suite"
 dir = "apps/cadence_simulator"
-run = "elixir --hidden --sname earendil_tm --cookie cadence -S mix run --no-start ../../dev/reflect_orbital_live.exs"
+run = "ERL_EPMD_ADDRESS=127.0.0.1 elixir --hidden --sname earendil_tm_${CADENCE_DEV_SLOT:?run dev/stack env first} --cookie ${CADENCE_ERLANG_COOKIE:?run dev/stack env first} --erl '-kernel inet_dist_use_interface {127,0,0,1}' -S mix run --no-start ../../dev/reflect_orbital_live.exs"
+
+[tasks.stack]
+description = "Manage this worktree's private development stack"
+run = "dev/stack"
 
 [tools]
 erlang = "29.0.5"

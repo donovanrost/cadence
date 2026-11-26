@@ -116,7 +116,7 @@ test("malformed records and forged selection cannot be admitted", () => {
   }
   expect(() => timelineHref("../foreign", {})).toThrow();
 });
-const producer = producerFixture("CADENCE_TIMELINE_DOCUMENT", import.meta.url);
+const producer = producerFixture("CADENCE_TIMELINE_DOCUMENT");
 test.skipIf(!producer.available)(
   "actual producer document reaches filters and selected canonical evidence",
   () => {

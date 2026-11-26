@@ -83,7 +83,7 @@ test("creation bounds Unicode and binds receipt actor and reserved stage", () =>
     ),
   ).toThrow();
 });
-const producer = producerFixture("CADENCE_COMMAND_STAGES_DOCUMENT", import.meta.url);
+const producer = producerFixture("CADENCE_COMMAND_STAGES_DOCUMENT");
 test.skipIf(!producer.available)(
   "actual producer stage creation controls yield the Phoenix input",
   async () => {

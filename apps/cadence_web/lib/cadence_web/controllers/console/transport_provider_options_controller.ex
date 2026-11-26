@@ -1,6 +1,6 @@
 defmodule CadenceWeb.Console.TransportProviderOptionsController do
   @moduledoc """
-  `GET /api/console/v1/missions/:mission_id/config/kinds/transport/provider-options` (comms
+  `GET /api/v1/missions/:mission_id/config/kinds/transport/provider-options` (comms
   parity 2): the provider-managed transport form's dependent choices and derived preview
   (`Cadence.Reads.TransportProviderOptions`). Query: `provider_id`, `service_profile_id`,
   `delivery_profile_id`, each optional. Read-only; it serves staging, so it needs `config.stage`.

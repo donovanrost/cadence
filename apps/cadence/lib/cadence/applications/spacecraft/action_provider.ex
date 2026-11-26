@@ -11,9 +11,8 @@ defmodule Cadence.Applications.Spacecraft.ActionProvider do
   alias Cadence.Spacecraft, as: SpacecraftAsset
   alias Cadence.SpacecraftType, as: SpacecraftProfile
 
-  # Host-action sweep row 2: the new, profile_new and edit form surfaces are gone; spacecraft and
-  # profiles are written only through the console's change sets (Identity and ProfileCreation
-  # refuse a save too, for the native page).
+  # Spacecraft and profiles are written only through the console's change sets; the new,
+  # profile_new and edit form surfaces are gone.
   @surface_action_bindings [
     {"applications", 1, "install"},
     {"applications", 1, "disable"},

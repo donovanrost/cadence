@@ -6,8 +6,6 @@ defmodule CadenceWeb.HealthController do
 
   @moduledoc "Infrastructure probes. Readiness covers HTTP/database access, not mission ownership."
 
-  def show(conn, _params), do: json(conn, %{data: %{status: "ok"}})
-
   def live(conn, _params), do: json(conn, %{status: "alive"})
 
   def ready(conn, _params) do

@@ -5,11 +5,9 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
 
   alias Cadence.Ingress.RawEvidence
 
-  alias Cadence.Protocol.RecordArchive.FileSystem.RecordEntryRow,
-    as: ProtocolArchiveRecordEntryRow
-
   alias Cadence.Protocol.{PacketRecord, RecordArchive, TransferFrameRecord}
   alias Cadence.Protocol.RecordArchive.FileSystem
+  alias Cadence.Protocol.RecordArchive.FileSystem.{IdentityRow, SegmentRow}
   alias Cadence.Replay.Scope
   alias Cadence.Repo
 
@@ -254,19 +252,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
                object_key: "mission-alpha/segment-collision.bin"
              )
 
-    assert Repo.get!(ProtocolArchiveRecordEntryRow, "packet_record:packet-idempotent").object_key ==
-             "mission-alpha/segment-alpha.bin"
-
-    # Legacy writers can still populate the nullable column during a rollout,
-    # but their rows are not evidence of content equality for a new writer.
-    ProtocolArchiveRecordEntryRow
-    |> where([row], row.record_id == "packet-idempotent")
-    |> Repo.update_all(set: [content_sha256: nil])
-
-    assert {:error, {:protocol_archive_record_identity_conflict, _ids}} =
-             FileSystem.persist_segment("segment-legacy", entries,
-               object_key: "mission-alpha/segment-legacy.bin"
-             )
+    assert object_key("packet_record", "packet-idempotent") == "mission-alpha/segment-alpha.bin"
   end
 
   describe "a replay that groups the journal into different evidence (11-14, 008's pass)" do
@@ -309,10 +295,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
 
       # The index keeps the original archive's rows.
       for frame <- frames do
-        assert Repo.get!(
-                 ProtocolArchiveRecordEntryRow,
-                 "transfer_frame_record:" <> frame.frame_record_id
-               ).object_key ==
+        assert object_key("transfer_frame_record", frame.frame_record_id) ==
                  "#{mission_id}/segment-run.bin"
       end
 
@@ -472,7 +455,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
                SELECT count(*) FROM pg_prepared_statements
                WHERE name = $1 AND cardinality(parameter_types) >= 1000
                """,
-               ["ecto_insert_all_protocol_archive_record_entries"]
+               ["ecto_insert_all_protocol_archive_record_identities"]
              )
   end
 
@@ -481,8 +464,6 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
     mission_id: mission_id,
     archive_policy: policy
   } do
-    writer = Process.whereis(FileSystem.Writer)
-
     failures = [
       %DBConnection.ConnectionError{message: "database checkout unavailable"},
       %Postgrex.Error{message: "temporary database query failure"}
@@ -511,6 +492,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
       }
 
       assert :ok = RecordArchive.persist_records(policy, evidence, [], [packet])
+      writer = mission_writer(mission_id)
 
       assert {:error, {:archive_database_error, _message}} =
                RecordArchive.flush(policy, mission_id)
@@ -523,8 +505,8 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
                RecordArchive.stats(policy, mission_id)
 
       assert count >= 2
-      assert Process.whereis(FileSystem.Writer) == writer
-      refute Repo.get(ProtocolArchiveRecordEntryRow, "packet_record:#{packet.packet_id}")
+      assert mission_writer(mission_id) == writer
+      refute object_key("packet_record", packet.packet_id)
 
       if index == 1 do
         assert :ok = RecordArchive.reset_stats(policy, mission_id)
@@ -542,8 +524,10 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
       assert %{queue_depth: 1} = RecordArchive.stats(policy, mission_id)
 
       Cadence.ProtocolArchiveFaultRepo.recover()
-      # The transaction yields the number of index rows it inserted.
-      assert_receive {:archive_write_completed, {:ok, 1}}, 2_000
+      # Flush explicitly after recovery; the scheduled retry may be seconds away.
+      assert :ok = RecordArchive.flush(policy, mission_id)
+      # The transaction yields the segment it indexed.
+      assert_receive {:archive_write_completed, {:ok, %SegmentRow{}}}
 
       assert %{queue_depth: 0, backpressured?: false, flushed_count: ^index} =
                RecordArchive.stats(policy, mission_id)
@@ -560,75 +544,11 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
     end
   end
 
-  test "stats and flush tolerate legacy writer state without buffer sizes", %{
-    mission_id: mission_id,
-    archive_policy: archive_policy
-  } do
-    receipt_time = DateTime.from_unix!(1_700_910_000, :second)
+  defp mission_writer(mission_id) do
+    [{pid, _value}] =
+      Registry.lookup(Module.concat(FileSystem.Writer, Registry), {mission_id, nil})
 
-    raw_evidence =
-      RawEvidence.new(%{
-        evidence_id: "evidence-protocol-legacy-state",
-        mission_id: mission_id,
-        protocol_family: :tm,
-        direction: :downlink,
-        raw: <<1, 2, 3, 4>>,
-        receipt_time: receipt_time
-      })
-
-    transfer_frame_record =
-      TransferFrameRecord.new(%{
-        frame_record_id: "frame-legacy-state",
-        evidence_id: raw_evidence.evidence_id,
-        mission_id: mission_id,
-        protocol_family: :tm,
-        direction: :downlink,
-        scid: 11,
-        vcid: 2,
-        frame_seq: 21,
-        raw_frame_offset_bytes: 0,
-        raw_frame_length_bytes: 1115,
-        payload_length_bytes: 1109,
-        first_header_pointer: 0,
-        quality: :good,
-        receipt_time: receipt_time
-      })
-
-    packet_record = %PacketRecord{
-      packet_id: "packet-legacy-state",
-      evidence_id: raw_evidence.evidence_id,
-      mission_id: mission_id,
-      protocol_family: :tm,
-      packet_kind: :space_packet,
-      apid: 42,
-      sequence_flags: 3,
-      sequence_count: 29,
-      secondary_header?: false,
-      packet_data: <<2, 9>>,
-      receipt_time: receipt_time,
-      provenance: %{}
-    }
-
-    entries = FileSystem.build_entries(raw_evidence, [transfer_frame_record], [packet_record])
-
-    writer = Keyword.get(archive_policy.backend_opts, :name, FileSystem.Writer)
-
-    :sys.replace_state(writer, fn state ->
-      state
-      |> Map.put(:buffers, %{mission_id => entries})
-      |> Map.put(:buffer_started_at_ms, %{mission_id => System.monotonic_time(:millisecond)})
-      |> Map.delete(:buffer_sizes)
-    end)
-
-    stats_before_flush = RecordArchive.stats(archive_policy, mission_id)
-    assert stats_before_flush.queue_depth == 2
-
-    assert :ok = RecordArchive.flush(archive_policy, mission_id)
-    assert 2 == archive_entry_count(entries)
-
-    stats_after_flush = RecordArchive.stats(archive_policy, mission_id)
-    assert stats_after_flush.queue_depth == 0
-    assert stats_after_flush.flush_count == 1
+    pid
   end
 
   defp replay_evidence(mission_id, range, receipt_time, metadata) do
@@ -682,8 +602,16 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
   defp archive_entry_count(entries) when is_list(entries) do
     record_ids = Enum.map(entries, &Map.fetch!(&1, "record_id"))
 
-    ProtocolArchiveRecordEntryRow
+    IdentityRow
     |> where([row], row.record_id in ^record_ids)
-    |> Repo.aggregate(:count, :entry_id)
+    |> Repo.aggregate(:count)
+  end
+
+  defp object_key(record_kind, record_id) do
+    SegmentRow
+    |> join(:inner, [s], i in IdentityRow, on: i.segment_id == s.id)
+    |> where([_s, i], i.record_kind == ^record_kind and i.record_id == ^record_id)
+    |> select([s], s.object_key)
+    |> Repo.one()
   end
 end

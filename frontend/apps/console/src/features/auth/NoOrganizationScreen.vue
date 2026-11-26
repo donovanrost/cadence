@@ -27,6 +27,12 @@ const note = ref<{ text: string; failed: boolean } | null>(null);
 /** L6 (lead): the shell's step-up sheet works without AppShell; then the admin area (L7: /admin). */
 const adminSheet = ref<InstanceType<typeof AdminModeSheet> | null>(null);
 const adminOn = ref(false);
+/** #664: a failed sign-out says why and leaves them signed in as they were. */
+async function signOutNow() {
+  const r = await signOutHere();
+  if (!r.ok && r.error.kind !== "unauthenticated")
+    note.value = { text: `Couldn't sign out. ${describeApiError(r.error)}`, failed: true };
+}
 function changed(text: string | null, failed: boolean) {
   note.value = text === null ? null : { text, failed };
   list.refetch();
@@ -79,9 +85,7 @@ function changed(text: string | null, failed: boolean) {
         >
         <AdminModeSheet ref="adminSheet" @entered="adminOn = true" />
       </template>
-      <ApButton variant="ghost" class="w-full" @click="signOutHere(session.csrf_token)"
-        >Sign out</ApButton
-      >
+      <ApButton variant="ghost" class="w-full" @click="signOutNow">Sign out</ApButton>
     </template>
   </div>
 </template>

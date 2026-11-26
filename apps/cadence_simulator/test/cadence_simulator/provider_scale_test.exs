@@ -15,7 +15,7 @@ defmodule CadenceSimulator.ProviderScaleTest do
   alias CadenceSimulator.StoreRestart
 
   @definitions Path.expand(
-                 "../../../../legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml",
+                 "../../../../dev/catalogs/demo_spacecraft.yaml",
                  __DIR__
                )
 
@@ -201,6 +201,7 @@ defmodule CadenceSimulator.ProviderScaleTest do
 
     before_restart = Store.events_for_run(run["id"], 0, 500)
     assert before_restart.data != []
+    :ok = Store.flush()
     previous_store = Process.whereis(Store)
     Process.exit(previous_store, :kill)
     # #331: back under its name AND past init/1, so its ETS mirror exists before the read.

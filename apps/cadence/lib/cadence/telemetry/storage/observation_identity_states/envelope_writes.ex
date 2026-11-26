@@ -17,6 +17,10 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates.EnvelopeWrites do
   sightings update them. A conflicting row that vanished before the lock (the 96 h prune) is
   inserted once more; only a second conflict fails the batch. Within a batch, a canonical
   sighting before an identity's first non-canonical one still writes nothing.
+
+  `record/2` returns the identities whose stored state this batch actually changed (a row inserted,
+  or an existing row updated by a new sighting), so the caller publishes a fact for those only
+  (#689): a sample that stored nothing changed nothing for a reader to hear about.
   """
 
   import Ecto.Query
@@ -26,28 +30,38 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates.EnvelopeWrites do
   alias Cadence.Telemetry.Storage.ObservationIdentityStates.TelemetryObservationIdentityStateRow,
     as: Row
 
-  @spec record(module(), [ObservationEnvelope.t()]) :: :ok | {:error, term()}
+  @spec record(module(), [ObservationEnvelope.t()]) ::
+          {:ok, MapSet.t(binary())} | {:error, term()}
   def record(repo, envelopes) when is_list(envelopes) do
     rows = lock_existing(repo, envelopes |> Enum.map(& &1.observation_identity_id) |> Enum.uniq())
 
-    with {:ok, claimed, rows} <- claim_new(repo, envelopes, rows) do
-      record_all(repo, envelopes, rows, claimed)
+    with {:ok, claimed, rows} <- claim_new(repo, envelopes, rows),
+         {:ok, updated} <- record_all(repo, envelopes, rows, claimed) do
+      {:ok, MapSet.union(MapSet.new(Map.keys(claimed)), updated)}
     end
   end
 
   defp record_all(repo, envelopes, rows, claimed) do
     envelopes
-    |> Enum.reduce_while({:ok, rows}, fn envelope, {:ok, rows} ->
+    |> Enum.reduce_while({:ok, rows, MapSet.new()}, fn envelope, {:ok, rows, updated} ->
       id = envelope.observation_identity_id
 
       case record_envelope(repo, envelope, current_row(rows, claimed, envelope)) do
-        {:ok, nil} -> {:cont, {:ok, rows}}
-        {:ok, %Row{} = row} -> {:cont, {:ok, Map.put(rows, id, row)}}
-        {:error, reason} -> {:halt, {:error, reason}}
+        {:ok, nil} ->
+          {:cont, {:ok, rows, updated}}
+
+        {:ok, %Row{} = row, :unchanged} ->
+          {:cont, {:ok, Map.put(rows, id, row), updated}}
+
+        {:ok, %Row{} = row, :updated} ->
+          {:cont, {:ok, Map.put(rows, id, row), MapSet.put(updated, id)}}
+
+        {:error, reason} ->
+          {:halt, {:error, reason}}
       end
     end)
     |> case do
-      {:ok, _rows} -> :ok
+      {:ok, _rows, updated} -> {:ok, updated}
       {:error, reason} -> {:error, reason}
     end
   end
@@ -172,12 +186,13 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates.EnvelopeWrites do
   defp record_envelope(_repo, envelope, %Row{} = row)
        when row.latest_observation_id == envelope.observation_id or
               row.canonical_observation_id == envelope.observation_id,
-       do: {:ok, row}
+       do: {:ok, row, :unchanged}
 
   defp record_envelope(repo, envelope, %Row{} = row) do
-    row
-    |> Row.changeset(updated_attrs(row, envelope))
-    |> repo.update()
+    case row |> Row.changeset(updated_attrs(row, envelope)) |> repo.update() do
+      {:ok, updated} -> {:ok, updated, :updated}
+      {:error, changeset} -> {:error, changeset}
+    end
   end
 
   defp initial_attrs(%ObservationEnvelope{} = envelope) do
@@ -186,6 +201,26 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates.EnvelopeWrites do
     |> Map.merge(count_attrs(envelope))
     |> maybe_put_canonical(envelope, envelope.validity_state == :canonical)
     |> Map.put(:validity_state, validity_state(nil, envelope))
+  end
+
+  # #369 (lead's ruling: a revision never clears an operator's decision; domain's scope): a row an
+  # operator DECIDED (decision_event_id set) keeps every field the decision owns: the canonical
+  # columns, validity_state, decision_reason, decided_at and the payload's "decision" that
+  # EffectiveSelection reads. A later sighting (a duplicate, a conflict or a revision) updates only
+  # the counts, latest_* and the seen times, so latest_revision > canonical_revision says a newer
+  # revision arrived (U106) while selection still follows the decision.
+  defp updated_attrs(%Row{decision_event_id: decided} = row, %ObservationEnvelope{} = envelope)
+       when is_binary(decided) do
+    row
+    |> Map.take(Row.fields())
+    |> merge_counts(envelope)
+    |> Map.merge(%{
+      latest_observation_id: envelope.observation_id,
+      latest_sample_id: envelope.sample_id,
+      latest_revision: envelope.revision
+    })
+    |> Map.put(:first_seen_at, earliest(row.first_seen_at, envelope.ingested_at))
+    |> Map.put(:last_seen_at, latest(row.last_seen_at, envelope.ingested_at))
   end
 
   defp updated_attrs(%Row{} = row, %ObservationEnvelope{} = envelope) do

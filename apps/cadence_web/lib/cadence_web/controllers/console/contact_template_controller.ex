@@ -1,7 +1,7 @@
 defmodule CadenceWeb.Console.ContactTemplateController do
   @moduledoc """
   Contact planning summary (CP1) and targeted requirement templates (CP3) under
-  `/api/console/v1/missions/:mission_id/contact-planning`. Contract:
+  `/api/v1/missions/:mission_id/contact-planning`. Contract:
   docs/apogee/api/scheduling.md.
   """
 
@@ -36,8 +36,8 @@ defmodule CadenceWeb.Console.ContactTemplateController do
   """
   def supersedes(conn, %{"template_id" => id}) do
     drafts = ContactPlanOverview.would_supersede(org_id(conn), mission_id(conn), {:template, id})
-    decided = TemplateDayReview.decided(org_id(conn), mission_id(conn), id, DateTime.utc_now())
-    ok(conn, %{drafts: drafts, decided: decided})
+    result = TemplateDayReview.review(org_id(conn), mission_id(conn), id, DateTime.utc_now())
+    ok(conn, Map.put(result, :drafts, drafts))
   end
 
   @doc "Dry run: the open drafts a new version of this requirement would supersede."

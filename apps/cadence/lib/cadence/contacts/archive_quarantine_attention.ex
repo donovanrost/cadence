@@ -134,7 +134,7 @@ defmodule Cadence.Contacts.ArchiveQuarantineAttention do
       state: "open",
       raised_at: rows |> Enum.map(& &1.first_seen_at) |> Enum.min(DateTime),
       last_seen_at: rows |> Enum.map(& &1.last_seen_at) |> Enum.max(DateTime),
-      expires_at: nil,
+      expires_at: Quarantine.expires_at(rows),
       acknowledged_by: nil,
       resolution: nil,
       spacecraft_id: Enum.find_value(rows, & &1.spacecraft_id),

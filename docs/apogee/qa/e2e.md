@@ -6,7 +6,7 @@ both; lead owns the app's `package.json` / tsconfig wiring). Runner: `@playwrigh
 
 ## Run it
 
-Needs the live dev stack (see `runbook.md`); e2e is **not** in the workspace `test` script.
+Needs the live dev stack (see [dev environment](../../dev-environment.md)); e2e is **not** in the workspace `test` script.
 Check `uptime` first: above a 1-minute load of 16, run single specs, not the whole suite
 (TEAM.md, Git).
 
@@ -21,7 +21,7 @@ E2E_WORKERS=4 …                                                   # when the l
 
 **When (user, 2026-11-11).** Browser tests are not part of agents' routine validation: no runs
 after a server restart, before a commit, or inside another agent's iterate-and-check loop. The
-suite runs in CI (devops; `docs/apogee/qa/ci-handoff.md`), which is what catches regressions such
+suite runs in CI, which is what catches regressions such
 as qa #43 (a Readiness 500 that sat for two days). Run specs locally only while developing or
 debugging the suite itself (qa), or to reproduce a specific reported bug.
 
@@ -46,6 +46,20 @@ The default is `admin`; switch with `test.use({ storageState: storageStateFor("o
 | `second` | `qa-second@example.com`, member | second operator / approver |
 | `orgAdmin` | `qa-org-admin@example.com`, organization admin | admin UI without platform admin (default) |
 | `orgAdmin2` | `qa-org-admin-2@example.com`, organization admin | approvals the author can't give (#38, policy versions) |
+
+The persona password comes from `E2E_PERSONA_PASSWORD` and the admin password from
+`CADENCE_ADMIN_PASSWORD`; `dev/stack env` writes both to the gitignored `mise.local.toml`.
+Run Playwright through `mise exec --` so it reads the same credentials as the seeds. `BASE_URL`
+defaults to the slot's Phoenix URL.
+
+## Specs that touch shared state
+
+- Run CI without `E2E_MUTATE`. With it unset, permanent writes in `changes`, `catalog-import`,
+  `planning-policy`, and `planning-submit-race` are skipped.
+- `changes`, `setup-stations`, and `setup-add-spacecraft` stage a `QA-E2E` change set and discard
+  it. Each skips if another change set is staged. Run these in the serial Playwright project on
+  one shard with one worker against a given server.
+- Other specs are read-only or use `page.route` fixtures and can run in parallel.
 
 ## Layout
 
@@ -91,7 +105,7 @@ The default is `admin`; switch with `test.use({ storageState: storageStateFor("o
 - A known defect is a `test.fail(true, "qa issue #N: …")` test; it flips (and fails loudly) when
   fixed, which is the signal to remove the marker and close the issue.
 
-## Shell contract (agreed with lead; see docs/apogee/ARCHITECTURE.md)
+## Shell contract (agreed with lead; see frontend/apps/console/ARCHITECTURE.md)
 
 1. `/console` signed out → redirect to `/sign-in`.
 2. Signed in, `/console` renders a `banner` landmark showing the current org **and** mission names

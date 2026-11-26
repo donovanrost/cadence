@@ -77,14 +77,12 @@ defmodule Cadence.Telemetry.Storage.QuestDB.SmokeTest do
     assert result.bounded_history_count == 1
     assert result.decimated_bucket_count == 1
     assert result.watermark.sample_count == 1
-    assert length(result.applied_migrations) == 3
+    assert length(result.applied_migrations) == 1
 
     sqls = received_sqls([])
 
     assert_sql_executed(sqls, "CREATE TABLE IF NOT EXISTS cadence_schema_migrations")
     assert_sql_executed(sqls, "CREATE TABLE IF NOT EXISTS telemetry_observations")
-    assert_sql_executed(sqls, "ALTER TABLE telemetry_observations")
-    assert_sql_executed(sqls, "ADD COLUMN IF NOT EXISTS observation_identity_id STRING")
     assert_sql_executed(sqls, "INSERT INTO telemetry_observations")
     assert_sql_executed(sqls, "SELECT sample_id, mission_id, spacecraft_id")
     assert_sql_executed(sqls, "SAMPLE BY")

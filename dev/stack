@@ -1,0 +1,230 @@
+#!/usr/bin/env bash
+# Private, stable development stack for this Git worktree.
+set -euo pipefail
+root=$(cd "$(dirname "$0")/.." && pwd -P)
+cd "$root"
+command=${1:-}
+usage='usage: dev/stack up [--no-seed]|down|reset [--no-seed]|seed-rest|status|env'
+case "$command" in up|down|reset|seed-rest|status|env) ;; *) echo "$usage" >&2; exit 2 ;; esac
+shift
+no_seed=false
+case "$command" in
+  up|reset)
+    case "${1:-}" in
+      '') ;;
+      --no-seed) no_seed=true; shift ;;
+      *) echo "$usage" >&2; exit 2 ;;
+    esac
+    ;;
+esac
+if [ "$#" -ne 0 ]; then echo "$usage" >&2; exit 2; fi
+
+registry_dir=${XDG_STATE_HOME:-$HOME/.cache}/cadence
+registry=$registry_dir/dev-slots
+mkdir -p "$registry_dir" "$root/var/stack"
+lock=$registry_dir/dev-slots.lock
+for attempt in $(seq 1 100); do
+  if mkdir "$lock" 2>/dev/null; then break; fi
+  if [ "$attempt" -eq 100 ]; then echo 'dev slot registry is locked' >&2; exit 1; fi
+  sleep 0.1
+done
+trap 'rmdir "$lock"' EXIT
+touch "$registry"
+# Free the slots of worktrees that no longer exist (removed or moved to the other laptop).
+pruned=$registry.pruned
+while IFS="$(printf '\t')" read -r path assigned; do
+  if [ -d "$path" ]; then printf '%s\t%s\n' "$path" "$assigned"; fi
+done < "$registry" > "$pruned"
+mv "$pruned" "$registry"
+slot=$(awk -F '\t' -v path="$root" '$1 == path {print $2}' "$registry" | tail -1)
+if [ -z "$slot" ]; then
+  for candidate in $(seq 1 40); do
+    if ! awk -F '\t' -v n="$candidate" '$2 == n {found=1} END {exit !found}' "$registry"; then
+      slot=$candidate
+      printf '%s\t%s\n' "$root" "$slot" >> "$registry"
+      break
+    fi
+  done
+fi
+rmdir "$lock"
+trap - EXIT
+[ -n "$slot" ] || { echo 'all 40 dev slots are assigned' >&2; exit 1; }
+
+slug=$(basename "$root" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_' '_' | cut -c1-35)
+slug=${slug}_${slot}
+db=cadence_dev_$slug
+container=cadence_qdb_$slug
+server_port=$((11000 + slot))
+sim_port=$((11100 + slot))
+console_port=$((11200 + slot))
+live_port=$((11300 + slot))
+qhttp=$((10000 + slot))
+qpg=$((10100 + slot))
+qilp=$((10200 + slot))
+ingress=$((43000 + slot * 100))
+uplink=$((48000 + slot * 100))
+state=$root/var/stack
+
+set_env() {
+  local key=$1 value=$2 file=$root/mise.local.toml
+  # Rewrite only this key in [env], retaining other local settings and secrets.
+  awk -v key="$key" -v line="$key = \"$value\"" '
+    /^\[env\]/ { in_env=1; print; if (!written) {print line; written=1}; next }
+    /^\[/ {in_env=0}
+    in_env && $0 ~ "^[[:space:]]*" key "[[:space:]]*=" {next}
+    {print}
+  ' "$file" > "$file.tmp"
+  mv "$file.tmp" "$file"
+  chmod 600 "$file"
+}
+
+prepare_env() {
+  bash "$root/dev/local_secrets.sh" >/dev/null
+  set_env CADENCE_DEV_SLOT "$slot"
+  set_env CADENCE_DEV_DATABASE "$db"
+  set_env MIX_TEST_PARTITION "$slot"
+  set_env PORT "$server_port"
+  set_env PHX_URL_PORT "$server_port"
+  set_env CADENCE_LIVE_VUE_VITE_PORT "$live_port"
+  set_env CONSOLE_VITE_PORT "$console_port"
+  set_env CONSOLE_VITE_ORIGIN "http://127.0.0.1:$console_port"
+  set_env BASE_URL "http://127.0.0.1:$server_port"
+  set_env EARENDIL_SIMULATOR_PORT "$sim_port"
+  set_env EARENDIL_PROVIDER_URL "http://127.0.0.1:$sim_port"
+  set_env EARENDIL_INGRESS_BASE_PORT "$ingress"
+  set_env EARENDIL_UPLINK_BASE_PORT "$uplink"
+  set_env CADENCE_QUESTDB_HTTP_ENDPOINT "http://127.0.0.1:$qhttp"
+  set_env CADENCE_QUESTDB_HOST "127.0.0.1"
+  set_env CADENCE_QUESTDB_PORT "$qpg"
+  set_env CADENCE_QUESTDB_ILP_PORT "$qilp"
+  set_env ERL_EPMD_ADDRESS "127.0.0.1"
+  set_env ELIXIR_ERL_OPTIONS "-kernel inet_dist_use_interface {127,0,0,1}"
+  set_env OTEL_EXPORTER_OTLP_ENDPOINT ""
+}
+
+run_mix() { (cd "$root/apps/cadence_web" && mise exec -- mix "$@"); }
+pid_alive() {
+  [ -f "$state/$1.pid" ] || return 1
+  # A sandboxed caller may be unable to signal a process started by another shell.
+  # The supervisor socket also rejects stale PID files after PID reuse.
+  kill -0 "$(cat "$state/$1.pid")" 2>/dev/null || true
+  python3 "$root/dev/stack_service.py" ping "$state" "$1"
+}
+port_for() {
+  case "$1" in
+    phoenix) echo "$server_port" ;;
+    simulator) echo "$sim_port" ;;
+    console) echo "$console_port" ;;
+  esac
+}
+port_ready() { curl --silent --max-time 2 "http://127.0.0.1:$(port_for "$1")" >/dev/null; }
+running() { pid_alive "$1" && port_ready "$1"; }
+start_process() {
+  local name=$1 directory=$2; shift 2
+  if pid_alive "$name"; then return; fi
+  if port_ready "$name"; then
+    echo "port $(port_for "$name") is already in use by another process" >&2
+    exit 1
+  fi
+  python3 "$root/dev/stack_service.py" start "$state" "$name" "$directory" mise exec -- "$@"
+}
+stop_process() {
+  local name=$1
+  if pid_alive "$name"; then
+    python3 "$root/dev/stack_service.py" stop "$state" "$name"
+  fi
+}
+wait_http() {
+  local url=$1 name=$2 code
+  for _ in $(seq 1 120); do
+    code=$(curl --silent --max-time 2 --output /dev/null --write-out '%{http_code}' "$url" || true)
+    if [ "$name" = simulator ]; then
+      if [ "$code" != 000 ] && [ "$code" -lt 500 ]; then return; fi
+    elif [ "$code" = 200 ]; then
+      return
+    fi
+    sleep 1
+  done
+  echo "$name failed to become ready; see $state/$name.log" >&2
+  exit 1
+}
+questdb_up() {
+  if docker inspect "$container" >/dev/null 2>&1; then
+    if [ "$(docker inspect -f '{{.State.Running}}' "$container")" != true ]; then
+      docker start "$container" >/dev/null
+    fi
+  else
+    mkdir -p "$root/var/questdb"
+    docker run -d --name "$container" \
+      -p "127.0.0.1:$qhttp:9000" -p "127.0.0.1:$qpg:8812" -p "127.0.0.1:$qilp:9009" \
+      -v "$root/var/questdb:/var/lib/questdb" questdb/questdb:9.4.3 >/dev/null
+  fi
+  wait_http "http://127.0.0.1:$qhttp/exec?query=select%201" questdb
+  run_mix cadence.questdb.migrate
+}
+down() {
+  stop_process console
+  stop_process phoenix
+  stop_process simulator
+  if docker inspect "$container" >/dev/null 2>&1; then docker stop "$container" >/dev/null; fi
+}
+status() {
+  local qstate dbstate
+  qstate=$(docker inspect -f '{{.State.Running}}' "$container" 2>/dev/null | tr -d '\n' || true)
+  qstate=${qstate:-absent}
+  case "$qstate" in true) qstate=up ;; false) qstate=down ;; esac
+  dbstate=$(psql -X -d postgres -Atc "select 1 from pg_database where datname='$db'" 2>/dev/null || true)
+  printf 'slot=%s database=%s\n' "$slot" "$db"
+  printf 'postgres=%s\n' "$([ "$dbstate" = 1 ] && echo up || echo absent)"
+  printf 'phoenix=http://127.0.0.1:%s (%s)\n' "$server_port" "$(running phoenix && echo up || echo down)"
+  printf 'console=http://127.0.0.1:%s (%s)\n' "$console_port" "$(running console && echo up || echo down)"
+  printf 'simulator=http://127.0.0.1:%s (%s)\n' "$sim_port" "$(running simulator && echo up || echo down)"
+  printf 'questdb=%s http://127.0.0.1:%s (%s)\n' "$container" "$qhttp" "$qstate"
+  printf 'questdb pg=%s ilp=%s ingress=%s uplink=%s\n' "$qpg" "$qilp" "$ingress" "$uplink"
+}
+
+case "$command" in
+  env)
+    prepare_env
+    echo "slot $slot: mise.local.toml ready (credentials hidden)"
+    status
+    ;;
+  status) status ;;
+  down) down; status ;;
+  reset)
+    prepare_env
+    down
+    (cd "$root/apps/cadence_web" && mise exec -- mix ecto.drop -r Cadence.Repo)
+    if docker inspect "$container" >/dev/null 2>&1; then docker rm "$container" >/dev/null; fi
+    rm -rf "$root/var/questdb" "$root/var/reflect_orbital"
+    if [ "$no_seed" = true ]; then "$0" up --no-seed; else "$0" up; fi
+    ;;
+  up)
+    prepare_env
+    questdb_up
+    run_mix ecto.create -r Cadence.Repo
+    run_mix ecto.migrate -r Cadence.Repo
+    start_process simulator "$root/apps/cadence_simulator" mix run --no-start --no-halt ../../dev/reflect_orbital_simulator.exs
+    wait_http "http://127.0.0.1:$sim_port" simulator
+    start_process phoenix "$root" mise run cadence
+    wait_http "http://127.0.0.1:$server_port/health/ready" phoenix
+    if [ "$no_seed" = false ]; then
+      for seed in reflect_orbital_demo apogee_qa_personas reflect_orbital_planning apogee_qa_mission; do
+        run_mix run --no-start "../../dev/$seed.exs"
+      done
+    fi
+    start_process console "$root/frontend" corepack pnpm --filter @cadence/console dev --host 127.0.0.1
+    wait_http "http://127.0.0.1:$console_port/console/" console
+    status
+    ;;
+  seed-rest)
+    prepare_env
+    for service in phoenix console simulator; do
+      if ! running "$service"; then
+        echo "$service is not running; start the stack with dev/stack up --no-seed" >&2
+        exit 1
+      fi
+    done
+    MIX_INSTALL_DIR="$state/mix-install" mise exec -- elixir "$root/dev/seed/earendil.exs"
+    ;;
+esac

@@ -45,7 +45,6 @@ const invitation = shallowRef<Invitation | null>(null);
 const unknown = ref(false);
 const loadError = ref<string | null>(null);
 const signedInAs = ref<string | null>(null);
-const csrf = ref<string | null>(null);
 
 const name = ref("");
 const password = ref("");
@@ -82,7 +81,6 @@ async function load() {
   const [inv, session] = await Promise.all([fetchInvitation(token.value), optionalSession()]);
   if (session.ok && session.value) {
     signedInAs.value = session.value.user.email;
-    csrf.value = session.value.csrf_token;
   }
   if (inv.ok) invitation.value = inv.value;
   else if (inv.error.kind === "not_found") unknown.value = true;
@@ -146,6 +144,15 @@ async function decline() {
   busy.value = false;
   if (r.ok) declined.value = true;
   else error.value = { tone: "caution", text: describeApiError(r.error) };
+}
+/** "Sign out and continue" (#664): a failure says why and leaves them signed in as they were. */
+async function signOutAndContinue() {
+  busy.value = true;
+  error.value = null;
+  const r = await signOutHere();
+  busy.value = false;
+  if (!r.ok && r.error.kind !== "unauthenticated")
+    error.value = { tone: "caution", text: `Couldn't sign out. ${describeApiError(r.error)}` };
 }
 const run = (f: () => Promise<void>) => () => f().catch((e: unknown) => console.error(e));
 const reason = computed(
@@ -259,7 +266,8 @@ const reason = computed(
         v-else-if="invitation.case === 'signed_in_other'"
         variant="primary"
         class="w-full"
-        @click="run(() => signOutHere(csrf))()"
+        :disabled="busy"
+        @click="run(signOutAndContinue)()"
         >Sign out and continue</ApButton
       >
       <!-- qa/lead: no dead ends. Signed in: on to Cadence; signed out: sign in. -->

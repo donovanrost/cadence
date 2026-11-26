@@ -38,7 +38,7 @@ defmodule CadenceWeb.Console.MissionModelRevisionAPITest do
       mission: mission,
       revision: revision.mission_model_revision_id,
       artifact_id: revision.artifact_id,
-      base: "/api/console/v1/missions/#{mission.mission_id}"
+      base: "/api/v1/missions/#{mission.mission_id}"
     }
   end
 
@@ -156,7 +156,7 @@ defmodule CadenceWeb.Console.MissionModelRevisionAPITest do
     actions =
       c.admin
       |> TestFixtures.member_conn()
-      |> get("/api/console/v1/organizations/#{c.org.organization_id}/audit")
+      |> get("/api/v1/organizations/#{c.org.organization_id}/audit")
       |> json_response(200)
       |> get_in(["data", "events"])
       |> Enum.map(& &1["action"])
@@ -176,7 +176,7 @@ defmodule CadenceWeb.Console.MissionModelRevisionAPITest do
         requested_by: %{"actor_kind" => "user", "user_id" => importer.user_id, "name" => "Ivo P."}
       ).mission_model_revision_id
 
-    path = "/api/console/v1/missions/#{mission.mission_id}/mission-model-revisions/#{revision}"
+    path = "/api/v1/missions/#{mission.mission_id}/mission-model-revisions/#{revision}"
 
     post_to = fn user, suffix, body ->
       user |> TestFixtures.member_conn() |> post(path <> suffix, body)
@@ -203,7 +203,7 @@ defmodule CadenceWeb.Console.MissionModelRevisionAPITest do
     actions =
       c.admin
       |> TestFixtures.member_conn()
-      |> get("/api/console/v1/organizations/#{c.org.organization_id}/audit")
+      |> get("/api/v1/organizations/#{c.org.organization_id}/audit")
       |> json_response(200)
       |> get_in(["data", "events"])
       |> Enum.map(& &1["action"])
@@ -284,7 +284,7 @@ defmodule CadenceWeb.Console.MissionModelRevisionAPITest do
     events =
       c.admin
       |> TestFixtures.member_conn()
-      |> get("/api/console/v1/organizations/#{c.org.organization_id}/audit")
+      |> get("/api/v1/organizations/#{c.org.organization_id}/audit")
       |> json_response(200)
       |> get_in(["data", "events"])
 

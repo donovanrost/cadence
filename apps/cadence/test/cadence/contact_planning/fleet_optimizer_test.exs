@@ -57,6 +57,88 @@ defmodule Cadence.ContactPlanning.FleetOptimizerTest do
              "requirement_already_satisfied"
   end
 
+  test "streamed snapshots retain decisions and reject missing locked evidence" do
+    requirement = requirement("stream")
+
+    first =
+      snapshot(requirement, "first", 3_600, 4_500, provider: "provider-a", station: "station-a")
+
+    second =
+      snapshot(requirement, "second", 5_400, 6_300,
+        provider: "provider-a",
+        station: "station-a"
+      )
+
+    policy = policy()
+
+    assert {:ok, expected} =
+             FleetOptimizer.optimize([requirement], [first, second], policy, now: @now)
+
+    assert {:ok, streamed} =
+             FleetOptimizer.optimize_stream(
+               [requirement],
+               Stream.map([second, first, second], & &1),
+               policy,
+               now: @now
+             )
+
+    assert streamed.selected_snapshot_ids == expected.selected_snapshot_ids
+    assert streamed.decisions == expected.decisions
+    assert streamed.coverage_by_requirement == expected.coverage_by_requirement
+
+    assert {:error, :fleet_optimizer_locked_snapshot_not_found} =
+             FleetOptimizer.optimize_stream([requirement], Stream.map([], & &1), policy,
+               now: @now,
+               locked_snapshot_ids: ["snapshot-missing"]
+             )
+  end
+
+  test "multi-spacecraft decisions and coverage are independent of stream batch size" do
+    requirements =
+      for index <- 1..6 do
+        requirement("batch-#{index}",
+          priority: if(rem(index, 2) == 0, do: :high, else: :routine)
+        )
+      end
+
+    snapshots =
+      for {requirement, index} <- Enum.with_index(requirements, 1), variant <- 1..3 do
+        offset = 3_600 + (variant - 1) * 1_200
+
+        snapshot(
+          requirement,
+          "#{requirement.spacecraft_id}-#{variant}",
+          offset,
+          offset + 900,
+          provider: "provider-#{rem(variant, 2)}",
+          station: "station-#{rem(variant, 2)}",
+          service_pool: "pool-#{rem(variant, 2)}",
+          availability:
+            if(rem(variant + index, 7) == 0,
+              do: :unavailable,
+              else: :available
+            )
+        )
+      end
+
+    ordered = Enum.reverse(snapshots)
+    fleet_policy = policy()
+
+    assert {:ok, expected} =
+             FleetOptimizer.optimize(requirements, ordered, fleet_policy, now: @now)
+
+    for batch_size <- [1, 7] do
+      stream = ordered |> Stream.chunk_every(batch_size) |> Stream.flat_map(& &1)
+
+      assert {:ok, result} =
+               FleetOptimizer.optimize_stream(requirements, stream, fleet_policy, now: @now)
+
+      assert result.selected_snapshot_ids == expected.selected_snapshot_ids
+      assert result.decisions == expected.decisions
+      assert result.coverage_by_requirement == expected.coverage_by_requirement
+    end
+  end
+
   test "earlier demand wins and same-spacecraft overlap is a hard fleet constraint" do
     early =
       requirement("early",

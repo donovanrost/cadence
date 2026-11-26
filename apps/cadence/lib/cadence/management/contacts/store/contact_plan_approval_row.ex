@@ -31,6 +31,8 @@ defmodule Cadence.Management.Contacts.Store.ContactPlanApprovalRow do
     # #277: the author ids the separation check compared (#117's `separated_from`); [] when the
     # policy didn't require separation, and on rows decided before it.
     field(:separated_from, {:array, :string}, default: [])
+    # #273: the passes left out (booking window closed); NULL on rejections.
+    field(:skipped_document, {:array, :map})
 
     timestamps(updated_at: false)
   end
@@ -50,7 +52,8 @@ defmodule Cadence.Management.Contacts.Store.ContactPlanApprovalRow do
     :automation_grant_id,
     :automation_grant_content_sha256,
     :decided_at,
-    :exceptions_document
+    :exceptions_document,
+    :skipped_document
   ]
 
   @spec changeset(ContactPlanApproval.t()) :: Ecto.Changeset.t()
@@ -59,7 +62,13 @@ defmodule Cadence.Management.Contacts.Store.ContactPlanApprovalRow do
     |> cast(domain_attrs(approval), @fields)
     |> validate_required(
       @fields --
-        [:automation_grant_id, :automation_grant_content_sha256, :exceptions_document, :reason]
+        [
+          :automation_grant_id,
+          :automation_grant_content_sha256,
+          :exceptions_document,
+          :skipped_document,
+          :reason
+        ]
     )
     |> validate_rejection_reason()
     |> validate_number(:contact_plan_version, greater_than: 0)
@@ -102,7 +111,8 @@ defmodule Cadence.Management.Contacts.Store.ContactPlanApprovalRow do
       automation_grant_content_sha256: row.automation_grant_content_sha256,
       decided_at: row.decided_at,
       inserted_at: row.inserted_at,
-      exceptions: row.exceptions_document || []
+      exceptions: row.exceptions_document || [],
+      skipped: row.skipped_document
     })
   end
 
@@ -122,7 +132,8 @@ defmodule Cadence.Management.Contacts.Store.ContactPlanApprovalRow do
       automation_grant_id: approval.automation_grant_id,
       automation_grant_content_sha256: approval.automation_grant_content_sha256,
       decided_at: approval.decided_at,
-      exceptions_document: approval.exceptions
+      exceptions_document: approval.exceptions,
+      skipped_document: approval.skipped
     }
   end
 

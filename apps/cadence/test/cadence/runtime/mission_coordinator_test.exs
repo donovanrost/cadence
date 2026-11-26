@@ -713,7 +713,7 @@ defmodule Cadence.Runtime.MissionCoordinatorTest do
       })
 
     assert {:ok, persisted_source_endpoint} =
-             Cadence.SourceEndpoints.persist_source_endpoint(source_endpoint)
+             Cadence.SourceEndpointFixtures.persist(source_endpoint)
 
     persisted_source_endpoint
   end

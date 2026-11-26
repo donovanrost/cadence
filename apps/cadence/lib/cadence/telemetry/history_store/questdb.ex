@@ -48,6 +48,10 @@ defmodule Cadence.Telemetry.HistoryStore.QuestDB do
   @impl true
   def fetch_sample(query, opts), do: PhysicalSampleReader.fetch(query, opts)
 
+  @doc "The newest value of every (spacecraft, point) a source endpoint wrote (#831)."
+  def latest_for_source_endpoint(mission_id, source_endpoint_id, opts),
+    do: ObservationReader.latest_values_for_endpoint(mission_id, source_endpoint_id, opts)
+
   @impl true
   def reset, do: :ok
 end

@@ -1,6 +1,6 @@
 defmodule CadenceWeb.Console.SpacecraftPassesController do
   @moduledoc """
-  `GET /api/console/v1/missions/:mission_id/spacecraft/:spacecraft_id/passes`: Investigate's
+  `GET /api/v1/missions/:mission_id/spacecraft/:spacecraft_id/passes`: Investigate's
   Passes tab coverage (P1) and queued counts (P3). Contract: docs/apogee/api/ops.md §Investigate
   Passes.
   """

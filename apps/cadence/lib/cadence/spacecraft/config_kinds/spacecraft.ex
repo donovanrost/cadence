@@ -11,7 +11,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.Spacecraft do
   and planning but keeps its id, SCID and history. Archiving raises the HOLDs in `ArchiveHolds`
   (waiting command requests block; booked passes and past traffic are acknowledged).
 
-  Rules carried over from `Cadence.Spacecraft.Identity`: a pin names an existing, active profile
+  Pin rules: a pin names an existing, active profile
   version; synthetic configuration profiles can't be chosen; a spacecraft whose framing is
   governed by its configuration review keeps its pin. Identity changes have no direct runtime
   effect: runtime pipelines pick spacecraft configuration up through activation.
@@ -23,6 +23,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.Spacecraft do
   alias Cadence.Platform.ConfigurationSettings
   alias Cadence.Spacecraft, as: SpacecraftAsset
   alias Cadence.Spacecraft.ConfigKinds.{ArchiveHolds, ScidHolds}
+  alias Cadence.Spacecraft.StagedScids
   alias Cadence.SpacecraftStore
   alias Cadence.SpacecraftTypeStore
 
@@ -167,6 +168,10 @@ defmodule Cadence.Spacecraft.ConfigKinds.Spacecraft do
 
   defp pin_pair(_document),
     do: [F.error("spacecraft_type_version", "Choose a profile and its version together")]
+
+  @impl true
+  def stage_conflicts(organization_id, mission_id, staged, prepared),
+    do: StagedScids.conflicts(organization_id, mission_id, staged, prepared)
 
   defp scid_free(_organization_id, _mission_id, _previous, %{"scid" => nil}), do: []
 

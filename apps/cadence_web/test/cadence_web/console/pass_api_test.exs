@@ -14,7 +14,7 @@ defmodule CadenceWeb.Console.PassAPITest do
   defp get_passes(c, query, mission_id \\ nil) do
     c.user
     |> TestFixtures.member_conn()
-    |> get("/api/console/v1/missions/#{mission_id || c.mission.mission_id}/passes" <> query)
+    |> get("/api/v1/missions/#{mission_id || c.mission.mission_id}/passes" <> query)
   end
 
   test "defaults to the next 24 hours and returns an empty list for a mission with no bookings",

@@ -1,38 +1,28 @@
 defmodule CadenceSimulator.Provider.Store do
   @moduledoc """
-  Durable store for provider scenarios, run snapshots, provider resources, and events.
+  ETS store for provider scenarios, runs, resources, and events.
 
-  The store intentionally uses DETS so the simulator remains an external peer
-  and does not acquire a runtime dependency on Cadence's database.
-
-  Reads go to an ETS mirror in the calling process, never through this process (qa #46).
-  The Orchestrator reads on every 100 ms tick. When each list scanned the DETS file
-  inside this one process, a load spike queued calls past their 5 s timeout and crashed
-  the Orchestrator mid-pass, which orphans uplink peers.
-
-  * A write lands in ETS at once, so every reader sees it. The caller then waits, at
-    most `@persist_timeout_ms`, for this process to copy the key's current ETS value to
-    DETS and sync. It copies the value, not the message, so DETS converges on ETS
-    whatever order writers race in.
-  * Durability: a write that returned normally is on disk. One whose wait timed out
-    (logged) is still queued here and persists when this process catches up; a crash
-    before then loses it. A clean stop flushes the whole mirror.
-  * Sequence numbers and fault counters are atomic ETS counters.
+  Writes are visible immediately. The store publishes a verified snapshot after
+  changes on a one-second timer and on clean shutdown. A restart loads the last
+  atomically published snapshot. A restore may require reconciliation because
+  a snapshot can capture concurrent updates to related keys at different times.
   """
 
   use GenServer
 
   require Logger
 
-  @table :cadence_simulator_provider_store
   @mirror :cadence_simulator_provider_store_mirror
-
-  @resource_kinds [:scenario, :run, :reservation, :delivery_profile, :opportunity, :contact]
+  @metadata :cadence_simulator_provider_store_metadata
+  @search_faults :cadence_simulator_provider_search_faults
+  @resource_kinds [:scenario, :run, :reservation, :delivery_profile, :contact]
+  @scheduled_kinds [:run, :reservation, :contact]
   @sequence_key {:metadata, :event_sequence}
-  @persist_timeout_ms 1_000
+  @dirty_key {:snapshot, :dirty}
+  @snapshot_interval_ms 1_000
 
   @type resource_kind ::
-          :scenario | :run | :reservation | :delivery_profile | :opportunity | :contact
+          :scenario | :run | :reservation | :delivery_profile | :contact
 
   def start_link(opts) when is_list(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -40,8 +30,13 @@ defmodule CadenceSimulator.Provider.Store do
 
   @spec put(resource_kind(), map()) :: {:ok, map()}
   def put(kind, %{"id" => id} = resource) when kind in @resource_kinds do
-    true = :ets.insert(@mirror, {{kind, id}, resource})
-    persist([{kind, id}])
+    key = {kind, id}
+    objects = [{key, resource}, {@dirty_key, true}]
+
+    objects =
+      if kind in @scheduled_kinds, do: [{{:schedule_change, key}, true} | objects], else: objects
+
+    true = :ets.insert(@mirror, objects)
     {:ok, resource}
   end
 
@@ -70,8 +65,14 @@ defmodule CadenceSimulator.Provider.Store do
       |> Map.put("sequence", sequence)
       |> Map.put_new("occurred_at", DateTime.utc_now() |> DateTime.to_iso8601())
 
-    true = :ets.insert(@mirror, {{:event, sequence}, stored_event})
-    persist([{:event, sequence}, @sequence_key])
+    key = {:event, sequence}
+
+    true =
+      :ets.insert(@mirror, [
+        {key, stored_event},
+        {@dirty_key, true}
+      ])
+
     {:ok, stored_event}
   end
 
@@ -113,18 +114,75 @@ defmodule CadenceSimulator.Provider.Store do
   @spec consume_fault(binary(), binary(), non_neg_integer()) :: boolean()
   def consume_fault(run_id, fault, limit)
       when is_binary(run_id) and is_binary(fault) and is_integer(limit) and limit >= 0 do
-    key = {:fault_counter, run_id, fault}
-
-    # One atomic step: read the count, then add 1 capped at `limit`.
-    [consumed, _capped] =
-      :ets.update_counter(@mirror, key, [{2, 0}, {2, 1, limit, limit}], {key, 0})
-
-    if consumed < limit do
-      persist([key])
+    if take_fault(@mirror, {:fault_counter, run_id, fault}, limit) do
+      true = :ets.insert(@mirror, {@dirty_key, true})
       true
     else
       false
     end
+  end
+
+  @doc "Consumes a search throttle without adding to the snapshot. Restart resets the throttle."
+  @spec consume_search_fault(binary(), binary(), non_neg_integer()) :: boolean()
+  def consume_search_fault(run_id, fault, limit)
+      when is_binary(run_id) and is_binary(fault) and is_integer(limit) and limit >= 0 do
+    take_fault(@search_faults, {run_id, fault}, limit)
+  end
+
+  defp take_fault(_table, _key, 0), do: false
+
+  defp take_fault(table, key, limit) do
+    # One atomic step: read the count, then add 1 capped at `limit`.
+    [consumed, _capped] =
+      :ets.update_counter(table, key, [{2, 0}, {2, 1, limit, limit}], {key, 0})
+
+    consumed < limit
+  end
+
+  @doc false
+  def schedule_generation do
+    :ets.lookup_element(@metadata, :schedule_generation, 2)
+  end
+
+  @doc false
+  def take_schedule_changes do
+    for key <- marked_keys(:schedule_change),
+        :ets.take(@mirror, {:schedule_change, key}) != [],
+        do: key
+  end
+
+  @doc false
+  def diagnostics do
+    memory_words = :ets.info(@mirror, :memory)
+
+    %{
+      mirror_entries: :ets.info(@mirror, :size),
+      mirror_memory_words: memory_words,
+      mirror_memory_bytes: memory_words * :erlang.system_info(:wordsize),
+      snapshot_pending: :ets.member(@mirror, @dirty_key),
+      event_count: count_keys(:event)
+    }
+  end
+
+  @doc "Captures the store generation before an API mutation."
+  @spec persistence_token() :: {pid(), reference()} | nil
+  def persistence_token do
+    case :ets.lookup(@metadata, :schedule_generation) do
+      [{:schedule_generation, generation, owner}] -> {owner, generation}
+      [] -> nil
+    end
+  rescue
+    ArgumentError -> nil
+  end
+
+  @doc "Waits for the store to publish the writes completed before this call."
+  @spec await_persisted({pid(), reference()} | nil) :: :ok | {:error, term()}
+  def await_persisted(nil), do: {:error, :store_unavailable}
+
+  def await_persisted({owner, generation}) do
+    GenServer.call(owner, {:await_persisted, generation})
+  catch
+    :exit, _reason -> {:error, :store_unavailable}
   end
 
   @doc false
@@ -133,7 +191,7 @@ defmodule CadenceSimulator.Provider.Store do
   end
 
   @doc false
-  @spec flush() :: :ok
+  @spec flush() :: :ok | {:error, term()}
   def flush do
     GenServer.call(__MODULE__, :flush)
   end
@@ -144,69 +202,173 @@ defmodule CadenceSimulator.Provider.Store do
     path = Keyword.fetch!(opts, :path)
     :ok = File.mkdir_p(Path.dirname(path))
 
-    case :dets.open_file(@table, type: :set, file: String.to_charlist(path)) do
-      {:ok, @table} ->
-        mirror =
-          :ets.new(@mirror, [
-            :ordered_set,
-            :public,
-            :named_table,
-            read_concurrency: true,
-            write_concurrency: true
-          ])
+    case load_snapshot(path) do
+      {:ok, @mirror} ->
+        :ets.delete(@mirror, @dirty_key)
+        :ets.select_delete(@mirror, [{{{:schedule_change, :_}, :_}, [], [true]}])
+        restore_event_sequence()
+        :ets.new(@metadata, [:named_table])
+        :ets.new(@search_faults, [:named_table, :public, write_concurrency: true])
+        reset_schedule_generation()
+        schedule_snapshot()
+        {:ok, %{path: path, snapshot_observer: opts[:snapshot_observer], waiters: []}}
 
-        @mirror = :dets.to_ets(@table, mirror)
-        {:ok, %{table: @table, path: path}}
+      {:ok, unexpected_table} ->
+        {:stop, {:provider_store_unexpected_table, path, unexpected_table}}
 
       {:error, reason} ->
         {:stop, {:provider_store_open_failed, path, reason}}
     end
   end
 
+  defp load_snapshot(path) do
+    case File.stat(path) do
+      {:ok, _stat} ->
+        :ets.file2tab(String.to_charlist(path), verify: true)
+
+      {:error, :enoent} ->
+        {:ok,
+         :ets.new(@mirror, [
+           :ordered_set,
+           :public,
+           :named_table,
+           read_concurrency: true,
+           write_concurrency: true
+         ])}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   @impl true
-  def handle_call({:persist, keys}, _from, state) do
-    Enum.each(keys, &persist_key(state.table, &1))
-    :ok = :dets.sync(state.table)
-    {:reply, :ok, state}
+  def handle_call({:await_persisted, generation}, from, state) do
+    cond do
+      generation != schedule_generation() ->
+        {:reply, {:error, :store_replaced}, state}
+
+      # This call runs outside the snapshot callback. The dirty flag therefore
+      # covers any writes the last published snapshot could have missed.
+      :ets.member(@mirror, @dirty_key) ->
+        {:noreply, %{state | waiters: [from | state.waiters]}}
+
+      true ->
+        {:reply, :ok, state}
+    end
   end
 
   def handle_call(:clear, _from, state) do
+    state = reply_waiters(state, {:error, :store_replaced})
     true = :ets.delete_all_objects(@mirror)
-    :ok = :dets.delete_all_objects(state.table)
-    :ok = :dets.sync(state.table)
-    {:reply, :ok, state}
+    true = :ets.delete_all_objects(@search_faults)
+    reset_schedule_generation()
+    true = :ets.insert(@mirror, {@dirty_key, true})
+    {:reply, persist_pending(state), state}
   end
 
-  # Persists queued before this call are already handled, in order.
   def handle_call(:flush, _from, state) do
-    :ok = :dets.sync(state.table)
-    {:reply, :ok, state}
+    result = persist_pending(state)
+    {:reply, result, reply_waiters(state, result)}
+  end
+
+  @impl true
+  def handle_info(:snapshot, state) do
+    result = persist_pending(state)
+    schedule_snapshot()
+    {:noreply, reply_waiters(state, result)}
+  end
+
+  defp reply_waiters(state, result) do
+    Enum.each(state.waiters, &GenServer.reply(&1, result))
+    %{state | waiters: []}
   end
 
   @impl true
   def terminate(_reason, state) do
-    # Persist whatever is still queued: the mirror holds every write.
-    @table = :ets.to_dets(@mirror, state.table)
-    :dets.close(state.table)
+    started = now_us()
+    result = persist_pending(state)
+
+    observe(
+      state.snapshot_observer,
+      {:provider_store_terminated, %{persist_us: now_us() - started}}
+    )
+
+    result
   end
 
-  # The write is already visible in ETS. If this process is too slow to answer, the
-  # request stays queued and persists later; the caller isn't held up or crashed.
-  defp persist(keys) do
-    GenServer.call(__MODULE__, {:persist, keys}, @persist_timeout_ms)
-  catch
-    :exit, {:timeout, _call} ->
-      Logger.warning(
-        "provider store: persisting #{inspect(keys)} is queued past #{@persist_timeout_ms} ms"
-      )
+  defp restore_event_sequence do
+    sequence = :ets.update_counter(@mirror, @sequence_key, 0, {@sequence_key, 0})
+    true = :ets.insert(@mirror, {@sequence_key, last_event_sequence(sequence)})
   end
 
-  defp persist_key(table, key) do
-    case :ets.lookup(@mirror, key) do
-      [object] -> :ok = :dets.insert(table, object)
-      [] -> :ok = :dets.delete(table, key)
+  defp reset_schedule_generation do
+    true = :ets.insert(@metadata, {:schedule_generation, make_ref(), self()})
+  end
+
+  defp schedule_snapshot, do: Process.send_after(self(), :snapshot, @snapshot_interval_ms)
+
+  defp persist_pending(state) do
+    case :ets.take(@mirror, @dirty_key) do
+      [] -> :ok
+      [_marker] -> persist_snapshot(state)
     end
   end
+
+  defp persist_snapshot(state) do
+    case publish_snapshot(state) do
+      :ok ->
+        :ok
+
+      {:error, reason} = error ->
+        true = :ets.insert(@mirror, {@dirty_key, true})
+        Logger.warning("provider store snapshot failed: #{inspect(reason)}")
+        error
+    end
+  end
+
+  defp publish_snapshot(state) do
+    tmp = state.path <> ".tmp"
+    started = now_us()
+
+    # A writer can set the dirty flag while the dump runs. The next timer will
+    # publish those writes even if some were already visited by this dump.
+    with :ok <-
+           :ets.tab2file(@mirror, String.to_charlist(tmp),
+             extended_info: [:object_count, :md5sum],
+             sync: true
+           ),
+         written = now_us(),
+         :ok <- File.rename(tmp, state.path) do
+      renamed = now_us()
+
+      observe(state.snapshot_observer, {
+        :provider_store_snapshot,
+        %{
+          write_us: written - started,
+          rename_us: renamed - written,
+          duration_us: renamed - started
+        }
+      })
+    end
+  end
+
+  defp marked_keys(marker) do
+    Stream.unfold(:ets.next(@mirror, {marker, 0}), fn
+      {^marker, key} = tagged -> {key, :ets.next(@mirror, tagged)}
+      _other -> nil
+    end)
+  end
+
+  defp count_keys(kind), do: :ets.select_count(@mirror, [{{{kind, :_}, :_}, [], [true]}])
+
+  defp observe(nil, _sample), do: :ok
+
+  defp observe(pid, message) do
+    send(pid, message)
+    :ok
+  end
+
+  defp now_us, do: System.monotonic_time(:microsecond)
 
   # Events after `cursor`, in sequence order, read lazily in chunks.
   defp events_after(cursor) do

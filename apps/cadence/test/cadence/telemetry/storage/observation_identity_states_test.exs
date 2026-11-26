@@ -14,7 +14,8 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStatesTest do
   test "envelope state publication uses the explicitly selected event bus" do
     event_bus = start_event_bus()
     assert :ok = TelemetryFacts.subscribe(event_bus, self())
-    envelope = envelope(sample_id: "sample-explicit-bus", revision: 1)
+    # A non-canonical sighting stores a row, so it is a stored change worth a fact (#689).
+    envelope = envelope(sample_id: "sample-explicit-bus", revision: 1, validity_state: :advisory)
 
     assert :ok = ObservationIdentityStates.record_envelopes([envelope], event_bus: event_bus)
 
@@ -24,6 +25,67 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStatesTest do
 
     assert fact.observation_identity_id == envelope.observation_identity_id
     refute_receive {:"$gen_cast", {:cadence_fact, {:cadence, :telemetry, :facts}, _fact}}
+  end
+
+  describe "one fact per stored change (#689)" do
+    setup do
+      event_bus = start_event_bus()
+      assert :ok = TelemetryFacts.subscribe(event_bus, self())
+      %{bus: event_bus}
+    end
+
+    defp facts do
+      receive do
+        {:"$gen_cast", {:cadence_fact, {:cadence, :telemetry, :facts}, fact}} -> [fact | facts()]
+      after
+        100 -> []
+      end
+    end
+
+    test "samples that store nothing publish nothing", %{bus: bus} do
+      canonical = for n <- 1..20, do: envelope(sample_id: "canonical-#{n}", point_id: "HK.p#{n}")
+
+      assert :ok = ObservationIdentityStates.record_envelopes(canonical, event_bus: bus)
+      assert facts() == []
+    end
+
+    test "a batch publishes one fact per identity it stored, however many sightings it holds",
+         %{bus: bus} do
+      # Three non-canonical sightings of one identity and one of another, among canonical ones.
+      first = for n <- 1..3, do: envelope(sample_id: "adv-#{n}", validity_state: :advisory)
+      other = envelope(sample_id: "adv-other", point_id: "HK.other", validity_state: :advisory)
+      quiet = for n <- 1..10, do: envelope(sample_id: "quiet-#{n}", point_id: "HK.quiet#{n}")
+
+      assert :ok =
+               ObservationIdentityStates.record_envelopes(first ++ quiet ++ [other],
+                 event_bus: bus
+               )
+
+      ids =
+        for %ObservationIdentityStateChanged{} = fact <- facts(), do: fact.observation_identity_id
+
+      assert Enum.sort(ids) ==
+               Enum.sort([hd(first).observation_identity_id, other.observation_identity_id])
+    end
+
+    test "a later sighting of an identity that has a row publishes, a re-delivery does not", %{
+      bus: bus
+    } do
+      stored = envelope(sample_id: "stored-1", validity_state: :advisory)
+      assert :ok = ObservationIdentityStates.record_envelopes([stored], event_bus: bus)
+      assert [%ObservationIdentityStateChanged{}] = facts()
+
+      # The same observation again: the row is unchanged, so nothing is published.
+      assert :ok = ObservationIdentityStates.record_envelopes([stored], event_bus: bus)
+      assert facts() == []
+
+      # A new sighting of the identity (a canonical one, which the row now tracks) changes it.
+      later = envelope(sample_id: "stored-2", revision: 2)
+      assert later.observation_identity_id == stored.observation_identity_id
+      assert :ok = ObservationIdentityStates.record_envelopes([later], event_bus: bus)
+      assert [%ObservationIdentityStateChanged{observation_identity_id: id}] = facts()
+      assert id == stored.observation_identity_id
+    end
   end
 
   test "a canonical first sighting writes no row (first-seen rule)" do
@@ -558,7 +620,7 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStatesTest do
 
   test "emits runtime invalidation for changed observation identity state" do
     attach_runtime_invalidation_telemetry(self())
-    envelope = envelope(sample_id: "sample-invalidation")
+    envelope = envelope(sample_id: "sample-invalidation", validity_state: :advisory)
 
     assert :ok = ObservationIdentityStates.record_envelopes([envelope])
 

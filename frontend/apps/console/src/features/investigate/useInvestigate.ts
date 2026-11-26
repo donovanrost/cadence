@@ -1,37 +1,53 @@
 import { computed, onScopeDispose, type Ref } from "vue";
 import { useRemoteQuery, type MissionId, type SpacecraftId } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
-import { fetchAlarms, fetchEpisode, fetchEpisodes } from "@/features/alarms/index.ts";
+import { fetchEpisode, fetchEpisodes, useAlarmPages } from "@/features/alarms/index.ts";
 import { FLEET_REFETCH_GAP_MS, throttle } from "@/features/fleet/index.ts";
 import { fetchEvents } from "@/features/timeline/index.ts";
 import { fetchHistory, fetchLimitIntervals } from "./api.ts";
 import { rangeWindow, type RangeKey } from "./model.ts";
+
+const PAGE = 200;
 
 /**
  * useRemoteQuery compares keys by value, so each key is a typed object (typing §12 A4) and the
  * MissionId stays one on its way to the request (§12C).
  */
 
-/** Active alarms of one spacecraft (B1, title tag). Refetch on limit-state transitions. */
+/**
+ * Active alarms of one spacecraft (B1, title tag), worst first, in pages: `more()` loads the next
+ * 200, and the screen says when it holds only part of them (#827).
+ */
 export function useSpacecraftAlarms(missionId: Ref<MissionId>, spacecraftId: Ref<string | null>) {
-  const key = computed(() =>
-    spacecraftId.value ? { m: missionId.value, sc: spacecraftId.value } : null,
+  return useAlarmPages(missionId, () =>
+    spacecraftId.value ? { state: "active", spacecraftId: spacecraftId.value, limit: PAGE } : null,
   );
-  const query = useRemoteQuery(key, (k, signal) => {
-    return fetchAlarms(k.m, { state: "active", spacecraftId: k.sc }, signal);
-  });
-  useMissionInvalidation(missionId, ["alarms", "limits"], query.refetch);
-  return query;
 }
 
-/** Active alarms on one point across the mission (B4 sisters). */
-export function usePointAlarms(missionId: Ref<MissionId>, pointId: Ref<string | null>) {
-  const key = computed(() => (pointId.value ? { m: missionId.value, p: pointId.value } : null));
-  const query = useRemoteQuery(key, (k, signal) => {
-    return fetchAlarms(k.m, { state: "active", q: k.p }, signal);
-  });
-  useMissionInvalidation(missionId, ["alarms", "limits"], query.refetch);
-  return query;
+/** The sisters' read: who, on which point, in which plane (null: nothing to ask). */
+export type SisterQuery = Readonly<{ pointId: string; plane: number; spacecraftId: string }>;
+
+/**
+ * B4 sisters: the active alarms on one point in one plane, other than this spacecraft's, in pages.
+ * The server filters by plane (the plane is its own spacecraft) and counts them (`total`); `limit`
+ * 1 is a count. Never the mission's alarms.
+ */
+export function useSisterAlarms(
+  missionId: Ref<MissionId>,
+  sister: Ref<SisterQuery | null>,
+  limit = PAGE,
+) {
+  return useAlarmPages(missionId, () =>
+    sister.value
+      ? {
+          state: "active",
+          pointId: sister.value.pointId,
+          plane: sister.value.plane,
+          excludeSpacecraftId: sister.value.spacecraftId,
+          limit,
+        }
+      : null,
+  );
 }
 
 /**

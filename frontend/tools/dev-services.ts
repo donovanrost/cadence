@@ -1,7 +1,6 @@
 export const developmentPorts = Object.freeze({
   host: 5173,
   "telemetry-decom": 4174,
-  "contract-probe": 4175,
   "comms-overview": 4176,
   "mission-catalog": 4177,
   "organization-admin": 4178,
@@ -11,12 +10,16 @@ export const developmentPorts = Object.freeze({
 });
 export type DevelopmentService = keyof typeof developmentPorts;
 export function developmentOrigin(service: DevelopmentService) {
-  return `http://127.0.0.1:${developmentPorts[service]}`;
+  const port =
+    service === "console" && process.env.CONSOLE_VITE_PORT
+      ? Number(process.env.CONSOLE_VITE_PORT)
+      : developmentPorts[service];
+  return `http://127.0.0.1:${port}`;
 }
 export function developmentServer(service: DevelopmentService) {
   return {
     host: "127.0.0.1",
-    port: developmentPorts[service],
+    port: Number(new URL(developmentOrigin(service)).port),
     strictPort: true,
     origin: developmentOrigin(service),
   };

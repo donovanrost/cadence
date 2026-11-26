@@ -5,6 +5,7 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
   alias Cadence.Applications.{ActionRequest, HostContext, TelemetryDecom}
   alias Cadence.Applications.TelemetryDecom.ActionProvider, as: DecomActions
   alias Cadence.Catalog.FleetSnapshot
+  alias Cadence.Control.ActivationRequests
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Control.ModelApprovalGate
   alias Cadence.Control.SpacecraftConfiguration
@@ -20,7 +21,6 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
   alias Cadence.Runtime.Missions, as: RuntimeMissions
   alias Cadence.Runtime.PartitionKey
   alias Cadence.Runtime.SourceRuntimeBases
-  alias Cadence.Spacecraft.Identity
   alias Cadence.SpacecraftStore
 
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
@@ -306,7 +306,7 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
              c.other_revision.mission_model_revision_id
   end
 
-  test "reviewed framing survives identity edits and cannot become another spacecraft's preset",
+  test "reviewed framing stays pinned through each activation",
        c do
     protocol = %{
       "downlink" => "tm",
@@ -331,69 +331,6 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
 
       assert {:ok, pinned} = SpacecraftStore.fetch_pinned_profile(c.mission, current)
       assert ConfigurationInput.from_profile(pinned) == selected_protocol
-
-      input = %{
-        "spacecraft" => %{
-          "display_name" => "Renamed vehicle",
-          "scid" => "17",
-          "spacecraft_type_id" => current.spacecraft_type_id,
-          "spacecraft_type_version" => current.spacecraft_type_version
-        }
-      }
-
-      assert {:ok, _} =
-               Identity.action(
-                 c.scope,
-                 c.mission.mission_id,
-                 current.spacecraft_id,
-                 "validate",
-                 input
-               )
-
-      # Host-action sweep row 2: a save is refused (the console's change sets edit spacecraft);
-      # the governed-pin rule below is checked through validate, which still applies it.
-      assert {:error, %{"display_name" => [refused]}} =
-               Identity.action(
-                 c.scope,
-                 c.mission.mission_id,
-                 current.spacecraft_id,
-                 "save",
-                 input
-               )
-
-      assert refused =~ "Setup › Spacecraft"
-
-      legacy_input = Map.update!(input, "spacecraft", &Map.delete(&1, "spacecraft_type_version"))
-
-      assert {:ok, _} =
-               Identity.action(
-                 c.scope,
-                 c.mission.mission_id,
-                 current.spacecraft_id,
-                 "validate",
-                 legacy_input
-               )
-
-      replacement = %{
-        "spacecraft_type_id" => if(pinned, do: nil, else: "unreviewed-preset"),
-        "spacecraft_type_version" => if(pinned, do: nil, else: 1)
-      }
-
-      assert {:error, %{"spacecraft_type_id" => [message]}} =
-               Identity.action(
-                 c.scope,
-                 c.mission.mission_id,
-                 current.spacecraft_id,
-                 "validate",
-                 Map.update!(input, "spacecraft", &Map.merge(&1, replacement))
-               )
-
-      assert message =~ "Communications"
-
-      if pinned do
-        assert {:error, %{"spacecraft_type_id" => [_]}} =
-                 Identity.action(c.scope, c.mission.mission_id, nil, "validate", input)
-      end
     end
   end
 
@@ -531,7 +468,7 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
              SpacecraftModelBindings.validate(c.org, c.mission.mission_id, wrong_plan)
   end
 
-  test "the spacecraft review boundary rejects self review and applies a teammate's exact revision",
+  test "the activation route rejects self review and applies a teammate's exact revision",
        c do
     save(c, c.first, c.revision)
     {:ok, page} = ConfigurationRead.load(c.scope, c.mission, c.first.spacecraft_id, "changes")
@@ -546,26 +483,17 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
                :review
              )
 
-    assert {:error, :activation_self_approval_forbidden} =
-             SpacecraftConfiguration.decide(
-               c.scope,
-               c.mission.mission_id,
-               c.first.spacecraft_id,
-               page.token,
-               request_id,
-               "Reviewed",
-               "approved"
-             )
+    assert {:error, {:activation_self_approval_forbidden, _via}} =
+             ActivationRequests.approve(c.scope, c.mission.mission_id, request_id, %{
+               "reason" => "Reviewed"
+             })
 
-    assert {:ok, %{"outcome" => "applied"}} =
-             SpacecraftConfiguration.decide(
+    assert {:ok, %{outcome: "applied"}} =
+             ActivationRequests.approve(
                Fixtures.user_scope(c.org, "teammate"),
                c.mission.mission_id,
-               c.first.spacecraft_id,
-               page.token,
                request_id,
-               "Verified spacecraft configuration",
-               "approved"
+               %{"reason" => "Verified spacecraft configuration"}
              )
 
     assert {:ok, %{generation: 1}} = RuntimeMissions.applied_spec(c.mission.mission_id)

@@ -13,7 +13,7 @@ defmodule CadenceWeb.Console.PassReservationAPITest do
     body =
       user
       |> TestFixtures.member_conn()
-      |> get("/api/console/v1/missions/#{mission.mission_id}/passes/nope/reservation")
+      |> get("/api/v1/missions/#{mission.mission_id}/passes/nope/reservation")
       |> json_response(404)
 
     assert body["error"]["code"] == "pass_not_found"
@@ -21,7 +21,7 @@ defmodule CadenceWeb.Console.PassReservationAPITest do
     body =
       user
       |> TestFixtures.member_conn()
-      |> get("/api/console/v1/missions/#{mission.mission_id}/contacts/nope/record")
+      |> get("/api/v1/missions/#{mission.mission_id}/contacts/nope/record")
       |> json_response(404)
 
     assert body["error"]["code"] == "contact_not_found"

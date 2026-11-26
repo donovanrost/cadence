@@ -7,7 +7,7 @@ defmodule Cadence.Reads.PlanMeasures do
   - `longest_gap/2`: the longest stretch of the plan's UTC day without one of the spacecraft's
     passes. A gap runs from LOS to the next AOS; the day's edges count (00:00Z to the first AOS,
     the last LOS to 24:00Z). Only the plan's own passes count.
-  - `uplink_passes/3`: passes whose booking will request an uplink leg (`UplinkLegs`), i.e.
+  - `uplink_passes_by_spacecraft/3`: passes whose booking will request an uplink leg (`UplinkLegs`), i.e.
     requested, not confirmed by the provider.
   - `provider_freeze/2`: the earliest `expires_at` (the last moment the provider honours the
     offer) among passes not yet sent to the provider, overall and per provider.
@@ -73,23 +73,14 @@ defmodule Cadence.Reads.PlanMeasures do
     |> Map.put(:limit_seconds, requirement.max_gap_seconds)
   end
 
-  @doc """
-  `%{have, need: nil}`: how many of `passes` (one spacecraft's) will be booked with an uplink
-  leg. One routing lookup per station and provider.
-  """
-  @spec uplink_passes(binary(), binary(), [ContactOpportunitySnapshot.t()]) :: map()
-  def uplink_passes(organization_id, mission_id, passes) do
-    have =
-      passes
-      |> Enum.frequencies_by(&leg_key/1)
-      |> Enum.reduce(0, fn {{spacecraft_id, station, provider_id}, count}, acc ->
-        leg =
-          UplinkLegs.for_booking(organization_id, mission_id, spacecraft_id, station, provider_id)
+  @doc "Counts passes booked with an uplink leg per spacecraft, using batched route lookups."
+  @spec uplink_passes_by_spacecraft(binary(), binary(), [ContactOpportunitySnapshot.t()]) :: map()
+  def uplink_passes_by_spacecraft(organization_id, mission_id, passes) do
+    keys = Enum.map(passes, &leg_key/1)
+    ids = for {id, _station, _provider} <- keys, is_binary(id), uniq: true, do: id
+    eligible = UplinkLegs.booking_keys(organization_id, mission_id, ids)
 
-        if is_map(leg), do: acc + count, else: acc
-      end)
-
-    %{have: have, need: nil}
+    keys |> Enum.filter(&MapSet.member?(eligible, &1)) |> Enum.frequencies_by(&elem(&1, 0))
   end
 
   defp leg_key(%ContactOpportunitySnapshot{} = pass) do

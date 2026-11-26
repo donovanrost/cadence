@@ -18,7 +18,7 @@ defmodule Cadence.Reads.Passes do
   alias Cadence.Comms.{GroundStationStore, StationRefs}
   alias Cadence.Contacts.{PassWindows, ProviderReservation, RealizedContact}
   alias Cadence.Control.Contacts
-  alias Cadence.Reads.{HandStartedPasses, PassEnders, PassListenerOverlap}
+  alias Cadence.Reads.{HandStartedPasses, PassEnders, PassListenerOverlap, WindowCursor}
 
   @default_limit 500
   @hand_only_states ~w(defined stopped)
@@ -36,13 +36,69 @@ defmodule Cadence.Reads.Passes do
           optional(:states) => [binary()] | nil,
           optional(:limit) => pos_integer(),
           optional(:order) => :asc | :desc,
-          optional(:hand_started) => boolean()
+          optional(:hand_started) => boolean(),
+          optional(:cursor) => binary() | nil,
+          optional(:after) => {DateTime.t(), binary(), integer()}
         }
+
+  @doc "A page of passes and the counts over its entire filtered window."
+  def page(org, mission, from, to, filters) do
+    basis =
+      {:passes, org, mission, DateTime.to_unix(from, :microsecond),
+       DateTime.to_unix(to, :microsecond),
+       Map.take(filters, [:spacecraft_id, :station, :states, :order, :hand_started])}
+
+    with {:ok, after_key} <- WindowCursor.decode(Map.get(filters, :cursor), basis, [0, 1]) do
+      filters = Map.put(filters, :after, after_key)
+      station_refs = station_refs(org, mission, filters)
+      filters = Map.put(filters, :station_refs, station_refs)
+      result = load(org, mission, from, to, filters)
+
+      cursor =
+        if result.truncated do
+          pass = List.last(result.passes)
+          WindowCursor.encode(pass.starts_at, pass.id, kind(pass), basis)
+        end
+
+      {:ok,
+       Map.merge(result, %{next_cursor: cursor, counts: counts(org, mission, from, to, filters)})}
+    end
+  end
+
+  defp counts(org, mission, from, to, filters) do
+    counts =
+      case booked_states(Map.get(filters, :states)) do
+        :none ->
+          %{booked: 0, upcoming: 0, in_contact: 0, synthetic: 0}
+
+        states ->
+          PassWindows.reservation_counts(
+            org,
+            mission,
+            from,
+            to,
+            reservation_opts(filters, states),
+            DateTime.utc_now()
+          )
+      end
+
+    hand_started =
+      if filters[:hand_started],
+        do: HandStartedPasses.count(org, mission, from, to, filters),
+        else: 0
+
+    Map.merge(counts, %{hand_started: hand_started, total: counts.booked + hand_started})
+  end
 
   @spec load(binary(), binary(), DateTime.t(), DateTime.t(), filters()) :: map()
   def load(organization_id, mission_id, from, to, filters \\ %{}) do
     limit = Map.get(filters, :limit, @default_limit)
     order = Map.get(filters, :order, :asc)
+
+    filters =
+      Map.put_new_lazy(filters, :station_refs, fn ->
+        station_refs(organization_id, mission_id, filters)
+      end)
 
     {reservations, truncated?} =
       case booked_states(Map.get(filters, :states)) do
@@ -50,11 +106,12 @@ defmodule Cadence.Reads.Passes do
           {[], false}
 
         states ->
-          Contacts.list_provider_reservations_in_window(organization_id, mission_id, from, to,
-            spacecraft_id: Map.get(filters, :spacecraft_id),
-            states: states,
-            order: order,
-            limit: limit
+          PassWindows.reservations(
+            organization_id,
+            mission_id,
+            from,
+            to,
+            reservation_opts(filters, states)
           )
       end
 
@@ -62,8 +119,7 @@ defmodule Cadence.Reads.Passes do
     |> load_rows(mission_id, reservations, %{
       from: from,
       to: to,
-      truncated: truncated?,
-      filters: filters
+      truncated: truncated?
     })
     |> with_hand_started(organization_id, mission_id, filters, limit, order)
   end
@@ -72,8 +128,6 @@ defmodule Cadence.Reads.Passes do
   # order and cut to the same limit, so the kept rows are the first `limit` of the whole list.
   defp with_hand_started(result, org, mission, %{hand_started: true} = filters, limit, order) do
     {rows, truncated?} = HandStartedPasses.load(org, mission, result.from, result.to, filters)
-    station = Map.get(filters, :station)
-    rows = Enum.filter(rows, &station_match?(&1, station))
     merged = merge(result.passes, rows, order)
 
     %{
@@ -88,8 +142,29 @@ defmodule Cadence.Reads.Passes do
   defp merge(booked, [], _order), do: booked
 
   defp merge(booked, hand, order) do
-    key = &{DateTime.to_unix(&1.starts_at, :microsecond), &1.id}
+    key = &{DateTime.to_unix(&1.starts_at, :microsecond), &1.id, kind(&1)}
     Enum.sort_by(booked ++ hand, key, order)
+  end
+
+  defp kind(%{booked: true}), do: 0
+  defp kind(_hand_started), do: 1
+
+  defp station_refs(_org, _mission, %{station: nil}), do: nil
+
+  defp station_refs(org, mission, %{station: station}),
+    do: StationRefs.matching_refs(StationRefs.index(org, mission), station)
+
+  defp station_refs(_org, _mission, _filters), do: nil
+
+  defp reservation_opts(filters, states) do
+    [
+      spacecraft_id: Map.get(filters, :spacecraft_id),
+      station_refs: Map.get(filters, :station_refs),
+      states: states,
+      after: Map.get(filters, :after),
+      order: Map.get(filters, :order, :asc),
+      limit: Map.get(filters, :limit, @default_limit)
+    ]
   end
 
   # A states filter applies to bookings in SQL (before the cut); words only a hand-started
@@ -177,12 +252,18 @@ defmodule Cadence.Reads.Passes do
   end
 
   defp load_rows(organization_id, mission_id, reservations, window) do
+    ids = for r <- reservations, is_binary(r.spacecraft_id), do: r.spacecraft_id
+
+    {:ok, spacecraft} =
+      Cadence.SpacecraftStore.fetch_spacecrafts_in_batches(organization_id, mission_id, ids)
+
     window
     |> Map.merge(%{
+      filters: %{},
       reservations: reservations,
       enders: PassEnders.load(organization_id, mission_id, reservations),
       stations: GroundStationStore.list_ground_stations(organization_id, mission_id),
-      spacecraft: Cadence.SpacecraftStore.list_spacecraft(organization_id, mission_id),
+      spacecraft: Map.values(spacecraft),
       # U58 (b), #361: a booked pass that loses its start to a one-connection listener.
       overlaps: PassListenerOverlap.for_rows(organization_id, mission_id, reservations)
     })
@@ -342,6 +423,7 @@ defmodule Cadence.Reads.Passes do
   # Identity on every line (CommandFlow R01): name and SCID, nil when the spacecraft is gone.
   defp spacecraft(id, crafts) do
     case Map.get(crafts, id) do
+      %{lifecycle_state: :archived} -> %{id: id, name: nil, scid: nil}
       nil -> %{id: id, name: nil, scid: nil}
       craft -> %{id: id, name: craft.display_name, scid: craft.scid}
     end

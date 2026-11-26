@@ -1,8 +1,8 @@
 defmodule CadenceWeb.Console.SessionController do
   @moduledoc """
-  Console bootstrap (`GET /api/console/v1/session`), default-organization
-  selection (`PUT /api/console/v1/session/organization`) and admin mode (L6:
-  `POST` / `DELETE /api/console/v1/session/admin-mode`). Contract: docs/apogee/api/session.md.
+  Console bootstrap (`GET /api/v1/session`), sign-out (`DELETE /api/v1/session`),
+  default-organization selection (`PUT /api/v1/session/organization`) and admin mode (L6:
+  `POST` / `DELETE /api/v1/session/admin-mode`). Contract: docs/apogee/api/session.md.
   """
 
   use CadenceWeb, :controller
@@ -14,9 +14,27 @@ defmodule CadenceWeb.Console.SessionController do
   alias CadenceWeb.Console.Capabilities
   alias CadenceWeb.Console.Problem
   alias CadenceWeb.Console.SessionJSON
+  alias CadenceWeb.ConsoleSocket
+  alias CadenceWeb.Endpoint
 
   def show(conn, _params) do
     render_session(conn, conn.assigns.current_scope)
+  end
+
+  @doc """
+  Signs this browser out (#664): revokes the session token, then disconnects that session's live
+  sockets, then drops and renews the cookie session. Revoking first means a socket that reconnects
+  straight away is refused. A person only: service identities aren't in `ServiceAccess`.
+  """
+  def delete(conn, _params) do
+    session_token = conn.assigns.console_credentials.session_token
+    :ok = Cadence.Auth.revoke_user_session(session_token)
+    Endpoint.broadcast(ConsoleSocket.id_for_session_token(session_token), "disconnect", %{})
+
+    conn
+    |> configure_session(renew: true)
+    |> clear_session()
+    |> send_resp(:no_content, "")
   end
 
   def update_organization(conn, %{"organization_id" => organization_id})

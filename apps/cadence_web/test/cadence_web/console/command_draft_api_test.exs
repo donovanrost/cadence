@@ -16,7 +16,7 @@ defmodule CadenceWeb.Console.CommandDraftAPITest do
     %{user: user, other: other, mission: mission}
   end
 
-  defp path(c), do: "/api/console/v1/missions/#{c.mission.mission_id}/command-draft"
+  defp path(c), do: "/api/v1/missions/#{c.mission.mission_id}/command-draft"
   defp as(user), do: TestFixtures.member_conn(user)
 
   defp document(title, stack \\ [%{"key" => "k1", "command_id" => "NOOP", "values" => %{}}]) do

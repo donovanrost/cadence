@@ -20,7 +20,6 @@ defmodule CadenceWorkspace.MixProject do
       preferred_envs: [
         precommit: :test,
         "precommit.checks": :test,
-        "precommit.affected": :test,
         "test.fast": :test,
         "test.runtime": :test,
         "test.management": :test,
@@ -50,6 +49,10 @@ defmodule CadenceWorkspace.MixProject do
   defp aliases do
     [
       setup: ["deps.get", workspace_command("deps.get")],
+      "cadence.scale.run": [&run_scale/1],
+      "cadence_simulator.load": [
+        workspace_command("cadence_simulator.load", projects: [:cadence_simulator])
+      ],
       "format.all": [&run_format_all/1],
       test: [workspace_test_command()],
       "test.fast": [
@@ -113,16 +116,23 @@ defmodule CadenceWorkspace.MixProject do
         "test.cluster",
         "test.planes",
         "test"
-      ],
-      "precommit.affected": [
-        "precommit.checks",
-        affected_plane_test_command(:management),
-        affected_plane_test_command(:control),
-        affected_plane_test_command(:data),
-        affected_plane_test_command(:projections),
-        workspace_test_command(affected: true)
       ]
     ]
+  end
+
+  defp run_scale(args) do
+    if Enum.any?(args, &(&1 == "--spacecraft" or String.starts_with?(&1, "--spacecraft="))) do
+      Mix.Task.run("run", [
+        "--no-start",
+        "-r",
+        "dev/scale_run.exs",
+        "-e",
+        "Cadence.Dev.ScaleRun.boot(System.argv())",
+        "--" | args
+      ])
+    else
+      run_child_mix_command(:cadence, ["cadence.scale.run" | args])
+    end
   end
 
   defp workspace_test_command(opts \\ []) do
@@ -131,10 +141,6 @@ defmodule CadenceWorkspace.MixProject do
 
   defp plane_test_command(plane, opts \\ []) do
     workspace_test_command(plane_test_options(plane, opts))
-  end
-
-  defp affected_plane_test_command(plane) do
-    plane_test_command(plane, affected: true)
   end
 
   defp run_plane_tests(args) do
@@ -176,8 +182,6 @@ defmodule CadenceWorkspace.MixProject do
       |> Keyword.get(:projects, [])
       |> Enum.flat_map(&["-p", Atom.to_string(&1)])
 
-    affected_args = if Keyword.get(opts, :affected, false), do: ["--affected"], else: []
-
     env_args =
       opts
       |> Keyword.get(:env, [])
@@ -187,7 +191,6 @@ defmodule CadenceWorkspace.MixProject do
 
     ["-t", task, "--order", "postorder", "--early-stop"]
     |> Kernel.++(project_args)
-    |> Kernel.++(affected_args)
     |> Kernel.++(env_args)
     |> Kernel.++(["--" | task_args])
   end

@@ -15,7 +15,7 @@ defmodule CadenceWeb.Endpoint do
 
   # Apogee console SPA live data. Session-authenticated: the client sends its
   # CSRF token as the `_csrf_token` param so Phoenix exposes the cookie session.
-  socket("/socket/console", CadenceWeb.ConsoleSocket,
+  socket("/socket", CadenceWeb.ConsoleSocket,
     websocket: [connect_info: [session: @session_options]],
     longpoll: false
   )
@@ -43,7 +43,10 @@ defmodule CadenceWeb.Endpoint do
   plug(CadenceWeb.Plugs.FrontendReleasePublisher)
   plug(CadenceWeb.Plugs.FrontendReleaseRequestBody)
 
-  if Mix.env() == :dev do
+  # Dev only, and not on the console-e2e CI server (config/dev.exs `:tidewave?`): its toolbar loads
+  # from tidewave.ai into every page and scans the DOM, which the fleet-scale budgets were timing
+  # as Fleet's longest task (#867).
+  if Application.compile_env(:cadence_web, :tidewave?, false) do
     plug(Tidewave)
   end
 

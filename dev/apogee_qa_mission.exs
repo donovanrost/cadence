@@ -34,7 +34,7 @@
 #   mise exec -- mix run --no-start ../../dev/apogee_qa_mission.exs [--offline]
 #
 # --offline skips the provider's validate and sync (they call the simulator over HTTP), for a dry
-# run where the simulator isn't up. See docs/apogee/qa/runbook.md.
+# run where the simulator isn't up. See docs/dev-environment.md.
 Code.require_file("reflect_orbital/fixture.exs", __DIR__)
 Code.require_file("apogee_qa_mission/provider.exs", __DIR__)
 
@@ -50,7 +50,6 @@ defmodule Cadence.Dev.ApogeeQaMission do
 
   alias Cadence.Missions.Mission
   alias Cadence.{Repo, Spacecraft, SpacecraftType}
-  alias Cadence.SourceEndpoints.SourceEndpoint
 
   @organization_id F.organization_id()
   @mission_id Provider.mission_id()
@@ -255,17 +254,12 @@ defmodule Cadence.Dev.ApogeeQaMission do
               )
 
             {:ok, _source} =
-              Cadence.SourceEndpoints.persist_source_endpoint(
-                @organization_id,
-                SourceEndpoint.new(%{
-                  source_endpoint_id: "source-#{id}",
-                  mission_id: m.mission_id,
-                  spacecraft_id: id,
-                  source_ref: craft.display_name,
-                  display_name: "#{craft.display_name} TT&C",
-                  metadata: @metadata
-                })
-              )
+              Cadence.SourceEndpoints.create_source_endpoint(@organization_id, m.mission_id, %{
+                spacecraft_id: id,
+                source_ref: craft.display_name,
+                display_name: "#{craft.display_name} TT&C",
+                metadata: @metadata
+              })
 
             craft
           end)

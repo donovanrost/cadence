@@ -179,7 +179,8 @@ effects: the same assertion across a restart, with fire times.
   and acknowledgements keep `Ids.new`.
 - **The tripwire compares what derives from the input:** an episode's or event's subject and
   observation time (not its source ref: a transition's id derives from its sample id, which
-  includes the evidence id, and that changes when a replay batches the journal differently; not
+  included the evidence id until #161, and that changed when a replay batched the journal
+  differently; the tripwire stays on subject and time either way; not
   the event kind or payload either: an honest replay can decide a different kind because the
   episode moved on, and the payload holds acknowledgement state); an action request's kind, timer
   key and delay (not its metadata, which is the capability's and could carry batch-dependent ids).
@@ -195,9 +196,13 @@ effects: the same assertion across a restart, with fire times.
   above. Two more: the two-subject wedge (an empty start, seeded, replays a frame where only one of
   two subjects re-derives), and a managed application's request re-emitted after a restart and a
   re-cut replay (one row, the same id).
-- **Known, not #99:** the transition and evaluation rows keep content ids over the sample id, so a
-  replay that batches differently writes them again (new evidence id, new sample id). They are
-  low-volume (written only on a transition) and covered by the identity-v2 audit below.
+- **Fixed by #161/#162 (api, 11-19; was "known, not #99"):** the transition and evaluation rows
+  keep content ids over the sample id, and the sample id now hashes the packet id (a journaled
+  packet's journal position, #71) instead of the evidence id. A replay that batches differently
+  re-derives the same sample ids, so it writes no evaluation or transition twice; the observation
+  id leaves out the evidence too (domain's design A), so identity states see a no-op. The e2e's
+  third test replays a re-cut frame and finds the same sample ids and no new monitoring rows. No
+  legacy form or cutover (DECISIONS #112); it rides the dev reset.
 
 **Measured, A/B (domain, 11-17; the director's landing condition 3).** Base `2dec10bc2` against
 built `16e80e241` (the code as approved at `e80f6cbc6`). Both benches ran interleaved, built x3,

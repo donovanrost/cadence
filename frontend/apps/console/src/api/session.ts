@@ -14,7 +14,7 @@ import { role } from "./entities.ts";
 import { missionId } from "./ids.ts";
 import { request, type ApiResult } from "./http.ts";
 
-/** Contract: docs/apogee/api/session.md (GET /api/console/v1/session). */
+/** Contract: docs/apogee/api/session.md (GET /api/v1/session). */
 /** §12C: the id is a MissionId (what the API takes); the slug is only for routes. */
 const mission = object({ id: missionId, slug: token, name: string });
 const organization = object({
@@ -47,4 +47,13 @@ export type SessionMission = Decoded<typeof mission>;
 
 export function fetchSession(signal?: AbortSignal): Promise<ApiResult<Session>> {
   return request("/session", sessionReader, signal ? { signal } : {});
+}
+
+/**
+ * #664: signs this browser out (`DELETE /session`, 204). The server revokes the session, disconnects
+ * its live sockets and drops the cookie; the caller then leaves with a full navigation, since the
+ * CSRF token and every cached read belonged to that session.
+ */
+export function signOut(): Promise<ApiResult<null>> {
+  return request("/session", () => null, { method: "DELETE" });
 }

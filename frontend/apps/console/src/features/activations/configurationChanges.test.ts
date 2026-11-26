@@ -8,7 +8,7 @@ import {
   noChangesLine,
   orderedGroups,
   rowLine,
-  showAllLabel,
+  showNamesLabel,
   summaryLines,
   telemetryOffLine,
   unnamedSourceIds,
@@ -166,7 +166,8 @@ describe("#235 what a spacecraft configuration request changes", () => {
     expect(last.rows.items).toEqual([]);
     expect(groupHeading(first)).toBe("283 spacecraft");
     expect(namesLine(first)).toBe("EARENDIL-001, EARENDIL-002, EARENDIL-003 and 280 more");
-    expect(showAllLabel(first)).toBe("Show all 283");
+    expect(showNamesLabel(first, false)).toBe("Show names (283)");
+    expect(showNamesLabel(first, true)).toBe("Hide names");
     expect(noChangesLine(last, true)).toBe(
       "No changes on 12 spacecraft: EARENDIL-300, EARENDIL-301, EARENDIL-302 and 9 more.",
     );
@@ -182,7 +183,7 @@ describe("#235 what a spacecraft configuration request changes", () => {
     expect(changesHeading(c)).toBe("What changes");
     expect(groupHeading(g)).toBe("EARENDIL-001");
     expect(namesLine(g)).toBe("EARENDIL-001");
-    expect(showAllLabel(g)).toBeNull();
+    expect(showNamesLabel(g, false)).toBeNull();
     expect(noChangesLine(g, false)).toBe(
       "Nothing changes for EARENDIL-001: this configuration matches what's active.",
     );

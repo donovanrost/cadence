@@ -8,9 +8,17 @@ defmodule Cadence.ContactPlanning.TemplateDayReviewTest do
 
   alias Cadence.Accounts.{OrganizationMembership, User}
   alias Cadence.Auth.Scope
-  alias Cadence.ContactPlanning.{ContactRequirements, ContactRequirementTemplates}
+
+  alias Cadence.ContactPlanning.{
+    ContactPlanVersion,
+    ContactRequirements,
+    ContactRequirementTemplates
+  }
+
   alias Cadence.ContactPlanning.{RequirementListing, TemplateDayReview}
-  alias Cadence.Spacecraft
+  alias Cadence.Reads.ContactPlanOverview.Demand
+  alias Cadence.{Repo, Spacecraft}
+  alias Cadence.SpacecraftStore.SpacecraftRow
 
   @org "org-template-day-review"
   @mission "mission-template-day-review"
@@ -52,8 +60,22 @@ defmodule Cadence.ContactPlanning.TemplateDayReviewTest do
     later = DateTime.add(@now, 900, :second)
     id = c.template.contact_requirement_template_id
 
-    assert %{planned_or_started: [kept], closed: [done], canceled: [gone]} =
-             TemplateDayReview.decided(@org, @mission, id, later)
+    assert %{
+             decided: %{planned_or_started: [kept], closed: [done], canceled: [gone]},
+             decided_counts: counts
+           } = TemplateDayReview.review(@org, @mission, id, later)
+
+    assert Map.values(counts) ==
+             List.duplicate(
+               %{
+                 days: 1,
+                 requirements: 1,
+                 dates: ["2026-07-17"],
+                 first_date: "2026-07-17",
+                 last_date: "2026-07-17"
+               },
+               3
+             )
 
     assert kept == %{
              occurrence_at: occurrence_at(started),
@@ -79,6 +101,70 @@ defmodule Cadence.ContactPlanning.TemplateDayReviewTest do
     assert RequirementListing.template_id(version) == c.template.contact_requirement_template_id
     assert RequirementListing.template_version(%{metadata: %{}}) == nil
     assert requirement.contact_requirement_id
+  end
+
+  test "template day and plan coverage counts include all 1,000 spacecraft", c do
+    ids = [@spacecraft | Enum.map(2..1_000, &"day-review-fleet-#{&1}")]
+    id = c.template.contact_requirement_template_id
+    later = DateTime.add(@now, 4_500, :second)
+
+    ids
+    |> tl()
+    |> Enum.map(fn spacecraft_id ->
+      %{
+        spacecraft_id: spacecraft_id,
+        organization_id: @org,
+        mission_id: @mission,
+        display_name: spacecraft_id,
+        lifecycle_state: "active",
+        metadata: %{},
+        inserted_at: @now
+      }
+    end)
+    |> Enum.chunk_every(250)
+    |> Enum.each(&Repo.insert_all(SpacecraftRow, &1))
+
+    assert {:ok, generated} =
+             ContactRequirementTemplates.materialize(
+               c.scope,
+               @mission,
+               id,
+               @now,
+               DateTime.add(@now, 3_599, :second),
+               now: @now,
+               targets: ids,
+               supersede: false
+             )
+
+    assert length(generated) == 1_000
+
+    assert %{days: 1, requirements: 1_001, dates: ["2026-07-17"]} =
+             TemplateDayReview.review(@org, @mission, id, later).decided_counts.planned_or_started
+
+    evaluations =
+      for {%{requirement: requirement}, index} <- Enum.with_index(generated) do
+        covered = rem(index, 2) == 0
+
+        %{
+          "contact_requirement_id" => requirement.contact_requirement_id,
+          "contact_requirement_version" => requirement.current_version,
+          "satisfied" => covered,
+          "facts" => %{"selected_count" => if(covered, do: 1, else: 0)}
+        }
+      end
+
+    unmet = Enum.reject(evaluations, & &1["satisfied"])
+
+    version = %ContactPlanVersion{
+      coverage_document: %{"requirements" => evaluations},
+      unsatisfied_document: %{"requirements" => unmet}
+    }
+
+    assert %{
+             rule_total: 1_000,
+             rule_met: 500,
+             coverage: %{spacecraft_uncovered: 500, contacts_short: 500, gaps: 500}
+           } = Demand.demand(@org, @mission, version, [])
   end
 
   defp occurrence_at(requirement) do

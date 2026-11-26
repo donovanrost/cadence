@@ -42,7 +42,7 @@ defmodule Cadence.Applications.PacketBindingsTest do
       })
 
     assert {:ok, endpoint} =
-             Cadence.SourceEndpoints.persist_source_endpoint(@organization_id, endpoint)
+             Cadence.SourceEndpointFixtures.persist(@organization_id, endpoint)
 
     revision = persist_revision!()
 
@@ -202,7 +202,7 @@ defmodule Cadence.Applications.PacketBindingsTest do
       })
 
     assert {:ok, alternate_endpoint} =
-             Cadence.SourceEndpoints.persist_source_endpoint(
+             Cadence.SourceEndpointFixtures.persist(
                @organization_id,
                alternate_endpoint
              )

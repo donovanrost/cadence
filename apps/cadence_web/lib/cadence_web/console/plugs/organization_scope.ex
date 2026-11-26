@@ -1,6 +1,6 @@
 defmodule CadenceWeb.Console.Plugs.OrganizationScope do
   @moduledoc """
-  For `/api/console/v1/organizations/:organization_id/...` routes: rebinds
+  For `/api/v1/organizations/:organization_id/...` routes: rebinds
   `current_scope` to that organization (the URL decides, not the session's
   default). Controllers still authorize each action through their facade;
   an actor with no access to the organization gets `404 organization_not_found`.

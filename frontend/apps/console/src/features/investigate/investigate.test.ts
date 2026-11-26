@@ -28,6 +28,8 @@ import {
   sisters,
   trendSentence,
   lastCleared,
+  MAX_AUTO_PAGES,
+  wantsMorePages,
 } from "./model.ts";
 
 const thresholds = { red_low: 24, yellow_low: 25, yellow_high: 33, red_high: 34 };
@@ -119,6 +121,33 @@ describe("history decoding", () => {
         body([b("2026-11-08T00:10:00Z", 1, 2, 3), b("2026-11-08T00:00:00Z", 1, 2, 3)]),
       ).ok,
     ).toBe(false);
+  });
+});
+
+describe("a deep-linked alarm on a later page (#827)", () => {
+  const loaded = [alarmRow("a", "sc1"), alarmRow("b", "sc1")];
+  const none = { alarm: null, point: null };
+
+  it("loads another page while the asked-for alarm is not among those loaded", () => {
+    expect(wantsMorePages(loaded, "c2", { alarm: "far", point: null }, 0)).toBe(true);
+    expect(wantsMorePages(loaded, "c2", { alarm: "b", point: null }, 0)).toBe(false);
+  });
+
+  it("for a point, loads while no alarm on it is loaded", () => {
+    const pointId = loaded[0]?.point.id ?? "";
+    expect(wantsMorePages(loaded, "c2", { alarm: null, point: "other" }, 0)).toBe(true);
+    expect(wantsMorePages(loaded, "c2", { alarm: null, point: pointId }, 0)).toBe(false);
+  });
+
+  it("asks for nothing without a link or without a next page", () => {
+    expect(wantsMorePages(loaded, "c2", none, 0)).toBe(false);
+    expect(wantsMorePages(loaded, null, { alarm: "far", point: null }, 0)).toBe(false);
+  });
+
+  it("is bounded: an id that does not exist cannot page through the whole list", () => {
+    const link = { alarm: "missing", point: null };
+    expect(wantsMorePages(loaded, "c2", link, MAX_AUTO_PAGES - 1)).toBe(true);
+    expect(wantsMorePages(loaded, "c2", link, MAX_AUTO_PAGES)).toBe(false);
   });
 });
 

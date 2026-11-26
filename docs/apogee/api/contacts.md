@@ -11,17 +11,24 @@ S8) are api's: [scheduling.md](scheduling.md). Conventions: [README.md](README.m
 | S9 | `GET /missions/:mission_id/pass-review[/rows|/daily]` | **implemented** (K3) |
 | S10 | `contacts` and `contact_plans` on the `mission:<id>` `invalidate` event | **implemented** (contact facts + reservation changes; plans and fleet runs) |
 
-## `GET /api/console/v1/missions/:mission_id/passes`
+## `GET /api/v1/missions/:mission_id/passes`
 
-One row per **provider reservation** whose window overlaps `[from, to)`, oldest start first
-(`order=desc`: newest first). Every reservation row carries `booked: true`.
+One row per **provider reservation** whose window overlaps `[from, to)`. Every reservation row
+carries `booked: true`.
 
 Query: `from`, `to` (ISO-8601; default `from` = now, `to` = `from` + 24 h; at most 7 days),
 `spacecraft_id`, `station` (matches the row's `station.ref`, `station.id` or `station.code`),
 `states` (comma list of reservation states, below, plus a hand-started contact's `defined` and
-`stopped`), `order` (`asc` | `desc`), `include=hand_started` (U78, below). `spacecraft_id` and
-`states` apply in SQL before the 500-row cut; `station` applies after it. Bad values:
-`422 invalid_params` with `details` keyed by parameter.
+`stopped`), `order` (`asc` | `desc`, default `asc`), `include=hand_started` (U78, below),
+`limit` (1–500, default 500), and `cursor`. All filters apply before paging.
+
+Pages are ordered by `starts_at`, then by bytewise `id`, with a booked row before a hand-started
+row if both keys tie. `order=desc` reverses that order. To continue, send the opaque
+`meta.next_cursor` as `cursor`, along with the response's `data.from` and `data.to` and the same
+filters and order. The cursor is bound to the mission, normalized window, and filters. The page
+size can change between requests. An invalid or mismatched cursor returns `422 invalid_params`
+with a `details.cursor` error. `meta.next_cursor` is `null` at the end. `data.truncated` is
+retained for compatibility and is true when another page is available.
 
 **Hand-started contacts (U78, opt-in `include=hand_started`; History sends it).** A realized
 contact with no scheduled contact (started by hand, #84) whose time overlaps the window joins as a
@@ -41,13 +48,10 @@ contact with no scheduled contact (started by hand, #84) whose time overlaps the
   `uplink_capable`, `booking_evidence`, `attested_by`, `uplink_confirmed`, `off_plan`, `ended_by`,
   `attention`, `uplink_readiness`, `contact_action`, `contact_ended`: `null`; `releasable: false`.
 
-Both halves are read in the requested order, merged by `starts_at` (then `id`) and cut to 500, so
-the rows kept are always the first 500 of the whole list; `truncated: true` when either half or the
-merge passed 500.
-
 ```json
 {"data": {
   "from": "2026-11-08T02:00:00.000Z", "to": "2026-11-09T02:00:00.000Z", "truncated": false,
+  "counts": {"total": 1, "booked": 1, "hand_started": 0, "in_contact": 0, "upcoming": 1, "synthetic": 1},
   "passes": [{
     "id": "provider_reservation_…", "kind": "contact",
     "state": "confirmed", "pass_phase": "scheduled", "delivery_state": "pending",
@@ -66,8 +70,22 @@ merge passed 500.
     "ended_by": null,
     "replaced_by": null
   }]
-}}
+}, "meta": {"next_cursor": null}}
 ```
+
+`data.counts` covers the entire filtered window on each request. Counts use server time.
+
+- `total` counts all matching rows. It equals `booked` plus `hand_started`.
+- `booked` counts matching provider reservations in all requested states.
+- `hand_started` counts matching hand-started contacts with `include=hand_started`, otherwise zero.
+- `in_contact` counts distinct spacecraft with a matching booking whose `[starts_at, ends_at)`
+  contains now and whose state is `active` or provider `pass_phase` is `pass`. States `rejected`,
+  `canceling`, `canceled` and `failed` are excluded.
+- `upcoming` counts matching `confirmed` and `active` bookings that start strictly after now.
+- `synthetic` counts matching bookings whose effective provider snapshot specifies JSON
+  `true` for `synthetic`. The server uses the same snapshot precedence as `station`, and checks
+  `extensions.synthetic` when no top-level flag is present. An absent, null or false flag does
+  not count.
 
 - `spacecraft`: identity on every line (R01). `name` and `scid` are `null` if the spacecraft was
   deleted since the booking.
@@ -111,8 +129,6 @@ merge passed 500.
   null, reservation_id}` when a live single booking (contact workspace `actions/reserve`) covers
   it. A lost row with `replaced_by: null` is still lost: that's what re-plan's Impact shows.
   Replacement is persisted when the repair plan is created and never re-derived.
-- `truncated: true`: more than 500 rows overlap the window (with the filters that apply in SQL).
-  The rows kept are the first 500 in the requested order. Narrow it.
 - Refetch on `invalidate` with `contacts` (below). AOS/LOS happen without an event; refresh a
   "now" line on a timer if you draw one.
 
@@ -143,7 +159,7 @@ Every row gains four fields:
 - An attention change (`invalidate` `attention`) also invalidates `contacts`, since rows carry
   their item.
 
-### `GET /api/console/v1/missions/:mission_id/passes/:id`
+### `GET /api/v1/missions/:mission_id/passes/:id`
 
 One pass by its reservation id (the row `id`, or the attention object's `reservation_id`), in the
 same row shape including `attention`, whatever its window. Review opens passes days out with it.
@@ -173,7 +189,7 @@ the plan's UTC day, the day of its earliest selected pass, as plan detail derive
 `requirement: {id, version, name}` (`name` as plan history's `requirement_label`: template name,
 else the rule in words). Both `null` for a pass booked outside a plan.
 
-### `GET /api/console/v1/missions/:mission_id/passes/:id/reservation` (L14 / A11, owner: api)
+### `GET /api/v1/missions/:mission_id/passes/:id/reservation` (L14 / A11, owner: api)
 
 The pass's reservation for the drawer's Technical details (what the legacy reservation review
 showed):
@@ -198,7 +214,7 @@ showed):
 - `audit`: newest first, 25 per page; `?audit_cursor=<next_cursor>`. A cursor not on this
   reservation → `422 invalid_params` (`details.audit_cursor`). `404 pass_not_found`.
 
-### `GET /api/console/v1/missions/:mission_id/contacts/:contact_id/record` (L14 / A13, owner: api)
+### `GET /api/v1/missions/:mission_id/contacts/:contact_id/record` (L14 / A13, owner: api)
 
 A contact's record for the drawer's Technical details (what the legacy contact record showed).
 `contact_id` is a scheduled OR a realized contact id; both sides of the pair come back.
@@ -351,6 +367,13 @@ receipt span), `last_seen_at` (bumped while more keep arriving), `actions` (`["r
 - Discard is `POST …/attention/archive_quarantine/:id/resolve {action_text}` (the reason,
   required, at most 200 characters): the entries leave the quarantine unarchived;
   `resolution.action: "discarded"`, `note` the reason.
+- **Expiry (#791).** Nobody has to clear an item: an entry is kept for the protocol archive's
+  retention (`protocol_archive_days`, 30 by default) plus a review margin (`quarantine_review_days`,
+  7), counted from when its record was received (first sighting without one). The item's
+  `expires_at` is when its last entry expires. Then the item closes by itself:
+  `resolution.action: "expired"`, `resolved_by: {kind: "system"}`, no note, and `counts` those of the
+  last chunk removed. Retried and discarded items' records are kept 30 days
+  (`quarantine_resolution_days`), so "recently resolved" is at most that old.
 - `acknowledge` answers `409 attention_item_not_open`. `403 forbidden` for non-operators, `404
   attention_item_not_found`, `422 invalid_params {action_text}` / `reason_required`, and `503
   attention_unavailable` when the archive can't be reached.
@@ -517,7 +540,7 @@ Writes (operators, `operate_mission`; neither changes the provider booking, whic
 - Hand-started contacts aren't pass rows, so they're out of this step: ending one from Uplink's
   contact view is a follow-up.
 
-### `POST /api/console/v1/missions/:mission_id/attention/:source/:id/acknowledge` · `…/resolve`
+### `POST /api/v1/missions/:mission_id/attention/:source/:id/acknowledge` · `…/resolve`
 
 `:source` and `:id` are the attention object's `source` and `id`: `pass_resolution` (the
 resolution id), or `contact_settlement` (only a lost-telemetry item, acknowledge only; see
@@ -534,6 +557,16 @@ signed-in user (#30).
   (already resolved, or acknowledging one that's acknowledged), `403 forbidden`,
   `422 invalid_params` (`details.action_text`), `422 actor_not_assignable` (the body names an
   actor field), `404 mission_not_found`.
+
+### `GET /api/v1/missions/:mission_id/attention/contact_settlement?reservation_id=…` (#847)
+
+The open `contact_settlement` item for one pass's booking (U37, the Contacts drawer), so the drawer
+doesn't read the whole action queue. Members of the mission.
+
+- `200 {data: <attention object>}`, the same object as the queue row's `attention`, or
+  `{data: null}` when the pass has no open settlement item.
+- It reads only the mission's open unsettled contacts, not the fleet.
+- Errors: `422 invalid_params` (`details.reservation_id`: missing), `404 mission_not_found`.
 
 ### Uplink readiness (U33, DECISIONS #58/#59)
 
@@ -586,7 +619,7 @@ and `attention`.
     - `armed_group_ids`: the mission's `queued` groups with members still queued for that
       spacecraft, oldest GO first. Send it as is to the named release (commanding.md); the viewed
       group is in it while it has unreleased members there. Empty means nothing to release.
-- **`POST /api/console/v1/missions/:mission_id/passes/:id/recover-uplink`** (`:id` = the pass row
+- **`POST /api/v1/missions/:mission_id/passes/:id/recover-uplink`** (`:id` = the pass row
   `id`, a reservation). No body; `operate_mission`; audited; safe to repeat. It re-runs the pass's
   uplink qualification.
   - Returns `{data: {state: "ready", ready_at}}`.
@@ -614,15 +647,23 @@ and `attention`.
   - `/counts.attention` counts both sources. `POST /attention/uplink_blocked/…` answers
     `404 attention_item_not_found`, since these resolve by themselves.
 
-## `GET /api/console/v1/missions/:mission_id/contact-findings` (M22, Contacts D4)
+## `GET /api/v1/missions/:mission_id/contact-findings` (M22, Contacts D4)
 
 "Needs a decision": problems across the mission's live bookings (requesting, pending, confirmed,
 active) in a window. Query: `from`, `to` (default now to +6 h, at most 7 days), `max_gap_s`
-(coverage-gap threshold, 600–604800, default 14400 = 4 h).
+(coverage-gap threshold, 600–604800, default 14400 = 4 h), `limit` (1–500, default 100), and
+`cursor`.
+
+Pages are ordered by `at` ascending, then by bytewise `id`. To continue, send the opaque
+`meta.next_cursor` as `cursor`, along with the response's `data.from`, `data.to` and
+`data.max_gap_s`. The cursor is bound to the mission, normalized window and gap threshold.
+The page size can change between requests. An invalid or mismatched cursor returns
+`422 invalid_params` with a `details.cursor` error. `meta.next_cursor` is `null` at the end.
+`data.truncated` is retained for compatibility and is true when another page is available.
 
 ```json
 {"data": {"from": "…", "to": "…", "max_gap_s": 14400, "truncated": false,
-  "counts": {"conflicts": 1, "gaps": 1},
+  "counts": {"conflicts": 2, "gaps": 1},
   "findings": [
     {"id": "station_double_booked:…:…", "kind": "station_double_booked", "severity": "caution",
      "at": "…", "station": {"ref", "id", "code", "name"}, "spacecraft": null,
@@ -633,7 +674,7 @@ active) in a window. Query: `from`, `to` (default now to +6 h, at most 7 days), 
     {"kind": "coverage_gap", "severity": "critical", "spacecraft": {"id", "name", "scid"},
      "gap": {"from", "to", "seconds": 19860}, "passes": [],
      "message": "389 has no pass for 5h 31m.", "fix": null}
-  ]}}
+  ]}, "meta": {"next_cursor": null}}
 ```
 
 - `station_double_booked`: two live bookings at the same station overlap. Bookings on different
@@ -645,8 +686,9 @@ active) in a window. Query: `from`, `to` (default now to +6 h, at most 7 days), 
   `station` is `null` on `coverage_gap`.
 - `fix` is always `null` for now: proposals (another station, an opportunity) need a provider
   search. Show the problem and `Open in Plan`.
-- Header counts: `counts.conflicts` (double-bookings + outage bookings), `counts.gaps`.
-- `truncated: true`: the passes read hit its 500-row cap; narrow the window.
+- Counts cover the entire window on each request. `counts.conflicts` counts
+  `station_double_booked` and `booked_into_outage` findings combined. `counts.gaps` counts
+  `coverage_gap` findings.
 - Refetch on `invalidate` with `contacts` or `stations`.
 
 ### Contact drawer D2 actions: `Release` and `Swap station` (BACKLOG §8)
@@ -659,7 +701,7 @@ active) in a window. Query: `from`, `to` (default now to +6 h, at most 7 days), 
     when `state` is `pending | confirmed | active` and the viewer may cancel bookings
     (organization admin, `:manage_missions`, as for the contact workspace's cancel). Members don't
     see the button; D2 shows "Org admins can release a booking." (ux).
-  - `POST /api/console/v1/missions/:mission_id/passes/:id/release` with body
+  - `POST /api/v1/missions/:mission_id/passes/:id/release` with body
     `{"expected_provider_revision": <the row's provider_revision>}`. The server builds the
     cancellation evidence from the stored booking; a different revision means the provider
     changed it, so reload.
@@ -770,13 +812,16 @@ change publishes both).
   starts_at, ends_at?, eta?, reason?, detail?}` → `201` window. Operator-entered
   (`source: operator`, `reported_by` = you).
 - `POST /station-availability/windows/:window_id/clear` `{reason?}` → the window with `cleared_at`.
-- `GET /station-availability/:station_id/impact?from&to` → `{ground_station_id, from, to, passes_hit,
+- `GET /station-availability/:station_id/impact?from&to` → `{ground_station_id, from, to, passes_hit, spacecraft_count,
   reservation_ids, spacecraft_ids, plans: [{id, version}], truncated}`. `plans` are the contact plan
   revisions that booked the hit passes (start a repair, S8, from them). `lost: {count, reservation_ids,
   spacecraft_ids, plans}` lists bookings at the station in the window that already ended without a
   pass (`canceled`, `rejected`, `failed`), for example ones a provider canceled because of the outage.
-  Those are the ones K2 re-plans: live bookings at that station in the window (K2's
-  "passes hit"). Reservations that never named a station can't be attributed and aren't counted.
+  `passes_hit` counts live bookings at that station. `spacecraft_count` counts distinct spacecraft
+  across live and lost bookings, so a spacecraft appearing in both counts once. These counts and
+  `lost.count` cover the entire window. The reference arrays reflect up to 2,000 matching
+  bookings combined. `truncated` is true when more bookings match. Reservations without a station
+  reference are excluded.
 
 ```json
 status = {"ground_station_id": "gs-…", "state": "up | degraded | down", "since": null, "eta": null,
@@ -862,3 +907,15 @@ threshold}`.
 Draw `target` as the dashed line. `top_cause`/`top_station` annotate dips.
 
 Money (R5, disputes in $) is out of scope: no provider reports prices.
+
+
+## Live runtime snapshots
+
+The console mission scope serves realized-contact runtime snapshots under
+`/api/v1/missions/:mission_id/realized-contacts/:realized_contact_id`.
+
+- `GET /runtime` returns the running contact and its path snapshots.
+- `GET /paths/:path_id/runtime` returns one path, including its provider and transport runtimes.
+
+People use a mission-admin session. The path endpoint also accepts a mission-authorized service
+identity bearing its token, which the simulator uses to discover live connection settings.

@@ -21,7 +21,7 @@ const session = (current: readonly string[]): Session => ({
   capabilities: current,
   organizations: [],
   csrf_token: "t",
-  socket: { path: "/socket/console" },
+  socket: { path: "/socket" },
 });
 
 describe("canAdministerOrganization", () => {

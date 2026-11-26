@@ -43,7 +43,7 @@ WORKDIR /app
 COPY --from=server-build --chown=cadence:cadence /release ./
 COPY --chown=cadence:cadence dev/reflect_orbital /lab/reflect_orbital
 COPY --chown=cadence:cadence dev/chaos/scripts /lab/scripts
-COPY --chown=cadence:cadence legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml /lab/demo_spacecraft.yaml
+COPY --chown=cadence:cadence dev/catalogs/demo_spacecraft.yaml /lab/demo_spacecraft.yaml
 RUN for runtime in /app/releases/*/runtime.exs; do test -f "$runtime" && cat /lab/scripts/runtime.exs >> "$runtime"; done
 ENV EARENDIL_DATABASE_PATH=/lab/demo_spacecraft.yaml
 USER cadence
@@ -55,6 +55,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 WORKDIR /app
 COPY --from=simulator-build --chown=cadence:cadence /simulator-release ./
 COPY --chown=cadence:cadence dev/chaos/scripts /lab/scripts
-COPY --chown=cadence:cadence legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml /lab/demo_spacecraft.yaml
+COPY --chown=cadence:cadence dev/catalogs/demo_spacecraft.yaml /lab/demo_spacecraft.yaml
 USER cadence
 CMD ["bin/cadence_simulator", "eval", "Code.eval_file(\"/lab/scripts/simulator.exs\")"]

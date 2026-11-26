@@ -38,7 +38,7 @@ defmodule CadenceWeb.Console.ConfigurationReviewsAPITest do
       revision: revision,
       first: first,
       second: second,
-      base: "/api/console/v1/missions/#{mission_id}"
+      base: "/api/v1/missions/#{mission_id}"
     }
   end
 

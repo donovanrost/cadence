@@ -52,8 +52,6 @@ At the Workspace project level:
   external peers.
 - `packages/xtce` contains reusable XTCE 1.3 document parsing and offline
   schema validation.
-- `legacy/cadence_legacy` is a preserved reference snapshot of the previous
-  system and is useful for migration and performance comparisons.
 
 Conceptually, the system has three authority planes and two cross-cutting
 structures:
@@ -381,8 +379,7 @@ The preferred local workflow is profile-driven.
 Run the server as a named node when you want to use the profiler tasks:
 
 ```bash
-cd apps/cadence_web
-iex --sname cadence -S mix phx.server
+dev/stack up
 ```
 
 ### 8.2 Optional environment administrator
@@ -424,7 +421,7 @@ The Cadence-owned profiler task remains available for inspecting a running
 Cadence node:
 
 ```bash
-mix cadence.profile demo_spacecraft
+mise exec -- mix cadence.profile demo_spacecraft
 ```
 
 Named profiler defaults live under `dev/profiles`. These files are Cadence-side

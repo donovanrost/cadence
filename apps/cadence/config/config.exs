@@ -85,6 +85,8 @@ config :cadence,
   catalog_revisions: Cadence.Catalog,
   # A catalog revision's APIDs, for profile/override handled_apids (L22), configured likewise.
   catalog_apids: Cadence.MissionModels.CatalogApids,
+  # D3's composition pin rules (#544) for the profile and override kinds, configured likewise.
+  composition_pins: Cadence.MissionModels.CompositionPin,
   # Builds runtime activations for profile-framed change-set applies (DECISIONS #36).
   configuration_generation: Cadence.Control.ConfigurationGeneration,
   ecto_repos: [Cadence.Repo],
@@ -127,7 +129,13 @@ config :cadence,
     flush_interval_ms: 250,
     flush_count: 250
   ],
+  # Retention for the tables nothing else cleans (#694; Cadence.Persistence.Retention): chunk size,
+  # pause, budget and interval are its defaults; the archives follow the observation retention.
+  retention: [enabled?: true],
   telemetry_current_value_store: [module: Cadence.Telemetry.CurrentValueStore.ETS],
+  # QuestDB day-partition retention (#693; Cadence.Telemetry.Storage.QuestDB.Retention): partitions
+  # wholly older than `retention_days` are dropped. One platform setting: the table is shared.
+  telemetry_observation_retention: [enabled?: true, retention_days: 30],
   telemetry_storage: [
     writer: Cadence.Telemetry.Storage.Writers.QuestDB,
     realm: :flight,

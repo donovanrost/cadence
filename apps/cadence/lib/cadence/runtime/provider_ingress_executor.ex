@@ -13,6 +13,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
   alias Cadence.Runtime.Persistence, as: RuntimePersistence
 
   alias Cadence.Ingress.RawEvidence
+  alias Cadence.IngressJournal.IngestTelemetry
   alias Cadence.Observability
   alias Cadence.Observability.AsyncContext
   alias Cadence.Runtime, as: RuntimeBoundary
@@ -1066,8 +1067,10 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
             {pid, ref,
              %{
                resume_offset: resume_offset(result),
+               snapshot_partition: snapshot_partition(result),
                incomplete: incomplete(result),
-               scid_check: scid_check(result)
+               scid_check: scid_check(result),
+               counts: IngestTelemetry.counts(result)
              }}
         ),
       producer_receipts: [{self(), length(entries)}]
@@ -1076,6 +1079,12 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
 
   defp resume_offset(%{resume_offset: offset}) when is_integer(offset), do: offset
   defp resume_offset(_result), do: nil
+
+  # The partition whose semantic snapshot this batch's durable ack waits for (nil: none).
+  defp snapshot_partition(%{semantic_snapshot_partition: partition}) when is_binary(partition),
+    do: partition
+
+  defp snapshot_partition(_result), do: nil
 
   defp incomplete(%{incomplete: %{} = incomplete}), do: incomplete
   defp incomplete(_result), do: nil

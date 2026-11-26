@@ -1,6 +1,6 @@
 defmodule CadenceWeb.Console.TelemetryLatestController do
   @moduledoc """
-  `POST /api/console/v1/missions/:mission_id/telemetry/latest {point_ids, spacecraft_ids}` (fe-ops,
+  `POST /api/v1/missions/:mission_id/telemetry/latest {point_ids, spacecraft_ids}` (fe-ops,
   Compose B2): the latest value per spacecraft and point. Contract: docs/apogee/api/ops.md.
   """
 

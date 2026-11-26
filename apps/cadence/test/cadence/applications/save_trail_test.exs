@@ -39,17 +39,17 @@ defmodule Cadence.Applications.SaveTrailTest do
   end
 
   describe "limits save_limit_definition" do
-    test "records the actor and the path, for each host", c do
+    test "records the actor and the path", c do
       assert {:ok, first} = dispatch(c, limit_request(:console, "HK.trail_a"))
       assert first.metadata["saved_by"] == %{"kind" => "user", "id" => "trail-operator-a"}
       assert first.metadata["via"] == "console"
       assert first.metadata["application"] == "limits"
 
       other = %{c | scope: scope("trail-operator-b")}
-      assert {:ok, second} = dispatch(other, limit_request(:legacy_host, "HK.trail_a", first))
+      assert {:ok, second} = dispatch(other, limit_request(:console, "HK.trail_a", first))
       assert second.version == 2
       assert second.metadata["saved_by"] == %{"kind" => "user", "id" => "trail-operator-b"}
-      assert second.metadata["via"] == "legacy_host"
+      assert second.metadata["via"] == "console"
 
       # Before and after: the previous version stays, unchanged, beside the new one.
       assert [2, 1] == limit_versions(first.limit_definition_id)
@@ -68,7 +68,7 @@ defmodule Cadence.Applications.SaveTrailTest do
         | metadata: %{
             "application" => "limits",
             "saved_by" => %{"kind" => "user", "id" => "trail-operator-b"},
-            "via" => "legacy_host"
+            "via" => "change_set"
           }
       }
 
@@ -80,10 +80,10 @@ defmodule Cadence.Applications.SaveTrailTest do
   end
 
   describe "derived telemetry save_definition" do
-    test "records the actor and the path, for each host", c do
-      assert {:ok, first} = dispatch(c, derived_request(:legacy_host, "DERIVED.trail_a"))
+    test "records the actor and the path", c do
+      assert {:ok, first} = dispatch(c, derived_request(:console, "DERIVED.trail_a"))
       assert first.metadata["saved_by"] == %{"kind" => "user", "id" => "trail-operator-a"}
-      assert first.metadata["via"] == "legacy_host"
+      assert first.metadata["via"] == "console"
 
       assert {:ok, second} = dispatch(c, derived_request(:console, "DERIVED.trail_a", first))
       assert second.version == 2
@@ -107,7 +107,7 @@ defmodule Cadence.Applications.SaveTrailTest do
         | metadata: %{
             "application" => "derived_telemetry",
             "saved_by" => %{"kind" => "user", "id" => "trail-operator-b"},
-            "via" => "legacy_host"
+            "via" => "change_set"
           }
       }
 

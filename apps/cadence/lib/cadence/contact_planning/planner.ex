@@ -86,6 +86,77 @@ defmodule Cadence.ContactPlanning.Planner do
     end
   end
 
+  @doc false
+  def fleet_actor(scope, mission_id) do
+    with :ok <- authorize_member(scope, mission_id), do: actor_id(scope)
+  end
+
+  @doc false
+  def fleet_entry(requirement, actor_id, route_result, responses, windows, opts) do
+    timestamp = now(opts)
+
+    run =
+      ContactPlanningRun.new(%{
+        organization_id: requirement.organization_id,
+        mission_id: requirement.mission_id,
+        contact_requirement_id: requirement.contact_requirement_id,
+        contact_requirement_version: requirement.version,
+        lifecycle_state: :running,
+        requested_by: actor_id,
+        started_at: Keyword.fetch!(opts, :started_at),
+        summary_document: %{}
+      })
+
+    with :ok <- executable_direction(requirement.service_direction) do
+      case route_result do
+        {:ok, %{routes: routes, findings: findings}} ->
+          results =
+            routes
+            |> Enum.sort_by(&route_sort_key/1)
+            |> Enum.map(&fleet_route_result(&1, requirement, responses))
+
+          build_results(
+            run,
+            requirement,
+            Enum.sort_by(findings, &finding_sort_key/1),
+            results,
+            timestamp,
+            windows
+          )
+
+        {:error, reason} ->
+          %{
+            run: %{
+              run
+              | lifecycle_state: :failed,
+                completed_at: timestamp,
+                summary_document: failure_summary(route_resolution_error(reason))
+            },
+            searches: [],
+            snapshots: []
+          }
+      end
+    end
+  end
+
+  @doc false
+  def fleet_routes({:ok, %{routes: routes}}, requirement) do
+    Enum.reject(routes, &route_excluded?(requirement, &1))
+  end
+
+  def fleet_routes({:error, _reason}, _requirement), do: []
+
+  defp fleet_route_result(route, requirement, responses) do
+    if route_excluded?(requirement, route) do
+      excluded_search_result(route)
+    else
+      responses
+      |> Map.fetch!(route.route_key)
+      |> normalize_route_search(route)
+      |> Map.put(:sanitized_opportunities?, true)
+    end
+  end
+
   defp execute_run(run, requirement, opts) do
     case list_routes(requirement, opts) do
       {:ok, route_result} ->
@@ -159,29 +230,21 @@ defmodule Cadence.ContactPlanning.Planner do
          }}
 
       {:error, reason} ->
-        {:error, {:contact_planning_route_resolution_failed, safe_error(reason)}}
+        {:error, route_resolution_error(reason)}
 
       _other ->
         {:error, :contact_planning_route_resolution_malformed}
     end
   end
 
+  defp route_resolution_error(reason),
+    do: {:contact_planning_route_resolution_failed, safe_error(reason)}
+
   defp search_routes(routes, requirement, opts) do
     search_fun =
       Keyword.get(opts, :search_opportunities, &ProviderScheduling.search_opportunities/5)
 
-    search_opts =
-      opts
-      |> Keyword.get(:provider_opts, [])
-      |> Keyword.take([
-        :client,
-        :credential_resolver,
-        :receive_timeout,
-        :req_request,
-        :secret_backend
-      ])
-      |> Keyword.merge(Keyword.take(opts, [:result_limit, :now]))
-      |> Keyword.put_new(:now, now(opts))
+    search_opts = provider_options(opts)
 
     maximum = Keyword.get(opts, :max_concurrency, 4)
 
@@ -206,6 +269,21 @@ defmodule Cadence.ContactPlanning.Planner do
           error: %{"code" => "search_worker_exit"}
         }
     end)
+  end
+
+  @doc false
+  def provider_options(opts) do
+    opts
+    |> Keyword.get(:provider_opts, [])
+    |> Keyword.take([
+      :client,
+      :credential_resolver,
+      :receive_timeout,
+      :req_request,
+      :secret_backend
+    ])
+    |> Keyword.merge(Keyword.take(opts, [:result_limit, :now]))
+    |> Keyword.put_new_lazy(:now, fn -> now(opts) end)
   end
 
   defp search_route(route, requirement, search_fun, search_opts) do
@@ -287,42 +365,65 @@ defmodule Cadence.ContactPlanning.Planner do
   defp search_success_outcome(_opportunities), do: :succeeded_with_results
 
   defp persist_results(run, requirement, findings, results, completed_at) do
+    windows =
+      StationAvailability.blocking_windows(
+        run.organization_id,
+        run.mission_id,
+        requirement.earliest_start,
+        requirement.latest_end
+      )
+
+    entry = build_results(run, requirement, findings, results, completed_at, windows)
+
+    PlanningResults.complete_run(
+      run,
+      entry.searches,
+      entry.snapshots,
+      entry.run.lifecycle_state,
+      completed_at,
+      entry.run.summary_document
+    )
+  end
+
+  defp build_results(run, requirement, findings, results, completed_at, windows) do
     readiness = build_readiness_searches(run, findings, completed_at)
 
     searched =
       results
       |> Enum.with_index(length(readiness))
       |> Enum.map(fn {result, index} ->
-        build_search_and_snapshots(run, requirement, result, index, completed_at)
+        build_search_and_snapshots(run, requirement, result, index, completed_at, windows)
       end)
 
     all = readiness ++ searched
     searches = Enum.map(all, &elem(&1, 0))
     snapshots = Enum.flat_map(all, &elem(&1, 1))
 
-    PlanningResults.complete_run(
-      run,
-      searches,
-      snapshots,
-      run_state(searches),
-      completed_at,
-      summary(searches, snapshots)
-    )
+    %{
+      run: %{
+        run
+        | lifecycle_state: run_state(searches),
+          completed_at: completed_at,
+          summary_document: summary(searches, snapshots)
+      },
+      searches: searches,
+      snapshots: snapshots
+    }
   end
 
   defp fail_run(run, reason, completed_at) do
-    failure = safe_error(reason)
+    PlanningResults.fail_run(run, completed_at, failure_summary(reason))
+  end
 
-    summary = %{
+  defp failure_summary(reason) do
+    %{
       "search_count" => 0,
       "search_outcomes" => %{},
       "opportunity_count" => 0,
       "eligible_opportunity_count" => 0,
       "ineligible_opportunity_count" => 0,
-      "failure" => failure
+      "failure" => safe_error(reason)
     }
-
-    PlanningResults.fail_run(run, completed_at, summary)
   end
 
   defp build_readiness_searches(run, findings, completed_at) do
@@ -354,16 +455,18 @@ defmodule Cadence.ContactPlanning.Planner do
     end)
   end
 
-  defp build_search_and_snapshots(run, requirement, result, index, completed_at) do
+  defp build_search_and_snapshots(run, requirement, result, index, completed_at, windows) do
     route = result.route
     route_document = route_binding(route)
-    opportunities = normalized_unique_opportunities(result.opportunities, route_document)
 
     {outcome, error, opportunities} =
-      if opportunity_identity_collision?(result.opportunities, route_document) do
-        {:failed, %{"code" => "provider_opportunity_identity_collision"}, []}
-      else
-        {result.outcome, result.error, opportunities}
+      case normalized_opportunities(
+             result.opportunities,
+             route_document,
+             Map.get(result, :sanitized_opportunities?, false)
+           ) do
+        {:ok, opportunities} -> {result.outcome, result.error, opportunities}
+        :collision -> {:failed, %{"code" => "provider_opportunity_identity_collision"}, []}
       end
 
     search_id = Cadence.Ids.new("planning_search")
@@ -395,33 +498,31 @@ defmodule Cadence.ContactPlanning.Planner do
         opportunity_count: length(opportunities),
         route_binding_document: route_document,
         readiness_document:
-          merge_readiness(result.readiness, readiness_from_opportunities(opportunities)),
+          merge_readiness(
+            result.readiness,
+            readiness_from_opportunities(Enum.map(opportunities, &elem(&1, 0)))
+          ),
         error_document: error,
         content_sha256: ContentHash.sha256(search_content),
         started_at: run.started_at,
         completed_at: completed_at
       })
 
-    unavailable =
-      StationAvailability.blocking_windows(
-        run.organization_id,
-        run.mission_id,
-        requirement.earliest_start,
-        requirement.latest_end
-      )
-
     snapshots =
-      Enum.map(opportunities, fn opportunity ->
+      Enum.map(opportunities, fn {opportunity, content_sha256} ->
+        starts_at = parse_datetime!(opportunity["starts_at"])
+        ends_at = parse_datetime!(opportunity["ends_at"])
+        expires_at = parse_datetime!(opportunity["expires_at"])
+
         evaluation =
           RequirementEvaluator.evaluate_opportunity(
             requirement,
             opportunity,
             route_document,
             now: completed_at,
-            unavailable_windows: unavailable
+            unavailable_windows: windows,
+            timestamps: {starts_at, ends_at, expires_at}
           )
-
-        evidence = Validation.sanitize(opportunity)
 
         ContactOpportunitySnapshot.new(%{
           contact_planning_run_id: run.contact_planning_run_id,
@@ -431,19 +532,18 @@ defmodule Cadence.ContactPlanning.Planner do
           contact_requirement_id: requirement.contact_requirement_id,
           contact_requirement_version: requirement.version,
           provider_opportunity_ref: opportunity["id"],
-          starts_at: parse_datetime!(opportunity["starts_at"]),
-          ends_at: parse_datetime!(opportunity["ends_at"]),
-          expires_at: parse_datetime!(opportunity["expires_at"]),
+          starts_at: starts_at,
+          ends_at: ends_at,
+          expires_at: expires_at,
           availability: opportunity["availability"],
           estimated_capacity_document: opportunity["estimated_capacity"] || %{},
           synthetic: opportunity["synthetic"],
           route_binding_document: route_document,
           normalized_opportunity_document: opportunity,
-          provider_evidence_document: evidence,
+          provider_evidence_document: opportunity,
           evaluation_document: evaluation,
           eligible: evaluation["eligible"],
-          content_sha256:
-            ContentHash.sha256(%{"route" => route_document, "opportunity" => evidence}),
+          content_sha256: content_sha256,
           captured_at: completed_at
         })
       end)
@@ -451,26 +551,32 @@ defmodule Cadence.ContactPlanning.Planner do
     {search, snapshots}
   end
 
-  defp normalized_unique_opportunities(opportunities, route_document) do
-    opportunities
-    |> Enum.map(&Validation.sanitize/1)
-    |> Enum.uniq_by(fn opportunity ->
-      {opportunity["id"],
-       ContentHash.sha256(%{"route" => route_document, "opportunity" => opportunity})}
-    end)
-    |> Enum.sort_by(&{&1["starts_at"], &1["id"]})
-  end
+  defp normalized_opportunities(opportunities, route_document, sanitized?) do
+    result =
+      Enum.reduce_while(opportunities, %{}, fn opportunity, seen ->
+        opportunity = if sanitized?, do: opportunity, else: Validation.sanitize(opportunity)
+        id = opportunity["id"]
+        hash = ContentHash.sha256_json(%{"route" => route_document, "opportunity" => opportunity})
 
-  defp opportunity_identity_collision?(opportunities, route_document) do
-    opportunities
-    |> Enum.map(&Validation.sanitize/1)
-    |> Enum.group_by(& &1["id"])
-    |> Enum.any?(fn {_id, values} ->
-      values
-      |> Enum.map(&ContentHash.sha256(%{"route" => route_document, "opportunity" => &1}))
-      |> Enum.uniq()
-      |> length() > 1
-    end)
+        case Map.fetch(seen, id) do
+          :error -> {:cont, Map.put(seen, id, {opportunity, hash})}
+          {:ok, {_previous, ^hash}} -> {:cont, seen}
+          {:ok, _different} -> {:halt, :collision}
+        end
+      end)
+
+    case result do
+      :collision ->
+        :collision
+
+      seen ->
+        {:ok,
+         seen
+         |> Map.values()
+         |> Enum.sort_by(fn {item, _hash} ->
+           {item["starts_at"], item["id"]}
+         end)}
+    end
   end
 
   @doc "Returns the durable, serializable identity of one ready provider route."

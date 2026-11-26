@@ -35,7 +35,8 @@ defmodule Cadence.Commanding.RequestReviewDecisionTest do
                c.request,
                :approved,
                %{"service_identity_id" => "service"},
-               expected_review: review
+               expected_review: review,
+               admin_mode: false
              )
 
     assert RequestStore.list_approvals(c.org, c.mission, []) == []
@@ -62,7 +63,8 @@ defmodule Cadence.Commanding.RequestReviewDecisionTest do
                c.request,
                :approved,
                %{"service_identity_id" => "service"},
-               require_review: true
+               require_review: true,
+               admin_mode: false
              )
 
     assert {:error, :command_review_required} =
@@ -81,7 +83,8 @@ defmodule Cadence.Commanding.RequestReviewDecisionTest do
                :approved,
                %{"service_identity_id" => "service"},
                require_review: true,
-               expected_review: String.duplicate("0", 64)
+               expected_review: String.duplicate("0", 64),
+               admin_mode: false
              )
 
     assert RequestStore.list_approvals(c.org, c.mission, []) == []
@@ -93,13 +96,13 @@ defmodule Cadence.Commanding.RequestReviewDecisionTest do
              )
   end
 
-  test "an unknown approval decision never reads as approved (#117 step 4a)" do
+  test "an unknown approval decision never reads as approved (#117 step 4a; not_required is known since 4b)" do
     assert_raise ArgumentError, ~r/unknown command approval decision/, fn ->
       CommandApproval.new(%{
         organization_id: "org",
         mission_id: "mission",
         command_request_id: "request",
-        decision: "not_required",
+        decision: "bogus",
         decided_by: %{},
         decided_at: DateTime.utc_now()
       })
@@ -182,7 +185,8 @@ defmodule Cadence.Commanding.RequestReviewDecisionTest do
       c.request,
       decision,
       %{"actor_kind" => "user", "user_id" => reviewer},
-      opts
+      # #117 step 4b: an explicit choice; the missing-admin_mode test calls decide_request itself.
+      Keyword.put_new(opts, :admin_mode, false)
     )
   end
 

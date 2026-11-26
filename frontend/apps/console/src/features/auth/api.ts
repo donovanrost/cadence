@@ -1,5 +1,5 @@
 import { decoders as d, request, role, type ApiResult, type Decoded } from "@/api";
-import { fetchSession, type Session } from "@/api/session.ts";
+import { fetchSession, signOut, type Session } from "@/api/session.ts";
 
 /**
  * L5 public auth endpoints (api-ops' agreed shapes, BACKLOG §11 L5; ux Auth.md). Built against
@@ -107,15 +107,14 @@ export function safeReturn(raw: unknown): string | null {
   return raw;
 }
 
-/** "Sign out and continue": ends the session, then reloads this page signed out. */
-export async function signOutHere(csrf: string | null): Promise<void> {
-  await fetch("/session", {
-    method: "DELETE",
-    credentials: "same-origin",
-    redirect: "manual",
-    headers: csrf ? { "x-csrf-token": csrf } : {},
-  });
-  window.location.reload();
+/**
+ * "Sign out and continue": ends the session, then reloads this page signed out. A 401 means it had
+ * already ended, which is what was asked; any other failure is returned for the screen to say.
+ */
+export async function signOutHere(): Promise<ApiResult<null>> {
+  const r = await signOut();
+  if (r.ok || r.error.kind === "unauthenticated") window.location.reload();
+  return r;
 }
 
 /** A full navigation: the csrf token changes after sign-in, and the server validated the target. */

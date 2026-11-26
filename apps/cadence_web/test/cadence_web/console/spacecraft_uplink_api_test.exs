@@ -33,7 +33,7 @@ defmodule CadenceWeb.Console.SpacecraftUplinkAPITest do
       ids: model.commands_by_name,
       craft: craft,
       endpoint: endpoint,
-      base: "/api/console/v1/missions/#{mission.mission_id}"
+      base: "/api/v1/missions/#{mission.mission_id}"
     }
   end
 

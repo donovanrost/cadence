@@ -73,7 +73,9 @@ defmodule Cadence.Commanding.CommandRequestRow do
     |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
     |> validate_number(:priority, greater_than_or_equal_to: 0)
-    |> unique_constraint([:mission_id, :command_request_id], name: :command_requests_scope_idx)
+    |> unique_constraint([:organization_id, :mission_id, :command_request_id],
+      name: :command_requests_org_scope_idx_uniq
+    )
     |> unique_constraint(:command_request_id, name: :command_requests_pkey)
   end
 

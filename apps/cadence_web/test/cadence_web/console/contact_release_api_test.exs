@@ -29,7 +29,7 @@ defmodule CadenceWeb.Console.ContactReleaseAPITest do
     %{alpha: alpha, bravo: bravo, model: model, conn: TestFixtures.member_conn(user)}
   end
 
-  defp base, do: "/api/console/v1/missions/#{@mission}"
+  defp base, do: "/api/v1/missions/#{@mission}"
 
   defp release(c, contact, body),
     do: post(c.conn, base() <> "/contacts/#{contact.realized_contact_id}/release", body)

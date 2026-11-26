@@ -3,8 +3,7 @@ amends "package://github.com/jdx/hk/releases/download/v1.56.0/hk@1.56.0#/Config.
 hooks {
     ["pre-commit"] {
         fix = true
-        // "none": several agents share one worktree; stashing would hide their
-        // uncommitted files for the whole precommit run.
+        // "none": the git stash stack is shared by every worktree of this repo.
         stash = "none"
         steps {
             ["elixir-format"] {
@@ -12,9 +11,11 @@ hooks {
                 check = "mix format.all --check-formatted {{files}}"
                 fix = "mix format.all {{files}}"
             }
-            ["precommit-affected"] {
+            // Format, compile, credo and the architecture checks. Test suites run in CI
+            // (docs/TEAM.md); run the tests for the area you touched yourself.
+            ["precommit-checks"] {
                 profiles = List("!full")
-                check = "mix precommit.affected"
+                check = "mix precommit.checks"
                 stdin = ""
                 exclusive = true
             }

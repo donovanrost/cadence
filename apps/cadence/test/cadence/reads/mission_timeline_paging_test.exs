@@ -96,7 +96,7 @@ defmodule Cadence.Reads.MissionTimelinePagingTest do
              )
 
     assert {:ok, _} =
-             SourceEndpoints.persist_source_endpoint(
+             Cadence.SourceEndpointFixtures.persist(
                @org,
                SourceEndpoint.new(%{
                  source_endpoint_id: "wanted-endpoint",

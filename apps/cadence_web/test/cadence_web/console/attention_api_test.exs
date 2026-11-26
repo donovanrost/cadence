@@ -3,6 +3,7 @@ defmodule CadenceWeb.Console.AttentionAPITest do
   use CadenceWeb.ConnCase, async: false
 
   alias Cadence.Contacts.BookingResolutions.Row
+  alias Cadence.Contacts.{ContactStore, RealizedContact}
   alias Cadence.ProviderChangeFixtures
   alias Cadence.Repo
   alias CadenceWeb.TestFixtures
@@ -12,7 +13,7 @@ defmodule CadenceWeb.Console.AttentionAPITest do
     user = TestFixtures.persist_user!(display_name: "Mira K.")
     TestFixtures.grant_membership!(user, c.organization)
     conflict!(c, user)
-    Map.merge(c, %{user: user, base: "/api/console/v1/missions/#{c.mission_id}"})
+    Map.merge(c, %{user: user, base: "/api/v1/missions/#{c.mission_id}"})
   end
 
   defp conflict!(c, user) do
@@ -149,5 +150,68 @@ defmodule CadenceWeb.Console.AttentionAPITest do
                "action_text" => "stored"
              })
              |> json_response(404)
+  end
+
+  # #847 (U37): the Contacts drawer reads one pass's settlement item, not the whole action queue.
+  describe "GET …/attention/contact_settlement?reservation_id=" do
+    setup c do
+      now = DateTime.utc_now()
+
+      {:ok, _contact} =
+        ContactStore.persist_realized(
+          RealizedContact.new(%{
+            organization_id: c.organization_id,
+            mission_id: c.mission_id,
+            scheduled_contact_id: c.reservation.scheduled_contact_id,
+            initial_time: now,
+            realized_at: now,
+            lifecycle_state: :completed,
+            metadata: %{
+              "settlement" => %{
+                "state" => "unsettled",
+                "reason" => "settle_deadline",
+                "failure_kind" => "store_unavailable",
+                "unsettled_at" => DateTime.to_iso8601(now),
+                "backlog" => %{"entries" => 120, "bytes" => 4096, "journals" => 1}
+              }
+            }
+          })
+        )
+
+      :ok
+    end
+
+    test "answers the pass's open item in the queue's wire shape", c do
+      id = c.reservation.provider_reservation_id
+
+      assert %{"data" => item} =
+               c
+               |> conn()
+               |> get(c.base <> "/attention/contact_settlement?reservation_id=#{id}")
+               |> json_response(200)
+
+      assert %{
+               "source" => "contact_settlement",
+               "conflict" => "unsettled",
+               "reservation_id" => ^id,
+               "backlog" => %{"entries" => 120, "lost" => false}
+             } = item
+    end
+
+    test "answers null for a pass with no open item", c do
+      assert %{"data" => nil} =
+               c
+               |> conn()
+               |> get(c.base <> "/attention/contact_settlement?reservation_id=another-booking")
+               |> json_response(200)
+    end
+
+    test "requires the reservation id", c do
+      assert %{"error" => %{"code" => "invalid_params"}} =
+               c
+               |> conn()
+               |> get(c.base <> "/attention/contact_settlement")
+               |> json_response(422)
+    end
   end
 end

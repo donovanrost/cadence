@@ -25,6 +25,25 @@ defmodule CadenceWeb.Console.AttentionController do
   @max_action_text 200
   @actor_keys ~w(actor actor_id actor_kind user_id resolved_by acknowledged_by by)
 
+  @doc """
+  `GET …/attention/contact_settlement?reservation_id=` (U37, #847): the open settlement item for
+  one pass's booking, or `data: null`. The Contacts drawer reads this instead of the whole action
+  queue.
+  """
+  def settlement(conn, %{"reservation_id" => reservation_id})
+      when is_binary(reservation_id) and reservation_id != "" do
+    org = scope(conn).organization_id
+    item = ContactSettlementAttention.for_reservation(org, mission_id(conn), reservation_id)
+
+    data =
+      item && AttentionItems.object(item, AttentionItems.lookups(org, mission_id(conn), [item]))
+
+    json(conn, %{data: data})
+  end
+
+  def settlement(conn, _params),
+    do: problem(conn, {:invalid_params, %{"reservation_id" => "is required"}})
+
   # todo(authz): Cedar should decide who may acknowledge or resolve each attention source (any
   # mission operator today), e.g. only provider-account owners for pass resolutions.
   def acknowledge(conn, %{"source" => source, "id" => id} = params) do

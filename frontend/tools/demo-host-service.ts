@@ -243,19 +243,6 @@ export class DemoHostService {
       return json(200, data);
     }
 
-    if (body.queryId === "cadence.contract_probe.snapshot" && body.version === 1) {
-      return json(200, {
-        queryVersion: 1,
-        hostContract: APPLICATION_HOST_CONTRACT,
-        catalogMode: this.#mode,
-        checks: [
-          { id: "catalog", label: "Runtime catalog", status: "nominal" },
-          { id: "bridge", label: "Host bridge", status: "nominal" },
-          { id: "scope", label: "Server-derived scope", status: "nominal" },
-        ],
-      });
-    }
-
     return problem(404, "unsupported_query", "The host does not provide that query contract.");
   }
 
@@ -425,33 +412,6 @@ function catalogApplications(
         manifestUrl:
           scenario === "offline" ? "http://127.0.0.1:4199/mf-manifest.json" : telemetryManifest,
         exposedModule,
-      },
-    },
-    {
-      applicationKey: "contract_probe",
-      applicationVersion: 1,
-      displayName: "Contract Probe",
-      description: "A development fixture proving that the host can discover another remote.",
-      package: { packageId: "cadence.frontend-fixtures", version: 1 },
-      surface: {
-        surfaceId: "runtime_contracts",
-        version: 1,
-        purpose: "overview",
-        scope: "spacecraft",
-        placement: "application_workspace",
-        navigation: { label: "Runtime contracts", order: 90 },
-        dataContract: { id: "cadence.contract_probe.snapshot", version: 1 },
-        actions: [],
-        renderer: { kind: "federated-vue", exposedModule: "./Application" },
-      },
-      release: {
-        federation: "module_federation",
-        releaseId: "2026.08.22.1",
-        remoteName: "contract_probe_current_2026_08_22_1",
-        manifestUrl: production
-          ? `${developmentOrigin("contract-probe")}/releases/current/mf-manifest.json`
-          : `${developmentOrigin("contract-probe")}/mf-manifest.json`,
-        exposedModule: "./Application",
       },
     },
   ];

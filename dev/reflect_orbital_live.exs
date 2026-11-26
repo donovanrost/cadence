@@ -1,16 +1,33 @@
-# Run with mise run earendil-live. This process owns the ten TCP simulator feeds.
+# Run with mise run earendil-live. This process owns the rehearsal TCP feeds.
 if Mix.env() != :dev, do: raise("Earendil live telemetry is a local development demo")
+Code.require_file("seed/earendil_dashboard_import.exs", __DIR__)
+
+{options, [], []} =
+  OptionParser.parse(System.argv(), strict: [craft: :integer, shape: :string, per_site: :integer])
+
+craft = Keyword.get(options, :craft, 10)
+shape = Keyword.get(options, :shape, "peak")
+per_site = Keyword.get(options, :per_site, 8)
+
+case CadenceSimulator.Load.Shape.validate(craft, shape, per_site) do
+  :ok -> :ok
+  {:error, reason} -> raise reason
+end
 
 {:ok, hostname} = :inet.gethostname()
-# EARENDIL_CADENCE_NODE targets another worktree's server (its iex --sname); default `cadence`.
-peer = :"#{System.get_env("EARENDIL_CADENCE_NODE", "cadence")}@#{hostname}"
+# EARENDIL_CADENCE_NODE targets another worktree's server.
+peer_name =
+  System.get_env("EARENDIL_CADENCE_NODE") || "cadence_#{System.fetch_env!("CADENCE_DEV_SLOT")}"
+
+peer = :"#{peer_name}@#{hostname}"
+
 unless Node.connect(peer), do: raise("Start mise run cadence before the live demo")
 
 # Per-packet SQL debug output overwhelms an interactive development terminal.
 # Keep normal operational messages and every warning/error during the rehearsal.
 :ok = :rpc.call(peer, Logger, :configure, [[level: :info]])
 
-for file <- ["fixture.exs", "dashboards.exs", "live_contacts.exs"] do
+for file <- ["fixture.exs", "live_contacts.exs"] do
   case :rpc.call(
          peer,
          Code,
@@ -23,46 +40,50 @@ for file <- ["fixture.exs", "dashboards.exs", "live_contacts.exs"] do
   end
 end
 
+sites =
+  case :rpc.call(peer, Cadence.Dev.ReflectOrbital.Fixture, :sites, []) do
+    sites when is_list(sites) -> length(sites)
+    error -> raise "Could not read fixture sites: #{inspect(error)}"
+  end
+
+scids =
+  for {scid, _site} <- CadenceSimulator.Load.Shape.fleet(craft, sites),
+      CadenceSimulator.Load.Shape.in_contact?(scid, sites, shape, per_site),
+      do: scid
+
 duration = String.to_integer(System.get_env("EARENDIL_DEMO_CONTACT_SECONDS") || "7200")
 unless duration in 60..28_800, do: raise("Demo duration must be 60–28800 seconds")
 
-IO.puts("Preparing ten rehearsal contacts and recovering their telemetry decoders…")
+IO.puts("Preparing #{length(scids)} rehearsal contacts and recovering their telemetry decoders…")
 
 contacts =
-  case :rpc.call(peer, Cadence.Dev.ReflectOrbital.LiveContacts, :run, [duration], 1_800_000) do
-    contacts when is_list(contacts) and length(contacts) == 10 -> contacts
+  case :rpc.call(
+         peer,
+         Cadence.Dev.ReflectOrbital.LiveContacts,
+         :run,
+         [duration, scids],
+         1_800_000
+       ) do
+    contacts when is_list(contacts) and length(contacts) == length(scids) -> contacts
     error -> raise "Contact setup failed: #{inspect(error, limit: 20)}"
   end
 
 IO.puts("Checking telemetry history and saving the dashboard suite…")
 
-case :rpc.call(
-       peer,
-       Cadence.Dev.ReflectOrbital.Dashboards,
-       :run,
-       [[replace?: System.get_env("EARENDIL_REBUILD_DASHBOARDS") == "1"]],
-       120_000
-     ) do
-  %{dashboards: dashboards, playlist: playlist} ->
-    IO.puts("Earendil: ten live spacecraft, 1 Hz per packet family, local TCP ingress")
+%{dashboards: dashboards, playlist: playlist} =
+  EarendilDashboardImport.run("org-reflect-orbital-demo", "mission-earendil-demo")
 
-    Enum.each(
-      dashboards,
-      &IO.puts(
-        "#{&1.name}: http://localhost:4001/missions/mission-earendil-demo/ops/dashboards/#{&1.id}"
-      )
-    )
+IO.puts("Earendil: #{length(contacts)} live spacecraft, 1 Hz per packet family, local TCP ingress")
 
-    IO.puts("Playlist: #{playlist}")
-
-  error ->
-    raise "Dashboard setup failed: #{inspect(error, limit: 30)}"
-end
+base_url = System.get_env("BASE_URL") || "http://127.0.0.1:#{System.get_env("PORT", "4001")}"
+console_url = base_url <> "/console/reflect-orbital/earendil/telemetry/dashboards"
+Enum.each(dashboards, &IO.puts("#{&1.name}: #{console_url}/#{&1.id}"))
+IO.puts("Playlist: #{console_url}/playlists/#{playlist}/present")
 
 Application.put_env(:cadence_simulator, :provider_http, enabled: false)
 
 Application.put_env(:cadence_simulator, :provider_store,
-  path: Path.expand("../var/reflect_orbital/dashboard_feed.dets", __DIR__)
+  path: Path.expand("../var/reflect_orbital/dashboard_feed.ets", __DIR__)
 )
 
 {:ok, _} = Application.ensure_all_started(:cadence_simulator)
@@ -74,8 +95,7 @@ feeds =
         target_id: contact.source_endpoint_id,
         rate_hz: 1.0,
         output: {:tcp, "127.0.0.1", contact.port},
-        definitions_path:
-          Path.expand("../legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml", __DIR__),
+        definitions_path: Path.expand("../dev/catalogs/demo_spacecraft.yaml", __DIR__),
         provider: CadenceSimulator.Providers.DatabaseDynamics,
         provider_opts: [noise_amplitude: 0.05],
         parallel_mode: :sequential,
@@ -83,7 +103,6 @@ feeds =
         frame: %{format: :tm, frame_size: 1115, scid: contact.scid, vcid: 0}
       )
 
-    Process.sleep(100)
     {pid, contact}
   end)
 

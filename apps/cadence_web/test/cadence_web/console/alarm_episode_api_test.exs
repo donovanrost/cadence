@@ -17,7 +17,7 @@ defmodule CadenceWeb.Console.AlarmEpisodeAPITest do
   end
 
   defp path(c, suffix),
-    do: "/api/console/v1/missions/#{c.mission.mission_id}/alarm-episodes" <> suffix
+    do: "/api/v1/missions/#{c.mission.mission_id}/alarm-episodes" <> suffix
 
   defp conn(c), do: TestFixtures.member_conn(c.user)
 
@@ -190,7 +190,7 @@ defmodule CadenceWeb.Console.AlarmEpisodeAPITest do
     assert %{"error" => %{"code" => "mission_not_found"}} =
              c
              |> conn()
-             |> get("/api/console/v1/missions/#{stranger.mission_id}/alarm-episodes")
+             |> get("/api/v1/missions/#{stranger.mission_id}/alarm-episodes")
              |> json_response(404)
   end
 end

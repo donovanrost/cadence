@@ -1,13 +1,13 @@
 defmodule Cadence.Protocol.RecordArchive.InstancesTest do
   use Cadence.ProcessDataCase, async: false
 
-  alias Cadence.Ingress.RawEvidence
+  import Ecto.Query
 
-  alias Cadence.Protocol.RecordArchive.FileSystem.RecordEntryRow,
-    as: ProtocolArchiveRecordEntryRow
+  alias Cadence.Ingress.RawEvidence
 
   alias Cadence.Protocol.{PacketRecord, RecordArchive, TransferFrameRecord}
   alias Cadence.Protocol.RecordArchive.FileSystem
+  alias Cadence.Protocol.RecordArchive.FileSystem.{IdentityRow, SegmentRow}
   alias Cadence.Replay.Scope
   alias Cadence.Repo
 
@@ -208,9 +208,10 @@ defmodule Cadence.Protocol.RecordArchive.InstancesTest do
   end
 
   defp archive_entry_count(archive_backend) do
-    ProtocolArchiveRecordEntryRow
-    |> where([row], row.archive_backend == ^archive_backend)
-    |> Repo.aggregate(:count, :entry_id)
+    IdentityRow
+    |> join(:inner, [i], s in SegmentRow, on: s.id == i.segment_id)
+    |> where([_i, s], s.archive_backend == ^archive_backend)
+    |> Repo.aggregate(:count)
   end
 
   defp segment_files(base_path) do

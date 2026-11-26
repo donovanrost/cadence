@@ -21,7 +21,7 @@ Status: **implemented** (`CadenceWeb.Console.*`, tests in `apps/cadence_web/test
   `base: '/console/'`, `server.port: 5181`, `strictPort`, `server.origin: 'http://127.0.0.1:5181'`
   and `cors: true`. Set `CONSOLE_VITE_ORIGIN=""` to serve the built output in dev.
 
-## `GET /api/console/v1/session`
+## `GET /api/v1/session`
 
 The bootstrap payload.
 
@@ -44,7 +44,7 @@ The bootstrap payload.
       }
     ],
     "csrf_token": "…",
-    "socket": {"path": "/socket/console"},
+    "socket": {"path": "/socket"},
     "pending_invitations_count": 1
   }
 }
@@ -80,18 +80,18 @@ Errors: `401 unauthenticated`.
 
 - `GET /session` carries `admin_mode_expires_at`: ISO time admin mode ends, or `null` when it's
   off. It drives the 'ADMIN MODE · 52:10' chip.
-- `POST /api/console/v1/session/admin-mode {password}` → `200 {expires_at}`: enters admin mode for
+- `POST /api/v1/session/admin-mode {password}` → `200 {expires_at}`: enters admin mode for
   one hour (the server's TTL). Entering while on starts a fresh hour. The password is checked
   through the attempt limit, like sign-in (§Attempt limit). Errors:
   - `422 password_incorrect` ("That password isn't right.");
   - `429 too_many_attempts` with `details.retry_after` and a `Retry-After` header;
   - `403 forbidden` for someone who isn't an eligible platform admin, before any password check;
   - `422 invalid_params` (`details.password`) when the password is missing.
-- `DELETE /api/console/v1/session/admin-mode` → `204`. Leaves admin mode; idempotent.
+- `DELETE /api/v1/session/admin-mode` → `204`. Leaves admin mode; idempotent.
 - Both need `x-csrf-token`. After either one, refetch `GET /session`: capabilities and
   organizations change with admin mode.
 
-## `PUT /api/console/v1/session/organization`
+## `PUT /api/v1/session/organization`
 
 Sets the session's default organization (the org switcher). Body `{"organization_id": "org_…"}` or
 `{"organization_slug": "reflect-orbital"}` (the shell uses the slug for an org in the URL it doesn't
@@ -104,7 +104,7 @@ organization.
 Errors: `403 invalid_csrf`, `404 organization_not_found` (not a member and not in admin mode),
 `422 invalid_params` (missing `organization_id`).
 
-## `GET /api/console/v1/missions/:mission_id`
+## `GET /api/v1/missions/:mission_id`
 
 ```json
 {"data": {"id": "mission_…", "slug": "earendil", "name": "Earendil",
@@ -115,23 +115,30 @@ Errors: `404 mission_not_found`.
 
 ## Sign-out
 
-`DELETE /session` (the existing browser route) also broadcasts `disconnect` to that session's
-console sockets. After it, the next API call returns `401` and the SPA should redirect to
-`/sign-in`.
+`DELETE /api/v1/session` → `204` (#664). A person only (CSRF on, like every write); a service
+identity gets `403 service_not_allowed`. The server revokes the session token, then broadcasts
+`disconnect` to that session's console sockets (revoked first, so a socket that reconnects at once
+is refused), then drops and renews the cookie session. After it the old cookie answers `401` here
+and the console's page sends you to `/console/sign-in`.
+
+Without a session it's `401 unauthenticated`, which the console treats as already signed out. Any
+other failure leaves you signed in, and the console says so. The console leaves with a full
+navigation to `/console/sign-in`, since the CSRF token and every cached read belonged to the old
+session. The root `DELETE /session` and `PUT /session/organization` are gone.
 
 ## Account: my invitations (§11 L21)
 
 The signed-in user's own pending invitations. People who aren't signed in accept through the
 emailed link (`/invitations/:token`, server-rendered; api-ops' L5 token path).
 
-- `GET /api/console/v1/account/invitations` → `{invitations: [{id, organization {id, slug,
+- `GET /api/v1/account/invitations` → `{invitations: [{id, organization {id, slug,
   name}, role, invited_by {name} | null, invited_at, expires_at}]}`, oldest first. Only pending,
   unexpired invitations addressed to my current email (the same rule as
   `pending_invitations_count`).
-- `POST /api/console/v1/account/invitations/:id/accept` → `{organization {id, slug, name}, role}`.
+- `POST /api/v1/account/invitations/:id/accept` → `{organization {id, slug, name}, role}`.
   The membership exists at once. The session is a boot snapshot, so open the new organization
   with a full navigation (re-bootstrap).
-- `POST /api/console/v1/account/invitations/:id/decline` → `{id, status: "declined"}`. Final; the
+- `POST /api/v1/account/invitations/:id/decline` → `{id, status: "declined"}`. Final; the
   inviter's People list shows it as declined.
 - Errors: `404 invitation_not_found` for an unknown id **or** one addressed to someone else (the
   same answer, so ids don't leak); `409 invitation_not_pending` with `details.status` `accepted |
@@ -139,7 +146,7 @@ emailed link (`/invitations/:token`, server-rendered; api-ops' L5 token path).
 
 ## Account: password and sessions (backlog)
 
-The signed-in user's own account, under `/api/console/v1/account` (no organization or mission).
+The signed-in user's own account, under `/api/v1/account` (no organization or mission).
 
 - `PUT /account/password {current_password, new_password}` → `204`. The new password needs at
   least 12 characters and must differ from the current one. Every **other** session of the user is
@@ -190,7 +197,7 @@ They show in every organization the person is or was a member of.
 
 The SPA serves the auth screens itself: `GET /console/sign-in`, `/console/invitations/:token` and
 `/console/no-organization` return the SPA document **without** a console session, with the
-`csrf-token` meta. The JSON lives under `/api/console/v1/auth`. It works signed out, but every
+`csrf-token` meta. The JSON lives under `/api/v1/auth`. It works signed out, but every
 write still needs `x-csrf-token` from that meta. After a successful sign-in or accept the session
 is renewed (against fixation), so the CSRF token changes: refetch `GET /session`.
 

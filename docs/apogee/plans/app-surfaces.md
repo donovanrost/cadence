@@ -35,7 +35,7 @@ their UI (managed-application framework).
    (a per-app save-outcome adapter, the seam for B later) and telemetry_decom's `request_activation` goes to L10
    approvals. B (change-set kinds for app config) is queued for domain much later.
 
-## Proposed endpoints (console API, `/api/console/v1/missions/:mission_id`)
+## Proposed endpoints (console API, `/api/v1/missions/:mission_id`)
 
 ### A1 extended: `GET /apps` rows gain
 ```

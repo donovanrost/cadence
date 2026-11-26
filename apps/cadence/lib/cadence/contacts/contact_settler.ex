@@ -27,12 +27,15 @@ defmodule Cadence.Contacts.ContactSettler do
 
   use GenServer, restart: :temporary
 
+  require Logger
+
   alias Cadence.Contacts.ContactSettlement
   alias Cadence.Contacts.ListenerRefusalAttention
   alias Cadence.Contacts.RealizedContact
   alias Cadence.Contacts.Scheduler
   alias Cadence.Control.Contacts, as: Runtime
   alias Cadence.Control.ProcessNamespace
+  alias Cadence.Telemetry.Storage, as: TelemetryStorage
 
   @doc "The settlers' supervisor, a child of the control root supervisor."
   @spec supervisor_name(ProcessNamespace.t()) :: GenServer.name()
@@ -198,6 +201,8 @@ defmodule Cadence.Contacts.ContactSettler do
     scid_checks = Runtime.realized_contact_scid_checks(mission_id, id)
 
     stop = Runtime.terminate_realized_contact(mission_id, id)
+    # End of pass: write the mission's pending watermark window (#690) so the pass reads settled.
+    log_unwritten_watermark(TelemetryStorage.flush_source_watermarks(mission_id), mission_id)
 
     _ =
       if state.mode == :replay,
@@ -216,6 +221,14 @@ defmodule Cadence.Contacts.ContactSettler do
     # Its runtime is gone, listener included: a pass that couldn't start (ux U45) starts now.
     :ok = Scheduler.retry_starts(mission_id)
     {:stop, :normal, state}
+  end
+
+  defp log_unwritten_watermark(:ok, _mission_id), do: :ok
+
+  defp log_unwritten_watermark({:error, reason}, mission_id) do
+    Logger.error(
+      "contact settled with an unwritten watermark window for mission #{mission_id}: #{inspect(reason)}"
+    )
   end
 
   defp process_name(namespace, contact, opts) do

@@ -18,14 +18,13 @@ defmodule Cadence.Reads.CompositionReadsTest do
   alias Cadence.MissionModels.{
     CompositionNumberRow,
     CompositionRow,
-    Compositions,
-    CompositionViews
+    Compositions
   }
 
   alias Cadence.Reads.{CompositionActors, MissionModelApprovals}
   alias Cadence.Reads.MissionModelApprovals.CompositionKeys
 
-  @migration %{"actor_kind" => "system", "system_id" => "migration:20261120060000"}
+  @system_actor %{"actor_kind" => "system", "system_id" => "seed:composition-test"}
 
   setup do
     org = "org-d2-#{System.unique_integer([:positive])}"
@@ -47,12 +46,12 @@ defmodule Cadence.Reads.CompositionReadsTest do
       assert number(c, c.revision_id) == 1
 
       {:ok, two} =
-        Compositions.insert_or_get(c.org, c.mid, [{a, "/"}, {b, "/payload"}], @migration)
+        Compositions.insert_or_get(c.org, c.mid, [{a, "/"}, {b, "/payload"}], @system_actor)
 
       assert numbers(c) |> Map.fetch!(two.composition_id) == 3
 
       {:ok, again} =
-        Compositions.insert_or_get(c.org, c.mid, [{b, "/payload"}, {a, "/"}], @migration)
+        Compositions.insert_or_get(c.org, c.mid, [{b, "/payload"}, {a, "/"}], @system_actor)
 
       assert again.composition_id == two.composition_id
       assert numbers(c) |> Map.values() |> Enum.sort() == [1, 2, 3]
@@ -121,7 +120,7 @@ defmodule Cadence.Reads.CompositionReadsTest do
       assert database_id == c.catalog.catalog_database_id
     end
 
-    test "created_by: a seed names its runner while a member; the migration's actor is null", c do
+    test "created_by: a seed names its runner while a member", c do
       person = member!(c, "Mira K.")
       seed = Actor.system("seed:demo", "Seed", person.user_id)
       revision = import!(c, "Seeded", payload_yaml(), seed)
@@ -137,20 +136,6 @@ defmodule Cadence.Reads.CompositionReadsTest do
 
       # The fixture's own runner isn't a person: run_by reads unnamed, never echoed.
       assert %{created_by: %{run_by: %{id: nil, name: nil}}} = for_revision(c, c.revision_id)
-
-      a = layer_of(c, c.revision_id)
-
-      {:ok, migrated} =
-        Compositions.insert_or_get(
-          c.org,
-          c.mid,
-          [{a, "/"}, {layer_of(c, revision.mission_model_revision_id), "/p"}],
-          @migration
-        )
-
-      view = CompositionViews.fetch(c.org, c.mid, migrated.composition_id)
-      names = CompositionActors.names(c.org, [view.created_by])
-      assert CompositionActors.named(view, names).created_by == nil
     end
 
     test "a person who isn't a member is neither named nor identified; never an email", c do

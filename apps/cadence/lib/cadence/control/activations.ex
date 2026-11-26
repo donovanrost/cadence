@@ -16,7 +16,6 @@ defmodule Cadence.Control.Activations do
   alias Cadence.Control.Activations.{ActivationExecution, ActivationExecutionRow, ExecutionLock}
   alias Cadence.Control.Activations.{Approval, Preflight}
   alias Cadence.Control.Activations.Resume
-  alias Cadence.Control.Activations.Review
   alias Cadence.Control.MissionRuntimeReconciler
   alias Cadence.Control.Missions, as: ControlMissions
   alias Cadence.Governance
@@ -64,9 +63,6 @@ defmodule Cadence.Control.Activations do
   end
 
   defp settle(result, _opts), do: result
-
-  @doc "Reviews one mission-bound activation request through the host's human approval workflow."
-  def review(%Scope{} = scope, mission_id, input), do: Review.decide(scope, mission_id, input)
 
   @doc """
   Approves `request_id` only if its apply could run; otherwise nothing is recorded and the request

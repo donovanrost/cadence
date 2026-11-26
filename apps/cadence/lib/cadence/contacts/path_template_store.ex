@@ -18,6 +18,7 @@ defmodule Cadence.Contacts.PathTemplateStore do
   alias Cadence.Contacts.TransportProfile
   alias Cadence.Listing
   alias Cadence.Missions
+  alias Cadence.Persistence.BulkLookup
   alias Cadence.Repo
 
   @spec persist(binary(), PathTemplate.t()) ::
@@ -132,6 +133,14 @@ defmodule Cadence.Contacts.PathTemplateStore do
     end
   end
 
+  @doc "Exact mission path template versions keyed by `{id, version}`."
+  def fetch_versions(organization_id, mission_id, keys) do
+    PathTemplateRow
+    |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
+    |> BulkLookup.by_version(:path_template_id, keys)
+    |> Map.new(&{{&1.path_template_id, &1.version}, PathTemplateRow.to_domain(&1)})
+  end
+
   @spec list(binary()) :: [PathTemplate.t()]
   def list(mission_id) when is_binary(mission_id) do
     PathTemplateRow
@@ -184,19 +193,6 @@ defmodule Cadence.Contacts.PathTemplateStore do
       page: page,
       page_size: page_size
     }
-  end
-
-  @spec list_versions(binary(), binary()) :: [PathTemplate.t()]
-  def list_versions(mission_id, path_template_id)
-      when is_binary(mission_id) and is_binary(path_template_id) do
-    PathTemplateRow
-    |> where(
-      [row],
-      row.mission_id == ^mission_id and row.path_template_id == ^path_template_id
-    )
-    |> order_by([row], desc: row.version)
-    |> Repo.all()
-    |> Enum.map(&PathTemplateRow.to_domain/1)
   end
 
   @spec list_versions(binary(), binary(), binary()) :: [PathTemplate.t()]

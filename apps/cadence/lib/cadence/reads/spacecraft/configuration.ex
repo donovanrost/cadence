@@ -146,7 +146,6 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
            applications: base <> "/applications",
            communications: "/missions/#{mission.mission_id}/comms",
            readiness: base <> "/readiness",
-           approvals: "/missions/#{mission.mission_id}/ops/activations",
            settings: "/missions/#{mission.mission_id}/settings/cadence.governance",
            ops: ops_href(mission, active_entry)
          }

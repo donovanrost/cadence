@@ -1,6 +1,6 @@
 defmodule CadenceWeb.Console.Plugs.AuthAPISession do
   @moduledoc """
-  Session handling for `/api/console/v1/auth` (L5: sign-in and invitation links), which work
+  Session handling for `/api/v1/auth` (L5: sign-in and invitation links), which work
   signed out. CSRF is enforced on unsafe methods exactly like the rest of the console API (the
   `x-csrf-token` header, from the page's `csrf-token` meta); a valid session is optional and, when
   present, assigns `current_scope` (otherwise `nil`).

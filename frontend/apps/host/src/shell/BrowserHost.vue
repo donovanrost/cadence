@@ -6,7 +6,7 @@ import type {
   OpsPageNavigationResult,
   OpsPageUpdateSubscription,
 } from "@cadence/plugin-sdk/ops-pages";
-import { readHostSnapshot, requireRecord, errorMessage, type HostSnapshot } from "./host-snapshot";
+import { readHostSnapshot, errorMessage, type HostSnapshot } from "./host-snapshot";
 import { record } from "./snapshot-readers";
 import { useLiveVue } from "live_vue";
 import HostPage from "./HostPage.vue";
@@ -21,13 +21,7 @@ import {
   shellForRoute,
 } from "./host-navigation";
 import { hostBrowserHistory, ownBrowserHistory } from "./host-browser-history";
-import {
-  createConfigurationDrafts,
-  createConfigurationPort,
-  readConfiguration,
-} from "../mission-and-spacecraft/configuration";
 
-const CatalogPage = lazyHostPage("CatalogPage", () => import("../catalog/CatalogPage.vue"));
 const WorkspaceLanding = lazyHostPage(
   "WorkspaceLanding",
   () => import("../ops-workspace/features/landing/WorkspaceLanding.vue"),
@@ -36,25 +30,14 @@ const TimelinePage = lazyHostPage(
   "TimelinePage",
   () => import("../ops-workspace/features/timeline/TimelinePage.vue"),
 );
-const SpacecraftPage = lazyHostPage(
-  "SpacecraftPage",
-  () => import("../mission-and-spacecraft/SpacecraftPage.vue"),
-);
 const OpsModulePage = lazyHostPage(
   "OpsModulePage",
   () => import("../ops-workspace/features/module-pages/OpsModulePage.vue"),
-);
-const ActivationApprovalsPage = lazyHostPage(
-  "ActivationApprovalsPage",
-  () =>
-    import("../capability-management/features/activation-approvals/ActivationApprovalsPage.vue"),
 );
 
 const props = defineProps<{ snapshot: unknown }>();
 const initialSnapshot = readHostSnapshot(props.snapshot);
 const live = useLiveVue();
-const configurationDrafts = createConfigurationDrafts();
-const configurationPort = createConfigurationPort(configurationRequest);
 // A native Phoenix navigation can mount this host after the history module loaded.
 hostBrowserHistory.replace(initialSnapshot.path + window.location.hash);
 const router = createHostRouter(hostBrowserHistory);
@@ -67,13 +50,6 @@ const committed = shallowRef<CommittedPage | null>(null);
 function currentPage(): CommittedPage {
   if (!committed.value) throw new Error("The host page is unavailable.");
   return committed.value;
-}
-function field(value: unknown, ...keys: string[]): unknown {
-  for (const key of keys) {
-    if (!record(value)) return undefined;
-    value = value[key];
-  }
-  return value;
 }
 const failure = shallowRef<string | null>(null);
 const pending = shallowRef(false);
@@ -138,7 +114,7 @@ function guardNavigation(guard: () => boolean) {
   };
 }
 function beforeUnload(event: BeforeUnloadEvent) {
-  if (configurationDrafts.hasUnsaved() || (leaveGuard && !leaveGuard())) event.preventDefault();
+  if (leaveGuard && !leaveGuard()) event.preventDefault();
 }
 router.beforeEach(async (to, from) => {
   if (stopped) return false;
@@ -217,13 +193,6 @@ const missionContext = computed(() => {
     ? { organizationId, missionId, ...(resourceId ? { resourceId } : {}) }
     : null;
 });
-const spacecraftContext = computed(() => {
-  const mission = missionContext.value,
-    spacecraftId = committed.value?.params.spacecraft_id;
-  return mission && spacecraftId
-    ? { organizationId: mission.organizationId, missionId: mission.missionId, spacecraftId }
-    : null;
-});
 // A route may opt out of the host heading when its page renders its own identity bar.
 const pageHeading = computed(
   () => !(route.value && "pageChrome" in route.value && route.value.pageChrome === "none"),
@@ -286,74 +255,6 @@ async function reconnect() {
       failure.value = errorMessage(error);
   }
 }
-async function catalogAction(event: "reimport") {
-  const path = currentPage().snapshot.path;
-  const requestGeneration = generation;
-  const result = requireRecord(await request("host:catalog", { event, path }));
-  if (!stopped && generation === requestGeneration && currentPage().snapshot.path === path) {
-    if (typeof result.href !== "string") throw new Error("Invalid catalog destination.");
-    navigate(result.href);
-  }
-}
-function cancelCatalogUpload(params: Record<string, unknown>) {
-  live.pushEvent("catalog:upload:cancel", params);
-}
-async function spacecraftAction(event: string, input: Record<string, unknown>) {
-  const path = currentPage().snapshot.path;
-  const requestGeneration = generation;
-  const token = currentPage().snapshot.spacecraft_page?.form_token;
-  const result = requireRecord(await request("host:spacecraft", { event, input, path, token }));
-  if (
-    !stopped &&
-    generation === requestGeneration &&
-    currentPage().snapshot.path === path &&
-    event === "save" &&
-    result?.status === "ok"
-  ) {
-    const href = field(result, "data", "href");
-    const destination =
-      `/missions/${currentPage().route.params.mission_id}/spacecraft` +
-      (currentPage().snapshot.spacecraft_page?.page === "profile_new" ? "/profiles" : "");
-    if (typeof href !== "string" || href !== destination)
-      throw new Error("Invalid spacecraft destination.");
-    navigate(href);
-  }
-  return result;
-}
-async function configurationRequest(event: string, input: Record<string, unknown>) {
-  const path = currentPage().snapshot.path;
-  const requestGeneration = generation;
-  const userId = context.value?.user?.user_id;
-  const result = requireRecord(
-    await request("host:spacecraft-configuration", { event, input, path }),
-  );
-  if (
-    stopped ||
-    generation !== requestGeneration ||
-    currentPage().snapshot.path !== path ||
-    context.value?.user?.user_id !== userId
-  )
-    throw new Error("The spacecraft context changed.");
-  const host = readHostSnapshot(result.host);
-  if (host.path !== path || host.context.user?.user_id !== userId)
-    throw new Error("Invalid spacecraft context.");
-  if (event === "save" && result.status === "ok")
-    configurationDrafts.acceptSaved(readConfiguration(host.spacecraft_page?.data));
-  committed.value = { ...currentPage(), snapshot: host };
-  return result;
-}
-async function activationDecision(input: unknown) {
-  const path = currentPage().snapshot.path;
-  const requestGeneration = generation;
-  const token = currentPage().snapshot.activation_approvals?.token;
-  const result = requireRecord(await request("host:activation", { path, token, input }));
-  if (!stopped && generation === requestGeneration && currentPage().snapshot.path === path) {
-    const page = readHostSnapshot(result.page);
-    if (page.path !== path) throw new Error("Invalid activation response path.");
-    committed.value = { ...currentPage(), snapshot: page };
-  }
-  return result.result;
-}
 async function opsPageAction(payload: Record<string, unknown>) {
   const path = currentPage().snapshot.path,
     requestGeneration = generation;
@@ -401,7 +302,6 @@ onMounted(() => {
   });
 });
 onBeforeUnmount(() => {
-  configurationDrafts.clear();
   window.removeEventListener("beforeunload", beforeUnload);
   stopped = true;
   generation++;
@@ -423,7 +323,7 @@ onBeforeUnmount(() => {
     managed-page
   >
     <HostPage
-      :key="route.kind === 'spacecraft' ? committed.route.path : committed.route.fullPath"
+      :key="committed.route.fullPath"
       :title="pageTitle"
       :breadcrumbs="pageBreadcrumbs"
       :workspace="variant === 'ops'"
@@ -433,20 +333,8 @@ onBeforeUnmount(() => {
     >
       <p v-if="failure" id="host-navigation-error" role="alert">{{ failure }}</p>
       <div :aria-busy="pending" :data-host-path="committed.snapshot.path">
-        <ActivationApprovalsPage
-          v-if="route.kind === 'activation_approvals' && missionContext"
-          :id="route.mountId"
-          :snapshot="committed.snapshot.activation_approvals"
-          :context="{
-            organization_id: missionContext.organizationId,
-            mission_id: missionContext.missionId,
-          }"
-          :execute="activationDecision"
-          :refresh="reconnect"
-          :navigating="pending"
-        />
         <OpsModulePage
-          v-else-if="route.kind === 'ops_module' && missionContext"
+          v-if="route.kind === 'ops_module' && missionContext"
           :id="route.mountId"
           :contribution-id="route.contribution"
           :snapshot="committed.snapshot.ops_page"
@@ -459,22 +347,6 @@ onBeforeUnmount(() => {
           :guard-navigation="guardNavigation"
           :refresh="reconnect"
           :refreshing="pending"
-        />
-        <SpacecraftPage
-          v-else-if="route.kind === 'spacecraft'"
-          :id="route.mountId"
-          :page="route.spacecraftPage"
-          :class="route.viewClass"
-          :snapshot="committed.snapshot.spacecraft_page"
-          v-bind="
-            spacecraftContext
-              ? { configurationIdentity: spacecraftContext, configurationPort, configurationDrafts }
-              : {}
-          "
-          :execute="spacecraftAction"
-          :navigating="pending"
-          :navigate="navigate"
-          :refresh="reconnect"
         />
         <WorkspaceLanding
           v-else-if="
@@ -495,16 +367,6 @@ onBeforeUnmount(() => {
           :mission-id="missionContext.missionId"
           :navigate="navigate"
           :refresh="reconnect"
-        />
-        <CatalogPage
-          v-else-if="route.kind === 'catalog'"
-          :id="route.mountId"
-          :page="route.catalogPage"
-          :snapshot="committed.snapshot.catalog"
-          :execute="catalogAction"
-          :refresh="reconnect"
-          :cancel-upload="cancelCatalogUpload"
-          :navigate="navigate"
         />
         <p v-else id="host-route-unavailable" role="alert">This page is unavailable.</p>
       </div>

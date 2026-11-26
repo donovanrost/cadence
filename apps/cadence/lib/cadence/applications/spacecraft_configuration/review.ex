@@ -288,7 +288,9 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
 
   # #534: the telemetry's packet definition versions are resolved by content, with `acc` carrying
   # the generation's resolutions across its catalogs (amendment 1).
-  defp catalog_inputs(mission, catalog_id, acc) do
+  # D3 (#544): `revision_id` is the revision the catalog's composition selected; nil keeps the
+  # catalog's own (a catalog with no composition, as before).
+  defp catalog_inputs(mission, catalog_id, acc, revision_id \\ nil) do
     with {:ok, catalog} <-
            Catalog.fetch_revision(mission.organization_id, mission.mission_id, catalog_id),
          :ok <- has_mission_model(catalog),
@@ -296,7 +298,7 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
            MissionModels.fetch_revision(
              mission.organization_id,
              mission.mission_id,
-             catalog.mission_model_revision_id
+             revision_id || catalog.mission_model_revision_id
            ),
          {:ok, plans} <-
            MissionModels.fetch_runtime_plans(
@@ -330,8 +332,11 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
   cache also carries the generation's resolved packet definition versions, so its catalogs give
   distinct contents distinct versions (#534).
   """
-  @spec cached_inputs(map(), map(), binary()) :: {:ok, map(), map()} | {:error, term()}
-  def cached_inputs(cache, mission, catalog_id) do
+  @spec cached_inputs(map(), map(), binary(), binary() | nil) ::
+          {:ok, map(), map()} | {:error, term()}
+  # Keyed by catalog: within a generation a catalog's composition selects one revision, and
+  # ApplicationInputs.resync_packet_inputs/3 reads the inputs by catalog.
+  def cached_inputs(cache, mission, catalog_id, revision_id \\ nil) do
     case Map.fetch(cache, catalog_id) do
       {:ok, inputs} ->
         {:ok, inputs, cache}
@@ -339,7 +344,7 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
       :error ->
         acc = Map.get(cache, @versions, %{})
 
-        with {:ok, inputs, acc} <- catalog_inputs(mission, catalog_id, acc),
+        with {:ok, inputs, acc} <- catalog_inputs(mission, catalog_id, acc, revision_id),
              do: {:ok, inputs, cache |> Map.put(catalog_id, inputs) |> Map.put(@versions, acc)}
     end
   end

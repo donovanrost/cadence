@@ -9,7 +9,7 @@ defmodule CadenceWeb.Console.SpacecraftEditAPITest do
     user = TestFixtures.persist_user!()
     TestFixtures.grant_membership!(user, org)
     mission = TestFixtures.persist_mission!(org)
-    %{user: user, mission: mission, base: "/api/console/v1/missions/#{mission.mission_id}"}
+    %{user: user, mission: mission, base: "/api/v1/missions/#{mission.mission_id}"}
   end
 
   test "the spacecraft schema: identity, then the switches with ux's help", c do

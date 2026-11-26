@@ -9,7 +9,7 @@ defmodule Cadence.Reads.DataSourceDirectory do
 
   alias Cadence.DataSources.{AdapterRegistry, DataSource, SourceCredentialReference}
   alias Cadence.ExtensionCatalog
-  alias Cadence.Projections.DataSources.{Health, Watermarks}
+  alias Cadence.Projections.DataSources.Health
   alias Cadence.Reads.DataSources
 
   @doc "One source as `list/3` shows it, or `nil` when the mission can't see it."
@@ -26,7 +26,7 @@ defmodule Cadence.Reads.DataSourceDirectory do
 
     received =
       organization_id
-      |> Watermarks.list_source_watermark_statuses(mission_id)
+      |> DataSources.list_source_watermark_statuses(mission_id)
       |> Enum.group_by(& &1.data_source_id, & &1.latest_receipt_time)
       |> Map.new(fn {id, times} -> {id, times |> Enum.reject(&is_nil/1) |> max_time()} end)
 

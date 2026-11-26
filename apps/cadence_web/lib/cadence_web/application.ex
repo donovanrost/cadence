@@ -12,6 +12,9 @@ defmodule CadenceWeb.Application do
       CadenceWeb.FrontendReleasePublication.Janitor,
       CadenceWeb.Console.LimitTransitions,
       {Task.Supervisor, name: CadenceWeb.Console.TaskSupervisor},
+      # The live fleet push reads each mission once, not once per socket (#797).
+      {Registry, keys: :unique, name: CadenceWeb.Console.FleetSources},
+      {DynamicSupervisor, name: CadenceWeb.Console.FleetSourceSupervisor, strategy: :one_for_one},
       CadenceWeb.Console.ContactChanges,
       CadenceWeb.Endpoint
     ]

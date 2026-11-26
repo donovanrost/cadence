@@ -4,9 +4,12 @@ defmodule Cadence.ContactPlanning.FleetOptimizer.Scoring do
   alias Cadence.ContactPlanning.{
     ContactOpportunitySnapshot,
     ContactRequirementVersion,
+    ContentHash,
     FleetOptimizer.Constraints,
     FleetPlanningPolicyVersion
   }
+
+  alias Cadence.ContactPlanning.FleetOptimizer.SelectionIndex
 
   @scale 1_000
   @expiry_risk_window_seconds 24 * 60 * 60
@@ -16,11 +19,17 @@ defmodule Cadence.ContactPlanning.FleetOptimizer.Scoring do
           ContactRequirementVersion.t(),
           ContactOpportunitySnapshot.t(),
           non_neg_integer(),
-          [ContactOpportunitySnapshot.t()],
+          SelectionIndex.t(),
           FleetPlanningPolicyVersion.t(),
           DateTime.t()
         ) :: {integer(), map()}
   def score(requirement, snapshot, scarcity, selected, policy, now) do
+    {score, document, _cache} = score(requirement, snapshot, scarcity, selected, policy, now, %{})
+    {score, document}
+  end
+
+  @doc false
+  def score(requirement, snapshot, scarcity, selected, policy, now, cache) do
     components = %{
       "priority" => priority(requirement.priority),
       "deadline" => deadline(requirement, snapshot),
@@ -34,8 +43,16 @@ defmodule Cadence.ContactPlanning.FleetOptimizer.Scoring do
       "expiry_risk_penalty" => expiry_risk(snapshot, now)
     }
 
-    weights = policy.scoring_document
+    case Map.fetch(cache, components) do
+      {:ok, {document, _sha256}} ->
+        {document["total"], document, cache}
 
+      :error ->
+        score_document(components, policy.scoring_document, cache)
+    end
+  end
+
+  defp score_document(components, weights, cache) do
     contributions = %{
       "priority" => components["priority"] * weights["priority_weight"],
       "deadline" => components["deadline"] * weights["deadline_weight"],
@@ -53,14 +70,15 @@ defmodule Cadence.ContactPlanning.FleetOptimizer.Scoring do
 
     total = contributions |> Map.values() |> Enum.sum()
 
-    {total,
-     %{
-       "scale" => @scale,
-       "components" => components,
-       "weights" => Map.take(weights, weight_fields()),
-       "contributions" => contributions,
-       "total" => total
-     }}
+    document = %{
+      "scale" => @scale,
+      "components" => components,
+      "weights" => Map.take(weights, weight_fields()),
+      "contributions" => contributions,
+      "total" => total
+    }
+
+    {total, document, Map.put(cache, components, {document, ContentHash.sha256(document)})}
   end
 
   defp priority(:critical), do: 1_000
@@ -125,11 +143,7 @@ defmodule Cadence.ContactPlanning.FleetOptimizer.Scoring do
   end
 
   defp diversity(requirement, snapshot, selected, policy) do
-    existing =
-      Enum.filter(selected, fn current ->
-        current.contact_requirement_id == requirement.contact_requirement_id and
-          current.contact_requirement_version == requirement.version
-      end)
+    existing = SelectionIndex.for_requirement(selected, requirement)
 
     dimensions =
       [
@@ -166,10 +180,7 @@ defmodule Cadence.ContactPlanning.FleetOptimizer.Scoring do
   defp fragmentation(snapshot, selected) do
     gaps =
       selected
-      |> Enum.filter(fn current ->
-        current.route_binding_document["spacecraft_id"] ==
-          snapshot.route_binding_document["spacecraft_id"]
-      end)
+      |> SelectionIndex.for_route_spacecraft(snapshot.route_binding_document["spacecraft_id"])
       |> Enum.map(&gap(snapshot, &1))
       |> Enum.filter(&is_integer/1)
 

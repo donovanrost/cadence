@@ -1,6 +1,6 @@
 defmodule CadenceWeb.Console.Plugs.MissionScope do
   @moduledoc """
-  For `/api/console/v1/missions/:mission_id/...` routes: rebinds
+  For `/api/v1/missions/:mission_id/...` routes: rebinds
   `current_scope` to the mission's organization and assigns `current_mission`,
   or answers 404 `mission_not_found` when the actor cannot operate it.
   """

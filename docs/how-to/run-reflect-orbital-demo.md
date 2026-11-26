@@ -16,61 +16,28 @@ or an OpenC3 COSMOS integration.
 
 ## Start and seed
 
-Run these commands from the repository root in separate terminals. Postgres and
-an existing Cadence user are required. The default local user is
-`admin@example.com`; set `EARENDIL_DEMO_EMAIL` to use another existing account.
-
-Start OrbStack (or the configured Docker engine), then the local telemetry history
-and observability services. The repository's `mise` environment enables OTLP
-exports to port 4318, so the collector must be running:
+Run the private worktree stack from the repository root. See
+[Per-worktree development environment](../dev-environment.md) for prerequisites and ports.
+The default local user is `admin@example.com`; set `EARENDIL_DEMO_EMAIL` before seeding
+to use another existing account.
 
 ```sh
-docker compose up -d questdb greptimedb tempo loki otel_collector grafana
+dev/stack up
 ```
 
-Start the independent simulator (leave it running):
-
-```sh
-mise run earendil-simulator
-```
-
-Apply migrations and run the seed:
-
-```sh
-cd apps/cadence_web
-mix ecto.migrate -r Cadence.Repo
-mix cadence.questdb.migrate
-mix run --no-start ../../dev/reflect_orbital_demo.exs
-```
-
-Start the named Cadence server with the local provider credential (leave it running):
-
-```sh
-POOL_SIZE=30 DB_QUEUE_TARGET_MS=1000 mise run cadence
-```
-
-The repository's `mise` environment also defines this public demo credential, so
-`mise run cadence` inherits it. A server started before adding that environment
-variable needs to be restarted with it. Do not start a second server on port 4001.
-
-The larger development database pool leaves capacity for dashboard reads alongside
-ten concurrent telemetry decoders and their history writers. The queue target allows
-short local CPU/I/O bursts without dropping database requests. These environment
-overrides apply to this server process; the development defaults remain 10 connections
-and a 50 ms queue target. Finish builds and test suites before starting the live feeds.
-
-The simulator binds **127.0.0.1:4101** and uses separate public local admin and
-provider tokens. It stores its scenario, run, delivery profiles, and reservations
-under `var/reflect_orbital/provider.dets`. These credentials and endpoints are only
-for local development.
+`up` starts the independent simulator, migrates both stores, runs the Reflect Orbital
+and QA seeds, and starts the named Phoenix node and console. The simulator binds a
+slot-specific loopback port and stores its scenario, run, delivery profiles, and
+reservations under `var/reflect_orbital/provider.ets`. Its provider token is private
+to this worktree in `mise.local.toml`. Use `dev/stack status` for the URLs.
 
 The seed is rerunnable: it uses stable identities, reuses the simulator run and
 delivery profiles, and reconciles this fixture’s 500 spacecraft to the complete demo database.
 Re-running it intentionally restores the fixture’s catalog, telemetry and commanding inputs.
 It does not delete or reset other organizations. It grants the chosen existing
 user organization-admin membership in Reflect Orbital. A stopped simulator run
-is reported as an error rather than silently replaced. Stop the processes with
-Ctrl-C when finished; the persisted demo remains available.
+is reported as an error rather than silently replaced. Run `dev/stack down` when
+finished; the persisted demo remains available.
 
 ## What is configured
 
@@ -80,9 +47,9 @@ Ctrl-C when finished; the persisted demo remains available.
 | Orbit metadata | 20 planes × 25 spacecraft; 625 km, 97.9° inclination, phased RAAN/anomaly |
 | Bus | Shared version-pinned Earendil Block 1 profile; TM downlink, TC uplink, 1,115-byte frames, VC 0 |
 | Payload metadata | Solar reflector; 475 deployed, 25 stowed for commissioning; illumination disabled |
-| Catalog | Unmodified `legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml`: 10 telemetry packets and 27 commands |
+| Catalog | Unmodified `dev/catalogs/demo_spacecraft.yaml`: 10 telemetry packets and 27 commands |
 | Ground network | 10 synthetic sites with 38 modeled antennas, synchronized through the provider HTTP API |
-| Delivery | 10 version-pinned TCP ingress profiles/transports on loopback ports 42100–42109 |
+| Delivery | 10 version-pinned TCP ingress profiles/transports on loopback ports derived from `EARENDIL_INGRESS_BASE_PORT` |
 | Routing | 500 provider spacecraft mappings; primary and backup routes for each spacecraft |
 | Scheduling | Deterministic synthetic visibility, 97-minute cadence, eight-minute windows, bounded jitter |
 | Access | Existing authenticated organization and mission routes; no demo-only web routes |
@@ -105,16 +72,16 @@ retain the previous default; explicit legacy data-plane values take precedence.
 
 ## Presenter walkthrough
 
-1. Sign in at [Cadence](http://localhost:4001). From platform administration,
+1. Sign in at Cadence at the Phoenix URL from `dev/stack status`. From platform administration,
    open **Organizations → Reflect Orbital → Open Organization**.
-2. Open [Earendil's spacecraft directory](http://localhost:4001/missions/mission-earendil-demo/spacecraft).
+2. Open **Earendil's spacecraft directory** (`/missions/mission-earendil-demo/spacecraft`).
    Show 500 assets, the shared profile, unique identities, and pagination/search.
 3. Open EARENDIL-001 and its configuration. Show the versioned catalog, APID
    selection, frame interpretation, and primary/backup delivery routes.
-4. Open [Ground Stations](http://localhost:4001/missions/mission-earendil-demo/comms/ground-stations)
-   and [Providers](http://localhost:4001/missions/mission-earendil-demo/comms/providers).
+4. Open **Ground Stations** (`/missions/mission-earendil-demo/comms/ground-stations`)
+   and **Providers** (`/missions/mission-earendil-demo/comms/providers`).
    Show synchronized fleet/site inventory and the organization account's mission grant.
-5. Open [Contacts](http://localhost:4001/missions/mission-earendil-demo/ops/contacts)
+5. Open **Contacts** (`/missions/mission-earendil-demo/ops/contacts`)
    or **Ops → Requirements** to search provider-owned opportunities. Use a future
    two-hour horizon; synthetic windows are intentionally not accelerated.
 
@@ -137,11 +104,11 @@ the same YAML and assign it to the saved configurations. Activate the new saved
 revisions with the activation command below; the previously reviewed model is
 retained unchanged.
 
-Activate the fleet in the existing named development server (`mise run cadence`),
+Activate the fleet in the existing named development server (`dev/stack up`),
 from the repository root:
 
 ```sh
-elixir --sname earendil_setup --cookie cadence dev/reflect_orbital_activate.exs --single-operator
+mise exec -- env ERL_EPMD_ADDRESS=127.0.0.1 elixir --sname "earendil_setup_$CADENCE_DEV_SLOT" --cookie "$CADENCE_ERLANG_COOKIE" --erl '-kernel inet_dist_use_interface {127,0,0,1}' dev/reflect_orbital_activate.exs --single-operator
 ```
 
 **`--single-operator` explicitly changes only Earendil’s activation setting to
@@ -166,7 +133,7 @@ sent by the setup. QuestDB is needed for telemetry history.
 
 ### Command preparation
 
-Open the [Commanding workspace](http://localhost:4001/missions/mission-earendil-demo/ops/commands/workspace).
+Open the **Commanding workspace** (`/missions/mission-earendil-demo/ops/commands/workspace`).
 Search for a spacecraft such as `EARENDIL-001` and select its runtime target, which
 shows `SCID 1`. The separate `EARENDIL-001 TT&C` result is the provider mapping;
 use the target with the spacecraft's SCID for the command rehearsal.
@@ -207,6 +174,13 @@ Each spacecraft emits all ten packet families from the assigned demo YAML every
 second: 100 packets/second across the ten vehicles. The other 490 spacecraft
 remain configured and selectable, with no simulated live feed.
 
+Use `mise run earendil-live -- --craft 500 --shape peak` for all 500
+configured spacecraft, or `--shape average --per-site 8` (or `16`) for up to
+that many spacecraft per site. The selected spacecraft must be configured and
+activated on the target Cadence node. Additional rehearsal
+paths use dedicated listeners at port `43000 + SCID`. For the simulator's
+standalone 1,000-path benchmark, see [Measure simulator contact load](measure-simulator-load.md).
+
 The simulator sends CCSDS TM frames over the ten local TCP ingress paths. Cadence
 performs normal frame processing, database-driven decoding, current-value updates,
 monitoring, and history persistence. Values are synthetic generic spacecraft data,
@@ -214,32 +188,32 @@ not Reflect Orbital flight telemetry. The live task uses info-level server loggi
 to avoid flooding the development terminal with per-packet SQL; warnings and errors
 remain enabled. Restart Cadence to restore its configured logging level.
 
-Managed QuestDB writes use bounded HTTP ingestion batches on the existing port
-9000. Reads continue through the SQL API. The migrated table's timestamp and
+Managed QuestDB writes use bounded HTTP ingestion batches at the slot-specific
+`CADENCE_QUESTDB_HTTP_ENDPOINT`. Reads continue through the SQL API. The migrated table's timestamp and
 idempotency key retain retry deduplication. Counters outside QuestDB's signed LONG
 range use the lossless JSON integer representation; these values remain readable
 but do not participate in native numeric aggregates.
 
-The task creates six native dashboards and a 30-second rotating wallboard playlist:
+The task imports six native dashboards through REST and creates a 30-second rotating wallboard playlist:
 
-- [Fleet Watch](http://localhost:4001/missions/mission-earendil-demo/ops/dashboards/dashboard-earendil-fleet)
-- [Spacecraft Overview](http://localhost:4001/missions/mission-earendil-demo/ops/dashboards/dashboard-earendil-overview)
-- [Electrical Power](http://localhost:4001/missions/mission-earendil-demo/ops/dashboards/dashboard-earendil-power)
-- [Thermal Control](http://localhost:4001/missions/mission-earendil-demo/ops/dashboards/dashboard-earendil-thermal)
-- [Attitude & Pointing](http://localhost:4001/missions/mission-earendil-demo/ops/dashboards/dashboard-earendil-attitude)
-- [Communications & Payload](http://localhost:4001/missions/mission-earendil-demo/ops/dashboards/dashboard-earendil-comms-payload)
+- **Fleet Watch** (`/console/reflect-orbital/earendil/telemetry/dashboards/dashboard-earendil-fleet`)
+- **Spacecraft Overview** (`/console/reflect-orbital/earendil/telemetry/dashboards/dashboard-earendil-overview`)
+- **Electrical Power** (`/console/reflect-orbital/earendil/telemetry/dashboards/dashboard-earendil-power`)
+- **Thermal Control** (`/console/reflect-orbital/earendil/telemetry/dashboards/dashboard-earendil-thermal`)
+- **Attitude & Pointing** (`/console/reflect-orbital/earendil/telemetry/dashboards/dashboard-earendil-attitude`)
+- **Communications & Payload** (`/console/reflect-orbital/earendil/telemetry/dashboards/dashboard-earendil-comms-payload`)
 
 Use the dashboard's spacecraft selector to switch subsystem views. All views
 refresh every second and show five-minute receipt-time trends. Open the dashboard
-directory to present **Earendil — Demo Rotation**. Rerunning the task reuses the
-saved dashboards and playlist, preserving manual dashboard edits.
+directory to present **Earendil — Demo Rotation**. Rerunning the task reuses identical
+dashboards and the saved playlist. If an existing dashboard has different content, the
+REST import reports a conflict with a diff; reset the worktree stack to restore the fixture.
 The playlist presents published snapshots and refreshes on each entry change or
 manual refresh; open an individual dashboard for continuous live updates.
 
-Startup probes QuestDB and saves its supported query capabilities before creating
+Startup probes QuestDB and saves its supported query capabilities before importing
 the views. Trend charts use native decimation to preserve the range of samples
-that arrive together after TCP buffering. To intentionally restore the fixture's
-dashboard definitions, run `EARENDIL_REBUILD_DASHBOARDS=1 mise run earendil-live`.
+that arrive together after TCP buffering.
 After a server restart, allow time for the ten telemetry partitions to recover
 their recorded state before the feeds start. This can take several minutes after
 repeated rehearsals, so start the feed before the presentation.
@@ -247,7 +221,7 @@ repeated rehearsals, so start the feed before the presentation.
 For uninterrupted presentation, the task creates two-hour **manual rehearsal
 contacts**, associated with the ten synthetic ground sites. These are explicitly
 labeled continuous simulations; they are not provider-booked orbital passes.
-They occupy ports 42100–42109 while active, so do not book overlapping provider
+They occupy the ten ports starting at `EARENDIL_INGRESS_BASE_PORT` while active, so do not book overlapping provider
 contacts onto the same gateways during the rehearsal. The provider simulator's
 ordinary eight-minute visibility windows remain available for a separate scheduling
 walkthrough.
@@ -260,16 +234,7 @@ before starting to choose a new contact duration between 60 and 28,800 seconds
 
 ## Connection-refused warnings
 
-Cadence and the simulator are separate processes. Starting `mise run cadence`
-does not start the simulator. If the simulator exits, provider polling retries
-`http://127.0.0.1:4101/provider/v1/capabilities` and Req reports
-`connection refused`. Restart `mise run earendil-simulator` in its own terminal;
-the persisted scenario and run are reused. Its health endpoint is
-`http://127.0.0.1:4101/health`.
-
-The other local dependencies are QuestDB on port 9000 and the OTLP collector on
-port 4318. Use `docker compose ps` to check them and rerun the startup command
-above if they are stopped. Missing QuestDB prevents telemetry history access;
-a missing collector prevents observability exports. Restart these services after
-a reboot or after stopping the Docker engine. Do not disable provider retries or
-logging to conceal an unavailable service.
+Cadence and the simulator are separate processes. If the simulator exits, provider
+polling retries the slot's `EARENDIL_PROVIDER_URL` and Req reports `connection refused`.
+Run `dev/stack up` to restart it; the persisted scenario and run are reused. Check
+`dev/stack status` and the logs in `var/stack/` when a service does not recover.

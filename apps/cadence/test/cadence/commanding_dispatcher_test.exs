@@ -62,7 +62,8 @@ defmodule Cadence.CommandingDispatcherTest do
                dispatcher_scope.mission_id,
                low_priority_request.command_request_id,
                %{"user_id" => "queue-operator"},
-               process_namespace: process_namespace
+               process_namespace: process_namespace,
+               admin_mode: false
              )
 
     assert {:ok, %{queue_entry: high_priority_queue_entry}} =
@@ -71,7 +72,8 @@ defmodule Cadence.CommandingDispatcherTest do
                dispatcher_scope.mission_id,
                high_priority_request.command_request_id,
                %{"user_id" => "queue-operator"},
-               process_namespace: process_namespace
+               process_namespace: process_namespace,
+               admin_mode: false
              )
 
     assert Cadence.Commanding.list_command_release_attempts(
@@ -158,7 +160,8 @@ defmodule Cadence.CommandingDispatcherTest do
                dispatcher_scope.mission_id,
                command_request.command_request_id,
                %{"user_id" => "queue-operator"},
-               process_namespace: process_namespace
+               process_namespace: process_namespace,
+               admin_mode: false
              )
 
     assert_received {:lane_timer_scheduled, %{delay_ms: @lane_safety_poll_interval_ms},
@@ -264,7 +267,7 @@ defmodule Cadence.CommandingDispatcherTest do
       })
 
     assert {:ok, persisted_source_endpoint} =
-             Cadence.SourceEndpoints.persist_source_endpoint(
+             Cadence.SourceEndpointFixtures.persist(
                dispatcher_scope.organization_id,
                source_endpoint
              )

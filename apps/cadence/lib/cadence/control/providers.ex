@@ -57,9 +57,20 @@ defmodule Cadence.Control.Providers do
              provider_id,
              Keyword.get(opts, :provider_version)
            ),
-         {:ok, context, call_opts} <- provider_context(provider, opts),
+         {:ok, search} <- prepare_search(provider, opts) do
+      search.request.(params)
+    end
+  end
+
+  @doc false
+  def prepare_search(%MissionProvider{} = provider, opts) do
+    with {:ok, context, call_opts} <- provider_context(provider, opts),
          {:ok, client} <- resolve_client(context, opts) do
-      client.search_opportunities(context, params, call_opts)
+      {:ok,
+       %{
+         capabilities: context.capabilities,
+         request: &client.search_opportunities(context, &1, call_opts)
+       }}
     end
   end
 

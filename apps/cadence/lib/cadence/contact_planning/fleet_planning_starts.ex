@@ -1,11 +1,11 @@
 defmodule Cadence.ContactPlanning.FleetPlanningStarts do
-  @moduledoc "Reviewed manual fleet creation: exact input claim and atomic database materialization."
+  @moduledoc "Reviewed manual fleet creation: exact input claim and batched atomic materialization."
   alias Cadence.Auth.{Policy, Scope}
 
   alias Cadence.ContactPlanning.{
-    ContactRequirementTemplates,
     FleetPlanningRuns,
     FleetStartInputs,
+    FleetStartMaterialization,
     FleetStartProjection,
     TemplateSupersession
   }
@@ -38,16 +38,19 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
   def create(%Scope{} = scope, mission_id, params, opts \\ []) do
     with :ok <- authorize(scope, mission_id),
          {:ok, window, _, evidence} <- admit(params, :create) do
-      Repo.transaction(fn ->
-        claim(
-          scope,
-          mission_id,
-          window,
-          evidence,
-          Keyword.get(opts, :operation_id),
-          Keyword.get(opts, :occupied, [])
-        )
-      end)
+      Repo.transaction(
+        fn ->
+          claim(
+            scope,
+            mission_id,
+            window,
+            evidence,
+            Keyword.get(opts, :operation_id),
+            Keyword.get(opts, :occupied, [])
+          )
+        end,
+        timeout: :infinity
+      )
       |> case do
         {:ok, {run, refs}} -> {:ok, run, refs}
         {:error, reason} -> {:error, reason}
@@ -62,25 +65,40 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
     with {:ok, as_of} <- review_as_of(evidence),
          {:ok, inputs} <- FleetStartInputs.load(scope, mission_id, window, true, as_of),
          true <- inputs.evidence === evidence,
+         candidates <- supersession_candidates(scope, mission_id, inputs),
+         :ok <- prefer_index_scans_for_materialization(),
          {:ok, generated, materialization} <- materialize(scope, mission_id, inputs),
-         :ok <- supersede(scope, inputs),
-         refs <- requirement_refs(inputs, generated),
+         :ok <- TemplateSupersession.cancel_prepared(scope, mission_id, candidates, as_of),
+         requirements <- requirement_pairs(inputs, generated),
          {:ok, run, refs} <-
-           FleetPlanningRuns.create(scope, mission_id, %{
-             horizon_start: window.horizon_start,
-             horizon_end: window.horizon_end,
-             trigger_kind: :manual,
-             requirement_refs: refs,
-             creation_review_document: evidence,
-             template_materialization_document: materialization,
-             occupied_document: occupied
-           }),
+           FleetPlanningRuns.create_reviewed(
+             scope,
+             mission_id,
+             %{
+               horizon_start: window.horizon_start,
+               horizon_end: window.horizon_end,
+               trigger_kind: :manual,
+               creation_review_document: evidence,
+               template_materialization_document: materialization,
+               occupied_document: occupied
+             },
+             requirements
+           ),
          :ok <- record_operation(scope, mission_id, run, operation_id) do
       {run, refs}
     else
       false -> Repo.rollback(:fleet_planning_review_changed)
       {:error, reason} -> Repo.rollback(reason)
     end
+  end
+
+  defp prefer_index_scans_for_materialization do
+    # PostgreSQL caches RI trigger plans per backend. A new fleet can create its parent rows
+    # inside this transaction before table statistics see them; a broad or sequential FK plan
+    # then revisits prior inserts for each child. The exact-key indexes and this transaction-
+    # local setting keep both cold and previously used backends on indexed lookups.
+    Repo.query!("SET LOCAL enable_seqscan = off")
+    :ok
   end
 
   defp record_operation(_scope, _mission_id, _run, nil), do: :ok
@@ -189,37 +207,30 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
         mission_id: mission
       })
 
-  # These calls intentionally stay in the claiming process and its transaction.
-  # materialize_active uses worker connections and cannot provide atomic rollback here.
+  # Batch inserts stay on the claiming connection. Review drift still rolls back the entire
+  # claim, including generated requirements, occurrences, refs, and the run.
   defp materialize(scope, mission, inputs) do
     inputs.templates
-    |> Enum.reduce_while({:ok, []}, fn t, {:ok, results} ->
-      case ContactRequirementTemplates.materialize(
-             scope,
-             mission,
-             t.template.contact_requirement_template_id,
-             inputs.window.horizon_start,
-             inputs.window.horizon_end,
-             # Exactly the reviewed spacecraft; supersession runs after every template has
-             # materialized, inside this transaction, so a later failure rolls it back.
-             supersede: false,
-             targets: t.spacecraft_ids
-           ) do
-        {:ok, rows} ->
-          append_reviewed_materialization(t, rows, results)
+    |> Enum.reduce_while({:ok, [], 0}, fn t, {:ok, batches, count} ->
+      case FleetStartMaterialization.materialize(scope, mission, t) do
+        {:ok, pairs, occurrence_count} ->
+          {:cont, {:ok, [pairs | batches], count + occurrence_count}}
 
         {:error, reason} ->
           {:halt, {:error, reason}}
       end
     end)
     |> case do
-      {:ok, results} ->
-        {:ok, results,
+      {:ok, batches, occurrence_count} ->
+        pairs = batches |> Enum.reverse() |> List.flatten()
+        created_count = length(pairs)
+
+        {:ok, pairs,
          %{
            "template_count" => length(inputs.templates),
-           "occurrence_count" => length(results),
-           "created_count" => Enum.count(results, &(&1.status == :created)),
-           "existing_count" => Enum.count(results, &(&1.status == :existing)),
+           "occurrence_count" => occurrence_count,
+           "created_count" => created_count,
+           "existing_count" => occurrence_count - created_count,
            "skipped" => not inputs.window.include_recurring
          }}
 
@@ -228,78 +239,30 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
     end
   end
 
-  # The reviewed inputs already leave these out (FleetStartInputs), so the run's refs are
-  # unaffected; cancelling them here keeps v1 and v2 from planning the same slot twice.
-  defp supersede(scope, inputs) do
-    # The review's instant, so exactly what the review left out is superseded (G1).
-    now = inputs.as_of
+  # Read the older rows before the write batches while the table statistics still reflect
+  # its contents. Freshly generated requirements are already on the reviewed template version.
+  defp supersession_candidates(scope, mission_id, inputs) do
+    templates =
+      Enum.filter(inputs.templates, fn t ->
+        t.version.version > 1 or t.version.target_document["kind"] != "spacecraft_ids"
+      end)
 
-    Enum.each(inputs.templates, fn t ->
-      TemplateSupersession.supersede(
-        scope,
-        t.version,
-        t.spacecraft_ids,
-        now,
-        # Exactly the occurrences the start generated for it (qa #86).
-        t.occurrences
-      )
-    end)
+    TemplateSupersession.prepare(scope.organization_id, mission_id, templates, inputs.as_of)
   end
 
-  defp append_reviewed_materialization(template, rows, results) do
-    if reviewed_materialization?(template, rows),
-      do: {:cont, {:ok, results ++ rows}},
-      else: {:halt, {:error, :fleet_planning_review_changed}}
-  end
-
-  defp reviewed_materialization?(template, rows) do
-    existing = Map.new(template.existing_occurrences, &{{&1.at, &1.spacecraft_id}, &1})
-
-    Enum.all?(rows, fn result ->
-      occurrence = result.occurrence
-      at = DateTime.to_unix(occurrence.occurrence_at, :microsecond)
-
-      case {result.status, Map.get(existing, {at, occurrence.spacecraft_id})} do
-        {:created, nil} ->
-          true
-
-        # An older version's day the review said this version regenerates (DECISIONS #86).
-        {:created, %{outcome: "generate"}} ->
-          true
-
-        {:existing, %{outcome: "generate"}} ->
-          false
-
-        {:existing, %{state: "generated", requirement_id: id, requirement_version: version}} ->
-          occurrence.generated_contact_requirement_id == id and
-            occurrence.generated_contact_requirement_version == version
-
-        _ ->
-          false
-      end
-    end)
-  end
-
-  defp requirement_refs(inputs, generated) do
-    existing = Enum.map(inputs.requirements, fn {_, v} -> reference(v) end)
-    reviewed_ids = MapSet.new(existing, & &1.contact_requirement_id)
+  defp requirement_pairs(inputs, generated) do
+    existing = inputs.requirements
+    reviewed_ids = MapSet.new(existing, fn {r, _v} -> r.contact_requirement_id end)
 
     additional =
       generated
-      |> Enum.filter(&(&1.status == :created))
-      |> Enum.reject(&MapSet.member?(reviewed_ids, &1.requirement.contact_requirement_id))
-      |> Enum.filter(fn result ->
-        v = result.requirement_version
-
-        result.requirement.lifecycle_state == :active and
+      |> Enum.reject(fn {r, _v} -> MapSet.member?(reviewed_ids, r.contact_requirement_id) end)
+      |> Enum.filter(fn {r, v} ->
+        r.lifecycle_state == :active and
           DateTime.before?(v.earliest_start, inputs.window.horizon_end) and
           DateTime.after?(v.latest_end, inputs.window.horizon_start)
       end)
-      |> Enum.map(&reference(&1.requirement_version))
 
-    Enum.uniq_by(existing ++ additional, & &1.contact_requirement_id)
+    Enum.uniq_by(existing ++ additional, fn {r, _v} -> r.contact_requirement_id end)
   end
-
-  defp reference(version),
-    do: %{contact_requirement_id: version.contact_requirement_id, version: version.version}
 end

@@ -13,14 +13,9 @@ defmodule CadenceWeb.Plugs.RequireAuthenticatedScope do
   def call(conn, _opts) do
     conn
     |> maybe_store_return_to()
-    |> redirect(to: sign_in_path(conn.request_path))
+    |> redirect(to: "/console/sign-in")
     |> halt()
   end
-
-  # The console bounces straight to its own sign-in (one hop; the stored return target still
-  # applies). Legacy pages keep /sign-in, which redirects there too (L5).
-  defp sign_in_path("/console" <> _rest), do: "/console/sign-in"
-  defp sign_in_path(_legacy), do: "/sign-in"
 
   defp maybe_store_return_to(%Plug.Conn{method: "GET"} = conn) do
     if application_host_json_path?(conn.request_path) do

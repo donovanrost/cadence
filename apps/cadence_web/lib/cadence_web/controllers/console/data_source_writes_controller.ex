@@ -1,7 +1,7 @@
 defmodule CadenceWeb.Console.DataSourceWritesController do
   @moduledoc """
   L11 data-source writes and the reads their screens need (owner: api-ops), under
-  `/api/console/v1/missions/:mission_id`. Contract: docs/apogee/api/setup.md §Data sources (L11).
+  `/api/v1/missions/:mission_id`. Contract: docs/apogee/api/setup.md §Data sources (L11).
 
   Writes go through `OpsConsole.Actions.DataSources`, the adapter the legacy page uses: the same
   validation and authorization (`operate_mission`), and since e80c9d872 only the organization's

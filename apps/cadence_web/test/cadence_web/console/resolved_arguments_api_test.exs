@@ -89,6 +89,6 @@ defmodule CadenceWeb.Console.ResolvedArgumentsAPITest do
     assert [%{"id" => ^id, "priority" => 1}] = listed
   end
 
-  defp base(c), do: "/api/console/v1/missions/#{c.mission.mission_id}/command-groups"
+  defp base(c), do: "/api/v1/missions/#{c.mission.mission_id}/command-groups"
   defp conn(c), do: TestFixtures.member_conn(c.user)
 end

@@ -33,7 +33,7 @@ defmodule CadenceWeb.Console.ContactQueueAPITest do
   defp queue(c) do
     c.admin
     |> TestFixtures.member_conn()
-    |> get("/api/console/v1/missions/#{c.mission.mission_id}/action-queue")
+    |> get("/api/v1/missions/#{c.mission.mission_id}/action-queue")
     |> json_response(200)
     |> Map.fetch!("data")
   end

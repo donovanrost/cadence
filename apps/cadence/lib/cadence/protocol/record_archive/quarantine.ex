@@ -12,6 +12,7 @@ defmodule Cadence.Protocol.RecordArchive.Quarantine do
   import Ecto.Query
 
   alias Cadence.Ids
+  alias Cadence.Persistence.Retention
   alias Cadence.Protocol.RecordArchive
   alias Cadence.Protocol.RecordArchive.FileSystem
   alias Cadence.Protocol.RecordArchive.FileSystem.PoisonIsolation
@@ -109,6 +110,21 @@ defmodule Cadence.Protocol.RecordArchive.Quarantine do
 
   defp where_contact(query, nil), do: where(query, [r], is_nil(r.realized_contact_id))
   defp where_contact(query, id), do: where(query, [r], r.realized_contact_id == ^id)
+
+  @doc """
+  When an item's last entry expires (`Quarantine.Retention`): the newest record's receipt time (its
+  first sighting without one) plus the archive's retention and the review margin. The item closes
+  as `expired` then, unless an operator retries or discards it first.
+  """
+  @spec expires_at([EntryRow.t()]) :: DateTime.t()
+  def expires_at([_ | _] = rows) do
+    newest =
+      rows
+      |> Enum.map(&(&1.receipt_time || &1.first_seen_at))
+      |> Enum.max(DateTime)
+
+    DateTime.add(newest, Retention.quarantine_entry_days() * 86_400, :second)
+  end
 
   @doc "A quarantined entry as the writer built it."
   @spec entry(EntryRow.t()) :: map()

@@ -60,6 +60,9 @@ config :cadence, protocol_record_archive: [module: Cadence.Protocol.RecordArchiv
 config :cadence,
   telemetry_current_value_store: [module: Cadence.Telemetry.CurrentValueStore.Postgres]
 
+# The fleet read asks the durable history store every time in tests (the cache is tested on its own).
+config :cadence, fleet_durable_receipts_ttl_ms: 0
+
 config :cadence,
   telemetry_storage: [
     # The Postgres read model, except while a test turns on an outage (DECISIONS #71).
@@ -78,6 +81,9 @@ config :cadence, dashboard_source_circuit_breaker: [enabled?: false]
 config :cadence, data_source_health_events: [enabled?: false]
 config :cadence, data_source_probe_scheduler: [enabled?: false]
 config :cadence, data_source_watermark_events: [enabled?: false]
+
+# No QuestDB in tests: the retention job is exercised with an injected `exec_fun`.
+config :cadence, :telemetry_observation_retention, enabled?: false
 
 config :logger, level: :warning
 
@@ -105,3 +111,10 @@ config :cadence, :env_credentials,
 config :cadence, :fixture_application_contributors, [
   Cadence.TestSupport.SurfaceFixtureApplication
 ]
+
+# Retention sweepers (#694) are exercised directly in their tests: no timers in the suite.
+config :cadence, :retention, enabled?: false
+
+# The watermark coalescer's own timer cannot use a test's sandbox connection: tests flush through
+# a watermark read or `WatermarkCoalescer.flush/0`.
+config :cadence, :source_watermark_coalescing, interval_ms: :infinity

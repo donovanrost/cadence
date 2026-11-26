@@ -51,6 +51,7 @@ defmodule Cadence.Applications.TelemetryDecom do
   alias Cadence.Auth.Scope
   alias Cadence.Catalog
   alias Cadence.Catalog.Revision
+  alias Cadence.Catalog.TelemetryBinding
   alias Cadence.Extensions.Presentation.ReferenceDefinition
   alias Cadence.Governance
   alias Cadence.Management.Activations.ActivationRequest
@@ -1021,7 +1022,7 @@ defmodule Cadence.Applications.TelemetryDecom do
       Enum.map(packet_definitions, fn packet_definition ->
         CapabilityInstance.new(%{
           capability_instance_id:
-            capability_instance_id(
+            TelemetryBinding.capability_instance_id(
               telemetry.mission_model_revision.revision_id,
               config.source_endpoint_id,
               packet_definition.packet_definition_id
@@ -1038,7 +1039,7 @@ defmodule Cadence.Applications.TelemetryDecom do
         packet_definition = capability_instance.runtime_configuration
 
         BindingRule.new(%{
-          binding_rule_id: capability_instance.capability_instance_id <> ":rule",
+          binding_rule_id: TelemetryBinding.rule_id(capability_instance.capability_instance_id),
           capability_instance_id: capability_instance.capability_instance_id,
           selector: %{
             scope: %{
@@ -1070,10 +1071,6 @@ defmodule Cadence.Applications.TelemetryDecom do
           rules: rules
         })
     }
-  end
-
-  defp capability_instance_id(revision_id, source_endpoint_id, packet_definition_id) do
-    "mission_model_telemetry:#{revision_id}:#{source_endpoint_id}:#{packet_definition_id}"
   end
 
   defp parse_handled_apids(attrs) do
@@ -1164,20 +1161,8 @@ defmodule Cadence.Applications.TelemetryDecom do
     end
   end
 
-  defp runtime_source_endpoint_id(spacecraft_id), do: "spacecraft_runtime:" <> spacecraft_id
-
   defp create_managed_runtime_source_endpoint(organization_id, spacecraft) do
-    endpoint =
-      SourceEndpoint.new(%{
-        source_endpoint_id: runtime_source_endpoint_id(spacecraft.spacecraft_id),
-        mission_id: spacecraft.mission_id,
-        spacecraft_id: spacecraft.spacecraft_id,
-        scid: spacecraft.scid,
-        display_name: spacecraft.display_name,
-        metadata: %{"managed_by" => "spacecraft_application_binding"}
-      })
-
-    case SourceEndpoints.persist_source_endpoint(organization_id, endpoint) do
+    case SourceEndpoints.ensure_managed_source_endpoint(organization_id, spacecraft) do
       {:ok, persisted} -> {:ok, persisted.source_endpoint_id}
       {:error, reason} -> {:error, reason}
     end
@@ -1186,7 +1171,8 @@ defmodule Cadence.Applications.TelemetryDecom do
   @doc false
   # Also Readiness's rule for which endpoint carries a spacecraft's telemetry (L22).
   def managed_runtime_source_endpoint?(%SourceEndpoint{} = endpoint) do
-    endpoint.source_endpoint_id == runtime_source_endpoint_id(endpoint.spacecraft_id) or
+    endpoint.source_endpoint_id ==
+      SourceEndpoints.managed_source_endpoint_id(endpoint.spacecraft_id) or
       Map.get(endpoint.metadata, "managed_by") in [
         "spacecraft_application_binding",
         "telemetry_decom"

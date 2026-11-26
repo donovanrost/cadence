@@ -27,6 +27,8 @@ defmodule Cadence.Contacts.ContactSettlementTest do
     TransportBinding
   }
 
+  alias Cadence.Control.ProcessNamespace
+
   alias Cadence.OutageTelemetryWriter
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
@@ -268,7 +270,8 @@ defmodule Cadence.Contacts.ContactSettlementTest do
       assert {:ok, %{replaying_realized_contact_ids: [^a_run], errors: []}} =
                Contacts.reconcile(ctx.mission_id, DateTime.utc_now())
 
-      assert_eventually(fn -> settlement(ctx, a_run)["state"] == "settled" end)
+      await_replay!(ctx.mission_id)
+      assert settlement(ctx, a_run)["state"] == "settled"
       assert settlement(ctx, a_run)["replayed_at"]
       refute Cadence.Runtime.realized_contact_running?(ctx.mission_id, a_run)
       assert samples(ctx) == 1
@@ -299,15 +302,19 @@ defmodule Cadence.Contacts.ContactSettlementTest do
         assert {:ok, %{replaying_realized_contact_ids: [^a_run]}} =
                  Contacts.reconcile(ctx.mission_id, DateTime.utc_now())
 
-        assert_eventually(fn ->
-          settlement(ctx, a_run)["attempts"] == attempt and
-            not ContactSettler.replaying?(ctx.mission_id)
-        end)
+        await_replay!(ctx.mission_id)
+        assert settlement(ctx, a_run)["attempts"] == attempt
 
         if attempt < 6 do
-          assert %{"retry" => "automatic", "next_attempt_at" => next} = settlement(ctx, a_run)
+          assert %{
+                   "retry" => "automatic",
+                   "next_attempt_at" => next,
+                   "unsettled_at" => failed_at
+                 } = settlement(ctx, a_run)
+
           {:ok, next, _} = DateTime.from_iso8601(next)
-          assert DateTime.diff(next, DateTime.utc_now()) > 4 * 60
+          {:ok, failed_at, _} = DateTime.from_iso8601(failed_at)
+          assert DateTime.diff(next, failed_at) == 300 * Integer.pow(2, attempt - 1)
 
           # Not due yet: nothing replays until the backoff passes.
           assert {:ok, %{replaying_realized_contact_ids: []}} =
@@ -335,7 +342,8 @@ defmodule Cadence.Contacts.ContactSettlementTest do
       assert {:ok, %{replaying_realized_contact_ids: [^a_run]}} =
                Contacts.reconcile(ctx.mission_id, DateTime.utc_now())
 
-      assert_eventually(fn -> settlement(ctx, a_run)["state"] == "settled" end)
+      await_replay!(ctx.mission_id)
+      assert settlement(ctx, a_run)["state"] == "settled"
       assert samples(ctx) == 1
     end
 
@@ -361,7 +369,8 @@ defmodule Cadence.Contacts.ContactSettlementTest do
       assert {:ok, %{replaying_realized_contact_ids: [^a_run], errors: []}} =
                Contacts.reconcile(ctx.mission_id, DateTime.add(now, 10))
 
-      assert_eventually(fn -> settlement(ctx, a_run)["state"] == "settled" end)
+      await_replay!(ctx.mission_id)
+      assert settlement(ctx, a_run)["state"] == "settled"
       assert settlement(ctx, a_run)["inspected_at"]
       refute settlement(ctx, a_run)["replayed_at"]
       assert samples(ctx) == 1
@@ -404,10 +413,8 @@ defmodule Cadence.Contacts.ContactSettlementTest do
       assert {:ok, %{replaying_realized_contact_ids: [^a_run]}} =
                Contacts.reconcile(ctx.mission_id, DateTime.add(now, 10))
 
-      assert_eventually(fn ->
-        settlement(ctx, a_run)["state"] == "unsettled" and
-          not ContactSettler.replaying?(ctx.mission_id)
-      end)
+      await_replay!(ctx.mission_id)
+      assert settlement(ctx, a_run)["state"] == "unsettled"
 
       # Storage is back: the due replay drains it.
       OutageTelemetryWriter.outage(false)
@@ -416,10 +423,8 @@ defmodule Cadence.Contacts.ContactSettlementTest do
       assert {:ok, %{replaying_realized_contact_ids: [^a_run]}} =
                Contacts.reconcile(ctx.mission_id, DateTime.add(now, 20))
 
-      assert_eventually(fn ->
-        settlement(ctx, a_run)["state"] == "settled" and
-          not ContactSettler.replaying?(ctx.mission_id)
-      end)
+      await_replay!(ctx.mission_id)
+      assert settlement(ctx, a_run)["state"] == "settled"
 
       assert %{"replayed_at" => replayed, "inspected_at" => inspected} = settlement(ctx, a_run)
       assert replayed == inspected
@@ -513,7 +518,7 @@ defmodule Cadence.Contacts.ContactSettlementTest do
     {:ok, _} = Cadence.SpacecraftStore.persist_spacecraft(organization_id, spacecraft)
 
     {:ok, endpoint} =
-      Cadence.SourceEndpoints.persist_source_endpoint(
+      Cadence.SourceEndpointFixtures.persist(
         organization_id,
         SourceEndpoint.new(%{
           source_endpoint_id: "endpoint-settlement-" <> suffix,
@@ -673,6 +678,21 @@ defmodule Cadence.Contacts.ContactSettlementTest do
 
   defp restore(key, nil), do: Application.delete_env(:cadence, key)
   defp restore(key, value), do: Application.put_env(:cadence, key, value)
+
+  defp await_replay!(mission_id) do
+    name = ProcessNamespace.via(ProcessNamespace.default(), {:contact_replay, mission_id})
+
+    case GenServer.whereis(name) do
+      nil ->
+        :ok
+
+      pid ->
+        ref = Process.monitor(pid)
+        assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, 10_000
+    end
+
+    refute ContactSettler.replaying?(mission_id)
+  end
 
   defp assert_eventually(fun, attempts \\ 200)
   defp assert_eventually(_fun, 0), do: flunk("condition was not satisfied in time")

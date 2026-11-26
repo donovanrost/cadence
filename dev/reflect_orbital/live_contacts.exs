@@ -1,10 +1,11 @@
 defmodule Cadence.Dev.ReflectOrbital.LiveContacts do
-  @moduledoc "Continuous local rehearsal contacts; not provider-booked orbital passes."
+  @moduledoc "Continuous local downlinks for Earendil demos and scale runs."
   alias Cadence.Contacts.{Path, ProviderBinding, RealizedContact, ScheduledContact}
   alias Cadence.Dev.ReflectOrbital.Fixture, as: F
   alias Cadence.Runtime.MissionRuntime
 
-  def run(duration_seconds) when duration_seconds in 60..28_800 do
+  def run(duration_seconds, scids \\ Enum.to_list(1..10), opts \\ [])
+      when duration_seconds in 60..28_800 do
     # Safe ETF recovery requires the persisted semantic types' atoms to exist.
     :ok =
       :cadence
@@ -13,28 +14,34 @@ defmodule Cadence.Dev.ReflectOrbital.LiveContacts do
       |> Code.ensure_all_loaded()
 
     now = DateTime.utc_now()
-    existing = Cadence.Contacts.list_scheduled_contacts(F.organization_id(), F.mission_id())
+
+    scale_id = Keyword.get(opts, :scale_id)
+    existing = if scale_id, do: %{}, else: existing_rehearsal_contacts(now)
+
+    sites = F.sites() |> List.to_tuple()
+    selected = MapSet.new(scids)
+    count = Keyword.get_lazy(opts, :spacecraft, &F.fleet_size/0)
+    crafts = Enum.filter(F.spacecraft(count), &MapSet.member?(selected, &1.scid))
+
+    if length(crafts) != length(scids),
+      do: raise("Requested craft exceed the seeded fixture fleet")
 
     contacts =
-      F.spacecraft()
-      |> Enum.take(10)
-      |> Enum.zip(F.sites())
-      |> Enum.map(fn {craft, site} ->
+      for craft <- crafts do
+        site = elem(sites, rem(craft.scid - 1, tuple_size(sites)))
         source = "spacecraft_runtime:#{craft.spacecraft_id}"
+        port = if scale_id, do: 0, else: rehearsal_port(craft.scid, site, tuple_size(sites))
 
         contact =
-          Enum.find(existing, fn contact ->
-            contact.metadata["fixture"] == "earendil-live-dashboards" and
-              source in contact.source_endpoint_refs and
-              contact.lifecycle_state in [:scheduled, :realized] and
-              DateTime.after?(contact.ends_at, DateTime.add(now, 60, :second))
-          end) || create_contact(craft, site, source, now, duration_seconds)
+          Map.get_lazy(existing, source, fn ->
+            create_contact(craft, site, source, port, now, duration_seconds, scale_id)
+          end)
 
-        {craft, site, contact}
-      end)
+        {craft, site, port, contact}
+      end
 
-    Enum.map(contacts, fn {craft, site, contact} ->
-      realized = await_active(contact, 100)
+    Enum.map(contacts, fn {craft, site, port, contact} ->
+      realized = await_active(contact, if(scale_id, do: 600, else: 100))
       [path] = realized.paths
 
       # Recover the decoder before the short path-snapshot call. A coordinator
@@ -60,7 +67,7 @@ defmodule Cadence.Dev.ReflectOrbital.LiveContacts do
         )
 
       [provider] = snapshot.provider_runtimes
-      true = provider.port == site["ingress_port"]
+      true = if port == 0, do: provider.port in 1..65_535, else: provider.port == port
 
       %{
         spacecraft_id: craft.spacecraft_id,
@@ -75,8 +82,56 @@ defmodule Cadence.Dev.ReflectOrbital.LiveContacts do
     end)
   end
 
-  defp create_contact(craft, site, source, now, duration_seconds) do
-    id = "rehearsal-#{craft.spacecraft_id}-#{DateTime.to_unix(now)}"
+  def stop_scale_run(scale_id) do
+    F.organization_id()
+    |> Cadence.Contacts.list_scheduled_contacts(F.mission_id())
+    |> Enum.filter(&(&1.metadata["scale_run_id"] == scale_id))
+    |> Enum.flat_map(fn contact ->
+      id = contact.scheduled_contact_id
+
+      case Cadence.Contacts.cancel_scheduled_contact(F.organization_id(), F.mission_id(), id, []) do
+        {:ok, _contact} -> []
+        {:error, reason} -> [{id, reason}]
+      end
+    end)
+  end
+
+  defp existing_rehearsal_contacts(now) do
+    F.organization_id()
+    |> Cadence.Contacts.list_scheduled_contacts(F.mission_id())
+    |> Enum.filter(fn contact ->
+      contact.metadata["fixture"] == "earendil-live-dashboards" and
+        contact.lifecycle_state in [:scheduled, :realized] and
+        DateTime.after?(contact.ends_at, DateTime.add(now, 60, :second))
+    end)
+    |> Map.new(fn contact -> {List.first(contact.source_endpoint_refs), contact} end)
+  end
+
+  # The first craft at each site uses the demo gateway, while additional rehearsal
+  # paths own individual Cadence listeners.
+  defp rehearsal_port(scid, site, site_count) when scid <= site_count, do: site["ingress_port"]
+  defp rehearsal_port(scid, _site, _site_count), do: 43_000 + scid
+
+  defp create_contact(craft, site, source, port, now, duration_seconds, scale_id) do
+    id =
+      if scale_id,
+        do: "#{scale_id}-#{craft.scid}",
+        else: "rehearsal-#{craft.spacecraft_id}-#{DateTime.to_unix(now)}"
+
+    metadata = %{
+      "fixture" => if(scale_id, do: "earendil-scale", else: "earendil-live-dashboards"),
+      "synthetic" => true,
+      "purpose" =>
+        if(scale_id,
+          do: "Continuous ingest scale run",
+          else: "Continuous dashboard rehearsal; not an orbital pass or provider reservation"
+        ),
+      "display_name" => "#{craft.display_name} — #{site["name"]} rehearsal",
+      "ground_station_ref" => site["id"],
+      "rate_hz" => 1.0
+    }
+
+    metadata = if scale_id, do: Map.put(metadata, "scale_run_id", scale_id), else: metadata
 
     contact =
       ScheduledContact.new(%{
@@ -87,15 +142,7 @@ defmodule Cadence.Dev.ReflectOrbital.LiveContacts do
         contact_intents: [:telemetry_downlink],
         starts_at: DateTime.add(now, 2, :second),
         ends_at: DateTime.add(now, duration_seconds, :second),
-        metadata: %{
-          "fixture" => "earendil-live-dashboards",
-          "synthetic" => true,
-          "purpose" =>
-            "Continuous dashboard rehearsal; not an orbital pass or provider reservation",
-          "display_name" => "#{craft.display_name} — #{site["name"]} rehearsal",
-          "ground_station_ref" => site["id"],
-          "rate_hz" => 1.0
-        },
+        metadata: metadata,
         paths: [
           Path.new(%{
             path_id: "#{id}:downlink",
@@ -110,7 +157,7 @@ defmodule Cadence.Dev.ReflectOrbital.LiveContacts do
                 configuration: %{
                   mode: :listen,
                   host: F.bind_host(),
-                  port: site["ingress_port"],
+                  port: port,
                   ingress_protocol_family: :tm,
                   frame_size: F.frame_size(),
                   ingress_metadata: %{frame_size: F.frame_size(), ocf_length: 0}

@@ -1,5 +1,6 @@
 <script setup lang="ts" generic="Row">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { revealInline } from "./lib/reveal.ts";
 import { useScrollable } from "./lib/scrollable.ts";
 import { useRowWindow, type VirtualOptions } from "./lib/virtualRows.ts";
 
@@ -52,6 +53,21 @@ function cellText(row: Row, key: string): string {
 const wrapper = ref<HTMLElement | null>(null);
 const scrollable = useScrollable(wrapper);
 const scrolls = computed(() => scrollable.value || props.scrollBox === true);
+
+/**
+ * A link or control Tab lands on inside a table that scrolls sideways comes fully into view (#189:
+ * a Source file link cut off at 390). In a scrollBox it clears the sticky Name column, and the Name
+ * column itself never needs it.
+ */
+function showFocused(event: FocusEvent) {
+  const box = wrapper.value;
+  const el = event.target;
+  if (!box || !scrolls.value || !(el instanceof HTMLElement) || el === box) return;
+  if (!props.scrollBox) return revealInline(box, el);
+  const cell = el.closest("td, th");
+  if (cell instanceof HTMLTableCellElement && cell.cellIndex === 0) return;
+  revealInline(box, el, { start: head.value?.querySelector("th")?.offsetWidth ?? 0 });
+}
 
 /** scrollBox: the heading's height is the scroll padding, so focus never lands under it. */
 const head = ref<HTMLElement | null>(null);
@@ -130,6 +146,7 @@ defineSlots<
     :tabindex="scrolls ? 0 : undefined"
     :role="scrolls ? 'region' : undefined"
     :aria-label="scrolls ? (props.caption ?? 'Table') : undefined"
+    @focusin="showFocused"
   >
     <table
       class="w-full border-collapse text-md"

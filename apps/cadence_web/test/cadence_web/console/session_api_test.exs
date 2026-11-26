@@ -1,7 +1,10 @@
 defmodule CadenceWeb.Console.SessionAPITest do
   use CadenceWeb.ConnCase, async: true
 
+  alias CadenceWeb.ConsoleSocket
+  alias CadenceWeb.Endpoint
   alias CadenceWeb.TestFixtures
+  alias Phoenix.Socket.Broadcast
 
   setup do
     org = TestFixtures.persist_org!(display_name: "Reflect Orbital")
@@ -12,9 +15,9 @@ defmodule CadenceWeb.Console.SessionAPITest do
     %{org: org, user: user, mission: mission}
   end
 
-  describe "GET /api/console/v1/session" do
+  describe "GET /api/v1/session" do
     test "without a session answers a JSON 401", %{conn: conn} do
-      conn = get(conn, "/api/console/v1/session")
+      conn = get(conn, "/api/v1/session")
 
       assert %{"error" => %{"code" => "unauthenticated", "message" => _}} =
                json_response(conn, 401)
@@ -24,7 +27,7 @@ defmodule CadenceWeb.Console.SessionAPITest do
       conn =
         build_conn()
         |> init_test_session(%{user_session_token: "not-a-real-token"})
-        |> get("/api/console/v1/session")
+        |> get("/api/v1/session")
 
       assert %{"error" => %{"code" => "unauthenticated"}} = json_response(conn, 401)
     end
@@ -33,7 +36,7 @@ defmodule CadenceWeb.Console.SessionAPITest do
       data =
         c.user
         |> TestFixtures.member_conn()
-        |> get("/api/console/v1/session")
+        |> get("/api/v1/session")
         |> json_response(200)
         |> Map.fetch!("data")
 
@@ -48,7 +51,7 @@ defmodule CadenceWeb.Console.SessionAPITest do
       assert data["platform_admin_eligible"] == false
       assert is_list(data["capabilities"])
       assert is_binary(data["csrf_token"]) and data["csrf_token"] != ""
-      assert data["socket"] == %{"path" => "/socket/console"}
+      assert data["socket"] == %{"path" => "/socket"}
 
       assert [
                %{
@@ -75,7 +78,7 @@ defmodule CadenceWeb.Console.SessionAPITest do
       orgs =
         c.user
         |> TestFixtures.member_conn()
-        |> get("/api/console/v1/session")
+        |> get("/api/v1/session")
         |> json_response(200)
         |> get_in(["data", "organizations"])
 
@@ -91,13 +94,57 @@ defmodule CadenceWeb.Console.SessionAPITest do
     end
   end
 
-  describe "PUT /api/console/v1/session/organization" do
+  # #664: the console signs out through its API; the root DELETE /session is gone.
+  describe "DELETE /api/v1/session" do
+    test "revokes the session, disconnects its live sockets and drops the cookie", c do
+      conn = TestFixtures.member_conn(c.user)
+      token = get_session(conn, :user_session_token)
+      Endpoint.subscribe(ConsoleSocket.id_for_session_token(token))
+
+      signed_out = delete(conn, "/api/v1/session")
+
+      assert response(signed_out, 204) == ""
+      assert get_session(signed_out, :user_session_token) == nil
+      assert_receive %Broadcast{event: "disconnect"}
+      assert {:error, :unauthenticated} = Cadence.Auth.authenticate_browser_session(token)
+
+      # The old cookie is worthless now, on the API and the console's own page.
+      copied = init_test_session(build_conn(), %{user_session_token: token})
+
+      assert json_response(get(copied, "/api/v1/session"), 401)["error"]["code"] ==
+               "unauthenticated"
+
+      assert redirected_to(get(copied, "/console/")) == "/console/sign-in"
+    end
+
+    test "refuses a sign-out without the CSRF token and keeps the session", c do
+      conn = TestFixtures.member_conn(c.user)
+      token = get_session(conn, :user_session_token)
+      Endpoint.subscribe(ConsoleSocket.id_for_session_token(token))
+
+      refused =
+        conn
+        |> put_private(:plug_skip_csrf_protection, false)
+        |> delete("/api/v1/session")
+
+      assert json_response(refused, 403)["error"]["code"] == "invalid_csrf"
+      refute_received %Broadcast{event: "disconnect"}
+      assert {:ok, _scope} = Cadence.Auth.authenticate_browser_session(token)
+    end
+
+    test "signed out, answers a JSON 401", %{conn: conn} do
+      assert json_response(delete(conn, "/api/v1/session"), 401)["error"]["code"] ==
+               "unauthenticated"
+    end
+  end
+
+  describe "PUT /api/v1/session/organization" do
     test "rejects a write without a CSRF token", c do
       conn =
         c.user
         |> TestFixtures.member_conn()
         |> put_private(:plug_skip_csrf_protection, false)
-        |> put("/api/console/v1/session/organization", %{
+        |> put("/api/v1/session/organization", %{
           "organization_id" => c.org.organization_id
         })
 
@@ -108,7 +155,7 @@ defmodule CadenceWeb.Console.SessionAPITest do
       other = TestFixtures.persist_org!(display_name: "Another Org")
       TestFixtures.grant_membership!(c.user, other)
 
-      bootstrap = c.user |> TestFixtures.member_conn() |> get("/api/console/v1/session")
+      bootstrap = c.user |> TestFixtures.member_conn() |> get("/api/v1/session")
       csrf_token = json_response(bootstrap, 200)["data"]["csrf_token"]
 
       conn =
@@ -116,7 +163,7 @@ defmodule CadenceWeb.Console.SessionAPITest do
         |> recycle()
         |> put_private(:plug_skip_csrf_protection, false)
         |> put_req_header("x-csrf-token", csrf_token)
-        |> put("/api/console/v1/session/organization", %{
+        |> put("/api/v1/session/organization", %{
           "organization_id" => other.organization_id
         })
 
@@ -132,7 +179,7 @@ defmodule CadenceWeb.Console.SessionAPITest do
       member =
         c.user
         |> TestFixtures.member_conn()
-        |> put("/api/console/v1/session/organization", %{"organization_slug" => "another-org"})
+        |> put("/api/v1/session/organization", %{"organization_slug" => "another-org"})
 
       assert json_response(member, 404)["error"]["code"] == "organization_not_found"
 
@@ -142,7 +189,7 @@ defmodule CadenceWeb.Console.SessionAPITest do
         admin
         |> TestFixtures.member_conn()
         |> init_test_session(%{admin_mode_expires_at: System.system_time(:second) + 600})
-        |> put("/api/console/v1/session/organization", %{"organization_slug" => "another-org"})
+        |> put("/api/v1/session/organization", %{"organization_slug" => "another-org"})
 
       data = json_response(conn, 200)["data"]
       assert data["current_organization_id"] == other.organization_id
@@ -155,7 +202,7 @@ defmodule CadenceWeb.Console.SessionAPITest do
       unknown =
         c.user
         |> TestFixtures.member_conn()
-        |> put("/api/console/v1/session/organization", %{"organization_slug" => "nope"})
+        |> put("/api/v1/session/organization", %{"organization_slug" => "nope"})
 
       assert json_response(unknown, 404)["error"]["code"] == "organization_not_found"
     end
@@ -166,7 +213,7 @@ defmodule CadenceWeb.Console.SessionAPITest do
       conn =
         c.user
         |> TestFixtures.member_conn()
-        |> put("/api/console/v1/session/organization", %{
+        |> put("/api/v1/session/organization", %{
           "organization_id" => stranger.organization_id
         })
 
@@ -177,19 +224,19 @@ defmodule CadenceWeb.Console.SessionAPITest do
       conn =
         c.user
         |> TestFixtures.member_conn()
-        |> put("/api/console/v1/session/organization", %{})
+        |> put("/api/v1/session/organization", %{})
 
       assert %{"error" => %{"code" => "invalid_params", "details" => %{"organization_id" => _}}} =
                json_response(conn, 422)
     end
   end
 
-  describe "GET /api/console/v1/missions/:mission_id" do
+  describe "GET /api/v1/missions/:mission_id" do
     test "returns the mission for an organization member", c do
       data =
         c.user
         |> TestFixtures.member_conn()
-        |> get("/api/console/v1/missions/#{c.mission.mission_id}")
+        |> get("/api/v1/missions/#{c.mission.mission_id}")
         |> json_response(200)
         |> Map.fetch!("data")
 
@@ -205,7 +252,7 @@ defmodule CadenceWeb.Console.SessionAPITest do
       data =
         c.user
         |> TestFixtures.member_conn()
-        |> get("/api/console/v1/missions/#{other_mission.mission_id}")
+        |> get("/api/v1/missions/#{other_mission.mission_id}")
         |> json_response(200)
         |> Map.fetch!("data")
 
@@ -218,7 +265,7 @@ defmodule CadenceWeb.Console.SessionAPITest do
       conn =
         c.user
         |> TestFixtures.member_conn()
-        |> get("/api/console/v1/missions/#{stranger_mission.mission_id}")
+        |> get("/api/v1/missions/#{stranger_mission.mission_id}")
 
       assert %{"error" => %{"code" => "mission_not_found"}} = json_response(conn, 404)
     end
@@ -227,14 +274,14 @@ defmodule CadenceWeb.Console.SessionAPITest do
       conn =
         c.user
         |> TestFixtures.member_conn()
-        |> get("/api/console/v1/missions/mission_does_not_exist")
+        |> get("/api/v1/missions/mission_does_not_exist")
 
       assert %{"error" => %{"code" => "mission_not_found"}} = json_response(conn, 404)
     end
   end
 
   test "unknown console API routes answer a JSON 404", c do
-    conn = c.user |> TestFixtures.member_conn() |> get("/api/console/v1/nope")
+    conn = c.user |> TestFixtures.member_conn() |> get("/api/v1/nope")
 
     assert %{"error" => %{"code" => "not_found"}} = json_response(conn, 404)
   end
@@ -245,7 +292,7 @@ defmodule CadenceWeb.Console.SessionAPITest do
     end
 
     defp enter(conn, password),
-      do: post(conn, "/api/console/v1/session/admin-mode", %{"password" => password})
+      do: post(conn, "/api/v1/session/admin-mode", %{"password" => password})
 
     test "the right password enters for an hour; the session shows when it ends; leave ends it",
          c do
@@ -254,14 +301,14 @@ defmodule CadenceWeb.Console.SessionAPITest do
       {:ok, expires, 0} = DateTime.from_iso8601(expires_at)
       assert_in_delta DateTime.diff(expires, DateTime.utc_now()), 3600, 5
 
-      session = conn |> recycle() |> get("/api/console/v1/session") |> json_response(200)
+      session = conn |> recycle() |> get("/api/v1/session") |> json_response(200)
       assert session["data"]["admin_mode"] == true
       assert session["data"]["admin_mode_expires_at"] == expires_at
 
-      left = conn |> recycle() |> delete("/api/console/v1/session/admin-mode")
+      left = conn |> recycle() |> delete("/api/v1/session/admin-mode")
       assert response(left, 204)
 
-      after_leave = left |> recycle() |> get("/api/console/v1/session") |> json_response(200)
+      after_leave = left |> recycle() |> get("/api/v1/session") |> json_response(200)
       assert after_leave["data"]["admin_mode"] == false
       assert after_leave["data"]["admin_mode_expires_at"] == nil
     end
@@ -291,7 +338,7 @@ defmodule CadenceWeb.Console.SessionAPITest do
 
       assert c.user
              |> TestFixtures.member_conn()
-             |> get("/api/console/v1/session")
+             |> get("/api/v1/session")
              |> json_response(200)
              |> get_in(["data", "admin_mode_expires_at"]) == nil
     end

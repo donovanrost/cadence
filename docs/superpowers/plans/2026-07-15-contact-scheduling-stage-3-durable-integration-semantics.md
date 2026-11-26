@@ -845,6 +845,8 @@ The reproducible audit is:
 ./scripts/audit-stage-3-provider-migrations.sh
 ```
 
+This historical audit script was retired by #718 when the migrations became one baseline.
+
 Run all focused suites from their owning applications, then run from the
 umbrella root:
 
