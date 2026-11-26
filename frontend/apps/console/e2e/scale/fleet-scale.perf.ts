@@ -59,6 +59,7 @@ interface Load {
   readonly heapMb: number;
 }
 
+/** Runs in the page (Playwright serialises it), so it can't call anything defined here. */
 const pushCount = () => window.__scale?.pushes.length ?? 0;
 
 /** One cold load of `path` with `size` spacecraft, in its own page so routes don't stack. */
@@ -78,10 +79,12 @@ async function load(
     // or the subscription broke); then one push changes every row.
     let pushMs: number | null = null;
     if (screen.live) {
-      await page.waitForFunction(() => pushCount() > 0, undefined, { timeout: 15_000 });
+      await page.waitForFunction(() => (window.__scale?.pushes.length ?? 0) > 0, undefined, {
+        timeout: 15_000,
+      });
       const before = await page.evaluate(pushCount);
       await fleet.pushAll(round + 1);
-      await page.waitForFunction((n) => pushCount() > n, before);
+      await page.waitForFunction((n) => (window.__scale?.pushes.length ?? 0) > n, before);
       pushMs = (await pushTimes(page)).at(-1) ?? null;
     }
     // Let a task the push started finish before reading the totals.
