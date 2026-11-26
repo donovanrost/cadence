@@ -1,0 +1,89 @@
+name: Scale tests
+
+# Dispatch only when the PR queue is short. This workflow shares the 20 CI job slots.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Commit, tag, or branch to test. Dispatch only when the PR queue is short (shared 20-job pool)."
+        type: string
+        default: develop
+        required: true
+      filter:
+        description: "Mix tag filter (for example --only scale) or a test file path"
+        type: string
+        default: "--only scale"
+      repeats:
+        description: "Number of repetitions (1–10)"
+        type: number
+        default: 3
+
+permissions:
+  contents: read
+
+env:
+  MIX_ENV: test
+  MIX_TEST_PARTITION: "1"
+  SCALE_RUNNER_TYPE: GitHub-hosted ubuntu-24.04
+
+jobs:
+  scale-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --tmpfs /var/lib/postgresql/data:rw
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Check out the dispatch workflow revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Keep the reporting tools available when testing older refs
+        run: |
+          mkdir "$RUNNER_TEMP/scale-tools"
+          cp scripts/ci/run_scale_tests.py scripts/ci/scale_test_formatter.exs "$RUNNER_TEMP/scale-tools/"
+      - name: Check out the requested test ref
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - name: Validate the test selection
+        env:
+          TEST_FILTER: ${{ inputs.filter }}
+          TEST_REPEATS: ${{ inputs.repeats }}
+        run: >-
+          python3 "$RUNNER_TEMP/scale-tools/run_scale_tests.py" --validate
+          --filter="$TEST_FILTER" --repeats="$TEST_REPEATS"
+      - name: Tune Postgres for throwaway test data
+        run: scripts/ci/tune_postgres.sh
+      - uses: ./.github/actions/setup-cadence
+      - name: Prepare the test database
+        working-directory: apps/cadence
+        run: mix db.setup.test
+      - name: Repeat the selected tests
+        id: repeat
+        env:
+          TEST_FILTER: ${{ inputs.filter }}
+          TEST_REPEATS: ${{ inputs.repeats }}
+        run: >-
+          python3 "$RUNNER_TEMP/scale-tools/run_scale_tests.py"
+          --filter="$TEST_FILTER" --repeats="$TEST_REPEATS"
+          --output "$RUNNER_TEMP/scale-test-results"
+      - name: Upload logs and timings
+        if: ${{ !cancelled() && (steps.repeat.outcome == 'success' || steps.repeat.outcome == 'failure') }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d32962f4752f3646cd9 # v7.0.2
+        with:
+          name: scale-test-results-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/scale-test-results/
