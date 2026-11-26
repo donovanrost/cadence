@@ -127,6 +127,99 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
     end
   end
 
+  test "profile throttling stays outside the snapshot and long configured IDs remain bookable",
+       context do
+    service_id = String.duplicate("service", 500)
+    station_id = String.duplicate("station", 500)
+
+    {:ok, scenario} =
+      Provider.create_scenario(%{
+        "spacecraft_count" => 10_000,
+        "ground_stations" => [
+          %{"id" => "first", "name" => "First"},
+          %{"id" => station_id, "name" => "Second"}
+        ],
+        "service_profiles" => [
+          %{"id" => "first", "display_name" => "First"},
+          %{"id" => service_id, "display_name" => "Second"}
+        ],
+        "route_profiles" => [
+          %{
+            "id" => "transient-throttle",
+            "ground_station_ref" => station_id,
+            "service_profile_ref" => service_id,
+            "antenna_or_service_pool_ref" => "pool",
+            "rate_limit_response_count" => 1
+          }
+        ]
+      })
+
+    {:ok, run} = Provider.create_run(scenario["id"], %{"seed" => 42, "speed" => 100.0})
+
+    delivery_request =
+      Map.put(context.delivery_request, "supported_service_profile_refs", [service_id])
+
+    delivery_profile = provision_delivery(%{run: run, delivery_request: delivery_request})
+    now = DateTime.utc_now()
+
+    params = %{
+      "spacecraft_refs" => ["SC-10000"],
+      "ground_station_refs" => [station_id],
+      "service_profile_ref" => service_id,
+      "starts_at" => now |> DateTime.add(60) |> DateTime.to_iso8601(),
+      "ends_at" => now |> DateTime.add(120) |> DateTime.to_iso8601(),
+      "page_size" => 1
+    }
+
+    search = fn -> request(:post, "/provider/v1/opportunities/search", run, params) end
+    :ok = Store.flush()
+    store = Process.whereis(Store)
+    :ok = :sys.suspend(store)
+
+    opportunity =
+      try do
+        snapshot_entries = Store.diagnostics().mirror_entries
+        assert search.().status == 429
+        result = search.()
+        assert result.status == 200
+        assert %{mirror_entries: ^snapshot_entries, snapshot_pending: false} = Store.diagnostics()
+        assert %{"data" => [opportunity]} = Jason.decode!(result.resp_body)
+        assert byte_size(opportunity["id"]) < 100
+        Process.exit(store, :kill)
+        _replacement = StoreRestart.await(store)
+        opportunity
+      after
+        if Process.alive?(store), do: :sys.resume(store)
+      end
+
+    assert search.().status == 429
+
+    result =
+      request(
+        :post,
+        "/provider/v1/contacts",
+        run,
+        %{
+          "opportunity_ref" => opportunity["id"],
+          "spacecraft_ref" => "SC-10000",
+          "service_profile_ref" => service_id,
+          "delivery_profile_ref" => delivery_profile["id"],
+          "client_reference" => "long-config-refs"
+        },
+        "idempotency-key": "long-config-refs"
+      )
+
+    assert result.status == 201, result.resp_body
+
+    assert %{
+             "data" => %{
+               "ground_station_ref" => ^station_id,
+               "service_profile_ref" => ^service_id
+             }
+           } =
+             Jason.decode!(result.resp_body)
+  end
+
   test "profile-backed Contacts keep contact, pass, and delivery state independent", context do
     delivery_profile = provision_delivery(context)
     opportunity = search_opportunity(context.run)

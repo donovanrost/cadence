@@ -187,8 +187,8 @@ defmodule CadenceSimulator.Provider do
     end
   end
 
-  @spec search_opportunities(map()) :: {:ok, map()} | {:error, term()}
-  def search_opportunities(params) when is_map(params) do
+  @spec search_opportunities(map(), keyword()) :: {:ok, map()} | {:error, term()}
+  def search_opportunities(params, opts \\ []) when is_map(params) do
     with {:ok, run} <- Store.fetch(:run, Map.get(params, "run_id", "")),
          :ok <- ensure_run_searchable(run),
          {:ok, starts_at} <- parse_datetime(params, "starts_at"),
@@ -201,7 +201,8 @@ defmodule CadenceSimulator.Provider do
 
       stations =
         scenario["ground_stations"]
-        |> maybe_filter_by_ids(station_ids)
+        |> Enum.with_index()
+        |> filter_stations(station_ids)
 
       spacecraft =
         scenario
@@ -209,7 +210,14 @@ defmodule CadenceSimulator.Provider do
         |> maybe_filter_by_ids(requested_spacecraft_ids)
 
       opportunities =
-        generate_opportunities(run, spacecraft, stations, starts_at, ends_at)
+        generate_opportunities(
+          run,
+          spacecraft,
+          stations,
+          starts_at,
+          ends_at,
+          Keyword.get(opts, :station_numbers, false)
+        )
         |> Enum.take(limit)
 
       {:ok,
@@ -224,13 +232,14 @@ defmodule CadenceSimulator.Provider do
   end
 
   @doc "Rebuilds a synthetic offer from its exact spacecraft, station and possibly clipped window."
-  def restore_opportunity(run, spacecraft_id, station_id, start_unix, end_unix) do
+  def restore_opportunity(run, spacecraft_number, station_number, start_unix, end_unix) do
     scenario = run["scenario_snapshot"]
     {cadence, duration, jitter} = pass_parameters(run)
 
-    with true <- spacecraft_known?(scenario, spacecraft_id),
-         %{} = station <- Enum.find(scenario["ground_stations"], &(&1["id"] == station_id)),
+    with true <- spacecraft_number in 1..scenario["spacecraft_count"],
+         %{} = station <- Enum.at(scenario["ground_stations"], station_number),
          true <- end_unix > start_unix and end_unix - start_unix <= duration,
+         spacecraft_id = configured_spacecraft_id(scenario, spacecraft_number),
          offset = pass_offset(run, spacecraft_id, cadence, jitter),
          true <- rem(start_unix - offset, cadence) == 0,
          {:ok, starts_at} <- DateTime.from_unix(start_unix),
@@ -332,7 +341,7 @@ defmodule CadenceSimulator.Provider do
 
   def terminal_reservation_status?(status), do: status in @terminal_reservation_states
 
-  defp generate_opportunities(run, spacecraft, stations, starts_at, ends_at) do
+  defp generate_opportunities(run, spacecraft, stations, starts_at, ends_at, station_numbers?) do
     {cadence, duration, jitter} = pass_parameters(run)
     start_unix = DateTime.to_unix(starts_at)
     end_unix = DateTime.to_unix(ends_at)
@@ -340,17 +349,20 @@ defmodule CadenceSimulator.Provider do
     for craft <- spacecraft,
         stations != [],
         window_start <- opportunity_starts(run, craft, start_unix, end_unix, cadence, jitter),
-        station =
+        {station, number} =
           Enum.at(stations, rem(:erlang.phash2({craft["id"], window_start}), length(stations))),
         window_end = min(window_start + duration, end_unix) do
-      opportunity(
-        run,
-        craft["id"],
-        station,
-        window_start,
-        DateTime.from_unix!(window_start),
-        DateTime.from_unix!(window_end)
-      )
+      offer =
+        opportunity(
+          run,
+          craft["id"],
+          station,
+          window_start,
+          DateTime.from_unix!(window_start),
+          DateTime.from_unix!(window_end)
+        )
+
+      if station_numbers?, do: Map.put(offer, "station_number", number), else: offer
     end
     |> Enum.sort_by(& &1["starts_at"])
   end
@@ -411,17 +423,9 @@ defmodule CadenceSimulator.Provider do
     end)
   end
 
-  defp spacecraft_known?(scenario, id) do
+  defp configured_spacecraft_id(scenario, index) do
     prefix = scenario["spacecraft_prefix"] <> "-"
-    size = byte_size(prefix)
-
-    with <<^prefix::binary-size(^size), digits::binary>> <- id,
-         {index, ""} <- Integer.parse(digits),
-         true <- index in 1..scenario["spacecraft_count"] do
-      spacecraft_id(prefix, index, spacecraft_number_width(scenario["spacecraft_count"])) == id
-    else
-      _unknown -> false
-    end
+    spacecraft_id(prefix, index, spacecraft_number_width(scenario["spacecraft_count"]))
   end
 
   defp spacecraft_number_width(count), do: max(3, byte_size(Integer.to_string(count)))
@@ -529,6 +533,11 @@ defmodule CadenceSimulator.Provider do
 
   defp maybe_filter_by_ids(resources, []), do: resources
   defp maybe_filter_by_ids(resources, ids), do: Enum.filter(resources, &(&1["id"] in ids))
+
+  defp filter_stations(stations, []), do: stations
+
+  defp filter_stations(stations, ids),
+    do: Enum.filter(stations, fn {station, _number} -> station["id"] in ids end)
 
   defp apply_run_transition(%{"state" => state}, _action) when state in @terminal_run_states,
     do: {:error, {:conflict, "run is terminal"}}
