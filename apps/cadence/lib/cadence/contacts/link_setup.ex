@@ -359,7 +359,7 @@ defmodule Cadence.Contacts.LinkSetup do
   end
 
   defp endpoint_refs_for_spacecraft(spacecraft, source_endpoints) do
-    managed_id = "spacecraft_runtime:" <> spacecraft.spacecraft_id
+    managed_id = SourceEndpoints.managed_source_endpoint_id(spacecraft.spacecraft_id)
 
     endpoint_refs =
       Enum.flat_map(source_endpoints, fn endpoint ->
