@@ -1265,11 +1265,11 @@ defmodule Cadence.IngressJournal.FileSystem do
     cursors |> Map.values() |> Enum.min(fn -> 0 end)
   end
 
-  # What the processing consumer hasn't durably passed (DECISIONS #71): a restart resumes from
-  # the durable cursor, so that is where the not-yet-stored entries start.
   # #686: the processing backlog as a :telemetry event, at most once a second. O(1) bytes and one
   # O(log n) lookup for the oldest unacknowledged entry: never the entry count, which walks the
-  # whole backlog (`processing_backlog/1`, for snapshots only).
+  # whole backlog (`processing_backlog/1`, for snapshots only). It is measured from the in-memory
+  # processing cursor ("not yet acknowledged"), which is what lag means; the snapshot's
+  # `processing_backlog/1` starts from the lower of the durable and in-memory cursors.
   @backlog_report_ms 1_000
 
   defp maybe_report_backlog(state) do
@@ -1297,6 +1297,8 @@ defmodule Cadence.IngressJournal.FileSystem do
     end
   end
 
+  # What the processing consumer hasn't durably passed (DECISIONS #71): a restart resumes from
+  # the durable cursor, so that is where the not-yet-stored entries start.
   defp processing_backlog(state) do
     from =
       [Map.get(state.durable_cursors, :processing), Map.get(state.cursors, :processing)]

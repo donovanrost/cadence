@@ -8,15 +8,19 @@ defmodule Cadence.IngressJournal.IngestTelemetry do
     acknowledged (the processing cursor advances).
     Measurements: `entries`, `bytes`, `frames`, `packets`, `samples` (decoded and derived),
     `duration_us` (delivery to the executor until acknowledgement) and `journal_lag_ms` (now minus
-    the receipt time of the batch's first entry).
+    the receipt time of the batch's first entry). A batch acknowledged after a restart resumed it
+    has no delivery time or counts: `duration_us` and the three counts are then left out, never
+    reported as 0, so they don't drag an average down.
   * `[:cadence, :ingest, :journal, :backlog]`: per journal (one per contact path), at most once a
     second, from the journal's own checkpoint timer.
-    Measurements: `bytes` (appended but not yet acknowledged by processing) and
-    `oldest_unacked_age_ms` (0 when nothing is waiting).
+    Measurements: `bytes` (appended but not yet acknowledged by processing: measured from the
+    in-memory processing cursor, unlike the snapshot's `processing_backlog`, which starts from the
+    durable one) and `oldest_unacked_age_ms` (0 when nothing is waiting).
 
   Both carry `mission_id`, `path_id`, `provider_binding_id` and `realized_contact_id` as metadata.
   At 1,000 paths the batch event fires a few thousand times a second: handlers should aggregate,
-  not store each event.
+  not store each event. `path_id` and `realized_contact_id` are unbounded (one per contact): never
+  map them to a metric label (the metrics catalog forbids them as attributes).
   """
 
   alias Cadence.Telemetry.Sample
@@ -52,21 +56,27 @@ defmodule Cadence.IngressJournal.IngestTelemetry do
   """
   @spec batch_acknowledged(map(), map()) :: :ok
   def batch_acknowledged(batch, context) do
-    counts = Map.get(batch, :counts) || %{}
-
-    :telemetry.execute(
-      @batch_stop,
+    measurements =
       %{
         entries: batch.entry_count,
         bytes: batch.byte_count,
-        frames: Map.get(counts, :frames, 0),
-        packets: Map.get(counts, :packets, 0),
-        samples: Map.get(counts, :samples, 0),
-        duration_us: duration_us(Map.get(batch, :delivered_at)),
         journal_lag_ms:
           max(DateTime.diff(DateTime.utc_now(), batch.first.receipt_time, :millisecond), 0)
-      },
-      metadata(context)
+      }
+      |> Map.merge(Map.take(Map.get(batch, :counts) || %{}, [:frames, :packets, :samples]))
+      |> put_duration(Map.get(batch, :delivered_at))
+
+    :telemetry.execute(@batch_stop, measurements, metadata(context))
+  end
+
+  # Unknown after a restart resumed the batch: left out rather than reported as 0.
+  defp put_duration(measurements, nil), do: measurements
+
+  defp put_duration(measurements, delivered_at) do
+    Map.put(
+      measurements,
+      :duration_us,
+      System.convert_time_unit(System.monotonic_time() - delivered_at, :native, :microsecond)
     )
   end
 
@@ -85,11 +95,6 @@ defmodule Cadence.IngressJournal.IngestTelemetry do
       metadata(context)
     )
   end
-
-  defp duration_us(nil), do: 0
-
-  defp duration_us(delivered_at),
-    do: System.convert_time_unit(System.monotonic_time() - delivered_at, :native, :microsecond)
 
   defp metadata(context) do
     Map.take(context, [:mission_id, :path_id, :provider_binding_id, :realized_contact_id])

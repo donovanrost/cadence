@@ -17,6 +17,27 @@ defmodule Cadence.IngressJournal.IngestTelemetryTest do
     assert IngestTelemetry.counts(%{}) == %{frames: 0, packets: 0, samples: 0}
   end
 
+  test "a batch resumed after a restart leaves out its unknown duration and counts" do
+    ids = ids("resumed")
+    attach(IngestTelemetry.batch_stop_event(), ids.provider_binding_id)
+    receipt_time = DateTime.add(DateTime.utc_now(), -1, :second)
+
+    batch = %{
+      first: %{receipt_time: receipt_time},
+      entry_count: 2,
+      byte_count: 10,
+      delivered_at: nil,
+      counts: nil
+    }
+
+    IngestTelemetry.batch_acknowledged(batch, Map.put(ids, :extra, :dropped))
+
+    assert_receive {:ingest_event, measurements, metadata}
+    assert Map.keys(measurements) |> Enum.sort() == [:bytes, :entries, :journal_lag_ms]
+    assert measurements.journal_lag_ms >= 1_000
+    refute Map.has_key?(metadata, :extra)
+  end
+
   @tag :tmp_dir
   test "an acknowledged batch emits batch.stop with its counts, lag and path", %{tmp_dir: tmp_dir} do
     ids = ids("batch")
