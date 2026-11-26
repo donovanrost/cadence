@@ -169,41 +169,10 @@ defmodule CadenceWeb.Router do
         metadata: %{host_policy: :ops}
       )
 
-      live("/missions/:mission_id/ops/commands/workspace", HostPageLive, :index,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/commands/stages", HostPageLive, :index,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/commands/stages/new", HostPageLive, :new,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/commands/stages/:command_stage_id", HostPageLive, :show,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/commands/new", HostPageLive, :new,
-        metadata: %{host_policy: :ops}
-      )
-
       live(
         "/missions/:mission_id/ops/commands/requests/:command_request_id/history",
         HostPageLive,
         :show,
-        metadata: %{host_policy: :ops}
-      )
-
-      live(
-        "/missions/:mission_id/ops/commands/requests/:command_request_id/queue",
-        HostPageLive,
-        :show,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/commands/requests/:command_request_id", HostPageLive, :show,
         metadata: %{host_policy: :ops}
       )
 
@@ -826,7 +795,6 @@ defmodule CadenceWeb.Router do
         post("/command_stages", CommandStageController, :create)
         get("/command_stages/:command_stage_id", CommandStageController, :show)
         patch("/command_stages/:command_stage_id", CommandStageController, :update)
-        post("/command_stages/:command_stage_id/submit", CommandStageController, :submit)
 
         get("/command_stages/:command_stage_id/items", StagedCommandItemController, :index)
         post("/command_stages/:command_stage_id/items", StagedCommandItemController, :create)
@@ -840,11 +808,7 @@ defmodule CadenceWeb.Router do
         )
 
         get("/command_requests", CommandRequestController, :index)
-        post("/command_requests", CommandRequestController, :create)
         get("/command_requests/:command_request_id", CommandRequestController, :show)
-        post("/command_requests/:command_request_id/approve", CommandRequestController, :approve)
-        post("/command_requests/:command_request_id/reject", CommandRequestController, :reject)
-        post("/command_requests/:command_request_id/enqueue", CommandRequestController, :enqueue)
 
         get("/command_approvals", CommandApprovalController, :index)
         get("/command_approvals/:command_approval_id", CommandApprovalController, :show)

@@ -131,11 +131,6 @@ const trail = computed(() =>
         <p>
           This default sets the initial layout. Operators can adjust the shelf during their session.
         </p>
-        <CadenceLink
-          v-if="context.scope === 'mission'"
-          :href="`/missions/${encodeURIComponent(context.missionId)}/ops/commands/workspace`"
-          >Open Commanding</CadenceLink
-        >
       </div></template
     >
     <template #history><slot name="history" /></template>

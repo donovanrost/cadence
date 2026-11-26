@@ -8,7 +8,6 @@ defmodule Cadence.Reads.CommandMonitor do
   this projection. Reads do not approve, enqueue, release or verify commands.
   """
   alias Cadence.Auth.Scope
-  alias Cadence.Management.Commanding.RequestReview
   alias Cadence.Reads.CommandMonitor.Store
   alias Cadence.Reads.CommandMonitorProjection
   alias Cadence.Reads.CommandReadAccess
@@ -30,7 +29,6 @@ defmodule Cadence.Reads.CommandMonitor do
 
       model = %{
         version: 1,
-        can_review: match?({:ok, _, _}, RequestReview.authorize(scope, mission)),
         organization_id: scope.organization_id,
         mission_id: mission,
         observed_at: CommandMonitorProjection.time(observed_at),

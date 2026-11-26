@@ -5,24 +5,14 @@ defmodule Cadence.Management.Commanding.ExactArgumentAuthoringTest do
     CommandQueueEntryRow,
     CommandReleaseAttemptRow,
     CommandRequestRow,
-    CommandStage,
     RequestStore,
-    RequestValidation,
-    StagedCommandItem,
-    StagedCommandItemRow,
-    StageStore
+    RequestValidation
   }
 
   alias Cadence.Control.Commanding
   alias Cadence.ExactCommandAuthoringFixtures, as: Fixtures
 
-  alias Cadence.Management.Commanding.{
-    RequestAuthoring,
-    StageCatalog,
-    StageDrafts,
-    StageItemAuthoring,
-    StageSubmission
-  }
+  alias Cadence.Management.Commanding.RequestAuthoring
 
   @maximum 18_446_744_073_709_551_615
   @minimum -9_223_372_036_854_775_808
@@ -94,152 +84,6 @@ defmodule Cadence.Management.Commanding.ExactArgumentAuthoringTest do
     assert Repo.aggregate(CommandRequestRow, :count) == 0
   end
 
-  test "wide draft intent survives save, selected-item read, edit and formal batch submission",
-       c do
-    {:ok, stage} =
-      StageStore.persist_stage(
-        c.org,
-        CommandStage.new(%{
-          organization_id: c.org,
-          mission_id: c.mission,
-          stage_name: "Exact command batch",
-          owner: %{"user_id" => c.user.user_id},
-          visibility: :private
-        })
-      )
-
-    stage_id = stage.command_stage_id
-    {:ok, workbench} = StageCatalog.workbench(c.scope, c.mission, stage_id, %{})
-
-    input = %{
-      "expected_stage" => workbench["stage"]["expected_stage"],
-      "expected_item" => nil,
-      "command" => Fixtures.input(c, "SET_COUNTER", %{"amount" => 2, "counter" => @maximum})
-    }
-
-    assert {:ok, held} = StageItemAuthoring.preview(c.scope, c.mission, stage_id, nil, input)
-
-    assert Jason.decode!(
-             StageItemAuthoring.public_preview(held)["command"]["argument_values_json"]
-           )["counter"] == @maximum
-
-    assert {:ok, _} = save(c, stage_id, held)
-    assert Repo.aggregate(CommandRequestRow, :count) == 0
-
-    {:ok, selected} =
-      StageCatalog.workbench(c.scope, c.mission, stage_id, %{"item" => held.item_id})
-
-    assert selected["version"] == 2
-    assert Jason.decode!(selected["selected_item"]["argument_values_json"])["counter"] == @maximum
-    assert Enum.all?(selected["items"]["entries"], &is_nil(&1["argument_values_json"]))
-
-    input = %{
-      "expected_stage" => selected["stage"]["expected_stage"],
-      "expected_item" => selected["selected_item"]["expected_item"],
-      "command" => Fixtures.input(c, "SET_COUNTER", %{"amount" => 2, "counter" => @maximum - 1})
-    }
-
-    assert {:ok, edited} =
-             StageItemAuthoring.preview(c.scope, c.mission, stage_id, held.item_id, input)
-
-    assert {:ok, _} = save(c, stage_id, edited)
-
-    assert Repo.get!(StagedCommandItemRow, held.item_id).argument_values_document == %{
-             "value" => %{"amount" => 2, "counter" => @maximum - 1}
-           }
-
-    {:ok, selected} =
-      StageCatalog.workbench(c.scope, c.mission, stage_id, %{"item" => held.item_id})
-
-    selection = %{
-      "expected_stage" => selected["stage"]["expected_stage"],
-      "items" => [
-        %{"id" => held.item_id, "expected_item" => selected["selected_item"]["expected_item"]}
-      ]
-    }
-
-    assert {:ok, batch} = StageSubmission.preview(c.scope, c.mission, stage_id, selection)
-    assert {:ok, public} = StageSubmission.public_preview(batch)
-    assert [preview] = public["requests"]
-    assert Jason.decode!(preview["resolved_argument_values_json"])["counter"] == @maximum - 1
-    token = StageDrafts.new_write_token()
-
-    assert {:ok, receipt} =
-             StageSubmission.submit(c.scope, c.mission, stage_id, token, batch, %{
-               "expected_write" => token,
-               "expected_preview" => batch.token
-             })
-
-    assert [request] = receipt["requests"]
-    assert {:ok, stored} = RequestStore.fetch_request(c.org, c.mission, request["request_id"])
-    assert stored.argument_values["counter"] == @maximum - 1
-    assert stored.resolved_argument_values["counter"] == @maximum - 1
-    assert encoded(c, stored) == <<1, 2, @maximum - 1::unsigned-big-64>>
-    assert Repo.aggregate(CommandRequestRow, :count) == 1
-    assert Repo.aggregate(CommandQueueEntryRow, :count) == 0
-    assert Repo.aggregate(CommandReleaseAttemptRow, :count) == 0
-  end
-
-  test "more resolved defaults than the UI contract allows return unavailable without effects",
-       c do
-    parameters =
-      Enum.map_join(1..65, fn n ->
-        """
-            - name: value_#{n}
-              data_type: uint
-              required: false
-              default_value: 1
-              bit_offset: #{(n - 1) * 8}
-              bit_length: 8
-        """
-      end)
-
-    extra = "  - name: MANY_DEFAULTS\n    opcode: 4\n    parameters:\n" <> parameters
-    c = %{c | model: Fixtures.activate!(c.org, c.mission, extra)}
-    input = Fixtures.input(c, "MANY_DEFAULTS", %{})
-
-    assert {:error, :command_preview_unavailable} =
-             RequestAuthoring.preview(c.scope, c.mission, input)
-
-    {:ok, stage} =
-      StageStore.persist_stage(
-        c.org,
-        CommandStage.new(%{
-          organization_id: c.org,
-          mission_id: c.mission,
-          stage_name: "Existing native drafts",
-          owner: %{"user_id" => c.user.user_id}
-        })
-      )
-
-    {:ok, item} =
-      StageStore.persist_item(
-        c.org,
-        StagedCommandItem.new(%{
-          organization_id: c.org,
-          mission_id: c.mission,
-          command_stage_id: stage.command_stage_id,
-          source_endpoint_ref: c.target.source_endpoint_id,
-          mission_model_revision_id: c.model.revision_id,
-          command_id: c.model.commands_by_name["MANY_DEFAULTS"],
-          argument_values: %{}
-        })
-      )
-
-    {:ok, workbench} = StageCatalog.workbench(c.scope, c.mission, stage.command_stage_id, %{})
-
-    input = %{
-      "expected_stage" => workbench["stage"]["expected_stage"],
-      "items" => Enum.map(workbench["items"]["entries"], &Map.take(&1, ["id", "expected_item"]))
-    }
-
-    assert {:error, :command_stage_preview_too_large} =
-             StageSubmission.preview(c.scope, c.mission, stage.command_stage_id, input)
-
-    assert Repo.get!(StagedCommandItemRow, item.staged_command_item_id).lifecycle_state == "draft"
-    assert Repo.aggregate(CommandRequestRow, :count) == 0
-  end
-
   defp encoded(c, request) do
     {:ok, basis} =
       RequestValidation.resolve_basis(
@@ -256,20 +100,5 @@ defmodule Cadence.Management.Commanding.ExactArgumentAuthoringTest do
       )
 
     bytes
-  end
-
-  defp save(c, stage_id, held) do
-    token = StageDrafts.new_write_token()
-
-    input = %{
-      "expected_write" => token,
-      "expected_preview" => held.token,
-      "expected_stage" => held.expected_stage,
-      "notes" => nil,
-      "order" => 0
-    }
-
-    input = if held.new?, do: input, else: Map.put(input, "expected_item", held.expected_item)
-    StageItemAuthoring.save(c.scope, c.mission, stage_id, token, held, input)
   end
 end

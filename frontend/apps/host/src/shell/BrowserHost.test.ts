@@ -43,7 +43,6 @@ import OpsModulePage from "../ops-workspace/features/module-pages/OpsModulePage.
 import { createHostRouter, hostRoute, shellForRoute } from "./host-navigation";
 import routes from "../routes.json";
 import { monitorFixture } from "../../../../modules/commanding/src/features/mission-commands/monitor.test-support";
-import { workspaceFixture as commandWorkspaceFixture } from "../../../../modules/commanding/src/features/workspace/fixtures.test-support";
 import { readMonitorQuery } from "../../../../modules/commanding/src/features/mission-commands/monitor-query";
 import {
   fixture as explorationFixture,
@@ -508,59 +507,6 @@ test("fleet directory is host-composed and captured reads retain evidence across
   await reply(3, fresh);
   expect(view().find("#ops-fleet-planning-page").exists()).toBe(false);
   expect(onNeutral()).toBe(true);
-});
-
-test("live commanding notices are isolated to the captured path and token and stop after departure", async () => {
-  await start();
-  const path = "/missions/mission_one/ops/commands/workspace";
-  const data = commandWorkspaceFixture();
-  const state = snapshot(path, "mission_one");
-  state.context.organization.organization_id = "org_one";
-  const envelope = {
-    id: "commanding.workspace",
-    slot: "ops.page",
-    version: 1,
-    status: "ready",
-    token: "11111111-1111-4111-8111-111111111111",
-    context: data.directory.context,
-    data,
-  };
-  await click(path);
-  await reply(0, { ...state, ops_page: envelope });
-  expect(view().find("#command-workspace").exists()).toBe(true);
-  await reply(1, envelope); // Initial reconciliation after subscribing.
-  await view().get("#workspace-shared-argument-0").setValue("unfinished");
-  const handler = required(
-    transport.handleEvent.mock.calls.find(([name]) => name === "cadence:ops-page-changed"),
-  )[1];
-  const notice = { path, id: envelope.id, token: envelope.token };
-  for (const invalid of [
-    null,
-    {},
-    { ...notice, path: "/missions/other/ops/commands/workspace" },
-    { ...notice, token: "old" },
-    { ...notice, id: "other" },
-  ])
-    handler(invalid);
-  await flushPromises();
-  expect(transport.requests).toHaveLength(2);
-  handler(notice);
-  expect(transport.requests[2]).toMatchObject({ event: "host:ops-page:read", payload: notice });
-  await reply(2, envelope);
-  expect(view().get<HTMLInputElement>("#workspace-shared-argument-0").element.value).toBe(
-    "unfinished",
-  );
-  await click(neutralPath);
-  await reply(3, snapshot(neutralPath, "mission-1"));
-  handler(notice);
-  await flushPromises();
-  expect(transport.requests).toHaveLength(4);
-  view().unmount();
-  handler(notice);
-  expect(transport.requests).toHaveLength(4);
-  expect(transport.removeHandleEvent).toHaveBeenCalledWith(
-    transport.handleEvent.mock.results[0]?.value,
-  );
 });
 
 test("core timeline filters, selected evidence and older pages restore through persistent Ops history", async () => {

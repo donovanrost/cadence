@@ -683,19 +683,35 @@ required, so this lands only on a fresh database at a reset):
 - A group decision's `decision_document` also names `members_digest` (the members the GO's token
   covered) and `excluded_request_ids` (the requests a GO-excluding left out).
 
-## REST command requests: approve and reject require the review token (#117 step 4a; lands after the 11-22 reset, date set at landing)
+## REST: command requests are made and decided only through command groups (#708; breaking)
 
-**Breaking (REST only).** `POST /api/organizations/:organization_id/missions/:mission_id/command_requests/:id/approve` and `/reject` require `approval.expected_review`: the request's review token (64 hex), the same token the command review read sends as `expected_review`. That's four-eyes design B: a decision names exactly what was reviewed.
-- Without it: `422 {errors: [{field: "approval.expected_review", reason: "required"}]}`. Not a review token at all (not 64 lowercase hex): the same with `reason: "invalid"`. Nothing is recorded.
-- A token that no longer matches the request: `409 command_review_changed`. Nothing is recorded; read the request again.
-- The human-approver check runs first, so a service caller still gets its `403` (a REST bearer is a service, and a service can't approve), whatever token it sent.
-- No working client is affected: REST approve and reject have no human caller today, and no qa script calls them (qa, 11-20).
+The pre-console REST API (`/api/organizations/:organization_id/missions/:mission_id`) no longer
+creates, decides or queues a command request on its own. Every command request is a member of a
+command group (DECISIONS #61, #62), and a group is the one way to command. **Breaking:** these
+endpoints are removed, and a call to one is a `404`:
+
+| Removed | Instead |
+| --- | --- |
+| `POST /command_requests` | Submit a group: `POST /api/v1/missions/:mission_id/command-groups` (after `…/preflight`). |
+| `POST /command_requests/:id/approve` · `/reject` | Decide the group: `POST /api/v1/missions/:mission_id/command-groups/:id/decision` (GO, GO excluding, send back, NO-GO). |
+| `POST /command_requests/:id/enqueue` | The group's GO queues its members (or its submission, when its policy needs no second GO). |
+| `POST /command_stages/:id/submit` | Submit a group. A command stage no longer turns into requests. |
+
+Still there: the reads `GET /command_requests` (and `/:id`), `GET /command_approvals`,
+`GET /command_queue_entries` and the release `POST /command_queue_entries/:id/release`, and the
+command stage and staged item writes other than submit (a command stage is retired in #708's
+last step).
+
+The command pages of the pre-console host that could queue a command without a group preflight
+(the command workspace's queue action, the stage queue and the single-request authoring page,
+#707) are removed with them, so no path queues a command without the group's preflight and its
+second-GO rule.
 
 ## REST commanding: actors (#465)
 
 Every actor object the pre-console REST commanding API sends (a command stage's `owner`, a command
 request's `requested_by`, an approval's `decided_by`, a queue entry's `enqueued_by`, a release
-attempt's `released_by`, alone or inside the decide, enqueue and release answers) is `{kind, id,
+attempt's `released_by`, alone or inside the release answer) is `{kind, id,
 name}` or `null`, never the stored actor document (#146, through #472's `ActorRef`):
 
 - `kind`: `user`, `service` or `system`.
@@ -711,28 +727,20 @@ name}` or `null`, never the stored actor document (#146, through #472's `ActorRe
   leaves the server. The stored keys (`actor_kind`, `user_id`, `service_identity_id`,
   `user_display_name`, …) are gone from the answer; read `kind` and `id`.
 
-## REST command requests: command-group members (owner: api-ops; four-eyes P0, 2026-11-18)
+## REST command queue entries: group members (owner: api-ops; four-eyes P0, 2026-11-18)
 
 The pre-console REST API under `/api/organizations/:organization_id/missions/:mission_id`
 (the `:api` and `:authenticated_api` pipelines) keeps its own error body, `{"errors": [{"reason":
-"<code>", "message": "…"}]}`, not the console envelope. Since **2026-11-18** a command request
-that belongs to a command group is decided, queued and released only through its group, and only a
-group submission makes a request a group member (#249). These are breaking changes: a request that
-used to succeed is now refused.
+"<code>", "message": "…"}]}`, not the console envelope. Every command request is a command group's
+member (#708), so a request is queued and released only through its group.
 
-| Endpoint | New refusal | Meaning | Instead |
+| Endpoint | Refusal | Meaning | Instead |
 | --- | --- | --- | --- |
-| `POST /command_requests/:id/approve` · `/reject` | `409 command_request_in_group` | The request belongs to a command group. Nothing was recorded. | Decide the group: `POST /api/v1/missions/:mission_id/command-groups/:id/decision` (GO, GO excluding, send back, NO-GO). |
-| `POST /command_requests/:id/enqueue` | `409 command_request_in_group` | The same, for queueing. Nothing was queued. | The group's GO queues its members. |
-| `POST /command_queue_entries/:id/release` | `409 command_group_not_armed` | The entry is a group member and its group isn't armed (`queued`, after its GO), judged from the server's group row. Nothing was released. | Give the group its GO; its release goes through the group. |
-| `POST /command_requests` | `422 command_request_group_reserved` | The request's `metadata` names a group (`metadata["group"]`). Nothing was created. | Submit the group: `POST /api/v1/missions/:mission_id/command-groups`. Drop group keys from a standalone request's `metadata`. |
-| `POST /command_requests/:id/approve` | `403 command_request_approver_authors_unknown` (#280) | The request was made through a service identity with nobody recorded as accountable for it, so nobody can approve it. Nothing was recorded. | An org admin records who is accountable (People › Service identities), then a person outside them approves. |
+| `POST /command_queue_entries/:id/release` | `409 command_group_not_armed` | The entry's group isn't armed (`queued`, after its GO), judged from the server's group row. Nothing was released. | Give the group its GO; its release goes through the group. |
 
-The `message` is ux U87's words: "This command is part of a command group. Approve it with the
-group's GO/NO-GO.", "A command joins a command group only when the group is submitted." and
-"This command's group hasn't been given its GO, so it can't be sent." Membership is read from the
-server's group records, never from a caller's metadata. Requests outside any group are unchanged. The console's named release already refused an unarmed group (`command_group_not_armed`
-under `refused`, in the release section above).
+The `message` is ux U87's words: "This command's group hasn't been given its GO, so it can't be
+sent." Membership is read from the server's group records. The console's named release already
+refused an unarmed group (`command_group_not_armed` under `refused`, in the release section above).
 
 **Service requesters (#280, ux U100).** A request made through a service identity counts as made by
 the people accountable for it (its issuer and rotators, and anyone an org admin records). Approving

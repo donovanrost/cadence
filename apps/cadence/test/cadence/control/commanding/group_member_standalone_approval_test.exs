@@ -24,10 +24,7 @@ defmodule Cadence.Control.Commanding.GroupMemberStandaloneApprovalTest do
   alias Cadence.Control.Commanding.{GroupAbort, GroupDecision, GroupSubmission}
   alias Cadence.Ids
   alias Cadence.Management.Commanding, as: ManagementCommanding
-  alias Cadence.Management.Commanding.RequestReview
   alias Cadence.Reads.CommandGroups
-
-  @in_group "This command is part of a command group. Approve it with the group's GO/NO-GO."
 
   setup do
     c = setup!(2)
@@ -73,22 +70,6 @@ defmodule Cadence.Control.Commanding.GroupMemberStandaloneApprovalTest do
                  reason: "rejecting one member alone",
                  admin_mode: false
                )
-
-      assert_member_untouched(c)
-    end
-
-    test "the ops review page says why", c do
-      {:ok, request} =
-        Commanding.fetch_command_request(c.org, c.mission, c.member.command_request_id)
-
-      input = %{
-        "decision" => "approved",
-        "reason" => "approving one member alone",
-        "expected_review" => RequestReview.review_token(request)
-      }
-
-      assert {:rejected, @in_group} =
-               RequestReview.decide(c.other, c.mission, c.member.command_request_id, input)
 
       assert_member_untouched(c)
     end

@@ -125,24 +125,6 @@ defmodule Cadence.Management.Commanding do
     )
   end
 
-  @spec submit_staged_command_items(binary(), binary(), binary(), [binary()], map()) ::
-          {:ok, [CommandRequest.t()]} | {:error, term()}
-  def submit_staged_command_items(
-        organization_id,
-        mission_id,
-        command_stage_id,
-        staged_command_item_ids,
-        requested_by \\ %{}
-      ) do
-    StageStore.submit_items(
-      organization_id,
-      mission_id,
-      command_stage_id,
-      staged_command_item_ids,
-      requested_by
-    )
-  end
-
   @spec approve_command_request(binary(), binary(), binary(), map(), keyword()) ::
           {:ok, map()} | {:error, term()}
   def approve_command_request(

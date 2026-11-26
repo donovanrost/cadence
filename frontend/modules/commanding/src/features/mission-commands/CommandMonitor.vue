@@ -2,14 +2,12 @@
 import { computed, reactive, ref, watch } from "vue";
 import type { OpsPageContext, OpsPageNavigationPort } from "@cadence/plugin-sdk/ops-pages";
 import { useOpsHeader } from "@cadence/plugin-sdk/page-header";
-import { href as routeHref } from "@cadence/plugin-sdk/routes";
 import CadenceOpsViewport from "@cadence/ui/CadenceOpsViewport.vue";
 import CadenceOpsListBodyFrame from "@cadence/ui/CadenceOpsListBodyFrame.vue";
 import CadenceOpsListFrame from "@cadence/ui/CadenceOpsListFrame.vue";
 import CadenceDetailsFrame from "@cadence/ui/CadenceDetailsFrame.vue";
 import CommandEvidence from "./CommandEvidence.vue";
 import { commandHistoryHref } from "@cadence/commanding/command-history";
-import { commandReviewHref } from "@cadence/commanding/command-review";
 import { commandStates, type CommandMonitorModel, type MonitorQuery } from "./monitor.contracts";
 import { monitorHref } from "./monitor-query";
 defineOptions({ inheritAttrs: false });
@@ -70,21 +68,6 @@ function openHistory(event: MouseEvent, id: string) {
   const destination = historyHref(id);
   if (!pending.value && destination) props.port.navigate(destination);
 }
-function reviewHref(id: string): string | undefined {
-  if (!props.model.can_review) return undefined;
-  try {
-    return commandReviewHref(props.model.mission_id, id);
-  } catch {
-    return undefined;
-  }
-}
-function reviewRequest(event: MouseEvent, id: string) {
-  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
-    return;
-  event.preventDefault();
-  const destination = reviewHref(id);
-  if (!pending.value && destination) props.port.navigate(destination);
-}
 function clearFocus() {
   const { focus_command_id: _, ...query } = props.model.query;
   navigate(query);
@@ -102,34 +85,14 @@ async function retry() {
 }
 useOpsHeader("/missions/:mission_id/ops/commands", () => {
   const summary = props.model.summary;
-  const mission = { mission_id: props.model.mission_id };
   return {
-    description:
-      "Request, queue, release and verifier evidence. Open a request for detailed review.",
+    description: "Request, queue, release and verifier evidence.",
     facts: [
       `${summary.queued_count} queued`,
       `${summary.release_pending_count} release pending`,
       `${summary.in_flight_count} in flight`,
       `${summary.failed_count + summary.indeterminate_count} failed or indeterminate`,
     ],
-    ...(props.model.can_review
-      ? {
-          primary: {
-            id: "command-monitor-create",
-            label: "Create request",
-            icon: "hero-plus",
-            href: routeHref("/missions/:mission_id/ops/commands/new", mission),
-          },
-          actions: [
-            {
-              id: "command-monitor-stages",
-              label: "Command stages",
-              icon: "hero-rectangle-stack",
-              href: routeHref("/missions/:mission_id/ops/commands/stages", mission),
-            },
-          ],
-        }
-      : {}),
     ...(!props.live || props.syncFailed ? { refresh: { run: retry, pending: pending.value } } : {}),
   };
 });
@@ -180,14 +143,6 @@ useOpsHeader("/missions/:mission_id/ops/commands", () => {
             class="btn btn-ghost btn-sm"
             @click="openHistory($event, model.focus.row.id)"
             >Open full command history</a
-          >
-          <a
-            class="btn btn-ghost btn-sm mt-3"
-            v-if="reviewHref(model.focus.row.id)"
-            :href="reviewHref(model.focus.row.id)"
-            data-command-review-focus
-            @click="reviewRequest($event, model.focus.row.id)"
-            >Review request</a
           >
         </div>
         <p v-else role="status" class="mt-3 text-sm">
@@ -348,14 +303,6 @@ useOpsHeader("/missions/:mission_id/ops/commands", () => {
               :data-command-follow="row.id"
               @click="follow($event, row.id)"
               >{{ model.query.focus_command_id === row.id ? "Focused" : "Focus" }}</a
-            >
-            <a
-              class="btn btn-ghost btn-xs"
-              v-if="reviewHref(row.id)"
-              :href="reviewHref(row.id)"
-              :data-command-review="row.id"
-              @click="reviewRequest($event, row.id)"
-              >Review request</a
             >
             <CadenceDetailsFrame class="border-t border-base-300/50 pt-2 xl:col-span-6"
               ><summary class="cursor-pointer font-mono text-xs uppercase text-base-content/75">

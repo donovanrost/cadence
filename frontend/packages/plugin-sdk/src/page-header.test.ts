@@ -14,7 +14,7 @@ import { readPageHeader } from "./page-header-validation";
 import { href } from "./routes";
 
 const alarms = "/missions/:mission_id/ops/alarms" as const;
-const request = "/missions/:mission_id/ops/commands/requests/:command_request_id" as const;
+const request = "/missions/:mission_id/ops/commands/requests/:command_request_id/history" as const;
 const transports = "/missions/:mission_id/comms/transports" as const;
 const transport = "/missions/:mission_id/comms/transports/:transport_id" as const;
 const link = href(alarms, { mission_id: "m" });

@@ -39,12 +39,7 @@ test("features own their contracts and cannot depend on delivery or sibling inte
       }
     }
   }
-  for (const feature of [
-    "mission-commands",
-    "spacecraft-commanding",
-    "command-review",
-    "command-authoring",
-  ]) {
+  for (const feature of ["mission-commands", "spacecraft-commanding"]) {
     expect(readFileSync(resolve(directory, "features", feature, "contracts.ts"), "utf8")).toContain(
       "export type",
     );

@@ -146,8 +146,7 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
            applications: base <> "/applications",
            communications: "/missions/#{mission.mission_id}/comms",
            readiness: base <> "/readiness",
-           settings: "/missions/#{mission.mission_id}/settings/cadence.governance",
-           ops: ops_href(mission, active_entry)
+           settings: "/missions/#{mission.mission_id}/settings/cadence.governance"
          }
        }}
     end
@@ -201,13 +200,6 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
       }
     )
   end
-
-  defp ops_href(_mission, nil), do: nil
-
-  defp ops_href(mission, %{"commanding_enabled" => true, "source_endpoint_ids" => [id | _]}),
-    do: "/missions/#{mission.mission_id}/ops/commands/workspace?target=#{URI.encode_www_form(id)}"
-
-  defp ops_href(_, _), do: nil
 
   defp review(mission, id, current, active) do
     request =
