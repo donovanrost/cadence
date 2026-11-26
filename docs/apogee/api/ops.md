@@ -714,8 +714,10 @@ request), so housekeeping rows don't starve a filtered page. Fewer than `limit` 
 - **`POST /telemetry/latest {point_ids, spacecraft_ids}`** (Compose B2 "Now", fe-ops) →
   `{values: [{spacecraft_id, point_id, value_json | null, received_at | null, stale}]}`: one entry
   per spacecraft × point, spacecraft first, in the asked order.
-  - Limits: at most 10 points and 500 spacecraft (5,000 values). Every spacecraft must be the
-    mission's (`422 details.spacecraft_ids` plus `unknown`).
+  - Limits: at most 10 points per call and **no ceiling on spacecraft**: a request is bounded by
+    its response, 8 MB (about 50,000 values; `422 details.max_response_bytes`). The server reads
+    only the asked points × spacecraft, in chunks of spacecraft, so a 1,000-craft fleet is one call.
+    Every spacecraft must be the mission's (`422 details.spacecraft_ids` plus `unknown`).
   - `value_json` is the engineering value as JSON text (64-bit safe); null when there's no value
     yet.
   - `stale` uses the point's stale timeout, else the fleet's (`stale_after_s`); false when there's

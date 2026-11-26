@@ -158,15 +158,18 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
   def latest_values_for_mission(mission_id, opts, backend_opts)
       when is_binary(mission_id) and is_list(opts) and is_list(backend_opts) do
     spacecraft_filter = Keyword.get(opts, :spacecraft_id)
+    point_ids = id_set(Keyword.get(opts, :point_ids))
+    spacecraft_ids = id_set(Keyword.get(opts, :spacecraft_ids))
     table = ensure_table!(backend_opts)
 
     :ets.foldl(
       fn
-        {{^mission_id, stored_scope_id, _point_id, _realm, _data_source_id, _binding_id},
+        {{^mission_id, stored_scope_id, point_id, _realm, _data_source_id, _binding_id},
          %Sample{} = sample},
         acc ->
           if (is_nil(spacecraft_filter) or
                 stored_scope_id == spacecraft_scope_id(spacecraft_filter)) and
+               member?(point_ids, point_id) and member?(spacecraft_ids, stored_scope_id) and
                SourceFilters.sample_matches?(sample, opts) and
                SelectionPolicy.selected_sample?(sample, opts) do
             [sample | acc]
@@ -182,6 +185,14 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
     )
     |> Enum.sort_by(& &1.point_name)
   end
+
+  # `:point_ids` and `:spacecraft_ids` (lists) restrict the read to those points and spacecraft:
+  # one pass, and only matches are kept, so a read of a few points on many craft holds just them.
+  defp id_set(nil), do: nil
+  defp id_set(ids) when is_list(ids), do: MapSet.new(ids)
+
+  defp member?(nil, _id), do: true
+  defp member?(set, id), do: MapSet.member?(set, id)
 
   @impl true
   def reset, do: reset(:all, [])
