@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { RouteLocationRaw } from "vue-router";
+import { revealInline } from "./lib/reveal.ts";
 
 /** Section navigation between routes (links, not ARIA tabs). Looks like ApSegmented `tabs`. */
 export type ApTabLink = Readonly<{
@@ -18,16 +19,11 @@ const props = defineProps<{ links: readonly ApTabLink[]; active: string; label: 
 const nav = ref<HTMLElement | null>(null);
 /** The edge fade's width: a link is in view only when it clears the fade too. */
 const FADE = 24;
+/** revealInline stops at scrollLeft 0: the first link has no fade to clear. */
 function reveal(link: HTMLElement) {
   const strip = nav.value;
   if (!strip) return;
-  const box = strip.getBoundingClientRect();
-  const at = link.getBoundingClientRect();
-  let by = 0;
-  if (at.left < box.left + FADE) by = at.left - box.left - FADE;
-  else if (at.right > box.right - FADE) by = at.right - box.right + FADE;
-  // The first link sits at the strip's start, where there is no fade to clear.
-  if (by !== 0) strip.scrollLeft = Math.max(0, strip.scrollLeft + by);
+  revealInline(strip, link, { start: FADE, end: FADE });
   measure();
 }
 function showActive() {
