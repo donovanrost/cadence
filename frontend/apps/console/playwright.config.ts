@@ -21,7 +21,6 @@ export default defineConfig({
   reporter: [["list"], ["html", { open: "never", outputFolder: "./playwright-report" }]],
   use: {
     baseURL: BASE_URL,
-    channel: "chrome",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
@@ -41,7 +40,6 @@ export default defineConfig({
       dependencies: ["setup"],
       use: {
         ...devices["Desktop Chrome"],
-        channel: "chrome",
         viewport: { width: 1512, height: 1000 },
         storageState: DEFAULT_STORAGE_STATE,
       },
@@ -56,7 +54,6 @@ export default defineConfig({
       dependencies: ["setup"],
       use: {
         ...devices["Desktop Chrome"],
-        channel: "chrome",
         viewport: { width: 1512, height: 1000 },
         storageState: DEFAULT_STORAGE_STATE,
       },
@@ -69,7 +66,6 @@ export default defineConfig({
       dependencies: ["setup"],
       use: {
         ...devices["Desktop Chrome"],
-        channel: "chrome",
         viewport: { width: 1512, height: 1000 },
         storageState: DEFAULT_STORAGE_STATE,
       },
@@ -84,7 +80,6 @@ export default defineConfig({
         metadata: { persona: persona.name },
         use: {
           ...devices["Desktop Chrome"],
-          channel: "chrome",
           viewport: size.viewport,
           storageState: storageStateFor(persona.key),
         },

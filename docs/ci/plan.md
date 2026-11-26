@@ -202,7 +202,7 @@ So the gate is:
 | Build, dev env (phase 4) | the same `_build/dev` paths | the same scheme | push to develop, from one e2e shard |
 | pnpm store | `$(pnpm store path)` | `pnpm-v1-{hash(frontend/pnpm-lock.yaml)}` | push to develop |
 | npm (phase 4, LiveView Vite) | `~/.npm` | `npm-v1-{hash(apps/cadence_web/package-lock.json)}` | push to develop |
-| Playwright | nothing | — | system Chrome on the runner image (`channel: "chrome"`), no browser download; verified in the first e2e run |
+| Playwright Chromium | `~/.cache/ms-playwright` | `playwright-chromium-v1-{os}-{playwright version}` | push to develop/main (`.github/actions/playwright-chromium`) |
 
 - PR runs **restore** the latest develop build and compile only what the PR changed. They never
   save, so PRs don't churn the 10 GB repo cache quota.
