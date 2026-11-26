@@ -1,7 +1,8 @@
 defmodule Cadence.Reads.ConfigLabels do
   @moduledoc """
   Display fields for change-set previews and revision entries (fe-setup / ux): each item gets
-  `entity_name`, and each changed path gets the kind schema's `label` and `unit`, so the console
+  `entity_name`, an item that names a fleet gets `spacecraft_count` and `spacecraft_sample` (the
+  first 5 craft by name) in place of its id list, and each changed path gets the kind schema's `label` and `unit`, so the console
   can say "Earendil Block 1 · TM frame length is 1,024 bytes now, not 900 bytes as r8 left it".
   Names come from the documents (`display_name`), else the entity's current document; a
   spacecraft-keyed kind (overrides, routes) takes the spacecraft's name. Unknown ones stay nil.
@@ -15,6 +16,7 @@ defmodule Cadence.Reads.ConfigLabels do
 
   alias Cadence.Configuration.Kinds
   alias Cadence.Reads.{ConfigKindSchema, LegacyRouteLabel}
+  alias Cadence.SpacecraftStore
   alias Cadence.SpacecraftType.Schema
 
   @spacecraft_keyed ~w(spacecraft_override spacecraft_routes)
@@ -33,11 +35,41 @@ defmodule Cadence.Reads.ConfigLabels do
       preview
       | checks:
           Enum.map(preview.checks, fn check ->
-            %{check | items: Enum.map(check.items, &decorate(&1, names, fields))}
+            %{
+              check
+              | items:
+                  Enum.map(check.items, fn item ->
+                    item
+                    |> decorate(names, fields)
+                    |> spacecraft_sample(organization_id, mission_id)
+                  end)
+            }
           end),
         diffs: Enum.map(preview.diffs, &decorate(&1, names, fields))
     }
   end
+
+  @sample 5
+
+  # An item that moves or names a fleet carries `spacecraft_count` and the first few craft by name
+  # (`spacecraft_sample`), never the whole id list: the screen says "EARENDIL-001 and 1,199
+  # more", not a 1,200-name read (#796).
+  defp spacecraft_sample(%{spacecraft_ids: ids} = item, organization_id, mission_id)
+       when is_list(ids) do
+    item
+    |> Map.delete(:spacecraft_ids)
+    |> Map.put(:spacecraft_count, length(ids))
+    |> Map.put(
+      :spacecraft_sample,
+      organization_id
+      |> SpacecraftStore.name_sample(mission_id, ids, @sample)
+      |> Enum.map(&sample_entry/1)
+    )
+  end
+
+  defp spacecraft_sample(item, _organization_id, _mission_id), do: item
+
+  defp sample_entry(%{"id" => id, "name" => name}), do: %{id: id, name: name}
 
   @doc "Adds display fields to a revision's entries (or a compare's, which carry no documents)."
   @spec revision(binary(), binary(), map()) :: map()

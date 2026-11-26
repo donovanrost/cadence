@@ -1,17 +1,14 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import { useMissionScope } from "@/shell";
-import { useSpacecraftNames } from "@/features/scheduling/index.ts";
+import { formatCount } from "@/ui";
 import type { AppHold } from "./holds.ts";
 
 /**
  * U63: a HOLD that needs an app installed first links to that app's page in Setup › Apps (where
- * install happens). The sentence names up to 3 spacecraft; above that, their names are under Show.
+ * install happens). It names the first few spacecraft the server sent and says how many more
+ * (#796): no fleet read to name them.
  */
 defineProps<{ holds: readonly AppHold[] }>();
-const scope = useMissionScope();
-const nameOf = useSpacecraftNames(computed(() => scope.value.mission.id));
-const SHOWN_IN_SENTENCE = 3;
+const more = (h: AppHold) => h.spacecraftCount - h.spacecraftSample.length;
 </script>
 
 <template>
@@ -25,11 +22,9 @@ const SHOWN_IN_SENTENCE = 3;
       class="text-primary no-underline hover:underline"
       >Open Setup › Apps{{ h.appName ? ` (${h.appName})` : "" }}</RouterLink
     >
-    <details v-if="h.spacecraftIds.length > SHOWN_IN_SENTENCE">
-      <summary class="cursor-pointer text-text-2">Show {{ h.spacecraftIds.length }}</summary>
-      <ul class="m-0 mt-1 flex list-none flex-col gap-0.5 p-0 font-mono text-xs text-text-2">
-        <li v-for="id in h.spacecraftIds" :key="id">{{ nameOf(id)?.name ?? id }}</li>
-      </ul>
-    </details>
+    <p v-if="h.spacecraftSample.length > 0" class="m-0 font-mono text-xs text-text-2">
+      {{ h.spacecraftSample.map((s) => s.name).join(", ")
+      }}{{ more(h) > 0 ? ` and ${formatCount(more(h))} more` : "" }}
+    </p>
   </div>
 </template>

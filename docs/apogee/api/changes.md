@@ -190,12 +190,20 @@ order, so a SCID repeated **within the batch** fails validation for the later op
 `catalog_revision_id` previews a `compatibility` check whose items carry a `reason` and a
 `message` sentence:
 
-- `catalog_change` `{spacecraft_ids, from, to}`: which spacecraft move to which revision (HOLD).
+- `catalog_change` `{spacecraft_count, spacecraft_sample, from, to}`: how many spacecraft move to which revision (HOLD).
 - `catalog_cancels_commands` `{requests: [{command_request_id, command_group_id, command_name,
   lifecycle_state}]}`: queued requests the change cancels (HOLD).
 - `catalog_command_in_flight` `{requests}` and `catalog_configuration_pending`
-  `{spacecraft_ids}`: **blocking**. The check then has `blocking: true`, and acknowledging holds
+  `{spacecraft_count, spacecraft_sample}`: **blocking**. The check then has `blocking: true`, and acknowledging holds
   doesn't let it apply.
+
+**Fleet items name a count and a few craft (#796).** A preview item that moves or names spacecraft
+(`catalog_change`, `catalog_configuration_pending`, `telemetry_app_not_installed`, the compatibility
+holds) carries `spacecraft_count` (how many) and `spacecraft_sample` (`[{id, name}]`, the first 5 by
+name, at most), **not** an id list: a 1,200-craft change doesn't send 1,200 ids or need a fleet read
+to name them. Say "EARENDIL-001, EARENDIL-002 and 1,198 more". The count is what the check
+counted; the sample leaves out an id that isn't the mission's. This holds for every preview the API
+returns, including the `409 holds_blocking` details.
 
 Submitting while a blocking item stands answers `409 holds_blocking` with the preview as
 `details` (show the blocking items: "can't apply yet"). Approving does too, when a blocking item

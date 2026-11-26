@@ -101,7 +101,8 @@ const previewItem = object({
   // Lenient: each hold sends details of its own shape; only an object is read, for its used_by.
   details: (v: unknown, path = "") => (isRecord(v) ? holdDetails(v, path) : null),
   /** #65 catalog holds (catalog-generations.md): who moves from → to, and the requests involved. */
-  spacecraft_ids: decoders.optional(array(token, 20_000)),
+  /** #796: the first few craft an item moves or names, by name (`spacecraft_count` says how many); never every id. */
+  spacecraft_sample: decoders.optional(array(object({ id: token, name: string }), 5)),
   from: decoders.optional(nullable(token)),
   to: decoders.optional(nullable(token)),
   requests: decoders.optional(array((v: unknown) => v, 5000)),

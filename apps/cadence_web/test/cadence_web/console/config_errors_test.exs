@@ -3,6 +3,40 @@ defmodule CadenceWeb.Console.ConfigErrorsTest do
   use CadenceWeb.ConnCase, async: true
 
   alias CadenceWeb.Console.{ConfigJSON, Problem}
+  alias CadenceWeb.TestFixtures
+
+  test "a blocking hold's preview names a fleet by count and a few craft, not every id (#796)" do
+    org = TestFixtures.persist_org!()
+    mission = TestFixtures.persist_mission!(org)
+
+    ids =
+      for n <- 1..7 do
+        TestFixtures.persist_spacecraft!(mission, display_name: "Craft 0#{n}").spacecraft_id
+      end
+
+    item = %{reason: :catalog_configuration_pending, blocking: true, spacecraft_ids: ids}
+
+    preview = %{
+      verdict: :hold,
+      diffs: [],
+      checks: [%{key: "compatibility", verdict: :hold, blocking: true, items: [item]}]
+    }
+
+    conn =
+      build_conn()
+      |> Plug.Conn.assign(:current_scope, %{organization_id: org.organization_id})
+      |> Plug.Conn.assign(:current_mission, mission)
+      |> ConfigJSON.error({:holds_blocking, preview})
+
+    assert %{"error" => %{"details" => %{"checks" => [%{"items" => [shown]}]}}} =
+             json_response(conn, 409)
+
+    refute Map.has_key?(shown, "spacecraft_ids")
+    assert shown["spacecraft_count"] == 7
+
+    assert Enum.map(shown["spacecraft_sample"], & &1["name"]) ==
+             ["Craft 01", "Craft 02", "Craft 03", "Craft 04", "Craft 05"]
+  end
 
   test "holds_blocking carries the preview; an in-flight race names the requests" do
     preview = %{verdict: :hold, checks: [%{key: "compatibility", blocking: true, items: []}]}

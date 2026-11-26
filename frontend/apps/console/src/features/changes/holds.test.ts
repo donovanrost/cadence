@@ -54,7 +54,11 @@ describe("telemetry_app_not_installed (U63, domain e587668da)", () => {
   const hold = {
     kind: "spacecraft",
     entity_id: "sc_1",
-    spacecraft_ids: ["sc_1", "sc_2", "sc_3", "sc_4"],
+    spacecraft_count: 1_200,
+    spacecraft_sample: [
+      { id: "sc_2", name: "EARENDIL-002" },
+      { id: "sc_1", name: "EARENDIL-001" },
+    ],
     reason: "telemetry_app_not_installed",
     blocking: true,
     sentence:
@@ -69,7 +73,38 @@ describe("telemetry_app_not_installed (U63, domain e587668da)", () => {
       {
         appKey: "telemetry_decom",
         appName: "Telemetry decom",
-        spacecraftIds: ["sc_1", "sc_2", "sc_3", "sc_4"],
+        spacecraftCount: 1_200,
+        // By name, whatever order the server sent.
+        spacecraftSample: [
+          { id: "sc_1", name: "EARENDIL-001" },
+          { id: "sc_2", name: "EARENDIL-002" },
+        ],
+      },
+    ]);
+  });
+
+  it("adds up the craft of several items for one app, and names a lone entity", () => {
+    const one = {
+      ...hold,
+      spacecraft_count: undefined,
+      spacecraft_sample: undefined,
+      entity_name: "EARENDIL-009",
+      entity_id: "sc_9",
+    };
+    const other = {
+      ...hold,
+      spacecraft_count: 3,
+      spacecraft_sample: [{ id: "sc_3", name: "EARENDIL-003" }],
+    };
+    expect(appHolds(preview([one, other]))).toEqual([
+      {
+        appKey: "telemetry_decom",
+        appName: "Telemetry decom",
+        spacecraftCount: 4,
+        spacecraftSample: [
+          { id: "sc_3", name: "EARENDIL-003" },
+          { id: "sc_9", name: "EARENDIL-009" },
+        ],
       },
     ]);
   });
@@ -94,7 +129,7 @@ describe("mission_model_not_approved (U65, domain's gate)", () => {
     blocking: true,
     sentence:
       "Catalog rev 4 isn't approved yet, so 499 spacecraft can't move to it. An org admin approves it in Setup › Catalog first.",
-    spacecraft_ids: ["sc_1", "sc_2"],
+    spacecraft_count: 2,
     details: {
       catalog_database_id: "db-1",
       catalog_revision_id: "cr-4",

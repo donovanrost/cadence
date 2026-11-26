@@ -83,28 +83,51 @@ export function alarmPoints(preview: Preview): readonly string[] {
   return [...new Set(points)];
 }
 
-/** U63: an app a HOLD says to install first, with the spacecraft that need it (one per app). */
+/**
+ * U63: an app a HOLD says to install first, with how many spacecraft need it and the first few by
+ * name (the server's `spacecraft_count`/`spacecraft_sample`, #796; one per app).
+ */
 export type AppHold = Readonly<{
   appKey: string;
   appName: string | null;
-  spacecraftIds: readonly string[];
+  spacecraftCount: number;
+  spacecraftSample: readonly Readonly<{ id: string; name: string }>[];
 }>;
+
+/** How many names an app hold shows before saying "and N more". */
+const SAMPLE_SHOWN = 5;
 
 /** U63: holds that name an app to install (telemetry_app_not_installed), merged per app. */
 export function appHolds(preview: Preview): readonly AppHold[] {
-  const byKey = new Map<string, { appName: string | null; ids: Set<string> }>();
+  const byKey = new Map<
+    string,
+    { appName: string | null; count: number; sample: Map<string, string> }
+  >();
   for (const c of preview.checks)
     for (const i of c.items) {
       const key = i.reason === "telemetry_app_not_installed" ? i.details?.app_key : null;
       if (!key) continue;
-      const entry = byKey.get(key) ?? { appName: i.details?.app_name ?? null, ids: new Set() };
-      for (const id of i.spacecraft_ids ?? (i.entity_id ? [i.entity_id] : [])) entry.ids.add(id);
+      const entry = byKey.get(key) ?? {
+        appName: i.details?.app_name ?? null,
+        count: 0,
+        sample: new Map<string, string>(),
+      };
+      // An item for one craft may carry only its entity; a fleet item carries the count and sample.
+      const sample =
+        i.spacecraft_sample ??
+        (i.entity_id ? [{ id: i.entity_id, name: i.entity_name ?? i.entity_id }] : []);
+      entry.count += i.spacecraft_count ?? sample.length;
+      for (const craft of sample) entry.sample.set(craft.id, craft.name);
       byKey.set(key, entry);
     }
   return [...byKey.entries()].map(([appKey, e]) => ({
     appKey,
     appName: e.appName,
-    spacecraftIds: [...e.ids],
+    spacecraftCount: e.count,
+    spacecraftSample: [...e.sample]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
+      .slice(0, SAMPLE_SHOWN),
   }));
 }
 
