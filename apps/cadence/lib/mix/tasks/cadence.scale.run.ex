@@ -28,13 +28,17 @@ defmodule Mix.Tasks.Cadence.Scale.Run do
 
   # Telemetry's #686 list: singletons and per-mission processes on the ingest path.
   @default_modules [
-    Cadence.Protocol.RecordArchive.FileSystem.Writer,
+    # The archive writers, one per mission since #733 (FileSystem.Writer is only the front).
+    Cadence.Protocol.RecordArchive.FileSystem.Writer.Mission,
     Cadence.Platform.EventBus,
     Cadence.Dashboards.RuntimeFactConsumer,
     Cadence.Dashboards.RuntimeCache,
     Cadence.Runtime.CapabilityRegistry,
     Cadence.Runtime.MissionCoordinator
   ]
+
+  @doc "The mailbox modules watched by default (telemetry's #686 list)."
+  def default_modules, do: @default_modules
 
   @headline [
     "ecto.queue_ms.p99",
@@ -45,7 +49,9 @@ defmodule Mix.Tasks.Cadence.Scale.Run do
     "beam.run_queue",
     "beam.scheduler_utilization",
     "storage.postgres_wal_bytes",
-    "storage.questdb_wal_lag.max"
+    "storage.questdb_wal_lag.max",
+    "host.swap_used_mb",
+    "host.agents"
   ]
 
   @impl true
@@ -59,11 +65,25 @@ defmodule Mix.Tasks.Cadence.Scale.Run do
 
     sampler_opts = [
       out: out,
+      # The sampler stops if this task dies, and in any case shortly after the run should end.
+      owner: self(),
+      max_ms: duration * 1_000 + 120_000,
       modules: if(modules == [], do: @default_modules, else: modules),
       questdb_exec: &RestClient.exec/1
     ]
 
-    {:ok, _pid} = rpc!(node, :start, [sampler_opts])
+    case rpc!(node, :start, [sampler_opts]) do
+      {:ok, _pid} ->
+        :ok
+
+      {:error, {:already_started, _pid}} ->
+        Mix.raise(
+          "A scale sampler is already running on #{node}. It stops when its runner exits or at " <>
+            "its deadline; wait for it, or stop it with " <>
+            "`:rpc.call(:\"#{node}\", Cadence.Observability.ScaleSampler, :stop, [])`."
+        )
+    end
+
     Mix.shell().info("Sampling #{node} for #{duration} s into #{out}")
     wait(duration)
     {:ok, summary} = rpc!(node, :stop, [])

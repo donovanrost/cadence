@@ -112,12 +112,18 @@ defmodule Cadence.Observability.ScaleSampler.Storage do
     _db_unavailable -> nil
   end
 
+  # Bounded: an unreachable QuestDB makes the HTTP client retry for seconds, which would stall
+  # the once-a-second sampler.
+  @questdb_timeout_ms 500
+
   defp questdb(exec, sql) do
-    case exec.(sql) do
-      {:ok, %{"dataset" => rows}} -> {:ok, rows}
-      other -> {:error, other}
+    task = Task.async(fn -> exec.(sql) end)
+
+    case Task.yield(task, @questdb_timeout_ms) || Task.shutdown(task, :brutal_kill) do
+      {:ok, {:ok, %{"dataset" => rows}}} -> {:ok, rows}
+      {:ok, other} -> {:error, other}
+      {:exit, reason} -> {:error, reason}
+      nil -> {:error, :timeout}
     end
-  rescue
-    _questdb_unavailable -> {:error, :unavailable}
   end
 end

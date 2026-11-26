@@ -15,6 +15,10 @@ defmodule Cadence.Observability.ScaleSampler do
   - `mailboxes`: per watched module, the processes with a backlog and their sum and max, plus
     the busiest processes (`ScaleSampler.Mailboxes`)
   - `storage`: Postgres WAL bytes that second, QuestDB WAL lag (`ScaleSampler.Storage`)
+  - `host`: load average, swap used and agent processes on the machine (`ScaleSampler.Host`)
+
+  It never outlives its run: it monitors `:owner` (the runner, usually on another node; a
+  Ctrl-C or a lost connection stops it) and stops itself at `:max_ms` whatever happens.
 
   The summary adds the run's settings (`meta`) and, per watched table, rows and bytes written
   over the run in Postgres and QuestDB. The sampler's own queries are excluded from `ecto`.
@@ -22,7 +26,7 @@ defmodule Cadence.Observability.ScaleSampler do
 
   use GenServer
 
-  alias Cadence.Observability.ScaleSampler.{Mailboxes, Stats, Storage}
+  alias Cadence.Observability.ScaleSampler.{Host, Mailboxes, Stats, Storage}
 
   @repo_event [:cadence, :repo, :query]
   @batch_event [:cadence, :ingest, :batch, :stop]
@@ -34,7 +38,8 @@ defmodule Cadence.Observability.ScaleSampler do
   Starts the sampler. Options: `:out` (JSON lines path, required), `:interval_ms` (1000),
   `:modules` (mailboxes to watch, default []), `:top` (5), `:postgres_tables` /
   `:questdb_tables` (`Storage` defaults), `:postgres` (true; false where there's no database to
-  ask) and `:questdb_exec` (a `sql -> result` function for QuestDB; no QuestDB probes without it).
+  ask), `:questdb_exec` (a `sql -> result` function for QuestDB; no QuestDB probes without it),
+  `:owner` (a pid; the sampler stops when it goes down) and `:max_ms` (required: a hard stop).
   """
   @spec start(keyword()) :: GenServer.on_start()
   def start(opts), do: GenServer.start(__MODULE__, opts, name: __MODULE__)
@@ -48,6 +53,9 @@ defmodule Cadence.Observability.ScaleSampler do
     # Started over RPC, this process inherits the caller's group leader; log on the node instead.
     if user = Process.whereis(:user), do: Process.group_leader(self(), user)
     out = Keyword.fetch!(opts, :out)
+    max_ms = Keyword.fetch!(opts, :max_ms)
+    if owner = Keyword.get(opts, :owner), do: Process.monitor(owner)
+    Process.send_after(self(), :deadline, max_ms)
     File.mkdir_p!(Path.dirname(out))
     table = :ets.new(__MODULE__, [:duplicate_bag, :public, write_concurrency: true])
     handler = "cadence-scale-sampler-#{System.unique_integer([:positive])}"
@@ -74,8 +82,10 @@ defmodule Cadence.Observability.ScaleSampler do
         wall_time_was_on?: :erlang.system_flag(:scheduler_wall_time, true),
         scheduler: scheduler_sample(),
         started_at: DateTime.utc_now(),
+        owner: Keyword.get(opts, :owner),
         rows: []
       }
+      |> disable_unreachable_questdb()
       |> then(&Map.merge(&1, %{wal: wal(&1), storage_start: storage_snapshot(&1)}))
 
     Process.send_after(self(), :tick, state.interval_ms)
@@ -113,6 +123,13 @@ defmodule Cadence.Observability.ScaleSampler do
     {:noreply, record(state)}
   end
 
+  # The runner is gone (Ctrl-C, crash, lost connection) or the run overran: nobody will ask for
+  # the summary, so stop; the JSON lines written so far stay on disk.
+  def handle_info({:DOWN, _ref, :process, owner, _reason}, %{owner: owner} = state),
+    do: {:stop, :normal, state}
+
+  def handle_info(:deadline, state), do: {:stop, :normal, state}
+
   @impl true
   def handle_call(:stop, _from, state) do
     state = record(state)
@@ -144,6 +161,7 @@ defmodule Cadence.Observability.ScaleSampler do
       ingest: ingest(state.table),
       beam: beam(state.scheduler, scheduler),
       mailboxes: Mailboxes.sample(state.modules, state.top),
+      host: Host.sample(),
       storage: %{
         postgres_wal_bytes: delta(state.wal, wal),
         questdb_wal_lag: if(state.questdb_exec, do: Storage.questdb_wal_lag(state.questdb_exec))
@@ -189,7 +207,13 @@ defmodule Cadence.Observability.ScaleSampler do
     }
   end
 
-  defp scheduler_sample, do: :erlang.statistics(:scheduler_wall_time) || []
+  # `:undefined` until the scheduler_wall_time flag is on (init turns it on).
+  defp scheduler_sample do
+    case :erlang.statistics(:scheduler_wall_time) do
+      samples when is_list(samples) -> samples
+      :undefined -> []
+    end
+  end
 
   # Busy wall time over total wall time, across schedulers, since the previous sample.
   defp utilization(previous, current) do
@@ -202,6 +226,17 @@ defmodule Cadence.Observability.ScaleSampler do
       end)
 
     if total > 0, do: Float.round(active / total, 3), else: nil
+  end
+
+  # Probed once: if QuestDB doesn't answer at the start, the run records that and doesn't ask again.
+  defp disable_unreachable_questdb(%{questdb_exec: nil} = state),
+    do: Map.put(state, :questdb_status, :not_configured)
+
+  defp disable_unreachable_questdb(state) do
+    case Storage.questdb_wal_lag(state.questdb_exec) do
+      nil -> %{state | questdb_exec: nil} |> Map.put(:questdb_status, :unreachable)
+      _lag -> Map.put(state, :questdb_status, :ok)
+    end
   end
 
   defp wal(%{postgres?: true}), do: Storage.wal_position()
@@ -244,7 +279,9 @@ defmodule Cadence.Observability.ScaleSampler do
       schedulers: System.schedulers_online(),
       pool_size: Application.get_env(:cadence, Cadence.Repo, [])[:pool_size],
       journal_enabled: Keyword.get(journal, :enabled?),
-      journal_durability: Keyword.get(journal, :durability)
+      journal_durability: Keyword.get(journal, :durability),
+      questdb: state.questdb_status,
+      host: Host.info()
     }
   end
 end
