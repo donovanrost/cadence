@@ -43,8 +43,8 @@ own lines; Platform (backend) or Console (frontend) reviews.
 
 ### Headcount
 
-- Total live agents across both machines: **15**, including the CTO. Per machine: **7** on laptop 1 (it
-  swaps under load, so it takes no more), **8** on laptop 2.
+- Total live agents across both machines: **15**, including the CTO. Per machine: **6** on laptop 1 (it
+  swaps under load, which skewed ground's timings 4-12x, so it takes no more), **9** on laptop 2.
 - Each Head may hire **one** agent without asking; a second needs the CTO's OK (message the CTO with why).
 - **Codex** may be hired for backend, infra, CI, data and scale work. **Never for frontend or UX.**
 - Pick model and effort for the job: Heads and design/security work on Claude Opus, high effort. Well-scoped
@@ -145,7 +145,7 @@ Laptop 1 worktrees live in `~/.herdr/worktrees/cadence/<handle>`. The new agent 
 | console | Head of Console | laptop 1 | `console` | Claude Opus 5.5, high | 2026-11-25 |
 | console-eng | Frontend engineer, Console (head: console) | laptop 1 | `console-eng` | Claude Opus 5.5, high | 2026-11-25 |
 | ground | Head of Ground & Comms | laptop 1 | `ground` | Claude Opus 5.5, high | 2026-11-25 |
-| ground-scale | Ground & Comms backend and scale engineer (reports to ground) | laptop 1 | `ground-scale` | Codex, high | 2026-11-25 |
+| ground-scale | Ground & Comms backend and scale engineer (reports to ground) | laptop 2 | `donovans-macbook-pro-1/ground-scale` | Codex, high | 2026-11-25 |
 | commanding | Head of Commanding & Approvals | laptop 2 | `donovans-macbook-pro-1/commanding` | Claude Opus 5.5, high | 2026-11-25 |
 | mission-model | Head of Mission Model & Spacecraft | laptop 2 | `donovans-macbook-pro-1/mission-model` | Claude Opus 5.5, high | 2026-11-25 |
 | telemetry | Head of Telemetry & Data | laptop 2 | `donovans-macbook-pro-1/telemetry` | Claude Opus 5.5, high | 2026-11-25 |
