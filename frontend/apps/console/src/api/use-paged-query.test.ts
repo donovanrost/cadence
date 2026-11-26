@@ -7,7 +7,6 @@ type Row = Readonly<{ id: string; v: number }>;
 type Call = Readonly<{
   key: string;
   cursor: string | null;
-  want: number;
   signal: AbortSignal;
   resolve: (value: ApiResult<Page<Row, string>>) => void;
 }>;
@@ -15,9 +14,9 @@ type Call = Readonly<{
 /** Every page request waits until the test answers it. */
 function harness() {
   const calls: Call[] = [];
-  const fetchPage = (key: string, cursor: string | null, want: number, signal: AbortSignal) =>
+  const fetchPage = (key: string, cursor: string | null, signal: AbortSignal) =>
     new Promise<ApiResult<Page<Row, string>>>((resolve) =>
-      calls.push({ key, cursor, want, signal, resolve }),
+      calls.push({ key, cursor, signal, resolve }),
     );
   return { calls, fetchPage };
 }
@@ -104,11 +103,11 @@ describe("usePagedQuery (#176)", () => {
     await more;
 
     t.query.refetch();
-    expect(t.calls[2]).toMatchObject({ cursor: null, want: 4 });
+    expect(t.calls[2]).toMatchObject({ cursor: null });
     expect(items(t.query)).toEqual(["a", "b", "c", "d"]);
     t.calls[2]?.resolve(page(rows("new", "a"), "r2"));
     await flush();
-    expect(t.calls[3]).toMatchObject({ cursor: "r2", want: 2 });
+    expect(t.calls[3]).toMatchObject({ cursor: "r2" });
     t.calls[3]?.resolve(page(rows("b", "c"), "r3"));
     await flush();
     expect(items(t.query)).toEqual(["new", "a", "b", "c"]);
@@ -160,26 +159,54 @@ describe("usePagedQuery (#176)", () => {
     t.scope.stop();
   });
 
-  it("a failing Load more or refresh keeps the rows and says why", async () => {
+  it("a failing Load more keeps the rows and says so until the next Load more starts", async () => {
     const t = start();
     t.calls[0]?.resolve(page(rows("a"), "c2"));
     await flush();
-    const more = t.query.more();
+    const first = t.query.more();
     t.calls[1]?.resolve(failed);
-    await more;
+    await first;
     expect(items(t.query)).toEqual(["a"]);
-    expect(t.query.error.value).toMatchObject({ status: 503 });
+    expect(t.query.moreError.value).toMatchObject({ status: 503 });
+    expect(t.query.refreshError.value).toBeNull();
 
+    // Cleared as the next Load more starts, so a repeated failure is said again.
+    const second = t.query.more();
+    expect(t.query.moreError.value).toBeNull();
+    t.calls[2]?.resolve(page(rows("b"), null));
+    await second;
+    expect(items(t.query)).toEqual(["a", "b"]);
+    t.scope.stop();
+  });
+
+  it("a failing refresh keeps the rows and sets refreshError until one succeeds", async () => {
+    const t = start();
+    t.calls[0]?.resolve(page(rows("a"), null));
+    await flush();
     t.query.refetch();
-    t.calls[2]?.resolve(failed);
+    t.calls[1]?.resolve(failed);
     await flush();
     expect(items(t.query)).toEqual(["a"]);
-    expect(t.query.error.value).toMatchObject({ status: 503 });
+    expect(t.query.refreshError.value).toMatchObject({ status: 503 });
+    expect(t.query.moreError.value).toBeNull();
 
     t.query.refetch();
-    t.calls[3]?.resolve(page(rows("a"), null));
+    t.calls[2]?.resolve(page(rows("a"), null));
     await flush();
-    expect(t.query.error.value).toBeNull();
+    expect(t.query.refreshError.value).toBeNull();
+    t.scope.stop();
+  });
+
+  it("Retry from a failed first page loads afresh, showing loading", async () => {
+    const t = start();
+    t.calls[0]?.resolve(failed);
+    await flush();
+    expect(t.query.state.value.status).toBe("failed");
+    t.query.refetch();
+    expect(t.query.state.value.status).toBe("loading");
+    t.calls[1]?.resolve(page(rows("a"), null));
+    await flush();
+    expect(items(t.query)).toEqual(["a"]);
     t.scope.stop();
   });
 

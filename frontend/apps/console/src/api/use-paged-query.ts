@@ -24,14 +24,10 @@ export type Paged<Item, Meta> = Readonly<{
   metas: readonly Meta[];
 }>;
 
-/**
- * Fetches one page after `cursor` (null: the first). `want` is how many more items the caller
- * would like, for a read that takes a page size (a refresh asks for the rows already shown).
- */
+/** Fetches one page after `cursor` (null: the first), at the server's page size. */
 export type PageFetcher<K, Item, Meta> = (
   key: K,
   cursor: string | null,
-  want: number,
   signal: AbortSignal,
 ) => Promise<ApiResult<Page<Item, Meta>>>;
 
@@ -40,8 +36,13 @@ export type PagedQuery<Item, Meta> = Readonly<{
   /** Appends the next page. A no-op when there is none or one is already on its way. */
   more: () => Promise<void>;
   moreBusy: Readonly<ShallowRef<boolean>>;
-  /** Why the last Load more or refresh failed while rows were shown (they stay); null after a success. */
-  error: Readonly<ShallowRef<ApiError | null>>;
+  /**
+   * Why the last Load more failed (the rows stay), for an alert next to the button (ux U72, a11y
+   * B6). Cleared when a Load more starts, so a repeated failure is said again.
+   */
+  moreError: Readonly<ShallowRef<ApiError | null>>;
+  /** Why the last live refresh failed while rows were shown (they stay); null after a success. */
+  refreshError: Readonly<ShallowRef<ApiError | null>>;
   /** Reloads from the first page up to the rows shown, so nothing vanishes (a live change). */
   refetch: () => void;
 }>;
@@ -57,8 +58,9 @@ export type PagedQuery<Item, Meta> = Readonly<{
  *   comes back by itself. A refetch drops a Load more still on its way.
  * - Items are kept once by `idOf`: a row that moves between pages shows once, at its first place,
  *   with its newest value.
- * - A first page that fails is the state's failure (ApRemote shows it with Retry). A refresh or
- *   Load more that fails keeps the rows and sets `error`.
+ * - A first page that fails is the state's failure (ApRemote shows it with Retry); a Retry from
+ *   there loads afresh, showing loading. A Load more or a refresh that fails keeps the rows and
+ *   sets `moreError` or `refreshError`.
  */
 export function usePagedQuery<K, Item, Meta>(
   key: MaybeRefOrGetter<K | null>,
@@ -67,7 +69,8 @@ export function usePagedQuery<K, Item, Meta>(
 ): PagedQuery<Item, Meta> {
   const state = shallowRef<RemoteState<Paged<Item, Meta>>>({ status: "loading" });
   const moreBusy = shallowRef(false);
-  const error = shallowRef<ApiError | null>(null);
+  const moreError = shallowRef<ApiError | null>(null);
+  const refreshError = shallowRef<ApiError | null>(null);
   let controller: AbortController | null = null;
   /** Bumped by every start-over and refresh: a page from before is dropped. */
   let generation = 0;
@@ -91,15 +94,10 @@ export function usePagedQuery<K, Item, Meta>(
     const metas: Meta[] = [];
     let cursor: string | null = null;
     do {
-      const result = await fetchPage(
-        current,
-        cursor,
-        Math.max(1, upTo - items.length),
-        mine.signal,
-      );
+      const result = await fetchPage(current, cursor, mine.signal);
       if (id !== generation) return;
       if (!result.ok) {
-        if (keep && state.value.status === "ready") error.value = result.error;
+        if (keep && state.value.status === "ready") refreshError.value = result.error;
         else state.value = { status: "failed", error: result.error };
         return;
       }
@@ -109,7 +107,7 @@ export function usePagedQuery<K, Item, Meta>(
     } while (cursor !== null && items.length < upTo);
     const [meta] = metas;
     if (meta === undefined) return;
-    error.value = null;
+    refreshError.value = null;
     state.value = {
       status: "ready",
       value: { items: dedupe(items), next: cursor, meta, metas },
@@ -121,8 +119,10 @@ export function usePagedQuery<K, Item, Meta>(
   async function refresh(current: K) {
     refreshing = true;
     try {
+      // Shown rows stay while they reload; from a failure (Retry) it loads afresh.
       const s = state.value;
-      await load(current, s.status === "ready" ? s.value.items.length : 0, true);
+      if (s.status === "ready") await load(current, s.value.items.length, true);
+      else await load(current, 0, false);
     } catch {
       // An aborted request (a key change started over): that load owns the state now.
     } finally {
@@ -141,15 +141,15 @@ export function usePagedQuery<K, Item, Meta>(
     if (s.status !== "ready" || s.value.next === null || current === null || moreBusy.value) return;
     const id = generation;
     moreBusy.value = true;
+    moreError.value = null;
     try {
       const signal = controller?.signal ?? new AbortController().signal;
-      const result = await fetchPage(current, s.value.next, 1, signal);
+      const result = await fetchPage(current, s.value.next, signal);
       if (id !== generation) return;
       if (!result.ok) {
-        error.value = result.error;
+        moreError.value = result.error;
         return;
       }
-      error.value = null;
       state.value = {
         ...s,
         value: {
@@ -175,7 +175,8 @@ export function usePagedQuery<K, Item, Meta>(
     },
     (signature) => {
       const current = toValue(key);
-      error.value = null;
+      moreError.value = null;
+      refreshError.value = null;
       again = false;
       if (signature === null || current === null) {
         controller?.abort();
@@ -198,7 +199,8 @@ export function usePagedQuery<K, Item, Meta>(
     state,
     more,
     moreBusy,
-    error,
+    moreError,
+    refreshError,
     refetch: () => {
       const current = toValue(key);
       if (current === null) return;

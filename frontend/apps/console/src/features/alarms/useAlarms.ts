@@ -9,7 +9,7 @@ type Episode = Episodes["episodes"][number];
 export type EpisodesMeta = Omit<Episodes, "episodes">;
 type Key = Readonly<{ missionId: MissionId; which: "active" | "cleared" }>;
 
-const fetchPage: PageFetcher<Key, Episode, EpisodesMeta> = async (key, cursor, _want, signal) => {
+const fetchPage: PageFetcher<Key, Episode, EpisodesMeta> = async (key, cursor, signal) => {
   const r = await fetchEpisodePage(key.missionId, key.which, cursor, signal);
   if (!r.ok) return r;
   const { episodes, ...meta } = r.value.value;

@@ -311,6 +311,13 @@ const empty = computed(() =>
                   @click="loadMore"
                   >Load more</ApButton
                 >
+                <!-- ux U72, a11y B6: a failed Load more is said next to it, as an alert, always
+                  mounted so it's announced; the rows stay. Cleared as Load more starts again. -->
+                <span role="alert" class="ml-3 text-sm text-caution-text">{{
+                  (tab === "cleared" ? cleared : active).moreError.value
+                    ? "More alarms couldn't load. Try Load more again."
+                    : ""
+                }}</span>
               </div>
             </template>
           </template>
