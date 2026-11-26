@@ -51,7 +51,7 @@ defmodule Cadence.Telemetry.Storage.QuestDB.SeedLatestOnMeasureTest do
 
   defp latest_on(mission, spacecraft) do
     """
-    SELECT point_id, observed_at, receipt_time, engineering_value
+    SELECT *
     FROM telemetry_observations
     WHERE mission_id = #{SQL.literal(mission)} AND spacecraft_id = #{SQL.literal(spacecraft)}
       AND realm = 'flight'
