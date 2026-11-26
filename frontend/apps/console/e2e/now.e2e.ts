@@ -3,7 +3,7 @@ import { expectAccessible } from "./support/accessibility.ts";
 import { jsonProblem, missionApi, missionPath, openConsole } from "./support/console.ts";
 import { DEMO } from "./support/env.ts";
 import { allow, expect, test } from "./support/fixtures.ts";
-import { routeDegradedNow, type Degradation } from "./support/fleet.ts";
+import { refuseLiveSocket, routeDegradedNow, type Degradation } from "./support/fleet.ts";
 
 // J1 · Now (fe-ops, 7cd1e7a4). Spec: docs/apogee/ux/screens/Now.md; data: /fleet (ops.md).
 const screen = missionPath("now");
@@ -160,6 +160,8 @@ test.describe("Now (J1)", () => {
     test.use({ allowedDiagnostics: allow(/\/fleet -> 500/, /status of 500/, /socket\/console/) });
 
     test("says the fleet status is unavailable and offers retry", async ({ page }) => {
+      // The live fleet push would replace the failed read with real data ("No telemetry yet").
+      await refuseLiveSocket(page);
       await page.route(missionApi("fleet"), (route) =>
         route.fulfill(jsonProblem(500, "internal_error")),
       );
@@ -172,6 +174,8 @@ test.describe("Now (J1)", () => {
     // #646 (a11y B6, #603): a first load's failure is read politely; after the person's Retry
     // fails too, it's an alert.
     test("a failed first load is polite; a failed Retry is an alert", async ({ page }) => {
+      // The live fleet push would replace the failed read with real data ("No telemetry yet").
+      await refuseLiveSocket(page);
       await page.route(missionApi("fleet"), (route) =>
         route.fulfill(jsonProblem(500, "internal_error")),
       );
