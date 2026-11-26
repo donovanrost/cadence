@@ -19,7 +19,7 @@ defmodule Cadence.Dev.ReflectOrbital.Fixture do
   def database_path,
     do:
       System.get_env("EARENDIL_DATABASE_PATH") ||
-        Path.expand("../../legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml", __DIR__)
+        Path.expand("../../dev/catalogs/demo_spacecraft.yaml", __DIR__)
 
   def chaos_lab? do
     System.get_env("CADENCE_CHAOS_LAB") == "true" and

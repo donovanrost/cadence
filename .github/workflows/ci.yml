@@ -5,6 +5,9 @@ name: CI
 on:
   pull_request:
     branches: [develop, main]
+    # A draft runs no CI: ready_for_review starts the run, converted_to_draft cancels a running one
+    # through the concurrency group (docs/TEAM.md, #730).
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   push:
     branches: [develop, main]
   # Twice a day on develop (the default branch, where schedules run), so jobs on probation outside
@@ -27,12 +30,21 @@ env:
 jobs:
   changes:
     name: Detect code changes
+    # Draft PRs run nothing (runner slots are the team's bottleneck, #730); ci-ok fails for them.
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       pull-requests: read
+    # Pushes and schedules run everything. A PR runs the jobs its paths can affect:
+    # - code: anything but docs (browser, console e2e, publication, JS audit)
+    # - backend: code outside the console app and its kit (Elixir quality and suites). Elixir tests
+    #   still execute frontend/modules and frontend/apps/host producer code, so those count.
+    # - frontend: code outside the Elixir projects (frontend quality)
     outputs:
       code: ${{ github.event_name != 'pull_request' || steps.filter.outputs.code == 'true' }}
+      backend: ${{ github.event_name != 'pull_request' || steps.filter.outputs.backend == 'true' }}
+      frontend: ${{ github.event_name != 'pull_request' || steps.filter.outputs.frontend == 'true' }}
     steps:
       - if: github.event_name == 'pull_request'
         id: filter
@@ -44,11 +56,27 @@ jobs:
               - "**"
               - "!docs/**"
               - "!**/*.md"
+            backend:
+              - "**"
+              - "!docs/**"
+              - "!**/*.md"
+              - "!frontend/apps/console/**"
+              - "!frontend/packages/apogee-ui/**"
+            frontend:
+              - "**"
+              - "!docs/**"
+              - "!**/*.md"
+              - "!apps/**"
+              - "!packages/**"
+              - "!config/**"
+              - "!dev/**"
+              - "!mix.exs"
+              - "!mix.lock"
 
   quality:
     name: Elixir quality
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -127,7 +155,7 @@ jobs:
   test-core:
     name: Core tests (${{ matrix.partition }}/4)
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     strategy:
@@ -185,7 +213,7 @@ jobs:
   test-web:
     name: Web tests (${{ matrix.partition }}/2)
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     strategy:
@@ -640,7 +668,7 @@ jobs:
   test-packages:
     name: Packages, simulator, planes and cluster tests
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     services:
@@ -702,7 +730,7 @@ jobs:
   producer-coverage:
     name: Producer-contract coverage
     needs: [changes, test-core, test-web]
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -761,7 +789,7 @@ jobs:
   frontend-quality:
     name: Frontend quality
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -789,7 +817,7 @@ jobs:
   questdb-integration:
     name: QuestDB integration
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
@@ -854,7 +882,7 @@ jobs:
   ingest-journal-off:
     name: Ingest tests, journal off
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     services:
@@ -913,6 +941,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
+      - name: A draft PR is not checked
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft
+        run: |
+          echo "::error::Draft PRs run no CI. Mark the PR ready for review to run it."
+          exit 1
       - name: Every needed job succeeded or was skipped as unaffected
         env:
           NEEDS: ${{ toJSON(needs) }}

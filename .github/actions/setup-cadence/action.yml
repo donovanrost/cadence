@@ -46,11 +46,16 @@ runs:
           echo "EOF"
         } >> "$GITHUB_ENV"
 
+    # An exact miss (a lockfile changed, or develop hasn't saved the new key yet) restores the
+    # nearest older deps, and `mix setup --check-locked` fetches only what changed. Without it every
+    # Elixir job re-fetched everything, heroicons' git clone included (~90 s each, #730).
     - name: Restore deps
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ env.CADENCE_DEPS_PATHS }}
         key: ${{ env.CADENCE_DEPS_KEY }}
+        restore-keys: |
+          deps-v1-${{ runner.os }}-otp${{ steps.beam.outputs.otp-version }}-ex${{ steps.beam.outputs.elixir-version }}-
 
     - name: Restore _build
       id: build-cache

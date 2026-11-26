@@ -5,10 +5,27 @@ defmodule Cadence.Telemetry.ObservationIdentityDependency do
   alias Cadence.Telemetry.Storage.ObservationIdentityState
 
   @spec from_states([ObservationIdentityState.t()]) :: map()
-  def from_states(states) when is_list(states) do
+  def from_states(states) when is_list(states), do: from_states(states, [])
+
+  @doc """
+  The dependency on `states` and on every identity in `identity_ids`. An identity with no state row
+  (a canonical sighting nobody decided on: the first-seen rule, 11-17) still belongs to the
+  dependency, as a bare entry, so a later decision that creates its row invalidates what read it.
+  """
+  @spec from_states([ObservationIdentityState.t()], [binary()]) :: map()
+  def from_states(states, identity_ids) when is_list(states) and is_list(identity_ids) do
+    stated = MapSet.new(states, & &1.observation_identity_id)
+
+    bare =
+      identity_ids
+      |> Enum.uniq()
+      |> Enum.reject(&MapSet.member?(stated, &1))
+      |> Enum.map(&%{observation_identity_id: &1})
+
     entries =
       states
       |> Enum.map(&entry/1)
+      |> Kernel.++(bare)
       |> Enum.sort_by(& &1.observation_identity_id)
 
     %{

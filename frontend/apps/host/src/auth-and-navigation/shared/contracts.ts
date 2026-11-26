@@ -11,8 +11,3 @@ export function present(value: unknown, max = 4096): value is string {
 export function count(value: unknown): value is number {
   return Number.isSafeInteger(value) && Number(value) >= 0;
 }
-export function sessionPage(
-  value: unknown,
-): value is Record<string, unknown> & { version: 1; csrf_token: string } {
-  return record(value) && value.version === 1 && present(value.csrf_token);
-}

@@ -129,6 +129,7 @@ defmodule Cadence.Configuration.ActorNamesTest do
       revision_number: 3,
       kind: "change_set",
       applied_by: applied_by,
+      submitted_by: applied_by,
       applied_at: DateTime.utc_now(),
       reason: "Before #471",
       summary: "Old row",

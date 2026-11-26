@@ -164,7 +164,7 @@ defmodule Cadence.Dev.ReflectOrbital.Configuration do
             Map.put(
               F.metadata(),
               "source_path",
-              "legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml"
+              "dev/catalogs/demo_spacecraft.yaml"
             )
         })
 

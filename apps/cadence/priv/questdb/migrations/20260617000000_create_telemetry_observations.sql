@@ -5,7 +5,8 @@
 -- duplicate/correction policy is still owned by Cadence before rows reach the
 -- physical store.
 --
--- Deduplication and the observation identity column are part of this one create (dev QuestDB is
+-- Deduplication, the observation identity column and the provenance columns (DECISIONS #103;
+-- docs/apogee/domain/provenance-storage.md, option B) are part of this one create (dev QuestDB is
 -- disposable, so there are no incremental migrations to keep).
 --
 -- SYMBOL CAPACITY is the expected number of distinct values; it is sized for 1,000+ spacecraft
@@ -52,6 +53,20 @@ CREATE TABLE IF NOT EXISTS telemetry_observations (
   validity_state SYMBOL,
   revision LONG,
   supersedes_observation_id STRING,
+
+  -- Provenance as typed columns. CAPACITY is every tenant on a platform-shared instance over the
+  -- table's life; NOCACHE keeps ~10^5 long strings off the heap (no read path filters on them).
+  -- Rows written before a reader knew a column read it as null, and the reader decodes their full
+  -- provenance_json.
+  mission_model_revision_id SYMBOL CAPACITY 16384 CACHE,
+  runtime_plan_id SYMBOL CAPACITY 32768 CACHE,
+  producer_kind SYMBOL CAPACITY 256 CACHE,
+  producer_id SYMBOL CAPACITY 16384 CACHE,
+  semantic_id SYMBOL CAPACITY 262144 NOCACHE,
+  qualified_name SYMBOL CAPACITY 262144 NOCACHE,
+  identity_ref VARCHAR,
+  binding_rule_derived BOOLEAN,
+  packet_refs_derived BOOLEAN,
 
   provenance_json STRING,
   metadata_json STRING

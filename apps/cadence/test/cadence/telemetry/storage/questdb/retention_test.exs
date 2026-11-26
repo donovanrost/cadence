@@ -265,7 +265,8 @@ defmodule Cadence.Telemetry.Storage.QuestDB.RetentionTest do
     parent = self()
 
     run_fun = fn _opts ->
-      send(parent, :ran) && {:ok, %{dropped: [], partitions: 0, disk_bytes: 0}}
+      send(parent, :ran)
+      {:ok, %{dropped: [], partitions: 0, disk_bytes: 0}}
     end
 
     start_supervised!({RetentionJob, interval_ms: 20, run_fun: run_fun})

@@ -47,7 +47,8 @@ defmodule Cadence.Configuration.Staging do
   defp stage_locked(set, actor, summary, source, prepared) do
     with :ok <- not_frozen(set),
          :ok <- rollback_alone(set, source),
-         :ok <- resolve_overlaps(set, actor, prepared) do
+         :ok <- resolve_overlaps(set, actor, prepared),
+         :ok <- stage_conflicts(set, prepared) do
       write(set, actor, summary, source, prepared)
     else
       {:error, reason} -> Repo.rollback(reason)
@@ -325,6 +326,28 @@ defmodule Cadence.Configuration.Staging do
       base: base,
       touched_paths: paths
     }
+  end
+
+  # ConfigKind.stage_conflicts/4 for the kinds this request stages (e.g. a SCID another staged
+  # spacecraft holds, S9), against what the set has staged once this author's overlaps are replaced.
+  defp stage_conflicts(set, prepared) do
+    kinds = prepared |> Enum.map(& &1.kind) |> Enum.uniq() |> Enum.map(&Kinds.fetch!/1)
+
+    case Enum.filter(kinds, &function_exported?(&1, :stage_conflicts, 4)) do
+      [] ->
+        :ok
+
+      checking ->
+        staged = ChangeSetStore.staged_ops(set.change_set_id)
+        Enum.find_value(checking, :ok, &kind_conflicts(&1, set, staged, prepared))
+    end
+  end
+
+  defp kind_conflicts(kind, set, staged, prepared) do
+    case kind.stage_conflicts(set.organization_id, set.mission_id, staged, prepared) do
+      :ok -> nil
+      {:error, _} = error -> error
+    end
   end
 
   defp not_frozen(%{state: "in_review"}), do: {:error, :frozen_in_review}

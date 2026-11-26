@@ -129,22 +129,21 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     assert String.ends_with?(fallback, "/setup/comms")
   end
 
-  test "an organization-scope catalog says no applications are installed at that level" do
-    # §11c A + L13 (lead): no organization-scope surface is left; the route answers plainly.
+  test "organization and admin scope catalogs are refused: only user, mission and spacecraft scopes exist" do
     {member_conn, organization, _mission, _scope} = signed_in_scope_and_mission()
 
-    problem =
-      member_conn
-      |> get(
-        "/api/cadence/application-host/v1/catalog?scope=organization&organization_id=#{organization.organization_id}"
-      )
-      |> json_response(404)
-
-    assert problem["code"] == "no_organization_applications"
-    assert problem["message"] == "No applications are installed at the organization level."
+    for query <- [
+          "scope=organization&organization_id=#{organization.organization_id}",
+          "scope=admin"
+        ] do
+      assert %{"code" => "application_unavailable"} =
+               member_conn
+               |> get("/api/cadence/application-host/v1/catalog?" <> query)
+               |> json_response(404)
+    end
   end
 
-  test "a mission-scope catalog keeps its own answer (only the organization scope changed)" do
+  test "a mission-scope catalog keeps its own answer" do
     {member_conn, _organization, _mission, _scope} = signed_in_scope_and_mission()
 
     assert %{"code" => "application_unavailable"} =
