@@ -8,13 +8,12 @@
 #   cd apps/cadence_web
 #   mix run --no-start ../../dev/apogee_qa_personas.exs
 #
-# The password (#242): E2E_PERSONA_PASSWORD when set (at least 12 characters, not the public
-# default; from the environment or a CI secret only, never a committed file, and never printed),
-# else the public local default, printed as before. E2E_RESET_PERSONA_PASSWORDS=1 also sets the
+# The password (#242): E2E_PERSONA_PASSWORD (at least 12 characters, never printed).
+# E2E_RESET_PERSONA_PASSWORDS=1 also sets the
 # EXISTING personas' passwords to it through Cadence.Accounts.FixturePasswords (all their
 # sessions signed out); it refuses without E2E_PERSONA_PASSWORD.
 #
-# Requires the Reflect Orbital seed (dev/reflect_orbital_demo.exs). See docs/apogee/qa/runbook.md.
+# Requires the Reflect Orbital seed (dev/reflect_orbital_demo.exs). See docs/dev-environment.md.
 defmodule Cadence.Dev.ApogeeQaPersonas do
   @moduledoc false
 
@@ -51,7 +50,7 @@ defmodule Cadence.Dev.ApogeeQaPersonas do
 
     env = System.get_env()
     # Both read before anything is written: a bad value stops the run with nothing changed.
-    {password, source} = settle(FixturePasswords.persona_password(env))
+    {password, _source} = settle(FixturePasswords.persona_password(env))
     reset? = settle(FixturePasswords.reset?(env))
 
     Logger.configure(level: :warning)
@@ -65,10 +64,7 @@ defmodule Cadence.Dev.ApogeeQaPersonas do
       IO.puts("#{persona.email}  #{persona.role}")
     end)
 
-    case source do
-      :default -> IO.puts("Password for all personas: #{password}")
-      :env -> IO.puts("Password for all personas: from E2E_PERSONA_PASSWORD (not printed)")
-    end
+    IO.puts("Password for all personas: from E2E_PERSONA_PASSWORD (not printed)")
   end
 
   defp settle({:ok, password, source}), do: {password, source}

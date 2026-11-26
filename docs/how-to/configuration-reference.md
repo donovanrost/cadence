@@ -352,7 +352,7 @@ Common fields include:
 
 These provide defaults for:
 
-- `mix cadence.profile`
+- `mise exec -- mix cadence.profile`
 
 ## 5. Named-node attachment and cookies
 
@@ -361,11 +361,10 @@ The live profiler tasks attach to a running named Cadence node.
 Typical local startup:
 
 ```bash
-cd apps/cadence_web
-iex --sname cadence -S mix phx.server
+dev/stack up
 ```
 
-The profiler tasks will use the local cookie by default. If you need to
+The profiler tasks use the slot cookie from `mise.local.toml` when run through `mise exec --`. If you need to
 override it, use:
 
 - `CADENCE_NODE_COOKIE`
@@ -376,7 +375,7 @@ They also respect:
 
 This matters for:
 
-- `mix cadence.profile`
+- `mise exec -- mix cadence.profile`
 
 ## 6. Simulator performance flags commonly used in docs
 

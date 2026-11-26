@@ -8,8 +8,8 @@ defmodule Mix.Tasks.Cadence.Profile do
 
   ## Usage
 
-      iex --sname cadence -S mix phx.server
-      mix cadence.profile --node cadence --mission-id mission-alpha
+      dev/stack up
+      mix cadence.profile --node cadence_1 --mission-id mission-alpha
 
   ## Options
 
@@ -59,7 +59,7 @@ defmodule Mix.Tasks.Cadence.Profile do
 
     maybe_handle_help_or_invalid_opts(opts, remaining, invalid)
 
-    node_name = validate_node!(opts, profile_defaults.node)
+    node_name = validate_node!(opts, slot_node(profile_defaults.node))
     mission_id = validate_mission_id!(opts, profile_defaults.mission_id)
     config = build_profile_config(node_name, mission_id, opts)
 
@@ -76,6 +76,15 @@ defmodule Mix.Tasks.Cadence.Profile do
     |> DevProfile.load!()
     |> DevProfile.profiler_defaults()
   end
+
+  defp slot_node("cadence") do
+    case System.get_env("CADENCE_DEV_SLOT") do
+      nil -> "cadence"
+      slot -> "cadence_#{slot}"
+    end
+  end
+
+  defp slot_node(other), do: other
 
   defp maybe_handle_help_or_invalid_opts(opts, remaining, invalid) do
     if opts[:help] || invalid != [] || remaining != [] do
@@ -200,7 +209,7 @@ defmodule Mix.Tasks.Cadence.Profile do
         Failed to connect to #{target_node}.
 
         Make sure the server is running with a node name, for example:
-          iex --sname cadence -S mix phx.server
+          dev/stack up
 
         If the server was started with a non-default Erlang cookie, set the
         same cookie in `CADENCE_NODE_COOKIE` before running this task.
@@ -388,7 +397,8 @@ defmodule Mix.Tasks.Cadence.Profile do
   end
 
   defp maybe_set_distribution_cookie do
-    case System.get_env("CADENCE_NODE_COOKIE") || System.get_env("ERL_COOKIE") do
+    case System.get_env("CADENCE_NODE_COOKIE") || System.get_env("CADENCE_ERLANG_COOKIE") ||
+           System.get_env("ERL_COOKIE") do
       nil ->
         :ok
 
