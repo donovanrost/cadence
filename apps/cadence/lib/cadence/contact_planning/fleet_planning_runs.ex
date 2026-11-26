@@ -239,14 +239,16 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
   @spec list_decisions(binary(), binary(), binary()) :: [FleetPlanningDecision.t()]
   def list_decisions(organization_id, mission_id, run_id) do
     visible_decisions(organization_id, mission_id, run_id)
+    |> with_score_evidence()
     |> order_by([decision],
       asc_nulls_last: decision.rank,
       desc: decision.score,
       asc: decision.contact_opportunity_snapshot_id
     )
     |> Repo.all()
-    |> Repo.preload(:score_evidence)
-    |> Enum.map(&FleetPlanningDecisionRow.to_domain/1)
+    |> Enum.map(fn {decision, evidence} ->
+      FleetPlanningDecisionRow.to_domain(decision, evidence)
+    end)
   end
 
   @spec selected_snapshot_ids(binary(), binary(), binary()) :: {[binary()], [binary()]}
@@ -265,7 +267,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
 
   @doc "Bounded optimizer decisions in rank, score and snapshot identity order."
   def decisions_page(org, mission, run_id, page) when is_integer(page) and page in 1..1_000_000 do
-    query = visible_decisions(org, mission, run_id)
+    query = visible_decisions(org, mission, run_id) |> with_score_evidence()
 
     rows =
       query
@@ -277,13 +279,27 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
       |> offset(^((page - 1) * 10))
       |> limit(11)
       |> Repo.all()
-      |> Repo.preload(:score_evidence)
 
     %{
       page: page,
       more: length(rows) > 10,
-      entries: rows |> Enum.take(10) |> Enum.map(&FleetPlanningDecisionRow.to_domain/1)
+      entries:
+        rows
+        |> Enum.take(10)
+        |> Enum.map(fn {decision, evidence} ->
+          FleetPlanningDecisionRow.to_domain(decision, evidence)
+        end)
     }
+  end
+
+  defp with_score_evidence(query) do
+    query
+    |> join(:inner, [decision, _run], evidence in FleetPlanningScoreDocumentRow,
+      on:
+        evidence.mission_id == decision.mission_id and
+          evidence.score_document_sha256 == decision.score_document_sha256
+    )
+    |> select([decision, _run, evidence], {decision, evidence})
   end
 
   defp visible_decisions(organization_id, mission_id, run_id) do
@@ -520,7 +536,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
     with :ok <- authorize_member(scope, mission_id),
          {:ok, run} <- fetch(scope.organization_id, mission_id, run_id),
          :ok <- optimizing_run(run) do
-      with :ok <- persist_score_documents(decisions) do
+      with :ok <- persist_score_documents(run, decisions) do
         replace_decisions(run, decisions)
       end
     end
@@ -875,7 +891,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
     end
   end
 
-  defp persist_score_documents(decisions) do
+  defp persist_score_documents(run, decisions) do
     result =
       Enum.reduce_while(decisions, {:ok, %{}}, fn decision, {:ok, documents} ->
         document = Map.fetch!(decision, :score_document)
@@ -897,13 +913,18 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
            end) do
       documents
       |> Enum.map(fn {sha256, document} ->
-        FleetPlanningScoreDocumentRow.insert_attrs(document, sha256)
+        FleetPlanningScoreDocumentRow.insert_attrs(
+          document,
+          sha256,
+          run.organization_id,
+          run.mission_id
+        )
       end)
       |> Enum.chunk_every(@decision_batch_size)
       |> Enum.each(fn rows ->
         Repo.insert_all(FleetPlanningScoreDocumentRow, rows,
           on_conflict: :nothing,
-          conflict_target: [:score_document_sha256]
+          conflict_target: [:mission_id, :score_document_sha256]
         )
       end)
 

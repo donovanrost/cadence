@@ -25,13 +25,6 @@ defmodule Cadence.Management.Contacts.Store.FleetPlanningDecisionRow do
     field(:score_document_sha256, :string)
     field(:explanation_document, :map, default: %{})
 
-    belongs_to(:score_evidence, FleetPlanningScoreDocumentRow,
-      type: :string,
-      foreign_key: :score_document_sha256,
-      references: :score_document_sha256,
-      define_field: false
-    )
-
     timestamps()
   end
 
@@ -62,10 +55,13 @@ defmodule Cadence.Management.Contacts.Store.FleetPlanningDecisionRow do
       [:fleet_planning_run_id, :contact_opportunity_snapshot_id],
       name: :fleet_planning_decisions_snapshot_uniq
     )
+    |> foreign_key_constraint(:score_document_sha256,
+      name: :fleet_planning_decisions_score_document_fk
+    )
   end
 
-  @spec to_domain(struct()) :: FleetPlanningDecision.t()
-  def to_domain(%__MODULE__{score_evidence: %FleetPlanningScoreDocumentRow{} = evidence} = row) do
+  @spec to_domain(struct(), struct()) :: FleetPlanningDecision.t()
+  def to_domain(%__MODULE__{} = row, %FleetPlanningScoreDocumentRow{} = evidence) do
     FleetPlanningDecision.new(%{
       fleet_planning_decision_id: row.fleet_planning_decision_id,
       fleet_planning_run_id: row.fleet_planning_run_id,
