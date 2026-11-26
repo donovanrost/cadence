@@ -30,12 +30,15 @@ const page = (events: unknown[]) => {
   if (!r.ok) throw r.error;
   return r.value;
 };
+/** AuditResults' props for one loaded page (usePagedQuery's items, meta.sources and unshown). */
+const shown = (events: unknown[]) => {
+  const p = page(events);
+  return { events: p.events, sources: p.sources, unshown: p.unshown };
+};
 const results = (events: unknown[]) =>
   mount(AuditResults, {
     props: {
-      page: page(events),
-      older: [],
-      olderUnshown: [],
+      ...shown(events),
       hasMore: false,
       loading: false,
       failed: false,
@@ -81,9 +84,7 @@ describe("Org Audit's failed Older load (#244, B6)", () => {
   it("is announced: a status region, always mounted, that says so only when it failed", async () => {
     const w = mount(AuditResults, {
       props: {
-        page: page([ok("e1")]),
-        older: [],
-        olderUnshown: [],
+        ...shown([ok("e1")]),
         hasMore: true,
         loading: false,
         failed: false,
