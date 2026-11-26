@@ -39,15 +39,7 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
   def insert_materialized_occurrences(items) when is_list(items) do
     now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
 
-    rows =
-      Enum.map(items, fn item ->
-        item.occurrence
-        |> ContactRequirementOccurrenceRow.changeset()
-        |> Changeset.apply_action!(:insert)
-        |> Map.from_struct()
-        |> Map.take(ContactRequirementOccurrenceRow.__schema__(:fields))
-        |> Map.merge(%{inserted_at: now, updated_at: now})
-      end)
+    rows = Enum.map(items, &ContactRequirementOccurrenceRow.insert_attrs(&1.occurrence, now))
 
     {count, _} =
       Repo.insert_all(ContactRequirementOccurrenceRow, rows, on_conflict: :nothing)

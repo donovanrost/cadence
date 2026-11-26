@@ -37,6 +37,14 @@ defmodule Cadence.Management.Contacts.Store.ContactRequirementRow do
     )
   end
 
+  @doc "Serializes a requirement built from a validated template for bulk insertion."
+  @spec insert_attrs(ContactRequirement.t(), DateTime.t()) :: map()
+  def insert_attrs(%ContactRequirement{} = requirement, now) do
+    requirement
+    |> domain_attrs()
+    |> Map.merge(%{inserted_at: now, updated_at: now})
+  end
+
   @spec projection_changeset(struct(), map()) :: Ecto.Changeset.t()
   def projection_changeset(%__MODULE__{} = row, attrs) when is_map(attrs) do
     row

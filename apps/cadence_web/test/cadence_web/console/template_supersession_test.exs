@@ -110,6 +110,38 @@ defmodule CadenceWeb.Console.TemplateSupersessionTest do
           name: "v2"
         })
 
+      if submit? do
+        # The bulk fleet path also rechecks plan uptake after preparing candidates.
+        now = DateTime.utc_now()
+
+        prepared =
+          TemplateSupersession.prepare(
+            c.org.organization_id,
+            c.mission.mission_id,
+            [
+              %{
+                version: v2,
+                spacecraft_ids: [fixture.craft.spacecraft_id],
+                occurrences: [~U[2027-01-01 01:00:00Z]]
+              }
+            ],
+            now
+          )
+
+        id = fixture.requirement.contact_requirement_id
+        assert [{^v2, [{^id, 1, :template_versioned}]}] = prepared
+
+        assert {:ok, :ok} =
+                 Cadence.Repo.transaction(fn ->
+                   TemplateSupersession.cancel_prepared(
+                     c.scope,
+                     c.mission.mission_id,
+                     prepared,
+                     now
+                   )
+                 end)
+      end
+
       result =
         TemplateSupersession.supersede(
           c.scope,
