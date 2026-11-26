@@ -66,6 +66,11 @@ const lookup = computed(() => {
             :key="lookup.sc.id"
             :sc="lookup.sc"
             :alarms="alarms.state.value"
+            :more="{
+              load: () => void alarms.more(),
+              busy: alarms.moreBusy.value,
+              failed: alarms.moreError.value !== null,
+            }"
             :limits-configured="
               fleet.state.value.status !== 'ready' || fleet.state.value.value.limits.configured
             "
