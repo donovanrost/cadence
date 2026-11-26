@@ -6,6 +6,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
   import CadenceWeb.ControlPlaneApiFixtures
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet, CapabilityInstance}
+  alias Cadence.Commanding.ApprovalDecisions
   alias Cadence.Jobs
   alias Cadence.Jobs.Runner, as: JobRunner
   alias Cadence.Management.Commanding, as: ManagementCommanding
@@ -470,7 +471,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
     # #117 step 4b (api-ops on #639): the release recorded not_required in the four-eyes record,
     # but the REST approvals read doesn't show it: decision stays approved | rejected there.
     assert Enum.any?(
-             Cadence.Commanding.ApprovalDecisions.decisions(organization_id),
+             ApprovalDecisions.decisions(organization_id),
              &(&1.decision == :not_required and &1.subject.id == "command-request-noop")
            )
 
