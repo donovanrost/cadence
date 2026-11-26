@@ -4,7 +4,20 @@ set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd -P)
 cd "$root"
 command=${1:-}
-case "$command" in up|down|reset|status|env) ;; *) echo 'usage: dev/stack up|down|reset|status|env' >&2; exit 2 ;; esac
+usage='usage: dev/stack up [--no-seed]|down|reset [--no-seed]|seed-rest|status|env'
+case "$command" in up|down|reset|seed-rest|status|env) ;; *) echo "$usage" >&2; exit 2 ;; esac
+shift
+no_seed=false
+case "$command" in
+  up|reset)
+    case "${1:-}" in
+      '') ;;
+      --no-seed) no_seed=true; shift ;;
+      *) echo "$usage" >&2; exit 2 ;;
+    esac
+    ;;
+esac
+if [ "$#" -ne 0 ]; then echo "$usage" >&2; exit 2; fi
 
 registry_dir=${XDG_STATE_HOME:-$HOME/.cache}/cadence
 registry=$registry_dir/dev-slots
@@ -178,7 +191,7 @@ case "$command" in
     (cd "$root/apps/cadence_web" && mise exec -- mix ecto.drop -r Cadence.Repo)
     if docker inspect "$container" >/dev/null 2>&1; then docker rm "$container" >/dev/null; fi
     rm -rf "$root/var/questdb" "$root/var/reflect_orbital"
-    "$0" up
+    if [ "$no_seed" = true ]; then "$0" up --no-seed; else "$0" up; fi
     ;;
   up)
     prepare_env
@@ -189,11 +202,23 @@ case "$command" in
     wait_http "http://127.0.0.1:$sim_port" simulator
     start_process phoenix "$root" mise run cadence
     wait_http "http://127.0.0.1:$server_port/health/ready" phoenix
-    for seed in reflect_orbital_demo apogee_qa_personas reflect_orbital_planning apogee_qa_mission; do
-      run_mix run --no-start "../../dev/$seed.exs"
-    done
+    if [ "$no_seed" = false ]; then
+      for seed in reflect_orbital_demo apogee_qa_personas reflect_orbital_planning apogee_qa_mission; do
+        run_mix run --no-start "../../dev/$seed.exs"
+      done
+    fi
     start_process console "$root/frontend" corepack pnpm --filter @cadence/console dev --host 127.0.0.1
     wait_http "http://127.0.0.1:$console_port/console/" console
     status
+    ;;
+  seed-rest)
+    prepare_env
+    for service in phoenix console simulator; do
+      if ! running "$service"; then
+        echo "$service is not running; start the stack with dev/stack up --no-seed" >&2
+        exit 1
+      fi
+    done
+    MIX_INSTALL_DIR="$state/mix-install" mise exec -- elixir "$root/dev/seed/earendil.exs"
     ;;
 esac
