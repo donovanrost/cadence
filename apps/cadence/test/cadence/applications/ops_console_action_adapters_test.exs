@@ -17,7 +17,11 @@ defmodule Cadence.Applications.OpsConsoleActionAdaptersTest do
 
     # The data operations surfaces bind no host action at all (their decisions are native-only).
     assert {:error, :unsupported_application_action} =
-             Actions.MissionOperations.execute(@scope, @host_context, mission_request)
+             Cadence.Applications.OpsConsole.ActionProvider.execute(
+               @scope,
+               @host_context,
+               mission_request
+             )
   end
 
   test "source action payloads are exact before policy or domain calls" do

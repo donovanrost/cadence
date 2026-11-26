@@ -10,7 +10,6 @@ defmodule CadenceWeb.SettingsPage do
 
   @consumers [
     "/missions/:mission_id/spacecraft/:spacecraft_id",
-    "/missions/:mission_id/ops/activations",
     "/missions/:mission_id/ops/commands/workspace"
   ]
 

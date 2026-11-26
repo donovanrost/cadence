@@ -230,8 +230,6 @@ const reviewText = computed(() => {
                     ? "Activate configuration"
                     : "Submit for review"
               }}</CadenceButton
-            ><CadenceLink v-if="pendingReview" :href="snapshot.links.approvals"
-              >Open review inbox</CadenceLink
             ><CadenceLink v-if="catalog" :href="catalog.href">View catalog</CadenceLink>
           </div>
         </div>

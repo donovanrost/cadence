@@ -3,7 +3,7 @@ defmodule Cadence.Applications.HistoricalWorkflowRequestTest do
 
   alias Cadence.Applications.{ActionRequest, HostContext}
   alias Cadence.Applications.OpsConsole.Actions.HistoricalWorkflowRequest
-  alias Cadence.Applications.OpsConsole.Actions.MissionOperations
+  alias Cadence.Applications.OpsConsole.ActionProvider
   alias Cadence.Auth.{Scope, ServiceIdentity}
   alias Cadence.DataSources.{DataBinding, DataSource}
   alias Cadence.Management.DataSources.Store
@@ -122,7 +122,7 @@ defmodule Cadence.Applications.HistoricalWorkflowRequestTest do
   defp execute(action, values) do
     all_values = Map.merge(Map.new(@workflow_keys, &{&1, ""}), values)
 
-    MissionOperations.execute(scope(), HostContext.mission("mission-one"), %ActionRequest{
+    ActionProvider.execute(scope(), HostContext.mission("mission-one"), %ActionRequest{
       application_key: "ops_console",
       application_version: 1,
       surface_id: "data_operations",

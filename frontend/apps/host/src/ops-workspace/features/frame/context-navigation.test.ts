@@ -5,7 +5,7 @@ import { contextSections } from "./context";
 import { required } from "../../../../../../test-support/required";
 import { readOpsFrameContext } from "./context-contract";
 import { context } from "../../../auth-and-navigation/shared/context.test-support";
-test("operators can find approvals without a built-in role and links preserve command focus", () => {
+test("operators see the Act group without a built-in role and links preserve command focus", () => {
   const operator = { ...context, capabilities: [] };
   expect(
     required(
@@ -13,7 +13,7 @@ test("operators can find approvals without a built-in role and links preserve co
         (group) => group.key === "act",
       ),
     ).items.map((item) => item.key),
-  ).toEqual(["commands", "activations"]);
+  ).toEqual(["commands"]);
   const nav = opsNavigation(
     required(
       readOpsFrameContext({
