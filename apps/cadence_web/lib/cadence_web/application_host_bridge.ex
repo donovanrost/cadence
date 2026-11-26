@@ -466,9 +466,7 @@ defmodule CadenceWeb.ApplicationHostBridge do
   @spec host_dom_id(atom()) :: binary()
   def host_dom_id(:spacecraft), do: "spacecraft-application-host"
   def host_dom_id(:mission), do: "mission-application-host"
-  def host_dom_id(:organization), do: "organization-application-host"
   def host_dom_id(:user), do: "user-application-host"
-  def host_dom_id(:admin), do: "admin-application-host"
 
   defp installation_id(%ApplicationInstallation{application_installation_id: id}), do: id
   defp installation_id(nil), do: nil

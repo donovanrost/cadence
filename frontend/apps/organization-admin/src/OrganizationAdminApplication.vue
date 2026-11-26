@@ -33,10 +33,6 @@ const renderer = computed<Component | null>(
 const rendererName = computed(() => surface.value?.component ?? "Unavailable");
 
 const actionEvents: Record<OrganizationAdminSurface, Record<string, string>> = {
-  notifications: {
-    "accept-invitation": "accept_invitation",
-    "mark-read": "mark_notification_read",
-  },
   notifications_bell: {
     "mark-read": "mark_notification_read",
   },
