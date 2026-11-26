@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { defineConfig, lazyPlugins } from "vite-plus";
 
 // Phoenix serves /console/* and stays the browser origin in development; it loads
-// modules from this server cross-origin (see docs/apogee/ARCHITECTURE.md).
+// modules from this server cross-origin (see ARCHITECTURE.md "Serving").
 const phoenixOutput = fileURLToPath(
   new URL("../../../apps/cadence_web/priv/static/console", import.meta.url),
 );
