@@ -14,6 +14,7 @@ defmodule Cadence.Reads.FleetStatusScaleTest do
   alias Cadence.Limits.Store.{FleetSummary, LatestStateRow}
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Reads.FleetStatus
+  alias Cadence.SemanticObservations.{FleetAlarms, LatestAlarmStateRow}
   alias Cadence.Spacecraft
   alias Cadence.SpacecraftStore
   alias Cadence.Telemetry.{CurrentValueStore, Sample}
@@ -25,6 +26,29 @@ defmodule Cadence.Reads.FleetStatusScaleTest do
   @points 200
   # Their atoms, loaded for the rows' `String.to_existing_atom`.
   @limit_states [:green, :red_high]
+
+  defp alarm_rows(now, active_share) do
+    for c <- 1..@crafts, p <- 1..@points do
+      active? = rem(c * 31 + p * 17, 1_000) < active_share * 1_000
+
+      %{
+        organization_id: @org,
+        mission_id: @mission,
+        spacecraft_scope_id: "sc-#{c}",
+        spacecraft_id: "sc-#{c}",
+        parameter_id: "P#{p}",
+        policy_id: "pol",
+        evaluation_id: "e-#{c}-#{p}",
+        transition_id: "t-#{c}-#{p}",
+        effective_state: if(active?, do: Enum.random(["watch", "critical"]), else: "normal"),
+        generation_time: now,
+        receipt_time: DateTime.add(now, -rem(c * 7 + p, 600), :second),
+        state_document: %{"value" => %{}},
+        inserted_at: now,
+        updated_at: now
+      }
+    end
+  end
 
   test "one load of the whole fleet fits the push budget, with a bounded number of queries" do
     persist_mission_scope(@org, @mission)
@@ -129,29 +153,60 @@ defmodule Cadence.Reads.FleetStatusScaleTest do
       nil
     )
 
-    for _ <- 1..5, do: FleetStatus.load(@org, @mission, now: now)
-    :counters.put(queries, 1, 0)
+    # p50, p99 and queries per load, over 100 loads.
+    measure = fn label ->
+      for _ <- 1..5, do: FleetStatus.load(@org, @mission, now: now)
+      :counters.put(queries, 1, 0)
 
-    runs =
-      for _ <- 1..100 do
-        {micros, fleet} = :timer.tc(fn -> FleetStatus.load(@org, @mission, now: now) end)
-        assert fleet.counts.total == @crafts
-        micros / 1_000
-      end
+      runs =
+        for _ <- 1..100 do
+          {micros, fleet} = :timer.tc(fn -> FleetStatus.load(@org, @mission, now: now) end)
+          assert fleet.counts.total == @crafts
+          micros / 1_000
+        end
 
-    :telemetry.detach("fleet-scale")
-    sorted = Enum.sort(runs)
-    p50 = Enum.at(sorted, 49)
-    p99 = Enum.at(sorted, 98)
-    per_load = div(:counters.get(queries, 1), 100)
+      sorted = Enum.sort(runs)
+      p99 = Enum.at(sorted, 98)
+      per_load = div(:counters.get(queries, 1), 100)
 
-    IO.puts(
-      "FleetStatus.load at #{@crafts} spacecraft x #{@points} points: p50 #{Float.round(p50, 1)} ms, " <>
-        "p99 #{Float.round(p99, 1)} ms, #{per_load} queries per load"
+      IO.puts(
+        "FleetStatus.load at #{@crafts} spacecraft x #{@points} points, #{label}: " <>
+          "p50 #{Float.round(Enum.at(sorted, 49), 1)} ms, p99 #{Float.round(p99, 1)} ms, " <>
+          "#{per_load} queries per load"
+      )
+
+      assert per_load <= 9
+      assert p99 < 250
+    end
+
+    measure.("ground limits only")
+
+    refresh_alarms = fn ->
+      # The writer keeps the summary; a bulk fixture refreshes it, as one batch per spacecraft would.
+      FleetAlarms.refresh(Repo, @org, @mission, for(c <- 1..@crafts, do: "sc-#{c}"))
+      Repo.query!("ANALYZE semantic_latest_alarm_states")
+      Repo.query!("ANALYZE semantic_fleet_alarm_summaries")
+    end
+
+    # #871: the live monitoring table as well, every parameter of every spacecraft having
+    # transitioned once (200,000 rows, the table's practical bound), with ~3% of them active.
+    Repo.query!("SET LOCAL session_replication_role = replica")
+
+    for chunk <- Enum.chunk_every(alarm_rows(now, 0.03), 2_000),
+        do: Repo.insert_all(LatestAlarmStateRow, chunk)
+
+    refresh_alarms.()
+    measure.("+ 200,000 live alarm rows, 3% active")
+
+    # A mass event: a quarter of every spacecraft's alarms active at once.
+    Repo.query!(
+      "UPDATE semantic_latest_alarm_states SET effective_state = 'warning' WHERE parameter_id LIKE 'P1%' OR parameter_id LIKE 'P2%'"
     )
 
+    refresh_alarms.()
+    measure.("+ live alarm rows, ~50% active (mass event)")
+
+    :telemetry.detach("fleet-scale")
     assert length(@limit_states) == 2
-    assert per_load <= 8
-    assert p99 < 250
   end
 end

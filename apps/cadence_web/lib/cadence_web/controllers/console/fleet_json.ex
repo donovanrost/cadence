@@ -56,12 +56,14 @@ defmodule CadenceWeb.Console.FleetJSON do
 
   defp worst_point(point) do
     %{
+      source: Atom.to_string(point.source),
       point_id: point.point_id,
       point_name: point.point_name,
       value: WireValue.encode(point.value),
       limit_state: Atom.to_string(point.limit_state),
       raw_limit_state: point.raw_limit_state,
-      received_at: point.received_at
+      received_at: point.received_at,
+      evaluated_at: point.evaluated_at
     }
   end
 end
