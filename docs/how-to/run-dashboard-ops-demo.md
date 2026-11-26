@@ -106,6 +106,9 @@ In the right rail, call out the critical battery alarm and queued recovery
 command. Open **Alarm workspace**, inspect the evidence and limit-definition
 links, then open **Command workspace** and follow the recovery command.
 
+Until #902 rebuilds the demo with an active mission model revision, setup stops
+at the queued command with a clear #902 error and this step is unavailable.
+
 Navigate to Timeline or Planning. The focused command and mission-level alarm
 summary remain in the shell rail, preserving awareness while the central task
 changes.
