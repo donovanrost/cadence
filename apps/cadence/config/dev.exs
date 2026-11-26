@@ -38,11 +38,3 @@ config :cadence, :provider_outbound, allow: ["127.0.0.1/32", "::1/128"]
 config :cadence, :env_credentials,
   allow: ["EARENDIL_DEMO_PROVIDER_TOKEN"],
   allow_prefixes: []
-
-# #359: observation identity state retention, DEV ONLY. The dev stack's observation store keeps
-# two days (qa's QuestDB day-partition drops). Every other environment leaves it unset, so
-# nothing is deleted until a deployment names its own store's retention: a store that keeps
-# observations longer must never lose their states. The cutoff is the later of this and the
-# contacts journal's re-delivery window (72 h + 24 h); see Cadence.Control.IdentityStateRetention.
-# Mode: CADENCE_IDENTITY_STATE_RETENTION (dry by default).
-config :cadence, Cadence.Control.IdentityStateRetention, observation_retention_hours: 48
