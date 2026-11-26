@@ -201,7 +201,6 @@ defmodule CadenceWeb.API.CommandingParams do
       {:ok,
        []
        |> maybe_put_opt(:source_endpoint_ref, string_value(params, "source_endpoint_ref"))
-       |> maybe_put_opt(:command_stage_id, string_value(params, "command_stage_id"))
        |> maybe_put_opt(:lifecycle_state, lifecycle_state)}
     end
   end

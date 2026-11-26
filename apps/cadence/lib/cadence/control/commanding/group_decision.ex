@@ -23,7 +23,8 @@ defmodule Cadence.Control.Commanding.GroupDecision do
 
   alias Cadence.Commanding.Groups.{Admission, CommandGroup, GroupStore}
   alias Cadence.Governance.Accountability
-  alias Cadence.Management.Commanding.{ApprovedCommand, ReviewAccess}
+  alias Cadence.Management.Commanding, as: ManagementCommanding
+  alias Cadence.Management.Commanding.ApprovedCommand
   alias Cadence.Platform.ScopedReadUpdates
 
   @kinds ~w(go go_excluding send_back no_go)a
@@ -63,7 +64,7 @@ defmodule Cadence.Control.Commanding.GroupDecision do
   # todo(authz): Cedar should decide who may GO / NO-GO / send back this group (DECISIONS #62:
   # any mission operator today, minus self-approval), e.g. by hazard, fleet reach or subsystem.
   def decide(scope, mission_id, group_id, decision) do
-    with {:ok, fresh, _mission} <- ReviewAccess.authorize(scope, mission_id),
+    with {:ok, fresh, _mission} <- ManagementCommanding.authorize(scope, mission_id),
          :ok <- valid_decision(decision) do
       org = fresh.organization_id
       actor = %{"actor_kind" => "user", "user_id" => fresh.user.user_id}
@@ -301,7 +302,7 @@ defmodule Cadence.Control.Commanding.GroupDecision do
 
     Enum.split_with(
       members,
-      &(not MapSet.member?(excluded, &1.group_target_index))
+      &(not MapSet.member?(excluded, &1.group_slot.target_index))
     )
   end
 

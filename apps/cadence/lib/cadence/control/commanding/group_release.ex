@@ -31,7 +31,7 @@ defmodule Cadence.Control.Commanding.GroupRelease do
   alias Cadence.Commanding.Groups.{CommandGroup, GroupStore}
   alias Cadence.Contacts
   alias Cadence.Contacts.RealizedContact
-  alias Cadence.Management.Commanding.ReviewAccess
+  alias Cadence.Management.Commanding, as: ManagementCommanding
   alias Cadence.Platform.ScopedReadUpdates
 
   @type stopped :: %{
@@ -58,7 +58,7 @@ defmodule Cadence.Control.Commanding.GroupRelease do
     # todo(authz): Cedar should decide who may send a group over a pass they name (today the
     # GO/NO-GO rule: any mission operator, DECISIONS #62), e.g. not into an unbooked contact.
     with {:ok, %Scope{user: %User{user_id: user_id}} = fresh, _mission} <-
-           ReviewAccess.authorize(scope, mission_id) do
+           ManagementCommanding.authorize(scope, mission_id) do
       org = fresh.organization_id
       at = Keyword.get(opts, :attempted_at, DateTime.utc_now())
       actor = %{"actor_kind" => "user", "user_id" => user_id}

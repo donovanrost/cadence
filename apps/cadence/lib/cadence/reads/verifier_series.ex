@@ -72,7 +72,7 @@ defmodule Cadence.Reads.VerifierSeries do
         not_plottable(org, mission, group, members, verifiers, opts)
 
       {position, subject, plan} ->
-        plotted_members = Enum.filter(members, &(&1.group_position == position))
+        plotted_members = Enum.filter(members, &(&1.group_slot.position == position))
         point = point(org, mission, subject, opts)
         series(org, mission, group, plotted_members, by_request, {position, point, plan}, opts)
     end
@@ -85,7 +85,7 @@ defmodule Cadence.Reads.VerifierSeries do
     do: Enum.find(points, first, &(&1.point.id == wanted))
 
   defp point_entry(entry, members, group) do
-    index_of = Map.new(members, &{&1.command_request_id, &1.group_target_index})
+    index_of = Map.new(members, &{&1.command_request_id, &1.group_slot.target_index})
     spacecraft = Map.new(group.targets, &{&1["index"], &1["spacecraft_id"]})
 
     %{
@@ -117,7 +117,7 @@ defmodule Cadence.Reads.VerifierSeries do
   # verifier plans (known before release), else from its verifier instances.
   defp plotted(org, mission, members, by_request, opts) do
     members
-    |> Enum.group_by(& &1.group_position)
+    |> Enum.group_by(& &1.group_slot.position)
     |> Enum.sort_by(&elem(&1, 0))
     |> Enum.find_value(fn {position, [member | _] = at_position} ->
       plan = org |> plans(mission, member, opts) |> Enum.find(&telemetry_point/1)
@@ -159,7 +159,7 @@ defmodule Cadence.Reads.VerifierSeries do
 
   # Nothing to plot: the commands are verified only by the uplink acknowledgement, or not at all.
   defp not_plottable(org, mission, group, members, verifiers, opts) do
-    first = members |> Enum.sort_by(& &1.group_position) |> List.first()
+    first = members |> Enum.sort_by(& &1.group_slot.position) |> List.first()
     verified? = verifiers != [] or Enum.any?(members, &(plans(org, mission, &1, opts) != []))
 
     %{
@@ -188,7 +188,7 @@ defmodule Cadence.Reads.VerifierSeries do
         instance -> instance.success_criteria
       end
 
-    plotted = MapSet.new(members, & &1.group_target_index)
+    plotted = MapSet.new(members, & &1.group_slot.target_index)
     point_targets = Enum.filter(group.targets, &MapSet.member?(plotted, &1["index"]))
     targets = select_targets(point_targets, Keyword.get(opts, :target_ids))
     window = window(org, mission, members, instances, opts)
@@ -199,7 +199,7 @@ defmodule Cadence.Reads.VerifierSeries do
     by_target =
       Map.new(
         Enum.zip(members, instances),
-        &{elem(&1, 0).group_target_index, elem(&1, 1)}
+        &{elem(&1, 0).group_slot.target_index, elem(&1, 1)}
       )
 
     %{
@@ -274,7 +274,7 @@ defmodule Cadence.Reads.VerifierSeries do
 
   defp verifier_ref(member),
     do: %{
-      position: member.group_position,
+      position: member.group_slot.position,
       command_id: member.command_id,
       command_name: member.command_name
     }

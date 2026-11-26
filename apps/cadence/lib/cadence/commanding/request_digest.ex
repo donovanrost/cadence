@@ -10,8 +10,7 @@ defmodule Cadence.Commanding.RequestDigest do
   - Values are the request's JSON form (`JsonDocument.encode/1`: string keys, ISO 8601 times), so
     the digest doesn't depend on Elixir structs or atoms.
 
-  Version 3 (#708): the request's group (`command_group_id`, `group_target_index`,
-  `group_position`) is reviewed with it. Version 2 carried the group inside `metadata["group"]`.
+  Version 3 (#708): the request's group (`command_group_id`, `group_slot`) is reviewed with it. Version 2 carried the group inside `metadata["group"]`.
   """
   alias Cadence.Commanding.CommandRequest
   alias Cadence.Persistence.JsonDocument
@@ -19,11 +18,10 @@ defmodule Cadence.Commanding.RequestDigest do
   @basis_version 3
   @basis ~w(command_request_id organization_id mission_id source_endpoint_ref
             mission_model_revision_id command_id command_name command_display_name not_before
-            expires_at verification_state source_command_stage_id source_staged_command_item_id
-            significance subsystem group_name preferred_uplink_service release_policy_hint apid
+            expires_at verification_state significance subsystem group_name preferred_uplink_service release_policy_hint apid
             service_type service_subtype opcode requested_at requested_by lifecycle_state priority
             argument_values resolved_argument_values critical hazardous metadata
-            command_group_id group_target_index group_position)a
+            command_group_id group_slot)a
   @not_reviewed []
 
   @doc "The reviewed fields, and the fields deliberately left out (for the basis test)."

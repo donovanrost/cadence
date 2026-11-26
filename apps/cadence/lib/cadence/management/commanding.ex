@@ -21,6 +21,11 @@ defmodule Cadence.Management.Commanding do
   @spec capabilities(Cadence.Auth.Scope.t()) :: [binary()]
   defdelegate capabilities(scope), to: ReviewAccess
 
+  @doc "The fresh scope and mission when the scope's user may author, request or review commands."
+  # todo(authz): Cedar should decide who may author and request each command (any mission
+  # operator today, DECISIONS #62), e.g. by significance, hazard or target.
+  defdelegate authorize(scope, mission_id), to: ReviewAccess
+
   @spec persist_command_stage(binary(), CommandStage.t()) ::
           {:ok, CommandStage.t()} | {:error, term()}
   defdelegate persist_command_stage(organization_id, command_stage),

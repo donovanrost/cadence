@@ -11,7 +11,7 @@ defmodule Cadence.Control.Commanding.CommandDrafts do
   """
 
   alias Cadence.Commanding.Drafts
-  alias Cadence.Management.Commanding.ReviewAccess
+  alias Cadence.Management.Commanding, as: ManagementCommanding
   alias Cadence.Reads.MissionModels.ActiveBasis
 
   @max_bytes 256 * 1024
@@ -50,7 +50,7 @@ defmodule Cadence.Control.Commanding.CommandDrafts do
   # todo(authz): Cedar should decide who may keep a command draft; today it's whoever may
   # request commands for the mission (DECISIONS #62), and only for their own draft.
   defp owner(scope, mission_id) do
-    case ReviewAccess.authorize(scope, mission_id) do
+    case ManagementCommanding.authorize(scope, mission_id) do
       {:ok, fresh, _mission} -> {:ok, {fresh.organization_id, mission_id, fresh.user.user_id}}
       {:error, reason} -> {:error, reason}
     end

@@ -123,8 +123,6 @@ defmodule Cadence.Commanding.RequestValidation do
       not_before: command_request.not_before,
       expires_at: command_request.expires_at,
       requested_by: command_request.requested_by,
-      source_command_stage_id: command_request.source_command_stage_id,
-      source_staged_command_item_id: command_request.source_staged_command_item_id,
       argument_values: normalize_argument_values(command_request.argument_values),
       resolved_argument_values: resolved_argument_values,
       significance: request_basis.operational_binding.significance,

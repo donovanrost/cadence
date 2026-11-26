@@ -65,7 +65,7 @@ defmodule Cadence.Control.Commanding.GroupDecisionTest do
                expected_review: GroupDecision.review_token(c.group)
              })
 
-    by_target = Enum.group_by(members(c), & &1.group_target_index)
+    by_target = Enum.group_by(members(c), & &1.group_slot.target_index)
     assert [%{lifecycle_state: :rejected}] = by_target[1]
     assert [%{lifecycle_state: :queued}] = by_target[0]
     assert queue_count(c) == 2
@@ -214,7 +214,7 @@ defmodule Cadence.Control.Commanding.GroupDecisionTest do
 
     excluded =
       before
-      |> Enum.filter(&(&1.group_target_index == 1))
+      |> Enum.filter(&(&1.group_slot.target_index == 1))
       |> Enum.map(& &1.command_request_id)
       |> Enum.sort()
 

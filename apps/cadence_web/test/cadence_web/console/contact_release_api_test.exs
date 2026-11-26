@@ -184,12 +184,12 @@ defmodule CadenceWeb.Console.ContactReleaseAPITest do
     targets =
       @org
       |> GroupStore.members(@mission, id)
-      |> Enum.uniq_by(& &1.group_target_index)
+      |> Enum.uniq_by(& &1.group_slot.target_index)
       |> Enum.map(fn member ->
         name = String.replace_prefix(member.source_endpoint_ref, "source-endpoint-", "")
 
         %{
-          "index" => member.group_target_index,
+          "index" => member.group_slot.target_index,
           "spacecraft_id" => "spacecraft-" <> name,
           "source_endpoint_id" => member.source_endpoint_ref,
           "name" => name

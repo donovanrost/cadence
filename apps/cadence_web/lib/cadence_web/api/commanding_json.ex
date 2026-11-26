@@ -96,8 +96,6 @@ defmodule CadenceWeb.API.CommandingJSON do
       not_before: iso8601(request.not_before),
       expires_at: iso8601(request.expires_at),
       requested_by: request.requested_by |> JsonDocument.encode() |> ActorDocument.actor(names),
-      source_command_stage_id: request.source_command_stage_id,
-      source_staged_command_item_id: request.source_staged_command_item_id,
       argument_values: JsonDocument.encode(request.argument_values),
       resolved_argument_values: JsonDocument.encode(request.resolved_argument_values),
       significance: maybe_atom_to_string(request.significance),

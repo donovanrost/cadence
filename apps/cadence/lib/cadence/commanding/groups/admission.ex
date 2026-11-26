@@ -21,8 +21,7 @@ defmodule Cadence.Commanding.Groups.Admission do
         | command_request_id: Ids.new("command_request"),
           lifecycle_state: state,
           command_group_id: group_id,
-          group_target_index: member.target_index,
-          group_position: member.position
+          group_slot: %{target_index: member.target_index, position: member.position}
       }
     end)
   end
@@ -68,7 +67,7 @@ defmodule Cadence.Commanding.Groups.Admission do
 
     {entries, _next} =
       requests
-      |> Enum.sort_by(&{&1.group_target_index, &1.group_position})
+      |> Enum.sort_by(&{&1.group_slot.target_index, &1.group_slot.position})
       |> Enum.map_reduce(next, fn request, next ->
         lane = request.source_endpoint_ref
         sequence = Map.fetch!(next, lane)

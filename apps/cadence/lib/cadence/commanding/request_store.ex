@@ -34,7 +34,6 @@ defmodule Cadence.Commanding.RequestStore do
       row.organization_id == ^organization_id and row.mission_id == ^mission_id
     )
     |> maybe_filter_equals(:source_endpoint_ref, Keyword.get(opts, :source_endpoint_ref))
-    |> maybe_filter_equals(:source_command_stage_id, Keyword.get(opts, :command_stage_id))
     |> maybe_filter_equals(:lifecycle_state, normalized_filter(opts, :lifecycle_state))
     |> order_by([row], asc: row.requested_at, asc: row.command_request_id)
     |> Repo.all()

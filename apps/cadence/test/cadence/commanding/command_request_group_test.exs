@@ -62,7 +62,10 @@ defmodule Cadence.Commanding.CommandRequestGroupTest do
 
     changeset =
       CommandRequestRow.changeset(
-        request(c, %{command_group_id: "no-such-group", group_target_index: 0, group_position: 0})
+        request(c, %{
+          command_group_id: "no-such-group",
+          group_slot: %{target_index: 0, position: 0}
+        })
       )
 
     assert {:error, %Ecto.Changeset{errors: errors}} = Repo.insert(changeset)
@@ -79,8 +82,7 @@ defmodule Cadence.Commanding.CommandRequestGroupTest do
                CommandRequestRow.changeset(
                  request(c, %{
                    command_group_id: group,
-                   group_target_index: 0,
-                   group_position: 0
+                   group_slot: %{target_index: 0, position: 0}
                  })
                )
              )

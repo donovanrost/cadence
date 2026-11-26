@@ -23,7 +23,8 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
 
   alias Cadence.Commanding.Groups.{Admission, CommandGroup, GroupStore, Validation}
   alias Cadence.Comms.UplinkResolution
-  alias Cadence.Management.Commanding.{ApprovedCommand, ReviewAccess}
+  alias Cadence.Management.Commanding, as: ManagementCommanding
+  alias Cadence.Management.Commanding.ApprovedCommand
   alias Cadence.Platform.ScopedReadUpdates
 
   @spec submit(Cadence.Auth.Scope.t(), binary(), map(), keyword()) ::
@@ -31,7 +32,7 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
   # todo(authz): Cedar should decide who may request this group (DECISIONS #62: any mission
   # operator today), e.g. by command significance, hazard, target set or fleet reach.
   def submit(scope, mission_id, draft, opts) do
-    with {:ok, fresh, _mission} <- ReviewAccess.authorize(scope, mission_id),
+    with {:ok, fresh, _mission} <- ManagementCommanding.authorize(scope, mission_id),
          org = fresh.organization_id,
          actor = %{"actor_kind" => "user", "user_id" => fresh.user.user_id},
          :ok <- not_replayed(org, mission_id, Keyword.get(opts, :operation_id)),

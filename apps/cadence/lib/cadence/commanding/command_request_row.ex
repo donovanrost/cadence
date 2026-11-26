@@ -26,8 +26,6 @@ defmodule Cadence.Commanding.CommandRequestRow do
     field(:not_before, :utc_datetime_usec)
     field(:expires_at, :utc_datetime_usec)
     field(:requested_by_document, :map, default: %{})
-    field(:source_command_stage_id, :string)
-    field(:source_staged_command_item_id, :string)
     field(:argument_values_document, :map, default: %{})
     field(:resolved_argument_values_document, :map, default: %{})
     field(:significance, :string)
@@ -118,8 +116,6 @@ defmodule Cadence.Commanding.CommandRequestRow do
       not_before: row.not_before,
       expires_at: row.expires_at,
       requested_by: JsonDocument.unwrap_value(row.requested_by_document),
-      source_command_stage_id: row.source_command_stage_id,
-      source_staged_command_item_id: row.source_staged_command_item_id,
       argument_values: JsonDocument.unwrap_value(row.argument_values_document),
       resolved_argument_values: JsonDocument.unwrap_value(row.resolved_argument_values_document),
       significance: row.significance,
@@ -135,8 +131,7 @@ defmodule Cadence.Commanding.CommandRequestRow do
       opcode: JsonDocument.unwrap_value(row.opcode_document),
       requested_at: row.requested_at,
       command_group_id: row.command_group_id,
-      group_target_index: row.group_target_index,
-      group_position: row.group_position,
+      group_slot: %{target_index: row.group_target_index, position: row.group_position},
       metadata: JsonDocument.unwrap_value(row.metadata_document)
     })
   end
@@ -161,8 +156,6 @@ defmodule Cadence.Commanding.CommandRequestRow do
       not_before: command_request.not_before,
       expires_at: command_request.expires_at,
       requested_by_document: JsonDocument.wrap_value(command_request.requested_by),
-      source_command_stage_id: command_request.source_command_stage_id,
-      source_staged_command_item_id: command_request.source_staged_command_item_id,
       argument_values_document: JsonDocument.wrap_value(command_request.argument_values),
       resolved_argument_values_document:
         JsonDocument.wrap_value(command_request.resolved_argument_values),
@@ -184,10 +177,13 @@ defmodule Cadence.Commanding.CommandRequestRow do
       requested_at: command_request.requested_at,
       metadata_document: JsonDocument.wrap_value(command_request.metadata),
       command_group_id: command_request.command_group_id,
-      group_target_index: command_request.group_target_index,
-      group_position: command_request.group_position
+      group_target_index: slot(command_request, :target_index),
+      group_position: slot(command_request, :position)
     }
   end
+
+  defp slot(%{group_slot: nil}, _key), do: nil
+  defp slot(%{group_slot: slot}, key), do: Map.fetch!(slot, key)
 
   defp all_fields do
     [
@@ -205,8 +201,6 @@ defmodule Cadence.Commanding.CommandRequestRow do
       :not_before,
       :expires_at,
       :requested_by_document,
-      :source_command_stage_id,
-      :source_staged_command_item_id,
       :argument_values_document,
       :resolved_argument_values_document,
       :significance,

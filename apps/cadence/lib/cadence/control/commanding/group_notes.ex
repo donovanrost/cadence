@@ -6,7 +6,7 @@ defmodule Cadence.Control.Commanding.GroupNotes do
   """
 
   alias Cadence.Commanding.Groups.GroupStore
-  alias Cadence.Management.Commanding.ReviewAccess
+  alias Cadence.Management.Commanding, as: ManagementCommanding
   alias Cadence.Platform.ScopedReadUpdates
 
   @max_bytes 4_000
@@ -14,7 +14,7 @@ defmodule Cadence.Control.Commanding.GroupNotes do
   @spec add(Cadence.Auth.Scope.t(), binary(), binary(), binary()) :: :ok | {:error, term()}
   # todo(authz): Cedar should decide who may add notes to a group (any mission operator today).
   def add(scope, mission_id, group_id, note) do
-    with {:ok, fresh, _mission} <- ReviewAccess.authorize(scope, mission_id),
+    with {:ok, fresh, _mission} <- ManagementCommanding.authorize(scope, mission_id),
          {:ok, note} <- valid_note(note),
          {:ok, _group} <- GroupStore.fetch(fresh.organization_id, mission_id, group_id) do
       :ok =

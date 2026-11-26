@@ -67,8 +67,10 @@ defmodule Cadence.CommandMemberFixtures do
     %{
       request
       | command_group_id: group,
-        group_target_index: Keyword.get(opts, :target_index, 0),
-        group_position: Keyword.get(opts, :position, 0)
+        group_slot: %{
+          target_index: Keyword.get(opts, :target_index, 0),
+          position: Keyword.get(opts, :position, 0)
+        }
     }
     |> CommandRequestRow.changeset()
     |> Repo.insert!()
@@ -96,8 +98,7 @@ defmodule Cadence.CommandMemberFixtures do
       request
       | organization_id: org,
         command_group_id: group,
-        group_target_index: 0,
-        group_position: 0
+        group_slot: %{target_index: 0, position: 0}
     })
   end
 

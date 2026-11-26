@@ -38,7 +38,7 @@ defmodule Cadence.Control.Commanding.GroupSubmissionTest do
 
     assert Enum.map(
              members,
-             &{&1.group_target_index, &1.group_position}
+             &{&1.group_slot.target_index, &1.group_slot.position}
            ) ==
              [{0, 0}, {0, 1}, {1, 0}, {1, 1}]
 

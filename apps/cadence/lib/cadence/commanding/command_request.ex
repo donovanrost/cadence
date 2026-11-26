@@ -1,8 +1,8 @@
 defmodule Cadence.Commanding.CommandRequest do
   @moduledoc """
   Durable formal command intent record. Every request is a member of a command group (DECISIONS
-  #61, #62): `command_group_id` and its place in the group (`group_target_index`, `group_position`)
-  are required to persist one.
+  #61, #62): `command_group_id` and its place in the group (`group_slot`: the `target_index` of the
+  spacecraft it is sent to and its `position` in that target's order) are required to persist one.
   """
 
   alias Cadence.Ids
@@ -20,6 +20,8 @@ defmodule Cadence.Commanding.CommandRequest do
   @type significance :: :routine | :warning | :critical | :hazardous | nil
   @type verification_state :: :not_required | :pending | :satisfied | :failed | :timed_out | nil
 
+  @type group_slot :: %{target_index: non_neg_integer(), position: non_neg_integer()}
+
   @type t :: %__MODULE__{
           command_request_id: binary(),
           organization_id: binary() | nil,
@@ -35,8 +37,6 @@ defmodule Cadence.Commanding.CommandRequest do
           not_before: DateTime.t() | nil,
           expires_at: DateTime.t() | nil,
           requested_by: map(),
-          source_command_stage_id: binary() | nil,
-          source_staged_command_item_id: binary() | nil,
           argument_values: map(),
           resolved_argument_values: map(),
           significance: significance(),
@@ -52,12 +52,10 @@ defmodule Cadence.Commanding.CommandRequest do
           opcode: term() | nil,
           requested_at: DateTime.t() | nil,
           command_group_id: binary() | nil,
-          group_target_index: non_neg_integer() | nil,
-          group_position: non_neg_integer() | nil,
+          group_slot: group_slot() | nil,
           metadata: map()
         }
 
-  # credo:disable-for-next-line Credo.Check.Warning.StructFieldAmount
   defstruct [
     :command_request_id,
     :organization_id,
@@ -70,8 +68,6 @@ defmodule Cadence.Commanding.CommandRequest do
     :not_before,
     :expires_at,
     :verification_state,
-    :source_command_stage_id,
-    :source_staged_command_item_id,
     :significance,
     :subsystem,
     :group_name,
@@ -83,8 +79,7 @@ defmodule Cadence.Commanding.CommandRequest do
     :opcode,
     :requested_at,
     :command_group_id,
-    :group_target_index,
-    :group_position,
+    :group_slot,
     requested_by: %{},
     lifecycle_state: :draft,
     priority: 3,
@@ -124,14 +119,6 @@ defmodule Cadence.Commanding.CommandRequest do
       not_before: Map.get(attrs, :not_before, Map.get(attrs, "not_before")),
       expires_at: Map.get(attrs, :expires_at, Map.get(attrs, "expires_at")),
       requested_by: Map.get(attrs, :requested_by, Map.get(attrs, "requested_by", %{})),
-      source_command_stage_id:
-        Map.get(attrs, :source_command_stage_id, Map.get(attrs, "source_command_stage_id")),
-      source_staged_command_item_id:
-        Map.get(
-          attrs,
-          :source_staged_command_item_id,
-          Map.get(attrs, "source_staged_command_item_id")
-        ),
       argument_values: Map.get(attrs, :argument_values, Map.get(attrs, "argument_values", %{})),
       resolved_argument_values:
         Map.get(attrs, :resolved_argument_values, Map.get(attrs, "resolved_argument_values", %{})),
@@ -151,8 +138,7 @@ defmodule Cadence.Commanding.CommandRequest do
       opcode: Map.get(attrs, :opcode, Map.get(attrs, "opcode")),
       requested_at: Map.get(attrs, :requested_at, Map.get(attrs, "requested_at")),
       command_group_id: Map.get(attrs, :command_group_id),
-      group_target_index: Map.get(attrs, :group_target_index),
-      group_position: Map.get(attrs, :group_position),
+      group_slot: Map.get(attrs, :group_slot),
       metadata: Map.get(attrs, :metadata, Map.get(attrs, "metadata", %{}))
     }
   end

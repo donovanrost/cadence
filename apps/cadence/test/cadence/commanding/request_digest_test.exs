@@ -8,7 +8,7 @@ defmodule Cadence.Commanding.RequestDigestTest do
 
   alias Cadence.Commanding.{CommandRequest, RequestDigest}
 
-  @golden "c3131f74cf088af915d1f04a8496aea347cf2994257ef9b927ac79bcb547fd88"
+  @golden "a1ccde6ab9a110656ac42354e56aa38594c157562dca66f02f9d6a8e7fbb8d60"
 
   defp request do
     CommandRequest.new(%{
@@ -25,8 +25,7 @@ defmodule Cadence.Commanding.RequestDigestTest do
       resolved_argument_values: %{"mode" => 3},
       requested_at: ~U[2026-11-25 12:00:00.000000Z],
       command_group_id: "group-golden",
-      group_target_index: 2,
-      group_position: 1
+      group_slot: %{target_index: 2, position: 1}
     })
   end
 
@@ -53,8 +52,8 @@ defmodule Cadence.Commanding.RequestDigestTest do
           %{expires_at: ~U[2026-11-26 00:00:00Z]},
           %{lifecycle_state: :approved},
           %{command_group_id: "another-group"},
-          %{group_target_index: 3},
-          %{group_position: 2}
+          %{group_slot: %{target_index: 3, position: 1}},
+          %{group_slot: %{target_index: 2, position: 2}}
         ] do
       refute RequestDigest.digest(struct!(request(), change)) == base, inspect(change)
     end
