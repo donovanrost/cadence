@@ -12,7 +12,7 @@ defmodule Cadence.Reads.FleetStatus do
 
   **Cost (#798).** `load/3` never reads the mission's latest limit states or current values whole
   (200,000 of each at 1,000 spacecraft x 200 points: 4.8 s). The limit conditions per spacecraft are
-  aggregated in the database (`Cadence.Limits.Store.FleetSummary`), each spacecraft's newest
+  one row each in a summary the limit-state writers keep (`Cadence.Limits.Store.FleetSummary`, #849), each spacecraft's newest
   telemetry receipt comes from the current-value store, which keeps it as values are recorded
   (`CurrentValueStore.last_receipts/2`), and the durable history receipts come from a cache
   (`fleet_durable_receipts_ttl_ms`, 60 s) refreshed off the read's path. The number of queries is
@@ -82,9 +82,10 @@ defmodule Cadence.Reads.FleetStatus do
   end
 
   # What the live read needs of limits and telemetry, from the database and the cache and never by
-  # reading every value (#798): the limit conditions per spacecraft (`FleetSummary`, two
-  # statements), each spacecraft's newest receipt (the current-value store keeps it as values are
-  # recorded) and the durable history's. A fixed number of reads however large the fleet is.
+  # reading every value (#798): the limit conditions per spacecraft (`FleetSummary`, one
+  # statement over a row per spacecraft), each spacecraft's newest receipt (the current-value
+  # store keeps it as values are recorded) and the durable history's. A fixed number of reads
+  # however large the fleet is.
   defp live_inputs(organization_id, mission_id) do
     summaries = FleetSummary.load(organization_id, mission_id)
     durable = durable(organization_id, mission_id)

@@ -73,6 +73,7 @@ defmodule Cadence.Reads.FleetStatusDatabaseTest do
   defp seed(rows) do
     Repo.query!("SET LOCAL session_replication_role = replica")
     for chunk <- Enum.chunk_every(rows, 500), do: Repo.insert_all(LatestStateRow, chunk)
+    FleetSummary.refresh(Repo, @mission, :all)
   end
 
   test "fixture states exist as atoms", do: assert(length(@limit_states) == 4)
