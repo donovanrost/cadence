@@ -44,12 +44,34 @@ defmodule Cadence.Missions do
     end
   end
 
+  @doc """
+  The organization a mission belongs to, or nil when there is no such mission.
+
+  A mission never changes organization, so a found answer is memoized in the calling process
+  (#687): the ingest path's long-lived processes (archive writers, the persistence projector,
+  storage) ask this for every batch and every mission-owned row, and now pay one query per mission
+  for their lifetime instead of one per call. A miss is not memoized, so a mission created later
+  is found. The memo lives and dies with the process: nothing is shared across processes or
+  nodes, so there is nothing to invalidate.
+  """
   @spec organization_id_for_mission(binary()) :: binary() | nil
   def organization_id_for_mission(mission_id) when is_binary(mission_id) do
-    MissionRow
-    |> where([mission_row], mission_row.mission_id == ^mission_id)
-    |> select([mission_row], mission_row.organization_id)
-    |> Repo.one()
+    key = {__MODULE__, :organization_id, mission_id}
+
+    case Process.get(key) do
+      nil ->
+        organization_id =
+          MissionRow
+          |> where([mission_row], mission_row.mission_id == ^mission_id)
+          |> select([mission_row], mission_row.organization_id)
+          |> Repo.one()
+
+        if organization_id, do: Process.put(key, organization_id)
+        organization_id
+
+      organization_id ->
+        organization_id
+    end
   end
 
   @doc """
