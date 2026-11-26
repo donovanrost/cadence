@@ -7,7 +7,6 @@ defmodule Cadence.Management.Commanding do
   """
 
   alias Cadence.Commanding.{
-    CommandApproval,
     CommandRequest,
     CommandStage,
     RequestStore,
@@ -77,20 +76,4 @@ defmodule Cadence.Management.Commanding do
   defdelegate fetch_command_request(organization_id, mission_id, command_request_id),
     to: RequestStore,
     as: :fetch_request
-
-  @spec list_command_requests(binary(), binary(), keyword()) :: [CommandRequest.t()]
-  defdelegate list_command_requests(organization_id, mission_id, opts \\ []),
-    to: RequestStore,
-    as: :list_requests
-
-  @spec fetch_command_approval(binary(), binary(), binary()) ::
-          {:ok, CommandApproval.t()} | {:error, term()}
-  defdelegate fetch_command_approval(organization_id, mission_id, command_approval_id),
-    to: RequestStore,
-    as: :fetch_approval
-
-  @spec list_command_approvals(binary(), binary(), keyword()) :: [CommandApproval.t()]
-  defdelegate list_command_approvals(organization_id, mission_id, opts \\ []),
-    to: RequestStore,
-    as: :list_approvals
 end

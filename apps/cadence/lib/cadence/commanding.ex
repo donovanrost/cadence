@@ -11,7 +11,6 @@ defmodule Cadence.Commanding do
 
   alias Cadence.Commanding.{
     Cancellation,
-    CommandApproval,
     CommandQueueEntry,
     CommandQueueEntryRow,
     CommandReleaseAttempt,
@@ -214,20 +213,6 @@ defmodule Cadence.Commanding do
   def list_command_requests(organization_id, mission_id, opts \\ [])
       when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
     RequestStore.list_requests(organization_id, mission_id, opts)
-  end
-
-  @spec fetch_command_approval(binary(), binary(), binary()) ::
-          {:ok, CommandApproval.t()} | {:error, term()}
-  def fetch_command_approval(organization_id, mission_id, command_approval_id)
-      when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(command_approval_id) do
-    RequestStore.fetch_approval(organization_id, mission_id, command_approval_id)
-  end
-
-  @spec list_command_approvals(binary(), binary(), keyword()) :: [CommandApproval.t()]
-  def list_command_approvals(organization_id, mission_id, opts \\ [])
-      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
-    RequestStore.list_approvals(organization_id, mission_id, opts)
   end
 
   @spec fetch_command_queue_entry(binary(), binary(), binary()) ::

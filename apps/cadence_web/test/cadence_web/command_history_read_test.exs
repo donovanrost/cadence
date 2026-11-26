@@ -6,7 +6,6 @@ defmodule CadenceWeb.CommandHistoryReadTest do
   alias Cadence.CommandMonitorFixtures, as: Fixtures
   alias Cadence.Reads.CommandHistory
   alias Cadence.Repo
-  alias CadenceWeb.API.CommandingParams
   alias CadenceWeb.{HostTransportTestSupport, OpsCommandHistoryPage, TestFixtures}
 
   @checker Path.expand(
@@ -34,13 +33,7 @@ defmodule CadenceWeb.CommandHistoryReadTest do
     Map.merge(c, %{request: request, queue: queue, release: release})
   end
 
-  test "uncertain native release evidence is admitted by the published contract and API filter",
-       c do
-    assert {:ok, [lifecycle_state: :release_uncertain]} =
-             CommandingParams.command_release_attempt_filters(%{
-               "lifecycle_state" => "release_uncertain"
-             })
-
+  test "uncertain native release evidence is admitted by the published contract", c do
     Repo.query!(
       "UPDATE command_release_attempts SET lifecycle_state = 'release_uncertain', released_at = NULL WHERE command_release_attempt_id = $1",
       ["history-release"]

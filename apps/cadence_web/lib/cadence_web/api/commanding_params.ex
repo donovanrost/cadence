@@ -8,33 +8,6 @@ defmodule CadenceWeb.API.CommandingParams do
   @command_stage_visibility_values [:private, :shared]
   @command_stage_lifecycle_states [:draft, :in_review, :ready_to_submit, :submitted, :canceled]
   @staged_command_item_lifecycle_states [:draft, :submitted, :canceled]
-  @command_request_lifecycle_states [
-    :draft,
-    :validated,
-    :approval_pending,
-    :approved,
-    :rejected,
-    :queued,
-    :released,
-    :canceled
-  ]
-  @command_approval_decisions [:approved, :rejected]
-  @command_queue_entry_lifecycle_states [:pending, :release_pending, :released, :canceled]
-  @command_release_attempt_lifecycle_states [
-    :release_pending,
-    :released,
-    :release_failed,
-    :release_uncertain,
-    :canceled
-  ]
-  @command_verifier_instance_lifecycle_states [
-    :pending,
-    :satisfied,
-    :failed,
-    :timed_out,
-    :canceled
-  ]
-  @command_verifier_phases [:acceptance, :start, :completion, :custom]
   @spec command_stage(binary(), binary(), map(), keyword()) ::
           {:ok, CommandStage.t()} | {:error, term()}
   def command_stage(organization_id, mission_id, params, opts \\ [])
@@ -195,83 +168,6 @@ defmodule CadenceWeb.API.CommandingParams do
     end
   end
 
-  @spec command_request_filters(map()) :: {:ok, keyword()} | {:error, term()}
-  def command_request_filters(params) when is_map(params) do
-    with {:ok, lifecycle_state} <- optional_command_request_lifecycle_state(params) do
-      {:ok,
-       []
-       |> maybe_put_opt(:source_endpoint_ref, string_value(params, "source_endpoint_ref"))
-       |> maybe_put_opt(:lifecycle_state, lifecycle_state)}
-    end
-  end
-
-  @spec command_approval_filters(map()) :: {:ok, keyword()} | {:error, term()}
-  def command_approval_filters(params) when is_map(params) do
-    with {:ok, decision} <- optional_command_approval_decision(params) do
-      {:ok,
-       []
-       |> maybe_put_opt(:command_request_id, string_value(params, "command_request_id"))
-       |> maybe_put_opt(:decision, decision)}
-    end
-  end
-
-  @spec command_queue_entry_filters(map()) :: {:ok, keyword()} | {:error, term()}
-  def command_queue_entry_filters(params) when is_map(params) do
-    with {:ok, lifecycle_state} <- optional_command_queue_entry_lifecycle_state(params) do
-      {:ok,
-       []
-       |> maybe_put_opt(:source_endpoint_ref, string_value(params, "source_endpoint_ref"))
-       |> maybe_put_opt(:queue_lane_key, string_value(params, "queue_lane_key"))
-       |> maybe_put_opt(:lifecycle_state, lifecycle_state)}
-    end
-  end
-
-  @spec command_release_attempt(map(), keyword()) :: {:ok, keyword()} | {:error, term()}
-  def command_release_attempt(params, opts \\ []) when is_map(params) and is_list(opts) do
-    with {:ok, realized_contact_id} <- required_string(params, "realized_contact_id"),
-         {:ok, released_by} <-
-           scope_actor(params, "released_by", opts, :default_released_by),
-         {:ok, attempted_at} <- optional_datetime(params, "attempted_at") do
-      {:ok,
-       []
-       |> Keyword.put(:realized_contact_id, realized_contact_id)
-       |> Keyword.put(:released_by, released_by || %{})
-       |> maybe_put_opt(:path_id, string_value(params, "path_id"))
-       |> maybe_put_opt(:transport_binding_id, string_value(params, "transport_binding_id"))
-       |> maybe_put_opt(:attempted_at, attempted_at)
-       |> Keyword.put(:metadata, map_value(params, "metadata"))}
-    end
-  end
-
-  @spec command_release_attempt_filters(map()) :: {:ok, keyword()} | {:error, term()}
-  def command_release_attempt_filters(params) when is_map(params) do
-    with {:ok, lifecycle_state} <- optional_command_release_attempt_lifecycle_state(params) do
-      {:ok,
-       []
-       |> maybe_put_opt(:command_request_id, string_value(params, "command_request_id"))
-       |> maybe_put_opt(:command_queue_entry_id, string_value(params, "command_queue_entry_id"))
-       |> maybe_put_opt(:realized_contact_id, string_value(params, "realized_contact_id"))
-       |> maybe_put_opt(:lifecycle_state, lifecycle_state)}
-    end
-  end
-
-  @spec command_verifier_instance_filters(map()) :: {:ok, keyword()} | {:error, term()}
-  def command_verifier_instance_filters(params) when is_map(params) do
-    with {:ok, lifecycle_state} <- optional_command_verifier_instance_lifecycle_state(params),
-         {:ok, phase} <- optional_command_verifier_phase(params) do
-      {:ok,
-       []
-       |> maybe_put_opt(:command_request_id, string_value(params, "command_request_id"))
-       |> maybe_put_opt(
-         :command_release_attempt_id,
-         string_value(params, "command_release_attempt_id")
-       )
-       |> maybe_put_opt(:source_endpoint_ref, string_value(params, "source_endpoint_ref"))
-       |> maybe_put_opt(:phase, phase)
-       |> maybe_put_opt(:lifecycle_state, lifecycle_state)}
-    end
-  end
-
   defp command_stage_visibility(params, default) when is_map(params) do
     allowed_atom_param(params, "visibility", default, @command_stage_visibility_values)
   end
@@ -292,42 +188,9 @@ defmodule CadenceWeb.API.CommandingParams do
     optional_allowed_atom_param(params, "lifecycle_state", @staged_command_item_lifecycle_states)
   end
 
-  defp optional_command_request_lifecycle_state(params) when is_map(params) do
-    optional_allowed_atom_param(params, "lifecycle_state", @command_request_lifecycle_states)
-  end
-
-  defp optional_command_approval_decision(params) when is_map(params) do
-    optional_allowed_atom_param(params, "decision", @command_approval_decisions)
-  end
-
-  defp optional_command_queue_entry_lifecycle_state(params) when is_map(params) do
-    optional_allowed_atom_param(params, "lifecycle_state", @command_queue_entry_lifecycle_states)
-  end
-
-  defp optional_command_release_attempt_lifecycle_state(params) when is_map(params) do
-    optional_allowed_atom_param(
-      params,
-      "lifecycle_state",
-      @command_release_attempt_lifecycle_states
-    )
-  end
-
-  defp optional_command_verifier_instance_lifecycle_state(params) when is_map(params) do
-    optional_allowed_atom_param(
-      params,
-      "lifecycle_state",
-      @command_verifier_instance_lifecycle_states
-    )
-  end
-
-  defp optional_command_verifier_phase(params) when is_map(params) do
-    optional_allowed_atom_param(params, "phase", @command_verifier_phases)
-  end
-
   # Actors always come from the authenticated scope: a user, or a service identity acting as
-  # itself. A request that names any actor (owner, requested_by, decided_by, enqueued_by,
-  # released_by) is rejected rather than ignored, so a client can't attribute an action to
-  # someone else or approve its own request as another user (DECISIONS #30).
+  # itself. A request that names an actor (a stage's owner) is rejected rather than ignored, so a
+  # client can't attribute an action to someone else (DECISIONS #30).
   defp scope_actor(params, key, opts, default_key) do
     if Map.has_key?(params, key),
       do: {:error, {:invalid_param, key, :actor_not_assignable}},

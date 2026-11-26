@@ -17,16 +17,16 @@ defmodule Cadence.Projections.CommandStatus do
              mission_id,
              command_request_id
            ) do
+      by_request = [command_request_id: command_request_id]
+
       queue_entries =
-        list_queue_entries(organization_id, mission_id, command_request_id: command_request_id)
+        LegacyCommanding.list_command_queue_entries(organization_id, mission_id, by_request)
 
       release_attempts =
-        list_release_attempts(organization_id, mission_id, command_request_id: command_request_id)
+        LegacyCommanding.list_command_release_attempts(organization_id, mission_id, by_request)
 
       verifier_instances =
-        list_verifier_instances(organization_id, mission_id,
-          command_request_id: command_request_id
-        )
+        LegacyCommanding.list_command_verifier_instances(organization_id, mission_id, by_request)
 
       {:ok,
        %{
@@ -37,32 +37,4 @@ defmodule Cadence.Projections.CommandStatus do
        }}
     end
   end
-
-  defdelegate fetch_queue_entry(organization_id, mission_id, command_queue_entry_id),
-    to: LegacyCommanding,
-    as: :fetch_command_queue_entry
-
-  defdelegate list_queue_entries(organization_id, mission_id, opts \\ []),
-    to: LegacyCommanding,
-    as: :list_command_queue_entries
-
-  defdelegate fetch_release_attempt(organization_id, mission_id, command_release_attempt_id),
-    to: LegacyCommanding,
-    as: :fetch_command_release_attempt
-
-  defdelegate list_release_attempts(organization_id, mission_id, opts \\ []),
-    to: LegacyCommanding,
-    as: :list_command_release_attempts
-
-  defdelegate fetch_verifier_instance(
-                organization_id,
-                mission_id,
-                command_verifier_instance_id
-              ),
-              to: LegacyCommanding,
-              as: :fetch_command_verifier_instance
-
-  defdelegate list_verifier_instances(organization_id, mission_id, opts \\ []),
-    to: LegacyCommanding,
-    as: :list_command_verifier_instances
 end

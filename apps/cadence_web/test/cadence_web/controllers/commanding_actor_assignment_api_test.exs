@@ -1,7 +1,7 @@
 defmodule CadenceWeb.CommandingActorAssignmentApiTest do
   @moduledoc """
-  DECISIONS #30: commanding actors (owner, released_by)
-  always come from the authenticated scope. A request that names one gets 422
+  DECISIONS #30: a commanding actor (a stage's owner)
+  always comes from the authenticated scope. A request that names one gets 422
   `actor_not_assignable`, so a client can't act as someone else.
   """
   use CadenceWeb.ConnCase, async: false
@@ -59,23 +59,13 @@ defmodule CadenceWeb.CommandingActorAssignmentApiTest do
     )
   end
 
-  test "release refuses released_by", c do
-    refused(
-      c,
-      :post,
-      "/command_queue_entries/qe-1/release",
-      %{"release_attempt" => %{"realized_contact_id" => "rc-1", "released_by" => @someone}},
-      "released_by"
-    )
-  end
-
   test "an explicit null actor is refused too", c do
     refused(
       c,
       :post,
-      "/command_queue_entries/qe-1/release",
-      %{"release_attempt" => %{"realized_contact_id" => "rc-1", "released_by" => nil}},
-      "released_by"
+      "/command_stages",
+      %{"command_stage" => %{"stage_name" => "S", "owner" => nil}},
+      "owner"
     )
   end
 end
