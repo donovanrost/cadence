@@ -1,7 +1,7 @@
 defmodule CadenceWeb.API.RESTCommandingActorsTest do
   @moduledoc """
-  #465 (#462, #146): REST commanding names every actor (a stage's owner, requested_by,
-  decided_by, enqueued_by, released_by) as `{kind, id, name}` through #472's `ActorRef`, built on
+  #465 (#462, #146): REST commanding names every actor (a stage's owner; the request, approval,
+  queue and release endpoints went with #754) as `{kind, id, name}` through #472's `ActorRef`, built on
   #466's `ActorDocument`, never the stored document. A person is named and keeps their id only
   while an active member of the record's organization (a member without a name keeps their id);
   anyone else is `{kind: "user", id: nil, name: nil}`. A service of the organization keeps its id
@@ -16,13 +16,7 @@ defmodule CadenceWeb.API.RESTCommandingActorsTest do
   alias Cadence.Auth
   alias Cadence.Auth.ServiceIdentity
 
-  alias Cadence.Commanding.{
-    CommandApproval,
-    CommandQueueEntry,
-    CommandReleaseAttempt,
-    CommandRequest,
-    CommandStage
-  }
+  alias Cadence.Commanding.CommandStage
 
   alias Cadence.Repo
   alias CadenceWeb.API.CommandingJSON
@@ -94,19 +88,7 @@ defmodule CadenceWeb.API.RESTCommandingActorsTest do
           visibility: :private,
           lifecycle_state: :draft
         )
-      ).owner,
-      CommandingJSON.command_request(
-        struct(CommandRequest, organization_id: org, requested_by: document)
-      ).requested_by,
-      CommandingJSON.command_approval(
-        struct(CommandApproval, organization_id: org, decided_by: document)
-      ).decided_by,
-      CommandingJSON.command_queue_entry(
-        struct(CommandQueueEntry, organization_id: org, enqueued_by: document)
-      ).enqueued_by,
-      CommandingJSON.command_release_attempt(
-        struct(CommandReleaseAttempt, organization_id: org, released_by: document)
-      ).released_by
+      ).owner
     ]
   end
 
@@ -155,13 +137,19 @@ defmodule CadenceWeb.API.RESTCommandingActorsTest do
   end
 
   test "a list encodes with its names loaded once, and no email anywhere", c do
-    requests =
+    stages =
       for user <- [c.named, c.nameless, c.left, c.support],
-          do: struct(CommandRequest, organization_id: c.org, requested_by: old_rest(user, c.org))
+          do:
+            struct(CommandStage,
+              organization_id: c.org,
+              owner: old_rest(user, c.org),
+              visibility: :private,
+              lifecycle_state: :draft
+            )
 
-    encoded = CommandingJSON.encode_all(requests, &CommandingJSON.command_request/2)
+    encoded = CommandingJSON.encode_all(stages, &CommandingJSON.command_stage/2)
 
-    assert Enum.map(encoded, & &1.requested_by) == [
+    assert Enum.map(encoded, & &1.owner) == [
              %{kind: "user", id: c.named.user_id, name: "Mira K."},
              %{kind: "user", id: c.nameless.user_id, name: nil},
              %{kind: "user", id: nil, name: nil},

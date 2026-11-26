@@ -54,11 +54,11 @@ on success. JSON views are in `W/api/*_json.ex`. Every `…` row passes `authori
 | Comms | `GET`, `POST …/link_assignments`; `GET`, `DELETE …/link_assignments/:id` | LinkAssignment | `Contacts.*_link_assignment` | legacy |
 | Commanding | `GET`, `POST …/command_stages`; `GET`, `PATCH /:id` | CommandStage | `Management.Commanding.*_command_stage` | submit removed (#708) |
 | Commanding | `GET`, `POST …/command_stages/:id/items`; `GET`, `PATCH …/staged_command_items/:id` | StagedCommandItem | `Management.Commanding.*_staged_command_item*` | |
-| Commanding | `GET …/command_requests`, `/:id` | CommandRequest | `Management.Commanding.{list,fetch}_command_request*` | create, approve, reject and enqueue removed (#708): commands go through command groups |
-| Commanding | `GET …/command_approvals`, `/:id` | CommandApproval | `Management.Commanding.list_/fetch_command_approval*` | |
-| Commanding | `GET …/command_queue_entries`, `/:id`; `POST /:id/release` | CommandQueueEntry | `Projections.CommandStatus.*`, `Control.Commanding.release_command_queue_entry` | **no cancel/abort route** |
-| Commanding | `GET …/command_release_attempts`, `/:id` | CommandReleaseAttempt | `Projections.CommandStatus.*_release_attempt*` | |
-| Commanding | `GET …/command_verifier_instances`, `/:id` | CommandVerifierInstance | `Projections.CommandStatus.*_verifier_instance*` | |
+| Commanding | ~~`GET …/command_requests`, `/:id`~~ | ~~CommandRequest~~ | — | **Removed (#754, #747):** create, approve, reject and enqueue went with #708; a request is a command group's member, read through the console's command groups (`/api/v1/missions/:m/command-groups…`). |
+| Commanding | ~~`GET …/command_approvals`, `/:id`~~ | ~~CommandApproval~~ | — | **Removed (#754, #747):** a group's decisions are read with the group. |
+| Commanding | ~~`GET …/command_queue_entries`, `/:id`; `POST /:id/release`~~ | ~~CommandQueueEntry~~ | — | **Removed (#754, #747):** release is a person's act through a group's send (`GroupRelease`), not ported. |
+| Commanding | ~~`GET …/command_release_attempts`, `/:id`~~ | ~~CommandReleaseAttempt~~ | — | **Removed (#754, #747).** |
+| Commanding | ~~`GET …/command_verifier_instances`, `/:id`~~ | ~~CommandVerifierInstance~~ | — | **Removed (#754, #747).** |
 | Contacts | `GET`, `POST …/scheduled_contacts`; `GET /:id`; `POST /:id/realize`, `/:id/cancel` | ScheduledContact | `Contacts.*_scheduled_contact` | |
 | Contacts | `GET …/realized_contacts`, `/:id`; `POST /:id/end_early` | RealizedContact | `Contacts.*_realized_contact*` | |
 | Contacts | `GET …/contact_actions` | ContactAction | `Contacts.list_contact_actions` | |

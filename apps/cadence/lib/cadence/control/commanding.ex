@@ -104,16 +104,6 @@ defmodule Cadence.Control.Commanding do
               ),
               to: LegacyCommanding
 
-  defdelegate release_command_queue_entry(
-                organization_id,
-                mission_id,
-                command_queue_entry_id,
-                realized_contact_id,
-                released_by \\ %{},
-                opts \\ []
-              ),
-              to: LegacyCommanding
-
   @doc "Release an armed group onto a named contact (U46): `GroupRelease.release/5`."
   defdelegate release_group_to_contact(
                 scope,

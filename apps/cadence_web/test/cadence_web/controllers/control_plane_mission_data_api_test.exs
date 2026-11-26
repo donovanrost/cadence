@@ -333,12 +333,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
 
     # Requests exist only as members of a command group (DECISIONS #61/#62), so a stage's items
     # leave no request behind: the REST stage cannot be submitted.
-    command_requests_conn =
-      conn
-      |> authorize(api_token)
-      |> get("/api/organizations/#{organization_id}/missions/#{mission_id}/command_requests")
-
-    assert %{"data" => []} = json_response(command_requests_conn, 200)
+    assert Cadence.Commanding.list_command_requests(organization_id, mission_id) == []
     :ok
   end
 
