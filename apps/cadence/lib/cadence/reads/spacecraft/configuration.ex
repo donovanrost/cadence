@@ -215,7 +215,13 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
       Activations.latest_spacecraft_request(mission.organization_id, mission.mission_id, id)
 
     if request do
-      evidence = ConfigurationReviews.evidence_for(request.metadata, id)
+      evidence =
+        ConfigurationReviews.evidence_for(
+          mission.organization_id,
+          mission.mission_id,
+          request.metadata,
+          id
+        )
 
       applied =
         get_in(active.entries, [id, "configuration_revision_id"]) ==

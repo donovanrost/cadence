@@ -94,7 +94,12 @@ defmodule Cadence.Control.SpacecraftConfiguration do
          {:ok, request} <- Activations.fetch(scope, request_id),
          true <- request.mission_id == mission_id,
          %{"configuration_token" => reviewed_token} <-
-           ConfigurationReviews.evidence_for(request.metadata, spacecraft_id),
+           ConfigurationReviews.evidence_for(
+             mission.organization_id,
+             mission_id,
+             request.metadata,
+             spacecraft_id
+           ),
          true <- reviewed_token == token,
          :ok <- Drafts.exact_token(Drafts.snapshot(mission, spacecraft).token, token) do
       ControlActivations.review(scope, mission_id, %{

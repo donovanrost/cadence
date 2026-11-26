@@ -4,6 +4,7 @@ defmodule Cadence.Activations.SpacecraftConfiguration do
   alias Cadence.Applications.ConfigurationLock
   alias Cadence.Applications.SpacecraftConfiguration.Active, as: ConfigurationActive
   alias Cadence.Applications.SpacecraftConfiguration.Drafts, as: ConfigurationDrafts
+  alias Cadence.Catalog.ChangeSetSpacecraft
   alias Cadence.Catalog.ConfigurationReviews
   alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Catalog.SpacecraftConfigurationInput, as: ConfigurationInput
@@ -22,13 +23,16 @@ defmodule Cadence.Activations.SpacecraftConfiguration do
           metadata:
             %{
               "spacecraft_configuration_version" => 2,
-              "change_set" => %{"spacecraft_ids" => ids}
+              "change_set" => %{"id" => change_set_id}
             } = metadata
         } = attrs
       )
-      when is_binary(org) and is_list(ids) do
+      when is_binary(org) and is_binary(change_set_id) do
     ConfigurationLock.run(org, attrs.mission_id, fn ->
-      with {:ok, entries} <- FleetSnapshot.entries(metadata),
+      ids = ChangeSetSpacecraft.spacecraft_ids(org, attrs.mission_id, metadata)
+
+      with true <- ids != [] and length(ids) == ChangeSetSpacecraft.count(metadata),
+           {:ok, entries} <- FleetSnapshot.entries(metadata),
            {:ok, mission} <- Missions.fetch_mission(org, attrs.mission_id),
            {:ok, active} <- ConfigurationActive.load(mission),
            true <- Map.drop(entries, ids) == Map.drop(active.entries, ids),
@@ -61,7 +65,8 @@ defmodule Cadence.Activations.SpacecraftConfiguration do
       )
       when is_binary(org) do
     ConfigurationLock.run(attrs.organization_id, attrs.mission_id, fn ->
-      with {:ok, evidence} <- ConfigurationReviews.evidence(metadata),
+      with {:ok, evidence} <-
+             ConfigurationReviews.evidence(attrs.organization_id, attrs.mission_id, metadata),
            ids = evidence |> Map.keys() |> Enum.sort(),
            {:ok, entries} <- FleetSnapshot.entries(metadata),
            {:ok, mission} <- Missions.fetch_mission(attrs.organization_id, attrs.mission_id),

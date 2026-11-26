@@ -5,11 +5,19 @@ defmodule Cadence.Configuration.SwitchGenerationTest do
   alias Cadence.Applications.{ApplicationInstallations, HostContext}
   alias Cadence.Applications.SpacecraftConfiguration.{CatalogAuthority, Drafts, Review}
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
-  alias Cadence.Catalog.{FleetSnapshot, SpacecraftConfigurationInput}
+
+  alias Cadence.Catalog.{
+    ChangeSetSpacecraft,
+    FleetSnapshot,
+    RequestSpacecraft,
+    SpacecraftConfigurationInput
+  }
+
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Control.{Configuration, ConfigurationSwitches}
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Activations
+  alias Cadence.Persistence.JsonDocument
   alias Cadence.Spacecraft.ConfigKinds.Spacecraft, as: SpacecraftKind
   alias Cadence.SpacecraftStore
 
@@ -67,6 +75,38 @@ defmodule Cadence.Configuration.SwitchGenerationTest do
     assert get_in(metadata, ["value", "cancellation", "reason"]) =~ "commanding_disabled: "
   end
 
+  # #734: a change set touching thousands of craft used to inline `spacecraft_ids` in the generation's
+  # metadata, which broke command authoring's 64 KiB bound at about 2,500 craft.
+  test "a change set over 3,000 craft keeps the generation's metadata constant-size", c do
+    {:ok, active} = Cadence.Activations.fetch_active_activation(c.org, c.mission.mission_id)
+    ids = for _ <- 1..3_500, do: "spacecraft_" <> Ecto.UUID.generate()
+    assert byte_size(Jason.encode!(ids)) > 65_536
+
+    {:ok, reference} =
+      ChangeSetSpacecraft.store(c.org, c.mission.mission_id, "change_set_bulk", 7, ids)
+
+    assert reference == %{"id" => "change_set_bulk", "revision" => 7, "count" => 3_500}
+
+    metadata = Map.put(active.metadata, "change_set", reference)
+    assert byte_size(Jason.encode!(metadata)) < 65_536
+
+    row = Repo.get!(Cadence.Activations.ActiveBindingSetRow, c.mission.mission_id)
+
+    Repo.update!(Ecto.Changeset.change(row, metadata: JsonDocument.wrap_value(metadata)))
+
+    # Command authoring still works after it...
+    assert {:ok, :basis_ready} =
+             Cadence.Activations.with_locked_command_basis(
+               c.org,
+               c.mission.mission_id,
+               fn _activation -> {:ok, :basis_ready} end
+             )
+
+    # ...and the changed craft read back from their rows.
+    assert RequestSpacecraft.count(metadata) == 3_500
+    assert RequestSpacecraft.ids(c.org, c.mission.mission_id, metadata) == Enum.sort(ids)
+  end
+
   test "turning commanding off is a generation the configuration follows; a save can't turn it back on",
        c do
     id = c.craft.spacecraft_id
@@ -92,6 +132,14 @@ defmodule Cadence.Configuration.SwitchGenerationTest do
     assert generation > before.generation
 
     {:ok, active} = Cadence.Activations.fetch_active_activation(c.org, c.mission.mission_id)
+
+    # The generation's metadata names its change set by reference; the changed craft are rows (#734).
+    assert %{"id" => change_set_id, "revision" => _, "count" => 1} = active.metadata["change_set"]
+    assert change_set_id == staged.change_set_id
+    refute Map.has_key?(active.metadata["change_set"], "spacecraft_ids")
+
+    assert [^id] = RequestSpacecraft.ids(c.org, c.mission.mission_id, active.metadata)
+
     assert {:ok, entry} = FleetSnapshot.entry(active.metadata, id)
     assert entry["commanding_enabled"] == false
     assert entry["document"]["commanding_enabled"] == false

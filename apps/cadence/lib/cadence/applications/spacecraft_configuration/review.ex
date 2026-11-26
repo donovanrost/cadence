@@ -102,7 +102,12 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
          {:ok, _} <- Governance.persist_binding_set(scope.organization_id, binding_set),
          entries <- Map.merge(active.entries, Map.new(prepared, &{&1.id, &1.entry})),
          {:ok, fleet} <- FleetSnapshot.store(mission_id, entries),
-         {:ok, review} <- ConfigurationReviews.store(mission_id, Enum.map(prepared, & &1.review)),
+         {:ok, review} <-
+           ConfigurationReviews.store(
+             mission.organization_id,
+             mission_id,
+             Enum.map(prepared, & &1.review)
+           ),
          metadata <- FleetSnapshot.metadata(fleet, review_evidence(review, active)) do
       Activations.request(
         scope,

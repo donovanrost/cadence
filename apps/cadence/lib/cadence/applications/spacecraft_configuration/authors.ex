@@ -21,20 +21,24 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Authors do
   """
   @spec by_spacecraft(map(), map()) :: {:ok, %{binary() => [binary()]}} | {:error, term()}
   def by_spacecraft(mission, %{"configuration_review" => _} = metadata) do
-    with {:ok, evidence} <- ConfigurationReviews.evidence(metadata),
+    with {:ok, evidence} <-
+           ConfigurationReviews.evidence(mission.organization_id, mission.mission_id, metadata),
          ids = evidence |> Map.keys() |> Enum.sort(),
          {:ok, active} <- Active.load(mission),
          {:ok, reviewed} <- reviewed_versions(mission, evidence, ids) do
       {:ok, authors(mission, reviewed, active.entries)}
     else
-      {:error, {:activation_approver_authors_unknown, _ids}} = unknown -> unknown
-      _unreadable -> {:error, {:activation_approver_authors_unknown, reviewed_ids(metadata)}}
+      {:error, {:activation_approver_authors_unknown, _ids}} = unknown ->
+        unknown
+
+      _unreadable ->
+        {:error, {:activation_approver_authors_unknown, reviewed_ids(mission, metadata)}}
     end
   end
 
   def by_spacecraft(_mission, _metadata), do: {:ok, %{}}
 
-  # ONE query for every reviewed craft's reviewed version (a fleet review holds up to 500, and
+  # ONE query for every reviewed craft's reviewed version (a fleet review can hold thousands, and
   # approval runs this under its locks; api-ops, lead 11-18). A craft whose review names no
   # revision, or whose revision is missing or another craft's, fails closed: the first such craft
   # in review order, as before.
@@ -96,8 +100,12 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Authors do
 
   defp floor_version(active_entry), do: (active_entry || %{})["configuration_version"] || 0
 
-  defp reviewed_ids(metadata) do
-    case ConfigurationReviews.spacecraft_ids(metadata) do
+  defp reviewed_ids(mission, metadata) do
+    case ConfigurationReviews.spacecraft_ids(
+           mission.organization_id,
+           mission.mission_id,
+           metadata
+         ) do
       {:ok, ids} -> ids
       _unreadable -> []
     end

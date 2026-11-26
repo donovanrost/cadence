@@ -62,7 +62,11 @@ defmodule Cadence.Control.ActivationRequests.ConfigurationChanges do
   """
   @spec reviewed(map(), map()) :: map() | nil
   def reviewed(mission, %{metadata: %{"configuration_review" => _} = metadata}) do
-    case ConfigurationReviews.spacecraft_ids(metadata) do
+    case ConfigurationReviews.spacecraft_ids(
+           mission.organization_id,
+           mission.mission_id,
+           metadata
+         ) do
       {:ok, ids} ->
         shown = Enum.take(ids, @page)
         names = names_for(mission, shown)
@@ -98,7 +102,8 @@ defmodule Cadence.Control.ActivationRequests.ConfigurationChanges do
          state: :approval_pending,
          metadata: %{"configuration_review" => _} = metadata
        }) do
-    with {:ok, evidence} <- ConfigurationReviews.evidence(metadata),
+    with {:ok, evidence} <-
+           ConfigurationReviews.evidence(mission.organization_id, mission.mission_id, metadata),
          ids = evidence |> Map.keys() |> Enum.sort(),
          {:ok, active} <- Active.load(mission) do
       reviewed = reviewed_documents(mission, evidence, ids)

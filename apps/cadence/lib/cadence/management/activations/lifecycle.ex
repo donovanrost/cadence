@@ -19,7 +19,7 @@ defmodule Cadence.Management.Activations.Lifecycle do
   import Ecto.Query
 
   alias Cadence.Auth.Scope
-  alias Cadence.Catalog.ConfigurationReviews
+  alias Cadence.Catalog.RequestSpacecraft
   alias Cadence.Management.Activations.{ActivationDecision, ActivationDecisionRow}
   alias Cadence.Management.Activations.{ActivationRequest, ActivationRequestRow}
   alias Cadence.OperationalEvents
@@ -54,7 +54,7 @@ defmodule Cadence.Management.Activations.Lifecycle do
     |> candidates()
     |> lock("FOR UPDATE")
     |> Repo.all()
-    |> Enum.filter(&replaces?(request, &1))
+    |> then(&filter_replaced(request, &1))
     |> Enum.map(fn row ->
       row
       |> Ecto.Changeset.change(
@@ -131,23 +131,29 @@ defmodule Cadence.Management.Activations.Lifecycle do
     )
   end
 
-  defp replaces?(%{metadata: %{"spacecraft_configuration_version" => _} = metadata}, row) do
-    case {reviewed(metadata), reviewed(JsonDocument.unwrap_value(row.metadata) || %{})} do
-      {[_ | _] = new, [_ | _] = old} -> Enum.any?(new, &(&1 in old))
-      _unknown -> false
+  # The new request's spacecraft are read once, not once per candidate.
+  defp filter_replaced(
+         %{metadata: %{"spacecraft_configuration_version" => _} = metadata} = request,
+         rows
+       ) do
+    case reviewed(request, metadata) do
+      [] ->
+        []
+
+      new ->
+        new = MapSet.new(new)
+
+        Enum.filter(rows, fn row ->
+          old = reviewed(row, JsonDocument.unwrap_value(row.metadata) || %{})
+          Enum.any?(old, &MapSet.member?(new, &1))
+        end)
     end
   end
 
-  defp replaces?(_request, _row), do: true
+  defp filter_replaced(_request, rows), do: rows
 
-  defp reviewed(%{"change_set" => %{"spacecraft_ids" => ids}}) when is_list(ids), do: ids
-
-  defp reviewed(metadata) do
-    case ConfigurationReviews.spacecraft_ids(metadata) do
-      {:ok, ids} -> ids
-      {:error, _not_reviewed} -> []
-    end
-  end
+  defp reviewed(%{organization_id: org, mission_id: mission_id}, metadata),
+    do: RequestSpacecraft.ids(org, mission_id, metadata)
 
   defp audit(row, request, now) do
     %{
