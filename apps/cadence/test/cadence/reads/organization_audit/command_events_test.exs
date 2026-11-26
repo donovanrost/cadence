@@ -32,7 +32,8 @@ defmodule Cadence.Reads.OrganizationAudit.CommandEventsTest do
       GroupDecision.decide(approver, c.mission, group.command_group_id, %{
         kind: :go_excluding,
         excluded: [Enum.at(c.spacecraft, 1)],
-        note: "sc-2 in safe mode"
+        note: "sc-2 in safe mode",
+        expected_review: GroupDecision.review_token(group)
       })
 
     {:ok, _} = GroupAbort.abort(c.scope, c.mission, group.command_group_id, "Wrong mode")
