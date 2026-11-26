@@ -3,6 +3,7 @@ defmodule Cadence.Catalog.ConfigurationReviewsTest do
 
   import Cadence.ConfigurationFixtures
 
+  alias Cadence.Catalog.ChangeSetSpacecraft
   alias Cadence.Catalog.ConfigurationReviews
   alias Cadence.Catalog.ConfigurationReviews.{MemberRow, SetRow}
   alias Cadence.TestSupport.DecisionRecordPurge
@@ -174,7 +175,7 @@ defmodule Cadence.Catalog.ConfigurationReviewsTest do
   describe "the evidence an approval rests on is immutable (commanding's review, DECISIONS #107)" do
     test "the review tables and the change-set rows refuse UPDATE, DELETE and TRUNCATE", c do
       {:ok, _} = ConfigurationReviews.store(c.org, c.mission, items(2))
-      {:ok, _} = Cadence.Catalog.ChangeSetSpacecraft.store(c.org, c.mission, "cs-1", 1, ["sc-1"])
+      {:ok, _} = ChangeSetSpacecraft.store(c.org, c.mission, "cs-1", 1, ["sc-1"])
 
       for sql <- [
             "UPDATE spacecraft_configuration_review_members SET configuration_token = 'x'",
