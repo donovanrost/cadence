@@ -84,8 +84,13 @@ defmodule Cadence.Commanding.RequestValidation do
   transaction: target identities are read `FOR SHARE`. Returns the enriched
   request and `%{target, target_token, snapshot}`.
   """
-  def validate_on_snapshot(%CommandRequest{} = request, snapshot, expected_target \\ nil),
-    do: resolve_authoring_request(request, snapshot, expected_target)
+  def validate_on_snapshot(
+        %CommandRequest{} = request,
+        snapshot,
+        expected_target \\ nil,
+        opts \\ []
+      ),
+      do: resolve_authoring_request(request, snapshot, expected_target, opts)
 
   @doc "Validates a finite batch under one admitted model and held target identities."
   def with_authoring_requests(
@@ -148,13 +153,10 @@ defmodule Cadence.Commanding.RequestValidation do
     end
   end
 
-  defp resolve_authoring_request(request, snapshot, expected_target) do
-    with {:ok, target} <-
-           SourceEndpoints.fetch_command_authoring_target(
-             request.organization_id,
-             request.mission_id,
-             request.source_endpoint_ref
-           ),
+  # `opts[:targets]`: the targets of many requests, read once (`%{endpoint_id => endpoint}`), so a
+  # group of N members costs one target read, not N.
+  defp resolve_authoring_request(request, snapshot, expected_target, opts \\ []) do
+    with {:ok, target} <- authoring_target(request, Keyword.get(opts, :targets)),
          target_token = authoring_digest(target),
          true <- is_nil(expected_target) or target_token == expected_target,
          {:ok, snapshot} <- ActiveBasis.for_target(snapshot, target),
@@ -175,6 +177,21 @@ defmodule Cadence.Commanding.RequestValidation do
     else
       false -> {:error, :command_authoring_basis_changed}
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp authoring_target(request, nil),
+    do:
+      SourceEndpoints.fetch_command_authoring_target(
+        request.organization_id,
+        request.mission_id,
+        request.source_endpoint_ref
+      )
+
+  defp authoring_target(request, targets) when is_map(targets) do
+    case Map.fetch(targets, request.source_endpoint_ref) do
+      {:ok, target} -> {:ok, target}
+      :error -> {:error, :command_target_unavailable}
     end
   end
 

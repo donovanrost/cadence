@@ -1518,6 +1518,13 @@ defmodule CadenceWeb.Router do
           :update
         )
 
+        # #708: the way to command over REST is a command group; one target and one command is a
+        # group of one. A service requests; a person decides, in the console.
+        post("/command_groups/preflight", CommandGroupController, :preflight)
+        post("/command_groups", CommandGroupController, :create)
+        get("/command_groups", CommandGroupController, :index)
+        get("/command_groups/:command_group_id", CommandGroupController, :show)
+
         get("/command_requests", CommandRequestController, :index)
         post("/command_requests", CommandRequestController, :create)
         get("/command_requests/:command_request_id", CommandRequestController, :show)

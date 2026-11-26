@@ -200,6 +200,40 @@ defmodule Cadence.SourceEndpoints do
     end
   end
 
+  @doc """
+  Locks the exact bounded targets of many endpoints in one read per 500 (a command group's
+  members share their targets): `%{endpoint_id => endpoint}`. An endpoint that is not the
+  mission's, or is over the size bound, is absent, as `fetch_command_authoring_target/3` refuses it.
+  """
+  @spec fetch_command_authoring_targets(binary(), binary(), [binary()]) ::
+          {:ok, %{binary() => struct()}} | {:error, :command_target_transaction_required}
+  def fetch_command_authoring_targets(organization_id, mission_id, endpoint_ids)
+      when is_list(endpoint_ids) do
+    if Repo.in_transaction?() do
+      targets =
+        endpoint_ids
+        |> Enum.filter(&is_binary/1)
+        |> Enum.uniq()
+        |> Enum.chunk_every(500)
+        |> Enum.flat_map(fn chunk ->
+          SourceEndpointRow
+          |> where(
+            [row],
+            row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+              row.source_endpoint_id in ^chunk
+          )
+          |> where([row], fragment("octet_length(?::text)", row.metadata) <= 65_536)
+          |> lock("FOR SHARE")
+          |> Repo.all()
+        end)
+        |> Map.new(&{&1.source_endpoint_id, SourceEndpointRow.to_domain(&1)})
+
+      {:ok, targets}
+    else
+      {:error, :command_target_transaction_required}
+    end
+  end
+
   @doc "Returns only spacecraft identities for explicitly referenced, scoped endpoints."
   def spacecraft_for_source_endpoints(organization_id, mission_id, ids) when is_list(ids) do
     ids

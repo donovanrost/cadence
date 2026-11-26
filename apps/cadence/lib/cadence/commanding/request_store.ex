@@ -106,6 +106,54 @@ defmodule Cadence.Commanding.RequestStore do
     |> Enum.map(&CommandRequestRow.to_domain/1)
   end
 
+  @max_page 500
+
+  @doc """
+  One page of a mission's requests, oldest first, after `:after` (`{requested_at, id}`, from a
+  previous page's `next`). `:limit` is 1..#{@max_page} (default 100). Filters as `list_requests/3`
+  plus `:command_group_id`. A page is a bounded read at any mission size.
+  """
+  @spec page_requests(binary(), binary(), keyword()) ::
+          {[CommandRequest.t()], {DateTime.t(), binary()} | nil}
+  def page_requests(organization_id, mission_id, opts)
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    limit = opts |> Keyword.get(:limit, 100) |> max(1) |> min(@max_page)
+
+    rows =
+      CommandRequestRow
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id
+      )
+      |> maybe_filter_equals(:source_endpoint_ref, Keyword.get(opts, :source_endpoint_ref))
+      |> maybe_filter_equals(:command_group_id, Keyword.get(opts, :command_group_id))
+      |> maybe_filter_equals(:lifecycle_state, normalized_filter(opts, :lifecycle_state))
+      |> after_cursor(Keyword.get(opts, :after))
+      |> order_by([row], asc: row.requested_at, asc: row.command_request_id)
+      |> limit(^(limit + 1))
+      |> Repo.all()
+
+    {page, rest} = Enum.split(rows, limit)
+
+    next =
+      case {rest, List.last(page)} do
+        {[_ | _], %{requested_at: at, command_request_id: id}} -> {at, id}
+        _none -> nil
+      end
+
+    {Enum.map(page, &CommandRequestRow.to_domain/1), next}
+  end
+
+  defp after_cursor(query, nil), do: query
+
+  defp after_cursor(query, {%DateTime{} = at, id}) when is_binary(id) do
+    where(
+      query,
+      [row],
+      row.requested_at > ^at or (row.requested_at == ^at and row.command_request_id > ^id)
+    )
+  end
+
   @spec decide_request(binary(), binary(), binary(), :approved | :rejected, map(), keyword()) ::
           {:ok, %{approval: CommandApproval.t(), command_request: CommandRequest.t()}}
           | {:error, term()}
