@@ -1,6 +1,12 @@
 import { windowEnd } from "./verifyTimes.ts";
 import type { MissionId } from "@/api/index.ts";
-import { decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
+import {
+  decoders as d,
+  request,
+  type ApiResult,
+  type Decoded,
+  pointId as pointIdReader,
+} from "@/api/index.ts";
 import type { ComparisonSeries, TimeWindow } from "@/ui";
 
 /**
@@ -65,7 +71,7 @@ export const seriesReader = d.object({
   points: d.optional(
     d.array(
       d.object({
-        point_id: d.token,
+        point_id: pointIdReader,
         name: d.string,
         // free-text: the verifier's name ("Mode applied")
         verifier_name: d.string,

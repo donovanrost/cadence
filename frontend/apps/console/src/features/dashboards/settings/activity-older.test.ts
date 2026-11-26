@@ -1,3 +1,4 @@
+import { dashboardId as dashIdReader } from "@/api/index.ts";
 import { flushPromises, mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { missionId } from "@/api";
@@ -37,7 +38,7 @@ describe("Activity › Older", () => {
       { ok: true, value: lastPage },
     );
     mount(ActivityTab, {
-      props: { settingsKey: { missionId: missionId("m1"), dashboardId: "d1" } },
+      props: { settingsKey: { missionId: missionId("m1"), dashboardId: dashIdReader("d1") } },
       attachTo: document.body,
     });
     await flushPromises();

@@ -1,3 +1,4 @@
+import type { PointId } from "@/api/index.ts";
 import { computed, onScopeDispose, type Ref } from "vue";
 import { useRemoteQuery, type MissionId, type SpacecraftId } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
@@ -25,7 +26,7 @@ export function useSpacecraftAlarms(missionId: Ref<MissionId>, spacecraftId: Ref
 }
 
 /** The sisters' read: who, on which point, in which plane (null: nothing to ask). */
-export type SisterQuery = Readonly<{ pointId: string; plane: number; spacecraftId: string }>;
+export type SisterQuery = Readonly<{ pointId: PointId; plane: number; spacecraftId: string }>;
 
 /**
  * B4 sisters: the active alarms on one point in one plane, other than this spacecraft's, in pages.
@@ -57,10 +58,10 @@ export function useSisterAlarms(
 export function usePointTrend(
   missionId: Ref<MissionId>,
   spacecraftId: Ref<SpacecraftId | null>,
-  pointId: Ref<string | null>,
+  pointId: Ref<PointId | null>,
   range: Ref<RangeKey>,
 ) {
-  type TrendKey = Readonly<{ m: MissionId; sc: SpacecraftId; p: string; r: RangeKey }>;
+  type TrendKey = Readonly<{ m: MissionId; sc: SpacecraftId; p: PointId; r: RangeKey }>;
   const key = computed((): TrendKey | null =>
     spacecraftId.value && pointId.value
       ? { m: missionId.value, sc: spacecraftId.value, p: pointId.value, r: range.value }

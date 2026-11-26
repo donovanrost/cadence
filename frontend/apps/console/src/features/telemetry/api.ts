@@ -6,6 +6,7 @@ import {
   type Decoded,
   type MissionId,
   type SpacecraftId,
+  pointId as pointIdReader,
 } from "@/api/index.ts";
 import type { OpState } from "@/ui";
 import { engineeringValue } from "@/features/alarms/index.ts";
@@ -21,7 +22,7 @@ const limitState: d.Reader<Decoded<typeof limitStates>> = (value, path = "") =>
   value === null ? "no_data" : limitStates(value, path);
 
 const point = d.object({
-  id: d.token,
+  id: pointIdReader,
   name: d.string,
   description: d.nullable(d.string),
   unit: d.nullable(d.string),
@@ -114,7 +115,7 @@ export const latestValuesReader = d.object({
   values: d.array(
     d.object({
       spacecraft_id: spacecraftIdReader,
-      point_id: d.token,
+      point_id: pointIdReader,
       value_json: d.nullable(d.string),
       received_at: d.nullable(d.timestamp),
       stale: d.boolean,

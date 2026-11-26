@@ -1,7 +1,8 @@
 import { computed, ref, watch, type Ref } from "vue";
+import type { DashboardId } from "@/api/index.ts";
 import { useNow } from "@/ui";
 
-type Entry = Readonly<{ id: string; name: string; archived: boolean }>;
+type Entry = Readonly<{ id: DashboardId; name: string; archived: boolean }>;
 
 /**
  * Present mode's rotation (ux): each dashboard for one dwell, ←/→ step, Space pauses. Archived

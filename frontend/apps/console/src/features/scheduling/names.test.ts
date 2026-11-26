@@ -1,7 +1,7 @@
+import { missionId as missionIdOf } from "@/api/index.ts";
 import { flushPromises } from "@vue/test-utils";
 import { effectScope, ref } from "vue";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import type { MissionId } from "@/api/index.ts";
 import { useSpacecraftNames } from "./names.ts";
 
 vi.mock("@/live/index.ts", () => ({ useMissionInvalidation: () => undefined }));
@@ -23,7 +23,7 @@ describe("useSpacecraftNames", () => {
       .mockResolvedValueOnce(page([{ id: "sc-2", name: "EARENDIL-002", scid: null }], null));
     vi.stubGlobal("fetch", fetch);
     const scope = effectScope();
-    const nameOf = scope.run(() => useSpacecraftNames(ref("m1" as MissionId)));
+    const nameOf = scope.run(() => useSpacecraftNames(ref(missionIdOf("m1"))));
     await flushPromises();
     await flushPromises();
     const urls = fetch.mock.calls.map(([input]) =>

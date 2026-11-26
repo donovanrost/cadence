@@ -1,9 +1,10 @@
+import type { OrganizationId } from "@/api/index.ts";
 import { codeOf, request, type ApiError, type ApiResult, outcomeUnknown } from "@/api";
 import { decoders as d } from "@/api";
 import { roles, type Role } from "./api.ts";
 
 /** O5 people administration (api 1b4defb8, setup.md). All need org.manage_members. */
-const base = (orgId: string) => `/organizations/${encodeURIComponent(orgId)}`;
+const base = (orgId: OrganizationId) => `/organizations/${encodeURIComponent(orgId)}`;
 
 const membershipReader = d.object({
   user_id: d.token,
@@ -11,21 +12,21 @@ const membershipReader = d.object({
   state: d.oneOf(["active", "revoked"]),
 });
 
-export function setRole(orgId: string, userId: string, role: Role) {
+export function setRole(orgId: OrganizationId, userId: string, role: Role) {
   return request(`${base(orgId)}/people/${encodeURIComponent(userId)}`, membershipReader, {
     method: "PUT",
     body: { role },
   });
 }
 
-export function removeMember(orgId: string, userId: string) {
+export function removeMember(orgId: OrganizationId, userId: string) {
   return request(`${base(orgId)}/people/${encodeURIComponent(userId)}`, membershipReader, {
     method: "DELETE",
   });
 }
 
 /** 201 a fresh invitation (new id; the old link stops working). Only the new id matters here. */
-export function resendInvitation(orgId: string, invitationId: string) {
+export function resendInvitation(orgId: OrganizationId, invitationId: string) {
   return request(
     `${base(orgId)}/invitations/${encodeURIComponent(invitationId)}/resend`,
     d.object({ id: d.token }),
@@ -33,7 +34,10 @@ export function resendInvitation(orgId: string, invitationId: string) {
   );
 }
 
-export function revokeInvitation(orgId: string, invitationId: string): Promise<ApiResult<null>> {
+export function revokeInvitation(
+  orgId: OrganizationId,
+  invitationId: string,
+): Promise<ApiResult<null>> {
   return request(`${base(orgId)}/invitations/${encodeURIComponent(invitationId)}`, () => null, {
     method: "DELETE",
   });

@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import type { OrganizationId } from "@/api/index.ts";
 import { computed } from "vue";
 import { useRemoteQuery } from "@/api";
 import { AuditTable, fetchAudit } from "@/features/audit/index.ts";
 import { ApEmptyState, ApPanel, ApRemote } from "@/ui";
 
 /** People.md person page · Activity: their last 10 audit events (AU1 `actor_id`), last 90 days. */
-const props = defineProps<{ orgId: string; userId: string; name: string }>();
+const props = defineProps<{ orgId: OrganizationId; userId: string; name: string }>();
 const to = new Date().toISOString();
 const key = computed(() => ({
   organizationId: props.orgId,

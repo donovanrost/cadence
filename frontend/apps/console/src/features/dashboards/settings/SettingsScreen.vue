@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, watch } from "vue";
 import { useRoute, useRouter, type RouteLocationRaw } from "vue-router";
-import { useRemoteQuery } from "@/api";
+import { useRemoteQuery, dashboardIdSegment } from "@/api";
 import { useMissionInvalidation } from "@/live";
 import { useMissionScope } from "@/shell";
 import {
@@ -31,9 +31,7 @@ const route = useRoute("ops.dashboard.settings");
 const router = useRouter();
 const scope = useMissionScope();
 const missionId = computed(() => scope.value.mission.id);
-const dashboardId = computed(() =>
-  typeof route.params.dashboardId === "string" ? route.params.dashboardId : "",
-);
+const dashboardId = computed(() => dashboardIdSegment(route.params.dashboardId));
 const key = computed(() => ({ missionId: missionId.value, dashboardId: dashboardId.value }));
 const head = useRemoteQuery(key, (k, signal) =>
   fetchDashboard(k.missionId, k.dashboardId, { from: "", to: "", spacecraftId: "" }, signal),

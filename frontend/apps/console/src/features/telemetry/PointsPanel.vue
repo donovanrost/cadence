@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { pointIdParam } from "@/api/index.ts";
+import type { PointId } from "@/api/index.ts";
 import { computed, onScopeDispose, ref, watch } from "vue";
 import { useMissionScope } from "@/shell/index.ts";
 import { useRemoteQuery } from "@/api/index.ts";
@@ -27,13 +29,13 @@ import { fetchPoints, pointLimits, type TelemetryPoint } from "./api.ts";
 const props = defineProps<{
   fleet: readonly FleetSpacecraft[];
   scids: readonly Scid[];
-  points: readonly string[];
+  points: readonly PointId[];
 }>();
 const emit = defineEmits<{
   addSc: [scid: Scid];
   removeSc: [scid: Scid];
-  addPoint: [pointId: string];
-  removePoint: [pointId: string];
+  addPoint: [pointId: PointId];
+  removePoint: [pointId: PointId];
 }>();
 const scope = useMissionScope();
 
@@ -88,7 +90,7 @@ defineExpose({ focusSpacecraft: () => scPicker.value?.querySelector("select")?.f
 
 const manual = ref("");
 function addManual() {
-  const id = manual.value.trim();
+  const id = pointIdParam(manual.value.trim());
   if (id) emit("addPoint", id);
   manual.value = "";
 }

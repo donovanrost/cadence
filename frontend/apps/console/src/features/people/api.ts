@@ -1,3 +1,4 @@
+import type { OrganizationId } from "@/api/index.ts";
 import {
   decoders,
   invitationState,
@@ -45,10 +46,11 @@ export type People = Decoded<typeof peopleReader>;
 export type Member = Decoded<typeof member>;
 export type Invitation = Decoded<typeof invitation>;
 
-const base = (organizationId: string) => `/organizations/${encodeURIComponent(organizationId)}`;
+const base = (organizationId: OrganizationId) =>
+  `/organizations/${encodeURIComponent(organizationId)}`;
 
 export function fetchPeople(
-  organizationId: string,
+  organizationId: OrganizationId,
   signal: AbortSignal,
 ): Promise<ApiResult<People>> {
   return request(`${base(organizationId)}/people`, peopleReader, { signal });
@@ -62,7 +64,7 @@ const invited = (value: unknown, path = "") => ({
 export type Invited = ReturnType<typeof invited>;
 
 export function sendInvitation(
-  organizationId: string,
+  organizationId: OrganizationId,
   body: Readonly<{ email: string; role: Role }>,
 ): Promise<ApiResult<Invited>> {
   return request(`${base(organizationId)}/invitations`, invited, { method: "POST", body });
@@ -113,7 +115,7 @@ export const serviceIdentitiesReader = object({
 export type ServiceIdentities = Decoded<typeof serviceIdentitiesReader>;
 
 export function fetchServiceIdentities(
-  organizationId: string,
+  organizationId: OrganizationId,
   signal: AbortSignal,
 ): Promise<ApiResult<ServiceIdentities>> {
   return request(`${base(organizationId)}/service-identities`, serviceIdentitiesReader, { signal });

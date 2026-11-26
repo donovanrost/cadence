@@ -1,6 +1,6 @@
 import { computed, onBeforeUnmount, ref, type Ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useRemoteQuery, type MissionId, type SpacecraftId } from "@/api/index.ts";
+import { useRemoteQuery, type MissionId, type SpacecraftId, type PointId } from "@/api/index.ts";
 import { fetchSample } from "./api.ts";
 
 /**
@@ -12,7 +12,7 @@ import { fetchSample } from "./api.ts";
 export function useSample(
   missionId: Ref<MissionId>,
   spacecraftId: Ref<SpacecraftId>,
-  pointId: Ref<string | null>,
+  pointId: Ref<PointId | null>,
 ) {
   const route = useRoute();
   const router = useRouter();

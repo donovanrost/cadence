@@ -1,3 +1,4 @@
+import type { PointId } from "@/api/index.ts";
 import type { RouteLocationRaw } from "vue-router";
 import type { Scid } from "@/api/index.ts";
 
@@ -13,7 +14,7 @@ export type SampleRef = Readonly<{
  * Sample aside open on it (`sample`, and `received` when known, which makes the read exact). A
  * sample with no id (catalog monitoring) only rings the time.
  */
-export function sampleLink(scid: Scid, pointId: string, s: SampleRef): RouteLocationRaw {
+export function sampleLink(scid: Scid, pointId: PointId, s: SampleRef): RouteLocationRaw {
   return {
     name: "ops.spacecraft",
     params: { scId: scid, tab: "telemetry" },

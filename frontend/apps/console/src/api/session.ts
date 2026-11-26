@@ -11,14 +11,14 @@ import {
   type Decoded,
 } from "./decode.ts";
 import { role } from "./entities.ts";
-import { missionId } from "./ids.ts";
+import { missionId, organizationId as organizationIdReader } from "./ids.ts";
 import { request, type ApiResult } from "./http.ts";
 
 /** Contract: docs/apogee/api/session.md (GET /api/v1/session). */
 /** §12C: the id is a MissionId (what the API takes); the slug is only for routes. */
 const mission = object({ id: missionId, slug: token, name: string });
 const organization = object({
-  id: token,
+  id: organizationIdReader,
   slug: token,
   name: string,
   role: nullable(role),
@@ -28,7 +28,7 @@ const organization = object({
 
 export const sessionReader = object({
   user: object({ id: token, email: string, display_name: nullable(string) }),
-  current_organization_id: nullable(token),
+  current_organization_id: nullable(organizationIdReader),
   admin_mode: boolean,
   /** api-ops L6: when admin mode ends (ISO); null when off or unknown. */
   admin_mode_expires_at: optional(nullable(timestamp)),

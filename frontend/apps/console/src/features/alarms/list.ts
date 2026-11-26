@@ -1,3 +1,4 @@
+import type { PointId } from "@/api/index.ts";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 import { bandFor } from "./api.ts";
 import { formatValue, withUnit } from "./format.ts";
@@ -159,7 +160,7 @@ export function alarmRows(
   episodes: readonly Episode[],
   fleet: readonly FleetSpacecraft[],
   tab: AlarmTab,
-  pointId: string | null,
+  pointId: PointId | null,
   now: Date,
 ): AlarmListRow[] {
   const byId = new Map(fleet.map((sc) => [sc.id, sc]));
@@ -188,7 +189,7 @@ export function tabCounts(
 }
 
 export type PointCount = Readonly<{
-  pointId: string;
+  pointId: PointId;
   name: string;
   count: number;
   critical: number;
@@ -196,7 +197,7 @@ export type PointCount = Readonly<{
 
 /** Active episodes per point, most first: "is it spreading?" */
 export function byPoint(episodes: readonly Episode[]): PointCount[] {
-  const counts = new Map<string, { name: string; count: number; critical: number }>();
+  const counts = new Map<PointId, { name: string; count: number; critical: number }>();
   for (const e of episodes) {
     if (e.status === "cleared") continue;
     const entry = counts.get(e.point.id) ?? { name: e.point.name, count: 0, critical: 0 };

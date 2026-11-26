@@ -1,5 +1,12 @@
 import type { MissionId } from "@/api/index.ts";
-import { decoders as d, request, spacecraftRef, type ApiResult, type Decoded } from "@/api";
+import {
+  decoders as d,
+  request,
+  spacecraftRef,
+  type ApiResult,
+  type Decoded,
+  dashboardId as dashboardIdReader,
+} from "@/api";
 
 /**
  * Directory endpoints (plans/dashboards.md "D1–D4, D6", api-ops): list, star, archive/restore,
@@ -19,7 +26,7 @@ const spacecraftSummary = d.nullable(
   }),
 );
 const row = d.object({
-  id: d.token,
+  id: dashboardIdReader,
   name: d.string,
   description: d.nullable(d.string),
   tags: d.array(d.string, 64),

@@ -1,3 +1,4 @@
+import { dashboardId as dashIdReader } from "@/api/index.ts";
 import { flushPromises, mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { missionId } from "@/api";
@@ -39,7 +40,7 @@ describe("points picker (ObservablePicker)", () => {
     mount(ObservablePicker, {
       props: {
         missionId: missionId("m1"),
-        dashboardId: "d1",
+        dashboardId: dashIdReader("d1"),
         baseVersion: 1,
         fields: {} as never,
         limit: 4,

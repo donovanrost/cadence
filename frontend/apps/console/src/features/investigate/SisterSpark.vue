@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { PointId } from "@/api/index.ts";
 import type { MissionId } from "@/api/index.ts";
 import type { SpacecraftId } from "@/api/index.ts";
 import { computed, onScopeDispose } from "vue";
@@ -13,7 +14,7 @@ import { sparkPoints } from "./sisters.ts";
 const props = defineProps<{
   missionId: MissionId;
   spacecraftId: SpacecraftId;
-  pointId: string;
+  pointId: PointId;
   tone: "crit" | "caution";
 }>();
 const key = computed(() => `${props.missionId}|${props.spacecraftId}|${props.pointId}`);

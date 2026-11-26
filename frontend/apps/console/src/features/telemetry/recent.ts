@@ -1,4 +1,11 @@
-import { decode, decoders as d, scid as scidReader, type Scid } from "@/api";
+import {
+  decode,
+  decoders as d,
+  pointId as pointIdReader,
+  scid as scidReader,
+  type PointId,
+  type Scid,
+} from "@/api";
 import { computed, ref, watch, type Ref } from "vue";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 import { seriesOf, type Selection } from "./selection.ts";
@@ -8,11 +15,11 @@ import { seriesOf, type Selection } from "./selection.ts";
  * recently plotted by you. Kept per viewer and mission in localStorage (a convenience: a private
  * window or cleared storage simply has none).
  */
-export type RecentPlot = Readonly<{ scid: Scid; name: string; point: string }>;
+export type RecentPlot = Readonly<{ scid: Scid; name: string; point: PointId }>;
 const MAX = 10;
 const keyOf = (missionId: string) => `apogee:recent-plots:${missionId}`;
 
-const recentReader = d.object({ scid: scidReader, name: d.string, point: d.string });
+const recentReader = d.object({ scid: scidReader, name: d.string, point: pointIdReader });
 /** One stored entry, or none when it no longer reads (an older shape, hand-edited storage). */
 const recentOf = (v: unknown): RecentPlot[] => {
   const r = decode(recentReader, v);

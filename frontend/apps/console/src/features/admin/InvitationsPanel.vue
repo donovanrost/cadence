@@ -1,11 +1,15 @@
 <script setup lang="ts">
+import type { OrganizationId } from "@/api/index.ts";
 import { failureOutcome } from "@/features/changes/index.ts";
 import { roleText } from "@/api";
 import { ApButton, ApPanel, ApTable, formatShort, plural, type ApColumn } from "@/ui";
 import { withdrawInvitation, type AdminOrganizationDetail } from "./api.ts";
 
 /** The organization's invitations (Admin.md), each pending one with Withdraw. */
-const props = defineProps<{ orgId: string; invitations: AdminOrganizationDetail["invitations"] }>();
+const props = defineProps<{
+  orgId: OrganizationId;
+  invitations: AdminOrganizationDetail["invitations"];
+}>();
 const emit = defineEmits<{ changed: [note: { tone: "nominal" | "crit"; text: string }] }>();
 const columns: readonly ApColumn[] = [
   { key: "email", label: "Email", mono: true },

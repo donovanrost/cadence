@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useRoute } from "vue-router";
-import { useRemoteQuery, type RemoteState } from "@/api/index.ts";
+import { useRemoteQuery, type RemoteState, pointIdParam } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
 import { ApKeyValue } from "@/ui";
 import { episodeFor, fetchEpisodes, type AlarmsPage } from "@/features/alarms/index.ts";
@@ -32,7 +32,7 @@ const range = ref<RangeKey>(DEFAULT_RANGE);
 const alarm = computed(() => {
   const state = props.alarms;
   const id = typeof route.query.alarm === "string" ? route.query.alarm : null;
-  const point = typeof route.query.point === "string" ? route.query.point : null;
+  const point = typeof route.query.point === "string" ? pointIdParam(route.query.point) : null;
   return state.status === "ready" ? pickAlarm(state.value.alarms, id, point) : null;
 });
 

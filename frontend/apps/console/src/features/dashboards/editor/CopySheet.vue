@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { DashboardId } from "@/api/index.ts";
 import type { MissionId } from "@/api/index.ts";
 import { nextTick, ref } from "vue";
 import { useRouter } from "vue-router";
@@ -11,7 +12,7 @@ import { warningsText } from "./source-warnings.ts";
  * ⋯ › Save as copy (D11): a new dashboard from the current version plus any unsaved edits, opened
  * in edit mode. This dashboard stays as it was saved; the edits move to the copy.
  */
-const props = defineProps<{ missionId: MissionId; dashboardId: string; name: string }>();
+const props = defineProps<{ missionId: MissionId; dashboardId: DashboardId; name: string }>();
 const emit = defineEmits<{ copied: [] }>();
 const router = useRouter();
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);

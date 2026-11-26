@@ -6,6 +6,7 @@ import {
   request,
   type ApiResult,
   type Decoded,
+  pointId as pointIdReader,
 } from "@/api/index.ts";
 
 /** Contract: docs/apogee/api/ops.md, `GET /api/v1/missions/:mission_id/fleet`. */
@@ -26,7 +27,7 @@ export const rawLimitStates = [
 export type RawLimitState = (typeof rawLimitStates)[number];
 
 const worstPoint = d.object({
-  point_id: d.token,
+  point_id: pointIdReader,
   point_name: d.string,
   // Exact server value: numbers stay numbers, enum/text values stay text.
   value: d.nullable((value, path) => (typeof value === "string" ? value : d.number(value, path))),

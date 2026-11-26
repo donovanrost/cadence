@@ -1,4 +1,10 @@
-import { DecodeError, decoders as d, type Decoded, type Reader } from "@/api/index.ts";
+import {
+  DecodeError,
+  decoders as d,
+  type Decoded,
+  type Reader,
+  dashboardId as dashboardIdReader,
+} from "@/api/index.ts";
 
 /**
  * Readers for the resolved dashboard snapshot: `Cadence.Reads.Dashboards.WorkspaceSnapshot`
@@ -233,7 +239,7 @@ const snapshotShape = d.object({
   version: d.literal(1),
   organization_id: d.token,
   mission_id: d.token,
-  dashboard_id: d.token,
+  dashboard_id: dashboardIdReader,
   document_version: bounded(1, MAX_SAFE),
   document_mode: d.known(["published", "draft", "draft_preview", "snapshot"] as const),
   author: d.boolean,
