@@ -213,6 +213,7 @@ defmodule Cadence.Reads.SpacecraftDirectoryPageTest do
     # On a table this small the planner rightly prefers a seq scan; forbid it to show the index
     # serves the order and the keyset range without a sort (what a large fleet gets).
     Repo.query!("SET LOCAL enable_seqscan = off")
+
     # And forbid a sort, so a cheaper index on one column plus a sort can't be chosen in its place.
     Repo.query!("SET LOCAL enable_sort = off")
 
