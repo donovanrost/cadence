@@ -124,6 +124,7 @@ Laptop 1 worktrees live in `~/.herdr/worktrees/cadence/<handle>`. The new agent 
 | cto | CTO | laptop 1 | `t11` | Claude Opus 5.5 | 2026-11-25 |
 | platform | Head of Platform | laptop 1 | `platform` | Claude Opus 5.5, high | 2026-11-25 |
 | console | Head of Console | laptop 1 | `console` | Claude Opus 5.5, high | 2026-11-25 |
+| console-eng | Frontend engineer, Console (head: console) | laptop 1 | `console-eng` | Claude Opus 5.5, high | 2026-11-25 |
 | ground | Head of Ground & Comms | laptop 1 | `ground` | Claude Opus 5.5, high | 2026-11-25 |
 | commanding | Head of Commanding & Approvals | laptop 2 | `donovans-macbook-pro-1/commanding` | Claude Opus 5.5, high | 2026-11-25 |
 | mission-model | Head of Mission Model & Spacecraft | laptop 2 | `donovans-macbook-pro-1/mission-model` | Claude Opus 5.5, high | 2026-11-25 |
