@@ -70,6 +70,20 @@ describe("usePagedQuery (#176)", () => {
     t.scope.stop();
   });
 
+  it("Load more keeps the first page's receivedAt: older pages don't make the newest rows fresher", async () => {
+    const t = start();
+    t.calls[0]?.resolve(page(rows("a"), "c2"));
+    await flush();
+    const before = t.query.state.value;
+    if (before.status !== "ready") throw new Error("not ready");
+    const more = t.query.more();
+    t.calls[1]?.resolve(page(rows("b"), null));
+    await more;
+    const after = t.query.state.value;
+    expect(after.status === "ready" && after.receivedAt).toBe(before.receivedAt);
+    t.scope.stop();
+  });
+
   it("shows a row that moved between pages once, at its first place with its newest value", async () => {
     const t = start();
     t.calls[0]?.resolve(page(rows("a", "b"), "c2"));

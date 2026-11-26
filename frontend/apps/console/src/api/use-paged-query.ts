@@ -158,7 +158,7 @@ export function usePagedQuery<K, Item, Meta>(
           meta: s.value.meta,
           metas: [...s.value.metas, result.value.meta],
         },
-        receivedAt: new Date(),
+        // `receivedAt` stays the first page's: older pages don't make the newest rows any fresher.
       };
     } catch {
       // Aborted by a start-over.

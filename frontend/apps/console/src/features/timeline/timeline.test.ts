@@ -16,6 +16,7 @@ import {
   scopeOptions,
   scopeQuery,
   scopeValue,
+  staleLine,
   timelineScope,
   withAlertingData,
 } from "./model.ts";
@@ -301,5 +302,15 @@ describe("a full events read is never cut silently (parity D2, now A9d pages)", 
       from: "2026-11-15T00:00:00Z",
       to: "2026-11-16T00:00:00Z",
     });
+  });
+});
+
+describe("a failed live refresh is said, not silent (#837 review)", () => {
+  const at = new Date("2026-11-26T14:07:30Z");
+  it("says how old the log is while refreshes fail", () => {
+    expect(staleLine(true, at)).toBe("Couldn't refresh. Showing events as of 14:07Z.");
+  });
+  it("says nothing while refreshes succeed", () => {
+    expect(staleLine(false, at)).toBeNull();
   });
 });

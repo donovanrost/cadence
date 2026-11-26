@@ -51,6 +51,7 @@ import {
   scopeOptions,
   scopeQuery,
   scopeValue,
+  staleLine,
   timelineScope,
   withAlertingData,
 } from "./model.ts";
@@ -170,13 +171,18 @@ const windowOf = (w: WindowSel) => {
 };
 /**
  * A9d: the window's events in pages (usePagedQuery); Older events loads the next. A live refetch
- * reloads up to the events shown, so older pages stay and no gap opens; a failed one keeps them.
+ * reloads up to the events shown, so older pages stay and no gap opens; a failed one keeps them and
+ * says how old they are (`stale`).
  */
 const events = usePagedQuery(
   key,
   (k, cursor, signal) => fetchEventPage(k.m, { ...windowOf(k.w), ...filters(k) }, cursor, signal),
   (e) => e.id,
 );
+const stale = computed(() => {
+  const s = events.state.value;
+  return s.status === "ready" ? staleLine(events.refreshError.value !== null, s.receivedAt) : null;
+});
 const density = useRemoteQuery(key, (k, signal) => {
   const w = windowOf(k.w);
   return fetchDensity(
@@ -320,6 +326,9 @@ const short = (iso: string) => {
             @retry="events.refetch"
           >
             <template #default="{ value }">
+              <p v-if="stale" role="status" class="m-0 px-4 py-2 text-sm text-caution-text">
+                {{ stale }}
+              </p>
               <ApEmptyState
                 v-if="(shownEvents ?? value.items).length === 0"
                 :headline="`No events between ${short(value.meta.from)} and ${short(value.meta.to)}.`"
