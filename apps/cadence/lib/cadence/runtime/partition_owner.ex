@@ -287,29 +287,8 @@ defmodule Cadence.Runtime.PartitionOwner do
     if SemanticSnapshots.gated?(state), do: Process.flag(:trap_exit, true)
     SemanticSnapshots.schedule(state)
     SemanticSnapshots.announce_recovery(state)
-    seed_current_values(state)
+    CurrentValueSeed.start(state, Keyword.get(opts, :current_value_seed, []))
     state
-  end
-
-  # The recovered snapshot's latest values go into the ETS current-value store before any new frame
-  # arrives (DECISIONS #96, #831). A failure is logged: the partition starts without the seed.
-  defp seed_current_values(state) do
-    if SemanticSnapshots.gated?(state) do
-      derived = &derived_sample(&1, state.active_activation)
-
-      case CurrentValueSeed.seed(state, state.semantic_state, derived) do
-        {:ok, _counts} ->
-          :ok
-
-        {:error, reason} ->
-          Logger.warning("Current values not seeded from the snapshot: #{inspect(reason)}",
-            mission_id: state.mission_id,
-            partition_id: PartitionKey.identifier(state.partition_key)
-          )
-      end
-    end
-
-    :ok
   end
 
   defp initialize(opts) do
@@ -780,9 +759,6 @@ defmodule Cadence.Runtime.PartitionOwner do
         metadata: %{
           mission_id: sample.mission_id,
           spacecraft_id: sample.spacecraft_id,
-          # The point it came from, so a restart can put the snapshot's value back in the current-value
-          # store under the key ingest uses (#831).
-          point_id: sample.point_id,
           packet_id: sample.packet_id,
           evidence_id: sample.evidence_id,
           trigger_sample_id: sample.sample_id,

@@ -1,113 +1,126 @@
 defmodule Cadence.Runtime.PartitionOwner.CurrentValueSeed do
   @moduledoc """
-  Seeds the ETS current-value store from a recovered partition's snapshot (DECISIONS #96, #831).
+  Seeds the ETS current-value store from the durable history when a partition starts (DECISIONS #96,
+  #831). After a node restart the store is empty until each spacecraft's next frame, and at 500+
+  craft most are not in contact. A starting owner asks QuestDB, in one statement, for the newest
+  value of every (spacecraft, point) its source endpoint has written
+  (`LATEST ON observed_at PARTITION BY spacecraft_id, point_id`) and records them
+  (`Storage.seed_current_values/3`): each with its OWN generation and receipt time, so the
+  staleness rules still say stale; under the stored source identity, so a live value replaces it;
+  never over a newer value already there.
 
-  After a node restart the store is empty until each spacecraft's next frame, and at 500+ craft
-  most are not in contact. The snapshot holds each parameter's `latest` update, so a starting
-  owner puts those into the store (`Storage.seed_current_values/3`): every value with its OWN
-  generation and receipt time, so the staleness rules still say stale, and never over a value the
-  store already has that is newer.
+  Every point the endpoint ever wrote is covered, not only the parameters a semantic plan
+  evaluates; it needs no semantic state, so a partition with no plan seeds too. Measured in CI
+  (`docs/apogee/domain/recovery-from-archive.md`): about 4-9 ms per spacecraft at 200 points, flat
+  from 50,000 to 400,000 rows, a spacecraft last heard days ago included.
 
-  What can be seeded is what the snapshot holds: the parameters the mission model's semantic plan
-  evaluates (monitoring and algorithms), not every telemetry point. A container parameter is
-  carries the point it came from (`metadata.point_id`, set when the update is made); an algorithm
-  output is built the way its live derived sample is (`derived_sample`). A parameter with no point
-  (a snapshot written before the point was carried) is skipped and counted.
-  Only the ETS store is seeded: the Postgres store is not a cache and its rows have referential
-  ties a snapshot cannot supply.
+  The read runs in a task, after a random delay of up to `spread_ms` (2 s: 500 partitions starting
+  at once do not ask QuestDB at the same instant), so a slow or unreachable QuestDB never delays a
+  partition's start; a failure is logged and the store simply fills from ingest, as it always did.
+  It runs only when the current-value store is ETS and the history store is QuestDB.
   """
+
+  require Logger
 
   alias Cadence.Runtime.PartitionKey
-  alias Cadence.SemanticRuntime.{State, Update}
-  alias Cadence.Telemetry.CurrentValueStore
-  alias Cadence.Telemetry.Sample
-  alias Cadence.Telemetry.Storage
+  alias Cadence.Telemetry.{CurrentValueStore, HistoryStore, Storage}
+
+  @default_spread_ms 2_000
 
   @doc """
-  Seeds the store from `semantic_state.latest`. `derived_sample` builds the sample of an algorithm
-  output (the partition owner's own). `{:ok, %{seeded: n, skipped: m}}`.
+  Starts the seed for `state`'s partition when it applies. Options: `:history_store_policy`,
+  `:spread_ms` (tests pass 0), `:notify` (a pid told `{:current_values_seeded, count}`).
   """
-  @spec seed(map(), State.t(), (Update.t() -> Sample.t())) ::
-          {:ok, %{seeded: non_neg_integer(), skipped: non_neg_integer()}} | {:error, term()}
-  def seed(state, %State{latest: latest}, derived_sample) when map_size(latest) > 0 do
-    policy = state.persistence_policy.telemetry_storage
+  @spec start(map(), keyword()) :: :ok
+  def start(state, opts \\ []) do
+    history = Keyword.get_lazy(opts, :history_store_policy, &HistoryStore.configured_policy/0)
 
-    if ets?(policy) do
-      started = System.monotonic_time()
+    if applies?(state, history) do
+      spread = Keyword.get(opts, :spread_ms, @default_spread_ms)
+      notify = Keyword.get(opts, :notify)
+      job = job(state, history)
 
-      samples =
-        latest |> Map.values() |> Enum.map(&sample(&1, derived_sample)) |> Enum.reject(&is_nil/1)
+      {:ok, _pid} =
+        Task.start(fn ->
+          if spread > 0, do: Process.sleep(:rand.uniform(spread))
+          result = seed(job)
+          if notify, do: send(notify, {:current_values_seeded, result})
+        end)
+    end
 
-      skipped = map_size(latest) - length(samples)
+    :ok
+  end
 
-      with :ok <-
-             Storage.seed_current_values(policy, samples,
-               organization_id: state.active_activation.organization_id,
-               source_endpoint_id: source_endpoint(state.partition_key),
-               metadata: %{seeded_from: "semantic_snapshot"}
-             ) do
-        :telemetry.execute(
-          [:cadence, :runtime, :partition, :current_values_seeded],
-          %{
-            seeded: length(samples),
-            skipped: skipped,
-            duration_ms:
-              System.convert_time_unit(System.monotonic_time() - started, :native, :millisecond)
-          },
-          %{
-            mission_id: state.mission_id,
-            partition_id: PartitionKey.identifier(state.partition_key)
-          }
+  defp applies?(
+         %{persist_runtime_records?: true, partition_key: %PartitionKey{} = key} = state,
+         history
+       ) do
+    key.affinity == :source_endpoint and is_binary(key.value) and
+      match?(%{backend: HistoryStore.QuestDB}, history) and
+      match?(
+        %{current_value_store_policy: %{backend: CurrentValueStore.ETS}},
+        state.persistence_policy.telemetry_storage
+      )
+  end
+
+  defp applies?(_state, _history), do: false
+
+  defp job(state, history) do
+    %{
+      mission_id: state.mission_id,
+      organization_id: state.active_activation.organization_id,
+      source_endpoint_id: state.partition_key.value,
+      partition_id: PartitionKey.identifier(state.partition_key),
+      storage_policy: state.persistence_policy.telemetry_storage,
+      history: history
+    }
+  end
+
+  @doc false
+  @spec seed(map()) :: {:ok, non_neg_integer()} | {:error, term()}
+  def seed(job) do
+    started = System.monotonic_time()
+
+    with {:ok, samples} <-
+           HistoryStore.latest_for_source_endpoint(
+             job.history,
+             job.mission_id,
+             job.source_endpoint_id,
+             organization_id: job.organization_id
+           ),
+         :ok <-
+           Storage.seed_current_values(job.storage_policy, samples,
+             organization_id: job.organization_id,
+             source_endpoint_id: job.source_endpoint_id
+           ) do
+      :telemetry.execute(
+        [:cadence, :runtime, :partition, :current_values_seeded],
+        %{
+          seeded: length(samples),
+          duration_ms:
+            System.convert_time_unit(System.monotonic_time() - started, :native, :millisecond)
+        },
+        %{mission_id: job.mission_id, partition_id: job.partition_id}
+      )
+
+      {:ok, length(samples)}
+    else
+      {:error, reason} = error ->
+        Logger.warning("Current values not seeded from the history store: #{inspect(reason)}",
+          mission_id: job.mission_id,
+          partition_id: job.partition_id
         )
 
-        {:ok, %{seeded: length(samples), skipped: skipped}}
-      end
-    else
-      {:ok, %{seeded: 0, skipped: 0}}
+        error
     end
+  rescue
+    error ->
+      Logger.warning(
+        "Current values not seeded from the history store: #{Exception.message(error)}",
+        mission_id: job.mission_id,
+        partition_id: job.partition_id
+      )
+
+      {:error, error}
   end
-
-  def seed(_state, _semantic_state, _derived_sample), do: {:ok, %{seeded: 0, skipped: 0}}
-
-  defp ets?(%{current_value_store_policy: %{backend: CurrentValueStore.ETS}}), do: true
-  defp ets?(_policy), do: false
-
-  defp sample(%Update{producer_kind: :algorithm} = update, derived_sample),
-    do: derived_sample.(update)
-
-  defp sample(%Update{} = update, _derived_sample) do
-    case meta(update, :point_id) do
-      nil ->
-        nil
-
-      point_id ->
-        %Sample{
-          sample_id: update.update_id,
-          mission_id: meta(update, :mission_id),
-          spacecraft_id: meta(update, :spacecraft_id),
-          point_id: point_id,
-          point_name: point_id,
-          semantic_id: update.parameter_id,
-          qualified_name: update.qualified_name,
-          producer_kind: update.producer_kind,
-          producer_id: update.producer_id,
-          packet_definition_id: update.producer_id,
-          packet_definition_version: 1,
-          packet_id: meta(update, :packet_id) || update.update_id,
-          evidence_id: meta(update, :evidence_id) || update.update_id,
-          raw_value: update.raw_value,
-          engineering_value: update.value,
-          quality_state: update.quality,
-          generation_time: update.generation_time,
-          receipt_time: update.receipt_time,
-          provenance: %{seeded_from: "semantic_snapshot"}
-        }
-    end
-  end
-
-  defp meta(update, key),
-    do: Map.get(update.metadata, key, Map.get(update.metadata, Atom.to_string(key)))
-
-  defp source_endpoint(%PartitionKey{affinity: :source_endpoint, value: value}), do: value
-  defp source_endpoint(_key), do: nil
 end
