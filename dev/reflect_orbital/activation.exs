@@ -75,22 +75,51 @@ defmodule Cadence.Dev.ReflectOrbital.Activation do
 
     unless already_active? do
       policy = ActivationPolicy.load(F.organization_id(), F.mission_id())
-      tokens = Map.new(snapshots, fn {id, snapshot} -> {id, snapshot.token} end)
-      IO.puts("Preparing one exact activation review for #{length(fleet)} spacecraft")
+      batch = Cadence.Catalog.SpacecraftModelBindings.max_review_batch()
 
-      {:ok, request} =
-        Review.request_many(scope, F.mission_id(), tokens,
-          expected_policy_token: policy.token,
-          expected_approval_required: false
-        )
+      # One review covers at most `batch` spacecraft (500 today), so a larger fleet activates in
+      # batches; each review adds its craft to the active binding set (#715).
+      snapshots
+      |> Enum.reject(fn {id, snapshot} ->
+        get_in(active.entries, [id, "configuration_revision_id"]) ==
+          snapshot.row.configuration_revision_id
+      end)
+      |> Enum.sort()
+      |> Enum.chunk_every(batch)
+      |> Enum.each(fn chunk ->
+        tokens = Map.new(chunk, fn {id, snapshot} -> {id, snapshot.token} end)
 
-      IO.puts("Executing approved fleet request #{request.activation_request_id}")
+        {ms, request} =
+          :timer.tc(
+            fn ->
+              {:ok, request} =
+                Review.request_many(scope, F.mission_id(), tokens,
+                  expected_policy_token: policy.token,
+                  expected_approval_required: false
+                )
 
-      {:ok, approved} =
-        Cadence.Management.Activations.fetch_approved(request.activation_request_id)
+              request
+            end,
+            :millisecond
+          )
 
-      {:ok, execution} = Cadence.Control.Activations.execute(approved)
-      :succeeded = execution.status
+        IO.puts("Review for #{map_size(tokens)} spacecraft prepared in #{ms} ms")
+
+        {ms, execution} =
+          :timer.tc(
+            fn ->
+              {:ok, approved} =
+                Cadence.Management.Activations.fetch_approved(request.activation_request_id)
+
+              {:ok, execution} = Cadence.Control.Activations.execute(approved)
+              execution
+            end,
+            :millisecond
+          )
+
+        :succeeded = execution.status
+        IO.puts("Executed fleet request #{request.activation_request_id} in #{ms} ms")
+      end)
     end
 
     verify(mission, fleet, revision)
@@ -111,12 +140,15 @@ defmodule Cadence.Dev.ReflectOrbital.Activation do
     ^n = map_size(active.entries)
     # The complete fleet specification (500-1,000 spacecraft) can exceed the ordinary five-
     # second observation timeout while a release is recovering the fleet.
-    {:ok, spec} =
-      GenServer.call(
-        MissionRuntime.coordinator_name(F.mission_id()),
-        :active_spec,
-        600_000
+    {spec_ms, {:ok, spec}} =
+      :timer.tc(
+        fn ->
+          GenServer.call(MissionRuntime.coordinator_name(F.mission_id()), :active_spec, 600_000)
+        end,
+        :millisecond
       )
+
+    IO.puts("Runtime :active_spec for #{n} spacecraft answered in #{spec_ms} ms")
 
     true = spec.generation == active.activation.generation
     # Ten capability instances per spacecraft.
