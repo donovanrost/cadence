@@ -1,6 +1,6 @@
 # Pass prediction: element sets, SGP4 and station visibility (#732)
 
-Status: proposed (ground, 2026-11-26). Supersedes DECISIONS #4 once agreed.
+Status: agreed (CTO, 2026-11-26). DECISIONS #114, superseding #4.
 
 ## Problem
 
@@ -91,8 +91,9 @@ mask. Cadence stores no station location today.
   adapter where the provider gives one (the simulator will). Otherwise a mission admin sets it.
 - **Mask.** Each station gets an elevation mask, with a mission default of 5°. A per-azimuth
   horizon mask is a follow-up.
-- **Before slice 2 starts:** confirm which station table survives #128's deletion of the legacy
-  Communications app (`comms_ground_stations` is a candidate to go), and put the columns there.
+- **Which table.** The columns go on whichever station table survives #128's deletion of the
+  legacy Communications app. This is being settled with console now. There is no third station
+  table.
 
 ### Propagation and visibility (slice 2)
 
@@ -129,6 +130,9 @@ Indexes are `(mission_id, ground_station_id, aos)` and `(mission_id, spacecraft_
 - **Horizon.** The horizon is rolling: 7 days by default, with a mission setting of up to 14.
 - **Size.** That comes to about 270k rows per week at 500 × 15, and about 1.1M at 1,000 × 15
   over 14 days.
+- **Bounded at any fleet size.** Passes that ended more than 7 days ago are pruned, so the table
+  holds at most the horizon plus 7 days. Provider opportunities and bookings keep their own
+  records, so pruning a predicted pass loses no contact history.
 
 Recompute is incremental:
 
@@ -138,6 +142,7 @@ Recompute is incremental:
 | Station location or mask change | That station, for all spacecraft |
 | Daily horizon extension | One more day for every spacecraft |
 | Full mission (seed, admin) | Everything, batched |
+| Daily prune | Deletes passes that ended more than 7 days ago (what planning history reads) |
 
 Writes use `Cadence.Persistence.BulkInsert` (#872): typed arrays and one statement per
 2,000 rows. A request path never queries per spacecraft. Reads are by mission and window, paged.
@@ -154,7 +159,9 @@ Writes use `Cadence.Persistence.BulkInsert` (#872): typed arrays and one stateme
   package, from the element sets it reads through the API. Dev and tests then run on real
   geometry. This replaces `generate_opportunities/5`'s hash.
 
-### Console (slice 6)
+### Console (slice 6, a console issue)
+
+Console builds this slice. Ground owns the API contract it reads.
 
 - **Spacecraft.** A spacecraft gets an Orbit section: its current element set (format, epoch,
   age, source) with history, and its predicted passes (AOS, LOS, maximum elevation, station),
@@ -170,19 +177,21 @@ Each slice becomes a sub-issue of #732 under #211 once this note is agreed.
 1. **Element-set store and API**, including bulk. This also closes the fleet-seed gap on #706.
 2. **`packages/sgp4`** with the Vallado verification set, plus **station geometry** and the
    **visibility search**.
-3. **Predicted-pass store and recompute** (jobs, triggers, horizon), measured at 500 and 1,000
+3. **Predicted-pass store and recompute** (jobs, triggers, horizon, pruning), measured at 500 and 1,000
    on laptop 2 and recorded on #177.
 4. **Planning and Book a pass integration**, with the opportunity ↔ predicted-pass match and the
    flag.
 5. **Simulator** opportunities from predicted passes.
-6. **Console** Orbit section and elevation.
+6. **Console** Orbit section and elevation. This is a console issue (frontend, not a Codex agent);
+   ground supplies the API contract.
 7. **SDP4** (deep space).
 
 A catalog feed (Space-Track or CelesTrak) and per-azimuth horizon masks are follow-ups outside
 #732.
 
-## Open questions
+## Settled with the CTO (2026-11-26)
 
-- Which station table carries the geometry once #128 lands (see slice 2).
-- Whether the mission default mask is 5° or 10°. 5° is assumed; it is a per-station setting
-  either way.
+- The default elevation mask is 5°, and it can be set per station.
+- Slice 6 goes to console.
+- Slice 3 includes pruning.
+- The station table is settled with console, with no third table.
