@@ -172,6 +172,26 @@ describe("archive_quarantine on Now (ux U49)", () => {
     expect(done?.discard).toBeUndefined();
   });
 
+  // #791: an item nobody decided closes as expired, in the same words on the Now row (here) and in
+  // the Resolved list (below).
+  it("words an expired item on the Now row as the Resolved list does", () => {
+    const expired = rowOf({
+      state: "resolved",
+      resolution: {
+        action: "expired",
+        actor: { kind: "system", id: null, name: null },
+        at: "2026-11-14T03:22:00Z",
+        note: null,
+        provider_reference: null,
+      },
+    });
+    expect(expired?.sentence).toBe(
+      "Expired at 03:22Z: nobody retried or discarded it before its retention ran out, so it was never archived.",
+    );
+    expect(expired?.command).toBeUndefined();
+    expect(expired?.discard).toBeUndefined();
+  });
+
   it("titles the discard sheet and says how it closed", () => {
     const row = rowOf();
     if (!row?.discard) throw new Error("no discard");
@@ -197,7 +217,7 @@ describe("archive_quarantine on Now (ux U49)", () => {
     expect(closed("discarded", "Bad replay.")).toBe("Discarded by Mira K. at 03:21Z: Bad replay.");
     // #791: an item nobody decided expires with the entries' retention.
     expect(closed("expired", null)).toBe(
-      "Expired at 03:21Z: nobody retried or discarded it before its retention ran out.",
+      "Expired at 03:21Z: nobody retried or discarded it before its retention ran out, so it was never archived.",
     );
   });
 });
