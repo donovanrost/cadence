@@ -2,7 +2,8 @@
 
 Location: `frontend/apps/console/e2e/` + `frontend/apps/console/playwright.config.ts` (qa owns
 both; lead owns the app's `package.json` / tsconfig wiring). Runner: `@playwright/test` 1.62.1
-(same version as the workspace `playwright` catalog entry), headless system Chrome.
+(same version as the workspace `playwright` catalog entry), headless Chromium as pinned by that
+Playwright version (`pnpm exec playwright install chromium` once locally).
 
 ## Run it
 

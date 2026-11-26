@@ -1,0 +1,25 @@
+name: Playwright Chromium
+description: >-
+  Installs the Chromium build pinned by the workspace's Playwright version, restoring it from the
+  cache first. Only a push to develop or main saves the cache (PRs never save; docs/ci/plan.md).
+runs:
+  using: composite
+  steps:
+    - id: version
+      shell: bash
+      working-directory: frontend
+      run: echo "playwright=$(corepack pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+    - id: cache
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-chromium-v1-${{ runner.os }}-${{ steps.version.outputs.playwright }}
+    # --with-deps installs the system libraries every run; the browser download is skipped on a hit.
+    - shell: bash
+      working-directory: frontend
+      run: corepack pnpm exec playwright install --with-deps chromium
+    - if: steps.cache.outputs.cache-hit != 'true' && github.event_name == 'push'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-chromium-v1-${{ runner.os }}-${{ steps.version.outputs.playwright }}
