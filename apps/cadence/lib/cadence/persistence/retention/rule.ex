@@ -21,6 +21,11 @@ defmodule Cadence.Persistence.Retention.Rule do
   @doc "The cursor of a walk that starts from the beginning."
   @callback initial_cursor() :: cursor()
 
+  @doc "How often to sweep, when the rule wants other than the shared `interval_ms`."
+  @callback interval_ms(settings :: keyword()) :: pos_integer()
+
+  @optional_callbacks interval_ms: 1
+
   @doc "Deletes one chunk of what has expired at `now`, inside the caller's transaction."
   @callback sweep_chunk(cursor(), now :: DateTime.t(), settings :: keyword()) :: chunk_result()
 end
