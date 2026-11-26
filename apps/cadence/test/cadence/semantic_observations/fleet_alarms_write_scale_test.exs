@@ -13,7 +13,6 @@ defmodule Cadence.SemanticObservations.FleetAlarmsWriteScaleTest do
   alias Cadence.SemanticObservations
   alias Cadence.SemanticObservations.{FleetAlarms, LatestAlarmStateRow}
 
-  @moduletag :scale
   @moduletag timeout: 900_000
 
   @org "org-fleet-alarm-write"

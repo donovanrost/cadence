@@ -6,7 +6,6 @@ defmodule Cadence.Limits.FleetSummaryWriteScaleTest do
   """
   use Cadence.DataCase, async: false
 
-  @moduletag :scale
   @moduletag timeout: 900_000
 
   alias Cadence.Limits.{Event, Store}
