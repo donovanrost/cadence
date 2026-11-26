@@ -42,6 +42,53 @@ defmodule Cadence.Limits.FleetSummaryPropertyTest do
     end
   end
 
+  test "a writer holds one advisory lock per touched spacecraft, in the ground-limit namespace" do
+    counter = :counters.new(1, [])
+
+    events =
+      for craft <- ["sc-1", "sc-1", "sc-2"] do
+        %{event(counter, @mission) | spacecraft_id: craft}
+      end
+
+    # The test's sandbox transaction outlives the writer's own, so its locks are still visible.
+    assert {:ok, _rows} = Store.persist_latest_states(Repo, events)
+    assert advisory_locks() == 2
+
+    for craft <- ["sc-1", "sc-2"] do
+      assert advisory_locks("telemetry_fleet_limit/" <> @mission <> "/" <> craft) == 1
+    end
+
+    # A one-spacecraft rebuild locks that spacecraft (already held here), a mission rebuild the
+    # summarized ones and its new events' spacecraft.
+    sc3 = [%{event(counter, @mission) | spacecraft_id: "sc-3"}]
+    assert :ok = Store.replace_latest_states(@mission, sc3)
+    assert advisory_locks("telemetry_fleet_limit/" <> @mission <> "/sc-3") == 1
+    assert advisory_locks() == 3
+  end
+
+  defp advisory_locks do
+    %{rows: [[n]]} =
+      Repo.query!(
+        "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND pid = pg_backend_pid()"
+      )
+
+    n
+  end
+
+  defp advisory_locks(key) do
+    %{rows: [[n]]} =
+      Repo.query!(
+        """
+        SELECT count(*) FROM pg_locks
+        WHERE locktype = 'advisory' AND pid = pg_backend_pid()
+          AND ((classid::bigint << 32) | objid::bigint) = hashtextextended($1, 0)
+        """,
+        [key]
+      )
+
+    n
+  end
+
   defp apply_random_operation(counter) do
     case :rand.uniform(10) do
       n when n <= 7 ->
