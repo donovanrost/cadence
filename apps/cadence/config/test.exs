@@ -105,3 +105,6 @@ config :cadence, :env_credentials,
 config :cadence, :fixture_application_contributors, [
   Cadence.TestSupport.SurfaceFixtureApplication
 ]
+
+# Retention sweepers (#694) are exercised directly in their tests: no timers in the suite.
+config :cadence, :retention, enabled?: false
