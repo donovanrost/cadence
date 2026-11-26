@@ -47,18 +47,58 @@ defmodule Cadence.ContactPlanning.TemplateSupersession do
         now,
         slots
       ) do
-    superseded =
+    candidates =
       version.organization_id
       |> ContactRequirements.list_generated(
         version.mission_id,
-        version.contact_requirement_template_id,
+        [version.contact_requirement_template_id],
         now
       )
       |> in_slots(slots)
-      |> stale(version, MapSet.new(targets))
-      |> Enum.count(&cancel_unless_taken_up(scope, version, &1, now))
+      |> stale_versions(version, MapSet.new(targets))
 
-    %{superseded: superseded}
+    %{superseded: Enum.count(candidates, &cancel_unless_taken_up(scope, version, &1, now))}
+  end
+
+  @doc "Collects a reviewed fleet start's stale candidates before it inserts replacements."
+  def prepare(organization_id, mission_id, templates, now) do
+    template_ids = Enum.map(templates, & &1.version.contact_requirement_template_id)
+
+    by_template =
+      organization_id
+      |> ContactRequirements.list_generated(mission_id, template_ids, now)
+      |> Enum.group_by(fn {_requirement, current} ->
+        get_in(current.metadata, ["generation", "contact_requirement_template_id"])
+      end)
+
+    Enum.map(templates, fn template ->
+      candidates =
+        by_template
+        |> Map.get(template.version.contact_requirement_template_id, [])
+        |> at_occurrences(template.occurrences)
+        |> stale_versions(template.version, MapSet.new(template.spacecraft_ids))
+
+      {template.version, candidates}
+    end)
+  end
+
+  @doc "Cancels prepared candidates in the fleet start transaction after their replacements exist."
+  def cancel_prepared(scope, mission_id, prepared, now) do
+    cancellations =
+      for {version, candidates} <- prepared, {id, current_version, cause} <- candidates do
+        %{id: id, version: current_version, reason: supersession_reason(version, cause)}
+      end
+
+    taken_up =
+      ContactPlans.requirements_taken_up(
+        scope.organization_id,
+        mission_id,
+        Enum.map(cancellations, & &1.id),
+        lock: true
+      )
+
+    cancellations = Enum.reject(cancellations, &MapSet.member?(taken_up, &1.id))
+    ContactRequirements.cancel_superseded(scope, mission_id, cancellations, now)
   end
 
   defp in_slots(requirements, {%DateTime{}, %DateTime{}} = window),
@@ -109,6 +149,12 @@ defmodule Cadence.ContactPlanning.TemplateSupersession do
           {binary(), atom()}
         ]
   def stale(requirements, version, targets) do
+    requirements
+    |> stale_versions(version, targets)
+    |> Enum.map(fn {id, _current_version, cause} -> {id, cause} end)
+  end
+
+  defp stale_versions(requirements, version, targets) do
     Enum.flat_map(requirements, fn {requirement, current} ->
       generation =
         ((current.metadata || %{})["generation"] || %{})
@@ -116,7 +162,7 @@ defmodule Cadence.ContactPlanning.TemplateSupersession do
 
       case cause(generation, version, targets) do
         nil -> []
-        cause -> [{requirement.contact_requirement_id, cause}]
+        cause -> [{requirement.contact_requirement_id, current.version, cause}]
       end
     end)
   end
@@ -140,13 +186,11 @@ defmodule Cadence.ContactPlanning.TemplateSupersession do
     end
   end
 
-  defp cancel_unless_taken_up(scope, version, {requirement_id, cause}, now) do
+  defp cancel_unless_taken_up(scope, version, {requirement_id, expected_version, cause}, now) do
     org = version.organization_id
     mission = version.mission_id
 
-    reason =
-      "#{cause}: superseded by template #{version.contact_requirement_template_id} " <>
-        "version #{version.version}"
+    reason = supersession_reason(version, cause)
 
     Repo.transaction(fn ->
       # Plans first: share-lock every referencing plan and re-check uptake, then the requirement.
@@ -156,14 +200,14 @@ defmodule Cadence.ContactPlanning.TemplateSupersession do
         |> MapSet.member?(requirement_id)
 
       with false <- taken_up?,
-           {:ok, %{lifecycle_state: :active} = requirement} <-
+           {:ok, %{lifecycle_state: :active, current_version: ^expected_version}} <-
              ContactRequirements.lock(org, mission, requirement_id),
            {:ok, _canceled} <-
              ContactRequirements.cancel(
                scope,
                mission,
                requirement_id,
-               requirement.current_version,
+               expected_version,
                reason,
                now: now
              ) do
@@ -184,5 +228,10 @@ defmodule Cadence.ContactPlanning.TemplateSupersession do
         Logger.warning("could not supersede requirement #{requirement_id}: #{inspect(error)}")
         false
     end
+  end
+
+  defp supersession_reason(version, cause) do
+    "#{cause}: superseded by template #{version.contact_requirement_template_id} " <>
+      "version #{version.version}"
   end
 end

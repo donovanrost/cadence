@@ -65,9 +65,10 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
     with {:ok, as_of} <- review_as_of(evidence),
          {:ok, inputs} <- FleetStartInputs.load(scope, mission_id, window, true, as_of),
          true <- inputs.evidence === evidence,
+         candidates <- supersession_candidates(scope, mission_id, inputs),
          :ok <- prefer_index_scans_for_materialization(),
          {:ok, generated, materialization} <- materialize(scope, mission_id, inputs),
-         :ok <- supersede(scope, inputs),
+         :ok <- TemplateSupersession.cancel_prepared(scope, mission_id, candidates, as_of),
          requirements <- requirement_pairs(inputs, generated),
          {:ok, run, refs} <-
            FleetPlanningRuns.create_reviewed(
@@ -210,23 +211,26 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
   # claim, including generated requirements, occurrences, refs, and the run.
   defp materialize(scope, mission, inputs) do
     inputs.templates
-    |> Enum.reduce_while({:ok, []}, fn t, {:ok, results} ->
+    |> Enum.reduce_while({:ok, [], 0}, fn t, {:ok, batches, count} ->
       case FleetStartMaterialization.materialize(scope, mission, t) do
-        {:ok, rows} ->
-          append_reviewed_materialization(t, rows, results)
+        {:ok, pairs, occurrence_count} ->
+          {:cont, {:ok, [pairs | batches], count + occurrence_count}}
 
         {:error, reason} ->
           {:halt, {:error, reason}}
       end
     end)
     |> case do
-      {:ok, results} ->
-        {:ok, results,
+      {:ok, batches, occurrence_count} ->
+        pairs = batches |> Enum.reverse() |> List.flatten()
+        created_count = length(pairs)
+
+        {:ok, pairs,
          %{
            "template_count" => length(inputs.templates),
-           "occurrence_count" => length(results),
-           "created_count" => Enum.count(results, &(&1.status == :created)),
-           "existing_count" => Enum.count(results, &(&1.status == :existing)),
+           "occurrence_count" => occurrence_count,
+           "created_count" => created_count,
+           "existing_count" => occurrence_count - created_count,
            "skipped" => not inputs.window.include_recurring
          }}
 
@@ -235,58 +239,15 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
     end
   end
 
-  # The reviewed inputs already leave these out (FleetStartInputs), so the run's refs are
-  # unaffected; cancelling them here keeps v1 and v2 from planning the same slot twice.
-  defp supersede(scope, inputs) do
-    # The review's instant, so exactly what the review left out is superseded (G1).
-    now = inputs.as_of
+  # Read the older rows before the write batches while the table statistics still reflect
+  # its contents. Freshly generated requirements are already on the reviewed template version.
+  defp supersession_candidates(scope, mission_id, inputs) do
+    templates =
+      Enum.filter(inputs.templates, fn t ->
+        t.version.version > 1 or t.version.target_document["kind"] != "spacecraft_ids"
+      end)
 
-    Enum.each(inputs.templates, fn t ->
-      if t.version.version > 1 or t.version.target_document["kind"] != "spacecraft_ids" do
-        TemplateSupersession.supersede(
-          scope,
-          t.version,
-          t.spacecraft_ids,
-          now,
-          # Exactly the occurrences the start generated for it (qa #86).
-          t.occurrences
-        )
-      end
-    end)
-  end
-
-  defp append_reviewed_materialization(template, rows, results) do
-    if reviewed_materialization?(template, rows),
-      do: {:cont, {:ok, results ++ rows}},
-      else: {:halt, {:error, :fleet_planning_review_changed}}
-  end
-
-  defp reviewed_materialization?(template, rows) do
-    existing = Map.new(template.existing_occurrences, &{{&1.at, &1.spacecraft_id}, &1})
-
-    Enum.all?(rows, fn result ->
-      occurrence = result.occurrence
-      at = DateTime.to_unix(occurrence.occurrence_at, :microsecond)
-
-      case {result.status, Map.get(existing, {at, occurrence.spacecraft_id})} do
-        {:created, nil} ->
-          true
-
-        # An older version's day the review said this version regenerates (DECISIONS #86).
-        {:created, %{outcome: "generate"}} ->
-          true
-
-        {:existing, %{outcome: "generate"}} ->
-          false
-
-        {:existing, %{state: "generated", requirement_id: id, requirement_version: version}} ->
-          occurrence.generated_contact_requirement_id == id and
-            occurrence.generated_contact_requirement_version == version
-
-        _ ->
-          false
-      end
-    end)
+    TemplateSupersession.prepare(scope.organization_id, mission_id, templates, inputs.as_of)
   end
 
   defp requirement_pairs(inputs, generated) do
@@ -295,16 +256,12 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
 
     additional =
       generated
-      |> Enum.filter(&(&1.status == :created))
-      |> Enum.reject(&MapSet.member?(reviewed_ids, &1.requirement.contact_requirement_id))
-      |> Enum.filter(fn result ->
-        v = result.requirement_version
-
-        result.requirement.lifecycle_state == :active and
+      |> Enum.reject(fn {r, _v} -> MapSet.member?(reviewed_ids, r.contact_requirement_id) end)
+      |> Enum.filter(fn {r, v} ->
+        r.lifecycle_state == :active and
           DateTime.before?(v.earliest_start, inputs.window.horizon_end) and
           DateTime.after?(v.latest_end, inputs.window.horizon_start)
       end)
-      |> Enum.map(&{&1.requirement, &1.requirement_version})
 
     Enum.uniq_by(existing ++ additional, fn {r, _v} -> r.contact_requirement_id end)
   end

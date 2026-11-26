@@ -521,40 +521,37 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
   end
 
   defp insert_requirement_refs(run, requirements) do
-    refs =
-      Enum.map(requirements, fn {_requirement, version} ->
-        FleetPlanningRunRequirementRef.new(%{
-          fleet_planning_run_id: run.fleet_planning_run_id,
-          organization_id: run.organization_id,
-          mission_id: run.mission_id,
-          contact_requirement_id: version.contact_requirement_id,
-          contact_requirement_version: version.version,
-          input_content_sha256: version.content_sha256,
-          input_state: :pending,
-          result_state: :pending,
-          explanation_document: %{}
-        })
-      end)
-
     inserted =
-      refs
+      requirements
       |> Stream.chunk_every(@insert_batch_size)
       |> Enum.reduce([], fn batch, acc ->
-        rows = Enum.map(batch, &FleetPlanningRunRequirementRefRow.insert_attrs/1)
+        refs = requirement_refs_for_batch(run, batch)
+        rows = Enum.map(refs, &FleetPlanningRunRequirementRefRow.insert_attrs/1)
         {count, _} = Repo.insert_all(FleetPlanningRunRequirementRefRow, rows)
 
         if count != length(batch), do: Repo.rollback(:fleet_planning_run_requirement_refs_invalid)
 
-        persisted =
-          Enum.zip(batch, rows)
-          |> Enum.map(fn {ref, row} ->
-            %{ref | inserted_at: row.inserted_at, updated_at: row.updated_at}
-          end)
-
-        [persisted | acc]
+        [refs | acc]
       end)
 
     {:ok, inserted |> Enum.reverse() |> List.flatten()}
+  end
+
+  defp requirement_refs_for_batch(run, requirements) do
+    now = DateTime.utc_now()
+
+    Enum.map(requirements, fn {_requirement, version} ->
+      FleetPlanningRunRequirementRef.new(%{
+        fleet_planning_run_id: run.fleet_planning_run_id,
+        organization_id: run.organization_id,
+        mission_id: run.mission_id,
+        contact_requirement_id: version.contact_requirement_id,
+        contact_requirement_version: version.version,
+        input_content_sha256: version.content_sha256,
+        inserted_at: now,
+        updated_at: now
+      })
+    end)
   end
 
   defp build_run(
