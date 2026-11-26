@@ -27,6 +27,7 @@ defmodule Cadence.Comms.RoutingRuleStore do
 
   alias Cadence.Listing
   alias Cadence.Missions
+  alias Cadence.Persistence.BulkLookup
   alias Cadence.Repo
   alias Cadence.SourceEndpoints
   alias Cadence.Spacecraft
@@ -245,6 +246,52 @@ defmodule Cadence.Comms.RoutingRuleStore do
     |> order_by([row], asc: row.spacecraft_id, asc: row.purpose_label, asc: row.direction)
     |> Repo.all()
     |> Enum.map(&RoutingRuleRow.to_domain/1)
+  end
+
+  @doc "Materialized legs of the named extra routes, with archived legs for revival."
+  def extra_route_rows(organization_id, mission_id, ids) do
+    RoutingRuleRow
+    |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
+    |> where([row], row.origin == "spacecraft")
+    |> order_by([row], asc: row.spacecraft_id, asc: row.purpose_label, asc: row.direction)
+    |> BulkLookup.by_id(:profile_rule_id, ids)
+    |> Enum.map(&RoutingRuleRow.to_domain/1)
+    |> Enum.group_by(& &1.profile_rule_id)
+  end
+
+  @doc "Effective profile choices of the named spacecraft."
+  def profile_choices(organization_id, mission_id, ids) do
+    RoutingRuleRow
+    |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
+    |> where([row], row.origin == "profile" and row.lifecycle_state != "archived")
+    |> select([row], {row.spacecraft_id, {row.transport_id, row.direction, row.role}})
+    |> BulkLookup.by_id(:spacecraft_id, ids)
+    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+    |> Map.new(fn {id, choices} -> {id, MapSet.new(choices)} end)
+  end
+
+  @doc false
+  def planned_change(nil, desired), do: {nil, desired, :created}
+
+  def planned_change(current, desired) do
+    fields = @route_fields ++ [:metadata]
+
+    unless same_route?(current, desired, fields) do
+      {:ok, next} = build_next_rule(current, route_attrs(desired, fields))
+      {current, next, :updated}
+    end
+  end
+
+  @doc false
+  def planned_archive(current) do
+    {:ok, archived} =
+      build_next_rule(current, %{
+        lifecycle_state: :archived,
+        enabled?: false,
+        metadata_patch: %{"archived_at" => DateTime.utc_now()}
+      })
+
+    {current, archived, :archived}
   end
 
   @doc "Returns one bounded page of active mission routing rules."
@@ -555,45 +602,72 @@ defmodule Cadence.Comms.RoutingRuleStore do
          provider_refs,
          transport_refs
        ) do
-    path_template =
-      PathTemplate.new(%{
-        mission_id: rule.mission_id,
-        path_id: "#{rule.routing_rule_id}:#{path_direction}",
-        direction: path_direction,
-        selection_role: selection_role,
-        provider_path_ref: rule.provider_path_ref,
-        provider_profile_refs: provider_refs,
-        transport_profile_refs: transport_refs,
-        metadata: %{
-          "display_name" => "#{rule.display_name} #{path_direction}",
-          "materialized_from_routing_rule_id" => rule.routing_rule_id
-        }
-      })
+    template = path_template(rule, path_direction, selection_role, provider_refs, transport_refs)
 
-    with {:ok, path_template} <-
-           PathTemplateStore.persist(rule.organization_id, path_template) do
-      assignment =
-        LinkAssignment.new(%{
-          mission_id: rule.mission_id,
-          spacecraft_id: rule.spacecraft_id,
-          source_endpoint_ref: source_endpoint_ref,
-          path_template_id: path_template.path_template_id,
-          path_template_version: path_template.version,
-          direction: path_template.direction,
-          selection_role: path_template.selection_role,
-          provider_path_ref: rule.provider_path_ref,
-          provider_profile_refs: path_template.provider_profile_refs,
-          metadata: %{
-            "display_name" => "#{rule.display_name} #{path_direction}",
-            "materialized_from_routing_rule_id" => rule.routing_rule_id
-          }
-        })
-
-      with {:ok, assignment} <-
-             LinkAssignmentStore.persist(rule.organization_id, assignment) do
-        {:ok, %{path_template: path_template, link_assignment: assignment}}
-      end
+    with {:ok, template} <- PathTemplateStore.persist(rule.organization_id, template),
+         assignment = link_assignment(rule, source_endpoint_ref, template),
+         {:ok, assignment} <- LinkAssignmentStore.persist(rule.organization_id, assignment) do
+      {:ok, %{path_template: template, link_assignment: assignment}}
     end
+  end
+
+  @doc false
+  def route_artifacts(rule, endpoint, provider, gateway) do
+    provider_refs = [
+      %{"provider_profile_id" => provider.provider_profile_id, "version" => provider.version}
+    ]
+
+    transport_refs = if gateway, do: [UplinkGateway.ref(gateway)], else: []
+
+    template =
+      path_template(
+        rule,
+        path_direction(rule.direction),
+        selection_role(rule.role),
+        provider_refs,
+        transport_refs
+      )
+
+    %{path_template: template, link_assignment: link_assignment(rule, endpoint, template)}
+  end
+
+  defp path_template(rule, path_direction, selection_role, provider_refs, transport_refs) do
+    PathTemplate.new(%{
+      organization_id: rule.organization_id,
+      mission_id: rule.mission_id,
+      path_id: "#{rule.routing_rule_id}:#{path_direction}",
+      direction: path_direction,
+      selection_role: selection_role,
+      provider_path_ref: rule.provider_path_ref,
+      provider_profile_ids: Enum.map(provider_refs, & &1["provider_profile_id"]),
+      provider_profile_refs: provider_refs,
+      transport_profile_ids: Enum.map(transport_refs, & &1["transport_profile_id"]),
+      transport_profile_refs: transport_refs,
+      metadata: routing_metadata(rule, path_direction)
+    })
+  end
+
+  defp link_assignment(rule, source_endpoint_ref, template) do
+    LinkAssignment.new(%{
+      organization_id: rule.organization_id,
+      mission_id: rule.mission_id,
+      spacecraft_id: rule.spacecraft_id,
+      source_endpoint_ref: source_endpoint_ref,
+      path_template_id: template.path_template_id,
+      path_template_version: template.version,
+      direction: template.direction,
+      selection_role: template.selection_role,
+      provider_path_ref: rule.provider_path_ref,
+      provider_profile_refs: template.provider_profile_refs,
+      metadata: routing_metadata(rule, template.direction)
+    })
+  end
+
+  defp routing_metadata(rule, direction) do
+    %{
+      "display_name" => "#{rule.display_name} #{direction}",
+      "materialized_from_routing_rule_id" => rule.routing_rule_id
+    }
   end
 
   defp path_direction(:inbound), do: :downlink
@@ -603,7 +677,8 @@ defmodule Cadence.Comms.RoutingRuleStore do
   defp selection_role(:candidate), do: :candidate
   defp selection_role(:contributing), do: :contributing
 
-  defp merge_materialized_refs(%RoutingRule{} = rule, materialized) do
+  @doc false
+  def merge_materialized_refs(%RoutingRule{} = rule, materialized) do
     assignment_ids = Enum.map(materialized, & &1.link_assignment.link_assignment_id)
     path_template_ids = Enum.map(materialized, & &1.path_template.path_template_id)
 
@@ -618,22 +693,24 @@ defmodule Cadence.Comms.RoutingRuleStore do
   end
 
   defp append_event(%RoutingRule{} = rule, default_event_type, opts) do
-    event_type = Keyword.get(opts, :event_type, default_event_type)
-
-    event =
-      RoutingRuleEvent.new(%{
-        organization_id: rule.organization_id,
-        mission_id: rule.mission_id,
-        routing_rule_id: rule.routing_rule_id,
-        event_type: event_type,
-        actor_id: Keyword.get(opts, :actor_id),
-        payload: event_payload(rule, event_type)
-      })
+    event = route_event(rule, Keyword.get(opts, :event_type, default_event_type), opts)
 
     case Repo.insert(RoutingRuleEventRow.changeset(event)) do
       {:ok, %RoutingRuleEventRow{} = row} -> {:ok, RoutingRuleEventRow.to_domain(row)}
       {:error, %Changeset{} = changeset} -> {:error, changeset}
     end
+  end
+
+  @doc false
+  def route_event(%RoutingRule{} = rule, event_type, opts \\ []) do
+    RoutingRuleEvent.new(%{
+      organization_id: rule.organization_id,
+      mission_id: rule.mission_id,
+      routing_rule_id: rule.routing_rule_id,
+      event_type: event_type,
+      actor_id: Keyword.get(opts, :actor_id),
+      payload: event_payload(rule, event_type)
+    })
   end
 
   defp event_payload(rule, event_type) do

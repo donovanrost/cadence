@@ -27,28 +27,41 @@ defmodule Cadence.Comms.UplinkGateway do
         %Transport{} = transport,
         provider
       ) do
+    profile = profile(rule, spacecraft, transport, provider)
+
+    with {:ok, profile} <- ProfileStore.persist_transport_profile(rule.organization_id, profile) do
+      {:ok, ref(profile)}
+    end
+  end
+
+  @doc false
+  def profile(
+        %RoutingRule{} = rule,
+        %Spacecraft{} = spacecraft,
+        %Transport{} = transport,
+        provider
+      ) do
     configuration = configuration(spacecraft, transport, provider)
     digest = configuration |> ContentHash.term_sha256() |> binary_part(0, 12)
 
-    profile =
-      TransportProfile.new(%{
-        transport_profile_id: "uplink-gateway:#{rule.routing_rule_id}:#{digest}",
-        mission_id: rule.mission_id,
-        version: 1,
-        family_key: :uplink_gateway,
-        target_scope: :path,
-        configuration: configuration,
-        metadata: %{
-          "display_name" => "#{rule.display_name} uplink gateway",
-          "materialized_from_routing_rule_id" => rule.routing_rule_id
-        }
-      })
-
-    with {:ok, profile} <- ProfileStore.persist_transport_profile(rule.organization_id, profile) do
-      {:ok,
-       %{"transport_profile_id" => profile.transport_profile_id, "version" => profile.version}}
-    end
+    TransportProfile.new(%{
+      organization_id: rule.organization_id,
+      transport_profile_id: "uplink-gateway:#{rule.routing_rule_id}:#{digest}",
+      mission_id: rule.mission_id,
+      version: 1,
+      family_key: :uplink_gateway,
+      target_scope: :path,
+      configuration: configuration,
+      metadata: %{
+        "display_name" => "#{rule.display_name} uplink gateway",
+        "materialized_from_routing_rule_id" => rule.routing_rule_id
+      }
+    })
   end
+
+  @doc false
+  def ref(%TransportProfile{} = profile),
+    do: %{"transport_profile_id" => profile.transport_profile_id, "version" => profile.version}
 
   defp configuration(spacecraft, transport, provider) do
     %{

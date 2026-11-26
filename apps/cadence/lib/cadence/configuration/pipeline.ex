@@ -72,11 +72,9 @@ defmodule Cadence.Configuration.Pipeline do
     }
 
     ops
-    |> Enum.reduce_while(initial, fn op, acc ->
-      case step(organization_id, mission_id, base_revision, op, acc) do
-        {:halt, acc} -> {:halt, %{acc | halted?: true}}
-        acc -> {:cont, acc}
-      end
+    |> Enum.chunk_by(&operation_group/1)
+    |> Enum.reduce_while(initial, fn group, acc ->
+      run_group(organization_id, mission_id, base_revision, group, acc)
     end)
     |> finalize(organization_id, mission_id)
     |> holds(organization_id, mission_id)
@@ -85,6 +83,97 @@ defmodule Cadence.Configuration.Pipeline do
     |> Map.update!(:errors, &Enum.reverse/1)
     |> Map.update!(:effects, &Enum.reverse/1)
     |> Map.update!(:diffs, &Enum.reverse/1)
+  end
+
+  defp operation_group(op) do
+    kind = Kinds.fetch!(op.kind)
+
+    if function_exported?(kind, :batchable?, 1) and
+         not function_exported?(kind, :effect, 7) and kind.batchable?(op),
+       do: {:batch, kind},
+       else: :single
+  end
+
+  defp run_group(org, mission, base, [first | _] = ops, acc) do
+    case operation_group(first) do
+      :single ->
+        run_steps(ops, acc, &step(org, mission, base, &1, &2))
+
+      {:batch, kind} ->
+        run_steps(distinct_groups(ops), acc, &step_batch(kind, org, mission, base, &1, &2))
+    end
+  end
+
+  defp run_steps(ops, acc, step) do
+    result =
+      Enum.reduce_while(ops, acc, fn op, acc ->
+        case step.(op, acc) do
+          {:halt, acc} -> {:halt, %{acc | halted?: true}}
+          acc -> {:cont, acc}
+        end
+      end)
+
+    if result.halted?, do: {:halt, result}, else: {:cont, result}
+  end
+
+  # Repeated edits to an entity must see the result of the previous edit.
+  defp distinct_groups(ops) do
+    Enum.chunk_while(
+      ops,
+      {[], MapSet.new()},
+      fn op, {batch, ids} ->
+        if MapSet.member?(ids, op.entity_id) do
+          {:cont, Enum.reverse(batch), {[op], MapSet.new([op.entity_id])}}
+        else
+          {:cont, {[op | batch], MapSet.put(ids, op.entity_id)}}
+        end
+      end,
+      fn {batch, _ids} -> {:cont, Enum.reverse(batch), nil} end
+    )
+  end
+
+  defp step_batch(kind, org, mission, base, ops, acc) do
+    {documents, context} = kind.load_batch(org, mission, Enum.map(ops, & &1.entity_id))
+
+    {transitions, acc} =
+      Enum.reduce(ops, {[], acc}, fn op, {transitions, acc} ->
+        current = Document.normalize(Map.get(documents, op.entity_id))
+
+        case transition(mission, base, op, current) do
+          {:ok, change} ->
+            acc = Map.update!(acc, :diffs, &[diff(op, current, change.proposed) | &1])
+            {[change | transitions], acc}
+
+          {:conflict, item} ->
+            {transitions, Map.update!(acc, :conflicts, &[item | &1])}
+        end
+      end)
+
+    write_batch(Enum.reverse(transitions), kind, org, mission, context, acc)
+  end
+
+  defp write_batch([], _kind, _org, _mission, _context, acc), do: acc
+
+  defp write_batch(transitions, kind, org, mission, context, acc) do
+    case kind.write_batch(org, mission, transitions, context) do
+      {:ok, outcomes} ->
+        Enum.zip(transitions, outcomes)
+        |> Enum.reduce(acc, fn
+          {change, {:ok, stored}}, acc ->
+            record_entry(acc, kind, change, stored, [])
+
+          {%{op: op}, {:invalid, fields}}, acc ->
+            Map.update!(acc, :errors, &[error(op, fields) | &1])
+        end)
+
+      {:error, id, reason} ->
+        %{op: op} = Enum.find(transitions, hd(transitions), &(&1.id == id))
+        write_error(acc, op, reason)
+
+      {:error, reason} ->
+        %{op: op} = hd(transitions)
+        write_error(acc, op, reason)
+    end
   end
 
   # Derived kinds run only when every op applied cleanly; otherwise there's nothing coherent
@@ -144,63 +233,94 @@ defmodule Cadence.Configuration.Pipeline do
 
   defp step(organization_id, mission_id, base_revision, op, acc) do
     kind = Kinds.fetch!(op.kind)
-    action = action_atom(op.action)
     current = load_current(kind, organization_id, mission_id, op.entity_id)
 
+    case transition(mission_id, base_revision, op, current) do
+      {:ok, change} ->
+        acc
+        |> Map.update!(:diffs, &[diff(op, current, change.proposed) | &1])
+        |> add_effect(
+          kind,
+          organization_id,
+          mission_id,
+          change.action,
+          op,
+          current,
+          change.proposed
+        )
+        |> validate_and_write(kind, organization_id, mission_id, change)
+
+      {:conflict, item} ->
+        Map.update!(acc, :conflicts, &[item | &1])
+    end
+  end
+
+  defp transition(mission_id, base_revision, op, current) do
     with {:ok, proposed} <- propose(op.action, current, op.payload),
          [] <- value_conflicts(mission_id, base_revision, op, current) do
-      acc
-      |> Map.update!(:diffs, &[diff(op, current, proposed) | &1])
-      |> add_effect(kind, organization_id, mission_id, action, op, current, proposed)
-      |> validate_and_write(kind, organization_id, mission_id, action, op, current, proposed)
+      {:ok,
+       %{
+         action: action_atom(op.action),
+         id: op.entity_id,
+         op: op,
+         current: current,
+         proposed: proposed
+       }}
     else
       {:conflict, reason} ->
-        Map.update!(acc, :conflicts, &[conflict(op, reason, []) | &1])
+        {:conflict, conflict(op, reason, [])}
 
       conflicts when is_list(conflicts) ->
-        Map.update!(acc, :conflicts, &[conflict(op, :value_changed, conflicts) | &1])
+        {:conflict, conflict(op, :value_changed, conflicts)}
     end
   end
 
-  defp validate_and_write(acc, kind, org, mission_id, action, op, current, proposed) do
-    case kind.validate(org, mission_id, action, op.entity_id, current, proposed) do
+  defp validate_and_write(acc, kind, org, mission_id, change) do
+    case kind.validate(org, mission_id, change.action, change.id, change.current, change.proposed) do
       :ok ->
-        write(acc, kind, org, mission_id, action, op, current, proposed)
+        write(acc, kind, org, mission_id, change)
 
       {:error, field_errors} ->
-        Map.update!(acc, :errors, &[error(op, field_errors) | &1])
+        Map.update!(acc, :errors, &[error(change.op, field_errors) | &1])
     end
   end
 
-  defp write(acc, kind, org, mission_id, action, op, current, proposed) do
-    case kind.write(org, mission_id, action, op.entity_id, current, proposed, options(op)) do
-      {:ok, stored, extra} ->
-        entry = %{
-          kind: op.kind,
-          entity_id: op.entity_id,
-          op: action,
-          previous: current,
-          proposed: Document.normalize(stored)
-        }
-
-        acc
-        |> Map.update!(:entries, &(Enum.reverse(extra, [entry]) ++ &1))
-        |> Map.update!(:impacts, &MapSet.put(&1, kind.runtime_impact(action, current, proposed)))
-
-      # A store refusal the kind can word as field errors (e.g. a listen port another mission
-      # holds) reads like validation, on the field.
-      {:error, [%{path: _, message: _} | _] = field_errors} ->
-        {:halt, Map.update!(acc, :errors, &[error(op, field_errors) | &1])}
-
-      {:error, reason} ->
-        {:halt,
-         Map.update!(
-           acc,
-           :errors,
-           &[error(op, [%{path: "", message: "Could not save: " <> describe(reason)}]) | &1]
-         )}
+  defp write(
+         acc,
+         kind,
+         org,
+         mission_id,
+         %{action: action, id: id, op: op, current: current, proposed: proposed} = change
+       ) do
+    case kind.write(org, mission_id, action, id, current, proposed, options(op)) do
+      {:ok, stored, extra} -> record_entry(acc, kind, change, stored, extra)
+      {:error, reason} -> write_error(acc, op, reason)
     end
   end
+
+  defp record_entry(acc, kind, change, stored, extra) do
+    entry = %{
+      kind: change.op.kind,
+      entity_id: change.id,
+      op: change.action,
+      previous: change.current,
+      proposed: Document.normalize(stored)
+    }
+
+    acc
+    |> Map.update!(:entries, &(Enum.reverse(extra, [entry]) ++ &1))
+    |> Map.update!(
+      :impacts,
+      &MapSet.put(&1, kind.runtime_impact(change.action, change.current, change.proposed))
+    )
+  end
+
+  # A store refusal the kind can word (e.g. a claimed listen port) stays on the field.
+  defp write_error(acc, op, [%{path: _, message: _} | _] = fields),
+    do: {:halt, Map.update!(acc, :errors, &[error(op, fields) | &1])}
+
+  defp write_error(acc, op, reason),
+    do: write_error(acc, op, [%{path: "", message: "Could not save: " <> describe(reason)}])
 
   defp add_effect(acc, kind, org, mission_id, action, op, current, proposed) do
     if function_exported?(kind, :effect, 7) do
