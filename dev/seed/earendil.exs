@@ -9,8 +9,9 @@ defmodule EarendilSeed do
 
   def run do
     started = now()
+    # The current harness measures up to 1,000; the simulator's SCID range reaches 1,023.
     count = integer_env!("EARENDIL_SPACECRAFT_COUNT", 500, 1..1000)
-    sites = integer_env!("EARENDIL_SITE_COUNT", 10, 1..10)
+    sites = integer_env!("EARENDIL_SITE_COUNT", 10, 2..15)
     base = System.get_env("BASE_URL") || "http://127.0.0.1:#{System.get_env("PORT", "4001")}"
     email = System.fetch_env!("CADENCE_ADMIN_EMAIL")
     password = System.fetch_env!("CADENCE_ADMIN_PASSWORD")

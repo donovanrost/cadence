@@ -13,11 +13,7 @@ Scope follows `docs/apogee/DECISIONS.md`; the decision number is in brackets whe
 
 ## Personas
 
-On a freshly reset worktree, the REST seed currently creates only the environment admin.
-Additional personas await #745 and the remaining #752 work.
-
-The planned REST personas are listed below (see `../../dev-environment.md`);
-`e2e/auth.setup.ts` saves sessions once invitations are available.
+Seeded by `dev/apogee_qa_personas.exs` (see `../../dev-environment.md`); sessions saved by `e2e/auth.setup.ts`.
 
 | Key | User | Role | Used for |
 | --- | --- | --- | --- |

@@ -8,11 +8,6 @@ updated: 2026-10-19
 
 # Run the Reflect Orbital Demo
 
-This guide describes the former direct-store fixture and is pending a REST rewrite under #752.
-Current `dev/stack up` runs [the REST seed](../dev-environment.md): it creates the organization
-and mission, stages 500 spacecraft for independent review, and reports the missing API steps.
-The site, catalog, routing, and planning steps below are not run by `dev/stack up` yet.
-
 This development fixture creates **Reflect Orbital → Earendil** in the existing
 Cadence database. It is a synthetic constellation rehearsal for an interview,
 inspired by [Reflect Orbital's published constellation ambitions](https://www.reflectorbital.com/).
