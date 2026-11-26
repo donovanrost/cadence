@@ -92,9 +92,10 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
   end
 
   defp prefer_index_scans_for_materialization do
-    # New missions may create thousands of parent rows in this transaction while the planner
-    # still sees near-empty committed tables. FK checks then scan every prior insert for each
-    # child row. All referenced keys are indexed; keep their checks logarithmic until commit.
+    # PostgreSQL caches RI trigger plans per backend. A new fleet can create its parent rows
+    # inside this transaction before table statistics see them; a broad or sequential FK plan
+    # then revisits prior inserts for each child. The exact-key indexes and this transaction-
+    # local setting keep both cold and previously used backends on indexed lookups.
     Repo.query!("SET LOCAL enable_seqscan = off")
     :ok
   end

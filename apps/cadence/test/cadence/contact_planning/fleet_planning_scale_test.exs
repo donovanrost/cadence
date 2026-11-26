@@ -24,6 +24,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningScaleTest do
   @tag :scale
   @tag timeout: 1_800_000
   test "500 spacecraft at four daily contacts start 14,000 requirements", context do
+    warm_fk_plans(context)
     assert_scale_start(context, 500)
   end
 
@@ -172,6 +173,61 @@ defmodule Cadence.ContactPlanning.FleetPlanningScaleTest do
     after
       100 -> sample_peak(owner, current)
     end
+  end
+
+  defp warm_fk_plans(context) do
+    [[backend]] = Repo.query!("SELECT pg_backend_pid()").rows
+    at = DateTime.add(@start, -86_400)
+    until = DateTime.add(at, 3_600)
+
+    attrs =
+      Fixtures.template_attrs(%{
+        target_document: %{
+          "kind" => "spacecraft_ids",
+          "spacecraft_ids" => [context.craft.spacecraft_id]
+        },
+        schedule_document: %{
+          "type" => "fixed_interval",
+          "anchor_at" => DateTime.to_iso8601(at),
+          "interval_seconds" => 86_400,
+          "window_offset_seconds" => 600,
+          "window_duration_seconds" => 1_800
+        },
+        catch_up_policy_document: %{
+          "maximum_occurrences_per_run" => 1,
+          "maximum_lookback_seconds" => 86_400
+        }
+      })
+
+    assert {:ok, template, version} =
+             ContactRequirementTemplates.create(context.admin, context.mission_id, attrs)
+
+    assert {:ok, [%{status: :created}]} =
+             ContactRequirementTemplates.materialize(
+               context.scope,
+               context.mission_id,
+               template.contact_requirement_template_id,
+               at,
+               until
+             )
+
+    assert {:ok, _run, [_ref]} =
+             FleetPlanningRuns.create(context.scope, context.mission_id, %{
+               horizon_start: at,
+               horizon_end: until,
+               trigger_kind: :manual
+             })
+
+    assert {:ok, _} =
+             ContactRequirementTemplates.pause(
+               context.admin,
+               context.mission_id,
+               template.contact_requirement_template_id,
+               version.version,
+               "Warm backend test"
+             )
+
+    assert Repo.query!("SELECT pg_backend_pid()").rows == [[backend]]
   end
 
   defp spacecraft_ids(context, count) do

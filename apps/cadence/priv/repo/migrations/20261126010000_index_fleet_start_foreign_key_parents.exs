@@ -15,6 +15,13 @@ defmodule Cadence.Repo.Migrations.IndexFleetStartForeignKeyParents do
       )
     )
 
+    create(
+      index(:contact_requirements, [:organization_id, :mission_id, :lifecycle_state],
+        name: :contact_requirements_inactive_mission_state_idx,
+        where: "lifecycle_state <> 'active'"
+      )
+    )
+
     drop(
       index(
         :contact_requirement_versions,
@@ -28,6 +35,17 @@ defmodule Cadence.Repo.Migrations.IndexFleetStartForeignKeyParents do
         :contact_requirement_versions,
         [:spacecraft_id, :organization_id, :mission_id, :earliest_start, :latest_end],
         name: :contact_requirement_versions_spacecraft_horizon_idx
+      )
+    )
+
+    create(
+      index(
+        :contact_requirement_versions,
+        [:organization_id, :mission_id, :earliest_start, :latest_end],
+        name: :contact_requirement_versions_mission_horizon_idx,
+        # Horizon reads imply this predicate; RI checks do not. Even though the column is
+        # required, the predicate keeps this broad index out of cached FK lookup plans.
+        where: "earliest_start IS NOT NULL"
       )
     )
 
@@ -48,6 +66,15 @@ defmodule Cadence.Repo.Migrations.IndexFleetStartForeignKeyParents do
     drop(
       index(
         :contact_requirement_versions,
+        [:organization_id, :mission_id, :earliest_start, :latest_end],
+        name: :contact_requirement_versions_mission_horizon_idx,
+        where: "earliest_start IS NOT NULL"
+      )
+    )
+
+    drop(
+      index(
+        :contact_requirement_versions,
         [:spacecraft_id, :organization_id, :mission_id, :earliest_start, :latest_end],
         name: :contact_requirement_versions_spacecraft_horizon_idx
       )
@@ -58,6 +85,12 @@ defmodule Cadence.Repo.Migrations.IndexFleetStartForeignKeyParents do
         :contact_requirement_versions,
         [:organization_id, :mission_id, :spacecraft_id, :earliest_start, :latest_end],
         name: :contact_requirement_versions_horizon_idx
+      )
+    )
+
+    drop(
+      index(:contact_requirements, [:organization_id, :mission_id, :lifecycle_state],
+        name: :contact_requirements_inactive_mission_state_idx
       )
     )
 
