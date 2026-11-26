@@ -114,7 +114,7 @@ defmodule Cadence.GroupReleaseFixtures do
       )
 
     {:ok, endpoint} =
-      Cadence.SourceEndpoints.persist_source_endpoint(
+      Cadence.SourceEndpointFixtures.persist(
         @org,
         SourceEndpoint.new(%{
           source_endpoint_id: "source-endpoint-" <> name,

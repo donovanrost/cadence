@@ -206,7 +206,7 @@ defmodule Cadence.Runtime.ManagedActionRequestReplayE2ETest do
       )
 
     {:ok, endpoint} =
-      Cadence.SourceEndpoints.persist_source_endpoint(
+      Cadence.SourceEndpointFixtures.persist(
         SourceEndpoint.new(%{
           source_endpoint_id: "endpoint-sc-alpha",
           mission_id: mission_id,

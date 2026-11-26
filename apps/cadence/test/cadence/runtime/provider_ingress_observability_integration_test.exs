@@ -41,7 +41,7 @@ defmodule Cadence.Runtime.ProviderIngressObservabilityIntegrationTest do
       })
 
     assert {:ok, _source_endpoint} =
-             Cadence.SourceEndpoints.persist_source_endpoint(source_endpoint)
+             Cadence.SourceEndpointFixtures.persist(source_endpoint)
 
     binding_set = persist_binding_set(mission_id)
 

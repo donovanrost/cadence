@@ -50,7 +50,6 @@ defmodule Cadence.Dev.ApogeeQaMission do
 
   alias Cadence.Missions.Mission
   alias Cadence.{Repo, Spacecraft, SpacecraftType}
-  alias Cadence.SourceEndpoints.SourceEndpoint
 
   @organization_id F.organization_id()
   @mission_id Provider.mission_id()
@@ -255,17 +254,12 @@ defmodule Cadence.Dev.ApogeeQaMission do
               )
 
             {:ok, _source} =
-              Cadence.SourceEndpoints.persist_source_endpoint(
-                @organization_id,
-                SourceEndpoint.new(%{
-                  source_endpoint_id: "source-#{id}",
-                  mission_id: m.mission_id,
-                  spacecraft_id: id,
-                  source_ref: craft.display_name,
-                  display_name: "#{craft.display_name} TT&C",
-                  metadata: @metadata
-                })
-              )
+              Cadence.SourceEndpoints.create_source_endpoint(@organization_id, m.mission_id, %{
+                spacecraft_id: id,
+                source_ref: craft.display_name,
+                display_name: "#{craft.display_name} TT&C",
+                metadata: @metadata
+              })
 
             craft
           end)

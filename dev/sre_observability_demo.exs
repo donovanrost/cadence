@@ -18,7 +18,6 @@ defmodule Cadence.Dev.SreObservabilityDemo do
   alias Cadence.Observability
   alias Cadence.Organizations.Organization
   alias Cadence.Runtime.MissionRuntimeSpec
-  alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
   alias Cadence.Telemetry.DataManagement
   alias Cadence.Telemetry.PacketDefinition
@@ -71,7 +70,6 @@ defmodule Cadence.Dev.SreObservabilityDemo do
       organization_id: "org-sre-demo-#{run_id}",
       mission_id: "mission-sre-demo-#{run_id}",
       spacecraft_id: "spacecraft-sre-demo-#{run_id}",
-      source_endpoint_id: "source-sre-demo-#{run_id}",
       binding_set_id: "binding-sre-demo-#{run_id}",
       dashboard_id: "dashboard-sre-demo-#{run_id}",
       investigation_dashboard_id: "dashboard-sre-demo-investigation-#{run_id}",
@@ -119,7 +117,8 @@ defmodule Cadence.Dev.SreObservabilityDemo do
          :ok <- ensure_browser_access(ids),
          {:ok, _mission} <- persist_mission(ids),
          {:ok, _spacecraft} <- persist_spacecraft(ids),
-         {:ok, source_endpoint} <- persist_source_endpoint(ids),
+         {:ok, source_endpoint} <- create_source_endpoint(ids),
+         ids = Map.put(ids, :source_endpoint_id, source_endpoint.source_endpoint_id),
          {:ok, _binding_set} <- activate_packet_binding(ids),
          {:ok, scheduled_contact} <-
            schedule_contact(ids, source_endpoint, now, duration_seconds),
@@ -236,17 +235,12 @@ defmodule Cadence.Dev.SreObservabilityDemo do
     Cadence.SpacecraftStore.persist_spacecraft(ids.organization_id, spacecraft)
   end
 
-  defp persist_source_endpoint(ids) do
-    source_endpoint =
-      SourceEndpoint.new(%{
-        source_endpoint_id: ids.source_endpoint_id,
-        mission_id: ids.mission_id,
-        spacecraft_id: ids.spacecraft_id,
-        source_ref: "sre-demo/tcp/downlink",
-        display_name: "SRE demo telemetry endpoint"
-      })
-
-    Cadence.SourceEndpoints.persist_source_endpoint(ids.organization_id, source_endpoint)
+  defp create_source_endpoint(ids) do
+    Cadence.SourceEndpoints.create_source_endpoint(ids.organization_id, ids.mission_id, %{
+      spacecraft_id: ids.spacecraft_id,
+      source_ref: "sre-demo/tcp/downlink",
+      display_name: "SRE demo telemetry endpoint"
+    })
   end
 
   defp activate_packet_binding(ids) do

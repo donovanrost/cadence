@@ -52,20 +52,9 @@ defmodule CadenceWeb.Console.SourceEndpointController do
     with :ok <- authorize(conn),
          :ok <- reject_supplied_id(params, attrs),
          :ok <- ensure_spacecraft(conn, spacecraft_id),
-         {:ok, endpoint} <-
-           SourceEndpointParams.source_endpoint(
-             org_id(conn),
-             mission_id(conn),
-             spacecraft_id,
-             attrs
-           ),
-         {:ok, _created} <- SourceEndpoints.persist_source_endpoint(org_id(conn), endpoint),
+         {:ok, attributes} <- SourceEndpointParams.attributes(spacecraft_id, attrs),
          {:ok, saved} <-
-           SourceEndpoints.fetch_source_endpoint(
-             org_id(conn),
-             mission_id(conn),
-             endpoint.source_endpoint_id
-           ) do
+           SourceEndpoints.create_source_endpoint(org_id(conn), mission_id(conn), attributes) do
       conn |> put_status(:created) |> json(%{data: encode(saved)})
     else
       error -> failure(conn, error)

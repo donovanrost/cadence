@@ -54,7 +54,7 @@ defmodule Cadence.Reads.CommandTargetNamesTest do
 
   defp endpoint!(c, id, name) do
     assert {:ok, _} =
-             SourceEndpoints.persist_source_endpoint(
+             Cadence.SourceEndpointFixtures.persist(
                c.org,
                SourceEndpoint.new(%{
                  source_endpoint_id: id,

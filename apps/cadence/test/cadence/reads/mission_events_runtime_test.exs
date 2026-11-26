@@ -355,7 +355,7 @@ defmodule Cadence.Reads.MissionEventsRuntimeTest do
       })
 
     assert {:ok, persisted_source_endpoint} =
-             Cadence.SourceEndpoints.persist_source_endpoint(organization_id, source_endpoint)
+             Cadence.SourceEndpointFixtures.persist(organization_id, source_endpoint)
 
     assert persisted_source_endpoint.source_endpoint_id == source_endpoint.source_endpoint_id
     assert persisted_source_endpoint.organization_id == organization_id

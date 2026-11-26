@@ -437,7 +437,7 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
       })
 
     assert {:ok, endpoint} =
-             Cadence.SourceEndpoints.persist_source_endpoint(
+             Cadence.SourceEndpointFixtures.persist(
                context.organization.organization_id,
                endpoint
              )
