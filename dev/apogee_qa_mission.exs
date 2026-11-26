@@ -14,7 +14,7 @@
 #   - a QA provider on the dev simulator: credential (the env variable named, never its value),
 #     account, grant to the QA mission, mission provider, then validate and sync;
 #   - a local test station, direct TCP-client transport and extra downlink route to 23565-1,
-#     submitted as a change set for independent review;
+#     submitted as a change set and approved by the seeded second admin when required;
 #   - QA mission 2, qa-mission-23566 ("QA mission 23566"; director's GO 11-18), for checks of a
 #     decision under 'direct': the same organization and rules, also with NO approval override
 #     (it reads 'independent' until lead saves 'direct' by hand in the console, reset slot); its
@@ -37,6 +37,7 @@
 # --offline skips the provider's validate and sync (they call the simulator over HTTP), for a dry
 # run where the simulator isn't up. See docs/dev-environment.md.
 Code.require_file("reflect_orbital/fixture.exs", __DIR__)
+Code.require_file("reflect_orbital/approver.exs", __DIR__)
 Code.require_file("seed/route_changes.exs", __DIR__)
 Code.require_file("apogee_qa_mission/provider.exs", __DIR__)
 
@@ -48,6 +49,7 @@ defmodule Cadence.Dev.ApogeeQaMission do
   alias Cadence.Catalog
   alias Cadence.Catalog.{Actor, Artifact}
   alias Cadence.Dev.ApogeeQaMission.Provider
+  alias Cadence.Dev.ReflectOrbital.Approver
   alias Cadence.Dev.ReflectOrbital.Fixture, as: F
 
   alias Cadence.Missions.Mission
@@ -107,7 +109,12 @@ defmodule Cadence.Dev.ApogeeQaMission do
     Enum.each(craft, &ensure_decom(scope, @qa1, &1))
     revision = ensure_catalog(@qa1, scope.user.user_id)
     provider = Provider.ensure_provider(scope, offline?)
-    routing = Provider.seed_route(hd(craft), profile.spacecraft_type_id)
+
+    :applied =
+      craft
+      |> hd()
+      |> Provider.seed_route(profile.spacecraft_type_id)
+      |> Approver.approve_route_changes(Approver.scope(scope.user), @mission_id)
 
     IO.puts("""
 
@@ -115,7 +122,7 @@ defmodule Cadence.Dev.ApogeeQaMission do
     Spacecraft: #{Enum.map_join(craft, ", ", &"#{&1.display_name} (SCID #{&1.scid})")}; switches unset.
     Catalog: qa-l10 demo copy, revision #{revision.catalog_revision_id}; its model is a candidate.
     Provider: #{provider.display_name} (#{provider.provider_id})#{if offline?, do: ", not validated (--offline)", else: ", validated and synced"}.
-    Local test station, TCP client and extra downlink: #{routing}.
+    Local test station, TCP client and extra downlink: applied.
     By hand in qa's slot: the first start (switches change set) and the model approval, each
     approved by a second admin.
     """)

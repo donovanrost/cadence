@@ -8,9 +8,7 @@ unless Cadence.Dev.ReflectOrbital.Fixture.chaos_lab?(), do: raise("Not the isola
 
 case System.fetch_env!("LAB_ACTION") do
   "seed" ->
-    if Cadence.Dev.ReflectOrbital.Seed.run() == :in_review do
-      IO.puts("EARENDIL_ROUTES_IN_REVIEW")
-    end
+    Cadence.Dev.ReflectOrbital.Seed.run()
 
   "activate" ->
     # Explicitly synthetic mission; this changes only the lab Earendil policy.

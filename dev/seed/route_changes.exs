@@ -46,8 +46,8 @@ defmodule Cadence.Dev.RouteChanges do
     {client, set} = current_set(client, path, source)
 
     case set do
-      %{"id" => id, "state" => "in_review"} ->
-        awaiting_review(mission_id, id)
+      %{"id" => id, "state" => "in_review", "version" => version} ->
+        {:in_review, id, version}
 
       _ ->
         client = stage(client, path, source, summary, missing_ops(ops, set))
@@ -59,9 +59,12 @@ defmodule Cadence.Dev.RouteChanges do
             expected_version: set["version"]
           })
 
-        case result["state"] do
-          "in_review" -> awaiting_review(mission_id, set["id"])
-          "applied" -> :applied
+        case result do
+          %{"state" => "in_review", "change_set_id" => id, "version" => version} ->
+            {:in_review, id, version}
+
+          %{"state" => "applied"} ->
+            :applied
         end
     end
   end
@@ -94,14 +97,5 @@ defmodule Cadence.Dev.RouteChanges do
 
       client
     end)
-  end
-
-  defp awaiting_review(mission_id, id) do
-    # TODO(#745): use the invitation from /dev/mailbox/json to sign in a second admin and review.
-    IO.puts(
-      "Mission #{mission_id}: a second admin must approve change set #{id} in the console. Rerun the seed after approval."
-    )
-
-    :in_review
   end
 end

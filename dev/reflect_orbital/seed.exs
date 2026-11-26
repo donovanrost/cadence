@@ -52,17 +52,17 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
     transports = seed_sites(provider, deliveries)
     uplinks = seed_uplinks(provider, uplink_deliveries)
     {fleet_ms, :ok} = :timer.tc(&seed_fleet/0, :millisecond)
-    routing = seed_routes(transports, uplinks)
+    approver = Approver.scope(scope.user)
 
-    case routing do
-      :applied -> Configuration.prepare(scope)
-      :in_review -> Configuration.import_revision(run_by: scope.user.user_id)
-    end
+    :applied =
+      transports
+      |> seed_routes(uplinks)
+      |> Approver.approve_route_changes(approver, F.mission_id())
 
-    # A second seeded admin approves the imported mission-model revision (user decision 11-25).
-    approved = scope.user |> Approver.scope() |> Approver.approve_candidates()
+    Configuration.prepare(scope)
+    approved = Approver.approve_candidates(approver)
     Planning.prepare(scope)
-    verify!(routing)
+    verify!()
     server_url = "http://127.0.0.1:#{System.get_env("PORT", "4001")}"
 
     n = F.fleet_size()
@@ -72,7 +72,8 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
 
     Reflect Orbital / Earendil setup completed for #{email}.
     #{n} spacecraft, #{F.plane_count()} planes, #{F.site_count()} simulated sites, #{antennas} antennas.
-    #{n} provider mappings. #{route_status(routing, n)}
+    #{n} provider mappings, #{2 * n} primary/backup downlink routes and #{n} primary uplinks.
+    #{n} saved configurations share demo_spacecraft.yaml: 10 telemetry packets and 27 commands.
     Mission-model revisions approved by the seeded second admin: #{length(approved)}.
     Fleet rows (spacecraft, switches, sources) written in #{fleet_ms} ms.
     Configuration activation remains an explicit review step in Cadence.
@@ -80,16 +81,7 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
     Console: #{server_url}/console (organization Reflect Orbital, mission Earendil)
     All spacecraft, orbits, sites, and telemetry definitions are synthetic.
     """)
-
-    routing
   end
-
-  defp route_status(:applied, n),
-    do: "#{2 * n} primary/backup downlinks, #{n} primary uplinks and #{n} saved configurations."
-
-  defp route_status(:in_review, _n),
-    do:
-      "Extra routes await independent review. Rerun the seed after approval to save spacecraft configurations."
 
   defp seed_scope(user) do
     {:ok, organization} =
@@ -459,13 +451,13 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
     )
   end
 
-  defp verify!(routing) do
+  defp verify! do
     fleet = Cadence.SpacecraftStore.list_spacecraft(F.organization_id(), F.mission_id())
     n = F.fleet_size()
     ^n = length(fleet)
     ^n = fleet |> Enum.map(& &1.scid) |> Enum.uniq() |> length()
 
-    if routing == :applied, do: verify_routes!(fleet)
+    verify_routes!(fleet)
   end
 
   defp verify_routes!(fleet) do

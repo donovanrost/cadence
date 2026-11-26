@@ -31,9 +31,10 @@ this slot's dev data.
 The default Earendil and QA mission seeds submit their extra routes through the Console API.
 Earendil includes the station bindings for its existing downlink transports in the same change
 set. The QA change set includes a local test station and the direct TCP transport on it.
-On missions with independent approval, a second admin must approve each route change set in
-Setup before the routes can be used. The seeds print the change set IDs. Rerun
-`dev/stack up` after approval to save Earendil's spacecraft configurations.
+On missions with independent approval, the existing seeded second admin approves the route
+change set through the same domain function as the Console. The seed saves the Earendil
+spacecraft configurations after the routes apply. The standalone REST seed will use
+a second admin's REST session for both route approvals once #745 and #752 supply that path.
 
 After the #718 migration baseline lands, run `dev/stack reset` once in each existing worktree.
 The old migration ledger and schema cannot be upgraded in place; the baseline reports that reset

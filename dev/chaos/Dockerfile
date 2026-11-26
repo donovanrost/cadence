@@ -27,6 +27,7 @@ RUN case "$(uname -m)" in aarch64) target=arm64 ;; x86_64) target=x64 ;; *) exit
 # Invoke Vite directly: phoenix_vite.npm loads runtime.exs, which correctly
 # requires deployment secrets that must never be supplied to an image build.
 RUN mix tailwind cadence_web --minify && npm run build && node ../../frontend/tools/build-first-party-publication.mjs
+RUN corepack pnpm@11.22.0 --dir ../../frontend --filter @cadence/console run build
 
 FROM publication-build AS server-build
 RUN node ../../frontend/tools/production-publication-output-check.mjs && mix phx.digest && mix release --path /release
