@@ -133,12 +133,15 @@ defmodule Cadence.Observability.ScaleSampler do
   @impl true
   def handle_call(:stop, _from, state) do
     state = record(state)
+    meta = meta(state)
+    host_capacity = Host.capacity(Enum.map(state.rows, & &1.host), meta.host.logical_cpus)
 
     summary =
       state.rows
       |> Enum.reverse()
       |> Stats.summarize()
-      |> Map.put(:meta, meta(state))
+      |> Map.put(:meta, meta)
+      |> Map.put(:host_capacity, host_capacity)
       |> Map.put(:storage, storage_deltas(state))
 
     {:stop, :normal, {:ok, summary}, state}

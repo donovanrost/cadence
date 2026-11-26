@@ -27,6 +27,11 @@ Markdown scorecard to `docs/scale/<UTC date>-<label>.md`. The label defaults to
 `<shape>-<spacecraft>`. Use `--label` for another run of the same shape and
 size on the same UTC day.
 
+The report opens with the run classification, peak 1-minute host load and
+peak swap percentage. A baseline requires the load to stay at or below the
+logical core count and swap use to stay under 50% in every sample. Runs with
+missing host readings or a threshold breach are ceiling checks.
+
 Without `--spacecraft`, `mix cadence.scale.run --duration S` samples an
 already running Cadence node. `mix cadence_simulator.load` runs the
 simulator-only TCP sink benchmark.

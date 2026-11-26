@@ -185,7 +185,7 @@ defmodule Cadence.Dev.ScaleRun do
     %{meta: meta, metrics: metrics, seconds: seconds, storage: storage} = load.summary
 
     report = [
-      "# Earendil scale run — #{opts[:label]}\n\n",
+      capacity_heading(load.summary.host_capacity, meta.host.logical_cpus, opts[:label]),
       "- Fleet size #{opts[:spacecraft]}, #{sites} sites, #{opts[:shape]} load shape\n",
       per_site_line(opts),
       "- Requested duration #{opts[:duration]} s, #{seconds} sampler rows\n",
@@ -210,6 +210,16 @@ defmodule Cadence.Dev.ScaleRun do
     File.mkdir_p!(Path.dirname(path))
     File.write!(path, report, [:exclusive])
     Mix.shell().info("Wrote #{Path.relative_to(path, @root)}")
+  end
+
+  defp capacity_heading(capacity, cores, label) do
+    classification =
+      if capacity.classification == :baseline, do: "Baseline", else: "Ceiling check"
+
+    load = capacity.max_load_one || "unavailable"
+    swap = if capacity.max_swap_percent, do: "#{capacity.max_swap_percent}%", else: "unavailable"
+
+    "# #{classification} — max 1-min load #{load} (#{cores} logical cores), max swap #{swap} — #{label}\n\n"
   end
 
   defp per_site_line(opts) do
