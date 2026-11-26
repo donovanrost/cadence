@@ -7,7 +7,9 @@ defmodule Cadence.Governance.ActivationLocks do
        organization and its missions share it. Every activation path takes it SHARED
        (`ActivationPolicy.with_stable_policy/2`, `policy/1`): it only needs the policy to stay
        stable, so applies, approvals and executes in an organization's missions don't block each
-       other. Only a policy save takes it exclusive, and it holds nothing else, so it can't be in a
+       other. Only a policy save takes it exclusive. It then takes only the rows a tightening
+       suspends (#499: the mission's automation grants FOR UPDATE, after the policy lock, as every
+       grant path that takes both does; a grant's use takes no policy lock), so it can't be in a
        cycle; it waits for the readers, and once queued holds back new ones;
     2. the mission's generation lock (`generation/2`);
     3. a change set's own rows: its set row and the mission's ledger head (FOR UPDATE). Only

@@ -236,6 +236,7 @@ export function lastChangeLine(
       }>
     | null
     | undefined,
+  /** The craft mid-sentence (craftInSentence); null while the fleet read loads, so the line waits. */
   nameOf: (id: string) => string | null,
   now: Date,
 ): string | null {
@@ -243,6 +244,9 @@ export function lastChangeLine(
   const iso = change.at;
   const today = iso.slice(0, 10) === now.toISOString().slice(0, 10);
   const when = `${today ? "" : `${iso.slice(5, 10)} `}${iso.slice(11, 16)}Z`;
-  const name = change.spacecraft_id ? nameOf(change.spacecraft_id) : null;
-  return `Last change ${when}: ${changeClause(change.kind, name ? `on ${name}` : "on the mission")}.`;
+  if (change.spacecraft_id === null)
+    return `Last change ${when}: ${changeClause(change.kind, "on the mission")}.`;
+  // A craft's change never reads "on the mission"; until it can be named, the line waits (#652).
+  const name = nameOf(change.spacecraft_id);
+  return name === null ? null : `Last change ${when}: ${changeClause(change.kind, `on ${name}`)}.`;
 }

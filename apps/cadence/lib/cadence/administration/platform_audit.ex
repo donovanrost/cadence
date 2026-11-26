@@ -2,11 +2,19 @@ defmodule Cadence.Administration.PlatformAudit do
   @moduledoc """
   The platform audit for Admin › Audit (L7) and, filtered to one organization, that
   organization's Audit (`kind: "platform"`): server sentences over `Administration.PlatformEvents`.
+
+  Who it names depends on who reads it (#470):
+  - `list/2` is for platform administrators in admin mode only (`Access`, checked first). It names
+    the platform admin who acted, by display name only, never the email (`PlatformNames`).
+  - `for_organization/2` feeds a customer organization's own Audit. Its actors carry only their
+    id, never a name; `Reads.OrganizationAudit` names them by that organization's rule, so a
+    platform admin who isn't one of its members reads `{kind: "user", id: nil, name: nil}`. Every
+    platform event is a platform admin's act, which is how the console words those rows (ux,
+    ca-ux #523: "the team that runs Cadence").
   """
 
-  alias Cadence.Accounts
   alias Cadence.Accounts.PlatformDirectory
-  alias Cadence.Administration.{Access, PlatformEvents}
+  alias Cadence.Administration.{Access, PlatformEvents, PlatformNames}
 
   @page 100
 
@@ -15,11 +23,19 @@ defmodule Cadence.Administration.PlatformAudit do
     with {:ok, _admin} <- Access.authorize(scope) do
       rows = PlatformEvents.list(after: params["after"], limit: @page + 1)
       {page, more} = Enum.split(rows, @page)
-      {:ok, %{events: events(page), next: if(more != [], do: List.last(page).platform_event_id)}}
+
+      {:ok, names} =
+        PlatformNames.display_names(scope, page |> Enum.map(& &1.actor_id) |> Enum.uniq())
+
+      {:ok,
+       %{events: events(page, names), next: if(more != [], do: List.last(page).platform_event_id)}}
     end
   end
 
-  @doc "One organization's platform events, for its Audit (kind platform)."
+  @doc """
+  One organization's platform events, for its Audit (kind platform). Actors are unnamed here:
+  `Reads.OrganizationAudit` names them under the organization's rule.
+  """
   @spec for_organization(binary(), pos_integer()) :: [map()]
   def for_organization(organization_id, limit \\ 200) do
     [organization_id: organization_id, limit: limit]
@@ -28,9 +44,9 @@ defmodule Cadence.Administration.PlatformAudit do
   end
 
   @doc false
-  def events(rows) do
+  # Sentences with unnamed actors (an id only); `names` (platform admins' reads) names them.
+  def events(rows, names \\ %{}) do
     orgs = organizations(rows)
-    actors = actors(rows)
 
     Enum.map(rows, fn row ->
       org = row.organization_id && Map.get(orgs, row.organization_id)
@@ -38,7 +54,7 @@ defmodule Cadence.Administration.PlatformAudit do
       %{
         id: "platform:#{row.platform_event_id}",
         at: row.occurred_at,
-        actor: %{kind: "user", id: row.actor_id, name: Map.get(actors, row.actor_id)},
+        actor: %{kind: "user", id: row.actor_id, name: Map.get(names, row.actor_id)},
         kind: "platform",
         action: sentence(row, org),
         target: row.target_kind && %{kind: row.target_kind, id: row.target_id, label: label(row)},
@@ -111,17 +127,5 @@ defmodule Cadence.Administration.PlatformAudit do
     |> Enum.reject(&is_nil/1)
     |> Enum.uniq()
     |> PlatformDirectory.organization_names()
-  end
-
-  defp actors(rows) do
-    rows
-    |> Enum.map(& &1.actor_id)
-    |> Enum.uniq()
-    |> Map.new(fn id ->
-      case Accounts.fetch_user(id) do
-        {:ok, user} -> {id, user.display_name || user.email}
-        _missing -> {id, nil}
-      end
-    end)
   end
 end

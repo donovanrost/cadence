@@ -5,6 +5,11 @@
 capability: `403 admin_mode_required` (end the admin chip). Writes need `x-csrf-token` and are
 recorded in the platform audit. Proposal: `docs/apogee/plans/admin.md`; screens: ux `screens/Admin.md`.
 
+People named here (`created_by`, `invited_by`, the platform audit's `actor`) may be anyone, in any
+organization, because only platform admins read this area: the read itself checks admin mode, not
+only the controller (#470). They're named by display name only, never by email, and `null`
+without one.
+
 ## AD1 organizations
 
 - `GET /organizations?q=&after=` → `{organizations: [{id, name, slug, members, missions,
@@ -72,6 +77,10 @@ id (withdrawn invitations; revokes recorded before 11-13).
 - `action` is a server sentence: "Created organization Nova", "Issued service identity Bot in
   Acme Space", "Entered admin mode (until 03:10Z)".
 - Entries never hold a token or password.
+- `actor.name` is the platform admin's display name, never their email (`null` without one, #470).
 - Events tied to an organization also appear in that organization's Audit as `kind: "platform"`.
+  There the actor is named by that organization's rule (setup.md C1, #470): a platform admin who
+  isn't one of its members is `{kind: "user", id: null, name: null}`, with no id, name or email.
+  The console reads that as "the team that runs Cadence" (ux, #523).
 - Caption for the platform pages: "Recorded in Admin › Audit; organization changes also appear
   in that organization's Audit."

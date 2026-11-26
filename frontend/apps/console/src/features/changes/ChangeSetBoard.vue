@@ -81,6 +81,7 @@ const reviewing = () =>
       @result="emit('result', $event)"
       @changed="emit('changed')"
       @in-use="inUse = $event"
+      :viewer-id="viewerId"
     />
   </div>
 </template>

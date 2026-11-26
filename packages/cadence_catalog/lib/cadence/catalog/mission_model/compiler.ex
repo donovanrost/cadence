@@ -8,6 +8,7 @@ defmodule Cadence.Catalog.MissionModel.Compiler do
     Diagnostic,
     Inheritance,
     Layer,
+    Mount,
     Path,
     Reference,
     Revision,
@@ -23,10 +24,14 @@ defmodule Cadence.Catalog.MissionModel.Compiler do
 
   def compile([%Layer{} | _rest] = layers, opts) do
     with :ok <- validate_layer_scope(layers),
-         {declarations, composition_diagnostics} <- compose(layers),
+         # #444: imported layers mounted under their own subtrees; one layer at '/' is unchanged.
+         {:ok, mounted_layers, mount} <- Mount.prepare(layers, Keyword.get(opts, :mounts, %{})),
+         {declarations, composed_diagnostics} <- compose(mounted_layers, Mount.initial(mount)),
+         {composition_diagnostics, mount_diagnostics} <-
+           Mount.diagnostics(mount, mounted_layers, composed_diagnostics, declarations),
          declarations <- Defaults.apply(declarations),
          {systems, hierarchy_diagnostics} <- build_space_systems(declarations),
-         {resolved_declarations, edges, reference_diagnostics} <- resolve(declarations),
+         {resolved_declarations, edges, reference_diagnostics} <- resolve(declarations, mount),
          {inherited_declarations, inheritance_diagnostics} <-
            Inheritance.apply(resolved_declarations, edges),
          validation_diagnostics <- Validator.validate(inherited_declarations),
@@ -43,10 +48,11 @@ defmodule Cadence.Catalog.MissionModel.Compiler do
           diagnostics:
             source_diagnostics(layers) ++
               composition_diagnostics ++
+              mount_diagnostics ++
               hierarchy_diagnostics ++
               reference_diagnostics ++
               inheritance_diagnostics ++ validation_diagnostics ++ graph_diagnostics,
-          metadata: Keyword.get(opts, :metadata, %{})
+          metadata: opts |> Keyword.get(:metadata, %{}) |> Mount.metadata(mount)
         })
 
       targets = Keyword.get(opts, :targets, Map.keys(Target.contracts()))
@@ -92,8 +98,8 @@ defmodule Cadence.Catalog.MissionModel.Compiler do
     end)
   end
 
-  defp compose(layers) do
-    Enum.reduce(layers, {%{}, []}, fn layer, {declarations, diagnostics} ->
+  defp compose(layers, initial) do
+    Enum.reduce(layers, {initial, []}, fn layer, {declarations, diagnostics} ->
       Enum.reduce(layer.declarations, {declarations, diagnostics}, fn declaration, acc ->
         apply_declaration(layer, declaration, acc)
       end)
@@ -227,7 +233,7 @@ defmodule Cadence.Catalog.MissionModel.Compiler do
     end)
   end
 
-  defp resolve(declarations) do
+  defp resolve(declarations, mount) do
     symbols =
       Map.new(declarations, fn {_id, declaration} ->
         {{declaration.kind, declaration.qualified_name}, declaration}
@@ -236,7 +242,7 @@ defmodule Cadence.Catalog.MissionModel.Compiler do
     Enum.reduce(declarations, {%{}, [], []}, fn {id, %Declaration{} = declaration},
                                                 {resolved, edges, diagnostics} ->
       {references, reference_edges, reference_diagnostics} =
-        resolve_references(declaration, symbols)
+        resolve_references(declaration, symbols, mount)
 
       resolved_declaration = %Declaration{declaration | references: references}
 
@@ -248,10 +254,10 @@ defmodule Cadence.Catalog.MissionModel.Compiler do
     end)
   end
 
-  defp resolve_references(declaration, symbols) do
+  defp resolve_references(declaration, symbols, mount) do
     Enum.reduce(declaration.references, {[], [], []}, fn %Reference{} = reference,
                                                          {references, edges, diagnostics} ->
-      qualified_name = Path.resolve(declaration.qualified_name, reference.source_ref)
+      qualified_name = Mount.resolve(mount, declaration, reference)
 
       case Map.fetch(symbols, {reference.expected_kind, qualified_name}) do
         {:ok, target} ->

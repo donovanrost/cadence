@@ -2,11 +2,12 @@
 import { computed } from "vue";
 import { ApField, ApPanel } from "@/ui";
 import { useDraft } from "./context.ts";
-import { rangeLabel } from "./batch.ts";
+import { rangeLabel, scidStartHint } from "./batch.ts";
 import type { FieldErrors } from "./draft.ts";
 
 /** A2 Identity (profile path): count, naming pattern, SCID range, NORAD ids; clashes inline. */
-const { draft, set, proposal } = useDraft();
+const { draft, set, proposal, directory } = useDraft();
+const scidHint = computed(() => scidStartHint(directory().scids, scidEnd.value));
 
 const errors = computed((): FieldErrors => {
   const p = proposal();
@@ -59,7 +60,7 @@ const scidEnd = computed(() => {
         label="First SCID"
         inputmode="numeric"
         mono
-        :hint="`Last SCID ${scidEnd} · prefilled with the next free SCID`"
+        :hint="scidHint"
         :error="errors.scidStart ?? null"
         @update:model-value="set('scidStart', $event)"
       />

@@ -7,6 +7,7 @@ import {
   type ApiResult,
   type Decoded,
 } from "@/api/index.ts";
+import { compositionKey } from "@/features/catalog/composition.ts";
 
 /**
  * (B) a spacecraft's configuration workspace (director 11-17; ux U94; api's shape diff, ported
@@ -78,10 +79,18 @@ export const snapshotReader = d.object({
   /** Per craft (v1, v2…); null: never saved, so the document is derived. */
   saved_version: d.nullable(d.integer),
   document: documentReader,
+  /** D2 (#581; U109): the composition behind the document's catalog revision. */
+  composition: compositionKey,
   external_changes: d.boolean,
   /** null: nothing runs for this craft yet (U94 "Not set up"). */
   active: d.nullable(
-    d.object({ version: d.integer, generation: d.integer, document: documentReader }),
+    d.object({
+      version: d.integer,
+      generation: d.integer,
+      document: documentReader,
+      /** D2: the composition behind the active document's catalog revision. */
+      composition: compositionKey,
+    }),
   ),
   review: d.nullable(
     d.object({
@@ -98,7 +107,17 @@ export const snapshotReader = d.object({
     source: d.knownText(["organization", "inherited", "overridden", "enforced"] as const),
     can_request: d.boolean,
     can_review: d.boolean,
+    /** #595 (api): `:operate_mission`, the check a draft save makes. Optional until api ships it. */
+    can_save: d.optional(d.boolean),
   }),
+  /**
+   * #595 (api): the profile the craft inherits, for U94's `Open profile` on
+   * spacecraft_catalog_set_by_profile. Optional until api ships it.
+   */
+  // free-text: the profile's display name (nullable here, so one name never fails the snapshot)
+  profile: d.optional(d.nullable(d.object({ id: d.token, name: d.nullable(d.string) }))),
+  /** #595b (api): who sets the catalog revision; "profile" disables Change… (U94). Optional. */
+  catalog_set_by: d.optional(d.knownText(["profile", "spacecraft"] as const)),
   catalogs: d.array(
     d.object({
       id: d.token,
@@ -111,6 +130,13 @@ export const snapshotReader = d.object({
       commands: d.integer,
       /** The catalog revision number, for U65's "catalog rev 14"; optional until api adds it. */
       number: d.optional(d.integer),
+      /**
+       * #595b (api): its mission model revision's approval (U65), for the picker. `withdrawn`
+       * comes with E2 (#546). Optional until api ships it.
+       */
+      approval_status: d.optional(
+        d.knownText(["candidate", "approved", "rejected", "retired", "withdrawn"] as const),
+      ),
     }),
     500,
   ),
@@ -163,6 +189,30 @@ export function fetchWorkspace(
   );
 }
 
+/**
+ * #595 (U94): PUT …/workspace/draft {token, document}. Saves a draft (the active configuration
+ * stays in use) and answers the fresh snapshot with a new token. Never sends a switch (#109).
+ */
+export function saveDraft(
+  k: WorkspaceKey,
+  token: string,
+  document: ConfigurationDocument,
+): Promise<ApiResult<ConfigurationSnapshot>> {
+  return request(
+    `${workspacePath(k.missionId, k.spacecraftId)}/draft?section=${encodeURIComponent(k.section)}`,
+    snapshotReader,
+    { method: "PUT", body: { token, document: documentBody(document) } },
+  );
+}
+
+/** Only the document's own keys, so nothing the reader passed through is ever sent back. */
+const documentBody = (doc: ConfigurationDocument) => ({
+  catalog_revision_id: doc.catalog_revision_id,
+  telemetry_source_endpoint_id: doc.telemetry_source_endpoint_id,
+  handled_apids: [...doc.handled_apids],
+  protocol: doc.protocol,
+});
+
 /** GET …/workspace/catalogs/:id/packets: the packet choices for a catalog revision. */
 export const packetChoicesReader = d.object({
   catalog_id: d.token,
@@ -189,7 +239,23 @@ export function fetchPacketChoices(
   );
 }
 
-/** POST …/workspace/submit's answer (writes land in a later commit, once the route exists). */
+/**
+ * #595c (U94): POST …/workspace/submit {token, policy_token, intent}. `review` when the mission
+ * needs a second person's approval (L10 lists the request), `activate` when it applies without.
+ */
+export function submitWorkspace(
+  k: WorkspaceKey,
+  token: string,
+  policyToken: string,
+  intent: "review" | "activate",
+): Promise<ApiResult<SubmitResult>> {
+  return request(`${workspacePath(k.missionId, k.spacecraftId)}/submit`, submitResultReader, {
+    method: "POST",
+    body: { token, policy_token: policyToken, intent },
+  });
+}
+
+/** POST …/workspace/submit's answer. */
 export const submitResultReader = d.variant("state", {
   approval_pending: d.object({
     state: d.literal("approval_pending"),

@@ -97,6 +97,7 @@ describe("override text", () => {
     set_at: null,
     actor: { kind: "user" as const, id: "u1", name: "Mira K." },
     redundant: false,
+    composition: undefined,
   };
 
   it("reads a catalog revision as its label, never its id", () => {

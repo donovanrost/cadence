@@ -87,6 +87,14 @@ defmodule CadenceWeb.Console.ConfigAPITest do
     # ux U93: nothing has been activated on this mission, so applying starts nothing.
     assert preview["has_active_configuration"] == false
 
+    # #522 (K3): the explicit preview says what applying leaves behind. A station touches
+    # readiness, so it's read too.
+    assert %{
+             "spacecraft" => %{"now" => 0, "after" => 0},
+             "routes" => %{"now" => 0, "after" => 0, "added" => 0, "removed" => 0},
+             "readiness" => %{"now" => %{"blocker" => _}, "after" => %{"blocker" => _}}
+           } = preview["outcome"]
+
     applied =
       c.alice
       |> call(:post, "#{c.base}/change-sets/#{set_id}/submit", %{
@@ -102,6 +110,9 @@ defmodule CadenceWeb.Console.ConfigAPITest do
              "runtime" => "not_applicable",
              "has_active_configuration" => false
            } = applied
+
+    # #522: the submit gate's preview never carries `outcome` (api-ops).
+    refute Map.has_key?(applied, "outcome")
 
     revisions =
       c.alice

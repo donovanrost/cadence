@@ -1,11 +1,14 @@
 defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
   use Cadence.DataCase, async: false
 
+  import Ecto.Query
+
   alias Cadence.Management.Transports
 
-  alias Cadence.Accounts.{OrganizationMembership, User}
+  alias Cadence.Accounts.{OrganizationMembership, User, UserRow}
   alias Cadence.Auth.Scope
   alias Cadence.Comms.Transport
+  alias Cadence.ConfigurationFixtures
 
   alias Cadence.ContactPlanning.{
     ContactPlanExecutions,
@@ -791,6 +794,29 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
       assert approved_at == context.plan.approved_at
       assert first == DateTime.add(@now, 3_600, :second)
       assert bookable > 0
+    end
+
+    # #468 (B): the approvers are the organization's active admins, named by display name only; an
+    # admin without one reads name nil (keeping their id), never their email.
+    test "approvers: active admins by display name, a nameless one with name nil, never email",
+         context do
+      org = context.organization_id
+      named = ConfigurationFixtures.member_scope(org, :organization_admin, "Ana")
+      nameless = ConfigurationFixtures.member_scope(org, :organization_admin, "x")
+      nameless_id = nameless.user.user_id
+
+      Repo.update_all(from(u in UserRow, where: u.user_id == ^nameless_id),
+        set: [display_name: ""]
+      )
+
+      member = ConfigurationFixtures.member_scope(org, :member, "Mo")
+
+      %{approvers: approvers} = coverage(context, DateTime.add(@now, 4, :minute))
+
+      assert %{id: named.user.user_id, name: "Ana"} in approvers
+      assert %{id: nameless_id, name: nil} in approvers
+      refute Enum.any?(approvers, &(&1.id == member.user.user_id))
+      refute inspect(approvers) =~ "@"
     end
 
     test "booking under way (its lock held) is covered; lock free with a pass never placed reopens",

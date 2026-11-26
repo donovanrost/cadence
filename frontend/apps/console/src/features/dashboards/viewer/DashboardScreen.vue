@@ -3,7 +3,7 @@ import { computed, nextTick, ref, watch } from "vue";
 import { useRoute, useRouter, type LocationQueryValue } from "vue-router";
 import { TakeoverHeader, useMissionScope, useSmallScreen } from "@/shell";
 import { useConnection } from "@/live";
-import { ApButton, ApCallout } from "@/ui";
+import { announcePolite, ApButton, ApCallout } from "@/ui";
 import type { Runtime } from "../api.ts";
 import { recordView } from "../directory/api.ts";
 import { exportUrl } from "../settings/api.ts";
@@ -110,9 +110,9 @@ const connection = useConnection();
 /** Kiosk (ux): `?kiosk=1` or ⋯ › Kiosk; the header collapses to a status line. */
 const kiosk = computed(() => one(route.query.kiosk) === "1");
 /**
- * The header swaps its actions on Edit, Save, Discard and leaving kiosk, taking the focused control
- * with it (a11y A5): focus lands on the counterpart (Add widget; Edit, else ⋯), as ux asks for
- * kiosk ('after Esc, focus returns to ⋯ › Kiosk').
+ * The header swaps its actions on Edit, Save, Discard and entering or leaving kiosk, taking the
+ * focused control with it (a11y A5): focus lands on the counterpart (Add widget; Edit, else ⋯;
+ * Exit kiosk), as ux asks for kiosk ('after Esc, focus returns to ⋯ › Kiosk').
  */
 const headerControl = (selector: string) => document.querySelector<HTMLElement>(selector);
 const viewerMenu = "[data-viewer-menu] [aria-haspopup]";
@@ -121,6 +121,7 @@ watch(
   async ([on, inKiosk], [wasOn, wasKiosk]) => {
     await nextTick();
     if (on && !wasOn) refocus(headerControl("[data-add-widget]"));
+    else if (inKiosk && !wasKiosk) refocus(headerControl("[data-exit-kiosk]"));
     else if (wasKiosk && !inKiosk) refocus(headerControl(viewerMenu));
     else if (wasOn && !on)
       refocus(headerControl("[data-edit-dashboard]") ?? headerControl(viewerMenu));
@@ -142,8 +143,11 @@ function onMenu(
     case "snapshot":
       return snapshotSheet.value?.open();
     case "export":
-      // A plain download (the server records the export); ux's toast waits for a kit toast.
-      return download(exportUrl({ missionId: missionId.value, dashboardId: dashboardId.value }));
+      // A plain download (the server records the export); ux's toast waits for a kit toast. B6:
+      // until then, a screen reader hears that it started. Only that: the console can't see
+      // whether the browser saves the file (U20), nor its name (the server sets it).
+      download(exportUrl({ missionId: missionId.value, dashboardId: dashboardId.value }));
+      return announcePolite("Export started.");
     case "settings":
     case "activity":
       return router.push({
@@ -256,7 +260,7 @@ const onRange = (s: TimeSelection) =>
   <ApCallout v-else-if="live.stalled.value && !editing" tone="stale">
     Live updates aren't arriving for this dashboard. Values may be out of date.
   </ApCallout>
-  <ApCallout v-if="sourceNote && !editing" tone="caution">
+  <ApCallout v-if="sourceNote && !editing" tone="caution" role="alert">
     {{ sourceNote }}
     <template #action>
       <ApButton size="compact" variant="secondary" @click="sourceNote = null">Dismiss</ApButton>

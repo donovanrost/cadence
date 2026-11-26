@@ -64,7 +64,7 @@ function errorLine(
 
 export type PreviewCounts = Readonly<{ changes: number; keeps: number }>;
 
-/** P4's tiles (`Changes 499 SC` / `Keeps 1 SC`): spacecraft the dry run changes and keeps. */
+/** P4's tiles (`Changes 499 spacecraft` / `Keeps 1 spacecraft`; U102, never "SC"): spacecraft the dry run changes and keeps. */
 export const previewCounts = (p: Preview): PreviewCounts => ({
   changes: p.effects.reduce((n, e) => n + e.changes, 0),
   keeps: p.effects.reduce((n, e) => n + e.keeps.length, 0),

@@ -19,6 +19,7 @@ import ProfileRoutingPanel from "./ProfileRoutingPanel.vue";
 import ProfileSectionView from "./ProfileSectionView.vue";
 import { fetchProfileDetail, type ProfileDetail } from "./detail.ts";
 import { profileSubline } from "./present.ts";
+import { isComposed, madeOfLine } from "@/features/catalog/composition.ts";
 import { useFramingOff } from "./useFramingOff.ts";
 import { useStagedFields } from "./staged.ts";
 
@@ -83,6 +84,13 @@ const crumbs = computed((): readonly ApCrumb[] => [
     <ApPageHeader :title="title" size="reading">
       <template v-if="state.status === 'ready'" #subtitle>
         <span class="text-md text-text-3">{{ profileSubline(state.value) }}</span>
+        <!-- U109 (mms-ux on #609): a composed profile's Made of under the header. -->
+        <span
+          v-if="isComposed(state.value.profile.composition)"
+          data-made-of
+          class="block text-sm text-text-3"
+          >{{ madeOfLine(state.value.profile.composition) }}</span
+        >
       </template>
       <ApButton
         v-if="canStage && profileId"

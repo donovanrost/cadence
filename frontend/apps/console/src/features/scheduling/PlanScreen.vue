@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { ResolveBookingActions } from "@/features/resolutions/index.ts";
-import { useRoute, type RouteLocationRaw } from "vue-router";
+import { useRoute } from "vue-router";
 import { canAdministerOrganization, TakeoverHeader, useMissionScope, useSession } from "@/shell";
 import type { ApiError } from "@/api";
-import { ApButton, ApCallout, ApStationBar, useNow } from "@/ui";
+import { ApButton, ApCallout, ApStationBar, OutcomeCallout, useNow } from "@/ui";
 import { draftedByOther, editableStates, type Acknowledgement } from "./api.ts";
 import DayNav from "./DayNav.vue";
 import DemandPanel from "./DemandPanel.vue";
@@ -20,9 +20,9 @@ import { historical } from "./plan-history.ts";
 import PlanHistorySheet from "./PlanHistorySheet.vue";
 import OldVersionCallout from "./OldVersionCallout.vue";
 import { useBookingStopped } from "./useBookingStopped.ts";
-import PlanStatePanel from "./PlanStatePanel.vue";
-import { limitRefusal, overLimit } from "./start-limit.ts";
-import StartLimits from "./StartLimits.vue";
+import PlanStartPanel from "./PlanStartPanel.vue";
+import { limitRefusal } from "./start-limit.ts";
+import { useSupersededRole } from "./superseded-role.ts";
 import SelectedPanel from "./SelectedPanel.vue";
 import { isPlanSuperseded, planErrorText } from "./errors.ts";
 import SendBackSheet from "./SendBackSheet.vue";
@@ -39,6 +39,8 @@ import { planPrimary } from "./plan-primary.ts";
 import { usePlanDay } from "./usePlanDay.ts";
 import { resubmittedLines, sentBackLine } from "./review-lines.ts";
 import type { ReviewAfter } from "./review-run.ts";
+import { usePlanFocus } from "./usePlanFocus.ts";
+import PlanReviewLine from "./PlanReviewLine.vue";
 
 /** K1 · Plan a day (ScheduleFlow.md). States: plan-state.ts; data: usePlanDay. */
 const route = useRoute();
@@ -122,8 +124,10 @@ const sendBackError = ref<ApiError | null>(null);
 async function onSendBack(reason: string) {
   if (view.value.kind !== "plan") return;
   const result = await sendBack(view.value.plan, reason);
-  if (result.ok) sendBackSheet.value?.close();
-  else sendBackError.value = result.error;
+  if (result.ok) {
+    sendBackSheet.value?.close();
+    focusSoon.to(() => reviewLine.value?.box ?? null);
+  } else sendBackError.value = result.error;
 }
 const resubmitted = computed(() =>
   view.value.kind === "plan" ? resubmittedLines(view.value.plan) : null,
@@ -132,7 +136,23 @@ const sentBack = computed(() =>
   view.value.kind === "plan" ? sentBackLine(view.value.plan, session.user.id, isAdmin.value) : null,
 );
 
-watch(day, () => (reviewed.value = null));
+/** #244 (A5, B4): focus follows Submit and Send back to their result lines (usePlanFocus.ts). */
+const resultBox = ref<HTMLElement | null>(null);
+const reviewLine = ref<InstanceType<typeof PlanReviewLine> | null>(null);
+const unconfirmed = ref<InstanceType<typeof UnconfirmedCallout> | null>(null);
+const focusSoon = usePlanFocus(() =>
+  view.value.kind === "plan"
+    ? `${view.value.plan.id}:${view.value.plan.version}:${view.value.plan.state}`
+    : null,
+);
+watch(day, () => {
+  reviewed.value = null;
+  focusSoon.cancel();
+});
+/** #654 (B6): the superseded line is an alert only right after this person's refused Submit. */
+const supersededRole = useSupersededRole(() =>
+  view.value.kind === "plan" ? `${day.value}:${view.value.plan.id}` : null,
+);
 async function onSubmit(acks: Acknowledgement[], note?: string) {
   if (view.value.kind !== "plan" || primary.value?.kind !== "sheet") return;
   const planId = view.value.plan.id;
@@ -140,13 +160,16 @@ async function onSubmit(acks: Acknowledgement[], note?: string) {
   if (out.kind === "refused") {
     // A draft superseded meanwhile (409 plan_superseded): the plan was re-read, so it lands in the
     // superseded state, which says nothing was submitted.
-    if (isPlanSuperseded(out.error)) sheet.value?.close();
-    else sheetError.value = out.error;
+    if (isPlanSuperseded(out.error)) {
+      supersededRole.mark();
+      sheet.value?.close();
+    } else sheetError.value = out.error;
     return;
   }
   sheet.value?.close();
   reviewed.value = { ...out, planId };
   expired.value = out.expired;
+  focusSoon.to(() => resultBox.value);
 }
 const editable = computed(
   () =>
@@ -156,14 +179,13 @@ const editable = computed(
 );
 function onEdit(change: { add?: string[]; remove?: string[] }) {
   if (view.value.kind !== "plan") return;
+  // #244 (A5): the selection stays, so SelectedPanel swaps Remove ↔ Add in place (it moves focus
+  // to the new button if focus was lost) instead of unmounting the focused one.
   void edit(view.value.plan, change);
-  selected.value = null;
 }
 const actionText = computed(() =>
   actionError.value ? (limitRefusal(actionError.value) ?? planErrorText(actionError.value)) : null,
 );
-/** U52: over the limit, Start is disabled with the sentence StartLimits shows above it. */
-const overReason = computed(() => overLimit(estimate.value));
 function onExecute() {
   if (view.value.kind === "plan") void execute(view.value.plan.id);
 }
@@ -182,7 +204,6 @@ const step = computed(() =>
       : 0,
 );
 const headerLine = computed(() => headerFor(view.value, dayLabel(day.value)));
-const setupLink = computed((): RouteLocationRaw => ({ name: "setup.contact-planning" }));
 /** ux: "NEXT OFFER EXPIRES T−… · KSAT" from the plan's provider_freeze (domain c38bb5de). */
 const clockNow = useNow();
 const clock = computed(() =>
@@ -215,32 +236,26 @@ const clock = computed(() =>
   <template v-if="view.kind === 'plan'">
     <PlanLifecycleCallouts :day="day" :superseded-by="view.plan.superseded_by" :expired="expired" />
     <OldVersionCallout v-if="latest !== null" :plan="view.plan" :latest="latest" />
-    <SupersededCallout v-else-if="view.plan.superseded" :superseded="view.plan.superseded" />
-    <ApCallout v-else-if="sentBack" tone="caution"
-      >{{ sentBack
-      }}<template #action
-        ><ApButton size="compact" variant="ghost" @click="historySheet?.open()"
-          >All decisions</ApButton
-        ></template
-      ></ApCallout
-    >
-    <ApCallout v-else-if="resubmitted" tone="info">
-      <span class="flex flex-col gap-1">
-        <span>{{ resubmitted.line }}</span>
-        <span v-if="resubmitted.earlier" class="text-sm text-text-3">{{
-          resubmitted.earlier
-        }}</span>
-      </span>
-      <template #action
-        ><ApButton size="compact" variant="ghost" @click="historySheet?.open()"
-          >All decisions</ApButton
-        ></template
-      >
-    </ApCallout>
+    <!-- ux on #656: keyed on the role, so an alert that arrives after the line is shown re-mounts
+      (a role flip on a mounted region isn't announced). -->
+    <SupersededCallout
+      v-else-if="view.plan.superseded"
+      :key="supersededRole.role.value ?? 'polite'"
+      :superseded="view.plan.superseded"
+      :role="supersededRole.role.value"
+    />
+    <PlanReviewLine
+      v-else-if="sentBack || resubmitted"
+      ref="reviewLine"
+      :sent-back="sentBack"
+      :resubmitted="resubmitted"
+      @history="historySheet?.open()"
+    />
     <ApCallout v-else-if="stopped" :tone="stopped.tone">{{ stopped.text }}</ApCallout>
     <!-- U30: on any state that has unconfirmed bookings, on top of the state's own callout. -->
     <UnconfirmedCallout
       v-if="view.plan.unconfirmed"
+      ref="unconfirmed"
       :plan="view.plan"
       :name-of="nameOf"
       :member-note="!isAdmin"
@@ -251,7 +266,7 @@ const clock = computed(() =>
           :mission-id="missionId"
           :plan-id="view.plan.id"
           :pass="pass"
-          @resolved="refresh"
+          @resolved="(unconfirmed?.armFocus(), refresh())"
         />
       </template>
     </UnconfirmedCallout>
@@ -309,8 +324,10 @@ const clock = computed(() =>
         @select="selected = $event"
       />
     </div>
-    <ApCallout v-if="actionText" tone="caution">{{ actionText }}</ApCallout>
-    <ApCallout v-if="current" :tone="current.tone">{{ current.text }}</ApCallout>
+    <ApCallout v-if="actionText" tone="caution" role="alert">{{ actionText }}</ApCallout>
+    <div v-if="current" ref="resultBox" tabindex="-1">
+      <OutcomeCallout :outcome="current" />
+    </div>
     <PlanFooter
       :plan="view.plan"
       :is-admin="isAdmin"
@@ -359,33 +376,14 @@ const clock = computed(() =>
       :day="day"
     />
   </template>
-  <template v-else>
-    <PlanStatePanel :view="view" />
-    <StartLimits :estimate="estimate" :error="actionError" />
-    <ApCallout v-if="actionText && !limitRefusal(actionError)" tone="caution">{{
-      actionText
-    }}</ApCallout>
-    <footer class="flex flex-none justify-end border-t border-hairline pt-3">
-      <ApButton v-if="view.kind === 'not_set_up'" variant="primary" size="commit" :to="setupLink"
-        >Set up contact planning</ApButton
-      >
-      <ApButton
-        v-else-if="view.kind === 'no_draft' || view.kind === 'draft_failed'"
-        variant="primary"
-        size="commit"
-        :disabled="busy || overReason !== null"
-        :disabled-reason="overReason ?? 'Drafting…'"
-        @click="draftDay"
-        >Draft the day</ApButton
-      >
-      <ApButton
-        v-else-if="view.kind === 'interrupted'"
-        variant="primary"
-        size="commit"
-        :disabled="busy"
-        @click="resume"
-        >Continue drafting</ApButton
-      >
-    </footer>
-  </template>
+  <PlanStartPanel
+    v-else
+    :view="view"
+    :estimate="estimate"
+    :action-error="actionError"
+    :action-text="actionText"
+    :busy="busy"
+    @draft="draftDay"
+    @resume="resume"
+  />
 </template>

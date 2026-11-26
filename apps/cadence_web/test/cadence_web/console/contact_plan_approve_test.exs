@@ -120,7 +120,7 @@ defmodule CadenceWeb.Console.ContactPlanApproveTest do
       assert %{"code" => "contact_plan_self_approval_forbidden", "details" => details} =
                json_response(conn, 403)["error"]
 
-      assert details == %{"because" => "submitted"}
+      assert details == %{"because" => "submitted", "via_service" => nil}
       assert approvals(c, plan_id) == []
       assert plan_state(c, plan_id) == "pending_approval"
     end
@@ -134,7 +134,7 @@ defmodule CadenceWeb.Console.ContactPlanApproveTest do
       assert %{"code" => "contact_plan_self_approval_forbidden", "details" => details} =
                json_response(conn, 403)["error"]
 
-      assert details == %{"because" => "edited"}
+      assert details == %{"because" => "edited", "via_service" => nil}
       assert approvals(c, plan_id) == []
     end
 

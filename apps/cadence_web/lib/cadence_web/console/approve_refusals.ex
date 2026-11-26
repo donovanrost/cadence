@@ -40,6 +40,74 @@ defmodule CadenceWeb.Console.ApproveRefusals do
 
   @generic "Not approved: this request can't apply as it stands."
 
+  @doc """
+  #236 (ux): an author of the configuration being activated is refused (403), naming up to three
+  of the spacecraft they saved, then "and N more". Without names, the generic line.
+  """
+  @spec authored(Plug.Conn.t(), map()) :: Plug.Conn.t()
+  def authored(conn, %{spacecraft_ids: ids, spacecraft: named} = details) do
+    names = named |> Enum.map(& &1.name) |> Enum.filter(&is_binary/1) |> Enum.take(3)
+    {status, code, generic} = Problem.describe(:activation_approver_authored_content)
+
+    conn
+    |> put_status(status)
+    |> Phoenix.Controller.json(
+      Problem.body(code, authored_line(names, length(ids)) || generic, details)
+    )
+    |> halt()
+  end
+
+  @authors_unknown "Not approved: Cadence can't tell who saved this configuration, so it can't " <>
+                     "check that you weren't one of them. Your approval wasn't recorded. Reject it " <>
+                     "so the requester can send it again; if it keeps happening, tell the team " <>
+                     "that runs Cadence for you."
+
+  @doc """
+  #236 and #280 (one code, ux U100): who made this can't be established. `details.service` picks
+  the line: null (or absent) for #236's unreadable configuration authors, U94's line; a service
+  (`{id, name}`) with nobody recorded as accountable for it, U100's line naming it (never its id,
+  U25; a null name reads "a service identity involved in this request", ux's U100 amendment for
+  activations: the unknown service can be the requester or a version's author).
+  """
+  @spec authors_unknown(Plug.Conn.t(), map()) :: Plug.Conn.t()
+  def authors_unknown(conn, %{} = details) do
+    {status, code, _generic} = Problem.describe(:activation_approver_authors_unknown)
+
+    conn
+    |> put_status(status)
+    |> Phoenix.Controller.json(Problem.body(code, unknown_line(details[:service]), details))
+    |> halt()
+  end
+
+  defp unknown_line(%{name: name}) when is_binary(name) and name != "",
+    do: service_line(name)
+
+  defp unknown_line(%{}), do: service_line("a service identity involved in this request")
+  defp unknown_line(_no_service), do: @authors_unknown
+
+  defp service_line(who),
+    do:
+      "Not approved: #{who} has no one recorded as accountable for it, so this can't be approved " <>
+        "yet. An org admin records who's accountable in People › Service identities." <> @recorded
+
+  defp authored_line([], _count), do: nil
+
+  defp authored_line([name], 1),
+    do:
+      "Not approved: you saved #{name}'s configuration in this request, so another person approves it." <>
+        @recorded
+
+  defp authored_line(names, count) when length(names) == count,
+    do: authored_many(Enum.join(Enum.drop(names, -1), ", ") <> " and " <> List.last(names))
+
+  defp authored_line(names, count),
+    do: authored_many(Enum.join(names, ", ") <> " and #{count - length(names)} more spacecraft")
+
+  defp authored_many(list),
+    do:
+      "Not approved: you saved the configurations of #{list} in this request, so another person approves it." <>
+        @recorded
+
   @spec respond(Plug.Conn.t(), atom(), map() | nil) :: Plug.Conn.t()
   def respond(conn, code, details) when is_atom(code) do
     message = Map.get(@messages, code, @generic) <> @recorded

@@ -7,6 +7,7 @@ import {
   type Decoded,
   type MissionId,
 } from "@/api";
+import { listenerOverlapKey } from "@/features/contacts/listenerOverlap.ts";
 import { expiredReader, supersededByReader } from "./lifecycle.ts";
 import { base, planRow, stationReader } from "./plans-api.ts";
 import { repairInfoReader } from "./repair-info.ts";
@@ -142,6 +143,8 @@ export const planDetailReader = d.object({
       ends_at: d.timestamp,
       synthetic: d.boolean,
       locked: d.boolean,
+      /** U58 (b), #361: a single-connection listener overlap with another pass; absent before #640. */
+      listener_overlap: listenerOverlapKey,
       /** That offer's expiry (domain c38bb5de). */
       expires_at: d.optional(d.nullable(d.timestamp)),
       /**

@@ -30,7 +30,11 @@ defineProps<{
   <p v-if="readOnly && !refusal" class="m-0 text-sm text-text-3">
     Org admins change app configuration.
   </p>
-  <ApCallout v-if="outcome && outcome.kind !== 'staged'" tone="nominal">{{
-    outcome.text
-  }}</ApCallout>
+  <!-- A3 (#313, ux §10): a requested activation has one line, the status line's caution
+    "Waiting for activation approval…", announced there; no nominal callout beside it. -->
+  <ApCallout
+    v-if="outcome && outcome.kind !== 'staged' && outcome.kind !== 'activation_requested'"
+    tone="nominal"
+    >{{ outcome.text }}</ApCallout
+  >
 </template>

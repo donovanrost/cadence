@@ -13,6 +13,7 @@ const pass = (id: string, b: PlanPass["booking"]): PlanPass => ({
   locked: false,
   expires_at: null,
   booking: b,
+  listener_overlap: undefined,
 });
 
 describe("K1 per-contact booking (api 8e)", () => {

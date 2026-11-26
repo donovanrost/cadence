@@ -536,6 +536,32 @@ describe("GO re-checks HOLDs (DECISIONS #61)", () => {
     }).events;
     expect(e && eventText(e, () => "Sam")).toBe("Sam acknowledged the Conflicts HOLD at GO: “ok”");
   });
+
+  it("names the Composition HOLD's targets from its evidence (#546), never their ids", () => {
+    const [e] = groupOf({
+      events: [
+        {
+          id: "e3",
+          kind: "hold_acknowledged",
+          actor: { actor_kind: "user", user_id: "user-2" },
+          at: "2026-11-10T01:05:00Z",
+          payload: {
+            key: "model_approval_withdrawn",
+            note: "ok",
+            hold_basis: "b3",
+            evidence: { spacecraft_ids: ["sc-4", "sc-9"] },
+          },
+        },
+      ],
+    }).events;
+    const targets = [
+      { spacecraft_id: "sc-4", name: "EARENDIL-004", members: [] },
+      { spacecraft_id: "sc-9", name: null, members: [] },
+    ];
+    expect(e && eventText(e, () => "Sam", targets)).toBe(
+      "Sam acknowledged the Composition HOLD on EARENDIL-004 and Unknown spacecraft: “ok”",
+    );
+  });
 });
 
 describe("catalog_changed (#65)", () => {

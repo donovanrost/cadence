@@ -3,6 +3,8 @@ export { fetchPasses, type Pass, type Passes } from "./api.ts";
 export { fetchPassOrContact } from "./handStarted.ts";
 export { passGantt, passStatus, stationLabel, type GanttAxis, type PassStatus } from "./gantt.ts";
 export { usePasses } from "./usePasses.ts";
+export { default as ListenerOverlapNote } from "./ListenerOverlapNote.vue";
+export { listenerOverlapKey, overlapWords, type ListenerOverlap } from "./listenerOverlap.ts";
 export {
   groupBlockedLine,
   readinessTag,

@@ -17,6 +17,14 @@ export function useSpacecraftNames(missionId: Readonly<Ref<MissionId>>) {
   return (id: string | null): SpacecraftName | null => (id ? (byId.value.get(id) ?? null) : null);
 }
 
+/**
+ * #237 (U25): a craft's name from the fleet, or "Unknown spacecraft" when it can't be named.
+ * Never its id: an id read as a name is meaningless to an operator and hides that the name
+ * couldn't be read.
+ */
+export const craftLabel = (name: SpacecraftName | null): string =>
+  name?.name.trim() ? name.name : "Unknown spacecraft";
+
 /** `FRI 24 OCT` for header lines; days are UTC (U22 Q1). */
 export function dayLabel(day: string): string {
   const d = new Date(`${day}T00:00:00Z`);

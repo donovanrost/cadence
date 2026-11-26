@@ -42,7 +42,11 @@ defmodule Cadence.Governance.FieldIdentityTest do
     assert {:ok, _} = Governance.persist_binding_set(@org, binding_set)
 
     # Rows as written before #73: no identity. Its stored hash was the read-back's term hash.
+    # #534's trigger allows only filling the identity, never clearing it; this test lifts it in its
+    # own sandbox to make the rows a pre-#73 write left behind.
+    Repo.query!("ALTER TABLE governed_packet_definition_fields DISABLE TRIGGER USER")
     {1, _} = Repo.update_all(identity_rows(), set: [parameter_id: nil, qualified_name: nil])
+    Repo.query!("ALTER TABLE governed_packet_definition_fields ENABLE TRIGGER USER")
     {:ok, before} = Governance.fetch_binding_set(@org, @mission, "hk-v1", 1)
     assert [%{parameter_id: nil}] = fields(before)
     stored_hash = ContentHash.term_sha256(before)

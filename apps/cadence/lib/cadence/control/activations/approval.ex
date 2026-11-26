@@ -12,6 +12,7 @@ defmodule Cadence.Control.Activations.Approval do
   alias Cadence.Auth.Scope
   alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Control.Activations.Preflight
+  alias Cadence.Governance.Accountability
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.MissionModels
@@ -66,11 +67,18 @@ defmodule Cadence.Control.Activations.Approval do
   # author of the spacecraft configuration under review (not only its requester, which
   # Management's decidable checks). Checked against the request's recorded policy, validated
   # current by the preflight.
+  #
+  # #280 (api-ops' cross-PR item): authors are compared through Governance.Accountability, not by
+  # user id alone. A version's `created_by` can be a service identity's id (Drafts.derive writes a
+  # change set's applier), which counts as its accountable people; a service nobody is on record
+  # for refuses everyone, with `details.service` (#434's spacecraft-list form stays for a review
+  # it can't read).
   defp distinct_from_authors(scope, %{metadata: %{"configuration_review" => _}} = request) do
     with true <- separation?(request),
          {:ok, mission} <- Missions.fetch_mission(request.organization_id, request.mission_id),
-         {:ok, by_spacecraft} <- Authors.by_spacecraft(mission, request.metadata) do
-      authored = for {id, authors} <- by_spacecraft, scope.user.user_id in authors, do: id
+         {:ok, by_spacecraft} <- Authors.by_spacecraft(mission, request.metadata),
+         {:ok, self_ids} <- self_authors(request.organization_id, approver(scope), by_spacecraft) do
+      authored = for {id, authors} <- by_spacecraft, Enum.any?(authors, &(&1 in self_ids)), do: id
 
       if authored == [],
         do: :ok,
@@ -82,6 +90,44 @@ defmodule Cadence.Control.Activations.Approval do
   end
 
   defp distinct_from_authors(_scope, _request), do: :ok
+
+  # The author ids (across every reviewed craft) that count as the approver. Each distinct id is
+  # checked once, and which ids are service identities is read in ONE query over all of them
+  # (#439), so the craft count and the number of people who saved add no queries. Only a service
+  # author costs its own accountable-people read.
+  # No approver to compare (no person or service on the scope): every author counts, so it fails
+  # closed. Approval requires a person before this (Management's decidable).
+  defp self_authors(_organization_id, nil, by_spacecraft),
+    do: {:ok, by_spacecraft |> Map.values() |> List.flatten() |> Enum.uniq()}
+
+  defp self_authors(organization_id, approver, by_spacecraft) do
+    authors = by_spacecraft |> Map.values() |> List.flatten() |> Enum.uniq()
+
+    services =
+      for {:service, id} <- Accountability.actors_for_ids(organization_id, authors),
+          into: MapSet.new(),
+          do: id
+
+    Enum.reduce_while(authors, {:ok, []}, fn author, {:ok, acc} ->
+      # As actors_for_ids/2 counts a bare id: the person, and the service when one has that id.
+      actors = [{:user, author} | if(author in services, do: [{:service, author}], else: [])]
+
+      case Accountability.separate(organization_id, approver, actors) do
+        :ok -> {:cont, {:ok, acc}}
+        {:error, {:self, _via}} -> {:cont, {:ok, [author | acc]}}
+        {:error, {:unknown, service}} -> {:halt, unknown(service)}
+      end
+    end)
+  end
+
+  defp unknown(service),
+    do: {:error, {:activation_approver_authors_unknown, %{service: service}}}
+
+  defp approver(%Scope{actor_kind: :service, service_identity: %{service_identity_id: id}}),
+    do: {:service, id}
+
+  defp approver(%Scope{user: %{user_id: id}}), do: {:user, id}
+  defp approver(_scope), do: nil
 
   # Fails closed (api-ops): only a request whose recorded policy says separation is OFF ('direct')
   # skips the author check; a missing or malformed policy runs it.

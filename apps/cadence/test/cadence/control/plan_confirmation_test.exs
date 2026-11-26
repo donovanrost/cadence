@@ -113,7 +113,7 @@ defmodule Cadence.Control.PlanConfirmationTest do
         })
 
       assert %{reason: "operator_not_booked", resolved: resolved} =
-               PlanConfirmation.bookings([item], %{"user-1" => "Mira K."})["s10"]
+               PlanConfirmation.bookings([item], member_names(%{"user-1" => "Mira K."}))["s10"]
 
       assert resolved == %{
                by: %{kind: "user", id: "user-1", name: "Mira K."},
@@ -134,7 +134,18 @@ defmodule Cadence.Control.PlanConfirmationTest do
                detail: nil,
                resolved: %{at: "2026-11-13T10:53:00Z"}
              } =
-               PlanConfirmation.bookings([attested], %{"user-1" => "Mira K."})["s11"]
+               PlanConfirmation.bookings([attested], member_names(%{"user-1" => "Mira K."}))[
+                 "s11"
+               ]
     end
   end
+
+  # ActorRef.names/2's shape for members of this organization (#468).
+  defp member_names(users),
+    do: %{
+      users: users,
+      user_ids: MapSet.new(Map.keys(users)),
+      services: %{},
+      service_ids: MapSet.new()
+    }
 end

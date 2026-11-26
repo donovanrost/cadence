@@ -37,7 +37,8 @@ test.describe("Catalog import", () => {
       buffer: Buffer.from("not a catalog"),
     });
     await expect(
-      page.getByRole("status").filter({ hasText: "Cadence can't import notes.txt" }),
+      // A refusal of the person's pick is an alert (a11y B6, #276).
+      page.getByRole("alert").filter({ hasText: "Cadence can't import notes.txt" }),
     ).toBeVisible();
     await expect(upload(page)).toHaveAttribute("aria-disabled", "true");
     await expect(upload(page)).toHaveAccessibleDescription(

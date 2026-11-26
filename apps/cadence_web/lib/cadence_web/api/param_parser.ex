@@ -1,24 +1,9 @@
 defmodule CadenceWeb.API.ParamParser do
   @moduledoc "Shared primitives for parsing product HTTP API parameters."
 
-  @service_identity_lifecycle_states [:active, :disabled]
   @direction_values [:uplink, :downlink]
   @selection_role_values [:selected, :candidate, :contributing]
   @transport_target_scope_values [:path, :transport]
-
-  def capabilities(params, default) when is_map(params) and is_list(default) do
-    case Map.get(params, "capabilities", default) do
-      values when is_list(values) ->
-        reduce_ok(values, &normalize_capability/1)
-
-      _other ->
-        {:error, {:invalid_param, "capabilities", :list}}
-    end
-  end
-
-  def service_identity_lifecycle_state(params) when is_map(params) do
-    allowed_atom_param(params, "lifecycle_state", :active, @service_identity_lifecycle_states)
-  end
 
   def required_string(params, key) do
     case Map.get(params, key) do
@@ -208,16 +193,6 @@ defmodule CadenceWeb.API.ParamParser do
 
   def parse_allowed_atom(_value, key, _allowed),
     do: {:error, {:invalid_param, key, :unknown_atom}}
-
-  def normalize_capability(value) do
-    case value do
-      :organization_admin -> {:ok, :organization_admin}
-      "organization_admin" -> {:ok, :organization_admin}
-      :mission_admin -> {:ok, :mission_admin}
-      "mission_admin" -> {:ok, :mission_admin}
-      _other -> {:error, {:invalid_param, "capabilities", :unknown_atom}}
-    end
-  end
 
   def required_catalog_family(params, key) do
     case Map.get(params, key) do

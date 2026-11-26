@@ -50,7 +50,8 @@ defmodule CadenceWeb.Console.Problem do
       {409,
        "The booking window has closed for some of this plan's passes, so it can't be approved as it is. Nothing was recorded."},
     contact_plan_self_approval_forbidden:
-      {403, "You submitted or drafted this version, so another org admin approves it."},
+      {403,
+       "You submitted this plan or drafted a version of it since it was last approved, so another org admin approves it."},
     contact_plan_version_already_decided:
       {422, "This version was already decided. Reload to see it."},
     booking_not_found: {404, "That pass isn't a booking of this plan."},
@@ -98,6 +99,43 @@ defmodule CadenceWeb.Console.Problem do
       {409, "The planning policy changed since you loaded it. Review it, then try again."},
     grant_changed: {409, "This grant changed since you loaded it."},
     grant_not_found: {404, "Automation grant not found."},
+    # #283 (ux U105): a grant takes effect only after a second org admin approves it. The
+    # console words each from its code and details; these are the server's plain fallbacks.
+    automation_grant_self_approval_forbidden:
+      {403, "Not approved: another org admin approves this grant. Your approval wasn't recorded."},
+    automation_grant_approver_authors_unknown:
+      {403,
+       "Not approved: the service identity has no one recorded as accountable for it, so its grant can't be approved yet. Your approval wasn't recorded."},
+    automation_grant_not_proposed:
+      {409, "This grant isn't waiting for approval, so nothing was recorded. Reload to see it."},
+    approval_policy_changed:
+      {409,
+       "Not approved: the mission's approval setting changed after this grant was proposed. Your approval wasn't recorded. It has to be proposed again."},
+    automation_grant_not_active: {403, "The grant isn't active."},
+    automation_grant_not_narrower:
+      {422,
+       "Not narrowed: this change gives the service more than it has now, so it needs approval. Propose it as a new grant instead."},
+    automation_grant_legacy:
+      {409,
+       "This grant was issued before two-person approval, so it can only be revoked. Propose a new grant instead."},
+    automation_grant_narrow_unchanged:
+      {422, "Not narrowed: nothing changed. Choose less than the grant allows now."},
+    # #499: resume (ca-ux words the console's lines; these are the server's fallbacks).
+    automation_grant_not_suspended:
+      {409, "This grant isn't suspended, so there's nothing to resume. Reload to see it."},
+    automation_grant_service_has_grant:
+      {409,
+       "This service already has a grant here. Revoke it, or propose a wider one that replaces it."},
+    approval_tightening_unavailable:
+      {503,
+       "Not saved: Cadence can't check what this change would suspend right now. Try again later."},
+    approval_tightening_suspends_grants:
+      {409,
+       "Not saved: this change suspends automation grants that were approved by one person. Review them and save again to confirm."},
+    automation_grant_capability_required:
+      {403, "You can't propose or approve a grant for something you can't do yourself."},
+    authenticated_user_required:
+      {403, "Only a person can do this, not a service identity. Nothing changed."},
     route_changed: {409, "The route to that station changed. Search again."},
     opportunity_expired: {409, "That offer has gone. Search again."},
     token_invalid: {422, "That offer can't be booked. Search again."},
@@ -208,7 +246,9 @@ defmodule CadenceWeb.Console.Problem do
     configuration_changes_group_not_found:
       {404, "That group of spacecraft isn't in this request."},
     not_pending: {409, "That request has already been decided."},
-    self_approval_forbidden: {403, "You can't approve your own request."},
+    activation_approver_authored_content:
+      {403,
+       "Not approved: you saved part of what this request activates, so another person approves it. Your approval wasn't recorded."},
     not_requester: {403, "Only the person who requested it can withdraw it."},
     activation_policy_changed:
       {409, "The activation policy changed since this was requested. Request it again."},
@@ -298,8 +338,36 @@ defmodule CadenceWeb.Console.Problem do
     spacecraft_source_limit_exceeded: {422, "Too many packet sources for one spacecraft."},
     mission_model_revision_not_approved:
       {409, "Not applied: the catalog revision isn't approved yet."},
+    # #275 (U94, ca-ux's amendment): the requester only; an author gets
+    # activation_approver_authored_content (#236).
+    # ca-ux on #608: neutral, so it's true with or without via_service; U95's ending.
     activation_self_approval_forbidden:
-      {403, "A different person must review this configuration."}
+      {403,
+       "Not approved: you, or a service identity you're accountable for, requested this, so another person approves it. Your approval wasn't recorded."},
+    # #534 (mms-ux): another generation saved a packet definition under the same version at the
+    # same moment; nothing was written, and doing it again re-resolves. Retryable.
+    packet_definition_version_taken:
+      {409,
+       "Not applied: another change saved a packet definition at the same moment, so nothing changed. Try again."},
+    # #280 (U100): who made this can't be established; details.service names the service whose
+    # accountable people aren't recorded (null when none is involved).
+    activation_approver_authors_unknown:
+      {403, "Not approved: Cadence can't tell who made this, so this can't be approved yet."},
+    contact_plan_approver_authors_unknown:
+      {403, "Not approved: Cadence can't tell who made this plan, so this can't be approved yet."},
+    mission_model_approver_authors_unknown:
+      {403,
+       "Not approved: Cadence can't tell who imported this revision, so this can't be approved yet."},
+    # #260 (mms-ux): the console names the revision, the decider and the time from the details.
+    mission_model_revision_already_approved:
+      {409,
+       "Not approved: this catalog revision was already approved, so your approval wasn't recorded. Reload to see it."},
+    command_group_approver_authors_unknown:
+      {403,
+       "Not approved: Cadence can't tell who sent this command group, so this can't be approved yet."},
+    command_request_approver_authors_unknown:
+      {403,
+       "Not approved: Cadence can't tell who sent this command request, so this can't be approved yet."}
   }
 
   @doc "Sends the error envelope for a known reason atom and halts."

@@ -12,7 +12,8 @@ Not on the canvas; build as a reading-layout form"). Replaces the `New mission` 
 - Slugs are unique per organization (`missions_org_slug_idx`). A clash comes back as a changeset error, not a
   field message the console can show.
 - The outside-console `POST /api/organizations/:organization_id/missions` (`MissionController.create`,
-  `:manage_missions`) takes the same pair through `IdentityParams.mission/2`.
+  `:manage_missions`) takes the same pair through `IdentityParams.mission/2`. (Retired by #384, director
+  2026-11-19, with `IdentityParams`.)
 - The console already reads `GET /api/console/v1/organizations/:id/missions` (`{missions: [{id, slug, name,
   spacecraft_count, worst_state}]}`, pass-2 #11).
 - Nothing records a mission's creation, so org Audit can't say who created it.

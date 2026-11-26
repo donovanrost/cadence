@@ -11,7 +11,7 @@ defmodule Cadence.Reads.ProfileDetail do
   """
 
   alias Cadence.Catalog
-  alias Cadence.Reads.{CatalogRollout, ProfileRouting}
+  alias Cadence.Reads.{CatalogCompositions, CatalogRollout, ProfileRouting}
   alias Cadence.SpacecraftType
   alias Cadence.SpacecraftType.Schema
 
@@ -23,29 +23,38 @@ defmodule Cadence.Reads.ProfileDetail do
            profile_id
          ) do
       {:ok, %SpacecraftType{} = profile} ->
-        revisions = Catalog.list_revisions(organization_id, mission_id)
-
-        {:ok,
-         build(%{
-           profile: profile,
-           versions:
-             Cadence.SpacecraftTypeStore.list_spacecraft_type_version_history(
-               organization_id,
-               mission_id,
-               profile_id
-             ),
-           version_counts:
-             Cadence.SpacecraftStore.fleet_summary(organization_id, mission_id).profile_version_counts,
-           rules: ProfileRouting.rules(organization_id, mission_id, profile),
-           overrides: ProfileRouting.overrides(organization_id, mission_id, profile),
-           extra_routes: ProfileRouting.extra_routes(organization_id, mission_id, profile),
-           catalog_choices: Enum.map(revisions, &catalog_choice/1),
-           revision_numbers: Map.new(revisions, &{&1.catalog_revision_id, &1.revision_number})
-         })}
+        {:ok, build(input(organization_id, mission_id, profile))}
 
       _missing ->
         {:error, :spacecraft_type_not_found}
     end
+  end
+
+  defp input(organization_id, mission_id, profile) do
+    revisions = Catalog.list_revisions(organization_id, mission_id)
+    overrides = ProfileRouting.overrides(organization_id, mission_id, profile)
+
+    %{
+      profile: profile,
+      versions:
+        Cadence.SpacecraftTypeStore.list_spacecraft_type_version_history(
+          organization_id,
+          mission_id,
+          profile.spacecraft_type_id
+        ),
+      version_counts:
+        Cadence.SpacecraftStore.fleet_summary(organization_id, mission_id).profile_version_counts,
+      rules: ProfileRouting.rules(organization_id, mission_id, profile),
+      overrides: overrides,
+      extra_routes: ProfileRouting.extra_routes(organization_id, mission_id, profile),
+      catalog_choices: Enum.map(revisions, &catalog_choice/1),
+      revision_numbers: Map.new(revisions, &{&1.catalog_revision_id, &1.revision_number}),
+      # D2 (#543): the profile's catalog revision and every catalog override's, in one lookup.
+      compositions:
+        CatalogCompositions.by_catalog_revision(organization_id, mission_id, revisions, [
+          profile.catalog_revision_id | CatalogCompositions.override_ids(overrides)
+        ])
+    }
   end
 
   @doc "Pure builder; see `load/3` for the inputs."
@@ -53,7 +62,12 @@ defmodule Cadence.Reads.ProfileDetail do
   def build(%{profile: %SpacecraftType{} = profile} = input) do
     versions = Map.get(input, :versions, [])
     rules = Map.get(input, :rules, [])
-    overrides = Map.get(input, :overrides, [])
+    compositions = Map.get(input, :compositions, %{})
+
+    overrides =
+      input
+      |> Map.get(:overrides, [])
+      |> Enum.map(&CatalogCompositions.put_override(&1, compositions))
 
     pinned =
       input
@@ -72,6 +86,8 @@ defmodule Cadence.Reads.ProfileDetail do
         # number; {id} alone made the page unreadable for a profile with a catalog revision).
         catalog_revision:
           CatalogRollout.ref(profile.catalog_revision_id, Map.get(input, :revision_numbers, %{})),
+        # D2 (#543): the composition behind that catalog revision, or nil.
+        composition: Map.get(compositions, profile.catalog_revision_id),
         protocols: %{
           downlink: enum_value(profile.downlink_protocol),
           uplink: enum_value(profile.uplink_protocol),

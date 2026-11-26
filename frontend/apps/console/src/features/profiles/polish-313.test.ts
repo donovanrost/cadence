@@ -1,6 +1,8 @@
-import { mount } from "@vue/test-utils";
+import { mount, RouterLinkStub } from "@vue/test-utils";
 import { describe, expect, it } from "vite-plus/test";
 import type { ApiError } from "@/api";
+import LimitsNotice from "./LimitsNotice.vue";
+import RuleBlock from "./RuleBlock.vue";
 import RuleLegs from "./RuleLegs.vue";
 import { checkFallback } from "./rulesDraft.ts";
 
@@ -41,5 +43,37 @@ describe("a rule's legs are named groups (a11y B7)", () => {
     ]);
     expect(w.text()).toContain("Direction");
     expect(w.text()).not.toContain("Leg 1 direction");
+  });
+});
+
+describe("P7: a disabled rule, the Limits link (ux §10)", () => {
+  const rule = {
+    id: "r1",
+    label: "Prime downlink",
+    name_template: "{craft}-{station}",
+    enabled: false,
+    stations: [{ id: "s1", code: "SVB", name: "Svalbard", transport_id: null }],
+    legs: [{ direction: "downlink" as const, role: "primary" as const }],
+    route_count: 0,
+    samples: [],
+  };
+  it("tags a disabled rule DISABLED in its header and keeps the sentence", () => {
+    const w = mount(RuleBlock, { props: { rule, profileName: "Block 1", index: "P2" } });
+    expect(w.get("header").text()).toContain("Disabled");
+    expect(w.get("[data-rule-disabled]").text()).toBe(
+      "This rule is disabled; it generates no routes.",
+    );
+    // Not dimmed (mms-ux, #460): the query, route and name keep full contrast.
+    expect(w.find(".opacity-60").exists()).toBe(false);
+    const on = mount(RuleBlock, {
+      props: { rule: { ...rule, enabled: true }, profileName: "Block 1", index: "P2" },
+    });
+    expect(on.get("header").text()).not.toContain("Disabled");
+  });
+  it("links Limits to the Limits app by name", () => {
+    const w = mount(LimitsNotice, { global: { stubs: { RouterLink: RouterLinkStub } } });
+    const link = w.getComponent(RouterLinkStub);
+    expect(link.text()).toBe("Limits");
+    expect(link.props("to")).toEqual({ name: "setup.app", params: { appKey: "limits" } });
   });
 });

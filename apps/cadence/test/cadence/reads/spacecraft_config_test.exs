@@ -54,7 +54,9 @@ defmodule Cadence.Reads.SpacecraftConfigTest do
                unit: "bytes",
                profile_value_json: "1115",
                spacecraft_value_json: "892",
-               reason: "Bench"
+               reason: "Bench",
+               # D2 (#543): only a catalog override names a composition.
+               composition: nil
              }
            ] = config.overrides
 

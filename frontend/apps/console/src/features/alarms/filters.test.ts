@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
 import { spacecraftId } from "@/api/index.ts";
+import { scid as scidReader } from "@/api/index.ts";
 import {
+  craftInSentence,
+  craftStandalone,
   filtered,
   filteredEmpty,
   filtersOf,
@@ -8,6 +11,7 @@ import {
   shownLine,
   spacecraftOptions,
   withFilter,
+  type FleetNames,
 } from "./filters.ts";
 import { episodeFixture } from "./fixtures.ts";
 
@@ -16,7 +20,8 @@ const names: Record<string, string> = {
   "sc-312": "EARENDIL-312",
   "sc-047": "EARENDIL-047",
 };
-const nameOf = (id: string) => names[id] ?? id;
+const nameOf = (id: string) => names[id] ?? null;
+const ready: FleetNames = { state: "ready", names: new Map(Object.entries(names)) };
 
 describe("Alarms filters (ux U69 A6)", () => {
   it("reads ?sc= and ?severity= from the URL; both severities is none", () => {
@@ -41,11 +46,11 @@ describe("Alarms filters (ux U69 A6)", () => {
       episodeFixture({ id: "2" }),
       episodeFixture({ id: "3", spacecraft_id: b }),
     ];
-    expect(spacecraftOptions(list, null, nameOf)).toEqual([
+    expect(spacecraftOptions(list, null, ready)).toEqual([
       { value: "sc-047", label: "EARENDIL-047 (1)" },
       { value: "sc-312", label: "EARENDIL-312 (2)" },
     ]);
-    expect(spacecraftOptions([], "sc-047", nameOf)).toEqual([
+    expect(spacecraftOptions([], "sc-047", ready)).toEqual([
       { value: "sc-047", label: "EARENDIL-047 (0)" },
     ]);
   });
@@ -70,5 +75,58 @@ describe("Alarms filters (ux U69 A6)", () => {
       point: "VBAT",
       severity: "critical",
     });
+  });
+});
+
+/** ux's ruling on #652: a craft's name goes by the fleet read's state; never the internal id. */
+describe("craft names by the fleet read (U25, U20)", () => {
+  const loading: FleetNames = { state: "loading" };
+  const failed: FleetNames = { state: "failed" };
+  const lost = (n: number) => {
+    const id = spacecraftId(`sc-lost-${n}`);
+    return episodeFixture({
+      spacecraft_id: id,
+      spacecraft: { id, name: null, scid: scidReader(n) },
+    });
+  };
+
+  it("ready, and the craft isn't in it: an unknown spacecraft, with its SCID standing alone", () => {
+    expect(craftInSentence("sc-lost-9", 9999, ready)).toBe("an unknown spacecraft");
+    expect(craftStandalone("sc-lost-9", 9999, ready)).toBe("Unknown spacecraft · SCID 9999");
+    expect(craftStandalone("sc-lost-9", null, ready)).toBe("Unknown spacecraft");
+    expect(craftInSentence("sc-312", 312, ready)).toBe("EARENDIL-312");
+    expect(spacecraftOptions([lost(9999)], null, ready)).toEqual([
+      { value: "sc-lost-9999", label: "Unknown spacecraft · SCID 9999 (1)" },
+    ]);
+  });
+
+  it("loading: nothing is named yet, so the lines and the picker wait", () => {
+    expect(craftInSentence("sc-312", 312, loading)).toBeNull();
+    expect(craftStandalone("sc-312", 312, loading)).toBeNull();
+    expect(spacecraftOptions([lost(9999)], null, loading)).toEqual([]);
+    expect(
+      filteredEmpty({ spacecraftId: "sc-312", severities: [] }, (id) =>
+        craftInSentence(id, 312, loading),
+      ),
+    ).toBeNull();
+  });
+
+  it("failed: a spacecraft by its SCID, never claimed unknown", () => {
+    expect(craftInSentence("sc-312", 312, failed)).toBe("a spacecraft (SCID 312)");
+    expect(craftInSentence("sc-312", null, failed)).toBe("a spacecraft");
+    expect(craftStandalone("sc-312", 312, failed)).toBe("SCID 312");
+    expect(craftStandalone("sc-312", null, failed)).toBe("Spacecraft");
+    expect(spacecraftOptions([lost(9999)], null, failed)).toEqual([
+      { value: "sc-lost-9999", label: "SCID 9999 (1)" },
+    ]);
+  });
+
+  it("never says the internal id, in any state", () => {
+    for (const fleet of [ready, loading, failed]) {
+      for (const scid of [9999, null]) {
+        expect(craftInSentence("sc-lost-9", scid, fleet) ?? "").not.toContain("sc-lost-9");
+        expect(craftStandalone("sc-lost-9", scid, fleet) ?? "").not.toContain("sc-lost-9");
+      }
+    }
   });
 });

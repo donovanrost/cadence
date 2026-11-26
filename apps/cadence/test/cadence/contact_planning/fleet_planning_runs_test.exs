@@ -10,6 +10,8 @@ defmodule Cadence.ContactPlanning.FleetPlanningRunsTest do
     FleetPlanningRuns
   }
 
+  alias Cadence.Management.Contacts.Store.FleetPlanningRunRow
+  alias Cadence.Persistence.JsonDocument
   alias Cadence.PolicyReviewer
   alias Cadence.Spacecraft
 
@@ -70,7 +72,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningRunsTest do
       end
 
     # Exercise the durable identifier tie-breaker, independent of clock precision.
-    Cadence.Repo.update_all(Cadence.Management.Contacts.Store.FleetPlanningRunRow,
+    Cadence.Repo.update_all(FleetPlanningRunRow,
       set: [inserted_at: @now]
     )
 
@@ -275,6 +277,19 @@ defmodule Cadence.ContactPlanning.FleetPlanningRunsTest do
     assert run.fleet_planning_policy_version == context.policy_version.version
     assert run.input_document["requirement_count"] == 1
     assert run.trigger_actor_document["id"] == context.member_scope.user.user_id
+
+    # #466: the stored trigger actor is kind, id and display name only, with no email.
+    stored_row =
+      Cadence.Repo.get!(
+        FleetPlanningRunRow,
+        run.fleet_planning_run_id
+      )
+
+    assert JsonDocument.unwrap_value(stored_row.trigger_actor_document) == %{
+             "kind" => "user",
+             "id" => context.member_scope.user.user_id,
+             "display_name" => context.member_scope.user.display_name
+           }
 
     assert input_ref.contact_requirement_id == requirement.contact_requirement_id
     assert input_ref.contact_requirement_version == requirement_version.version

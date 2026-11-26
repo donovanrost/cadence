@@ -82,6 +82,8 @@ with `spacecraft`.
 - `catalog_revision`: the catalog the profile's latest version sets (`SpacecraftType.catalog_revision_id`),
   `{id, number, label}` with `label` "rev N" ("rN" is a change-set revision), or `null` when the
   profile sets none. `number`/`label` are `null` if the revision can't be found.
+- `composition` (D2, #543): the composition behind this revision (shape in setup.md's
+  'Compositions' section), or null.
 - `override_count`: per-spacecraft override entries (spacecraft × path) across the spacecraft
   pinned to the profile, as the detail's `override_count`. `last_change`: the detail's
   `profile.last_change` (`{version, revision: null, at, actor: null}`: when the latest version was
@@ -206,12 +208,20 @@ by its catalog revision ("catalog rev 4"); the model revision id is Technical de
 - `GET /:id` → `{id, status, imported_at, imported_by, catalog_revision, decision {kind:
   approved|rejected, by {id, name}, at, report_id | null, reason | null, retroactive} | null,
   viewer_can_decide, viewer_is_importer, cannot_decide_because: not_admin | not_approvable |
-  self_approval | plans_not_ready | null, cannot_approve_because: not_in_catalog | null,
+  self_approval | composer | authors_unknown | plans_not_ready | null, cannot_decide_details: {via_service:
+  {id, name} | null} | {service: {id, name} | null} | null, cannot_approve_because: not_in_catalog | null,
   plans_ready, comparison: <cmp> | null}`. `imported_by`
-  null reads "Importer not recorded". `cannot_approve_because` (11-17, ux U88) is
-  `not_in_catalog` when no catalog revision names the model revision (a second run of a file
-  makes one): Approve is refused (`409 mission_model_revision_not_in_catalog`), Reject stays;
-  `cannot_decide_because` wins when both are set. Importers (11-17) are the people recorded on the catalog
+  null reads "Importer not recorded". `imported_by` names a person only while they hold an
+  active membership in the mission's organization, never by email (#366, #146's rule). A member
+  with no display name is `{id, name: null}`. Anyone outside the organization is `{id: null,
+  name: null}`: recorded, but not named, and their id isn't sent. `cannot_approve_because` (11-17, ux U88) is
+  `not_in_catalog` when the approve check refuses it as not catalog-named (a second run of a file
+  makes one). Since D2 (#543) it's that check itself (E1: a composition names the revision and
+  each of its layers came from an import a catalog revision names), so a composed revision, which
+  has no catalog revision of its own, isn't flagged: Approve is refused (`409 mission_model_revision_not_in_catalog`), Reject stays;
+  `cannot_decide_because` wins when both are set. `self_approval` and `authors_unknown` (#280) come
+  from the same check the approve path makes; `cannot_decide_details` carries the approve refusal's
+  details for them (null otherwise). Importers (11-17) are the people recorded on the catalog
   revisions naming the model revision plus the people who ran a completed import run that made
   it (every run makes its own model revision, so a reimport's has only its runner);
   `imported_by` is the first. A service or Cadence's own seed never counts as one.
@@ -230,6 +240,48 @@ by its catalog revision ("catalog rev 4"); the model revision id is Technical de
     `diff` below (no model, a model revision not stored for this mission, or a failed query; #367).
     Both set: the count. `0` means nothing breaks; an unknown count is never sent as `0`.
   - The list (`GET ?status=`) doesn't carry these fields (one diff per row would read every model).
+- **Compositions (D2, #543; design `docs/apogee/domain/mission-composition-design.md` §6;
+  additive, read as optional).** The list rows and `GET /:id` carry `composition`, the shared
+  object below, or null when no composition names the revision. `GET /:id` also carries:
+  - `importers: [{layer_id, importers: [<actor>], importers_count}]`: per imported layer, in mount
+    order, the people and services the approve check counts as that layer's importers (at most
+    100 named, in no promised order; `importers_count` is exact). The composer is
+    `composition.created_by`, not repeated here. Empty when no composition names the revision.
+  - `breaking_base: {revision_id, composition: {composition_id, number | null} | null,
+    catalog_revision: {id, number} | null} | null`: exactly the revision approval compares
+    against (`ModelApprovalGate.default_baseline/3`: the previous import of the same lineage, else
+    the revision most craft run), so U102's line can say "compared with rev 3" or "compared with
+    composition 2". Null when nothing earlier exists. `catalog_revision.breaking_base` above stays
+    as it is.
+  - `cannot_decide_because` adds `composer`: the viewer is refused only because they (or a service
+    they're accountable for) made the composition, and they import none of its layers. If they're
+    an importer too, it stays `self_approval`. `cannot_decide_details` for `composer` is
+    `{via_service: {id, name} | null}`, as for `self_approval`.
+
+  **The `composition` object**, shared by every read that shows one (profiles, overrides,
+  spacecraft configuration, activation rows and this one):
+
+  ```
+  {composition_id, number: integer | null, imported_layers: [{layer_id, mount, catalog_revision:
+   {id, number, database: {id, name | null}} | null}], created_by: <actor> | null, created_at}
+  ```
+
+  - `number`: the mission's short number for the composition ("Composition 3"), per mission,
+    assigned in order of creation and never reused. Null only if a composition has none.
+  - `imported_layers`: never empty, in mount order. Before D4 every composition has one layer at
+    `/`. A layer's `catalog_revision` is the earliest catalog revision in the mission that imported
+    it (by creation, then id; derived, not stored), which may be in another database than the
+    one a profile names. Null only if no catalog revision did.
+  - `<actor>` is `{kind: user | service | system, id, name, run_by: {id, name} | null}`. A person
+    has `id` and `name` only while an active member of the mission's organization (a member
+    without a display name: `name` null); anyone else `id: null, name: null`. A service of the
+    organization: its id and name; another organization's: nulls. A system actor (a seed or a
+    script): its system id, `name` null (say "Cadence"), and `run_by` naming who ran it by the
+    same member rule (#513, as `requested_by`). Never an email.
+  - `created_by` is null only for the compositions the D1 migration made for existing catalog
+    revisions (nobody chose them).
+  - Until pins exist (D3), a read's composition is the one its model revision belongs to (that
+    revision's link), so every read shows the same composition for the same revision.
 - `POST /:id/comparison {}` → `201 <cmp>`, synchronous, against the mission's active binding set
   and the revision this one replaces (the previous catalog revision's model in the same
   database, else none). Reports dedupe on content.
@@ -243,15 +295,29 @@ by its catalog revision ("catalog rev 4"); the model revision id is Technical de
 - `POST /:id/approve {comparison_report_id}` and `POST /:id/reject {reason}` (reason required;
   only a candidate) → `200` the read. Refusals, worded per ux U65: `403 forbidden` (not an org
   admin), `403 human_mission_model_approver_required`, `403 mission_model_self_approval_forbidden`
-  (the importer, under 'independent'), `409 mission_model_comparison_not_passed`, `409
+  (the importer, under 'independent'; `details: {via_service: {id, name} | null}`, #280: a service
+  identity you're accountable for imported it), `403 mission_model_approver_authors_unknown`
+  (`details: {service: {id, name} | null}`, #280: a service identity with nobody recorded as
+  accountable imported it, so nobody can approve it yet), `409 mission_model_comparison_not_passed`, `409
   mission_model_comparison_mismatch` (another revision's report: run it again), `409
   mission_model_runtime_plans_not_ready`, `409 mission_model_revision_not_approvable`, `404
   mission_model_revision_not_found` / `mission_model_comparison_report_not_found`, `422
   mission_model_decision_reason_required` ("Give a reason first."), `422
-  mission_model_decision_reason_too_long` (over 2,000 bytes), `422 invalid_params`. Approving an
-  already approved revision returns it unchanged (the first approver stays).
+  mission_model_decision_reason_too_long` (over 2,000 bytes), `422 invalid_params`.
+- Approve takes an optional `operation_id` (#260; 1-120 characters, else `422 invalid_params`),
+  recorded with the approval. Its `200` carries `replayed: false`. On an **already approved**
+  revision approve records nothing (the first approver stays), in this order: the separation
+  check still applies (the importer gets `403 mission_model_self_approval_forbidden` or
+  `…_authors_unknown`); the same `operation_id`, approver and `comparison_report_id` as the
+  recorded approval answer `200` (the read) with `replayed: true`; anything else answers `409
+  mission_model_revision_already_approved`, `details: {decided_by: {id, name} | null,
+  decided_at | null}`, both set or both null. `decided_by` names an active member (C1: a person
+  no longer a member reads `{id: null, name: null}`; never a stored name or an email). Before
+  #260 this answered `200` with the revision unchanged (breaking).
 - The catalog read's revision rows (`GET /catalog?database_id=`) carry `model {revision_id,
   status} | null` for the row tag (NEEDS APPROVAL / APPROVED / REJECTED).
+  - `composition_id` (D2, #543): the id of the composition behind the row's model revision, or
+    null.
 - Preview HOLD `mission_model_not_approved` (blocking; compatibility check): `details
   {catalog_revision_id, catalog_revision_number, catalog_database_id, mission_model_revision_id}`.
 - Apply refusals: `409 mission_model_revision_not_approved {mission_model_revision_ids,
@@ -285,6 +351,8 @@ switches. The editable `document` never carries them; they're read-only in `swit
 - `document`: `{catalog_revision_id|null, telemetry_source_endpoint_id|null, handled_apids: [int],
   protocol: {downlink, uplink, frame_size, secondary_header_length, insert_zone_length,
   ocf_length, truncated_primary_header} | null}`. No switch keys.
+- `composition` (D2, #543), beside `document`: the composition behind the document's
+  `catalog_revision_id` (shape in setup.md's 'Compositions' section), or null.
 - `external_changes`: bool.
 - `switches`: `{telemetry_enabled: SWITCH, commanding_enabled: SWITCH}`, where SWITCH is `{value:
   bool, set: bool, revision: int|null}`. `set` false means no change set has set it (the value
@@ -292,15 +360,26 @@ switches. The editable `document` never carries them; they're read-only in `swit
   stored (null reads "set through Setup, Changes").
 - `active`: `{version, generation, document}` (the same document shape), or null when nothing runs
   for the craft.
+  - `active.composition` (D2, #543): the composition behind the active document's catalog
+    revision (shape in setup.md's 'Compositions' section), or null.
 - `review`: `{id, state: approval_pending|approved|rejected|withdrawn|superseded|stale|active,
   requester_id, version|null}` or null. From the dev reset (DECISIONS #112) it also carries the
   decision record's `subject`, `separated_from`, `admin_mode` and `applied_by`. Read them as
   optional until then.
 - `approval`: `{requirement: direct|independent, policy_token, source:
-  organization|inherited|overridden|enforced, can_request, can_review}`. Send `policy_token` back
-  on submit.
-- `catalogs` (≤100): `{id, name, label, number, declarations, packets, commands}`, where `number`
-  is the catalog revision number (U65's "catalog rev 14").
+  organization|inherited|overridden|enforced, can_request, can_review, can_save}`. Send
+  `policy_token` back on submit. `can_save` (#595) gates editing: it's the draft save's own check
+  (any mission operator), while `can_request` gates Request activation.
+- `profile` (#595): `{id, name}` of the craft's own profile (spacecraft type), for U94's Open
+  profile, or null when it has none.
+- `catalog_set_by` (#595b): `profile | spacecraft`. It's `profile` when the craft's profile (with
+  its overrides) names a catalog revision: that one is the catalog, and a draft naming another is
+  refused with `spacecraft_catalog_set_by_profile` (DECISIONS #65). Otherwise `spacecraft`: the
+  craft's own configuration sets it.
+- `catalogs` (≤100): `{id, name, label, number, approval_status, declarations, packets, commands}`,
+  where `number` is the catalog revision number (U65's "catalog rev 14") and `approval_status`
+  (#595b) is its mission-model revision's gate state: `candidate | approved | rejected | retired`.
+  (`withdrawn` isn't a model revision state; a withdrawn approval is E2's, #546.)
 - `fleet` (≤100, this craft first): `{id, name, scid, active_catalog_id, has_changes}`, plus
   `fleet_total`.
 - `sources`: `{id, name}` (this craft's packet sources). `presets`: `{id, version, name,
@@ -351,7 +430,7 @@ console's mission scope), so the mission's existence doesn't leak.
 | `spacecraft_packet_input_unavailable` | 422 | The source isn't this craft's |
 | `spacecraft_source_limit_exceeded` | 422 | Too many sources |
 | `mission_model_revision_not_approved` | 409 | The catalog's model isn't approved (U65). `details {mission_model_revision_ids, catalog_revision_numbers}`: one number per id, in the same order; an entry is `null` when that catalog revision has no number, so read it as "a catalog revision" (U65, #272) |
-| `activation_self_approval_forbidden` | 403 | (L10 approve) A different person must review |
+| `activation_self_approval_forbidden` | 403 | You requested it, so another person approves it (U94; the same code L10's approve sends since #275). `details {via_service}` on L10 |
 | `forbidden` | 403 | No operate access |
 | `spacecraft_not_found` | 404 | Also when the craft is removed between the access check and the read (#272) |
 
@@ -451,6 +530,9 @@ Profile detail with **schema-driven sections** (`Cadence.SpacecraftType.Schema`,
   "P2 additions"). `routing_model` is `"profile"` when the profile has rules, else
   `"per_spacecraft"` (legacy per-spacecraft rules not yet lifted). `override_count` and each
   field's `overridden_by` count the spacecraft overriding that path.
+  - `overrides[].composition` (D2, #543): for a `catalog_revision_id` override, the composition
+    behind the catalog revision it sets (shape in setup.md's 'Compositions' section); null for
+    any other override or a revision without one.
 - `extra_routes` (ux U79), beside `overrides`: one entry per extra route a spacecraft on this
   profile has of its own, `[{spacecraft: {id, name}, route_id, name, station: {id, code, name} |
   null, legs: [{direction: "downlink" | "uplink", role}]}]`, sorted by spacecraft name then route
@@ -465,6 +547,8 @@ Profile detail with **schema-driven sections** (`Cadence.SpacecraftType.Schema`,
   `catalog_revision_id`. `versions[].actor` and `last_change.actor` are `null` because profile versions don't
   record an author (change-set revisions do; `last_change.revision` fills in when profile edits go
   through change sets).
+- `profile.composition` (D2, #543): the composition behind this revision (shape in setup.md's
+  'Compositions' section), or null.
 - `applications`: the profile's app defaults as raw JSON. A typed app-config schema needs each
   app's declared contract; that's planned.
 
@@ -484,12 +568,13 @@ The shape is setup-shapes.md §C1. `?database_id=` selects a database (default: 
   revision.
 - `revisions[].artifact.size_bytes` is `null` in the index (sizes would mean loading every file).
   C3 has the real size. `format_label` is the importer's display name.
-- `revisions[].actor`: `{name}` from the importer of record, when recorded.
+- `revisions[].actor`: the importer of record, `{kind, name} | null`, by the same rule as `requested_by` below (#366; it was `{name}` from the stored name or email). `null` when none was recorded.
 - `import_runs[].status`: `running | succeeded | failed`. There is no separate `pending` state: a
   queued import is `running`. `file_name` is known for runs that produced a revision, otherwise
   `null`.
 - `import_runs[].requested_by` (#146, ux U103; additive, read as optional): who started the run,
-  `{kind: user | service | system, name: string | null} | null`. Also on C3's run detail and the
+  `{kind: user | service | system, name: string | null, run_by: {name: string | null} | null} | null`
+  (`run_by` additive, #513). Also on C3's run detail and the
   source-file page's runs. `null` when the run recorded no actor. Two batched name queries per
   table, whatever its length. The name follows mms-security's rule (11-19); the console's words
   decide what shows:
@@ -501,7 +586,27 @@ The shape is setup-shapes.md §C1. `?database_id=` selects a database (default: 
   - `service`: the service identity's display name, only when it belongs to the mission's
     organization; otherwise `null`.
   - `system`: Cadence itself (a seed or a task), with the stored system name, which is never a
-    person.
+    person. `run_by` (#513, ux): the person who ran it, `{name}`, named by the same rule as
+    `user`. A runner's name that can't be read is `{name: null}`, never an id. `run_by` is null
+    for a system run that recorded no runner (one from before #513) and for `user` and `service`.
+    The console reads "by Cadence, run by Mira K.". The same object is the source-file page's
+    `uploaded_by`, C1's `revisions[].actor`, and the REST `requested_by`/`uploaded_by`.
+  - **One exception: the organization's own Audit (#470).** OK'd by ca-security on its five
+    conditions, with ux and lead (11-20); ca-ux's #523 has the screen words.
+    `Reads.OrganizationAudit` (the organization's own Audit, behind `:read_organization`) names a
+    *former* member of that organization by their current display name too: in membership rows
+    ("Removed Mira K. from the organization") and as the actor of their own past acts, as
+    `{kind: "user", id: null, name}`: a former member's id isn't sent; a current member keeps
+    theirs. The conditions:
+    1. this read only; every other read keeps the rule above;
+    2. only people with a membership row in that organization, in any state. A platform admin,
+       or anyone never a member, is `{kind: "user", id: null, name: null}`;
+    3. the display name only, never the email or an id as a name; without one, "a member";
+    4. recorded here;
+    5. a person offboarding erases reads unnamed (#220).
+
+    Every platform event (`kind: "platform"`) is a platform admin's act. A nameless actor there
+    reads "the team that runs Cadence" in the console (ux, #523).
 
 ## `GET /api/console/v1/missions/:mission_id/catalog/imports/:import_run_id` (C3)
 
@@ -594,9 +699,9 @@ The APIDs the revision defines, with their packets: the choices for `handled_api
 Under `/api/console/v1/missions/:mission_id/catalog/artifacts/:artifact_id`.
 
 - **K1** `GET` → `{artifact: {id, file_name, format_label, format_version, media_type, size_bytes,
-  sha256, uploaded_at, uploaded_by {name} | null, database {id, name}, download_url}, revisions:
+  sha256, uploaded_at, uploaded_by {kind, name} | null, database {id, name}, download_url}, revisions:
   [{id, number, label, imported_at}] (made from this file), import_runs: [<the index's run row>]
-  (newest first, 50), permissions: ["catalog.import"] | []}`. `404 artifact_not_found`.
+  (newest first, 50), permissions: ["catalog.import"] | []}`. `404 artifact_not_found`. `uploaded_by` follows the same rule as `requested_by` (C1, #366).
 - **K2** `POST /reimport` (empty body) → `202 {import_run: {id}}`: the importer runs again on the
   stored file and makes a new candidate revision. `409 import_running {import_run_id}` while a run
   on this file is still going, `403 forbidden`, `404 artifact_not_found`. todo(authz): any mission
@@ -758,6 +863,14 @@ access, provider accounts, account, platform) are always included.
 null, mission: {id, name} | null, reason}], sources: {included, missing}, next_cursor}`, newest
 first.
 
+- Who's named (#470): a current member of this organization by display name (`null` without
+  one), with their id; a former member by display name with `id: null` (ca-security). This is
+  C1's exception for this read (catalog C1 above), so "Removed Mira K. from the organization"
+  names a former member. Anyone else, a
+  platform admin included, is `{kind: "user", id: null, name: null}`. A service is named from its
+  live row in this organization, else `{kind: "service", id: null, name: null}`. A name stored in
+  a record is never used for a person or a service. Never an email.
+
 - There's no single audit store yet, so this merges each domain's own records:
   - `config`: applied configuration revisions ("Applied r6 · 2 changes", "Rolled back to r4") and
     settings changes ("Changed Governance settings");
@@ -816,8 +929,21 @@ first.
   (organization default): …" / "Tightened …", and "Missions may now set their own approval
   setting." / "Missions can no longer set their own approval setting." (both in one save: two
   sentences, the value first). A change saved before #233 has no `change` and keeps "Changed
-  Governance settings". Settings history carries only the actor's name, so `actor` is `{kind:
-  "user", id: null, name}` and `actor_id` doesn't find a person's settings changes. The log holds
+  Governance settings".
+- **The missions an organization save moved (#430; additive).** An organization entry's `change`
+  carries `missions: [{id, name | null, before, after}]`: every mission whose effective
+  requirement that save changed (turning overrides off moves pinned missions to the default;
+  turning them on applies the pins again; a default change moves the missions that inherit it),
+  with raw values, in stored order. `name` is looked up under the entry's organization and is
+  null for a mission that's gone (never its id). `[]` when none moved, and for saves before #430.
+  The sentence adds one per new value, in the setting's own words, never "loosened"/"tightened"
+  (ux): "Changed on 2 missions to Applies without approval: EARENDIL and KESTREL." / "Changed on
+  1 mission to Needs a second person's approval: VEGA." Up to three names, then "and N more"; a
+  null name reads "Unknown mission"; a value outside the two reads "Changed approval on N
+  missions."; none moved, no sentence. Only organization admins read this log, so no
+  mission-level reader sees other missions' names or settings. A settings change's actor is named from the stored
+  id by this log's rule above (#470), never the stored name, which is an email in rows saved before
+  #470; `actor_id` now finds a current member's settings changes too. The log holds
   each section's 10 most recent changes per scope, for the Governance, Commanding, Configuration
   and Pass review sections.
 - The per-field settings migration shows as one entry per mission it rewrote: `actor: null`,
@@ -892,7 +1018,12 @@ one active admin.
 
 ### Service identity writes (O6)
 
-All require an organization admin (the same access as the O3 read; offer them where O3 succeeds). The API token appears in the
+All require an organization admin who is a **person** (the same access as the O3 read; offer them
+where O3 succeeds). A service identity never lists, issues, rotates or revokes service identities
+(#281): the domain refuses it with `authenticated_user_required`, and the console's organization
+scope already refuses services. Whoever issues or rotates must hold every capability the identity
+has, or gets `403 capability_beyond_issuer {details: {capabilities}}` in ux U104's words (it can't
+happen today: an organization admin holds every capability a service identity can get). The API token appears in the
 response **once** (create and rotate); Cadence stores only its digest and can't show it again.
 Responses carry `cache-control: no-store`.
 
@@ -906,6 +1037,18 @@ Responses carry `cache-control: no-store`.
   `404 service_identity_not_found` (not active), `403 forbidden`.
 - `DELETE /service-identities/:id` → `204`. The identity is disabled: its token stops working and
   it leaves the directory (O3). Errors: `404 service_identity_not_found`, `403 forbidden`.
+- `POST /service-identities/:id/accountable {user_ids: [user_id]}` → `204` (#280). Records people
+  as accountable for the identity, for approvals. Use it for an identity issued before #280 with
+  nobody on record. The acting admin is recorded too. Errors: `422 invalid_params` (`user_ids`: each
+  must be a person in this organization), `404 service_identity_not_found`, `403 forbidden` (not an
+  org admin, or not a person).
+- **Accountability (#280, ux U100):** whoever creates an identity, and whoever rotates its key, is
+  recorded as accountable for it, from the session, in the same transaction. Its acts then count as
+  theirs wherever an approval kind refuses approving your own work: catalog imports, activation
+  requests, contact plans (including approvals under an automation grant), command requests and
+  change sets. An identity issued by another service counts as that service's people,
+  transitively. If anyone in the chain is unknown, nobody can approve its work (`*_approver_authors_unknown`).
+  The directory's `created_by` comes from this record, never from identity metadata.
 
 ## Comms reads (G1, T1, T2)
 
@@ -986,7 +1129,7 @@ bindings can be written. A platform-shared one needs a platform admin in admin m
   3 passes live now (AOS ≤ now < LOS), earliest AOS first. `403 platform_source` outside admin
   mode, `409 binding_not_shared` for a mission's own binding, `404 binding_not_found`, `503
   blast_radius_unavailable` when counting fails (the sheet then refuses to switch).
-- `GET /data-source-bindings/:binding_id/events` → `{events: [{at, actor: {id, name} | null,
+- `GET /data-source-bindings/:binding_id/events` (actors per #146's rule, #471: on an organization's binding a person is named only while an active member, and anyone else is `{id: null, name: null}`; never an email) → `{events: [{at, actor: {id, name} | null,
   kind: switched | registered | changed | enabled | disabled | superseded, from: {id,
   display_name} | null, to: …, reason | null, affected_missions | null, live_passes_total |
   null}]}`, newest first, 50. A platform-wide switch's entry carries its reason and counts. For a
@@ -1171,6 +1314,16 @@ writes nothing:
 - While the organization doesn't allow an override, every mission save, an organization admin's
   included, is `409 settings_enforced_by_organization`. A stale version is refused first
   (`409 version_conflict`).
+- `409 approval_tightening_suspends_grants` (#499): the save tightens a mission's setting to
+  'independent' (a mission save, or an organization save for each mission it moves that way), and
+  that suspends the mission's automation grants that went active on one approval. Nothing is
+  written. `details: {grants: [{id, mission: {id, name}, service: {id, name | null},
+  allowed_actions, valid_until}], digest}`: an organization save lists every mission's grants.
+  Save again with `acknowledged_suspensions: digest` (the same `PUT` body plus that key) to
+  suspend them with the setting, in one transaction; a list that changed meanwhile (a grant made,
+  revoked or changed) answers this 409 again with the new list. The digest is sha256 of
+  `[1, [[id, sha256, state], …]]` sorted by id. Loosening never resumes a grant (see
+  [scheduling.md](scheduling.md), automation grants).
 
 ### `GET /missions/:mission_id/routing-rules/groups` (pass-2 #10)
 

@@ -25,6 +25,7 @@ import { providerChangeReader } from "./providerChangeReader.ts";
 import { replayConflictFields, replayConflictPaths } from "./replayConflictFields.ts";
 import { runtimeFields } from "./runtimeFields.ts";
 import { scidMismatchFields } from "./scidMismatch.ts";
+import { withdrawalReader } from "./withdrawnComposition.ts";
 
 /**
  * Attention items in Now's queue (U31, DECISIONS #54; ops.md §action-queue `attention`): mission
@@ -123,6 +124,8 @@ export const attentionReader = d.object({
   /** Set while automatic and backing off (5 min doubling to 2 h); null when manual. */
   next_attempt_at: d.optional(d.nullable(d.timestamp)),
   last_attempt_at: d.optional(d.nullable(d.timestamp)),
+  /** model_approval_withdrawn (U109, #546): the withdrawn or rejected revision; null elsewhere. */
+  withdrawal: d.optional(d.nullable(withdrawalReader)),
   /** activation_apply (domain 9b8456132): the request, in the words its review page uses. */
   activation_request_id: d.optional(d.nullable(d.token)),
   error_code: d.optional(

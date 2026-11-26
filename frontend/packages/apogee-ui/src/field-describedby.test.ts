@@ -38,7 +38,9 @@ describe.each([
       props: { label: "Comment", modelValue: "Looks right", readonly: true },
       attachTo: document.body,
     });
-    const el = w.get(tag).element as HTMLInputElement | HTMLTextAreaElement;
+    const el = w.get(tag).element;
+    if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement))
+      throw new Error("not a text control");
     expect(el.readOnly).toBe(true);
     expect(el.disabled).toBe(false);
     expect(el.value).toBe("Looks right");

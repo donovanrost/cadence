@@ -10,6 +10,7 @@ import { ChartEvents } from "./chart-events.ts";
 import { ChartLimits } from "./chart-limits.ts";
 import { ChartSelection } from "./chart-selection.ts";
 import { ChartLive } from "./chart-live.ts";
+import { keepingFocus } from "./chart-focus.ts";
 
 /** Owns the mounted lifetime. Data and renderers never install global observers themselves. */
 export class TelemetryChartController {
@@ -132,6 +133,9 @@ export class TelemetryChartController {
     );
   }
   private render() {
+    keepingFocus(this.surface.el, () => this.paint());
+  }
+  private paint() {
     const { el, model } = this.surface;
     el.dataset.compareSeriesCount = `${model.seriesList.filter((series) => series.role === "compare").length}`;
     el.dataset.chartPointCount = `${model.pointCount}`;
@@ -152,10 +156,12 @@ export class TelemetryChartController {
   }
   private rebuild() {
     if (this.disposed) return;
-    this.plot.destroy();
-    this.plot.mount();
-    this.attachLayers();
-    this.render();
+    keepingFocus(this.surface.el, () => {
+      this.plot.destroy();
+      this.plot.mount();
+      this.attachLayers();
+      this.paint();
+    });
   }
   destroyed() {
     if (this.disposed) return;

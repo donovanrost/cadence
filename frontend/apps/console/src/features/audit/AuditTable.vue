@@ -2,6 +2,7 @@
 import { ApTable, ApTag, formatAbsolute, type ApColumn } from "@/ui";
 import { computed } from "vue";
 import { AdminModeTag, useConsoleScope } from "@/shell";
+import { auditActorCell } from "./actor-cell.ts";
 import { groupRepeats, targetRoute, targetText, type AuditEvent } from "./api.ts";
 
 /** Audit rows, newest first: time · actor · action in words · mission · why. */
@@ -18,6 +19,7 @@ const rows = computed(() =>
   groupRepeats(props.events).map((row) => ({
     ...row,
     link: targetRoute(row, organization.value),
+    actorCell: auditActorCell(row),
   })),
 );
 const columns: readonly ApColumn[] = [
@@ -33,9 +35,15 @@ const columns: readonly ApColumn[] = [
   <ApTable :columns="columns" :rows="rows" :row-key="(e) => e.id" caption="Audit log">
     <template #cell-at="{ row }">{{ formatAbsolute(new Date(row.at)) }}</template>
     <template #cell-actor="{ row }">
-      <template v-if="row.actor">
-        <span :class="row.actor.kind === 'service' ? 'font-mono' : ''">{{ row.actor.name }}</span>
-        <ApTag v-if="row.actor.kind === 'service'" class="ml-2" label="Service" />
+      <template v-if="row.actorCell">
+        <span
+          :class="[
+            row.actorCell.muted ? 'text-text-3' : '',
+            row.actorCell.service && !row.actorCell.muted ? 'font-mono' : '',
+          ]"
+          >{{ row.actorCell.text }}</span
+        >
+        <ApTag v-if="row.actorCell.service" class="ml-2" label="Service" />
         <AdminModeTag v-if="row.admin_mode === true" class="ml-2" />
       </template>
       <span v-else class="text-text-3">Not recorded</span>

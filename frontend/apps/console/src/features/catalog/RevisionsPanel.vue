@@ -60,7 +60,9 @@ const columns: readonly ApColumn[] = [
       </template>
       <template #cell-declarations="{ row }">{{ formatCount(row.declaration_count) }}</template>
       <template #cell-used="{ row }">
-        <span v-if="row.spacecraft_count > 0">{{ formatCount(row.spacecraft_count) }} SC</span>
+        <span v-if="row.spacecraft_count > 0"
+          >{{ formatCount(row.spacecraft_count) }} spacecraft</span
+        >
         <span v-else class="text-text-4">not used</span>
       </template>
       <template #cell-imported="{ row }">

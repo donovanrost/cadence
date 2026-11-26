@@ -95,6 +95,8 @@ export const errorCodes = [
   "account_grant_not_found",
   // App activations (L10)
   "self_approval_forbidden",
+  // #275: the console's activation code (as contact_plan_ and mission_model_), beside the old one.
+  "activation_self_approval_forbidden",
   "not_requester",
   "share_not_active",
   "not_pending",
@@ -106,6 +108,16 @@ export const errorCodes = [
   "change_set_activation_stale",
   "mission_model_activation_manifest_required",
   "spacecraft_configuration_review_stale",
+  // #595 (U94): the workspace draft's save refusals.
+  "spacecraft_configuration_changed",
+  // #595c (U94): the workspace submit's refusals.
+  "spacecraft_configuration_review_unavailable",
+  "spacecraft_switch_set_by_change_set",
+  "spacecraft_catalog_required",
+  "spacecraft_packet_inputs_required",
+  "spacecraft_catalog_set_by_profile",
+  "spacecraft_packet_input_unavailable",
+  "spacecraft_configuration_catalog_not_loaded",
   "mission_model_comparison_report_required",
   // U95 additions (api b417a5757 with domain's R1).
   "spacecraft_configuration_review_required",
@@ -212,6 +224,8 @@ export const errorCodes = [
   // #257 (api): submit on a plan already waiting; approve by its submitter or drafter (independent).
   "plan_already_submitted",
   "contact_plan_self_approval_forbidden",
+  // #277: a service identity made a version since the last approval and no one is accountable for it.
+  "contact_plan_approver_authors_unknown",
   "plan_not_ready",
   "plan_not_repairable",
   "plan_not_resumable",
@@ -237,6 +251,19 @@ export const errorCodes = [
   "template_transition_not_allowed",
   "policy_changed",
   "grant_changed",
+  // #283 (ux U105): automation grant proposals, decisions and tightenings.
+  "automation_grant_self_approval_forbidden",
+  "automation_grant_approver_authors_unknown",
+  "automation_grant_not_proposed",
+  "approval_policy_changed",
+  "automation_grant_not_active",
+  "automation_grant_not_narrower",
+  "automation_grant_narrow_unchanged",
+  "automation_grant_legacy",
+  "automation_grant_capability_required",
+  "authenticated_user_required",
+  // #499 (U105 Suspended): resume refused, the grant isn't suspended (or it expired).
+  "automation_grant_not_suspended",
   // Model approval gate (ux U65, domain 742567770)
   "human_mission_model_approver_required",
   "mission_model_self_approval_forbidden",
@@ -246,9 +273,12 @@ export const errorCodes = [
   "mission_model_comparison_mismatch",
   "mission_model_runtime_plans_not_ready",
   "mission_model_revision_not_approvable",
+  "mission_model_revision_already_approved",
   "mission_model_revision_not_found",
   "mission_model_comparison_report_not_found",
   "mission_model_decision_reason_required",
+  // E2 (#546): withdrawing an approval that isn't one.
+  "mission_model_revision_not_withdrawable",
   "mission_model_decision_reason_too_long",
   "mission_model_revision_not_approved",
   "mission_model_comparison_failed",
@@ -268,6 +298,16 @@ export const errorCodes = [
   // TEMPORARY, deleted with 9ac6dc8ee: the legacy route conversion (api v3.2; ux U79).
   "conversion_already_staged",
   "path_already_staged",
+  // #499 (api): tightening approval would suspend automation grants; details {grants, digest}.
+  "approval_tightening_suspends_grants",
+  // #534 (mms-engineer, #548/#549): a packet definition version race; retryable, nothing written.
+  "packet_definition_version_taken",
+  // Change-set apply refusals (api changes.md § Errors), worded per code by #310 (ca-ux, U79).
+  "change_set_changed",
+  "checks_failed",
+  "holds_not_acknowledged",
+  "nothing_staged",
+  "invalid_op",
   "open_change_set_not_empty",
   "nothing_to_convert",
   "conversion_in_progress",

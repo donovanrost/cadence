@@ -114,7 +114,7 @@ async function create() {
           :options="missionOptions"
           :error="errors['mission_id'] ?? null"
         />
-        <ApCallout v-if="failure" tone="caution">{{ failure }}</ApCallout>
+        <ApCallout v-if="failure" tone="caution" role="alert">{{ failure }}</ApCallout>
         <div>
           <ApButton type="submit" variant="primary" :disabled="busy" disabled-reason="Creating…"
             >Create and show the token</ApButton

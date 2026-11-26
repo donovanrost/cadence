@@ -20,29 +20,76 @@ defmodule Cadence.Configuration.Preview do
           diffs: [map()]
         }
 
-  @spec run(String.t(), String.t(), integer(), [Pipeline.op()]) :: {:ok, t()} | {:error, term()}
-  def run(organization_id, mission_id, base_revision, ops) do
+  @doc """
+  Options: `outcome:` a zero-arity reader (#522). Only the explicit preview passes one; the
+  preview that submit and review run as their gate never does (api-ops). It's called before and
+  after the staged ops, inside this transaction, each time behind a savepoint: a read that fails
+  rolls back to the savepoint and gives `outcome: nil`, never changing the verdict or checks.
+  With a reader the answer has `outcome: %{now, after} | nil` (nil also when the pipeline didn't
+  fully check the set: a halt, errors or conflicts).
+  """
+  @spec run(String.t(), String.t(), integer(), [Pipeline.op()], keyword()) ::
+          {:ok, t()} | {:error, term()}
+  def run(organization_id, mission_id, base_revision, ops, opts \\ []) do
+    reader = Keyword.get(opts, :outcome)
+
     Repo.transaction(
       fn ->
         Repo.query!("SET LOCAL statement_timeout = #{@statement_timeout_ms}")
+        now = guarded(reader)
 
         result =
           organization_id
           |> Pipeline.run(mission_id, base_revision, ops)
           |> Map.update(:holds, Rollback.holds(ops), &(&1 ++ Rollback.holds(ops)))
 
-        Repo.rollback({:preview, result})
+        later = if checked?(result), do: guarded(reader), else: nil
+        Repo.rollback({:preview, result, pair(reader, now, later)})
       end,
       timeout: @statement_timeout_ms + 5_000
     )
     |> case do
-      {:error, {:preview, result}} -> {:ok, summarize(result)}
-      {:error, reason} -> {:error, reason}
+      {:error, {:preview, result, :none}} ->
+        {:ok, summarize(result)}
+
+      {:error, {:preview, result, outcome}} ->
+        {:ok, Map.put(summarize(result), :outcome, outcome)}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   rescue
     error in [Postgrex.Error, DBConnection.ConnectionError] ->
       {:error, {:preview_failed, Exception.message(error)}}
   end
+
+  defp guarded(nil), do: nil
+
+  defp guarded(reader) when is_function(reader, 0) do
+    Repo.query!("SAVEPOINT preview_outcome")
+
+    try do
+      value = reader.()
+      Repo.query!("RELEASE SAVEPOINT preview_outcome")
+      value
+    rescue
+      _error ->
+        Repo.query!("ROLLBACK TO SAVEPOINT preview_outcome")
+        nil
+    end
+  end
+
+  # Only a set the pipeline fully checked has an "after": with errors, conflicts or a halt, the
+  # derived kinds (routes, compatibility) never ran, so the after-state would mislead.
+  defp checked?(result),
+    do:
+      Map.get(result, :halted?) != true and Map.get(result, :errors, []) == [] and
+        Map.get(result, :conflicts, []) == []
+
+  defp pair(nil, _now, _later), do: :none
+  defp pair(_reader, nil, _later), do: nil
+  defp pair(_reader, _now, nil), do: nil
+  defp pair(_reader, now, later), do: %{now: now, after: later}
 
   @doc "Turns a pipeline result into GO / HOLD / NO-GO checks."
   @spec summarize(Pipeline.result()) :: t()

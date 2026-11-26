@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, onUpdated, ref } from "vue";
 import { ApButton, ApPanel } from "@/ui";
 import type { WorkspacePlacement, WorkspaceSnapshot } from "../model/snapshot.ts";
 import WidgetBody from "../widgets/WidgetBody.vue";
+import { readingOrder, untitled } from "../model/widget-data.ts";
 import { BoardGrid } from "./board-grid.ts";
 import { keyboardLayout, positionText } from "./keyboard-layout.ts";
 import type { LayoutEdit, OutlinePlacement } from "./contracts.ts";
@@ -46,8 +47,21 @@ function onHandleKey(p: OutlinePlacement, event: KeyboardEvent) {
   if (!edit) return;
   event.preventDefault();
   emit("layout", [edit]);
-  announcement.value = `${p.title || "Widget"}: ${positionText(edit)}.`;
+  announcement.value = `${nameOf(p)}: ${positionText(edit)}.`;
 }
+/**
+ * B7: an untitled widget's controls still name what they act on, with its place in the section in
+ * reading order ("Untitled widget 3"), as the viewer names it.
+ */
+const positions = computed(
+  () =>
+    new Map(
+      [...props.placements]
+        .sort((a, b) => readingOrder(a) - readingOrder(b))
+        .map((p, i) => [p.id, i + 1]),
+    ),
+);
+const nameOf = (p: OutlinePlacement) => p.title || untitled("widget", positions.value.get(p.id));
 </script>
 
 <template>
@@ -68,17 +82,17 @@ function onHandleKey(p: OutlinePlacement, event: KeyboardEvent) {
       :gs-max-h="String(p.constraints.max_h)"
     >
       <div class="grid-stack-item-content">
-        <ApPanel :title="p.title || 'Untitled widget'" :heading-level="3" flush pane class="h-full">
+        <ApPanel :title="nameOf(p)" :heading-level="3" flush pane class="h-full">
           <template #meta>
             <span class="flex items-center gap-1">
               <button
                 type="button"
                 data-drag-handle
                 class="cursor-move border-0 bg-transparent px-1 font-mono text-text-4"
-                :aria-label="`Move ${p.title}`"
+                :aria-label="`Move ${nameOf(p)}`"
                 :aria-description="positionText(p.layout)"
                 :data-layout="`${p.layout.x ?? ''},${p.layout.y ?? ''},${p.layout.w},${p.layout.h}`"
-                aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight Shift+ArrowRight Shift+ArrowDown"
+                aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight"
                 title="Drag to move. Arrow keys move; Shift+arrow keys resize."
                 @keydown="onHandleKey(p, $event)"
               >
@@ -88,14 +102,14 @@ function onHandleKey(p: OutlinePlacement, event: KeyboardEvent) {
                 v-if="p.editable"
                 variant="ghost"
                 size="compact"
-                :aria-label="`Edit ${p.title}`"
+                :aria-label="`Edit ${nameOf(p)}`"
                 @click="emit('edit', p)"
                 >Edit</ApButton
               >
               <ApButton
                 variant="ghost"
                 size="compact"
-                :aria-label="`Remove ${p.title}`"
+                :aria-label="`Remove ${nameOf(p)}`"
                 @click="emit('remove', p)"
                 >Remove</ApButton
               >
@@ -104,6 +118,7 @@ function onHandleKey(p: OutlinePlacement, event: KeyboardEvent) {
           <WidgetBody
             v-if="preview"
             :placement="preview"
+            :name="nameOf(p)"
             :context="snapshot.context"
             :now="Date.now()"
             :group="`edit-${snapshot.dashboard_id}`"

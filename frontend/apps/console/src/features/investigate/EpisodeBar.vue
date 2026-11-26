@@ -124,10 +124,10 @@ const buttonClass = computed(() => (stacked.value ? "min-h-12 w-full" : ""));
       @submit="submitForm"
       @cancel="form = null"
     />
-    <ApCallout v-if="outcome?.status === 'rejected'" tone="caution">
+    <ApCallout v-if="outcome?.status === 'rejected'" tone="caution" role="alert">
       Nothing changed: {{ describeApiError(outcome.error) }}
     </ApCallout>
-    <ApCallout v-else-if="outcome?.status === 'unclear'" tone="stale">
+    <ApCallout v-else-if="outcome?.status === 'unclear'" tone="stale" role="alert">
       It's unclear whether that went through ({{ describeApiError(outcome.error) }}). The status
       above updates when the server confirms; check it before trying again.
       <template #action

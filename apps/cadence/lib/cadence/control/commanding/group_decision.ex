@@ -21,6 +21,7 @@ defmodule Cadence.Control.Commanding.GroupDecision do
   }
 
   alias Cadence.Commanding.Groups.{Admission, CommandGroup, GroupStore}
+  alias Cadence.Governance.Accountability
   alias Cadence.Management.Commanding.{ApprovedCommand, RequestAuthoring}
   alias Cadence.Platform.ScopedReadUpdates
 
@@ -79,13 +80,34 @@ defmodule Cadence.Control.Commanding.GroupDecision do
   end
 
   defp decidable(group, actor, decision) do
+    with :ok <- pending(group),
+         :ok <- separated(group, actor),
+         do: decidable_rest(group, actor, decision)
+  end
+
+  defp pending(%{state: :approval_pending}), do: :ok
+  defp pending(_group), do: {:error, :command_group_not_pending}
+
+  # #622 (#280): the requester counts as people, as on a single request (LifecyclePolicy): a service
+  # requester is its issuer and rotators, and a service nobody is accountable for refuses everyone.
+  # ca-security on #626: a decider who isn't a person is refused here, on its own (fail closed).
+  defp separated(_group, %{"user_id" => id}) when not is_binary(id) or id == "",
+    do: {:error, :command_group_self_approval_not_allowed}
+
+  defp separated(_group, actor) when not is_map_key(actor, "user_id"),
+    do: {:error, :command_group_self_approval_not_allowed}
+
+  defp separated(group, actor) do
+    group.organization_id
+    |> Accountability.separate({:user, actor["user_id"]}, [group.requested_by])
+    |> Accountability.refusal(
+      :command_group_self_approval_not_allowed,
+      :command_group_approver_authors_unknown
+    )
+  end
+
+  defp decidable_rest(group, actor, decision) do
     cond do
-      group.state != :approval_pending ->
-        {:error, :command_group_not_pending}
-
-      group.requested_by["user_id"] == actor["user_id"] ->
-        {:error, :command_group_self_approval_not_allowed}
-
       group.requested_approver_user_id not in [nil, actor["user_id"]] ->
         {:error, :not_the_requested_approver}
 

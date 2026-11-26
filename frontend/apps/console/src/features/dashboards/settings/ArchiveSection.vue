@@ -1,18 +1,27 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { failureOutcome } from "@/features/changes/index.ts";
-import { ApButton, ApCallout, ApPanel } from "@/ui";
+import { ApButton, ApInlineConfirm, ApPanel } from "@/ui";
 import { archiveDashboard, type SettingsKey } from "./api.ts";
 import { usedByPlaylists } from "./present.ts";
 
-/** General's foot (ux): Archive, danger, confirms; D3 warns (409 in_use) when playlists use it. */
+/**
+ * General's foot (ux): Archive…, danger, confirms in place with the kit's confirm (A1 opens on
+ * Keep it, A4 Esc, A5 focus back to Archive…). D3: when playlists use it (409 in_use), the
+ * confirm says where, under the question, and the action becomes Archive anyway.
+ */
 const props = defineProps<{ settingsKey: SettingsKey; archived: boolean }>();
 const router = useRouter();
 const confirming = ref(false);
 const playlists = ref<readonly string[] | null>(null);
 const failure = ref<string | null>(null);
 const busy = ref(false);
+const refusal = computed(() =>
+  playlists.value
+    ? `Used in ${playlists.value.length === 1 ? "a playlist" : `${playlists.value.length} playlists`}: ${playlists.value.join(", ")}. Archiving skips it there until it's restored.`
+    : failure.value,
+);
 
 async function archive(confirm: boolean) {
   busy.value = true;
@@ -35,26 +44,21 @@ async function archive(confirm: boolean) {
       <p class="m-0 text-md text-text-3">
         Archived dashboards leave the directory; their links stop working.
       </p>
-      <ApCallout v-if="playlists" tone="caution"
-        >Used in {{ playlists.length === 1 ? "a playlist" : `${playlists.length} playlists` }}:
-        {{ playlists.join(", ") }}. Archiving skips it there until it's restored.</ApCallout
+      <ApInlineConfirm
+        v-model:open="confirming"
+        :action="playlists ? 'Archive anyway' : 'Archive the dashboard'"
+        cancel-label="Keep it"
+        :busy="busy"
+        busy-reason="Archiving…"
+        :refusal="refusal"
+        @confirm="archive(playlists !== null)"
+        @cancel="((playlists = null), (failure = null))"
       >
-      <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>
-      <div class="flex flex-wrap gap-2">
-        <ApButton v-if="!confirming" variant="danger" @click="confirming = true">Archive…</ApButton>
-        <template v-else>
-          <ApButton
-            variant="danger"
-            :disabled="busy"
-            disabled-reason="Working…"
-            @click="archive(playlists !== null)"
-            >{{ playlists ? "Archive anyway" : "Archive the dashboard" }}</ApButton
-          >
-          <ApButton variant="ghost" @click="((confirming = false), (playlists = null))"
-            >Keep it</ApButton
-          >
+        <template #trigger="{ attrs }">
+          <ApButton variant="danger" class="self-start" v-bind="attrs">Archive…</ApButton>
         </template>
-      </div>
+        Archive this dashboard? It leaves the directory, and its links stop working.
+      </ApInlineConfirm>
     </div>
   </ApPanel>
   <p v-else class="m-0 text-md text-text-3">

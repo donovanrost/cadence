@@ -6,6 +6,7 @@ import { canAdministerOrganization, useConsoleScope, useSession } from "@/shell"
 import {
   ApButton,
   ApCallout,
+  type ApColumn,
   ApEmptyState,
   ApPageHeader,
   ApPanel,
@@ -13,7 +14,7 @@ import {
   ApTag,
   formatCount,
   plural,
-  type ApColumn,
+  useActed,
 } from "@/ui";
 import { fetchMissionSummaries } from "./api.ts";
 
@@ -33,6 +34,8 @@ const canCreate = computed(() =>
   organization.value ? canAdministerOrganization(session, organization.value) : false,
 );
 const summaries = useRemoteQuery(() => organization.value?.id ?? null, fetchMissionSummaries);
+/** B6 (#276): a failure after Retry is an alert; on load, polite. */
+const summariesActed = useActed(() => summaries.state.value.status === "ready");
 const summary = (id: string) =>
   summaries.state.value.status === "ready" ? summaries.state.value.value.get(id) : undefined;
 const columns: readonly ApColumn[] = [
@@ -62,10 +65,21 @@ const columns: readonly ApColumn[] = [
         sentence="A mission groups the spacecraft, profiles and catalog operated together."
       />
       <template v-else>
-        <ApCallout v-if="summaries.state.value.status === 'failed'" tone="caution">
+        <ApCallout
+          v-if="summaries.state.value.status === 'failed'"
+          tone="caution"
+          :role="summariesActed.role.value"
+        >
           Fleet size and state couldn't load.
           <template #action>
-            <ApButton size="compact" @click="summaries.refetch">Retry</ApButton>
+            <ApButton
+              size="compact"
+              @click="
+                summariesActed.mark();
+                summaries.refetch();
+              "
+              >Retry</ApButton
+            >
           </template>
         </ApCallout>
         <ApTable

@@ -17,7 +17,7 @@ defmodule Cadence.Contacts.ProviderChangeAttention do
 
   import Ecto.Query
 
-  alias Cadence.Accounts
+  alias Cadence.Accounts.MemberNames
   alias Cadence.Contacts.{ProviderChangeApprovals, ProviderReservationChanges}
   alias Cadence.Control.Contacts.Store.{ProviderReservationChangeRow, ProviderReservationRow}
   alias Cadence.Persistence.JsonDocument
@@ -79,7 +79,7 @@ defmodule Cadence.Contacts.ProviderChangeAttention do
       |> Repo.all()
 
     reservation = Map.get(reservations(org, mission, rows), reservation_id)
-    names = names(Enum.map(rows, & &1.decided_by))
+    names = names(org, Enum.map(rows, & &1.decided_by))
 
     Enum.map(rows, fn row ->
       row
@@ -111,7 +111,7 @@ defmodule Cadence.Contacts.ProviderChangeAttention do
       )
       |> Repo.all()
 
-    names = names(Enum.map(rows, & &1.decided_by))
+    names = names(org, Enum.map(rows, & &1.decided_by))
 
     for row <- rows do
       %{
@@ -258,17 +258,16 @@ defmodule Cadence.Contacts.ProviderChangeAttention do
 
   defp resolver(%{lifecycle_state: "superseded"}, _names), do: %{"kind" => "system"}
 
-  defp resolver(%{decided_by: id}, names) when is_binary(id),
-    do: %{"kind" => "user", "id" => id, "name" => Map.get(names, id)}
+  # #146 (#468): a person is named, and keeps their id, only while an active member of the
+  # mission's organization; anyone else reads id and name nil, never an email.
+  defp resolver(%{decided_by: id}, names) when is_binary(id) do
+    case Map.fetch(names, id) do
+      {:ok, name} -> %{"kind" => "user", "id" => id, "name" => name}
+      :error -> %{"kind" => "user", "id" => nil, "name" => nil}
+    end
+  end
 
   defp resolver(_row, _names), do: %{"kind" => "system"}
 
-  defp names(ids) do
-    for id <- ids, is_binary(id), uniq: true, into: %{} do
-      case Accounts.fetch_user(id) do
-        {:ok, user} -> {id, user.display_name || user.email}
-        _not_a_user -> {id, nil}
-      end
-    end
-  end
+  defp names(org, ids), do: MemberNames.members(org, Enum.filter(ids, &is_binary/1))
 end

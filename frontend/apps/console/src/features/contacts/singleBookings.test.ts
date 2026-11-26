@@ -31,6 +31,7 @@ const offer = (id: string, over: Partial<Offer> = {}): Offer => ({
   synthetic: false,
   cost: null,
   overlaps: null,
+  listener_overlap: undefined,
   ...over,
 });
 const now = new Date("2026-11-13T03:00:00Z");

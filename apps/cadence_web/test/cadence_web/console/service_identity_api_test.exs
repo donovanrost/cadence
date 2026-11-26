@@ -2,7 +2,9 @@ defmodule CadenceWeb.Console.ServiceIdentityAPITest do
   @moduledoc "Service identity create / rotate / revoke (O6): the token is shown once."
   use CadenceWeb.ConnCase, async: false
 
+  alias Cadence.Accounts.PlatformDirectory
   alias Cadence.Auth
+  alias Cadence.Auth.ServiceAccountability
   alias CadenceWeb.TestFixtures
 
   setup do
@@ -95,5 +97,53 @@ defmodule CadenceWeb.Console.ServiceIdentityAPITest do
 
     assert %{"error" => %{"details" => %{"mission_id" => _}}} =
              post.(%{"name" => "x", "capabilities" => ["mission_admin"], "mission_id" => "nope"})
+  end
+
+  # #280: the people accountable for an identity are recorded by the server.
+  test "create and rotate record who did them; an org admin records accountable people", c do
+    org_id = c.mission.organization_id
+    second_admin = TestFixtures.persist_user!(display_name: "Bo Admin")
+    {:ok, org} = Cadence.Organizations.fetch_organization(org_id)
+    TestFixtures.grant_membership!(second_admin, org, role: :organization_admin)
+
+    body = %{
+      "name" => "Pipeline",
+      "mission_id" => c.mission.mission_id,
+      "capabilities" => ["mission_admin"]
+    }
+
+    %{"service_identity" => %{"id" => id}} =
+      c.admin |> conn() |> post(c.base, body) |> json_response(201) |> Map.fetch!("data")
+
+    assert {:ok, [admin_id]} = ServiceAccountability.people(org_id, id)
+    assert admin_id == c.admin.user_id
+    # The platform directory's creator is the recorded issuer, never identity metadata.
+    assert %{created_by_id: ^admin_id} =
+             PlatformDirectory.service_identity(org_id, id)
+
+    second_admin |> conn() |> post(c.base <> "/#{id}/rotate", %{}) |> json_response(200)
+    assert {:ok, people} = ServiceAccountability.people(org_id, id)
+    assert Enum.sort(people) == Enum.sort([c.admin.user_id, second_admin.user_id])
+
+    accountable = c.base <> "/#{id}/accountable"
+
+    assert c.member
+           |> conn()
+           |> post(accountable, %{"user_ids" => [c.member.user_id]})
+           |> json_response(403)
+
+    assert %{"error" => %{"code" => "invalid_params"}} =
+             c.admin
+             |> conn()
+             |> post(accountable, %{"user_ids" => ["not-a-member"]})
+             |> json_response(422)
+
+    assert c.admin
+           |> conn()
+           |> post(accountable, %{"user_ids" => [c.member.user_id]})
+           |> response(204)
+
+    assert {:ok, people} = ServiceAccountability.people(org_id, id)
+    assert c.member.user_id in people and c.admin.user_id in people
   end
 end

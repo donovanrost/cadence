@@ -14,7 +14,7 @@ defineProps<{ request: ActivationRequest }>();
     Replaced by a
     <RouterLink
       :to="{ name: 'setup.activation', params: { requestId: replacedBy(request) ?? '' } }"
-      class="text-primary hover:underline"
+      class="text-primary underline"
       >newer request</RouterLink
     >.
   </p>

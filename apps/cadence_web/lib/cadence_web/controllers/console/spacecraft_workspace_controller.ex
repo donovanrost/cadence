@@ -134,6 +134,21 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceController do
     refuse(conn, :mission_model_revision_not_approved, action, id, details, nil, ctx)
   end
 
+  # #534: another generation saved a packet definition under the same version at the same moment.
+  # Nothing was sent; sending again re-resolves (mms-ux's words; the id and version are details).
+  defp error(
+         conn,
+         {:packet_definition_content_changed, packet_definition_id, version},
+         action,
+         id
+       ),
+       do:
+         refuse(conn, :packet_definition_version_taken, action, id, %{
+           packet_definition_id: packet_definition_id,
+           version: version,
+           retryable: true
+         })
+
   defp error(conn, reason, action, id) when is_atom(reason), do: refuse(conn, reason, action, id)
 
   defp error(conn, reason, action, id) do

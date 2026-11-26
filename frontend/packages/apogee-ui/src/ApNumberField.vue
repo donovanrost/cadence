@@ -17,6 +17,11 @@ const props = withDefaults(
     integer?: boolean | undefined;
     hint?: string | undefined;
     hiddenLabel?: boolean | undefined;
+    /**
+     * A refusal for this field from the server (#595a: "under its field"); the field's own reading
+     * (not a number, out of range) wins while it applies. The caller clears it on the next edit.
+     */
+    error?: string | null | undefined;
   }>(),
   { integer: false, hiddenLabel: false },
 );
@@ -33,7 +38,7 @@ const error = computed(() => {
     return props.integer ? "Enter a whole number." : "Enter a number.";
   if (reading.value.kind === "out_of_range")
     return `Out of range. Allowed: ${range.value ?? "see catalog"}.`;
-  return null;
+  return props.error ?? null;
 });
 const tick = computed(() => {
   const r = reading.value;

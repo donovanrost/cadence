@@ -70,15 +70,4 @@ defmodule CadenceWeb.API.IdentityJSON do
       metadata: service_identity.metadata
     }
   end
-
-  @spec issued_service_identity(map()) :: map()
-  def issued_service_identity(%{
-        service_identity: %ServiceIdentity{} = service_identity,
-        api_token: api_token
-      }) do
-    %{
-      service_identity: service_identity(service_identity),
-      api_token: api_token
-    }
-  end
 end

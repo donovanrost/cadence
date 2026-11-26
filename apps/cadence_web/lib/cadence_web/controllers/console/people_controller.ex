@@ -20,8 +20,23 @@ defmodule CadenceWeb.Console.PeopleController do
 
   def service_identities(conn, %{"organization_id" => organization_id}) do
     case OrganizationPeople.service_identities(conn.assigns.current_scope, organization_id) do
-      {:ok, data} -> json(conn, %{data: ConfigJSON.encode(data)})
-      {:error, reason} -> Problem.respond(conn, reason)
+      {:ok, data} ->
+        json(conn, %{data: ConfigJSON.encode(data)})
+
+      # ux U104 (#281); unreachable today, as the organization scope refuses a service first.
+      {:error, :authenticated_user_required} ->
+        conn
+        |> put_status(:forbidden)
+        |> json(
+          Problem.body(
+            "authenticated_user_required",
+            "Only a person can list the organization's service identities, not a service identity.",
+            nil
+          )
+        )
+
+      {:error, reason} ->
+        Problem.respond(conn, reason)
     end
   end
 

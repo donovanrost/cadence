@@ -40,9 +40,9 @@ export function fetchRollout(
   });
 }
 
-/** "Earendil Block 1 · 500 SC · rev 14" (ux C3). */
+/** "Earendil Block 1 · 500 spacecraft · rev 14" (ux C3; U102, never "SC"). */
 export const profileCard = (p: RolloutProfile) =>
-  `${p.name} · ${p.spacecraft_count} SC · ${p.current_revision?.label ?? "catalog set per spacecraft"}`;
+  `${p.name} · ${p.spacecraft_count} spacecraft · ${p.current_revision?.label ?? "catalog set per spacecraft"}`;
 
 /**
  * C3 Roll out to (Catalog.md, #65): a rollout is a change set. By profile, one

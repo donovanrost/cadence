@@ -1,0 +1,45 @@
+name: Install xmllint
+description: >-
+  Install xmllint (libxml2-utils) for XTCE schema validation: from the runner image's own package
+  index when it can (no update), else from a pinned Ubuntu noble source, independent of the image's apt sources.
+runs:
+  using: composite
+  steps:
+    - name: Install xmllint
+      shell: bash
+      # #327 history: a mirror hang ate a 25-min job (11-19); a 520 from one mirror failed `apt-get update` (#381);
+      # then runner image ubuntu-24.04 20261116.133.1 shipped with NO Ubuntu archive apt source at all, so the
+      # package couldn't be found even after an update (run 44637404264, tracker 36). So: install from the
+      # image's own package index first (no update, no network for the index: the fast path on most images);
+      # only if that fails, write our own pinned noble source (the image's standard Ubuntu archive keyring),
+      # refresh ONLY that source and install, so the fallback never depends on the runner's apt sources.
+      # Composite steps take no timeout-minutes, so every apt call has a `timeout` bound plus retries and
+      # network timeouts. A failed install still fails the job.
+      run: |
+        if command -v xmllint >/dev/null 2>&1; then
+          echo "xmllint: already on the runner: $(xmllint --version 2>&1 | head -1)"
+          exit 0
+        fi
+        apt_opts=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+        install_xmllint() { sudo timeout 120 apt-get "${apt_opts[@]}" install -y -q --no-install-recommends libxml2-utils; }
+        if install_xmllint && command -v xmllint >/dev/null 2>&1; then
+          echo "xmllint: installed from the image's package index (no apt-get update)"
+          echo "xmllint ready: $(xmllint --version 2>&1 | head -1)"
+          exit 0
+        fi
+        echo "xmllint: not installable from the image's package index; falling back to a pinned noble source"
+        keyring=/usr/share/keyrings/ubuntu-archive-keyring.gpg
+        if [ ! -s "$keyring" ]; then
+          echo "::error title=xmllint::no Ubuntu archive keyring at $keyring, so the pinned noble source can't be verified"
+          exit 1
+        fi
+        list=/etc/apt/sources.list.d/cadence-xmllint-noble.list
+        printf 'deb [signed-by=%s] http://archive.ubuntu.com/ubuntu noble main\ndeb [signed-by=%s] http://archive.ubuntu.com/ubuntu noble-updates main\n' "$keyring" "$keyring" \
+          | sudo tee "$list" >/dev/null
+        # Refresh ONLY the pinned source; keep the other lists as they are.
+        sudo timeout 240 apt-get "${apt_opts[@]}" \
+          -o Dir::Etc::sourcelist="$list" -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0 update -q
+        install_xmllint
+        command -v xmllint >/dev/null 2>&1 || { echo "::error::libxml2-utils installed but xmllint is not on PATH"; exit 1; }
+        echo "xmllint: installed from the pinned noble source ($list) after the image's index had no libxml2-utils"
+        echo "xmllint ready: $(xmllint --version 2>&1 | head -1)"

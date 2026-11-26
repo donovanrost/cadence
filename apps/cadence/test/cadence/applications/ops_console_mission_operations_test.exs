@@ -1,9 +1,10 @@
 defmodule Cadence.Applications.OpsConsoleMissionOperationsTest do
   use ExUnit.Case, async: true
 
+  alias Cadence.Accounts.{OrganizationMembership, User}
   alias Cadence.Applications.{ActionRequest, HostContext}
   alias Cadence.Applications.OpsConsole.Actions.MissionOperations
-  alias Cadence.Auth.{Scope, ServiceIdentity}
+  alias Cadence.Auth.Scope
 
   @data_operation_actions ~w(
     validate-request record-historical-workflow-request transition-group retry-group
@@ -90,20 +91,20 @@ defmodule Cadence.Applications.OpsConsoleMissionOperationsTest do
     }
   end
 
+  # A person: the ops console's actions run in the app host, a browser session, never as a
+  # service. Since #384 an organization-level action refuses a service (#282).
   defp scope do
-    identity = %ServiceIdentity{
-      service_identity_id: "service-1",
-      organization_id: "org-1",
-      mission_id: "mission-1",
-      display_name: "Ops test service",
-      lifecycle_state: :active
-    }
-
     %Scope{
-      actor_kind: :service,
+      actor_kind: :user,
       organization_id: "org-1",
       mission_id: "mission-1",
-      service_identity: identity,
+      organization_membership: %OrganizationMembership{
+        organization_id: "org-1",
+        user_id: "user-1",
+        role: :member,
+        lifecycle_state: :active
+      },
+      user: %User{user_id: "user-1", display_name: "Ops tester"},
       capabilities: MapSet.new()
     }
   end

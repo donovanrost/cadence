@@ -11,6 +11,7 @@ import {
 import { ApButton, ApCallout, formatShort } from "@/ui";
 import type { ProfileField, ProfileOverride } from "./detail.ts";
 import { overrideCraft, overrideOp, valueText } from "./overrides.ts";
+import { compositionInSentence, isComposed } from "@/features/catalog/composition.ts";
 
 /** P3 rows: spacecraft · what differs · since · Reset (stages a spacecraft_override reset). */
 const props = defineProps<{
@@ -65,7 +66,13 @@ async function reset(o: ProfileOverride) {
         <span :class="fieldOf(o) ? 'text-text-2' : 'text-text-3'">{{
           fieldOf(o)?.label ?? "Other setting"
         }}</span>
-        {{ valueText(fieldOf(o), o.spacecraft_value) }} instead of
+        <!-- U109: a composed value reads "composition 3" where it reads "catalog rev 4". -->
+        {{
+          isComposed(o.composition)
+            ? compositionInSentence(o.composition)
+            : valueText(fieldOf(o), o.spacecraft_value)
+        }}
+        instead of
         {{ valueText(fieldOf(o), o.profile_value) }}
         <span v-if="o.reason" class="text-text-3"> · {{ o.reason }}</span>
         <span class="font-mono text-xs text-text-4">

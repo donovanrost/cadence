@@ -76,3 +76,28 @@ describe("Org Audit, read event by event (U86)", () => {
     expect(unreadNote(3)).toBe("3 events couldn't be read, so they aren't in this file.");
   });
 });
+
+describe("Org Audit's failed Older load (#244, B6)", () => {
+  it("is announced: a status region, always mounted, that says so only when it failed", async () => {
+    const w = mount(AuditResults, {
+      props: {
+        page: page([ok("e1")]),
+        older: [],
+        olderUnshown: [],
+        hasMore: true,
+        loading: false,
+        failed: false,
+        span: "7 days",
+      },
+      // The footer (Load older and the region) is the table's footer slot.
+      global: { stubs: { AuditTable: { template: "<table><slot name='footer' /></table>" } } },
+    });
+    // An alert: it answers the person's own click (ca-ux on #569, as #410).
+    const region = w.get("[role=alert]");
+    expect(region.text()).toBe("");
+    await w.setProps({ failed: true });
+    expect(w.get("[role=alert]").text()).toBe("Older events couldn't load. Try Load older again.");
+    // In the tree (not display:none), so the alert is announced.
+    expect(w.get("[role=alert]").classes()).not.toContain("empty:hidden");
+  });
+});

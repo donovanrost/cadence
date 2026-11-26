@@ -76,6 +76,48 @@ defmodule Cadence.Governance.DecisionRecordTest do
              })
   end
 
+  # #283 (api-ops 11-19): automation grants' proposal, revoke and narrow.
+  test "proposed and narrowed need a digest; revoked never needs a digest or a reason" do
+    for decision <- [:proposed, :narrowed] do
+      assert {:error, :decision_record_digest_required} =
+               DecisionRecord.new(scope("u-1"), %{
+                 decision: decision,
+                 subject: Map.delete(@subject, :digest)
+               })
+    end
+
+    assert {:ok, %{reason: nil, subject: %{digest: nil}}} =
+             DecisionRecord.new(scope("u-1"), %{
+               decision: :revoked,
+               subject: Map.delete(@subject, :digest)
+             })
+
+    assert {:ok, %{reason: nil}} =
+             DecisionRecord.new(scope("u-1"), %{decision: :narrowed, subject: @subject})
+
+    assert {:ok, %{reason: nil}} =
+             DecisionRecord.new(scope("u-1"), %{decision: :proposed, subject: @subject})
+  end
+
+  test "previous_digest is typed: nil by default, a non-empty string when given" do
+    assert {:ok, %{subject: %{previous_digest: nil}}} =
+             DecisionRecord.new(scope("u-1"), %{decision: :approved, subject: @subject})
+
+    assert {:ok, %{subject: %{digest: "sha-abc", previous_digest: "sha-old"}}} =
+             DecisionRecord.new(scope("u-1"), %{
+               decision: :narrowed,
+               subject: Map.put(@subject, :previous_digest, "sha-old")
+             })
+
+    for bad <- ["", 7] do
+      assert {:error, :decision_record_previous_digest_invalid} =
+               DecisionRecord.new(scope("u-1"), %{
+                 decision: :narrowed,
+                 subject: Map.put(@subject, :previous_digest, bad)
+               })
+    end
+  end
+
   test "an unknown decision, a missing subject or a bad separated_from is refused" do
     assert {:error, :decision_record_decision_invalid} =
              DecisionRecord.new(scope("u-1"), %{decision: :maybe, subject: @subject})

@@ -88,6 +88,20 @@ merge passed 500.
   currency}`). `source.synthetic` is `true` for the simulator's deterministic windows. Say so in the
   UI. `source.provider_name` and `source.synthetic` are `null` when the snapshot doesn't say.
 - `plan`: the contact plan revision that booked it, or `null` for direct bookings.
+- `listener_overlap` (U58 (b), #361): `null`, or `{with: {spacecraft: {id | null, name | null},
+  station: {code, name} | null, starts_at, state: "booked" | "planned"}, seconds | null, loses: "this" |
+  "other" | "either", direction: "downlink" | "uplink", listener: {host, port}, count}`. The pass
+  loses its start (or would) to another pass of the mission on a station listener that takes one
+  connection at a time. The rule is the runtime's own: a listen binding with a fixed port that binds
+  its own socket (everything but a `listener: "shared"` downlink) on a colliding host:port
+  (`ListenClaims`). The later start loses from its start to the earlier pass's end, capped at its
+  own end; an equal start is a race (`either`). `seconds` is `null` when neither pass has an end
+  (unmeasurable, not absent). With several, it names the pass's OWN loss first (`this`, then
+  `either`, most seconds), and only when it loses nothing the costliest it causes (`other`), so a
+  pass that loses time always reads as the loser; `count` is how many passes it overlaps (1 when
+  single). `spacecraft.id` is null only when the other pass's record doesn't say. `listener` is for Technical details only (U58: no port in
+  sentences). Another mission can never hold the listener: `ListenClaims` refuses another
+  mission's endpoint at save. Advisory: nothing is refused.
 - `ended_by` (qa #30): who ended a `canceled`, `rejected` or `failed` booking, else `null`.
   `{kind: "user", id, name}` for a cancel from the contact workspace or an operator's #53
   "not booked" resolution; otherwise `{kind: "provider", id, name}`.
@@ -695,7 +709,9 @@ never count them toward a requirement.
   expires_at, starts_at, ends_at, station {ref, id, code, name}, antenna {id, label} | null,
   provider {id, name}, availability, uplink_capable, synthetic, cost, overlaps {reservation_id,
   spacecraft {id, name}, station_code, starts_at, reason: same_spacecraft | same_antenna} |
-  null}], hidden {no_uplink_route}, not_ready: [{code, message}], truncated}`. The server fans out
+  null, listener_overlap}], hidden {no_uplink_route}, not_ready: [{code, message}], truncated}`.
+  `listener_overlap` as on a pass above (#361), against the mission's booked passes (offers are
+  alternatives, never checked against each other); booking it is still allowed. The server fans out
   over the spacecraft's ready routes; route keys and evidence ride inside the signed `token`.
   `station.id`, `code` and `name` are `null` when the provider's station matches no Cadence
   station (`ref` is always set). `overlaps` covers every live booking, plan or not. No ready route

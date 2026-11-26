@@ -8,6 +8,7 @@ import {
   type Decoded,
   type Unrecognized,
 } from "@/api";
+import { outcomeReader } from "./outcome.ts";
 
 /** The change-set dry run's shape. Contract: docs/apogee/api/changes.md (preview). */
 const { array, boolean, integer, nullable, object, oneOf, string, token } = decoders;
@@ -180,6 +181,8 @@ export const previewReader = object({
   verdict,
   /** U93 (api): false = no activation exists, so applying starts nothing. Optional until shipped. */
   has_active_configuration: decoders.optional(boolean),
+  /** #522: what applying does (SC, Routes, readiness after); optional, null when not computed. */
+  outcome: outcomeReader,
   diffs: decoders.optional(array(diffEntry, 5000)),
   checks: array(
     object({

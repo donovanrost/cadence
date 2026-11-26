@@ -1,0 +1,51 @@
+# Checks .github/actions/install-xmllint on the stock runner image AND on a runner with no Ubuntu apt
+# sources, the state ubuntu-24.04 20261116.133.1 shipped in (#327, tracker 36). Runs only when the action
+# changes (or by hand); not part of ci-ok.
+name: xmllint install check
+
+on:
+  pull_request:
+    paths:
+      - .github/actions/install-xmllint/**
+      - .github/workflows/xmllint-image-check.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    name: install-xmllint (${{ matrix.image_state }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        image_state: [stock, no-ubuntu-sources]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Runner image
+        run: echo "image ${ImageOS:-?} ${ImageVersion:-?}"
+      - name: Simulate an image with no Ubuntu apt sources
+        if: matrix.image_state == 'no-ubuntu-sources'
+        run: |
+          sudo rm -f /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources /etc/apt/apt-mirrors.txt
+          sudo rm -rf /var/lib/apt/lists/*
+          sudo timeout 240 apt-get update -q || true
+          if apt-cache policy libxml2-utils | grep -q 'Candidate: [0-9]'; then
+            echo "::error::the simulation still has an Ubuntu source"; exit 1
+          fi
+          echo "simulated: libxml2-utils has no install candidate"
+      - uses: ./.github/actions/install-xmllint
+      - name: xmllint validates against an XSD
+        run: |
+          cat > "$RUNNER_TEMP/s.xsd" <<'XSD'
+          <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="a" type="xs:int"/></xs:schema>
+          XSD
+          echo '<a>4</a>' > "$RUNNER_TEMP/ok.xml"
+          echo '<a>x</a>' > "$RUNNER_TEMP/bad.xml"
+          xmllint --noout --schema "$RUNNER_TEMP/s.xsd" "$RUNNER_TEMP/ok.xml"
+          if xmllint --noout --schema "$RUNNER_TEMP/s.xsd" "$RUNNER_TEMP/bad.xml" 2>/dev/null; then
+            echo "::error::xmllint accepted an invalid document"; exit 1
+          fi
+          echo "xmllint validates: ok accepted, bad rejected"

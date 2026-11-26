@@ -593,8 +593,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningPolicies do
      %{
        "kind" => "user",
        "user_id" => user.user_id,
-       "display_name" => user.display_name,
-       "email" => user.email
+       "display_name" => user.display_name
      }}
   end
 
