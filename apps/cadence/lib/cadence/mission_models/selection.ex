@@ -36,15 +36,17 @@ defmodule Cadence.MissionModels.Selection do
 
   @doc """
   The revision `composition_id` runs: `{:ok, revision_id}`; `{:error, :reapproval_needed}` when
-  only revisions this server can't run are approved; else `{:error, :not_approved}`. It's the first
-  approved, runnable link of `ranked/3`.
+  only revisions this server can't run are approved; `{:error, :withdrawn}` when none is approved
+  and one's approval was withdrawn (E2, #546); else `{:error, :not_approved}`. It's the first
+  approved, runnable link of `ranked/3`, so withdrawing the newest approval falls back to an older
+  approved, runnable revision of the same composition, which staging then records and shows.
 
   `opts[:assume_approved]` treats that one revision as approved (#577's "what the next staging
   would select once it's approved"), in the same pass, so a read can't disagree with staging.
   `opts[:runnable]` replaces the list (tests only).
   """
   @spec select(binary(), binary(), binary(), keyword()) ::
-          {:ok, binary()} | {:error, :not_approved | :reapproval_needed}
+          {:ok, binary()} | {:error, :not_approved | :reapproval_needed | :withdrawn}
   def select(organization_id, mission_id, composition_id, opts \\ []) do
     links =
       organization_id
@@ -56,9 +58,12 @@ defmodule Cadence.MissionModels.Selection do
         {:ok, revision_id}
 
       nil ->
-        if Enum.any?(links, &(&1.status == "approved")),
-          do: {:error, :reapproval_needed},
-          else: {:error, :not_approved}
+        cond do
+          Enum.any?(links, &(&1.status == "approved")) -> {:error, :reapproval_needed}
+          # E2 (#546): the composition's own approval was taken back (§5's narrow "superseded").
+          Enum.any?(links, &(&1.status == "withdrawn")) -> {:error, :withdrawn}
+          true -> {:error, :not_approved}
+        end
     end
   end
 

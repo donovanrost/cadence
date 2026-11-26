@@ -24,8 +24,17 @@ defmodule Cadence.MissionModels.RevisionDecisions do
 
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Catalog.MissionModel.Revision
-  alias Cadence.Governance.{Accountability, ActivationPolicy}
-  alias Cadence.MissionModels.{Comparison, CompositionApproval, RevisionRow, RuntimePlanRow}
+  alias Cadence.Governance.{Accountability, ActivationPolicy, DecisionRecord}
+  alias Cadence.Ids
+
+  alias Cadence.MissionModels.{
+    Comparison,
+    CompositionApproval,
+    DecisionRow,
+    RevisionRow,
+    RuntimePlanRow
+  }
+
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Repo
 
@@ -169,6 +178,114 @@ defmodule Cadence.MissionModels.RevisionDecisions do
         revision_id,
         &reject_locked(&1, actor, reason, opts)
       )
+    end
+  end
+
+  @doc """
+  Withdraws an approved revision's approval (E2, #546; design §5): its status becomes `withdrawn`,
+  which is terminal (a database trigger refuses any move away from it), and an append-only
+  `mission_model_decisions` row records who, when and why, naming the composition approved.
+
+  - The same authority as approving (`:approve_mission_model`), a person, never a service. No
+    four-eyes (commanding, #546): withdrawing narrows what can run and stops nothing.
+  - A reason is required. Takes the revision row FOR UPDATE; the caller holds the locks before it
+    in `ActivationLocks`' order (`Control.ModelWithdrawal`: the stable policy, then the mission's
+    configuration lock), so an apply's or approval's FOR SHARE sees the withdrawal or finishes first.
+  - The status change and the decision row commit together.
+  - On a withdrawn revision the same `operation_id` by the same person replays
+    `{:ok, {:replayed, revision}}` (#260); anything else, and any revision that isn't approved, is
+    `{:error, :mission_model_revision_not_withdrawable}`.
+  """
+  @spec withdraw(Scope.t(), binary(), binary(), term(), keyword()) ::
+          {:ok, Revision.t() | {:replayed, Revision.t()}} | {:error, term()}
+  def withdraw(%Scope{} = scope, mission_id, revision_id, reason, opts \\ [])
+      when is_binary(mission_id) and is_binary(revision_id) do
+    organization_id = scope.organization_id
+
+    with :ok <- authorize(scope, mission_id),
+         {:ok, actor} <- actor(scope),
+         {:ok, reason} <- reason(reason) do
+      locked(organization_id, mission_id, revision_id, fn row ->
+        withdraw_locked(row, scope, actor, reason, opts)
+      end)
+    end
+  end
+
+  defp withdraw_locked(%RevisionRow{status: "approved"} = row, scope, actor, reason, opts) do
+    %{organization_id: organization_id, mission_id: mission_id, revision_id: revision_id} = row
+    composition = composition(organization_id, mission_id, revision_id)
+
+    with {:ok, record} <-
+           DecisionRecord.new(scope, %{
+             decision: :withdrawn,
+             reason: reason,
+             subject: %{
+               kind: "mission_model_revision",
+               id: revision_id,
+               digest: row.content_sha256,
+               composition: composition && CompositionApproval.evidence(composition)
+             },
+             decided_at: at(opts)
+           }) do
+      Repo.insert!(%DecisionRow{
+        decision_id: Ids.new("mission_model_decision"),
+        organization_id: organization_id,
+        mission_id: mission_id,
+        revision_id: revision_id,
+        composition_id: composition && composition.composition_id,
+        decision: "withdrawn",
+        actor: actor,
+        reason: reason,
+        subject: record.subject,
+        policy_document: ActivationPolicy.evidence(organization_id, mission_id),
+        admin_mode: record.admin_mode,
+        operation_id: operation_id(opts),
+        decided_at: record.decided_at
+      })
+
+      row |> RevisionRow.status_changeset(:withdrawn, actor, record.decided_at) |> Repo.update()
+    end
+  end
+
+  defp withdraw_locked(%RevisionRow{status: "withdrawn"} = row, _scope, actor, _reason, opts) do
+    case withdrawal(row.organization_id, row.mission_id, row.revision_id) do
+      %DecisionRow{operation_id: id, actor: %{"id" => by}}
+      when is_binary(id) and id != "" ->
+        if id == operation_id(opts) and by == actor["id"],
+          do: {:ok, {:replayed, row}},
+          else: {:error, :mission_model_revision_not_withdrawable}
+
+      _other ->
+        {:error, :mission_model_revision_not_withdrawable}
+    end
+  end
+
+  defp withdraw_locked(%RevisionRow{}, _scope, _actor, _reason, _opts),
+    do: {:error, :mission_model_revision_not_withdrawable}
+
+  @doc "The revision's withdrawal record, or nil."
+  @spec withdrawal(binary(), binary(), binary()) :: DecisionRow.t() | nil
+  def withdrawal(organization_id, mission_id, revision_id) do
+    Repo.one(
+      from(decision in DecisionRow,
+        where:
+          decision.organization_id == ^organization_id and decision.mission_id == ^mission_id and
+            decision.revision_id == ^revision_id and decision.decision == "withdrawn"
+      )
+    )
+  end
+
+  defp composition(organization_id, mission_id, revision_id) do
+    case CompositionApproval.require(organization_id, mission_id, revision_id) do
+      {:ok, composition} -> composition
+      {:error, _none} -> nil
+    end
+  end
+
+  defp operation_id(opts) do
+    case Keyword.get(opts, :operation_id) do
+      id when is_binary(id) and id != "" -> id
+      _none -> nil
     end
   end
 

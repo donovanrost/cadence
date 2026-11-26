@@ -19,7 +19,7 @@ defmodule Cadence.MissionModels.CompositionPin do
   """
 
   alias Cadence.Catalog.CompositionPins
-  alias Cadence.MissionModels.{Compositions, Selection}
+  alias Cadence.MissionModels.{Compositions, RevisionDecisions, Selection}
   alias Cadence.Platform.ConfigFields, as: F
 
   @type pin :: {binary() | nil, binary() | nil}
@@ -84,13 +84,24 @@ defmodule Cadence.MissionModels.CompositionPin do
         :ok
 
       {:error, reason} ->
-        pin = pin_details(organization_id, mission_id, composition)
-        {:error, error(path, sentence(reason, pin), Map.put(pin, :reason, to_string(reason)))}
+        pin =
+          organization_id
+          |> pin_details(mission_id, composition)
+          |> Map.put(:reason, to_string(reason))
+          |> put_decision(organization_id, mission_id, composition, reason)
+
+        {:error, error(path, sentence(reason, pin), pin)}
     end
   end
 
   defp sentence(:not_approved, pin),
     do: "#{subject(pin)} isn't approved yet; an org admin approves it in Setup › Catalog first"
+
+  # U109 (E2, #546): nothing approved is left; the decision record rides in `details.decision`.
+  defp sentence(:withdrawn, pin),
+    do:
+      "#{subject(pin)} is no longer approved, so it can't take a new configuration that uses " <>
+        "it. Move it to an approved composition first"
 
   defp sentence(:reapproval_needed, pin),
     do:
@@ -105,6 +116,35 @@ defmodule Cadence.MissionModels.CompositionPin do
     do: "Composition #{number}"
 
   defp subject(_pin), do: "This composition"
+
+  @doc """
+  The withdrawal behind a `:withdrawn` selection, for `details.decision` (U109): the newest
+  withdrawn link's record, `%{revision_id, kind, by, at, reason}`, or nil.
+  """
+  @spec withdrawn_decision(binary(), binary(), binary()) :: map() | nil
+  def withdrawn_decision(organization_id, mission_id, composition) do
+    with %{revision_id: revision_id} <-
+           organization_id
+           |> Selection.ranked(mission_id, composition)
+           |> Enum.find(&(&1.status == "withdrawn")),
+         %{} = record <- RevisionDecisions.withdrawal(organization_id, mission_id, revision_id) do
+      %{
+        revision_id: revision_id,
+        kind: "withdrawn",
+        # The revision read's form (`{id, name}`), from the record's actor.
+        by: %{id: record.actor["id"], name: record.actor["display_name"]},
+        at: record.decided_at,
+        reason: record.reason
+      }
+    else
+      _none -> nil
+    end
+  end
+
+  defp put_decision(pin, organization_id, mission_id, composition, :withdrawn),
+    do: Map.put(pin, :decision, withdrawn_decision(organization_id, mission_id, composition))
+
+  defp put_decision(pin, _organization_id, _mission_id, _composition, _reason), do: pin
 
   defp pin_details(organization_id, mission_id, composition) do
     catalog = CompositionPins.catalog_revision_for(organization_id, mission_id, composition)

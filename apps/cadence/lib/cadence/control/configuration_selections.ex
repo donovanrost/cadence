@@ -14,7 +14,7 @@ defmodule Cadence.Control.ConfigurationSelections do
 
   alias Cadence.Catalog.CompositionPins
   alias Cadence.MissionModels
-  alias Cadence.MissionModels.Selection
+  alias Cadence.MissionModels.{CompositionPin, Selection}
   alias Cadence.SpacecraftStore.Overrides
   alias Cadence.SpacecraftTypeStore
 
@@ -28,7 +28,7 @@ defmodule Cadence.Control.ConfigurationSelections do
           composition_number: pos_integer() | nil
         }
 
-  # current_reason: newer_approved | unrunnable | none_left | nil (E2 adds withdrawn); U109.
+  # current_reason: newer_approved | unrunnable | none_left | withdrawn | nil; U109.
 
   @doc "`%{composition_id => answer}` and `%{catalog_revision_id => composition_id}`."
   @spec for_catalogs(binary(), binary(), [binary() | nil], keyword()) ::
@@ -73,7 +73,11 @@ defmodule Cadence.Control.ConfigurationSelections do
     :ok = MissionModels.share_lock_revisions(organization_id, mission_id, revisions(first))
     {current, pins} = for_catalogs(organization_id, mission_id, catalogs, opts)
 
-    case differences(organization_id, mission_id, recorded || %{}, current, opts) do
+    # commanding (#767, #546): only `first`'s revisions are locked. If a decision moved the
+    # selection between the two reads, what's selected now isn't held, so it's refused too.
+    against = if current == first, do: recorded || %{}, else: first
+
+    case differences(organization_id, mission_id, against, current, opts) do
       [] -> {:ok, {current, pins}}
       entries -> {:error, {:restage_needed, entries}}
     end
@@ -86,15 +90,29 @@ defmodule Cadence.Control.ConfigurationSelections do
       now = revision(Map.get(current, composition))
       ranked = Selection.ranked(organization_id, mission_id, composition, opts)
 
+      why = reason(was, now, ranked)
+
       %{
         composition_id: composition,
         recorded_revision_id: was,
         current_revision_id: now,
-        current_reason: reason(was, now, ranked)
+        current_reason: why
       }
       |> Map.merge(numbers(organization_id, mission_id, composition))
+      |> put_decision(organization_id, mission_id, composition, why)
     end
   end
+
+  # U109 (E2, #546): restage_needed names the withdrawal record in `decision`.
+  defp put_decision(entry, organization_id, mission_id, composition, "withdrawn"),
+    do:
+      Map.put(
+        entry,
+        :decision,
+        CompositionPin.withdrawn_decision(organization_id, mission_id, composition)
+      )
+
+  defp put_decision(entry, _organization_id, _mission_id, _composition, _reason), do: entry
 
   # What the words name the pin by (U109): its catalog revision's number while it's one layer,
   # else the composition's display number. Display only.
@@ -109,10 +127,17 @@ defmodule Cadence.Control.ConfigurationSelections do
     }
   end
 
-  # U109's five whys (mms-ux, #633), one to one: E2 (#546) sets "withdrawn" with its decision.
-  defp reason(_was, nil, _ranked), do: "none_left"
-
+  # U109's five whys (mms-ux, #633), one to one. E2 (#546): "withdrawn" when the recorded
+  # revision's approval was taken back, whether nothing is left or an older approval now runs.
   defp reason(was, now, ranked) do
+    cond do
+      Enum.any?(ranked, &(&1.revision_id == was and &1.status == "withdrawn")) -> "withdrawn"
+      is_nil(now) -> "none_left"
+      true -> moved(was, now, ranked)
+    end
+  end
+
+  defp moved(was, now, ranked) do
     ids = Enum.map(ranked, & &1.revision_id)
 
     cond do
@@ -131,7 +156,7 @@ defmodule Cadence.Control.ConfigurationSelections do
     end
   end
 
-  @reasons ["not_approved", "reapproval_needed"]
+  @reasons ["not_approved", "reapproval_needed", "withdrawn"]
 
   @doc "The revision id in a selection answer, or nil for a reason none is selectable."
   @spec revision_of(answer() | nil) :: binary() | nil
