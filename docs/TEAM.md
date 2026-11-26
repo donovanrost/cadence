@@ -130,5 +130,6 @@ Laptop 1 worktrees live in `~/.herdr/worktrees/cadence/<handle>`. The new agent 
 | telemetry | Head of Telemetry & Data | laptop 2 | `donovans-macbook-pro-1/telemetry` | Claude Opus 5.5, high | 2026-11-25 |
 | mm-engineer | Engineer, Mission Model & Spacecraft (head: mission-model) | laptop 2 | `donovans-macbook-pro-1/mm-engineer` | Claude Sonnet, high | 2026-11-25 |
 | telemetry-eng | Engineer, Telemetry & Data (head: telemetry) | laptop 2 | `donovans-macbook-pro-1/telemetry-eng` | Claude Sonnet, high | 2026-11-26 |
+| commanding-eng | Engineer, Commanding & Approvals (head: commanding) | laptop 2 | `donovans-macbook-pro-1/commanding-eng` | Claude Sonnet 5.5, high | 2026-11-26 |
 
 Codex is installed and signed in on laptop 1 only. Until laptop 2 has it, Codex hires run on laptop 1.
