@@ -95,8 +95,15 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Writer.Mission do
   def handle_call(:reset_stats, _from, state),
     do: {:reply, :ok, %{state | metrics: zero_metrics()}}
 
+  # A reset drops the buffer, so a flush waiting on it is answered: there is nothing left to flush.
   def handle_call(:reset, _from, state) do
-    {:reply, :ok, state |> cancel_timer() |> Map.merge(new_state(%{}) |> Map.take(reset_keys()))}
+    Enum.each(state.waiters, &GenServer.reply(&1, :ok))
+
+    {:reply, :ok,
+     state
+     |> cancel_timer()
+     |> Map.merge(Map.take(new_state(%{}), reset_keys()))
+     |> Map.put(:waiters, [])}
   end
 
   @impl true
