@@ -88,6 +88,7 @@ defmodule CadenceWeb.Console.FleetAPITest do
     assert %{
              "source" => "catalog_monitoring",
              "point_id" => "HEALTH.mode",
+             "point_name" => "HEALTH.mode",
              "limit_state" => "critical",
              "value" => nil,
              "raw_limit_state" => nil,
