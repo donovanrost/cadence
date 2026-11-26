@@ -148,4 +148,5 @@ Laptop 1 worktrees live in `~/.herdr/worktrees/cadence/<handle>`. The new agent 
 | commanding-eng | Engineer, Commanding & Approvals (head: commanding) | laptop 2 | `donovans-macbook-pro-1/commanding-eng` | Claude Sonnet 5.5, high | 2026-11-26 |
 | platform-eng | Engineer, Platform (head: platform) | laptop 1 | `platform-eng` | Codex, high | 2026-11-25 |
 
-Codex is installed and signed in on laptop 1 only. Until laptop 2 has it, Codex hires run on laptop 1.
+Codex (0.172.0) is installed and signed in on both laptops, under the node version `mise.toml` pins; a Codex
+hire can go on either machine. If that pin moves, install Codex for the new node version too.
