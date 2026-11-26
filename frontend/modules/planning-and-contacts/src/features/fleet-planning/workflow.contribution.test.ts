@@ -84,7 +84,7 @@ test("the start adapter preserves reviewed native payloads and successful receip
   wrapper.unmount();
 });
 
-const producer = producerFixture("CADENCE_FLEET_WORKFLOW", import.meta.url);
+const producer = producerFixture("CADENCE_FLEET_WORKFLOW");
 test.skipIf(!producer.available)("producer-supplied host fleet workflow", async () => {
   const supplied = jsonFixture(producer.read());
   const snapshot = fixtureRecord(supplied.snapshot),

@@ -43,10 +43,6 @@
     "lines": 486,
     "owner": "legacy (#80): frozen, leaves with its row"
   },
-  "apps/storybook/src/CommandWorkspaceExample.vue": {
-    "lines": 509,
-    "owner": "legacy (#80): frozen, leaves with its row"
-  },
   "modules/telemetry-decom/src/features/configuration/contracts.ts": {
     "lines": 506,
     "owner": "legacy (#80): frozen, leaves with its row"

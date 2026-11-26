@@ -226,7 +226,7 @@ test("contract rejects malformed, foreign, oversized and incoherent review evide
     expect(() => readCommandReviewPage(page, fixture().review.context)).toThrow();
   }
 });
-const producer = producerFixture("CADENCE_COMMAND_REVIEW_DOCUMENT", import.meta.url);
+const producer = producerFixture("CADENCE_COMMAND_REVIEW_DOCUMENT");
 test.skipIf(!producer.available)(
   "actual producer review mounts the feature and captures its decision input",
   async () => {

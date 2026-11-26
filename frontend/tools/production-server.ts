@@ -8,14 +8,12 @@ import { createDemoHostMiddleware } from "./demo-host-service.ts";
 const frontendRoot = resolve(import.meta.dirname, "..");
 const hostRoot = resolve(frontendRoot, "apps/host/dist");
 const telemetryRoot = resolve(frontendRoot, "apps/telemetry-decom/dist");
-const probeRoot = resolve(frontendRoot, "apps/contract-probe/dist");
 const hostMiddleware = createDemoHostMiddleware("production");
 
 await Promise.all([
   requireBuild(resolve(hostRoot, "index.html")),
   requireBuild(resolve(telemetryRoot, "current/mf-manifest.json")),
   requireBuild(resolve(telemetryRoot, "previous/mf-manifest.json")),
-  requireBuild(resolve(probeRoot, "current/mf-manifest.json")),
 ]);
 
 const host = createServer((request, response) => {
@@ -27,10 +25,10 @@ const host = createServer((request, response) => {
       headers: {
         "content-security-policy": [
           "default-src 'self'",
-          `script-src 'self' ${developmentOrigin("telemetry-decom")} ${developmentOrigin("contract-probe")} http://127.0.0.1:4199`,
-          `style-src 'self' 'unsafe-inline' ${developmentOrigin("telemetry-decom")} ${developmentOrigin("contract-probe")}`,
+          `script-src 'self' ${developmentOrigin("telemetry-decom")} http://127.0.0.1:4199`,
+          `style-src 'self' 'unsafe-inline' ${developmentOrigin("telemetry-decom")}`,
           "font-src 'self' data:",
-          `connect-src 'self' ${developmentOrigin("telemetry-decom")} ${developmentOrigin("contract-probe")} http://127.0.0.1:4199`,
+          `connect-src 'self' ${developmentOrigin("telemetry-decom")} http://127.0.0.1:4199`,
           "img-src 'self' data:",
           "object-src 'none'",
           "base-uri 'self'",
@@ -55,30 +53,15 @@ const telemetry = createServer((request, response) => {
   );
 });
 
-const probe = createServer((request, response) => {
-  const pathname = new URL(request.url ?? "/", developmentOrigin("contract-probe")).pathname;
-  const releasePath = releaseStaticPath(pathname);
-  if (!releasePath) {
-    notFound(response);
-    return;
-  }
-
-  void serveStatic(response, probeRoot, releasePath, { headers: remoteHeaders() }).catch(() =>
-    serverError(response),
-  );
-});
-
 await Promise.all([
   listen(host, developmentPorts["host"], "Cadence host"),
   listen(telemetry, developmentPorts["telemetry-decom"], "Telemetry Decom releases"),
-  listen(probe, developmentPorts["contract-probe"], "Contract Probe release"),
 ]);
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {
     host.close();
     telemetry.close();
-    probe.close();
   });
 }
 

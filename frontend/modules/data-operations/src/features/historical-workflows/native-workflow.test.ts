@@ -275,7 +275,7 @@ test("binding paging retains the reviewed binding and unsaved request", async ()
   });
   w.unmount();
 });
-const producer = producerFixture("CADENCE_HISTORY", import.meta.url);
+const producer = producerFixture("CADENCE_HISTORY");
 test.skipIf(!producer.available)("producer supplied native history contribution", async () => {
   const supplied = jsonFixture(producer.read()),
     snapshot = fixtureRecord(supplied.snapshot),

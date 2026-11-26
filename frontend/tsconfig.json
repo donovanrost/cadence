@@ -8,9 +8,6 @@
       "path": "./apps/console"
     },
     {
-      "path": "./apps/contract-probe"
-    },
-    {
       "path": "./apps/host"
     },
     {
@@ -24,9 +21,6 @@
     },
     {
       "path": "./apps/spacecraft"
-    },
-    {
-      "path": "./apps/storybook"
     },
     {
       "path": "./apps/surface-fixture"

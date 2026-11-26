@@ -20,26 +20,26 @@ import {
 } from "./remote-loader";
 
 const application: CatalogApplication = {
-  applicationKey: "contract_probe",
+  applicationKey: "fixture_application",
   applicationVersion: 1,
-  displayName: "Contract Probe",
+  displayName: "Fixture Application",
   description: "Fixture remote",
   package: { packageId: "cadence.frontend-fixtures", version: 1 },
   surface: {
-    surfaceId: "runtime_contracts",
+    surfaceId: "fixture_overview",
     version: 1,
     purpose: "overview",
     scope: "spacecraft",
     placement: "application_workspace",
-    navigation: { label: "Runtime contracts", order: 90 },
-    dataContract: { id: "cadence.contract_probe.snapshot", version: 1 },
+    navigation: { label: "Fixture overview", order: 90 },
+    dataContract: { id: "cadence.fixture_application.snapshot", version: 1 },
     actions: [],
     renderer: { kind: "federated-vue", exposedModule: "./Application" },
   },
   release: {
     federation: "module_federation",
     releaseId: "2026.08.22.1",
-    remoteName: "contract_probe_current_2026_08_22_1",
+    remoteName: "fixture_application_current_2026_08_22_1",
     manifestUrl: "http://127.0.0.1:4175/mf-manifest.json",
     exposedModule: "./Application",
   },
@@ -56,9 +56,9 @@ const manifest = defineApplicationManifest({
     cadenceThemeContract: 1,
   },
   application: {
-    applicationKey: "contract_probe",
+    applicationKey: "fixture_application",
     version: 1,
-    displayName: "Contract Probe",
+    displayName: "Fixture Application",
     description: "Fixture remote",
     installableScopes: ["spacecraft"],
   },
@@ -122,7 +122,7 @@ describe("the generic federated application loader", () => {
   });
 
   it("registers and loads the exact release approved by the catalog", async () => {
-    const load = vi.fn(async () => ({ manifest, default: { name: "ContractProbe" } }));
+    const load = vi.fn(async () => ({ manifest, default: { name: "FixtureApplication" } }));
     const runtime: FederatedRuntime = { load };
 
     await loadFederatedApplication(application, runtime);
@@ -134,7 +134,7 @@ describe("the generic federated application loader", () => {
     const runtime: FederatedRuntime = {
       load: vi.fn(async () => ({
         manifest,
-        default: { name: "ContractProbe" },
+        default: { name: "FixtureApplication" },
       })),
     };
 
