@@ -1,6 +1,10 @@
 defmodule CadenceWeb.Router do
   use CadenceWeb, :router
 
+  require CadenceWeb.Console.DevIngestRoutes, as: DevIngestRoutes
+
+  @dev_ingest_routes Application.compile_env(:cadence_web, :dev_ingest_routes, false)
+
   pipeline :browser do
     plug(CadenceWeb.Plugs.BrowserAccepts)
     plug(:fetch_session)
@@ -279,6 +283,8 @@ defmodule CadenceWeb.Router do
       get("/limits/points/:point_id/intervals", PointController, :limit_intervals)
       get("/action-queue", ActionQueueController, :show)
       get("/counts", OpsCountsController, :show)
+      # #780: development ingest, mounted in dev and test only (compiled out of prod).
+      DevIngestRoutes.mount(@dev_ingest_routes)
       # Dashboards (owner: api-ops). Contract: docs/apogee/api/dashboards.md
       get("/dashboards", DashboardDirectoryController, :index)
       post("/dashboards", DashboardDirectoryController, :create)
@@ -369,6 +375,15 @@ defmodule CadenceWeb.Router do
       get("/single-bookings/routes", SingleBookingController, :routes)
       post("/single-bookings/search", SingleBookingController, :search)
       post("/single-bookings", SingleBookingController, :create)
+
+      get("/realized-contacts/:realized_contact_id/runtime", ContactRuntimeController, :runtime)
+
+      get(
+        "/realized-contacts/:realized_contact_id/paths/:path_id/runtime",
+        ContactRuntimeController,
+        :path_runtime
+      )
+
       get("/commands", CommandCatalogController, :index)
       get("/commands/:command_id", CommandCatalogController, :show)
       get("/command-policies", CommandGroupController, :policies)
@@ -451,13 +466,22 @@ defmodule CadenceWeb.Router do
       post("/attention/provider_change/:id/approve", ProviderChangeController, :approve)
       post("/attention/provider_change/:id/reject", ProviderChangeController, :reject)
       post("/attention/provider_change/:id/acknowledge", ProviderChangeController, :acknowledge)
+      # U37 (#847): one pass's open settlement item, without reading the action queue.
+      get("/attention/contact_settlement", AttentionController, :settlement)
       post("/attention/:source/:id/acknowledge", AttentionController, :acknowledge)
       post("/attention/:source/:id/resolve", AttentionController, :resolve)
       post("/attention/:source/:id/retry", AttentionController, :retry)
 
       # -- Setup (owner: api). Contracts: docs/apogee/api/setup.md
       get("/spacecraft", SpacecraftController, :index)
+      # #847: before :spacecraft_id, so "names" isn't read as an id.
+      get("/spacecraft/names", SpacecraftController, :names)
       get("/spacecraft/:spacecraft_id", SpacecraftDetailController, :show)
+      get("/spacecraft/:spacecraft_id/source-endpoints", SourceEndpointController, :index)
+      post("/spacecraft/:spacecraft_id/source-endpoints", SourceEndpointController, :create)
+      get("/source-endpoints", SourceEndpointController, :index)
+      post("/source-endpoints", SourceEndpointController, :create)
+      get("/source-endpoints/:source_endpoint_id", SourceEndpointController, :show)
       get("/spacecraft/:spacecraft_id/routes/:route_id", SpacecraftDetailController, :route)
       # TEMPORARY (removed with 9ac6dc8ee): the legacy route conversion (ux U79).
       get("/routes/legacy-conversion", LegacyConversionController, :show)
@@ -798,13 +822,6 @@ defmodule CadenceWeb.Router do
       # services never manage service identities. People issue them in the console.
 
       scope "/missions/:mission_id" do
-        get("/mission_health", MissionHealthController, :show)
-        get("/mission_events", MissionEventController, :index)
-        get("/telemetry/latest", TelemetryController, :latest_values)
-        get("/telemetry/points/:point_id/latest", TelemetryController, :latest_value)
-        get("/telemetry/points/:point_id/history", TelemetryController, :history)
-        post("/dev/space_packets", DevSpacePacketController, :create)
-        post("/dev/tm_frames", DevTMFrameController, :create)
         get("/catalog/importers", CatalogImporterController, :index)
         get("/catalog_artifacts", CatalogArtifactController, :index)
         post("/catalog_artifacts", CatalogArtifactController, :create)
@@ -814,12 +831,6 @@ defmodule CadenceWeb.Router do
         get("/catalog_import_runs/:import_run_id", CatalogImportRunController, :show)
         get("/spacecraft", SpacecraftController, :index)
         get("/spacecraft/:spacecraft_id", SpacecraftController, :show)
-        get("/spacecraft/:spacecraft_id/source_endpoints", SourceEndpointController, :index)
-        post("/spacecraft/:spacecraft_id/source_endpoints", SourceEndpointController, :create)
-
-        get("/source_endpoints", SourceEndpointController, :index)
-        post("/source_endpoints", SourceEndpointController, :create)
-        get("/source_endpoints/:source_endpoint_id", SourceEndpointController, :show)
 
         get("/command_stages", CommandStageController, :index)
         post("/command_stages", CommandStageController, :create)
@@ -871,18 +882,6 @@ defmodule CadenceWeb.Router do
           "/command_verifier_instances/:command_verifier_instance_id",
           CommandVerifierInstanceController,
           :show
-        )
-
-        get(
-          "/realized_contacts/:realized_contact_id/runtime",
-          RealizedContactController,
-          :runtime
-        )
-
-        get(
-          "/realized_contacts/:realized_contact_id/paths/:path_id/runtime",
-          RealizedContactController,
-          :path_runtime
         )
 
         get("/packet_definitions", PacketDefinitionController, :index)

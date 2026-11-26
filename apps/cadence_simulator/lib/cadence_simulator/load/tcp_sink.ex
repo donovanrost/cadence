@@ -36,6 +36,7 @@ defmodule CadenceSimulator.Load.TcpSink do
         case :gen_tcp.recv(socket, frame_size, 10_000) do
           {:ok, <<0::2, scid::10, _rest::bitstring>>}
           when scid >= 1 and scid <= craft and rem(scid - 1, sites) == site ->
+            Process.set_label({:simulator_load_receiver, scid})
             count(counters, scid, 1, frame_size)
             drain(socket, scid, frame_size, counters, 0)
 

@@ -257,4 +257,17 @@ defmodule Cadence.SpacecraftTypeStore do
           type.mission_id}}
     end
   end
+
+  @doc "The distinct catalog revisions the mission's profiles pin (D3, #544). One query."
+  @spec pinned_catalog_revision_ids(String.t(), String.t()) :: [String.t()]
+  def pinned_catalog_revision_ids(organization_id, mission_id) do
+    from(profile in SpacecraftTypeRow,
+      where:
+        profile.organization_id == ^organization_id and profile.mission_id == ^mission_id and
+          not is_nil(profile.catalog_revision_id),
+      distinct: true,
+      select: profile.catalog_revision_id
+    )
+    |> Repo.all()
+  end
 end

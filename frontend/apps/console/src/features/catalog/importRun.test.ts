@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api";
-import { importRunReader } from "./importRun.ts";
+import { importRunReader, rolloutTarget } from "./importRun.ts";
 
 const run = (diff: unknown) => ({
   id: "catalog_import_run_1",
@@ -11,9 +11,34 @@ const run = (diff: unknown) => ({
   failure_reason: null,
   declaration_count: 547,
   diagnostics: [],
-  revision: { id: "rev3", number: 3, label: null },
+  revision: { id: "rev3", number: 3, label: null, composition_id: "comp3" },
   base_revision: { id: "rev2", number: 2 },
   diff,
+});
+
+describe("rolloutTarget (C3 pins the revision's composition; D3, #544)", () => {
+  const read = (revision: unknown) => {
+    const r = decode(importRunReader, { ...run(null), revision });
+    if (!r.ok) throw new Error(r.error.message);
+    return r.value;
+  };
+
+  it("is the revision and its composition", () => {
+    expect(
+      rolloutTarget(read({ id: "rev3", number: 3, label: null, composition_id: "comp3" })),
+    ).toEqual({
+      id: "rev3",
+      number: 3,
+      compositionId: "comp3",
+    });
+  });
+
+  it("is null without a revision, or without a composition to pin", () => {
+    expect(rolloutTarget(read(null))).toBeNull();
+    expect(
+      rolloutTarget(read({ id: "rev3", number: 3, label: null, composition_id: null })),
+    ).toBeNull();
+  });
 });
 
 describe("importRunReader diff (api cab661fe)", () => {

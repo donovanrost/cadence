@@ -108,15 +108,13 @@ const title = computed(() => {
           >
             <ApButton size="compact" @click="setFilter(NO_FILTER)">Clear filters</ApButton>
           </ApEmptyState>
+          <!-- One list for the viewport, never both: the phone's list renders a link per craft,
+            and hidden with CSS on a desktop it still cost Fleet's first render at 1,000. -->
           <template v-else-if="view === 'table'">
+            <FleetRowList v-if="small" :rows="narrowed(value).rows" :total="value.counts.total" />
             <FleetTable
-              class="max-md:hidden"
+              v-else
               :boxed="boxed"
-              :rows="narrowed(value).rows"
-              :total="value.counts.total"
-            />
-            <FleetRowList
-              class="md:hidden"
               :rows="narrowed(value).rows"
               :total="value.counts.total"
             />

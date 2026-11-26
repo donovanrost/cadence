@@ -45,7 +45,7 @@ defmodule Cadence.Commanding.ApprovalDecisions do
         row.decided_at < ^at or (row.decided_at == ^at and row.command_approval_id < ^id)
       )
 
-  # The table's check allows exactly these (migration 20261121100000).
+  # The table's check allows exactly these.
   defp decision("approved"), do: :approved
   defp decision("rejected"), do: :rejected
   defp decision("not_required"), do: :not_required

@@ -8,7 +8,8 @@ defmodule CadenceSimulator.TestSupport.FakeCadenceRuntimeBootstrapClient do
   end
 
   @spec get_json(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
-  def get_json(_url, _opts) do
+  def get_json(url, opts) do
+    send(self(), {:bootstrap_request, url, opts})
     Process.get({__MODULE__, :response}, {:error, :missing_fake_bootstrap_response})
   end
 end

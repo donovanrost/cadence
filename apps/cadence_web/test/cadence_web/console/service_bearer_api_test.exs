@@ -34,17 +34,17 @@ defmodule CadenceWeb.Console.ServiceBearerAPITest do
   end
 
   # Phoenix.ConnTest skips CSRF by default; these requests check it for real.
-  # The one API's prefix: /api/v1 until platform's router move (#757), /api/v1 after.
-  @prefix if Enum.any?(CadenceWeb.Router.__routes__(), &String.starts_with?(&1.path, "/api/v1/")),
-            do: "/api/v1",
-            else: "/api/v1"
+  @prefix "/api/v1"
 
   defp csrf_checked, do: build_conn() |> put_private(:plug_skip_csrf_protection, false)
 
   defp bearer(token), do: csrf_checked() |> put_req_header("authorization", "Bearer " <> token)
 
   test "the opt-in list is exactly this (additions show up in review)" do
-    assert ServiceAccess.allowed() == %{CadenceWeb.Console.MissionController => [:show]}
+    assert ServiceAccess.allowed() == %{
+             CadenceWeb.Console.ContactRuntimeController => [:path_runtime],
+             CadenceWeb.Console.MissionController => [:show]
+           }
   end
 
   test "a mission-pinned service reads an opted-in action with its bearer token", c do
@@ -59,6 +59,14 @@ defmodule CadenceWeb.Console.ServiceBearerAPITest do
              c.token
              |> bearer()
              |> get("#{@prefix}/missions/mission-beta")
+             |> json_response(404)
+
+    assert %{"error" => %{"code" => "mission_not_found"}} =
+             c.token
+             |> bearer()
+             |> get(
+               "#{@prefix}/missions/mission-beta/realized-contacts/contact/paths/path/runtime"
+             )
              |> json_response(404)
   end
 

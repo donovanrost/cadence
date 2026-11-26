@@ -39,6 +39,8 @@ defmodule Cadence.Application do
         {Cadence.Platform.Supervisor, root_composition: root_composition},
         # Node-wide, and after the repo: it writes pending watermarks when it stops (#690).
         Cadence.Telemetry.Storage.WatermarkCoalescer,
+        # Before the runtime: journal consumers subscribe to partitions' snapshot notices.
+        Cadence.Runtime.SemanticSnapshotNotifier,
         Cadence.Management.Supervisor,
         {Cadence.Runtime.Supervisor, root_composition: root_composition},
         {Cadence.Control.Supervisor, control_supervisor_opts},
@@ -107,7 +109,9 @@ defmodule Cadence.Application do
       Cadence.Runtime.PartitionStreamKeys.Retention,
       Cadence.IngressArchive.Retention,
       Cadence.Telemetry.Storage.ObservationIdentityStates.Retention,
-      Cadence.Projections.DataSources.Watermarks.Retention
+      Cadence.Projections.DataSources.Watermarks.Retention,
+      Cadence.Protocol.RecordArchive.FileSystem.Retention,
+      Cadence.Protocol.RecordArchive.Quarantine.Retention
     ])
   end
 

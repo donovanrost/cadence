@@ -34,7 +34,7 @@ defmodule Cadence.SemanticRuntime.TermsTest do
   end
 
   test "an atom no semantic runtime module defines still fails closed" do
-    assert {:error, :semantic_runtime_commit_decode_failed} =
+    assert {:error, :semantic_runtime_snapshot_decode_failed} =
              Terms.decode(map_term([{"no_module_defines_" <> "this_atom_z9", 1}]))
   end
 

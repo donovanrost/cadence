@@ -328,7 +328,7 @@ when their file reservations do not overlap.
 ### Parallel worktree protocol
 
 - Every worktree receives a stable, unique `MIX_TEST_PARTITION`. Test PostgreSQL
-  databases, the ingress journal, and simulator DETS storage already incorporate
+  databases, the ingress journal, and simulator snapshot storage already incorporate
   that partition.
 - Worker BEAMs use a bounded scheduler count so parallel compilation and test
   pools do not exhaust local CPU or PostgreSQL connections.

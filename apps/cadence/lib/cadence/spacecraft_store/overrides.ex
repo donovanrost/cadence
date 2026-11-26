@@ -25,8 +25,10 @@ defmodule Cadence.SpacecraftStore.Overrides do
 
   @doc "Whether a path may be overridden."
   @spec overridable?(String.t()) :: boolean()
+  # D3 (#544): composition_id is the per-craft pin, a change-set path only. It isn't a schema
+  # field, so the console's kind editor shows no raw id field before its reads move (D2c).
   def overridable?(path) when is_binary(path) do
-    Regex.match?(@routing, path) or path in schema_paths()
+    Regex.match?(@routing, path) or path == "composition_id" or path in schema_paths()
   end
 
   def overridable?(_path), do: false
@@ -42,6 +44,22 @@ defmodule Cadence.SpacecraftStore.Overrides do
     |> Repo.all()
     |> Enum.group_by(& &1.spacecraft_id)
     |> Map.new(fn {id, rows} -> {id, Map.new(rows, &{&1.path, view(&1)})} end)
+  end
+
+  @doc """
+  The distinct values the mission's overrides set at `path`, as text (nil-free): e.g. the catalog
+  revisions per-craft overrides pin (D3, #544). One query.
+  """
+  @spec text_values_at(String.t(), String.t(), String.t()) :: [String.t()]
+  def text_values_at(organization_id, mission_id, path) do
+    from(o in OverrideRow,
+      where:
+        o.organization_id == ^organization_id and o.mission_id == ^mission_id and o.path == ^path,
+      distinct: true,
+      select: fragment("? ->> 'value'", o.value)
+    )
+    |> Repo.all()
+    |> Enum.reject(&is_nil/1)
   end
 
   @doc "Sets (or replaces) one override."

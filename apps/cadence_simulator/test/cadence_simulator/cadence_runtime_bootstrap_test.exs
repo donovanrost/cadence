@@ -32,7 +32,6 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrapTest do
       provider: DatabaseDynamics,
       cadence_url: "http://127.0.0.1:4001",
       api_token: "token-alpha",
-      organization_id: "org-alpha",
       mission_id: "mission-alpha",
       realized_contact_id: "contact-alpha_run",
       path_id: "downlink-path-alpha"
@@ -43,6 +42,12 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrapTest do
                runtime_opts,
                http_client: FakeCadenceRuntimeBootstrapClient
              )
+
+    assert_received {:bootstrap_request,
+                     "http://127.0.0.1:4001/api/v1/missions/mission-alpha/realized-contacts/contact-alpha_run/paths/downlink-path-alpha/runtime",
+                     request_opts}
+
+    assert request_opts[:headers] == [{"authorization", "Bearer token-alpha"}]
 
     assert resolved_opts[:output] == {:tcp, "127.0.0.1", 4100}
     assert resolved_opts[:frame] == %{format: :tm, frame_size: 1115, scid: 0, vcid: 0, fecf: true}
@@ -82,7 +87,6 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrapTest do
       frame: %{format: :tm, frame_size: 32, scid: 9, vcid: 9},
       cadence_url: "http://127.0.0.1:4001",
       api_token: "token-alpha",
-      organization_id: "org-alpha",
       mission_id: "mission-alpha",
       realized_contact_id: "contact-alpha_run",
       path_id: "downlink-path-alpha"
@@ -131,7 +135,6 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrapTest do
       provider: DatabaseDynamics,
       cadence_url: "http://127.0.0.1:4001",
       api_token: "token-alpha",
-      organization_id: "org-alpha",
       mission_id: "mission-alpha",
       realized_contact_id: "contact-alpha_run",
       path_id: "downlink-path-alpha"
@@ -189,7 +192,6 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrapTest do
       runtime_mode: :cop1_loopback,
       cadence_url: "http://127.0.0.1:4001",
       api_token: "token-alpha",
-      organization_id: "org-alpha",
       mission_id: "mission-alpha",
       realized_contact_id: "contact-alpha_run",
       path_id: "uplink-path-alpha"
@@ -245,7 +247,6 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrapTest do
       tc_frame_size: 8,
       cadence_url: "http://127.0.0.1:4001",
       api_token: "token-alpha",
-      organization_id: "org-alpha",
       mission_id: "mission-alpha",
       realized_contact_id: "contact-alpha_run",
       path_id: "uplink-path-alpha"
@@ -293,7 +294,6 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrapTest do
       provider: DatabaseDynamics,
       cadence_url: "http://127.0.0.1:4001",
       api_token: "token-alpha",
-      organization_id: "org-alpha",
       mission_id: "mission-alpha",
       realized_contact_id: "contact-alpha_run",
       path_id: "downlink-path-alpha"

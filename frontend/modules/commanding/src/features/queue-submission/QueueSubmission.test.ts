@@ -130,7 +130,7 @@ test("pending approval has no queue control", () => {
     c.wrapper.unmount();
   }
 });
-const producer = producerFixture("CADENCE_COMMAND_QUEUE_DOCUMENT", import.meta.url);
+const producer = producerFixture("CADENCE_COMMAND_QUEUE_DOCUMENT");
 test.skipIf(!producer.available)(
   "actual producer yields the feature-owned queue action or receipt",
   async () => {

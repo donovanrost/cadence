@@ -11,6 +11,8 @@ const props = defineProps<{
   sources: Readonly<Partial<Record<Group, SourceState>>>;
   /** Groups showing all their rows (Show all N), so the toggle can offer Show first N. */
   expanded: ReadonlySet<Group>;
+  /** More alarms match than were read (#827): the list must not look complete. */
+  alarmsTruncated?: boolean;
 }>();
 const emit = defineEmits<{
   open: [item: PaletteItem];
@@ -93,6 +95,9 @@ watch(
         >Try again</ApButton
       >
     </div>
+    <p v-if="alarmsTruncated" class="m-0 px-4 py-3 text-md text-text-3" role="status">
+      More alarms match than are shown. Add a spacecraft or point to narrow the search.
+    </p>
     <section v-for="g in groups" :key="g.group" :aria-label="g.group">
       <h2 :data-heading="g.group" tabindex="-1" class="ap-label m-0 px-4 pt-3 pb-1">
         {{ g.group }}

@@ -6,6 +6,8 @@ defmodule Cadence.Control.PlanConfirmation do
   say which passes wait on which provider instead of guessing from reservation states.
   """
 
+  alias Cadence.ContactPlanning.ContactPlanExecutions
+  alias Cadence.Contacts.ProviderReservations
   alias Cadence.Control.ActorRef
   alias Cadence.Control.Contacts, as: ControlContacts
   alias Cadence.GroundNetworks.MissionProviders
@@ -39,17 +41,19 @@ defmodule Cadence.Control.PlanConfirmation do
   def detail(organization_id, mission_id, plan_id, opts \\ []) do
     case ManagementContacts.fetch_approved_plan(organization_id, mission_id, plan_id) do
       {:ok, approved} ->
-        items =
-          ControlContacts.list_plan_execution(
+        {items, counts} =
+          ContactPlanExecutions.list_with_counts(
             organization_id,
             mission_id,
             plan_id,
             approved.contact_plan_version
           )
 
+        display = booking_display(organization_id, mission_id, items)
+
         %{
-          unconfirmed: unconfirmed_of(organization_id, mission_id, items, opts),
-          execution: execution(items),
+          unconfirmed: unconfirmed_of(items, counts, display, opts),
+          execution: execution_summary(counts, display.provider_names),
           bookings: bookings(items, resolver_names(organization_id, items))
         }
 
@@ -90,8 +94,17 @@ defmodule Cadence.Control.PlanConfirmation do
       failed: failed
     }
 
-    sent = summary.confirmed + summary.uncertain + summary.rejected + failed
-    Map.merge(summary, %{sent: sent, never_sent: summary.requested - sent})
+    with_sent(summary)
+  end
+
+  defp execution_summary(nil, _names), do: nil
+
+  defp execution_summary(counts, names),
+    do: counts |> with_sent() |> Map.put(:provider_names, names)
+
+  defp with_sent(counts) do
+    sent = counts.confirmed + counts.uncertain + counts.rejected + counts.failed
+    Map.merge(counts, %{sent: sent, never_sent: counts.requested - sent})
   end
 
   @doc """
@@ -193,7 +206,7 @@ defmodule Cadence.Control.PlanConfirmation do
   defp placed?(item),
     do: is_binary(item.provider_reservation_id) and item.provider_reservation_id != ""
 
-  defp unconfirmed_of(organization_id, mission_id, items, opts) do
+  defp unconfirmed_of(items, counts, display, opts) do
     window = Keyword.get_lazy(opts, :window_ms, &window_ms/0)
     now = Keyword.get_lazy(opts, :now, &DateTime.utc_now/0)
     cutoff = DateTime.add(now, -window, :millisecond)
@@ -205,8 +218,8 @@ defmodule Cadence.Control.PlanConfirmation do
       late ->
         %{
           window_ms: window,
-          booked: Enum.count(items, &(&1.lifecycle_state == :reserved)),
-          passes: passes(organization_id, mission_id, late)
+          booked: counts.confirmed,
+          passes: passes(late, display)
         }
     end
   end
@@ -236,23 +249,37 @@ defmodule Cadence.Control.PlanConfirmation do
 
   defp late?(_item, _cutoff), do: false
 
-  defp passes(organization_id, mission_id, items) do
-    providers =
-      organization_id
-      |> MissionProviders.list_providers(mission_id)
-      |> Map.new(&{&1.provider_id, &1.display_name})
+  defp booking_display(org, mission, items) do
+    ids =
+      for item <- items,
+          booking_state(item) != "never_sent",
+          placed?(item),
+          do: item.provider_reservation_id
 
+    reservations = ProviderReservations.booking_display_fields(org, mission, ids)
+
+    providers =
+      if map_size(reservations) == 0 do
+        %{}
+      else
+        org
+        |> MissionProviders.list_providers(mission)
+        |> Map.new(&{&1.provider_id, &1.display_name})
+      end
+
+    names =
+      for {_id, reservation} <- reservations,
+          name = providers[reservation.provider_id],
+          uniq: true,
+          do: name
+
+    %{reservations: reservations, providers: providers, provider_names: Enum.sort(names)}
+  end
+
+  defp passes(items, display) do
     items
     |> Enum.map(fn item ->
-      reservation =
-        case ControlContacts.fetch_provider_reservation(
-               organization_id,
-               mission_id,
-               item.provider_reservation_id
-             ) do
-          {:ok, reservation} -> reservation
-          _missing -> nil
-        end
+      reservation = display.reservations[item.provider_reservation_id]
 
       {reservation && reservation.starts_at,
        %{
@@ -260,7 +287,10 @@ defmodule Cadence.Control.PlanConfirmation do
          item_id: item.contact_plan_execution_item_id,
          provider:
            reservation &&
-             %{id: reservation.provider_id, name: Map.get(providers, reservation.provider_id)},
+             %{
+               id: reservation.provider_id,
+               name: Map.get(display.providers, reservation.provider_id)
+             },
          sent_at: item.started_at
        }}
     end)

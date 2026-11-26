@@ -19,6 +19,7 @@ defmodule Cadence.Comms.TransportStore do
   alias Cadence.Contacts.ProfileStore
   alias Cadence.Listing
   alias Cadence.Missions
+  alias Cadence.Persistence.BulkLookup
   alias Cadence.Platform.RedactedJson
   alias Cadence.Repo
 
@@ -143,6 +144,14 @@ defmodule Cadence.Comms.TransportStore do
       nil -> {:error, :transport_not_found}
       %TransportRow{} = row -> {:ok, TransportRow.to_domain(row)}
     end
+  end
+
+  @doc "Exact mission transport versions keyed by `{id, version}`."
+  def fetch_transport_versions(organization_id, mission_id, keys) do
+    TransportRow
+    |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
+    |> BulkLookup.by_version(:transport_id, keys)
+    |> Map.new(&{{&1.transport_id, &1.version}, TransportRow.to_domain(&1)})
   end
 
   @doc "A mission's transports (latest versions); archived ones only with `include_archived: true` (U82)."

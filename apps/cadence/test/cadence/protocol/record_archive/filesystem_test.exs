@@ -524,8 +524,10 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
       assert %{queue_depth: 1} = RecordArchive.stats(policy, mission_id)
 
       Cadence.ProtocolArchiveFaultRepo.recover()
+      # Flush explicitly after recovery; the scheduled retry may be seconds away.
+      assert :ok = RecordArchive.flush(policy, mission_id)
       # The transaction yields the segment it indexed.
-      assert_receive {:archive_write_completed, {:ok, %SegmentRow{}}}, 2_000
+      assert_receive {:archive_write_completed, {:ok, %SegmentRow{}}}
 
       assert %{queue_depth: 0, backpressured?: false, flushed_count: ^index} =
                RecordArchive.stats(policy, mission_id)

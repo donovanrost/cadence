@@ -3,7 +3,7 @@ defmodule CadenceSimulator.StoreRestart do
   #331: waits until the provider store is back after a stop or kill, and READY.
 
   A GenServer registers its name before `init/1` runs, and the store builds its ETS mirror in
-  `init/1` (loading the DETS file). Reads go straight to that table from the caller (qa #46), so a
+  `init/1` (loading the snapshot). Reads go straight to that table from the caller (qa #46), so a
   test that only waits for a new pid under the name can read before the table exists. That's the
   'table identifier does not refer to an existing ETS table' flake. A synchronous call to the new
   pid is handled only after `init/1` has returned, so once it answers, the mirror exists.

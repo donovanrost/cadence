@@ -46,7 +46,7 @@ defmodule CadenceSimulator.SendBuffer do
     :jitter_ms,
     :connect_timeout,
     :send_timeout,
-    :reconnect_interval,
+    :reconnect_timer,
     :reconnect_timer_ref,
     :max_buffer_bytes,
     connection_stats: %{
@@ -149,7 +149,11 @@ defmodule CadenceSimulator.SendBuffer do
       socket_owner: nil,
       connect_timeout: Keyword.get(opts, :connect_timeout, @default_connect_timeout),
       send_timeout: Keyword.get(opts, :send_timeout, @default_send_timeout),
-      reconnect_interval: Keyword.get(opts, :reconnect_interval, @default_reconnect_interval),
+      reconnect_timer:
+        Keyword.get_lazy(opts, :reconnect_timer, fn ->
+          interval = Keyword.get(opts, :reconnect_interval, @default_reconnect_interval)
+          fn pid -> :erlang.start_timer(interval, pid, :reconnect) end
+        end),
       max_buffer_bytes: Keyword.get(opts, :max_buffer_bytes, @default_max_buffer_bytes),
       packet_loss_rate: Map.get(fault_profile, "packet_loss_rate", 0.0),
       latency_ms: Map.get(fault_profile, "latency_ms", 0),
@@ -478,7 +482,7 @@ defmodule CadenceSimulator.SendBuffer do
        when not is_nil(output) do
     %{
       state
-      | reconnect_timer_ref: :erlang.start_timer(state.reconnect_interval, self(), :reconnect)
+      | reconnect_timer_ref: state.reconnect_timer.(self())
     }
   end
 

@@ -39,15 +39,7 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
   def insert_materialized_occurrences(items) when is_list(items) do
     now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
 
-    rows =
-      Enum.map(items, fn item ->
-        item.occurrence
-        |> ContactRequirementOccurrenceRow.changeset()
-        |> Changeset.apply_action!(:insert)
-        |> Map.from_struct()
-        |> Map.take(ContactRequirementOccurrenceRow.__schema__(:fields))
-        |> Map.merge(%{inserted_at: now, updated_at: now})
-      end)
+    rows = Enum.map(items, &ContactRequirementOccurrenceRow.insert_attrs(&1.occurrence, now))
 
     {count, _} =
       Repo.insert_all(ContactRequirementOccurrenceRow, rows, on_conflict: :nothing)
@@ -295,24 +287,6 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
 
     query = if lock?, do: lock(query, "FOR SHARE"), else: query
     Repo.all(query)
-  end
-
-  @doc """
-  `[{occurrence_at, spacecraft_id}]` of `template_id`'s generated occurrences at or after `since`,
-  any version (U48 edit dry run, `TemplateDayReview`), at most `fan_out_limit/0`.
-  """
-  @spec generated_days(binary(), binary(), binary(), DateTime.t()) :: [{DateTime.t(), binary()}]
-  def generated_days(org, mission, template_id, %DateTime{} = since) do
-    from(o in ContactRequirementOccurrenceRow,
-      where:
-        o.organization_id == ^org and o.mission_id == ^mission and
-          o.contact_requirement_template_id == ^template_id and
-          o.generation_state == "generated" and o.occurrence_at >= ^since,
-      distinct: true,
-      select: {o.occurrence_at, o.spacecraft_id},
-      limit: ^fan_out_limit()
-    )
-    |> Repo.all()
   end
 
   @spec materialize(

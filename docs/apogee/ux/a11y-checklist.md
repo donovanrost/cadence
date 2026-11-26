@@ -1,9 +1,9 @@
 # Accessibility checklist: interactions and newer surfaces (ux, for qa's §6 pass)
 
-qa's run 2 (`qa/a11y/README.md`) covered axe, h1 and landmarks, and Tab traversal, read-only, on 36 screens. This
-list covers what that method can't see: what happens when something is **opened, confirmed or closed**. It also
+The console's a11y specs (`frontend/apps/console/e2e/a11y/README.md`) cover axe, h1 and landmarks, and Tab traversal, read-only, on every screen. This
+list covers what a load-and-Tab sweep can't see: what happens when something is **opened, confirmed or closed**. It also
 covers surfaces built after 11-13. The rules are design-language §6. Each line is one pass/fail check. Run at 1440
-and 390 as admin and member, as before, and record results in the screen's `qa/a11y/<screen>.md`.
+and 390 as admin and member, and record results on #189.
 
 ## A. Every sheet and dialog (check each one listed in C)
 1. **Opens with focus inside it:** on the first field. For a **danger** sheet, focus goes to the safe button

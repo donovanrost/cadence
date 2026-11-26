@@ -6,14 +6,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "typescript";
 
 const containers = ["apps", "modules", "packages"];
-const excluded = new Set([
-  "node_modules",
-  "dist",
-  "coverage",
-  "storybook-static",
-  ".git",
-  "vendor",
-]);
+const excluded = new Set(["node_modules", "dist", "coverage", ".git", "vendor"]);
 const authoredSource = /\.(?:[cm]?[jt]sx?|vue)$/;
 const javascriptSource = /\.[cm]?jsx?$/;
 const compiler = createRequire(import.meta.url).resolve("vue-tsc/bin/vue-tsc.js");

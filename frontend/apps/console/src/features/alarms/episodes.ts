@@ -140,11 +140,15 @@ export function fetchEpisodePage(
   missionId: MissionId,
   state: "active" | "cleared",
   cursor: string | null,
-  limit = 200,
+  signal?: AbortSignal,
 ) {
-  const params = new URLSearchParams({ state, limit: String(limit) });
+  const params = new URLSearchParams({ state, limit: "200" });
   if (cursor) params.set("cursor", cursor);
-  return requestPage(`${base(missionId)}?${params.toString()}`, episodesReader);
+  return requestPage(
+    `${base(missionId)}?${params.toString()}`,
+    episodesReader,
+    signal ? { signal } : {},
+  );
 }
 
 export function fetchEpisode(missionId: MissionId, episodeId: string, signal?: AbortSignal) {

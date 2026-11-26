@@ -65,7 +65,6 @@ void test("Phoenix publication emits only the host runtime and no mutable fallba
     for (const forbidden of [
       "http://localhost/",
       "demo-auth-service",
-      "contract-probe",
       "sourceMappingURL",
       "import.meta.hot",
       "/@vite/client",

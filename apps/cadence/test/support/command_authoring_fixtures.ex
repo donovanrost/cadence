@@ -2,7 +2,7 @@ defmodule Cadence.CommandAuthoringFixtures do
   @moduledoc false
   alias Cadence.Catalog.Importers.CadenceYamlDatabase
   alias Cadence.Catalog.Source
-  alias Cadence.{CommandReviewFixtures, Ids, MissionModelFixtures, MissionModels, SourceEndpoints}
+  alias Cadence.{CommandReviewFixtures, Ids, MissionModelFixtures, MissionModels}
   alias Cadence.SourceEndpoints.SourceEndpoint
 
   def fixture! do
@@ -13,17 +13,19 @@ defmodule Cadence.CommandAuthoringFixtures do
   end
 
   def target!(org, mission, attrs \\ %{}) do
+    endpoint_id = Ids.new("authoring_target")
+
     {:ok, target} =
-      SourceEndpoints.persist_source_endpoint(
+      Cadence.SourceEndpointFixtures.persist(
         org,
         SourceEndpoint.new(
           Map.merge(
             %{
               organization_id: org,
               mission_id: mission,
-              source_endpoint_id: Ids.new("authoring_target"),
+              source_endpoint_id: endpoint_id,
               display_name: "Flight command endpoint",
-              source_ref: "fixture:uplink",
+              source_ref: "fixture:uplink:#{endpoint_id}",
               scid: 7,
               metadata: %{"private" => "target-secret"}
             },

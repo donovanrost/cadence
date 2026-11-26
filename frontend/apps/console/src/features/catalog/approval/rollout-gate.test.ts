@@ -4,6 +4,13 @@ import { modelRevisionReader } from "./api.ts";
 import { rolloutGate } from "./rollout-gate.ts";
 
 const cr = { id: "cr-4", number: 4, label: null, database_id: "db-1" };
+const composition = {
+  composition_id: "comp-4",
+  number: null,
+  imported_layers: [],
+  created_by: null,
+  created_at: "2026-11-26T00:00:00Z",
+};
 function read(o: Record<string, unknown>) {
   const r = decode(modelRevisionReader, {
     id: "mm-4",
@@ -17,6 +24,7 @@ function read(o: Record<string, unknown>) {
     cannot_decide_because: null,
     plans_ready: true,
     comparison: null,
+    composition,
     ...o,
   });
   if (!r.ok) throw new Error(r.error.message);
@@ -24,12 +32,16 @@ function read(o: Record<string, unknown>) {
 }
 
 describe("rolloutGate (U102 'Where', #195)", () => {
-  it("offers C3 for an approved revision, for its catalog revision", () => {
+  it("offers C3 for an approved revision, pinning its composition (D3, #544)", () => {
     expect(rolloutGate(read({ status: "approved" }))).toEqual({
       kind: "rollout",
-      revision: { id: "cr-4", number: 4 },
+      revision: { id: "cr-4", number: 4, compositionId: "comp-4" },
       catalogRevision: cr,
     });
+  });
+
+  it("offers no C3 for an approved revision without a composition to pin", () => {
+    expect(rolloutGate(read({ status: "approved", composition: null }))).toEqual({ kind: "none" });
   });
 
   it("says why in C3's place while it waits for approval, or once it's rejected", () => {

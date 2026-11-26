@@ -1,29 +1,26 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
-import { useMissionScope } from "@/shell";
-import { postureChips, useFleet } from "@/features/fleet/index.ts";
+import { useFleetPosture } from "@/shell";
+import { postureChips, postureFromCounts } from "@/features/fleet/index.ts";
 import { ApStatusMark, stateTextClass } from "@/ui";
 
 /**
  * The cockpit cluster (ux): fleet health chips, the same as the top bar's posture
  * (posture.ts): crit and caution link to Alarms, stale to Fleet, and ground limits off to Apps.
- * The takeover header draws UTC itself (qa: it showed twice inside ClockCluster). There's one
- * fleet read per open dashboard, refreshed by invalidations (lead).
+ * The takeover header draws UTC itself (qa: it showed twice inside ClockCluster). The numbers are
+ * the shell's /counts posture, which the top bar reads too: no fleet read per open dashboard
+ * (#847; it used to read every row only to count them). Nothing until /counts has answered (U20).
  * `words` is the phone status bar's form (ux Dashboards.md §Phone): mark, count and word per chip
  * (`◆ 2 crit`), each a 48px link, and `■ Fleet nominal` when there's nothing to report. The
  * desktop header shows counts only and says nothing when nominal.
  */
 const props = defineProps<{ words?: boolean | undefined }>();
-const scope = useMissionScope();
-const fleet = useFleet(
-  computed(() => scope.value.mission.id),
-  { live: false },
-);
+const posture = useFleetPosture();
 const chips = computed(() => {
-  const s = fleet.state.value;
-  if (s.status !== "ready") return [];
-  const all = postureChips(s.value);
+  const p = posture.value;
+  if (!p) return [];
+  const all = postureChips(postureFromCounts(p));
   return props.words ? all : all.filter((chip) => chip.key !== "nominal");
 });
 </script>

@@ -13,8 +13,6 @@ Reka supplies interaction primitives behind Cadence's APIs.
 - `@cadence/ui`: production Vue controls, presentation/layout components, and the CSS recipes used
   by both Vue and Phoenix HEEx. It depends on tokens and Reka, with Vue as a peer dependency.
 - `@cadence/plugin-sdk`: application/host contracts. It does not own appearance.
-- `apps/storybook`: executable documentation for the real packages and representative production
-  screens. Stories never provide an alternative production component implementation.
 - Application packages: domain state, workflows, data adapters, and domain compositions.
   Applications import shared components directly; there are no local `src/ui` copies.
 
@@ -26,7 +24,7 @@ state. These frontend boundaries do not change those responsibilities.
 The document host imports `@cadence/ui/styles.css` exactly once. Phoenix's `assets/css/app.css`
 imports that source and adds its LiveView directives, template sources, and the dashboard module's
 public `workspace.css` entry.
-Standalone apps and Storybook use the same entry through the pinned Tailwind Vite compiler.
+Standalone apps use the same entry through the pinned Tailwind Vite compiler.
 Each build declares its own source directories explicitly. Phoenix includes first-party remote
 sources so server-authored and remote-authored utility classes both exist in its stylesheet.
 
@@ -85,19 +83,10 @@ additive changes can keep the contract, breaking changes require a new admitted 
 From `frontend`:
 
 ```sh
-corepack pnpm storybook
-corepack pnpm storybook:test
-corepack pnpm storybook:build
 corepack pnpm check
 corepack pnpm test
 corepack pnpm build
 ```
-
-Storybook runs at `http://127.0.0.1:6006`. Component stories live with the shared component.
-Application examples import production screens with deterministic props and mocked actions.
-Chrome-backed stories check accessibility and interactions, including theme propagation, forms,
-loading/disabled states, and overlay focus. Enable `VITE_DESIGN_SYSTEM_SCREENSHOTS=true` during
-`storybook:test` to retain review screenshots under the Storybook build output.
 
 Run Phoenix asset validation and `mix precommit` from the repository root before completion.
 The ownership tests reject local UI copies, experimental token imports, DaisyUI, and theme/reset

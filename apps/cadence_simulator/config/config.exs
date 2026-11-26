@@ -6,7 +6,7 @@ config :cadence_simulator,
   provider_api_token: nil,
   provider_auth_required: false,
   provider_store: [
-    path: Path.expand("../../../var/cadence_simulator_provider.dets", __DIR__)
+    path: Path.expand("../../../var/cadence_simulator_provider.ets", __DIR__)
   ],
   provider_defaults: [definitions_path: nil]
 

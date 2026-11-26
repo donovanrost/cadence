@@ -1038,6 +1038,7 @@ defmodule Cadence.IngressJournal.FileSystem do
         queue_depth: checkpoint.queue_depth,
         entry_count_before: checkpoint.entry_count_before,
         entry_count_after: :gb_trees.size(state.entries),
+        durable_processing_offset: Map.get(state.durable_cursors, :processing),
         reclaimed_entries: reclaimed.entries,
         reclaimed_segments: reclaimed.segments,
         reclaimed_bytes: reclaimed.bytes

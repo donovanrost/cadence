@@ -3,6 +3,6 @@ defmodule CadenceWeb.Console.PassJSON do
 
   @spec passes(map()) :: map()
   def passes(result) do
-    %{from: result.from, to: result.to, truncated: result.truncated, passes: result.passes}
+    Map.take(result, [:from, :to, :truncated, :passes, :counts])
   end
 end

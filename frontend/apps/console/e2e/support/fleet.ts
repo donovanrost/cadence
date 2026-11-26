@@ -294,10 +294,10 @@ export function actionQueueFor(fleet: Json, awaitingViewer = 0): Json {
 
 /**
  * Refuses the console socket, so a routed `/fleet` (data or failure) isn't overwritten by the live
- * `fleet` push. Specs using this must allow `/socket\/console/` diagnostics.
+ * `fleet` push. Specs using this must allow `/\/socket\/websocket/` diagnostics.
  */
 export async function refuseLiveSocket(page: Page): Promise<void> {
-  await page.routeWebSocket(/\/socket\/console\//, (ws) => {
+  await page.routeWebSocket(/\/socket\/websocket/, (ws) => {
     void ws.close({ code: 1011, reason: "qa fixture: live socket disabled" });
   });
 }
@@ -308,7 +308,7 @@ export async function refuseLiveSocket(page: Page): Promise<void> {
  * The fleet normally arrives over the live `fleet` push (realtime.md), which would overwrite the
  * fixture with real data, so the console socket is refused here and the app falls back to polling
  * GET /fleet. These specs therefore test presentation over the polling fallback; specs using this
- * must allow `/socket\/console/` diagnostics.
+ * must allow `/\/socket\/websocket/` diagnostics.
  */
 export async function routeDegradedNow(page: Page, d: Degradation): Promise<void> {
   await refuseLiveSocket(page);

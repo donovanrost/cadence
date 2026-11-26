@@ -57,7 +57,7 @@ How the console is built: `frontend/apps/console/ARCHITECTURE.md`.
 console API call the facade.
 
 **Console API:** `/api/v1` (session-cookie authenticated, CSRF header on writes, JSON 401),
-the console socket at `/socket/console`. The server checks org/mission scope and authorization on
+the console socket at `/socket`. The server checks org/mission scope and authorization on
 every endpoint; client capability checks only hide affordances.
 
 **Console serving:** Phoenix serves `/console/*` (`CadenceWeb.Console.Shell`). In dev, Phoenix stays

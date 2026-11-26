@@ -111,7 +111,8 @@ defmodule Cadence.Management.Contacts.Store.ContactPlanningSearchRow do
     })
   end
 
-  defp domain_attrs(search) do
+  @doc false
+  def domain_attrs(search) do
     %{
       contact_planning_search_id: search.contact_planning_search_id,
       contact_planning_run_id: search.contact_planning_run_id,

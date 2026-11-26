@@ -23,6 +23,9 @@ defmodule Cadence.ContactPlanning.TemplateDays do
 
   @superseded_prefixes ["template_versioned", "left_template_target"]
 
+  @doc false
+  def superseded_prefixes, do: @superseded_prefixes
+
   @type outcome :: :generate | :kept | :done
   @type why :: :planned | :started | :closed | :canceled | nil
 

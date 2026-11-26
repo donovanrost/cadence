@@ -4,7 +4,7 @@ import { RouterLink } from "vue-router";
 import { useConnection } from "@/live";
 import { TopBarLevel, useFleetPosture, useTopBarLevel } from "@/shell";
 import { ApStatusMark, formatHourMinute, stateTextClass } from "@/ui";
-import { POSTURE_WIDE_QUERY, postureChips } from "./posture.ts";
+import { POSTURE_WIDE_QUERY, postureChips, postureFromCounts } from "./posture.ts";
 
 /**
  * The top bar's fleet posture (ux information-architecture.md §Top bar, ca31e877a). It replaces
@@ -25,11 +25,7 @@ const ready = computed(() => posture.value ?? null);
 const chips = computed(() => {
   const p = ready.value;
   if (!p) return [];
-  return postureChips({
-    counts: p,
-    limits: { configured: p.limits_configured },
-    telemetry: p.telemetry,
-  });
+  return postureChips(postureFromCounts(p));
 });
 const offline = computed(() => connection.value === "offline");
 /**

@@ -12,7 +12,6 @@ defmodule CadenceSimulator.CLI do
     config: :string,
     cadence_url: :string,
     api_token: :string,
-    organization_id: :string,
     mission_id: :string,
     realized_contact_id: :string,
     path_id: :string,
@@ -44,7 +43,6 @@ defmodule CadenceSimulator.CLI do
     config: :string,
     cadence_url: :string,
     api_token: :string,
-    organization_id: :string,
     mission_id: :string,
     realized_contact_id: :string,
     path_id: :string,
@@ -149,7 +147,6 @@ defmodule CadenceSimulator.CLI do
     Cadence Bootstrap:
       --cadence-url URL        Resolve path runtime socket info from Cadence
       --api-token TOKEN        Bearer token for the Cadence API
-      --organization-id ID     Organization scope for runtime lookup
       --mission-id ID          Mission scope for runtime lookup
       --realized-contact-id ID Realized contact to inspect
       --path-id ID             Path runtime to inspect
@@ -199,7 +196,6 @@ defmodule CadenceSimulator.CLI do
     Cadence Bootstrap:
       --cadence-url URL        Resolve path runtime socket info from Cadence
       --api-token TOKEN        Bearer token for the Cadence API
-      --organization-id ID     Organization scope for runtime lookup
       --mission-id ID          Mission scope for runtime lookup
       --realized-contact-id ID Realized contact to inspect
       --path-id ID             Path runtime to inspect
@@ -529,7 +525,6 @@ defmodule CadenceSimulator.CLI do
     []
     |> maybe_put(:cadence_url, parsed[:cadence_url])
     |> maybe_put(:api_token, parsed[:api_token])
-    |> maybe_put(:organization_id, parsed[:organization_id])
     |> maybe_put(:mission_id, parsed[:mission_id])
     |> maybe_put(:realized_contact_id, parsed[:realized_contact_id])
     |> maybe_put(:path_id, parsed[:path_id])
@@ -784,11 +779,6 @@ defmodule CadenceSimulator.CLI do
     |> maybe_put_config(
       :api_token,
       fetch_config_value(config_root, ["api_token"]) || fetch_config_value(cadence, ["api_token"])
-    )
-    |> maybe_put_config(
-      :organization_id,
-      fetch_config_value(config_root, ["organization_id"]) ||
-        fetch_config_value(cadence, ["organization_id"])
     )
     |> maybe_put_config(
       :mission_id,

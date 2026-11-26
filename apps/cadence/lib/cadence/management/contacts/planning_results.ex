@@ -14,6 +14,8 @@ defmodule Cadence.Management.Contacts.PlanningResults do
     ContactPlanningSearch
   }
 
+  alias Cadence.Management.Contacts.FleetSnapshotReader
+
   alias Cadence.Management.Contacts.Store.{
     ContactOpportunitySnapshotRow,
     ContactPlanningRunRow,
@@ -22,6 +24,99 @@ defmodule Cadence.Management.Contacts.PlanningResults do
 
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Repo
+
+  # The caller commits these immutable results with the fleet requirement checkpoints.
+  @doc false
+  def insert_fleet_entries(entries) do
+    insert_entries(entries, ContactPlanningRunRow, &List.wrap(&1.run), [:inserted_at, :updated_at])
+
+    insert_entries(entries, ContactPlanningSearchRow, & &1.searches, [:inserted_at])
+
+    insert_entries(
+      entries,
+      ContactOpportunitySnapshotRow,
+      &snapshot_rows/1,
+      [:inserted_at],
+      &Function.identity/1
+    )
+
+    :ok
+  end
+
+  # An array per column keeps the statement shape fixed and avoids thousands of
+  # individual bind parameters. PostgreSQL still validates the ordinary table constraints.
+  defp insert_entries(entries, schema, take_records, timestamp_fields, to_row \\ nil) do
+    now = DateTime.utc_now() |> DateTime.to_naive()
+    fields = schema.__schema__(:fields) -- timestamp_fields
+    sql = fleet_insert_sql(schema, fields, timestamp_fields)
+    to_row = to_row || (&schema.domain_attrs/1)
+
+    entries
+    |> Stream.flat_map(take_records)
+    |> Stream.map(to_row)
+    |> Stream.chunk_every(2_000)
+    |> Enum.each(fn rows ->
+      columns = Enum.map(fields, &column_values(rows, &1))
+      Repo.query!(sql, columns ++ [now])
+    end)
+  end
+
+  defp snapshot_rows(entry) do
+    readiness = Map.new(entry.searches, &{&1.contact_planning_search_id, &1.readiness_document})
+
+    Enum.map(entry.snapshots, fn snapshot ->
+      ContactOpportunitySnapshotRow.compact_attrs(
+        snapshot,
+        Map.fetch!(readiness, snapshot.contact_planning_search_id)
+      )
+    end)
+  end
+
+  defp fleet_insert_sql(schema, fields, timestamp_fields) do
+    arrays =
+      fields
+      |> Enum.with_index(1)
+      |> Enum.map_join(", ", fn {field, index} ->
+        "$#{index}::#{column_type(schema.__schema__(:type, field))}[]"
+      end)
+
+    timestamps =
+      Enum.map_join(timestamp_fields, ", ", fn _ -> "$#{length(fields) + 1}::timestamp" end)
+
+    columns = Enum.join(fields ++ timestamp_fields, ", ")
+    table = schema.__schema__(:source)
+
+    "INSERT INTO #{table} (#{columns}) SELECT batch.*, #{timestamps} FROM unnest(#{arrays}) AS batch"
+  end
+
+  defp column_values(rows, field) do
+    Enum.map(rows, fn row ->
+      case Map.fetch!(row, field) do
+        %DateTime{} = value -> DateTime.to_naive(value)
+        value -> value
+      end
+    end)
+  end
+
+  defp column_type(:string), do: "text"
+  defp column_type(:integer), do: "integer"
+  defp column_type(:boolean), do: "boolean"
+  defp column_type(:map), do: "jsonb"
+  defp column_type(:utc_datetime_usec), do: "timestamp"
+
+  @doc false
+  def fetch_runs(_organization_id, _mission_id, []), do: %{}
+
+  def fetch_runs(organization_id, mission_id, run_ids) do
+    ContactPlanningRunRow
+    |> where(
+      [run],
+      run.organization_id == ^organization_id and run.mission_id == ^mission_id and
+        run.contact_planning_run_id in ^run_ids
+    )
+    |> Repo.all()
+    |> Map.new(&{&1.contact_planning_run_id, ContactPlanningRunRow.to_domain(&1)})
+  end
 
   @spec start_run(ContactPlanningRun.t()) :: {:ok, ContactPlanningRun.t()} | {:error, term()}
   def start_run(%ContactPlanningRun{} = run) do
@@ -72,16 +167,43 @@ defmodule Cadence.Management.Contacts.PlanningResults do
 
   @spec list_snapshots(binary(), binary(), binary()) :: [ContactOpportunitySnapshot.t()]
   def list_snapshots(organization_id, mission_id, run_id) do
-    ContactOpportunitySnapshotRow
-    |> where(
-      [snapshot],
-      snapshot.organization_id == ^organization_id and snapshot.mission_id == ^mission_id and
-        snapshot.contact_planning_run_id == ^run_id
-    )
-    |> order_by([snapshot], asc: snapshot.starts_at, asc: snapshot.provider_opportunity_ref)
-    |> Repo.all()
-    |> Enum.map(&ContactOpportunitySnapshotRow.to_domain/1)
+    list_fleet_snapshots(organization_id, mission_id, [run_id])
   end
+
+  @doc false
+  def list_fleet_snapshots(organization_id, mission_id, run_ids) do
+    run_ids
+    |> Enum.chunk_every(500)
+    |> Enum.flat_map(fn ids ->
+      ContactOpportunitySnapshotRow
+      |> where(
+        [snapshot],
+        snapshot.organization_id == ^organization_id and snapshot.mission_id == ^mission_id and
+          snapshot.contact_planning_run_id in ^ids
+      )
+      |> order_by([snapshot],
+        asc: snapshot.contact_planning_run_id,
+        asc: snapshot.starts_at,
+        asc: snapshot.provider_opportunity_ref
+      )
+      |> Repo.all()
+      |> Repo.preload(:search)
+      |> Enum.map(&ContactOpportunitySnapshotRow.to_domain/1)
+    end)
+  end
+
+  @doc "Streams compact immutable opportunity snapshots for fleet optimization."
+  def stream_fleet_snapshots(organization_id, mission_id, run_ids),
+    do: FleetSnapshotReader.stream(organization_id, mission_id, run_ids)
+
+  @doc "Finds the planning runs that supplied selected fleet opportunities."
+  def planning_run_ids_for_fleet_snapshots(organization_id, mission_id, snapshot_ids),
+    do:
+      FleetSnapshotReader.planning_run_ids_for_snapshots(
+        organization_id,
+        mission_id,
+        snapshot_ids
+      )
 
   @doc "A bounded live run ledger; the selected run must be fetched by its exact identity."
   def list_runs_page(organization_id, mission_id, requirement_id, page)
@@ -134,13 +256,15 @@ defmodule Cadence.Management.Contacts.PlanningResults do
       asc: snapshot.provider_opportunity_ref,
       asc: snapshot.contact_opportunity_snapshot_id
     )
-    |> result_page(page, &ContactOpportunitySnapshotRow.to_domain/1)
+    |> result_page(page, &ContactOpportunitySnapshotRow.to_domain/1, [:search])
   end
 
   def list_snapshots_page(_, _, _, _), do: {:error, :invalid_planning_result_page}
 
-  defp result_page(query, page, to_domain) do
-    rows = query |> offset(^((page - 1) * 25)) |> limit(26) |> Repo.all()
+  defp result_page(query, page, to_domain, preloads \\ []) do
+    rows =
+      query |> offset(^((page - 1) * 25)) |> limit(26) |> Repo.all() |> Repo.preload(preloads)
+
     {:ok, %{entries: rows |> Enum.take(25) |> Enum.map(to_domain), more?: length(rows) > 25}}
   end
 
@@ -220,6 +344,6 @@ defmodule Cadence.Management.Contacts.PlanningResults do
     snapshot
     |> ContactOpportunitySnapshotRow.changeset()
     |> Repo.insert!()
-    |> ContactOpportunitySnapshotRow.to_domain()
+    |> ContactOpportunitySnapshotRow.to_domain(snapshot.route_binding_document)
   end
 end

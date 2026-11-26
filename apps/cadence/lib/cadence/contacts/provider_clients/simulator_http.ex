@@ -301,9 +301,19 @@ defmodule Cadence.Contacts.ProviderClients.SimulatorHTTP do
         |> maybe_put(:json, Keyword.get(opts, :json))
         |> maybe_put(:params, Keyword.get(opts, :params))
 
-      normalize_response(req_request.(request_opts))
+      normalize_response(req_request.(request_opts), path)
     end
   end
+
+  # The typed opportunity decoder and the evidence projection each sanitize their own input.
+  defp normalize_response(
+         {:ok, %Req.Response{status: status, body: %{"data" => _data} = body}},
+         "/provider/v1/opportunities/search"
+       )
+       when status >= 200 and status < 300,
+       do: {:ok, body}
+
+  defp normalize_response(result, _path), do: normalize_response(result)
 
   defp normalize_response({:ok, %Req.Response{status: status, body: %{"data" => _data} = body}})
        when status >= 200 and status < 300,

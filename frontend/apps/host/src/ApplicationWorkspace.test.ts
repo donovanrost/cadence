@@ -26,15 +26,33 @@ type TestBridge = HttpHostBridge & {
   unsubscribe: ReturnType<typeof vi.fn<() => void>>;
 };
 
-const workspaceCatalog = catalogFromDemo();
+const workspaceCatalog = twoApplicationCatalog();
 
-function catalogFromDemo(): FrontendApplicationCatalog {
+/**
+ * The demo host's catalog plus a second, independently released application, so a test can switch
+ * between two. The demo itself now ships only Telemetry Decom (#661 deleted the contract probe).
+ */
+function twoApplicationCatalog(): FrontendApplicationCatalog {
   const response = new DemoHostService("development").handle({
     method: "GET",
     url: "/api/cadence/application-host/v1/catalog",
   });
   assertFrontendApplicationCatalog(response?.body);
-  return response.body;
+  const first = required(response.body.applications[0]);
+  const second = {
+    ...first,
+    applicationKey: "fixture_overview",
+    displayName: "Fixture Overview",
+    surface: {
+      ...first.surface,
+      surfaceId: "fixture_overview",
+      navigation: { label: "Fixture overview", order: 90 },
+    },
+    release: { ...first.release, remoteName: "fixture_overview_current_1" },
+  };
+  const catalog = { ...response.body, applications: [first, second] };
+  assertFrontendApplicationCatalog(catalog);
+  return catalog;
 }
 
 function testBridge(): TestBridge {

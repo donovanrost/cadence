@@ -220,7 +220,7 @@ test("replacing props while creation is pending ignores the late receipt and ret
   wrapper.unmount();
 });
 
-const producer = producerFixture("CADENCE_FLEET_START", import.meta.url);
+const producer = producerFixture("CADENCE_FLEET_START");
 test.skipIf(!producer.available)("producer-supplied fleet creation workflow", async () => {
   const supplied = jsonFixture(producer.read());
   const model = required(admitFleetStart(supplied.model)),

@@ -5,18 +5,6 @@ defmodule CadenceWeb.ControlPlaneApiTest do
 
   import CadenceWeb.ControlPlaneApiFixtures
 
-  test "the legacy runtime reads remain routed until the simulator moves to /api/v1" do
-    base = "/api/organizations/org/missions/mission/realized_contacts/contact"
-
-    for {suffix, action} <- [
-          {"/runtime", :runtime},
-          {"/paths/path/runtime", :path_runtime}
-        ] do
-      assert %{plug: CadenceWeb.RealizedContactController, plug_opts: ^action} =
-               Phoenix.Router.route_info(CadenceWeb.Router, "GET", base <> suffix, "localhost")
-    end
-  end
-
   test "retired contact and link APIs have no routes" do
     base = "/api/organizations/org/missions/mission"
 
@@ -24,6 +12,8 @@ defmodule CadenceWeb.ControlPlaneApiTest do
           {"GET", "/scheduled_contacts"},
           {"POST", "/scheduled_contacts/contact/realize"},
           {"GET", "/realized_contacts"},
+          {"GET", "/realized_contacts/contact/runtime"},
+          {"GET", "/realized_contacts/contact/paths/path/runtime"},
           {"POST", "/realized_contacts/contact/end_early"},
           {"GET", "/contact_actions"},
           {"GET", "/provider_profiles"},
@@ -257,154 +247,6 @@ defmodule CadenceWeb.ControlPlaneApiTest do
              }
            } = json_response(packet_definition_conn, 201)
 
-    source_endpoint_conn =
-      conn
-      |> authorize(api_token)
-      |> post(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/spacecraft/spacecraft-001/source_endpoints",
-        %{
-          "source_endpoint" => %{
-            "source_endpoint_id" => "source-endpoint-001",
-            "source_ref" => "sc-001",
-            "scid" => 23,
-            "display_name" => "SC-001 Primary Endpoint"
-          }
-        }
-      )
-
-    assert %{
-             "data" => %{
-               "source_endpoint_id" => "source-endpoint-001",
-               "organization_id" => ^organization_id,
-               "mission_id" => ^mission_id,
-               "spacecraft_id" => "spacecraft-001"
-             }
-           } = json_response(source_endpoint_conn, 201)
-
-    spacecraft_source_endpoints_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/spacecraft/spacecraft-001/source_endpoints"
-      )
-
-    assert %{
-             "data" => [
-               %{
-                 "source_endpoint_id" => "source-endpoint-001",
-                 "spacecraft_id" => "spacecraft-001"
-               }
-             ]
-           } = json_response(spacecraft_source_endpoints_conn, 200)
-
-    source_endpoint_show_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/source_endpoints/source-endpoint-001"
-      )
-
-    assert %{
-             "data" => %{
-               "source_endpoint_id" => "source-endpoint-001",
-               "display_name" => "SC-001 Primary Endpoint",
-               "spacecraft_id" => "spacecraft-001"
-             }
-           } = json_response(source_endpoint_show_conn, 200)
-
     assert_binding_set_activation(conn, api_token, organization_id, mission_id)
-  end
-
-  test "authenticated mission read endpoints expose mission health and mission events", %{
-    conn: conn
-  } do
-    %{conn: conn, api_token: api_token, organization_id: organization_id, mission_id: mission_id} =
-      bootstrap(conn)
-
-    seed_mission_read_models(organization_id, mission_id)
-
-    mission_health_conn =
-      conn
-      |> authorize(api_token)
-      |> get("/api/organizations/#{organization_id}/missions/#{mission_id}/mission_health")
-
-    assert %{
-             "data" => %{
-               "organization_id" => ^organization_id,
-               "mission_id" => ^mission_id,
-               "total_points" => 2,
-               "violating_points" => 1,
-               "worst_normalized_state" => "yellow",
-               "normalized_state_counts" => %{
-                 "red" => 0,
-                 "yellow" => 1,
-                 "green" => 1,
-                 "blue" => 0
-               },
-               "scope_summaries" => [
-                 %{
-                   "scope_kind" => "spacecraft",
-                   "spacecraft_id" => "spacecraft-001",
-                   "total_points" => 2,
-                   "violating_points" => 1
-                 }
-               ]
-             }
-           } = json_response(mission_health_conn, 200)
-
-    spacecraft_health_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/mission_health?spacecraft_id=spacecraft-001"
-      )
-
-    assert %{
-             "data" => %{
-               "organization_id" => ^organization_id,
-               "mission_id" => ^mission_id,
-               "total_points" => 2,
-               "violating_points" => 1,
-               "scope_summaries" => [
-                 %{
-                   "scope_kind" => "spacecraft",
-                   "spacecraft_id" => "spacecraft-001"
-                 }
-               ]
-             }
-           } = json_response(spacecraft_health_conn, 200)
-
-    mission_events_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/mission_events?category=health&limit=10"
-      )
-
-    assert %{
-             "data" => [
-               %{
-                 "organization_id" => ^organization_id,
-                 "mission_id" => ^mission_id,
-                 "category" => "health",
-                 "kind" => "limit_violation",
-                 "severity" => "warning",
-                 "subject_kind" => "telemetry_point",
-                 "subject_id" => "HK.counter"
-               }
-             ]
-           } = json_response(mission_events_conn, 200)
-
-    all_mission_events_conn =
-      conn
-      |> authorize(api_token)
-      |> get("/api/organizations/#{organization_id}/missions/#{mission_id}/mission_events")
-
-    assert %{
-             "data" => mission_events
-           } = json_response(all_mission_events_conn, 200)
-
-    assert Enum.any?(mission_events, &(&1["kind"] == "scheduled_contact_canceled"))
-    assert Enum.any?(mission_events, &(&1["kind"] == "limit_violation"))
   end
 end

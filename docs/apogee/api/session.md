@@ -44,7 +44,7 @@ The bootstrap payload.
       }
     ],
     "csrf_token": "…",
-    "socket": {"path": "/socket/console"},
+    "socket": {"path": "/socket"},
     "pending_invitations_count": 1
   }
 }

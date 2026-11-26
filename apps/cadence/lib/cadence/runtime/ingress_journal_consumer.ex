@@ -6,6 +6,10 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
   archive custody has an independent consumer and acknowledgement. This
   consumer has at most one bounded contiguous range in flight, which makes the
   cursor protocol explicit and bounds replay work after a process restart.
+
+  The journal's DURABLE resume point also waits for the semantic snapshot of every partition
+  that consumed the stream (`SnapshotGate`, DECISIONS #94/#96), so a restart replays at most
+  what the snapshots do not cover. The read cursor, and so flow control, does not wait.
   """
 
   use GenServer
@@ -14,11 +18,15 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
 
   alias Cadence.IngressJournal.{Entry, Evidence, FileSystem, IngestTelemetry}
   alias Cadence.Platform.SnapshotCall
-  alias Cadence.Runtime.ProviderIngressExecutor
+  alias Cadence.Runtime.IngressJournalConsumer.SnapshotGate
+  alias Cadence.Runtime.{ProviderIngressExecutor, SemanticSnapshotNotifier}
 
   @default_poll_interval_ms 10
   @default_max_batch_entries 8
   @default_max_batch_bytes 2 * 1_024 * 1_024
+  # How long quiescing waits for the partition's end-of-pass snapshot before it gives up on the
+  # gate and acks what was read (the journal can then drain; a crash loses at most that tail).
+  @default_quiesce_snapshot_wait_ms 10_000
 
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) when is_list(opts) do
@@ -103,6 +111,7 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
         positive_option(opts, config, :processing_max_batch_bytes, @default_max_batch_bytes),
       retry_initial_ms: positive_option(opts, config, :retry_initial_ms, 250),
       retry_max_ms: positive_option(opts, config, :retry_max_ms, 30_000),
+      retry_scheduler: Keyword.get(opts, :retry_scheduler, &Process.send_after/3),
       retry_ref: nil,
       retry_delay_ms: 0,
       consecutive_failures: 0,
@@ -127,6 +136,15 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
       # would retry forever); raised by each ack.
       resume_floor: 0,
       last_incomplete: nil,
+      # The semantic snapshots gating the durable resume point (see SnapshotGate); `stream_id`
+      # is learned from the first batch, `last_finished` is the last acked batch's end offset and where its
+      # processing finished (the resume point the journal gets once the snapshots cover it).
+      snapshot_gate: SnapshotGate.new(),
+      stream_id: nil,
+      last_finished: nil,
+      quiesce_started_at: nil,
+      quiesce_snapshot_wait_ms:
+        Keyword.get(opts, :quiesce_snapshot_wait_ms, @default_quiesce_snapshot_wait_ms),
       incomplete_at_end: %{frame_bytes: 0, packet_octets: 0, journal_bytes: 0},
       # The frame-SCID cross-check's running tally for this stream (DECISIONS #102): nil until a
       # batch reports one (no expected SCID: never).
@@ -149,6 +167,7 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
      %{
        state
        | lifecycle_status: :quiescing,
+         quiesce_started_at: state.quiesce_started_at || System.monotonic_time(:millisecond),
          quiesce_waiters: [from | state.quiesce_waiters]
      }}
   end
@@ -237,6 +256,44 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
 
   def handle_info({:retry, _stale_ref}, state), do: {:noreply, state}
 
+  # A partition committed a snapshot covering this stream up to `offset`: the durable resume point
+  # may follow it. Mid-batch, that batch's ack applies it; idle, release it now.
+  def handle_info({:semantic_snapshot_durable, partition, stream_id, offset}, state)
+      when stream_id == state.stream_id do
+    gate = SnapshotGate.snapshotted(state.snapshot_gate, partition, offset)
+    {:noreply, release_snapshot(%{state | snapshot_gate: gate})}
+  end
+
+  def handle_info({:semantic_snapshot_durable, _partition, _stream_id, _offset}, state),
+    do: {:noreply, state}
+
+  # A partition recovered from a snapshot: if this consumer has processed its stream past what the
+  # snapshot includes, the state lacks those batches. Restart, which reads the stream again from the
+  # durable resume point; the partition skips the frames its snapshot already holds.
+  def handle_info({:semantic_partition_recovered, partition, resume}, state) do
+    if replay_from_snapshot?(state, partition, resume) do
+      Logger.warning(
+        "Ingress journal consumer replays from a recovered semantic snapshot of #{partition}",
+        mission_id: state.mission_id,
+        path_id: state.path_id
+      )
+
+      {:stop, {:shutdown, :semantic_replay}, state}
+    else
+      {:noreply, state}
+    end
+  end
+
+  # A partition stopped after its final snapshot: it must not pin the durable cursor for good.
+  def handle_info({:semantic_snapshot_stopped, partition, stream_id}, state)
+      when stream_id == state.stream_id do
+    gate = SnapshotGate.release(state.snapshot_gate, partition)
+    {:noreply, release_snapshot(%{state | snapshot_gate: gate})}
+  end
+
+  def handle_info({:semantic_snapshot_stopped, _partition, _stream_id}, state),
+    do: {:noreply, state}
+
   # Trapping exits (#270): a linked process's normal exit changes nothing; any other stops the
   # consumer with the same reason, as an untrapped link would.
   def handle_info({:EXIT, _pid, :normal}, state), do: {:noreply, state}
@@ -252,7 +309,8 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
         resume: Map.get(progress, :resume_offset),
         incomplete: Map.get(progress, :incomplete),
         scid_check: Map.get(progress, :scid_check),
-        counts: Map.get(progress, :counts)
+        counts: Map.get(progress, :counts),
+        snapshot_partition: Map.get(progress, :snapshot_partition)
       })
 
     acknowledge_batch(%{state | in_flight: batch})
@@ -299,7 +357,7 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
       counts: nil
     }
 
-    state = %{state | in_flight: batch} |> load_resume_slice()
+    state = %{state | in_flight: batch} |> load_resume_slice() |> subscribe_to_snapshots(first)
 
     with {:ok, raw_evidence} <- Evidence.from_contiguous_entries(entries),
          raw_evidence = slice(raw_evidence, state.resume_slice),
@@ -359,13 +417,20 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
   end
 
   defp acknowledge_batch(%{in_flight: batch} = state) do
-    # Acked through the batch's end, durable only to where the stream may resume: the start of a
-    # frame or packet still incomplete (domain's partial-frame fix, 11-15).
+    # Processing finished through the batch's end, and the stream may resume (durably) at the start
+    # of a frame or packet still incomplete (domain's partial-frame fix, 11-15). The journal's
+    # durable resume point is that, held back to the partitions' last snapshots (SnapshotGate).
+    finished = batch_resume(batch, state.resume_floor) || batch.last.end_offset
+    partition = Map.get(batch, :snapshot_partition)
+    if partition, do: SemanticSnapshotNotifier.subscribe_partition(partition)
+    gate = SnapshotGate.note(state.snapshot_gate, partition)
+    resume = SnapshotGate.limit(gate, finished, state.resume_floor)
+
     case FileSystem.acknowledge(
            state.journal_name,
            :processing,
            batch.last.end_offset,
-           resume_offset: batch_resume(batch, state.resume_floor)
+           resume_offset: resume
          ) do
       :ok ->
         send(self(), :consume)
@@ -376,7 +441,9 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
            state
            | in_flight: nil,
              resume_slice: nil,
-             resume_floor: batch_resume(batch, state.resume_floor) || batch.last.end_offset,
+             resume_floor: resume,
+             snapshot_gate: gate,
+             last_finished: {batch.last.end_offset, finished},
              last_incomplete: Map.get(batch, :incomplete),
              scid_check: add_scid_check(state.scid_check, Map.get(batch, :scid_check)),
              acknowledged_batches: state.acknowledged_batches + 1,
@@ -394,6 +461,40 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
     end
   end
 
+  defp replay_from_snapshot?(state, partition, resume) do
+    with true <- MapSet.member?(state.snapshot_gate.partitions, partition),
+         {_end_offset, finished} <- state.last_finished do
+      finished > Map.get(resume, state.stream_id, state.resume_floor)
+    else
+      _no_gate_or_nothing_processed -> false
+    end
+  end
+
+  defp subscribe_to_snapshots(%{stream_id: nil} = state, %Entry{stream_id: stream_id}) do
+    SemanticSnapshotNotifier.subscribe(stream_id)
+    %{state | stream_id: stream_id}
+  end
+
+  defp subscribe_to_snapshots(state, _first), do: state
+
+  # Idle, with a snapshot newly covering more than the durable resume point: re-ack the read
+  # position with the higher resume point. Mid-batch the batch's own ack applies it.
+  defp release_snapshot(%{in_flight: nil, last_finished: {end_offset, finished}} = state) do
+    resume = SnapshotGate.limit(state.snapshot_gate, finished, state.resume_floor)
+
+    with true <- resume > state.resume_floor,
+         :ok <-
+           FileSystem.acknowledge(state.journal_name, :processing, end_offset,
+             resume_offset: resume
+           ) do
+      %{state | resume_floor: resume}
+    else
+      _unchanged_or_retried_at_the_next_snapshot -> state
+    end
+  end
+
+  defp release_snapshot(state), do: state
+
   defp retry_after_failure(state, reason) do
     delay =
       if state.consecutive_failures == 0,
@@ -401,7 +502,7 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
         else: min(state.retry_delay_ms * 2, state.retry_max_ms)
 
     ref = make_ref()
-    Process.send_after(self(), {:retry, ref}, delay)
+    state.retry_scheduler.(self(), {:retry, ref}, delay)
     phase = if state.in_flight, do: state.in_flight.phase, else: :read
 
     range =
@@ -431,21 +532,57 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
   end
 
   defp settle_or_schedule(%{lifecycle_status: :quiescing} = state) do
-    state = give_up_incomplete(state)
-    settlement = quiescence_settlement(state)
-    Enum.each(state.quiesce_waiters, &GenServer.reply(&1, {:ok, settlement}))
-
-    {:noreply,
-     %{
-       state
-       | lifecycle_status: :quiesced,
-         quiesce_waiters: []
-     }}
+    if snapshot_pending?(state) do
+      schedule_consume(state.poll_interval_ms)
+      {:noreply, state}
+    else
+      {:noreply, settle_quiesced(state)}
+    end
   end
 
   defp settle_or_schedule(state) do
     schedule_consume(state.poll_interval_ms)
     {:noreply, state}
+  end
+
+  # Quiescing (the contact's end) waits, a bounded time, for the partition's end-of-pass snapshot
+  # to cover what was read; after that it releases the journal anyway so the stream can drain.
+  defp snapshot_pending?(%{last_finished: {_end, finished}} = state) do
+    SnapshotGate.holding?(state.snapshot_gate, finished, state.resume_floor) and
+      System.monotonic_time(:millisecond) - state.quiesce_started_at <
+        state.quiesce_snapshot_wait_ms
+  end
+
+  defp snapshot_pending?(_state), do: false
+
+  defp release_ungated(%{last_finished: {end_offset, finished}} = state) do
+    if SnapshotGate.holding?(state.snapshot_gate, finished, state.resume_floor) do
+      Logger.warning(
+        "Ingress journal released past the semantic snapshot at the end of the stream: " <>
+          "durable resume #{state.resume_floor}, processed through #{finished}",
+        mission_id: state.mission_id,
+        path_id: state.path_id
+      )
+
+      case FileSystem.acknowledge(state.journal_name, :processing, end_offset,
+             resume_offset: finished
+           ) do
+        :ok -> %{state | resume_floor: finished, snapshot_gate: SnapshotGate.new()}
+        {:error, _reason} -> state
+      end
+    else
+      state
+    end
+  end
+
+  defp release_ungated(state), do: state
+
+  defp settle_quiesced(state) do
+    state = state |> release_ungated() |> give_up_incomplete()
+    settlement = quiescence_settlement(state)
+    Enum.each(state.quiesce_waiters, &GenServer.reply(&1, {:ok, settlement}))
+
+    %{state | lifecycle_status: :quiesced, quiesce_waiters: []}
   end
 
   defp quiescence_settlement(state) do

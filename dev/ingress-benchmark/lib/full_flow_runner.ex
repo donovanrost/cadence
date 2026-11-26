@@ -10,7 +10,6 @@ defmodule Cadence.IngressBenchmark.FullFlowRunner do
   alias Cadence.Organizations.Organization
   alias Cadence.Protocol.RecordArchive.Postgres.ProtocolAnomalyRow
   alias Cadence.Runtime.MissionRuntimeSpec
-  alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
   alias Cadence.Telemetry.Profiler
   alias CadenceSimulator.IngressBenchmark.{Manifest, Preflight}
@@ -297,7 +296,6 @@ defmodule Cadence.IngressBenchmark.FullFlowRunner do
       organization_id: "org-ingress-benchmark-" <> run_suffix,
       mission_id: "mission-ingress-benchmark-" <> run_suffix,
       spacecraft_id: "spacecraft-ingress-benchmark-" <> run_suffix,
-      source_endpoint_id: "source-ingress-benchmark-" <> run_suffix,
       realized_contact_id: "contact-ingress-benchmark-" <> run_suffix,
       path_id: "path-ingress-benchmark-" <> run_suffix,
       provider_binding_id: "provider-ingress-benchmark-" <> run_suffix
@@ -333,17 +331,14 @@ defmodule Cadence.IngressBenchmark.FullFlowRunner do
     {:ok, _spacecraft} =
       Cadence.SpacecraftStore.persist_spacecraft(ids.organization_id, spacecraft)
 
-    source_endpoint =
-      SourceEndpoint.new(%{
-        source_endpoint_id: ids.source_endpoint_id,
-        mission_id: ids.mission_id,
+    {:ok, source_endpoint} =
+      Cadence.SourceEndpoints.create_source_endpoint(ids.organization_id, ids.mission_id, %{
         spacecraft_id: ids.spacecraft_id,
         source_ref: "benchmark/tcp/downlink",
         display_name: "Ingress benchmark source"
       })
 
-    {:ok, _source_endpoint} =
-      Cadence.SourceEndpoints.persist_source_endpoint(ids.organization_id, source_endpoint)
+    ids = Map.put(ids, :source_endpoint_id, source_endpoint.source_endpoint_id)
 
     binding_set =
       BindingSet.new(%{

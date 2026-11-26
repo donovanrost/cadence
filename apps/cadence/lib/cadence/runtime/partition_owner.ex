@@ -10,6 +10,7 @@ defmodule Cadence.Runtime.PartitionOwner do
 
   alias Cadence.Runtime.AdmittedFraming
   alias Cadence.Runtime.Cluster
+  alias Cadence.Runtime.PartitionOwner.SemanticSnapshots
 
   alias Cadence.ApplicationDispatch.{
     BindingSet,
@@ -181,6 +182,7 @@ defmodule Cadence.Runtime.PartitionOwner do
         {:ok, state} ->
           {:ok,
            state
+           |> start_semantic_snapshots(opts)
            |> Map.put(:admission_monitor, monitor)
            |> Map.put(:admission_source, Keyword.get(opts, :spec_source))}
 
@@ -189,6 +191,14 @@ defmodule Cadence.Runtime.PartitionOwner do
       end
     end
   end
+
+  @impl true
+  def terminate(_reason, %{semantic_resume: _resume} = state) do
+    _ = SemanticSnapshots.stop(state)
+    :ok
+  end
+
+  def terminate(_reason, _state), do: :ok
 
   @impl true
   def handle_continue(:initialize, %{initialization_options: opts} = initial_state) do
@@ -254,12 +264,29 @@ defmodule Cadence.Runtime.PartitionOwner do
       {:ok, state} ->
         {:noreply,
          state
+         |> start_semantic_snapshots(opts)
          |> Map.put(:admission_monitor, initial_state.admission_monitor)
          |> Map.put(:admission_source, initial_state.admission_source)}
 
       {:stop, reason} ->
         {:stop, {:shutdown, {:partition_initialization_failed, reason}}, initial_state}
     end
+  end
+
+  # Once recovered (a partition blocked in recovery must still die on a supervisor's signal), an
+  # owner that snapshots traps exits, so a shutdown reaches terminate/2 and writes the last
+  # snapshot.
+  defp start_semantic_snapshots(state, opts) do
+    state =
+      Keyword.get(opts, :semantic_snapshot, [])
+      |> SemanticSnapshots.init()
+      |> Map.merge(state)
+      |> Map.put(:semantic_replay_floor, Map.get(state, :semantic_resume, %{}))
+
+    if SemanticSnapshots.gated?(state), do: Process.flag(:trap_exit, true)
+    SemanticSnapshots.schedule(state)
+    SemanticSnapshots.announce_recovery(state)
+    state
   end
 
   defp initialize(opts) do
@@ -303,22 +330,18 @@ defmodule Cadence.Runtime.PartitionOwner do
              clock_mode,
              initial_time
            ),
-         {:ok, semantic_state, semantic_writer, semantic_timer_cursors, pending_semantic_timers} <-
+         {:ok, semantic_recovery} <-
            recover_semantic_runtime(
              persist_runtime_records?,
              active_activation,
              partition_key
            ),
-         :ok <-
-           reproject_pending_semantic_timers(
-             persist_runtime_records?,
-             persistence_policy,
-             active_activation,
-             partition_key,
-             pending_semantic_timers
-           ),
          semantic_timers <-
-           build_semantic_timers(active_activation, timer_service, semantic_timer_cursors) do
+           build_semantic_timers(
+             active_activation,
+             timer_service,
+             semantic_recovery.state.timer_cursors
+           ) do
       case maybe_persist_runtime_records(
              persist_runtime_records?,
              runtime_records,
@@ -347,8 +370,10 @@ defmodule Cadence.Runtime.PartitionOwner do
              persist_runtime_records?: persist_runtime_records?,
              pending_runtime_records: pending_runtime_records,
              async_outputs: [],
-             semantic_state: semantic_state,
-             semantic_writer: semantic_writer
+             semantic_state: semantic_recovery.state,
+             semantic_writer: semantic_recovery.writer,
+             semantic_resume: semantic_recovery.resume,
+             semantic_dirty?: semantic_recovery.dirty?
            }}
 
         {:error, reason} ->
@@ -478,23 +503,18 @@ defmodule Cadence.Runtime.PartitionOwner do
           {:ok, runtime_binding_set, managed_application_states, timer_service, runtime_records} ->
             previous_timer_events = build_timer_cancellation_records(state)
 
-            with {:ok, semantic_state, semantic_writer, semantic_timer_cursors,
-                  pending_semantic_timers} <-
+            with {:ok, semantic_recovery} <-
                    recover_semantic_runtime(
                      state.persist_runtime_records?,
                      activation,
                      state.partition_key
                    ),
-                 :ok <-
-                   reproject_pending_semantic_timers(
-                     state.persist_runtime_records?,
-                     state.persistence_policy,
-                     activation,
-                     state.partition_key,
-                     pending_semantic_timers
-                   ),
                  semantic_timers <-
-                   build_semantic_timers(activation, timer_service, semantic_timer_cursors),
+                   build_semantic_timers(
+                     activation,
+                     timer_service,
+                     semantic_recovery.state.timer_cursors
+                   ),
                  {:ok, pending_runtime_records} <-
                    maybe_persist_runtime_records(
                      state.persist_runtime_records?,
@@ -524,8 +544,11 @@ defmodule Cadence.Runtime.PartitionOwner do
                    semantic_timers: semantic_timers,
                    pending_runtime_records: pending_runtime_records,
                    async_outputs: [],
-                   semantic_state: semantic_state,
-                   semantic_writer: semantic_writer
+                   semantic_state: semantic_recovery.state,
+                   semantic_writer: semantic_recovery.writer,
+                   semantic_resume: semantic_recovery.resume,
+                   semantic_replay_floor: semantic_recovery.resume,
+                   semantic_dirty?: semantic_recovery.dirty?
                }}
             else
               {:error, reason} ->
@@ -651,17 +674,21 @@ defmodule Cadence.Runtime.PartitionOwner do
     if plan.algorithms == [] and plan.monitoring == [] do
       {:ok, annotated_outputs, %Result{}, state}
     else
-      updates = Enum.flat_map(annotated_outputs, &sample_update/1)
+      # A replay after recovery applies only the frames the snapshot does not already include.
+      updates =
+        annotated_outputs
+        |> Enum.reject(&SemanticSnapshots.skip_replayed?(state, &1))
+        |> Enum.flat_map(&sample_update/1)
 
       case evaluate_semantic_updates(state, updates, plan) do
-        {:ok, %Result{} = result, semantic_state, semantic_writer} ->
+        {:ok, %Result{} = result, semantic_state} ->
           derived_samples =
             result.parameter_updates
             |> Enum.filter(&(&1.producer_kind == :algorithm))
             |> Enum.map(&derived_sample(&1, activation))
 
           {:ok, annotated_outputs ++ derived_samples, result,
-           %{state | semantic_state: semantic_state, semantic_writer: semantic_writer}}
+           %{state | semantic_state: semantic_state}}
 
         {:error, reason} ->
           {:error, {:semantic_runtime_failed, reason}}
@@ -670,100 +697,32 @@ defmodule Cadence.Runtime.PartitionOwner do
   end
 
   defp evaluate_semantic_updates(state, [], _plan),
-    do: {:ok, %Result{}, state.semantic_state, state.semantic_writer}
+    do: {:ok, %Result{}, state.semantic_state}
 
-  defp evaluate_semantic_updates(%{persist_runtime_records?: true} = state, updates, plan) do
-    Store.process(
-      state.active_activation,
-      state.partition_key,
-      state.semantic_writer,
-      state.semantic_state,
-      updates,
-      plan,
-      reclaim?: is_nil(Cluster.config(state.process_namespace))
-    )
-  end
+  defp evaluate_semantic_updates(state, updates, plan),
+    do: SemanticRuntime.process(state.semantic_state, updates, plan)
 
-  defp evaluate_semantic_updates(state, updates, plan) do
-    with {:ok, result, semantic_state} <-
-           SemanticRuntime.process(state.semantic_state, updates, plan) do
-      {:ok, result, semantic_state, nil}
-    end
-  end
-
+  # A partition that persists semantic state takes the partition (a new ownership epoch) and loads
+  # its last snapshot; the journal replays what the snapshot does not cover. `dirty?`: the state
+  # differs from the snapshot (it was seeded), so the next cadence snapshots it.
   defp recover_semantic_runtime(false, _activation, _partition_key),
-    do: {:ok, SemanticRuntime.new(), nil, %{}, []}
+    do: {:ok, no_semantic_state()}
 
   defp recover_semantic_runtime(true, activation, partition_key) do
     plan = PlanDecoder.decode(activation.runtime_plans)
 
     if plan.algorithms == [] and plan.monitoring == [] do
-      {:ok, SemanticRuntime.new(), nil, %{}, []}
+      {:ok, no_semantic_state()}
     else
-      with {:ok, recovered, recovered_writer} <-
-             Store.recover_writer(activation, partition_key, plan),
-           {:ok, semantic_state, writer} <-
-             MonitoringSeed.maybe_seed(
-               activation,
-               partition_key,
-               plan,
-               recovered,
-               recovered_writer
-             ),
-           {:ok, cursors} <- Store.timer_cursors(activation, partition_key),
-           {:ok, pending_timers} <- Store.pending_timer_results(activation, partition_key) do
-        {:ok, semantic_state, writer, cursors, pending_timers}
+      with {:ok, recovered, writer, resume} <- Store.recover(activation, partition_key),
+           {:ok, seeded} <- MonitoringSeed.maybe_seed(activation, partition_key, plan, recovered) do
+        {:ok, %{state: seeded, writer: writer, resume: resume, dirty?: seeded != recovered}}
       end
     end
   end
 
-  defp reproject_pending_semantic_timers(
-         false,
-         _persistence_policy,
-         _activation,
-         _partition_key,
-         _pending
-       ),
-       do: :ok
-
-  defp reproject_pending_semantic_timers(
-         true,
-         persistence_policy,
-         activation,
-         partition_key,
-         pending
-       ) do
-    Enum.reduce_while(pending, :ok, fn entry, :ok ->
-      derived_samples =
-        entry.result.parameter_updates
-        |> Enum.filter(&(&1.producer_kind == :algorithm))
-        |> Enum.map(&derived_sample(&1, activation))
-
-      with {:ok, effect_ordinals} <-
-             result_effect_ordinals(activation.mission_id, partition_key, entry.result),
-           :ok <-
-             runtime_writer(persistence_policy).persist_semantic_timer_result(
-               persistence_policy,
-               activation,
-               entry.result,
-               derived_samples,
-               at: entry.at,
-               timer_key: entry.timer_key,
-               effect_ordinals: effect_ordinals
-             ),
-           :ok <-
-             Store.mark_timer_projected(
-               activation,
-               partition_key,
-               entry.timer_key,
-               entry.at
-             ) do
-        {:cont, :ok}
-      else
-        {:error, reason} -> {:halt, {:error, reason}}
-      end
-    end)
-  end
+  defp no_semantic_state,
+    do: %{state: SemanticRuntime.new(), writer: nil, resume: %{}, dirty?: false}
 
   defp annotate_semantic_basis(%Sample{} = sample, activation) do
     telemetry_plan = Map.get(activation.runtime_plans, :telemetry)
@@ -858,6 +817,23 @@ defmodule Cadence.Runtime.PartitionOwner do
     {:stop, {:shutdown, {:admission_lost, reason}}, state}
   end
 
+  def handle_info(:semantic_snapshot_tick, state) do
+    case SemanticSnapshots.tick(state) do
+      {:ok, next_state} ->
+        {:noreply, next_state}
+
+      # Another owner has the partition: retire as a fenced batch would have.
+      {:fenced, next_state} ->
+        reason = {:semantic_runtime_failed, :semantic_runtime_fenced}
+        {:stop, tripped(retirement_reason(reason, next_state)), next_state}
+    end
+  end
+
+  # Trapping exits: a linked process's normal exit changes nothing; any other stops the owner
+  # with the same reason, as an untrapped link would.
+  def handle_info({:EXIT, _pid, :normal}, state), do: {:noreply, state}
+  def handle_info({:EXIT, _pid, reason}, state), do: {:stop, reason, state}
+
   def handle_info({:global_name_conflict, _name}, state) do
     {:stop, {:shutdown, :name_conflict}, state}
   end
@@ -934,7 +910,7 @@ defmodule Cadence.Runtime.PartitionOwner do
         scoped -> scoped
       end
 
-    with {:ok, result, semantic_state, semantic_writer} <-
+    with {:ok, result, semantic_state} <-
            evaluate_semantic_timer_scopes(scopes, entry, plan, state, %Result{}),
          derived_samples <-
            result.parameter_updates
@@ -956,8 +932,8 @@ defmodule Cadence.Runtime.PartitionOwner do
 
       {:ok,
        state
-       |> Map.put(:semantic_state, semantic_state)
-       |> Map.put(:semantic_writer, semantic_writer)
+       |> Map.put(:semantic_state, fired(semantic_state, entry))
+       |> SemanticSnapshots.touch()
        |> Map.put(
          :semantic_timers,
          Map.put(state.semantic_timers, entry.timer_key, next_entry)
@@ -967,47 +943,24 @@ defmodule Cadence.Runtime.PartitionOwner do
   end
 
   defp evaluate_semantic_timer_scopes(scopes, entry, plan, state, result) do
-    Enum.reduce_while(
-      scopes,
-      {:ok, result, state.semantic_state, state.semantic_writer},
-      fn scope, {:ok, acc, semantic_state, writer} ->
-        current = %{state | semantic_state: semantic_state, semantic_writer: writer}
+    Enum.reduce_while(scopes, {:ok, result, state.semantic_state}, fn scope,
+                                                                      {:ok, acc, semantic_state} ->
+      case SemanticRuntime.timer(semantic_state, scope, entry.algorithm_id, entry.due_at, plan) do
+        {:ok, result, next_state} ->
+          {:cont, {:ok, merge_semantic_results(acc, result), next_state}}
 
-        case evaluate_semantic_timer(current, scope, entry, plan) do
-          {:ok, result, next_state, next_writer} ->
-            {:cont, {:ok, merge_semantic_results(acc, result), next_state, next_writer}}
-
-          {:error, reason} ->
-            {:halt, {:error, {:semantic_runtime_timer_failed, reason}}}
-        end
+        {:error, reason} ->
+          {:halt, {:error, {:semantic_runtime_timer_failed, reason}}}
       end
-    )
+    end)
   end
 
-  defp evaluate_semantic_timer(%{persist_runtime_records?: true} = state, scope, entry, plan) do
-    Store.timer(
-      state.active_activation,
-      state.partition_key,
-      state.semantic_writer,
-      state.semantic_state,
-      {scope, entry.algorithm_id, entry.due_at, entry.timer_key},
-      plan,
-      reclaim?: is_nil(Cluster.config(state.process_namespace))
-    )
-  end
-
-  defp evaluate_semantic_timer(state, scope, entry, plan) do
-    with {:ok, result, semantic_state} <-
-           SemanticRuntime.timer(
-             state.semantic_state,
-             scope,
-             entry.algorithm_id,
-             entry.due_at,
-             plan
-           ) do
-      {:ok, result, semantic_state, nil}
-    end
-  end
+  # The timer's cursor (when it last fired) is part of the state a snapshot holds.
+  defp fired(%State{} = semantic_state, entry),
+    do: %State{
+      semantic_state
+      | timer_cursors: Map.put(semantic_state.timer_cursors, entry.timer_key, entry.due_at)
+    }
 
   defp maybe_persist_semantic_timer(
          %{persist_runtime_records?: true} = state,
@@ -1016,22 +969,15 @@ defmodule Cadence.Runtime.PartitionOwner do
          derived_samples
        ) do
     with {:ok, effect_ordinals} <-
-           result_effect_ordinals(state.active_activation.mission_id, state.partition_key, result),
-         :ok <-
-           runtime_writer(state.persistence_policy).persist_semantic_timer_result(
-             state.persistence_policy,
-             state.active_activation,
-             result,
-             derived_samples,
-             at: entry.due_at,
-             timer_key: entry.timer_key,
-             effect_ordinals: effect_ordinals
-           ) do
-      Store.mark_timer_projected(
+           result_effect_ordinals(state.active_activation.mission_id, state.partition_key, result) do
+      runtime_writer(state.persistence_policy).persist_semantic_timer_result(
+        state.persistence_policy,
         state.active_activation,
-        state.partition_key,
-        entry.timer_key,
-        entry.due_at
+        result,
+        derived_samples,
+        at: entry.due_at,
+        timer_key: entry.timer_key,
+        effect_ordinals: effect_ordinals
       )
     end
   end
@@ -1049,6 +995,16 @@ defmodule Cadence.Runtime.PartitionOwner do
 
   defp handle_processing_reply({:ok, processing_result, next_state}, _state) do
     metadata = processing_result.raw_evidence.metadata || %{}
+
+    # The reply tells the journal consumer which snapshot gates its durable ack (nil: none).
+    next_state = SemanticSnapshots.track(next_state, processing_result)
+
+    processing_result =
+      Map.put(
+        processing_result,
+        :semantic_snapshot_partition,
+        SemanticSnapshots.partition(next_state, processing_result)
+      )
 
     next_state =
       if Map.has_key?(metadata, "journal_stream_id") or Map.has_key?(metadata, :journal_stream_id) do

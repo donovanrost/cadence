@@ -2,9 +2,11 @@ defmodule Cadence.Control.SpacecraftModelBindings do
   @moduledoc "Admits the exact model assigned to each spacecraft in an activation generation."
 
   alias Cadence.Catalog
+  alias Cadence.Catalog.CompositionPins
   alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Control.MissionModelPromotion
   alias Cadence.MissionModels
+  alias Cadence.MissionModels.Compositions
   alias Cadence.SourceEndpoints
   alias Cadence.SpacecraftStore
 
@@ -35,7 +37,13 @@ defmodule Cadence.Control.SpacecraftModelBindings do
            SpacecraftStore.fetch_spacecraft(organization_id, mission_id, spacecraft_id),
          {:ok, catalog} <-
            Catalog.fetch_revision(organization_id, mission_id, entry["catalog_revision_id"]),
-         true <- catalog.mission_model_revision_id == entry["mission_model"]["revision_id"],
+         true <-
+           catalog_model?(
+             organization_id,
+             mission_id,
+             catalog,
+             entry["mission_model"]["revision_id"]
+           ),
          :ok <- validate_endpoints(organization_id, mission_id, spacecraft_id, entry) do
       {:cont, :ok}
     else
@@ -43,6 +51,30 @@ defmodule Cadence.Control.SpacecraftModelBindings do
       {:error, reason} -> {:halt, {:error, reason}}
     end
   end
+
+  # The catalog's own model revision, or (D3, #544) a revision its one-layer composition links:
+  # after a compiler version bump the craft runs the selected approved compile, not the catalog's
+  # newest. A revision of another composition is still a mismatch.
+  defp catalog_model?(_organization_id, _mission_id, %{mission_model_revision_id: id}, id),
+    do: true
+
+  defp catalog_model?(organization_id, mission_id, catalog, revision_id)
+       when is_binary(revision_id) do
+    with {:ok, composition} <-
+           CompositionPins.for_catalog_revision(
+             organization_id,
+             mission_id,
+             catalog.catalog_revision_id
+           ),
+         {:ok, %{composition_id: ^composition}} <-
+           Compositions.for_revision(organization_id, mission_id, revision_id) do
+      true
+    else
+      _other -> false
+    end
+  end
+
+  defp catalog_model?(_organization_id, _mission_id, _catalog, _revision_id), do: false
 
   def runtime_basis(activation) do
     with {:ok, entries} <- FleetSnapshot.entries(activation.metadata),

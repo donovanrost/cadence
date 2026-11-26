@@ -14,7 +14,6 @@ defmodule Cadence.Management.Commanding.StageCatalogTest do
 
   alias Cadence.Ids
   alias Cadence.Management.Commanding.StageCatalog
-  alias Cadence.SourceEndpoints
   alias Cadence.SourceEndpoints.SourceEndpoint
 
   setup do
@@ -106,7 +105,7 @@ defmodule Cadence.Management.Commanding.StageCatalogTest do
     assert before["selected_item"]["target_name"] == nil
 
     assert {:ok, _} =
-             SourceEndpoints.persist_source_endpoint(
+             Cadence.SourceEndpointFixtures.persist(
                c.org,
                SourceEndpoint.new(%{
                  mission_id: c.mission,

@@ -57,8 +57,7 @@ defmodule Cadence.Dev.ReflectOrbital.Fixture do
   defp spacecraft_name(index, width),
     do: "EARENDIL-" <> (index |> Integer.to_string() |> String.pad_leading(width, "0"))
 
-  def spacecraft do
-    count = fleet_size()
+  def spacecraft(count \\ fleet_size()) do
     width = max(3, count |> Integer.to_string() |> String.length())
     commissioning_from = count - div(count, 20)
 

@@ -23,7 +23,7 @@ defmodule Cadence.MissionModels.Compositions do
     (#146), and a system actor's `run_by` still counts its runner (#513).
   - **Number.** A new composition gets its mission's next short number (D2, #543), in
     `mission_model_composition_numbers`, never reused.
-  - Rows are immutable by trigger (migrations 20261120060000 and 20261120150000).
+  - Rows are immutable by triggers in the schema baseline.
   """
 
   import Ecto.Query

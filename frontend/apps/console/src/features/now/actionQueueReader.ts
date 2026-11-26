@@ -125,7 +125,11 @@ const itemReader = d.object({
   acknowledged: d.nullable(d.integer),
   since: d.nullable(d.timestamp),
   count: d.integer,
-  spacecraft: d.array(member, 1_000),
+  /**
+   * Every member: Now's headline counts the spacecraft that need you across items. Bounded like
+   * GET /fleet's rows (20,000), not at 1,000, so an item over 1,000 spacecraft still reads (#847).
+   */
+  spacecraft: d.array(member, 20_000),
   point: d.nullable(
     d.object({
       id: d.token,

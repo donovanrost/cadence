@@ -12,6 +12,7 @@ defmodule CadenceWeb.Console.ServiceAccess do
   """
 
   @allowed %{
+    CadenceWeb.Console.ContactRuntimeController => [:path_runtime],
     CadenceWeb.Console.MissionController => [:show]
   }
 

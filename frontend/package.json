@@ -13,9 +13,6 @@
     "preview": "node tools/production-server.ts",
     "check": "vp check && corepack pnpm typecheck && corepack pnpm lint:structure",
     "test": "corepack pnpm -r --if-present test && corepack pnpm test:tools && corepack pnpm test:transport",
-    "storybook": "corepack pnpm --filter @cadence/storybook storybook",
-    "storybook:build": "corepack pnpm --filter @cadence/storybook build-storybook",
-    "storybook:test": "corepack pnpm --filter @cadence/storybook test",
     "test:transport": "node --test tools/phoenix/*.test.mjs",
     "typecheck": "node tools/typecheck-workspace.mjs",
     "test:typecheck": "node --test tools/typecheck-workspace.test.mjs",
@@ -23,7 +20,6 @@
     "test:tools": "node --test tools/*.test.mjs",
     "lint:structure": "ast-grep test --config sgconfig.yml --skip-snapshot-tests && ast-grep scan --config sgconfig.yml",
     "test:structure": "ast-grep test --config sgconfig.yml --skip-snapshot-tests && node --test tools/structural-rules.test.mjs",
-    "test:producers": "node tools/producer-contracts.mjs",
     "routes:generate": "node tools/generate-route-types.mjs"
   },
   "devDependencies": {

@@ -26,13 +26,15 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
   alias Cadence.SpacecraftTypeStore
 
   @fields ~w(display_name downlink_protocol uplink_protocol packet_protocol frame_parameters
-             applications metadata catalog_revision_id handled_apids routing_rules)
+             applications metadata catalog_revision_id composition_id handled_apids
+             routing_rules)
   # `fecf` (frame error control field present) is carried by existing profiles and read by the
   # TM frame codec.
   @frame_fields ~w(frame_size secondary_header_length insert_zone_length ocf_length
                    truncated_primary_header fecf)
   @governed_key "spacecraft_configuration_revision_id"
   # The profile paths a framing-governed spacecraft keeps from its configuration review.
+  @pin_paths ["composition_id", "catalog_revision_id"]
   @framing_paths ~w(downlink_protocol uplink_protocol packet_protocol frame_parameters)
   @synthetic_prefix "spacecraft_configuration_profile_"
 
@@ -78,6 +80,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
     errors =
       rule_errors ++
         F.text(document, "catalog_revision_id", 1..255, label: "Catalog revision") ++
+        F.text(document, "composition_id", 1..255, label: "Mission composition") ++
         F.only(document, @fields) ++
         F.text(document, "display_name", 1..200, required: true, label: "Name") ++
         F.one_of(document, "downlink_protocol", ~w(tm aos uslp),
@@ -143,7 +146,17 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
         do: :ok,
         else: catalog_exists(organization_id, mission_id, catalog, "catalog_revision_id")
 
+    pin_errors =
+      pins().errors(
+        organization_id,
+        mission_id,
+        pin(previous),
+        pin(proposed),
+        "composition_id"
+      )
+
     with :ok <- catalog_check,
+         :ok <- if(pin_errors == [], do: :ok, else: {:error, pin_errors}),
          do:
            apids_in_catalog(
              organization_id,
@@ -155,6 +168,30 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
   end
 
   def validate(_organization_id, _mission_id, _action, _entity_id, _previous, _proposed), do: :ok
+
+  @impl true
+  # D3 (#544): the client pins the composition; Cadence derives its provenance catalog revision.
+  def translate(organization_id, mission_id, _previous, proposed, touched) do
+    with {:ok, {catalog, composition}} <-
+           pins().derive(
+             organization_id,
+             mission_id,
+             proposed["composition_id"],
+             if("catalog_revision_id" in touched, do: proposed["catalog_revision_id"])
+           ) do
+      {:ok,
+       proposed
+       |> Map.put("catalog_revision_id", catalog)
+       |> put_pin(composition)}
+    end
+  end
+
+  # A profile without a pin keeps no composition_id key.
+  defp put_pin(document, nil), do: Map.delete(document, "composition_id")
+  defp put_pin(document, composition), do: Map.put(document, "composition_id", composition)
+
+  defp pin(nil), do: {nil, nil}
+  defp pin(document), do: {document["catalog_revision_id"], document["composition_id"]}
 
   @impl true
   def write(organization_id, mission_id, :create, id, nil, proposed, _options) do
@@ -204,7 +241,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
     target_ids = MapSet.new(targets, & &1.spacecraft_id)
 
     {catalog_pinned, moving} =
-      if changed == ["catalog_revision_id"],
+      if pin_only?(changed),
         do: split_catalog_pinned(organization_id, mission_id, moving),
         else: {[], moving}
 
@@ -232,6 +269,9 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
           )
     }
   end
+
+  # A pin edit (D3: the composition and the catalog revision Cadence derives from it) and nothing else.
+  defp pin_only?(changed), do: changed != [] and changed -- @pin_paths == []
 
   # An override at catalog_revision_id keeps the spacecraft's own catalog whatever the profile
   # says (CatalogAuthority), so a catalog-only edit changes nothing for it.
@@ -297,6 +337,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
         applications: document["applications"],
         metadata: document["metadata"],
         catalog_revision_id: document["catalog_revision_id"],
+        composition_id: document["composition_id"],
         handled_apids: document["handled_apids"],
         routing_rules: document["routing_rules"] || []
       })
@@ -400,6 +441,13 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
         do: Map.put(document, "handled_apids", profile.handled_apids),
         else: document
     end)
+    # D3 (#544; #108, no legacy-hash shim per domain, #112): in the document once set. A profile
+    # change staged before the pin was filled in reads stale at apply and must be re-staged.
+    |> then(fn document ->
+      if profile.composition_id,
+        do: Map.put(document, "composition_id", profile.composition_id),
+        else: document
+    end)
   end
 
   @doc false
@@ -458,4 +506,8 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
       {:error, _not_found} -> {:error, [F.error(path, "That catalog revision doesn't exist")]}
     end
   end
+
+  # D3's pin rules (#544) live with the mission model (Cadence.MissionModels.CompositionPin),
+  # configured so this kind has no compile-time edge to the catalog context.
+  defp pins, do: Application.fetch_env!(:cadence, :composition_pins)
 end

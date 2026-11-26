@@ -116,7 +116,7 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
       })
 
     assert {:ok, persisted_endpoint} =
-             Cadence.SourceEndpoints.persist_source_endpoint(
+             Cadence.SourceEndpointFixtures.persist(
                organization.organization_id,
                endpoint
              )

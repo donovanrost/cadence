@@ -69,7 +69,7 @@ defmodule Cadence.Management.Contacts.Store.ContactRequirementVersionRow do
   @spec changeset(ContactRequirementVersion.t()) :: Ecto.Changeset.t()
   def changeset(%ContactRequirementVersion{} = version) do
     %__MODULE__{}
-    |> cast(domain_attrs(version), fields())
+    |> cast(insert_attrs(version), fields())
     |> validate_required(@required_fields)
     |> validate_number(:version, greater_than: 0)
     |> validate_number(:contact_count, greater_than: 0)
@@ -123,7 +123,9 @@ defmodule Cadence.Management.Contacts.Store.ContactRequirementVersionRow do
     })
   end
 
-  defp domain_attrs(%ContactRequirementVersion{} = version) do
+  @doc "Serializes a normalized requirement version for bulk insertion."
+  @spec insert_attrs(ContactRequirementVersion.t()) :: map()
+  def insert_attrs(%ContactRequirementVersion{} = version) do
     %{
       contact_requirement_version_id: version.contact_requirement_version_id,
       contact_requirement_id: version.contact_requirement_id,

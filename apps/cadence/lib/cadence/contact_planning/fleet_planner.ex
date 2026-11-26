@@ -16,14 +16,15 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
     FleetPlanningRuns,
     FleetRepairInputs,
     FleetRunLock,
+    FleetSearch,
     Planner,
     RepairPairing
   }
 
+  alias Cadence.Management.Contacts.PlanningResults
+
   @type result :: %{
           required(:run) => struct(),
-          required(:requirement_refs) => [struct()],
-          required(:decisions) => [struct()],
           required(:plan) => struct() | nil,
           required(:plan_version) => struct() | nil
         }
@@ -101,8 +102,10 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
 
   defp continue(scope, mission_id, %{phase: :searching} = run, opts) do
     with {:ok, policy} <- exact_policy(run),
-         {:ok, _requirements} <- exact_requirements(run),
-         {:ok, search_summary} <- search_requirements(scope, run, policy, opts),
+         refs <- requirement_refs(run),
+         {:ok, requirements} <- exact_requirements(run, refs),
+         {:ok, search_summary} <-
+           search_requirements(scope, run, refs, requirements, policy, opts),
          {:ok, advanced} <-
            FleetPlanningRuns.advance_phase(
              scope,
@@ -121,13 +124,44 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
   end
 
   defp continue(scope, mission_id, %{phase: :optimizing} = run, opts) do
-    with :ok <- ensure_current_inputs(run),
-         {:ok, policy} <- exact_policy(run),
-         {:ok, requirements} <- exact_requirements(run),
-         {:ok, snapshots} <- planning_snapshots(run),
+    case optimize_phase(scope, mission_id, run, opts) do
+      {:ok, advanced} ->
+        :erlang.garbage_collect()
+        continue(scope, mission_id, advanced, opts)
+
+      {:error, reason} ->
+        fail_and_return(scope, mission_id, run, "fleet_optimization_failed", reason, opts)
+    end
+  end
+
+  defp continue(scope, mission_id, %{phase: :materializing_plan} = run, opts) do
+    case materialize_phase(scope, mission_id, run, opts) do
+      {:ok, completed, plan, version} ->
+        :erlang.garbage_collect()
+        terminal_result(completed, plan, version)
+
+      {:error, reason} ->
+        fail_and_return(scope, mission_id, run, "fleet_plan_materialization_failed", reason, opts)
+    end
+  end
+
+  defp continue(_scope, _mission_id, %{phase: :finished} = run, _opts) do
+    case candidate_plan(run) do
+      {:ok, plan, version} -> terminal_result(run, plan, version)
+      {:error, :fleet_planning_candidate_plan_not_linked} -> terminal_result(run, nil, nil)
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp optimize_phase(scope, mission_id, run, opts) do
+    with {:ok, policy} <- exact_policy(run),
+         :ok <- ensure_active_policy(run, policy),
+         refs <- requirement_refs(run),
+         {:ok, requirements} <- exact_requirements(run, refs),
+         {:ok, snapshots} <- planning_snapshots(run, refs),
          {:ok, locked_commitments} <- FleetRepairInputs.locked_commitments(run),
          {:ok, optimization} <-
-           FleetOptimizer.optimize(
+           FleetOptimizer.optimize_stream(
              requirements,
              snapshots,
              policy,
@@ -140,37 +174,32 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
              run.fleet_planning_run_id,
              optimization.decisions
            ),
-         :ok <- checkpoint_coverage(scope, run, optimization.coverage_by_requirement),
-         {:ok, advanced} <-
-           FleetPlanningRuns.advance_phase(
-             scope,
-             mission_id,
-             run.fleet_planning_run_id,
-             :optimizing,
-             :materializing_plan,
-             %{
-               progress_document:
-                 Map.merge(run.progress_document, %{
-                   "snapshots_considered" => length(optimization.decisions),
-                   "snapshots_selected" => length(optimization.selected_snapshot_ids)
-                 }),
-               result_summary_document: %{
-                 "coverage_counts" => coverage_counts(optimization.coverage_by_requirement),
-                 "resources" => optimization.resource_summary,
-                 "budgets" => optimization.budget_summary,
-                 "termination" => optimization.termination_document
-               }
-             },
-             opts
-           ) do
-      continue(scope, mission_id, advanced, opts)
-    else
-      {:error, reason} ->
-        fail_and_return(scope, mission_id, run, "fleet_optimization_failed", reason, opts)
+         :ok <- checkpoint_coverage(scope, run, optimization.coverage_by_requirement) do
+      FleetPlanningRuns.advance_phase(
+        scope,
+        mission_id,
+        run.fleet_planning_run_id,
+        :optimizing,
+        :materializing_plan,
+        %{
+          progress_document:
+            Map.merge(run.progress_document, %{
+              "snapshots_considered" => length(optimization.decisions),
+              "snapshots_selected" => length(optimization.selected_snapshot_ids)
+            }),
+          result_summary_document: %{
+            "coverage_counts" => coverage_counts(optimization.coverage_by_requirement),
+            "resources" => optimization.resource_summary,
+            "budgets" => optimization.budget_summary,
+            "termination" => optimization.termination_document
+          }
+        },
+        opts
+      )
     end
   end
 
-  defp continue(scope, mission_id, %{phase: :materializing_plan} = run, opts) do
+  defp materialize_phase(scope, mission_id, run, opts) do
     with :ok <- ensure_current_inputs(run),
          {:ok, plan, version} <- materialize_candidate_plan(scope, run, opts),
          outcome <- fleet_outcome(run.result_summary_document),
@@ -196,18 +225,7 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
              },
              opts
            ) do
-      terminal_result(completed, plan, version)
-    else
-      {:error, reason} ->
-        fail_and_return(scope, mission_id, run, "fleet_plan_materialization_failed", reason, opts)
-    end
-  end
-
-  defp continue(_scope, _mission_id, %{phase: :finished} = run, _opts) do
-    case candidate_plan(run) do
-      {:ok, plan, version} -> terminal_result(run, plan, version)
-      {:error, :fleet_planning_candidate_plan_not_linked} -> terminal_result(run, nil, nil)
-      {:error, reason} -> {:error, reason}
+      {:ok, completed, plan, version}
     end
   end
 
@@ -237,14 +255,20 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
     end
   end
 
-  defp search_requirements(scope, run, policy, opts) do
-    refs =
-      FleetPlanningRuns.list_requirement_refs(
-        run.organization_id,
-        run.mission_id,
-        run.fleet_planning_run_id
-      )
+  defp search_requirements(scope, run, refs, requirements, policy, opts) do
+    planner_opts = Keyword.get(opts, :planner_opts, [])
 
+    if Keyword.has_key?(opts, :plan_requirement) or
+         Enum.any?([:list_routes, :search_opportunities], fn key ->
+           Keyword.has_key?(opts, key) or Keyword.has_key?(planner_opts, key)
+         end) do
+      search_custom_requirements(scope, run, refs, policy, opts)
+    else
+      FleetSearch.run(scope, run, refs, requirements, policy, Keyword.merge(opts, planner_opts))
+    end
+  end
+
+  defp search_custom_requirements(scope, run, refs, policy, opts) do
     refs
     |> Task.async_stream(
       &search_requirement(scope, run, &1, policy, opts),
@@ -404,20 +428,25 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
     end
   end
 
-  defp planning_snapshots(run) do
+  defp planning_snapshots(run, refs) do
     snapshots =
-      run
-      |> planning_run_ids()
-      |> Enum.flat_map(fn planning_run_id ->
-        Planner.list_snapshots(run.organization_id, run.mission_id, planning_run_id)
-      end)
+      PlanningResults.stream_fleet_snapshots(
+        run.organization_id,
+        run.mission_id,
+        planning_run_ids(refs)
+      )
 
     {:ok, snapshots}
   end
 
-  defp planning_run_ids(run) do
+  defp planning_run_ids(%{fleet_planning_run_id: _} = run) do
     run.organization_id
     |> FleetPlanningRuns.list_requirement_refs(run.mission_id, run.fleet_planning_run_id)
+    |> planning_run_ids()
+  end
+
+  defp planning_run_ids(refs) when is_list(refs) do
+    refs
     |> Enum.map(& &1.contact_planning_run_id)
     |> Enum.reject(&is_nil/1)
     |> Enum.uniq()
@@ -425,65 +454,16 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
   end
 
   defp checkpoint_coverage(scope, run, coverage) do
-    refs =
-      FleetPlanningRuns.list_requirement_refs(
-        run.organization_id,
-        run.mission_id,
-        run.fleet_planning_run_id
-      )
-
-    results =
-      Enum.map(refs, fn ref ->
-        requirement_coverage = coverage[ref.contact_requirement_id]
-
-        {input_state, result_state} =
-          if ref.input_state == :failed do
-            {:failed, :failed}
-          else
-            {:searched, coverage_state(requirement_coverage["state"])}
-          end
-
-        FleetPlanningRuns.update_requirement_progress(
-          scope,
-          run.mission_id,
-          run.fleet_planning_run_id,
-          ref.contact_requirement_id,
-          input_state,
-          result_state,
-          %{
-            explanation_document:
-              Map.merge(ref.explanation_document, %{
-                "coverage" => requirement_coverage
-              })
-          }
-        )
-      end)
-
-    case Enum.find(results, &match?({:error, _}, &1)) do
-      nil -> :ok
-      {:error, reason} -> {:error, reason}
-    end
+    FleetPlanningRuns.persist_coverage(scope, run.mission_id, run.fleet_planning_run_id, coverage)
   end
 
   defp materialize_candidate_plan(scope, run, opts) do
-    decisions =
-      FleetPlanningRuns.list_decisions(
+    {selected_ids, locked_ids} =
+      FleetPlanningRuns.selected_snapshot_ids(
         run.organization_id,
         run.mission_id,
         run.fleet_planning_run_id
       )
-
-    selected_ids =
-      decisions
-      |> Enum.filter(&(&1.disposition == :selected))
-      |> Enum.sort_by(& &1.rank)
-      |> Enum.map(& &1.contact_opportunity_snapshot_id)
-
-    locked_ids =
-      decisions
-      |> Enum.filter(&(&1.disposition == :locked))
-      |> Enum.sort_by(& &1.rank)
-      |> Enum.map(& &1.contact_opportunity_snapshot_id)
 
     planning_run_ids =
       run
@@ -508,21 +488,11 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
   end
 
   defp selected_planning_run_ids(run, selected_ids) do
-    selected = MapSet.new(selected_ids)
-
-    run.organization_id
-    |> FleetPlanningRuns.list_requirement_refs(run.mission_id, run.fleet_planning_run_id)
-    |> Enum.flat_map(fn ref ->
-      case ref.contact_planning_run_id do
-        nil ->
-          []
-
-        planning_run_id ->
-          Planner.list_snapshots(run.organization_id, run.mission_id, planning_run_id)
-          |> Enum.filter(&MapSet.member?(selected, &1.contact_opportunity_snapshot_id))
-          |> Enum.map(& &1.contact_planning_run_id)
-      end
-    end)
+    PlanningResults.planning_run_ids_for_fleet_snapshots(
+      run.organization_id,
+      run.mission_id,
+      selected_ids
+    )
   end
 
   defp create_or_fetch_candidate_plan(
@@ -573,13 +543,21 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
 
   defp ensure_current_inputs(run) do
     with {:ok, policy} <- exact_policy(run),
-         {:ok, _active_policy, active_version} <-
+         :ok <- ensure_active_policy(run, policy),
+         {:ok, _requirements} <- exact_requirements(run) do
+      :ok
+    else
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp ensure_active_policy(run, policy) do
+    with {:ok, _active_policy, active_version} <-
            FleetPlanningPolicies.fetch_active(run.organization_id, run.mission_id),
          true <-
            active_version.fleet_planning_policy_id == policy.fleet_planning_policy_id and
              active_version.version == policy.version and
-             active_version.content_sha256 == policy.content_sha256,
-         {:ok, _requirements} <- exact_requirements(run) do
+             active_version.content_sha256 == policy.content_sha256 do
       :ok
     else
       false -> {:error, :fleet_planning_input_drift}
@@ -596,9 +574,18 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
     )
   end
 
-  defp exact_requirements(run) do
-    run.organization_id
-    |> FleetPlanningRuns.list_requirement_refs(run.mission_id, run.fleet_planning_run_id)
+  defp requirement_refs(run) do
+    FleetPlanningRuns.list_requirement_refs(
+      run.organization_id,
+      run.mission_id,
+      run.fleet_planning_run_id
+    )
+  end
+
+  defp exact_requirements(run), do: exact_requirements(run, requirement_refs(run))
+
+  defp exact_requirements(run, refs) do
+    refs
     |> Stream.chunk_every(500)
     |> Enum.reduce_while({:ok, []}, &fetch_requirement_batch(&1, &2, run))
     |> case do
@@ -721,24 +708,7 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
   end
 
   defp terminal_result(run, plan, version) do
-    {:ok,
-     %{
-       run: run,
-       requirement_refs:
-         FleetPlanningRuns.list_requirement_refs(
-           run.organization_id,
-           run.mission_id,
-           run.fleet_planning_run_id
-         ),
-       decisions:
-         FleetPlanningRuns.list_decisions(
-           run.organization_id,
-           run.mission_id,
-           run.fleet_planning_run_id
-         ),
-       plan: plan,
-       plan_version: version
-     }}
+    {:ok, %{run: run, plan: plan, plan_version: version}}
   end
 
   defp fail_and_return(scope, mission_id, run, code, reason, opts) do
@@ -769,10 +739,6 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
 
     "contact_plan_fleet_#{digest}"
   end
-
-  defp coverage_state("satisfied"), do: :satisfied
-  defp coverage_state("partial"), do: :partial
-  defp coverage_state("unsatisfied"), do: :unsatisfied
 
   defp reason_code(reason) when is_atom(reason), do: Atom.to_string(reason)
   defp reason_code({reason, _detail}) when is_atom(reason), do: Atom.to_string(reason)

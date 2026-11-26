@@ -12,10 +12,12 @@ import {
   type RolloutProfile,
 } from "./rollout.ts";
 
-describe("C3 rollout ops", () => {
+const target = { id: "cat_15", number: 15, compositionId: "comp_15" } as const;
+
+describe("C3 rollout ops (D3, #544: they pin the revision's composition)", () => {
   it("stages one profile op per profile, all_versions only when asked", () => {
     expect(
-      rolloutOps("cat_15", {
+      rolloutOps(target, {
         kind: "profiles",
         profiles: [
           { id: "prof_1", allVersions: false },
@@ -27,28 +29,28 @@ describe("C3 rollout ops", () => {
         kind: "spacecraft_profile",
         action: "update",
         entity_id: "prof_1",
-        changes: [{ path: "catalog_revision_id", value: "cat_15" }],
+        changes: [{ path: "composition_id", value: "comp_15" }],
       },
       {
         kind: "spacecraft_profile",
         action: "update",
         entity_id: "prof_2",
-        changes: [{ path: "catalog_revision_id", value: "cat_15" }],
+        changes: [{ path: "composition_id", value: "comp_15" }],
         options: { rollout: "all_versions" },
       },
     ]);
   });
 
-  it("stages a canary as one catalog override per spacecraft", () => {
+  it("stages a canary as one composition override per spacecraft", () => {
     expect(
-      rolloutOps("cat_15", { kind: "spacecraft", ids: ["sc_1"], reason: "Canary for rev 15" }),
+      rolloutOps(target, { kind: "spacecraft", ids: ["sc_1"], reason: "Canary for rev 15" }),
     ).toEqual([
       {
         kind: "spacecraft_override",
         action: "update",
         entity_id: "sc_1",
         changes: [
-          { path: "catalog_revision_id", value: { value: "cat_15", reason: "Canary for rev 15" } },
+          { path: "composition_id", value: { value: "comp_15", reason: "Canary for rev 15" } },
         ],
       },
     ]);

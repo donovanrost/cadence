@@ -32,6 +32,10 @@ defmodule Cadence.Management.Contacts.Store.ContactPlanOpportunityRefRow do
     :reason_document
   ]
 
+  @doc false
+  def insert_attrs(attrs),
+    do: Map.update(attrs, :reason_document, %{}, &JsonDocument.wrap_value/1)
+
   def changeset(attrs) when is_map(attrs) do
     attrs = Map.update(attrs, :reason_document, %{}, &JsonDocument.wrap_value/1)
 

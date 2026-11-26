@@ -134,11 +134,26 @@ Query: `state` = `active` (default) | `nominal` | `all`; `severity` = `critical`
 `spacecraft_id`; `q` (substring of point id/name/subsystem/limit set). Unknown `state`/`severity`
 values get `422 invalid_params` with `details`.
 
+**Paged** (#794): `limit` (1 to 200, default 100) and `cursor` (a previous page's
+`meta.next_cursor`; a cursor that isn't one is `422 details.cursor`). Rows come in the list's
+order (severity, newest first, spacecraft, point); the cursor is the last row's place in it, so
+alarms that clear or appear between pages never repeat or skip a row that stays (a new alarm that
+sorts before the cursor is in a page already read: refetch from the first page on `invalidate`).
+**Every row of every page is enriched.** `data.total` counts the rows matching the filters.
+
+**Sister alarms, server-side** (replacing the client-side filter): `point_id` (exactly that point),
+`plane` (the spacecraft whose metadata has that orbital plane; none: no rows) and
+`exclude_spacecraft_id`. "N sisters in P07 out of limits" is
+`?state=active&point_id=…&plane=7&exclude_spacecraft_id=…&limit=1` and `data.total`; B4's rows
+are the same query's first page.
+
 ```json
 {
+  "meta": {"next_cursor": "g2gEYQBiAAABWm0AAAAGc2MtMDAzbQAAAAVIS…" },
   "data": {
     "observed_at": "2026-11-08T02:41:17Z",
     "summary": {"active": 4, "critical": 3, "caution": 1, "latest_transition_at": "2026-11-08T02:35:02Z"},
+    "total": 4,
     "alarms": [
       {
         "id": "limit_event_…",
@@ -168,7 +183,8 @@ values get `422 invalid_params` with `details`.
 - `first_crossed_at`: when the point entered its current state. It is the oldest evaluation in the
   current unbroken run of that state, by generation time (falling back to receipt time). The
   server looks back up to 200 evaluations, so for a state held longer than that it is the oldest
-  one in the window. Only the first 200 rows are enriched; later rows have `null`.
+  one in the window. Every page is enriched (a page is at most 200 rows, which bounds those
+  reads).
 - `value`: the evaluated engineering value, as a number, string or boolean.
 - Sorting: severity (critical first), then newest received first.
 - `point.unit`: the engineering unit of the decoded packet field in the mission's **active** binding
@@ -714,8 +730,10 @@ request), so housekeeping rows don't starve a filtered page. Fewer than `limit` 
 - **`POST /telemetry/latest {point_ids, spacecraft_ids}`** (Compose B2 "Now", fe-ops) →
   `{values: [{spacecraft_id, point_id, value_json | null, received_at | null, stale}]}`: one entry
   per spacecraft × point, spacecraft first, in the asked order.
-  - Limits: at most 10 points and 500 spacecraft (5,000 values). Every spacecraft must be the
-    mission's (`422 details.spacecraft_ids` plus `unknown`).
+  - Limits: at most 10 points per call and **no ceiling on spacecraft**: a request is bounded by
+    its response, 8 MB (about 50,000 values; `422 details.max_response_bytes`). The server reads
+    only the asked points × spacecraft, in chunks of spacecraft, so a 1,000-craft fleet is one call.
+    Every spacecraft must be the mission's (`422 details.spacecraft_ids` plus `unknown`).
   - `value_json` is the engineering value as JSON text (64-bit safe); null when there's no value
     yet.
   - `stale` uses the point's stale timeout, else the fleet's (`stale_after_s`); false when there's
@@ -862,3 +880,19 @@ resolved bindings) and its allowlisted projection.
 - Errors: `422 invalid_params` (`point_id` / `spacecraft_id` missing, `receipt_time` or `at` not
   ISO-8601);
   `404 mission_not_found`. The read authorizes like Explore did (operate the mission).
+
+## `POST /api/v1/missions/:mission_id/dev/space_packets` and `.../dev/tm_frames` (dev and test only, #780)
+
+Development ingest: one packet or frame through the real ingest path, for seeding a dev mission and
+for tests. **The routes exist only in dev and test**: `config :cadence_web, :dev_ingest_routes, true`
+in `config/dev.exs` and `config/test.exs`, read at compile time by the router
+(`CadenceWeb.Console.DevIngestRoutes`), so a prod release has no such route (a test builds a router
+the prod way and finds none). A person's session and CSRF only; a service identity is refused
+(`service_not_allowed`), like everywhere on this API, because no named caller needs one.
+
+Body `{"space_packet": {"packet_hex" | "packet_base64", "source_ref"?, "source_endpoint_ref"?,
+"spacecraft_id"?, "direction"?, "source_time"?, "receipt_time"?, "metadata"?}}`, or
+`{"tm_frame": {"frame_hex" | "frame_base64", "frame_size"?, "secondary_header_length"?,
+"ocf_length"?, ...}}`. 200 `{data: {raw_evidence, packet_records, transfer_frame_records,
+protocol_anomalies, dispatch_decisions, outputs}}`. 422 `invalid_params` for a missing or malformed
+body, or when the ingest refuses it (`details.ingest`, for example no active binding set).

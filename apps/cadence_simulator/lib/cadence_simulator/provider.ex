@@ -187,8 +187,8 @@ defmodule CadenceSimulator.Provider do
     end
   end
 
-  @spec search_opportunities(map()) :: {:ok, map()} | {:error, term()}
-  def search_opportunities(params) when is_map(params) do
+  @spec search_opportunities(map(), keyword()) :: {:ok, map()} | {:error, term()}
+  def search_opportunities(params, opts \\ []) when is_map(params) do
     with {:ok, run} <- Store.fetch(:run, Map.get(params, "run_id", "")),
          :ok <- ensure_run_searchable(run),
          {:ok, starts_at} <- parse_datetime(params, "starts_at"),
@@ -201,7 +201,8 @@ defmodule CadenceSimulator.Provider do
 
       stations =
         scenario["ground_stations"]
-        |> maybe_filter_by_ids(station_ids)
+        |> Enum.with_index()
+        |> filter_stations(station_ids)
 
       spacecraft =
         scenario
@@ -209,7 +210,14 @@ defmodule CadenceSimulator.Provider do
         |> maybe_filter_by_ids(requested_spacecraft_ids)
 
       opportunities =
-        generate_opportunities(run, spacecraft, stations, starts_at, ends_at)
+        generate_opportunities(
+          run,
+          spacecraft,
+          stations,
+          starts_at,
+          ends_at,
+          Keyword.get(opts, :station_numbers, false)
+        )
         |> Enum.take(limit)
 
       {:ok,
@@ -220,6 +228,25 @@ defmodule CadenceSimulator.Provider do
          "generated_at" => now_iso8601(),
          "truncated" => length(opportunities) == limit
        }}
+    end
+  end
+
+  @doc "Rebuilds a synthetic offer from its exact spacecraft, station and possibly clipped window."
+  def restore_opportunity(run, spacecraft_number, station_number, start_unix, end_unix) do
+    scenario = run["scenario_snapshot"]
+    {cadence, duration, jitter} = pass_parameters(run)
+
+    with true <- spacecraft_number in 1..scenario["spacecraft_count"],
+         %{} = station <- Enum.at(scenario["ground_stations"], station_number),
+         true <- end_unix > start_unix and end_unix - start_unix <= duration,
+         spacecraft_id = configured_spacecraft_id(scenario, spacecraft_number),
+         offset = pass_offset(run, spacecraft_id, cadence, jitter),
+         true <- rem(start_unix - offset, cadence) == 0,
+         {:ok, starts_at} <- DateTime.from_unix(start_unix),
+         {:ok, ends_at} <- DateTime.from_unix(end_unix) do
+      {:ok, opportunity(run, spacecraft_id, station, start_unix, starts_at, ends_at)}
+    else
+      _invalid -> {:error, :not_found}
     end
   end
 
@@ -314,70 +341,97 @@ defmodule CadenceSimulator.Provider do
 
   def terminal_reservation_status?(status), do: status in @terminal_reservation_states
 
-  defp generate_opportunities(run, spacecraft, stations, starts_at, ends_at) do
-    scenario = run["scenario_snapshot"]
-    pass_model = scenario["pass_model"]
-    speed = run["speed"]
-    cadence = max(10, round(pass_model["cadence_seconds"] / speed))
-    duration = max(5, round(pass_model["duration_seconds"] / speed))
-    jitter = max(0, round(pass_model["jitter_seconds"] / speed))
+  defp generate_opportunities(run, spacecraft, stations, starts_at, ends_at, station_numbers?) do
+    {cadence, duration, jitter} = pass_parameters(run)
     start_unix = DateTime.to_unix(starts_at)
     end_unix = DateTime.to_unix(ends_at)
 
     for craft <- spacecraft,
         stations != [],
         window_start <- opportunity_starts(run, craft, start_unix, end_unix, cadence, jitter),
-        station =
+        {station, number} =
           Enum.at(stations, rem(:erlang.phash2({craft["id"], window_start}), length(stations))),
-        antenna_index = rem(:erlang.phash2({window_start, craft["id"]}), station["antenna_count"]),
         window_end = min(window_start + duration, end_unix) do
-      opportunity_id =
-        Ids.stable("opportunity", [
-          run["id"],
+      offer =
+        opportunity(
+          run,
           craft["id"],
-          station["id"],
-          Integer.to_string(window_start)
-        ])
+          station,
+          window_start,
+          DateTime.from_unix!(window_start),
+          DateTime.from_unix!(window_end)
+        )
 
-      %{
-        "id" => opportunity_id,
-        "run_id" => run["id"],
-        "spacecraft_id" => craft["id"],
-        "ground_station_id" => station["id"],
-        "antenna_id" => "#{station["id"]}-antenna-#{antenna_index + 1}",
-        "starts_at" => window_start |> DateTime.from_unix!() |> DateTime.to_iso8601(),
-        "ends_at" => window_end |> DateTime.from_unix!() |> DateTime.to_iso8601(),
-        "synthetic" => true,
-        "model" => "deterministic_pass_v1"
-      }
+      if station_numbers?, do: Map.put(offer, "station_number", number), else: offer
     end
     |> Enum.sort_by(& &1["starts_at"])
   end
 
+  defp opportunity(run, spacecraft_id, station, start_unix, starts_at, ends_at) do
+    antenna_index = rem(:erlang.phash2({start_unix, spacecraft_id}), station["antenna_count"])
+
+    %{
+      "id" =>
+        Ids.stable("opportunity", [
+          run["id"],
+          spacecraft_id,
+          station["id"],
+          Integer.to_string(start_unix)
+        ]),
+      "run_id" => run["id"],
+      "spacecraft_id" => spacecraft_id,
+      "ground_station_id" => station["id"],
+      "antenna_id" => "#{station["id"]}-antenna-#{antenna_index + 1}",
+      "starts_at" => DateTime.to_iso8601(starts_at),
+      "ends_at" => DateTime.to_iso8601(ends_at),
+      "synthetic" => true,
+      "model" => "deterministic_pass_v1"
+    }
+  end
+
+  defp pass_parameters(run) do
+    pass_model = run["scenario_snapshot"]["pass_model"]
+    speed = run["speed"]
+
+    {max(10, round(pass_model["cadence_seconds"] / speed)),
+     max(5, round(pass_model["duration_seconds"] / speed)),
+     max(0, round(pass_model["jitter_seconds"] / speed))}
+  end
+
   defp opportunity_starts(run, craft, start_unix, end_unix, cadence, jitter) do
-    base_offset = rem(:erlang.phash2({run["seed"], craft["id"]}), cadence)
-
-    jitter_offset =
-      rem(:erlang.phash2({craft["id"], run["seed"], :jitter}), jitter * 2 + 1) - jitter
-
-    offset = max(0, base_offset + jitter_offset)
+    offset = pass_offset(run, craft["id"], cadence, jitter)
     first = start_unix + rem(cadence - rem(start_unix - offset, cadence), cadence)
 
     Stream.iterate(first, &(&1 + cadence))
     |> Enum.take_while(&(&1 < end_unix))
   end
 
+  defp pass_offset(run, spacecraft_id, cadence, jitter) do
+    base = rem(:erlang.phash2({run["seed"], spacecraft_id}), cadence)
+    variation = rem(:erlang.phash2({spacecraft_id, run["seed"], :jitter}), jitter * 2 + 1)
+    max(0, base + variation - jitter)
+  end
+
   defp spacecraft_inventory(scenario) do
     count = scenario["spacecraft_count"]
-    width = max(3, count |> Integer.to_string() |> String.length())
+    prefix = scenario["spacecraft_prefix"] <> "-"
+    width = spacecraft_number_width(count)
 
     Enum.map(1..count, fn index ->
-      id =
-        "#{scenario["spacecraft_prefix"]}-#{index |> Integer.to_string() |> String.pad_leading(width, "0")}"
-
+      id = spacecraft_id(prefix, index, width)
       %{"id" => id, "name" => "Spacecraft #{index}", "synthetic" => true}
     end)
   end
+
+  defp configured_spacecraft_id(scenario, index) do
+    prefix = scenario["spacecraft_prefix"] <> "-"
+    spacecraft_id(prefix, index, spacecraft_number_width(scenario["spacecraft_count"]))
+  end
+
+  defp spacecraft_number_width(count), do: max(3, byte_size(Integer.to_string(count)))
+
+  defp spacecraft_id(prefix, index, width),
+    do: prefix <> String.pad_leading(Integer.to_string(index), width, "0")
 
   defp normalize_stations(stations) when is_list(stations) and stations != [] do
     normalized =
@@ -479,6 +533,11 @@ defmodule CadenceSimulator.Provider do
 
   defp maybe_filter_by_ids(resources, []), do: resources
   defp maybe_filter_by_ids(resources, ids), do: Enum.filter(resources, &(&1["id"] in ids))
+
+  defp filter_stations(stations, []), do: stations
+
+  defp filter_stations(stations, ids),
+    do: Enum.filter(stations, fn {station, _number} -> station["id"] in ids end)
 
   defp apply_run_transition(%{"state" => state}, _action) when state in @terminal_run_states,
     do: {:error, {:conflict, "run is terminal"}}

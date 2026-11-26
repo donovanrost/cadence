@@ -170,6 +170,31 @@ defmodule Cadence.Limits do
     |> limit_definition_result()
   end
 
+  @doc """
+  The definitions for `{limit_definition_id, version}` pairs, in ONE query, keyed by the pair
+  (a pair with no definition is absent).
+  """
+  @spec fetch_limit_definitions(binary() | nil, binary(), [{binary(), pos_integer()}]) ::
+          %{{binary(), pos_integer()} => Definition.t()}
+  def fetch_limit_definitions(_organization_id, _mission_id, []), do: %{}
+
+  def fetch_limit_definitions(organization_id, mission_id, keys) when is_list(keys) do
+    keys = Enum.uniq(keys)
+    wanted = MapSet.new(keys)
+
+    GovernedLimitDefinitionRow
+    |> where(
+      [row],
+      row.mission_id == ^mission_id and
+        row.limit_definition_id in ^Enum.map(keys, &elem(&1, 0)) and
+        row.version in ^Enum.map(keys, &elem(&1, 1))
+    )
+    |> scope_limit_definition_organization(organization_id, [])
+    |> Repo.all()
+    |> Enum.filter(&MapSet.member?(wanted, {&1.limit_definition_id, &1.version}))
+    |> Map.new(&{{&1.limit_definition_id, &1.version}, GovernedLimitDefinitionRow.to_domain(&1)})
+  end
+
   @spec fetch_latest_limit_definition(binary() | nil, binary(), binary(), keyword()) ::
           {:ok, Definition.t()} | {:error, :limit_definition_not_found}
   def fetch_latest_limit_definition(

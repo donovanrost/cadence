@@ -8,7 +8,9 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
   alias Cadence.Applications.SpacecraftConfiguration.{Drafts, Review}
   alias Cadence.Applications.TelemetryDecom
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
+  alias Cadence.Catalog.CompositionPins
   alias Cadence.Catalog.SpacecraftConfigurationInput
+  alias Cadence.CompositionFixtures
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Control.Configuration
   alias Cadence.Governance.ActivationPolicy
@@ -96,7 +98,8 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
     assert_received {:apply_transaction_ms, transaction_ms}
 
     # Every spacecraft's stored decom config follows the move (11-15: it kept the old catalog).
-    [%{changes: [%{value: rev2}]}] = ops
+    [%{changes: [%{value: composition}]}] = ops
+    rev2 = CompositionPins.catalog_revision_for(c.org, c.mission.mission_id, composition)
 
     assert c.org
            |> TelemetryDecom.list_configs(c.mission.mission_id)
@@ -177,7 +180,12 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
         kind: "spacecraft_profile",
         action: :update,
         entity_id: profile,
-        changes: [%{path: "catalog_revision_id", value: rev2.catalog_revision_id}],
+        changes: [
+          %{
+            path: "composition_id",
+            value: CompositionFixtures.pin!(c.org, c.mission.mission_id, rev2.catalog_revision_id)
+          }
+        ],
         options: %{rollout: "all_versions"}
       }
     ]

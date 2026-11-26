@@ -119,6 +119,20 @@ produces `:mission` affinity. Their inputs are other partitions' **outputs**, no
 
 ## (d) Journal-off deployments
 
+**Built (#692).** A partition recovers from its last semantic snapshot (`semantic_runtime_snapshots`,
+one row per partition and basis) and the journal replays from the snapshot's per-stream offsets;
+`semantic_runtime_commits`, the per-batch commit path and `CommitRetirement` are gone. The journal's
+durable processing cursor follows the snapshots (`IngressJournalConsumer.SnapshotGate`), a recovered
+partition tells the consumers it gated to replay (`SemanticSnapshotNotifier`), and it skips the
+frames its snapshot already includes (`SemanticSnapshots.skip_replayed?/2`), so a replay applies
+nothing twice. Journal off: nothing replays, and a crash loses the memory since the last snapshot
+(pinned by `monitoring_replay_ids_e2e_test.exs`).
+
+**A superseded owner is fenced at its next snapshot, not its next batch** (accepted, #692 review):
+the previous owner keeps processing until its next snapshot write (one interval, 60 s) fails on the
+new epoch and it stops. Its snapshot cannot overwrite the new owner's; its effects are insert-or-get
+under the same replay-safe ids, so nothing duplicates.
+
 **The archive isn't written at all on the TCP path.**
 - The FileSystem archive's `persist_raw_evidence_multi` is a no-op (`L/ingress_archive/filesystem.ex:40-45`).
 - The projector runs with `archive_raw_evidence?: false` (`L/runtime/persistence.ex:109-115`).

@@ -5,6 +5,7 @@ Conventions: [README.md](README.md). Requested shapes: `docs/apogee/plans/setup-
 | Ask | Endpoint | Status |
 | --- | --- | --- |
 | S | `GET /missions/:mission_id/spacecraft` | **implemented** |
+| SN | `GET /missions/:mission_id/spacecraft/names` | **implemented** (#847, `Cadence.Reads.SpacecraftNames`) |
 | R | `GET /missions/:mission_id/readiness` | **implemented** (v1, `Cadence.Reads.Readiness`; domain extends it for change-set preview) |
 | P | `GET /missions/:mission_id/profiles` | **implemented** |
 | SD | `GET /missions/:mission_id/spacecraft/:spacecraft_id` | **implemented** |
@@ -98,6 +99,20 @@ with `spacecraft`.
   pinned to the profile, as the detail's `override_count`. `last_change`: the detail's
   `profile.last_change` (`{version, revision: null, at, actor: null}`: when the latest version was
   made), or `null` if its history row is missing.
+
+## `GET /api/v1/missions/:mission_id/spacecraft/names`
+
+Spacecraft id → name and SCID, for a screen that names the craft its own rows carry (Plan,
+Re-plan) without the fleet read's telemetry and limits (#847). Members of the mission. Both forms
+answer `{data: {names: [{id, name, scid}]}, meta: {next_cursor}}`; `scid` is null for a craft that
+has none yet. Archived spacecraft are included (plans still name them).
+
+- **By ids**: `?ids=a,b,c`, at most 100 (the small sets a screen already knows). Unknown ids are
+  left out. `next_cursor` is null. More than 100 is `422 invalid_params` (`details.ids`).
+- **The whole mission, in pages**: no `ids`. Sorted by name, then id, so pages are stable. `limit`
+  1–500 (default 500; a limit outside 1–500 falls back to 500); pass the previous `meta.next_cursor` as `?cursor=` for the next page, null
+  on the last. There is no unpaged list. A cursor the server didn't make is `422 invalid_params`
+  (`details.cursor`).
 
 ## `GET /api/v1/missions/:mission_id/spacecraft/:spacecraft_id`
 
@@ -626,6 +641,9 @@ The shape is setup-shapes.md §C3, plus `declaration_count`.
 - `diagnostics[]`: `{severity: error|warning|info, code, message, path}`, where `path` is a
   " / "-joined XTCE path or `null`. A run can succeed with error diagnostics (unsupported items
   are skipped).
+- `revision`: `{id, number, label, composition_id}` or `null`. `composition_id` (D3, #544) is the
+  revision's one-layer composition: what C3's rollout pins on profiles and overrides (`null` only
+  if the import made none).
 - `base_revision`: the revision before this run's revision in the same database (the highest
   `revision_number` below its own), or `null` (first revision, or no revision produced). It's the
   same base as the revision read's `breaking_base` (the model approval gate above).
@@ -1576,3 +1594,24 @@ change set (`GET /config`), so the routing read carries no flag.
   name; never an id. The console adds its verb ('Remove older route …').
 - A rollback past a removal is NO-GO with a validation item: 'The older route “<name>” ·
   <spacecraft> was removed and can't be restored. To route that way again, add an extra route.'
+
+
+## Source endpoints
+
+Mission admins use the session-authenticated `/api/v1/missions/:mission_id` routes to manage
+ingress identity mappings. POST requests require the session's CSRF token.
+
+- `GET /source-endpoints` lists mission endpoints.
+- `GET /spacecraft/:spacecraft_id/source-endpoints` lists only endpoints assigned to that spacecraft.
+- `GET /source-endpoints/:source_endpoint_id` reads one endpoint in the mission.
+- `POST /source-endpoints` creates a mission endpoint, optionally assigned to a spacecraft.
+- `POST /spacecraft/:spacecraft_id/source-endpoints` creates an endpoint assigned to the route's spacecraft.
+
+Lists accept `page` (default 1) and `page_size` (default 50, maximum 100). The response contains
+`data` and `meta` with `page`, `page_size`, and `total_count`. Creation accepts a
+`source_endpoint` object with `source_ref`, `display_name`, optional `scid` and `metadata`, and
+an optional `spacecraft_id` on the mission route. The server generates `source_endpoint_id` and
+returns it with the stored endpoint. Supplying the ID on create returns `422 invalid_params`.
+
+A non-empty `source_ref` identifies an endpoint within its mission and spacecraft scope. Repeating
+that reference returns the existing endpoint with its saved attributes.

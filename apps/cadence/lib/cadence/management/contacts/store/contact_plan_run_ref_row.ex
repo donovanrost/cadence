@@ -24,6 +24,9 @@ defmodule Cadence.Management.Contacts.Store.ContactPlanRunRefRow do
     :contact_planning_run_id
   ]
 
+  @doc false
+  def insert_attrs(attrs), do: attrs
+
   def changeset(attrs) when is_map(attrs) do
     %__MODULE__{}
     |> cast(attrs, @fields)

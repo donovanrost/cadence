@@ -34,7 +34,12 @@ defmodule Cadence.Dev.ReflectOrbital.Activation do
       )
 
     fleet = Cadence.SpacecraftStore.list_spacecraft(F.organization_id(), F.mission_id())
-    ^expected = length(fleet)
+
+    if length(fleet) != expected do
+      raise "Earendil has #{length(fleet)} seeded spacecraft, expected #{expected}. " <>
+              "Use a fresh worktree stack or run dev/stack reset with the requested fleet size."
+    end
+
     snapshots = Map.new(fleet, &{&1.spacecraft_id, Drafts.snapshot(mission, &1)})
 
     verify_drafts!(snapshots, revision)

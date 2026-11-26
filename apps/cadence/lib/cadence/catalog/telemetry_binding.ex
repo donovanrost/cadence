@@ -8,13 +8,15 @@ defmodule Cadence.Catalog.TelemetryBinding do
       mission_model_telemetry:<revision>:<source endpoint>:<packet definition>        capability instance
       mission_model_telemetry:<revision>:<source endpoint>:<packet definition>:rule   binding rule
 
-  A spacecraft's managed source endpoint is `spacecraft_runtime:<spacecraft id>`. A decom
+  A spacecraft's managed source endpoint ID is defined by `Cadence.Ids`. A decom
   configuration may name another endpoint; its rule ids follow the same format with that endpoint,
   so `binding_rule_id/3` (by spacecraft) doesn't produce them.
 
   Changing the format changes how existing rows read back: stored observations carry only the
   parts, so a change here needs a migration of the derived rows first.
   """
+
+  alias Cadence.Ids
 
   @doc "The capability instance id for one packet definition on one source endpoint."
   @spec capability_instance_id(binary(), binary(), binary()) :: binary()
@@ -37,11 +39,7 @@ defmodule Cadence.Catalog.TelemetryBinding do
   def binding_rule_id(revision_id, spacecraft_id, producer_id)
       when is_binary(spacecraft_id) do
     revision_id
-    |> capability_instance_id(managed_source_endpoint_id(spacecraft_id), producer_id)
+    |> capability_instance_id(Ids.managed_source_endpoint_id(spacecraft_id), producer_id)
     |> rule_id()
   end
-
-  # The same id as SourceEndpoints.managed_source_endpoint_id/1 (comms); catalog can't depend on
-  # comms, and the binding test pins that the two agree.
-  defp managed_source_endpoint_id(spacecraft_id), do: "spacecraft_runtime:" <> spacecraft_id
 end

@@ -71,6 +71,45 @@ defmodule CadenceWeb.Console.AlarmAPITest do
       assert is_binary(alarm["received_at"])
     end
 
+    test "pages by cursor: meta.next_cursor, a total, and every row enriched", c do
+      first = c |> get_json("/alarms?state=all&limit=1") |> json_response(200)
+      assert [one] = first["data"]["alarms"]
+      assert first["data"]["total"] == 2
+      assert is_binary(first["meta"]["next_cursor"])
+
+      cursor = first["meta"]["next_cursor"]
+      second = c |> get_json("/alarms?state=all&limit=1&cursor=#{cursor}") |> json_response(200)
+      assert [other] = second["data"]["alarms"]
+      assert other["id"] != one["id"]
+      assert second["meta"]["next_cursor"] == nil
+      assert second["data"]["summary"] == first["data"]["summary"]
+    end
+
+    test "the sister filters: one point, a plane's spacecraft, not me", c do
+      by_point = c |> get_json("/alarms?state=all&point_id=HK.counter") |> json_response(200)
+      assert Enum.all?(by_point["data"]["alarms"], &(&1["point"]["id"] == "HK.counter"))
+      assert by_point["data"]["total"] == length(by_point["data"]["alarms"])
+
+      no_plane = c |> get_json("/alarms?state=all&plane=9") |> json_response(200)
+      assert no_plane["data"]["alarms"] == [] and no_plane["data"]["total"] == 0
+
+      excluded =
+        c
+        |> get_json("/alarms?state=all&exclude_spacecraft_id=spacecraft-001")
+        |> json_response(200)
+
+      assert excluded["data"]["alarms"] == []
+    end
+
+    test "bad paging parameters are 422s", c do
+      for query <- ["limit=0", "limit=201", "limit=x", "plane=x", "cursor=garbage"] do
+        assert %{"error" => %{"details" => details}} =
+                 c |> get_json("/alarms?" <> query) |> json_response(422)
+
+        assert map_size(details) == 1
+      end
+    end
+
     test "state=all includes in-limits points; spacecraft filter narrows", c do
       all = c |> get_json("/alarms?state=all") |> json_response(200)
       assert length(all["data"]["alarms"]) == 2

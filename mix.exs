@@ -49,6 +49,7 @@ defmodule CadenceWorkspace.MixProject do
   defp aliases do
     [
       setup: ["deps.get", workspace_command("deps.get")],
+      "cadence.scale.run": [&run_scale/1],
       "cadence_simulator.load": [
         workspace_command("cadence_simulator.load", projects: [:cadence_simulator])
       ],
@@ -117,6 +118,21 @@ defmodule CadenceWorkspace.MixProject do
         "test"
       ]
     ]
+  end
+
+  defp run_scale(args) do
+    if Enum.any?(args, &(&1 == "--spacecraft" or String.starts_with?(&1, "--spacecraft="))) do
+      Mix.Task.run("run", [
+        "--no-start",
+        "-r",
+        "dev/scale_run.exs",
+        "-e",
+        "Cadence.Dev.ScaleRun.boot(System.argv())",
+        "--" | args
+      ])
+    else
+      run_child_mix_command(:cadence, ["cadence.scale.run" | args])
+    end
   end
 
   defp workspace_test_command(opts \\ []) do

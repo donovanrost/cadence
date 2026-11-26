@@ -13,16 +13,68 @@ Elixir dependencies (`mise exec -- mix workspace.run -t deps.get`), and frontend
 
 ```sh
 dev/stack up       # create and migrate both stores, start services, seed data
+dev/stack up --no-seed     # start services without any data seeds
+dev/stack seed-rest        # run the REST Earendil harness against a running unseeded stack
 dev/stack status   # show this slot's names, ports, and process state
 dev/stack down     # stop this worktree's processes and QuestDB container
 dev/stack reset    # drop this worktree's DB and QuestDB data, then rebuild
+dev/stack reset --no-seed  # rebuild empty stores and start services for the REST harness
 dev/stack env      # create/refresh mise.local.toml and show non-secret settings
 ```
 
-`mise run stack up` and the other subcommands are equivalent. `up` is safe to rerun. Seeds run
-in this order: Reflect Orbital demo, QA personas, Reflect Orbital planning, QA mission. The
-simulator starts before seeds; Phoenix starts before its environment admin and seeds. The seed
-does not activate a configuration or write approvals. `reset` deletes only this slot's dev data.
+`mise run stack up` and the other subcommands are equivalent. Default `up` is safe to rerun and
+keeps the four existing seeds in order: Reflect Orbital demo, QA personas, Reflect Orbital
+planning, QA mission. They build the complete local demo until the REST path reaches parity.
+The simulator starts before those seeds, and Phoenix starts before its environment admin and
+seeds. `reset` deletes only this slot's dev data.
+
+After the #718 migration baseline lands, run `dev/stack reset` once in each existing worktree.
+The old migration ledger and schema cannot be upgraded in place; the baseline reports that reset
+instruction before applying any DDL. Recreate your own test partition after dropping its old
+database as well.
+
+For the REST harness, use `dev/stack reset --no-seed` then `dev/stack seed-rest`. This starts the
+simulator, Phoenix, and console before the standalone REST client. The environment admin in
+`mise.local.toml` is the only bootstrap credential; the client signs in through the console and
+uses its session. Set `EARENDIL_SPACECRAFT_COUNT` to 500 (default) or 1000 and
+`EARENDIL_SITE_COUNT` to 2–15 (default 10). It prints wall time for each phase. The client imports
+the Earendil command and telemetry YAML catalog through the console upload route, starts the
+simulator run over its HTTP admin API, and creates the provider account, mission grant, and mission
+provider through the console API. It validates and syncs the provider, probes the managed QuestDB
+dashboard source through the console API, then stages the selected ground stations, a catalog-backed
+spacecraft profile, and spacecraft pinned to that profile in one change set. The spacecraft use the
+stable IDs referenced by the six documents in `dev/seed/earendil_dashboards.exs`. That change set
+enters independent review. Once the first ten
+spacecraft are applied, the client imports those dashboards through `POST /dashboards` with
+`identity: "keep"`; an identical rerun reuses them. Until then, it reports the #745 approval wait.
+Invitation delivery and a second person's session also wait on #745. Per-spacecraft configuration
+drafts need an applied fleet; the bulk review path waits on #734. Orbit elements wait on #732.
+Do not run `seed-rest` on a database seeded by default `up`. Use `reset` when switching between
+the full demo and REST harness.
+
+Fresh `reset --no-seed` + `seed-rest` measurements on the Platform worktree (2026-11-26;
+100 spacecraft per REST batch; totals exclude stack startup and vary with machine load):
+
+| Spacecraft | Sites | QuestDB source probe | Dashboard phase | Total |
+| ---: | ---: | ---: | ---: | ---: |
+| 500 | 10 | 3.04 s | 0.04 s | 44.99 s |
+| 1,000 | 15 | 0.10 s | 0.05 s | 17.67 s |
+
+Both runs reached `in_review` and the dashboard phase reported the #745 wait. The mission's default
+independent approval policy prevents the spacecraft from becoming active until #745 supplies a
+second person.
+
+Default `up` retains these direct seeds until the REST harness reaches parity:
+
+| Direct seed step | Remaining REST work |
+| --- | --- |
+| `reflect_orbital_demo.exs` | Independent fleet and model approval need a second person (#745); orbital elements need #732; bulk spacecraft configuration review needs #734. |
+| `apogee_qa_personas.exs` | Invite and sign in the four QA people using the dev mailbox (#745). |
+| `reflect_orbital_planning.exs` | Seed planning policy and recurring templates over REST; its second-person policy approval needs #745. |
+| `apogee_qa_mission.exs` | Build both QA missions through REST after the QA people can join by invitation (#745). |
+
+`mise run earendil-live` imports the shared dashboard documents and playlist through REST. Its
+contact setup still uses the fixture and live contact scripts required by the scale harness.
 
 Use `mise exec --` from anywhere under the worktree to load `mise.local.toml`, including when
 running `mise run cadence`, `mise run earendil-live`, Mix tasks, and console e2e tests. The
