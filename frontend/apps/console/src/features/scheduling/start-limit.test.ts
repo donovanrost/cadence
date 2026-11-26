@@ -56,8 +56,9 @@ describe("U52 start limit (ux)", () => {
     expect(limitRefusal(refusal({ count: 62_400, limit: 50_000 }))).toContain("counts 62,400");
     expect(limitRefusal(refusal(null))).toContain("goes over the limit of template");
     expect(limitRefusal(refusal(null, "planning_not_set_up"))).toBeNull();
-    expect(limitRefusal(refusal({ limit: 100_000 }, "fleet_planning_run_requirement_limit_exceeded")))
-      .toContain("safety limit of 100,000");
+    expect(
+      limitRefusal(refusal({ limit: 100_000 }, "fleet_planning_run_requirement_limit_exceeded")),
+    ).toContain("safety limit of 100,000");
     expect(limitRefusal(null)).toBeNull();
   });
 });
