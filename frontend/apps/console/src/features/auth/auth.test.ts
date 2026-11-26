@@ -1,7 +1,7 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { fetchInvitation, safeReturn, type Invitation } from "./api.ts";
+import { fetchInvitation, safeReturn, signOutHere, type Invitation } from "./api.ts";
 import SignInScreen from "./SignInScreen.vue";
 import { invitationHeader, invitationView } from "./words.ts";
 
@@ -162,5 +162,42 @@ describe("SignInScreen", () => {
     expect(primary?.text()).toContain("Too many attempts. Try again in 0:42.");
     w.unmount();
     expect(assign).not.toHaveBeenCalled();
+  });
+});
+
+/** #664: "Sign out and continue" goes through DELETE /api/v1/session. */
+describe("signOutHere", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+  const problem = (status: number, code: string) =>
+    new Response(JSON.stringify({ error: { code, message: "Down." } }), {
+      status,
+      headers: { "content-type": "application/json" },
+    });
+
+  it("reloads signed out after a 204, and after a 401 (it had already ended)", async () => {
+    const reload = vi.spyOn(window.location, "reload").mockImplementation(() => undefined);
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(problem(401, "unauthenticated"));
+    vi.stubGlobal("fetch", fetch);
+    expect((await signOutHere()).ok).toBe(true);
+    expect((await signOutHere()).ok).toBe(false);
+    expect(reload).toHaveBeenCalledTimes(2);
+    expect(fetch.mock.calls[0]).toEqual([
+      "/api/v1/session",
+      expect.objectContaining({ method: "DELETE" }),
+    ]);
+  });
+
+  it("stays put and returns any other failure for the screen to say", async () => {
+    const reload = vi.spyOn(window.location, "reload").mockImplementation(() => undefined);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(problem(503, "unavailable")));
+    const r = await signOutHere();
+    expect(r.ok).toBe(false);
+    expect(reload).not.toHaveBeenCalled();
   });
 });

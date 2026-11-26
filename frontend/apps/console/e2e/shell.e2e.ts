@@ -1,7 +1,9 @@
+import { request, type WebSocket } from "@playwright/test";
 import { expectAccessible } from "./support/accessibility.ts";
 import { missionPath, openConsole } from "./support/console.ts";
-import { DEMO, storageStateFor } from "./support/env.ts";
+import { BASE_URL, DEMO, PERSONAS, storageStateFor } from "./support/env.ts";
 import { allow, expect, test } from "./support/fixtures.ts";
+import { signInByApi } from "./support/sign-in.ts";
 
 // Shell contract: frontend/apps/console/ARCHITECTURE.md "Building a screen".
 test.describe("console shell", () => {
@@ -80,5 +82,52 @@ test.describe("console shell, signed out", () => {
     await page.goto("/console");
     await expect(page).toHaveURL(/\/console\/sign-in(?:[/?#]|$)/);
     await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible();
+  });
+});
+
+// #664: sign-out goes through DELETE /api/v1/session. Its own session (signed in here, through the
+// API), so revoking it leaves the shared persona sessions alone.
+test.describe("console shell, sign-out", () => {
+  test.use({
+    storageState: async ({ baseURL }, use, testInfo) => {
+      const path = testInfo.outputPath("sign-out-session.json");
+      await signInByApi(baseURL ?? BASE_URL, PERSONAS.operator, path);
+      await use(path);
+    },
+    // After the session ends, the other tab's socket reconnects and is refused, and its reads 401.
+    allowedDiagnostics: allow(/\/socket\/websocket/, /\/api\/v1\/.* -> 401/, /status of 401/),
+  });
+
+  test("ends the session, disconnects every tab's live socket and refuses the old cookie", async ({
+    page,
+    context,
+  }) => {
+    const sockets = (tab: typeof page) => {
+      const seen: WebSocket[] = [];
+      tab.on("websocket", (ws) => {
+        if (ws.url().includes("/socket/websocket")) seen.push(ws);
+      });
+      return seen;
+    };
+    const other = await context.newPage();
+    const otherSockets = sockets(other);
+    await openConsole(other, missionPath("now"));
+    await expect.poll(() => otherSockets.length).toBeGreaterThan(0);
+    await openConsole(page, missionPath("now"));
+    const before = await context.storageState();
+    // The other tab's socket that's open now; nothing on the client closes it, only the server.
+    await expect.poll(() => otherSockets.filter((ws) => !ws.isClosed()).length).toBe(1);
+    const open = otherSockets.find((ws) => !ws.isClosed());
+
+    await page.getByRole("button", { name: /account menu for/i }).click();
+    await page.getByRole("menuitem", { name: "Sign out" }).click();
+
+    await expect(page).toHaveURL(/\/console\/sign-in(?:[/?#]|$)/);
+    // The other tab never navigated: only the server's disconnect closes its socket, at once.
+    await expect.poll(() => open?.isClosed(), { timeout: 2_000 }).toBe(true);
+    expect(other.url()).toContain(missionPath("now"));
+    const old = await request.newContext({ baseURL: BASE_URL, storageState: before });
+    expect((await old.get("/api/v1/session")).status()).toBe(401);
+    await old.dispose();
   });
 });

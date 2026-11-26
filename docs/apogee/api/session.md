@@ -115,9 +115,16 @@ Errors: `404 mission_not_found`.
 
 ## Sign-out
 
-`DELETE /session` (the existing browser route) also broadcasts `disconnect` to that session's
-console sockets. After it, the next API call returns `401` and the SPA should redirect to
-`/sign-in`.
+`DELETE /api/v1/session` → `204` (#664). A person only (CSRF on, like every write); a service
+identity gets `403 service_not_allowed`. The server revokes the session token, then broadcasts
+`disconnect` to that session's console sockets (revoked first, so a socket that reconnects at once
+is refused), then drops and renews the cookie session. After it the old cookie answers `401` here
+and the console's page sends you to `/console/sign-in`.
+
+Without a session it's `401 unauthenticated`, which the console treats as already signed out. Any
+other failure leaves you signed in, and the console says so. The console leaves with a full
+navigation to `/console/sign-in`, since the CSRF token and every cached read belonged to the old
+session. The root `DELETE /session` and `PUT /session/organization` are gone.
 
 ## Account: my invitations (§11 L21)
 

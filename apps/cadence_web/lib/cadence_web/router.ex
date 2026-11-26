@@ -121,9 +121,6 @@ defmodule CadenceWeb.Router do
   scope "/", CadenceWeb do
     pipe_through([:browser, :require_authenticated_scope])
 
-    delete("/session", UserSessionController, :delete)
-    put("/session/organization", UserSessionController, :update)
-
     live_session :application,
       on_mount: [{CadenceWeb.UserAuth, :require_user_scope}],
       layout: {CadenceWeb.Layouts, :host} do
@@ -235,6 +232,7 @@ defmodule CadenceWeb.Router do
     pipe_through(:console_api)
 
     get("/session", SessionController, :show)
+    delete("/session", SessionController, :delete)
     put("/session/organization", SessionController, :update_organization)
     # L6 admin mode step-up (owner: api-ops). Contract: docs/apogee/api/session.md
     post("/session/admin-mode", SessionController, :enter_admin_mode)
