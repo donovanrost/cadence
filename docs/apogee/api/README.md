@@ -5,7 +5,7 @@ Owner: **api**. Every contract the console SPA uses is documented in this folder
 | Doc | Covers |
 | --- | --- |
 | [session.md](session.md) | SPA hosting, auth, bootstrap, organization switch |
-| [realtime.md](realtime.md) | `/socket/console`, `mission:<id>` channel |
+| [realtime.md](realtime.md) | `/socket`, `mission:<id>` channel |
 | [ops.md](ops.md) | Now / Investigate reads (owner: api-ops) |
 | [setup.md](setup.md) | Readiness, spacecraft, profiles, catalog, people |
 | [changes.md](changes.md) | Mission change sets and configuration revisions |
