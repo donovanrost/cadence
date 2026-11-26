@@ -9,7 +9,7 @@ defmodule Cadence.Runtime.PartitionOwner.DispatchCache do
   every reconcile since the new activation's bindings may put different handlers in play.
   """
 
-  alias Cadence.Runtime.{CapabilityRegistry, PacketDefinitionCache, ProcessNamespace}
+  alias Cadence.Runtime.{CapabilityRegistry, PacketDefinitionCache}
   alias Cadence.Telemetry.PacketDefinition
 
   @type t :: %__MODULE__{
@@ -26,13 +26,13 @@ defmodule Cadence.Runtime.PartitionOwner.DispatchCache do
   (releasing the previous one) and starts with no registry lookups cached. A plan that fails to
   decode is reported on resolve, as it was when each packet decoded it.
   """
-  @spec acquire(ProcessNamespace.t(), map()) :: t()
-  def acquire(%ProcessNamespace{} = namespace, plans) do
+  @spec acquire(GenServer.server(), map()) :: t()
+  def acquire(cache_server, plans) do
     plan_id = plan_id(plans)
 
     %__MODULE__{
       plan_id: plan_id,
-      packet_definitions: PacketDefinitionCache.acquire(namespace, plan_id, plans)
+      packet_definitions: PacketDefinitionCache.acquire(cache_server, plan_id, plans)
     }
   end
 

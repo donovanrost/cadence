@@ -32,6 +32,7 @@ defmodule Cadence.Runtime.PartitionOwner do
     MissionAdmission,
     MissionRuntime,
     MissionRuntimeSpec,
+    PacketDefinitionCache,
     PartitionKey,
     Persistence,
     ProcessNamespace,
@@ -58,6 +59,7 @@ defmodule Cadence.Runtime.PartitionOwner do
           partition_key: PartitionKey.t(),
           active_activation: MissionRuntimeSpec.t(),
           dispatch_cache: DispatchCache.t(),
+          packet_definition_cache: GenServer.server(),
           binding_set: BindingSet.t(),
           runtime_binding_set: BindingSet.t(),
           managed_application_states: %{required(binary()) => term()},
@@ -263,6 +265,15 @@ defmodule Cadence.Runtime.PartitionOwner do
     partition_key = Keyword.fetch!(opts, :partition_key)
     active_activation = Keyword.fetch!(opts, :active_activation)
     binding_set = Keyword.fetch!(opts, :binding_set)
+
+    # The decoded packet definitions live in a cache the host provides: its namespace's (the
+    # runtime's `Runtime.Supervisor` starts one), or a pid a host with its own tree passes in
+    # (`ReplaySession`).
+    packet_definition_cache =
+      Keyword.get_lazy(opts, :packet_definition_cache, fn ->
+        PacketDefinitionCache.name(process_namespace)
+      end)
+
     persist_runtime_records? = Keyword.get(opts, :persist_runtime_records?, true)
 
     persistence_policy =
@@ -312,8 +323,9 @@ defmodule Cadence.Runtime.PartitionOwner do
              profiler: Keyword.get(opts, :profiler, TelemetryProfiler),
              partition_key: partition_key,
              active_activation: active_activation,
+             packet_definition_cache: packet_definition_cache,
              dispatch_cache:
-               DispatchCache.acquire(process_namespace, active_activation.runtime_plans),
+               DispatchCache.acquire(packet_definition_cache, active_activation.runtime_plans),
              binding_set: binding_set,
              runtime_binding_set: runtime_binding_set,
              managed_application_states: managed_application_states,
@@ -491,7 +503,10 @@ defmodule Cadence.Runtime.PartitionOwner do
                  state
                  | active_activation: activation,
                    dispatch_cache:
-                     DispatchCache.acquire(state.process_namespace, activation.runtime_plans),
+                     DispatchCache.acquire(
+                       state.packet_definition_cache,
+                       activation.runtime_plans
+                     ),
                    binding_set: binding_set,
                    runtime_binding_set: runtime_binding_set,
                    managed_application_states: managed_application_states,

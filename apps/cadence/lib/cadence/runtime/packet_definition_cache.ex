@@ -21,10 +21,17 @@ defmodule Cadence.Runtime.PacketDefinitionCache do
     %{id: __MODULE__, start: {__MODULE__, :start_link, [opts]}, type: :worker}
   end
 
+  @doc """
+  Starts a cache. With a `:process_namespace` it is that namespace's cache (registered; what the
+  runtime's partition owners find by default). Without one it is unregistered, for a host that
+  owns its own tree and passes the pid to its partition owners (an isolated replay session).
+  """
   @spec start_link(keyword()) :: GenServer.on_start()
-  def start_link(opts) do
-    namespace = Keyword.fetch!(opts, :process_namespace)
-    GenServer.start_link(__MODULE__, :ok, name: name(namespace))
+  def start_link(opts \\ []) do
+    case Keyword.fetch(opts, :process_namespace) do
+      {:ok, namespace} -> GenServer.start_link(__MODULE__, :ok, name: name(namespace))
+      :error -> GenServer.start_link(__MODULE__, :ok)
+    end
   end
 
   @spec name(ProcessNamespace.t()) :: GenServer.name()
@@ -39,19 +46,17 @@ defmodule Cadence.Runtime.PacketDefinitionCache do
   content-addressed (`RuntimePlan.new/5` hashes the revision, target, contract and plan content):
   the same id always means the same definitions. A plan without an id is never cached.
   """
-  @spec acquire(ProcessNamespace.t(), binary() | nil, map()) ::
+  @spec acquire(GenServer.server(), binary() | nil, map()) ::
           {:ok, table()} | {:error, term()}
-  def acquire(%ProcessNamespace{} = namespace, plan_id, plans) when is_binary(plan_id) do
-    server = name(namespace)
-
+  def acquire(server, plan_id, plans) when is_binary(plan_id) do
     case GenServer.call(server, {:hold, self(), plan_id}, :infinity) do
       {:ok, table} -> {:ok, table}
       :miss -> GenServer.call(server, {:load, self(), plan_id, plans}, :infinity)
     end
   end
 
-  def acquire(%ProcessNamespace{} = namespace, _plan_id, plans),
-    do: GenServer.call(name(namespace), {:release_without_id, self(), plans}, :infinity)
+  def acquire(server, _plan_id, plans),
+    do: GenServer.call(server, {:release_without_id, self(), plans}, :infinity)
 
   @doc "One ETS read of a decoded packet definition."
   @spec fetch(table(), binary(), binary()) :: {:ok, term()} | :error

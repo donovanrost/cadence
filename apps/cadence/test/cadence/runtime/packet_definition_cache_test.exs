@@ -68,7 +68,7 @@ defmodule Cadence.Runtime.PacketDefinitionCacheTest do
 
     pid =
       spawn(fn ->
-        cache = DispatchCache.acquire(namespace, plans)
+        cache = DispatchCache.acquire(PacketDefinitionCache.name(namespace), plans)
         send(parent, {:held, self(), cache})
 
         receive do
@@ -112,9 +112,26 @@ defmodule Cadence.Runtime.PacketDefinitionCacheTest do
   end
 
   test "reacquiring a different revision releases the previous one", %{namespace: namespace} do
-    {:ok, table} = PacketDefinitionCache.acquire(namespace, "p1", plans("p1", ["a"]))
-    assert {:ok, ^table} = PacketDefinitionCache.acquire(namespace, "p1", plans("p1", ["a"]))
-    assert {:ok, ^table} = PacketDefinitionCache.acquire(namespace, "p2", plans("p2", ["c"]))
+    {:ok, table} =
+      PacketDefinitionCache.acquire(
+        PacketDefinitionCache.name(namespace),
+        "p1",
+        plans("p1", ["a"])
+      )
+
+    assert {:ok, ^table} =
+             PacketDefinitionCache.acquire(
+               PacketDefinitionCache.name(namespace),
+               "p1",
+               plans("p1", ["a"])
+             )
+
+    assert {:ok, ^table} =
+             PacketDefinitionCache.acquire(
+               PacketDefinitionCache.name(namespace),
+               "p2",
+               plans("p2", ["c"])
+             )
 
     assert :error = PacketDefinitionCache.fetch(table, "p1", "a")
     assert {:ok, _} = PacketDefinitionCache.fetch(table, "p2", "c")
@@ -137,25 +154,44 @@ defmodule Cadence.Runtime.PacketDefinitionCacheTest do
     other = put_in(plans("ignored", ["b"]), [:telemetry, Access.key(:plan_id)], nil)
 
     assert {:error, :telemetry_plan_without_id} =
-             PacketDefinitionCache.acquire(namespace, nil, first)
+             PacketDefinitionCache.acquire(PacketDefinitionCache.name(namespace), nil, first)
 
     assert {:error, :telemetry_plan_without_id} =
-             PacketDefinitionCache.acquire(namespace, nil, other)
+             PacketDefinitionCache.acquire(PacketDefinitionCache.name(namespace), nil, other)
 
-    {:ok, table} = PacketDefinitionCache.acquire(namespace, "p1", plans("p1", ["a"]))
+    {:ok, table} =
+      PacketDefinitionCache.acquire(
+        PacketDefinitionCache.name(namespace),
+        "p1",
+        plans("p1", ["a"])
+      )
 
     assert {:error, :telemetry_plan_without_id} =
-             PacketDefinitionCache.acquire(namespace, nil, other)
+             PacketDefinitionCache.acquire(PacketDefinitionCache.name(namespace), nil, other)
 
     assert :ets.info(table, :size) == 0
     assert :error = PacketDefinitionCache.fetch(table, nil, "a")
     assert :error = PacketDefinitionCache.fetch(table, nil, "b")
   end
 
+  test "an unregistered cache is addressed by its pid, for a host with its own tree", %{} do
+    # An isolated replay session runs partition owners without a `Runtime.Supervisor`, so it
+    # starts its own cache and hands the pid to its owners.
+    {:ok, cache} = PacketDefinitionCache.start_link()
+    assert Process.info(cache, :registered_name) == {:registered_name, []}
+
+    {:ok, table} = PacketDefinitionCache.acquire(cache, "p1", plans("p1", ["a"]))
+
+    assert {:ok, %PacketDefinition{packet_name: "a"}} =
+             PacketDefinitionCache.fetch(table, "p1", "a")
+
+    GenServer.stop(cache)
+  end
+
   test "a plan that fails to decode is reported on resolve and caches nothing", %{
     namespace: namespace
   } do
-    cache = DispatchCache.acquire(namespace, %{})
+    cache = DispatchCache.acquire(PacketDefinitionCache.name(namespace), %{})
 
     assert {:error, {:mission_model_runtime_plan_required, :telemetry}} =
              DispatchCache.resolve_packet_definition(cache, configured("a"))
