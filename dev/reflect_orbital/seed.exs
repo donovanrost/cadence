@@ -1,6 +1,6 @@
 defmodule Cadence.Dev.ReflectOrbital.Seed do
   @moduledoc false
-  alias Cadence.Accounts.{OrganizationMembership, OrganizationMembershipRow}
+  alias Cadence.Dev.ReflectOrbital.Approver
   alias Cadence.Auth.Scope
 
   alias Cadence.Comms.{
@@ -55,6 +55,8 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
     uplinks = seed_uplinks(provider, uplink_deliveries)
     {fleet_ms, :ok} = :timer.tc(fn -> seed_fleet(transports, uplinks) end, :millisecond)
     Configuration.prepare(scope)
+    # A second seeded admin approves the imported mission-model revision (user decision 11-25).
+    approved = scope.user |> Approver.scope() |> Approver.approve_candidates()
     Planning.prepare(scope)
     verify!()
 
@@ -67,6 +69,7 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
     #{n} spacecraft, #{F.plane_count()} planes, #{F.site_count()} simulated sites, #{antennas} antennas.
     #{n} provider mappings, #{2 * n} primary/backup downlink routes and #{n} primary uplinks.
     #{n} saved configurations share demo_spacecraft.yaml: 10 telemetry packets and 27 commands.
+    Mission-model revisions approved by the seeded second admin: #{length(approved)}.
     Fleet rows (spacecraft, switches, sources, routes) written in #{fleet_ms} ms.
     Configuration activation remains an explicit review step in Cadence.
     Simulator environment: #{F.run_id()}
@@ -112,19 +115,32 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
           membership
 
         {:error, :not_found} ->
-          membership =
-            OrganizationMembership.new(%{
-              user_id: user.user_id,
-              organization_id: F.organization_id(),
-              role: :organization_admin,
-              metadata: F.metadata()
-            })
-
-          {:ok, _row} = membership |> OrganizationMembershipRow.changeset() |> Repo.insert()
-          membership
+          join(user)
       end
 
     Scope.new(%{user: user, organization: organization, organization_membership: membership})
+  end
+
+  # The seeding admin joins Reflect Orbital through the public access path: granted directly to a
+  # durable account, otherwise invited and accepted as that signed-in user. No row inserts.
+  defp join(user) do
+    case Cadence.Accounts.establish_organization_access(user.email, F.organization_id(),
+           membership_role: :organization_admin,
+           invited_by_user_id: user.user_id,
+           membership_metadata: F.metadata()
+         ) do
+      {:ok, %{mode: :granted, membership: membership}} ->
+        membership
+
+      {:ok, %{mode: :invited, invitation: invitation}} ->
+        {:ok, %{membership: membership}} =
+          Cadence.Accounts.accept_invitation_as_user(
+            user.user_id,
+            invitation.organization_invitation_id
+          )
+
+        membership
+    end
   end
 
   defp seed_provider(scope) do
