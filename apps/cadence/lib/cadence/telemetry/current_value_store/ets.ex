@@ -158,36 +158,37 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
   def latest_values_for_mission(mission_id, opts, backend_opts)
       when is_binary(mission_id) and is_list(opts) and is_list(backend_opts) do
     spacecraft_filter = Keyword.get(opts, :spacecraft_id)
-    point_ids = id_set(Keyword.get(opts, :point_ids))
     spacecraft_ids = id_set(Keyword.get(opts, :spacecraft_ids))
     table = ensure_table!(backend_opts)
 
-    :ets.foldl(
-      fn
-        {{^mission_id, stored_scope_id, point_id, _realm, _data_source_id, _binding_id},
-         %Sample{} = sample},
-        acc ->
-          if (is_nil(spacecraft_filter) or
-                stored_scope_id == spacecraft_scope_id(spacecraft_filter)) and
-               member?(point_ids, point_id) and member?(spacecraft_ids, stored_scope_id) and
-               SourceFilters.sample_matches?(sample, opts) and
-               SelectionPolicy.selected_sample?(sample, opts) do
-            [sample | acc]
-          else
-            acc
-          end
-
-        _entry, acc ->
-          acc
-      end,
-      [],
-      table
-    )
+    # The match spec compares the KEY inside the table (mission, and the asked points) and copies
+    # out only the entries that pass: a fleet's thousands of other points are never copied.
+    table
+    |> :ets.select([
+      {{{mission_id, :"$1", :"$2", :_, :_, :_}, :"$3"}, point_guards(opts), [{{:"$1", :"$3"}}]}
+    ])
+    |> Enum.flat_map(fn {stored_scope_id, %Sample{} = sample} ->
+      if (is_nil(spacecraft_filter) or
+            stored_scope_id == spacecraft_scope_id(spacecraft_filter)) and
+           member?(spacecraft_ids, stored_scope_id) and
+           SourceFilters.sample_matches?(sample, opts) and
+           SelectionPolicy.selected_sample?(sample, opts),
+         do: [sample],
+         else: []
+    end)
     |> Enum.sort_by(& &1.point_name)
   end
 
-  # `:point_ids` and `:spacecraft_ids` (lists) restrict the read to those points and spacecraft:
-  # one pass, and only matches are kept, so a read of a few points on many craft holds just them.
+  # `:point_ids` restricts the read to those points (a guard on the key's point), `:spacecraft_ids`
+  # to those spacecraft (checked on what the guard let through: the spacecraft list can be long).
+  defp point_guards(opts) do
+    case Keyword.get(opts, :point_ids) do
+      nil -> []
+      [] -> [{:"=:=", 1, 0}]
+      ids -> [List.to_tuple([:orelse | Enum.map(ids, &{:"=:=", :"$2", &1})])]
+    end
+  end
+
   defp id_set(nil), do: nil
   defp id_set(ids) when is_list(ids), do: MapSet.new(ids)
 
