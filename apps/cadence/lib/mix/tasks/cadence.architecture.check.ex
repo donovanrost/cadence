@@ -1,6 +1,6 @@
 defmodule Mix.Tasks.Cadence.Architecture.Check do
   @moduledoc """
-  Reports source-size pressure and enforces ratcheted dependency boundaries.
+  Reports source-size pressure and enforces dependency boundaries.
 
   ## Usage
 
@@ -98,18 +98,16 @@ defmodule Mix.Tasks.Cadence.Architecture.Check do
     graph = load_xref_graph!(repo_root, opts)
     findings = DependencyBoundary.findings(graph)
 
-    baseline =
-      repo_root
-      |> Path.join("docs/architecture/dependency-baseline.txt")
-      |> DependencyBoundary.read_baseline!()
-
-    result = DependencyBoundary.compare(findings, baseline)
-    print_dependency_details(result, Keyword.get(opts, :summary, false))
+    unless Keyword.get(opts, :summary, false) do
+      Enum.each(findings, fn finding ->
+        Mix.shell().info("error: " <> DependencyBoundary.format_finding(finding))
+      end)
+    end
 
     counts = Enum.frequencies_by(findings, & &1.kind)
 
     Mix.shell().info(
-      "Architecture dependency baseline: " <>
+      "Architecture dependency boundaries: " <>
         "#{Map.get(counts, :root_facade, 0)} root-facade edges, " <>
         "#{Map.get(counts, :persistence_schema, 0)} schema edges, " <>
         "#{Map.get(counts, :context_schema, 0)} cross-context row edges, " <>
@@ -119,24 +117,10 @@ defmodule Mix.Tasks.Cadence.Architecture.Check do
         "#{Map.get(counts, :web_catch_all, 0)} web catch-all edges, " <>
         "#{Map.get(counts, :web_legacy_adapter, 0)} API legacy-adapter edges, " <>
         "#{Map.get(counts, :unclassified_plane, 0)} unclassified plane modules, " <>
-        "#{Map.get(counts, :unclassified_context, 0)} unclassified context modules, " <>
-        "#{length(result.new)} new, #{length(result.resolved)} resolved; " <>
-        "owner #{result.owner}, review by #{result.review_by}."
+        "#{Map.get(counts, :unclassified_context, 0)} unclassified context modules."
     )
 
-    result
-  end
-
-  defp print_dependency_details(_result, true), do: :ok
-
-  defp print_dependency_details(result, false) do
-    Enum.each(result.new, fn finding ->
-      Mix.shell().info("error: new " <> DependencyBoundary.format_finding(finding))
-    end)
-
-    Enum.each(result.resolved, fn fingerprint ->
-      Mix.shell().info("error: remove resolved dependency baseline: " <> fingerprint)
-    end)
+    findings
   end
 
   defp load_xref_graph!(repo_root, opts) do
@@ -195,21 +179,9 @@ defmodule Mix.Tasks.Cadence.Architecture.Check do
 
   defp maybe_raise_dependency_failure!(:skipped), do: :ok
 
-  defp maybe_raise_dependency_failure!(result) do
-    cond do
-      result.expired? ->
-        Mix.raise("Architecture dependency baseline review date has expired.")
+  defp maybe_raise_dependency_failure!([]), do: :ok
 
-      result.new != [] ->
-        Mix.raise("Architecture dependency check found #{length(result.new)} new edge(s).")
-
-      result.resolved != [] ->
-        Mix.raise(
-          "Architecture dependency baseline retains #{length(result.resolved)} resolved edge(s)."
-        )
-
-      true ->
-        :ok
-    end
+  defp maybe_raise_dependency_failure!(findings) do
+    Mix.raise("Architecture dependency check found #{length(findings)} boundary violation(s).")
   end
 end
