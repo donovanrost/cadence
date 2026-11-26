@@ -73,6 +73,14 @@ describe("ApTabLinks on a narrow screen", () => {
     expect(w.get("a").text()).toBe("Released 0");
   });
 
+  it("never shrinks in a screen's flex column (#189: Telemetry at 390)", () => {
+    const w = mount(ApTabLinks, {
+      props: { links, active: "overview", label: "Sections" },
+      global: { plugins: [router] },
+    });
+    expect(w.find("nav").classes()).toContain("flex-none");
+  });
+
   it("keeps each link on one line", () => {
     const w = mount(ApTabLinks, {
       props: { links, active: "overview", label: "Sections" },
