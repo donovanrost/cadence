@@ -1,4 +1,5 @@
 Mix.install([:req, :jason])
+Code.require_file("earendil_dashboards.exs", __DIR__)
 
 defmodule EarendilSeed do
   @moduledoc false
@@ -51,11 +52,13 @@ defmodule EarendilSeed do
         ensure_provider(client, organization_id, mission_id)
       end)
 
+    client = phase("dashboard source probe", fn -> probe_dashboard_source(client, mission_id) end)
     seed_fleet(client, mission_id, count, site_rows, revision_id)
+    phase("dashboard import", fn -> seed_dashboards(client, organization_id, mission_id) end)
 
     IO.puts("Earendil: organization #{organization_id}, mission #{mission_id}")
 
-    IO.puts("  orbit elements wait on #732; dashboards await an applied fleet and #745")
+    IO.puts("  orbit elements wait on #732")
     IO.puts("  #{sites} station and profile changes await the fleet's independent review")
     IO.puts("  second-person invitations and approval wait on #745")
     IO.puts("  spacecraft configuration drafts wait on an applied fleet and bulk review #734")
@@ -339,6 +342,47 @@ defmodule EarendilSeed do
     end
   end
 
+  defp seed_dashboards(client, organization_id, mission_id) do
+    path = "/missions/#{mission_id}/dashboards"
+    {client, directory} = request!(client, :get, "/missions/#{mission_id}/spacecraft")
+    present = MapSet.new(Enum.map(directory["spacecraft"], & &1["id"]))
+
+    required =
+      MapSet.new(
+        Enum.map(1..10, fn index ->
+          "spacecraft-earendil-#{index |> Integer.to_string() |> String.pad_leading(3, "0")}"
+        end)
+      )
+
+    if MapSet.subset?(required, present) do
+      EarendilDashboardDocuments.documents(organization_id, mission_id)
+      |> Enum.reduce(client, &import_dashboard(&2, &1, path))
+    else
+      IO.puts("  six Earendil dashboards await the first 10 applied spacecraft and #745 approval")
+      client
+    end
+  end
+
+  defp import_dashboard(client, document, path) do
+    {client, result} = request!(client, :post, path, %{document: document, identity: "keep"})
+    unless result["id"] == document.dashboard_id, do: fail!("dashboard import", result)
+
+    state = if result["existing"], do: "existing", else: "created"
+    IO.puts("  #{document.dashboard_id}: #{state}")
+    client
+  end
+
+  defp probe_dashboard_source(client, mission_id) do
+    path = "/missions/#{mission_id}/data-sources"
+    {client, directory} = request!(client, :get, path)
+    source = Enum.find(directory["sources"], &(&1["id"] == "managed_questdb_primary"))
+    unless source, do: fail!("dashboard source", "managed QuestDB source is unavailable")
+
+    {client, result} = request!(client, :post, path <> "/#{source["id"]}/probe", %{})
+    IO.puts("  managed QuestDB: #{get_in(result, ["probe", "health", "status"]) || "unknown"}")
+    client
+  end
+
   defp stage_fleet(client, mission_id, missing, site_rows, revision_id) do
     {client, setup} =
       phase("stage sites and profile", fn ->
@@ -508,6 +552,7 @@ defmodule EarendilSeed do
     %{
       kind: "spacecraft",
       action: "create",
+      entity_id: "spacecraft-#{String.downcase(name)}",
       document: %{
         display_name: name,
         scid: index,
