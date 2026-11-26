@@ -51,6 +51,6 @@ defmodule CadenceWeb.CatalogArtifactDownloadControllerTest do
   test "redirects to /sign-in when the user is not authenticated", %{conn: conn} do
     conn = get(conn, "/missions/any-mission/catalog/artifacts/any-artifact/download")
 
-    assert redirected_to(conn) == "/sign-in"
+    assert redirected_to(conn) == "/console/sign-in"
   end
 end

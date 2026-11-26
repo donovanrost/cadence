@@ -467,13 +467,8 @@ defmodule CadenceWeb.ApplicationHostLive do
      |> push_navigate(to: inventory_path(socket.assigns))}
   end
 
-  defp inventory_path(%{current_mission: mission, current_spacecraft: spacecraft}) do
-    ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications"
-  end
-
-  defp inventory_path(%{current_mission: mission}) do
-    ~p"/missions/#{mission.mission_id}/applications"
-  end
+  # The legacy inventories are gone; the console lists a mission's and a spacecraft's apps.
+  defp inventory_path(_assigns), do: "/console"
 
   defp application_host_dom_id(%HostContext{placement: :spacecraft}),
     do: "spacecraft-application-host"

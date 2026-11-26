@@ -525,6 +525,8 @@ jobs:
       PORT: "4402"
       CADENCE_ADMIN_EMAIL: ci-admin@example.invalid
       CADENCE_ADMIN_DISPLAY_NAME: CI Administrator
+      # No dev code reloader or asset watchers on this server (apps/cadence_web/config/dev.exs).
+      CADENCE_CI_SERVER: "1"
       # The demo seed and planning act as this user (default admin@example.com): the CI admin.
       EARENDIL_DEMO_EMAIL: ci-admin@example.invalid
       BASE_URL: http://127.0.0.1:4402
@@ -597,7 +599,7 @@ jobs:
         working-directory: apps/cadence_web
         run: |
           (mix phx.server > "$RUNNER_TEMP/server.log" 2>&1 &)
-          curl --retry-connrefused --retry 120 --retry-delay 1 -fsS -o /dev/null http://127.0.0.1:4402/sign-in
+          curl --retry-connrefused --retry 120 --retry-delay 1 -fsS -o /dev/null http://127.0.0.1:4402/console/sign-in
           curl -fsS -o /dev/null http://127.0.0.1:4402/console/
       # Never reflect_orbital_activate.exs (director 11-18); E2E_MUTATE stays unset.
       - name: Seed the demo, the QA personas and planning (timed)

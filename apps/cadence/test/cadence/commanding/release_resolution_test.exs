@@ -49,7 +49,7 @@ defmodule Cadence.Commanding.ReleaseResolutionTest do
         c.mission,
         request.command_request_id,
         %{"user_id" => c.user.user_id},
-        []
+        admin_mode: false
       )
 
     queue = Repo.get!(CommandQueueEntryRow, entry.command_queue_entry_id)
@@ -138,7 +138,7 @@ defmodule Cadence.Commanding.ReleaseResolutionTest do
                c.mission,
                c.request.command_request_id,
                %{},
-               []
+               admin_mode: false
              )
 
     assert {:ok,

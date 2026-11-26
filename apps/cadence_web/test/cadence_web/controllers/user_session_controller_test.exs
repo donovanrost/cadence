@@ -45,7 +45,7 @@ defmodule CadenceWeb.UserSessionControllerTest do
     test "redirects unauthenticated requests to /sign-in", %{conn: conn} do
       conn = put(conn, "/session/organization", %{"organization_id" => "org-anything"})
 
-      assert redirected_to(conn) == "/sign-in"
+      assert redirected_to(conn) == "/console/sign-in"
     end
   end
 end

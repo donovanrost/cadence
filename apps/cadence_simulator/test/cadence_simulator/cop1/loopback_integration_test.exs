@@ -140,7 +140,8 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
-               %{"user_id" => "queue-loopback"}
+               %{"user_id" => "queue-loopback"},
+               admin_mode: false
              )
 
     assert {:ok, %{release_attempt: release_attempt, command_request: released_request}} =
