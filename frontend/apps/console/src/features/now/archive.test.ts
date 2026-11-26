@@ -195,6 +195,10 @@ describe("archive_quarantine on Now (ux U49)", () => {
       );
     expect(closed("retried", null)).toBe("Archived on retry at 03:21Z.");
     expect(closed("discarded", "Bad replay.")).toBe("Discarded by Mira K. at 03:21Z: Bad replay.");
+    // #791: an item nobody decided expires with the entries' retention.
+    expect(closed("expired", null)).toBe(
+      "Expired at 03:21Z: nobody retried or discarded it before its retention ran out.",
+    );
   });
 });
 

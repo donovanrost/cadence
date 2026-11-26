@@ -73,8 +73,10 @@ export function resolvedWords(r: ResolvedEntry, now: Date = new Date()): string 
       return `Acknowledged by ${r.resolved_by.name ?? "an operator"} at ${at}.`;
   }
   if (r.id.startsWith("attention:archive_quarantine:")) {
-    // U49: archived on retry, or discarded by an operator with a reason.
+    // U49: archived on retry, discarded by an operator with a reason, or expired (#791).
     if (r.action === "retried") return `Archived on retry at ${at}.`;
+    if (r.action === "expired")
+      return `Expired at ${at}: nobody retried or discarded it before its retention ran out.`;
     if (r.action === "discarded")
       return `Discarded by ${r.resolved_by.name ?? "an operator"} at ${at}${r.note ? `: ${noStop(r.note)}` : ""}.`;
   }

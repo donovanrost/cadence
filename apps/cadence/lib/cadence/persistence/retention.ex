@@ -18,6 +18,10 @@ defmodule Cadence.Persistence.Retention do
     * `ingress_archive_days`, `protocol_archive_days` and `watermark_event_days`: how long the
       archives keep what they index and how long the watermark history is kept; all default to the
       observation retention, so the stores can't drift apart;
+    * `quarantine_review_days` (7) and `quarantine_resolution_days` (30): how long a quarantined
+      protocol-archive entry outlives the archive's retention for an operator to review it, and how
+      long the record of a resolved item is kept
+      (`Cadence.Protocol.RecordArchive.Quarantine.Retention`);
     * `stream_key_margin_days` (7): added to the replay horizon below;
     * `identity_state_settlement_allowance_hours` (24) and `identity_state_interval_ms` (1 h): the
       identity-state rule (`Cadence.Telemetry.Storage.ObservationIdentityStates.Retention`).
@@ -41,6 +45,8 @@ defmodule Cadence.Persistence.Retention do
     budget_ms: 60_000,
     interval_ms: 600_000,
     stream_key_margin_days: 7,
+    quarantine_review_days: 7,
+    quarantine_resolution_days: 30,
     identity_state_settlement_allowance_hours: 24,
     identity_state_interval_ms: 3_600_000
   ]
@@ -70,6 +76,19 @@ defmodule Cadence.Persistence.Retention do
   @spec protocol_archive_days(keyword()) :: pos_integer()
   def protocol_archive_days(settings \\ settings()),
     do: Keyword.get(settings, :protocol_archive_days) || observation_days()
+
+  @doc """
+  How long a quarantined protocol-archive entry is kept: the archive's retention (past it, indexing
+  the entry would only expire it again) plus the review margin.
+  """
+  @spec quarantine_entry_days(keyword()) :: pos_integer()
+  def quarantine_entry_days(settings \\ settings()),
+    do: protocol_archive_days(settings) + Keyword.fetch!(settings, :quarantine_review_days)
+
+  @doc "How long the record of a resolved quarantine item is kept."
+  @spec quarantine_resolution_days(keyword()) :: pos_integer()
+  def quarantine_resolution_days(settings \\ settings()),
+    do: Keyword.fetch!(settings, :quarantine_resolution_days)
 
   @doc "How long the watermark event history is kept."
   @spec watermark_event_days(keyword()) :: pos_integer()

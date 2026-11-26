@@ -68,6 +68,8 @@ export function archiveClosed(a: Attention): string | null {
   if (a.state !== "resolved" || !r) return null;
   if (r.action === "discarded")
     return `Discarded by ${r.actor.name ?? "an operator"} at ${hhmm(r.at)}${r.note ? `: ${r.note.replace(/[.!?]+$/, "")}` : ""}.`;
+  if (r.action === "expired")
+    return `Expired at ${hhmm(r.at)}: nobody retried or discarded it before its retention ran out, so it was never archived.`;
   return `Archived on retry at ${hhmm(r.at)}.`;
 }
 

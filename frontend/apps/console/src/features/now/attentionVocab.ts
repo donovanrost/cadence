@@ -126,6 +126,8 @@ export const resolutionActions = [
   "discarded",
   "drained",
   "ended",
+  // U49 archive_quarantine: nobody decided before the entries' retention ran out (#791).
+  "expired",
   "nothing_left",
   "rejected",
   "replayed",
