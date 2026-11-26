@@ -33,9 +33,9 @@ defmodule CadenceWeb.Console.ServiceBearerAPITest do
     Map.put(base, :token, token)
   end
 
-  # Phoenix.ConnTest skips CSRF by default; these requests check it for real.
   @prefix "/api/v1"
 
+  # Phoenix.ConnTest skips CSRF by default; these requests check it for real.
   defp csrf_checked, do: build_conn() |> put_private(:plug_skip_csrf_protection, false)
 
   defp bearer(token), do: csrf_checked() |> put_req_header("authorization", "Bearer " <> token)
@@ -80,6 +80,31 @@ defmodule CadenceWeb.Console.ServiceBearerAPITest do
              |> json_response(404)
   end
 
+  # Pinning is what protects an opted-in action: an organization-wide service, even an
+  # organization_admin, reaches no mission at all.
+  test "an organization-wide service reaches no mission route, opted-in or not", c do
+    allowed = ServiceAccess.allowed()
+
+    routes =
+      for route <- CadenceWeb.Router.__routes__(),
+          route.plug_opts in Map.get(allowed, route.plug, []),
+          String.starts_with?(route.path, @prefix <> "/missions/:mission_id"),
+          do: route
+
+    # Every opted-in action is a mission route, so each one is checked here.
+    assert Enum.sort(Enum.uniq(for r <- routes, do: {r.plug, r.plug_opts})) ==
+             Enum.sort(for {plug, actions} <- allowed, action <- actions, do: {plug, action})
+
+    for route <- routes do
+      path = concrete(route.path, c.mission_id, c.organization_id)
+      method = route.verb |> Atom.to_string() |> String.upcase()
+
+      assert %{"error" => %{"code" => "mission_not_found"}} =
+               c.api_token |> bearer() |> dispatch(@endpoint, method, path) |> json_response(404),
+             "#{method} #{route.path} let an organization-wide service through"
+    end
+  end
+
   test "an invalid bearer is 401 and never falls back to a valid session cookie", c do
     user = TestFixtures.persist_user!()
     {:ok, organization} = Cadence.Organizations.fetch_organization(c.organization_id)
@@ -91,7 +116,14 @@ defmodule CadenceWeb.Console.ServiceBearerAPITest do
 
     assert build_conn() |> with_cookie.() |> get(path) |> json_response(200)
 
-    for header <- ["Bearer not-a-token", "Bearer ", "Basic abc", "bearer #{c.token}"] do
+    # A person's session token is never a bearer: no personal bearer tokens (#747).
+    for header <- [
+          "Bearer not-a-token",
+          "Bearer ",
+          "Basic abc",
+          "bearer #{c.token}",
+          "Bearer #{session}"
+        ] do
       conn =
         build_conn()
         |> with_cookie.()
