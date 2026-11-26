@@ -159,7 +159,8 @@ defmodule Cadence.Management.Activations do
       from(request in ActivationRequestRow,
         join: member in ConfigurationReviews.MemberRow,
         on:
-          member.mission_id == request.mission_id and member.spacecraft_id == ^spacecraft_id and
+          member.organization_id == request.organization_id and
+            member.mission_id == request.mission_id and member.spacecraft_id == ^spacecraft_id and
             member.review_sha256 ==
               fragment(
                 "? #>> '{value,configuration_review,review,sha256}'",

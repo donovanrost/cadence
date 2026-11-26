@@ -123,6 +123,7 @@ defmodule CadenceWeb.ActivationLifecycleTest do
   defp reviews(c, ids) do
     {:ok, stored} =
       ConfigurationReviews.store(
+        c.org,
         c.mission,
         Enum.map(
           ids,

@@ -8,8 +8,17 @@ Owner: **domain**. Status: **built** (`ddc72c2e`, DECISIONS #23). Reviewer: dire
   (the reviewed configuration revision and token of each spacecraft) lives in
   `spacecraft_configuration_reviews` / `spacecraft_configuration_review_members`, keyed by
   content hash like the fleet and read through `Cadence.Catalog.ConfigurationReviews`. A review
-  of one spacecraft is a set of one. `Management.Activations.latest_spacecraft_request` joins
-  through the members table (indexed by spacecraft).
+  of one spacecraft is a set of one. Both tables carry `organization_id` (`NOT NULL`, composite FK
+  to the mission, same sync trigger as the fleet tables); every read takes the request's own
+  organization and mission, refuses a reference naming another mission, and filters on both.
+  `Management.Activations.latest_spacecraft_request` joins through the members table
+  (`(organization_id, mission_id, spacecraft_id)` index) and finds the request by an expression
+  index on the review's sha.
+- **A change set's changed spacecraft are rows too.** The generation's `"change_set"` metadata is
+  `%{"id", "revision", "count"}`; the changed craft are in `activation_change_set_spacecraft`
+  (read through `Cadence.Catalog.ChangeSetSpacecraft`). `Cadence.Catalog.RequestSpacecraft` answers
+  "how many" (from the metadata alone), "which" and "which requests touch this craft" (one query
+  per kind) for any request, so the 64 KiB command-basis bound never depends on fleet size.
 - **No caps.** The 2,000-spacecraft / 8,000-source / 16 MiB fleet bounds and the 500-spacecraft
   review batch are deleted; activation metadata is constant-size, so the plain 64 KiB command-basis
   filter applies to every row.

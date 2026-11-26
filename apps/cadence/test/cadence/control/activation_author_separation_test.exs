@@ -88,7 +88,7 @@ defmodule Cadence.Control.ActivationAuthorSeparationTest do
   test "authors fail closed: a review whose version can't be found can't be approved by anyone",
        c do
     {:ok, stored} =
-      ConfigurationReviews.store(c.mission.mission_id, [
+      ConfigurationReviews.store(c.mission.organization_id, c.mission.mission_id, [
         %{
           id: c.craft.spacecraft_id,
           configuration_revision_id: "no-such-revision",
@@ -186,6 +186,7 @@ defmodule Cadence.Control.ActivationAuthorSeparationTest do
 
     {:ok, stored} =
       ConfigurationReviews.store(
+        c.mission.organization_id,
         c.mission.mission_id,
         Enum.map(reviewed, fn {id, v} ->
           %{id: id, configuration_revision_id: "#{id}-v#{v}", configuration_token: "t-#{id}"}

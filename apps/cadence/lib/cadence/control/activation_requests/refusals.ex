@@ -70,7 +70,9 @@ defmodule Cadence.Control.ActivationRequests.Refusals do
   # Both name the reviewed craft (ux U95).
   defp refusal(code, org, mission, request)
        when code in [:spacecraft_configuration_review_stale, :spacecraft_model_not_active] do
-    case Description.describe(request.metadata || %{}).spacecraft_ids do
+    scoped = Map.merge(request, %{organization_id: org, mission_id: mission})
+
+    case Description.describe(scoped, ids: true).spacecraft_ids do
       [] -> {code, nil}
       ids -> {code, %{spacecraft_ids: ids, spacecraft: named(org, mission, ids)}}
     end
