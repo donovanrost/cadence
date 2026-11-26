@@ -7,7 +7,8 @@ import { DEV_ONLY, expectKeyboardPass, waitForScreen } from "../support/keyboard
 import { guardReadOnly } from "../support/read-only.ts";
 
 // #189 inventory: every console screen gets axe (WCAG 2.1 A/AA) and the run-2 keyboard pass, at
-// 1440 and 390, as an organization admin (the role that sees the most controls). Each screen
+// 1440 and 390, as an organization admin (the role that sees the most controls) and as a member
+// (an operator: admin-only screens show their 403 state, which must pass too). Each screen
 // prints one `A11Y-SWEEP {json}` line, so a CI log can be grouped by cause, then fails softly with
 // its findings. Read-only: it loads and Tabs, never acts.
 test.beforeEach(({ page }) => guardReadOnly(page));
@@ -87,7 +88,6 @@ interface AxeFinding {
 test.describe("Console sweep · a11y", () => {
   for (const [name, path] of screens) {
     test(name, async ({ page }, info) => {
-      test.skip(a11yPersona(info) !== "admin", "the sweep runs as the organization admin");
       await openConsole(page, path);
       await waitForScreen(page);
 
@@ -108,7 +108,8 @@ test.describe("Console sweep · a11y", () => {
         keyboard = plain(error instanceof Error ? error.message : String(error));
       }
 
-      const line = { screen: name, path, project: info.project.name, axe, keyboard };
+      const persona = a11yPersona(info);
+      const line = { screen: name, path, project: info.project.name, persona, axe, keyboard };
       console.log(`A11Y-SWEEP ${JSON.stringify(line)}`);
       expect.soft(axe, "axe WCAG A/AA violations").toEqual([]);
       expect.soft(keyboard, "keyboard pass").toBeNull();

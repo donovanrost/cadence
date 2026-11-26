@@ -43,8 +43,9 @@ Every `*.a11y.ts` runs in four projects (`playwright.config.ts`, `e2e/support/a1
 - two personas: `admin`, an organization admin (`qa-org-admin`), and `member`, an operator without
   admin (`qa-operator`).
 
-The sweep runs as `admin` only, because that persona sees the most controls. A per-screen spec
-reads the persona with `a11yPersona(info)` when the screen differs by role.
+The sweep runs every screen as both personas: `admin` sees the most controls, and `member` sees
+the 403 state of the admin-only screens. Each `A11Y-SWEEP` line names its persona. A per-screen
+spec reads the persona with `a11yPersona(info)` when the screen differs by role.
 
 ## What each check does
 
