@@ -109,8 +109,8 @@ export async function serveScaledFleet(page: Page, size: number): Promise<Scaled
 /**
  * Installs the in-page probes before the app loads:
  * - long tasks (PerformanceObserver, buffered);
- * - "ready": the first frame where the shell is ready, the fleet read has finished, and no
- *   loading status is left in <main>; checked once per frame on a handful of elements only;
+ * - "ready": the first frame where the shell is ready, the app's GET /fleet body has arrived, and
+ *   no loading status is left in <main>; checked once per frame on a handful of elements only;
  * - push cost: for each `fleet` frame from the socket, from its arrival to the end of the next
  *   frame's style and layout (forced), so Vue's patch and the layout it causes are both counted.
  *   It includes the wait for that frame (up to ~16 ms at 60 Hz), so it errs high.
@@ -124,12 +124,21 @@ export async function installScaleProbes(page: Page): Promise<void> {
       for (const entry of list.getEntries()) probe.tasks.push(entry.duration);
     }).observe({ type: "longtask", buffered: true });
 
-    const fleetDone = () =>
-      performance
-        .getEntriesByType("resource")
-        .some(
-          (e) => /\/fleet(\?|$)/.test(e.name) && (e as PerformanceResourceTiming).responseEnd > 0,
-        );
+    // A response fulfilled by page.route gets no Resource Timing entry, so the probe watches the
+    // app's own fetch of GET /fleet and marks it once the body has arrived.
+    let fleetRead = false;
+    const fetchOriginal = window.fetch.bind(window);
+    window.fetch = async (input, init) => {
+      const response = await fetchOriginal(input, init);
+      const url = input instanceof Request ? input.url : String(input);
+      if (/\/missions\/[^/]+\/fleet(\?|$)/.test(url))
+        void response
+          .clone()
+          .text()
+          .then(() => (fleetRead = true));
+      return response;
+    };
+    const fleetDone = () => fleetRead;
     const loading = (main: Element) =>
       Array.from(main.querySelectorAll('[role="status"]')).some((s) =>
         /loading/i.test(s.textContent ?? ""),
