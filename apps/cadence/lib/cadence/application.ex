@@ -106,7 +106,8 @@ defmodule Cadence.Application do
     Cadence.Persistence.Retention.children([
       Cadence.Runtime.PartitionStreamKeys.Retention,
       Cadence.IngressArchive.Retention,
-      Cadence.Telemetry.Storage.ObservationIdentityStates.Retention
+      Cadence.Telemetry.Storage.ObservationIdentityStates.Retention,
+      Cadence.Projections.DataSources.Watermarks.Retention
     ])
   end
 
