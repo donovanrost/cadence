@@ -5,13 +5,11 @@ defmodule Cadence.Control.ConfigurationSelections do
 
   - `for_catalogs/3` maps the generation's derived catalogs to their one-layer compositions and
     `Selection.select/3`'s answer: `%{composition_id => revision_id | "not_approved" |
-    "reapproval_needed"}`. A catalog revision with no composition (a shape D1's backfill skipped)
-    adds nothing; the activation gate's per-revision check still applies to it.
+    "reapproval_needed"}`. A catalog revision with no composition adds nothing; the activation gate's per-revision check still applies to it.
   - `check/4` runs under the activation lock (api-ops): it holds the selected revision rows
     `FOR SHARE`, selects again, and compares with what the submit recorded. Any difference
     (a newer approval in between, the recorded revision withdrawn or unrunnable) refuses
-    `{:restage_needed, entries}` and nothing is written. A set recorded before D3 recorded
-    nothing, so it's refused whenever its apply would select anything (#112: no shim).
+    `{:restage_needed, entries}` and nothing is written.
   """
 
   import Ecto.Query

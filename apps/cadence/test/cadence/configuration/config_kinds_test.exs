@@ -243,20 +243,20 @@ defmodule Cadence.Configuration.ConfigKindsTest do
                SpacecraftTypeStore.fetch_spacecraft_type(ctx.org, ctx.mission, profile_id)
     end
 
-    test "a catalog change must name a catalog revision that exists (DECISIONS #36/#65)", ctx do
+    test "a pin must name a mission composition that exists (DECISIONS #36/#65; D3)", ctx do
       {profile_id, [sc]} = block(ctx, 1)
 
       for op <- [
-            update("spacecraft_profile", profile_id, "catalog_revision_id", "cat-missing"),
-            update("spacecraft_override", sc, "catalog_revision_id", %{
-              "value" => "cat-missing",
+            update("spacecraft_profile", profile_id, "composition_id", "composition-missing"),
+            update("spacecraft_override", sc, "composition_id", %{
+              "value" => "composition-missing",
               "reason" => "Trial"
             })
           ] do
         assert {:ok, %{verdict: :no_go, checks: checks}} =
                  Configuration.preview(ctx.alice, ctx.mission, {:ops, [op]})
 
-        assert %{items: [%{errors: [%{message: "That catalog revision doesn't exist"}]}]} =
+        assert %{items: [%{errors: [%{message: "That mission composition doesn't exist"}]}]} =
                  Enum.find(checks, &(&1.key == "validation"))
       end
     end
@@ -357,10 +357,10 @@ defmodule Cadence.Configuration.ConfigKindsTest do
                Configuration.preview(ctx.alice, ctx.mission, {:ops, [frame]})
     end
 
-    test "a catalog-only edit keeps a spacecraft whose override sets its catalog", ctx do
+    test "a pin-only edit keeps a spacecraft whose override sets its catalog", ctx do
       {profile_id, [sc_a, _sc_b]} = block(ctx, 2)
       {:ok, _} = Overrides.put(ctx.org, ctx.mission, sc_a, "catalog_revision_id", "cat-own")
-      edit = update("spacecraft_profile", profile_id, "catalog_revision_id", "cat-new")
+      edit = update("spacecraft_profile", profile_id, "composition_id", "composition-new")
 
       assert {:ok, %{effects: [%{changes: 1, keeps: [keep]}]}} =
                Configuration.preview(ctx.alice, ctx.mission, {:ops, [edit]})

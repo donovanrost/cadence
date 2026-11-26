@@ -35,6 +35,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
                    truncated_primary_header fecf)
   @governed_key "spacecraft_configuration_revision_id"
   # The profile paths a framing-governed spacecraft keeps from its configuration review.
+  @pin_paths ["composition_id", "catalog_revision_id"]
   @framing_paths ~w(downlink_protocol uplink_protocol packet_protocol frame_parameters)
   @synthetic_prefix "spacecraft_configuration_profile_"
 
@@ -170,27 +171,25 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
   def validate(_organization_id, _mission_id, _action, _entity_id, _previous, _proposed), do: :ok
 
   @impl true
-  # D3 (#544): an old client's catalog_revision_id names its composition, at staging only.
-  def translate(organization_id, mission_id, previous, proposed, touched) do
-    {catalog, composition} =
-      CompositionPin.translate(
-        organization_id,
-        mission_id,
-        pin(proposed),
-        {"catalog_revision_id" in touched, "composition_id" in touched}
-      )
-
-    {:ok,
-     proposed
-     |> Map.put("catalog_revision_id", catalog)
-     |> put_pin(composition, previous)}
+  # D3 (#544): the client pins the composition; Cadence derives its provenance catalog revision.
+  def translate(organization_id, mission_id, _previous, proposed, touched) do
+    with {:ok, {catalog, composition}} <-
+           CompositionPin.derive(
+             organization_id,
+             mission_id,
+             proposed["composition_id"],
+             if("catalog_revision_id" in touched, do: proposed["catalog_revision_id"])
+           ) do
+      {:ok,
+       proposed
+       |> Map.put("catalog_revision_id", catalog)
+       |> put_pin(composition)}
+    end
   end
 
-  # A profile without a pin keeps no composition_id key (#108: documents recorded before D3).
-  defp put_pin(document, nil, _previous), do: Map.delete(document, "composition_id")
-
-  defp put_pin(document, composition, _previous),
-    do: Map.put(document, "composition_id", composition)
+  # A profile without a pin keeps no composition_id key.
+  defp put_pin(document, nil), do: Map.delete(document, "composition_id")
+  defp put_pin(document, composition), do: Map.put(document, "composition_id", composition)
 
   defp pin(nil), do: {nil, nil}
   defp pin(document), do: {document["catalog_revision_id"], document["composition_id"]}
@@ -243,7 +242,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
     target_ids = MapSet.new(targets, & &1.spacecraft_id)
 
     {catalog_pinned, moving} =
-      if changed == ["catalog_revision_id"],
+      if pin_only?(changed),
         do: split_catalog_pinned(organization_id, mission_id, moving),
         else: {[], moving}
 
@@ -271,6 +270,9 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
           )
     }
   end
+
+  # A pin edit (D3: the composition and the catalog revision Cadence derives from it) and nothing else.
+  defp pin_only?(changed), do: changed != [] and changed -- @pin_paths == []
 
   # An override at catalog_revision_id keeps the spacecraft's own catalog whatever the profile
   # says (CatalogAuthority), so a catalog-only edit changes nothing for it.

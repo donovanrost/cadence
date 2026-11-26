@@ -2,8 +2,8 @@ defmodule Cadence.Configuration.Translation do
   @moduledoc """
   A kind's staging-time rewrite of an op (`ConfigKind.translate/5`), run before `normalize/3` with
   the tenant in hand. Staging only: apply validates what was staged and never translates (D3,
-  #544: an old client's `catalog_revision_id` becomes the composition it names here, so the staged
-  op is what's reviewed and applied).
+  #544: a pin's `catalog_revision_id` is derived from its composition here, so the staged op is
+  what's reviewed and applied).
   """
 
   alias Cadence.Configuration.Document

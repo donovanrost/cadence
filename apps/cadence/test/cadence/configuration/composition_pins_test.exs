@@ -1,8 +1,9 @@
 defmodule Cadence.Configuration.CompositionPinsTest do
   @moduledoc """
   D3 (#544; design §3): profiles and per-craft overrides pin a mission composition, through change
-  sets only. An old client's `catalog_revision_id` is translated at staging, never at apply; an
-  unapproved composition is a validation NO-GO; the number is display-only.
+  sets only. The client pins the composition and Cadence derives its catalog revision at staging
+  (a client-set catalog revision is refused); an unapproved composition is a validation NO-GO; the
+  number is display-only.
   """
   use Cadence.RuntimeCase, async: false
 
@@ -47,67 +48,56 @@ defmodule Cadence.Configuration.CompositionPinsTest do
     }
   end
 
-  describe "an old client's catalog_revision_id is translated at staging" do
-    test "a create names the catalog revision's one-layer composition in the staged op", c do
-      {:ok, staged} = stage(c, [create_profile("Old client", c.rev1.catalog_revision_id)])
+  describe "the client pins the composition; Cadence derives its catalog revision" do
+    test "a create stages the composition's provenance catalog revision beside it", c do
+      {:ok, staged} = stage(c, [create_profile("Pinned", c.comp1)])
 
-      assert %{"document" => %{"composition_id" => composition}} = staged_payload(staged)
-      assert composition == c.comp1
+      assert %{"document" => %{"composition_id" => composition, "catalog_revision_id" => catalog}} =
+               staged_payload(staged)
+
+      assert {composition, catalog} == {c.comp1, c.rev1.catalog_revision_id}
     end
 
-    test "an update that changes only the catalog revision also changes the composition", c do
-      profile = profile!(c, c.rev1.catalog_revision_id)
+    test "changing the composition also stages its catalog revision", c do
+      profile = profile!(c, c.comp1)
       CompositionFixtures.approve!(c.rev2.mission_model_revision_id)
 
-      {:ok, staged} =
-        stage(c, [
-          update("spacecraft_profile", profile, "catalog_revision_id", c.rev2.catalog_revision_id)
-        ])
+      {:ok, staged} = stage(c, [update("spacecraft_profile", profile, "composition_id", c.comp2)])
 
       changes = staged_payload(staged)["changes"]
-      assert %{"value" => composition} = Enum.find(changes, &(&1["path"] == "composition_id"))
-      assert composition == c.comp2
+      assert %{"value" => catalog} = Enum.find(changes, &(&1["path"] == "catalog_revision_id"))
+      assert catalog == c.rev2.catalog_revision_id
     end
 
-    test "a catalog revision and a composition that disagree are refused", c do
-      profile = profile!(c, c.rev1.catalog_revision_id)
+    test "an op that sets the catalog revision itself is refused", c do
+      profile = profile!(c, c.comp1)
 
-      rev3 =
-        Fixtures.persist_imported_revision!(c.org, c.mid,
-          revision_label: "Rev 3",
-          yaml: String.replace(rev2_yaml(), "apid: 77", "apid: 78")
-        )
+      for op <- [
+            update(
+              "spacecraft_profile",
+              profile,
+              "catalog_revision_id",
+              c.rev2.catalog_revision_id
+            ),
+            update("spacecraft_override", c.craft.spacecraft_id, "catalog_revision_id", %{
+              "value" => c.rev2.catalog_revision_id,
+              "reason" => "Trial"
+            })
+          ] do
+        assert {:error, {:invalid_op, 0, errors}} = stage(c, [op])
 
-      comp3 = composition!(c.org, c.mid, rev3)
-
-      op = %{
-        kind: "spacecraft_profile",
-        action: :update,
-        entity_id: profile,
-        changes: [
-          # Both change, to things that don't match (an unchanged path is dropped at staging).
-          %{path: "catalog_revision_id", value: c.rev2.catalog_revision_id},
-          %{path: "composition_id", value: comp3}
-        ]
-      }
-
-      assert {:ok, %{verdict: :no_go, checks: checks}} =
-               Configuration.preview(c.scope, c.mid, {:ops, [op]})
-
-      assert %{items: [%{errors: errors}]} = Enum.find(checks, &(&1.key == "validation"))
-
-      assert %{message: message, details: %{reason: "mismatch"}} =
-               Enum.find(errors, &(&1.path == "composition_id"))
-
-      assert message ==
-               "Cadence couldn't match this to catalog rev #{c.rev2.revision_number}; " <>
-                 "choose the catalog revision again"
+        assert %{
+                 message:
+                   "Cadence sets this from the mission composition; choose the composition instead"
+               } =
+                 Enum.find(errors, &(&1.path == "catalog_revision_id"))
+      end
     end
   end
 
   describe "an unapproved composition is a validation NO-GO at staging" do
     test "a profile pin to a composition with no approved revision", c do
-      profile = profile!(c, c.rev1.catalog_revision_id)
+      profile = profile!(c, c.comp1)
       op = update("spacecraft_profile", profile, "composition_id", c.comp2)
 
       assert {:ok, %{verdict: :no_go, checks: checks}} =
@@ -147,7 +137,7 @@ defmodule Cadence.Configuration.CompositionPinsTest do
     # mms-security's condition 4 (#559), as domain restated it: an old compiler version's approval
     # that this server can't run doesn't count; the pin is refused with re-approval needed.
     test "only an OLD compiler version's revision approved: refused, re-approval needed", c do
-      profile = profile!(c, c.rev1.catalog_revision_id)
+      profile = profile!(c, c.comp1)
 
       ctx = %{
         org: c.org,
@@ -180,7 +170,7 @@ defmodule Cadence.Configuration.CompositionPinsTest do
     # U109 (mms-ux): a pin of several catalogs is named by the composition's number (D2), never by
     # one of its catalog revisions.
     test "a two-layer composition is named 'Composition N'", c do
-      profile = profile!(c, c.rev1.catalog_revision_id)
+      profile = profile!(c, c.comp1)
       [%{layer_id: a}] = layers!(c, c.comp1)
       [%{layer_id: b}] = layers!(c, c.comp2)
       actor = %{"actor_kind" => "user", "user_id" => "composer"}
@@ -203,7 +193,7 @@ defmodule Cadence.Configuration.CompositionPinsTest do
     end
 
     test "a composition that doesn't exist in the mission", c do
-      profile = profile!(c, c.rev1.catalog_revision_id)
+      profile = profile!(c, c.comp1)
 
       op =
         update("spacecraft_profile", profile, "composition_id", "mission_model_composition:nope")
@@ -214,7 +204,7 @@ defmodule Cadence.Configuration.CompositionPinsTest do
 
   describe "the number is display-only (mms-security on #581)" do
     test "a number given as a write parameter is refused with a field error, never resolved", c do
-      profile = profile!(c, c.rev1.catalog_revision_id)
+      profile = profile!(c, c.comp1)
 
       for op <- [
             update("spacecraft_profile", profile, "composition_id", 1),
@@ -242,8 +232,8 @@ defmodule Cadence.Configuration.CompositionPinsTest do
   end
 
   describe "apply" do
-    test "a translated pin applies: the profile stores the composition and its catalog", c do
-      profile = profile!(c, c.rev1.catalog_revision_id)
+    test "a pinned profile stores the composition and its derived catalog revision", c do
+      profile = profile!(c, c.comp1)
 
       assert {:ok, %{composition_id: composition, catalog_revision_id: catalog}} =
                SpacecraftTypeStore.fetch_spacecraft_type(c.org, c.mid, profile)
@@ -280,7 +270,7 @@ defmodule Cadence.Configuration.CompositionPinsTest do
     """
   end
 
-  defp create_profile(name, catalog) do
+  defp create_profile(name, composition) do
     %{
       kind: "spacecraft_profile",
       action: :create,
@@ -289,14 +279,14 @@ defmodule Cadence.Configuration.CompositionPinsTest do
         "display_name" => name,
         "downlink_protocol" => "tm",
         "uplink_protocol" => "tc",
-        "catalog_revision_id" => catalog,
+        "composition_id" => composition,
         "frame_parameters" => %{"frame_size" => 1115, "ocf_length" => 4}
       }
     }
   end
 
-  defp profile!(c, catalog) do
-    %{entity_id: id} = op = create_profile("Pinned", catalog)
+  defp profile!(c, composition) do
+    %{entity_id: id} = op = create_profile("Pinned", composition)
     {:ok, staged} = stage(c, [op])
     {:ok, %{state: :applied}} = submit(c, staged)
     id

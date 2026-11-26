@@ -1,8 +1,7 @@
 defmodule Cadence.MissionModels.CatalogPins do
   @moduledoc """
   Between a catalog revision and the one-layer composition it imported (D3, #544): the
-  translation of an old client's catalog pin, and the provenance catalog revision of a
-  composition pin. A composition of more than one layer (D4) has no catalog revision.
+  provenance catalog revision of a composition pin, and the composition a catalog rollout pins. A composition of more than one layer (D4) has no catalog revision.
   """
 
   import Ecto.Query

@@ -8,6 +8,14 @@ defmodule Cadence.CompositionFixtures do
   alias Cadence.MissionModels.Compositions
   alias Cadence.Repo
 
+  @doc "The catalog revision's one-layer composition: what a profile or override pins (D3, #544)."
+  def pin!(org, mission_id, catalog_revision_id) do
+    {:ok, composition_id} =
+      Cadence.MissionModels.CatalogPins.for_catalog_revision(org, mission_id, catalog_revision_id)
+
+    composition_id
+  end
+
   def approve!(revision_id), do: set_status!([revision_id], "approved")
 
   def set_status!(revision_ids, status),

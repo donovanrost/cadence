@@ -474,7 +474,7 @@ defmodule Cadence.Control.ConfigurationGeneration do
     end
   end
 
-  # The revision a catalog's composition selected (nil: the catalog's own, as before D3).
+  # The revision a catalog's composition selected (nil: the catalog has no composition, so its own).
   defp selected_revision(selected, pins, catalog) do
     case Map.get(pins, catalog) do
       nil -> nil

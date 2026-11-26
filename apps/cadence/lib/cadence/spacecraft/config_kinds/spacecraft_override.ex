@@ -108,23 +108,23 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftOverride do
   def validate(_organization_id, _mission_id, _action, _entity_id, _previous, _proposed), do: :ok
 
   @impl true
-  # D3 (#544): an old client's catalog override names its composition, at staging only; the
-  # composition override carries the catalog override's reason.
+  # D3 (#544): the client overrides the composition; Cadence derives the catalog override from it,
+  # with the composition override's reason.
   def translate(organization_id, mission_id, _previous, proposed, touched) do
-    {catalog, composition} =
-      CompositionPin.translate(
-        organization_id,
-        mission_id,
-        pin(proposed),
-        {"catalog_revision_id" in touched, "composition_id" in touched}
-      )
+    with {:ok, {catalog, composition}} <-
+           CompositionPin.derive(
+             organization_id,
+             mission_id,
+             value(proposed, "composition_id"),
+             if("catalog_revision_id" in touched, do: value(proposed, "catalog_revision_id"))
+           ) do
+      reason = reason(proposed, "composition_id")
 
-    reason = reason(proposed, "catalog_revision_id") || reason(proposed, "composition_id")
-
-    {:ok,
-     proposed
-     |> put_pin("catalog_revision_id", catalog, reason)
-     |> put_pin("composition_id", composition, reason)}
+      {:ok,
+       proposed
+       |> put_pin("catalog_revision_id", catalog, reason)
+       |> put_pin("composition_id", composition, reason)}
+    end
   end
 
   defp put_pin(document, key, nil, _reason), do: Map.put(document, key, nil)

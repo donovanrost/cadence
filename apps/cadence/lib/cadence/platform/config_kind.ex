@@ -159,8 +159,8 @@ defmodule Cadence.Platform.ConfigKind do
 
   @doc """
   Rewrites a staged document before `normalize/3`, with the tenant in hand, AT STAGING ONLY (never
-  at apply): e.g. D3's translation of an old client's `catalog_revision_id` to the composition it
-  names (#544). `previous` is the live document (nil for a create), `touched` the paths the op
+  at apply): e.g. D3 derives a profile's `catalog_revision_id` from the composition it pins
+  (#544). `previous` is the live document (nil for a create), `touched` the paths the op
   sets. Paths it changes beyond `touched` are staged as further changes, so the staged op names
   exactly what apply will write.
   """

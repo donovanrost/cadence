@@ -13,7 +13,7 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Activations
   alias Cadence.MissionModelApproval
-  alias Cadence.MissionModels.TelemetryProjection
+  alias Cadence.MissionModels.{CatalogPins, TelemetryProjection}
   alias Cadence.Runtime.{MissionCoordinator, MissionModelPlanDecoder, MissionRuntimeSpec}
   alias Cadence.Telemetry.PacketDefinition
 
@@ -50,7 +50,7 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
     {:ok, before} = Cadence.Activations.fetch_active_activation(c.org, c.mission.mission_id)
 
     {:ok, staged} =
-      stage(c, [update("spacecraft_profile", profile, "catalog_revision_id", c.rev2)])
+      stage(c, [update("spacecraft_profile", profile, "composition_id", pin!(c, c.rev2))])
 
     assert {:ok, %{verdict: :hold, checks: checks}} =
              Configuration.preview(
@@ -112,7 +112,7 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
   # the application basis changed, so the next Save reverted the move.
   test "a later application change doesn't revert a change-set catalog move", c do
     profile = profile!(c, c.rev1)
-    apply!(c, [update("spacecraft_profile", profile, "catalog_revision_id", c.rev2)])
+    apply!(c, [update("spacecraft_profile", profile, "composition_id", pin!(c, c.rev2))])
 
     # Something else changes the spacecraft's application basis (the decom surface's own write).
     {:ok, config} =
@@ -154,7 +154,7 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
              })
 
     profile = profile!(c, c.rev1)
-    apply!(c, [update("spacecraft_profile", profile, "catalog_revision_id", c.rev2)])
+    apply!(c, [update("spacecraft_profile", profile, "composition_id", pin!(c, c.rev2))])
 
     assert [moved] =
              PacketBindings.list_for_mission(c.org, c.mission.mission_id,
@@ -198,10 +198,10 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
 
     {:ok, staged} =
       stage(c, [
-        update("spacecraft_profile", profile, "catalog_revision_id", rev3.catalog_revision_id)
+        update("spacecraft_profile", profile, "composition_id", pin!(c, rev3.catalog_revision_id))
       ])
 
-    # D3 (#544; design §3): the profile's pin is translated at staging to rev 3's composition,
+    # D3 (#544; design §3): the profile pins rev 3's composition,
     # which has no approved revision, so it's a validation NO-GO on the pin (no longer only the
     # blocking HOLD, which a NO-GO's preview doesn't reach).
     assert {:ok, %{verdict: :no_go, checks: checks}} =
@@ -316,7 +316,7 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
     in_flight = request!(c, "released", verification_state: "pending")
 
     {:ok, staged} =
-      stage(c, [update("spacecraft_profile", profile, "catalog_revision_id", c.rev2)])
+      stage(c, [update("spacecraft_profile", profile, "composition_id", pin!(c, c.rev2))])
 
     assert {:ok, %{checks: checks}} =
              Configuration.preview(
@@ -511,7 +511,7 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
           "display_name" => "Catalog profile",
           "downlink_protocol" => "tm",
           "uplink_protocol" => "tc",
-          "catalog_revision_id" => catalog,
+          "composition_id" => pin!(c, catalog),
           "frame_parameters" => %{"frame_size" => 1115, "ocf_length" => 4}
         }
       }
@@ -576,6 +576,15 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
       entity_id: id,
       changes: [%{path: key, value: value}]
     }
+
+  # D3 (#544): a profile pins the catalog revision's one-layer composition; Cadence derives the
+  # catalog revision from it.
+  defp pin!(c, catalog) do
+    {:ok, composition} =
+      CatalogPins.for_catalog_revision(c.org, c.mission.mission_id, catalog)
+
+    composition
+  end
 
   defp update(kind, id, path, value),
     do: %{kind: kind, action: :update, entity_id: id, changes: [%{path: path, value: value}]}
