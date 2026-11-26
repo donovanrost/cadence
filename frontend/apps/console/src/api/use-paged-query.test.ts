@@ -224,6 +224,22 @@ describe("usePagedQuery (#176)", () => {
     t.scope.stop();
   });
 
+  it("works for a read whose pages carry no meta (undefined)", async () => {
+    const calls: ((value: ApiResult<Page<Row, undefined>>) => void)[] = [];
+    const scope = effectScope();
+    const query = scope.run(() =>
+      usePagedQuery(
+        ref("k"),
+        () => new Promise<ApiResult<Page<Row, undefined>>>((resolve) => calls.push(resolve)),
+        (r) => r.id,
+      ),
+    );
+    calls[0]?.({ ok: true, value: { items: rows("a"), next: null, meta: undefined } });
+    await flush();
+    expect(query?.state.value).toMatchObject({ status: "ready", value: { items: rows("a") } });
+    scope.stop();
+  });
+
   it("a null key pauses: nothing is fetched and refetch does nothing", async () => {
     const t = start(ref<string | null>(null));
     t.query.refetch();
