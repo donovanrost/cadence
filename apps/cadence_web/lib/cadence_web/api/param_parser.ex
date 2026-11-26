@@ -621,13 +621,4 @@ defmodule CadenceWeb.API.ParamParser do
       _other -> {:error, :scope_mismatch}
     end
   end
-
-  def resolve_scoped_command_stage_id(params, scoped_command_stage_id)
-      when is_binary(scoped_command_stage_id) do
-    case string_value(params, "command_stage_id") do
-      nil -> {:ok, scoped_command_stage_id}
-      ^scoped_command_stage_id -> {:ok, scoped_command_stage_id}
-      _other -> {:error, :scope_mismatch}
-    end
-  end
 end

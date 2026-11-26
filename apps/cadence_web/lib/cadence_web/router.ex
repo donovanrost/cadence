@@ -807,28 +807,4 @@ defmodule CadenceWeb.Router do
       :actions
     )
   end
-
-  scope "/api", CadenceWeb do
-    pipe_through([:api, :authenticated_api])
-
-    scope "/organizations/:organization_id" do
-      scope "/missions/:mission_id" do
-        get("/command_stages", CommandStageController, :index)
-        post("/command_stages", CommandStageController, :create)
-        get("/command_stages/:command_stage_id", CommandStageController, :show)
-        patch("/command_stages/:command_stage_id", CommandStageController, :update)
-
-        get("/command_stages/:command_stage_id/items", StagedCommandItemController, :index)
-        post("/command_stages/:command_stage_id/items", StagedCommandItemController, :create)
-
-        get("/staged_command_items/:staged_command_item_id", StagedCommandItemController, :show)
-
-        patch(
-          "/staged_command_items/:staged_command_item_id",
-          StagedCommandItemController,
-          :update
-        )
-      end
-    end
-  end
 end

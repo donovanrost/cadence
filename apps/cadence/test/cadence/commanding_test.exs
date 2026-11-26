@@ -16,13 +16,11 @@ defmodule Cadence.CommandingTest do
     CommandQueueEntryRow,
     CommandReleaseAttempt,
     CommandRequest,
-    CommandStage,
     CommandVerifierInstance,
     ReleaseStore,
     ReleaseTargetGuard,
     ReleaseTargetSelection,
-    RequestQueueStore,
-    StagedCommandItem
+    RequestQueueStore
   }
 
   alias Cadence.Commanding.Groups.{CommandGroup, GroupStore}
@@ -58,76 +56,6 @@ defmodule Cadence.CommandingTest do
     command_model = import_command_model()
 
     {:ok, source_endpoint: source_endpoint, command_model: command_model}
-  end
-
-  test "persists and updates command stages and staged command items", %{
-    source_endpoint: source_endpoint,
-    command_model: command_model
-  } do
-    command_stage =
-      CommandStage.new(%{
-        mission_id: @mission_id,
-        stage_name: "Flight Director Review",
-        description: "Shared workbench for reviewed commands",
-        owner: %{"user_id" => "user-123"},
-        visibility: :shared
-      })
-
-    assert {:ok, persisted_stage} =
-             ManagementCommanding.persist_command_stage(@organization_id, command_stage)
-
-    staged_command_item =
-      StagedCommandItem.new(%{
-        mission_id: @mission_id,
-        command_stage_id: persisted_stage.command_stage_id,
-        source_endpoint_ref: source_endpoint.source_endpoint_id,
-        mission_model_revision_id: command_model.revision_id,
-        command_id: fetch_command_id(command_model, "SET_MODE"),
-        argument_values: %{"mode" => 2},
-        priority: 4,
-        item_order: 1,
-        notes: "Initial draft"
-      })
-
-    assert {:ok, %StagedCommandItem{} = persisted_item} =
-             ManagementCommanding.persist_staged_command_item(
-               @organization_id,
-               staged_command_item
-             )
-
-    updated_item = %StagedCommandItem{
-      persisted_item
-      | argument_values: %{"mode" => 3},
-        priority: 1,
-        notes: "Reviewed by FDO"
-    }
-
-    assert {:ok, fetched_stage} =
-             ManagementCommanding.fetch_command_stage(
-               @organization_id,
-               @mission_id,
-               persisted_stage.command_stage_id
-             )
-
-    assert fetched_stage.visibility == :shared
-
-    assert {:ok, updated_persisted_item} =
-             ManagementCommanding.update_staged_command_item(@organization_id, updated_item)
-
-    assert updated_persisted_item.argument_values == %{"mode" => 3}
-    assert updated_persisted_item.priority == 1
-    assert updated_persisted_item.notes == "Reviewed by FDO"
-
-    [listed_item] =
-      ManagementCommanding.list_staged_command_items(
-        @organization_id,
-        @mission_id,
-        command_stage_id: persisted_stage.command_stage_id
-      )
-
-    assert listed_item.staged_command_item_id == persisted_item.staged_command_item_id
-    assert listed_item.argument_values == %{"mode" => 3}
-    assert listed_item.priority == 1
   end
 
   test "queues safe command requests by priority within a source endpoint lane", %{

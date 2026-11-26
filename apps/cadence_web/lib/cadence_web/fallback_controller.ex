@@ -19,14 +19,6 @@ defmodule CadenceWeb.FallbackController do
     error_response(conn, :not_found, "mission_not_found")
   end
 
-  def call(conn, {:error, :command_stage_not_found}) do
-    error_response(conn, :not_found, "command_stage_not_found")
-  end
-
-  def call(conn, {:error, :staged_command_item_not_found}) do
-    error_response(conn, :not_found, "staged_command_item_not_found")
-  end
-
   def call(conn, {:error, :command_request_not_found}) do
     error_response(conn, :not_found, "command_request_not_found")
   end

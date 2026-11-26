@@ -1,8 +1,7 @@
 defmodule Cadence.Commanding do
   @moduledoc """
-  Persistence and validation boundary for command stages, staged command items,
-  validated command requests, command approvals, queued command entries, and
-  release attempts.
+  Persistence and validation boundary for validated command requests, command approvals, queued
+  command entries, and release attempts.
   """
 
   require Logger
@@ -17,7 +16,6 @@ defmodule Cadence.Commanding do
     CommandReleaseAttemptRow,
     CommandRequest,
     CommandRequestRow,
-    CommandStage,
     CommandVerifierInstance,
     ConstraintEvaluation,
     Dispatcher,
@@ -34,8 +32,6 @@ defmodule Cadence.Commanding do
     RequestQueueStore,
     RequestStore,
     RequestValidation,
-    StagedCommandItem,
-    StageStore,
     VerifierScheduler,
     VerifierStore,
     VerifierTransportSignals,
@@ -145,61 +141,6 @@ defmodule Cadence.Commanding do
     else
       {:error, _} -> {:error, :verification_basis_unavailable}
     end
-  end
-
-  @spec persist_command_stage(binary(), CommandStage.t()) ::
-          {:ok, CommandStage.t()} | {:error, term()}
-  def persist_command_stage(organization_id, %CommandStage{} = command_stage)
-      when is_binary(organization_id) do
-    StageStore.persist_stage(organization_id, command_stage)
-  end
-
-  @spec update_command_stage(binary(), CommandStage.t()) ::
-          {:ok, CommandStage.t()} | {:error, term()}
-  def update_command_stage(organization_id, %CommandStage{} = command_stage)
-      when is_binary(organization_id) do
-    StageStore.update_stage(organization_id, command_stage)
-  end
-
-  @spec fetch_command_stage(binary(), binary(), binary()) ::
-          {:ok, CommandStage.t()} | {:error, term()}
-  def fetch_command_stage(organization_id, mission_id, command_stage_id)
-      when is_binary(organization_id) and is_binary(mission_id) and is_binary(command_stage_id) do
-    StageStore.fetch_stage(organization_id, mission_id, command_stage_id)
-  end
-
-  @spec list_command_stages(binary(), binary(), keyword()) :: [CommandStage.t()]
-  def list_command_stages(organization_id, mission_id, opts \\ [])
-      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
-    StageStore.list_stages(organization_id, mission_id, opts)
-  end
-
-  @spec persist_staged_command_item(binary(), StagedCommandItem.t()) ::
-          {:ok, StagedCommandItem.t()} | {:error, term()}
-  def persist_staged_command_item(organization_id, %StagedCommandItem{} = staged_command_item)
-      when is_binary(organization_id) do
-    StageStore.persist_item(organization_id, staged_command_item)
-  end
-
-  @spec update_staged_command_item(binary(), StagedCommandItem.t()) ::
-          {:ok, StagedCommandItem.t()} | {:error, term()}
-  def update_staged_command_item(organization_id, %StagedCommandItem{} = staged_command_item)
-      when is_binary(organization_id) do
-    StageStore.update_item(organization_id, staged_command_item)
-  end
-
-  @spec fetch_staged_command_item(binary(), binary(), binary()) ::
-          {:ok, StagedCommandItem.t()} | {:error, term()}
-  def fetch_staged_command_item(organization_id, mission_id, staged_command_item_id)
-      when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(staged_command_item_id) do
-    StageStore.fetch_item(organization_id, mission_id, staged_command_item_id)
-  end
-
-  @spec list_staged_command_items(binary(), binary(), keyword()) :: [StagedCommandItem.t()]
-  def list_staged_command_items(organization_id, mission_id, opts \\ [])
-      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
-    StageStore.list_items(organization_id, mission_id, opts)
   end
 
   @spec fetch_command_request(binary(), binary(), binary()) ::

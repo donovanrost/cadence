@@ -52,8 +52,8 @@ on success. JSON views are in `W/api/*_json.ex`. Every `…` row passes `authori
 | Comms | transport_profiles: same 7 routes | TransportProfile | `Contacts.*_transport_profile*` | legacy model. The current UI uses Transports via the bridge |
 | Comms | path_templates: same 7 routes, plus `POST /:id/link_assignments` | PathTemplate, LinkAssignment | `Contacts.*_path_template*`, `apply_link_template` | legacy "link template" model |
 | Comms | `GET`, `POST …/link_assignments`; `GET`, `DELETE …/link_assignments/:id` | LinkAssignment | `Contacts.*_link_assignment` | legacy |
-| Commanding | `GET`, `POST …/command_stages`; `GET`, `PATCH /:id` | CommandStage | `Management.Commanding.*_command_stage` | submit removed (#708) |
-| Commanding | `GET`, `POST …/command_stages/:id/items`; `GET`, `PATCH …/staged_command_items/:id` | StagedCommandItem | `Management.Commanding.*_staged_command_item*` | |
+| Commanding | ~~`GET`, `POST …/command_stages`; `GET`, `PATCH /:id`~~ | ~~CommandStage~~ | — | **Removed (#708):** the stage workbench is deleted with its tables. |
+| Commanding | ~~`GET`, `POST …/command_stages/:id/items`; `GET`, `PATCH …/staged_command_items/:id`~~ | ~~StagedCommandItem~~ | — | **Removed (#708).** |
 | Commanding | ~~`GET …/command_requests`, `/:id`~~ | ~~CommandRequest~~ | — | **Removed (#754, #747):** create, approve, reject and enqueue went with #708; a request is a command group's member, read through the console's command groups (`/api/v1/missions/:m/command-groups…`). |
 | Commanding | ~~`GET …/command_approvals`, `/:id`~~ | ~~CommandApproval~~ | — | **Removed (#754, #747):** a group's decisions are read with the group. |
 | Commanding | ~~`GET …/command_queue_entries`, `/:id`; `POST /:id/release`~~ | ~~CommandQueueEntry~~ | — | **Removed (#754, #747):** release is a person's act through a group's send (`GroupRelease`), not ported. |
