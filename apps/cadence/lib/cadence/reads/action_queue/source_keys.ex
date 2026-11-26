@@ -6,6 +6,9 @@ defmodule Cadence.Reads.ActionQueue.SourceKeys do
   """
 
   @keys %{
+    # E2 (#546; U109): a craft on a revision whose approval was withdrawn; its facts nest in
+    # `withdrawal` (console's now/withdrawnComposition.ts).
+    "model_approval_withdrawn" => [:spacecraft_id, :severity, :withdrawal],
     # ux U61: a day nearing its first window with nothing being booked. Per-viewer fields
     # (viewer_can_approve, viewer_can_book) are the console's.
     "plan_coverage" => [

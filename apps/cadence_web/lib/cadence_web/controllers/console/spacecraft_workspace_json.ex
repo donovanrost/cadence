@@ -79,7 +79,9 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceJSON do
       version: active.version,
       generation: active.generation,
       document: document(active.document),
-      composition: active.composition
+      composition: active.composition,
+      # E2 (#546; U109): null, or {revision_id, decision: {kind, by, at, reason}}.
+      approval_withdrawn: Map.get(active, :approval_withdrawn)
     }
 
   # The decision record's fields (subject, separated_from, admin_mode, applied_by) join `review`

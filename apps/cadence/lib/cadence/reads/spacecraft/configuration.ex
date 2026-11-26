@@ -12,6 +12,7 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
   alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Catalog.SpacecraftConfigurationInput, as: ConfigurationInput
   alias Cadence.Control.Activations, as: ControlActivations
+  alias Cadence.Control.WithdrawnPins
   alias Cadence.Reads.CatalogCompositions
   alias Cadence.Reads.Spacecraft.ConfigurationCatalogs
   alias Cadence.SourceEndpoints
@@ -94,6 +95,8 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
                version: active_entry["configuration_version"],
                document: active_entry["document"],
                composition: Map.get(compositions, active_catalog),
+               # E2 (#546; U109): the revision it runs had its approval withdrawn, else nil.
+               approval_withdrawn: approval_withdrawn(mission, id),
                generation: active.activation.generation
              },
          review: review(mission, id, current, active),
@@ -256,5 +259,20 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
     ) or
       evidence["configuration_token"] != current.token or
       evidence["base_activation_id"] != (active.activation && active.activation.activation_id)
+  end
+
+  # `{revision_id, decision: {kind, by, at, reason}}` from the same read as commanding's HOLD and
+  # the attention item (`Control.WithdrawnPins.for_spacecraft/3`), so the three always agree.
+  defp approval_withdrawn(mission, spacecraft_id) do
+    case WithdrawnPins.for_spacecraft(mission.organization_id, mission.mission_id, [spacecraft_id]) do
+      %{^spacecraft_id => pin} ->
+        %{
+          revision_id: pin.revision_id,
+          decision: Map.take(pin.decision, [:kind, :by, :at, :reason])
+        }
+
+      _none ->
+        nil
+    end
   end
 end

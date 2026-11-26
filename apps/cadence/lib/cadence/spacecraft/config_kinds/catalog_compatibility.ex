@@ -10,7 +10,9 @@ defmodule Cadence.Spacecraft.ConfigKinds.CatalogCompatibility do
   - `catalog_command_in_flight`: a command releasing or radiating on them right now. Blocking:
     the apply waits for it to finish;
   - `catalog_configuration_pending`: a newer spacecraft configuration that isn't active yet.
-    Blocking: activate or discard it first.
+    Blocking: activate or discard it first;
+  - `model_approval_withdrawn` (E2, #546): touched spacecraft run a revision whose approval was
+    withdrawn. Blocking, whatever else changes: move them to an approved composition first.
 
   Never staged. The configured generation builder decides what changes, as for framing.
   """
@@ -55,18 +57,51 @@ defmodule Cadence.Spacecraft.ConfigKinds.CatalogCompatibility do
 
     with [_ | _] <- touched,
          true <- ConfigurationSettings.profile_framing_generations?(organization_id, mission_id),
-         builder when builder != nil <- Application.get_env(:cadence, :configuration_generation),
-         %{changes: changes} = impact when map_size(changes) > 0 <-
-           builder.catalog_impact(organization_id, mission_id, touched) do
-      change_items(changes, Map.get(impact, :labels, %{})) ++
-        waiting_items(impact.waiting) ++
-        in_flight_items(impact.in_flight) ++
-        pending_items(impact.pending) ++
-        unapproved_items(Map.get(impact, :unapproved, []), Map.get(impact, :labels, %{}))
+         builder when builder != nil <- Application.get_env(:cadence, :configuration_generation) do
+      catalog_items(builder, organization_id, mission_id, touched) ++
+        withdrawn_items(builder, organization_id, mission_id, touched)
     else
       _nothing -> []
     end
   end
+
+  defp catalog_items(builder, organization_id, mission_id, touched) do
+    case builder.catalog_impact(organization_id, mission_id, touched) do
+      %{changes: changes} = impact when map_size(changes) > 0 ->
+        change_items(changes, Map.get(impact, :labels, %{})) ++
+          waiting_items(impact.waiting) ++
+          in_flight_items(impact.in_flight) ++
+          pending_items(impact.pending) ++
+          unapproved_items(Map.get(impact, :unapproved, []), Map.get(impact, :labels, %{}))
+
+      _no_change ->
+        []
+    end
+  end
+
+  # E2 (#546; U109): craft on a revision whose approval was withdrawn can't take a new
+  # configuration (the gate refuses it at apply), whatever else changes. Blocking.
+  defp withdrawn_items(builder, organization_id, mission_id, touched) do
+    if function_exported?(builder, :withdrawn_impact, 3) do
+      for target <- builder.withdrawn_impact(organization_id, mission_id, touched) do
+        item(:model_approval_withdrawn, target.spacecraft_ids, true, %{
+          details:
+            Map.take(target, [:revision_id, :composition_id, :catalog_revision_number, :decision]),
+          sentence:
+            "#{count(target.spacecraft_ids)} #{on(target)}, which is no longer approved, so " <>
+              "it can't take a new configuration that uses it. Move it to an approved " <>
+              "composition first."
+        })
+      end
+    else
+      []
+    end
+  end
+
+  defp on(%{catalog_revision_number: number}) when is_integer(number),
+    do: "is on catalog rev #{number}"
+
+  defp on(_target), do: "is on a composition"
 
   # Revisions read "rev N" (qa: raw ids read badly); the builder names them.
   defp change_items(changes, labels) do
