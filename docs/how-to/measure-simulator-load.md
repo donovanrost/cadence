@@ -10,7 +10,7 @@ The command schedules provider contacts and runs the ordinary simulator
 coordinators, CCSDS TM framing, and TCP send buffers. Ten loopback listeners
 accept one connection per active contact. The sink identifies the path from the
 first frame's spacecraft ID and counts complete frames and received bytes
-across TCP reads. The command uses a private, temporary DETS store and runs
+across TCP reads. The command uses a private, temporary provider snapshot and runs
 without Cadence, PostgreSQL, QuestDB, or Docker.
 
 - `--craft` sets the fleet size. Use 50, 500, or 1,000 for the ingest baseline.
@@ -43,12 +43,12 @@ The app can report a TCP resource error when the process open-file limit is
 below its socket requirement. At 1,000 paths, the simulator and sink use about 2,000
 connected sockets plus ten listeners.
 
-Every tenth JSONL row includes the provider mirror's entry count and memory,
-dirty-key count, event count, DETS file size, and BEAM memory breakdown. It
-also includes any nonempty persistence batches since the previous sample,
-with the key count, prepare, insert, and sync durations, and the oldest write
-lag. The terminal log records initialization and shutdown diagnostics, including
-the time spent closing contacts and the time spent on the final flush.
+Every tenth JSONL row includes the provider table's entry count and memory,
+whether a snapshot is pending, the event count, the snapshot file size, and
+the BEAM memory breakdown. It also includes completed snapshot write and
+rename timings since the previous diagnostic sample. The terminal log
+records initialization, contact shutdown, the final flush, and the store's
+termination time.
 Per-process binary counts use `Process.info(pid, :binary)`. A binary held
 by two processes can appear in both totals. The independent BEAM binary
 memory counter is `diagnostics.memory.binary`.
@@ -57,7 +57,7 @@ The simulator load measurement is the producer baseline for the Cadence
 ingest run tracked in [#717](https://github.com/donovanrost/cadence/issues/717)
 and the scorecard in [#686](https://github.com/donovanrost/cadence/issues/686).
 
-## Laptop measurements
+## Laptop measurements with DETS
 
 Measured on 2026-11-26 on an arm64 Mac with Elixir 1.20.4, OTP 29, and eight
 normal schedulers. The 1,000-path soak used the 256-key batches and the
@@ -94,3 +94,31 @@ DETS file stayed the same size throughout the measurement window.
 
 The average fixtures delivered 1,039.9 frames/s with 80 active paths at eight
 craft per site and 2,079.9 frames/s with 160 paths at 16 per site.
+
+## 30-minute binary-memory soak
+
+The follow-up used the same 1,000-path peak fixture with per-process sampling
+enabled.
+
+```sh
+mix cadence_simulator.load --craft 1000 --shape peak --duration 1800 --binary-owners
+```
+
+On 2026-11-26, all 1,000 paths stayed active across the 1,800-second
+measurement. They delivered 23,363,483 frames at 12,979.7 frames/s, with 3.49%
+mean scheduler use. Each path delivered frames in every two-second window.
+
+| Minutes | BEAM binary median MiB | BEAM binary p95 MiB | Coordinator refs median MiB | Send-buffer refs median MiB | TCP receiver refs median MiB |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 0–5 | 125.0 | 157.3 | 50.6 | 26.9 | 39.8 |
+| 5–10 | 181.0 | 213.4 | 51.4 | 28.1 | 103.2 |
+| 10–15 | 231.0 | 263.0 | 53.3 | 26.2 | 149.2 |
+| 15–20 | 245.8 | 278.8 | 53.9 | 25.1 | 168.1 |
+| 20–25 | 252.7 | 284.5 | 55.5 | 26.2 | 174.4 |
+| 25–30 | 258.6 | 283.1 | 54.6 | 29.5 | 177.0 |
+
+TCP receiver references accounted for most of the initial rise and leveled off
+in the final ten minutes. The provider store held at 11,025 mirror entries,
+10,011 events, zero dirty keys, and a 9,114,453-byte DETS file throughout the
+measurement. The first capture delivered all 1,800 samples and then hit a
+five-second DETS timeout at its explicit shutdown flush.

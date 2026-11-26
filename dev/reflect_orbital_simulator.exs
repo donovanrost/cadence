@@ -12,7 +12,7 @@ Application.put_env(:cadence_simulator, :provider_http,
 )
 
 Application.put_env(:cadence_simulator, :provider_store,
-  path: Path.expand("../var/reflect_orbital/provider.dets", __DIR__)
+  path: Path.expand("../var/reflect_orbital/provider.ets", __DIR__)
 )
 
 Application.put_env(:cadence_simulator, :provider_defaults,

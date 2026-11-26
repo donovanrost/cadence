@@ -19,7 +19,7 @@ if config_env() != :test do
       path:
         System.get_env(
           "CADENCE_SIMULATOR_STORE_PATH",
-          Path.expand("../../../var/cadence_simulator_provider.dets", __DIR__)
+          Path.expand("../../../var/cadence_simulator_provider.ets", __DIR__)
         )
     ],
     provider_defaults: [
@@ -51,6 +51,6 @@ if config_env() == :test do
     path:
       Path.join(
         System.tmp_dir!(),
-        "cadence_simulator_provider_test_#{System.get_env("MIX_TEST_PARTITION", "0")}.dets"
+        "cadence_simulator_provider_test_#{System.get_env("MIX_TEST_PARTITION", "0")}.ets"
       )
 end

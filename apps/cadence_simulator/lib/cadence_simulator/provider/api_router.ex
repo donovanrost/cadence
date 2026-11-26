@@ -263,7 +263,6 @@ defmodule CadenceSimulator.Provider.ApiRouter do
         0
 
     if Store.consume_fault(run["id"], fault_key, limit) do
-      :ok = Store.flush()
       Process.exit(self(), :kill)
     end
   end

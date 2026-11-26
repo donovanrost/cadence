@@ -16,14 +16,14 @@ defmodule CadenceSimulator.Load do
     directory = Path.join(System.tmp_dir!(), "cadence-simulator-load-#{System.pid()}")
     File.mkdir_p!(Path.dirname(opts.output))
     File.mkdir!(directory)
-    store_path = Path.join(directory, "store.dets")
+    store_path = Path.join(directory, "store.ets")
 
     try do
       Application.put_env(:cadence_simulator, :provider_http, enabled: false)
 
       Application.put_env(:cadence_simulator, :provider_store,
         path: store_path,
-        batch_observer: self()
+        snapshot_observer: self()
       )
 
       {:ok, _apps} = Application.ensure_all_started(:cadence_simulator)
@@ -31,6 +31,7 @@ defmodule CadenceSimulator.Load do
       File.open!(opts.output, [:write, :utf8], &exercise(&1, opts, store_path))
     after
       Application.stop(:cadence_simulator)
+      report_store_termination()
       File.rm_rf!(directory)
     end
   end
@@ -282,8 +283,8 @@ defmodule CadenceSimulator.Load do
 
   defp diagnostics(store_path, binary_owners?) do
     sample = %{
-      store: Map.put(Store.diagnostics(), :dets_file_bytes, File.stat!(store_path).size),
-      batches: drain_batch_samples([]),
+      store: Map.put(Store.diagnostics(), :snapshot_file_bytes, File.stat!(store_path).size),
+      snapshots: drain_snapshot_samples([]),
       memory: Map.new(:erlang.memory())
     }
 
@@ -292,9 +293,9 @@ defmodule CadenceSimulator.Load do
       else: sample
   end
 
-  defp drain_batch_samples(samples) do
+  defp drain_snapshot_samples(samples) do
     receive do
-      {:provider_store_batch, sample} -> drain_batch_samples([sample | samples])
+      {:provider_store_snapshot, sample} -> drain_snapshot_samples([sample | samples])
     after
       0 -> Enum.reverse(samples)
     end
@@ -323,6 +324,14 @@ defmodule CadenceSimulator.Load do
 
   defp report_diagnostics(phase, diagnostics) do
     IO.puts("Provider store #{phase} " <> Jason.encode!(diagnostics))
+  end
+
+  defp report_store_termination do
+    receive do
+      {:provider_store_terminated, timings} -> report_diagnostics("terminate", timings)
+    after
+      0 -> :ok
+    end
   end
 
   defp path_deltas(previous, current) do

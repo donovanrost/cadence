@@ -3,12 +3,11 @@ defmodule CadenceSimulator.Provider.Router do
 
   use Plug.Router, copy_opts_to_assign: :provider_router_config
 
-  alias CadenceSimulator.Provider.{AdminRouter, ApiRouter, Contract, Store}
+  alias CadenceSimulator.Provider.{AdminRouter, ApiRouter, Contract}
 
   plug(Plug.RequestId)
   plug(:match)
   plug(Plug.Parsers, parsers: [:json], pass: ["application/json"], json_decoder: Jason)
-  plug(:flush_mutations)
   plug(:dispatch)
 
   forward("/admin", to: AdminRouter)
@@ -21,16 +20,6 @@ defmodule CadenceSimulator.Provider.Router do
   match _ do
     Contract.error(conn, 404, "not_found", "resource not found")
   end
-
-  # Persist all writes from one API operation before acknowledging it.
-  defp flush_mutations(%{method: method} = conn, _opts) when method in ["POST", "PATCH"] do
-    register_before_send(conn, fn conn ->
-      if conn.status in 200..299, do: :ok = Store.flush()
-      conn
-    end)
-  end
-
-  defp flush_mutations(conn, _opts), do: conn
 
   defp json(conn, status, body) do
     conn

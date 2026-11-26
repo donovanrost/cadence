@@ -41,7 +41,7 @@ defmodule CadenceSimulator.Provider.Configuration do
       http: http,
       store:
         Keyword.get(config, :provider_store,
-          path: Path.expand("var/cadence_simulator_provider.dets")
+          path: Path.expand("var/cadence_simulator_provider.ets")
         ),
       defaults: Keyword.get(config, :provider_defaults, []),
       auth: auth

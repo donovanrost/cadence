@@ -12,7 +12,7 @@ defmodule CadenceSimulator.Provider.StoreResilienceTest do
                  "../../../../../dev/catalogs/demo_spacecraft.yaml",
                  __DIR__
                )
-  @dets :cadence_simulator_provider_store
+  @mirror :cadence_simulator_provider_store_mirror
 
   setup do
     :ok = Store.clear()
@@ -56,8 +56,9 @@ defmodule CadenceSimulator.Provider.StoreResilienceTest do
       :ok = :sys.resume(Store)
       :ok = Store.flush()
 
-      assert [{_key, %{"status" => "canceled"}}] =
-               :dets.lookup(@dets, {:reservation, reservation["id"]})
+      reload_store()
+
+      assert {:ok, %{"status" => "canceled"}} = Provider.fetch_reservation(reservation["id"])
     end
 
     @tag timeout: 60_000
@@ -124,20 +125,20 @@ defmodule CadenceSimulator.Provider.StoreResilienceTest do
   describe "reads and writes" do
     test "don't wait on the Store process, and persist once it runs again" do
       :ok = :sys.suspend(Store)
+      snapshot = File.read!(snapshot_path())
 
       assert {:ok, _scenario} = Store.put(:scenario, %{"id" => "scenario-stuck"})
       assert {:ok, %{"id" => "scenario-stuck"}} = Store.fetch(:scenario, "scenario-stuck")
       assert [%{"id" => "scenario-stuck"}] = Store.list(:scenario)
       assert {:ok, %{"sequence" => sequence}} = Store.append_event(%{"run_id" => "run-a"})
-      assert [] = :dets.lookup(@dets, {:scenario, "scenario-stuck"})
+      assert File.read!(snapshot_path()) == snapshot
 
       :ok = :sys.resume(Store)
       :ok = Store.flush()
+      reload_store()
 
-      assert [{_key, %{"id" => "scenario-stuck"}}] =
-               :dets.lookup(@dets, {:scenario, "scenario-stuck"})
-
-      assert [{_key, %{"sequence" => ^sequence}}] = :dets.lookup(@dets, {:event, sequence})
+      assert {:ok, %{"id" => "scenario-stuck"}} = Store.fetch(:scenario, "scenario-stuck")
+      assert %{data: [%{"sequence" => ^sequence}]} = Store.events()
     end
 
     test "a clean stop persists writes still queued, and a restart reloads them" do
@@ -153,6 +154,33 @@ defmodule CadenceSimulator.Provider.StoreResilienceTest do
       assert restarted != store
       assert {:ok, %{"state" => "running"}} = Store.fetch(:run, "run-queued")
       assert Process.whereis(Orchestrator) == orchestrator
+    end
+
+    test "publishes changes on the snapshot timer" do
+      observer = self()
+      :sys.replace_state(Store, &Map.put(&1, :snapshot_observer, observer))
+      {:ok, _scenario} = Store.put(:scenario, %{"id" => "periodic"})
+
+      assert_receive {:provider_store_snapshot, _timing}, 3_000
+      reload_store()
+
+      assert {:ok, %{"id" => "periodic"}} = Store.fetch(:scenario, "periodic")
+    end
+
+    test "loads the last published snapshot after an interrupted replacement" do
+      {:ok, _scenario} = Store.put(:scenario, %{"id" => "published"})
+      :ok = Store.flush()
+
+      :ok = :sys.suspend(Store)
+      {:ok, _scenario} = Store.put(:scenario, %{"id" => "unpublished"})
+      File.write!(snapshot_path() <> ".tmp", "incomplete snapshot")
+
+      store = Process.whereis(Store)
+      Process.exit(store, :kill)
+      StoreRestart.await(store)
+
+      assert {:ok, %{"id" => "published"}} = Store.fetch(:scenario, "published")
+      assert {:error, :not_found} = Store.fetch(:scenario, "unpublished")
     end
 
     test "list returns one kind, newest first" do
@@ -173,14 +201,10 @@ defmodule CadenceSimulator.Provider.StoreResilienceTest do
       :ok
     end
 
-    test "allocates after recovered events when a batch reached disk before the sequence" do
+    test "allocates after recovered events when the saved sequence trails them" do
+      true = :ets.insert(@mirror, {{:metadata, :event_sequence}, 4})
       :ok = Store.flush()
-      :ok = :dets.insert(@dets, {{:metadata, :event_sequence}, 4})
-      :ok = :dets.sync(@dets)
-
-      store = Process.whereis(Store)
-      Process.exit(store, :kill)
-      _restarted = StoreRestart.await(store)
+      reload_store()
 
       assert {:ok, %{"sequence" => 6}} = Store.append_event(%{"run_id" => "run-a"})
       assert %{data: [%{"sequence" => 5}, %{"sequence" => 6}]} = Store.events(4, 10)
@@ -211,7 +235,19 @@ defmodule CadenceSimulator.Provider.StoreResilienceTest do
     refute Store.consume_fault("run-a", "never", 0)
 
     :ok = Store.flush()
-    assert [{_key, 2}] = :dets.lookup(@dets, {:fault_counter, "run-a", "drop"})
+    reload_store()
+    refute Store.consume_fault("run-a", "drop", 2)
+  end
+
+  defp snapshot_path do
+    :cadence_simulator
+    |> Application.fetch_env!(:provider_store)
+    |> Keyword.fetch!(:path)
+  end
+
+  defp reload_store do
+    :ok = Supervisor.terminate_child(CadenceSimulator.Supervisor, Store)
+    {:ok, _store} = Supervisor.restart_child(CadenceSimulator.Supervisor, Store)
   end
 
   defp active_reservation(port, now) do

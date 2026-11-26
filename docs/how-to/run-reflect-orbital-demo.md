@@ -28,7 +28,7 @@ dev/stack up
 `up` starts the independent simulator, migrates both stores, runs the Reflect Orbital
 and QA seeds, and starts the named Phoenix node and console. The simulator binds a
 slot-specific loopback port and stores its scenario, run, delivery profiles, and
-reservations under `var/reflect_orbital/provider.dets`. Its provider token is private
+reservations under `var/reflect_orbital/provider.ets`. Its provider token is private
 to this worktree in `mise.local.toml`. Use `dev/stack status` for the URLs.
 
 The seed is rerunnable: it uses stable identities, reuses the simulator run and
