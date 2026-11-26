@@ -5,6 +5,7 @@ Conventions: [README.md](README.md). Requested shapes: `docs/apogee/plans/setup-
 | Ask | Endpoint | Status |
 | --- | --- | --- |
 | S | `GET /missions/:mission_id/spacecraft` | **implemented** |
+| SN | `GET /missions/:mission_id/spacecraft/names` | **implemented** (#847, `Cadence.Reads.SpacecraftNames`) |
 | R | `GET /missions/:mission_id/readiness` | **implemented** (v1, `Cadence.Reads.Readiness`; domain extends it for change-set preview) |
 | P | `GET /missions/:mission_id/profiles` | **implemented** |
 | SD | `GET /missions/:mission_id/spacecraft/:spacecraft_id` | **implemented** |
@@ -98,6 +99,20 @@ with `spacecraft`.
   pinned to the profile, as the detail's `override_count`. `last_change`: the detail's
   `profile.last_change` (`{version, revision: null, at, actor: null}`: when the latest version was
   made), or `null` if its history row is missing.
+
+## `GET /api/v1/missions/:mission_id/spacecraft/names`
+
+Spacecraft id → name and SCID, for a screen that names the craft its own rows carry (Plan,
+Re-plan) without the fleet read's telemetry and limits (#847). Members of the mission. Both forms
+answer `{data: {names: [{id, name, scid}]}, meta: {next_cursor}}`; `scid` is null for a craft that
+has none yet. Archived spacecraft are included (plans still name them).
+
+- **By ids**: `?ids=a,b,c`, at most 100 (the small sets a screen already knows). Unknown ids are
+  left out. `next_cursor` is null. More than 100 is `422 invalid_params` (`details.ids`).
+- **The whole mission, in pages**: no `ids`. Sorted by name, then id, so pages are stable. `limit`
+  1–500 (default 500; a limit outside 1–500 falls back to 500); pass the previous `meta.next_cursor` as `?cursor=` for the next page, null
+  on the last. There is no unpaged list. A cursor the server didn't make is `422 invalid_params`
+  (`details.cursor`).
 
 ## `GET /api/v1/missions/:mission_id/spacecraft/:spacecraft_id`
 

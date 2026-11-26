@@ -576,6 +576,8 @@ defmodule CadenceWeb.Router do
 
       # -- Setup (owner: api). Contracts: docs/apogee/api/setup.md
       get("/spacecraft", SpacecraftController, :index)
+      # #847: before :spacecraft_id, so "names" isn't read as an id.
+      get("/spacecraft/names", SpacecraftController, :names)
       get("/spacecraft/:spacecraft_id", SpacecraftDetailController, :show)
       get("/spacecraft/:spacecraft_id/source-endpoints", SourceEndpointController, :index)
       post("/spacecraft/:spacecraft_id/source-endpoints", SourceEndpointController, :create)
