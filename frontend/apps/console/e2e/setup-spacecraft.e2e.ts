@@ -1,11 +1,15 @@
 import { expectAccessible } from "./support/accessibility.ts";
-import { jsonData, jsonProblem, missionApi, missionPath, openConsole } from "./support/console.ts";
+import { jsonData, jsonProblem, missionPath, openConsole } from "./support/console.ts";
 import { DEMO, storageStateFor } from "./support/env.ts";
 import { allow, expect, test } from "./support/fixtures.ts";
 
 // Setup › Spacecraft directory (fe-setup, d53a554e). Data: GET /missions/:id/spacecraft (§S).
 const screen = missionPath("setup/spacecraft");
-const directoryApi = missionApi("spacecraft");
+// The screen asks for `?limit=…`, and a string glob doesn't match a query: match the path, any query.
+const directoryApi = new RegExp(`/api/v1/missions/${DEMO.missionId}/spacecraft(\\?.*)?$`);
+
+// The directory pages 200 to a screen (#796); Load more appends the rest.
+const FIRST_PAGE = Math.min(200, DEMO.spacecraftCount);
 
 function directory(page: import("@playwright/test").Page) {
   return page.getByRole("table", { name: "Spacecraft" });
@@ -18,12 +22,10 @@ test.describe("setup spacecraft directory", () => {
     await expect(
       page.getByText(`${DEMO.spacecraftCount} spacecraft`, { exact: false }),
     ).toBeVisible();
-    await expect(
-      page.getByText(`${DEMO.spacecraftCount} of ${DEMO.spacecraftCount}`),
-    ).toBeVisible();
+    await expect(page.getByText(`${FIRST_PAGE} of ${DEMO.spacecraftCount}`)).toBeVisible();
 
     const rows = directory(page).locator("tbody tr");
-    await expect(rows).toHaveCount(DEMO.spacecraftCount);
+    await expect(rows).toHaveCount(FIRST_PAGE);
     const first = rows.first();
     await expect(first.getByRole("link", { name: "EARENDIL-001" })).toBeVisible();
     await expect(first).toContainText("Earendil Block 1");
@@ -31,6 +33,18 @@ test.describe("setup spacecraft directory", () => {
     await expect(directory(page).getByText("SCID —")).toHaveCount(0);
 
     await expectAccessible(page);
+
+    // Load more walks to the end of the fleet, and the button goes with the last page.
+    const more = page.getByRole("button", { name: "Load more" });
+    while (await more.isVisible()) {
+      const before = await rows.count();
+      await more.click();
+      await expect(rows).not.toHaveCount(before);
+    }
+    await expect(rows).toHaveCount(DEMO.spacecraftCount);
+    await expect(
+      page.getByText(`${DEMO.spacecraftCount} of ${DEMO.spacecraftCount}`),
+    ).toBeVisible();
   });
 
   test("filters by name, SCID prefix and profile, with an honest no-match state", async ({
@@ -54,10 +68,10 @@ test.describe("setup spacecraft directory", () => {
     await filter.fill("no-such-spacecraft");
     await expect(directory(page)).toHaveCount(0);
     await expect(page.getByText("No spacecraft match")).toBeVisible();
-    await expect(page.getByText("0 of 500")).toBeVisible();
+    await expect(page.getByText("0 match")).toBeVisible();
 
     await filter.fill("");
-    await expect(rows).toHaveCount(DEMO.spacecraftCount);
+    await expect(rows).toHaveCount(FIRST_PAGE);
   });
 
   test("keyboard: filter, then open a spacecraft from its Name link", async ({ page }) => {
@@ -73,7 +87,21 @@ test.describe("setup spacecraft directory", () => {
   });
 
   test("empty mission shows the add-spacecraft empty state", async ({ page }) => {
-    await page.route(directoryApi, (route) => route.fulfill(jsonData({ spacecraft: [] })));
+    await page.route(directoryApi, (route) =>
+      route.fulfill(
+        jsonData({
+          spacecraft: [],
+          summary: {
+            total: 0,
+            profiles: 0,
+            without_profile: 0,
+            without_scid: 0,
+            without_routing_rule: 0,
+            awaiting_first_aos: 0,
+          },
+        }),
+      ),
+    );
     await openConsole(page, screen);
     await expect(page.getByText("No spacecraft yet")).toBeVisible();
     await expect(page.getByRole("searchbox", { name: "Filter spacecraft" })).toHaveCount(0);
@@ -82,7 +110,7 @@ test.describe("setup spacecraft directory", () => {
   });
 
   test.describe("when the directory read fails", () => {
-    test.use({ allowedDiagnostics: allow(/\/spacecraft -> 500/, /status of 500/) });
+    test.use({ allowedDiagnostics: allow(/\/spacecraft\?[^ ]* -> 500/, /status of 500/) });
 
     test("shows a retryable error, then recovers", async ({ page }) => {
       await page.route(directoryApi, (route) => route.fulfill(jsonProblem(500, "internal_error")));
@@ -93,7 +121,7 @@ test.describe("setup spacecraft directory", () => {
 
       await page.unroute(directoryApi);
       await retry.click();
-      await expect(directory(page).locator("tbody tr")).toHaveCount(DEMO.spacecraftCount);
+      await expect(directory(page).locator("tbody tr")).toHaveCount(FIRST_PAGE);
     });
   });
 });
@@ -103,7 +131,7 @@ test.describe("setup spacecraft directory, organization member", () => {
 
   test("can read the directory", async ({ page }) => {
     await openConsole(page, screen);
-    await expect(directory(page).locator("tbody tr")).toHaveCount(DEMO.spacecraftCount);
+    await expect(directory(page).locator("tbody tr")).toHaveCount(FIRST_PAGE);
   });
 
   test("is not offered Add spacecraft (no manage_mission capability)", async ({ page }) => {

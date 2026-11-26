@@ -1,6 +1,6 @@
 defmodule CadenceWeb.Console.SpacecraftController do
   @moduledoc """
-  `GET /api/v1/missions/:mission_id/spacecraft` and `…/spacecraft/names` (#847). Contract:
+  `GET /api/v1/missions/:mission_id/spacecraft` (#796) and `…/spacecraft/names` (#847). Contract:
   docs/apogee/api/setup.md.
   """
 
@@ -9,14 +9,23 @@ defmodule CadenceWeb.Console.SpacecraftController do
   alias Cadence.Reads.{SpacecraftDirectory, SpacecraftNames}
   alias CadenceWeb.Console.Problem
 
-  def index(conn, _params) do
-    directory =
-      SpacecraftDirectory.index(
-        conn.assigns.current_scope.organization_id,
-        conn.assigns.current_mission.mission_id
-      )
+  @doc """
+  The directory a page at a time (#796): `?cursor=`, `?limit=` (1-500, default 200) and `?q=` (name
+  or profile name contains it, or the SCID starts with it), sorted by name then id. `{data:
+  {spacecraft, summary, telemetry, scids_in_use, next_free_scid}, meta: {next_cursor}}`; `summary`
+  counts the whole mission.
+  """
+  def index(conn, params) do
+    opts = [cursor: params["cursor"], limit: limit(params["limit"]), q: params["q"]]
 
-    json(conn, %{data: directory})
+    case SpacecraftDirectory.page(org(conn), mission(conn), opts) do
+      {:ok, page} ->
+        {next_cursor, data} = Map.pop(page, :next_cursor)
+        json(conn, %{data: data, meta: %{next_cursor: next_cursor}})
+
+      {:error, :invalid_cursor} ->
+        Problem.respond(conn, :invalid_params, %{cursor: "is not a valid cursor"})
+    end
   end
 
   @doc """

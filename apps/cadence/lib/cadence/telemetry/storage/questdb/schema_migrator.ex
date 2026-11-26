@@ -46,18 +46,23 @@ defmodule Cadence.Telemetry.Storage.QuestDB.SchemaMigrator do
 
   @spec connection_config(keyword()) :: connection_config()
   def connection_config(opts \\ []) when is_list(opts) do
+    environment = Keyword.get(opts, :environment, System.get_env())
+
     [
-      hostname: Keyword.get(opts, :hostname, env("CADENCE_QUESTDB_HOST", "127.0.0.1")),
-      port: Keyword.get(opts, :port, env_integer("CADENCE_QUESTDB_PORT", 8812)),
-      database: Keyword.get(opts, :database, env("CADENCE_QUESTDB_DATABASE", "qdb")),
-      username: Keyword.get(opts, :username, env("CADENCE_QUESTDB_USERNAME", "admin")),
-      password: Keyword.get(opts, :password, env("CADENCE_QUESTDB_PASSWORD", "quest")),
+      hostname:
+        Keyword.get(opts, :hostname, env(environment, "CADENCE_QUESTDB_HOST", "127.0.0.1")),
+      port: Keyword.get(opts, :port, env_integer(environment, "CADENCE_QUESTDB_PORT", 8812)),
+      database: Keyword.get(opts, :database, env(environment, "CADENCE_QUESTDB_DATABASE", "qdb")),
+      username:
+        Keyword.get(opts, :username, env(environment, "CADENCE_QUESTDB_USERNAME", "admin")),
+      password:
+        Keyword.get(opts, :password, env(environment, "CADENCE_QUESTDB_PASSWORD", "quest")),
       timeout: Keyword.get(opts, :timeout, 15_000),
       http_endpoint:
         Keyword.get(
           opts,
           :http_endpoint,
-          env("CADENCE_QUESTDB_HTTP_ENDPOINT", "http://127.0.0.1:9000")
+          env(environment, "CADENCE_QUESTDB_HTTP_ENDPOINT", "http://127.0.0.1:9000")
         )
     ]
   end
@@ -277,15 +282,15 @@ defmodule Cadence.Telemetry.Storage.QuestDB.SchemaMigrator do
     |> Base.encode16(case: :lower)
   end
 
-  defp env(name, default) do
-    case System.get_env(name) do
+  defp env(environment, name, default) do
+    case Map.get(environment, name) do
       value when is_binary(value) and value != "" -> value
       _other -> default
     end
   end
 
-  defp env_integer(name, default) do
-    case System.get_env(name) do
+  defp env_integer(environment, name, default) do
+    case Map.get(environment, name) do
       value when is_binary(value) ->
         case Integer.parse(value) do
           {integer, ""} when integer > 0 -> integer

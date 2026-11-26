@@ -420,8 +420,7 @@ jobs:
         with:
           name: browser-assets
           path: apps/cadence_web/priv/static
-      - run: corepack pnpm exec playwright install --with-deps chromium chrome
-        working-directory: frontend
+      - uses: ./.github/actions/playwright-chromium
       - name: Select the installed browser
         working-directory: frontend
         run: node --input-type=module -e 'import { chromium } from "playwright"; console.log("CHROME_BIN=" + chromium.executablePath())' >> "$GITHUB_ENV"
@@ -540,10 +539,7 @@ jobs:
         with:
           name: browser-assets
           path: apps/cadence_web/priv/static
-      # Federation browser's install line, as is (lead on #624: one proven pattern, 33-40 s there;
-      # if apt mirror delays recur, devops proposes one cached pattern for both jobs).
-      - run: corepack pnpm exec playwright install --with-deps chromium chrome
-        working-directory: frontend
+      - uses: ./.github/actions/playwright-chromium
       - name: Compile the app and the simulator (MIX_ENV=dev)
         run: |
           (cd apps/cadence_web && mix compile)
@@ -797,8 +793,7 @@ jobs:
       - run: corepack enable
       - run: corepack pnpm install --frozen-lockfile
         working-directory: frontend
-      - run: corepack pnpm exec playwright install --with-deps chromium chrome
-        working-directory: frontend
+      - uses: ./.github/actions/playwright-chromium
       - run: corepack pnpm verify
         working-directory: frontend
 

@@ -2,6 +2,7 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
   use CadenceSimulator.Case, async: false
 
   @moduletag :config
+  @moduletag :tmp_dir
 
   alias CadenceSimulator.Provider
   alias CadenceSimulator.Provider.{Contacts, Orchestrator, Router, Store}
@@ -20,8 +21,8 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
                  __DIR__
                )
 
-  setup do
-    :ok = Store.clear()
+  setup %{tmp_dir: tmp_dir} do
+    store_fixture = StoreRestart.isolate!(tmp_dir)
 
     {:ok, scenario} =
       Provider.create_scenario(%{
@@ -46,7 +47,7 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
       "framing" => %{"family" => "ccsds_tm", "mode" => "fixed_size", "frame_bytes" => 1115}
     }
 
-    %{run: run, delivery_request: delivery_request}
+    %{run: run, delivery_request: delivery_request, store_fixture: store_fixture}
   end
 
   test "Delivery Profile provisioning is idempotent, isolated, and sanitized", context do
@@ -94,7 +95,7 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
         task = Task.async(fn -> search_clipped_opportunity(context.run) end)
         assert {:ok, opportunity} = Task.yield(task, 1_000) || Task.shutdown(task)
         Process.exit(store, :kill)
-        _replacement = StoreRestart.await(store)
+        _replacement = StoreRestart.await(context.store_fixture)
         opportunity
       after
         if Process.alive?(store), do: :sys.resume(store)
@@ -186,7 +187,7 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
         assert %{"data" => [opportunity]} = Jason.decode!(result.resp_body)
         assert byte_size(opportunity["id"]) < 100
         Process.exit(store, :kill)
-        _replacement = StoreRestart.await(store)
+        _replacement = StoreRestart.await(context.store_fixture)
         opportunity
       after
         if Process.alive?(store), do: :sys.resume(store)

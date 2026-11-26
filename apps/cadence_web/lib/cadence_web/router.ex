@@ -799,37 +799,6 @@ defmodule CadenceWeb.Router do
           StagedCommandItemController,
           :update
         )
-
-        get("/command_requests", CommandRequestController, :index)
-        get("/command_requests/:command_request_id", CommandRequestController, :show)
-
-        get("/command_approvals", CommandApprovalController, :index)
-        get("/command_approvals/:command_approval_id", CommandApprovalController, :show)
-
-        get("/command_queue_entries", CommandQueueEntryController, :index)
-        get("/command_queue_entries/:command_queue_entry_id", CommandQueueEntryController, :show)
-
-        post(
-          "/command_queue_entries/:command_queue_entry_id/release",
-          CommandQueueEntryController,
-          :release
-        )
-
-        get("/command_release_attempts", CommandReleaseAttemptController, :index)
-
-        get(
-          "/command_release_attempts/:command_release_attempt_id",
-          CommandReleaseAttemptController,
-          :show
-        )
-
-        get("/command_verifier_instances", CommandVerifierInstanceController, :index)
-
-        get(
-          "/command_verifier_instances/:command_verifier_instance_id",
-          CommandVerifierInstanceController,
-          :show
-        )
       end
     end
   end

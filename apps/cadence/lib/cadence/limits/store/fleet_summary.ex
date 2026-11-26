@@ -12,7 +12,9 @@ defmodule Cadence.Limits.Store.FleetSummary do
   at 200 points, once per spacecraft per transaction), and removes the row of a spacecraft left
   without states. `Limits.Store.persist_latest_states/2` and `replace_latest_states/3`, the only
   writers of `telemetry_latest_limit_states`, call it; a new writer must too (the property test in
-  `fleet_summary_property_test.exs` is the check). Bulk fixtures call `refresh(repo, mission, :all)`.
+  `fleet_summary_property_test.exs` is the check). Writers take one advisory lock per spacecraft
+  first (`refresh_batch/2`, `lock_rebuild/4`), so two writers of one spacecraft never leave a stale
+  summary. Bulk fixtures call `refresh(repo, mission, :all)`.
 
   `load/2` is one statement over the summaries however many spacecraft or points there are.
   """
@@ -56,6 +58,63 @@ defmodule Cadence.Limits.Store.FleetSummary do
        }}
     end)
   end
+
+  # One writer per spacecraft at a time (#849 follow-up, same as #926): two transactions that touch
+  # the same spacecraft (two evaluation jobs, a job beside a rebuild) would each recompute from a
+  # snapshot that lacks the other's uncommitted states, and the later commit could leave a stale
+  # summary. A transaction-scoped advisory lock per (mission, spacecraft) makes the second wait for
+  # the first's commit; its recompute then reads the first's rows (READ COMMITTED takes a snapshot
+  # per statement). The locks are taken AFTER the state writes, in every writer, and that is still
+  # correct: the last lock holder recomputes after every earlier holder committed, and sees its own
+  # writes; taking them before the writes would let a rebuild's delete wait on a job's row lock
+  # while the job waits on the rebuild's advisory lock. One sorted order (mission, spacecraft)
+  # across missions, so batches cannot wait on each other. The key namespace is
+  # `telemetry_fleet_limit/`, apart from the live alarm summary's `semantic_fleet_alarm/`.
+  @doc """
+  Takes the transaction-scoped advisory lock of every `{mission, spacecraft}` key, in sorted order.
+  """
+  @spec lock_spacecraft(module(), [{binary(), binary()}]) :: :ok
+  def lock_spacecraft(repo, keys) do
+    keys
+    |> Enum.uniq()
+    |> Enum.sort()
+    |> Enum.each(fn {mission_id, spacecraft_id} ->
+      repo.query!("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
+        "telemetry_fleet_limit/" <> mission_id <> "/" <> spacecraft_id
+      ])
+    end)
+  end
+
+  @doc """
+  Locks, then recomputes, the spacecraft of the `{mission, spacecraft}` keys a batch of writes
+  touched, inside the caller's transaction.
+  """
+  @spec refresh_batch(module(), [{binary(), binary()}]) :: :ok
+  def refresh_batch(repo, keys) do
+    lock_spacecraft(repo, keys)
+
+    keys
+    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+    |> Enum.each(fn {mission_id, ids} -> refresh(repo, mission_id, Enum.uniq(ids)) end)
+  end
+
+  @doc """
+  Locks every spacecraft a rebuild touches: the one it names, or, for a whole-mission rebuild, those
+  that had a summary before it plus those of its new events.
+  """
+  @spec lock_rebuild(module(), binary(), binary() | nil, [Event.t()]) :: :ok
+  def lock_rebuild(repo, mission_id, nil, events) do
+    summarized =
+      repo.all(
+        from(s in FleetSummaryRow, where: s.mission_id == ^mission_id, select: s.spacecraft_id)
+      )
+
+    new = events |> Enum.map(& &1.spacecraft_id) |> Enum.reject(&is_nil/1)
+    lock_spacecraft(repo, Enum.map(summarized ++ new, &{mission_id, &1}))
+  end
+
+  def lock_rebuild(repo, mission_id, spacecraft_id, _events),
+    do: lock_spacecraft(repo, [{mission_id, spacecraft_id}])
 
   @doc """
   Recomputes the summaries of `spacecraft_ids` (or of every spacecraft of the mission, `:all`) from

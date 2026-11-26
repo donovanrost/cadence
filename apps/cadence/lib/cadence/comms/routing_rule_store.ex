@@ -234,6 +234,38 @@ defmodule Cadence.Comms.RoutingRuleStore do
     end
   end
 
+  @doc "The spacecraft ids that have an active, enabled routing rule."
+  @spec spacecraft_ids_with_usable_rule(binary(), binary()) :: [binary()]
+  def spacecraft_ids_with_usable_rule(organization_id, mission_id) do
+    organization_id
+    |> usable_rules(mission_id)
+    |> distinct(true)
+    |> select([rule], rule.spacecraft_id)
+    |> Repo.all()
+  end
+
+  @doc "How many active, enabled routing rules each of `spacecraft_ids` has: `%{id => count}`."
+  @spec usable_rule_counts(binary(), binary(), [binary()]) :: %{binary() => pos_integer()}
+  def usable_rule_counts(_organization_id, _mission_id, []), do: %{}
+
+  def usable_rule_counts(organization_id, mission_id, spacecraft_ids) do
+    organization_id
+    |> usable_rules(mission_id)
+    |> where([rule], rule.spacecraft_id in ^spacecraft_ids)
+    |> group_by([rule], rule.spacecraft_id)
+    |> select([rule], {rule.spacecraft_id, count(rule.routing_rule_id)})
+    |> Repo.all()
+    |> Map.new()
+  end
+
+  defp usable_rules(organization_id, mission_id) do
+    from(rule in RoutingRuleRow,
+      where:
+        rule.organization_id == ^organization_id and rule.mission_id == ^mission_id and
+          rule.lifecycle_state == "active" and rule.enabled
+    )
+  end
+
   @spec list_routing_rules(binary(), binary()) :: [RoutingRule.t()]
   def list_routing_rules(organization_id, mission_id)
       when is_binary(organization_id) and is_binary(mission_id) do

@@ -133,9 +133,8 @@ defmodule Cadence.Spacecraft.StagedScidsTest do
   end
 
   defp directory(c) do
-    c.org
-    |> SpacecraftDirectory.index(c.mission)
-    |> Map.take([:next_free_scid, :scids_in_use])
+    {:ok, page} = SpacecraftDirectory.page(c.org, c.mission, limit: 1)
+    Map.take(page, [:next_free_scid, :scids_in_use])
   end
 
   defp live!(c, name, scid) do

@@ -37,6 +37,43 @@ defmodule CadenceWeb.Console.SpacecraftAPITest do
     assert Map.has_key?(row, "plane")
   end
 
+  test "pages by name then id with a cursor, filters with q, and sends a whole-mission summary (#796)",
+       c do
+    for {name, scid} <- [{"Bravo", 2}, {"Alpha", 1}, {"Charlie", nil}],
+        do: TestFixtures.persist_spacecraft!(c.mission, display_name: name, scid: scid)
+
+    conn = TestFixtures.member_conn(c.user)
+    path = "/api/v1/missions/#{c.mission.mission_id}/spacecraft"
+
+    first = conn |> get(path <> "?limit=2") |> json_response(200)
+    assert Enum.map(first["data"]["spacecraft"], & &1["name"]) == ["Alpha", "Bravo"]
+    assert is_binary(first["meta"]["next_cursor"])
+
+    assert first["data"]["summary"] == %{
+             "total" => 3,
+             "profiles" => 0,
+             "without_profile" => 3,
+             "without_scid" => 1,
+             "without_routing_rule" => 3,
+             "awaiting_first_aos" => 3
+           }
+
+    second =
+      conn
+      |> get(path <> "?limit=2&cursor=" <> first["meta"]["next_cursor"])
+      |> json_response(200)
+
+    assert Enum.map(second["data"]["spacecraft"], & &1["name"]) == ["Charlie"]
+    assert second["meta"]["next_cursor"] == nil
+
+    filtered = conn |> get(path <> "?q=brav") |> json_response(200)
+    assert Enum.map(filtered["data"]["spacecraft"], & &1["name"]) == ["Bravo"]
+    assert filtered["data"]["summary"]["total"] == 3
+
+    assert %{"error" => %{"code" => "invalid_params"}} =
+             conn |> get(path <> "?cursor=nope") |> json_response(422)
+  end
+
   test "sends the SCIDs in use and the next free one (S9, #313)", c do
     TestFixtures.persist_spacecraft!(c.mission, display_name: "EARENDIL-001", scid: 1)
     TestFixtures.persist_spacecraft!(c.mission, display_name: "EARENDIL-003", scid: 3)

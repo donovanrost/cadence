@@ -25,7 +25,7 @@ const secret = await new Promise((resolve) =>
   }),
 );
 process.stdin.destroy();
-const browser = await chromium.launch({ channel: "chrome", headless: true });
+const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1366, height: 900 } });
 /** @type {string[]} */
 const errors = [];
