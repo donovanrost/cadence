@@ -10,9 +10,6 @@ defmodule Cadence.Commanding.CommandApprovalRecordTest do
 
   import Ecto.Query
 
-  alias Cadence.{Ids, Missions, Organizations}
-  alias Cadence.Commanding.Groups.AuditRecords
-
   alias Cadence.Commanding.{
     ApprovalDecisions,
     CommandApprovalRow,
@@ -22,9 +19,13 @@ defmodule Cadence.Commanding.CommandApprovalRecordTest do
     RequestStore
   }
 
+  alias Cadence.Commanding.Groups.AuditRecords
   alias Cadence.Governance.DecisionRecord
+  alias Cadence.Ids
   alias Cadence.Management.Commanding.ReviewPrecondition
+  alias Cadence.Missions
   alias Cadence.Missions.Mission
+  alias Cadence.Organizations
   alias Cadence.Organizations.Organization
 
   test "a decision records its review token, separated_from and admin_mode, read back from the row" do
