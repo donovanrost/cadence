@@ -15,11 +15,6 @@ on:
   schedule:
     - cron: "17 5,17 * * *"
   workflow_dispatch:
-    inputs:
-      rest_seed_only:
-        description: Run only the REST seed smoke for CI cost measurement
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -47,9 +42,9 @@ jobs:
     #   still execute frontend/modules and frontend/apps/host producer code, so those count.
     # - frontend: code outside the Elixir projects (frontend quality)
     outputs:
-      code: ${{ !inputs.rest_seed_only && (github.event_name != 'pull_request' || steps.filter.outputs.code == 'true') }}
-      backend: ${{ !inputs.rest_seed_only && (github.event_name != 'pull_request' || steps.filter.outputs.backend == 'true') }}
-      frontend: ${{ !inputs.rest_seed_only && (github.event_name != 'pull_request' || steps.filter.outputs.frontend == 'true') }}
+      code: ${{ github.event_name != 'pull_request' || steps.filter.outputs.code == 'true' }}
+      backend: ${{ github.event_name != 'pull_request' || steps.filter.outputs.backend == 'true' }}
+      frontend: ${{ github.event_name != 'pull_request' || steps.filter.outputs.frontend == 'true' }}
     steps:
       - if: github.event_name == 'pull_request'
         id: filter
@@ -911,7 +906,7 @@ jobs:
   rest-seed-smoke:
     name: REST seed smoke
     needs: changes
-    if: needs.changes.outputs.backend == 'true' || inputs.rest_seed_only
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
@@ -959,8 +954,7 @@ jobs:
           persist-credentials: false
       - name: Tune Postgres for throwaway test data
         run: scripts/ci/tune_postgres.sh
-      - id: setup
-        uses: ./.github/actions/setup-cadence
+      - uses: ./.github/actions/setup-cadence
         with:
           node: "false"
           xmllint: "false"
@@ -968,17 +962,6 @@ jobs:
         run: |
           (cd apps/cadence_web && mix compile)
           (cd apps/cadence_simulator && mix compile)
-      # A dispatch of this one job measures a cold restore, then saves the exact key for
-      # a second dispatch to measure a warm cache before the PR starts normal CI.
-      - name: Index sources for the measured dev build
-        if: github.event_name == 'workflow_dispatch' && inputs.rest_seed_only && steps.setup.outputs.build-cache-hit != 'true'
-        run: scripts/ci/source_index.sh write "$CADENCE_SOURCE_INDEX"
-      - name: Save the measured dev build
-        if: github.event_name == 'workflow_dispatch' && inputs.rest_seed_only && steps.setup.outputs.build-cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ env.CADENCE_BUILD_PATHS }}
-          key: ${{ env.CADENCE_BUILD_KEY }}
       - name: Make an ephemeral admin password
         run: |
           set +x
@@ -1014,6 +997,16 @@ jobs:
             elixir dev/seed/earendil.exs | tee "$RUNNER_TEMP/rest-seed.log"
           grep -Eq '^Earendil fleet: in_review \(10 spacecraft,' "$RUNNER_TEMP/rest-seed.log"
           echo "REST seed wall: $((SECONDS - start)) s"
+      - name: Show server and simulator logs on failure
+        if: ${{ failure() }}
+        run: |
+          for log in "$RUNNER_TEMP/server.log" "$RUNNER_TEMP/simulator.log"; do
+            if [ -f "$log" ]; then
+              echo "::group::$(basename "$log") tail"
+              tail -n 80 "$log"
+              echo "::endgroup::"
+            fi
+          done
 
   ci-ok:
     name: ci-ok
