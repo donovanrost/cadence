@@ -334,8 +334,8 @@ defmodule Cadence.Telemetry.Storage do
   end
 
   @doc """
-  Seeds the current-value store with samples that are already known (a partition's recovered
-  snapshot, DECISIONS #96), exactly as ingest would have recorded them (same source identity, so
+  Seeds the current-value store with samples that are already known (the latest values a starting
+  partition reads back from the history store, DECISIONS #96, #831), exactly as ingest would have recorded them (same source identity, so
   they share the live samples' keys) but with nothing else: no observation is written, no fact is
   published. The samples keep their OWN generation and receipt times, so staleness stays honest,
   and the store keeps a newer value it already has.
