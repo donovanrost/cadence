@@ -6,6 +6,7 @@ defmodule CadenceWeb.Console.FleetPushTest do
   require Phoenix.ChannelTest
 
   alias Cadence.Platform.ScopedReadUpdates
+  alias Cadence.Reads.CommandCounts
   import ExUnit.CaptureLog
 
   alias CadenceWeb.Console.FleetPush
@@ -200,6 +201,92 @@ defmodule CadenceWeb.Console.FleetPushTest do
       send(new, :tick)
       assert_push("fleet", %{seq: 2, full: false}, @load_ms)
       refute_push("fleet", %{seq: 1}, 200)
+    end
+  end
+
+  # #798: the viewers' command counts are read once per load in the source, not per socket.
+  describe "command counts per viewer" do
+    setup do
+      org = TestFixtures.persist_org!()
+      mission = TestFixtures.persist_mission!(org)
+
+      [ana, ben] =
+        for _n <- 1..2 do
+          user = TestFixtures.persist_user!()
+          TestFixtures.grant_membership!(user, org)
+          user
+        end
+
+      %{org: org, mission: mission, ana: ana, ben: ben}
+    end
+
+    test "load_for_viewers: one entry per distinct viewer, each what load/3 says", c do
+      org_id = c.org.organization_id
+      mission_id = c.mission.mission_id
+      viewers = [c.ana.user_id, c.ana.user_id, c.ben.user_id, nil]
+      counts = CommandCounts.load_for_viewers(org_id, mission_id, viewers)
+
+      assert Map.keys(counts) |> Enum.sort_by(&to_string/1) ==
+               Enum.sort_by([c.ana.user_id, c.ben.user_id, nil], &to_string/1)
+
+      for viewer <- Enum.uniq(viewers),
+          do: assert(counts[viewer] == CommandCounts.load(org_id, mission_id, viewer))
+    end
+
+    test "one commands read per load for every viewer; each socket gets its own viewer's", c do
+      test_pid = self()
+      row = %{id: "spacecraft-qa-1", name: "QA-1", state: "nominal", last_received_at: nil}
+      shared = %{counts: %{total: 1}, limits: %{configured: false}, spacecraft: [row]}
+
+      commands = fn _organization_id, _mission_id, viewers ->
+        send(test_pid, {:commands_read, Enum.sort(Enum.uniq(viewers))})
+        Map.new(viewers, &{&1, %{awaiting_viewer: &1}})
+      end
+
+      key = {c.org.organization_id, c.mission.mission_id}
+
+      source =
+        start_supervised!(
+          {FleetSource, key: key, load: fn _o, _m -> shared end, commands: commands}
+        )
+
+      # Ana on two sockets, Ben on one: their snapshots carry their own counts.
+      for user <- [c.ana, c.ana, c.ben] do
+        socket = join!(TestFixtures.member_session_token!(user), c.mission)
+        ref = Phoenix.ChannelTest.push(socket, "fleet:subscribe", %{})
+        assert_reply(ref, :ok, %{})
+      end
+
+      ana_id = c.ana.user_id
+      ben_id = c.ben.user_id
+      assert pushed_viewers(1) == Enum.sort([ana_id, ana_id, ben_id])
+      flush_commands_reads()
+
+      # A tick: one read of the commands for both viewers, each socket its viewer's counts.
+      send(source, :tick)
+      assert_receive {:commands_read, viewers}, @load_ms
+      assert viewers == Enum.sort([ana_id, ben_id])
+      refute_receive {:commands_read, _viewers}, 300
+      assert pushed_viewers(2) == Enum.sort([ana_id, ana_id, ben_id])
+    end
+  end
+
+  # The viewers whose counts the three sockets' pushes with this `seq` carried.
+  defp pushed_viewers(seq) do
+    viewers =
+      for _n <- 1..3 do
+        assert_push("fleet", %{seq: ^seq, commands: %{awaiting_viewer: viewer}}, @load_ms)
+        viewer
+      end
+
+    Enum.sort(viewers)
+  end
+
+  defp flush_commands_reads do
+    receive do
+      {:commands_read, _viewers} -> flush_commands_reads()
+    after
+      100 -> :ok
     end
   end
 

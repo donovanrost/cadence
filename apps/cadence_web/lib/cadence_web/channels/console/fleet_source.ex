@@ -6,9 +6,9 @@ defmodule CadenceWeb.Console.FleetSource do
   on each material change, so the push cost sockets × fleet size. Now one source per
   `{organization_id, mission_id}` reads it (`FleetStatus.load/2` and whether limits are
   configured, built with `FleetJSON.mission/2`) and sends the result to every subscribed channel
-  process as `{:fleet_loaded, shared, heard_due?}`. Each channel adds its viewer's command
-  counts, diffs against what it last pushed and pushes its own delta, so `seq`, rows and the
-  contract in `docs/apogee/api/realtime.md` stay per socket.
+  process as `{:fleet_loaded, shared, commands, heard_due?}`, where `commands` are that channel's
+  viewer's command counts. Each channel diffs against what it last pushed and pushes its own
+  delta, so `seq`, rows and the contract in `docs/apogee/api/realtime.md` stay per socket.
 
   - **Tick:** every 10 s while anyone is subscribed, a read with `heard_due?` set: the
     heartbeat, and the batch of rows whose only change is `last_received_at`.
@@ -22,9 +22,11 @@ defmodule CadenceWeb.Console.FleetSource do
     meanwhile, ticks included, so a client sees no heartbeat until reads succeed again.
 
   The rows are mission-wide; each channel was authorized for the mission at join. If rows ever
-  differ by viewer, the channel filters the shared rows by its scope before diffing. The one
-  read that stays per socket is `CommandCounts.load/3` (the viewer's `awaiting_viewer`): one
-  small query per socket per push, independent of fleet size, and not part of this read's cost.
+  differ by viewer, the channel filters the shared rows by its scope before diffing. The command
+  counts differ by viewer only in `awaiting_viewer`: after each read the source reads the
+  mission's commands once (`CommandCounts.load_for_viewers/3`) and builds the counts for each
+  distinct subscribed viewer from it (#798). Before, every channel ran its own query on every
+  push, so the fan-out grew with the sockets; now no channel touches the database on a push.
 
   The source stops when its last subscriber leaves or exits. It is `:temporary`: should it
   crash anyway, its channels see it go down and subscribe again, which starts a fresh one.
@@ -38,7 +40,7 @@ defmodule CadenceWeb.Console.FleetSource do
 
   require Logger
 
-  alias Cadence.Reads.FleetStatus
+  alias Cadence.Reads.{CommandCounts, FleetStatus}
   alias CadenceWeb.Console.FleetJSON
 
   @registry CadenceWeb.Console.FleetSources
@@ -48,23 +50,32 @@ defmodule CadenceWeb.Console.FleetSource do
 
   @type key :: {organization_id :: binary(), mission_id :: binary()}
 
+  @type viewer :: binary() | nil
+
   @doc """
   Starts the source for `key: {organization_id, mission_id}`, registered under that key.
-  `load` reads the shared fleet (default: `FleetStatus.load/2` and the limits, as wire rows).
+  `load` reads the shared fleet (default: `FleetStatus.load/2` and the limits, as wire rows);
+  `commands` reads the command counts for a list of viewers (default:
+  `CommandCounts.load_for_viewers/3`).
   """
-  @spec start_link(key: key(), load: (binary(), binary() -> map())) :: GenServer.on_start()
+  @spec start_link(
+          key: key(),
+          load: (binary(), binary() -> map()),
+          commands: (binary(), binary(), [viewer()] -> %{viewer() => map()})
+        ) :: GenServer.on_start()
   def start_link(opts) do
     key = Keyword.fetch!(opts, :key)
     GenServer.start_link(__MODULE__, opts, name: {:via, Registry, {@registry, key}})
   end
 
   @doc """
-  Subscribes the calling process. Returns the source's pid (to monitor) and the latest read when
-  it is fresh enough to be the caller's snapshot, or `nil`: then the next `{:fleet_loaded, ...}`
-  message is.
+  Subscribes the calling process for `viewer` (the channel's user id). Returns the source's pid
+  (to monitor) and `{shared, commands}`, the latest read with the viewer's counts, when it is
+  fresh enough to be the caller's snapshot, or `nil`: then the next `{:fleet_loaded, ...}` is.
   """
-  @spec subscribe(binary(), binary()) :: {pid(), map() | nil}
-  def subscribe(organization_id, mission_id), do: subscribe_to({organization_id, mission_id}, 5)
+  @spec subscribe(binary(), binary(), viewer()) :: {pid(), {map(), map()} | nil}
+  def subscribe(organization_id, mission_id, viewer),
+    do: subscribe_to({organization_id, mission_id}, viewer, 5)
 
   @doc "Unsubscribes the calling process."
   @spec unsubscribe(binary(), binary()) :: :ok
@@ -80,11 +91,11 @@ defmodule CadenceWeb.Console.FleetSource do
   # then both lookup and start return the dead pid, so wait a little first. A source busy with a
   # read slower than the call's 5 s still adds the caller, so a timeout just means "wait for the
   # next read".
-  defp subscribe_to(key, retries) do
+  defp subscribe_to(key, viewer, retries) do
     pid = running(key) || start(key)
 
     try do
-      {pid, GenServer.call(pid, {:subscribe, self()})}
+      {pid, GenServer.call(pid, {:subscribe, self(), viewer})}
     catch
       :exit, {:timeout, _call} ->
         {pid, nil}
@@ -92,7 +103,7 @@ defmodule CadenceWeb.Console.FleetSource do
       :exit, {reason, _call}
       when reason in [:noproc, :normal, :killed, :shutdown] and retries > 0 ->
         Process.sleep(10)
-        subscribe_to(key, retries - 1)
+        subscribe_to(key, viewer, retries - 1)
     end
   end
 
@@ -123,8 +134,12 @@ defmodule CadenceWeb.Console.FleetSource do
      %{
        key: Keyword.fetch!(opts, :key),
        load: Keyword.get(opts, :load, &read/2),
+       commands: Keyword.get(opts, :commands, &CommandCounts.load_for_viewers/3),
+       # pid => {monitor ref, viewer}
        subscribers: %{},
        latest: nil,
+       # viewer => that viewer's command counts, from the latest read
+       latest_commands: %{},
        loaded_at: nil,
        attempted_at: nil,
        failures: 0,
@@ -134,11 +149,11 @@ defmodule CadenceWeb.Console.FleetSource do
   end
 
   @impl true
-  def handle_call({:subscribe, pid}, _from, state) do
-    state = watch(state, pid)
+  def handle_call({:subscribe, pid, viewer}, _from, state) do
+    state = watch(state, pid, viewer)
 
     cond do
-      fresh?(state) -> {:reply, state.latest, state}
+      fresh?(state) -> snapshot(state, viewer)
       # While reads fail, a new subscriber waits for the next tick or change like everyone else.
       state.failures > 0 -> {:reply, nil, state}
       true -> {:reply, nil, schedule_load(state, 0)}
@@ -153,7 +168,7 @@ defmodule CadenceWeb.Console.FleetSource do
       {nil, _subscribers} ->
         {:noreply, state}
 
-      {ref, subscribers} ->
+      {{ref, _viewer}, subscribers} ->
         Process.demonitor(ref, [:flush])
         stop_when_empty(%{state | subscribers: subscribers})
     end
@@ -173,11 +188,27 @@ defmodule CadenceWeb.Console.FleetSource do
   def handle_info({:DOWN, _ref, :process, pid, _reason}, state),
     do: stop_when_empty(%{state | subscribers: Map.delete(state.subscribers, pid)})
 
-  defp watch(%{subscribers: subscribers} = state, pid) when is_map_key(subscribers, pid),
+  defp watch(%{subscribers: subscribers} = state, pid, _viewer) when is_map_key(subscribers, pid),
     do: state
 
-  defp watch(state, pid),
-    do: %{state | subscribers: Map.put(state.subscribers, pid, Process.monitor(pid))}
+  defp watch(state, pid, viewer),
+    do: %{state | subscribers: Map.put(state.subscribers, pid, {Process.monitor(pid), viewer})}
+
+  # A fresh read for a new subscriber: its viewer's counts from that read, or read now for a viewer
+  # who wasn't subscribed then. If that read fails, the subscriber waits for the next load.
+  defp snapshot(%{latest_commands: known} = state, viewer) when is_map_key(known, viewer),
+    do: {:reply, {state.latest, Map.fetch!(known, viewer)}, state}
+
+  defp snapshot(%{key: {organization_id, mission_id}} = state, viewer) do
+    case attempt_commands(state.commands, organization_id, mission_id, [viewer]) do
+      {:ok, %{^viewer => counts}} ->
+        state = %{state | latest_commands: Map.put(state.latest_commands, viewer, counts)}
+        {:reply, {state.latest, counts}, state}
+
+      _failed ->
+        {:reply, nil, schedule_load(state, 0)}
+    end
+  end
 
   defp stop_when_empty(%{subscribers: subscribers} = state) when map_size(subscribers) == 0,
     do: {:stop, :normal, state}
@@ -201,15 +232,19 @@ defmodule CadenceWeb.Console.FleetSource do
     if state.load_timer, do: Process.cancel_timer(state.load_timer)
     state = %{state | load_timer: nil, attempted_at: now_ms()}
 
-    case attempt(state.load, organization_id, mission_id) do
-      {:ok, shared} ->
-        if state.failures > 0,
-          do:
-            Logger.info("Fleet push for #{mission_id} reads again after #{state.failures} failed")
+    viewers = state.subscribers |> Map.values() |> Enum.map(&elem(&1, 1))
 
-        Enum.each(Map.keys(state.subscribers), &send(&1, {:fleet_loaded, shared, heard_due?}))
-        %{state | latest: shared, loaded_at: now_ms(), failures: 0}
+    with {:ok, shared} <- attempt(state.load, organization_id, mission_id),
+         {:ok, commands} <- attempt_commands(state.commands, organization_id, mission_id, viewers) do
+      if state.failures > 0,
+        do: Logger.info("Fleet push for #{mission_id} reads again after #{state.failures} failed")
 
+      Enum.each(state.subscribers, fn {pid, {_ref, viewer}} ->
+        send(pid, {:fleet_loaded, shared, Map.fetch!(commands, viewer), heard_due?})
+      end)
+
+      %{state | latest: shared, latest_commands: commands, loaded_at: now_ms(), failures: 0}
+    else
       {:error, reason} ->
         if state.failures == 0,
           do:
@@ -234,6 +269,19 @@ defmodule CadenceWeb.Console.FleetSource do
     error -> {:error, Exception.message(error)}
   catch
     :exit, reason -> {:error, Exception.format_exit(reason)}
+    :throw, value -> {:error, "throw: #{inspect(value)}"}
+  end
+
+  # The viewers' command counts, one read of the mission's commands; failing like a fleet read.
+  defp attempt_commands(_commands, _organization_id, _mission_id, []), do: {:ok, %{}}
+
+  defp attempt_commands(commands, organization_id, mission_id, viewers) do
+    {:ok, commands.(organization_id, mission_id, viewers)}
+  rescue
+    error -> {:error, Exception.message(error)}
+  catch
+    :exit, reason -> {:error, Exception.format_exit(reason)}
+    :throw, value -> {:error, "throw: #{inspect(value)}"}
   end
 
   defp read(organization_id, mission_id) do

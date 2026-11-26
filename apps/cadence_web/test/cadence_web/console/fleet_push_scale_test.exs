@@ -2,16 +2,15 @@ defmodule CadenceWeb.Console.FleetPushScaleTest do
   @moduledoc """
   The server half of the fleet push after the read (#798): fan-out and diff. 1,000 spacecraft,
   every row changed on each read (a full-fleet push, the worst case), to 20 joined `mission:`
-  channels, each with its own transport process as in production. For each read it times from
-  the end of the `[:cadence_web, :console, :fleet_source, :load]` span to the last socket's `fleet`
-  push. It also times the parts apart: the source's sends (one deep copy per subscriber), one
-  channel's diff, one channel's `CommandCounts` read, and the JSON encode each socket's transport
-  adds (ChannelTest doesn't serialize).
+  channels spread over 5 viewers, each socket with its own transport process as in production.
+  For each read it times from the end of the `[:cadence_web, :console, :fleet_source, :load]`
+  span to the last socket's `fleet` push: the source's read of the viewers' command counts (once
+  per load, #798), its sends, and each channel's diff and push. It also times the parts apart:
+  the commands read, the sends (one deep copy per subscriber), one channel's diff, and the JSON
+  encode each socket's transport adds (ChannelTest doesn't serialize).
 
-  The read itself is `FleetStatus.load`, measured by `Cadence.Reads.FleetStatusScaleTest`; here it
-  is a prepared fleet, so only what follows the read is timed. In the test sandbox every
-  channel's `CommandCounts` query shares one connection, so they run one after another; in
-  production they spread over the pool, so the fan-out here is an upper bound.
+  The fleet read itself is `FleetStatus.load`, measured by `Cadence.Reads.FleetStatusScaleTest`;
+  here it is a prepared fleet, so only what follows the read is timed.
 
   Excluded by default (`--include scale`). It REPORTS p50 and p99 and asserts only a loose
   regression bound (fan-out p99 under 150 ms): the budget (30 ms, #798) is a number to read on a
@@ -34,13 +33,20 @@ defmodule CadenceWeb.Console.FleetPushScaleTest do
 
   @crafts 1_000
   @sockets 20
+  @viewers 5
   @rounds 100
   @event [:cadence_web, :console, :fleet_source, :load, :stop]
 
   test "fan-out and diff of a full-fleet push to #{@sockets} channels at #{@crafts} spacecraft" do
     org = TestFixtures.persist_org!()
-    user = TestFixtures.persist_user!()
-    TestFixtures.grant_membership!(user, org)
+
+    users =
+      for _ <- 1..@viewers do
+        user = TestFixtures.persist_user!()
+        TestFixtures.grant_membership!(user, org)
+        user
+      end
+
     mission = TestFixtures.persist_mission!(org)
     key = {org.organization_id, mission.mission_id}
     persist_fleet(org, mission)
@@ -78,8 +84,9 @@ defmodule CadenceWeb.Console.FleetPushScaleTest do
 
     # Each socket gets its own transport process, as in production (one per websocket): it joins,
     # subscribes and reports when each `fleet` push reaches it.
-    token = TestFixtures.member_session_token!(user)
-    for _ <- 1..@sockets, do: transport(token, mission, test_pid)
+    # The sockets spread over a few viewers, as an ops room does: the counts are per viewer.
+    tokens = Enum.map(users, &TestFixtures.member_session_token!/1)
+    for n <- 1..@sockets, do: transport(Enum.at(tokens, rem(n, @viewers)), mission, test_pid)
     for _ <- 1..@sockets, do: assert_receive(:subscribed, 10_000)
     flush_loads()
 
@@ -118,20 +125,26 @@ defmodule CadenceWeb.Console.FleetPushScaleTest do
             do: elem(:timer.tc(fn -> FleetPush.diff(rows, flipped.spacecraft, false) end), 0)
       )
 
+    viewer_ids = Enum.map(users, & &1.user_id)
+
     counts =
       stats(
         for _ <- 1..@rounds,
             do:
               elem(
                 :timer.tc(fn ->
-                  CommandCounts.load(org.organization_id, mission.mission_id, user.user_id)
+                  CommandCounts.load_for_viewers(
+                    org.organization_id,
+                    mission.mission_id,
+                    viewer_ids
+                  )
                 end),
                 0
               )
       )
 
     IO.puts(
-      "\nFLEET_PUSH_SCALE #{Jason.encode!(%{crafts: @crafts, sockets: @sockets, rounds: @rounds, fanout_to_last_push_ms: fanout, json_encode_per_push_ms: encode, diff_per_channel_ms: diff, command_counts_per_channel_ms: counts, source_sends_all_ms: sends, payload_bytes: :erlang.external_size(flipped)})}"
+      "\nFLEET_PUSH_SCALE #{Jason.encode!(%{crafts: @crafts, sockets: @sockets, rounds: @rounds, fanout_to_last_push_ms: fanout, json_encode_per_push_ms: encode, diff_per_channel_ms: diff, viewers: @viewers, commands_read_per_load_ms: counts, source_sends_all_ms: sends, payload_bytes: :erlang.external_size(flipped)})}"
     )
 
     assert fanout.p99 < 150

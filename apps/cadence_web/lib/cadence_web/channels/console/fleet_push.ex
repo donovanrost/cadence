@@ -18,9 +18,11 @@ defmodule CadenceWeb.Console.FleetPush do
   The `:fleet` assign is `nil` (off); `:pending` (subscribed, the subscription to the source
   queued so the reply never waits on it); or a map with the source's monitor ref, `seq` and
   `rows`. `seq` is 0 while waiting for the source's first load, which becomes the snapshot.
+
+  The viewer's command counts come with each load: the source reads the mission's commands once
+  and builds each subscribed viewer's counts (#798), so a push never queries per socket.
   """
 
-  alias Cadence.Reads.CommandCounts
   alias CadenceWeb.Console.FleetSource
   alias Phoenix.{Channel, Socket}
 
@@ -28,7 +30,7 @@ defmodule CadenceWeb.Console.FleetPush do
 
   @type message ::
           :fleet_snapshot
-          | {:fleet_loaded, map(), boolean()}
+          | {:fleet_loaded, map(), map(), boolean()}
           | {:DOWN, reference(), :process, pid(), term()}
 
   @spec join(Socket.t()) :: Socket.t()
@@ -83,13 +85,16 @@ defmodule CadenceWeb.Console.FleetPush do
   def handle(:fleet_snapshot, socket), do: socket
 
   def handle(
-        {:fleet_loaded, shared, _heard_due?},
+        {:fleet_loaded, shared, commands, _heard_due?},
         %Socket{assigns: %{fleet: %{seq: 0}}} = socket
       ),
-      do: start(socket, shared)
+      do: start(socket, shared, commands)
 
-  def handle({:fleet_loaded, shared, heard_due?}, %Socket{assigns: %{fleet: %{}}} = socket),
-    do: refresh(socket, shared, heard_due?)
+  def handle(
+        {:fleet_loaded, shared, commands, heard_due?},
+        %Socket{assigns: %{fleet: %{}}} = socket
+      ),
+      do: refresh(socket, shared, commands, heard_due?)
 
   def handle(
         {:DOWN, ref, :process, _pid, _reason},
@@ -103,20 +108,24 @@ defmodule CadenceWeb.Console.FleetPush do
   # Subscribes to the mission's source and starts at once when it has a fresh load to share.
   defp follow(socket, position) do
     {source, latest} =
-      FleetSource.subscribe(socket.assigns.organization_id, socket.assigns.mission_id)
+      FleetSource.subscribe(
+        socket.assigns.organization_id,
+        socket.assigns.mission_id,
+        viewer(socket)
+      )
 
     socket = Socket.assign(socket, :fleet, Map.put(position, :source, Process.monitor(source)))
 
     case {latest, position.seq} do
       {nil, _seq} -> socket
-      {shared, 0} -> start(socket, shared)
-      {shared, _seq} -> refresh(socket, shared, false)
+      {{shared, commands}, 0} -> start(socket, shared, commands)
+      {{shared, commands}, _seq} -> refresh(socket, shared, commands, false)
     end
   end
 
   # The full snapshot (seq 1).
-  defp start(socket, shared) do
-    snapshot = with_commands(socket, shared)
+  defp start(socket, shared, commands) do
+    snapshot = Map.put(shared, :commands, commands)
 
     Channel.push(
       socket,
@@ -171,7 +180,7 @@ defmodule CadenceWeb.Console.FleetPush do
   defp heard_only?(old, row),
     do: Map.delete(old, :last_received_at) == Map.delete(row, :last_received_at)
 
-  defp refresh(%Socket{assigns: %{fleet: fleet}} = socket, shared, heard_due?) do
+  defp refresh(%Socket{assigns: %{fleet: fleet}} = socket, shared, commands, heard_due?) do
     {changed, heard, removed, rows} = diff(fleet.rows, shared.spacecraft, heard_due?)
 
     if changed == [] and heard == %{} and removed == [] and not heard_due? do
@@ -180,8 +189,8 @@ defmodule CadenceWeb.Console.FleetPush do
       seq = fleet.seq + 1
 
       payload =
-        socket
-        |> with_commands(shared)
+        shared
+        |> Map.put(:commands, commands)
         |> Map.merge(%{
           seq: seq,
           full: false,
@@ -195,14 +204,8 @@ defmodule CadenceWeb.Console.FleetPush do
     end
   end
 
-  # The viewer's own counts: `awaiting_viewer` leaves out what they requested themselves.
-  defp with_commands(%Socket{assigns: %{scope: scope, mission_id: mission_id}}, shared),
-    do:
-      Map.put(
-        shared,
-        :commands,
-        CommandCounts.load(scope.organization_id, mission_id, scope.user.user_id)
-      )
+  # The viewer whose command counts this socket shows (`awaiting_viewer` leaves out their own).
+  defp viewer(%Socket{assigns: %{scope: scope}}), do: scope.user && scope.user.user_id
 
   defp update_fleet(socket, fun), do: Socket.assign(socket, :fleet, fun.(socket.assigns.fleet))
 end
