@@ -35,24 +35,29 @@ uses its session. Set `EARENDIL_SPACECRAFT_COUNT` to 500 (default) or 1000 and
 `EARENDIL_SITE_COUNT` to 2–15 (default 10). It prints wall time for each phase. The client imports
 the Earendil command and telemetry YAML catalog through the console upload route, starts the
 simulator run over its HTTP admin API, and creates the provider account, mission grant, and mission
-provider through the console API. It validates and syncs the provider, then stages the selected
-ground stations, a catalog-backed spacecraft profile, and spacecraft pinned to that profile in one
-change set. That change set enters independent review. Invitation delivery and a second person's
-session wait on #745. Per-spacecraft configuration drafts need an applied fleet; the bulk review
-path waits on #734. Orbit elements wait on #732; dashboards need an applied fleet and #745. Do not run
-`seed-rest` on a database seeded by default `up`. Use `reset` when switching between the full demo
-and REST harness.
+provider through the console API. It validates and syncs the provider, probes the managed QuestDB
+dashboard source through the console API, then stages the selected ground stations, a catalog-backed
+spacecraft profile, and spacecraft pinned to that profile in one change set. The spacecraft use the
+stable IDs referenced by the six documents in
+`dev/reflect_orbital/dashboards.exs`. That change set enters independent review. Once the first ten
+spacecraft are applied, the client imports those dashboards through `POST /dashboards` with
+`identity: "keep"`; an identical rerun reuses them. Until then, it reports the #745 approval wait.
+Invitation delivery and a second person's session also wait on #745. Per-spacecraft configuration
+drafts need an applied fleet; the bulk review path waits on #734. Orbit elements wait on #732.
+Do not run `seed-rest` on a database seeded by default `up`. Use `reset` when switching between
+the full demo and REST harness.
 
 Fresh `reset --no-seed` + `seed-rest` measurements on the Platform worktree (2026-11-26;
-100 spacecraft per REST batch; selected phase timings; totals exclude stack startup):
+100 spacecraft per REST batch; totals exclude stack startup and vary with machine load):
 
-| Spacecraft | Sites | Catalog import | Provider setup | Sites + profile | Fleet preview + stage | Submit for review | Total |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 500 | 10 | 1.34 s | 0.50 s | 0.61 s | 8.78 s | 5.20 s | 19.00 s |
-| 1,000 | 15 | 1.32 s | 0.50 s | 1.39 s | 18.44 s | 11.48 s | 35.81 s |
+| Spacecraft | Sites | QuestDB source probe | Dashboard phase | Total |
+| ---: | ---: | ---: | ---: | ---: |
+| 500 | 10 | 3.04 s | 0.04 s | 44.99 s |
+| 1,000 | 15 | 0.10 s | 0.05 s | 17.67 s |
 
-Both runs reached `in_review`; the mission's default independent approval policy prevents the
-spacecraft from becoming active until #745 supplies a second person.
+Both runs reached `in_review` and the dashboard phase reported the #745 wait. The mission's default
+independent approval policy prevents the spacecraft from becoming active until #745 supplies a
+second person.
 
 Use `mise exec --` from anywhere under the worktree to load `mise.local.toml`, including when
 running `mise run cadence`, `mise run earendil-live`, Mix tasks, and console e2e tests. The
