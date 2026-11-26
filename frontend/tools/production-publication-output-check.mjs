@@ -44,6 +44,9 @@ const authoritativeHostJavascriptDigests = new Set([
   // snapshot (#667); the tokenizer finds the same 2 federation-loader templates and nothing new;
   // two identical build:publication runs.
   "66010ec52223a1b517db8a418a2467f2bb76f496f7a323b8baf699e9c6c4f06a",
+  // Reviewed the legacy command pages leaving the host (#708): the checker's tokenizer finds the same
+  // federation-loader templates as before and nothing new; identical digest from two pinned builds.
+  "9abee26081b155ff81513ba8a75a7b6bd305b50bc256aecfda9fe4281fe98cac",
 ]);
 
 /** @param {string} message @returns {never} */
