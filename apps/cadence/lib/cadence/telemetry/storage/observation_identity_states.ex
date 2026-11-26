@@ -43,13 +43,13 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates do
 
     Repo.transaction(fn ->
       case EnvelopeWrites.record(Repo, envelopes) do
-        :ok -> :ok
+        {:ok, changed} -> changed
         {:error, reason} -> Repo.rollback(reason)
       end
     end)
     |> case do
-      {:ok, _changes} ->
-        publish_envelope_state_changes(envelopes, opts)
+      {:ok, changed} ->
+        publish_envelope_state_changes(envelopes, changed, opts)
         :ok
 
       {:error, reason} ->
@@ -263,9 +263,12 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates do
     :ok
   end
 
-  defp publish_envelope_state_changes(envelopes, opts) do
-    if publish_state_facts?(opts) do
+  # One fact per identity whose stored state this batch changed (#689), not one per sample: a
+  # batch that stored nothing publishes nothing. Each fact is a call into the node's event bus.
+  defp publish_envelope_state_changes(envelopes, changed, opts) do
+    if publish_state_facts?(opts) and MapSet.size(changed) > 0 do
       envelopes
+      |> Enum.filter(&MapSet.member?(changed, &1.observation_identity_id))
       |> Enum.uniq_by(& &1.observation_identity_id)
       |> Enum.each(fn %ObservationEnvelope{} = envelope ->
         Facts.publish(Keyword.fetch!(opts, :event_bus), %ObservationIdentityStateChanged{
