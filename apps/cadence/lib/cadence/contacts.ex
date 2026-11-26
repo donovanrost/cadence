@@ -63,13 +63,6 @@ defmodule Cadence.Contacts do
     LinkSetup.apply_link_template(organization_id, mission_id, source_template, spacecraft, attrs)
   end
 
-  @spec persist_link_assignment(binary(), LinkAssignment.t()) ::
-          {:ok, LinkAssignment.t()} | {:error, term()}
-  def persist_link_assignment(organization_id, %LinkAssignment{} = assignment)
-      when is_binary(organization_id) do
-    LinkAssignmentStore.persist(organization_id, assignment)
-  end
-
   @spec fetch_link_assignment(binary(), binary(), binary()) ::
           {:ok, LinkAssignment.t()} | {:error, term()}
   def fetch_link_assignment(organization_id, mission_id, link_assignment_id)
@@ -89,24 +82,6 @@ defmodule Cadence.Contacts do
   def list_link_assignments(organization_id, mission_id)
       when is_binary(organization_id) and is_binary(mission_id) do
     LinkAssignmentStore.list(organization_id, mission_id)
-  end
-
-  @spec delete_link_assignment(binary(), binary(), binary(), map()) ::
-          {:ok, LinkAssignment.t()} | {:error, term()}
-  def delete_link_assignment(
-        organization_id,
-        mission_id,
-        link_assignment_id,
-        metadata_patch \\ %{}
-      )
-      when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(link_assignment_id) and is_map(metadata_patch) do
-    LinkAssignmentStore.delete(
-      organization_id,
-      mission_id,
-      link_assignment_id,
-      metadata_patch
-    )
   end
 
   @spec persist_provider_profile(ProviderProfile.t()) ::
@@ -151,54 +126,12 @@ defmodule Cadence.Contacts do
     )
   end
 
-  @spec list_provider_profiles(binary()) :: [ProviderProfile.t()]
-  def list_provider_profiles(mission_id) when is_binary(mission_id) do
-    ProfileStore.list_provider_profiles(mission_id)
-  end
-
-  @spec list_provider_profiles(binary(), binary()) :: [ProviderProfile.t()]
-  def list_provider_profiles(organization_id, mission_id)
-      when is_binary(organization_id) and is_binary(mission_id) do
-    ProfileStore.list_provider_profiles(organization_id, mission_id)
-  end
-
-  @spec list_provider_profile_versions(binary(), binary()) :: [ProviderProfile.t()]
-  def list_provider_profile_versions(mission_id, provider_profile_id)
-      when is_binary(mission_id) and is_binary(provider_profile_id) do
-    ProfileStore.list_provider_profile_versions(mission_id, provider_profile_id)
-  end
-
-  @spec list_provider_profile_versions(binary(), binary(), binary()) :: [ProviderProfile.t()]
-  def list_provider_profile_versions(organization_id, mission_id, provider_profile_id)
-      when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(provider_profile_id) do
-    ProfileStore.list_provider_profile_versions(organization_id, mission_id, provider_profile_id)
-  end
-
   @spec version_provider_profile(binary(), binary(), binary(), map()) ::
           {:ok, ProviderProfile.t()} | {:error, term()}
   def version_provider_profile(organization_id, mission_id, provider_profile_id, attrs)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(provider_profile_id) and is_map(attrs) do
     ProfileStore.version_provider_profile(organization_id, mission_id, provider_profile_id, attrs)
-  end
-
-  @spec delete_provider_profile(binary(), binary(), binary(), map()) ::
-          {:ok, ProviderProfile.t()} | {:error, term()}
-  def delete_provider_profile(
-        organization_id,
-        mission_id,
-        provider_profile_id,
-        metadata_patch \\ %{}
-      )
-      when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(provider_profile_id) and is_map(metadata_patch) do
-    ProfileStore.delete_provider_profile(
-      organization_id,
-      mission_id,
-      provider_profile_id,
-      metadata_patch
-    )
   end
 
   @spec persist_transport_profile(binary(), TransportProfile.t()) ::
@@ -250,65 +183,6 @@ defmodule Cadence.Contacts do
     )
   end
 
-  @spec list_transport_profiles(binary()) :: [TransportProfile.t()]
-  def list_transport_profiles(mission_id) when is_binary(mission_id) do
-    ProfileStore.list_transport_profiles(mission_id)
-  end
-
-  @spec list_transport_profiles(binary(), binary()) :: [TransportProfile.t()]
-  def list_transport_profiles(organization_id, mission_id)
-      when is_binary(organization_id) and is_binary(mission_id) do
-    ProfileStore.list_transport_profiles(organization_id, mission_id)
-  end
-
-  @spec list_transport_profile_versions(binary(), binary()) :: [TransportProfile.t()]
-  def list_transport_profile_versions(mission_id, transport_profile_id)
-      when is_binary(mission_id) and is_binary(transport_profile_id) do
-    ProfileStore.list_transport_profile_versions(mission_id, transport_profile_id)
-  end
-
-  @spec list_transport_profile_versions(binary(), binary(), binary()) :: [TransportProfile.t()]
-  def list_transport_profile_versions(organization_id, mission_id, transport_profile_id)
-      when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(transport_profile_id) do
-    ProfileStore.list_transport_profile_versions(
-      organization_id,
-      mission_id,
-      transport_profile_id
-    )
-  end
-
-  @spec version_transport_profile(binary(), binary(), binary(), map()) ::
-          {:ok, TransportProfile.t()} | {:error, term()}
-  def version_transport_profile(organization_id, mission_id, transport_profile_id, attrs)
-      when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(transport_profile_id) and is_map(attrs) do
-    ProfileStore.version_transport_profile(
-      organization_id,
-      mission_id,
-      transport_profile_id,
-      attrs
-    )
-  end
-
-  @spec delete_transport_profile(binary(), binary(), binary(), map()) ::
-          {:ok, TransportProfile.t()} | {:error, term()}
-  def delete_transport_profile(
-        organization_id,
-        mission_id,
-        transport_profile_id,
-        metadata_patch \\ %{}
-      )
-      when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(transport_profile_id) and is_map(metadata_patch) do
-    ProfileStore.delete_transport_profile(
-      organization_id,
-      mission_id,
-      transport_profile_id,
-      metadata_patch
-    )
-  end
-
   @spec persist_path_template(binary(), PathTemplate.t()) ::
           {:ok, PathTemplate.t()} | {:error, term()}
   def persist_path_template(organization_id, %PathTemplate{} = path_template)
@@ -319,20 +193,6 @@ defmodule Cadence.Contacts do
   @spec persist_path_template(PathTemplate.t()) :: {:ok, PathTemplate.t()} | {:error, term()}
   def persist_path_template(%PathTemplate{} = path_template) do
     PathTemplateStore.persist(path_template)
-  end
-
-  @spec fetch_path_template(binary(), binary()) :: {:ok, PathTemplate.t()} | {:error, term()}
-  def fetch_path_template(mission_id, path_template_id)
-      when is_binary(mission_id) and is_binary(path_template_id) do
-    PathTemplateStore.fetch(mission_id, path_template_id)
-  end
-
-  @spec fetch_path_template(binary(), binary(), binary()) ::
-          {:ok, PathTemplate.t()} | {:error, term()}
-  def fetch_path_template(organization_id, mission_id, path_template_id)
-      when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(path_template_id) do
-    PathTemplateStore.fetch(organization_id, mission_id, path_template_id)
   end
 
   @spec fetch_path_template_version(binary(), binary(), pos_integer()) ::
@@ -362,32 +222,12 @@ defmodule Cadence.Contacts do
     PathTemplateStore.list(organization_id, mission_id)
   end
 
-  @spec list_path_template_versions(binary(), binary()) :: [PathTemplate.t()]
-  def list_path_template_versions(mission_id, path_template_id)
-      when is_binary(mission_id) and is_binary(path_template_id) do
-    PathTemplateStore.list_versions(mission_id, path_template_id)
-  end
-
-  @spec list_path_template_versions(binary(), binary(), binary()) :: [PathTemplate.t()]
-  def list_path_template_versions(organization_id, mission_id, path_template_id)
-      when is_binary(organization_id) and is_binary(mission_id) and is_binary(path_template_id) do
-    PathTemplateStore.list_versions(organization_id, mission_id, path_template_id)
-  end
-
   @spec version_path_template(binary(), binary(), binary(), map()) ::
           {:ok, PathTemplate.t()} | {:error, term()}
   def version_path_template(organization_id, mission_id, path_template_id, attrs)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(path_template_id) and is_map(attrs) do
     PathTemplateStore.version(organization_id, mission_id, path_template_id, attrs)
-  end
-
-  @spec delete_path_template(binary(), binary(), binary(), map()) ::
-          {:ok, PathTemplate.t()} | {:error, term()}
-  def delete_path_template(organization_id, mission_id, path_template_id, metadata_patch \\ %{})
-      when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(path_template_id) and is_map(metadata_patch) do
-    PathTemplateStore.delete(organization_id, mission_id, path_template_id, metadata_patch)
   end
 
   @spec persist_scheduled_contact(ScheduledContact.t()) ::
@@ -427,13 +267,6 @@ defmodule Cadence.Contacts do
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(scheduled_contact_id) do
     ContactStore.fetch_scheduled(organization_id, mission_id, scheduled_contact_id)
-  end
-
-  @spec fetch_scheduled_contact_by_provider_ref(binary(), binary()) ::
-          {:ok, ScheduledContact.t()} | {:error, :scheduled_contact_not_found}
-  def fetch_scheduled_contact_by_provider_ref(mission_id, provider_contact_ref)
-      when is_binary(mission_id) and is_binary(provider_contact_ref) do
-    ContactStore.fetch_scheduled_by_provider_ref(mission_id, provider_contact_ref)
   end
 
   @spec list_scheduled_contacts(binary()) :: [ScheduledContact.t()]

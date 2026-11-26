@@ -172,23 +172,6 @@ defmodule Cadence.Contacts.ProfileStore do
     |> Map.new(&{&1.provider_profile_id, ProviderProfileRow.to_domain(&1)})
   end
 
-  @spec list_provider_profiles(binary()) :: [ProviderProfile.t()]
-  def list_provider_profiles(mission_id) when is_binary(mission_id) do
-    ProviderProfileRow
-    |> latest_versioned_rows(mission_id, :provider_profile_id)
-    |> Enum.reject(&(&1.lifecycle_state == "deleted"))
-    |> Enum.map(&ProviderProfileRow.to_domain/1)
-  end
-
-  @spec list_provider_profiles(binary(), binary()) :: [ProviderProfile.t()]
-  def list_provider_profiles(organization_id, mission_id)
-      when is_binary(organization_id) and is_binary(mission_id) do
-    ProviderProfileRow
-    |> latest_versioned_rows(organization_id, mission_id, :provider_profile_id)
-    |> Enum.reject(&(&1.lifecycle_state == "deleted"))
-    |> Enum.map(&ProviderProfileRow.to_domain/1)
-  end
-
   @doc "Returns one bounded page of active latest provider-profile versions."
   @spec list_provider_profiles_page(binary(), binary(), keyword()) :: Listing.Page.t()
   def list_provider_profiles_page(organization_id, mission_id, opts \\ [])
@@ -201,19 +184,6 @@ defmodule Cadence.Contacts.ProfileStore do
       opts,
       &ProviderProfileRow.to_domain/1
     )
-  end
-
-  @spec list_provider_profile_versions(binary(), binary()) :: [ProviderProfile.t()]
-  def list_provider_profile_versions(mission_id, provider_profile_id)
-      when is_binary(mission_id) and is_binary(provider_profile_id) do
-    ProviderProfileRow
-    |> where(
-      [row],
-      row.mission_id == ^mission_id and row.provider_profile_id == ^provider_profile_id
-    )
-    |> order_by([row], desc: row.version)
-    |> Repo.all()
-    |> Enum.map(&ProviderProfileRow.to_domain/1)
   end
 
   @spec list_provider_profile_versions(binary(), binary(), binary()) :: [ProviderProfile.t()]
@@ -429,14 +399,6 @@ defmodule Cadence.Contacts.ProfileStore do
     end
   end
 
-  @spec list_transport_profiles(binary()) :: [TransportProfile.t()]
-  def list_transport_profiles(mission_id) when is_binary(mission_id) do
-    TransportProfileRow
-    |> latest_versioned_rows(mission_id, :transport_profile_id)
-    |> Enum.reject(&(&1.lifecycle_state == "deleted"))
-    |> Enum.map(&TransportProfileRow.to_domain/1)
-  end
-
   @spec list_transport_profiles(binary(), binary()) :: [TransportProfile.t()]
   def list_transport_profiles(organization_id, mission_id)
       when is_binary(organization_id) and is_binary(mission_id) do
@@ -458,19 +420,6 @@ defmodule Cadence.Contacts.ProfileStore do
       opts,
       &TransportProfileRow.to_domain/1
     )
-  end
-
-  @spec list_transport_profile_versions(binary(), binary()) :: [TransportProfile.t()]
-  def list_transport_profile_versions(mission_id, transport_profile_id)
-      when is_binary(mission_id) and is_binary(transport_profile_id) do
-    TransportProfileRow
-    |> where(
-      [row],
-      row.mission_id == ^mission_id and row.transport_profile_id == ^transport_profile_id
-    )
-    |> order_by([row], desc: row.version)
-    |> Repo.all()
-    |> Enum.map(&TransportProfileRow.to_domain/1)
   end
 
   @spec list_transport_profile_versions(binary(), binary(), binary()) :: [TransportProfile.t()]
@@ -557,17 +506,6 @@ defmodule Cadence.Contacts.ProfileStore do
     |> order_by([definition_row], desc: field(definition_row, :version))
     |> limit(1)
     |> Repo.one()
-  end
-
-  defp latest_versioned_rows(schema, mission_id, definition_id_field) do
-    schema
-    |> where([definition_row], field(definition_row, :mission_id) == ^mission_id)
-    |> order_by([definition_row],
-      asc: field(definition_row, ^definition_id_field),
-      desc: field(definition_row, :version)
-    )
-    |> Repo.all()
-    |> latest_rows(definition_id_field)
   end
 
   defp latest_versioned_rows(schema, organization_id, mission_id, definition_id_field) do

@@ -195,19 +195,6 @@ defmodule Cadence.Contacts.PathTemplateStore do
     }
   end
 
-  @spec list_versions(binary(), binary()) :: [PathTemplate.t()]
-  def list_versions(mission_id, path_template_id)
-      when is_binary(mission_id) and is_binary(path_template_id) do
-    PathTemplateRow
-    |> where(
-      [row],
-      row.mission_id == ^mission_id and row.path_template_id == ^path_template_id
-    )
-    |> order_by([row], desc: row.version)
-    |> Repo.all()
-    |> Enum.map(&PathTemplateRow.to_domain/1)
-  end
-
   @spec list_versions(binary(), binary(), binary()) :: [PathTemplate.t()]
   def list_versions(organization_id, mission_id, path_template_id)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(path_template_id) do

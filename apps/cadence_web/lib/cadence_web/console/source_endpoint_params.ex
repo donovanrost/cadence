@@ -1,15 +1,9 @@
-defmodule CadenceWeb.API.CommsParams do
+defmodule CadenceWeb.Console.SourceEndpointParams do
   @moduledoc "Source endpoint request parsing boundary."
 
   import CadenceWeb.API.ParamParser
 
   alias Cadence.SourceEndpoints.SourceEndpoint
-
-  @spec source_endpoint(binary(), binary(), map()) :: {:ok, SourceEndpoint.t()} | {:error, term()}
-  def source_endpoint(organization_id, mission_id, params)
-      when is_binary(organization_id) and is_binary(mission_id) and is_map(params) do
-    source_endpoint(organization_id, mission_id, nil, params)
-  end
 
   @spec source_endpoint(binary(), binary(), binary() | nil, map()) ::
           {:ok, SourceEndpoint.t()} | {:error, term()}

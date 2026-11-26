@@ -566,6 +566,11 @@ defmodule CadenceWeb.Router do
       # -- Setup (owner: api). Contracts: docs/apogee/api/setup.md
       get("/spacecraft", SpacecraftController, :index)
       get("/spacecraft/:spacecraft_id", SpacecraftDetailController, :show)
+      get("/spacecraft/:spacecraft_id/source-endpoints", SourceEndpointController, :index)
+      post("/spacecraft/:spacecraft_id/source-endpoints", SourceEndpointController, :create)
+      get("/source-endpoints", SourceEndpointController, :index)
+      post("/source-endpoints", SourceEndpointController, :create)
+      get("/source-endpoints/:source_endpoint_id", SourceEndpointController, :show)
       get("/spacecraft/:spacecraft_id/routes/:route_id", SpacecraftDetailController, :route)
       # TEMPORARY (removed with 9ac6dc8ee): the legacy route conversion (ux U79).
       get("/routes/legacy-conversion", LegacyConversionController, :show)
@@ -928,12 +933,6 @@ defmodule CadenceWeb.Router do
         get("/catalog_import_runs/:import_run_id", CatalogImportRunController, :show)
         get("/spacecraft", SpacecraftController, :index)
         get("/spacecraft/:spacecraft_id", SpacecraftController, :show)
-        get("/spacecraft/:spacecraft_id/source_endpoints", SourceEndpointController, :index)
-        post("/spacecraft/:spacecraft_id/source_endpoints", SourceEndpointController, :create)
-
-        get("/source_endpoints", SourceEndpointController, :index)
-        post("/source_endpoints", SourceEndpointController, :create)
-        get("/source_endpoints/:source_endpoint_id", SourceEndpointController, :show)
 
         get("/command_stages", CommandStageController, :index)
         post("/command_stages", CommandStageController, :create)
