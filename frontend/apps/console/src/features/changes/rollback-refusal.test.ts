@@ -4,7 +4,7 @@ import { createMemoryHistory, createRouter } from "vue-router";
 import { missionId } from "@/api/index.ts";
 import RollbackPanel from "./RollbackPanel.vue";
 
-/** #413: a staging refusal on Roll back keeps its way out (U79 conversion_in_progress). */
+/** #413: a staging refusal on Roll back keeps its way out (e.g. Open the report). */
 afterEach(() => vi.unstubAllGlobals());
 
 const preview = {
@@ -22,16 +22,16 @@ const preview = {
 };
 
 describe("Roll back: a staging refusal (#413)", () => {
-  it("shows conversion_in_progress with Open change set and stays on the page", async () => {
+  it("shows a refusal with its way out and stays on the page", async () => {
     vi.stubGlobal("fetch", (_url: string, init?: RequestInit) =>
       Promise.resolve(
         init?.method === "POST"
           ? new Response(
               JSON.stringify({
                 error: {
-                  code: "conversion_in_progress",
-                  message: "A conversion batch is staged.",
-                  details: { change_set_id: "cs-9", batch: 3 },
+                  code: "mission_model_comparison_failed",
+                  message: "Not staged: the model comparison failed.",
+                  details: { mission_model_revision_id: "mmr-9" },
                 },
               }),
               { status: 409 },
@@ -44,7 +44,7 @@ describe("Roll back: a staging refusal (#413)", () => {
       history: createMemoryHistory(),
       routes: [
         { path: "/revisions", name: "setup.changes.revisions", component: stub },
-        { path: "/changes", name: "setup.changes", component: stub },
+        { path: "/model/:revisionId", name: "setup.catalog.model", component: stub },
       ],
     });
     await router.push("/revisions");
@@ -72,9 +72,9 @@ describe("Roll back: a staging refusal (#413)", () => {
       .find((b) => b.text().startsWith("Stage rollback"))
       ?.trigger("click");
     await flushPromises();
-    expect(w.text()).toContain("Batch 3 of the route conversion is staged");
-    const open = w.findAll("a").find((a) => a.text() === "Open change set");
-    expect(open?.attributes("href")).toBe("/changes");
+    expect(w.text()).toContain("Not staged: the model comparison failed.");
+    const open = w.findAll("a").find((a) => a.text() === "Open the report");
+    expect(open?.attributes("href")).toBe("/model/mmr-9");
     expect(router.currentRoute.value.name).toBe("setup.changes.revisions");
     w.unmount();
   });

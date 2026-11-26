@@ -8,7 +8,6 @@ import ChangeList from "./ChangeList.vue";
 import ChecksPanel from "./ChecksPanel.vue";
 import ReviewPanel from "./ReviewPanel.vue";
 import type { Preview, PreviewItem, SubmitResult } from "./actions.ts";
-import { conversionStager } from "./review-block.ts";
 import type { HeldChecks } from "./checks-view.ts";
 import type { InUseMark } from "./refusals.ts";
 import type { ChangeSet, ConfigState } from "./shapes.ts";
@@ -28,7 +27,7 @@ const props = defineProps<{
 const emit = defineEmits<{ reload: []; result: [result: SubmitResult]; changed: [] }>();
 /** U82: the archive row an apply-time in-use refusal is about (marked in K1 too). */
 const inUse = ref<InUseMark | null>(null);
-/** U79 / #412 (TEMPORARY): picks the conversion words for the batch's stager; the server decides. */
+/** The signed-in user, for the apply tiles' authors line. */
 const viewerId = useSession().user.id;
 const reviewing = () =>
   props.changeSet.state === "in_review" && props.config.permissions.has("config.review");
@@ -37,10 +36,6 @@ const reviewing = () =>
 <template>
   <div class="flex flex-wrap items-start gap-4">
     <div class="flex min-w-0 flex-[999_1_560px] flex-col gap-4">
-      <!-- TEMPORARY (ux U79; deleted with 9ac6dc8ee): who staged a conversion batch. -->
-      <p v-if="conversionStager(changeSet, viewerId)" class="m-0 text-md text-text-3">
-        {{ conversionStager(changeSet, viewerId) }}
-      </p>
       <ChangeList
         :mission-id="missionId"
         :config="config"
@@ -64,7 +59,6 @@ const reviewing = () =>
       :config="config"
       :change-set="changeSet"
       :preview="preview"
-      :viewer-id="viewerId"
       class="sticky top-0 min-w-0 flex-[1_1_340px]"
       @result="emit('result', $event)"
       @changed="emit('changed')"

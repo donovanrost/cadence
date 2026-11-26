@@ -40,8 +40,6 @@ export const configKinds = [
   "switch_compatibility",
   "derived_telemetry",
   "limit_definition",
-  // U79 (director): an older route set up on the old routing page, removed through the set (domain).
-  "legacy_routing_rule",
 ] as const;
 export type ConfigKind = (typeof configKinds)[number];
 const configKindWords: Readonly<Record<ConfigKind, string>> = {
@@ -58,7 +56,6 @@ const configKindWords: Readonly<Record<ConfigKind, string>> = {
   switch_compatibility: "Commanding and telemetry switches",
   derived_telemetry: "Derived point",
   limit_definition: "Limits",
-  legacy_routing_rule: "Older route",
 };
 export const configKind = decoders.knownText(configKinds);
 /** A kind in words, or the server's word for a kind the console doesn't know yet. */
@@ -163,8 +160,6 @@ export const changeSet = object({
   ),
   failure: nullable(raw),
   applied_revision: nullable(revisionNumber),
-  /** TEMPORARY, deleted with 9ac6dc8ee: a legacy route conversion batch (api v3.2; ux U79). */
-  legacy_conversion: optional(nullable(object({ batch: integer, batches_total: integer }))),
   /**
    * api changes.md §Permissions: whether this viewer may review (approve or send back), the
    * server's own reviewer_is_author test computed up front. Absent on an older server.

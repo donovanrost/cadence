@@ -17,7 +17,7 @@ const router = useRouter();
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
 const target = ref<Readonly<{ routeId: string; name: string; station: string }> | null>(null);
 const failure = ref<string | null>(null);
-/** #413: a refusal's way out (U79 conversion_in_progress: Open change set), beside its words. */
+/** #413: a refusal's way out (e.g. Open the report), beside its words. */
 const failureLink = ref<FailureOutcome["link"] | null>(null);
 const busy = ref(false);
 
