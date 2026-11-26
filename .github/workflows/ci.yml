@@ -900,6 +900,114 @@ jobs:
           fi
           mix test --only ingest_journal_matrix --slowest-modules 10
 
+  # #743: exercise the public seed path on a fresh server. One small fleet, one runner, no
+  # browser dependencies. MIX_ENV=dev and setup-cadence use the same deps/_build keys as
+  # console-e2e, whose develop push saves the dev build (#730).
+  rest-seed-smoke:
+    name: REST seed smoke
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --tmpfs /var/lib/postgresql/data:rw
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      questdb:
+        image: questdb/questdb:9.4.3
+        ports:
+          - 9000:9000
+          - 8812:8812
+          - 9009:9009
+    env:
+      MIX_ENV: dev
+      CADENCE_DEV_DATABASE: cadence_rest_seed_smoke
+      CADENCE_QUESTDB_HTTP_ENDPOINT: http://127.0.0.1:9000
+      CADENCE_QUESTDB_HOST: 127.0.0.1
+      CADENCE_QUESTDB_PORT: "8812"
+      EARENDIL_SIMULATOR_PORT: "4111"
+      EARENDIL_PROVIDER_URL: http://127.0.0.1:4111
+      EARENDIL_DEMO_PROVIDER_TOKEN: earendil-local-provider
+      EARENDIL_INGRESS_BASE_PORT: "43100"
+      EARENDIL_UPLINK_BASE_PORT: "48100"
+      OTEL_EXPORTER_OTLP_ENDPOINT: ""
+      CONSOLE_VITE_ORIGIN: ""
+      PORT: "4402"
+      BASE_URL: http://127.0.0.1:4402
+      CADENCE_ADMIN_EMAIL: ci-rest-admin@example.invalid
+      CADENCE_ADMIN_DISPLAY_NAME: CI REST Administrator
+      CADENCE_CI_SERVER: "1"
+      CI: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Tune Postgres for throwaway test data
+        run: scripts/ci/tune_postgres.sh
+      - uses: ./.github/actions/setup-cadence
+        with:
+          node: "false"
+          xmllint: "false"
+      - name: Compile the app and simulator from the dev build cache
+        run: |
+          (cd apps/cadence_web && mix compile)
+          (cd apps/cadence_simulator && mix compile)
+      - name: Make an ephemeral admin password
+        run: |
+          set +x
+          password=$(openssl rand -base64 30 | tr -d '/+=')
+          echo "::add-mask::$password"
+          echo "CADENCE_ADMIN_PASSWORD=$password" >> "$GITHUB_ENV"
+      # The REST client reads the CSRF meta tag from this route; no JS or browser assets run.
+      - name: Supply a minimal console shell for CSRF bootstrap
+        run: |
+          mkdir -p apps/cadence_web/priv/static/console
+          printf '<!doctype html><html><head></head><body></body></html>\n' > apps/cadence_web/priv/static/console/index.html
+      - name: Migrate the empty Postgres and QuestDB stores
+        working-directory: apps/cadence_web
+        run: mix ecto.create -r Cadence.Repo && mix ecto.migrate -r Cadence.Repo && mix cadence.questdb.migrate
+      - name: Start the simulator
+        working-directory: apps/cadence_simulator
+        run: |
+          rm -rf ../../var/reflect_orbital
+          (mix run --no-start --no-halt ../../dev/reflect_orbital_simulator.exs > "$RUNNER_TEMP/simulator.log" 2>&1 &)
+          curl --retry-connrefused --retry 60 --retry-delay 1 -s -o /dev/null http://127.0.0.1:4111/
+      - name: Start Phoenix and bootstrap the admin
+        working-directory: apps/cadence_web
+        run: |
+          (mix phx.server > "$RUNNER_TEMP/server.log" 2>&1 &)
+          curl --retry-connrefused --retry 120 --retry-delay 1 -fsS -o /dev/null http://127.0.0.1:4402/health/ready
+          curl -fsS -o /dev/null http://127.0.0.1:4402/console/sign-in
+      - name: Seed ten spacecraft through REST
+        shell: bash
+        run: |
+          set -euo pipefail
+          start=$SECONDS
+          EARENDIL_SPACECRAFT_COUNT=10 EARENDIL_SITE_COUNT=2 MIX_INSTALL_DIR="$RUNNER_TEMP/mix-install" \
+            elixir dev/seed/earendil.exs | tee "$RUNNER_TEMP/rest-seed.log"
+          grep -Eq '^Earendil fleet: in_review \(10 spacecraft,' "$RUNNER_TEMP/rest-seed.log"
+          echo "REST seed wall: $((SECONDS - start)) s"
+      - name: Show server and simulator logs on failure
+        if: ${{ failure() }}
+        run: |
+          for log in "$RUNNER_TEMP/server.log" "$RUNNER_TEMP/simulator.log"; do
+            if [ -f "$log" ]; then
+              echo "::group::$(basename "$log") tail"
+              tail -n 80 "$log"
+              echo "::endgroup::"
+            fi
+          done
+
   ci-ok:
     name: ci-ok
     needs:
@@ -916,6 +1024,7 @@ jobs:
         frontend-quality,
         ingest-journal-off,
         questdb-integration,
+        rest-seed-smoke,
       ]
     if: always()
     runs-on: ubuntu-24.04
