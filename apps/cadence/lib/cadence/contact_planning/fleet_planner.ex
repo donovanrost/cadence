@@ -16,9 +16,12 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
     FleetPlanningRuns,
     FleetRepairInputs,
     FleetRunLock,
+    FleetSearch,
     Planner,
     RepairPairing
   }
+
+  alias Cadence.Management.Contacts.PlanningResults
 
   @type result :: %{
           required(:run) => struct(),
@@ -101,8 +104,10 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
 
   defp continue(scope, mission_id, %{phase: :searching} = run, opts) do
     with {:ok, policy} <- exact_policy(run),
-         {:ok, _requirements} <- exact_requirements(run),
-         {:ok, search_summary} <- search_requirements(scope, run, policy, opts),
+         refs <- requirement_refs(run),
+         {:ok, requirements} <- exact_requirements(run, refs),
+         {:ok, search_summary} <-
+           search_requirements(scope, run, refs, requirements, policy, opts),
          {:ok, advanced} <-
            FleetPlanningRuns.advance_phase(
              scope,
@@ -237,14 +242,20 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
     end
   end
 
-  defp search_requirements(scope, run, policy, opts) do
-    refs =
-      FleetPlanningRuns.list_requirement_refs(
-        run.organization_id,
-        run.mission_id,
-        run.fleet_planning_run_id
-      )
+  defp search_requirements(scope, run, refs, requirements, policy, opts) do
+    planner_opts = Keyword.get(opts, :planner_opts, [])
 
+    if Keyword.has_key?(opts, :plan_requirement) or
+         Enum.any?([:list_routes, :search_opportunities], fn key ->
+           Keyword.has_key?(opts, key) or Keyword.has_key?(planner_opts, key)
+         end) do
+      search_custom_requirements(scope, run, refs, policy, opts)
+    else
+      FleetSearch.run(scope, run, refs, requirements, policy, Keyword.merge(opts, planner_opts))
+    end
+  end
+
+  defp search_custom_requirements(scope, run, refs, policy, opts) do
     refs
     |> Task.async_stream(
       &search_requirement(scope, run, &1, policy, opts),
@@ -406,11 +417,11 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
 
   defp planning_snapshots(run) do
     snapshots =
-      run
-      |> planning_run_ids()
-      |> Enum.flat_map(fn planning_run_id ->
-        Planner.list_snapshots(run.organization_id, run.mission_id, planning_run_id)
-      end)
+      PlanningResults.list_fleet_snapshots(
+        run.organization_id,
+        run.mission_id,
+        planning_run_ids(run)
+      )
 
     {:ok, snapshots}
   end
@@ -596,9 +607,18 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
     )
   end
 
-  defp exact_requirements(run) do
-    run.organization_id
-    |> FleetPlanningRuns.list_requirement_refs(run.mission_id, run.fleet_planning_run_id)
+  defp requirement_refs(run) do
+    FleetPlanningRuns.list_requirement_refs(
+      run.organization_id,
+      run.mission_id,
+      run.fleet_planning_run_id
+    )
+  end
+
+  defp exact_requirements(run), do: exact_requirements(run, requirement_refs(run))
+
+  defp exact_requirements(run, refs) do
+    refs
     |> Stream.chunk_every(500)
     |> Enum.reduce_while({:ok, []}, &fetch_requirement_batch(&1, &2, run))
     |> case do

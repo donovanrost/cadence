@@ -16,9 +16,13 @@ defmodule Cadence.ContactPlanning.RequirementEvaluator do
       )
       when is_map(opportunity) and is_map(route) do
     now = Keyword.get(opts, :now, DateTime.utc_now())
-    starts_at = datetime(opportunity, "starts_at")
-    ends_at = datetime(opportunity, "ends_at")
-    expires_at = datetime(opportunity, "expires_at")
+
+    {starts_at, ends_at, expires_at} =
+      Keyword.get_lazy(opts, :timestamps, fn ->
+        {datetime(opportunity, "starts_at"), datetime(opportunity, "ends_at"),
+         datetime(opportunity, "expires_at")}
+      end)
+
     duration_seconds = DateTime.diff(ends_at, starts_at, :second)
     estimated_volume_bytes = estimated_volume(opportunity["estimated_capacity"])
 

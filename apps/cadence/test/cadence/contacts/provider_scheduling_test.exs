@@ -5,6 +5,7 @@ defmodule Cadence.Contacts.ProviderSchedulingTest do
 
   alias Cadence.Comms.{RoutingRule, Transport}
   alias Cadence.Contacts.ProviderScheduling
+  alias Cadence.Control.Providers.FleetOpportunitySearch
   alias Cadence.GroundNetworks
   alias Cadence.GroundNetworks.MissionProvider
   alias Cadence.Management.Transports
@@ -240,6 +241,107 @@ defmodule Cadence.Contacts.ProviderSchedulingTest do
                context.spacecraft.spacecraft_id,
                route.route_key
              )
+  end
+
+  test "fleet searches split a truncated simulator page while preserving route evidence",
+       context do
+    {:ok, %{routes: [first]}} =
+      ProviderScheduling.list_ready_downlink_routes(
+        context.organization_id,
+        context.mission_id,
+        context.spacecraft.spacecraft_id
+      )
+
+    second = %{first | route_key: "second", provider_spacecraft_ref: "SIM-002"}
+
+    third = %{
+      first
+      | route_key: "other-delivery",
+        delivery_profile_ref: %{"id" => "backup-delivery", "version" => 1}
+    }
+
+    from = DateTime.utc_now() |> DateTime.add(120) |> DateTime.truncate(:second)
+    to = DateTime.add(from, 3_600)
+    test_pid = self()
+    by_ref = %{first.provider_spacecraft_ref => first, second.provider_spacecraft_ref => second}
+    evidence = %{"orbit_readiness" => %{"status" => "current"}}
+
+    request = fn opts ->
+      refs = opts[:json]["spacecraft_refs"]
+      send(test_pid, {:provider_search, refs})
+      rows = Enum.map(refs, &opportunity(Map.fetch!(by_ref, &1), from))
+
+      {:ok,
+       %Req.Response{
+         status: 200,
+         body: %{
+           "data" => Enum.take(rows, 1),
+           "meta" => %{
+             "truncated" => length(rows) > 1,
+             "provider_evidence" => evidence
+           }
+         }
+       }}
+    end
+
+    provider = %{context.provider | capabilities_document: search_capabilities()}
+    providers = %{{provider.provider_id, provider.version} => provider}
+    window = {from, to}
+
+    assert %{^window => results} =
+             FleetOpportunitySearch.search(%{window => [first, second, third]}, providers, 2,
+               credential_resolver: fn _reference -> {:ok, "test-provider-credential"} end,
+               req_request: request
+             )
+
+    assert_received {:provider_search, ["SIM-001", "SIM-002"]}
+    assert_received {:provider_search, ["SIM-001"]}
+    assert_received {:provider_search, ["SIM-002"]}
+    refute_received {:provider_search, _}
+
+    assert {:ok, %{opportunities: [primary], provider_evidence: ^evidence}} =
+             results[first.route_key]
+
+    assert {:ok, %{opportunities: [backup], provider_evidence: ^evidence}} =
+             results[third.route_key]
+
+    assert {:ok, %{opportunities: [%{"spacecraft_ref" => "SIM-002"}]}} =
+             results[second.route_key]
+
+    assert primary["spacecraft_ref"] == "SIM-001"
+    assert primary["delivery_profile_ref"] == "delivery-cadence"
+    assert backup["delivery_profile_ref"] == "backup-delivery"
+  end
+
+  defp search_capabilities do
+    %{
+      "contract_version" => "1.0",
+      "operations" =>
+        Map.new(
+          ~w(opportunity_search contact_reservation contact_modification contact_cancellation inventory_discovery delivery_profile_provisioning),
+          &{&1, true}
+        ),
+      "reservation" => %{
+        "confirmation" => "immediate",
+        "idempotency" => "native",
+        "recovery" => "client_reference"
+      },
+      "events" => %{
+        "polling" => true,
+        "webhooks" => false,
+        "delivery_semantics" => "at_least_once"
+      },
+      "search" => %{
+        "spacecraft_batch_limit" => 2,
+        "station_batch_limit" => 5,
+        "page_size_limit" => 100
+      },
+      "delivery" => %{
+        "kinds" => ["realtime_stream"],
+        "protocols" => ["tcp"],
+        "directions" => ["downlink"]
+      }
+    }
   end
 
   defp persist_spacecraft(organization_id, mission_id, suffix, name) do

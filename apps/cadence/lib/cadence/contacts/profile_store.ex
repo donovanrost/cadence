@@ -14,6 +14,7 @@ defmodule Cadence.Contacts.ProfileStore do
   alias Cadence.Missions
   alias Cadence.Persistence.JsonDocument
 
+  alias Cadence.Persistence.BulkLookup
   alias Cadence.Repo
 
   @spec persist_provider_profile(binary(), ProviderProfile.t()) ::
@@ -158,6 +159,17 @@ defmodule Cadence.Contacts.ProfileStore do
       nil -> {:error, :contact_provider_profile_not_found}
       %ProviderProfileRow{} = row -> {:ok, ProviderProfileRow.to_domain(row)}
     end
+  end
+
+  @doc "Latest non-deleted mission provider profiles keyed by their IDs."
+  def fetch_provider_profiles(organization_id, mission_id, ids) do
+    ProviderProfileRow
+    |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
+    |> distinct([row], row.provider_profile_id)
+    |> order_by([row], desc: row.version)
+    |> BulkLookup.by_id(:provider_profile_id, ids)
+    |> Enum.reject(&(&1.lifecycle_state == "deleted"))
+    |> Map.new(&{&1.provider_profile_id, ProviderProfileRow.to_domain(&1)})
   end
 
   @spec list_provider_profiles(binary()) :: [ProviderProfile.t()]

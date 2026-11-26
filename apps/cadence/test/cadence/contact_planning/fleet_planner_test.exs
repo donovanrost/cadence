@@ -13,6 +13,7 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
     FleetPlanningPolicies,
     FleetPlanningRuns,
     FleetRepairs,
+    Planner,
     RepairChain,
     RepairLinks
   }
@@ -146,6 +147,93 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
     assert repeated.plan == result.plan
     assert repeated.plan_version == result.plan_version
     refute_received :unexpected_route_search
+  end
+
+  test "default fleet search commits a distinct checkpoint and readiness evidence per requirement",
+       context do
+    create_requirement!(context.member_scope, "alpha")
+    create_requirement!(context.member_scope, "beta")
+
+    assert {:ok, result} =
+             FleetPlanner.plan(context.member_scope, @mission_id, run_attrs(),
+               materialize_templates: false,
+               now: @now
+             )
+
+    assert result.run.progress_document["requirements_failed"] == 2
+    assert result.run.progress_document["requirements_searched"] == 0
+    assert [first, second] = result.requirement_refs
+    assert first.contact_planning_run_id != second.contact_planning_run_id
+
+    for ref <- [first, second] do
+      assert ref.input_state == :failed
+
+      assert {:ok, run} =
+               Planner.fetch_run(@organization_id, @mission_id, ref.contact_planning_run_id)
+
+      assert run.contact_requirement_id == ref.contact_requirement_id
+      assert run.lifecycle_state == :failed
+
+      assert [%{outcome: :not_ready, readiness_document: %{"code" => "missing_source_endpoint"}}] =
+               Planner.list_searches(@organization_id, @mission_id, ref.contact_planning_run_id)
+    end
+  end
+
+  test "resuming the default search reuses committed snapshots and searches only pending refs",
+       context do
+    completed = create_requirement!(context.member_scope, "alpha")
+    pending = create_requirement!(context.member_scope, "beta")
+
+    assert {:ok, run, [_first, _second]} =
+             FleetPlanner.start(context.member_scope, @mission_id, run_attrs(),
+               materialize_templates: false,
+               now: @now
+             )
+
+    assert {:ok, previous} =
+             Planner.run(
+               context.member_scope,
+               @mission_id,
+               completed.contact_requirement_id,
+               1,
+               now: @now,
+               list_routes: &list_routes/3,
+               search_opportunities: &search_opportunities/5
+             )
+
+    assert {:ok, _ref} =
+             FleetPlanningRuns.update_requirement_progress(
+               context.member_scope,
+               @mission_id,
+               run.fleet_planning_run_id,
+               completed.contact_requirement_id,
+               :searched,
+               :pending,
+               %{contact_planning_run_id: previous.run.contact_planning_run_id}
+             )
+
+    assert {:ok, result} =
+             FleetPlanner.run(context.member_scope, @mission_id, run.fleet_planning_run_id,
+               now: @now
+             )
+
+    refs = Map.new(result.requirement_refs, &{&1.contact_requirement_id, &1})
+
+    assert refs[completed.contact_requirement_id].contact_planning_run_id ==
+             previous.run.contact_planning_run_id
+
+    assert refs[pending.contact_requirement_id].input_state == :failed
+    assert result.run.progress_document["requirements_searched"] == 1
+    assert result.run.progress_document["requirements_failed"] == 1
+
+    assert [snapshot] = previous.snapshots
+
+    assert [^snapshot] =
+             Planner.list_snapshots(
+               @organization_id,
+               @mission_id,
+               previous.run.contact_planning_run_id
+             )
   end
 
   test "one failed provider search yields a partial fleet run and explainable Plan", context do

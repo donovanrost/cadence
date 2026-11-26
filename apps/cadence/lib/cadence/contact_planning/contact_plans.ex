@@ -344,6 +344,7 @@ defmodule Cadence.ContactPlanning.ContactPlans do
             snapshot.contact_opportunity_snapshot_id in ^ids
         )
         |> Repo.all()
+        |> Repo.preload(:search)
         |> Map.new(
           &{&1.contact_opportunity_snapshot_id, ContactOpportunitySnapshotRow.to_domain(&1)}
         )
@@ -380,6 +381,7 @@ defmodule Cadence.ContactPlanning.ContactPlans do
     |> order_by([ref], asc: ref.selection_order)
     |> select([_ref, snapshot], snapshot)
     |> Repo.all()
+    |> Repo.preload(:search)
     |> Enum.map(&ContactOpportunitySnapshotRow.to_domain/1)
   end
 
@@ -398,6 +400,7 @@ defmodule Cadence.ContactPlanning.ContactPlans do
     |> order_by([ref], asc: ref.selection_order)
     |> select([_ref, snapshot], snapshot)
     |> Repo.all()
+    |> Repo.preload(:search)
     |> Enum.map(&ContactOpportunitySnapshotRow.to_domain/1)
   end
 
@@ -410,7 +413,7 @@ defmodule Cadence.ContactPlanning.ContactPlans do
            contact_opportunity_snapshot_id: snapshot_id
          ) do
       nil -> {:error, :contact_opportunity_snapshot_not_found}
-      row -> {:ok, ContactOpportunitySnapshotRow.to_domain(row)}
+      row -> {:ok, row |> Repo.preload(:search) |> ContactOpportunitySnapshotRow.to_domain()}
     end
   end
 
@@ -847,6 +850,7 @@ defmodule Cadence.ContactPlanning.ContactPlans do
         asc: snapshot.contact_opportunity_snapshot_id
       )
       |> Repo.all()
+      |> Repo.preload(:search)
       |> Enum.map(&ContactOpportunitySnapshotRow.to_domain/1)
 
     {:ok, snapshots}

@@ -16,6 +16,8 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
     FleetPlanningRunRequirementRef
   }
 
+  alias Cadence.Management.Contacts.PlanningResults
+
   alias Cadence.Management.Contacts.Store.{
     ContactRequirementRow,
     ContactRequirementVersionRow,
@@ -405,6 +407,89 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
           persist_requirement_progress(row, input_state, result_state, attrs)
       end
     end
+  end
+
+  @doc false
+  def checkpoint_search_batch(%Scope{} = scope, mission_id, run_id, entries) do
+    organization_id = scope.organization_id
+
+    with :ok <- authorize_member(scope, mission_id) do
+      Repo.transaction(fn ->
+        persist_search_batch(organization_id, mission_id, run_id, entries)
+      end)
+    end
+  end
+
+  defp persist_search_batch(organization_id, mission_id, run_id, entries) do
+    # Concurrent batches update distinct requirement refs. A phase change waits until they commit.
+    case lock_run(organization_id, mission_id, run_id, :shared) do
+      {:ok, %{phase: "searching"}} ->
+        :ok = PlanningResults.insert_fleet_entries(entries)
+        update_search_refs(organization_id, mission_id, run_id, entries)
+
+      {:ok, _run} ->
+        Repo.rollback(:fleet_planning_run_phase_mismatch)
+
+      {:error, reason} ->
+        Repo.rollback(reason)
+    end
+  end
+
+  defp update_search_refs(organization_id, mission_id, run_id, entries) do
+    checkpoints = Enum.map(entries, &search_checkpoint(&1.run))
+
+    types = %{
+      contact_requirement_id: :string,
+      contact_requirement_version: :integer,
+      contact_planning_run_id: :string,
+      input_state: :string,
+      result_state: :string,
+      explanation_document: :map
+    }
+
+    {count, _} =
+      FleetPlanningRunRequirementRefRow
+      |> join(:inner, [ref], checkpoint in values(checkpoints, types),
+        on:
+          ref.contact_requirement_id == checkpoint.contact_requirement_id and
+            ref.contact_requirement_version == checkpoint.contact_requirement_version
+      )
+      |> where(
+        [ref],
+        ref.organization_id == ^organization_id and ref.mission_id == ^mission_id and
+          ref.fleet_planning_run_id == ^run_id and is_nil(ref.contact_planning_run_id)
+      )
+      |> update([_ref, checkpoint],
+        set: [
+          contact_planning_run_id: checkpoint.contact_planning_run_id,
+          input_state: checkpoint.input_state,
+          result_state: checkpoint.result_state,
+          explanation_document: checkpoint.explanation_document,
+          updated_at: ^DateTime.utc_now()
+        ]
+      )
+      |> Repo.update_all([])
+
+    if count != length(checkpoints), do: Repo.rollback(:fleet_planning_search_checkpoint_changed)
+    :ok
+  end
+
+  defp search_checkpoint(run) do
+    failed? = run.lifecycle_state == :failed
+
+    %{
+      contact_requirement_id: run.contact_requirement_id,
+      contact_requirement_version: run.contact_requirement_version,
+      contact_planning_run_id: run.contact_planning_run_id,
+      input_state: if(failed?, do: "failed", else: "searched"),
+      result_state: if(failed?, do: "failed", else: "pending"),
+      explanation_document: %{
+        "code" => if(failed?, do: "stage_4_planning_failed", else: "stage_4_planning_complete"),
+        "contact_planning_run_id" => run.contact_planning_run_id,
+        "lifecycle_state" => Atom.to_string(run.lifecycle_state),
+        "summary" => run.summary_document
+      }
+    }
   end
 
   @spec persist_decisions(Scope.t(), binary(), binary(), [map()]) ::
@@ -908,19 +993,22 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
   defp update_run(row, attrs),
     do: row |> FleetPlanningRunRow.projection_changeset(attrs) |> Repo.update()
 
-  defp lock_run(organization_id, mission_id, run_id) do
+  defp lock_run(organization_id, mission_id, run_id, mode \\ :exclusive) do
     case FleetPlanningRunRow
          |> where(
            [run],
            run.organization_id == ^organization_id and run.mission_id == ^mission_id and
              run.fleet_planning_run_id == ^run_id
          )
-         |> lock("FOR UPDATE")
+         |> lock_fleet_run(mode)
          |> Repo.one() do
       nil -> {:error, :fleet_planning_run_not_found}
       row -> {:ok, row}
     end
   end
+
+  defp lock_fleet_run(query, :shared), do: lock(query, "FOR SHARE")
+  defp lock_fleet_run(query, :exclusive), do: lock(query, "FOR UPDATE")
 
   defp initial_progress(requirement_count) do
     %{
