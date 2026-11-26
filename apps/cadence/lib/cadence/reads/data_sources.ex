@@ -7,6 +7,7 @@ defmodule Cadence.Reads.DataSources do
   """
 
   alias Cadence.Projections.DataSources.{Health, Watermarks}
+  alias Cadence.Telemetry.Storage, as: TelemetryStorage
 
   alias Cadence.Management.DataSources, as: Definitions
 
@@ -63,19 +64,34 @@ defmodule Cadence.Reads.DataSources do
   defdelegate list_source_health_statuses(organization_id, mission_id, opts \\ []),
     to: Health
 
-  defdelegate fetch_source_watermark_status(source_watermark_key), to: Watermarks
+  # Watermarks are coalesced in memory and written in bulk (#690): each read first writes the
+  # mission's pending window, so a read on this node sees what the node has observed. The data
+  # plane's entry point does the write; the watermark store itself knows nothing of it.
+  def fetch_source_watermark_status(source_watermark_key) do
+    TelemetryStorage.flush_source_watermark(source_watermark_key)
+    Watermarks.fetch_source_watermark_status(source_watermark_key)
+  end
 
-  defdelegate fetch_source_watermark_for_identity(identity),
-    to: Watermarks,
-    as: :fetch_status_for_identity
+  def fetch_source_watermark_for_identity(identity) do
+    TelemetryStorage.flush_source_watermarks(Map.get(identity, :mission_id))
+    Watermarks.fetch_status_for_identity(identity)
+  end
 
-  defdelegate list_source_watermark_events(organization_id, mission_id, opts \\ []),
-    to: Watermarks
+  def list_source_watermark_events(organization_id, mission_id, opts \\ []) do
+    TelemetryStorage.flush_source_watermarks(mission_id)
+    Watermarks.list_source_watermark_events(organization_id, mission_id, opts)
+  end
 
-  defdelegate list_source_watermark_statuses(organization_id, mission_id, opts \\ []),
-    to: Watermarks
+  def list_source_watermark_statuses(organization_id, mission_id, opts \\ []) do
+    TelemetryStorage.flush_source_watermarks(mission_id)
+    Watermarks.list_source_watermark_statuses(organization_id, mission_id, opts)
+  end
 
   defdelegate fetch_data_binding_event(organization_id, mission_id, event_id), to: Definitions
   defdelegate fetch_source_health_event(organization_id, mission_id, event_id), to: Health
-  defdelegate fetch_source_watermark_event(organization_id, mission_id, event_id), to: Watermarks
+
+  def fetch_source_watermark_event(organization_id, mission_id, event_id) do
+    TelemetryStorage.flush_source_watermarks(mission_id)
+    Watermarks.fetch_source_watermark_event(organization_id, mission_id, event_id)
+  end
 end
