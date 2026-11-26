@@ -15,6 +15,7 @@ defmodule Cadence.Telemetry.CurrentValueStore.Postgres do
   alias Cadence.Telemetry.SourceFilters
 
   @mission_scope_key "__mission__"
+  @spacecraft_chunk 500
 
   @impl true
   def child_spec(_opts), do: nil
@@ -93,14 +94,30 @@ defmodule Cadence.Telemetry.CurrentValueStore.Postgres do
       TelemetryLatestValueRow
       |> where([row], row.mission_id == ^mission_id)
       |> maybe_filter_spacecraft(spacecraft_scope_id, opts)
+      |> maybe_filter_points(Keyword.get(opts, :point_ids))
       |> maybe_filter_source(opts)
       |> order_by([row], asc: row.point_name)
 
     query
-    |> Repo.all()
+    |> read_in_chunks(Keyword.get(opts, :spacecraft_ids))
     |> Enum.map(&TelemetryLatestValueRow.to_domain/1)
     |> SelectionPolicy.selected_samples(opts)
   end
+
+  # `:spacecraft_ids` restricts the read to those spacecraft, `@spacecraft_chunk` per statement, so
+  # no statement carries an unbounded id list however many spacecraft are asked for.
+  defp read_in_chunks(query, nil), do: Repo.all(query)
+
+  defp read_in_chunks(query, spacecraft_ids) when is_list(spacecraft_ids) do
+    spacecraft_ids
+    |> Enum.chunk_every(@spacecraft_chunk)
+    |> Enum.flat_map(fn chunk ->
+      query |> where([row], row.spacecraft_scope_id in ^chunk) |> Repo.all()
+    end)
+  end
+
+  defp maybe_filter_points(query, nil), do: query
+  defp maybe_filter_points(query, ids), do: where(query, [row], row.point_id in ^ids)
 
   @impl true
   def reset do
