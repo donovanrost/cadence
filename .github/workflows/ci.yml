@@ -593,6 +593,15 @@ jobs:
           corepack pnpm exec playwright test --shard=${{ matrix.shard }}/2
           --project=desktop --project=a11y-desktop-admin --project=a11y-desktop-member
           --project=a11y-phone-admin --project=a11y-phone-member
+      # #176: the fleet-scale budgets are timings, so they run alone with one worker, on the shard
+      # without the serial specs. Like the serial run, the main run's evidence moves aside first.
+      - name: Console fleet-scale budgets
+        if: ${{ !cancelled() && matrix.shard == 2 }}
+        working-directory: frontend/apps/console
+        run: |
+          if [ -d test-results ]; then mv test-results test-results-main; fi
+          if [ -d playwright-report ]; then mv playwright-report playwright-report-main; fi
+          corepack pnpm exec playwright test --project=scale --workers=1
       # docs/apogee/qa/e2e.md §1: specs that stage a change set run alone, on one shard.
       # A second playwright run clears test-results and rewrites playwright-report, so the main run's
       # evidence (traces, snapshots, its report) moves aside first and both sets are scanned and

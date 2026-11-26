@@ -61,6 +61,19 @@ export default defineConfig({
         storageState: DEFAULT_STORAGE_STATE,
       },
     },
+    // #176 fleet-scale budgets (*.perf.ts): timings, so CI runs them alone with one worker.
+    {
+      name: "scale",
+      testMatch: /.*\.perf\.ts/,
+      fullyParallel: false,
+      dependencies: ["setup"],
+      use: {
+        ...devices["Desktop Chrome"],
+        channel: "chrome",
+        viewport: { width: 1512, height: 1000 },
+        storageState: DEFAULT_STORAGE_STATE,
+      },
+    },
     // #189 per-screen a11y passes (*.a11y.ts): each spec runs at 1440 and 390, as an organization
     // admin and as a member, like qa's run 2. The spec reads its persona from the project metadata.
     ...A11Y_VIEWPORTS.flatMap((size) =>
