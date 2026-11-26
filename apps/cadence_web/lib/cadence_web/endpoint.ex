@@ -43,7 +43,10 @@ defmodule CadenceWeb.Endpoint do
   plug(CadenceWeb.Plugs.FrontendReleasePublisher)
   plug(CadenceWeb.Plugs.FrontendReleaseRequestBody)
 
-  if Mix.env() == :dev do
+  # Not on the console-e2e CI server (CADENCE_CI_SERVER, set before compiling): its toolbar loads
+  # from tidewave.ai into every page and scans the DOM, which the fleet-scale budgets were timing
+  # as Fleet's longest task (#176 follow-up).
+  if Mix.env() == :dev and System.get_env("CADENCE_CI_SERVER") not in ["1", "true"] do
     plug(Tidewave)
   end
 
