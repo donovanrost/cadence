@@ -19,6 +19,8 @@ without Cadence, PostgreSQL, QuestDB, or Docker.
   The remaining contacts have future acquisition times.
 - `--duration` sets the measurement window in seconds. It starts after each
   selected path has delivered its first frame.
+- `--binary-owners` adds the ten processes with the most referenced binary
+  bytes and totals by process role to each ten-second diagnostic row.
 - `--output` sets the JSON Lines destination. The default is
   `var/simulator-load.jsonl` at the repository root.
 
@@ -47,6 +49,9 @@ also includes any nonempty persistence batches since the previous sample,
 with the key count, prepare, insert, and sync durations, and the oldest write
 lag. The terminal log records initialization and shutdown diagnostics, including
 the time spent closing contacts and the time spent on the final flush.
+Per-process binary counts use `Process.info(pid, :binary)`. A binary held
+by two processes can appear in both totals. The independent BEAM binary
+memory counter is `diagnostics.memory.binary`.
 
 The simulator load measurement is the producer baseline for the Cadence
 ingest run tracked in [#717](https://github.com/donovanrost/cadence/issues/717)

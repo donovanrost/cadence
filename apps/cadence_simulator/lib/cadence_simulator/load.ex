@@ -2,7 +2,7 @@ defmodule CadenceSimulator.Load do
   @moduledoc "Measures the Provider Contact data plane with loopback TCP receivers."
 
   alias CadenceSimulator.{CatalogCache, PacketEncoder, Provider}
-  alias CadenceSimulator.Load.{Shape, TcpSink}
+  alias CadenceSimulator.Load.{BinaryOwners, Shape, TcpSink}
   alias CadenceSimulator.Provider.{ContactLifecycle, DeliveryProfiles, Orchestrator, Store}
   alias CadenceSimulator.Providers.DatabaseDynamics
 
@@ -64,10 +64,11 @@ defmodule CadenceSimulator.Load do
           "at #{target} frames/s for #{opts.duration}s. JSONL: #{opts.output}"
       )
 
-      report_diagnostics("start", diagnostics(store_path))
-      result = measure(output, active, counters, opts.duration, store_path)
+      diagnostics = fn -> diagnostics(store_path, opts.binary_owners?) end
+      report_diagnostics("start", diagnostics.())
+      result = measure(output, active, counters, opts.duration, diagnostics)
       outcome = report(result, frames_per_step, rate_hz, length(active))
-      stop_run(run["id"], store_path)
+      stop_run(run["id"], diagnostics)
       outcome
     after
       for {pid, _port} <- sinks do
@@ -185,7 +186,7 @@ defmodule CadenceSimulator.Load do
     end
   end
 
-  defp measure(output, active, counters, duration, store_path) do
+  defp measure(output, active, counters, duration, diagnostics) do
     previous_flag = :erlang.system_flag(:scheduler_wall_time, true)
     start = now_ms()
     first = snapshot(active, counters)
@@ -209,7 +210,7 @@ defmodule CadenceSimulator.Load do
           sample =
             second
             |> sample(acc.previous, current)
-            |> maybe_add_diagnostics(store_path)
+            |> maybe_add_diagnostics(diagnostics)
 
           :ok = IO.binwrite(output, [Jason.encode_to_iodata!(sample), "\n"])
           print_sample(sample)
@@ -271,20 +272,24 @@ defmodule CadenceSimulator.Load do
     }
   end
 
-  defp maybe_add_diagnostics(sample, store_path) do
+  defp maybe_add_diagnostics(sample, diagnostics) do
     if rem(sample.second, @diagnostics_interval_seconds) == 0 do
-      Map.put(sample, :diagnostics, diagnostics(store_path))
+      Map.put(sample, :diagnostics, diagnostics.())
     else
       sample
     end
   end
 
-  defp diagnostics(store_path) do
-    %{
+  defp diagnostics(store_path, binary_owners?) do
+    sample = %{
       store: Map.put(Store.diagnostics(), :dets_file_bytes, File.stat!(store_path).size),
       batches: drain_batch_samples([]),
       memory: Map.new(:erlang.memory())
     }
+
+    if binary_owners?,
+      do: Map.put(sample, :binary_owners, BinaryOwners.snapshot()),
+      else: sample
   end
 
   defp drain_batch_samples(samples) do
@@ -295,7 +300,7 @@ defmodule CadenceSimulator.Load do
     end
   end
 
-  defp stop_run(run_id, store_path) do
+  defp stop_run(run_id, diagnostics) do
     started = System.monotonic_time(:microsecond)
     {:ok, _run} = Provider.transition_run(run_id, "stop")
     :ok = Orchestrator.reconcile()
@@ -308,7 +313,7 @@ defmodule CadenceSimulator.Load do
 
       report_diagnostics(
         "shutdown",
-        Map.merge(diagnostics(store_path), %{
+        Map.merge(diagnostics.(), %{
           contact_shutdown_us: flush_started - started,
           final_flush_us: flush_ended - flush_started
         })
