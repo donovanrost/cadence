@@ -36,12 +36,10 @@ describe("members_changed up front (ux U92, #120)", () => {
     expect(membersChangedUpFront(groupOf(changed))).toBe(UP_FRONT);
     const bare = UP_FRONT.replace(" (12 then, 13 now)", "");
     expect(membersChangedUpFront(groupOf({ ...changed, submitted_member_count: null }))).toBe(bare);
-    expect(
-      membersChangedUpFront(groupOf({ members_changed: true, submitted_member_count: 12 })),
-    ).toBe(bare);
+    expect(membersChangedUpFront(groupOf({ ...changed, current_member_count: null }))).toBe(bare);
   });
 
-  it("blocks nothing when the flag is false, null or missing (U20: never guessed)", () => {
+  it("blocks nothing when the flag is false or null (U20: never guessed)", () => {
     expect(
       membersChangedUpFront(
         groupOf({ members_changed: false, submitted_member_count: 2, current_member_count: 2 }),

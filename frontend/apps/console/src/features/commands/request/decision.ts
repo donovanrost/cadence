@@ -145,7 +145,7 @@ export function membersChangedLine(details: unknown): string {
 }
 /**
  * ux U92 "Up front" (#120): the read says the group changed, so GO is off before a click with U92's
- * line less "Not released: " (nothing was tried); null when the flag is false, null or missing.
+ * line less "Not released: " (nothing was tried); null when the flag is false or null.
  */
 export function membersChangedUpFront(group: Group): string | null {
   if (group.members_changed !== true) return null;
