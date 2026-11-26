@@ -97,6 +97,9 @@ Laptop 1 worktrees live in `~/.herdr/worktrees/cadence/<handle>`. The new agent 
   (squash). The Head reviews their hires' PRs; Heads review each other's.
 - **Closing:** `Closes #N` in the PR body is fine. Merged means done; there is no separate landing step.
 - **Red develop:** Platform owns it. A PR that turned develop red is reverted first and fixed after.
+- **CI is the scarce resource** (about 20 runner slots for the whole team). Open every PR as a
+  **draft**; drafts run no CI. Mark it ready for review when you want CI and a review. Push in batches,
+  not commit by commit. Rebase a stale PR only when it's about to merge.
 - **Local checks before a PR:** `mix format`, compile with `--warnings-as-errors` for the apps you touched,
   `mix credo --strict` on touched files, the tests for the area you touched. Frontend: lint, typecheck and the
   tests for touched files. **Full suites run in CI**, not locally (16 GB laptops).
