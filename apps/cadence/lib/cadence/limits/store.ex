@@ -40,14 +40,12 @@ defmodule Cadence.Limits.Store do
     end)
   end
 
-  # The fleet summary of every spacecraft these events touched, once each (#849).
+  # The fleet summary of every spacecraft these events touched, once each, under their locks (#849).
   defp refresh_fleet_summaries(repo, events) do
     events
     |> Enum.reject(&is_nil(&1.spacecraft_id))
-    |> Enum.group_by(& &1.mission_id, & &1.spacecraft_id)
-    |> Enum.each(fn {mission_id, ids} ->
-      FleetSummary.refresh(repo, mission_id, Enum.uniq(ids))
-    end)
+    |> Enum.map(&{&1.mission_id, &1.spacecraft_id})
+    |> then(&FleetSummary.refresh_batch(repo, &1))
   end
 
   @spec fetch_event(binary(), binary(), binary()) :: {:ok, Event.t()} | {:error, :not_found}
@@ -166,6 +164,7 @@ defmodule Cadence.Limits.Store do
         %LatestStateRow{} |> LatestStateRow.changeset(event) |> Repo.insert!()
       end)
 
+      FleetSummary.lock_rebuild(Repo, mission_id, spacecraft_id, events)
       FleetSummary.refresh(Repo, mission_id, if(spacecraft_id, do: [spacecraft_id], else: :all))
       {:ok, changed} = AlarmGround.reconcile(Repo, mission_id, spacecraft_id, events)
       changed
