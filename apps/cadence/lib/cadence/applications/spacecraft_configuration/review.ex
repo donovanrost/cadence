@@ -300,9 +300,7 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
   # Keyed by catalog: within a generation a catalog's composition selects one revision, and
   # ApplicationInputs.resync_packet_inputs/3 reads the inputs by catalog.
   def cached_inputs(cache, mission, catalog_id, revision_id \\ nil) do
-    key = catalog_id
-
-    case Map.fetch(cache, key) do
+    case Map.fetch(cache, catalog_id) do
       {:ok, inputs} ->
         {:ok, inputs, cache}
 
@@ -310,7 +308,7 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
         acc = Map.get(cache, @versions, %{})
 
         with {:ok, inputs, acc} <- catalog_inputs(mission, catalog_id, acc, revision_id),
-             do: {:ok, inputs, cache |> Map.put(key, inputs) |> Map.put(@versions, acc)}
+             do: {:ok, inputs, cache |> Map.put(catalog_id, inputs) |> Map.put(@versions, acc)}
     end
   end
 end

@@ -15,6 +15,7 @@ defmodule Cadence.Governance.PacketDefinitionPathsTest do
   alias Cadence.Applications.SpacecraftConfiguration.{Drafts, Review}
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Catalog.SpacecraftConfigurationInput
+  alias Cadence.CompositionFixtures
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Control.{Configuration, ConfigurationRollback}
   alias Cadence.Governance
@@ -59,7 +60,7 @@ defmodule Cadence.Governance.PacketDefinitionPathsTest do
        c do
     b = catalog!(c, "B", ["mode", "aux"])
     profile = profile!(c, c.a)
-    apply!(c, [update("spacecraft_profile", profile, "catalog_revision_id", b)])
+    apply!(c, [update("spacecraft_profile", profile, "composition_id", pin!(c, b))])
 
     # The bug itself first: before #534 the earlier activations re-read to merged fields.
     assert_every_activation_rereads(c)
@@ -81,7 +82,7 @@ defmodule Cadence.Governance.PacketDefinitionPathsTest do
     profile = profile!(c, c.a)
 
     %{revision: moved} =
-      apply!(c, [update("spacecraft_profile", profile, "catalog_revision_id", b)])
+      apply!(c, [update("spacecraft_profile", profile, "composition_id", pin!(c, b))])
 
     assert health_versions(c) == [2]
 
@@ -106,7 +107,9 @@ defmodule Cadence.Governance.PacketDefinitionPathsTest do
     configure!(c, [{c.craft, b}, {second, d}])
 
     assert Enum.sort(health_versions(c)) == [2, 3]
-    assert stored_fields(c) == %{1 => ["mode"], 2 => ["aux", "mode"], 3 => ["flag", "mode"]}
+    # Which catalog takes 2 and which 3 follows the generation's craft order (random ids).
+    assert %{1 => ["mode"]} = fields = stored_fields(c)
+    assert Enum.sort([fields[2], fields[3]]) == [["aux", "mode"], ["flag", "mode"]]
     assert_every_activation_rereads(c)
   end
 
@@ -142,7 +145,7 @@ defmodule Cadence.Governance.PacketDefinitionPathsTest do
 
     {:ok, staged} =
       Configuration.stage(c.scope, c.mission.mission_id, %{summary: "Race"}, [
-        update("spacecraft_profile", profile, "catalog_revision_id", b)
+        update("spacecraft_profile", profile, "composition_id", pin!(c, b))
       ])
 
     assert {:error, {:packet_definition_content_changed, _id, _version}} = submit(c, staged)
@@ -259,7 +262,7 @@ defmodule Cadence.Governance.PacketDefinitionPathsTest do
           "display_name" => "Paths profile",
           "downlink_protocol" => "tm",
           "uplink_protocol" => "tc",
-          "catalog_revision_id" => catalog,
+          "composition_id" => pin!(c, catalog),
           "frame_parameters" => %{"frame_size" => 1115, "ocf_length" => 4}
         }
       }
@@ -279,6 +282,9 @@ defmodule Cadence.Governance.PacketDefinitionPathsTest do
 
     id
   end
+
+  # D3 (#544): a profile pins its catalog's composition; Cadence derives the catalog revision.
+  defp pin!(c, catalog), do: CompositionFixtures.pin!(c.org, c.mission.mission_id, catalog)
 
   defp update(kind, id, path, value),
     do: %{kind: kind, action: :update, entity_id: id, changes: [%{path: path, value: value}]}

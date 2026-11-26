@@ -95,7 +95,7 @@ defmodule Cadence.Configuration.Submission do
 
     locked(set, params, proof, fn set ->
       ReviewRecord.write(set, reviewer, "sent_back", comment, proof.review_id, %{
-        digest: set.change_set_id |> ChangeSetStore.staged_ops() |> ReviewRecord.digest(),
+        digest: ReviewRecord.digest(ChangeSetStore.staged_ops(set.change_set_id), set.selections),
         separated_from: ReviewRecord.separated_from(ReviewRecord.compared(set)),
         admin_mode: admin_mode(params)
       })
@@ -119,7 +119,8 @@ defmodule Cadence.Configuration.Submission do
           locked(set, params, proof, fn set ->
             # #117 step 2: the review names the ops it decided (the version pinned by expected/2,
             # under this lock); the apply below runs them, as the reviewer (applied_by).
-            digest = set.change_set_id |> ChangeSetStore.staged_ops() |> ReviewRecord.digest()
+            digest =
+              ReviewRecord.digest(ChangeSetStore.staged_ops(set.change_set_id), set.selections)
 
             review =
               ReviewRecord.write(set, reviewer, "approved", comment, proof.review_id, %{
@@ -231,6 +232,8 @@ defmodule Cadence.Configuration.Submission do
         submitted_by: set.submitted_by || applier,
         submitted_at: set.submitted_at || now,
         reason: reason,
+        # The record's digest covers them (#544), so a direct apply stores them too.
+        selections: set.selections,
         failure_document: nil,
         closed_at: now
       )
