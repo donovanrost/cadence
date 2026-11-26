@@ -148,7 +148,13 @@ defmodule Cadence.Protocol.RecordArchive.WriterTest do
     send(pid, :idle_check)
     assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, 1_000
 
+    # The writer dropped its name before exiting, so no lookup can hand out the dead pid (the
+    # Registry's own cleanup of a dead name is asynchronous).
+    assert Registry.lookup(registry, {mission_id, nil}) == []
+
     assert :ok = RecordArchive.persist_records_many(policy, [batch(mission_id, 2)])
+    [{fresh, _}] = Registry.lookup(registry, {mission_id, nil})
+    refute fresh == pid
     assert :ok = RecordArchive.flush(policy, mission_id)
     assert indexed?(policy, "packet-#{mission_id}-2")
   end
