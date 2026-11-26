@@ -80,6 +80,24 @@ defmodule CadenceWeb.Console.ServiceBearerAPITest do
              |> json_response(404)
   end
 
+  # Pinning is what protects an opted-in action: an organization-wide service, even an
+  # organization_admin, reaches no mission at all.
+  test "an organization-wide service reaches no mission route, opted-in or not", c do
+    for {plug, actions} <- ServiceAccess.allowed(), action <- actions do
+      [route] =
+        for route <- CadenceWeb.Router.__routes__(),
+            route.plug == plug and route.plug_opts == action,
+            String.starts_with?(route.path, @prefix <> "/missions/:mission_id"),
+            do: route
+
+      path = concrete(route.path, c.mission_id, c.organization_id)
+
+      assert %{"error" => %{"code" => "mission_not_found"}} =
+               c.api_token |> bearer() |> get(path) |> json_response(404),
+             "#{route.path} let an organization-wide service through"
+    end
+  end
+
   test "an invalid bearer is 401 and never falls back to a valid session cookie", c do
     user = TestFixtures.persist_user!()
     {:ok, organization} = Cadence.Organizations.fetch_organization(c.organization_id)
