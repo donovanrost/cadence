@@ -134,17 +134,8 @@ Projections, Telemetry, Runtime persistence, and the archive backends. Extend
 the executable ownership map in the same change whenever another context
 receives row modules.
 
-The live debt is recorded in
-[`dependency-baseline.txt`](dependency-baseline.txt). Each entry is an existing
-xref edge, not permission for new code. The check fails when an edge is added,
-when a removed edge is left in the baseline, or when the baseline review date
-expires. Removing an edge and its baseline entry in the same change makes the
-policy ratchet toward the target. The former zero-debt claim did not establish
-production coverage: the workspace-root `mix xref graph` could return an empty
-graph. The September 2026 recovery rejects that condition and exposes outstanding
-production findings. An empty baseline does not establish that the current graph
-passes. Remaining findings must be resolved and the actual command must pass
-before the migration can claim completion.
+There is no tolerated-debt baseline. `mix cadence.architecture.check` fails on
+any finding; fix the dependency in the change that introduces it.
 
 ## Reviewed source ownership
 
@@ -258,21 +249,13 @@ into the mission composition owner. Events cannot replace these calls because
 the caller needs the concrete startup result before continuing.
 
 The 2026-10-20 chaos-lab review confirmed both startup calls still serve this
-purpose and the dependency baseline remains empty. These are node-local startup
+purpose. These are node-local startup
 contracts; they do not establish exclusive mission ownership across replicas.
 
 ## Dependency exceptions
 
-New exceptions are not added directly to the baseline. A proposed exception
-must update this policy or an ADR in the same change and record:
-
-- the exact caller and callee;
-- why an event, public service, or orchestration move is not yet suitable;
-- the responsible owner;
-- a removal condition; and
-- a review-by date.
-
-Expired or ownerless exceptions fail the architecture check.
+There are none. A dependency the rules reject is a modelling problem: move the
+code, add a public boundary, or change the rule in this policy in the same PR.
 
 ### Scoped settings and spacecraft review
 
