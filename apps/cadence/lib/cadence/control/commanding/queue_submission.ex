@@ -61,6 +61,8 @@ defmodule Cadence.Control.Commanding.QueueSubmission do
          true <- expected == held.token,
          {:ok, %{queue_entry: queued}} <-
            Commanding.enqueue(held.approved, held.actor,
+             # #117 step 4b: a not_required record's admin_mode, from the releaser's scope.
+             admin_mode: fresh.admin_mode? == true,
              metadata: %{"operator_submission_id" => held.operation_id},
              before_enqueue: fn request -> authorize_insert(scope, mission_id, held, request) end
            ) do

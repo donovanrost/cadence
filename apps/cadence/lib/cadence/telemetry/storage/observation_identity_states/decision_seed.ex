@@ -124,7 +124,6 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates.DecisionSeed do
           observation_identity_id,
           sample.sample_id,
           sample.packet_id,
-          sample.evidence_id,
           revision
         )
 

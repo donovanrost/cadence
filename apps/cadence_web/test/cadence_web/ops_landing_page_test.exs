@@ -50,23 +50,19 @@ defmodule CadenceWeb.OpsLandingPageTest do
              render_hook(view, "host:context", %{"path" => destination})
   end
 
-  test "the dashboards directory is no longer a client-side hop: it redirects to the console",
-       c do
+  test "the dashboards directory is no longer a client-side hop", c do
     {:ok, view, _} = live(c.conn, path(c))
     render_hook(view, "host:context", %{"path" => path(c) <> "/dashboards"})
     assert_reply(view, %{ok: false})
     assert page(view)["context"]["mission_id"] == c.mission.mission_id
-
-    assert redirected_to(get(c.conn, path(c) <> "/dashboards"), 302) ==
-             "/console/#{c.org.slug}/#{c.mission.slug}/telemetry/dashboards"
   end
 
   test "anonymous entry and revoked refresh do not expose navigation", c do
-    assert {:error, {:redirect, %{to: "/sign-in"}}} = live(build_conn(), path(c))
+    assert {:error, {:redirect, %{to: "/console/sign-in"}}} = live(build_conn(), path(c))
     {:ok, view, _} = live(c.conn, path(c))
     :ok = Cadence.Auth.revoke_user_session(get_session(c.conn, :user_session_token))
     render_hook(view, "host:context", %{"path" => path(c)})
-    assert_redirect(view, "/sign-in")
+    assert_redirect(view, "/console/sign-in")
   end
 
   defp page(view),

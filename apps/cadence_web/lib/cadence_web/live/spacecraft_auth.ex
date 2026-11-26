@@ -20,7 +20,7 @@ defmodule CadenceWeb.SpacecraftAuth do
         {:halt,
          socket
          |> put_flash(:error, "Spacecraft not found.")
-         |> redirect(to: "/missions/#{mission_id}/spacecraft")}
+         |> redirect(to: "/console")}
     end
   end
 end

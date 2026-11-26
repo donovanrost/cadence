@@ -56,6 +56,19 @@ defmodule Cadence.Commanding.LifecyclePolicy do
     end
   end
 
+  @doc """
+  The authors the separation check is given: the requester, as stored. #117 step 4b records exactly
+  these as `separated_from` (domain: the same function `Accountability.separate` is given).
+  """
+  @spec separation_authors(map()) :: [map()]
+  def separation_authors(%{requested_by_document: document}),
+    do: [JsonDocument.unwrap_value(document)]
+
+  @doc "`separation_authors/1` as ids (a service by its own id), sorted and unique."
+  @spec separated_from(map()) :: [binary()]
+  def separated_from(request_row),
+    do: request_row |> separation_authors() |> Accountability.ids()
+
   @spec ensure_not_self_approval(map(), map()) :: :ok | {:error, term()}
   # #280: the requester counts as people. A service requester is its issuer and rotators (it has no
   # user_id, so the old comparison passed it); an unknown set refuses (`:command_request_approver_authors_unknown`).
@@ -68,10 +81,13 @@ defmodule Cadence.Commanding.LifecyclePolicy do
         decided_by
       )
       when is_map(decided_by) do
-    requester = JsonDocument.unwrap_value(requested_by_document)
     approver_user_id = Map.get(decided_by, "user_id") || Map.get(decided_by, :user_id)
 
-    case Accountability.separate(organization_id, {:user, approver_user_id}, [requester]) do
+    case Accountability.separate(
+           organization_id,
+           {:user, approver_user_id},
+           separation_authors(%{requested_by_document: requested_by_document})
+         ) do
       :ok ->
         :ok
 

@@ -45,6 +45,7 @@ defmodule Cadence.Application do
         {Cadence.Projections.Supervisor, root_composition: root_composition}
       ] ++
         background_job_children(root_composition) ++
+        retention_children() ++
         questdb_retention_children() ++
         [{Drain, callback: fn -> drain_runtime(root_composition) end}]
 
@@ -98,6 +99,14 @@ defmodule Cadence.Application do
     end
 
     :ok
+  end
+
+  # Retention for the tables nothing else cleans (#694): one chunked sweeper per rule.
+  defp retention_children do
+    Cadence.Persistence.Retention.children([
+      Cadence.Runtime.PartitionStreamKeys.Retention,
+      Cadence.IngressArchive.Retention
+    ])
   end
 
   # Retention for the QuestDB observation table (#693): only when that table is the store.

@@ -64,7 +64,7 @@ This configuration is not part of the normal production release.
 If a killed activation executor committed its generation but did not finish its
 execution receipt, the seed resumes that same approved execution before verifying it.
 
-Open <http://cadence.cadence-chaos.svc.cluster.local:4001/sign-in>.
+Open <http://cadence.cadence-chaos.svc.cluster.local:4001/console/sign-in>.
 The generated administrator credentials are in `var/chaos/credentials.json`
 (mode 0600, ignored by Git). Image tags are saved in `var/chaos/images.json`.
 Secrets are reused across invocations. Do not delete them while retaining the
@@ -76,7 +76,7 @@ pod and is not the Kubernetes Service load balancer.
 
 ```sh
 kubectl --context orbstack -n cadence-chaos port-forward service/cadence 14001:4001
-# Open http://localhost:14001/sign-in; this exact origin is allowed by the lab image.
+# Open http://localhost:14001/console/sign-in; this exact origin is allowed by the lab image.
 ```
 
 On a laptop, finish image builds before activating the full fleet or benchmarking.

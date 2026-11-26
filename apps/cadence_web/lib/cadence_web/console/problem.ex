@@ -233,6 +233,9 @@ defmodule CadenceWeb.Console.Problem do
     too_many_commands: {422, "Too many unsaved edits. Save to keep going."},
     dashboard_not_ready: {422, "Some widgets aren't ready to save."},
     dashboard_in_use: {409, "A playlist shows this dashboard. Confirm to archive it anyway."},
+    dashboard_id_in_use: {409, "That dashboard id is already in use."},
+    dashboard_import_conflict:
+      {409, "A dashboard with that id exists here with different content."},
     catalog_unavailable: {503, "The command catalog is unavailable right now."},
     alarms_unavailable: {503, "Alarms are unavailable right now."},
     commanding_unavailable: {503, "Commanding is unavailable right now."},

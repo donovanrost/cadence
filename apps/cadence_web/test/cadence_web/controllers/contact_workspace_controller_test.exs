@@ -34,7 +34,7 @@ defmodule CadenceWeb.ContactWorkspaceControllerTest do
   end
 
   test "the browser route requires authentication", c do
-    assert build_conn() |> get(c.page) |> redirected_to() == "/sign-in"
+    assert build_conn() |> get(c.page) |> redirected_to() == "/console/sign-in"
   end
 
   test "reads are independently scoped and do not require a page or catalog visit", c do

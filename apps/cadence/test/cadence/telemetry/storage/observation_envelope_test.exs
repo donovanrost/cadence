@@ -76,6 +76,29 @@ defmodule Cadence.Telemetry.Storage.ObservationEnvelopeTest do
     assert first.observation_identity_id == second.observation_identity_id
   end
 
+  # #161 (domain's design A): an observation is (identity, sample, packet, revision); the evidence
+  # that carried it is transport. A replay batched differently (same sample and packet, another
+  # evidence) is the same observation on every backend, so identity states see a no-op.
+  test "an observation's id doesn't depend on the evidence that carried it" do
+    context = write_context()
+
+    assert {:ok, first} = ObservationEnvelope.from_sample(context, sample(evidence_id: "ev-a"))
+
+    assert {:ok, rebatched} =
+             ObservationEnvelope.from_sample(context, sample(evidence_id: "ev-b"))
+
+    assert first.observation_id == rebatched.observation_id
+    assert first.idempotency_key == rebatched.idempotency_key
+
+    assert first.observation_id ==
+             ObservationEnvelope.observation_id_for(
+               first.observation_identity_id,
+               first.sample_id,
+               first.packet_id,
+               first.revision
+             )
+  end
+
   test "observation identity survives alternate path and row identity changes" do
     first_context =
       write_context(data_source_id: "ds-primary", source_endpoint_id: "ksat-downlink")
