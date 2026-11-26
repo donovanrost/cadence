@@ -5,6 +5,9 @@ name: CI
 on:
   pull_request:
     branches: [develop, main]
+    # A draft runs no CI: ready_for_review starts the run, converted_to_draft cancels a running one
+    # through the concurrency group (docs/TEAM.md, #730).
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   push:
     branches: [develop, main]
   # Twice a day on develop (the default branch, where schedules run), so jobs on probation outside
@@ -27,6 +30,8 @@ env:
 jobs:
   changes:
     name: Detect code changes
+    # Draft PRs run nothing (runner slots are the team's bottleneck, #730); ci-ok fails for them.
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -936,6 +941,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
+      - name: A draft PR is not checked
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft
+        run: |
+          echo "::error::Draft PRs run no CI. Mark the PR ready for review to run it."
+          exit 1
       - name: Every needed job succeeded or was skipped as unaffected
         env:
           NEEDS: ${{ toJSON(needs) }}
