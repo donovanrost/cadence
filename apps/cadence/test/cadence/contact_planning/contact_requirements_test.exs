@@ -94,6 +94,12 @@ defmodule Cadence.ContactPlanning.ContactRequirementsTest do
     assert version_two.minimum_data_volume_bytes == 2_000_000_000
     assert version_two.rationale == "Recorder pressure increased"
     refute version_two.content_sha256 == version_one.content_sha256
+    requirement_id = requirement.contact_requirement_id
+
+    assert ContactRequirements.fetch_many(@organization_id, @mission_id, [
+             requirement_id,
+             "missing-requirement"
+           ]) == %{requirement_id => {requirement_two, version_two}}
 
     assert {:ok, historical} =
              ContactRequirements.fetch_version(

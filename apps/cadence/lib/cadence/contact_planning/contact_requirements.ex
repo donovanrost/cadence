@@ -397,25 +397,39 @@ defmodule Cadence.ContactPlanning.ContactRequirements do
   def fetch_many(_organization_id, _mission_id, []), do: %{}
 
   def fetch_many(organization_id, mission_id, ids) do
-    ContactRequirementRow
-    |> join(:inner, [requirement], version in ContactRequirementVersionRow,
-      on:
-        version.organization_id == requirement.organization_id and
-          version.mission_id == requirement.mission_id and
-          version.contact_requirement_id == requirement.contact_requirement_id and
-          version.version == requirement.current_version
-    )
-    |> where(
-      [requirement],
-      requirement.organization_id == ^organization_id and requirement.mission_id == ^mission_id and
-        requirement.contact_requirement_id in ^ids
-    )
-    |> select([requirement, version], {requirement, version})
-    |> Repo.all()
-    |> Map.new(fn {requirement, version} ->
-      {requirement.contact_requirement_id,
-       {ContactRequirementRow.to_domain(requirement),
-        ContactRequirementVersionRow.to_domain(version)}}
+    requirements =
+      ContactRequirementRow
+      |> where(
+        [r],
+        r.organization_id == ^organization_id and r.mission_id == ^mission_id and
+          r.contact_requirement_id in ^ids
+      )
+      |> Repo.all()
+
+    current_versions = Map.new(requirements, &{&1.contact_requirement_id, &1.current_version})
+
+    versions =
+      ContactRequirementVersionRow
+      |> where(
+        [v],
+        v.organization_id == ^organization_id and v.mission_id == ^mission_id and
+          v.contact_requirement_id in ^Map.keys(current_versions) and
+          v.version in ^Enum.uniq(Map.values(current_versions))
+      )
+      |> Repo.all()
+      |> Map.new(&{{&1.contact_requirement_id, &1.version}, &1})
+
+    Enum.reduce(requirements, %{}, fn requirement, found ->
+      case Map.get(versions, {requirement.contact_requirement_id, requirement.current_version}) do
+        nil ->
+          found
+
+        version ->
+          Map.put(found, requirement.contact_requirement_id, {
+            ContactRequirementRow.to_domain(requirement),
+            ContactRequirementVersionRow.to_domain(version)
+          })
+      end
     end)
   end
 
