@@ -31,8 +31,9 @@ dev_port = String.to_integer(System.get_env("PORT", "4001"))
 ci_server? = System.get_env("CADENCE_CI_SERVER") in ["1", "true"]
 
 # The Tidewave dev toolbar, not on the CI server: it loads from tidewave.ai into every page and
-# scans the DOM, which the console's fleet-scale budgets were timing (#867). Read with
-# Application.compile_env in the endpoint, so Mix recompiles it when this changes.
+# scans the DOM, which the console's fleet-scale budgets were timing (#867). The endpoint reads it
+# with Application.compile_env: a build compiled under the other setting fails the boot-time
+# compile-env check (as code_reloader does), so set CADENCE_CI_SERVER before compiling.
 config :cadence_web, :tidewave?, not ci_server?
 
 config :cadence_web, CadenceWeb.Endpoint,
