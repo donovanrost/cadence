@@ -98,9 +98,15 @@ The list row, plus:
   listener_overlap}]`. `listener_overlap` (U58 (b), #361) is as on a booked pass
   ([contacts.md](contacts.md)), against the plan's other passes (`with.state: "planned"`) and the
   mission's booked passes (`"booked"`), the plan's own bookings left out.
-- `demand: {rule_met, rule_total, spacecraft: [{spacecraft_id, rule_met, contacts: {have, need},
+- `demand: {rule_met, rule_total, coverage, spacecraft: [{spacecraft_id, rule_met, contacts: {have, need},
   reasons: [code]}], rules: [{requirement_id, version, spacecraft_id, text, source: "requirement",
-  window}]}` (S2, from the version's persisted coverage)
+  window}]}` (S2, from the version's persisted coverage). `rule_total` is the number of spacecraft
+  with evaluated requirements. `rule_met` counts those with every evaluated requirement
+  satisfied. `coverage` has three counts for the entire version:
+  - `spacecraft_uncovered` counts spacecraft with any unsatisfied evaluated requirement.
+  - `contacts_short` sums `max(0, need - have)` across the uncovered spacecraft.
+  - `gaps` counts distinct spacecraft represented by the version's persisted `unmet` requirements.
+    Unresolvable requirement versions share one unknown group.
 - `unmet: [{requirement_id, requirement_version, spacecraft_id, why: [code]}]`: what an approver
   must acknowledge (DECISIONS #28)
 - `conflicts`: always block approval and submit (`422 plan_not_ready` carries them in
@@ -462,7 +468,7 @@ and times); `sent_at` is when the booking was placed.
 Each pass also carries `item_id` (the execution item).
 
 Plan detail also carries `execution` (lead: K1/K2 headers, bookingStopped, K2's applied
-footer): `{requested, sent, never_sent, confirmed, uncertain, rejected, failed}`, counts of the
+footer): `{requested, sent, never_sent, confirmed, uncertain, rejected, failed, provider_names}`, counts of the
 approved version's bookings, or `null` before the plan has any (drafts, pending approval).
 `requested` is every pass the plan books; `requested = sent + never_sent`; `sent = confirmed +
 uncertain + rejected + failed`. `never_sent` is still waiting, was interrupted before the
@@ -470,6 +476,8 @@ provider call, or failed before it (an expired opportunity); `failed` counts onl
 provider failed or lost after they were placed. Header example: "booking · `confirmed` of
 `requested`"; bookingStopped: "`sent` requests went out; `never_sent` didn't". It changes with
 `contact_plans` invalidations (contacts.md S10).
+`provider_names` lists the distinct, sorted display names of providers whose reservations
+correspond to sent items. A provider whose display name is unavailable contributes no name.
 
 Each of plan detail's `passes[]` carries `booking` (lead, K1 8e): `{state, reason, at}`, or `null`
 when the approved version doesn't book that pass (and for every pass before approval). It is
@@ -760,8 +768,10 @@ schedule, the requirement content each occurrence generates, and the catch-up bo
     Days canceled by supersession or by leaving the target regenerate, so they aren't listed.
   - The days looked at are the template's generated occurrences from the current version's
     catch-up lookback onward, classified as the next version would (domain's `TemplateDays`, the
-    rule materialize and the fleet start use). A day's count is the number of distinct `date`s;
-    its requirements are the sum of `spacecraft_ids` lengths (ux words both).
+    rule materialize and the fleet start use). `decided_counts` has the same three group keys as
+    `decided`. Each group contains `days` (distinct UTC dates), `requirements` (all
+    spacecraft occurrences), `first_date` and `last_date` (inclusive UTC dates, or `null` when
+    empty), and `dates` (sorted distinct UTC dates when there are at most three, otherwise `[]`).
   - Not on `requirements/:id/supersedes`.
 - Templates aren't change sets: edits are versioned and audited on the template (planning policy,
   not mission configuration).

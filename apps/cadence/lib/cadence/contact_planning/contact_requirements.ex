@@ -21,6 +21,7 @@ defmodule Cadence.ContactPlanning.ContactRequirements do
     ContactRequirementVersionRow
   }
 
+  alias Cadence.Persistence.BulkLookup
   alias Cadence.Repo
   alias Cadence.SpacecraftStore
 
@@ -321,6 +322,16 @@ defmodule Cadence.ContactPlanning.ContactRequirements do
       nil -> {:error, :contact_requirement_version_not_found}
       row -> {:ok, ContactRequirementVersionRow.to_domain(row)}
     end
+  end
+
+  @doc "Exact mission requirement versions keyed by `{requirement_id, version}`."
+  def fetch_versions(org, mission, pins) do
+    ContactRequirementVersionRow
+    |> where([r], r.organization_id == ^org and r.mission_id == ^mission)
+    |> BulkLookup.by_version(:contact_requirement_id, pins)
+    |> Map.new(
+      &{{&1.contact_requirement_id, &1.version}, ContactRequirementVersionRow.to_domain(&1)}
+    )
   end
 
   @spec list(binary(), binary(), keyword()) ::

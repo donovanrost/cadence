@@ -46,6 +46,14 @@ defmodule Cadence.Comms.StationRefs do
   def resolve(ref, index),
     do: Map.merge(%{ref: ref, id: nil, code: nil, name: nil}, Map.get(index, ref, %{}))
 
+  @doc "The stored station refs a filter matches by ref, resolved ID or code."
+  def matching_refs(_index, nil), do: nil
+
+  def matching_refs(index, station) do
+    aliases = for {ref, resolved} <- index, station in [resolved.id, resolved.code], do: ref
+    Enum.uniq([station | aliases])
+  end
+
   @doc "The station of a contact opportunity snapshot."
   @spec of_snapshot(map(), index()) :: station()
   def of_snapshot(snapshot, index),

@@ -289,24 +289,6 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
     Repo.all(query)
   end
 
-  @doc """
-  `[{occurrence_at, spacecraft_id}]` of `template_id`'s generated occurrences at or after `since`,
-  any version (U48 edit dry run, `TemplateDayReview`), at most `fan_out_limit/0`.
-  """
-  @spec generated_days(binary(), binary(), binary(), DateTime.t()) :: [{DateTime.t(), binary()}]
-  def generated_days(org, mission, template_id, %DateTime{} = since) do
-    from(o in ContactRequirementOccurrenceRow,
-      where:
-        o.organization_id == ^org and o.mission_id == ^mission and
-          o.contact_requirement_template_id == ^template_id and
-          o.generation_state == "generated" and o.occurrence_at >= ^since,
-      distinct: true,
-      select: {o.occurrence_at, o.spacecraft_id},
-      limit: ^fan_out_limit()
-    )
-    |> Repo.all()
-  end
-
   @spec materialize(
           Scope.t(),
           binary(),

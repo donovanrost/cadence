@@ -314,6 +314,15 @@ defmodule Cadence.SpacecraftStore do
     |> Enum.map(&SpacecraftRow.to_domain/1)
   end
 
+  @doc "The active mission spacecraft identities needed by contact coverage reads."
+  def active_identities(organization_id, mission_id) do
+    SpacecraftRow
+    |> where([r], r.organization_id == ^organization_id and r.mission_id == ^mission_id)
+    |> active()
+    |> select([r], %{id: r.spacecraft_id, name: r.display_name, scid: r.scid})
+    |> Repo.all()
+  end
+
   @doc "The SCIDs the mission's spacecraft hold, archived ones included (they keep theirs)."
   @spec scids(binary(), binary()) :: [non_neg_integer()]
   def scids(organization_id, mission_id)

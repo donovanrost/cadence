@@ -15,24 +15,32 @@ defmodule Cadence.Reads.ContactPlanOverview.Demand do
   """
   @spec demand(binary(), binary(), ContactPlanVersion.t(), [ContactOpportunitySnapshot.t()]) ::
           map()
-  def demand(organization_id, mission_id, %ContactPlanVersion{} = version, passes) do
+  def demand(organization_id, mission_id, %ContactPlanVersion{} = version, passes),
+    do: details(organization_id, mission_id, version, passes).demand
+
+  @doc "The demand and unsatisfied requirements, with one batched lookup of their pinned versions."
+  def details(organization_id, mission_id, %ContactPlanVersion{} = version, passes) do
     evaluations = (version.coverage_document || %{})["requirements"] || []
+    unmet = (version.unsatisfied_document || %{})["requirements"] || []
+
+    pins =
+      for item <- evaluations ++ unmet,
+          {id, rev} <- [pin(item)],
+          is_binary(id) and is_integer(rev),
+          uniq: true,
+          do: {id, rev}
+
+    versions = Contacts.fetch_requirement_versions(organization_id, mission_id, pins)
+    counts = Contacts.plan_demand_counts(organization_id, mission_id, evaluations, unmet)
 
     rules =
-      Enum.flat_map(evaluations, fn evaluation ->
-        case Contacts.fetch_requirement_version(
-               organization_id,
-               mission_id,
-               evaluation["contact_requirement_id"],
-               evaluation["contact_requirement_version"]
-             ) do
-          {:ok, requirement} -> [{requirement, evaluation}]
-          _missing -> []
-        end
-      end)
+      for evaluation <- evaluations,
+          requirement = versions[pin(evaluation)],
+          do: {requirement, evaluation}
 
     day = PlanMeasures.day(passes)
     by_craft = Enum.group_by(passes, &(&1.route_binding_document || %{})["spacecraft_id"])
+    uplinks = PlanMeasures.uplink_passes_by_spacecraft(organization_id, mission_id, passes)
 
     spacecraft =
       rules
@@ -44,43 +52,37 @@ defmodule Cadence.Reads.ContactPlanOverview.Demand do
         |> spacecraft_demand(items)
         |> Map.merge(%{
           longest_gap: items |> Enum.map(&elem(&1, 0)) |> PlanMeasures.spacecraft_gap(mine, day),
-          uplink_passes: PlanMeasures.uplink_passes(organization_id, mission_id, mine)
+          uplink_passes: %{have: Map.get(uplinks, spacecraft_id, 0), need: nil}
         })
       end)
       |> Enum.sort_by(&{&1.rule_met, &1.spacecraft_id})
 
     %{
-      spacecraft: spacecraft,
-      rule_met: Enum.count(spacecraft, & &1.rule_met),
-      rule_total: length(spacecraft),
-      rules: Enum.map(rules, fn {requirement, _evaluation} -> rule(requirement) end)
+      demand: %{
+        spacecraft: spacecraft,
+        rule_met: counts.rule_met,
+        rule_total: counts.rule_total,
+        rules: Enum.map(rules, fn {requirement, _evaluation} -> rule(requirement) end),
+        coverage: Map.take(counts, [:spacecraft_uncovered, :contacts_short, :gaps])
+      },
+      unmet: unmet_rows(unmet, versions)
     }
   end
 
-  @doc "Requirements the version leaves unsatisfied (what an approver must acknowledge)."
-  @spec unmet(binary(), binary(), ContactPlanVersion.t()) :: [map()]
-  def unmet(organization_id, mission_id, version) do
-    ((version.unsatisfied_document || %{})["requirements"] || [])
-    |> Enum.map(fn item ->
-      spacecraft_id =
-        case Contacts.fetch_requirement_version(
-               organization_id,
-               mission_id,
-               item["contact_requirement_id"],
-               item["contact_requirement_version"]
-             ) do
-          {:ok, requirement} -> requirement.spacecraft_id
-          _missing -> nil
-        end
+  defp unmet_rows(unmet, versions) do
+    Enum.map(unmet, fn item ->
+      requirement = versions[pin(item)]
 
       %{
         requirement_id: item["contact_requirement_id"],
         requirement_version: item["contact_requirement_version"],
-        spacecraft_id: spacecraft_id,
+        spacecraft_id: requirement && requirement.spacecraft_id,
         why: Enum.map((item["hard_failures"] || []) ++ (item["search_failures"] || []), &reason/1)
       }
     end)
   end
+
+  defp pin(item), do: {item["contact_requirement_id"], item["contact_requirement_version"]}
 
   defp spacecraft_demand(spacecraft_id, items) do
     {have, need} =
