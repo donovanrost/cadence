@@ -6,7 +6,7 @@ import {
   stationRef,
   isKnown,
   knownText,
-  request,
+  requestPage,
   useRemoteQuery,
   type ApiResult,
   type Decoded,
@@ -40,25 +40,47 @@ const finding = d.object({
   spacecraft: d.optional(d.nullable(spacecraftRef)),
   gap: d.optional(d.nullable(d.object({ from: d.timestamp, to: d.timestamp, seconds: d.integer }))),
 });
-const findingsReader = d.object({
-  truncated: d.boolean,
+/** The most findings one page carries (api #845: limit up to 500). */
+const FINDINGS_PAGE_LIMIT = 500;
+/** One page; `counts` are the whole window's on every page (#793, api #845). */
+const findingsPageReader = d.object({
   counts: d.object({ conflicts: d.integer, gaps: d.integer }),
-  findings: d.array(finding, 1_000),
+  findings: d.array(finding, FINDINGS_PAGE_LIMIT),
 });
-export type Findings = Decoded<typeof findingsReader>;
+export type Findings = Decoded<typeof findingsPageReader>;
 export type Finding = Findings["findings"][number];
 
-export function fetchFindings(
+/**
+ * Every finding in the window (#793): pages walked to the server's last cursor with the same
+ * window, so D4 folds same-cause gaps over all of them. A failed page fails the read.
+ */
+export async function fetchFindings(
   missionId: MissionId,
   window: Readonly<{ from: Date; to: Date }>,
   signal?: AbortSignal,
 ): Promise<ApiResult<Findings>> {
-  const q = new URLSearchParams({ from: window.from.toISOString(), to: window.to.toISOString() });
-  return request(
-    `/missions/${encodeURIComponent(missionId)}/contact-findings?${q.toString()}`,
-    findingsReader,
-    signal ? { signal } : {},
-  );
+  const q = new URLSearchParams({
+    from: window.from.toISOString(),
+    to: window.to.toISOString(),
+    limit: String(FINDINGS_PAGE_LIMIT),
+  });
+  const path = `/missions/${encodeURIComponent(missionId)}/contact-findings`;
+  const options = signal ? { signal } : {};
+  const page = (cursor: string | null) => {
+    if (cursor !== null) q.set("cursor", cursor);
+    return requestPage(`${path}?${q.toString()}`, findingsPageReader, options);
+  };
+  const first = await page(null);
+  if (!first.ok) return first;
+  const findings = [...first.value.value.findings];
+  let cursor = first.value.nextCursor;
+  while (cursor !== null) {
+    const next = await page(cursor);
+    if (!next.ok) return next;
+    findings.push(...next.value.value.findings);
+    cursor = next.value.nextCursor;
+  }
+  return { ok: true, value: { counts: first.value.value.counts, findings } };
 }
 
 /** Findings over now → now + span; refetched on contacts and stations. */

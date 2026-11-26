@@ -4,15 +4,12 @@ import type { PlanDetail } from "./api.ts";
 /**
  * Plan coverage in ux U23 units: spacecraft is the headline unit, contacts short the secondary
  * figure, and a **gap is one uncovered spacecraft** (U23 amended): its unmet requirements are
- * acknowledged together. Every count names its unit.
+ * acknowledged together. Every count names its unit. Counted by the server (#793), never over the
+ * per-spacecraft rows.
  */
-export function coverage(plan: Pick<PlanDetail, "demand" | "unmet">) {
-  const uncovered = plan.demand.spacecraft.filter((s) => !s.rule_met);
-  const contactsShort = uncovered.reduce(
-    (sum, s) => sum + Math.max(0, (s.contacts.need ?? 0) - s.contacts.have),
-    0,
-  );
-  return { spacecraft: uncovered.length, contactsShort, gaps: gapGroups(plan.unmet).length };
+export function coverage(plan: Readonly<{ demand: Pick<PlanDetail["demand"], "coverage"> }>) {
+  const c = plan.demand.coverage;
+  return { spacecraft: c.spacecraft_uncovered, contactsShort: c.contacts_short, gaps: c.gaps };
 }
 
 /** `10 spacecraft not covered` */

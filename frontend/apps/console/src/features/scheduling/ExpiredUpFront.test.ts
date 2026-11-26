@@ -3,6 +3,8 @@ import { describe, expect, it } from "vite-plus/test";
 import type { PlanDetail } from "./api.ts";
 import ExpiredUpFront from "./ExpiredUpFront.vue";
 
+const NO_GAPS = { spacecraft_uncovered: 0, contacts_short: 0, gaps: 0 };
+
 const plan = (over: Partial<PlanDetail>): PlanDetail => ({
   id: "plan_1",
   version: 41,
@@ -14,7 +16,7 @@ const plan = (over: Partial<PlanDetail>): PlanDetail => ({
   updated_at: "2026-11-09T10:00:00Z",
   created_at: null,
   passes: [],
-  demand: { rule_met: 3, rule_total: 3, spacecraft: [], rules: [] },
+  demand: { rule_met: 3, rule_total: 3, coverage: NO_GAPS, spacecraft: [], rules: [] },
   unmet: [],
   conflicts: [],
   at_risk: [],

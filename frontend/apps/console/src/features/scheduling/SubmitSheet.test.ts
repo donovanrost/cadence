@@ -7,6 +7,8 @@ import type { PlanDetail } from "./api.ts";
 import SubmitSheet from "./SubmitSheet.vue";
 import { station } from "./fixtures.ts";
 
+const NO_GAPS = { spacecraft_uncovered: 0, contacts_short: 0, gaps: 0 };
+
 const gap = (id: string) => ({
   requirement_id: id,
   requirement_version: 1,
@@ -24,7 +26,7 @@ const plan: PlanDetail = {
   updated_at: "2026-11-09T10:00:00Z",
   created_at: null,
   passes: [],
-  demand: { rule_met: 1, rule_total: 3, spacecraft: [], rules: [] },
+  demand: { rule_met: 1, rule_total: 3, coverage: NO_GAPS, spacecraft: [], rules: [] },
   unmet: [gap("r1"), gap("r2")],
   conflicts: [],
   at_risk: [],

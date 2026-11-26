@@ -573,12 +573,10 @@ describe("D4 findings (M22)", () => {
     expect(findingTitle(f("coverage_gap", null, null))).toBe("Coverage gap");
   });
   it("header meta names only non-zero counts", () => {
-    expect(
-      findingsMeta({ truncated: false, counts: { conflicts: 2, gaps: 1 }, findings: [] }),
-    ).toBe("2 conflicts · 1 coverage gap");
-    expect(
-      findingsMeta({ truncated: false, counts: { conflicts: 0, gaps: 0 }, findings: [] }),
-    ).toBeNull();
+    expect(findingsMeta({ counts: { conflicts: 2, gaps: 1 }, findings: [] })).toBe(
+      "2 conflicts · 1 coverage gap",
+    );
+    expect(findingsMeta({ counts: { conflicts: 0, gaps: 0 }, findings: [] })).toBeNull();
   });
 });
 

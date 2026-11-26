@@ -80,10 +80,7 @@ const impact = useRemoteQuery(impactKey, fetchStationImpact);
             :state="value.lost.count > 0 ? 'caution' : 'neutral'"
             caption="canceled, rejected or failed"
           />
-          <ApStatTile
-            label="Spacecraft"
-            :value="new Set([...value.spacecraft_ids, ...value.lost.spacecraft_ids]).size"
-          />
+          <ApStatTile label="Spacecraft" :value="value.spacecraft_count" />
         </div>
         <p class="m-0 border-t border-hairline px-4 py-2 text-sm text-text-3">
           Bookings that never named a station can't be attributed and aren't counted.<template

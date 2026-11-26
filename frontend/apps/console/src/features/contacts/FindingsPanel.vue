@@ -58,12 +58,6 @@ function showAll(row: FindingRow) {
         </template>
       </ApListRow>
     </ul>
-    <p
-      v-if="findings.truncated"
-      class="m-0 border-t border-hairline px-4 py-2 text-sm text-caution-text"
-    >
-      Too many passes to check them all; narrow the window.
-    </p>
     <ApSheet ref="sheet" :title="shown?.sentence ?? ''" width="wide" @closed="shown = null">
       <ul class="m-0 flex list-none flex-col gap-2 p-0">
         <li
