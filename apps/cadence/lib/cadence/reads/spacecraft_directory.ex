@@ -10,6 +10,7 @@ defmodule Cadence.Reads.SpacecraftDirectory do
 
   alias Cadence.Comms.RoutingRuleStore
   alias Cadence.Configuration.ChangeSetStore
+  alias Cadence.Control.WithdrawnPins
   alias Cadence.Reads.FleetStatus
   alias Cadence.Reads.SpacecraftCursor
   alias Cadence.Reads.SpacecraftMetadata
@@ -64,7 +65,14 @@ defmodule Cadence.Reads.SpacecraftDirectory do
              spacecraft: craft,
              profiles: profiles,
              rule_counts: rules,
-             last_received: last_received
+             last_received: last_received,
+             # E2 (#546; U109's row badge): one batched read for the page's craft.
+             withdrawn:
+               WithdrawnPins.for_spacecraft(
+                 organization_id,
+                 mission_id,
+                 Enum.map(craft, & &1.spacecraft_id)
+               )
            }),
          summary: summary(organization_id, mission_id, last_received),
          next_cursor: if(more != [], do: craft |> List.last() |> cursor_key()),
@@ -137,6 +145,7 @@ defmodule Cadence.Reads.SpacecraftDirectory do
     last_received = Map.get(input, :last_received, %{})
 
     rule_counts = Map.get(input, :rule_counts, %{})
+    withdrawn = Map.get(input, :withdrawn, %{})
 
     spacecraft
     |> Enum.map(fn %Spacecraft{} = craft ->
@@ -154,10 +163,20 @@ defmodule Cadence.Reads.SpacecraftDirectory do
         profile: profile,
         routing_rule_count: rule_count,
         ready: not is_nil(craft.scid) and not is_nil(profile) and rule_count > 0,
-        last_received_at: Map.get(last_received, craft.spacecraft_id)
+        last_received_at: Map.get(last_received, craft.spacecraft_id),
+        approval_withdrawn: approval_withdrawn(Map.get(withdrawn, craft.spacecraft_id))
       }
     end)
   end
+
+  # The workspace read's shape (`active.approval_withdrawn`), or nil.
+  defp approval_withdrawn(nil), do: nil
+
+  defp approval_withdrawn(pin),
+    do: %{
+      revision_id: pin.revision_id,
+      decision: Map.take(pin.decision, [:kind, :by, :at, :reason])
+    }
 
   defp profile(%Spacecraft{spacecraft_type_id: nil}, _profiles), do: nil
 

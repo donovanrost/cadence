@@ -89,6 +89,30 @@ defmodule Cadence.Catalog.FleetSnapshot do
 
   def entries(_metadata), do: {:error, :invalid_spacecraft_model_bindings}
 
+  @doc """
+  The entries of `spacecraft_ids` only (`spacecraft_id => entry`; absent: not in the fleet), in
+  one query for a v2 fleet, whatever the count (E2, #546).
+  """
+  @spec entries_for(map(), [String.t()]) :: {:ok, map()} | {:error, term()}
+  def entries_for(_metadata, []), do: {:ok, %{}}
+
+  def entries_for(%{"spacecraft_configuration_version" => 2, "fleet" => fleet}, spacecraft_ids) do
+    case members_query(fleet) do
+      nil ->
+        {:error, :invalid_spacecraft_model_bindings}
+
+      query ->
+        {:ok,
+         query
+         |> where([m], m.spacecraft_id in ^spacecraft_ids)
+         |> with_entries()
+         |> Repo.all()
+         |> Map.new()}
+    end
+  end
+
+  def entries_for(_metadata, _spacecraft_ids), do: {:error, :invalid_spacecraft_model_bindings}
+
   @doc "One spacecraft's entry."
   @spec entry(map(), String.t()) :: {:ok, map()} | {:error, :spacecraft_model_not_active}
   def entry(%{"spacecraft_configuration_version" => 2, "fleet" => fleet}, spacecraft_id) do

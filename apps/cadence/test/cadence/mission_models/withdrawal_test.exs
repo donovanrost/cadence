@@ -22,11 +22,20 @@ defmodule Cadence.MissionModels.WithdrawalTest do
   alias Cadence.Catalog.SpacecraftConfigurationInput
   alias Cadence.CompositionFixtures
   alias Cadence.Control.Activations, as: ControlActivations
-  alias Cadence.Control.{Configuration, ConfigurationSelections, ModelWithdrawal}
+
+  alias Cadence.Control.{
+    Configuration,
+    ConfigurationSelections,
+    ModelApprovalGate,
+    ModelWithdrawal,
+    WithdrawnPins
+  }
+
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Activations
   alias Cadence.MissionModels
   alias Cadence.MissionModels.{Compositions, DecisionRow, RevisionRow, Selection}
+  alias Cadence.Reads.{SpacecraftDirectory, WithdrawnApprovalAttention}
 
   setup do
     org = "org-withdraw-#{System.unique_integer([:positive])}"
@@ -195,6 +204,21 @@ defmodule Cadence.MissionModels.WithdrawalTest do
     end
   end
 
+  describe "the gate's backstop" do
+    test "never grandfathers a withdrawn revision for a craft the generation changes", c do
+      {:ok, _} = withdraw(c, c.model)
+      running = %{"craft-1" => %{"mission_model" => %{"revision_id" => c.model}, "v" => 1}}
+      changed = %{"craft-1" => %{"mission_model" => %{"revision_id" => c.model}, "v" => 2}}
+      model = c.model
+
+      assert {:error, {:mission_model_revision_not_approved, [^model]}} =
+               ModelApprovalGate.check(c.org, c.mid, changed, running, nil)
+
+      # An untouched craft keeps running it: nothing auto-stops (§5).
+      assert :ok = ModelApprovalGate.check(c.org, c.mid, running, running, nil)
+    end
+  end
+
   describe "the apply's own check" do
     test "a recorded withdrawn answer still refuses: no fallback to the catalog's revision", c do
       {:ok, _} = withdraw(c, c.model)
@@ -206,6 +230,36 @@ defmodule Cadence.MissionModels.WithdrawalTest do
                ])
 
       assert %{current_revision_id: nil, current_reason: "withdrawn", decision: %{}} = entry
+    end
+  end
+
+  describe "the reads (E2b)" do
+    test "the directory row and the attention item name the decision; both clear when moved", c do
+      configure!(c)
+      {:ok, _} = withdraw(c, c.model)
+      id = c.craft.spacecraft_id
+
+      row = c.org |> SpacecraftDirectory.load(c.mid) |> Enum.find(&(&1.id == id))
+
+      assert %{revision_id: revision, decision: %{kind: "withdrawn", reason: "Limits were wrong"}} =
+               row.approval_withdrawn
+
+      assert revision == c.model
+
+      assert [item] = WithdrawnApprovalAttention.items(c.org, c.mid)
+      assert item.source == "model_approval_withdrawn"
+      assert item.spacecraft_id == id
+      assert item.severity == "crit"
+
+      assert %{
+               revision_id: ^revision,
+               kind: "withdrawn",
+               reason: "Limits were wrong",
+               composition: %{},
+               earlier_approved: nil
+             } = item.withdrawal
+
+      assert %{open: 1} = WithdrawnApprovalAttention.counts(c.org, c.mid)
     end
   end
 
@@ -226,13 +280,24 @@ defmodule Cadence.MissionModels.WithdrawalTest do
         ])
 
       # A profile change regenerates the craft's entry without a catalog change, so it never reaches
-      # the selection check: the gate's own check refuses the withdrawn revision it already runs.
+      # the selection check; the preview's HOLD and the gate refuse the withdrawn revision.
       model = c.model
-      # The preview records the composition's withdrawn answer (what submit records); a blocking
-      # preview HOLD for this path comes with E2b's withdrawn_pins read.
+      # The preview says why first: a blocking HOLD naming the withdrawn revision and decision.
       {:ok, preview} = Configuration.preview(c.scope, c.mid, staged.change_set_id)
       assert preview.selections[c.composition] == "withdrawn"
-      assert {:error, {:mission_model_revision_not_approved, [^model]}} = submit(c, staged)
+
+      assert %{verdict: :hold, items: items} =
+               Enum.find(preview.checks, &(&1.key == "compatibility"))
+
+      assert %{blocking: true, spacecraft_ids: [craft], details: details, sentence: sentence} =
+               Enum.find(items, &(&1.reason == :model_approval_withdrawn))
+
+      assert craft == c.craft.spacecraft_id
+      assert details.revision_id == c.model
+      assert details.decision.reason == "Limits were wrong"
+      assert sentence =~ "which is no longer approved"
+      # The submit stops at that blocking HOLD; the gate's own check is the backstop at apply.
+      assert {:error, {:holds_blocking, _preview}} = submit(c, staged)
       assert {:ok, %{status: :withdrawn}} = MissionModels.fetch_revision(c.org, c.mid, model)
     end
   end
@@ -297,6 +362,27 @@ defmodule Cadence.MissionModels.WithdrawalTest do
         expected_version: staged.version,
         acknowledged_holds: true
       })
+
+  describe "Reads.WithdrawnPins.for_spacecraft/3 (commanding's HOLD, the state line, the attention item)" do
+    test "names the craft whose active generation runs the withdrawn revision", c do
+      configure!(c)
+      id = c.craft.spacecraft_id
+      assert WithdrawnPins.for_spacecraft(c.org, c.mid, [id]) == %{}
+
+      {:ok, _} = withdraw(c, c.model)
+
+      assert %{^id => pin} = WithdrawnPins.for_spacecraft(c.org, c.mid, [id, "not-a-craft"])
+      assert pin.revision_id == c.model
+      assert pin.composition_id == c.composition
+
+      assert %{kind: "withdrawn", reason: "Limits were wrong", at: at, by: %{id: by}} =
+               pin.decision
+
+      assert by == c.scope.user.user_id
+      assert pin.hold_basis == "#{c.model}:withdrawn:#{DateTime.to_iso8601(at)}"
+      assert WithdrawnPins.for_spacecraft(c.org, c.mid, []) == %{}
+    end
+  end
 
   defp ctx(c), do: %{org: c.org, mid: c.mid, revision_id: c.model, catalog: c.catalog}
 
