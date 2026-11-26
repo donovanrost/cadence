@@ -7,7 +7,6 @@ Owner: **api-ops**. Conventions: [README.md](README.md). Asks are tracked by the
 | --- | --- | --- |
 | M17 | `GET /missions/:mission_id/commands`, `GET /missions/:mission_id/commands/:command_id` | **implemented** |
 | M16 M18 M20 O4 | command groups: preflight, submit, list/show, decision, abort, cancel, policies | **implemented** |
-| #708 | REST command groups for a service identity: preflight, create, list, show | **implemented** |
 | M24 | `GET /missions/:mission_id/command-requests/:id/encoding` (owner: api) | **implemented** |
 | A1 | `GET /missions/:mission_id/command-requests/:id/brief` (owner: api) | **implemented** |
 
@@ -671,49 +670,6 @@ name}` or `null`, never the stored actor document (#146, through #472's `ActorRe
 - Never an email: the rows written before #466 that hold one stay as they are (#116), and it never
   leaves the server. The stored keys (`actor_kind`, `user_id`, `service_identity_id`,
   `user_display_name`, …) are gone from the answer; read `kind` and `id`.
-
-## REST command groups: the way to command over REST (#708)
-
-Every command request belongs to a command group; one target and one command is a group of one.
-A service identity commands through these endpoints, under
-`/api/organizations/:organization_id/missions/:mission_id` (the `:api` and `:authenticated_api`
-pipelines):
-
-| Endpoint | Same as the console's |
-| --- | --- |
-| `POST /command_groups/preflight` | `POST /command-groups/preflight` |
-| `POST /command_groups` | `POST /command-groups` |
-| `GET /command_groups` · `GET /command_groups/:id` | `GET /command-groups` · `GET /command-groups/:id` |
-
-The bodies and answers are the console's, including its error envelope
-(`{"error": {"code", "message", "details"}}`) and the preflight digest: preflight, then create with
-the digest it returned and any HOLD acknowledgements. Draft fields are as in
-[Draft](#draft-the-body-of-preflight-and-create); `log_entry` is required (see below).
-
-- **The requester is the bearer.** The group's `requested_by` is the calling service identity, read
-  from the credential. A body that names an actor (`requested_by`, `actor`, `actor_kind`,
-  `user_id`, `service_identity_id`, `decided_by`, `sent_back_from`) is `422 actor_not_assignable`
-  and nothing is created (DECISIONS #30).
-- **Scope.** The service must be active and pinned to the mission in the path, in the organization
-  in the path (`:operate_mission`): another mission is `403 forbidden`, another organization
-  `403 scope_mismatch`. `operation_id` is scoped to the mission; a replay answers
-  `409 duplicate_operation` and `GET /command_groups?operation_id=` finds the group.
-- **A service's group always needs a person's GO,** whatever the commands' significance or the
-  group's reach say. Preflight shows `second_go_required: true` with the reason
-  `service_requester`, so `log_entry` is required. (`todo(authz)`: Cedar will decide when a
-  service may release without a second person, #722.)
-- **A service never decides.** There is no decision route here. A person decides in the console
-  (`POST /api/console/v1/missions/:mission_id/command-groups/:id/decision`), and a service bearer
-  is refused there. Separation of duties is `Accountability`'s: the service's issuer and rotators
-  can't GO its group (`403 command_group_self_approval_not_allowed`), and a service with nobody
-  accountable for it can't have its group approved by anyone
-  (`403 command_group_approver_authors_unknown`).
-- **Size.** Up to 1,000 targets, 16 commands and 5,000 members per group. Preflight and create are
-  set-based: the same number of queries at 500 targets as at 5.
-
-`GET /command_requests` is paged: `limit` (1 to 500, default 100) and the opaque `cursor` from the
-previous page's `meta.next_cursor` (`null` on the last page); the new filter `command_group_id`
-lists a group's members.
 
 ## REST command requests: command-group members (owner: api-ops; four-eyes P0, 2026-11-18)
 

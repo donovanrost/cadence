@@ -94,12 +94,6 @@ defmodule Cadence.Management.Commanding do
     to: RequestStore,
     as: :list_requests
 
-  @spec page_command_requests(binary(), binary(), keyword()) ::
-          {[CommandRequest.t()], {DateTime.t(), binary()} | nil}
-  defdelegate page_command_requests(organization_id, mission_id, opts \\ []),
-    to: RequestStore,
-    as: :page_requests
-
   @spec fetch_command_approval(binary(), binary(), binary()) ::
           {:ok, CommandApproval.t()} | {:error, term()}
   defdelegate fetch_command_approval(organization_id, mission_id, command_approval_id),

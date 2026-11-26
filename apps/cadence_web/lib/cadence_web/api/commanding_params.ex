@@ -247,59 +247,6 @@ defmodule CadenceWeb.API.CommandingParams do
     end
   end
 
-  @doc """
-  Filters and paging for the command request list: `command_group_id`, `source_endpoint_ref`,
-  `lifecycle_state`, `limit` (1..500) and an opaque `cursor` from the previous page.
-  """
-  @spec command_request_page(map()) :: {:ok, keyword()} | {:error, term()}
-  def command_request_page(params) when is_map(params) do
-    with {:ok, lifecycle_state} <- optional_command_request_lifecycle_state(params),
-         {:ok, limit} <- page_limit(params["limit"]),
-         {:ok, after_key} <- page_cursor(params["cursor"]) do
-      {:ok,
-       [limit: limit]
-       |> maybe_put_opt(:source_endpoint_ref, string_value(params, "source_endpoint_ref"))
-       |> maybe_put_opt(:command_group_id, string_value(params, "command_group_id"))
-       |> maybe_put_opt(:lifecycle_state, lifecycle_state)
-       |> maybe_put_opt(:after, after_key)}
-    end
-  end
-
-  @doc "The opaque cursor for a page's `next` key."
-  @spec encode_cursor({DateTime.t(), binary()} | nil) :: binary() | nil
-  def encode_cursor(nil), do: nil
-
-  def encode_cursor({%DateTime{} = at, id}),
-    do: Base.url_encode64(Jason.encode!([DateTime.to_iso8601(at), id]), padding: false)
-
-  defp page_limit(nil), do: {:ok, 100}
-  defp page_limit(""), do: {:ok, 100}
-
-  defp page_limit(value) when is_binary(value) do
-    case Integer.parse(value) do
-      {n, ""} when n in 1..500 -> {:ok, n}
-      _other -> {:error, {:invalid_param, "limit", "must be an integer from 1 to 500"}}
-    end
-  end
-
-  defp page_limit(_other),
-    do: {:error, {:invalid_param, "limit", "must be an integer from 1 to 500"}}
-
-  defp page_cursor(nil), do: {:ok, nil}
-  defp page_cursor(""), do: {:ok, nil}
-
-  defp page_cursor(value) when is_binary(value) do
-    with {:ok, json} <- Base.url_decode64(value, padding: false),
-         {:ok, [iso, id]} when is_binary(iso) and is_binary(id) <- Jason.decode(json),
-         {:ok, at, _offset} <- DateTime.from_iso8601(iso) do
-      {:ok, {at, id}}
-    else
-      _invalid -> {:error, {:invalid_param, "cursor", "is not a valid cursor"}}
-    end
-  end
-
-  defp page_cursor(_other), do: {:error, {:invalid_param, "cursor", "is not a valid cursor"}}
-
   @spec command_approval(binary(), map(), keyword()) :: {:ok, keyword()} | {:error, term()}
   def command_approval(command_request_id, params, opts \\ [])
       when is_binary(command_request_id) and is_map(params) and is_list(opts) do

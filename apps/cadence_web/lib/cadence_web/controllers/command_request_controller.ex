@@ -14,18 +14,12 @@ defmodule CadenceWeb.CommandRequestController do
              organization_id,
              mission_id
            ),
-         {:ok, page_opts} <- CommandingParams.command_request_page(params) do
-      {requests, next} =
-        Cadence.Management.Commanding.page_command_requests(
-          organization_id,
-          mission_id,
-          page_opts
-        )
+         {:ok, filters} <- CommandingParams.command_request_filters(params) do
+      command_requests =
+        Cadence.Management.Commanding.list_command_requests(organization_id, mission_id, filters)
+        |> CommandingJSON.encode_all(&CommandingJSON.command_request/2)
 
-      json(conn, %{
-        data: CommandingJSON.encode_all(requests, &CommandingJSON.command_request/2),
-        meta: %{next_cursor: CommandingParams.encode_cursor(next)}
-      })
+      json(conn, %{data: command_requests})
     end
   end
 
