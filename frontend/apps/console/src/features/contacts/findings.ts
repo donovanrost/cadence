@@ -42,6 +42,12 @@ const finding = d.object({
 });
 /** The most findings one page carries (api #845: limit up to 500). */
 const FINDINGS_PAGE_LIMIT = 500;
+/** 100 pages of 500: far more findings than a window can hold at 1,000 spacecraft. */
+export const MAX_FINDINGS_PAGES = 100;
+const tooManyPages = {
+  kind: "malformed",
+  message: "the findings read has more pages than expected",
+} as const;
 /** One page; `counts` are the whole window's on every page (#793, api #845). */
 const findingsPageReader = d.object({
   counts: d.object({ conflicts: d.integer, gaps: d.integer }),
@@ -74,7 +80,10 @@ export async function fetchFindings(
   if (!first.ok) return first;
   const findings = [...first.value.value.findings];
   let cursor = first.value.nextCursor;
-  while (cursor !== null) {
+  // A safety ceiling, not a window limit (as #906 for passes): a cursor that never ends fails the
+  // read, shown with Retry, instead of looping on every invalidation.
+  for (let pages = 1; cursor !== null; pages += 1) {
+    if (pages >= MAX_FINDINGS_PAGES) return { ok: false, error: tooManyPages };
     const next = await page(cursor);
     if (!next.ok) return next;
     findings.push(...next.value.value.findings);
