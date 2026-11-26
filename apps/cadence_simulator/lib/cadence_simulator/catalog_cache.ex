@@ -18,15 +18,19 @@ defmodule CadenceSimulator.CatalogCache do
       kind = if provider == DatabaseDynamics, do: :database, else: :encoder
       key = {__MODULE__, kind, artifact_name, :crypto.hash(:sha256, content)}
 
-      case :persistent_term.get(key, nil) do
-        nil ->
-          with :ok <- GenServer.call(__MODULE__, {:compile, key, content}, :infinity) do
-            {:ok, :persistent_term.get(key)}
-          end
+      fetch_compiled(key, content)
+    end
+  end
 
-        catalog ->
-          {:ok, catalog}
-      end
+  defp fetch_compiled(key, content) do
+    case :persistent_term.get(key, nil) do
+      nil ->
+        with :ok <- GenServer.call(__MODULE__, {:compile, key, content}, :infinity) do
+          {:ok, :persistent_term.get(key)}
+        end
+
+      catalog ->
+        {:ok, catalog}
     end
   end
 

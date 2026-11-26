@@ -1,6 +1,9 @@
 defmodule Mix.Tasks.CadenceSimulator.Load do
   use Mix.Task
 
+  alias CadenceSimulator.Load
+  alias CadenceSimulator.Load.Shape
+
   @default_output Path.expand("../../../../../var/simulator-load.jsonl", __DIR__)
 
   @shortdoc "Measure simulator TCP throughput and scheduler use"
@@ -44,8 +47,8 @@ defmodule Mix.Tasks.CadenceSimulator.Load do
 
     Mix.Task.run("app.config")
 
-    with :ok <- CadenceSimulator.Load.Shape.validate(config.craft, config.shape, config.per_site),
-         :ok <- CadenceSimulator.Load.run(config) do
+    with :ok <- Shape.validate(config.craft, config.shape, config.per_site),
+         :ok <- Load.run(config) do
       :ok
     else
       {:error, reason} -> Mix.raise(reason)

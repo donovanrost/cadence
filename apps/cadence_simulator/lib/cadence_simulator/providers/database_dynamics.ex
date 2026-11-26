@@ -34,15 +34,17 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics do
 
   @impl true
   def init(config) do
-    with {:ok, prepared} <- prepared_catalog(config) do
-      {:ok,
-       %{
-         prepared
-         | command_state_table: init_command_state(),
-           noise_amplitude: Map.get(config, :noise_amplitude, @default_noise_amplitude)
-       }}
-    else
-      {:error, reason} -> {:error, {:failed_to_load_definitions, reason}}
+    case prepared_catalog(config) do
+      {:ok, prepared} ->
+        {:ok,
+         %{
+           prepared
+           | command_state_table: init_command_state(),
+             noise_amplitude: Map.get(config, :noise_amplitude, @default_noise_amplitude)
+         }}
+
+      {:error, reason} ->
+        {:error, {:failed_to_load_definitions, reason}}
     end
   end
 

@@ -65,7 +65,7 @@ defmodule CadenceSimulator.Load do
       {:ok, _run} = Provider.transition_run(run["id"], "stop")
       :ok = Orchestrator.reconcile()
       :ok = Store.flush()
-      report(result, path_target, length(active))
+      report(result, frames_per_step, rate_hz, length(active))
     after
       for {pid, _port} <- sinks do
         Process.unlink(pid)
@@ -193,7 +193,9 @@ defmodule CadenceSimulator.Load do
         before_previous: nil,
         first: first,
         all_live?: true,
-        peak_scheduler: 0.0
+        peak_scheduler: 0.0,
+        min_memory: first.memory_bytes,
+        peak_memory: first.memory_bytes
       }
 
       result =
@@ -211,7 +213,9 @@ defmodule CadenceSimulator.Load do
               all_live?:
                 acc.all_live? and sample.active_streams == length(active) and
                   paths_progressed?(acc.before_previous, current),
-              peak_scheduler: max(acc.peak_scheduler, sample.busiest_scheduler_utilization)
+              peak_scheduler: max(acc.peak_scheduler, sample.busiest_scheduler_utilization),
+              min_memory: min(acc.min_memory, current.memory_bytes),
+              peak_memory: max(acc.peak_memory, current.memory_bytes)
           }
         end)
 
@@ -230,6 +234,7 @@ defmodule CadenceSimulator.Load do
     %{
       time: now_ms(),
       paths: paths,
+      memory_bytes: :erlang.memory(:total),
       schedulers:
         Map.new(:erlang.statistics(:scheduler_wall_time), fn {id, active, total} ->
           {id, {active, total}}
@@ -253,6 +258,7 @@ defmodule CadenceSimulator.Load do
       frames_per_second: frames * 1000 / max(1, interval),
       scheduler_utilization: ratio(busy, total),
       busiest_scheduler_utilization: busiest,
+      memory_bytes: current.memory_bytes,
       paths: paths
     }
   end
@@ -299,32 +305,42 @@ defmodule CadenceSimulator.Load do
       "#{sample.second}s #{sample.active_streams} active, #{sample.live_paths} sending " <>
         "#{round(sample.frames_per_second)} frames/s " <>
         "#{sample.bytes} bytes schedulers #{percent(sample.scheduler_utilization)}% " <>
-        "busiest #{percent(sample.busiest_scheduler_utilization)}%"
+        "busiest #{percent(sample.busiest_scheduler_utilization)}%, " <>
+        "memory #{mib(sample.memory_bytes)} MiB"
     )
   end
 
-  defp report(result, path_target, active) do
+  defp report(result, frames_per_step, rate_hz, active) do
+    path_target = frames_per_step * rate_hz
     target = round(path_target * active)
     paths = path_deltas(result.first, result.previous)
     {frames, bytes, _live} = totals(paths)
     {busy, total, _busiest} = scheduler_deltas(result.first, result.previous)
-    min_path_rate = Enum.min_by(paths, & &1.frames).frames / result.elapsed_s
+    min_path_frames = Enum.min_by(paths, & &1.frames).frames
+    min_path_rate = min_path_frames / result.elapsed_s
     rate = frames / result.elapsed_s
+    expected_steps = result.elapsed_s * rate_hz
+
+    # Short runs can straddle the edge of a generation step.
+    min_steps = max(1, min(expected_steps * 0.98, floor(expected_steps) - 1))
 
     IO.puts(
       "Total #{frames} frames, #{bytes} bytes in #{Float.round(result.elapsed_s, 3)}s. " <>
         "#{Float.round(rate, 1)}/#{target} frames/s, minimum path #{Float.round(min_path_rate, 2)} frames/s. " <>
-        "Scheduler mean #{percent(ratio(busy, total))}%, busiest 1s #{percent(result.peak_scheduler)}%."
+        "Scheduler mean #{percent(ratio(busy, total))}%, busiest 1s #{percent(result.peak_scheduler)}%. " <>
+        "BEAM memory #{mib(result.min_memory)}–#{mib(result.peak_memory)} MiB " <>
+        "(#{mib(result.first.memory_bytes)} start, #{mib(result.previous.memory_bytes)} end)."
     )
 
-    if result.all_live? and min_path_rate >= path_target * 0.98,
+    if result.all_live? and min_path_frames >= min_steps * frames_per_step,
       do: :ok,
-      else: {:error, "one or more paths stalled or delivered below 98% of the target rate"}
+      else: {:error, "one or more paths stalled or delivered below the expected frame count"}
   end
 
   defp craft_ref(scid), do: "SC-#{String.pad_leading(Integer.to_string(scid), 3, "0")}"
   defp now_ms, do: System.monotonic_time(:millisecond)
   defp ratio(_active, total) when total <= 0, do: 0.0
   defp ratio(active, total), do: active / total
+  defp mib(bytes), do: Float.round(bytes / (1024 * 1024), 1)
   defp percent(ratio), do: Float.round(ratio * 100, 2)
 end

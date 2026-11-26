@@ -25,8 +25,8 @@ defmodule CadenceSimulator.Coordinator do
   alias CCSDS.SDLP.TM.Segmentation
 
   alias CadenceSimulator.{
-    GeneratorWorker,
     CatalogCache,
+    GeneratorWorker,
     PacketEncoder,
     SendBuffer,
     SequenceAllocator,

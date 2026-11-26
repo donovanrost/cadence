@@ -134,21 +134,19 @@ defmodule CadenceSimulator.Provider.Orchestrator do
   end
 
   defp reconcile_step(state, {kind, id} = key, now) do
-    try do
-      state =
-        case Store.fetch(kind, id) do
-          {:ok, resource} -> reconcile_resource(state, kind, resource, now)
-          {:error, :not_found} -> stop_stream(state, id)
-        end
+    state =
+      case Store.fetch(kind, id) do
+        {:ok, resource} -> reconcile_resource(state, kind, resource, now)
+        {:error, :not_found} -> stop_stream(state, id)
+      end
 
-      %{state | schedule: Schedule.update(state.schedule, key)}
-    rescue
-      error in ArgumentError ->
-        retry_step(state, key, Exception.message(error))
-    catch
-      :exit, reason ->
-        retry_step(state, key, Exception.format_exit(reason))
-    end
+    %{state | schedule: Schedule.update(state.schedule, key)}
+  rescue
+    error in ArgumentError ->
+      retry_step(state, key, Exception.message(error))
+  catch
+    :exit, reason ->
+      retry_step(state, key, Exception.format_exit(reason))
   end
 
   defp retry_step(state, key, reason) do
