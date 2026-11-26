@@ -6,6 +6,7 @@ defmodule Cadence.Platform.FactPublicationIsolationTest do
   alias Cadence.Management.DataSources.Store, as: DataSourceStore
   alias Cadence.Platform.EventBus
   alias Cadence.Projections.DataSources.Health, as: SourceHealth
+  alias Cadence.Projections.DataSources.Watermarks.Coalescer
   alias Cadence.Runtime.{ManagedRecordsPersisted, Persistence}
 
   alias Cadence.Telemetry.{
@@ -120,8 +121,11 @@ defmodule Cadence.Platform.FactPublicationIsolationTest do
              )
 
     assert_fact(:bus_a, {:cadence, :telemetry, :facts}, ObservationIdentityStateChanged)
-    assert_fact(:bus_a, {:cadence, :data_sources, :facts}, SourceWatermarkEvent)
     assert_fact(:bus_a, {:cadence, :telemetry, :facts}, ObservationsCommitted)
+
+    # The watermark is coalesced (#690): its fact goes out, on the batch's own bus, at the flush.
+    assert :ok = Coalescer.flush()
+    assert_fact(:bus_a, {:cadence, :data_sources, :facts}, SourceWatermarkEvent)
     refute_any_fact()
 
     assert :ok =
@@ -132,8 +136,11 @@ defmodule Cadence.Platform.FactPublicationIsolationTest do
              )
 
     assert_fact(:bus_b, {:cadence, :telemetry, :facts}, ObservationIdentityStateChanged)
-    assert_fact(:bus_b, {:cadence, :data_sources, :facts}, SourceWatermarkEvent)
     assert_fact(:bus_b, {:cadence, :telemetry, :facts}, ObservationsCommitted)
+
+    # The watermark is coalesced (#690): its fact goes out, on the batch's own bus, at the flush.
+    assert :ok = Coalescer.flush()
+    assert_fact(:bus_b, {:cadence, :data_sources, :facts}, SourceWatermarkEvent)
     refute_any_fact()
 
     assert length(Storage.list_observation_identity_states(mission_id)) == 2

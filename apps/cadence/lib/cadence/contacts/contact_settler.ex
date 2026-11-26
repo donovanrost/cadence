@@ -33,6 +33,7 @@ defmodule Cadence.Contacts.ContactSettler do
   alias Cadence.Contacts.Scheduler
   alias Cadence.Control.Contacts, as: Runtime
   alias Cadence.Control.ProcessNamespace
+  alias Cadence.Projections.DataSources.Watermarks.Coalescer
 
   @doc "The settlers' supervisor, a child of the control root supervisor."
   @spec supervisor_name(ProcessNamespace.t()) :: GenServer.name()
@@ -198,6 +199,8 @@ defmodule Cadence.Contacts.ContactSettler do
     scid_checks = Runtime.realized_contact_scid_checks(mission_id, id)
 
     stop = Runtime.terminate_realized_contact(mission_id, id)
+    # End of pass: write the mission's pending watermark window (#690) so the pass reads settled.
+    _ = Coalescer.flush_mission(mission_id)
 
     _ =
       if state.mode == :replay,

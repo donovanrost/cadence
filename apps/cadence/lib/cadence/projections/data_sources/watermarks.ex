@@ -16,7 +16,7 @@ defmodule Cadence.Projections.DataSources.Watermarks do
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
   alias Cadence.Platform.EventBus
 
-  alias Cadence.Projections.DataSources.Watermarks.{EventRow, StatusRow}
+  alias Cadence.Projections.DataSources.Watermarks.{Coalescer, EventRow, StatusRow}
   alias Cadence.Repo
 
   @type record_result ::
@@ -26,6 +26,8 @@ defmodule Cadence.Projections.DataSources.Watermarks do
 
   @doc "Fetches one exact event in the mission, including organization-neutral events."
   def fetch_source_watermark_event(organization_id, mission_id, event_id) do
+    Coalescer.flush_mission(mission_id)
+
     EventRow
     |> where(
       [row],
@@ -104,6 +106,7 @@ defmodule Cadence.Projections.DataSources.Watermarks do
         ]
   def list_source_watermark_events(organization_id, mission_id, opts \\ []) when is_list(opts) do
     limit = Keyword.get(opts, :limit, 100)
+    Coalescer.flush_mission(mission_id)
 
     EventRow
     |> maybe_scope_organization(organization_id)
@@ -132,6 +135,8 @@ defmodule Cadence.Projections.DataSources.Watermarks do
         ]
   def list_source_watermark_statuses(organization_id, mission_id, opts \\ [])
       when is_list(opts) do
+    Coalescer.flush_mission(mission_id)
+
     StatusRow
     |> maybe_scope_organization(organization_id)
     |> maybe_scope_mission(mission_id)
@@ -156,6 +161,8 @@ defmodule Cadence.Projections.DataSources.Watermarks do
   @spec fetch_source_watermark_status(binary()) ::
           {:ok, SourceWatermarkStatus.t()} | {:error, :source_watermark_status_not_found}
   def fetch_source_watermark_status(source_watermark_key) when is_binary(source_watermark_key) do
+    Coalescer.flush_key(source_watermark_key)
+
     case Repo.get(StatusRow, source_watermark_key) do
       nil -> {:error, :source_watermark_status_not_found}
       row -> {:ok, StatusRow.to_domain(row)}

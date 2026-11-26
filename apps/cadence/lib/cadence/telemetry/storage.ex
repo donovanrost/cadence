@@ -10,6 +10,7 @@ defmodule Cadence.Telemetry.Storage do
   alias Cadence.Persistence.OrganizationScope
   alias Cadence.Platform.EventBus
   alias Cadence.Projections.DataSources.Watermarks, as: SourceWatermarks
+  alias Cadence.Projections.DataSources.Watermarks.Coalescer
 
   alias Cadence.Telemetry.Storage.{
     BackfillLifecycleEvent,
@@ -397,13 +398,8 @@ defmodule Cadence.Telemetry.Storage do
       |> Enum.group_by(&source_watermark_group_key/1)
       |> Enum.map(fn {_group_key, group} -> source_watermark_attrs(group) end)
 
-    case SourceWatermarks.record_source_watermarks(
-           attributes,
-           Keyword.put(opts, :invalidate_runtime_cache?, false)
-         ) do
-      {:ok, _results} -> :ok
-      {:error, reason} -> {:error, reason}
-    end
+    # Merged in memory and written in bulk (#690): no database work, and no row shared by paths.
+    Enum.each(attributes, &Coalescer.observe(&1, opts))
   end
 
   defp record_backfill_lifecycle_events([], _opts), do: :ok
