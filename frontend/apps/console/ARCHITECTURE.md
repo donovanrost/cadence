@@ -23,8 +23,7 @@ Features import shared code only through the public entries:
 - `@/api`, `@/live` and `@/shell`.
 
 A feature never imports another feature's internals. If two features need the same thing, promote
-it to one of those entries (console reviews). The `@/ui/index.ts` and `@/lib/*` paths are
-transitional aliases of `@/ui`. Don't use them in new code.
+it to one of those entries (console reviews).
 
 ## Stack
 
@@ -132,6 +131,9 @@ dev_server:` is set, `CadenceWeb.Console.Shell` fetches the index from the Vite 
   `ApCallout`, `ApEmptyState` and the rest of `packages/apogee-ui/src`. A component that only one
   feature uses stays in that feature. A new shared primitive goes in `apogee-ui` (console reviews).
   Never build a local copy of one.
+- Rows navigate through their Name cell: a `RouterLink` to the row's page, never a whole-row
+  click. Secondary actions go in one `ApMenuButton` per row, and only when there are real ones
+  beyond View. A row never has several action buttons in one cell.
 - Real data only. When the backend lacks something, add the endpoint or show an honest empty state.
   Never ship fixtures or invented numbers.
 

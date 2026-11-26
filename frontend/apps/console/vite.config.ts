@@ -13,14 +13,7 @@ const phoenixOutput = fileURLToPath(
 export default defineConfig({
   base: "/console/",
   resolve: {
-    alias: [
-      // Transitional: pre-package import paths resolve to the "@/ui" surface. Remove once unused.
-      ...["@/ui/index.ts", "@/lib/index.ts", "@/lib/format.ts"].map((find) => ({
-        find,
-        replacement: fileURLToPath(new URL("./src/ui.ts", import.meta.url)),
-      })),
-      { find: "@", replacement: fileURLToPath(new URL("./src", import.meta.url)) },
-    ],
+    alias: [{ find: "@", replacement: fileURLToPath(new URL("./src", import.meta.url)) }],
   },
   server: { ...developmentServer("console"), cors: true },
   preview: developmentPreview("console"),

@@ -43,9 +43,13 @@ How the console is built: `frontend/apps/console/ARCHITECTURE.md`.
    the aggregate or a page. Long lists paginate or virtualize. Group identical findings by cause.
 8. **Real data only.** If the backend lacks something, add it or show an honest empty state. No
    fixtures or invented numbers in the console.
-9. **No file over 400 lines.** `test:tools` enforces it with a shrink-only baseline; split by
+9. **Row navigation is the Name-cell link.** In an `ApTable` (or list), the Name cell is a
+   `RouterLink` to the row's page; never a whole-row click. Secondary actions go in one
+   `ApMenuButton` per row, and only when there are real ones beyond View (drop a View-only menu).
+   Never put several action buttons in one cell.
+10. **No file over 400 lines.** `test:tools` enforces it with a shrink-only baseline; split by
    concern before you get there.
-10. **Read the most similar existing screen first** and match its patterns.
+11. **Read the most similar existing screen first** and match its patterns.
 
 ## Architecture quick reference
 
