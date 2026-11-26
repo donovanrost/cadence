@@ -15,12 +15,11 @@ defmodule Cadence.Reads.ConfigLabels do
   """
 
   alias Cadence.Configuration.Kinds
-  alias Cadence.Reads.{ConfigKindSchema, LegacyRouteLabel}
+  alias Cadence.Reads.ConfigKindSchema
   alias Cadence.SpacecraftStore
   alias Cadence.SpacecraftType.Schema
 
   @spacecraft_keyed ~w(spacecraft_override spacecraft_routes)
-  @legacy_kind "legacy_routing_rule"
 
   @doc "Adds display fields to a preview's conflict items and diffs."
   @spec preview(binary(), binary(), map() | nil) :: map() | nil
@@ -80,7 +79,6 @@ defmodule Cadence.Reads.ConfigLabels do
         {{entry.kind, entry.entity_id},
          name_of(Map.get(entry, :after)) || name_of(Map.get(entry, :before))}
       end)
-      |> Map.merge(legacy_names(organization_id, mission_id, entries))
 
     names = names(organization_id, mission_id, entries, documented)
     fields = schemas(organization_id, mission_id, entries)
@@ -88,20 +86,6 @@ defmodule Cadence.Reads.ConfigLabels do
   end
 
   def revision(_organization_id, _mission_id, revision), do: revision
-
-  # A revision's removed older routes, named from their `before` documents (the rows are archived).
-  defp legacy_names(organization_id, mission_id, entries) do
-    documents =
-      for %{kind: @legacy_kind, entity_id: id} = entry <- entries,
-          before = Map.get(entry, :before),
-          is_map(before),
-          into: %{},
-          do: {id, before}
-
-    for {id, label} <- LegacyRouteLabel.labels(organization_id, mission_id, documents),
-        into: %{},
-        do: {{@legacy_kind, id}, label}
-  end
 
   defp decorate(%{kind: kind, entity_id: id} = item, names, fields) do
     labels = Map.get(fields, kind, %{})
@@ -147,23 +131,6 @@ defmodule Cadence.Reads.ConfigLabels do
   # Overrides and routes are keyed by the spacecraft: name them after it.
   defp lookup_kind(kind) when kind in @spacecraft_keyed, do: "spacecraft"
   defp lookup_kind(kind), do: kind
-
-  # ux U79: an older route's removal reads '“name” · spacecraft' (the station form unnamed).
-  defp load_names(organization_id, mission_id, @legacy_kind, ids, items) do
-    loaded =
-      case Kinds.fetch(@legacy_kind) do
-        {:ok, module} -> module.load(organization_id, mission_id, ids)
-        _unknown -> %{}
-      end
-
-    labels = LegacyRouteLabel.labels(organization_id, mission_id, loaded)
-
-    for item <- items,
-        item.kind == @legacy_kind,
-        name = labels[item.entity_id],
-        into: %{},
-        do: {{item.kind, item.entity_id}, name}
-  end
 
   defp load_names(organization_id, mission_id, kind, ids, items) do
     loaded =

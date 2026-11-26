@@ -16,11 +16,6 @@ export const APPROVED_FIRST_PARTY_REMOTES = Object.freeze([
     bundle: "telemetry-decom",
     remoteName: "cadence_telemetry_decom",
   },
-  {
-    directoryName: "comms-overview",
-    bundle: "comms",
-    remoteName: "cadence_comms",
-  },
   { directoryName: "ops-console", bundle: "ops-console", remoteName: "cadence_ops_console" },
 ]);
 

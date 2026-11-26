@@ -187,21 +187,21 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
   end
 
   test "two signed remotes sharing Application survive initial activation and promotion" do
-    {_document, _payload, initial_comms} =
+    {_document, _payload, initial_spacecraft} =
       admit_release!(
         @artifact_bytes,
-        "activation-two-remotes-initial-comms",
-        application: %{"id" => "comms_overview", "version" => 1},
-        package: %{"id" => "cadence.comms_overview", "version" => 1},
-        surface: %{"id" => "overview", "version" => 1},
-        remote_name: "cadence_comms",
-        exposed_module: "./LegacyApplication"
+        "activation-two-remotes-initial-spacecraft",
+        application: %{"id" => "spacecraft", "version" => 1},
+        package: %{"id" => "cadence.spacecraft", "version" => 1},
+        surface: %{"id" => "list", "version" => 1},
+        remote_name: "cadence_spacecraft",
+        exposed_module: "./Application"
       )
 
     {_document, _payload, initial_telemetry} =
       admit_release!(@artifact_bytes, "activation-two-remotes-initial-telemetry")
 
-    initial_pairs = [{initial_comms, nil}, {initial_telemetry, nil}]
+    initial_pairs = [{initial_spacecraft, nil}, {initial_telemetry, nil}]
 
     initial_digest =
       snapshot_digest_for_entries(
@@ -223,22 +223,22 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     assert {:ok, %{status: 201, outcome: "initial"}} =
              activate(initial_catalog, "two-remotes-initial-key")
 
-    {_document, _payload, promoted_comms} =
+    {_document, _payload, promoted_spacecraft} =
       admit_release!(
         @artifact_bytes,
-        "activation-two-remotes-promoted-comms",
-        application: %{"id" => "comms_overview", "version" => 1},
-        package: %{"id" => "cadence.comms_overview", "version" => 1},
-        surface: %{"id" => "overview", "version" => 1},
-        remote_name: "cadence_comms",
-        exposed_module: "./LegacyApplication"
+        "activation-two-remotes-promoted-spacecraft",
+        application: %{"id" => "spacecraft", "version" => 1},
+        package: %{"id" => "cadence.spacecraft", "version" => 1},
+        surface: %{"id" => "list", "version" => 1},
+        remote_name: "cadence_spacecraft",
+        exposed_module: "./Application"
       )
 
     {_document, _payload, promoted_telemetry} =
       admit_release!(@artifact_bytes, "activation-two-remotes-promoted-telemetry")
 
     promoted_pairs = [
-      {promoted_comms, initial_comms},
+      {promoted_spacecraft, initial_spacecraft},
       {promoted_telemetry, initial_telemetry}
     ]
 
@@ -271,8 +271,8 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     assert Enum.map(entries, fn {key, release} ->
              {key, release.remote_name, release.exposed_module, release.release_id}
            end) == [
-             {{"comms_overview", 1, "overview", 1}, "cadence_comms", "./LegacyApplication",
-              promoted_comms["releaseId"]},
+             {{"spacecraft", 1, "list", 1}, "cadence_spacecraft", "./Application",
+              promoted_spacecraft["releaseId"]},
              {{"telemetry_decom", 1, "packet_bindings", 1}, "cadence_telemetry_decom",
               "./Application", promoted_telemetry["releaseId"]}
            ]
@@ -575,9 +575,9 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
       admit_release!(
         @artifact_bytes,
         "reader-package-mismatch-contributed",
-        application: %{"id" => "comms_overview", "version" => 1},
-        package: %{"id" => "cadence.comms_overview", "version" => 1},
-        surface: %{"id" => "overview", "version" => 1}
+        application: %{"id" => "spacecraft", "version" => 1},
+        package: %{"id" => "cadence.spacecraft", "version" => 1},
+        surface: %{"id" => "list", "version" => 1}
       )
 
     digest = snapshot_digest("initial", 1, "2026-09-01T18:00:00Z", release, nil)
@@ -585,24 +585,24 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
 
     assert {:ok, %{status: 201}} = activate(document, "reader-package-mismatch-contributed-key")
 
-    {scope, route_context} = installed_comms_context()
+    {scope, route_context} = installed_spacecraft_context()
 
     assert {:ok, admission} =
              ApplicationHostCatalog.admit_application(
                scope,
                route_context,
-               "comms_overview",
+               "spacecraft",
                nil,
                now: @now
              )
 
-    assert admission.package == %{package_id: "cadence.comms_overview", version: 1}
-    assert admission.release.package_id == "cadence.comms_overview"
+    assert admission.package == %{package_id: "cadence.spacecraft", version: 1}
+    assert admission.release.package_id == "cadence.spacecraft"
     assert admission.release.package_version == 1
   end
 
   test "post-cutover contributed package mismatch is sanitized across targeted host boundaries" do
-    {scope, route_context} = installed_comms_context()
+    {scope, route_context} = installed_spacecraft_context()
     mission_id = route_context.mission.mission_id
     member_conn = TestFixtures.member_conn(scope.user)
 
@@ -614,9 +614,9 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
       admit_release!(
         @artifact_bytes,
         "reader-package-mismatch-contributed",
-        application: %{"id" => "comms_overview", "version" => 1},
+        application: %{"id" => "spacecraft", "version" => 1},
         package: %{"id" => "cadence.untrusted-package", "version" => 1},
-        surface: %{"id" => "overview", "version" => 1}
+        surface: %{"id" => "list", "version" => 1}
       )
 
     digest = snapshot_digest("initial", 1, @http_published_at, release, nil, @http_expires_at)
@@ -631,7 +631,7 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
              ApplicationHostCatalog.admit_application(
                scope,
                route_context,
-               "comms_overview",
+               "spacecraft",
                nil,
                now: @http_now
              )
@@ -640,11 +640,11 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
 
     query_response =
       post_host_bridge(catalog_bootstrap_conn, catalog_bootstrap, query_path(mission_id), %{
-        "applicationKey" => "comms_overview",
+        "applicationKey" => "spacecraft",
         "applicationVersion" => 1,
-        "surfaceId" => "overview",
+        "surfaceId" => "list",
         "surfaceVersion" => 1,
-        "queryId" => "cadence.comms.overview",
+        "queryId" => "cadence.spacecraft.list",
         "version" => 1,
         "scope" => scope_document
       })
@@ -655,9 +655,9 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
         catalog_bootstrap,
         actions_path(mission_id),
         %{
-          "applicationKey" => "comms_overview",
+          "applicationKey" => "spacecraft",
           "applicationVersion" => 1,
-          "surfaceId" => "overview",
+          "surfaceId" => "list",
           "surfaceVersion" => 1,
           "actionId" => "anything",
           "input" => %{},
@@ -673,7 +673,7 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
                "message" => "The requested application is not available in this scope."
              } = json_response(response, 404)
 
-      refute response.resp_body =~ "cadence.comms_overview"
+      refute response.resp_body =~ "cadence.spacecraft"
       refute response.resp_body =~ "cadence.untrusted-package"
       refute response.resp_body =~ "package"
       refute response.resp_body =~ "no_history"
@@ -747,11 +747,11 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
         catalog_bootstrap,
         query_path(mission.mission_id),
         %{
-          "applicationKey" => "comms_overview",
+          "applicationKey" => "spacecraft",
           "applicationVersion" => 1,
-          "surfaceId" => "overview",
+          "surfaceId" => "list",
           "surfaceVersion" => 1,
-          "queryId" => "cadence.comms.overview",
+          "queryId" => "cadence.spacecraft.list",
           "version" => 1,
           "scope" => scope_document
         }
@@ -763,9 +763,9 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
         catalog_bootstrap,
         actions_path(mission.mission_id),
         %{
-          "applicationKey" => "comms_overview",
+          "applicationKey" => "spacecraft",
           "applicationVersion" => 1,
-          "surfaceId" => "overview",
+          "surfaceId" => "list",
           "surfaceVersion" => 1,
           "actionId" => "anything",
           "input" => %{},
@@ -794,13 +794,13 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
 
     assert {:ok, %{status: 201}} = activate(document, "reader-host-miss-key")
 
-    {scope, route_context} = installed_comms_context()
+    {scope, route_context} = installed_spacecraft_context()
 
     assert {:error, :no_history} =
              ApplicationHostCatalog.admit_application(
                scope,
                route_context,
-               "comms",
+               "spacecraft",
                nil,
                now: @now
              )
@@ -813,7 +813,7 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
 
     assert {:ok, %{status: 201}} = activate(document, "reader-host-build-miss-key")
 
-    {scope, route_context} = installed_comms_context()
+    {scope, route_context} = installed_spacecraft_context()
 
     assert {:error, :no_history} =
              ApplicationHostCatalog.build(
@@ -1358,11 +1358,11 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     )
   end
 
-  defp installed_comms_context do
+  defp installed_spacecraft_context do
     user = TestFixtures.persist_user!()
     organization = TestFixtures.persist_org!()
     membership = TestFixtures.grant_membership!(user, organization)
-    mission = TestFixtures.persist_mission!(organization, mission_id: "reader-comms-mission")
+    mission = TestFixtures.persist_mission!(organization, mission_id: "reader-spacecraft-mission")
 
     scope =
       Scope.new(%{
@@ -1375,7 +1375,7 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     host_context = HostContext.mission(mission.mission_id)
 
     assert {:error, :platform_application} =
-             ApplicationInstallations.install(scope, host_context, "comms")
+             ApplicationInstallations.install(scope, host_context, "spacecraft")
 
     {scope, %{host_context: host_context, mission: mission, spacecraft: nil}}
   end

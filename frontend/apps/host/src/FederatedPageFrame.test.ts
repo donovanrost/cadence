@@ -6,27 +6,27 @@ import type { CatalogApplication, MissionHostContext } from "@cadence/plugin-sdk
 import FederatedPageFrame from "./FederatedPageFrame.vue";
 
 const application: CatalogApplication = {
-  applicationKey: "comms",
+  applicationKey: "mission_catalog",
   applicationVersion: 1,
-  displayName: "Comms",
-  description: "Mission communications setup.",
-  package: { packageId: "cadence.comms", version: 1 },
+  displayName: "Mission Catalog",
+  description: "Mission catalog setup.",
+  package: { packageId: "cadence.mission-catalog", version: 1 },
   surface: {
-    surfaceId: "transports",
+    surfaceId: "catalog_database_new",
     version: 1,
     purpose: "collection",
     scope: "mission",
     placement: "application_workspace",
-    navigation: { label: "Transports", order: 30 },
-    dataContract: { id: "cadence.comms.transports", version: 1 },
+    navigation: { label: "New catalog database", order: 30 },
+    dataContract: { id: "cadence.mission_catalog.catalog_database_new", version: 1 },
     actions: [],
     renderer: { kind: "federated-vue", exposedModule: "./Application" },
   },
   release: {
     federation: "module_federation",
-    releaseId: "comms-v1",
-    remoteName: "cadence_comms",
-    manifestUrl: "/assets/application-host/comms/mf-manifest.json",
+    releaseId: "mission-catalog-v1",
+    remoteName: "cadence_mission_catalog",
+    manifestUrl: "/assets/application-host/mission-catalog/mf-manifest.json",
     exposedModule: "./Application",
   },
 };
@@ -42,14 +42,14 @@ const context = {
 test("a surface standing in for a host page gets that page's host-drawn header", () => {
   const wrapper = mount(FederatedPageFrame, {
     props: {
-      application: { ...application, hostRoute: "/missions/:mission_id/comms/transports" },
+      application: { ...application, hostRoute: "/missions/:mission_id/catalog/new" },
       context,
     },
     slots: { default: () => h("p", { id: "surface" }) },
   });
-  expect(wrapper.get("#host-page-heading h1").text()).toBe("Transports");
+  expect(wrapper.get("#host-page-heading h1").text()).toBe("New catalog database");
   expect(wrapper.get(".cd-page-breadcrumbs").text()).toContain("Kestrel");
-  expect(wrapper.get('a[href="/missions/m1/comms"]').text()).toBe("Comms");
+  expect(wrapper.get('a[href="/missions/m1/catalog"]').text()).toBe("Catalog");
   expect(wrapper.find("#surface").exists()).toBe(true);
   wrapper.unmount();
 });

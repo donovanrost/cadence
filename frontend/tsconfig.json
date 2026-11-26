@@ -2,9 +2,6 @@
   "files": [],
   "references": [
     {
-      "path": "./apps/comms-overview"
-    },
-    {
       "path": "./apps/console"
     },
     {
@@ -24,9 +21,6 @@
     },
     {
       "path": "./modules/commanding"
-    },
-    {
-      "path": "./modules/communications"
     },
     {
       "path": "./modules/dashboards-and-exploration"

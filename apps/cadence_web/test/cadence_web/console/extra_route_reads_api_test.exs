@@ -7,7 +7,7 @@ defmodule CadenceWeb.Console.ExtraRouteReadsAPITest do
   """
   use CadenceWeb.ConnCase, async: false
 
-  alias Cadence.Comms.{GroundStation, GroundStationStore, RoutingRule, RoutingRuleStore}
+  alias Cadence.Comms.{GroundStation, GroundStationStore}
   alias Cadence.Comms.{Transport, TransportStore}
   alias CadenceWeb.TestFixtures
 
@@ -38,7 +38,7 @@ defmodule CadenceWeb.Console.ExtraRouteReadsAPITest do
         GroundStation.new(%{mission_id: mission.mission_id, display_name: "Inuvik", code: "INU"})
       )
 
-    {:ok, transport} =
+    {:ok, _transport} =
       TransportStore.persist_transport(
         org.organization_id,
         Transport.new(%{
@@ -57,22 +57,6 @@ defmodule CadenceWeb.Console.ExtraRouteReadsAPITest do
             "framing_mode" => "raw",
             "tls_enabled" => "false"
           }
-        })
-      )
-
-    {:ok, _legacy} =
-      RoutingRuleStore.create_routing_rule(
-        org.organization_id,
-        RoutingRule.new(%{
-          mission_id: mission.mission_id,
-          spacecraft_id: craft.spacecraft_id,
-          display_name: "Old INU downlink",
-          purpose_label: "TT&C downlink",
-          direction: :inbound,
-          transport_id: transport.transport_id,
-          transport_version: transport.version,
-          ground_station_id: station.ground_station_id,
-          role: :primary
         })
       )
 
@@ -124,13 +108,14 @@ defmodule CadenceWeb.Console.ExtraRouteReadsAPITest do
     rules = data(c, "/spacecraft/#{c.craft.spacecraft_id}")["routing_rules"]
     station_id = c.station.ground_station_id
 
-    assert %{"origin" => "legacy", "route_id" => nil, "station" => station} =
-             Enum.find(rules, &(&1["name"] == "Old INU downlink"))
-
-    assert station == %{"id" => station_id, "code" => "INU", "name" => "Inuvik"}
-
-    assert [%{"origin" => "spacecraft", "route_id" => ^route_id, "role" => "candidate"}] =
-             Enum.filter(rules, &(&1["origin"] == "spacecraft"))
+    assert [
+             %{
+               "origin" => "spacecraft",
+               "route_id" => ^route_id,
+               "role" => "candidate",
+               "station" => %{"id" => ^station_id, "code" => "INU", "name" => "Inuvik"}
+             }
+           ] = rules
   end
 
   test "(B) the extra route's document, as staged, and only on its own spacecraft", c do

@@ -156,8 +156,8 @@ class FakeWebSocket {
 void test("scenario timeout aborts polling and CDP event waiters before gate cleanup returns", async () => {
   const client = new CdpClient("ws://fake", { webSocketImpl: FakeWebSocket });
   const args = [
-    "--comms-url",
-    "http://127.0.0.1:43721/missions/mission-1/applications/comms_overview/federated",
+    "--spacecraft-url",
+    "http://127.0.0.1:43721/missions/mission-1/applications/spacecraft/list/federated",
   ];
   let activePollTimers = 0;
   let runtimeClosed = 0;
@@ -456,8 +456,8 @@ void test("credential failure output is redacted and the password has no argv or
   try {
     const result = await runNode(
       [
-        "--comms-url",
-        "http://127.0.0.1:43721/comms",
+        "--spacecraft-url",
+        "http://127.0.0.1:43721/spacecraft",
         "--telemetry-url",
         "http://127.0.0.1:43721/telemetry",
         "--login-url",

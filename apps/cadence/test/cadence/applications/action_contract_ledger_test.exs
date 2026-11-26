@@ -9,41 +9,38 @@ defmodule Cadence.Applications.ActionContractLedgerTest do
     ledgers = ActionContractLedger.ledgers()
 
     assert map_size(ledgers) == 3
-    assert length(ledgers.declared) == 6
+    assert length(ledgers.declared) == 4
     assert ledgers.declared == ledgers.provider
     assert ledgers.declared == ledgers.registry
-    assert length(Enum.uniq(ledgers.declared)) == 6
+    assert length(Enum.uniq(ledgers.declared)) == 4
 
     assert ledgers.declared
            |> Enum.frequencies_by(&elem(&1, 0)) == %{
-             "telemetry_decom" => 4,
-             "comms" => 2
+             "telemetry_decom" => 4
            }
   end
 
   test "admits only the exact complete request envelope" do
     valid = %ActionRequest{
-      application_key: "comms",
+      application_key: "telemetry_decom",
       application_version: 1,
-      surface_id: "routing_new",
+      surface_id: "packet_bindings",
       surface_version: 1,
-      action_id: "save"
+      action_id: "save_packet_bindings"
     }
 
-    assert :ok = ActionContractLedger.admit(valid, Cadence.Applications.Comms.ActionProvider)
+    assert :ok = ActionContractLedger.admit(valid, Cadence.Applications.TelemetryDecom.ActionProvider)
 
     for request <- [
-          %{valid | application_key: "telemetry_decom"},
+          %{valid | application_key: "ops_console"},
           %{valid | application_version: 2},
-          %{valid | surface_id: "transport", surface_version: 2},
-          %{valid | action_id: "archive_provider", surface_id: "routing_new"},
-          # Host-action sweep batch 1: the transport and ground station forms bind nothing.
-          %{valid | surface_id: "transport_new"},
-          %{valid | surface_id: "ground_station_edit"},
+          %{valid | surface_version: 2},
+          %{valid | action_id: "unknown_action"},
+          %{valid | surface_id: "unknown_surface"},
           %{valid | surface_id: nil, surface_version: nil}
         ] do
       assert {:error, :unsupported_application_action} =
-               ActionContractLedger.admit(request, Cadence.Applications.Comms.ActionProvider)
+               ActionContractLedger.admit(request, Cadence.Applications.TelemetryDecom.ActionProvider)
     end
   end
 end

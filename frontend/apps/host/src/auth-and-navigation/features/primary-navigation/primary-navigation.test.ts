@@ -13,13 +13,13 @@ test("mission sections toggle locally and update their seed when the active rout
     attachTo: document.body,
     props: { mission: true, context: { ...context, nav_item: "mission_overview" } },
   });
-  const trigger = wrapper.get('[aria-controls="mission-sidebar-comms-content"]');
+  const trigger = wrapper.get('[aria-controls="mission-sidebar-ops-content"]');
   expect(trigger.attributes("aria-expanded")).toBe("false");
   await trigger.trigger("click");
   expect(trigger.attributes("aria-expanded")).toBe("true");
-  await wrapper.setProps({ context: { ...context, nav_item: "comms_transports" } });
+  await wrapper.setProps({ context: { ...context, nav_item: "ops_dashboards" } });
   expect(
-    wrapper.get('a[href="/missions/mission%2F1/comms/transports"]').attributes("aria-current"),
+    wrapper.get('a[href="/missions/mission%2F1/ops/dashboards"]').attributes("aria-current"),
   ).toBe("page");
 });
 test("capabilities select the compiled primary navigation links", () => {

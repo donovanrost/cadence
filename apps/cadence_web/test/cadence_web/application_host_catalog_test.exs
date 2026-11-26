@@ -8,8 +8,6 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
   alias CadenceWeb.{ApplicationHostCatalog, TestFixtures}
 
   @now "2026-09-03T12:00:00Z"
-  @comms_surfaces ~w(overview validation transports transport routing routing_detail ground_stations ground_station)
-
   test "serializes the tagged user scope document without mission ids" do
     scope = %Scope{organization_id: "org-1", actor_kind: :user, user: %{id: "user-1"}}
 
@@ -126,7 +124,7 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
              )
 
     assert Enum.sort(Enum.map(catalog["applications"], & &1["applicationKey"])) ==
-             ["comms", "comms_overview", "ops_console"]
+             ["ops_console"]
   end
 
   test "rejects oversized persisted display data before returning a catalog" do
@@ -144,24 +142,6 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
                manifest_url: fn path -> "https://example.test" <> path end,
                now: @now
              )
-  end
-
-  test "admits the canonical Comms release" do
-    {scope, route_context} = installed_comms_context()
-
-    for surface_id <- @comms_surfaces do
-      assert {:ok, %{release: release}} =
-               ApplicationHostCatalog.admit_application(
-                 scope,
-                 route_context,
-                 "comms",
-                 surface_id,
-                 now: @now
-               )
-
-      assert release.remote_name == "cadence_comms"
-      assert release.exposed_module == "./Application"
-    end
   end
 
   test "rejects cross-organization, missing-user, and unauthorized catalog admissions before lookup" do
@@ -187,7 +167,7 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
              ApplicationHostCatalog.admit_application(
                member_scope,
                route_context,
-               "comms_overview"
+               "ops_console"
              )
 
     missing_user_scope = %{member_scope | user: nil}
@@ -199,7 +179,7 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
                  route_context
                  | mission: %{route_context.mission | organization_id: "org-alpha"}
                },
-               "comms_overview"
+               "ops_console"
              )
 
     unauthorized_scope = %{member_scope | organization_membership: nil}
@@ -211,7 +191,7 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
                  route_context
                  | mission: %{route_context.mission | organization_id: "org-alpha"}
                },
-               "comms_overview"
+               "ops_console"
              )
   end
 
@@ -262,31 +242,7 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
     assert {:error, :platform_application} =
              ApplicationInstallations.install(scope, host_context, "ops_console")
 
-    assert {:error, :platform_application} =
-             ApplicationInstallations.install(scope, host_context, "comms")
-
     {scope, %{host_context: host_context, mission: mission, spacecraft: nil}}
   end
 
-  defp installed_comms_context do
-    user = TestFixtures.persist_user!()
-    organization = TestFixtures.persist_org!()
-    membership = TestFixtures.grant_membership!(user, organization)
-    mission = TestFixtures.persist_mission!(organization, mission_id: "mission-comms-registry")
-
-    scope =
-      Scope.new(%{
-        user: user,
-        organization_id: organization.organization_id,
-        organization: organization,
-        organization_membership: membership
-      })
-
-    host_context = HostContext.mission(mission.mission_id)
-
-    assert {:error, :platform_application} =
-             ApplicationInstallations.install(scope, host_context, "comms")
-
-    {scope, %{host_context: host_context, mission: mission, spacecraft: nil}}
-  end
 end

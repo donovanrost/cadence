@@ -57,7 +57,6 @@ async function publicationFixture() {
   for (const [bundle, remoteName] of /** @type {const} */ ([
     ["organization-admin", "cadence_organization_admin"],
     ["telemetry-decom", "cadence_telemetry_decom"],
-    ["comms", "cadence_comms"],
     ["ops-console", "cadence_ops_console"],
   ])) {
     await mkdir(join(root, bundle));

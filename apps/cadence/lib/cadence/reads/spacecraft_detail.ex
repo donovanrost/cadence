@@ -92,7 +92,7 @@ defmodule Cadence.Reads.SpacecraftDetail do
     %{
       id: rule.routing_rule_id,
       # ux U79: tags read the origin; an extra route's legs share its route_id (Edit/Remove).
-      origin: Atom.to_string(rule.origin || :legacy),
+      origin: Atom.to_string(rule.origin),
       route_id: if(rule.origin == :spacecraft, do: rule.profile_rule_id),
       station: station(rule.ground_station_id, stations),
       name: rule.display_name,

@@ -15,8 +15,8 @@ import { href } from "./routes";
 
 const alarms = "/missions/:mission_id/ops/alarms" as const;
 const request = "/missions/:mission_id/ops/commands/requests/:command_request_id/history" as const;
-const transports = "/missions/:mission_id/comms/transports" as const;
-const transport = "/missions/:mission_id/comms/transports/:transport_id" as const;
+const catalog = "/missions/:mission_id/catalog" as const;
+const database = "/missions/:mission_id/catalog/databases/:catalog_database_id" as const;
 const link = href(alarms, { mission_id: "m" });
 const ops = { kind: "collection", layer: "ops" } as const;
 
@@ -45,17 +45,17 @@ test("each layer has its own contract and only its own routes", () => {
   const a: PageAction = { id: "a", label: "A", href: link };
   const typed = () => {
     // @ts-expect-error -- a management route is not an Ops page
-    useOpsHeader(transports, {});
+    useOpsHeader(catalog, {});
     // @ts-expect-error -- an Ops route is not a management page
     useManagementHeader(alarms, {});
-    useManagementHeader(transports, { facts: ["3 configured"], primary: a });
+    useManagementHeader(catalog, { facts: ["3 configured"], primary: a });
     // @ts-expect-error -- records reload with the browser; there is no refresh
-    useManagementHeader(transports, { refresh: { run: () => {} } });
+    useManagementHeader(catalog, { refresh: { run: () => {} } });
     // @ts-expect-error -- management headers hold two quiet buttons
-    useManagementHeader(transports, { actions: [a, a, a] });
-    useManagementHeader(transport, { title: "S-band primary", identifier: "transport_01" });
+    useManagementHeader(catalog, { actions: [a, a, a] });
+    useManagementHeader(database, { title: "Mission catalog", identifier: "catalog_01" });
     // @ts-expect-error -- collection pages have no record identifier
-    useManagementHeader(transports, { identifier: "transport_01" });
+    useManagementHeader(catalog, { identifier: "catalog_01" });
   };
   expect(typed).toBeTypeOf("function");
 });
@@ -77,9 +77,9 @@ test("the host admits only well-formed headers for the route's policy", () => {
     description: "Latest evaluated limit states.",
   });
   const record = { kind: "resource", layer: "management" } as const;
-  expect(readPageHeader({ title: "S-band", identifier: "transport_01" }, record)).toEqual({
-    title: "S-band",
-    identifier: "transport_01",
+  expect(readPageHeader({ title: "Mission catalog", identifier: "catalog_01" }, record)).toEqual({
+    title: "Mission catalog",
+    identifier: "catalog_01",
   });
   const x = { id: "x", label: "X", href: "/a" };
   for (const [value, kind, layer] of [

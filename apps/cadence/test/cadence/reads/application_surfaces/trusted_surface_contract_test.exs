@@ -5,7 +5,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.TrustedSurfaceContractTest do
   alias Cadence.Applications.OpsConsole.ActionProvider, as: OpsActionProvider
   alias Cadence.Auth.Scope
   alias Cadence.ContactPlanning.FleetPlanningRuns
-  alias Cadence.Reads.ApplicationSurfaces.{Comms, OpsConsole}
+  alias Cadence.Reads.ApplicationSurfaces.OpsConsole
 
   @organization_id "org-trusted-surface-contract"
   @mission_id "mission-trusted-surface-contract"
@@ -52,7 +52,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.TrustedSurfaceContractTest do
              OpsConsole.load(
                context.scope,
                context.host_context,
-               %{request("ops_console", "telemetry_explore") | params: query}
+               %{request("telemetry_explore") | params: query}
              )
 
     assert props == %{"mission_id" => @mission_id, "query" => query}
@@ -79,7 +79,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.TrustedSurfaceContractTest do
                OpsConsole.load(
                  context.scope,
                  context.host_context,
-                 %{request("ops_console", "telemetry_explore") | params: invalid}
+                 %{request("telemetry_explore") | params: invalid}
                )
     end
   end
@@ -97,7 +97,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.TrustedSurfaceContractTest do
     assert {:ok,
             %{"data" => %{"presentation" => %{"component" => "OpsCommands", "props" => props}}}} =
              OpsConsole.load(context.scope, context.host_context, %{
-               request("ops_console", "commands")
+               request("commands")
                | params: query
              })
 
@@ -132,7 +132,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.TrustedSurfaceContractTest do
         ] do
       assert {:error, :unsupported_application_surface_query} =
                OpsConsole.load(context.scope, context.host_context, %{
-                 request("ops_console", "commands")
+                 request("commands")
                  | params: invalid
                })
     end
@@ -201,7 +201,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.TrustedSurfaceContractTest do
   test "native fleet creation carries the public producer review through the public action provider" do
     c = Cadence.FleetStartFixtures.setup_start()
     host = HostContext.mission(c.mission_id)
-    query = request("ops_console", "fleet_planning_new")
+    query = request("fleet_planning_new")
 
     assert {:ok, %{"data" => %{"presentation" => %{"props" => %{"start" => model}}}}} =
              OpsConsole.load(c.scope, host, query)
@@ -286,30 +286,17 @@ defmodule Cadence.Reads.ApplicationSurfaces.TrustedSurfaceContractTest do
              OpsConsole.load(
                context.scope,
                context.host_context,
-               request("ops_console", "data_source_registration")
+               request("data_source_registration")
              )
-
-    for surface_id <- ~w(routing_new) do
-      result =
-        Comms.load(
-          context.scope,
-          context.host_context,
-          request("comms", surface_id)
-        )
-
-      assert match?({:ok, _payload}, result),
-             "expected #{surface_id} to fit the trusted output boundary"
-    end
   end
 
-  defp request(application_key, surface_id) do
+  defp request(surface_id) do
     %SurfaceQueryRequest{
-      application_key: application_key,
+      application_key: "ops_console",
       application_version: 1,
       surface_id: surface_id,
       surface_version: 1,
-      query_id:
-        "cadence.#{if(application_key == "ops_console", do: "ops", else: "comms")}.#{surface_id}",
+      query_id: "cadence.ops.#{surface_id}",
       query_version: 1,
       params: %{}
     }
@@ -328,7 +315,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.TrustedSurfaceContractTest do
              OpsConsole.load(
                context.scope,
                context.host_context,
-               request("ops_console", surface_id)
+               request(surface_id)
              )
 
     props

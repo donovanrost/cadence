@@ -15,27 +15,27 @@ import { loadFederatedApplication } from "./remote-loader";
 vi.mock("./remote-loader", () => ({ loadFederatedApplication: vi.fn() }));
 
 const application: CatalogApplication = {
-  applicationKey: "comms_overview",
+  applicationKey: "spacecraft",
   applicationVersion: 1,
-  displayName: "Communications Overview",
-  description: "Mission communications overview.",
-  package: { packageId: "cadence.comms_overview", version: 1 },
+  displayName: "Spacecraft",
+  description: "Mission spacecraft.",
+  package: { packageId: "cadence.spacecraft", version: 1 },
   surface: {
-    surfaceId: "overview",
+    surfaceId: "list",
     version: 1,
     purpose: "overview",
     scope: "mission",
     placement: "application_workspace",
     navigation: { label: "Overview", order: 10 },
-    dataContract: { id: "cadence.comms.overview", version: 1 },
+    dataContract: { id: "cadence.spacecraft.list", version: 1 },
     actions: [],
     renderer: { kind: "federated-vue", exposedModule: "./Application" },
   },
   release: {
     federation: "module_federation",
     releaseId: "2026.08.29.1",
-    remoteName: "cadence_comms_overview",
-    manifestUrl: "/assets/application-host/comms-overview/mf-manifest.json",
+    remoteName: "cadence_spacecraft",
+    manifestUrl: "/assets/application-host/spacecraft/mf-manifest.json",
     exposedModule: "./Application",
   },
 };
@@ -102,7 +102,7 @@ describe("RemoteApplicationBoundary", () => {
         application,
         context,
         bridge: {} as HostBridge,
-        fallbackHref: "/missions/mission-1/comms",
+        fallbackHref: "/missions/mission-1/spacecraft",
       },
     });
 
@@ -116,12 +116,14 @@ describe("RemoteApplicationBoundary", () => {
     expect(wrapper.find("#remote-error").text()).not.toContain("internal");
     expect(wrapper.find("#remote-error-reference").text()).toMatch(/^Reference ID: [0-9a-f-]{36}$/);
     expect(wrapper.find("#retry-remote").exists()).toBe(true);
-    expect(wrapper.find("#remote-fallback").attributes("href")).toBe("/missions/mission-1/comms");
+    expect(wrapper.find("#remote-fallback").attributes("href")).toBe(
+      "/missions/mission-1/spacecraft",
+    );
     const reference = wrapper.get("#remote-error-reference").text().replace("Reference ID: ", "");
     expect(consoleError).toHaveBeenCalledWith(
       `[Cadence frontend failure] ${reference}`,
       containing({
-        contributionId: "comms_overview.overview",
+        contributionId: "spacecraft.list",
         releaseId: "2026.08.29.1",
         kind: "load",
         errorType: "Error",
@@ -151,7 +153,7 @@ describe("RemoteApplicationBoundary", () => {
         application,
         context,
         bridge: {} as HostBridge,
-        fallbackHref: "/missions/mission-1/comms",
+        fallbackHref: "/missions/mission-1/spacecraft",
       },
     });
 

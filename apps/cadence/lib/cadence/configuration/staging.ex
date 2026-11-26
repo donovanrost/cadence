@@ -67,44 +67,18 @@ defmodule Cadence.Configuration.Staging do
 
   # A rollback is its set's only change (DECISIONS #49 review 3/4), decided under the set lock: it
   # stages only into an empty set, and nothing else joins a set that holds one.
-  # A rollback, and a batch of the legacy route conversion (director 11-16), each stand ALONE in
-  # their change set: staged only into an empty set, and nothing else stages beside them, so
-  # their preview and review show only them.
   defp rollback_alone(set, source) do
     staged = ChangeSetStore.changes(set.change_set_id)
 
     cond do
       rollback?(source) and staged != [] -> {:error, :change_set_open}
       Enum.any?(staged, &rollback?(&1.source)) -> {:error, :rollback_in_progress}
-      true -> conversion_alone(set, staged, conversion?(source))
-    end
-  end
-
-  defp conversion_alone(set, staged, staging_conversion?) do
-    batch = Enum.find(staged, &conversion?(&1.source))
-
-    cond do
-      staging_conversion? and batch != nil -> {:error, :conversion_already_staged}
-      staging_conversion? and staged != [] -> {:error, :open_change_set_not_empty}
-      batch != nil -> {:error, {:conversion_in_progress, in_progress(set, batch)}}
       true -> :ok
     end
   end
 
-  # ux U79: which batch holds the set, for "Batch 3 of the route conversion is staged, …".
-  defp in_progress(set, change),
-    do: %{
-      change_set_id: set.change_set_id,
-      batch: get_in(change.source, ["legacy_route_conversion", "batch"])
-    }
-
   defp rollback?(%{"rollback" => %{}}), do: true
   defp rollback?(_source), do: false
-
-  @doc "Whether a change's source marks it a legacy route conversion batch."
-  @spec conversion?(map() | nil) :: boolean()
-  def conversion?(%{"legacy_route_conversion" => %{}}), do: true
-  def conversion?(_source), do: false
 
   @doc "Prepares unstaged ops for a preview, in pipeline form."
   @spec prepare_ops(String.t(), String.t(), [op_input()]) :: {:ok, [map()]} | {:error, term()}

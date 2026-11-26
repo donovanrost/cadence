@@ -19,14 +19,14 @@ defmodule CadenceWeb.ApplicationHostActionResponseTest do
     user = TestFixtures.persist_user!()
     organization = TestFixtures.persist_org!()
     _membership = TestFixtures.grant_membership!(user, organization)
-    mission = TestFixtures.persist_mission!(organization, display_name: "Routing Mission")
+    mission = TestFixtures.persist_mission!(organization, display_name: "Catalog Mission")
     member_conn = TestFixtures.member_conn(user)
 
     # The console's surface host mints the bridge session (host session id, CSRF token, pinned scope).
     catalog_conn =
       get(
         member_conn,
-        "/api/v1/missions/#{mission.mission_id}/apps/comms/surfaces/routing_new/host"
+        "/api/v1/missions/#{mission.mission_id}/apps/mission_catalog/surfaces/catalog_database_new/host"
       )
 
     %{
@@ -44,9 +44,9 @@ defmodule CadenceWeb.ApplicationHostActionResponseTest do
   for action <- ["validate", "save"] do
     test "a failed #{action} sends exactly one 422, stores it as failed, and replays it", c do
       action = unquote(action)
-      key = "routing-#{action}-#{System.unique_integer([:positive])}"
+      key = "catalog-#{action}-#{System.unique_integer([:positive])}"
 
-      conn = post_action(c, key, action, %{"routing_rule" => %{"display_name" => ""}})
+      conn = post_action(c, key, action, %{"form" => %{"display_name" => ""}})
 
       # Exactly one response on the wire for this request (the test adapter records each send).
       assert [{422, body}] = sent_responses(conn)
@@ -61,7 +61,7 @@ defmodule CadenceWeb.ApplicationHostActionResponseTest do
       assert [%{state: "failed", response_status: 422}] = ledger_rows(c.mission, action)
 
       # The same idempotency key replays the same 422, once.
-      replay = post_action(c, key, action, %{"routing_rule" => %{"display_name" => ""}})
+      replay = post_action(c, key, action, %{"form" => %{"display_name" => ""}})
       assert [{422, ^body}] = sent_responses(replay)
     end
   end
@@ -76,9 +76,9 @@ defmodule CadenceWeb.ApplicationHostActionResponseTest do
     |> post(
       @bridge_suffix <> "/#{c.mission.mission_id}/actions",
       Jason.encode!(%{
-        "applicationKey" => "comms",
+        "applicationKey" => "mission_catalog",
         "applicationVersion" => 1,
-        "surfaceId" => "routing_new",
+        "surfaceId" => "catalog_database_new",
         "surfaceVersion" => 1,
         "actionId" => action,
         "params" => params,
@@ -104,7 +104,7 @@ defmodule CadenceWeb.ApplicationHostActionResponseTest do
     Repo.all(
       from(row in "federated_application_action_idempotencies",
         where:
-          row.mission_id == ^mission.mission_id and row.surface_id == "routing_new" and
+          row.mission_id == ^mission.mission_id and row.surface_id == "catalog_database_new" and
             row.operation == ^action,
         select: %{state: row.state, response_status: row.response_status}
       )
