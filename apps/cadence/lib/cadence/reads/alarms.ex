@@ -59,7 +59,9 @@ defmodule Cadence.Reads.Alarms do
     end
   end
 
-  defp row(%Event{} = event) do
+  @doc "A latest limit state as an alarm row (the list's row, before enrichment)."
+  @spec row(Event.t()) :: map()
+  def row(%Event{} = event) do
     %{
       id: event.limit_event_id,
       limit_event_id: event.limit_event_id,
