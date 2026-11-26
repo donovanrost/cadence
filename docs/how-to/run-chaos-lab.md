@@ -53,7 +53,8 @@ python3 dev/chaos/lab.py status
 `up` applies infrastructure, runs a one-shot migration Job, then deploys the
 application (three replicas by default; the laptop bootstrap above starts with one).
 `seed` is rerunnable: it migrates the lab QuestDB, seeds the existing
-fixture, activates the exact 500 saved revisions, creates continuous synthetic
+fixture and submits its extra routes. The seeded second admin reviews and applies the routes
+when independent approval is required. It then activates the exact 500 saved revisions, creates continuous synthetic
 contacts, and starts the persisted mission on each replica. This explicitly
 selects direct activation for the **lab Earendil mission only**. The fixture's
 production escape hatch requires both `CADENCE_CHAOS_LAB=true` and

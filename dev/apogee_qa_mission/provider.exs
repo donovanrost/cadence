@@ -5,8 +5,8 @@ defmodule Cadence.Dev.ApogeeQaMission.Provider do
   environment's administrator, as the Earendil seed's do (no approval or decision).
   """
 
-  alias Cadence.Comms.{RoutingRule, RoutingRuleStore, Transport, TransportStore}
   alias Cadence.Dev.ReflectOrbital.Fixture, as: F
+  alias Cadence.Dev.RouteChanges
   alias Cadence.GroundNetworks
 
   alias Cadence.GroundNetworks.{
@@ -16,7 +16,7 @@ defmodule Cadence.Dev.ApogeeQaMission.Provider do
     ProviderCredentials
   }
 
-  alias Cadence.Management.Transports
+  import EarendilRestClient, only: [request!: 3]
 
   @organization_id F.organization_id()
   @mission_id "mission-qa-23565"
@@ -25,6 +25,7 @@ defmodule Cadence.Dev.ApogeeQaMission.Provider do
   @grant_id "grant-qa-23565"
   @provider_id "provider-qa-23565"
   @transport_id "transport-qa-23565-direct"
+  @station_id "station-qa-23565-local"
   # The simulator accepts one provider token, so the QA credential names Earendil's variable
   # (devops, #199). The value is read only to validate and sync in this process; never printed.
   @token_key "EARENDIL_DEMO_PROVIDER_TOKEN"
@@ -116,55 +117,92 @@ defmodule Cadence.Dev.ApogeeQaMission.Provider do
     end
   end
 
-  @doc "A direct TCP-client transport (qa's in-use refusal check needs one with a route to it)."
-  def ensure_direct_transport do
-    ensure_record(
-      TransportStore.fetch_transport(@organization_id, @mission_id, @transport_id),
-      fn ->
-        Transports.persist_transport(
-          @organization_id,
-          Transport.new(%{
-            transport_id: @transport_id,
-            mission_id: @mission_id,
-            display_name: "QA direct TCP client",
-            origin: :direct,
-            configuration: %{
-              "mode" => "connect",
-              "direction_capability" => "inbound",
-              "host" => "127.0.0.1",
-              "port" => 47_991,
-              "framing_mode" => "fixed_size",
-              "frame_size" => F.frame_size(),
-              "tls_enabled" => false
-            },
-            metadata: @metadata
-          })
+  @doc "Stages the QA direct downlink and its local test station through the Console API."
+  def seed_route(craft, profile_id) do
+    client = RouteChanges.sign_in(@organization_id)
+    id = "spacecraft_route_#{craft.spacecraft_id}-direct"
+    existing = RouteChanges.extra_route_ids(client, @mission_id, profile_id)
+
+    if MapSet.member?(existing, id) do
+      :applied
+    else
+      {client, %{"stations" => stations}} =
+        request!(client, :get, "/missions/#{@mission_id}/ground-stations")
+
+      {client, %{"transports" => transports}} =
+        request!(client, :get, "/missions/#{@mission_id}/transports")
+
+      route =
+        RouteChanges.route(
+          id,
+          craft.spacecraft_id,
+          @station_id,
+          @transport_id,
+          "QA direct downlink",
+          "TT&C downlink",
+          "primary",
+          "none"
         )
-      end
-    )
+
+      ops = local_station_op(stations) ++ [direct_transport_op(transports), route]
+
+      RouteChanges.submit(
+        client,
+        @mission_id,
+        "qa-direct-route",
+        "Seed QA local test downlink",
+        ops
+      )
+    end
   end
 
-  @doc "One downlink routing rule from the craft to the transport."
-  def ensure_route(craft, transport) do
-    id = "route-#{craft.spacecraft_id}-direct"
+  defp local_station_op(stations) do
+    if Enum.any?(stations, &(&1["id"] == @station_id)) do
+      []
+    else
+      [
+        %{
+          kind: "ground_station",
+          action: "create",
+          entity_id: @station_id,
+          document: %{display_name: "QA local test station", code: "QALOCAL", metadata: @metadata}
+        }
+      ]
+    end
+  end
 
-    ensure_record(RoutingRuleStore.fetch_routing_rule(@organization_id, @mission_id, id), fn ->
-      RoutingRuleStore.create_routing_rule(
-        @organization_id,
-        RoutingRule.new(%{
-          routing_rule_id: id,
-          mission_id: @mission_id,
-          spacecraft_id: craft.spacecraft_id,
-          display_name: "QA direct downlink",
-          purpose_label: "TT&C downlink",
-          direction: :inbound,
-          transport_id: transport.transport_id,
-          transport_version: transport.version,
-          role: :primary,
+  defp direct_transport_op(transports) do
+    if Enum.any?(transports, &(&1["id"] == @transport_id)) do
+      %{
+        kind: "transport",
+        action: "update",
+        entity_id: @transport_id,
+        changes: [%{path: "ground_station_id", value: @station_id}]
+      }
+    else
+      %{
+        kind: "transport",
+        action: "create",
+        entity_id: @transport_id,
+        document: %{
+          display_name: "QA direct TCP client",
+          origin: "direct",
+          transport_kind: "tcp_socket",
+          direction_capability: "inbound",
+          ground_station_id: @station_id,
+          configuration: %{
+            "mode" => "connect",
+            "direction_capability" => "inbound",
+            "host" => "127.0.0.1",
+            "port" => 47_991,
+            "framing_mode" => "fixed_size",
+            "frame_size" => F.frame_size(),
+            "tls_enabled" => false
+          },
           metadata: @metadata
-        })
-      )
-    end)
+        }
+      }
+    end
   end
 
   defp ensure_record({:ok, record}, _create), do: record
@@ -174,9 +212,7 @@ defmodule Cadence.Dev.ApogeeQaMission.Provider do
               :provider_credential_not_found,
               :provider_account_grant_not_found,
               :mission_provider_not_found,
-              :provider_not_found,
-              :transport_not_found,
-              :routing_rule_not_found
+              :provider_not_found
             ] do
     {:ok, record} = create.()
     record

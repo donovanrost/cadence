@@ -25,8 +25,16 @@ dev/stack env      # create/refresh mise.local.toml and show non-secret settings
 `mise run stack up` and the other subcommands are equivalent. Default `up` is safe to rerun and
 keeps the four existing seeds in order: Reflect Orbital demo, QA personas, Reflect Orbital
 planning, QA mission. They build the complete local demo until the REST path reaches parity.
-The simulator starts before those seeds, and Phoenix starts before its environment admin and
-seeds. `reset` deletes only this slot's dev data.
+The simulator, Phoenix and the Console dev server start before the seeds. `reset` deletes only
+this slot's dev data.
+
+The default Earendil and QA mission seeds submit their extra routes through the Console API.
+Earendil includes the station bindings for its existing downlink transports in the same change
+set. The QA change set includes a local test station and the direct TCP transport on it.
+On missions with independent approval, the existing seeded second admin approves the route
+change set through the same domain function as the Console. The seed saves the Earendil
+spacecraft configurations after the routes apply. The standalone REST seed will use
+a second admin's REST session for both route approvals once #745 and #752 supply that path.
 
 After the #718 migration baseline lands, run `dev/stack reset` once in each existing worktree.
 The old migration ledger and schema cannot be upgraded in place; the baseline reports that reset

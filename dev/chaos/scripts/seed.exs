@@ -1,4 +1,6 @@
-for file <- ~w(fixture configuration planning seed activation live_contacts) do
+Code.require_file("/lab/seed/route_changes.exs")
+
+for file <- ~w(fixture configuration planning approver seed activation live_contacts) do
   Code.require_file("/lab/reflect_orbital/#{file}.exs")
 end
 
