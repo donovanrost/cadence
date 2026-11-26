@@ -1,10 +1,11 @@
 Mix.install([:req, :jason])
-Code.require_file("earendil_dashboards.exs", __DIR__)
+Code.require_file("earendil_dashboard_import.exs", __DIR__)
 
 defmodule EarendilSeed do
   @moduledoc false
 
-  @api_base "/api/v1"
+  import EarendilRestClient, only: [request!: 3, request!: 4, request!: 5, sign_in: 3]
+
   @batch_size 100
   @sim_admin_token "earendil-local-admin"
   @run_id "run-earendil-demo-v1"
@@ -343,7 +344,6 @@ defmodule EarendilSeed do
   end
 
   defp seed_dashboards(client, organization_id, mission_id) do
-    path = "/missions/#{mission_id}/dashboards"
     {client, directory} = request!(client, :get, "/missions/#{mission_id}/spacecraft")
     present = MapSet.new(Enum.map(directory["spacecraft"], & &1["id"]))
 
@@ -355,21 +355,14 @@ defmodule EarendilSeed do
       )
 
     if MapSet.subset?(required, present) do
-      EarendilDashboardDocuments.documents(organization_id, mission_id)
-      |> Enum.reduce(client, &import_dashboard(&2, &1, path))
+      {client, _result} =
+        EarendilDashboardImport.import_documents(client, organization_id, mission_id)
+
+      client
     else
       IO.puts("  six Earendil dashboards await the first 10 applied spacecraft and #745 approval")
       client
     end
-  end
-
-  defp import_dashboard(client, document, path) do
-    {client, result} = request!(client, :post, path, %{document: document, identity: "keep"})
-    unless result["id"] == document.dashboard_id, do: fail!("dashboard import", result)
-
-    state = if result["existing"], do: "existing", else: "created"
-    IO.puts("  #{document.dashboard_id}: #{state}")
-    client
   end
 
   defp probe_dashboard_source(client, mission_id) do
@@ -490,20 +483,6 @@ defmodule EarendilSeed do
     {client, stage}
   end
 
-  defp sign_in(base, email, password) do
-    client = %{base: String.trim_trailing(base, "/"), cookies: %{}, csrf: nil}
-    {client, page} = request!(client, :get, "/console/sign-in", nil, api?: false)
-    [_, csrf] = Regex.run(~r/<meta name="csrf-token" content="([^"]+)"/, page)
-    client = %{client | csrf: csrf}
-    {client, _} = request!(client, :post, "/auth/sign-in", %{email: email, password: password})
-    {client, session} = request!(%{client | csrf: nil}, :get, "/session")
-
-    unless session["admin_mode"] == true,
-      do: fail!("admin sign-in", "environment admin session did not enter admin mode")
-
-    {%{client | csrf: session["csrf_token"]}, session}
-  end
-
   defp scope({client, _session}, email) do
     slug = "reflect-orbital"
     {client, listing} = request!(client, :get, "/admin/organizations?q=#{slug}")
@@ -566,67 +545,6 @@ defmodule EarendilSeed do
         }
       }
     }
-  end
-
-  defp request!(client, method, path, body \\ nil, opts \\ []) do
-    url = client.base <> if(Keyword.get(opts, :api?, true), do: @api_base, else: "") <> path
-    accept = if Keyword.get(opts, :api?, true), do: "application/json", else: "text/html"
-
-    options = [
-      method: method,
-      url: url,
-      headers: headers(client, accept),
-      receive_timeout: 120_000,
-      retry: false
-    ]
-
-    options = if body, do: Keyword.put(options, :json, body), else: options
-
-    options =
-      if opts[:multipart],
-        do: Keyword.put(options, :form_multipart, opts[:multipart]),
-        else: options
-
-    case Req.request(options) do
-      {:ok, response} -> response!(client, method, path, response)
-      {:error, error} -> fail!("#{method} #{path}", Exception.message(error))
-    end
-  end
-
-  defp headers(client, accept) do
-    headers = [{"accept", accept}]
-    headers = if client.csrf, do: [{"x-csrf-token", client.csrf} | headers], else: headers
-
-    if map_size(client.cookies) == 0 do
-      headers
-    else
-      cookie = Enum.map_join(client.cookies, "; ", fn {name, value} -> "#{name}=#{value}" end)
-      [{"cookie", cookie} | headers]
-    end
-  end
-
-  defp response!(client, method, path, response) do
-    unless response.status in 200..299,
-      do: fail!("#{method} #{path} (HTTP #{response.status})", response.body)
-
-    cookies =
-      Enum.reduce(Req.Response.get_header(response, "set-cookie"), client.cookies, &cookie/2)
-
-    data =
-      if is_map(response.body),
-        do: Map.get(response.body, "data", response.body),
-        else: response.body
-
-    {%{client | cookies: cookies}, data}
-  end
-
-  defp cookie(line, cookies) do
-    [pair | _] = String.split(line, ";", parts: 2)
-
-    case String.split(pair, "=", parts: 2) do
-      [name, value] -> Map.put(cookies, name, value)
-      _ -> cookies
-    end
   end
 
   defp phase(name, fun) do
