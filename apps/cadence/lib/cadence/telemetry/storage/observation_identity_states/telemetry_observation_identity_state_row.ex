@@ -91,6 +91,10 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates.TelemetryObservati
 
   @validity_states ["canonical", "duplicate", "conflict", "superseded", "advisory"]
 
+  @doc "The row's writable fields (everything but timestamps)."
+  @spec fields() :: [atom()]
+  def fields, do: @fields
+
   @spec changeset(struct(), map()) :: Ecto.Changeset.t()
   def changeset(%__MODULE__{} = row, attrs) when is_map(attrs) do
     row

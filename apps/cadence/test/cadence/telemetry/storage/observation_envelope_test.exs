@@ -3,7 +3,12 @@ defmodule Cadence.Telemetry.Storage.ObservationEnvelopeTest do
 
   alias Cadence.Telemetry.Sample
   alias Cadence.Telemetry.Storage.{ObservationEnvelope, WriteContext}
-  alias Cadence.Telemetry.Storage.QuestDB.{ObservationReader, ObservationRow}
+
+  alias Cadence.Telemetry.Storage.QuestDB.{
+    ObservationProvenance,
+    ObservationReader,
+    ObservationRow
+  }
 
   test "wraps a telemetry sample with tenant and data source context" do
     context = write_context()
@@ -25,6 +30,20 @@ defmodule Cadence.Telemetry.Storage.ObservationEnvelopeTest do
     assert is_binary(envelope.observation_id)
     assert is_binary(envelope.observation_identity_id)
     assert is_binary(envelope.idempotency_key)
+  end
+
+  # DECISIONS #99 guard (lead): the journal frame that keys monitoring effects is runtime-only. It
+  # must not reach the stored observation (its provenance, row or identity), so packet rows'
+  # provenance is unchanged by #99 (and B's residual stays null for them).
+  test "a sample's journal frame changes nothing that is stored" do
+    plain = sample()
+    framed = %{plain | journal_frame: {"journal-1", 1_400, ~U[2026-11-17 01:00:00Z]}}
+
+    assert {:ok, a} = ObservationEnvelope.from_sample(write_context(), plain)
+    assert {:ok, b} = ObservationEnvelope.from_sample(write_context(), framed)
+
+    assert a == b
+    assert ObservationRow.params(a) == ObservationRow.params(b)
   end
 
   test "uses write context as authoritative tenancy instead of sample provenance" do
@@ -193,8 +212,14 @@ defmodule Cadence.Telemetry.Storage.ObservationEnvelopeTest do
     assert {:ok, envelope} = ObservationEnvelope.from_sample(write_context(), read_back)
     assert envelope.provenance == %{"semantic_id" => "semantic:parameter:1"}
 
-    stored = Jason.decode!(Enum.at(ObservationRow.params(envelope), provenance_index()))
-    assert stored == %{"semantic_id" => "semantic:parameter:1"}
+    # Neither the provenance columns nor the residual JSON carry the reader's "storage".
+    row = stored_row(envelope)
+    assert row["semantic_id"] == "semantic:parameter:1"
+    assert row["provenance_json"] == nil
+
+    assert ObservationProvenance.rebuild(row, &Map.get(row, &1)) == %{
+             "semantic_id" => "semantic:parameter:1"
+           }
   end
 
   test "an atom-keyed storage map is not stored either" do
@@ -342,8 +367,12 @@ defmodule Cadence.Telemetry.Storage.ObservationEnvelopeTest do
     envelope.observation_identity_id
   end
 
-  defp provenance_index,
-    do: Enum.find_index(ObservationRow.columns(), &(&1 == :provenance_json))
+  defp stored_row(envelope) do
+    ObservationRow.columns()
+    |> Enum.map(&Atom.to_string/1)
+    |> Enum.zip(ObservationRow.params(envelope))
+    |> Map.new()
+  end
 
   defp write_context(overrides \\ []) do
     {:ok, context} =

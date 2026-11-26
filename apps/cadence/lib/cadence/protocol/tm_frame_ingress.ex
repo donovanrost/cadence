@@ -325,6 +325,7 @@ defmodule Cadence.Protocol.TMFrameIngress do
     with :ok <- validate_tm_sdu_kind(sdu),
          {:ok, %PacketRecord{} = packet_record} <-
            decode_tm_packet_record(raw_evidence, sdu, position) do
+      packet_record = %{packet_record | journal_frame: journal_frame(raw_evidence, sdu, position)}
       {:cont, {:ok, [packet_record | acc]}}
     else
       {:error, reason} ->
@@ -352,7 +353,7 @@ defmodule Cadence.Protocol.TMFrameIngress do
           map_id: sdu.map_id,
           quality: sdu.quality,
           source_frames: sdu.source_frames,
-          metadata: Map.delete(sdu.meta, :raw_frame_offset_bytes)
+          metadata: Map.drop(sdu.meta, [:raw_frame_offset_bytes, :raw_frame_length_bytes])
         }
       }
     )
@@ -369,6 +370,28 @@ defmodule Cadence.Protocol.TMFrameIngress do
 
       _no_journal_position ->
         Identity.packet_id(raw_evidence.evidence_id, ordinal, sdu.octets)
+    end
+  end
+
+  # The journal position of the frame that completed the packet (DECISIONS #99): the input of
+  # its replay-safe effect ids, `{stream, absolute frame offset, receipt time}`. Batch-independent
+  # like journal_packet_id: the receipt time is that of the journal record holding the frame's
+  # LAST byte, which is always in this evidence (its first byte may be carried over from earlier
+  # evidence, whose records this one doesn't have). nil without a journal position. A struct
+  # field, not provenance, so neither the archive entry nor the packet id changes.
+  defp journal_frame(raw_evidence, sdu, {_ordinal, absolute_base_offset}) do
+    meta = sdu.meta || %{}
+
+    case {journal_stream_id(raw_evidence), Map.get(meta, :raw_frame_offset_bytes),
+          Map.get(meta, :raw_frame_length_bytes)} do
+      {stream_id, offset, length}
+      when is_binary(stream_id) and is_integer(offset) and is_integer(length) and length > 0 ->
+        frame_offset = absolute_base_offset + offset
+        last_byte = frame_offset + length - 1
+        {stream_id, frame_offset, RawEvidence.receipt_time_at(raw_evidence, last_byte)}
+
+      _no_journal_position ->
+        nil
     end
   end
 

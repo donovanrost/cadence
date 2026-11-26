@@ -233,17 +233,8 @@ defmodule CadenceWeb.ApplicationHostCatalog do
         %Scope{},
         %{host_context: %HostContext{placement: placement} = host_context}
       )
-      when placement in [:organization, :user, :admin] do
-    case placement do
-      :organization ->
-        %{"scope" => "organization", "organizationId" => host_context.organization_id}
-
-      :user ->
-        %{"scope" => "user", "userId" => host_context.user_id}
-
-      :admin ->
-        %{"scope" => "admin"}
-    end
+      when placement == :user do
+    %{"scope" => "user", "userId" => host_context.user_id}
   end
 
   def scope_document(
@@ -262,7 +253,7 @@ defmodule CadenceWeb.ApplicationHostCatalog do
         %Scope{} = current_scope,
         %{host_context: %HostContext{placement: placement} = host_context}
       )
-      when placement in [:organization, :user, :admin] do
+      when placement == :user do
     %{
       "organizationId" => host_context.organization_id,
       "userId" => host_context.user_id,
@@ -296,7 +287,7 @@ defmodule CadenceWeb.ApplicationHostCatalog do
 
   @spec bridge_base_path(route_context()) :: binary()
   def bridge_base_path(%{host_context: %HostContext{placement: placement}})
-      when placement in [:organization, :user, :admin],
+      when placement == :user,
       do: "/api/cadence/application-host/v1"
 
   def bridge_base_path(%{host_context: %HostContext{placement: :mission, mission_id: mission_id}}) do
@@ -361,7 +352,7 @@ defmodule CadenceWeb.ApplicationHostCatalog do
          manifest_url,
          release_snapshot
        )
-       when placement in [:organization, :user, :admin] do
+       when placement == :user do
     with {:ok, contributed} <-
            contributed_applications(current_scope, route_context, manifest_url, release_snapshot) do
       finalize_catalog_applications(contributed)
@@ -544,7 +535,7 @@ defmodule CadenceWeb.ApplicationHostCatalog do
          surface_id,
          release_snapshot
        )
-       when placement in [:organization, :user, :admin] and is_binary(application_key) do
+       when placement == :user and is_binary(application_key) do
     with :ok <- authorize_catalog_access(current_scope, route_context),
          {:ok,
           %CatalogContribution{
@@ -915,19 +906,10 @@ defmodule CadenceWeb.ApplicationHostCatalog do
          %Scope{} = current_scope,
          %{host_context: %HostContext{placement: placement}}
        )
-       when placement in [:organization, :user, :admin] do
-    case placement do
-      :organization ->
-        if is_binary(current_scope.organization_id), do: :ok, else: {:error, :forbidden}
-
-      :user ->
-        if current_scope.actor_kind == :user and not is_nil(current_scope.user),
-          do: :ok,
-          else: {:error, :authenticated_user_required}
-
-      :admin ->
-        if Scope.admin_mode?(current_scope), do: :ok, else: {:error, :forbidden}
-    end
+       when placement == :user do
+    if current_scope.actor_kind == :user and not is_nil(current_scope.user),
+      do: :ok,
+      else: {:error, :authenticated_user_required}
   end
 
   defp authorize_catalog_access(

@@ -229,9 +229,9 @@ defmodule Cadence.Telemetry.Storage.ObservationEnvelope do
   # stream position; (c) on-board time with no count is unchanged. The tag keeps (a) and (b) from
   # ever colliding, and an envelope without a ref digests exactly as v1 did.
   # The version slot travels with the ref, and the version tells the truth: 2 only when a ref is in
-  # the digest. Both are stored on the row (metadata_json / provenance_json) so a v2 identity can
-  # be explained and recomputed. The ref and time source live on the sample (the envelope stays
-  # within 31 fields).
+  # the digest. Both are stored on the row (metadata_json / the identity_ref column, DECISIONS
+  # #103) so a v2 identity can be explained and recomputed. The ref and time source live on the
+  # sample (the envelope stays within 31 fields).
   defp identity_ref(%Sample{frame_ref: {:seq, apid, count}})
        when is_integer(apid) and is_integer(count),
        do: {:seq, apid, count}
@@ -261,13 +261,23 @@ defmodule Cadence.Telemetry.Storage.ObservationEnvelope do
   end
 
   defp observation_id(%__MODULE__{} = envelope, observation_identity_id) do
-    stable_digest([
+    observation_id_for(
       observation_identity_id,
       envelope.sample_id,
       envelope.packet_id,
       envelope.evidence_id,
       envelope.revision
-    ])
+    )
+  end
+
+  @doc """
+  The observation id of the row this identity, sample, packet refs and revision produce. The
+  identity-state decision seed checks a stored row's revision against it (11-17).
+  """
+  @spec observation_id_for(binary(), binary(), binary() | nil, binary() | nil, pos_integer()) ::
+          binary()
+  def observation_id_for(observation_identity_id, sample_id, packet_id, evidence_id, revision) do
+    stable_digest([observation_identity_id, sample_id, packet_id, evidence_id, revision])
   end
 
   defp idempotency_key(%__MODULE__{} = envelope) do

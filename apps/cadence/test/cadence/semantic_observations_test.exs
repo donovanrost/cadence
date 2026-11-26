@@ -1,10 +1,12 @@
 defmodule Cadence.SemanticObservationsTest do
   use Cadence.DataCase, async: false
 
+  alias Cadence.Alarms.{EpisodeEventRow, EpisodeRow}
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Catalog.MissionModel.{Compiler, Layer}
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Platform.ReplayId
   alias Cadence.Runtime.MissionRuntimeSpec
   alias Cadence.SemanticObservations
 
@@ -291,6 +293,70 @@ defmodule Cadence.SemanticObservationsTest do
 
   def capture_query(_event, _measurements, metadata, owner) do
     if self() == owner, do: send(owner, {:monitoring_query, metadata.query})
+  end
+
+  # DECISIONS #99 (lead's condition 3): alarm effects are keyed on their journal frame, so the
+  # same frames give the same episode and event ids whether they arrive as one prepared result or
+  # re-cut into several (a replay batching the journal differently), and a replay adds no rows.
+  test "alarm effect ids don't depend on batching, and a replay adds nothing" do
+    persist_mission_scope("org-monitoring-batch", "mission-monitoring-batch")
+
+    # Frame 14 carries a raise and its clear (two effects of one input); frame 28 a new raise.
+    inputs = [
+      framed(prepared_evaluation(1, {:normal, :critical}), 14),
+      framed(prepared_evaluation(2, {:critical, :normal}), 14),
+      framed(prepared_evaluation(3, {:normal, :critical}), 28)
+    ]
+
+    assert :ok = SemanticObservations.persist_many([merge(inputs)])
+    once = effect_ids()
+    assert length(once.episodes) == 2 and length(once.events) == 3
+    assert Enum.all?(once.episodes ++ once.events, &match?({:ok, _}, ReplayId.parse(&1)))
+
+    Repo.delete_all(EpisodeEventRow)
+    Repo.delete_all(EpisodeRow)
+    Repo.delete_all(LatestAlarmStateRow)
+    Repo.delete_all(AlarmTransitionRow)
+    Repo.delete_all(MonitoringEvaluationRow)
+
+    [first, second, third] = inputs
+    assert :ok = SemanticObservations.persist_many([merge([first, second])])
+    assert :ok = SemanticObservations.persist_many([third])
+    assert effect_ids() == once
+
+    # The replay: nothing new, no conflict.
+    assert :ok = SemanticObservations.persist_many([merge([first, second]), third])
+    assert effect_ids() == once
+  end
+
+  defp framed(prepared, offset) do
+    [update] = prepared.semantic_result.parameter_updates
+    us = DateTime.to_unix(update.receipt_time, :microsecond)
+    source = ["journal-batch", offset, us]
+    update = %{update | metadata: Map.put(update.metadata, :effect_source, source)}
+
+    %{
+      prepared
+      | semantic_result: %{prepared.semantic_result | parameter_updates: [update]}
+    }
+    |> Map.put(:effect_ordinals, %{"journal-batch" => 7})
+  end
+
+  defp merge([head | _] = prepared) do
+    %{
+      head
+      | semantic_result: %Result{
+          parameter_updates: Enum.flat_map(prepared, & &1.semantic_result.parameter_updates),
+          monitoring_results: Enum.flat_map(prepared, & &1.semantic_result.monitoring_results)
+        }
+    }
+  end
+
+  defp effect_ids do
+    %{
+      episodes: EpisodeRow |> Repo.all() |> Enum.map(& &1.episode_id) |> Enum.sort(),
+      events: EpisodeEventRow |> Repo.all() |> Enum.map(& &1.event_id) |> Enum.sort()
+    }
   end
 
   defp prepared_evaluation(index, transition \\ nil) do

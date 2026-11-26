@@ -9,7 +9,7 @@ defmodule CadenceWeb.Console.AppAPITest do
     user = TestFixtures.persist_user!()
     TestFixtures.grant_membership!(user, org)
     mission = TestFixtures.persist_mission!(org)
-    %{user: user, base: "/api/console/v1/missions/#{mission.mission_id}/apps"}
+    %{user: user, mission: mission, base: "/api/console/v1/missions/#{mission.mission_id}/apps"}
   end
 
   defp get_data(c),
@@ -31,17 +31,33 @@ defmodule CadenceWeb.Console.AppAPITest do
     %{"key" => key} = optional = Enum.find(data["apps"], &(&1["platform"] == false))
     assert %{"state" => "not_installed", "installed" => false, "version" => nil} = optional
 
+    # The server says which version ships and whether it is newer; the console never compares.
+    assert is_integer(optional["available_version"])
+    assert optional["update_available"] == false
+    assert data["spacecraft_count"] == 0
+
     assert %{"key" => ^key, "state" => "installed", "installed" => true} =
              c |> post_action(key, "install") |> json_response(200) |> Map.fetch!("data")
 
     assert %{"state" => "disabled"} =
              c |> post_action(key, "disable") |> json_response(200) |> Map.fetch!("data")
 
+    # The server accepts uninstall from an installed app too, not only a disabled one.
+    assert %{"state" => "installed"} =
+             c |> post_action(key, "install") |> json_response(200) |> Map.fetch!("data")
+
     assert %{"state" => "not_installed"} =
              c |> post_action(key, "uninstall") |> json_response(200) |> Map.fetch!("data")
 
     assert json_response(post_action(c, "no-such-app", "install"), 404)["error"]["code"] ==
              "app_not_found"
+  end
+
+  test "spacecraft_count is the mission's active spacecraft", c do
+    TestFixtures.persist_spacecraft!(c.mission)
+    TestFixtures.persist_spacecraft!(c.mission)
+
+    assert get_data(c)["spacecraft_count"] == 2
   end
 
   defp host(c, path), do: c.user |> TestFixtures.member_conn() |> get("#{c.base}/#{path}")
