@@ -44,11 +44,6 @@ const OpsModulePage = lazyHostPage(
   "OpsModulePage",
   () => import("../ops-workspace/features/module-pages/OpsModulePage.vue"),
 );
-const ActivationApprovalsPage = lazyHostPage(
-  "ActivationApprovalsPage",
-  () =>
-    import("../capability-management/features/activation-approvals/ActivationApprovalsPage.vue"),
-);
 
 const props = defineProps<{ snapshot: unknown }>();
 const initialSnapshot = readHostSnapshot(props.snapshot);
@@ -342,18 +337,6 @@ async function configurationRequest(event: string, input: Record<string, unknown
   committed.value = { ...currentPage(), snapshot: host };
   return result;
 }
-async function activationDecision(input: unknown) {
-  const path = currentPage().snapshot.path;
-  const requestGeneration = generation;
-  const token = currentPage().snapshot.activation_approvals?.token;
-  const result = requireRecord(await request("host:activation", { path, token, input }));
-  if (!stopped && generation === requestGeneration && currentPage().snapshot.path === path) {
-    const page = readHostSnapshot(result.page);
-    if (page.path !== path) throw new Error("Invalid activation response path.");
-    committed.value = { ...currentPage(), snapshot: page };
-  }
-  return result.result;
-}
 async function opsPageAction(payload: Record<string, unknown>) {
   const path = currentPage().snapshot.path,
     requestGeneration = generation;
@@ -433,20 +416,8 @@ onBeforeUnmount(() => {
     >
       <p v-if="failure" id="host-navigation-error" role="alert">{{ failure }}</p>
       <div :aria-busy="pending" :data-host-path="committed.snapshot.path">
-        <ActivationApprovalsPage
-          v-if="route.kind === 'activation_approvals' && missionContext"
-          :id="route.mountId"
-          :snapshot="committed.snapshot.activation_approvals"
-          :context="{
-            organization_id: missionContext.organizationId,
-            mission_id: missionContext.missionId,
-          }"
-          :execute="activationDecision"
-          :refresh="reconnect"
-          :navigating="pending"
-        />
         <OpsModulePage
-          v-else-if="route.kind === 'ops_module' && missionContext"
+          v-if="route.kind === 'ops_module' && missionContext"
           :id="route.mountId"
           :contribution-id="route.contribution"
           :snapshot="committed.snapshot.ops_page"

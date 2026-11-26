@@ -7,6 +7,7 @@ defmodule Cadence.ContactPlanning.FleetStartInputs do
     ContactRequirementTemplates,
     ContentHash,
     FleetPlanningPolicies,
+    FleetPlanningRuns,
     TemplateDays,
     TemplateSupersession,
     TemplateTargets
@@ -145,7 +146,7 @@ defmodule Cadence.ContactPlanning.FleetStartInputs do
                 v.latest_end > ^window.horizon_start))
       )
       |> order_by([r, v], asc: v.latest_end, asc: r.contact_requirement_id)
-      |> limit(10_001)
+      |> limit(^(FleetPlanningRuns.maximum_requirements() + 1))
       |> select([r, v], {r, v})
 
     query |> maybe_lock(locked) |> Repo.all() |> requirement_versions()
@@ -156,7 +157,7 @@ defmodule Cadence.ContactPlanning.FleetStartInputs do
       Enum.any?(rows, fn {_, version} -> is_nil(version) end) ->
         {:error, :fleet_planning_requirement_version_unavailable}
 
-      length(rows) > 10_000 ->
+      length(rows) > FleetPlanningRuns.maximum_requirements() ->
         {:error, :fleet_planning_run_requirement_limit_exceeded}
 
       true ->

@@ -1,5 +1,5 @@
 defmodule CadenceWeb.Console.AlarmController do
-  @moduledoc "`GET /api/console/v1/missions/:mission_id/alarms`. Contract: docs/apogee/api/ops.md."
+  @moduledoc "`GET /api/v1/missions/:mission_id/alarms`. Contract: docs/apogee/api/ops.md."
 
   use CadenceWeb, :controller
 

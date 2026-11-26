@@ -23,24 +23,17 @@ if Mix.env() in [:dev, :test] do
 
     @environment_admin "user_environment_admin"
     @fixture "apogee-qa"
-    @default "apogee-qa-password"
     @actor "system:dev:apogee_qa_personas"
     @min_password 12
 
-    @doc "The public local password (printed; never set by a reset)."
-    @spec default_password() :: String.t()
-    def default_password, do: @default
-
     @doc """
     The persona password from `env` (`System.get_env/0`'s map): `{:ok, password, :env}` from a
-    set `E2E_PERSONA_PASSWORD`, `{:ok, default, :default}` when unset or empty, or
-    `{:error, reason}` for one that's too short or is the public default.
+    set `E2E_PERSONA_PASSWORD`, or `{:error, reason}` when missing or too short.
     """
-    @spec persona_password(map()) :: {:ok, String.t(), :env | :default} | {:error, String.t()}
+    @spec persona_password(map()) :: {:ok, String.t(), :env} | {:error, String.t()}
     def persona_password(env) do
       case Map.get(env, "E2E_PERSONA_PASSWORD", "") do
-        "" -> {:ok, @default, :default}
-        @default -> {:error, "E2E_PERSONA_PASSWORD must not be the public default"}
+        "" -> {:error, "E2E_PERSONA_PASSWORD is required"}
         value -> if long_enough?(value), do: {:ok, value, :env}, else: {:error, too_short()}
       end
     end
@@ -48,7 +41,7 @@ if Mix.env() in [:dev, :test] do
     @doc """
     Whether `env` asks for a reset: `{:ok, false}` when `E2E_RESET_PERSONA_PASSWORDS` is unset,
     `{:ok, true}` for `"1"` with `E2E_PERSONA_PASSWORD` set, else `{:error, reason}` (any other
-    value, or a reset with no password of its own: never back to the public default).
+    value, or a reset with no password of its own).
     """
     @spec reset?(map()) :: {:ok, boolean()} | {:error, String.t()}
     def reset?(env) do
@@ -114,7 +107,7 @@ if Mix.env() in [:dev, :test] do
         fixture != @fixture ->
           {:error, :not_a_fixture_user}
 
-        not long_enough?(password) or password == @default ->
+        not long_enough?(password) ->
           {:error, {:invalid, %{password: too_short()}}}
 
         true ->
@@ -139,6 +132,6 @@ if Mix.env() in [:dev, :test] do
     end
 
     defp long_enough?(password), do: String.length(password) >= @min_password
-    defp too_short, do: "must be at least #{@min_password} characters and not the public default"
+    defp too_short, do: "must be at least #{@min_password} characters"
   end
 end

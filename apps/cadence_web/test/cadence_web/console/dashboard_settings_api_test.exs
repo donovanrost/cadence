@@ -11,7 +11,7 @@ defmodule CadenceWeb.Console.DashboardSettingsAPITest do
 
   defp path(c, suffix),
     do:
-      "/api/console/v1/missions/#{c.mission.mission_id}/dashboards/#{c.document.dashboard_id}" <>
+      "/api/v1/missions/#{c.mission.mission_id}/dashboards/#{c.document.dashboard_id}" <>
         suffix
 
   defp get_path(c, suffix), do: c.user |> TestFixtures.member_conn() |> get(path(c, suffix))

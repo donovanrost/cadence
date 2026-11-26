@@ -6,7 +6,7 @@ import { DEMO } from "./env.ts";
  * CSRF token. Specs stage through the API and then exercise the UI on top of it.
  */
 type Json = Record<string, unknown>;
-const base = `/api/console/v1/missions/${DEMO.missionId}/config`;
+const base = `/api/v1/missions/${DEMO.missionId}/config`;
 
 function isJson(value: unknown): value is Json {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -20,7 +20,7 @@ async function data(response: { json(): Promise<unknown>; status(): number }): P
 }
 
 async function csrf(request: APIRequestContext): Promise<string> {
-  const session = await data(await request.get("/api/console/v1/session"));
+  const session = await data(await request.get("/api/v1/session"));
   const token = session["csrf_token"];
   if (typeof token !== "string") throw new Error("session has no csrf_token");
   return token;

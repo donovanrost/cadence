@@ -45,7 +45,7 @@ defmodule CadenceWeb.Console.ArchiveAPITest do
 
     %{
       conn: TestFixtures.member_conn(user),
-      base: "/api/console/v1/missions/#{mission.mission_id}",
+      base: "/api/v1/missions/#{mission.mission_id}",
       craft: craft,
       used: used,
       spare: spare,

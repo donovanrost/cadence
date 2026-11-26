@@ -58,6 +58,9 @@ defmodule Cadence.Dashboards.DocumentStore.DashboardRow do
     |> validate_length(:name, min: 1, max: 120)
     |> validate_length(:description, max: 500)
     |> unique_constraint([:mission_id, :dashboard_id], name: :ops_dashboards_scope_idx)
+    # The id is the primary key, unique across every mission and organization: a lost race for an
+    # id is a changeset error to answer, never a raised constraint.
+    |> unique_constraint(:dashboard_id, name: :ops_dashboards_pkey)
   end
 
   @spec to_document(struct()) :: Document.t()

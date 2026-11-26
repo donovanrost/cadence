@@ -180,10 +180,13 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
     assert refs[requirement_beta.contact_requirement_id].input_state == :failed
     assert refs[requirement_beta.contact_requirement_id].result_state == :failed
 
-    assert get_in(
-             result.run.result_summary_document,
-             ["coverage", requirement_beta.contact_requirement_id, "state"]
-           ) == "unsatisfied"
+    assert get_in(refs[requirement_beta.contact_requirement_id].explanation_document, [
+             "coverage",
+             "state"
+           ]) ==
+             "unsatisfied"
+
+    assert result.run.result_summary_document["coverage_counts"]["unsatisfied"] == 1
   end
 
   test "Requirement drift stops closed before provider search and leaves durable failure",

@@ -20,7 +20,7 @@ defmodule CadenceWeb.Console.TelemetryLatestAPITest do
         binding_set_content_sha256: String.duplicate("0", 64)
       )
 
-    %{user: user, path: "/api/console/v1/missions/#{mission.mission_id}/telemetry/latest"}
+    %{user: user, path: "/api/v1/missions/#{mission.mission_id}/telemetry/latest"}
   end
 
   defp latest(c, body), do: c.user |> TestFixtures.member_conn() |> post(c.path, body)

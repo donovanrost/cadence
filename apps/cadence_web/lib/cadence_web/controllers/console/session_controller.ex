@@ -1,8 +1,8 @@
 defmodule CadenceWeb.Console.SessionController do
   @moduledoc """
-  Console bootstrap (`GET /api/console/v1/session`), default-organization
-  selection (`PUT /api/console/v1/session/organization`) and admin mode (L6:
-  `POST` / `DELETE /api/console/v1/session/admin-mode`). Contract: docs/apogee/api/session.md.
+  Console bootstrap (`GET /api/v1/session`), default-organization
+  selection (`PUT /api/v1/session/organization`) and admin mode (L6:
+  `POST` / `DELETE /api/v1/session/admin-mode`). Contract: docs/apogee/api/session.md.
   """
 
   use CadenceWeb, :controller

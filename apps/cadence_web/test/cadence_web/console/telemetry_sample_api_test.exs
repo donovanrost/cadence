@@ -136,7 +136,7 @@ defmodule CadenceWeb.Console.TelemetrySampleAPITest do
   end
 
   test "the endpoint needs a point and a spacecraft, and a valid receipt time", c do
-    path = "/api/console/v1/missions/#{c.mission}/telemetry/samples/sample-physical"
+    path = "/api/v1/missions/#{c.mission}/telemetry/samples/sample-physical"
     conn = TestFixtures.member_conn(c.user)
 
     assert %{"code" => "invalid_params", "details" => details} =

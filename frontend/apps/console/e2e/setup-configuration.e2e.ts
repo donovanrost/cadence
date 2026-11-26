@@ -8,7 +8,7 @@ import { allow, expect, test } from "./support/fixtures.ts";
 // Screens for ux's review: each state is attached to the HTML report at desktop and 390 wide.
 // The workspace read is answered from the feature's wire fixtures, so every state is
 // deterministic; nothing is written. qa runs it against :4011 in a slot, never during a pass
-// cluster (docs/apogee/qa/runbook.md); #242 brings these specs into CI.
+// cluster (docs/dev-environment.md); #242 brings these specs into CI.
 
 const CRAFT = "spacecraft-earendil-001";
 // The read and anything under it (the packets route too; the read side never calls it).

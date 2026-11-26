@@ -17,7 +17,7 @@ defmodule CadenceWeb.Console.SpacecraftPassesAPITest do
   defp get_json(c, spacecraft_id, status) do
     c.user
     |> TestFixtures.member_conn()
-    |> get("/api/console/v1/missions/#{c.mission.mission_id}/spacecraft/#{spacecraft_id}/passes")
+    |> get("/api/v1/missions/#{c.mission.mission_id}/spacecraft/#{spacecraft_id}/passes")
     |> json_response(status)
   end
 

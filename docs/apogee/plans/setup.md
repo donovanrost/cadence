@@ -5,7 +5,7 @@ Owner: **fe-setup**. Status: draft 1 (2026-11-08). Boards: `Setup` (S1), `AddSpa
 
 `L` = `apps/cadence/lib/cadence`. "Bridge" = the application-host query bridge
 (`/api/cadence/application-host/v1/.../query`). Bridge payloads are presentation DTOs (CSS classes,
-breadcrumbs, tone strings), so the plan asks **api** for purpose-built `/api/console/v1` JSON,
+breadcrumbs, tone strings), so the plan asks **api** for purpose-built `/api/v1` JSON,
 reusing the underlying `L/reads/*` and stores. "Missing" means no backend data exists today.
 
 ## Build status (2026-11-09, late)
@@ -95,7 +95,7 @@ Import catalog).
 | Revisions R2 | last N revisions: number, at, summary, actor | — | **Missing** (see §0). Under option B, show a "recent changes" feed from `OperationalEvents` + routing-rule events + app install events if api can unify them, or drop the panel. |
 | Verdict | "Ready for operations" / "N blockers" | derived from findings | Derive in the client from the decoded findings (blocker count). |
 
-**Proposed endpoint:** `GET /api/console/v1/missions/:mission_id/readiness` (api conventions: `docs/apogee/api/README.md`; contracts in `docs/apogee/api/setup.md`) →
+**Proposed endpoint:** `GET /api/v1/missions/:mission_id/readiness` (api conventions: `docs/apogee/api/README.md`; contracts in `docs/apogee/api/setup.md`) →
 `{areas: [{key, status, count, unit, detail}], findings: [{id, severity, cause, title, body,
 affected_count, fix: {kind, id} | null}], verdict: {blockers, cautions, suggestions}}`.
 

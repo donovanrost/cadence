@@ -14,7 +14,7 @@ defmodule CadenceWeb.Console.ContactFindingsAPITest do
       org: org,
       user: user,
       mission: mission,
-      base: "/api/console/v1/missions/#{mission.mission_id}"
+      base: "/api/v1/missions/#{mission.mission_id}"
     }
   end
 

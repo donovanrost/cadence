@@ -65,7 +65,7 @@ defmodule CadenceSimulator.PacketEncoder do
   def load(path) do
     with {:ok, content} <- File.read(path),
          {:ok, parsed} <- YamlElixir.read_from_string(content) do
-      build_encoder(parsed)
+      from_document(parsed)
     else
       {:error, reason} -> {:error, {:load_error, path, reason}}
     end
@@ -74,7 +74,7 @@ defmodule CadenceSimulator.PacketEncoder do
   @spec load_string(String.t()) :: {:ok, t()} | {:error, term()}
   def load_string(yaml_content) do
     with {:ok, parsed} <- YamlElixir.read_from_string(yaml_content) do
-      build_encoder(parsed)
+      from_document(parsed)
     end
   end
 
@@ -154,7 +154,7 @@ defmodule CadenceSimulator.PacketEncoder do
     |> Enum.uniq()
   end
 
-  defp build_encoder(parsed) do
+  def from_document(parsed) do
     packets = parsed["packets"] || []
 
     {packet_map, packet_order, items_map, conversions_map} =

@@ -431,19 +431,6 @@
     }
   },
   {
-    "path": "/missions/:mission_id/ops/activations",
-    "kind": "activation_approvals",
-    "scope": "mission",
-    "mountId": "activation-requests-component",
-    "queryKeys": [],
-    "queryAliases": {},
-    "viewClass": "contents",
-    "metadata": {
-      "page_title": "Activation approvals",
-      "ops_nav_item": "activations"
-    }
-  },
-  {
     "path": "/missions/:mission_id/ops/data-operations/manage",
     "scope": "mission",
     "mountId": "ops-data-operations-component",

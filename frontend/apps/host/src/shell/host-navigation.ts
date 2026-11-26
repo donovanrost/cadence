@@ -21,8 +21,6 @@ function normalizeHostRoute(route: CatalogRoute) {
       if (route.workspacePage === "landing" || route.workspacePage === "timeline")
         return { ...route, kind: "ops_workspace" as const, workspacePage: route.workspacePage };
       break;
-    case "activation_approvals":
-      return { ...route, kind: "activation_approvals" as const };
   }
   return { ...route, kind: "unavailable" as const };
 }

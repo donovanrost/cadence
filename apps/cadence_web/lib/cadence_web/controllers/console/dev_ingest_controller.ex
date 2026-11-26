@@ -1,6 +1,6 @@
 defmodule CadenceWeb.Console.DevIngestController do
   @moduledoc """
-  Development ingest, a person's tool: `POST /api/console/v1/missions/:mission_id/dev/space_packets`
+  Development ingest, a person's tool: `POST /api/v1/missions/:mission_id/dev/space_packets`
   and `.../dev/tm_frames` push one packet or frame through the real ingest path and answer with
   what it produced (#780, #747).
 

@@ -16,7 +16,9 @@ defmodule Cadence.Dev.ReflectOrbital.Activation do
     SourceRuntimeBases
   }
 
-  def run(single_operator?) do
+  # `expected` is the fleet size from the caller's environment (EARENDIL_SPACECRAFT_COUNT): this
+  # runs inside the live node over RPC, which needn't carry that variable.
+  def run(single_operator?, expected) do
     unless F.chaos_lab?() or
              Application.get_env(:cadence_web, CadenceWeb.Endpoint, [])[:code_reloader] == true,
            do: raise("Earendil activation requires development mode or the isolated chaos lab")
@@ -32,7 +34,7 @@ defmodule Cadence.Dev.ReflectOrbital.Activation do
       )
 
     fleet = Cadence.SpacecraftStore.list_spacecraft(F.organization_id(), F.mission_id())
-    500 = length(fleet)
+    ^expected = length(fleet)
     snapshots = Map.new(fleet, &{&1.spacecraft_id, Drafts.snapshot(mission, &1)})
 
     verify_drafts!(snapshots, revision)
@@ -73,25 +75,57 @@ defmodule Cadence.Dev.ReflectOrbital.Activation do
 
     unless already_active? do
       policy = ActivationPolicy.load(F.organization_id(), F.mission_id())
-      tokens = Map.new(snapshots, fn {id, snapshot} -> {id, snapshot.token} end)
-      IO.puts("Preparing one exact activation review for 500 spacecraft")
+      batch = Cadence.Catalog.SpacecraftModelBindings.max_review_batch()
 
-      {:ok, request} =
-        Review.request_many(scope, F.mission_id(), tokens,
-          expected_policy_token: policy.token,
-          expected_approval_required: false
-        )
-
-      IO.puts("Executing approved fleet request #{request.activation_request_id}")
-
-      {:ok, approved} =
-        Cadence.Management.Activations.fetch_approved(request.activation_request_id)
-
-      {:ok, execution} = Cadence.Control.Activations.execute(approved)
-      :succeeded = execution.status
+      # One review covers at most `batch` spacecraft (500 today), so a larger fleet activates in
+      # batches; each review adds its craft to the active binding set (#715).
+      snapshots
+      |> Enum.reject(fn {id, snapshot} ->
+        get_in(active.entries, [id, "configuration_revision_id"]) ==
+          snapshot.row.configuration_revision_id
+      end)
+      |> Enum.sort()
+      |> Enum.chunk_every(batch)
+      |> Enum.each(&activate_batch(scope, policy, &1))
     end
 
     verify(mission, fleet, revision)
+  end
+
+  # One review and its execution, with their wall times (#715).
+  defp activate_batch(scope, policy, chunk) do
+    tokens = Map.new(chunk, fn {id, snapshot} -> {id, snapshot.token} end)
+
+    {ms, request} =
+      :timer.tc(
+        fn ->
+          {:ok, request} =
+            Review.request_many(scope, F.mission_id(), tokens,
+              expected_policy_token: policy.token,
+              expected_approval_required: false
+            )
+
+          request
+        end,
+        :millisecond
+      )
+
+    IO.puts("Review for #{map_size(tokens)} spacecraft prepared in #{ms} ms")
+
+    {ms, execution} =
+      :timer.tc(
+        fn ->
+          {:ok, approved} =
+            Cadence.Management.Activations.fetch_approved(request.activation_request_id)
+
+          {:ok, execution} = Cadence.Control.Activations.execute(approved)
+          execution
+        end,
+        :millisecond
+      )
+
+    :succeeded = execution.status
+    IO.puts("Executed fleet request #{request.activation_request_id} in #{ms} ms")
   end
 
   defp verify_drafts!(snapshots, revision) do
@@ -105,18 +139,23 @@ defmodule Cadence.Dev.ReflectOrbital.Activation do
 
   defp verify(mission, fleet, revision) do
     {:ok, active} = Active.load(mission)
-    500 = map_size(active.entries)
-    # The complete 500-spacecraft specification can exceed the ordinary five-
+    n = length(fleet)
+    ^n = map_size(active.entries)
+    # The complete fleet specification (500-1,000 spacecraft) can exceed the ordinary five-
     # second observation timeout while a release is recovering the fleet.
-    {:ok, spec} =
-      GenServer.call(
-        MissionRuntime.coordinator_name(F.mission_id()),
-        :active_spec,
-        600_000
+    {spec_ms, {:ok, spec}} =
+      :timer.tc(
+        fn ->
+          GenServer.call(MissionRuntime.coordinator_name(F.mission_id()), :active_spec, 600_000)
+        end,
+        :millisecond
       )
 
+    IO.puts("Runtime :active_spec for #{n} spacecraft answered in #{spec_ms} ms")
+
     true = spec.generation == active.activation.generation
-    5_000 = length(spec.binding_set.capability_instances)
+    # Ten capability instances per spacecraft.
+    true = length(spec.binding_set.capability_instances) == 10 * n
     verify_routes(fleet, active.entries)
 
     {:ok, verified} =
@@ -186,7 +225,10 @@ defmodule Cadence.Dev.ReflectOrbital.Activation do
       true = Enum.all?(routes, &(&1.source_endpoint_id == source))
 
       if rem(index, 100) == 0,
-        do: IO.puts("Verified decoder and both provider routes for #{index}/500 spacecraft")
+        do:
+          IO.puts(
+            "Verified decoder and both provider routes for #{index}/#{length(fleet)} spacecraft"
+          )
     end)
   end
 

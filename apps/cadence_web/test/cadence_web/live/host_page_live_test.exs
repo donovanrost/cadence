@@ -54,7 +54,6 @@ defmodule CadenceWeb.HostPageLiveTest do
           {"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}",
            "mission_sidebar", mission.mission_id},
           {"/missions/#{mission.mission_id}/ops/explore", "ops", mission.mission_id},
-          {"/missions/#{mission.mission_id}/ops/activations", "ops", mission.mission_id},
           {"/missions/#{second.mission_id}/ops/explore", "ops", second.mission_id}
         ] do
       render_hook(view, "host:context", %{"path" => path})
@@ -73,11 +72,11 @@ defmodule CadenceWeb.HostPageLiveTest do
     {conn, _organization, mission} = navigation_fixture()
 
     # L7 moved /admin and L13 /provider-accounts to the console; data-operations/manage keeps the
-    # organization-admin policy. §11c A: "/" redirects to the console, so start on the mission.
+    # organization-admin policy. Start on the mission.
     for target <- ["/missions/#{mission.mission_id}/ops/data-operations/manage"] do
       {:ok, view, _html} = live(conn, "/missions/#{mission.mission_id}/ops")
 
-      assert {:error, {:redirect, %{to: "/"}}} =
+      assert {:error, {:redirect, %{to: "/console"}}} =
                render_hook(view, "host:context", %{"path" => target})
     end
   end
@@ -87,7 +86,7 @@ defmodule CadenceWeb.HostPageLiveTest do
     other = TestFixtures.persist_mission!(organization)
     spacecraft = TestFixtures.persist_spacecraft!(other)
     {:ok, view, _html} = live(conn, "/missions/#{mission.mission_id}/ops")
-    fallback = "/missions/#{mission.mission_id}/spacecraft"
+    fallback = "/console"
 
     assert {:error, {:redirect, %{to: ^fallback}}} =
              render_hook(view, "host:context", %{
@@ -101,7 +100,7 @@ defmodule CadenceWeb.HostPageLiveTest do
     {:ok, view, _html} = live(conn, path)
     :ok = Cadence.Auth.revoke_user_session(Plug.Conn.get_session(conn, :user_session_token))
 
-    assert {:error, {:redirect, %{to: "/sign-in"}}} =
+    assert {:error, {:redirect, %{to: "/console/sign-in"}}} =
              render_hook(view, "host:context", %{"path" => path})
   end
 

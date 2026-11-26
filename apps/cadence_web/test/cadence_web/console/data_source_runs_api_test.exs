@@ -92,7 +92,7 @@ defmodule CadenceWeb.Console.DataSourceRunsAPITest do
              |> json_response(202)
   end
 
-  defp api(c, path), do: "/api/console/v1/missions/#{c.mission.mission_id}" <> path
+  defp api(c, path), do: "/api/v1/missions/#{c.mission.mission_id}" <> path
 
   defp register_byo!(c, name, credentials_ref) do
     c.conn

@@ -66,15 +66,6 @@ defmodule CadenceSimulator.Provider.UplinkSessions do
     end
   end
 
-  @doc "Stops sessions whose contact is no longer active."
-  @spec stop_except(sessions(), MapSet.t()) :: sessions()
-  def stop_except(sessions, active_ids) do
-    sessions
-    |> Map.keys()
-    |> Enum.reject(&MapSet.member?(active_ids, &1))
-    |> Enum.reduce(sessions, &stop(&2, &1))
-  end
-
   @doc "Drops a session whose peer exited; returns `:not_found` for other pids."
   @spec down(sessions(), reference()) :: {:ok, sessions()} | :not_found
   def down(sessions, reference) do

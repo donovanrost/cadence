@@ -65,7 +65,7 @@ defmodule CadenceWeb.Console.ContactGrantAPITest do
       version: v1.version,
       mission: mission,
       org: org,
-      base: "/api/console/v1/missions/#{mission.mission_id}/contact-planning/grants"
+      base: "/api/v1/missions/#{mission.mission_id}/contact-planning/grants"
     }
   end
 
@@ -274,8 +274,8 @@ defmodule CadenceWeb.Console.ContactGrantAPITest do
   # and a second org admin resumes it (replayable); its original approver can't.
   test "a tightening lists, then suspends, a single-approval grant; another admin resumes it",
        c do
-    org_settings = "/api/console/v1/organizations/#{c.org.organization_id}/settings"
-    mission_settings = "/api/console/v1/missions/#{c.mission.mission_id}/settings"
+    org_settings = "/api/v1/organizations/#{c.org.organization_id}/settings"
+    mission_settings = "/api/v1/missions/#{c.mission.mission_id}/settings"
     assert json_response(save_setting(c.admin, org_settings, "direct", true), 201)
 
     grant = json_response(post_json(c.admin, c.base, body(c)), 201)["data"]["grant"]

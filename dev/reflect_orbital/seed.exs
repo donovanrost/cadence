@@ -1,6 +1,5 @@
 defmodule Cadence.Dev.ReflectOrbital.Seed do
   @moduledoc false
-  alias Cadence.Accounts.{OrganizationMembership, OrganizationMembershipRow}
   alias Cadence.Auth.Scope
 
   alias Cadence.Comms.{
@@ -14,6 +13,7 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
   }
 
   alias Cadence.Contacts.ProviderScheduling
+  alias Cadence.Dev.ReflectOrbital.Approver
   alias Cadence.Dev.ReflectOrbital.Configuration
   alias Cadence.Dev.ReflectOrbital.Fixture, as: F
   alias Cadence.Dev.ReflectOrbital.Planning
@@ -33,13 +33,14 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
   alias Cadence.SourceEndpoints.SourceEndpoint
 
   @token_key "EARENDIL_DEMO_PROVIDER_TOKEN"
+  @fleet_chunk 100
 
   def run do
     unless F.chaos_lab?() or (Code.ensure_loaded?(Mix) and Mix.env() == :dev),
       do: raise("The Earendil fixture requires development mode or the isolated chaos lab")
 
     Logger.configure(level: :warning)
-    System.put_env(@token_key, "earendil-local-provider")
+    provider_token!()
     {:ok, _apps} = Application.ensure_all_started(:cadence)
     email = System.get_env("EARENDIL_DEMO_EMAIL", "admin@example.com")
     {:ok, user} = Cadence.Accounts.fetch_user_by_email(email)
@@ -52,24 +53,28 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
     provider = seed_provider(scope)
     transports = seed_sites(provider, deliveries)
     uplinks = seed_uplinks(provider, uplink_deliveries)
-    seed_fleet(transports, uplinks)
+    {fleet_ms, :ok} = :timer.tc(fn -> seed_fleet(transports, uplinks) end, :millisecond)
     Configuration.prepare(scope)
+    # A second seeded admin approves the imported mission-model revision (user decision 11-25).
+    approved = scope.user |> Approver.scope() |> Approver.approve_candidates()
     Planning.prepare(scope)
     verify!()
+    server_url = "http://127.0.0.1:#{System.get_env("PORT", "4001")}"
+
+    n = F.fleet_size()
+    antennas = F.sites() |> Enum.map(& &1["antenna_count"]) |> Enum.sum()
 
     IO.puts("""
 
     Reflect Orbital / Earendil is ready for #{email}.
-    500 spacecraft, 20 planes, 10 simulated sites, 38 antennas.
-    500 provider mappings, 1,000 primary/backup downlink routes and 500 primary uplinks.
-    500 saved configurations share demo_spacecraft.yaml: 10 telemetry packets and 27 commands.
+    #{n} spacecraft, #{F.plane_count()} planes, #{F.site_count()} simulated sites, #{antennas} antennas.
+    #{n} provider mappings, #{2 * n} primary/backup downlink routes and #{n} primary uplinks.
+    #{n} saved configurations share demo_spacecraft.yaml: 10 telemetry packets and 27 commands.
+    Mission-model revisions approved by the seeded second admin: #{length(approved)}.
+    Fleet rows (spacecraft, switches, sources, routes) written in #{fleet_ms} ms.
     Configuration activation remains an explicit review step in Cadence.
     Simulator environment: #{F.run_id()}
-    Fleet: http://localhost:4001/missions/#{F.mission_id()}/spacecraft
-    Comms: http://localhost:4001/missions/#{F.mission_id()}/comms/providers
-    Sites: http://localhost:4001/missions/#{F.mission_id()}/comms/ground-stations
-    Contacts: http://localhost:4001/missions/#{F.mission_id()}/ops/contacts
-    Select Reflect Orbital in the organization switcher first.
+    Console: #{server_url}/console (organization Reflect Orbital, mission Earendil)
     All spacecraft, orbits, sites, and telemetry definitions are synthetic.
     """)
   end
@@ -95,8 +100,9 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
           metadata:
             Map.merge(F.metadata(), %{
               "description" =>
-                "500-spacecraft solar-reflector constellation operations rehearsal",
-              "scenario" => "20 planes × 25 spacecraft; synthetic 625 km near-polar LEO",
+                "#{F.fleet_size()}-spacecraft solar-reflector constellation operations rehearsal",
+              "scenario" =>
+                "#{F.plane_count()} planes × 25 spacecraft; synthetic 625 km near-polar LEO",
               "reference" => "https://www.reflectorbital.com/",
               "configuration_notice" =>
                 "Illustrative demo assumptions, not Reflect Orbital flight configuration"
@@ -110,19 +116,32 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
           membership
 
         {:error, :not_found} ->
-          membership =
-            OrganizationMembership.new(%{
-              user_id: user.user_id,
-              organization_id: F.organization_id(),
-              role: :organization_admin,
-              metadata: F.metadata()
-            })
-
-          {:ok, _row} = membership |> OrganizationMembershipRow.changeset() |> Repo.insert()
-          membership
+          join(user)
       end
 
     Scope.new(%{user: user, organization: organization, organization_membership: membership})
+  end
+
+  # The seeding admin joins Reflect Orbital through the public access path: granted directly to a
+  # durable account, otherwise invited and accepted as that signed-in user. No row inserts.
+  defp join(user) do
+    case Cadence.Accounts.establish_organization_access(user.email, F.organization_id(),
+           membership_role: :organization_admin,
+           invited_by_user_id: user.user_id,
+           membership_metadata: F.metadata()
+         ) do
+      {:ok, %{mode: :granted, membership: membership}} ->
+        membership
+
+      {:ok, %{mode: :invited, invitation: invitation}} ->
+        {:ok, %{membership: membership}} =
+          Cadence.Accounts.accept_invitation_as_user(
+            user.user_id,
+            invitation.organization_invitation_id
+          )
+
+        membership
+    end
   end
 
   defp seed_provider(scope) do
@@ -321,45 +340,54 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
         })
       )
 
+    sites = length(transports)
+
+    # One transaction per chunk, not per craft: commit cost dominated at 1,000 craft (#715).
     F.spacecraft()
     |> Enum.with_index()
-    |> Enum.each(fn {attrs, index} ->
-      {:ok, _result} =
-        Repo.transaction(fn ->
-          {:ok, craft} =
-            Cadence.SpacecraftStore.persist_spacecraft(F.organization_id(), Spacecraft.new(attrs))
-
-          # DECISIONS #109: change sets are the only writer of a spacecraft's Telemetry and
-          # Commanding switches, and a saved configuration takes them from the spacecraft. Set
-          # them here at the store level, like the spacecraft itself (no decision recorded), so
-          # configuration.exs saves telemetry and commanding on (board #234).
-          {:ok, _switched} =
-            Cadence.SpacecraftStore.put_switches(
-              F.organization_id(),
-              F.mission_id(),
-              craft.spacecraft_id,
-              %{telemetry_enabled: true, commanding_enabled: true}
-            )
-
-          {:ok, _source} =
-            Cadence.SourceEndpoints.persist_source_endpoint(
-              F.organization_id(),
-              SourceEndpoint.new(%{
-                source_endpoint_id: "source-#{craft.spacecraft_id}",
-                mission_id: F.mission_id(),
-                spacecraft_id: craft.spacecraft_id,
-                source_ref: craft.display_name,
-                display_name: "#{craft.display_name} TT&C",
-                metadata: F.metadata()
-              })
-            )
-
-          {primary_site, _transport} = primary = Enum.at(transports, rem(index, 10))
-          seed_route(craft, primary, :primary)
-          seed_route(craft, Enum.at(transports, rem(index + 5, 10)), :candidate)
-          seed_uplink_route(craft, Map.fetch!(uplinks, primary_site["id"]))
-        end)
+    |> Enum.chunk_every(@fleet_chunk)
+    |> Enum.each(fn chunk ->
+      {:ok, :ok} =
+        Repo.transaction(fn -> Enum.each(chunk, &seed_craft(&1, transports, uplinks, sites)) end,
+          timeout: :infinity
+        )
     end)
+  end
+
+  defp seed_craft({attrs, index}, transports, uplinks, sites) do
+    {:ok, craft} =
+      Cadence.SpacecraftStore.persist_spacecraft(F.organization_id(), Spacecraft.new(attrs))
+
+    # DECISIONS #109: change sets are the only writer of a spacecraft's Telemetry and
+    # Commanding switches, and a saved configuration takes them from the spacecraft. Set
+    # them here at the store level, like the spacecraft itself (no decision recorded), so
+    # configuration.exs saves telemetry and commanding on (board #234).
+    {:ok, _switched} =
+      Cadence.SpacecraftStore.put_switches(
+        F.organization_id(),
+        F.mission_id(),
+        craft.spacecraft_id,
+        %{telemetry_enabled: true, commanding_enabled: true}
+      )
+
+    {:ok, _source} =
+      Cadence.SourceEndpoints.persist_source_endpoint(
+        F.organization_id(),
+        SourceEndpoint.new(%{
+          source_endpoint_id: "source-#{craft.spacecraft_id}",
+          mission_id: F.mission_id(),
+          spacecraft_id: craft.spacecraft_id,
+          source_ref: craft.display_name,
+          display_name: "#{craft.display_name} TT&C",
+          metadata: F.metadata()
+        })
+      )
+
+    # Primary and candidate sites are half the site ring apart.
+    {primary_site, _transport} = primary = Enum.at(transports, rem(index, sites))
+    seed_route(craft, primary, :primary)
+    seed_route(craft, Enum.at(transports, rem(index + div(sites, 2), sites)), :candidate)
+    seed_uplink_route(craft, Map.fetch!(uplinks, primary_site["id"]))
   end
 
   defp seed_route(craft, {site, transport}, role) do
@@ -417,8 +445,9 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
 
   defp verify! do
     fleet = Cadence.SpacecraftStore.list_spacecraft(F.organization_id(), F.mission_id())
-    500 = length(fleet)
-    500 = fleet |> Enum.map(& &1.scid) |> Enum.uniq() |> length()
+    n = F.fleet_size()
+    ^n = length(fleet)
+    ^n = fleet |> Enum.map(& &1.scid) |> Enum.uniq() |> length()
 
     Enum.each(fleet, fn craft ->
       {:ok, %{routes: routes, findings: []}} =
@@ -442,7 +471,7 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
     [] = unresolved
 
     IO.puts(
-      "Verified: all 500 spacecraft have unique SCIDs, two ready downlink routes and one " <>
+      "Verified: all #{n} spacecraft have unique SCIDs, two ready downlink routes and one " <>
         "resolved primary uplink."
     )
   end
@@ -513,13 +542,20 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
     record
   end
 
+  defp provider_token! do
+    case System.get_env(@token_key) do
+      value when is_binary(value) and value != "" -> value
+      _ -> raise "#{@token_key} is required; run dev/stack env and use mise exec"
+    end
+  end
+
   defp request!(method, path, namespace, body \\ nil) do
     {:ok, data} = request(method, path, namespace, body)
     data
   end
 
   defp request(method, path, namespace, body \\ nil) do
-    token = if namespace == :admin, do: "earendil-local-admin", else: "earendil-local-provider"
+    token = if namespace == :admin, do: "earendil-local-admin", else: provider_token!()
     headers = [{"authorization", "Bearer #{token}"}, {"x-simulator-environment-ref", F.run_id()}]
 
     opts = [

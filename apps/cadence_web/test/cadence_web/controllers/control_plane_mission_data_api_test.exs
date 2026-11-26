@@ -6,6 +6,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
   import CadenceWeb.ControlPlaneApiFixtures
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet, CapabilityInstance}
+  alias Cadence.Commanding.ApprovalDecisions
   alias Cadence.Jobs
   alias Cadence.Jobs.Runner, as: JobRunner
   alias Cadence.Management.Commanding, as: ManagementCommanding
@@ -32,7 +33,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
     dev_ingress_conn =
       user
       |> TestFixtures.member_conn()
-      |> post("/api/console/v1/missions/#{mission_id}/dev/space_packets", %{
+      |> post("/api/v1/missions/#{mission_id}/dev/space_packets", %{
         "space_packet" => %{
           "source_ref" => "station-a",
           "packet_hex" => packet_hex
@@ -95,7 +96,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
     dev_tm_ingress_conn =
       user
       |> TestFixtures.member_conn()
-      |> post("/api/console/v1/missions/#{mission_id}/dev/tm_frames", %{
+      |> post("/api/v1/missions/#{mission_id}/dev/tm_frames", %{
         "tm_frame" => %{
           "source_ref" => "station-b",
           "frame_hex" => tm_frame_hex,
@@ -169,7 +170,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
     to = DateTime.utc_now() |> DateTime.add(3_600) |> DateTime.to_iso8601()
 
     history_path =
-      "/api/console/v1/missions/#{mission_id}/telemetry/points/THERM.temperature_c/history" <>
+      "/api/v1/missions/#{mission_id}/telemetry/points/THERM.temperature_c/history" <>
         "?from=#{URI.encode_www_form(from)}&to=#{URI.encode_www_form(to)}"
 
     # Both ingested samples (the packet and the frame) decode to 12.5.
@@ -348,7 +349,8 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
                mission_id,
                staged_command_request_id,
                %{"actor_kind" => "user", "user_id" => "reviewer-1"},
-               reason: "Reviewed for uplink"
+               reason: "Reviewed for uplink",
+               admin_mode: false
              )
 
     command_approval_id = approval.command_approval_id
@@ -433,6 +435,27 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
                }
              }
            } = json_response(noop_queue_entry_conn, 200)
+
+    # #117 step 4b (api-ops on #639): the release recorded not_required in the four-eyes record,
+    # but the REST approvals read doesn't show it: decision stays approved | rejected there.
+    assert Enum.any?(
+             ApprovalDecisions.decisions(organization_id),
+             &(&1.decision == :not_required and &1.subject.id == "command-request-noop")
+           )
+
+    for params <- [%{"command_request_id" => "command-request-noop"}, %{}] do
+      approvals_conn =
+        conn
+        |> authorize(api_token)
+        |> get(
+          "/api/organizations/#{organization_id}/missions/#{mission_id}/command_approvals",
+          params
+        )
+
+      assert %{"data" => approvals} = json_response(approvals_conn, 200)
+      assert Enum.all?(approvals, &(&1["decision"] in ["approved", "rejected"]))
+      refute Enum.any?(approvals, &(&1["command_request_id"] == "command-request-noop"))
+    end
 
     command_queue_entries_conn =
       conn

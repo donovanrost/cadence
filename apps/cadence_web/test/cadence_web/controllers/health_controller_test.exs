@@ -19,10 +19,6 @@ defmodule CadenceWeb.HealthControllerTest do
     assert %{"status" => "ready"} = build_conn() |> get("/health/ready") |> json_response(200)
   end
 
-  test "the existing API health response is preserved", %{conn: conn} do
-    assert %{"data" => %{"status" => "ok"}} = conn |> get("/api/health") |> json_response(200)
-  end
-
   test "draining removes readiness without failing liveness", %{conn: conn, drain_file: path} do
     File.write!(path, "")
     assert %{"status" => "unavailable"} = conn |> get("/health/ready") |> json_response(503)

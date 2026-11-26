@@ -114,7 +114,6 @@ const fields = object({
     applications: text,
     communications: text,
     readiness: text,
-    approvals: text,
     settings: text,
     ops: nullable(text),
   }),
@@ -157,7 +156,6 @@ export function readConfiguration(
     links.applications !== `${base}/applications` ||
     links.readiness !== `${base}/readiness` ||
     links.communications !== `${mission}/comms` ||
-    links.approvals !== `${mission}/ops/activations` ||
     links.settings !== `${mission}/settings/cadence.governance`
   )
     return invalid();

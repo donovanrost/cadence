@@ -26,5 +26,8 @@ defmodule Cadence.ProtocolArchiveFaultRepo do
 
   defdelegate insert_all(schema, rows, opts), to: Cadence.Repo
   defdelegate all(query), to: Cadence.Repo
+  defdelegate exists?(query), to: Cadence.Repo
+  defdelegate insert!(struct), to: Cadence.Repo
+  defdelegate update!(changeset), to: Cadence.Repo
   defdelegate rollback(reason), to: Cadence.Repo
 end

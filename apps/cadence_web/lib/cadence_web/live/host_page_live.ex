@@ -9,7 +9,6 @@ defmodule CadenceWeb.HostPageLive do
   alias Cadence.Reads.OperationalContext
 
   alias CadenceWeb.{
-    ActivationApprovals,
     CatalogPage,
     HostContext,
     HostPageAuthorization,
@@ -36,7 +35,7 @@ defmodule CadenceWeb.HostPageLive do
     case prepare_context(socket, path) do
       {:ok, socket} -> {:noreply, socket}
       {:halt, socket} -> {:noreply, socket}
-      :error -> {:noreply, redirect(socket, to: "/")}
+      :error -> {:noreply, redirect(socket, to: "/console")}
     end
   end
 
@@ -486,45 +485,6 @@ defmodule CadenceWeb.HostPageLive do
   end
 
   def handle_event(
-        "host:activation",
-        %{"path" => path, "token" => token, "input" => input},
-        socket
-      ) do
-    with true <- path == socket.assigns.host_path,
-         true <- ActivationApprovals.matches?(socket, token),
-         {:ok, info} <- resolve_path(path),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- ActivationApprovals.matches?(socket, token) do
-      result =
-        ActivationApprovals.decide(
-          socket.assigns.current_scope,
-          socket.assigns.activation_review_session,
-          input
-        )
-
-      socket =
-        if result.status == "ok",
-          do: assign(socket, :activation_review_session, nil),
-          else: socket
-
-      case prepare_context(socket, path) do
-        {:ok, socket} ->
-          {:reply, %{ok: true, snapshot: %{result: result, page: snapshot(socket.assigns)}},
-           socket}
-
-        {:halt, socket} ->
-          {:noreply, socket}
-
-        _ ->
-          {:reply, %{ok: false}, socket}
-      end
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event(
         "host:spacecraft-configuration",
         %{"path" => path, "event" => event, "input" => input},
         socket
@@ -608,14 +568,6 @@ defmodule CadenceWeb.HostPageLive do
 
       socket =
         assign(socket,
-          activation_approvals: ActivationApprovals.load(socket.assigns.current_scope, info),
-          activation_review_session:
-            ActivationApprovals.session(
-              socket.assigns[:activation_review_session],
-              socket.assigns.current_scope,
-              info,
-              path
-            ),
           ops_landing_page: OpsLandingPage.load(socket.assigns.current_scope, info),
           timeline_page: OpsTimelinePage.load(socket.assigns.current_scope, info),
           spacecraft_page: SpacecraftPage.load(socket.assigns.current_scope, info),
@@ -690,7 +642,6 @@ defmodule CadenceWeb.HostPageLive do
         assigns
         |> HostContext.from_assigns()
         |> Map.drop([:nav_context, :nav_item, :ops_nav_item, :active_dashboard_id]),
-      activation_approvals: ActivationApprovals.presentation(assigns),
       catalog: assigns[:catalog],
       timeline_page: assigns[:timeline_page],
       ops_landing_page: assigns[:ops_landing_page],

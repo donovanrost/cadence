@@ -13,7 +13,7 @@ defmodule CadenceWeb.Console.DashboardAPITest do
     (user || c.user)
     |> TestFixtures.member_conn()
     |> get(
-      "/api/console/v1/missions/#{c.mission.mission_id}/dashboards/#{c.document.dashboard_id}" <>
+      "/api/v1/missions/#{c.mission.mission_id}/dashboards/#{c.document.dashboard_id}" <>
         query
     )
   end
@@ -70,7 +70,7 @@ defmodule CadenceWeb.Console.DashboardAPITest do
 
   test "an unknown, archived or other mission's dashboard is not found", c do
     path = fn mission_id, dashboard_id ->
-      "/api/console/v1/missions/#{mission_id}/dashboards/#{dashboard_id}"
+      "/api/v1/missions/#{mission_id}/dashboards/#{dashboard_id}"
     end
 
     conn = TestFixtures.member_conn(c.user)

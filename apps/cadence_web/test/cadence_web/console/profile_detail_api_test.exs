@@ -24,7 +24,7 @@ defmodule CadenceWeb.Console.ProfileDetailAPITest do
       )
 
     without = TestFixtures.persist_spacecraft_profile!(mission)
-    base = "/api/console/v1/missions/#{mission.mission_id}/profiles/"
+    base = "/api/v1/missions/#{mission.mission_id}/profiles/"
 
     read = fn id ->
       user |> TestFixtures.member_conn() |> get(base <> id) |> json_response(200)
@@ -67,7 +67,7 @@ defmodule CadenceWeb.Console.ProfileDetailAPITest do
     rows =
       user
       |> TestFixtures.member_conn()
-      |> get("/api/console/v1/missions/#{mission.mission_id}/profiles")
+      |> get("/api/v1/missions/#{mission.mission_id}/profiles")
       |> json_response(200)
       |> get_in(["data", "profiles"])
       |> Map.new(&{&1["id"], &1})
@@ -105,7 +105,7 @@ defmodule CadenceWeb.Console.ProfileDetailAPITest do
         catalog_revision_id: elsewhere.catalog_revision_id
       )
 
-    path = "/api/console/v1/missions/#{mission.mission_id}/profiles/#{profile.spacecraft_type_id}"
+    path = "/api/v1/missions/#{mission.mission_id}/profiles/#{profile.spacecraft_type_id}"
 
     # Nor a composition (D2, #543): another mission's catalog revision is never looked up.
     assert %{"data" => %{"profile" => %{"catalog_revision" => catalog, "composition" => nil}}} =

@@ -127,7 +127,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressRuntimeTest do
 
     # Even an empty output batch must durably archive its protocol records
     # before the processing cursor may advance.
-    assert Repo.aggregate(Cadence.Protocol.RecordArchive.FileSystem.RecordEntryRow, :count) > 0
+    assert Repo.aggregate(Cadence.Protocol.RecordArchive.FileSystem.SegmentRow, :count) > 0
 
     assert {:ok, second_result} = Cadence.process_telemetry_ingress(raw_evidence_two)
 

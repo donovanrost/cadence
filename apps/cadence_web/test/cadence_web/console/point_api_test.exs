@@ -20,7 +20,7 @@ defmodule CadenceWeb.Console.PointAPITest do
   defp get_json(c, path) do
     c.user
     |> TestFixtures.member_conn()
-    |> get("/api/console/v1/missions/#{c.mission.mission_id}" <> path)
+    |> get("/api/v1/missions/#{c.mission.mission_id}" <> path)
   end
 
   defp window do

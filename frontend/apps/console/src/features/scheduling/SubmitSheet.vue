@@ -161,18 +161,16 @@ const heading = computed(() =>
     : props.title,
 );
 /**
- * U61: a refusal that names another plan offers to open it. #273: when the booking windows closed
- * (all, or some under step 1's refusal), K1's Draft a new plan before the day starts, Plan the rest
- * once it has; never Reload, since the windows stay closed.
+ * U61: a refusal that names another plan offers to open it. #273: when every pass's booking window
+ * closed, K1's Draft a new plan before the day starts, Plan the rest once it has; never Reload,
+ * since the windows stay closed.
  */
 const refusalOpen = computed(() => {
   const e = error.value;
   const open = e ? lifecycleRefusal(e)?.open : null;
   const day = open?.day ?? props.day ?? null;
   if (open && day) return { label: open.label, to: planOfDayRoute(day, open.planId) };
-  const closed =
-    isError(e, "contact_plan_all_opportunities_expired") ||
-    isError(e, "contact_plan_opportunity_expired");
+  const closed = isError(e, "contact_plan_all_opportunities_expired");
   if (!closed || !day) return null;
   const started = new Date().toISOString().slice(0, 10) >= day;
   return {

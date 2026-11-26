@@ -76,12 +76,8 @@ const alreadyPlanned = d.object({
   day: d.string,
 });
 const replaced = d.object({ plan_id: d.token, revision: d.integer, at: d.timestamp });
-/** All closed: #273's {expired, expired_digest}; the older {expired_count, day} still reads. */
-const allExpired = d.object({
-  expired: d.optional(expiredReader),
-  expired_count: d.optional(d.integer),
-  day: d.optional(d.string),
-});
+/** All closed (#273): the closed set, `{expired, expired_digest}`. */
+const allExpired = d.object({ expired: d.optional(expiredReader) });
 
 /** `11-16` from `2026-11-16`. */
 export const dayLabel = (day: string) => day.slice(5, 10);
@@ -99,12 +95,11 @@ const revisionBy = (revision: number, author: SupersededBy["author"]) =>
 export const supersededByLine = (s: SupersededBy, now: Date = new Date()) =>
   `Superseded by ${revisionBy(s.revision, s.author)} at ${at(s.at, now)}.`;
 
-/** Where a refusal points: the plan to open, or the day to plan the rest of. */
+/** Where a refusal points: the plan to open. */
 export type LifecycleRefusal = Readonly<{
   text: string;
   /** The plan to open; `day` when the refusal names it (else the day on screen). */
   open: Readonly<{ planId: string; label: string; day: string | null }> | null;
-  planRestOf: string | null;
 }>;
 
 /** The three U61 approval refusals in ux's words; null for any other error. */
@@ -115,13 +110,11 @@ export function lifecycleRefusal(error: ApiError, now: Date = new Date()): Lifec
       return {
         text: "Not approved: another plan already covers this day.",
         open: null,
-        planRestOf: null,
       };
     const state = typeof p.state === "string" ? COVERING_WORDS[p.state] : p.state.unrecognized;
     return {
       text: `Not approved: R${p.revision} (${state}) already covers ${formatCount(p.requirements)} of these requirements for ${dayLabel(p.day)}. Open R${p.revision}, or send this plan back.`,
       open: { planId: p.plan_id, label: `Open R${p.revision}`, day: p.day },
-      planRestOf: null,
     };
   }
   if (isError(error, "contact_plan_replaced")) {
@@ -130,17 +123,15 @@ export function lifecycleRefusal(error: ApiError, now: Date = new Date()): Lifec
       ? {
           text: `Not approved: R${p.revision} replaced this plan at ${at(p.at, now)}.`,
           open: { planId: p.plan_id, label: `Open R${p.revision}`, day: null },
-          planRestOf: null,
         }
-      : { text: "Not approved: a newer plan replaced this one.", open: null, planRestOf: null };
+      : { text: "Not approved: a newer plan replaced this one.", open: null };
   }
   if (isError(error, "contact_plan_all_opportunities_expired")) {
     const p = detailsOf(error, allExpired);
-    const n = p?.expired?.count ?? p?.expired_count ?? null;
+    const n = p?.expired?.count ?? null;
     return {
       text: `Not approved: the booking window has closed for ${allPasses(n)}, so nothing could be booked.`,
       open: null,
-      planRestOf: p?.day ?? null,
     };
   }
   return null;

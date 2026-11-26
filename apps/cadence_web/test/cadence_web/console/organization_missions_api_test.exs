@@ -14,7 +14,7 @@ defmodule CadenceWeb.Console.OrganizationMissionsAPITest do
     data =
       user
       |> TestFixtures.member_conn()
-      |> get("/api/console/v1/organizations/#{org.organization_id}/missions")
+      |> get("/api/v1/organizations/#{org.organization_id}/missions")
       |> json_response(200)
       |> Map.fetch!("data")
 
@@ -33,7 +33,7 @@ defmodule CadenceWeb.Console.OrganizationMissionsAPITest do
     groups =
       user
       |> TestFixtures.member_conn()
-      |> get("/api/console/v1/missions/#{mission.mission_id}/routing-rules/groups")
+      |> get("/api/v1/missions/#{mission.mission_id}/routing-rules/groups")
       |> json_response(200)
 
     assert groups["data"] == %{"groups" => []}
@@ -42,7 +42,7 @@ defmodule CadenceWeb.Console.OrganizationMissionsAPITest do
 
     assert outsider
            |> TestFixtures.member_conn()
-           |> get("/api/console/v1/organizations/#{org.organization_id}/missions")
+           |> get("/api/v1/organizations/#{org.organization_id}/missions")
            |> json_response(404)
   end
 end

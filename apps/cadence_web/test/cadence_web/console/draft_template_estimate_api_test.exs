@@ -17,7 +17,7 @@ defmodule CadenceWeb.Console.DraftTemplateEstimateAPITest do
 
     Map.merge(c, %{
       conn: TestFixtures.member_conn(user),
-      base: "/api/console/v1/missions/#{c.mission_id}/contact-plans"
+      base: "/api/v1/missions/#{c.mission_id}/contact-plans"
     })
   end
 

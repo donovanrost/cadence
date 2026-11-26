@@ -4,9 +4,10 @@ defmodule Cadence.Control.Commanding.GroupSubmissionTest do
   import Ecto.Query
   import Cadence.CommandGroupFixtures
 
-  alias Cadence.Commanding.CommandQueueEntryRow
+  alias Cadence.Commanding.{CommandApprovalRow, CommandQueueEntryRow}
   alias Cadence.Commanding.Groups.GroupStore
   alias Cadence.Control.Commanding.GroupSubmission
+  alias Cadence.Management.Commanding.RequestReview
 
   setup do
     setup!(2)
@@ -56,6 +57,23 @@ defmodule Cadence.Control.Commanding.GroupSubmissionTest do
     end
 
     assert [%{kind: :submitted}] = GroupStore.events(c.mission, group.command_group_id)
+
+    # #117 step 4b: released without a second GO, each member gets its own not_required record in
+    # the submission's transaction: the submitter as actor, no separation, its own review token.
+    ids = Enum.map(members, & &1.command_request_id)
+    rows = Repo.all(from(a in CommandApprovalRow, where: a.command_request_id in ^ids))
+    assert length(rows) == 4
+
+    for row <- rows do
+      member = Enum.find(members, &(&1.command_request_id == row.command_request_id))
+      assert row.decision == "not_required"
+      assert row.separated_from == []
+      assert row.admin_mode == (c.scope.admin_mode? == true)
+      assert row.decided_by_document["value"]["user_id"] == c.scope.user.user_id
+
+      assert row.subject_digest ==
+               RequestReview.review_token(%{member | lifecycle_state: :queued})
+    end
   end
 
   test "a plain member (role member) submits a small routine group and it's queued (#62)", c do

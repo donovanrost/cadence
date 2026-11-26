@@ -1,5 +1,4 @@
 import type { Component } from "vue";
-import OpsActivationRequests from "./OpsActivationRequests.vue";
 import OpsAlarms from "./OpsAlarms.vue";
 import OpsCommands from "./OpsCommands.vue";
 import OpsConsoleLanding from "./OpsConsoleLanding.vue";
@@ -22,7 +21,6 @@ import OpsTimeline from "./OpsTimeline.vue";
 // Feature widgets are reached through their owner's public component tree.
 // oxlint-disable typescript/no-unsafe-assignment -- This registry contains SFC constructors checked by vue-tsc.
 export const OPS_COMPONENTS: Record<string, Component> = {
-  OpsActivationRequests,
   OpsAlarms,
   OpsCommands,
   OpsConsoleLanding,

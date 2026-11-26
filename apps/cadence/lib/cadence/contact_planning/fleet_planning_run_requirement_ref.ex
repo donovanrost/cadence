@@ -14,6 +14,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningRunRequirementRef do
           mission_id: binary(),
           contact_requirement_id: binary(),
           contact_requirement_version: pos_integer(),
+          input_content_sha256: binary(),
           contact_planning_run_id: binary() | nil,
           input_state: atom(),
           result_state: atom(),
@@ -29,6 +30,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningRunRequirementRef do
     :mission_id,
     :contact_requirement_id,
     :contact_requirement_version,
+    :input_content_sha256,
     :contact_planning_run_id,
     :input_state,
     :result_state,
@@ -52,6 +54,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningRunRequirementRef do
       contact_requirement_id: required(attrs, :contact_requirement_id),
       contact_requirement_version:
         positive(value(attrs, :contact_requirement_version), :contact_requirement_version),
+      input_content_sha256: required(attrs, :input_content_sha256),
       contact_planning_run_id: optional_string(value(attrs, :contact_planning_run_id)),
       input_state:
         attrs

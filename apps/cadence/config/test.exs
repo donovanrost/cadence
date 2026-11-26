@@ -79,6 +79,9 @@ config :cadence, data_source_health_events: [enabled?: false]
 config :cadence, data_source_probe_scheduler: [enabled?: false]
 config :cadence, data_source_watermark_events: [enabled?: false]
 
+# No QuestDB in tests: the retention job is exercised with an injected `exec_fun`.
+config :cadence, :telemetry_observation_retention, enabled?: false
+
 config :logger, level: :warning
 
 # Provider HTTP calls refuse private and reserved networks (OutboundGuard, api-ops 11-15); this
@@ -105,6 +108,9 @@ config :cadence, :env_credentials,
 config :cadence, :fixture_application_contributors, [
   Cadence.TestSupport.SurfaceFixtureApplication
 ]
+
+# Retention sweepers (#694) are exercised directly in their tests: no timers in the suite.
+config :cadence, :retention, enabled?: false
 
 # The watermark coalescer's own timer cannot use a test's sandbox connection: tests flush through
 # a watermark read or `WatermarkCoalescer.flush/0`.

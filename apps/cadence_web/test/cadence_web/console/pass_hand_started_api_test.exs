@@ -29,7 +29,7 @@ defmodule CadenceWeb.Console.PassHandStartedAPITest do
       user: user,
       stopped: stopped,
       conn: TestFixtures.member_conn(user),
-      base: "/api/console/v1/missions/#{booked.mission_id}/passes"
+      base: "/api/v1/missions/#{booked.mission_id}/passes"
     }
   end
 
@@ -176,7 +176,7 @@ defmodule CadenceWeb.Console.PassHandStartedAPITest do
       assert %{"error" => %{"code" => "pass_not_found"}} =
                c |> show(theirs.realized_contact_id) |> json_response(404)
 
-      other_base = "/api/console/v1/missions/#{other_id}/passes"
+      other_base = "/api/v1/missions/#{other_id}/passes"
 
       for id <- [
             c.stopped.realized_contact_id,

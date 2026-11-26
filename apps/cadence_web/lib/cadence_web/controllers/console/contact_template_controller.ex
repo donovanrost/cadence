@@ -1,7 +1,7 @@
 defmodule CadenceWeb.Console.ContactTemplateController do
   @moduledoc """
   Contact planning summary (CP1) and targeted requirement templates (CP3) under
-  `/api/console/v1/missions/:mission_id/contact-planning`. Contract:
+  `/api/v1/missions/:mission_id/contact-planning`. Contract:
   docs/apogee/api/scheduling.md.
   """
 

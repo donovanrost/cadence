@@ -33,6 +33,28 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
 
   @document_limit 64 * 1_024
 
+  @doc "Persists prepared occurrence bindings inside the caller's transaction."
+  def insert_materialized_occurrences([]), do: :ok
+
+  def insert_materialized_occurrences(items) when is_list(items) do
+    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+
+    rows =
+      Enum.map(items, fn item ->
+        item.occurrence
+        |> ContactRequirementOccurrenceRow.changeset()
+        |> Changeset.apply_action!(:insert)
+        |> Map.from_struct()
+        |> Map.take(ContactRequirementOccurrenceRow.__schema__(:fields))
+        |> Map.merge(%{inserted_at: now, updated_at: now})
+      end)
+
+    {count, _} =
+      Repo.insert_all(ContactRequirementOccurrenceRow, rows, on_conflict: :nothing)
+
+    if count == length(items), do: :ok, else: {:error, :fleet_planning_review_changed}
+  end
+
   @spec create(Scope.t(), binary(), map(), keyword()) ::
           {:ok, ContactRequirementTemplate.t(), ContactRequirementTemplateVersion.t()}
           | {:error, term()}

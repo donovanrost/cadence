@@ -112,6 +112,7 @@ defmodule Cadence.Management.Contacts do
       snapshot_ids =
         ContactPlans.bookable_snapshots(organization_id, mission_id, plan_id, version)
         |> Enum.map(& &1.contact_opportunity_snapshot_id)
+        |> without_skipped(approval)
 
       ApprovedContactPlan.new(plan, approved_version, approval, snapshot_ids)
     else
@@ -156,6 +157,7 @@ defmodule Cadence.Management.Contacts do
           version.version
         )
         |> Enum.map(& &1.contact_opportunity_snapshot_id)
+        |> without_skipped(approval)
 
       ApprovedContactPlan.new(plan, version, approval, snapshot_ids)
     end
@@ -179,4 +181,13 @@ defmodule Cadence.Management.Contacts do
         approval.content_sha256 == version.content_sha256
     end)
   end
+
+  # #273: execution books exactly what was approved: the passes the decision left out because
+  # their booking window had closed are never requested (ca-security; the director's condition 1).
+  defp without_skipped(snapshot_ids, %{skipped: skipped}) when is_list(skipped) do
+    left_out = MapSet.new(skipped, & &1["snapshot_id"])
+    Enum.reject(snapshot_ids, &MapSet.member?(left_out, &1))
+  end
+
+  defp without_skipped(snapshot_ids, _approval), do: snapshot_ids
 end

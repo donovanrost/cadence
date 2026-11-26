@@ -13,15 +13,15 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase.Validation do
   @supported_effect_operations ~w(set increment decrement toggle)
 
   def validate(%Source{} = artifact) do
-    with :ok <- validate_format(artifact),
-         {:ok, parsed} <- parse(artifact) do
-      validate_root(parsed)
-    end
+    with {:ok, _document} <- parse(artifact), do: :ok
   end
 
   def parse(%Source{} = artifact) do
-    with {:ok, yaml_source} <- extract_yaml_source(artifact) do
-      parse_yaml(yaml_source)
+    with :ok <- validate_format(artifact),
+         {:ok, yaml_source} <- extract_yaml_source(artifact),
+         {:ok, document} <- parse_yaml(yaml_source),
+         :ok <- validate_root(document) do
+      {:ok, document}
     end
   end
 

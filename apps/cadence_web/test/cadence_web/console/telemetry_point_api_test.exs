@@ -27,7 +27,7 @@ defmodule CadenceWeb.Console.TelemetryPointAPITest do
   defp get_json(c, query) do
     c.user
     |> TestFixtures.member_conn()
-    |> get("/api/console/v1/missions/#{c.mission.mission_id}/telemetry/points" <> query)
+    |> get("/api/v1/missions/#{c.mission.mission_id}/telemetry/points" <> query)
   end
 
   test "searches the active points by id, name or description", c do

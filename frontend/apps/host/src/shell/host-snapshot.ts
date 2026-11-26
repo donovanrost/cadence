@@ -20,12 +20,10 @@ function envelope<T>(read: (value: unknown) => T) {
 }
 const contributedPage = envelope(object({ id: optional(string), token: maybe(string) }));
 const spacecraftPage = envelope(object({ form_token: maybe(string), page: optional(string) }));
-const activationPage = envelope(object({ token: maybe(string) }));
 const featurePayload = (value: unknown) => value;
 const snapshotFields = object({
   path: string,
   context: readHostContext,
-  activation_approvals: maybe(activationPage),
   ops_page: maybe(contributedPage),
   spacecraft_page: maybe(spacecraftPage),
   catalog: featurePayload,

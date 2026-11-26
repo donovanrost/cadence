@@ -49,7 +49,7 @@ defmodule CadenceWeb.Console.OneAPITelemetryTest do
     %{
       user: user,
       token: token,
-      base: "/api/console/v1/missions/#{mission.mission_id}"
+      base: "/api/v1/missions/#{mission.mission_id}"
     }
   end
 
@@ -164,7 +164,7 @@ defmodule CadenceWeb.Console.OneAPITelemetryTest do
       use Phoenix.Router
       require CadenceWeb.Console.DevIngestRoutes, as: DevIngestRoutes
 
-      scope "/api/console/v1/missions/:mission_id", CadenceWeb.Console do
+      scope "/api/v1/missions/:mission_id", CadenceWeb.Console do
         DevIngestRoutes.mount(false)
       end
     end
@@ -173,7 +173,7 @@ defmodule CadenceWeb.Console.OneAPITelemetryTest do
       use Phoenix.Router
       require CadenceWeb.Console.DevIngestRoutes, as: DevIngestRoutes
 
-      scope "/api/console/v1/missions/:mission_id", CadenceWeb.Console do
+      scope "/api/v1/missions/:mission_id", CadenceWeb.Console do
         DevIngestRoutes.mount(true)
       end
     end
@@ -182,8 +182,8 @@ defmodule CadenceWeb.Console.OneAPITelemetryTest do
       assert Phoenix.Router.routes(ProdShapeRouter) == []
 
       assert Phoenix.Router.routes(DevShapeRouter) |> Enum.map(& &1.path) |> Enum.sort() == [
-               "/api/console/v1/missions/:mission_id/dev/space_packets",
-               "/api/console/v1/missions/:mission_id/dev/tm_frames"
+               "/api/v1/missions/:mission_id/dev/space_packets",
+               "/api/v1/missions/:mission_id/dev/tm_frames"
              ]
 
       assert DevIngestRoutes.__info__(:module) == DevIngestRoutes

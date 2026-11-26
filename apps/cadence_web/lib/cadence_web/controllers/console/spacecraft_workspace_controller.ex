@@ -1,7 +1,7 @@
 defmodule CadenceWeb.Console.SpacecraftWorkspaceController do
   @moduledoc """
   (B) a spacecraft's configuration workspace (director 11-17; ux U94), under
-  `/api/console/v1/missions/:mission_id/spacecraft/:spacecraft_id/configuration/workspace`.
+  `/api/v1/missions/:mission_id/spacecraft/:spacecraft_id/configuration/workspace`.
   Contract: docs/apogee/api/setup.md §Spacecraft configuration workspace.
 
   Over the host's read model, Drafts and Control.SpacecraftConfiguration; no new domain logic.

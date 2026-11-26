@@ -25,11 +25,11 @@ defmodule CadenceWeb.OrganizationAuth do
             {:halt, redirect(socket, to: "/console/admin")}
 
           true ->
-            {:halt, redirect(socket, to: "/no-organization")}
+            {:halt, redirect(socket, to: "/console/no-organization")}
         end
 
       _other ->
-        {:halt, redirect(socket, to: "/sign-in")}
+        {:halt, redirect(socket, to: "/console/sign-in")}
     end
   end
 
@@ -42,11 +42,11 @@ defmodule CadenceWeb.OrganizationAuth do
         else
           {:halt,
            socket
-           |> redirect(to: "/")}
+           |> redirect(to: "/console")}
         end
 
       _other ->
-        {:halt, redirect(socket, to: "/sign-in")}
+        {:halt, redirect(socket, to: "/console/sign-in")}
     end
   end
 end

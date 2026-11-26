@@ -20,7 +20,7 @@ defmodule CadenceWeb.Console.PassSecondConnectionsAPITest do
       booked: booked,
       conn: TestFixtures.member_conn(user),
       path:
-        "/api/console/v1/missions/#{booked.mission_id}/passes/#{booked.reservation.provider_reservation_id}"
+        "/api/v1/missions/#{booked.mission_id}/passes/#{booked.reservation.provider_reservation_id}"
     }
   end
 

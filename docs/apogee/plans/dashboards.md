@@ -21,7 +21,7 @@ ux `screens/Dashboards.md` (aed431cb). Missing server pieces are numbered **D1â€
 
 ## What exists today (inventory, 2026-11-13)
 
-**Every dashboard page is LiveView-only.** There's no dashboard JSON endpoint anywhere (`/api/console/v1` has
+**Every dashboard page is LiveView-only.** There's no dashboard JSON endpoint anywhere (`/api/v1` has
 none), and the application-host bridge returns real data only for directory and new. Everything goes through
 `HostPageLive` `host:ops-page` events with a per-page `sequence`. The only plain route is the export download
 (`DashboardExportController`).
@@ -103,7 +103,7 @@ Ops mode, `nav: "telemetry"`. Base `M` = `/console/:org/:mission`.
 
 ## Data per screen
 
-Base `/api/console/v1/missions/:m/dashboards`. Session JSON, the console error envelope, `operation`-free
+Base `/api/v1/missions/:m/dashboards`. Session JSON, the console error envelope, `operation`-free
 (dashboard writes are synchronous and idempotent on `expected_version`). All endpoints wrap the existing domain
 functions named above. Nothing is reimplemented.
 
@@ -284,7 +284,7 @@ Priority order. Each one wraps an existing domain function unless marked **new**
 
 ## D5 proposed shape (for api-ops)
 
-`GET /api/console/v1/missions/:m/dashboards/:id?from&to&spacecraft_id` wraps `Reads.Dashboards.DashboardPage.load/4`
+`GET /api/v1/missions/:m/dashboards/:id?from&to&spacecraft_id` wraps `Reads.Dashboards.DashboardPage.load/4`
 with the runtime admitted by `OpsWorkspaceURL` (same `from`/`to` grammar: `now-6h` â€¦ `now`, or ISO bounds).
 
 ```json

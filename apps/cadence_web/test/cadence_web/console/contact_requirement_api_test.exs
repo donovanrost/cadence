@@ -21,7 +21,7 @@ defmodule CadenceWeb.Console.ContactRequirementAPITest do
       member: member,
       sc1: sc1,
       sc2: sc2,
-      base: "/api/console/v1/missions/#{mission.mission_id}/contact-planning/requirements"
+      base: "/api/v1/missions/#{mission.mission_id}/contact-planning/requirements"
     }
   end
 
@@ -375,7 +375,7 @@ defmodule CadenceWeb.Console.ContactRequirementAPITest do
 
     admin_user
     |> TestFixtures.member_conn()
-    |> post("/api/console/v1/missions/#{c.mission.mission_id}/contact-planning/templates", body)
+    |> post("/api/v1/missions/#{c.mission.mission_id}/contact-planning/templates", body)
     |> json_response(201)
     |> get_in(["data", "id"])
   end

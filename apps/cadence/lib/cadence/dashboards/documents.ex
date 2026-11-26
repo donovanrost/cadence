@@ -52,6 +52,8 @@ defmodule Cadence.Dashboards.Documents do
     to: DocumentStore,
     as: :fetch_published_document
 
+  defdelegate dashboard_owner(dashboard_id), to: DocumentStore
+
   defdelegate fetch_for_mode(organization_id, mission_id, dashboard_id, mode),
     to: DocumentStore,
     as: :fetch_document_for_mode

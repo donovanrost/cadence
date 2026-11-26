@@ -62,7 +62,7 @@ defmodule CadenceWeb.Console.MissionProvidersAPITest do
       member: member,
       scope: scope,
       grant: grant,
-      base: "/api/console/v1/missions/#{mission.mission_id}/providers"
+      base: "/api/v1/missions/#{mission.mission_id}/providers"
     }
   end
 
