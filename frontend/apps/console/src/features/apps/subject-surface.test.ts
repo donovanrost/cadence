@@ -27,6 +27,8 @@ const comms = {
   installed: true,
   state: "installed",
   version: 1,
+  available_version: 1,
+  update_available: false,
   consequence_if_missing: null,
   surfaces: [
     row("overview", 10, "overview"),
@@ -45,7 +47,9 @@ function setup() {
   vi.stubGlobal("fetch", (input: string) => {
     urls.push(input);
     return Promise.resolve(
-      new Response(JSON.stringify({ data: { apps: [comms], permissions: [] } })),
+      new Response(
+        JSON.stringify({ data: { apps: [comms], spacecraft_count: 0, permissions: [] } }),
+      ),
     );
   });
   const stub = { template: "<div />" };

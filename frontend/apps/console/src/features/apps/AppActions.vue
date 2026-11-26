@@ -5,13 +5,29 @@ import { failureOutcome } from "@/features/changes/index.ts";
 import { ApButton, ApCallout } from "@/ui";
 import type { SpacecraftId } from "@/api";
 import { changeApp, type App, type AppAction } from "./api.ts";
+import type { UninstallScope } from "./uninstall-words.ts";
+import UninstallSheet from "./UninstallSheet.vue";
 
-/** Install / disable / uninstall for one app, through the app-change seam. */
-const props = defineProps<{ missionId: MissionId; app: App; spacecraftId?: SpacecraftId | null }>();
+/**
+ * Install / disable / uninstall for one app, through the app-change seam. Uninstall is offered on an
+ * installed or a disabled app (the server accepts both, #679) behind a confirm sheet.
+ */
+const props = defineProps<{
+  missionId: MissionId;
+  app: App;
+  uninstallScope: UninstallScope;
+  spacecraftId?: SpacecraftId | null;
+}>();
 const emit = defineEmits<{ changed: [] }>();
 const busy = ref(false);
+const sheet = ref<InstanceType<typeof UninstallSheet> | null>(null);
 /** `failed`: the act was refused or failed, said as an alert; "Staged" is read politely (B6, ux #276). */
 const note = ref<{ text: string; failed: boolean } | null>(null);
+
+function confirmUninstall() {
+  sheet.value?.close();
+  void run("uninstall");
+}
 
 async function run(action: AppAction) {
   busy.value = true;
@@ -63,15 +79,22 @@ async function run(action: AppAction) {
         >Enable</ApButton
       >
       <ApButton
-        v-if="app.state === 'disabled'"
+        v-if="app.state === 'installed' || app.state === 'disabled'"
         size="compact"
         variant="danger"
         :disabled="busy"
         disabled-reason="Working…"
-        @click="run('uninstall')"
+        :aria-label="`Uninstall ${app.name}`"
+        @click="sheet?.open()"
         >Uninstall</ApButton
       >
     </div>
+    <UninstallSheet
+      ref="sheet"
+      :app-name="app.name"
+      :scope="uninstallScope"
+      @confirm="confirmUninstall"
+    />
     <ApCallout v-if="note" tone="caution" :role="note.failed ? 'alert' : 'status'">{{
       note.text
     }}</ApCallout>

@@ -407,6 +407,16 @@ defmodule Cadence.SpacecraftStore do
     end)
   end
 
+  @doc "Counts a mission's active spacecraft in SQL, without loading their records."
+  @spec count_mission_spacecraft(binary(), binary()) :: non_neg_integer()
+  def count_mission_spacecraft(organization_id, mission_id)
+      when is_binary(organization_id) and is_binary(mission_id) do
+    SpacecraftRow
+    |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
+    |> active()
+    |> Repo.aggregate(:count, :spacecraft_id)
+  end
+
   @doc "Counts spacecraft across an organization's missions without loading their records."
   def count_organization_spacecraft(organization_id) when is_binary(organization_id) do
     SpacecraftRow
