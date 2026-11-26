@@ -57,15 +57,18 @@ Each agent gets its own worktree off `origin/develop` and its own hc terminal, n
 ```sh
 # laptop 1 (add --on donovans-macbook-pro-1 for laptop 2; its repo is ~/projects/cadence/cadence,
 # worktrees go in ~/projects/cadence/worktrees/<handle>)
-git -C <repo> fetch origin && git -C <repo> worktree add <worktrees>/<handle> origin/develop --detach
-hc run --bg --name <handle> --outlive-parent --label team=cadence --label head=<your handle> \
-  --cwd <worktrees>/<handle> claude --model <model> --effort <level> --permission-mode auto
-# Codex: ... codex -c model_reasoning_effort="high"
-hc send <handle> "<brief: role, area, first task, link to docs/TEAM.md>"
+git -C <repo> fetch origin && git -C <repo> worktree add --detach <worktrees>/<handle> origin/develop
+(cd <worktrees>/<handle> && mise trust)        # without this, node is missing and hooks fail
+# start a login shell (so mise's PATH applies), then the agent inside it
+hc run --bg --name <handle> --no-parent --no-notify --keep --label team=cadence --label head=<your handle> \
+  --cwd <worktrees>/<handle>
+hc send <handle> "claude --model <model> --effort <level> --permission-mode auto"
+# Codex instead: hc send <handle> "codex -c model_reasoning_effort=high"
+hc send <handle> "<brief: role, area, first task, pointer to docs/TEAM.md>"
 ```
 
-Laptop 1 worktrees live in `~/.herdr/worktrees/cadence/<handle>`. Then run `mise trust` and `mix deps.get`
-(and `pnpm install` under `frontend/` for frontend work) in the new worktree.
+Laptop 1 worktrees live in `~/.herdr/worktrees/cadence/<handle>`. The new agent runs `mix deps.get`
+(and `pnpm install` under `frontend/` for frontend work) in its worktree.
 
 ### Firing
 
@@ -118,3 +121,11 @@ Laptop 1 worktrees live in `~/.herdr/worktrees/cadence/<handle>`. Then run `mise
 | Handle | Role | Machine | hc address | Model | Hired |
 | --- | --- | --- | --- | --- | --- |
 | cto | CTO | laptop 1 | `t11` | Claude Opus 5.5 | 2026-11-25 |
+| platform | Head of Platform | laptop 1 | `platform` | Claude Opus 5.5, high | 2026-11-25 |
+| console | Head of Console | laptop 1 | `console` | Claude Opus 5.5, high | 2026-11-25 |
+| ground | Head of Ground & Comms | laptop 1 | `ground` | Claude Opus 5.5, high | 2026-11-25 |
+| commanding | Head of Commanding & Approvals | laptop 2 | `donovans-macbook-pro-1/commanding` | Claude Opus 5.5, high | 2026-11-25 |
+| mission-model | Head of Mission Model & Spacecraft | laptop 2 | `donovans-macbook-pro-1/mission-model` | Claude Opus 5.5, high | 2026-11-25 |
+| telemetry | Head of Telemetry & Data | laptop 2 | `donovans-macbook-pro-1/telemetry` | Claude Opus 5.5, high | 2026-11-25 |
+
+Codex is installed and signed in on laptop 1 only. Until laptop 2 has it, Codex hires run on laptop 1.
