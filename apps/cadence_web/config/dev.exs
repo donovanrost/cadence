@@ -23,11 +23,11 @@ config :cadence_web,
 
 dev_port = String.to_integer(System.get_env("PORT", "4001"))
 
-# CADENCE_CI_SERVER=1: the console-e2e CI server only (lead 11-20). No code reloader and no Vite or
-# Tailwind watchers. Under concurrent requests the reloader raced Mix's project loading ("Trying to
-# load XTCE.MixProject ... another project with the same name was already defined", console-e2e
-# probation flake #1, run 44741752992), and CI serves built assets anyway. Inert unless set, so
-# local dev is unchanged. `code_reloader` is read at compile time: set it before compiling.
+# CADENCE_CI_SERVER=1: the console-e2e CI server only. No code reloader and no Vite or Tailwind
+# watchers. Under concurrent requests the reloader raced Mix's project loading ("Trying to load
+# XTCE.MixProject ... another project with the same name was already defined", run 44741752992),
+# and CI serves built assets anyway. Inert unless set, so local dev is unchanged. `code_reloader`
+# is read at compile time: set it before compiling.
 ci_server? = System.get_env("CADENCE_CI_SERVER") in ["1", "true"]
 
 config :cadence_web, CadenceWeb.Endpoint,
