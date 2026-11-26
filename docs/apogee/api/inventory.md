@@ -63,7 +63,6 @@ on success. JSON views are in `W/api/*_json.ex`. Every `…` row passes `authori
 | Commanding | `GET …/command_verifier_instances`, `/:id` | CommandVerifierInstance | `Projections.CommandStatus.*_verifier_instance*` | |
 | Contacts | `GET`, `POST …/scheduled_contacts`; `GET /:id`; `POST /:id/realize`, `/:id/cancel` | ScheduledContact | `Contacts.*_scheduled_contact` | |
 | Contacts | `GET …/realized_contacts`, `/:id`; `POST /:id/end_early` | RealizedContact | `Contacts.*_realized_contact*` | |
-| Contacts | `GET …/realized_contacts/:id/runtime`, `/:id/paths/:path_id/runtime` | RealizedContact | `Runtime.realized_contact_snapshot`, `path_runtime_snapshot` | live runtime snapshot |
 | Contacts | `GET …/contact_actions` | ContactAction | `Contacts.list_contact_actions` | |
 | Activations | `POST …/activations`; `GET …/activations/active` | Activation | `MissionModels.request_promotion`, `Control.Activations.fetch_active_basis` | |
 | Activations | `GET …/activation_requests`, `/:id`; `POST /:id/approve`, `/:id/reject` | Activation | `Management.Activations.{list,fetch,approve,reject}`, `Control.Activations.execute` | services can't approve; approve answers `outcome: applied \| needs_review` once the approval is recorded (#263) |

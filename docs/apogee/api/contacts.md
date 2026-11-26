@@ -862,3 +862,15 @@ threshold}`.
 Draw `target` as the dashed line. `top_cause`/`top_station` annotate dips.
 
 Money (R5, disputes in $) is out of scope: no provider reports prices.
+
+
+## Live runtime snapshots
+
+The console mission scope serves realized-contact runtime snapshots under
+`/api/v1/missions/:mission_id/realized-contacts/:realized_contact_id`.
+
+- `GET /runtime` returns the running contact and its path snapshots.
+- `GET /paths/:path_id/runtime` returns one path, including its provider and transport runtimes.
+
+People use a mission-admin session. The path endpoint also accepts a mission-authorized service
+identity bearing its token, which the simulator uses to discover live connection settings.

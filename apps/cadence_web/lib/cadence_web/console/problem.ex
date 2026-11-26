@@ -318,6 +318,9 @@ defmodule CadenceWeb.Console.Problem do
     unbooked_contact_unconfirmed:
       {409, "This contact isn't a booked pass. Confirm to release into it anyway."},
     realized_contact_not_found: {404, "Contact not found."},
+    realized_contact_runtime_not_running: {404, "The contact runtime is not running."},
+    path_runtime_not_running: {404, "The path runtime is not running."},
+    runtime_snapshot_unavailable: {503, "The runtime snapshot is unavailable."},
     contact_not_found: {404, "Contact not found."},
     realized_contact_not_releasable: {409, "Not released: the contact has ended."},
     attention_unavailable: {503, "That couldn't be done right now. Try again."},

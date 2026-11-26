@@ -5,18 +5,6 @@ defmodule CadenceWeb.ControlPlaneApiTest do
 
   import CadenceWeb.ControlPlaneApiFixtures
 
-  test "the legacy runtime reads remain routed until the simulator moves to /api/v1" do
-    base = "/api/organizations/org/missions/mission/realized_contacts/contact"
-
-    for {suffix, action} <- [
-          {"/runtime", :runtime},
-          {"/paths/path/runtime", :path_runtime}
-        ] do
-      assert %{plug: CadenceWeb.RealizedContactController, plug_opts: ^action} =
-               Phoenix.Router.route_info(CadenceWeb.Router, "GET", base <> suffix, "localhost")
-    end
-  end
-
   test "retired contact and link APIs have no routes" do
     base = "/api/organizations/org/missions/mission"
 
@@ -24,6 +12,8 @@ defmodule CadenceWeb.ControlPlaneApiTest do
           {"GET", "/scheduled_contacts"},
           {"POST", "/scheduled_contacts/contact/realize"},
           {"GET", "/realized_contacts"},
+          {"GET", "/realized_contacts/contact/runtime"},
+          {"GET", "/realized_contacts/contact/paths/path/runtime"},
           {"POST", "/realized_contacts/contact/end_early"},
           {"GET", "/contact_actions"},
           {"GET", "/provider_profiles"},
