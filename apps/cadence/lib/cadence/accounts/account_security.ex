@@ -12,6 +12,10 @@ defmodule Cadence.Accounts.AccountSecurity do
 
   Sessions record no device or address, only when they started and when they expire.
 
+  Every change that signs sessions out returns their token digests (`Token.digest/1`) so the web
+  layer can disconnect exactly those sessions' live sockets (#875); a digest is a hash, never the
+  token.
+
   The current-password check is throttled like sign-in (`AttemptLimit`), and each change is
   recorded for the organization audit (`AccountEvents`) in the same transaction. The actor is
   the user making the request, which is always the account's owner here.
@@ -25,9 +29,12 @@ defmodule Cadence.Accounts.AccountSecurity do
   @environment_admin "user_environment_admin"
   @min_password 12
 
-  @doc "Options: `ip`, the client's address (for the attempt limit)."
+  @doc """
+  Options: `ip`, the client's address (for the attempt limit). Returns the digests of the other
+  sessions it signed out.
+  """
   @spec change_password(User.t(), binary(), map(), keyword()) ::
-          :ok
+          {:ok, [binary()]}
           | {:error,
              :password_managed_externally
              | :invalid_credentials
@@ -46,10 +53,6 @@ defmodule Cadence.Accounts.AccountSecurity do
     with :ok <- new_password(new, current),
          :ok <- Authentication.verify_user_password(user, current, ip: opts[:ip]) do
       Repo.transaction(fn -> set_password(user.user_id, new, current_token) end)
-      |> case do
-        {:ok, _count} -> :ok
-        {:error, reason} -> {:error, reason}
-      end
     end
   end
 
@@ -71,9 +74,12 @@ defmodule Cadence.Accounts.AccountSecurity do
     )
   end
 
-  @doc "Signs one of the user's sessions out; `current` says whether it was `current_token`'s."
+  @doc """
+  Signs one of the user's sessions out; `current` says whether it was `current_token`'s, and
+  `token_digest` is the revoked session's.
+  """
   @spec revoke_session(binary(), binary(), binary()) ::
-          {:ok, %{current: boolean()}} | {:error, :session_not_found}
+          {:ok, %{current: boolean(), token_digest: binary()}} | {:error, :session_not_found}
   def revoke_session(user_id, session_id, current_token) do
     current = Token.digest(current_token)
 
@@ -94,39 +100,40 @@ defmodule Cadence.Accounts.AccountSecurity do
           current? = same_digest?(digest, current)
           details = %{"session_id" => session_id, "current" => current?}
           :ok = AccountEvents.record(user_id, user_id, "session_signed_out", details)
-          %{current: current?}
+          %{current: current?, token_digest: digest}
       end
     end)
   end
 
-  @doc "Signs out every session of the user except `current_token`'s; returns how many."
-  @spec revoke_others(binary(), binary()) :: non_neg_integer()
+  @doc "Signs out every session of the user except `current_token`'s; returns their digests."
+  @spec revoke_others(binary(), binary()) :: [binary()]
   def revoke_others(user_id, current_token) do
-    {:ok, count} =
+    {:ok, digests} =
       Repo.transaction(fn ->
-        count = delete_others(user_id, current_token)
+        digests = delete_others(user_id, current_token)
 
-        if count > 0,
+        if digests != [],
           do:
             AccountEvents.record(user_id, user_id, "other_sessions_signed_out", %{
-              "count" => count
+              "count" => length(digests)
             })
 
-        count
+        digests
       end)
 
-    count
+    digests
   end
 
   defp delete_others(user_id, current_token) do
     current = Token.digest(current_token)
 
-    {count, _rows} =
+    {_count, digests} =
       UserSessionTokenRow
       |> where([s], s.user_id == ^user_id and s.token_digest != ^current)
+      |> select([s], s.token_digest)
       |> Repo.delete_all()
 
-    count
+    digests
   end
 
   defp set_password(user_id, new, current_token) do
@@ -134,10 +141,10 @@ defmodule Cadence.Accounts.AccountSecurity do
 
     case Authentication.upsert_password_credential(Repo, user_id, new, metadata) do
       :ok ->
-        count = delete_others(user_id, current_token)
-        details = %{"other_sessions_signed_out" => count}
+        digests = delete_others(user_id, current_token)
+        details = %{"other_sessions_signed_out" => length(digests)}
         :ok = AccountEvents.record(user_id, user_id, "password_changed", details)
-        count
+        digests
 
       {:error, reason} ->
         Repo.rollback(reason)

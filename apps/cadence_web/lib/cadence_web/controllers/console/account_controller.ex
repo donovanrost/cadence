@@ -8,10 +8,12 @@ defmodule CadenceWeb.Console.AccountController do
 
   alias Cadence.Accounts.AccountSecurity
   alias CadenceWeb.Console.{ConfigJSON, Problem}
+  alias CadenceWeb.ConsoleSocket
 
   def change_password(conn, params) do
     case AccountSecurity.change_password(user(conn), token(conn), params, ip: conn.remote_ip) do
-      :ok ->
+      {:ok, signed_out} ->
+        ConsoleSocket.disconnect_sessions(signed_out)
         send_resp(conn, :no_content, "")
 
       {:error, {:too_many_attempts, retry_after}} ->
@@ -39,17 +41,20 @@ defmodule CadenceWeb.Console.AccountController do
   end
 
   def revoke_others(conn, _params) do
-    count = AccountSecurity.revoke_others(user(conn).user_id, token(conn))
-    json(conn, %{data: %{revoked: count}})
+    signed_out = AccountSecurity.revoke_others(user(conn).user_id, token(conn))
+    ConsoleSocket.disconnect_sessions(signed_out)
+    json(conn, %{data: %{revoked: length(signed_out)}})
   end
 
   def revoke_session(conn, %{"session_id" => session_id}) do
     case AccountSecurity.revoke_session(user(conn).user_id, session_id, token(conn)) do
       # Revoking the session you're using signs you out here too.
-      {:ok, %{current: true}} ->
+      {:ok, %{current: true, token_digest: digest}} ->
+        ConsoleSocket.disconnect_sessions([digest])
         conn |> configure_session(drop: true) |> send_resp(:no_content, "")
 
-      {:ok, %{current: false}} ->
+      {:ok, %{current: false, token_digest: digest}} ->
+        ConsoleSocket.disconnect_sessions([digest])
         send_resp(conn, :no_content, "")
 
       {:error, :session_not_found} ->
