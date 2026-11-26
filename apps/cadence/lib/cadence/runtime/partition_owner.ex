@@ -46,6 +46,7 @@ defmodule Cadence.Runtime.PartitionOwner do
   alias Cadence.Platform.ReplayId
 
   alias Cadence.Runtime.PartitionOwner.{
+    CurrentValueSeed,
     DispatchCache,
     EffectIds,
     MonitoringSeed,
@@ -286,6 +287,7 @@ defmodule Cadence.Runtime.PartitionOwner do
     if SemanticSnapshots.gated?(state), do: Process.flag(:trap_exit, true)
     SemanticSnapshots.schedule(state)
     SemanticSnapshots.announce_recovery(state)
+    CurrentValueSeed.start(state, Keyword.get(opts, :current_value_seed, []))
     state
   end
 

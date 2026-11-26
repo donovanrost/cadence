@@ -100,6 +100,43 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationReader do
     end
   end
 
+  @doc """
+  The newest canonical flight value of every (spacecraft, point) that one source endpoint has
+  written in the mission, in ONE statement (`LATEST ON observed_at PARTITION BY spacecraft_id,
+  point_id`): what a starting partition seeds the current-value store with (#831). Options:
+  `:organization_id`, `:data_source_id`, `:binding_id` narrow it as the other reads do.
+  """
+  @spec latest_values_for_endpoint(binary(), binary(), keyword()) ::
+          {:ok, [Sample.t()]} | {:error, term()}
+  def latest_values_for_endpoint(mission_id, source_endpoint_id, opts \\ [])
+      when is_binary(mission_id) and is_binary(source_endpoint_id) and is_list(opts) do
+    filters =
+      [
+        {"mission_id = ?", mission_id},
+        {"source_endpoint_id = ?", source_endpoint_id},
+        {"realm = ?", "flight"},
+        {"validity_state = ?", "canonical"}
+      ]
+      |> maybe_filter("organization_id = ?", Keyword.get(opts, :organization_id))
+      |> maybe_filter("data_source_id = ?", Keyword.get(opts, :data_source_id))
+      |> maybe_filter("binding_id = ?", SourceFilters.binding_id(opts))
+
+    {where_sql, params} = where_sql_and_params(filters)
+
+    sql =
+      render_sql(
+        """
+        SELECT #{Enum.join(@select_columns, ", ")}
+        FROM telemetry_observations
+        WHERE #{where_sql}
+        LATEST ON observed_at PARTITION BY spacecraft_id, point_id
+        """,
+        params
+      )
+
+    with {:ok, result} <- exec(sql, opts), do: {:ok, samples_from_result(result)}
+  end
+
   @spec decimated_history(binary(), binary(), keyword()) :: {:ok, [map()]} | {:error, term()}
   def decimated_history(mission_id, point_id, opts \\ [])
       when is_binary(mission_id) and is_binary(point_id) and is_list(opts) do

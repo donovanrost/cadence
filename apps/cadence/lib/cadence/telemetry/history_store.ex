@@ -318,6 +318,28 @@ defmodule Cadence.Telemetry.HistoryStore do
     }
   end
 
+  @doc """
+  The newest value of every (spacecraft, point) a source endpoint has written in a mission: what a
+  starting partition seeds the current-value store with (#831). `{:error,
+  {:unsupported_history_capability, backend, :latest_for_source_endpoint}}` for a store that cannot.
+  """
+  @spec latest_for_source_endpoint(policy(), binary(), binary(), keyword()) ::
+          {:ok, [Sample.t()]} | {:error, term()}
+  def latest_for_source_endpoint(%{} = policy, mission_id, source_endpoint_id, opts \\ [])
+      when is_binary(mission_id) and is_binary(source_endpoint_id) and is_list(opts) do
+    backend = backend(policy)
+
+    if function_exported?(backend, :latest_for_source_endpoint, 3) do
+      backend.latest_for_source_endpoint(
+        mission_id,
+        source_endpoint_id,
+        operation_opts(policy, opts)
+      )
+    else
+      {:error, {:unsupported_history_capability, backend, :latest_for_source_endpoint}}
+    end
+  end
+
   @doc false
   @spec configured_policy() :: policy()
   def configured_policy do
