@@ -22,7 +22,8 @@ defmodule Cadence.ContactPlanning.ContactPlanApproval do
           automation_grant_content_sha256: binary() | nil,
           decided_at: DateTime.t(),
           inserted_at: DateTime.t() | nil,
-          exceptions: [map()]
+          exceptions: [map()],
+          skipped: [map()] | nil
         }
 
   defstruct [
@@ -43,7 +44,11 @@ defmodule Cadence.ContactPlanning.ContactPlanApproval do
     :inserted_at,
     # Acknowledged unsatisfied requirements (DECISIONS #28):
     # [%{"contact_requirement_id", "contact_requirement_version", "reason"}]
-    exceptions: []
+    exceptions: [],
+    # #273: the passes left out because their booking window had closed, the whole set:
+    # [%{"snapshot_id", "reason" => "opportunity_expired" | "no_booking_window"}]; [] when none,
+    # nil on rejections and on approvals decided before #273.
+    skipped: nil
   ]
 
   @spec new(map()) :: t()
@@ -66,7 +71,8 @@ defmodule Cadence.ContactPlanning.ContactPlanApproval do
         optional_string(value(attrs, :automation_grant_content_sha256)),
       decided_at: datetime(value(attrs, :decided_at, DateTime.utc_now()), :decided_at),
       inserted_at: value(attrs, :inserted_at),
-      exceptions: value(attrs, :exceptions, []) || []
+      exceptions: value(attrs, :exceptions, []) || [],
+      skipped: value(attrs, :skipped)
     }
     |> validate_automation_shape()
   end
