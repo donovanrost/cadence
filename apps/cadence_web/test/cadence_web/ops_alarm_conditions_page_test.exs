@@ -81,7 +81,7 @@ defmodule CadenceWeb.OpsAlarmConditionsPageTest do
       "token" => original["token"]
     })
 
-    assert_redirect(view, "/sign-in")
+    assert_redirect(view, "/console/sign-in")
   end
 
   defp page(view),

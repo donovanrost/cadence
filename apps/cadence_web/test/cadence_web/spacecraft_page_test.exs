@@ -93,12 +93,12 @@ defmodule CadenceWeb.SpacecraftPageTest do
     {:ok, view, _} = live(conn, path <> "/" <> craft.spacecraft_id)
 
     render_hook(view, "host:context", %{"path" => path <> "/" <> other_craft.spacecraft_id})
-    assert_redirect(view, path)
+    assert_redirect(view, "/console")
     {:ok, view, _} = live(conn, path <> "/" <> craft.spacecraft_id)
     :ok = Cadence.Auth.revoke_user_session(get_session(conn, :user_session_token))
 
     render_hook(view, "host:context", %{"path" => path <> "/" <> craft.spacecraft_id})
-    assert_redirect(view, "/sign-in")
+    assert_redirect(view, "/console/sign-in")
   end
 
   defp snapshot(view),

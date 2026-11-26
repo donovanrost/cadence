@@ -44,7 +44,7 @@ defmodule CadenceWeb.OrganizationAuthTest do
                  %Phoenix.LiveView.Socket{}
                )
 
-      assert socket.redirected == {:redirect, %{to: "/no-organization", status: 302}}
+      assert socket.redirected == {:redirect, %{to: "/console/no-organization", status: 302}}
     end
 
     test "admin-eligible user without admin mode follows normal organization access" do
@@ -66,7 +66,7 @@ defmodule CadenceWeb.OrganizationAuthTest do
                  %Phoenix.LiveView.Socket{}
                )
 
-      assert socket.redirected == {:redirect, %{to: "/no-organization", status: 302}}
+      assert socket.redirected == {:redirect, %{to: "/console/no-organization", status: 302}}
     end
 
     test "admin mode can open an organization without membership" do
@@ -113,7 +113,7 @@ defmodule CadenceWeb.OrganizationAuthTest do
                  %Phoenix.LiveView.Socket{}
                )
 
-      assert socket.redirected == {:redirect, %{to: "/sign-in", status: 302}}
+      assert socket.redirected == {:redirect, %{to: "/console/sign-in", status: 302}}
     end
   end
 
@@ -136,7 +136,7 @@ defmodule CadenceWeb.OrganizationAuthTest do
                OrganizationAuth.on_mount(:require_organization_admin, %{}, %{}, socket)
     end
 
-    test "redirects an ordinary member to the organization home" do
+    test "redirects an ordinary member to the console" do
       user = TestFixtures.persist_user!()
       org = TestFixtures.persist_org!()
       _membership = TestFixtures.grant_membership!(user, org, role: :member)
@@ -153,7 +153,7 @@ defmodule CadenceWeb.OrganizationAuthTest do
       assert {:halt, socket} =
                OrganizationAuth.on_mount(:require_organization_admin, %{}, %{}, socket)
 
-      assert socket.redirected == {:redirect, %{to: "/", status: 302}}
+      assert socket.redirected == {:redirect, %{to: "/console", status: 302}}
     end
   end
 end
