@@ -6,6 +6,8 @@ import { searchReader } from "@/features/contacts/singleBookings.ts";
 import { planDetailReader } from "./api.ts";
 import SelectedPanel from "./SelectedPanel.vue";
 
+const NO_GAPS = { spacecraft_uncovered: 0, contacts_short: 0, gaps: 0 };
+
 /** U58 (b), #361: every read takes #640's listener_overlap, and reads as today without it. */
 const overlap = {
   with: {
@@ -41,7 +43,7 @@ const detail = (pass: unknown) =>
     ready_to_approve: false,
     updated_at: "2026-11-20T10:00:00Z",
     passes: [pass],
-    demand: { rule_met: 0, rule_total: 0, spacecraft: [], rules: [] },
+    demand: { rule_met: 0, rule_total: 0, coverage: NO_GAPS, spacecraft: [], rules: [] },
     unmet: [],
     conflicts: [],
   });

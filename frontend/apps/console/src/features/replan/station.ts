@@ -47,6 +47,8 @@ export const impactReader = object({
   from: timestamp,
   to: timestamp,
   passes_hit: integer,
+  /** #793: distinct spacecraft across live and lost bookings, over the whole window. */
+  spacecraft_count: integer,
   reservation_ids: array(token, 5000),
   spacecraft_ids: array(token, 5000),
   /** The plan revisions that booked the hit passes (api-ops fecd8245): K2 repairs from these. */

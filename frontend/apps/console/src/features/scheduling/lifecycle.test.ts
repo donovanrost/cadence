@@ -11,6 +11,8 @@ import {
   supersededByReader,
 } from "./lifecycle.ts";
 
+const NO_GAPS = { spacecraft_uncovered: 0, contacts_short: 0, gaps: 0 };
+
 const now = new Date("2026-11-16T12:00:00Z");
 const conflict = (code: string, details: unknown) =>
   ({ kind: "conflict", code, message: "x", details }) as const;
@@ -49,7 +51,7 @@ describe("U61 superseded_by", () => {
         ready_to_approve: false,
         updated_at: "2026-11-10T10:00:00Z",
         passes: [],
-        demand: { rule_met: 0, rule_total: 0, spacecraft: [], rules: [] },
+        demand: { rule_met: 0, rule_total: 0, coverage: NO_GAPS, spacecraft: [], rules: [] },
         unmet: [],
         conflicts: [],
         ...(superseded_by === undefined ? {} : { superseded_by }),

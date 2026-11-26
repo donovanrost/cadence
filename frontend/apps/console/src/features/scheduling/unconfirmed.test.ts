@@ -4,6 +4,8 @@ import { planHeaderTail } from "./plan-primary.ts";
 import { shortWhen, unconfirmedView } from "./unconfirmed.ts";
 import { station } from "./fixtures.ts";
 
+const NO_GAPS = { spacecraft_uncovered: 0, contacts_short: 0, gaps: 0 };
+
 const pass = (id: string, sc: string, start: string) => ({
   snapshot_id: id,
   spacecraft_id: sc,
@@ -40,7 +42,7 @@ const plan = (state: PlanDetail["state"], providers: readonly string[]): PlanDet
     pass("b", "sc-2", "2026-11-10T03:00:00Z"),
     pass("c", "sc-3", "2026-11-10T05:00:00Z"),
   ],
-  demand: { rule_met: 3, rule_total: 3, spacecraft: [], rules: [] },
+  demand: { rule_met: 3, rule_total: 3, coverage: NO_GAPS, spacecraft: [], rules: [] },
   unmet: [],
   conflicts: [],
   at_risk: [],
