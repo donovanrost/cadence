@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
-import { computed, ref, shallowRef, watch } from "vue";
-import { describeApiError, useRemoteQuery } from "@/api/index.ts";
+import { computed, ref } from "vue";
+import { describeApiError, usePagedQuery, type PageFetcher } from "@/api/index.ts";
 import { ApButton } from "@/ui";
 import ContactRecordView from "./ContactRecordView.vue";
 import { fetchReservation, type Reservation } from "./records.ts";
-import { holdsFocus, landOnFirstNew } from "./pageFocus.ts";
+import { useShowEarlier } from "./pageFocus.ts";
 import { clock, sentenceCase, TONE_CLASS, valueCells, withVersion } from "./recordWords.ts";
 
 /**
@@ -14,35 +14,37 @@ import { clock, sentenceCase, TONE_CLASS, valueCells, withVersion } from "./reco
  */
 const props = defineProps<{ missionId: MissionId; passId: string; providerName: string | null }>();
 const opened = ref(false);
-const query = useRemoteQuery(
-  computed(() => (opened.value ? { m: props.missionId, pass: props.passId } : null)),
-  (k, signal) => fetchReservation(k.m, k.pass, null, signal),
+type Key = Readonly<{ m: MissionId; pass: string }>;
+type AuditEntry = Reservation["audit"]["entries"][number];
+/** The reservation itself rides on each page; the provider audit is what pages (25 a page). */
+const fetchPage: PageFetcher<Key, AuditEntry, Omit<Reservation, "audit">> = async (
+  k,
+  cursor,
+  signal,
+) => {
+  const page = await fetchReservation(k.m, k.pass, cursor, signal);
+  if (!page.ok) return page;
+  const { audit, ...reservation } = page.value;
+  return { ok: true, value: { items: audit.entries, next: audit.next_cursor, meta: reservation } };
+};
+const query = usePagedQuery(
+  computed<Key | null>(() => (opened.value ? { m: props.missionId, pass: props.passId } : null)),
+  fetchPage,
+  (entry) => entry.id,
 );
-const r = computed(() => (query.state.value.status === "ready" ? query.state.value.value : null));
-/** Earlier audit pages (Show earlier), appended below the first. */
-const earlier = shallowRef<Reservation["audit"]["entries"]>([]);
-const cursor = ref<string | null>(null);
-const moreError = ref<string | null>(null);
-watch(r, (v) => {
-  earlier.value = [];
-  cursor.value = v?.audit.next_cursor ?? null;
-});
+const r = computed(() =>
+  query.state.value.status === "ready" ? query.state.value.value.meta : null,
+);
+/** The provider audit, every page loaded (Show earlier appends the next). */
+const audit = computed(() =>
+  query.state.value.status === "ready" ? query.state.value.value.items : [],
+);
+const hasEarlier = computed(
+  () => query.state.value.status === "ready" && query.state.value.value.next !== null,
+);
 const listEl = ref<HTMLElement | null>(null);
 const moreEl = ref<HTMLElement | null>(null);
-async function showEarlier() {
-  if (!cursor.value) return;
-  const firstNew = audit.value.length;
-  const page = await fetchReservation(props.missionId, props.passId, cursor.value);
-  // B4 (ux #426): read once the page is back; someone who tabbed away meanwhile keeps their place.
-  const hadFocus = holdsFocus(moreEl.value);
-  if (!page.ok) {
-    moreError.value = `Couldn't load more: ${describeApiError(page.error)}`;
-    return;
-  }
-  earlier.value = [...earlier.value, ...page.value.audit.entries];
-  cursor.value = page.value.audit.next_cursor;
-  if (cursor.value === null) await landOnFirstNew(listEl.value, firstNew, hadFocus);
-}
+const showEarlier = useShowEarlier(query, listEl, moreEl);
 const facts = computed(() => {
   const v = r.value?.reservation;
   if (!v) return [];
@@ -60,7 +62,6 @@ const facts = computed(() => {
     ["Last reconciled", v.last_reconciled_at ? clock(v.last_reconciled_at) : null],
   ].filter((f): f is [string, string] => f[1] !== null);
 });
-const audit = computed(() => [...(r.value?.audit.entries ?? []), ...earlier.value]);
 const onToggle = (e: Event) => {
   if (e.target instanceof HTMLDetailsElement && e.target.open) opened.value = true;
 };
@@ -114,7 +115,7 @@ const onToggle = (e: Event) => {
       </ul>
       <div ref="moreEl" class="contents">
         <ApButton
-          v-if="cursor"
+          v-if="hasEarlier"
           size="compact"
           variant="ghost"
           class="self-start"
@@ -122,7 +123,14 @@ const onToggle = (e: Event) => {
           >Show earlier</ApButton
         >
       </div>
-      <p v-if="moreError" role="alert" class="m-0 text-caution-text">{{ moreError }}</p>
+      <!-- a11y B6: always mounted so a failed Show earlier is announced; cleared as it starts again. -->
+      <p role="alert" class="m-0 text-caution-text">
+        {{
+          query.moreError.value
+            ? `Couldn't load more: ${describeApiError(query.moreError.value)}`
+            : ""
+        }}
+      </p>
     </div>
   </details>
   <!-- Its contact id comes from the reservation, so opening it reads the reservation too. -->
