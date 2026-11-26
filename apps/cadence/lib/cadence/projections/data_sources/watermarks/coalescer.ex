@@ -18,9 +18,12 @@ defmodule Cadence.Projections.DataSources.Watermarks.Coalescer do
   `first_sample_id` is the window's first and `last_sample_id` its last, with the observation
   count summed. One event row therefore covers a window instead of one batch.
 
-  Flushes are serialized across the cluster by a database advisory lock, and the pending entries are
-  taken only after it is held, so windows commit in the order they were taken. A failed flush puts
-  its entries back.
+  A flush is one transaction per mission with pending entries (none when nothing is pending: no
+  transaction and no lock). It holds a per-mission database advisory lock and takes the mission's
+  entries only after that, so a row's windows commit in the order they were taken, across nodes.
+  Whenever the transaction does not commit (an error, a raise, a failed commit) the taken entries
+  are merged back and the failure is logged. Facts for a flush (only when `publish_facts?` is set)
+  are published from inside that transaction, so they can precede its commit.
   """
 
   use GenServer
@@ -32,7 +35,7 @@ defmodule Cadence.Projections.DataSources.Watermarks.Coalescer do
   alias Cadence.Repo
 
   @table __MODULE__
-  @lock_key 6_907_001
+  @taken {__MODULE__, :taken}
   @default_interval_ms 5_000
 
   @type entry :: {binary(), non_neg_integer(), binary() | nil, map()}
@@ -92,7 +95,7 @@ defmodule Cadence.Projections.DataSources.Watermarks.Coalescer do
 
   @impl true
   def handle_info(:flush, state) do
-    log_failure(flush())
+    _ = flush()
     {:noreply, schedule(state)}
   end
 
@@ -100,7 +103,7 @@ defmodule Cadence.Projections.DataSources.Watermarks.Coalescer do
 
   @impl true
   def terminate(_reason, _state) do
-    log_failure(flush())
+    _ = flush()
     :ok
   end
 
@@ -116,11 +119,6 @@ defmodule Cadence.Projections.DataSources.Watermarks.Coalescer do
     |> Application.get_env(:source_watermark_coalescing, [])
     |> Keyword.get(:interval_ms, @default_interval_ms)
   end
-
-  defp log_failure(:ok), do: :ok
-
-  defp log_failure({:error, reason}),
-    do: Logger.error("source watermark flush failed, entries kept: #{inspect(reason)}")
 
   # Lock-free merge: a compare-and-swap on the entry's version, so concurrent writers to one row
   # lose nothing. A flush takes the entry, which fails the swap and recreates it on the retry.
@@ -144,24 +142,62 @@ defmodule Cadence.Projections.DataSources.Watermarks.Coalescer do
     end
   end
 
+  # One transaction per mission with pending entries, in sorted mission order. Nothing pending
+  # means no transaction and no lock.
   defp flush(scope) do
-    if :ets.whereis(@table) == :undefined do
-      :ok
-    else
-      case locked_write(scope) do
-        {:ok, :ok} -> :ok
-        {:ok, {:error, reason}} -> {:error, reason}
-        {:error, reason} -> {:error, reason}
+    if :ets.whereis(@table) == :undefined,
+      do: :ok,
+      else: scope |> pending_missions() |> flush_missions(scope)
+  end
+
+  defp flush_missions(missions, scope) do
+    Enum.reduce_while(missions, :ok, fn mission_id, :ok ->
+      case flush_mission_entries(mission_id, scope) do
+        :ok -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, reason}}
       end
+    end)
+  end
+
+  # The lock is per mission: a row key belongs to one mission, and the order guarantee (windows
+  # commit in the order they were taken) only has to hold per row.
+  defp flush_mission_entries(mission_id, scope) do
+    result =
+      try do
+        Repo.transaction(fn ->
+          Repo.query!("SELECT pg_advisory_xact_lock(hashtext($1))", [
+            "watermark:" <> to_string(mission_id)
+          ])
+
+          entries = take(mission_id, scope)
+          # Kept outside the transaction, so a raise or a failed commit can still restore them.
+          Process.put(@taken, entries)
+          write(entries)
+        end)
+      rescue
+        error -> {:error, error}
+      catch
+        kind, reason -> {:error, {kind, reason}}
+      end
+
+    taken = Process.delete(@taken) || []
+
+    case result do
+      {:ok, :ok} ->
+        :ok
+
+      {:ok, {:error, reason}} ->
+        fail(taken, reason)
+
+      {:error, reason} ->
+        fail(taken, reason)
     end
   end
 
-  defp locked_write(scope) do
-    Repo.transaction(fn ->
-      Repo.query!("SELECT pg_advisory_xact_lock($1)", [@lock_key])
-      entries = take(scope)
-      write(entries)
-    end)
+  defp fail(taken, reason) do
+    Enum.each(taken, &restore/1)
+    Logger.error("source watermark flush failed, window kept: #{inspect(reason)}")
+    {:error, reason}
   end
 
   defp write([]), do: :ok
@@ -173,12 +209,8 @@ defmodule Cadence.Projections.DataSources.Watermarks.Coalescer do
     end)
     |> Enum.reduce_while(:ok, fn {{bus, publish?}, group}, :ok ->
       case record(group, bus, publish?) do
-        :ok ->
-          {:cont, :ok}
-
-        {:error, reason} ->
-          Enum.each(group, &restore/1)
-          {:halt, {:error, reason}}
+        :ok -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, reason}}
       end
     end)
   end
@@ -205,18 +237,37 @@ defmodule Cadence.Projections.DataSources.Watermarks.Coalescer do
     end
   end
 
-  defp take(:all), do: take_keys(:ets.select(@table, [{{:"$1", :_, :_, :_}, [], [:"$1"]}]))
-
-  defp take({:key, row_key}) do
-    take_keys(
-      :ets.select(@table, [
-        {{:"$1", :_, :_, :_}, [{:==, {:element, 1, :"$1"}, row_key}], [:"$1"]}
-      ])
-    )
+  defp pending_missions(:all) do
+    @table |> :ets.select([{{:_, :_, :"$1", :_}, [], [:"$1"]}]) |> Enum.uniq() |> Enum.sort()
   end
 
-  defp take({:mission, mission_id}),
-    do: take_keys(:ets.select(@table, [{{:"$1", :_, mission_id, :_}, [], [:"$1"]}]))
+  defp pending_missions({:mission, mission_id}) do
+    if :ets.select_count(@table, [{{:_, :_, mission_id, :_}, [], [true]}]) > 0,
+      do: [mission_id],
+      else: []
+  end
+
+  defp pending_missions({:key, row_key}) do
+    @table
+    |> :ets.select([
+      {{:"$1", :_, :"$2", :_}, [{:==, {:element, 1, :"$1"}, row_key}], [:"$2"]}
+    ])
+    |> Enum.uniq()
+  end
+
+  # The entries to write for one mission, taken once its lock is held.
+  defp take(mission_id, :all), do: take_where(mission_id, [])
+
+  defp take(mission_id, {:mission, mission_id}), do: take_where(mission_id, [])
+
+  defp take(mission_id, {:key, row_key}),
+    do: take_where(mission_id, [{:==, {:element, 1, :"$1"}, row_key}])
+
+  defp take_where(mission_id, guards) do
+    @table
+    |> :ets.select([{{:"$1", :_, mission_id, :_}, guards, [:"$1"]}])
+    |> take_keys()
+  end
 
   defp take_keys(keys), do: Enum.flat_map(keys, &:ets.take(@table, &1))
 
