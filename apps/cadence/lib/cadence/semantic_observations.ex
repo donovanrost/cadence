@@ -59,14 +59,7 @@ defmodule Cadence.SemanticObservations do
       &{Ecto.Changeset.get_field(&1, :organization_id), Ecto.Changeset.get_field(&1, :mission_id),
        Ecto.Changeset.get_field(&1, :spacecraft_id)}
     )
-    |> Enum.reject(fn {organization_id, _mission, spacecraft} ->
-      is_nil(organization_id) or is_nil(spacecraft)
-    end)
-    |> Enum.uniq()
-    |> Enum.group_by(fn {org, mission, _craft} -> {org, mission} end, &elem(&1, 2))
-    |> Enum.each(fn {{organization_id, mission_id}, spacecraft_ids} ->
-      FleetAlarms.refresh(repo, organization_id, mission_id, spacecraft_ids)
-    end)
+    |> then(&FleetAlarms.refresh_batch(repo, &1))
 
     {:ok, :refreshed}
   end

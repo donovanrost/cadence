@@ -11,7 +11,7 @@ defmodule Cadence.SemanticObservations.FleetAlarms do
 
   **Kept by the writer, in its transaction.** `semantic_fleet_alarm_summaries` has one row per
   spacecraft with an active alarm: its worst alarm (most severe, then newest), how many are active,
-  and the newest receipt among them. `refresh/3` recomputes the rows of the spacecraft a batch
+  and the newest receipt among them. `refresh_batch/2` recomputes the rows of the spacecraft a batch
   transitioned from their active alarms (the partial index `semantic_latest_alarm_states_active_idx`
   serves it) and removes the row of one left with none; `SemanticObservations.persist_many/1` calls
   it once per spacecraft, inside the transaction that upserts the latest states, and only for a batch
@@ -69,14 +69,24 @@ defmodule Cadence.SemanticObservations.FleetAlarms do
   # One writer per spacecraft at a time (#871): two transactions that transition the same spacecraft
   # (two partitions after a handover, a replay beside the live owner) would each recompute from a
   # snapshot that lacks the other's uncommitted rows, and the later commit could leave a stale
-  # summary. A transaction-scoped advisory lock per (mission, spacecraft), taken in sorted order
-  # (no deadlock between batches) before the recompute, makes the second wait for the first's
-  # commit; its recompute statement then reads the first's rows (READ COMMITTED takes a snapshot
-  # per statement). Held until commit, so it also covers the latest-state upserts before it.
-  defp lock_spacecraft(repo, mission_id, spacecraft_ids) do
-    Enum.each(spacecraft_ids, fn id ->
+  # summary. A transaction-scoped advisory lock per (mission, spacecraft) makes the second wait for
+  # the first's commit; its recompute statement then reads the first's rows (READ COMMITTED takes a
+  # snapshot per statement).
+  #
+  # The locks are taken AFTER the latest-state upserts, and that is still correct: the upserts only
+  # need to be visible to the recompute of whoever commits LAST. The lock is held until commit and
+  # the recompute runs after it is granted, so the last lock holder recomputes after every earlier
+  # holder has committed its upserts, and sees its own. A transaction that has upserted but not yet
+  # locked recomputes later, under the lock, from everything committed by then. An upsert of the
+  # SAME row also waits on the row lock until the other commits.
+  #
+  # All locks of a batch are taken in one sorted order (mission, then spacecraft) across missions,
+  # so two batches cannot wait on each other. The key has its own namespace: the ground-limit
+  # summary's locks (`telemetry_fleet_limit/`) do not serialize with these.
+  defp lock_spacecraft(repo, keys) do
+    Enum.each(keys, fn {mission_id, spacecraft_id} ->
       repo.query!("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
-        mission_id <> "/" <> id
+        "semantic_fleet_alarm/" <> mission_id <> "/" <> spacecraft_id
       ])
     end)
   end
@@ -86,11 +96,39 @@ defmodule Cadence.SemanticObservations.FleetAlarms do
   caller's transaction.
   """
   @spec refresh(module(), binary(), binary(), [binary()]) :: :ok
-  def refresh(_repo, _organization_id, _mission_id, []), do: :ok
-
   def refresh(repo, organization_id, mission_id, spacecraft_ids) do
-    spacecraft_ids = Enum.sort(spacecraft_ids)
-    lock_spacecraft(repo, mission_id, spacecraft_ids)
+    refresh_batch(repo, Enum.map(spacecraft_ids, &{organization_id, mission_id, &1}))
+  end
+
+  @doc """
+  Recomputes the summaries of the `{organization, mission, spacecraft}` entries a batch
+  transitioned (duplicates and entries without an organization or spacecraft are ignored), inside
+  the caller's transaction: every spacecraft lock first, in one sorted order, then one recompute
+  per mission.
+  """
+  @spec refresh_batch(module(), [{binary() | nil, binary(), binary() | nil}]) :: :ok
+  def refresh_batch(repo, entries) do
+    entries =
+      entries
+      |> Enum.reject(fn {organization_id, _mission, spacecraft} ->
+        is_nil(organization_id) or is_nil(spacecraft)
+      end)
+      |> Enum.uniq()
+
+    entries
+    |> Enum.map(fn {_org, mission, craft} -> {mission, craft} end)
+    |> Enum.uniq()
+    |> Enum.sort()
+    |> then(&lock_spacecraft(repo, &1))
+
+    entries
+    |> Enum.group_by(fn {org, mission, _craft} -> {org, mission} end, &elem(&1, 2))
+    |> Enum.each(fn {{organization_id, mission_id}, spacecraft_ids} ->
+      recompute(repo, organization_id, mission_id, spacecraft_ids)
+    end)
+  end
+
+  defp recompute(repo, organization_id, mission_id, spacecraft_ids) do
     params = [organization_id, mission_id, spacecraft_ids]
 
     repo.query!(

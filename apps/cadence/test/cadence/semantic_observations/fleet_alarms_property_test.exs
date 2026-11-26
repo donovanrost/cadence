@@ -145,5 +145,18 @@ defmodule Cadence.SemanticObservations.FleetAlarmsPropertyTest do
              Repo.query!(
                "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND pid = pg_backend_pid()"
              )
+
+    # In the alarm namespace, so the ground-limit summary's locks do not serialize with these.
+    for craft <- ["sc-1", "sc-2"] do
+      assert %{rows: [[1]]} =
+               Repo.query!(
+                 """
+                 SELECT count(*) FROM pg_locks
+                 WHERE locktype = 'advisory' AND pid = pg_backend_pid()
+                   AND ((classid::bigint << 32) | objid::bigint) = hashtextextended($1, 0)
+                 """,
+                 ["semantic_fleet_alarm/" <> @mission <> "/" <> craft]
+               )
+    end
   end
 end
