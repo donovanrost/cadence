@@ -13,36 +13,23 @@ defmodule Cadence.Telemetry.Storage.QuestDB.SchemaMigratorTest do
                name: "create_telemetry_observations",
                sql: create_sql,
                checksum: create_checksum
-             },
-             %{
-               version: "20260627000000",
-               name: "enable_telemetry_observation_dedup",
-               sql: dedup_sql,
-               checksum: dedup_checksum
-             },
-             %{
-               version: "20260628000000",
-               name: "add_telemetry_observation_identity_id",
-               sql: observation_identity_sql,
-               checksum: observation_identity_checksum
              }
            ] = migrations
 
     assert create_sql =~ "CREATE TABLE IF NOT EXISTS telemetry_observations"
     assert create_sql =~ "TIMESTAMP(observed_at) PARTITION BY DAY WAL"
     assert create_sql =~ "DEDUP UPSERT KEYS(observed_at, idempotency_key)"
+    assert create_sql =~ "observation_identity_id STRING"
     assert is_binary(create_checksum)
 
-    assert dedup_sql =~ "ALTER TABLE telemetry_observations"
-    assert dedup_sql =~ "DEDUP ENABLE UPSERT KEYS(observed_at, idempotency_key)"
-    assert is_binary(dedup_checksum)
+    # Sized for 1,000+ craft: the symbols that grow with the fleet carry an explicit capacity.
+    for column <- ~w(spacecraft_id source_endpoint_id) do
+      assert create_sql =~ "#{column} SYMBOL CAPACITY 4096"
+    end
 
-    assert observation_identity_sql =~ "ALTER TABLE telemetry_observations"
-
-    assert observation_identity_sql =~
-             "ADD COLUMN IF NOT EXISTS observation_identity_id STRING"
-
-    assert is_binary(observation_identity_checksum)
+    for column <- ~w(observable_id point_id) do
+      assert create_sql =~ "#{column} SYMBOL CAPACITY 16384"
+    end
   end
 
   test "migration plan sorts files by version and ignores non-migration sql files" do

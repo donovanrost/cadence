@@ -4,6 +4,14 @@
 -- observation_identity_id, observation_id, and idempotency_key here, but
 -- duplicate/correction policy is still owned by Cadence before rows reach the
 -- physical store.
+--
+-- Deduplication and the observation identity column are part of this one create (dev QuestDB is
+-- disposable, so there are no incremental migrations to keep).
+--
+-- SYMBOL CAPACITY is the expected number of distinct values; it is sized for 1,000+ spacecraft
+-- (4x headroom: 4,096) and for a mission catalog of thousands of points (16,384), so the symbol
+-- maps never resize mid-ingest. The default of 256 is far below a constellation's craft count.
+-- Retention: Cadence drops whole day partitions (Cadence.Telemetry.Storage.QuestDB.Retention).
 
 CREATE TABLE IF NOT EXISTS telemetry_observations (
   observed_at TIMESTAMP,
@@ -16,16 +24,16 @@ CREATE TABLE IF NOT EXISTS telemetry_observations (
   realm SYMBOL,
   data_source_id SYMBOL,
   binding_id SYMBOL,
-  source_endpoint_id SYMBOL,
+  source_endpoint_id SYMBOL CAPACITY 4096,
   replay_run_id SYMBOL,
 
   observation_id STRING,
   observation_identity_id STRING,
   idempotency_key STRING,
   sample_id STRING,
-  spacecraft_id SYMBOL,
-  observable_id SYMBOL,
-  point_id SYMBOL,
+  spacecraft_id SYMBOL CAPACITY 4096,
+  observable_id SYMBOL CAPACITY 16384,
+  point_id SYMBOL CAPACITY 16384,
   point_name STRING,
 
   packet_definition_id SYMBOL,

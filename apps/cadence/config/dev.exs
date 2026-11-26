@@ -46,3 +46,6 @@ config :cadence, :env_credentials,
 # contacts journal's re-delivery window (72 h + 24 h); see Cadence.Control.IdentityStateRetention.
 # Mode: CADENCE_IDENTITY_STATE_RETENTION (dry by default).
 config :cadence, Cadence.Control.IdentityStateRetention, observation_retention_hours: 48
+
+# The dev store keeps two days of observations: Cadence's own retention job now drops the rest.
+config :cadence, :telemetry_observation_retention, enabled?: true, default_days: 2

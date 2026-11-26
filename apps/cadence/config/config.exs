@@ -128,6 +128,9 @@ config :cadence,
     flush_count: 250
   ],
   telemetry_current_value_store: [module: Cadence.Telemetry.CurrentValueStore.ETS],
+  # QuestDB day-partition retention (#693; Cadence.Telemetry.Storage.QuestDB.Retention): partitions
+  # wholly older than the longest retention (this default, or a `mission_days` override) are dropped.
+  telemetry_observation_retention: [enabled?: true, default_days: 30],
   telemetry_storage: [
     writer: Cadence.Telemetry.Storage.Writers.QuestDB,
     realm: :flight,

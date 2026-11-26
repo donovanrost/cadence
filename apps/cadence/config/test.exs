@@ -79,6 +79,9 @@ config :cadence, data_source_health_events: [enabled?: false]
 config :cadence, data_source_probe_scheduler: [enabled?: false]
 config :cadence, data_source_watermark_events: [enabled?: false]
 
+# No QuestDB in tests: the retention job is exercised with an injected `exec_fun`.
+config :cadence, :telemetry_observation_retention, enabled?: false
+
 config :logger, level: :warning
 
 # Provider HTTP calls refuse private and reserved networks (OutboundGuard, api-ops 11-15); this

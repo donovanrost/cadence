@@ -660,6 +660,24 @@ defmodule Cadence.Observability.Metrics.Catalog do
         tag_values: &take_string_keys(&1, ["downstream"])
       ),
       event_gauge(
+        "cadence.storage.questdb.disk",
+        [:cadence, :telemetry, :questdb_retention, :measured],
+        :disk_bytes,
+        "By",
+        "Disk used by QuestDB telemetry observation partitions, measured by the retention job.",
+        [],
+        []
+      ),
+      event_gauge(
+        "cadence.storage.questdb.partitions",
+        [:cadence, :telemetry, :questdb_retention, :measured],
+        :partitions,
+        "{partition}",
+        "QuestDB telemetry observation day partitions kept after the retention job's drop.",
+        [],
+        []
+      ),
+      event_gauge(
         "cadence.telemetry.persistence.queue.depth",
         [:cadence, :runtime, :ingress_persistence_projector, :capacity_waiter_registered],
         :queue_depth,
