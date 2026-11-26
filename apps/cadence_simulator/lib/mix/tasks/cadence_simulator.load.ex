@@ -18,7 +18,10 @@ defmodule Mix.Tasks.CadenceSimulator.Load do
   """
 
   @impl true
-  def run(args) do
+  def run(args), do: run(args, nil)
+
+  @doc false
+  def run(args, target) do
     if Mix.env() != :dev, do: Mix.raise("Run the simulator load test with MIX_ENV=dev")
 
     case OptionParser.parse(args,
@@ -31,12 +34,12 @@ defmodule Mix.Tasks.CadenceSimulator.Load do
              binary_owners: :boolean
            ]
          ) do
-      {opts, [], []} -> execute(opts)
+      {opts, [], []} -> execute(opts, target)
       _invalid -> Mix.raise(@moduledoc)
     end
   end
 
-  defp execute(opts) do
+  defp execute(opts, target) do
     config = %{
       craft: Keyword.get(opts, :craft, 1000),
       shape: Keyword.get(opts, :shape, "peak"),
@@ -50,11 +53,14 @@ defmodule Mix.Tasks.CadenceSimulator.Load do
 
     Mix.Task.run("app.config")
 
-    with :ok <- Shape.validate(config.craft, config.shape, config.per_site),
-         :ok <- Load.run(config) do
-      :ok
-    else
+    result =
+      with :ok <- Shape.validate(config.craft, config.shape, config.per_site) do
+        Load.run(config, target)
+      end
+
+    case result do
       {:error, reason} -> Mix.raise(reason)
+      success -> success
     end
   end
 end

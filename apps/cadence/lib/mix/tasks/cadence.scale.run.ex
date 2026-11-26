@@ -58,10 +58,19 @@ defmodule Mix.Tasks.Cadence.Scale.Run do
   def run(args) do
     {opts, [], []} = OptionParser.parse(args, strict: @switches)
     duration = Keyword.get(opts, :duration) || Mix.raise("--duration <seconds> is required")
-    label = Keyword.get(opts, :label, "run")
-    out = Keyword.get(opts, :out) || default_out(label)
-    modules = opts |> Keyword.get_values(:module) |> Enum.map(&Module.concat([&1]))
+    if duration < 1, do: Mix.raise("--duration must be positive")
+
     node = connect!(Keyword.get(opts, :node) || default_node())
+    sample(node, opts, fn -> wait(duration) end)
+    :ok
+  end
+
+  @doc false
+  def sample(node, opts, workload) do
+    duration = Keyword.fetch!(opts, :duration)
+    label = Keyword.get(opts, :label, "run")
+    out = Path.expand(Keyword.get(opts, :out) || default_out(label))
+    modules = opts |> Keyword.get_values(:module) |> Enum.map(&Module.concat([&1]))
 
     sampler_opts = [
       out: out,
@@ -82,16 +91,34 @@ defmodule Mix.Tasks.Cadence.Scale.Run do
             "its deadline; wait for it, or stop it with " <>
             "`:rpc.call(:\"#{node}\", Cadence.Observability.ScaleSampler, :stop, [])`."
         )
+
+      {:error, reason} ->
+        Mix.raise("Could not start the sampler on #{node}: #{inspect(reason)}")
     end
 
     Mix.shell().info("Sampling #{node} for #{duration} s into #{out}")
-    wait(duration)
+
+    result =
+      try do
+        workload.()
+      catch
+        kind, reason ->
+          :rpc.call(node, Cadence.Observability.ScaleSampler, :stop, [], 60_000)
+          :erlang.raise(kind, reason, __STACKTRACE__)
+      end
+
     {:ok, summary} = rpc!(node, :stop, [])
+    {summary, path} = write_summary(summary, out)
+    {summary, path, result}
+  end
+
+  defp write_summary(summary, out) do
     summary = put_in(summary, [:meta, :git_sha], git_sha())
 
-    summary_path = String.replace_suffix(out, ".jsonl", ".summary.json")
+    summary_path = Path.rootname(out, ".jsonl") <> ".summary.json"
     File.write!(summary_path, Jason.encode_to_iodata!(summary, pretty: true))
     print(summary, summary_path)
+    {summary, summary_path}
   end
 
   defp default_out(label) do
@@ -115,14 +142,16 @@ defmodule Mix.Tasks.Cadence.Scale.Run do
     end
   end
 
-  defp connect!(name) do
+  @doc false
+  def connect!(name) do
     {:ok, host} = :inet.gethostname()
     target = if String.contains?(name, "@"), do: name, else: "#{name}@#{host}"
 
-    case Node.start(:"scale_#{System.unique_integer([:positive])}@#{host}", :shortnames) do
-      {:ok, _pid} -> :ok
-      {:error, {:already_started, _pid}} -> :ok
-      {:error, reason} -> Mix.raise("Could not start distribution: #{inspect(reason)}")
+    unless Node.alive?() do
+      case Node.start(:"scale_#{System.pid()}@#{host}", :shortnames) do
+        {:ok, _pid} -> :ok
+        {:error, reason} -> Mix.raise("Could not start distribution: #{inspect(reason)}")
+      end
     end
 
     case System.get_env("CADENCE_ERLANG_COOKIE") || System.get_env("CADENCE_NODE_COOKIE") do
@@ -130,12 +159,21 @@ defmodule Mix.Tasks.Cadence.Scale.Run do
       cookie -> Node.set_cookie(String.to_atom(cookie))
     end
 
+    use_stack_loopback(name, host)
     target = String.to_atom(target)
 
     unless Node.connect(target) == true,
       do: Mix.raise("Could not connect to #{target}; is the stack up (dev/stack status)?")
 
     target
+  end
+
+  defp use_stack_loopback(name, host) do
+    if System.get_env("CADENCE_DEV_SLOT") != nil and not String.contains?(name, "@") do
+      # dev/stack binds distribution to loopback even if DNS resolves this host elsewhere.
+      :ok = :inet_db.add_host({127, 0, 0, 1}, [host])
+      :ok = :inet_db.set_lookup([:file, :native])
+    end
   end
 
   defp rpc!(node, function, args) do

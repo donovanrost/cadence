@@ -1,5 +1,5 @@
 defmodule CadenceSimulator.Load do
-  @moduledoc "Measures the Provider Contact data plane with loopback TCP receivers."
+  @moduledoc "Drives the Provider Contact data plane into a TCP sink or a Cadence stack."
 
   alias CadenceSimulator.{CatalogCache, PacketEncoder, Provider}
   alias CadenceSimulator.Load.{BinaryOwners, Shape, TcpSink}
@@ -12,9 +12,8 @@ defmodule CadenceSimulator.Load do
   @packets_per_second 10
   @diagnostics_interval_seconds 10
 
-  def run(opts) do
+  def run(opts, target \\ nil) do
     directory = Path.join(System.tmp_dir!(), "cadence-simulator-load-#{System.pid()}")
-    File.mkdir_p!(Path.dirname(opts.output))
     File.mkdir!(directory)
     store_path = Path.join(directory, "store.ets")
 
@@ -28,7 +27,7 @@ defmodule CadenceSimulator.Load do
 
       {:ok, _apps} = Application.ensure_all_started(:cadence_simulator)
       :ok = Logger.configure(level: :warning)
-      File.open!(opts.output, [:write, :utf8], &exercise(&1, opts, store_path))
+      exercise(opts, store_path, target)
     after
       Application.stop(:cadence_simulator)
       report_store_termination()
@@ -36,7 +35,7 @@ defmodule CadenceSimulator.Load do
     end
   end
 
-  defp exercise(output, opts, store_path) do
+  defp exercise(opts, store_path, nil) do
     fleet = Shape.fleet(opts.craft, @sites)
 
     active =
@@ -52,8 +51,11 @@ defmodule CadenceSimulator.Load do
 
     try do
       {run, frames_per_step, rate_hz} = create_run(fleet)
-      profiles = Enum.map(sinks, fn {_pid, port} -> delivery_profile(run, port) end)
-      seed_contacts(fleet, run, profiles, opts)
+
+      by_site =
+        sinks |> Enum.map(fn {_pid, port} -> delivery_profile(run, port) end) |> List.to_tuple()
+
+      seed_contacts(fleet, run, fn _scid, site -> elem(by_site, site) end, @sites, opts)
       :ok = Store.flush()
 
       await_paths(active, counters, now_ms() + 30_000)
@@ -67,7 +69,13 @@ defmodule CadenceSimulator.Load do
 
       diagnostics = fn -> diagnostics(store_path, opts.binary_owners?) end
       report_diagnostics("start", diagnostics.())
-      result = measure(output, active, counters, opts.duration, diagnostics)
+      File.mkdir_p!(Path.dirname(opts.output))
+
+      result =
+        File.open!(opts.output, [:write, :utf8], fn output ->
+          measure(output, active, counters, opts.duration, diagnostics)
+        end)
+
       outcome = report(result, frames_per_step, rate_hz, length(active))
       stop_run(run["id"], diagnostics)
       outcome
@@ -77,6 +85,81 @@ defmodule CadenceSimulator.Load do
         Process.exit(pid, :shutdown)
       end
     end
+  end
+
+  defp exercise(opts, store_path, %{ports: ports, sites: sites, measure: measure}) do
+    fleet = Shape.fleet(opts.craft, sites)
+
+    active =
+      Enum.filter(fleet, fn {scid, _site} ->
+        Shape.in_contact?(scid, sites, opts.shape, opts.per_site)
+      end)
+
+    scids = Enum.map(active, &elem(&1, 0)) |> MapSet.new()
+
+    if scids != MapSet.new(Map.keys(ports)),
+      do: raise("Cadence listener SCIDs do not match the selected load shape")
+
+    {run, frames_per_step, rate_hz} = create_run(fleet)
+    profiles = Map.new(ports, fn {scid, port} -> {scid, delivery_profile(run, port)} end)
+    seed_contacts(active, run, fn scid, _site -> Map.fetch!(profiles, scid) end, sites, opts)
+    :ok = Store.flush()
+
+    await_transmission(scids, now_ms() + 30_000)
+    expected_fps = round(length(active) * frames_per_step * rate_hz)
+    {summary, summary_path, {live, bytes}} = measure.(fn -> transmit_for(opts.duration) end)
+
+    diagnostics = fn -> diagnostics(store_path, opts.binary_owners?) end
+    stop_run(run["id"], diagnostics)
+
+    %{
+      summary: summary,
+      summary_path: summary_path,
+      paths_sending: live,
+      paths_expected: length(active),
+      frames_sent: div(bytes, @frame_size),
+      frames_per_second_expected: expected_fps
+    }
+  end
+
+  defp transmit_for(duration) do
+    started = transmitted_bytes()
+    Process.sleep(duration * 1_000)
+    finished = transmitted_bytes()
+
+    Enum.reduce(started, {0, 0}, fn {scid, before}, {live, bytes} ->
+      case Map.get(finished, scid, 0) - before do
+        sent when sent > 0 -> {live + 1, bytes + sent}
+        _ -> {live, bytes}
+      end
+    end)
+  end
+
+  defp await_transmission(scids, deadline) do
+    sent = transmitted_bytes()
+
+    cond do
+      scids == MapSet.new(Map.keys(sent)) ->
+        sent
+
+      now_ms() >= deadline ->
+        raise "Only #{map_size(sent)}/#{MapSet.size(scids)} TCP paths sent frames"
+
+      true ->
+        Process.sleep(100)
+        await_transmission(scids, deadline)
+    end
+  end
+
+  defp transmitted_bytes do
+    for {_, pid, :worker, _} <-
+          DynamicSupervisor.which_children(CadenceSimulator.RuntimeSupervisor),
+        %{frame: %{scid: scid}, send_buffer_stats: %{bytes_sent: bytes}} <- [
+          CadenceSimulator.simulator_stats(pid)
+        ],
+        bytes > 0,
+        into: %{},
+        do: {scid, bytes}
   end
 
   defp create_run(fleet) do
@@ -117,7 +200,7 @@ defmodule CadenceSimulator.Load do
   defp delivery_profile(run, port) do
     {:ok, profile} =
       DeliveryProfiles.provision(run, %{
-        "display_name" => "Load site TCP sink",
+        "display_name" => "Load TCP receiver",
         "client_reference" => "load-site-#{port}",
         "direction" => "downlink",
         "delivery_kind" => "realtime_stream",
@@ -139,18 +222,17 @@ defmodule CadenceSimulator.Load do
   end
 
   # Synthetic windows isolate the contact runtime from orbit prediction and booking.
-  defp seed_contacts(fleet, run, profiles, opts) do
+  defp seed_contacts(fleet, run, profile_for, sites, opts) do
     now = DateTime.utc_now()
     active_start = DateTime.add(now, 3)
     idle_start = DateTime.add(active_start, opts.duration + 120)
-    by_site = List.to_tuple(profiles)
 
     Enum.each(fleet, fn {scid, site} ->
-      profile = elem(by_site, site)
+      profile = profile_for.(scid, site)
 
       starts =
-        if Shape.in_contact?(scid, @sites, opts.shape, opts.per_site),
-          do: DateTime.add(active_start, rem(div(scid - 1, @sites), 10) * 100, :millisecond),
+        if Shape.in_contact?(scid, sites, opts.shape, opts.per_site),
+          do: DateTime.add(active_start, rem(div(scid - 1, sites), 10) * 100, :millisecond),
           else: idle_start
 
       {:ok, _contact} =
