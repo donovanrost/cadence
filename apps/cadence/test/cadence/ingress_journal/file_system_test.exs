@@ -537,7 +537,6 @@ defmodule Cadence.IngressJournal.FileSystemTest do
 
     tail = List.last(entries).end_offset
     assert :ok = FileSystem.acknowledge(ctx.name, :archive, tail)
-    Process.sleep(50)
 
     assert {:ok, snapshot} = FileSystem.snapshot(ctx.name)
     assert snapshot.reclaimed_segments == 0
@@ -556,14 +555,29 @@ defmodule Cadence.IngressJournal.FileSystemTest do
              stop_supervised({:ingress_journal, Keyword.fetch!(ctx.opts, :provider_binding_id)})
 
     start_supervised!({FileSystem, opts})
-    assert :ok = FileSystem.acknowledge(ctx.name, :processing, hd(entries).end_offset)
+    test_pid = self()
+    provider_binding_id = Keyword.fetch!(ctx.opts, :provider_binding_id)
+    handler_id = "journal-processing-checkpoint-#{provider_binding_id}"
 
-    assert_eventually(fn ->
-      assert {:ok, recovered} = FileSystem.snapshot(ctx.name)
-      assert recovered.durable_cursors.processing == hd(entries).end_offset
-      assert recovered.processing_backlog.entries == 2
-      assert recovered.processing_backlog.bytes == tail - hd(entries).end_offset
-    end)
+    :ok =
+      :telemetry.attach(
+        handler_id,
+        [:cadence, :ingress_journal, :maintenance],
+        fn _event, _measurements, metadata, _config ->
+          if metadata.provider_binding_id == provider_binding_id and metadata.outcome == :ok do
+            send(test_pid, :processing_checkpoint_complete)
+          end
+        end,
+        nil
+      )
+
+    on_exit(fn -> :telemetry.detach(handler_id) end)
+    assert :ok = FileSystem.acknowledge(ctx.name, :processing, hd(entries).end_offset)
+    assert_receive :processing_checkpoint_complete, 5_000
+    assert {:ok, recovered} = FileSystem.snapshot(ctx.name)
+    assert recovered.durable_cursors.processing == hd(entries).end_offset
+    assert recovered.processing_backlog.entries == 2
+    assert recovered.processing_backlog.bytes == tail - hd(entries).end_offset
 
     assert Enum.all?(tl(entries), &File.exists?(&1.segment_path))
   end
