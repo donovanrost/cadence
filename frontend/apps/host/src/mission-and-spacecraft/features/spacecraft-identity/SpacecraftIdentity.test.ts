@@ -1,7 +1,6 @@
 import { required } from "../../../../../../test-support/required";
-import { flushPromises, mount } from "@vue/test-utils";
-import { expect, test, vi } from "vite-plus/test";
-import SpacecraftIdentityPage from "./SpacecraftIdentityPage.vue";
+import { mount } from "@vue/test-utils";
+import { expect, test } from "vite-plus/test";
 import SpacecraftIdentityForm from "./SpacecraftIdentityForm.vue";
 import { identityFixture } from "./fixtures.test-support";
 import { assertIdentityForm, assertIdentityResult, assertNewIdentityForm } from "./validation";
@@ -34,25 +33,6 @@ test("editing preserves a current pin and offers an explicit newer version or No
   wrapper.unmount();
 });
 
-test("server refreshes and out-of-order validation replies do not erase drafts or replace newer errors", async () => {
-  const replies: ((value: unknown) => void)[] = [];
-  const execute = vi.fn(() => new Promise((resolve) => replies.push(resolve)));
-  const wrapper = mount(SpacecraftIdentityPage, { props: { data: identityFixture(), execute } });
-  await wrapper.get("#spacecraft-display-name").setValue("First");
-  await wrapper.get("#spacecraft-display-name").setValue("Latest");
-  await wrapper.setProps({ data: identityFixture() });
-  required(replies[1])({ status: "invalid", errors: { display_name: ["Current error"] } });
-  await flushPromises();
-  required(replies[0])({ status: "invalid", errors: { display_name: ["Old error"] } });
-  await flushPromises();
-  expect((wrapper.get("#spacecraft-display-name").element as HTMLInputElement).value).toBe(
-    "Latest",
-  );
-  expect(wrapper.get("#spacecraft-display-name-errors").text()).toBe("Current error");
-  expect(wrapper.get("#spacecraft-display-name").attributes("aria-invalid")).toBe("true");
-  wrapper.unmount();
-});
-
 test("identity edits preserve reviewed framing and link back to its configuration workspace", async () => {
   const data = identityFixture(true);
   const path = "/missions/mission-a/spacecraft/vehicle-one";
@@ -77,32 +57,6 @@ test("identity edits preserve reviewed framing and link back to its configuratio
   ]);
   data.form.configuration_href = "/missions/mission-a/spacecraft/other?section=communications";
   expect(() => assertIdentityForm(data)).toThrow("Invalid spacecraft configuration link");
-  wrapper.unmount();
-});
-
-test("a pending save disables repeat submits and failure retains values for retry", async () => {
-  let reject!: (reason?: unknown) => void;
-  const execute = vi.fn((event: string) =>
-    event === "save"
-      ? new Promise((_resolve, no) => {
-          reject = no;
-        })
-      : Promise.resolve({ status: "ok", errors: {} }),
-  );
-  const wrapper = mount(SpacecraftIdentityPage, { props: { data: identityFixture(), execute } });
-  await wrapper.get("#spacecraft-display-name").setValue("Vehicle");
-  await flushPromises();
-  await wrapper.get("#spacecraft-form").trigger("submit");
-  expect(wrapper.get("#create-spacecraft-button").attributes("disabled")).toBeDefined();
-  await wrapper.get("#spacecraft-form").trigger("submit");
-  expect(execute.mock.calls.filter(([event]) => event === "save")).toHaveLength(1);
-  reject(new Error("private transport details"));
-  await flushPromises();
-  expect(wrapper.get("#spacecraft-identity-error").text()).not.toContain("private");
-  expect(wrapper.get("#create-spacecraft-button").attributes("disabled")).toBeUndefined();
-  expect((wrapper.get("#spacecraft-display-name").element as HTMLInputElement).value).toBe(
-    "Vehicle",
-  );
   wrapper.unmount();
 });
 

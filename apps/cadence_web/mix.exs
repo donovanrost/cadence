@@ -109,11 +109,8 @@ defmodule CadenceWeb.MixProject do
   # only every n-th file from the k-th runs, so the order balances the shards: the two
   # federation-fixture suites, which build every plugin, are the heaviest and alternate.
   @federation_browser_tests [
-    "browser_test/cadence_web/assets/federation_browser_smoke_test.exs",
     "test/cadence_web/ops_contact_scheduling_page_test.exs",
-    "browser_test/cadence_web/assets/command_workspace_browser_test.exs",
-    "browser_test/cadence_web/assets/spacecraft_configuration_browser_test.exs",
-    "browser_test/cadence_web/assets/settings_browser_test.exs"
+    "browser_test/cadence_web/assets/command_workspace_browser_test.exs"
   ]
 
   # The node contract tests for the browser harness run once: unsharded, or in shard 1.

@@ -331,7 +331,7 @@ defmodule CadenceWeb.OpsContactSchedulingPageTest do
 
   @tag :browser_smoke
   @tag timeout: 300_000
-  test "production native, client-routed and federated scheduling share durable operations", c do
+  test "production native and client-routed scheduling share durable operations", c do
     output =
       Path.join(
         System.tmp_dir!(),

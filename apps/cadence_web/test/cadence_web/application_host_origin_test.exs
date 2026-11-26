@@ -1,9 +1,9 @@
 defmodule CadenceWeb.ApplicationHostOriginTest do
   @moduledoc """
-  Sweep row 3 W1: the bridge stamps each action with the host it came through. The legacy host's
-  catalog and the console's surface host each mint their own host session id; the session plug
-  knows which one a call carries, so a limits save records `via` "legacy_host" or "console" (and
-  `saved_by`), never a value the client chose. An id neither host issued is refused.
+  The bridge stamps each action with the host it came through. The console's surface host mints
+  the host session id; the session plug checks the call carries it, so a limits save records `via`
+  "console" (and `saved_by`), never a value the client chose. An id the console did not issue is
+  refused.
   """
   use CadenceWeb.ConnCase, async: false
 
@@ -31,14 +31,11 @@ defmodule CadenceWeb.ApplicationHostOriginTest do
 
     prefix = "/api/cadence/application-host/v1/missions/#{mission.mission_id}"
 
-    legacy =
-      get(TestFixtures.member_conn(user), prefix <> "/catalog", %{"application_key" => "limits"})
-
-    # The console's surface host, in the same browser session (cookie) as the legacy catalog.
     console =
-      legacy
-      |> recycle()
-      |> get("/api/console/v1/missions/#{mission.mission_id}/apps/limits/surfaces/manage/host")
+      get(
+        TestFixtures.member_conn(user),
+        "/api/console/v1/missions/#{mission.mission_id}/apps/limits/surfaces/manage/host"
+      )
 
     %{
       user: user,
@@ -46,30 +43,26 @@ defmodule CadenceWeb.ApplicationHostOriginTest do
       mission: mission,
       prefix: prefix,
       conn: console,
-      legacy_session: json_response(legacy, 200)["session"],
       console_session: json_response(console, 200)["data"]["catalog"]["session"]
     }
   end
 
-  test "each host's session id is its own, and a save records the host it came through", c do
-    refute c.legacy_session["sessionId"] == c.console_session["sessionId"]
+  test "a save records the console as the host it came through", c do
+    receipt =
+      c
+      |> send_action(c.console_session, input("CONSOLE"), "origin-console")
+      |> json_response(200)
 
-    for {session, set, via} <- [
-          {c.legacy_session, "LEGACY", "legacy_host"},
-          {c.console_session, "CONSOLE", "console"}
-        ] do
-      receipt = c |> send_action(session, input(set), "origin-#{via}") |> json_response(200)
-      id = receipt["result"]["definitionId"]
+    id = receipt["result"]["definitionId"]
 
-      assert {:ok, saved} =
-               Limits.fetch_limit_definition(c.org.organization_id, c.mission.mission_id, id, 1)
+    assert {:ok, saved} =
+             Limits.fetch_limit_definition(c.org.organization_id, c.mission.mission_id, id, 1)
 
-      assert saved.metadata["via"] == via
-      assert saved.metadata["saved_by"] == %{"kind" => "user", "id" => c.user.user_id}
-    end
+    assert saved.metadata["via"] == "console"
+    assert saved.metadata["saved_by"] == %{"kind" => "user", "id" => c.user.user_id}
   end
 
-  test "a host session id neither host issued is refused before any save", c do
+  test "a host session id the console did not issue is refused before any save", c do
     forged = %{c.console_session | "sessionId" => "not-a-host-session"}
 
     assert %{"code" => "invalid_session"} =

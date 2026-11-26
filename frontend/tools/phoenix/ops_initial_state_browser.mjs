@@ -56,7 +56,6 @@ const routes = [
   "/ops/contacts",
   "/ops/data-operations",
   "/ops/data-operations/manage",
-  "/ops/activations",
 ];
 try {
   await signInThroughConsole(page, {

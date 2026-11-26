@@ -5,14 +5,6 @@ import { routeLayer } from "@cadence/plugin-sdk/routes";
 type CatalogRoute = (typeof routes)[number];
 function normalizeHostRoute(route: CatalogRoute) {
   switch (route.kind) {
-    case "spacecraft":
-      if (route.spacecraftPage)
-        return { ...route, kind: "spacecraft" as const, spacecraftPage: route.spacecraftPage };
-      break;
-    case "catalog":
-      if (route.catalogPage)
-        return { ...route, kind: "catalog" as const, catalogPage: route.catalogPage };
-      break;
     case "ops_module":
       if (route.contribution)
         return { ...route, kind: "ops_module" as const, contribution: route.contribution };
@@ -21,8 +13,6 @@ function normalizeHostRoute(route: CatalogRoute) {
       if (route.workspacePage === "landing" || route.workspacePage === "timeline")
         return { ...route, kind: "ops_workspace" as const, workspacePage: route.workspacePage };
       break;
-    case "activation_approvals":
-      return { ...route, kind: "activation_approvals" as const };
   }
   return { ...route, kind: "unavailable" as const };
 }
@@ -33,9 +23,11 @@ declare module "vue-router" {
     snapshot?: import("./host-snapshot").HostSnapshot;
   }
 }
-// Application surfaces are served by the Phoenix application host, not this router;
-// they are in the catalog only so those pages can describe a typed header.
-const hostRoutes = routes.filter((route) => route.kind !== "application_surface");
+// Only Ops pages are served by this router. Other catalog entries (spacecraft, catalog, application
+// surfaces) exist only so the components that still render them can type a page header.
+const hostRoutes = routes.filter(
+  (route) => route.kind === "ops_module" || route.kind === "ops_workspace",
+);
 const matchers = hostRoutes.map((route) => ({
   route,
   pattern: new RegExp(

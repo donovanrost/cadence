@@ -23,7 +23,6 @@ page.setDefaultTimeout(15000);
 const errors = [];
 page.on("pageerror", (error) => errors.push(error.message));
 const native = `${base}/missions/${mission}/ops/contacts?spacecraft_id=${spacecraft}`;
-const remote = `${base}/missions/${mission}/applications/ops_console/contact_schedule/federated?spacecraft_id=${spacecraft}`;
 const workspace = `${base}/missions/${mission}/ops/contact-workspace?spacecraft_id=${spacecraft}`;
 /** @param {string} id */
 async function completed(id) {
@@ -48,8 +47,7 @@ try {
   await nativeOperation.getByRole("link", { name: "Reservation", exact: true }).waitFor();
   const reserveId = await nativeOperation.getAttribute("data-operation-id");
   assert.ok(reserveId);
-  await page.goto(`${base}/missions/${mission}/ops`);
-  await page.goto(remote);
+  await page.goto(native);
   await page.locator(`[data-operation-id="${reserveId}"]`).waitFor();
   await completed(reserveId);
   await page.goto(workspace);

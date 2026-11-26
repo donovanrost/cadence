@@ -11,7 +11,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.Spacecraft do
   and planning but keeps its id, SCID and history. Archiving raises the HOLDs in `ArchiveHolds`
   (waiting command requests block; booked passes and past traffic are acknowledged).
 
-  Rules carried over from `Cadence.Spacecraft.Identity`: a pin names an existing, active profile
+  Pin rules: a pin names an existing, active profile
   version; synthetic configuration profiles can't be chosen; a spacecraft whose framing is
   governed by its configuration review keeps its pin. Identity changes have no direct runtime
   effect: runtime pipelines pick spacecraft configuration up through activation.

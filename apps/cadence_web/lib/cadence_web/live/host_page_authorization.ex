@@ -4,22 +4,15 @@ defmodule CadenceWeb.HostPageAuthorization do
   import Phoenix.Component
 
   alias CadenceWeb.{MissionAuth, OrganizationAuth}
-  alias CadenceWeb.{OpsShellHook, SpacecraftAuth, UserAuth}
+  alias CadenceWeb.{OpsShellHook, UserAuth}
   alias CadenceWeb.OpsShellHook.CommandUpdates
 
   @organization {OrganizationAuth, :require_organization_scope}
   @mission {MissionAuth, :load_mission}
   @admin {OrganizationAuth, :require_organization_admin}
   @policies %{
-    organization: {@organization, [], false},
-    mission: {@organization, [@mission], false},
-    spacecraft: {@organization, [@mission], false},
-    spacecraft_show: {@organization, [@mission, {SpacecraftAuth, :load_spacecraft}], false},
-    catalog: {@organization, [@mission], false},
-    comms: {@organization, [@mission], false},
     ops: {@organization, [@mission], true},
-    ops_admin: {@organization, [@admin, @mission], true},
-    user: {{UserAuth, :require_user_scope}, [], false}
+    ops_admin: {@organization, [@admin, @mission], true}
   }
 
   def prepare(socket, policy, params) do

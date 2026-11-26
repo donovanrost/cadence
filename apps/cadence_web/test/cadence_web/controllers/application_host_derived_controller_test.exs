@@ -23,12 +23,14 @@ defmodule CadenceWeb.ApplicationHostDerivedControllerTest do
     {:ok, installation} = ApplicationInstallations.install(scope, host, "derived_telemetry")
     prefix = "/api/cadence/application-host/v1/missions/#{mission.mission_id}"
 
+    # The console's surface host mints the bridge session (host session id, CSRF token, pinned scope).
     response =
-      get(TestFixtures.member_conn(user), prefix <> "/catalog", %{
-        "application_key" => "derived_telemetry"
-      })
+      get(
+        TestFixtures.member_conn(user),
+        "/api/console/v1/missions/#{mission.mission_id}/apps/derived_telemetry/surfaces/manage/host"
+      )
 
-    catalog = json_response(response, 200)
+    catalog = json_response(response, 200)["data"]["catalog"]
 
     %{
       scope: scope,

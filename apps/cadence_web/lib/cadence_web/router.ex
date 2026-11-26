@@ -140,75 +140,6 @@ defmodule CadenceWeb.Router do
     )
 
     get(
-      "/missions/:mission_id/catalog/artifacts/:artifact_id/download",
-      CatalogArtifactDownloadController,
-      :show
-    )
-
-    get(
-      "/missions/:mission_id/applications/:application_key/federated",
-      ApplicationHostController,
-      :federated
-    )
-
-    get(
-      "/missions/:mission_id/applications/:application_key/:surface_id/federated",
-      ApplicationHostController,
-      :federated
-    )
-
-    get(
-      "/missions/:mission_id/spacecraft/:spacecraft_id/applications/:application_key/federated",
-      ApplicationHostController,
-      :federated
-    )
-
-    get(
-      "/missions/:mission_id/spacecraft/:spacecraft_id/applications/:application_key/:surface_id/federated",
-      ApplicationHostController,
-      :federated
-    )
-
-    # These shells stay in the authenticated browser scope so the Phoenix
-    # host can establish organization, user, and admin context from the
-    # current session without inventing a mission resource.
-    get(
-      "/applications/:application_key/federated",
-      ApplicationHostController,
-      :organization_federated
-    )
-
-    get(
-      "/applications/:application_key/:surface_id/federated",
-      ApplicationHostController,
-      :organization_federated
-    )
-
-    get(
-      "/account/applications/:application_key/federated",
-      ApplicationHostController,
-      :user_federated
-    )
-
-    get(
-      "/account/applications/:application_key/:surface_id/federated",
-      ApplicationHostController,
-      :user_federated
-    )
-
-    get(
-      "/admin/applications/:application_key/federated",
-      ApplicationHostController,
-      :admin_federated
-    )
-
-    get(
-      "/admin/applications/:application_key/:surface_id/federated",
-      ApplicationHostController,
-      :admin_federated
-    )
-
-    get(
       "/missions/:mission_id/ops/telemetry/explore",
       LegacyOpsRedirectController,
       :telemetry_explore
@@ -439,22 +370,6 @@ defmodule CadenceWeb.Router do
     live_session :application,
       on_mount: [{CadenceWeb.UserAuth, :require_user_scope}],
       layout: {CadenceWeb.Layouts, :host} do
-      live("/missions/:mission_id/spacecraft/:spacecraft_id", HostPageLive, :show,
-        metadata: %{host_policy: :spacecraft_show}
-      )
-
-      live("/missions/:mission_id/spacecraft/:spacecraft_id/identity", HostPageLive, :identity,
-        metadata: %{host_policy: :spacecraft_show}
-      )
-
-      live("/missions/:mission_id/spacecraft/:spacecraft_id/edit", HostPageLive, :edit,
-        metadata: %{host_policy: :spacecraft_show}
-      )
-
-      live("/missions/:mission_id/catalog/artifacts/:artifact_id", HostPageLive, :show,
-        metadata: %{host_policy: :catalog}
-      )
-
       live("/missions/:mission_id/ops", HostPageLive, :index, metadata: %{host_policy: :ops})
 
       live("/missions/:mission_id/ops/data-operations", HostPageLive, :index,
@@ -543,59 +458,12 @@ defmodule CadenceWeb.Router do
         metadata: %{host_policy: :ops}
       )
 
-      live("/missions/:mission_id/ops/activations", HostPageLive, :index,
-        metadata: %{host_policy: :ops}
-      )
-
       live("/missions/:mission_id/ops/data-operations/manage", HostPageLive, :manage,
         metadata: %{host_policy: :ops_admin}
       )
     end
 
-    live_session :mission,
-      on_mount: [
-        {CadenceWeb.OrganizationAuth, :require_organization_scope},
-        {CadenceWeb.MissionAuth, :load_mission},
-        {CadenceWeb.UserAuth, :attach_user_menu}
-      ],
-      layout: {CadenceWeb.Layouts, :mission_sidebar} do
-      live(
-        "/missions/:mission_id/applications/:application_key",
-        ApplicationHostLive,
-        :show
-      )
-
-      live(
-        "/missions/:mission_id/applications/:application_key/:surface_id",
-        ApplicationHostLive,
-        :show
-      )
-    end
-
-    live_session :spacecraft_show,
-      on_mount: [
-        {CadenceWeb.OrganizationAuth, :require_organization_scope},
-        {CadenceWeb.MissionAuth, :load_mission},
-        {CadenceWeb.SpacecraftAuth, :load_spacecraft},
-        {CadenceWeb.UserAuth, :attach_user_menu}
-      ],
-      layout: {CadenceWeb.Layouts, :mission_sidebar} do
-      live(
-        "/missions/:mission_id/spacecraft/:spacecraft_id/applications/:application_key",
-        ApplicationHostLive,
-        :show
-      )
-
-      live(
-        "/missions/:mission_id/spacecraft/:spacecraft_id/applications/:application_key/:surface_id",
-        ApplicationHostLive,
-        :show
-      )
-    end
-
-    # Legacy application URLs redirect to the generic application host. Keep
-    # compatibility mappings out of ApplicationHostLive so new applications do
-    # not require host actions or routes.
+    # Legacy application URLs redirect to the console.
     get(
       "/missions/:mission_id/spacecraft/:spacecraft_id/telemetry",
       LegacyApplicationRedirectController,
@@ -1374,16 +1242,6 @@ defmodule CadenceWeb.Router do
   scope "/api/cadence/application-host/v1", CadenceWeb do
     pipe_through([:browser, :require_authenticated_user, :application_host_json])
 
-    get("/missions/:mission_id/catalog", ApplicationHostController, :catalog)
-
-    get(
-      "/missions/:mission_id/spacecraft/:spacecraft_id/catalog",
-      ApplicationHostController,
-      :catalog
-    )
-
-    get("/catalog", ApplicationHostController, :catalog)
-
     post("/missions/:mission_id/query", ApplicationHostController, :query)
 
     post(
@@ -1399,9 +1257,6 @@ defmodule CadenceWeb.Router do
       ApplicationHostController,
       :actions
     )
-
-    post("/query", ApplicationHostController, :query)
-    post("/actions", ApplicationHostController, :actions)
   end
 
   scope "/api", CadenceWeb do

@@ -20,7 +20,6 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
   alias Cadence.Runtime.Missions, as: RuntimeMissions
   alias Cadence.Runtime.PartitionKey
   alias Cadence.Runtime.SourceRuntimeBases
-  alias Cadence.Spacecraft.Identity
   alias Cadence.SpacecraftStore
 
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
@@ -309,7 +308,7 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
              c.other_revision.mission_model_revision_id
   end
 
-  test "reviewed framing survives identity edits and cannot become another spacecraft's preset",
+  test "reviewed framing stays pinned through each activation",
        c do
     protocol = %{
       "downlink" => "tm",
@@ -334,69 +333,6 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
 
       assert {:ok, pinned} = SpacecraftStore.fetch_pinned_profile(c.mission, current)
       assert ConfigurationInput.from_profile(pinned) == selected_protocol
-
-      input = %{
-        "spacecraft" => %{
-          "display_name" => "Renamed vehicle",
-          "scid" => "17",
-          "spacecraft_type_id" => current.spacecraft_type_id,
-          "spacecraft_type_version" => current.spacecraft_type_version
-        }
-      }
-
-      assert {:ok, _} =
-               Identity.action(
-                 c.scope,
-                 c.mission.mission_id,
-                 current.spacecraft_id,
-                 "validate",
-                 input
-               )
-
-      # Host-action sweep row 2: a save is refused (the console's change sets edit spacecraft);
-      # the governed-pin rule below is checked through validate, which still applies it.
-      assert {:error, %{"display_name" => [refused]}} =
-               Identity.action(
-                 c.scope,
-                 c.mission.mission_id,
-                 current.spacecraft_id,
-                 "save",
-                 input
-               )
-
-      assert refused =~ "Setup › Spacecraft"
-
-      legacy_input = Map.update!(input, "spacecraft", &Map.delete(&1, "spacecraft_type_version"))
-
-      assert {:ok, _} =
-               Identity.action(
-                 c.scope,
-                 c.mission.mission_id,
-                 current.spacecraft_id,
-                 "validate",
-                 legacy_input
-               )
-
-      replacement = %{
-        "spacecraft_type_id" => if(pinned, do: nil, else: "unreviewed-preset"),
-        "spacecraft_type_version" => if(pinned, do: nil, else: 1)
-      }
-
-      assert {:error, %{"spacecraft_type_id" => [message]}} =
-               Identity.action(
-                 c.scope,
-                 c.mission.mission_id,
-                 current.spacecraft_id,
-                 "validate",
-                 Map.update!(input, "spacecraft", &Map.merge(&1, replacement))
-               )
-
-      assert message =~ "Communications"
-
-      if pinned do
-        assert {:error, %{"spacecraft_type_id" => [_]}} =
-                 Identity.action(c.scope, c.mission.mission_id, nil, "validate", input)
-      end
     end
   end
 

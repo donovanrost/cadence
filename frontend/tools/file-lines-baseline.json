@@ -3,10 +3,6 @@
     "lines": 1806,
     "owner": "legacy (#80): frozen, leaves with its row"
   },
-  "apps/host/src/shell/ApplicationHost.vue": {
-    "lines": 1105,
-    "owner": "legacy (#80): frozen, leaves with its row"
-  },
   "modules/commanding/src/features/workspace/useCommandWorkspace.ts": {
     "lines": 761,
     "owner": "legacy (#80): frozen, leaves with its row"
@@ -37,10 +33,6 @@
   },
   "apps/host/src/http-host-bridge.ts": {
     "lines": 529,
-    "owner": "legacy (#80): frozen, leaves with its row"
-  },
-  "apps/host/src/shell/BrowserHost.vue": {
-    "lines": 515,
     "owner": "legacy (#80): frozen, leaves with its row"
   },
   "apps/storybook/src/CommandWorkspaceExample.vue": {
