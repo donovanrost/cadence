@@ -109,6 +109,8 @@ Laptop 1 worktrees live in `~/.herdr/worktrees/cadence/<handle>`. The new agent 
 - `hc send <handle> "[from <you>] <message>"`. From laptop 1, laptop-2 agents are `donovans-macbook-pro-1/<handle>`;
   from laptop 2, laptop-1 agents are `laptop1/<handle>` (the CTO is `laptop1/t11`).
   Keep it to a few lines; longer things go in the issue or PR and you send the link.
+- Never ask a question as a dialog in your own terminal; nobody watches it. Send it to whoever decides with
+  `hc send`. For the CTO that's `t11`, or `laptop1/t11` from laptop 2.
 - Tell the CTO (`t11` on laptop 1, handle `cto`) about: a milestone done, a blocker you can't clear, a decision
   above your area, a hire or fire. Not routine progress; that goes on the board.
 - If a session dies or the machine reboots, each agent's worktree and branch are the recovery point.
