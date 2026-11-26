@@ -46,8 +46,8 @@ export const profileCard = (p: RolloutProfile) =>
 
 /**
  * C3 Roll out to (Catalog.md, #65): a rollout is a change set. By profile, one
- * `spacecraft_profile` op per profile setting its catalog revision; a few spacecraft first, one
- * catalog override per spacecraft (P3's op). The whole set applies as one generation.
+ * `spacecraft_profile` op per profile pinning the revision's composition; a few spacecraft first,
+ * one composition override per spacecraft (P3's op). The whole set applies as one generation.
  */
 export type RolloutChoice =
   | Readonly<{
@@ -57,16 +57,23 @@ export type RolloutChoice =
     }>
   | Readonly<{ kind: "spacecraft"; ids: readonly string[]; reason: string }>;
 
-export function rolloutOps(revisionId: string, choice: RolloutChoice): StageOp[] {
+/**
+ * What C3 rolls out: the catalog revision (its number, and the id the dry run's catalog moves name)
+ * and its one-layer composition, which is what the ops pin (D3, #544: Cadence derives the catalog
+ * revision from it).
+ */
+export type RolloutTarget = Readonly<{ id: string; number: number; compositionId: string }>;
+
+export function rolloutOps(target: RolloutTarget, choice: RolloutChoice): StageOp[] {
   if (choice.kind === "spacecraft")
     return choice.ids.map((id) =>
-      overrideOp(id, "catalog_revision_id", { value: revisionId, reason: choice.reason }),
+      overrideOp(id, "composition_id", { value: target.compositionId, reason: choice.reason }),
     );
   return choice.profiles.map((p) => ({
     kind: "spacecraft_profile",
     action: "update",
     entity_id: p.id,
-    changes: [{ path: "catalog_revision_id", value: revisionId }],
+    changes: [{ path: "composition_id", value: target.compositionId }],
     // domain 2ef4ca79: expanded when the set applies, so api's moves_all is what moves.
     ...(p.allVersions ? { options: { rollout: "all_versions" } } : {}),
   }));

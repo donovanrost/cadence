@@ -1,3 +1,4 @@
+import type { RolloutTarget } from "../rollout.ts";
 import type { ModelRevision } from "./api.ts";
 
 /**
@@ -13,7 +14,7 @@ import type { ModelRevision } from "./api.ts";
 export type RolloutGate =
   | Readonly<{
       kind: "rollout";
-      revision: Readonly<{ id: string; number: number }>;
+      revision: RolloutTarget;
       catalogRevision: NonNullable<ModelRevision["catalog_revision"]>;
     }>
   | Readonly<{ kind: "line"; line: string }>
@@ -23,8 +24,16 @@ export function rolloutGate(r: ModelRevision): RolloutGate {
   const cr = r.catalog_revision;
   if (!cr) return { kind: "none" };
   switch (r.status) {
-    case "approved":
-      return { kind: "rollout", revision: { id: cr.id, number: cr.number }, catalogRevision: cr };
+    case "approved": {
+      // D3 (#544): C3 pins the revision's composition; without one there's nothing to pin.
+      const compositionId = r.composition?.composition_id;
+      if (!compositionId) return { kind: "none" };
+      return {
+        kind: "rollout",
+        revision: { id: cr.id, number: cr.number, compositionId },
+        catalogRevision: cr,
+      };
+    }
     case "candidate":
       return {
         kind: "line",

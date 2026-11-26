@@ -9,7 +9,7 @@ import RolloutPanel from "./RolloutPanel.vue";
 import { ARTIFACT_LIVE } from "./artifact.ts";
 import { importBreaking } from "./breaking.ts";
 import ImportRunFile from "./ImportRunFile.vue";
-import { formatBytes, type ImportRunDetail } from "./importRun.ts";
+import { formatBytes, rolloutTarget, type ImportRunDetail } from "./importRun.ts";
 
 /** File line, verdict, stats, diff (when available) and diagnostics for one import run. */
 const props = defineProps<{ run: ImportRunDetail }>();
@@ -17,6 +17,7 @@ const props = defineProps<{ run: ImportRunDetail }>();
 const scope = useMissionScope();
 const session = useSession();
 const canStage = computed(() => canAdministerOrganization(session, scope.value.organization));
+const target = computed(() => rolloutTarget(props.run));
 const fileLine = computed(() =>
   [
     props.run.file.name,
@@ -42,8 +43,8 @@ const fileLine = computed(() =>
       : "This is the database's first revision, so there's nothing to compare it with."
   }}</ApCallout>
   <RolloutPanel
-    v-if="canStage && run.status === 'succeeded' && run.revision"
-    :revision="run.revision"
+    v-if="canStage && run.status === 'succeeded' && target"
+    :revision="target"
     :breaking="importBreaking(run)"
   />
 </template>

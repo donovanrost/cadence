@@ -641,6 +641,9 @@ The shape is setup-shapes.md §C3, plus `declaration_count`.
 - `diagnostics[]`: `{severity: error|warning|info, code, message, path}`, where `path` is a
   " / "-joined XTCE path or `null`. A run can succeed with error diagnostics (unsupported items
   are skipped).
+- `revision`: `{id, number, label, composition_id}` or `null`. `composition_id` (D3, #544) is the
+  revision's one-layer composition: what C3's rollout pins on profiles and overrides (`null` only
+  if the import made none).
 - `base_revision`: the revision before this run's revision in the same database (the highest
   `revision_number` below its own), or `null` (first revision, or no revision produced). It's the
   same base as the revision read's `breaking_base` (the model approval gate above).
