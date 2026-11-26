@@ -281,9 +281,12 @@ defmodule Cadence.Reads.MissionModelApprovals do
         view
 
       record ->
+        names = ActorRef.names(org, [record.actor])
+
         Map.put(view, :decision, %{
           kind: "withdrawn",
-          by: person(record.actor),
+          # C1 (Control.ActorRef): never the stored name.
+          by: withdrawn_by(ActorRef.document(record.actor, names)),
           at: record.decided_at,
           report_id: nil,
           reason: record.reason,
@@ -293,6 +296,10 @@ defmodule Cadence.Reads.MissionModelApprovals do
   end
 
   defp withdrawn(view, _org, _mission_id, _row), do: view
+
+  # The revision read's `by` form (`{id, name}`), from C1's actor.
+  defp withdrawn_by(%{id: id, name: name}), do: %{id: id, name: name}
+  defp withdrawn_by(nil), do: nil
 
   # A person who may approve (`:approve_mission_model`); a service never decides.
   defp may_decide?(%Scope{actor_kind: :user} = scope, mission_id),

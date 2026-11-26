@@ -19,7 +19,7 @@ defmodule Cadence.MissionModels.CompositionPin do
   """
 
   alias Cadence.Catalog.CompositionPins
-  alias Cadence.MissionModels.{Compositions, RevisionDecisions, Selection}
+  alias Cadence.MissionModels.{Compositions, Selection}
   alias Cadence.Platform.ConfigFields, as: F
 
   @type pin :: {binary() | nil, binary() | nil}
@@ -117,32 +117,17 @@ defmodule Cadence.MissionModels.CompositionPin do
 
   defp subject(_pin), do: "This composition"
 
-  @doc """
-  The withdrawal behind a `:withdrawn` selection, for `details.decision` (U109): the newest
-  withdrawn link's record, `%{revision_id, kind, by, at, reason}`, or nil.
-  """
-  @spec withdrawn_decision(binary(), binary(), binary()) :: map() | nil
-  def withdrawn_decision(organization_id, mission_id, composition) do
-    with %{revision_id: revision_id} <-
-           organization_id
-           |> Selection.ranked(mission_id, composition)
-           |> Enum.find(&(&1.status == "withdrawn")),
-         %{} = record <- RevisionDecisions.withdrawal(organization_id, mission_id, revision_id) do
-      %{
-        revision_id: revision_id,
-        kind: "withdrawn",
-        # The revision read's form (`{id, name}`), from the record's actor.
-        by: %{id: record.actor["id"], name: record.actor["display_name"]},
-        at: record.decided_at,
-        reason: record.reason
-      }
-    else
-      _none -> nil
-    end
-  end
+  # Named by C1 (`Control.ActorRef`), configured so this context has no compile-time edge to
+  # control (`config :cadence, withdrawn_decisions:`).
+  defp put_decision(pin, organization_id, mission_id, composition, :withdrawn) do
+    decisions = Application.fetch_env!(:cadence, :withdrawn_decisions)
 
-  defp put_decision(pin, organization_id, mission_id, composition, :withdrawn),
-    do: Map.put(pin, :decision, withdrawn_decision(organization_id, mission_id, composition))
+    Map.put(
+      pin,
+      :decision,
+      decisions.composition_decision(organization_id, mission_id, composition)
+    )
+  end
 
   defp put_decision(pin, _organization_id, _mission_id, _composition, _reason), do: pin
 

@@ -375,10 +375,11 @@ defmodule Cadence.MissionModels.WithdrawalTest do
       assert pin.revision_id == c.model
       assert pin.composition_id == c.composition
 
-      assert %{kind: "withdrawn", reason: "Limits were wrong", at: at, by: %{id: by}} =
-               pin.decision
+      assert %{kind: "withdrawn", reason: "Limits were wrong", at: at, by: by} = pin.decision
 
-      assert by == c.scope.user.user_id
+      # C1 (Control.ActorRef): the fixture's admin isn't a member of the organization, so they're
+      # named by neither id nor the stored name (the console API test names a member).
+      assert by == %{kind: "user", id: nil, name: nil}
       assert pin.hold_basis == "#{c.model}:withdrawn:#{DateTime.to_iso8601(at)}"
       assert WithdrawnPins.for_spacecraft(c.org, c.mid, []) == %{}
     end

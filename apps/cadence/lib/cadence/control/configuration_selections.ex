@@ -13,8 +13,9 @@ defmodule Cadence.Control.ConfigurationSelections do
   """
 
   alias Cadence.Catalog.CompositionPins
+  alias Cadence.Control.WithdrawnPins
   alias Cadence.MissionModels
-  alias Cadence.MissionModels.{CompositionPin, Selection}
+  alias Cadence.MissionModels.Selection
   alias Cadence.SpacecraftStore.Overrides
   alias Cadence.SpacecraftTypeStore
 
@@ -128,7 +129,7 @@ defmodule Cadence.Control.ConfigurationSelections do
       Map.put(
         entry,
         :decision,
-        CompositionPin.withdrawn_decision(organization_id, mission_id, composition)
+        WithdrawnPins.composition_decision(organization_id, mission_id, composition)
       )
 
   defp put_decision(entry, _organization_id, _mission_id, _composition, _reason), do: entry

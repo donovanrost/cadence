@@ -18,7 +18,16 @@ defmodule Cadence.Control.WithdrawnPins do
 
   alias Cadence.Activations
   alias Cadence.Catalog.FleetSnapshot
-  alias Cadence.MissionModels.{CompositionViews, DecisionRow, RevisionRow}
+  alias Cadence.Control.ActorRef
+
+  alias Cadence.MissionModels.{
+    CompositionViews,
+    DecisionRow,
+    RevisionDecisions,
+    RevisionRow,
+    Selection
+  }
+
   alias Cadence.Repo
 
   @type pin :: %{
@@ -43,10 +52,12 @@ defmodule Cadence.Control.WithdrawnPins do
       compositions =
         CompositionViews.ids_for_revisions(organization_id, mission_id, Map.keys(withdrawn))
 
+      names = ActorRef.names(organization_id, withdrawn |> Map.values() |> Enum.map(& &1.actor))
+
       for {spacecraft_id, revision_id} <- running,
           %DecisionRow{} = record <- [Map.get(withdrawn, revision_id)],
           into: %{},
-          do: {spacecraft_id, pin(revision_id, record, Map.get(compositions, revision_id))}
+          do: {spacecraft_id, pin(revision_id, record, Map.get(compositions, revision_id), names)}
     end
   end
 
@@ -100,24 +111,46 @@ defmodule Cadence.Control.WithdrawnPins do
     |> Map.new(&{&1.revision_id, &1})
   end
 
-  defp pin(revision_id, record, composition_id) do
+  defp pin(revision_id, record, composition_id, names) do
     %{
       composition_id: composition_id,
       revision_id: revision_id,
-      decision: decision(record),
+      decision: decision(record, names),
       hold_basis: "#{revision_id}:withdrawn:#{DateTime.to_iso8601(record.decided_at)}"
     }
   end
 
-  @doc "A withdrawal record as the reads show it: `{revision_id, kind, by: {id, name}, at, reason}`."
-  @spec decision(DecisionRow.t()) :: map()
-  def decision(%DecisionRow{} = record) do
+  @doc """
+  A withdrawal record as the reads show it: `{revision_id, kind, by, at, reason}`. `by` is
+  `{kind, id, name}` by #146's rule C1 (`Control.ActorRef`: a member by their current name, never
+  a stored name or an email), with `names` from `ActorRef.names/2` over the records' actors.
+  """
+  @spec decision(DecisionRow.t(), ActorRef.names()) :: map()
+  def decision(%DecisionRow{} = record, names) do
     %{
       revision_id: record.revision_id,
       kind: "withdrawn",
-      by: %{id: record.actor["id"], name: record.actor["display_name"]},
+      by: ActorRef.document(record.actor, names),
       at: record.decided_at,
       reason: record.reason
     }
+  end
+
+  @doc """
+  The withdrawal behind a composition's `:withdrawn` selection (its newest withdrawn link's
+  record), for `details.decision` on the staging NO-GO and `restage_needed` (U109); nil when none.
+  """
+  @spec composition_decision(binary(), binary(), binary()) :: map() | nil
+  def composition_decision(organization_id, mission_id, composition_id) do
+    with %{revision_id: revision_id} <-
+           organization_id
+           |> Selection.ranked(mission_id, composition_id)
+           |> Enum.find(&(&1.status == "withdrawn")),
+         %DecisionRow{} = record <-
+           RevisionDecisions.withdrawal(organization_id, mission_id, revision_id) do
+      decision(record, ActorRef.names(organization_id, [record.actor]))
+    else
+      _none -> nil
+    end
   end
 end
