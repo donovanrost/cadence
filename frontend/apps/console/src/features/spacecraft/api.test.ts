@@ -1,6 +1,23 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api/index.ts";
-import { directoryReader, matchesFilter, summarize } from "./api.ts";
+import { directoryPageReader } from "./api.ts";
+
+const summary = {
+  total: 2,
+  profiles: 1,
+  without_profile: 1,
+  without_scid: 1,
+  without_routing_rule: 1,
+  awaiting_first_aos: 1,
+};
+
+/** A page body: the rows, the whole-mission summary and the telemetry flag every page carries. */
+const page = (extra: Record<string, unknown> = {}) => ({
+  spacecraft: [],
+  summary,
+  telemetry: "ok",
+  ...extra,
+});
 
 const row = (extra: Record<string, unknown> = {}) => ({
   id: "spacecraft-1",
@@ -16,95 +33,108 @@ const row = (extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 
-describe("directoryReader", () => {
+describe("directoryPageReader", () => {
   it("reads identity columns and keeps null distinct", () => {
-    const result = decode(directoryReader, {
-      spacecraft: [
-        row(),
-        row({
-          id: "spacecraft-2",
-          scid: null,
-          profile: null,
-          routing_rule_count: 0,
-          ready: false,
-          last_received_at: null,
-        }),
-      ],
-    });
+    const result = decode(
+      directoryPageReader,
+      page({
+        spacecraft: [
+          row(),
+          row({
+            id: "spacecraft-2",
+            scid: null,
+            profile: null,
+            routing_rule_count: 0,
+            ready: false,
+            last_received_at: null,
+          }),
+        ],
+      }),
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.spacecraft[1]).toMatchObject({
+    expect(result.value.rows[1]).toMatchObject({
       scid: null,
       profile: null,
       lastReceivedAt: null,
     });
-    expect(summarize(result.value)).toEqual({
-      total: 2,
-      profiles: 1,
-      withoutProfile: 1,
-      withoutScid: 1,
-      withoutRoute: 1,
-      neverHeard: 1,
+  });
+
+  it("reads the server's whole-mission summary, not a tally of the rows", () => {
+    const result = decode(
+      directoryPageReader,
+      page({
+        spacecraft: [row()],
+        summary: {
+          total: 1_200,
+          profiles: 3,
+          without_profile: 4,
+          without_scid: 5,
+          without_routing_rule: 6,
+          awaiting_first_aos: 7,
+        },
+      }),
+    );
+    expect(result.ok && result.value.meta.summary).toEqual({
+      total: 1_200,
+      profiles: 3,
+      withoutProfile: 4,
+      withoutScid: 5,
+      withoutRoute: 6,
+      neverHeard: 7,
     });
   });
 
+  it("refuses a page without a summary or with a negative count", () => {
+    const { summary: _summary, ...bare } = page();
+    expect(decode(directoryPageReader, bare).ok).toBe(false);
+    expect(
+      decode(directoryPageReader, page({ summary: { ...summary, without_scid: -1 } })).ok,
+    ).toBe(false);
+  });
+
+  it("holds a page to the server's 500 rows", () => {
+    const rows = Array.from({ length: 501 }, (_, i) => row({ id: `spacecraft-${i}` }));
+    expect(decode(directoryPageReader, page({ spacecraft: rows })).ok).toBe(false);
+  });
+
   it("rejects a ready row that lacks a routing rule", () => {
-    const result = decode(directoryReader, { spacecraft: [row({ routing_rule_count: 0 })] });
+    const result = decode(
+      directoryPageReader,
+      page({ spacecraft: [row({ routing_rule_count: 0 })] }),
+    );
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.path).toBe("spacecraft[0].ready");
   });
 
   it("rejects missing columns rather than defaulting them", () => {
     const { plane: _plane, ...withoutPlane } = row();
-    expect(decode(directoryReader, { spacecraft: [withoutPlane] }).ok).toBe(false);
-  });
-});
-
-describe("matchesFilter", () => {
-  const result = decode(directoryReader, { spacecraft: [row()] });
-  if (!result.ok) throw result.error;
-  const sc = result.value.spacecraft[0];
-  if (!sc) throw new Error("fixture");
-
-  it("matches name, profile and SCID prefix", () => {
-    expect(matchesFilter(sc, "earendil")).toBe(true);
-    expect(matchesFilter(sc, "block")).toBe(true);
-    expect(matchesFilter(sc, "31")).toBe(true);
-    expect(matchesFilter(sc, "99")).toBe(false);
-    expect(matchesFilter(sc, "  ")).toBe(true);
+    expect(decode(directoryPageReader, page({ spacecraft: [withoutPlane] })).ok).toBe(false);
   });
 });
 
 describe("S9 (#313): the directory's SCIDs in use", () => {
   it("reads the server's next free SCID and SCIDs in use; null when it doesn't send them", () => {
-    const sent = decode(directoryReader, {
-      spacecraft: [],
-      next_free_scid: 3,
-      scids_in_use: [1, 2, 7],
-    });
-    expect(sent.ok && sent.value.scids).toEqual({ next: 3, inUse: [1, 2, 7] });
-    const full = decode(directoryReader, {
-      spacecraft: [],
-      next_free_scid: null,
-      scids_in_use: [],
-    });
-    expect(full.ok && full.value.scids).toEqual({ next: null, inUse: [] });
-    const before = decode(directoryReader, { spacecraft: [] });
-    expect(before.ok && before.value.scids).toBeNull();
+    const sent = decode(directoryPageReader, page({ next_free_scid: 3, scids_in_use: [1, 2, 7] }));
+    expect(sent.ok && sent.value.meta.scids).toEqual({ next: 3, inUse: [1, 2, 7] });
+    const full = decode(directoryPageReader, page({ next_free_scid: null, scids_in_use: [] }));
+    expect(full.ok && full.value.meta.scids).toEqual({ next: null, inUse: [] });
+    const before = decode(directoryPageReader, page());
+    expect(before.ok && before.value.meta.scids).toBeNull();
   });
 
   it("derives the next free SCID from the list when the server leaves it out (mms-engineer)", () => {
-    const r = decode(directoryReader, { spacecraft: [], scids_in_use: [1, 2, 4] });
-    expect(r.ok && r.value.scids).toEqual({ next: 3, inUse: [1, 2, 4] });
+    const r = decode(directoryPageReader, page({ scids_in_use: [1, 2, 4] }));
+    expect(r.ok && r.value.meta.scids).toEqual({ next: 3, inUse: [1, 2, 4] });
     const taken = Array.from({ length: 1023 }, (_, i) => i + 1);
-    const full = decode(directoryReader, { spacecraft: [], scids_in_use: taken });
-    expect(full.ok && full.value.scids?.next).toBeNull();
+    const full = decode(directoryPageReader, page({ scids_in_use: taken }));
+    expect(full.ok && full.value.meta.scids?.next).toBeNull();
   });
 
   it("refuses a SCID outside 0..1023", () => {
-    expect(decode(directoryReader, { spacecraft: [], scids_in_use: [1024] }).ok).toBe(false);
-    expect(
-      decode(directoryReader, { spacecraft: [], next_free_scid: -1, scids_in_use: [] }).ok,
-    ).toBe(false);
+    expect(decode(directoryPageReader, page({ scids_in_use: [1024] })).ok).toBe(false);
+    expect(decode(directoryPageReader, page({ next_free_scid: -1, scids_in_use: [] })).ok).toBe(
+      false,
+    );
   });
 });

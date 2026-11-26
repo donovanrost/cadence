@@ -1,17 +1,18 @@
 import type { MissionId } from "@/api/index.ts";
 import {
   decoders,
-  request,
+  requestPage,
   scid as scidReader,
   spacecraftId as spacecraftIdReader,
   type ApiResult,
+  type Page,
   type Reader,
   type Scid,
   type SpacecraftId,
 } from "@/api/index.ts";
 
 /**
- * The Setup spacecraft directory.
+ * The Setup spacecraft directory, a page at a time (#796).
  * Contract: docs/apogee/api/setup.md, `GET /api/v1/missions/:mission_id/spacecraft`.
  */
 const { array, boolean, integer, nullable, object, optional, string, timestamp, token } = decoders;
@@ -44,10 +45,29 @@ export const telemetryFreshness = (value: unknown): TelemetryFreshness =>
  */
 export type ServerScids = Readonly<{ next: number | null; inUse: readonly number[] }>;
 
+/** The server's whole-mission counts (the subtitle's numbers), whatever page or filter is shown. */
+export type DirectorySummary = Readonly<{
+  total: number;
+  profiles: number;
+  withoutProfile: number;
+  withoutScid: number;
+  withoutRoute: number;
+  /** Craft with no telemetry receipt yet ("awaiting first AOS"). */
+  neverHeard: number;
+}>;
+
+/** What every page carries besides its rows. */
+export type DirectoryMeta = Readonly<{
+  summary: DirectorySummary;
+  telemetry: TelemetryFreshness;
+  /** null when the server doesn't send them (before #313 S9's server half): the console guesses. */
+  scids: ServerScids | null;
+}>;
+
+/** Every spacecraft, read page by page: for the pickers and Add's clash checks, not the list. */
 export type SpacecraftDirectory = Readonly<{
   spacecraft: readonly SpacecraftRow[];
   telemetry: TelemetryFreshness;
-  /** null when the server doesn't send them (before #313 S9's server half): the console guesses. */
   scids: ServerScids | null;
 }>;
 
@@ -97,8 +117,31 @@ const scidValue: Reader<number> = (value, path = "") => {
   if (n < 0 || n > 1023) throw new decoders.DecodeError(path, "SCID from 0 to 1023");
   return n;
 };
+const summaryReader: Reader<DirectorySummary> = (value, path = "") => {
+  const raw = object({
+    total: count,
+    profiles: count,
+    without_profile: count,
+    without_scid: count,
+    without_routing_rule: count,
+    awaiting_first_aos: count,
+  })(value, path);
+  return {
+    total: raw.total,
+    profiles: raw.profiles,
+    withoutProfile: raw.without_profile,
+    withoutScid: raw.without_scid,
+    withoutRoute: raw.without_routing_rule,
+    neverHeard: raw.awaiting_first_aos,
+  };
+};
+
+/** The most rows one page carries (the server's cap). */
+export const DIRECTORY_PAGE_SIZE = 500;
+
 const directoryFields = object({
-  spacecraft: array(directoryRow, 20_000),
+  spacecraft: array(directoryRow, DIRECTORY_PAGE_SIZE),
+  summary: summaryReader,
   telemetry: telemetryFreshness,
   next_free_scid: optional(nullable(scidValue)),
   scids_in_use: optional(array(scidValue, 1024)),
@@ -111,72 +154,97 @@ export function lowestFreeScid(inUse: readonly number[]): number | null {
   return null;
 }
 
-export const directoryReader: Reader<SpacecraftDirectory> = (value, path = "") => {
+/** One page: its rows and what every page carries. */
+export type DirectoryPage = Readonly<{ rows: readonly SpacecraftRow[]; meta: DirectoryMeta }>;
+
+export const directoryPageReader: Reader<DirectoryPage> = (value, path = "") => {
   const raw = directoryFields(value, path);
   return {
-    spacecraft: raw.spacecraft,
-    telemetry: raw.telemetry,
-    // Readers first: without the list the console keeps its own guess; with it, the server's next.
-    scids:
-      raw.scids_in_use === undefined
-        ? null
-        : {
-            // Defined by the list (api docs); derived from it if the server ever leaves it out.
-            next:
-              raw.next_free_scid === undefined
-                ? lowestFreeScid(raw.scids_in_use)
-                : raw.next_free_scid,
-            inUse: raw.scids_in_use,
-          },
+    rows: raw.spacecraft,
+    meta: {
+      summary: raw.summary,
+      telemetry: raw.telemetry,
+      // Readers first: without the list the console keeps its own guess; with it, the server's next.
+      scids:
+        raw.scids_in_use === undefined
+          ? null
+          : {
+              // Defined by the list (api docs); derived from it if the server ever leaves it out.
+              next:
+                raw.next_free_scid === undefined
+                  ? lowestFreeScid(raw.scids_in_use)
+                  : raw.next_free_scid,
+              inUse: raw.scids_in_use,
+            },
+    },
   };
 };
 
-export function fetchSpacecraftDirectory(
+/** The directory's search and paging, as the server reads them. */
+function directoryPath(
+  missionId: MissionId,
+  query: string,
+  cursor: string | null,
+  limit: number,
+): string {
+  const params = new URLSearchParams({ limit: String(limit) });
+  const q = query.trim();
+  if (q !== "") params.set("q", q);
+  if (cursor !== null) params.set("cursor", cursor);
+  return `/missions/${encodeURIComponent(missionId)}/spacecraft?${params.toString()}`;
+}
+
+/** One directory page for `usePagedQuery`: the key is the mission and the filter text. */
+export async function fetchDirectoryPage(
+  key: Readonly<{ missionId: MissionId; query: string }>,
+  cursor: string | null,
+  signal: AbortSignal,
+): Promise<ApiResult<Page<SpacecraftRow, DirectoryMeta>>> {
+  const r = await requestPage(
+    directoryPath(key.missionId, key.query, cursor, 200),
+    directoryPageReader,
+    { signal },
+  );
+  if (!r.ok) return r;
+  return {
+    ok: true,
+    value: { items: r.value.value.rows, next: r.value.nextCursor, meta: r.value.value.meta },
+  };
+}
+
+/** At most this many pages are walked (500 each): a runaway cursor ends in a failure, not a loop. */
+const MAX_PAGES = 40;
+
+/**
+ * Every active spacecraft, a bounded page at a time. For the pickers and the Add flow's clash
+ * checks, which name or check against the fleet; the Setup directory itself pages with a cursor.
+ */
+export async function fetchSpacecraftDirectory(
   missionId: MissionId,
   signal: AbortSignal,
 ): Promise<ApiResult<SpacecraftDirectory>> {
-  return request(`/missions/${encodeURIComponent(missionId)}/spacecraft`, directoryReader, {
-    signal,
-  });
-}
-
-/** Case-insensitive match on name, or exact-prefix match on SCID digits. */
-export function matchesFilter(row: SpacecraftRow, query: string): boolean {
-  const q = query.trim().toLowerCase();
-  if (q === "") return true;
-  if (row.name.toLowerCase().includes(q)) return true;
-  if (row.profile?.name?.toLowerCase().includes(q)) return true;
-  return row.scid !== null && String(row.scid).startsWith(q);
-}
-
-export type DirectorySummary = Readonly<{
-  total: number;
-  profiles: number;
-  withoutProfile: number;
-  withoutScid: number;
-  withoutRoute: number;
-  neverHeard: number;
-}>;
-
-export function summarize(directory: SpacecraftDirectory): DirectorySummary {
-  const profiles = new Set<string>();
-  let withoutProfile = 0;
-  let withoutScid = 0;
-  let withoutRoute = 0;
-  let neverHeard = 0;
-  for (const row of directory.spacecraft) {
-    if (row.profile) profiles.add(row.profile.id);
-    else withoutProfile += 1;
-    if (row.scid === null) withoutScid += 1;
-    if (row.routingRuleCount === 0) withoutRoute += 1;
-    if (row.lastReceivedAt === null) neverHeard += 1;
+  const rows: SpacecraftRow[] = [];
+  let first: DirectoryMeta | null = null;
+  let cursor: string | null = null;
+  for (let page = 0; page < MAX_PAGES; page += 1) {
+    // Typed: `cursor` feeds the request and is reassigned from its answer.
+    const r: ApiResult<{ value: DirectoryPage; nextCursor: string | null }> = await requestPage(
+      directoryPath(missionId, "", cursor, DIRECTORY_PAGE_SIZE),
+      directoryPageReader,
+      { signal },
+    );
+    if (!r.ok) return r;
+    rows.push(...r.value.value.rows);
+    first ??= r.value.value.meta;
+    cursor = r.value.nextCursor;
+    if (cursor === null)
+      return {
+        ok: true,
+        value: { spacecraft: rows, telemetry: first.telemetry, scids: first.scids },
+      };
   }
   return {
-    total: directory.spacecraft.length,
-    profiles: profiles.size,
-    withoutProfile,
-    withoutScid,
-    withoutRoute,
-    neverHeard,
+    ok: false,
+    error: { kind: "malformed", message: "the spacecraft directory has more pages than expected" },
   };
 }

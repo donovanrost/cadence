@@ -73,7 +73,21 @@ test.describe("setup spacecraft directory", () => {
   });
 
   test("empty mission shows the add-spacecraft empty state", async ({ page }) => {
-    await page.route(directoryApi, (route) => route.fulfill(jsonData({ spacecraft: [] })));
+    await page.route(directoryApi, (route) =>
+      route.fulfill(
+        jsonData({
+          spacecraft: [],
+          summary: {
+            total: 0,
+            profiles: 0,
+            without_profile: 0,
+            without_scid: 0,
+            without_routing_rule: 0,
+            awaiting_first_aos: 0,
+          },
+        }),
+      ),
+    );
     await openConsole(page, screen);
     await expect(page.getByText("No spacecraft yet")).toBeVisible();
     await expect(page.getByRole("searchbox", { name: "Filter spacecraft" })).toHaveCount(0);

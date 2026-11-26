@@ -12,6 +12,7 @@ defmodule Cadence.Reads.SpacecraftNames do
   Rows are `%{"id", "name", "scid"}` from `SpacecraftStore` (no metadata loaded).
   """
 
+  alias Cadence.Reads.SpacecraftCursor
   alias Cadence.SpacecraftStore
 
   @max_ids 100
@@ -40,32 +41,22 @@ defmodule Cadence.Reads.SpacecraftNames do
   def page(org, mission, cursor, limit) do
     size = page_size(limit)
 
-    with {:ok, after_key} <- decode_cursor(cursor) do
+    with {:ok, after_key} <- SpacecraftCursor.decode(cursor) do
       # One row more than the page says whether another page follows.
       rows = SpacecraftStore.display_names_page(org, mission, after_key, size + 1)
       {names, more} = Enum.split(rows, size)
-      {:ok, %{names: names, next_cursor: if(more != [], do: encode_cursor(List.last(names)))}}
+
+      {:ok,
+       %{
+         names: names,
+         next_cursor:
+           if(more != [], do: names |> List.last() |> cursor_key() |> SpacecraftCursor.encode())
+       }}
     end
   end
 
   defp page_size(limit) when is_integer(limit) and limit in 1..@max_limit, do: limit
   defp page_size(_limit), do: @default_limit
 
-  # The cursor is the page's last row's sort key, so a craft added or renamed between pages
-  # neither repeats nor skips one that stays.
-  defp encode_cursor(%{"name" => name, "id" => id}),
-    do: Jason.encode!([name, id]) |> Base.url_encode64(padding: false)
-
-  defp decode_cursor(nil), do: {:ok, nil}
-
-  defp decode_cursor(cursor) when is_binary(cursor) and byte_size(cursor) <= 1_024 do
-    with {:ok, json} <- Base.url_decode64(cursor, padding: false),
-         {:ok, [name, id]} when is_binary(name) and is_binary(id) <- Jason.decode(json) do
-      {:ok, {name, id}}
-    else
-      _invalid -> {:error, :invalid_cursor}
-    end
-  end
-
-  defp decode_cursor(_cursor), do: {:error, :invalid_cursor}
+  defp cursor_key(%{"name" => name, "id" => id}), do: {name, id}
 end

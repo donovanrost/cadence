@@ -26,8 +26,15 @@ Conventions: [README.md](README.md). Requested shapes: `docs/apogee/plans/setup-
 
 ## `GET /api/v1/missions/:mission_id/spacecraft`
 
-The Setup spacecraft directory. It is unpaginated (the client filters) and sorted by `scid`, then
-`name`, with spacecraft lacking a SCID last. Refetch on `invalidate` with `spacecraft`.
+The Setup spacecraft directory, a page at a time (#796). Rows are sorted by `name`, then `id`
+(this was `scid`, then `name`, while the directory was unpaged; a SCID sort can't be keyset-paged
+with SCIDs missing). Refetch on `invalidate` with `spacecraft`.
+
+Query: `cursor` (the previous page's `meta.next_cursor`, opaque), `limit` (1-500, default 200) and
+`q` (case-insensitive: a name or profile name containing it, or a SCID starting with it; up to 100
+characters, `%` and `_` are literal). A bad cursor is `422 invalid_params`. The cursor is the last
+row's sort key, so a craft added or renamed between pages neither repeats nor skips one that stays.
+`meta.next_cursor` is `null` on the last page.
 
 ```json
 {"data": {"spacecraft": [
@@ -37,8 +44,18 @@ The Setup spacecraft directory. It is unpaginated (the client filters) and sorte
    "routing_rule_count": 6,
    "ready": true,
    "last_received_at": null}
-], "telemetry": "ok", "scids_in_use": [312], "next_free_scid": 1}}
+], "summary": {"total": 1200, "profiles": 3, "without_profile": 0, "without_scid": 0,
+   "without_routing_rule": 2, "awaiting_first_aos": 14},
+ "telemetry": "ok", "scids_in_use": [312], "next_free_scid": 1},
+ "meta": {"next_cursor": "W1siRUFSRU5ESUwtMzEyIiwic3BhY2VjcmFmdC1lYXJlbmRpbC0zMTIiXQ"}}
 ```
+
+- `summary`: the whole mission's counts, counted in the database over every active spacecraft
+  whatever the page or `q` (the subtitle's numbers): `total`; `profiles` (distinct profiles bound);
+  `without_profile`; `without_scid`; `without_routing_rule` (no active, enabled rule);
+  `awaiting_first_aos` (no telemetry receipt, from the same cached receipts as `last_received_at`,
+  so it carries the `telemetry` caveat below). `scids_in_use`, `next_free_scid` and `telemetry` are
+  on every page and cover the whole mission.
 
 - `scids_in_use` (S9, #313; ux U20): every SCID a new spacecraft can't take, as integers, sorted
   ascending and deduplicated. That's the live spacecraft's, **archived ones included** (they keep

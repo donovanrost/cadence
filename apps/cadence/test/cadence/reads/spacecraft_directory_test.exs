@@ -1,7 +1,6 @@
 defmodule Cadence.Reads.SpacecraftDirectoryTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.Comms.RoutingRule
   alias Cadence.Reads.SpacecraftDirectory
   alias Cadence.{Spacecraft, SpacecraftType}
 
@@ -13,14 +12,6 @@ defmodule Cadence.Reads.SpacecraftDirectoryTest do
       spacecraft_type_id: Keyword.get(opts, :profile_id),
       spacecraft_type_version: 1,
       metadata: Keyword.get(opts, :metadata, %{})
-    }
-  end
-
-  defp rule(spacecraft_id, opts \\ []) do
-    %RoutingRule{
-      spacecraft_id: spacecraft_id,
-      lifecycle_state: Keyword.get(opts, :lifecycle_state, :active),
-      enabled?: Keyword.get(opts, :enabled?, true)
     }
   end
 
@@ -40,13 +31,7 @@ defmodule Cadence.Reads.SpacecraftDirectoryTest do
           craft("no-profile", scid: 3)
         ],
         profiles: [%SpacecraftType{spacecraft_type_id: "p", display_name: "Bus", version: 1}],
-        routing_rules: [
-          rule("ready"),
-          rule("ready", enabled?: false),
-          rule("no-rule", lifecycle_state: :archived),
-          rule("no-scid"),
-          rule("no-profile")
-        ],
+        rule_counts: %{"ready" => 1, "no-scid" => 1, "no-profile" => 1},
         last_received: %{"ready" => at}
       })
 
@@ -63,6 +48,7 @@ defmodule Cadence.Reads.SpacecraftDirectoryTest do
     assert by_id["no-rule"].routing_rule_count == 0
     refute by_id["no-scid"].ready
     refute by_id["no-profile"].ready
-    assert Enum.map(rows, & &1.id) == ["ready", "no-rule", "no-profile", "no-scid"]
+    # The builder keeps the page's order (the store pages by name, then id).
+    assert Enum.map(rows, & &1.id) == ["ready", "no-rule", "no-scid", "no-profile"]
   end
 end
