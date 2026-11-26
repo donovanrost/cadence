@@ -828,7 +828,7 @@ test("workspace decoding rejects foreign identity, duplicate spacecraft labels a
     expect(() => readWorkspace(invalid, context)).toThrow();
 });
 
-const producer = producerFixture("CADENCE_COMMAND_WORKSPACE_DOCUMENT", import.meta.url);
+const producer = producerFixture("CADENCE_COMMAND_WORKSPACE_DOCUMENT");
 test.skipIf(!producer.available)(
   "actual producer workspace controls preserve multi-endpoint stage intent",
   async () => {

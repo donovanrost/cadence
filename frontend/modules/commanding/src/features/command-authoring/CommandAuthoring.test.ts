@@ -194,7 +194,7 @@ describe("command authoring", () => {
     ).toThrow();
   });
 });
-const producer = producerFixture("CADENCE_COMMAND_AUTHORING_DOCUMENT", import.meta.url);
+const producer = producerFixture("CADENCE_COMMAND_AUTHORING_DOCUMENT");
 test.skipIf(!producer.available)(
   "actual producer yields the feature-owned preview or create input",
   async () => {

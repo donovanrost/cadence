@@ -211,11 +211,10 @@ remain isolated and explained, including the consumed LiveVue hook, uPlot cursor
 Tailwind's CommonJS export, and generic test mocks.
 
 `corepack pnpm verify` runs formatting/lint, compiler coverage and Vue checking, structural
-rules, package/browser stories, root tools, and transport tests. Each shared test suite has
+rules, package tests, root tools, and transport tests. Each shared test suite has
 one aggregate owner. [CI](../../.github/workflows/frontend.yml) runs this command independently
-of the real Phoenix producer and federation browser job. The ordinary suite explicitly skips
-30 producer-dependent tests; `corepack pnpm test:producers` requires their native fixtures and
-checks that all consumers executed. `mix precommit` does not run the complete frontend gates,
+of the real Phoenix producer and federation browser job. The ordinary suite skips
+producer-dependent tests; their Phoenix producer tests run them with the fixture. `mix precommit` does not run the complete frontend gates,
 and Elixir tests remain outside frontend-only acceptance.
 
 The cleanup plan records verification and completion for its findings 6–12. The

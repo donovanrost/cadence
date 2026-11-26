@@ -331,7 +331,7 @@ test("unavailable tab storage prevents an effect whose response could not be rec
   w.unmount();
 });
 
-const producer = producerFixture("CADENCE_PACKET_PAGE", import.meta.url);
+const producer = producerFixture("CADENCE_PACKET_PAGE");
 test.skipIf(!producer.available)(
   "producer supplied packet configuration reaches the public feature and yields its explicit save input",
   async () => {

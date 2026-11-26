@@ -235,7 +235,7 @@ test("public contribution rejects foreign context and forged actual-result ident
   ).toThrow();
   expect(admitPlanReviewPage({ ...p, sequence: 1 })).toBeNull();
 });
-const producer = producerFixture("CADENCE_PLAN_WORKFLOW", import.meta.url);
+const producer = producerFixture("CADENCE_PLAN_WORKFLOW");
 test.skipIf(!producer.available)("producer supplied native plan review contribution", async () => {
   const supplied = jsonFixture(producer.read()),
     h = harness(

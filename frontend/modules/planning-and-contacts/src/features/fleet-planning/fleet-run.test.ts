@@ -164,7 +164,7 @@ test("departed actions cannot apply a late receipt", async () => {
   expect(h.wrapper.find("#fleet-run-uncertain").exists()).toBe(true);
   h.wrapper.unmount();
 });
-const producer = producerFixture("CADENCE_FLEET_RUN", import.meta.url);
+const producer = producerFixture("CADENCE_FLEET_RUN");
 test.skipIf(!producer.available)("producer-supplied fleet run workflow", async () => {
   const supplied = jsonFixture(producer.read());
   expect(admitFleetRun(supplied.model)).not.toBeNull();

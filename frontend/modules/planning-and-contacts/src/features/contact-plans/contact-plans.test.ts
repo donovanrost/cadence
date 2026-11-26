@@ -182,7 +182,7 @@ test("page links retain reviewed version and independent evidence pages", () => 
   );
   expect(reviewHref(detail, 2)).toBe("/missions/mission-plan/ops/plans/plan-one?version=2");
 });
-const producer = producerFixture("CADENCE_PLAN_REVIEW_MODEL", import.meta.url);
+const producer = producerFixture("CADENCE_PLAN_REVIEW_MODEL");
 test.skipIf(!producer.available)(
   "producer-supplied plan review emits native decision evidence",
   async () => {
