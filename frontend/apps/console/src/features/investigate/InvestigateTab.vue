@@ -14,7 +14,7 @@ import SistersPanel from "./SistersPanel.vue";
 import { logLines } from "./eventLog.ts";
 import { sampleLink } from "./sample/link.ts";
 import { useEpisodeDetail, useSpacecraftEpisodes, useSpacecraftEvents } from "./useInvestigate.ts";
-import { DEFAULT_RANGE, lastCleared, pickAlarm, type RangeKey } from "./model.ts";
+import { DEFAULT_RANGE, lastCleared, pickAlarm, wantsMorePages, type RangeKey } from "./model.ts";
 
 /** J2 · Investigate tab: B1 trend, B2 events, B4 same point in limits, technical details. */
 const props = defineProps<{
@@ -37,22 +37,34 @@ const alarm = computed(() => {
 });
 
 // An alarm asked for (?alarm=, ?point=) that is on a page not loaded yet: load pages until it
-// arrives or there are none left, so a deep link never lands on the wrong alarm (#827).
+// arrives, there are none left, or MAX_AUTO_PAGES (5) have been loaded for it, so a deep link lands on
+// the right alarm and an id that doesn't exist can't page through the whole list (#827). Past the
+// bound the "Showing N of M" line and Load more are what the person has.
+const autoPages = ref(0);
+watch(
+  () => [route.query.alarm, route.query.point],
+  () => {
+    autoPages.value = 0;
+  },
+);
 watch(
   () => {
     const s = props.alarms;
-    const id = typeof route.query.alarm === "string" ? route.query.alarm : null;
-    const point = typeof route.query.point === "string" ? route.query.point : null;
-    if (s.status !== "ready" || s.value.next === null || props.more.busy || props.more.failed)
-      return false;
-    const found =
-      id !== null
-        ? s.value.alarms.some((a) => a.id === id)
-        : point === null || s.value.alarms.some((a) => a.point.id === point);
-    return !found;
+    if (s.status !== "ready" || props.more.busy || props.more.failed) return false;
+    return wantsMorePages(
+      s.value.alarms,
+      s.value.next,
+      {
+        alarm: typeof route.query.alarm === "string" ? route.query.alarm : null,
+        point: typeof route.query.point === "string" ? route.query.point : null,
+      },
+      autoPages.value,
+    );
   },
   (missing) => {
-    if (missing) props.more.load();
+    if (!missing) return;
+    autoPages.value += 1;
+    props.more.load();
   },
   { immediate: true },
 );
