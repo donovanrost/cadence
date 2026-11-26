@@ -278,6 +278,9 @@ approval and effective timestamps
 The control plane verifies that the referenced artifact and approval still form
 a valid immutable basis. It does not re-run management authoring logic against a
 mutable draft.
+Text ordered for an identity, content hash, digest, persisted basis, or cursor uses
+bytewise order (`C`-collated SQL columns or an Elixir sort after fetching), independent
+of the database's presentation collation.
 
 ### Control To Data
 

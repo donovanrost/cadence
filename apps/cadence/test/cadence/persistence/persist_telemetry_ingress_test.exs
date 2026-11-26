@@ -135,8 +135,8 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
     telemetry_samples =
       TelemetrySampleRow
       |> where([row], row.mission_id == "mission-alpha")
-      |> order_by(asc: :point_name)
       |> Repo.all()
+      |> Enum.sort_by(& &1.point_name)
 
     assert Enum.map(telemetry_samples, & &1.point_name) == [
              "HK.heater_enabled",
@@ -228,8 +228,8 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
     telemetry_samples =
       TelemetrySampleRow
       |> where([row], row.mission_id == "mission-alpha")
-      |> order_by(asc: :point_name)
       |> Repo.all()
+      |> Enum.sort_by(& &1.point_name)
 
     assert Enum.map(telemetry_samples, &{&1.point_name, &1.raw_value}) == [
              {"THERM.counter", %{"value" => 500}},
