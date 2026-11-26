@@ -28,15 +28,15 @@ defmodule Cadence.SemanticObservations do
   @spec persist_many([map()]) :: :ok | {:error, term()}
   def persist_many(prepared_results) when is_list(prepared_results) do
     prepared_results
-    |> Enum.reduce({Multi.new(), []}, &add_result/2)
+    |> Enum.reduce({Multi.new(), [], []}, &add_result/2)
     |> persist_transitions()
   end
 
-  defp persist_transitions({_transitions, []}), do: :ok
+  defp persist_transitions({_operations, [], []}), do: :ok
 
-  defp persist_transitions({transitions, evaluations}) do
+  defp persist_transitions({operations, evaluations, transition_changesets}) do
     evaluations
-    |> evaluation_multi(transitions)
+    |> evaluation_multi(transition_changesets, operations)
     |> Repo.transaction()
     |> case do
       {:ok, changes} ->
@@ -57,12 +57,15 @@ defmodule Cadence.SemanticObservations do
     |> Notify.missions_changed()
   end
 
-  defp evaluation_multi(evaluations, transitions) do
+  defp evaluation_multi(evaluations, transition_changesets, operations) do
     Multi.new()
     |> Multi.run(:semantic_monitoring_evaluations, fn repo, _changes ->
       persist_evaluations(repo, Enum.reverse(evaluations))
     end)
-    |> Multi.append(transitions)
+    |> Multi.run(:semantic_alarm_transitions, fn repo, _changes ->
+      persist_alarm_transitions(repo, Enum.reverse(transition_changesets))
+    end)
+    |> Multi.append(operations)
   end
 
   @spec acknowledge(binary(), binary(), binary(), map(), keyword()) ::
@@ -146,19 +149,23 @@ defmodule Cadence.SemanticObservations do
     |> Enum.zip(keys)
     |> Enum.with_index()
     |> Enum.reduce(accumulator, fn {{monitoring_result, effect_key}, index},
-                                   {multi, evaluations} ->
+                                   {multi, evaluations, transition_changesets} ->
       update = Map.fetch!(updates, monitoring_result.update_id)
       evaluation_attrs = MonitoringEvaluationRow.attrs(monitoring_result, update, context)
       match = Map.get(rules, {monitoring_result.policy_id, monitoring_result.update_id})
 
-      {add_transition(
-         multi,
-         prepared,
-         index,
-         monitoring_result,
-         evaluation_attrs,
-         {update, match, effect_key}
-       ), [MonitoringEvaluationRow.changeset(evaluation_attrs) | evaluations]}
+      {operations, transition_changeset} =
+        add_transition(
+          multi,
+          prepared,
+          index,
+          monitoring_result,
+          evaluation_attrs,
+          {update, match, effect_key}
+        )
+
+      {operations, [MonitoringEvaluationRow.changeset(evaluation_attrs) | evaluations],
+       [transition_changeset | transition_changesets]}
     end)
   end
 
@@ -167,7 +174,7 @@ defmodule Cadence.SemanticObservations do
   # result, a recovered commit of another generation): the episode classifies by value instead.
 
   defp persist_evaluations(repo, changesets) do
-    with {:ok, rows} <- evaluation_rows(changesets) do
+    with {:ok, rows} <- validated_rows(changesets) do
       rows
       |> Enum.reverse()
       |> Enum.chunk_every(1_000)
@@ -182,7 +189,23 @@ defmodule Cadence.SemanticObservations do
     end
   end
 
-  defp evaluation_rows(changesets) do
+  defp persist_alarm_transitions(repo, changesets) do
+    with {:ok, rows} <- validated_rows(changesets) do
+      rows
+      |> Enum.reverse()
+      |> Enum.chunk_every(1_000)
+      |> Enum.each(
+        &repo.insert_all(AlarmTransitionRow, &1,
+          on_conflict: :nothing,
+          cache_statement: false
+        )
+      )
+
+      {:ok, length(rows)}
+    end
+  end
+
+  defp validated_rows(changesets) do
     now = DateTime.utc_now()
 
     Enum.reduce_while(changesets, {:ok, []}, fn changeset, {:ok, rows} ->
@@ -220,27 +243,26 @@ defmodule Cadence.SemanticObservations do
       receipt_time: evaluation_attrs.receipt_time
     }
 
-    multi
-    |> Multi.insert(
-      {:semantic_alarm_transition, prepared.raw_evidence.evidence_id, index},
-      AlarmTransitionRow.changeset(transition_attrs),
-      on_conflict: :nothing
-    )
-    |> Multi.insert(
-      {:semantic_latest_alarm_state, prepared.raw_evidence.evidence_id, index},
-      LatestAlarmStateRow.changeset(latest_attrs),
-      on_conflict: latest_alarm_upsert(latest_attrs),
-      conflict_target: [:mission_id, :spacecraft_scope_id, :parameter_id, :policy_id],
-      allow_stale: true
-    )
-    |> Multi.run({:alarm_episode, prepared.raw_evidence.evidence_id, index}, fn repo, _changes ->
-      observation =
-        evaluation_attrs
-        |> Sources.catalog(update, transition_attrs.transition_id, match)
-        |> Map.put(:effect_key, effect_key)
+    operations =
+      multi
+      |> Multi.insert(
+        {:semantic_latest_alarm_state, prepared.raw_evidence.evidence_id, index},
+        LatestAlarmStateRow.changeset(latest_attrs),
+        on_conflict: latest_alarm_upsert(latest_attrs),
+        conflict_target: [:mission_id, :spacecraft_scope_id, :parameter_id, :policy_id],
+        allow_stale: true
+      )
+      |> Multi.run({:alarm_episode, prepared.raw_evidence.evidence_id, index}, fn repo,
+                                                                                  _changes ->
+        observation =
+          evaluation_attrs
+          |> Sources.catalog(update, transition_attrs.transition_id, match)
+          |> Map.put(:effect_key, effect_key)
 
-      Episodes.record(repo, observation)
-    end)
+        Episodes.record(repo, observation)
+      end)
+
+    {operations, AlarmTransitionRow.changeset(transition_attrs)}
   end
 
   defp effect_source(%{metadata: metadata}) when is_map(metadata),
