@@ -4,6 +4,9 @@ Logger.configure(level: :warning)
 {:ok, hostname} = :inet.gethostname()
 # EARENDIL_CADENCE_NODE targets another worktree's server (its iex --sname); default `cadence`.
 peer = :"#{System.get_env("EARENDIL_CADENCE_NODE", "cadence")}@#{hostname}"
+# The fleet size comes from this shell's environment, not the server's.
+Code.require_file("reflect_orbital/fixture.exs", __DIR__)
+expected = Cadence.Dev.ReflectOrbital.Fixture.fleet_size()
 true = Node.connect(peer)
 :ok = :rpc.call(peer, Phoenix.CodeReloader, :reload, [CadenceWeb.Endpoint], 120_000)
 
@@ -16,10 +19,10 @@ case :rpc.call(
        peer,
        Cadence.Dev.ReflectOrbital.Activation,
        :run,
-       ["--single-operator" in System.argv()],
+       ["--single-operator" in System.argv(), expected],
        :infinity
      ) do
-  %{spacecraft: 500} = result ->
+  %{spacecraft: ^expected} = result ->
     IO.puts("Verified active Earendil fleet: " <> inspect(result, pretty: true))
 
   error ->
