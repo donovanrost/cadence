@@ -48,7 +48,13 @@ defmodule Cadence.ContactPlanning.ContactPlanVersion do
   ]
 
   @spec new(map()) :: t()
-  def new(attrs) do
+  def new(attrs), do: build(attrs, &JsonDocument.encode/1)
+
+  @doc false
+  @spec from_documents(map()) :: t()
+  def from_documents(attrs), do: build(attrs, &Function.identity/1)
+
+  defp build(attrs, encode) do
     %__MODULE__{} =
       version =
       %__MODULE__{
@@ -58,22 +64,18 @@ defmodule Cadence.ContactPlanning.ContactPlanVersion do
         organization_id: required(attrs, :organization_id),
         mission_id: required(attrs, :mission_id),
         version: positive(value(attrs, :version, 1), :version),
-        requirement_refs_document:
-          document(value(attrs, :requirement_refs_document), :requirement_refs_document),
-        planning_run_refs_document:
-          document(value(attrs, :planning_run_refs_document), :planning_run_refs_document),
+        requirement_refs_document: document(attrs, :requirement_refs_document, encode),
+        planning_run_refs_document: document(attrs, :planning_run_refs_document, encode),
         selected_snapshot_ids:
           string_list(value(attrs, :selected_snapshot_ids, []), :selected_snapshot_ids),
         locked_snapshot_ids:
           string_list(value(attrs, :locked_snapshot_ids, []), :locked_snapshot_ids),
         rejected_snapshot_ids:
           string_list(value(attrs, :rejected_snapshot_ids, []), :rejected_snapshot_ids),
-        coverage_document: document(value(attrs, :coverage_document), :coverage_document),
-        conflict_document: document(value(attrs, :conflict_document), :conflict_document),
-        unsatisfied_document:
-          document(value(attrs, :unsatisfied_document), :unsatisfied_document),
-        policy_snapshot_document:
-          document(value(attrs, :policy_snapshot_document), :policy_snapshot_document),
+        coverage_document: document(attrs, :coverage_document, encode),
+        conflict_document: document(attrs, :conflict_document, encode),
+        unsatisfied_document: document(attrs, :unsatisfied_document, encode),
+        policy_snapshot_document: document(attrs, :policy_snapshot_document, encode),
         rationale: string(value(attrs, :rationale, ""), :rationale),
         content_sha256: value(attrs, :content_sha256),
         created_by: required(attrs, :created_by),
@@ -83,7 +85,8 @@ defmodule Cadence.ContactPlanning.ContactPlanVersion do
 
     %__MODULE__{
       version
-      | content_sha256: version.content_sha256 || ContentHash.sha256(content_document(version))
+      | content_sha256:
+          version.content_sha256 || ContentHash.sha256_json(content_document(version))
     }
   end
 
@@ -147,8 +150,14 @@ defmodule Cadence.ContactPlanning.ContactPlanVersion do
   defp string_list(_items, field), do: raise(ArgumentError, "#{field} must be a list")
   defp positive(item, _field) when is_integer(item) and item > 0, do: item
   defp positive(_item, field), do: raise(ArgumentError, "#{field} must be positive")
-  defp document(item, _field) when is_map(item), do: JsonDocument.encode(item)
-  defp document(_item, field), do: raise(ArgumentError, "#{field} must be an object")
+
+  defp document(attrs, field, encode) do
+    case value(attrs, field) do
+      item when is_map(item) -> encode.(item)
+      _item -> raise ArgumentError, "#{field} must be an object"
+    end
+  end
+
   defp datetime(%DateTime{} = item, _field), do: DateTime.truncate(item, :microsecond)
   defp datetime(_item, field), do: raise(ArgumentError, "#{field} must be a timestamp")
 

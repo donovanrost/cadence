@@ -68,7 +68,7 @@ defmodule Cadence.Management.Contacts.Store.ContactPlanVersionRow do
 
   @spec to_domain(struct()) :: ContactPlanVersion.t()
   def to_domain(%__MODULE__{} = row) do
-    ContactPlanVersion.new(%{
+    ContactPlanVersion.from_documents(%{
       contact_plan_version_id: row.contact_plan_version_id,
       contact_plan_id: row.contact_plan_id,
       organization_id: row.organization_id,
@@ -97,15 +97,15 @@ defmodule Cadence.Management.Contacts.Store.ContactPlanVersionRow do
       organization_id: version.organization_id,
       mission_id: version.mission_id,
       version: version.version,
-      requirement_refs_document: JsonDocument.wrap_value(version.requirement_refs_document),
-      planning_run_refs_document: JsonDocument.wrap_value(version.planning_run_refs_document),
+      requirement_refs_document: %{"value" => version.requirement_refs_document},
+      planning_run_refs_document: %{"value" => version.planning_run_refs_document},
       selected_snapshot_ids: version.selected_snapshot_ids,
       locked_snapshot_ids: version.locked_snapshot_ids,
       rejected_snapshot_ids: version.rejected_snapshot_ids,
-      coverage_document: JsonDocument.wrap_value(version.coverage_document),
-      conflict_document: JsonDocument.wrap_value(version.conflict_document),
-      unsatisfied_document: JsonDocument.wrap_value(version.unsatisfied_document),
-      policy_snapshot_document: JsonDocument.wrap_value(version.policy_snapshot_document),
+      coverage_document: %{"value" => version.coverage_document},
+      conflict_document: %{"value" => version.conflict_document},
+      unsatisfied_document: %{"value" => version.unsatisfied_document},
+      policy_snapshot_document: %{"value" => version.policy_snapshot_document},
       rationale: version.rationale,
       content_sha256: version.content_sha256,
       created_by: version.created_by,

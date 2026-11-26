@@ -254,10 +254,7 @@ defmodule Cadence.ContactPlanning.FleetOptimizer.Constraints do
     key = resource_key(snapshot)
     capacity = resource_capacity(key, policy)
 
-    overlapping =
-      selected
-      |> SelectionIndex.for_resource(snapshot)
-      |> Enum.filter(&overlap?(snapshot, &1))
+    overlapping = SelectionIndex.overlapping_resource(selected, key, snapshot)
 
     if length(overlapping) >= capacity do
       failure(
