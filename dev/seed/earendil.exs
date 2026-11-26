@@ -3,8 +3,7 @@ Mix.install([:req, :jason])
 defmodule EarendilSeed do
   @moduledoc false
 
-  # Change this one prefix when the console routes move in #757.
-  @api_base "/api/console/v1"
+  @api_base "/api/v1"
   @batch_size 100
 
   def run do
