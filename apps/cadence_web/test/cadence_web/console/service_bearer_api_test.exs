@@ -83,18 +83,25 @@ defmodule CadenceWeb.Console.ServiceBearerAPITest do
   # Pinning is what protects an opted-in action: an organization-wide service, even an
   # organization_admin, reaches no mission at all.
   test "an organization-wide service reaches no mission route, opted-in or not", c do
-    for {plug, actions} <- ServiceAccess.allowed(), action <- actions do
-      [route] =
-        for route <- CadenceWeb.Router.__routes__(),
-            route.plug == plug and route.plug_opts == action,
-            String.starts_with?(route.path, @prefix <> "/missions/:mission_id"),
-            do: route
+    allowed = ServiceAccess.allowed()
 
+    routes =
+      for route <- CadenceWeb.Router.__routes__(),
+          route.plug_opts in Map.get(allowed, route.plug, []),
+          String.starts_with?(route.path, @prefix <> "/missions/:mission_id"),
+          do: route
+
+    # Every opted-in action is a mission route, so each one is checked here.
+    assert Enum.sort(Enum.uniq(for r <- routes, do: {r.plug, r.plug_opts})) ==
+             Enum.sort(for {plug, actions} <- allowed, action <- actions, do: {plug, action})
+
+    for route <- routes do
       path = concrete(route.path, c.mission_id, c.organization_id)
+      method = route.verb |> Atom.to_string() |> String.upcase()
 
       assert %{"error" => %{"code" => "mission_not_found"}} =
-               c.api_token |> bearer() |> get(path) |> json_response(404),
-             "#{route.path} let an organization-wide service through"
+               c.api_token |> bearer() |> dispatch(@endpoint, method, path) |> json_response(404),
+             "#{method} #{route.path} let an organization-wide service through"
     end
   end
 
