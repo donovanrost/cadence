@@ -10,6 +10,7 @@ defmodule CadenceSimulator.Load do
   @sites 10
   @frame_size 1115
   @packets_per_second 10
+  @store_flush_timeout :timer.seconds(60)
 
   def run(opts) do
     directory = Path.join(System.tmp_dir!(), "cadence-simulator-load-#{System.pid()}")
@@ -50,7 +51,7 @@ defmodule CadenceSimulator.Load do
       {run, frames_per_step, rate_hz} = create_run(fleet)
       profiles = Enum.map(sinks, fn {_pid, port} -> delivery_profile(run, port) end)
       seed_contacts(fleet, run, profiles, opts)
-      Store.flush()
+      :ok = Store.flush(@store_flush_timeout)
 
       await_paths(active, counters, now_ms() + 30_000)
       path_target = frames_per_step * rate_hz
@@ -62,10 +63,11 @@ defmodule CadenceSimulator.Load do
       )
 
       result = measure(output, active, counters, opts.duration)
+      outcome = report(result, frames_per_step, rate_hz, length(active))
       {:ok, _run} = Provider.transition_run(run["id"], "stop")
       :ok = Orchestrator.reconcile()
-      :ok = Store.flush()
-      report(result, frames_per_step, rate_hz, length(active))
+      :ok = Store.flush(@store_flush_timeout)
+      outcome
     after
       for {pid, _port} <- sinks do
         Process.unlink(pid)

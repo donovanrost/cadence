@@ -144,9 +144,9 @@ defmodule CadenceSimulator.Provider.Store do
   end
 
   @doc false
-  @spec flush() :: :ok
-  def flush do
-    GenServer.call(__MODULE__, :flush)
+  @spec flush(timeout()) :: :ok
+  def flush(timeout \\ 5_000) do
+    GenServer.call(__MODULE__, :flush, timeout)
   end
 
   @impl true
