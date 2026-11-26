@@ -87,6 +87,12 @@ defmodule Cadence.Reads.Alarms do
       severity_matches?(row, filter(filters, "severity", :severity)) and
         state_matches?(row, filter(filters, "state", :state)) and
         exact_matches?(row.spacecraft_id, filter(filters, "spacecraft_id", :spacecraft_id)) and
+        exact_matches?(row.point_id, filter(filters, "point_id", :point_id)) and
+        in_matches?(row.spacecraft_id, filter(filters, "spacecraft_ids", :spacecraft_ids)) and
+        not_matches?(
+          row.spacecraft_id,
+          filter(filters, "exclude_spacecraft_id", :exclude_spacecraft_id)
+        ) and
         query_matches?(row, filter(filters, "query", :query))
     end)
   end
@@ -101,6 +107,13 @@ defmodule Cadence.Reads.Alarms do
 
   defp exact_matches?(_actual, value) when value in [nil, "", "all"], do: true
   defp exact_matches?(actual, expected), do: actual == expected
+
+  # `nil`: no restriction; a list (possibly empty) restricts to those spacecraft.
+  defp in_matches?(_actual, nil), do: true
+  defp in_matches?(actual, ids) when is_list(ids), do: actual in ids
+
+  defp not_matches?(_actual, value) when value in [nil, ""], do: true
+  defp not_matches?(actual, excluded), do: actual != excluded
 
   defp query_matches?(_row, value) when value in [nil, ""], do: true
 
@@ -153,7 +166,9 @@ defmodule Cadence.Reads.Alarms do
     |> List.first()
   end
 
-  defp sort_key(row) do
+  @doc "The order of `rows` (a total order: the last two parts make it unique): the paging key."
+  @spec sort_key(map()) :: {non_neg_integer(), integer(), binary(), binary()}
+  def sort_key(row) do
     {Map.fetch!(@severity_order, row.severity), -DateTime.to_unix(row.receipt_time, :microsecond),
      row.spacecraft_id || "", row.point_id}
   end

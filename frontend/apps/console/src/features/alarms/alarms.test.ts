@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import { spacecraftId as spacecraftIdReader, scid as scidReader } from "@/api/index.ts";
 import { spacecraftRow } from "@/features/fleet/index.ts";
-import { bandFor, conditionWords } from "./api.ts";
+import { alarmQueryString, bandFor, conditionWords } from "./api.ts";
 import type { Episode } from "./episodes.ts";
 import {
   alarmRows,
@@ -213,5 +213,29 @@ describe("Alarms header's last change (ux U71 A12)", () => {
     expect(lastChangeLine(null, nameOf, now)).toBeNull();
     // #652: a craft's change waits while its name can't be said yet; it never reads "on the mission".
     expect(lastChangeLine({ at, kind: "raised", spacecraft_id: "sc-999" }, nameOf, now)).toBeNull();
+  });
+});
+
+describe("the alarm read's paging and sister query (#794)", () => {
+  it("asks the server for a plane's sisters on one point, not the mission's alarms", () => {
+    expect(
+      alarmQueryString({
+        state: "active",
+        pointId: "EPS.VBAT",
+        plane: 7,
+        excludeSpacecraftId: "spacecraft-earendil-312",
+        limit: 1,
+      }),
+    ).toBe(
+      "?state=active&point_id=EPS.VBAT&plane=7&exclude_spacecraft_id=spacecraft-earendil-312&limit=1",
+    );
+  });
+
+  it("sends plane 0, which is a plane", () => {
+    expect(alarmQueryString({ plane: 0 })).toBe("?plane=0");
+  });
+
+  it("sends nothing it was not given", () => {
+    expect(alarmQueryString({})).toBe("");
   });
 });

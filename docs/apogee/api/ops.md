@@ -134,11 +134,26 @@ Query: `state` = `active` (default) | `nominal` | `all`; `severity` = `critical`
 `spacecraft_id`; `q` (substring of point id/name/subsystem/limit set). Unknown `state`/`severity`
 values get `422 invalid_params` with `details`.
 
+**Paged** (#794): `limit` (1 to 200, default 100) and `cursor` (a previous page's
+`meta.next_cursor`; a cursor that isn't one is `422 details.cursor`). Rows come in the list's
+order (severity, newest first, spacecraft, point); the cursor is the last row's place in it, so
+alarms that clear or appear between pages never repeat or skip a row that stays (a new alarm that
+sorts before the cursor is in a page already read: refetch from the first page on `invalidate`).
+**Every row of every page is enriched.** `data.total` counts the rows matching the filters.
+
+**Sister alarms, server-side** (replacing the client-side filter): `point_id` (exactly that point),
+`plane` (the spacecraft whose metadata has that orbital plane; none: no rows) and
+`exclude_spacecraft_id`. "N sisters in P07 out of limits" is
+`?state=active&point_id=…&plane=7&exclude_spacecraft_id=…&limit=1` and `data.total`; B4's rows
+are the same query's first page.
+
 ```json
 {
+  "meta": {"next_cursor": "g2gEYQBiAAABWm0AAAAGc2MtMDAzbQAAAAVIS…" },
   "data": {
     "observed_at": "2026-11-08T02:41:17Z",
     "summary": {"active": 4, "critical": 3, "caution": 1, "latest_transition_at": "2026-11-08T02:35:02Z"},
+    "total": 4,
     "alarms": [
       {
         "id": "limit_event_…",
@@ -168,7 +183,8 @@ values get `422 invalid_params` with `details`.
 - `first_crossed_at`: when the point entered its current state. It is the oldest evaluation in the
   current unbroken run of that state, by generation time (falling back to receipt time). The
   server looks back up to 200 evaluations, so for a state held longer than that it is the oldest
-  one in the window. Only the first 200 rows are enriched; later rows have `null`.
+  one in the window. Every page is enriched (a page is at most 200 rows, which bounds those
+  reads).
 - `value`: the evaluated engineering value, as a number, string or boolean.
 - Sorting: severity (critical first), then newest received first.
 - `point.unit`: the engineering unit of the decoded packet field in the mission's **active** binding

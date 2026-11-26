@@ -77,17 +77,28 @@ export const alarmsReader = d.object({
     caution: d.integer,
     latest_transition_at: d.nullable(d.timestamp),
   }),
-  alarms: d.array(alarm, 20_000),
+  /** The rows matching the query, whatever the page (a count needs no more than this). */
+  total: d.integer,
+  alarms: d.array(alarm, 200),
 });
 
 export type Alarms = Decoded<typeof alarmsReader>;
 export type Alarm = Alarms["alarms"][number];
 
+/**
+ * One page, worst first. `limit` is 1 to 200 (the server's default is 100). The sister read is
+ * `pointId` + `plane` + `excludeSpacecraftId`: the server filters, so a plane's sisters or their
+ * count (`total`) never need the mission's alarms in the client.
+ */
 export type AlarmQuery = Readonly<{
   state?: "active" | "nominal" | "all";
   severity?: "critical" | "caution";
   spacecraftId?: string;
   q?: string;
+  pointId?: string;
+  plane?: number;
+  excludeSpacecraftId?: string;
+  limit?: number;
 }>;
 
 export function alarmQueryString(query: AlarmQuery): string {
@@ -96,6 +107,10 @@ export function alarmQueryString(query: AlarmQuery): string {
   if (query.severity) params.set("severity", query.severity);
   if (query.spacecraftId) params.set("spacecraft_id", query.spacecraftId);
   if (query.q) params.set("q", query.q);
+  if (query.pointId) params.set("point_id", query.pointId);
+  if (query.plane !== undefined) params.set("plane", String(query.plane));
+  if (query.excludeSpacecraftId) params.set("exclude_spacecraft_id", query.excludeSpacecraftId);
+  if (query.limit !== undefined) params.set("limit", String(query.limit));
   const text = params.toString();
   return text ? `?${text}` : "";
 }
