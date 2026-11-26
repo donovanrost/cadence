@@ -132,7 +132,7 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
 
     demo_yaml_path =
       Path.expand(
-        "../../../../../legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml",
+        "../../../../../dev/catalogs/demo_spacecraft.yaml",
         __DIR__
       )
 

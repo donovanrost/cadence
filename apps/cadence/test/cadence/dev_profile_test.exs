@@ -17,7 +17,7 @@ defmodule Cadence.DevProfileTest do
 
     assert String.ends_with?(
              bootstrap["definitions_path"],
-             "/legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml"
+             "/dev/catalogs/demo_spacecraft.yaml"
            )
 
     assert profiler.node == "cadence"

@@ -74,8 +74,7 @@ feeds =
         target_id: contact.source_endpoint_id,
         rate_hz: 1.0,
         output: {:tcp, "127.0.0.1", contact.port},
-        definitions_path:
-          Path.expand("../legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml", __DIR__),
+        definitions_path: Path.expand("../dev/catalogs/demo_spacecraft.yaml", __DIR__),
         provider: CadenceSimulator.Providers.DatabaseDynamics,
         provider_opts: [noise_amplitude: 0.05],
         parallel_mode: :sequential,

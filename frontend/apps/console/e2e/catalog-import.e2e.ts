@@ -6,7 +6,7 @@ import { expect, test } from "./support/fixtures.ts";
 // S3 · Catalog import (fe-setup). The real upload creates a catalog revision, so it's opt-in.
 const screen = missionPath("setup/catalog/import");
 const seedYaml = fileURLToPath(
-  new URL("../../../../legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml", import.meta.url),
+  new URL("../../../../dev/catalogs/demo_spacecraft.yaml", import.meta.url),
 );
 const fileInput = (page: import("@playwright/test").Page) => page.locator('input[type="file"]');
 const upload = (page: import("@playwright/test").Page) =>
