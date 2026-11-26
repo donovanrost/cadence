@@ -37,7 +37,7 @@ capabilities, not role names hard-coded in the UI.
 | Unknown deep link → in-shell Not found, 200 | goto `/console/<unknown>` |
 | OPS / SETUP switch | real control, state announced (`aria-pressed`/`aria-current`) |
 | Nav order: Now, Fleet, Alarms, Commands, Contacts, Telemetry, … | link names + `aria-current` on active |
-| Org switch | `PUT /session/organization` round-trip; banner updates; no stale mission data |
+| Org switch | `PUT /api/v1/session/organization` round-trip; banner updates; no stale mission data |
 
 ## Operator shift
 

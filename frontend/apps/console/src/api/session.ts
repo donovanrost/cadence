@@ -48,3 +48,12 @@ export type SessionMission = Decoded<typeof mission>;
 export function fetchSession(signal?: AbortSignal): Promise<ApiResult<Session>> {
   return request("/session", sessionReader, signal ? { signal } : {});
 }
+
+/**
+ * #664: signs this browser out (`DELETE /session`, 204). The server revokes the session, disconnects
+ * its live sockets and drops the cookie; the caller then leaves with a full navigation, since the
+ * CSRF token and every cached read belonged to that session.
+ */
+export function signOut(): Promise<ApiResult<null>> {
+  return request("/session", () => null, { method: "DELETE" });
+}

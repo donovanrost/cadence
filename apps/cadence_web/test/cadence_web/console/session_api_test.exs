@@ -1,7 +1,10 @@
 defmodule CadenceWeb.Console.SessionAPITest do
   use CadenceWeb.ConnCase, async: true
 
+  alias CadenceWeb.ConsoleSocket
+  alias CadenceWeb.Endpoint
   alias CadenceWeb.TestFixtures
+  alias Phoenix.Socket.Broadcast
 
   setup do
     org = TestFixtures.persist_org!(display_name: "Reflect Orbital")
@@ -88,6 +91,50 @@ defmodule CadenceWeb.Console.SessionAPITest do
                {"Reflect Orbital", "member",
                 ~w(command.abort command.approve command.request dashboard.author)}
              ]
+    end
+  end
+
+  # #664: the console signs out through its API; the root DELETE /session is gone.
+  describe "DELETE /api/v1/session" do
+    test "revokes the session, disconnects its live sockets and drops the cookie", c do
+      conn = TestFixtures.member_conn(c.user)
+      token = get_session(conn, :user_session_token)
+      Endpoint.subscribe(ConsoleSocket.id_for_session_token(token))
+
+      signed_out = delete(conn, "/api/v1/session")
+
+      assert response(signed_out, 204) == ""
+      assert get_session(signed_out, :user_session_token) == nil
+      assert_receive %Broadcast{event: "disconnect"}
+      assert {:error, :unauthenticated} = Cadence.Auth.authenticate_browser_session(token)
+
+      # The old cookie is worthless now, on the API and the console's own page.
+      copied = init_test_session(build_conn(), %{user_session_token: token})
+
+      assert json_response(get(copied, "/api/v1/session"), 401)["error"]["code"] ==
+               "unauthenticated"
+
+      assert redirected_to(get(copied, "/console/")) == "/console/sign-in"
+    end
+
+    test "refuses a sign-out without the CSRF token and keeps the session", c do
+      conn = TestFixtures.member_conn(c.user)
+      token = get_session(conn, :user_session_token)
+      Endpoint.subscribe(ConsoleSocket.id_for_session_token(token))
+
+      refused =
+        conn
+        |> put_private(:plug_skip_csrf_protection, false)
+        |> delete("/api/v1/session")
+
+      assert json_response(refused, 403)["error"]["code"] == "invalid_csrf"
+      refute_received %Broadcast{event: "disconnect"}
+      assert {:ok, _scope} = Cadence.Auth.authenticate_browser_session(token)
+    end
+
+    test "signed out, answers a JSON 401", %{conn: conn} do
+      assert json_response(delete(conn, "/api/v1/session"), 401)["error"]["code"] ==
+               "unauthenticated"
     end
   end
 
