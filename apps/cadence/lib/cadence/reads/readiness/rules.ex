@@ -18,6 +18,7 @@ defmodule Cadence.Reads.Readiness.Rules do
         fleet_findings(facts),
         catalog_findings(facts),
         comms_findings(facts),
+        routing_findings(facts),
         station_findings(facts),
         data_source_findings(facts),
         endpoint_findings(facts),
@@ -183,6 +184,40 @@ defmodule Cadence.Reads.Readiness.Rules do
   end
 
   defp comms_findings(_facts), do: []
+
+  defp routing_findings(%{routing: routing}) do
+    [
+      count_finding(
+        :comms,
+        :caution,
+        :spacecraft_with_multiple_uplinks,
+        routing.multiple_uplinks,
+        "have more than one uplink route",
+        "Review which route should carry commands.",
+        fix(:comms)
+      ),
+      count_finding(
+        :comms,
+        :blocker,
+        :spacecraft_without_downlink,
+        routing.without_downlink,
+        "have no downlink route",
+        "Add a downlink route so Cadence can receive their telemetry.",
+        fix(:comms)
+      ),
+      count_finding(
+        :comms,
+        :caution,
+        :spacecraft_with_disabled_route,
+        routing.disabled_route,
+        "have a disabled route",
+        "Review the disabled routes and enable the ones they need.",
+        fix(:comms)
+      )
+    ]
+  end
+
+  defp routing_findings(_facts), do: []
 
   defp station_findings(%{stations: %{count: 0}}) do
     [

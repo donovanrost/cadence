@@ -318,6 +318,35 @@ defmodule Cadence.Comms.RoutingRuleStore do
     Map.new(spacecraft_ids, &{&1, Map.get(found, &1, [])})
   end
 
+  @doc "Readiness counts across the active fleet's materialized profile and extra route legs."
+  def readiness_counts(organization_id, mission_id) do
+    routes =
+      from(r in RoutingRuleRow,
+        where: r.organization_id == ^organization_id and r.mission_id == ^mission_id,
+        where: r.lifecycle_state == "active" and r.origin in ["profile", "spacecraft"],
+        group_by: r.spacecraft_id,
+        select: %{
+          spacecraft_id: r.spacecraft_id,
+          enabled: filter(count(), r.enabled),
+          uplinks: filter(count(), r.enabled and r.direction in ["outbound", "bidirectional"]),
+          downlinks: filter(count(), r.enabled and r.direction in ["inbound", "bidirectional"]),
+          disabled: filter(count(), not r.enabled)
+        }
+      )
+
+    organization_id
+    |> SpacecraftStore.active_fleet_query(mission_id)
+    |> join(:left, [s], r in subquery(routes), on: r.spacecraft_id == s.spacecraft_id)
+    |> select([_s, r], %{
+      routing_rule_count: fragment("COALESCE(SUM(?), 0)::bigint", r.enabled),
+      without_routing: filter(count(), coalesce(r.enabled, 0) == 0),
+      multiple_uplinks: filter(count(), r.uplinks > 1),
+      without_downlink: filter(count(), r.enabled > 0 and r.downlinks == 0),
+      disabled_route: filter(count(), r.disabled > 0)
+    })
+    |> Repo.one!()
+  end
+
   @doc "Active profile-route counts per rule for spacecraft on one profile version."
   @spec profile_route_counts(binary(), binary(), binary(), pos_integer()) :: %{
           binary() => non_neg_integer()

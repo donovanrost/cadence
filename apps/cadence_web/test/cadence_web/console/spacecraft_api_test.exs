@@ -1,7 +1,10 @@
 defmodule CadenceWeb.Console.SpacecraftAPITest do
   use CadenceWeb.ConnCase, async: true
 
+  alias Cadence.Comms.RoutingRuleRow
   alias Cadence.Reads.ProfileDetail
+  alias Cadence.Repo
+  alias Cadence.SpacecraftStore.SpacecraftRow
   alias CadenceWeb.TestFixtures
 
   setup do
@@ -206,6 +209,114 @@ defmodule CadenceWeb.Console.SpacecraftAPITest do
 
     assert %{"kind" => "spacecraft_new", "id" => nil, "label" => nil} =
              Enum.find(data["findings"], &(&1["cause"] == "no_spacecraft"))["fix"]
+  end
+
+  test "readiness groups route findings across 500 active spacecraft", c do
+    mission = c.mission
+    profile = TestFixtures.persist_spacecraft_profile!(mission, display_name: "Fleet block")
+    now = DateTime.utc_now()
+
+    spacecraft =
+      for index <- 1..500 do
+        %{
+          spacecraft_id: "readiness-fleet-#{index}",
+          organization_id: mission.organization_id,
+          mission_id: mission.mission_id,
+          display_name: "Fleet #{index}",
+          scid: index,
+          lifecycle_state: "active",
+          spacecraft_type_id: if(index in 301..400, do: nil, else: profile.spacecraft_type_id),
+          spacecraft_type_version: if(index in 301..400, do: nil, else: profile.version),
+          metadata: %{},
+          inserted_at: now
+        }
+      end
+
+    archived = %{
+      hd(spacecraft)
+      | spacecraft_id: "readiness-archived",
+        scid: 501,
+        lifecycle_state: "archived"
+    }
+
+    Repo.insert_all(SpacecraftRow, [archived | spacecraft])
+
+    routes =
+      for {craft, index} <- Enum.with_index(spacecraft, 1),
+          {direction, origin, enabled, state} <- readiness_legs(index) do
+        readiness_route(craft, direction, origin, enabled, state, now)
+      end
+
+    archived_route = readiness_route(archived, "outbound", "spacecraft", true, "active", now)
+    Repo.insert_all(RoutingRuleRow, [archived_route | routes])
+
+    data =
+      c.user
+      |> TestFixtures.member_conn()
+      |> get("/api/v1/missions/#{mission.mission_id}/readiness")
+      |> json_response(200)
+      |> Map.fetch!("data")
+
+    findings = Map.new(data["findings"], &{&1["cause"], &1})
+
+    for {cause, severity, fix} <- [
+          {"spacecraft_without_profile", "blocker", "spacecraft_list"},
+          {"spacecraft_without_routing_rule", "blocker", "comms"},
+          {"spacecraft_without_downlink", "blocker", "comms"},
+          {"spacecraft_with_multiple_uplinks", "caution", "comms"},
+          {"spacecraft_with_disabled_route", "caution", "comms"}
+        ] do
+      assert %{
+               "severity" => ^severity,
+               "affected_count" => 100,
+               "fix" => %{"kind" => ^fix}
+             } = findings[cause]
+    end
+
+    assert %{"status" => "blocker", "secondary_count" => 500} =
+             Enum.find(data["areas"], &(&1["key"] == "comms"))
+  end
+
+  defp readiness_legs(index) when index <= 100,
+    do: [{"outbound", "profile", true, "active"}, {"bidirectional", "spacecraft", true, "active"}]
+
+  defp readiness_legs(index) when index <= 200,
+    do: [{"outbound", "profile", true, "active"}]
+
+  defp readiness_legs(index) when index <= 300 do
+    [
+      {"inbound", "profile", true, "active"},
+      {"outbound", "spacecraft", false, "active"},
+      {"inbound", "spacecraft", false, "active"}
+    ]
+  end
+
+  defp readiness_legs(index) when index <= 400,
+    do: [{"inbound", "legacy", true, "active"}, {"inbound", "profile", false, "archived"}]
+
+  defp readiness_legs(_index), do: [{"bidirectional", "spacecraft", true, "active"}]
+
+  defp readiness_route(craft, direction, origin, enabled, state, now) do
+    %{
+      routing_rule_id: "#{craft.spacecraft_id}-#{direction}-#{origin}",
+      organization_id: craft.organization_id,
+      mission_id: craft.mission_id,
+      spacecraft_id: craft.spacecraft_id,
+      spacecraft_type_id: if(origin == "profile", do: craft.spacecraft_type_id),
+      spacecraft_type_version: if(origin == "profile", do: craft.spacecraft_type_version),
+      lifecycle_state: state,
+      display_name: "Fleet route",
+      purpose_label: "Readiness",
+      direction: direction,
+      transport_id: "readiness-test-transport",
+      transport_version: 1,
+      role: "primary",
+      enabled: enabled,
+      origin: origin,
+      metadata: %{},
+      inserted_at: now,
+      updated_at: now
+    }
   end
 
   test "is not available for another organization's mission", c do

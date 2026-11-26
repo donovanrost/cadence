@@ -160,6 +160,19 @@ defmodule Cadence.SpacecraftTypeStore do
     end
   end
 
+  @doc "Fetches the pinned profile versions in bounded batches."
+  def fetch_spacecraft_type_versions_in_batches(organization_id, mission_id, references) do
+    references
+    |> Enum.uniq()
+    |> Enum.chunk_every(@max_batch_size)
+    |> Enum.reduce_while({:ok, %{}}, fn batch, {:ok, found} ->
+      case fetch_spacecraft_type_versions(organization_id, mission_id, batch) do
+        {:ok, versions} -> {:cont, {:ok, Map.merge(found, versions)}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
   defp bounded_references(references) do
     references = Enum.take(references, @max_batch_size + 1)
 

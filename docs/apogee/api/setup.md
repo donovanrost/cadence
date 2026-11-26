@@ -501,7 +501,7 @@ Rules (v1), by area:
 | --- | --- | --- |
 | fleet | `no_spacecraft` blocker → `spacecraft_new`; `spacecraft_missing_scid`, `spacecraft_without_profile` blocker → `spacecraft_list`; `spacecraft_without_routing_rule` blocker → `comms`; `spacecraft_on_older_profile_version` caution → `profile` (one profile) or `spacecraft_list` | |
 | catalog | `no_catalog`, `catalog_without_revision` blocker → `catalog_import` | detail "rev N · used by M spacecraft", or "rev N" ("rN" is reserved for mission config revisions) |
-| comms | `no_transports` blocker → `comms` | |
+| comms | `no_transports`, `spacecraft_without_downlink` blocker → `comms`; `spacecraft_with_multiple_uplinks`, `spacecraft_with_disabled_route` caution → `comms` | |
 | stations | `no_ground_stations` not_set_up → `station` | `unknown` when stations exist, because station health isn't tracked (never ready by default) |
 | data_sources | `data_source_unavailable` blocker, `data_source_degraded` caution → `data_source` (id when it is just one) | `unknown` when no health has been reported |
 | planning (no tile) | `planning_not_set_up` not_set_up → `contact_planning` | from `/contact-plans/setup` |
@@ -509,6 +509,11 @@ Rules (v1), by area:
 
 - Units are singular when the count is 1.
 - `affected_count` is 0 for findings that aren't about a set of items.
+- Route findings count affected active spacecraft once per cause across materialized profile and
+  extra routes. Enabled bidirectional legs count toward both uplink and downlink. The downlink
+  blocker applies to spacecraft with an enabled route. Spacecraft without enabled routes use
+  `spacecraft_without_routing_rule`. The disabled-route finding covers active disabled rows.
+  Archived routes and profile routes excluded by an override are outside these counts.
 - Findings are sorted by severity (blocker first), then area order.
 - `recent_changes` (R2): the mission's last 5 configuration revisions, newest first:
   `[{at, kind: "change_set" | "rollback" | "legacy_activation", version_label: "r3", summary,
