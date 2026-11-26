@@ -6,6 +6,8 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.PoisonIsolation do
   Classification errs toward TRANSIENT. Only these isolate entries:
 
   - `{:protocol_archive_record_identity_conflict, ids}` names its entries exactly;
+  - `{:protocol_archive_invalid_entries, ids}` names entries whose bytes cannot be read (a packet
+    whose stored data is not valid base64), quarantined as `data_rejected`;
   - a Postgres data or integrity error (SQLSTATE class 22 or 23) is bisected with rolled-back
     probes (bounded) to find every entry that fails on its own. If EVERY entry fails, it's
     environmental (a schema problem, permissions) and stays transient, so a bad deploy never
@@ -101,6 +103,22 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.PoisonIsolation do
     case poisoned do
       [] -> :transient
       _ -> {:isolated, Enum.map(poisoned, &quarantined(&1, "identity_conflict", nil)), rest}
+    end
+  end
+
+  defp poison({:protocol_archive_invalid_entries, ids}, entries, opts) do
+    named = MapSet.new(ids)
+
+    {poisoned, rest} =
+      Enum.split_with(entries, &MapSet.member?(named, FileSystem.entry_index_record_id(&1, opts)))
+
+    case poisoned do
+      [] ->
+        :transient
+
+      _ ->
+        message = "packet data is not valid base64"
+        {:isolated, Enum.map(poisoned, &quarantined(&1, "data_rejected", message)), rest}
     end
   end
 

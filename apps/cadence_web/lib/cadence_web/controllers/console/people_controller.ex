@@ -1,7 +1,7 @@
 defmodule CadenceWeb.Console.PeopleController do
   @moduledoc """
   Organization people and invitations under
-  `/api/console/v1/organizations/:organization_id`. Contract: docs/apogee/api/setup.md.
+  `/api/v1/organizations/:organization_id`. Contract: docs/apogee/api/setup.md.
   """
 
   use CadenceWeb, :controller

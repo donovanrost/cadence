@@ -77,30 +77,40 @@ defmodule Cadence.Observability.Metrics.Catalog do
   def definitions do
     [
       counter(
-        "cadence.runtime.partition.checkpoint.recovery",
-        [:cadence, :runtime, :partition, :checkpoint],
+        "cadence.runtime.partition.snapshot.recovery",
+        [:cadence, :runtime, :partition, :snapshot_recovery],
         :count,
         "{recovery}",
-        "Semantic recovery by checkpoint validation outcome.",
+        "Semantic recovery by snapshot outcome (a snapshot found, none, or an unusable one).",
         ["outcome"],
-        tag_values: &checkpoint_tags/1
+        tag_values: &snapshot_recovery_tags/1
       ),
       histogram(
-        "cadence.runtime.partition.checkpoint.replayed_commits",
-        [:cadence, :runtime, :partition, :checkpoint],
-        :replayed_commits,
-        "{commit}",
-        "Durable commits replayed after checkpoint selection.",
-        ["outcome"],
-        [0, 1, 10, 100, 1_000, 10_000, 100_000],
-        tag_values: &checkpoint_tags/1
+        "cadence.runtime.partition.snapshot.bytes",
+        [:cadence, :runtime, :partition, :snapshot_written],
+        :bytes,
+        "By",
+        "Encoded size of each semantic snapshot written.",
+        [],
+        [1_024, 4_096, 16_384, 65_536, 262_144, 1_048_576, 4_194_304],
+        []
+      ),
+      histogram(
+        "cadence.runtime.partition.snapshot.duration",
+        [:cadence, :runtime, :partition, :snapshot_written],
+        :duration_ms,
+        "ms",
+        "Time to write each semantic snapshot (encode and the fenced upsert).",
+        [],
+        [1, 5, 10, 25, 50, 100, 250, 1_000],
+        []
       ),
       counter(
         "cadence.runtime.partition.ownership",
         [:cadence, :runtime, :partition, :ownership],
         :count,
         "{event}",
-        "Semantic writer acquisitions and rejected conditional commits.",
+        "Semantic writer acquisitions and fenced snapshot writes.",
         ["outcome"],
         tag_values: &ownership_tags/1
       ),
@@ -658,6 +668,24 @@ defmodule Cadence.Observability.Metrics.Catalog do
         "Observed telemetry ingress executor queue depth.",
         ["downstream"],
         tag_values: &take_string_keys(&1, ["downstream"])
+      ),
+      event_gauge(
+        "cadence.storage.questdb.disk",
+        [:cadence, :telemetry, :questdb_retention, :measured],
+        :disk_bytes,
+        "By",
+        "Disk used by QuestDB telemetry observation partitions once the retention job's pending drops apply (a drop on a WAL table is asynchronous, so dropped partitions are excluded).",
+        [],
+        []
+      ),
+      event_gauge(
+        "cadence.storage.questdb.partitions",
+        [:cadence, :telemetry, :questdb_retention, :measured],
+        :partitions,
+        "{partition}",
+        "QuestDB telemetry observation day partitions kept after the retention job's drops, which apply asynchronously.",
+        [],
+        []
       ),
       event_gauge(
         "cadence.telemetry.persistence.queue.depth",
@@ -1228,18 +1256,17 @@ defmodule Cadence.Observability.Metrics.Catalog do
   defp ownership_tags(%{outcome: outcome})
        when outcome in [
               :acquired,
-              :semantic_runtime_fenced,
-              :semantic_runtime_stale_predecessor
+              :semantic_runtime_fenced
             ],
        do: %{"outcome" => Atom.to_string(outcome)}
 
   defp ownership_tags(_metadata), do: %{"outcome" => "error"}
 
-  defp checkpoint_tags(%{outcome: outcome})
-       when outcome in [:hit, :missing, :incompatible, :ahead, :invalid],
+  defp snapshot_recovery_tags(%{outcome: outcome})
+       when outcome in [:hit, :missing, :invalid],
        do: %{"outcome" => Atom.to_string(outcome)}
 
-  defp checkpoint_tags(_), do: %{"outcome" => "error"}
+  defp snapshot_recovery_tags(_), do: %{"outcome" => "error"}
 
   defp recovery_tags(%{status: :ok}), do: %{"outcome" => "ok"}
   defp recovery_tags(%{status: :stop}), do: %{"outcome" => "error"}

@@ -35,7 +35,7 @@ defmodule CadenceWeb.Console.ActivationRequestAPITest do
       org: org,
       mission: mission,
       scope: scope,
-      base: "/api/console/v1/missions/#{mission.mission_id}/activations"
+      base: "/api/v1/missions/#{mission.mission_id}/activations"
     }
   end
 
@@ -230,7 +230,7 @@ defmodule CadenceWeb.Console.ActivationRequestAPITest do
   test "another mission's request is not found here", c do
     id = request(c).activation_request_id
     other = TestFixtures.persist_mission!(c.org)
-    path = "/api/console/v1/missions/#{other.mission_id}/activations/#{id}"
+    path = "/api/v1/missions/#{other.mission_id}/activations/#{id}"
 
     assert c.approver |> get_conn(path) |> json_response(404) |> get_in(["error", "code"]) ==
              "activation_request_not_found"

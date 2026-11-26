@@ -20,8 +20,9 @@ import {
   conditionWords,
   crossedCondition,
   crossedLimit,
+  AlarmsMore,
   type Alarm,
-  type Alarms,
+  type AlarmsPage,
   valueLabel,
   type Episode,
   type EpisodeDetail,
@@ -46,7 +47,9 @@ import { usePointTrend } from "./useInvestigate.ts";
 /** B1 · Alarm trend: readouts (Now, Limit, Rate), range, chart. Spec: Investigate.md §B1. */
 const props = defineProps<{
   sc: FleetSpacecraft;
-  alarms: RemoteState<Alarms>;
+  alarms: RemoteState<AlarmsPage>;
+  /** Load more of this spacecraft's alarms (#827): the list holds a page at a time. */
+  more: { load: () => void; busy: boolean; failed: boolean };
   alarm: Alarm | null;
   /** U13: without ground limits, "no active alarm" is unknown, not nominal (qa #9). */
   limitsConfigured: boolean;
@@ -59,6 +62,14 @@ defineEmits<{ retry: [] }>();
 const range = defineModel<RangeKey>("range", { required: true });
 const scope = useMissionScope();
 /** What B1 plots: the alarm's point, else the last resolved alarm's. */
+/** Set while the list holds only part of this spacecraft's active alarms (#827). */
+const partial = computed(() => {
+  const s = props.alarms;
+  return s.status === "ready" && s.value.next !== null
+    ? { shown: s.value.alarms.length, total: s.value.total }
+    : null;
+});
+
 const subject = computed(() => {
   const a = props.alarm;
   if (a)
@@ -169,6 +180,16 @@ const ranges = RANGES.map((r) => ({ value: r.value, label: r.label }));
       >
     </template>
     <ApRemote :state="alarms" loading-label="LOADING ALARMS…" @retry="$emit('retry')">
+      <AlarmsMore
+        v-if="partial"
+        class="mb-3"
+        :shown="partial.shown"
+        :total="partial.total"
+        :what="`active alarms on ${sc.name}`"
+        :busy="more.busy"
+        :failed="more.failed"
+        @more="more.load"
+      />
       <ApCallout v-if="!alarm && !limitsConfigured" tone="off">
         Ground limits aren't configured, so no point on {{ sc.name }} is checked against limits.
       </ApCallout>

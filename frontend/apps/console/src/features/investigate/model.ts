@@ -152,6 +152,27 @@ export function neighbours(
   return { prev: peers[i - 1] ?? null, next: peers[i + 1] ?? null };
 }
 
+/** Pages loaded on their own for a deep-linked alarm: past this, Load more is the person's. */
+export const MAX_AUTO_PAGES = 5;
+
+/**
+ * Whether to load another page of a spacecraft's alarms for a deep link (?alarm=, ?point=): the
+ * asked-for alarm (or, for a point, any alarm on it) isn't among those loaded, a next page exists,
+ * and fewer than MAX_AUTO_PAGES were loaded for this link, so an id that doesn't exist can't page
+ * through the whole list (#827).
+ */
+export function wantsMorePages(
+  loaded: readonly Alarm[],
+  next: string | null,
+  link: Readonly<{ alarm: string | null; point: string | null }>,
+  autoPages: number,
+): boolean {
+  if (next === null || autoPages >= MAX_AUTO_PAGES) return false;
+  if (link.alarm !== null) return !loaded.some((a) => a.id === link.alarm);
+  if (link.point !== null) return !loaded.some((a) => a.point.id === link.point);
+  return false;
+}
+
 /** B4 v1: same plane, same point, currently caution or critical (U10 naming: "same point in limits"). */
 export function sisters(
   alarms: readonly Alarm[],

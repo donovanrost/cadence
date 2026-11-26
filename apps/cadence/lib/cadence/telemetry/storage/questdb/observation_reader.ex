@@ -9,7 +9,7 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationReader do
 
   alias Cadence.Telemetry.{EffectiveSelection, Sample, SelectionPolicy, SourceFilters}
   alias Cadence.Telemetry.Storage.ObservationIdentityStates
-  alias Cadence.Telemetry.Storage.QuestDB.{RestClient, SQL}
+  alias Cadence.Telemetry.Storage.QuestDB.{ObservationProvenance, RestClient, SQL}
 
   @select_columns [
     "sample_id",
@@ -39,6 +39,7 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationReader do
     "observation_id",
     "observation_identity_id",
     "validity_state"
+    | ObservationProvenance.select_columns()
   ]
 
   @decimated_select_columns [
@@ -97,6 +98,43 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationReader do
          diagnostics: sample_history_diagnostics(physical_samples, samples, opts)
        }}
     end
+  end
+
+  @doc """
+  The newest canonical flight value of every (spacecraft, point) that one source endpoint has
+  written in the mission, in ONE statement (`LATEST ON observed_at PARTITION BY spacecraft_id,
+  point_id`): what a starting partition seeds the current-value store with (#831). Options:
+  `:organization_id`, `:data_source_id`, `:binding_id` narrow it as the other reads do.
+  """
+  @spec latest_values_for_endpoint(binary(), binary(), keyword()) ::
+          {:ok, [Sample.t()]} | {:error, term()}
+  def latest_values_for_endpoint(mission_id, source_endpoint_id, opts \\ [])
+      when is_binary(mission_id) and is_binary(source_endpoint_id) and is_list(opts) do
+    filters =
+      [
+        {"mission_id = ?", mission_id},
+        {"source_endpoint_id = ?", source_endpoint_id},
+        {"realm = ?", "flight"},
+        {"validity_state = ?", "canonical"}
+      ]
+      |> maybe_filter("organization_id = ?", Keyword.get(opts, :organization_id))
+      |> maybe_filter("data_source_id = ?", Keyword.get(opts, :data_source_id))
+      |> maybe_filter("binding_id = ?", SourceFilters.binding_id(opts))
+
+    {where_sql, params} = where_sql_and_params(filters)
+
+    sql =
+      render_sql(
+        """
+        SELECT #{Enum.join(@select_columns, ", ")}
+        FROM telemetry_observations
+        WHERE #{where_sql}
+        LATEST ON observed_at PARTITION BY spacecraft_id, point_id
+        """,
+        params
+      )
+
+    with {:ok, result} <- exec(sql, opts), do: {:ok, samples_from_result(result)}
   end
 
   @spec decimated_history(binary(), binary(), keyword()) :: {:ok, [map()]} | {:error, term()}
@@ -360,10 +398,12 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationReader do
       quality_state: quality_state(get(row, "quality_state")),
       generation_time: utc_datetime(get(row, "generation_time")),
       receipt_time: utc_datetime(get(row, "receipt_time")),
+      # Rebuilt from the provenance columns over the residual JSON (DECISIONS #103); rows from
+      # before the columns decode their full JSON as before. "storage" is the reader's own
+      # bookkeeping from this row's columns, never stored (the write path drops it).
       provenance:
         row
-        |> get("provenance_json")
-        |> decode_json_map()
+        |> ObservationProvenance.rebuild(&get(row, &1))
         |> Map.put("storage", storage_metadata)
     }
   end
@@ -671,17 +711,6 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationReader do
 
   defp decode_raw_value(value), do: value
 
-  defp decode_json_map(nil), do: %{}
-
-  defp decode_json_map(value) when is_binary(value) do
-    case Jason.decode(value) do
-      {:ok, decoded} when is_map(decoded) -> decoded
-      _other -> %{}
-    end
-  end
-
-  defp decode_json_map(_value), do: %{}
-
   defp quality_state("good"), do: :good
   defp quality_state("bad"), do: :bad
   defp quality_state("suspect"), do: :suspect
@@ -743,6 +772,15 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationReader do
   defp key_atom("observation_id"), do: :observation_id
   defp key_atom("observation_identity_id"), do: :observation_identity_id
   defp key_atom("validity_state"), do: :validity_state
+  defp key_atom("mission_model_revision_id"), do: :mission_model_revision_id
+  defp key_atom("runtime_plan_id"), do: :runtime_plan_id
+  defp key_atom("producer_kind"), do: :producer_kind
+  defp key_atom("producer_id"), do: :producer_id
+  defp key_atom("semantic_id"), do: :semantic_id
+  defp key_atom("qualified_name"), do: :qualified_name
+  defp key_atom("identity_ref"), do: :identity_ref
+  defp key_atom("binding_rule_derived"), do: :binding_rule_derived
+  defp key_atom("packet_refs_derived"), do: :packet_refs_derived
   defp key_atom("bucket_start"), do: :bucket_start
   defp key_atom("bucket_min"), do: :bucket_min
   defp key_atom("bucket_max"), do: :bucket_max

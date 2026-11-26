@@ -6,6 +6,7 @@ import {
   requestPage,
   type ApiResult,
   type Decoded,
+  type Page,
 } from "@/api/index.ts";
 
 /** Contracts: docs/apogee/api/ops.md, `GET …/events` and `…/events/density` (owner api, DECISIONS #26). */
@@ -157,37 +158,27 @@ export function fetchEvents(
   );
 }
 
-/** The first page of the window, with the cursor to older events (U69 A9d; null = nothing older). */
-export type EventsPage = Events & Readonly<{ nextCursor: string | null }>;
+/** A page's envelope besides its events: the window it read. */
+export type EventsMeta = Omit<Events, "events">;
 
-export function fetchEventsPage(
+/**
+ * One page of the window's events, newest first (U69 A9d): the first with no `cursor`, an older one
+ * with the previous page's `meta.next_cursor`, same filters. 500 a page.
+ */
+export async function fetchEventPage(
   missionId: MissionId,
   query: EventQuery,
+  cursor: string | null,
   signal?: AbortSignal,
-): Promise<ApiResult<EventsPage>> {
-  return requestPage(
-    `${base(missionId)}?${params(query, { limit: "500" })}`,
+): Promise<ApiResult<Page<MissionEvent, EventsMeta>>> {
+  const r = await requestPage(
+    `${base(missionId)}?${params(query, cursor ? { limit: "500", cursor } : { limit: "500" })}`,
     eventsReader,
     signal ? { signal } : {},
-  ).then((r) =>
-    r.ok ? { ok: true, value: { ...r.value.value, nextCursor: r.value.nextCursor } } : r,
   );
-}
-
-/** The next older page (`?cursor=<meta.next_cursor>`); same filters as the first. */
-export function fetchOlderEvents(
-  missionId: MissionId,
-  query: EventQuery,
-  cursor: string,
-  signal?: AbortSignal,
-): Promise<ApiResult<EventsPage>> {
-  return requestPage(
-    `${base(missionId)}?${params(query, { limit: "500", cursor })}`,
-    eventsReader,
-    signal ? { signal } : {},
-  ).then((r) =>
-    r.ok ? { ok: true, value: { ...r.value.value, nextCursor: r.value.nextCursor } } : r,
-  );
+  if (!r.ok) return r;
+  const { events, ...meta } = r.value.value;
+  return { ok: true, value: { items: events, next: r.value.nextCursor, meta } };
 }
 
 export function fetchDensity(

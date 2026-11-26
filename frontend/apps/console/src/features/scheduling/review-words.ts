@@ -213,11 +213,6 @@ export function approveRefusal(error: ApiError, w: Who): Refusal {
   }
   if (code === "plan_not_ready") return notReady(error, r);
   if (code === "contact_plan_expired_passes_changed") return closedSince(error, w, r);
-  if (code === "contact_plan_opportunity_expired")
-    return refusal(
-      `Not approved: the booking window has closed for some of ${r}'s passes, so ${r} can't be booked as it is. Your approval wasn't recorded. To book the others, draft the day again without them.`,
-      "the booking window has closed for some of its passes, so it can't be booked as it is",
-    );
   if (code === "invalid_params") {
     // The server's own message: its case is kept (dashboards' review).
     const text = planErrorText(error);

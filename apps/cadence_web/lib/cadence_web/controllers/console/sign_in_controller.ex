@@ -1,6 +1,6 @@
 defmodule CadenceWeb.Console.SignInController do
   @moduledoc """
-  L5 JSON sign-in for the console (`POST /api/console/v1/auth/sign-in`). The single login path
+  L5 JSON sign-in for the console (`POST /api/v1/auth/sign-in`). The single login path
   (`/console/sign-in`): email and password, throttled by the attempt limit, one answer for any
   wrong pair. Contract: docs/apogee/api/session.md §Sign-in and invitation links.
   """

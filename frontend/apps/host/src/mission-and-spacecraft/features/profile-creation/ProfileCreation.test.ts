@@ -1,7 +1,6 @@
 import { required } from "../../../../../../test-support/required";
-import { flushPromises, mount } from "@vue/test-utils";
-import { expect, test, vi } from "vite-plus/test";
-import ProfileCreationPage from "./ProfileCreationPage.vue";
+import { mount } from "@vue/test-utils";
+import { expect, test } from "vite-plus/test";
 import SpacecraftTypeNew from "./SpacecraftTypeNew.vue";
 import { profileFixture } from "./fixtures.test-support";
 import { assertProfileForm, assertProfileResult } from "./validation";
@@ -30,30 +29,6 @@ test("protocol controls adapt while preserving the draft and selected applicatio
       },
     },
   ]);
-  wrapper.unmount();
-});
-test("current field errors win over stale validation and failed saves preserve drafts", async () => {
-  const replies: ((value: unknown) => void)[] = [];
-  const execute = vi.fn(() => new Promise((resolve) => replies.push(resolve)));
-  const wrapper = mount(ProfileCreationPage, { props: { data: profileFixture(), execute } });
-  await wrapper.get("#profile-display_name").setValue("Old");
-  await wrapper.get("#profile-display_name").setValue("New");
-  required(replies[1])({ status: "invalid", errors: { frame_size: ["Enter a frame size"] } });
-  await flushPromises();
-  required(replies[0])({ status: "invalid", errors: { display_name: ["Old error"] } });
-  await flushPromises();
-  expect(wrapper.get("#profile-validation-errors").text()).toBe("Enter a frame size");
-  expect(wrapper.get("#profile-frame_size").attributes("aria-describedby")).toBe(
-    "profile-frame_size-errors",
-  );
-  await wrapper.get("#spacecraft-profile-form").trigger("submit");
-  await wrapper.get("#spacecraft-profile-form").trigger("submit");
-  expect(execute).toHaveBeenCalledTimes(3);
-  expect(wrapper.get("#create-spacecraft-profile-button").attributes("disabled")).toBeDefined();
-  required(replies[2])({ status: "unavailable", errors: {} });
-  await flushPromises();
-  expect(wrapper.find("#profile-creation-error").exists()).toBe(true);
-  expect((wrapper.get("#profile-display_name").element as HTMLInputElement).value).toBe("New");
   wrapper.unmount();
 });
 test("contracts reject malformed controls, protocol choices, applications and links", () => {

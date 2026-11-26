@@ -157,6 +157,31 @@ defmodule Cadence.Protocol.TMFrameIngressTest do
     refute Enum.map(plain.packet_records, & &1.packet_id) == ids
   end
 
+  # The #71 edge, kept (director 11-17, known behaviour): two byte-identical packets (same APID,
+  # sequence count and content) completing in one frame are one receipt, a duplicate by CCSDS, so
+  # one packet id and, after #161, one sample. Pinned so any change to it is deliberate.
+  test "two byte-identical packets completing in one frame share one packet id (#71 edge)" do
+    packet = <<0::3, 0::1, 0::1, 42::11, 3::2, 5::14, 1::16, 0, 21>>
+
+    frame =
+      <<0::2, 11::10, 2::3, 0::1, 0::8, 0::8, 0::1, 0::1, 0::1, 3::2, 0::11>> <> packet <> packet
+
+    evidence =
+      RawEvidence.new(%{
+        evidence_id: "evidence-twins",
+        mission_id: "mission",
+        source_endpoint_ref: "endpoint",
+        protocol_family: :tm,
+        raw: frame,
+        receipt_time: ~U[2026-11-14 01:35:54Z],
+        metadata: Map.merge(%{frame_size: 22, ocf_length: 0}, metadata("j", "s", 0, 22))
+      })
+
+    {:ok, result, <<>>, _pipeline, _continuity} = process(evidence, initial_state())
+
+    assert [id, id] = Enum.map(result.packet_records, & &1.packet_id)
+  end
+
   # DECISIONS #99: monitoring effects are keyed on the frame that completed the packet. The key must
   # not depend on how a replay batches the journal, including a frame split across two evidences
   # and its receipt time (the record holding its LAST byte), and must stay out of what is archived.

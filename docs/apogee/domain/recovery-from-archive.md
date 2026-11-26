@@ -119,6 +119,39 @@ produces `:mission` affinity. Their inputs are other partitions' **outputs**, no
 
 ## (d) Journal-off deployments
 
+**Built (#692).** A partition recovers from its last semantic snapshot (`semantic_runtime_snapshots`,
+one row per partition and basis) and the journal replays from the snapshot's per-stream offsets;
+`semantic_runtime_commits`, the per-batch commit path and `CommitRetirement` are gone. The journal's
+durable processing cursor follows the snapshots (`IngressJournalConsumer.SnapshotGate`), a recovered
+partition tells the consumers it gated to replay (`SemanticSnapshotNotifier`), and it skips the
+frames its snapshot already includes (`SemanticSnapshots.skip_replayed?/2`), so a replay applies
+nothing twice. Journal off: nothing replays, and a crash loses the memory since the last snapshot
+(pinned by `monitoring_replay_ids_e2e_test.exs`).
+
+**The ETS current-value store is seeded from QuestDB (#831, DECISIONS #96).** After a restart the
+store is empty until each spacecraft's next frame, and at 500+ craft most are not in contact. A
+starting owner asks QuestDB, in one statement, for the newest value of every (spacecraft, point)
+its source endpoint has written (`LATEST ON observed_at PARTITION BY spacecraft_id, point_id`;
+`PartitionOwner.CurrentValueSeed`, `Storage.seed_current_values/3`). Each value keeps its OWN
+generation and receipt time, so the staleness rules still say stale; it is recorded under the
+same source identity as ingest, so a live value replaces it; never over a newer value already
+there; no observation written, no fact published. Every point the endpoint ever wrote is covered
+(not only what a semantic plan evaluates), and it needs no snapshot. The read runs in a task after
+a random delay of up to 2 s, so a slow or unreachable QuestDB never delays a partition's start (a
+failure is logged; the store fills from ingest as before) and 500 partitions do not ask at the
+same instant. ETS store and QuestDB history only (the Postgres store is not a cache).
+
+*Measured (CI QuestDB, `LATEST ON` for one spacecraft, 200 points x 10 rows each):* p50 5-9 ms,
+flat from 50,000 to 400,000 rows; a spacecraft last heard 3 days ago, with every newer row another
+spacecraft's, 3.6-5.2 ms median. About 4 s of QuestDB time for 500 partitions, spread over the
+2 s window; the apply into ETS is 3.7 ms per 500 points. Not measured: a real 500-partition
+simultaneous start against one QuestDB, or a table past 400,000 rows.
+
+**A superseded owner is fenced at its next snapshot, not its next batch** (accepted, #692 review):
+the previous owner keeps processing until its next snapshot write (one interval, 60 s) fails on the
+new epoch and it stops. Its snapshot cannot overwrite the new owner's; its effects are insert-or-get
+under the same replay-safe ids, so nothing duplicates.
+
 **The archive isn't written at all on the TCP path.**
 - The FileSystem archive's `persist_raw_evidence_multi` is a no-op (`L/ingress_archive/filesystem.ex:40-45`).
 - The projector runs with `archive_raw_evidence?: false` (`L/runtime/persistence.ex:109-115`).

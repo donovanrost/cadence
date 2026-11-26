@@ -1,6 +1,6 @@
 defmodule CadenceWeb.Console.AppController do
   @moduledoc """
-  A1 apps under `/api/console/v1/missions/:mission_id/apps`: the list and the
+  A1 apps under `/api/v1/missions/:mission_id/apps`: the list and the
   direct install / disable / uninstall actions. Contract: docs/apogee/api/setup.md.
   """
 

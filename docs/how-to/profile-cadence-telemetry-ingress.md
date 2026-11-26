@@ -17,19 +17,13 @@ The profiler task connects to a running Cadence node, so start the server like
 this:
 
 ```bash
-cd apps/cadence_web
-iex --sname cadence -S mix phx.server
+dev/stack up
 ```
 
 ## 2. Start a traffic source
 
-Start the external provider simulator in another shell, then schedule a contact
-from Cadence using its configured provider profile:
-
-```bash
-cd apps/cadence_simulator
-CADENCE_SIMULATOR_HTTP_ENABLED=true mix run --no-halt
-```
+`dev/stack up` already starts the external provider simulator. Schedule a contact
+from Cadence using its configured provider profile.
 
 See [Simulator Provider Integration Flow](../simulator_provider_integration_flow.md)
 for provider and mission setup.
@@ -39,7 +33,7 @@ for provider and mission setup.
 Use the profile-driven profiler task:
 
 ```bash
-mix cadence.profile demo_spacecraft
+mise exec -- mix cadence.profile demo_spacecraft
 ```
 
 Useful variants:
@@ -47,19 +41,19 @@ Useful variants:
 Reset first:
 
 ```bash
-mix cadence.profile demo_spacecraft --reset
+mise exec -- mix cadence.profile demo_spacecraft --reset
 ```
 
 Print one snapshot and exit:
 
 ```bash
-mix cadence.profile demo_spacecraft --snapshot
+mise exec -- mix cadence.profile demo_spacecraft --snapshot
 ```
 
 Adjust sampling duration and interval:
 
 ```bash
-mix cadence.profile demo_spacecraft --duration 20 --interval 500
+mise exec -- mix cadence.profile demo_spacecraft --duration 20 --interval 500
 ```
 
 ## 4. Compare selected rates
@@ -68,8 +62,8 @@ Update the simulator-owned scenario/run rate, reset the profiler, and capture a
 snapshot for each selected rate:
 
 ```bash
-mix cadence.profile demo_spacecraft --reset
-mix cadence.profile demo_spacecraft --snapshot
+mise exec -- mix cadence.profile demo_spacecraft --reset
+mise exec -- mix cadence.profile demo_spacecraft --snapshot
 ```
 
 Record the simulator run ID and rate with each sample so comparisons remain

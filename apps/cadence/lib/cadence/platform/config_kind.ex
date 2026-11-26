@@ -143,7 +143,38 @@ defmodule Cadence.Platform.ConfigKind do
   @callback absent_errors(organization_id :: String.t(), mission_id :: String.t(), String.t()) ::
               [field_error()]
 
+  @doc """
+  Refuses ops of this STAGE request against what the change set already has staged, under the
+  set lock (nothing is staged on a refusal): e.g. a SCID another spacecraft's staged op holds
+  (S9). `staged` is the set's staged ops after this author's overlapping ones are replaced;
+  `prepared` is the request's ops in order, so the error's index is the request's. A kind sees
+  every op and picks its own.
+  """
+  @callback stage_conflicts(
+              organization_id :: String.t(),
+              mission_id :: String.t(),
+              staged :: [map()],
+              prepared :: [map()]
+            ) :: :ok | {:error, {:invalid_op, non_neg_integer(), [field_error()]}}
+
+  @doc """
+  Rewrites a staged document before `normalize/3`, with the tenant in hand, AT STAGING ONLY (never
+  at apply): e.g. D3 derives a profile's `catalog_revision_id` from the composition it pins
+  (#544). `previous` is the live document (nil for a create), `touched` the paths the op
+  sets. Paths it changes beyond `touched` are staged as further changes, so the staged op names
+  exactly what apply will write.
+  """
+  @callback translate(
+              String.t(),
+              String.t(),
+              previous :: document() | nil,
+              proposed :: document(),
+              touched :: [String.t()]
+            ) :: {:ok, document()} | {:error, [field_error()]}
+
   @optional_callbacks stage_check: 5,
+                      stage_conflicts: 4,
+                      translate: 5,
                       absent_errors: 3,
                       effect: 7,
                       normalize_options: 2,

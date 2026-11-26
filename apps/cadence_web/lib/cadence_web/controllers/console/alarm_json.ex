@@ -6,8 +6,13 @@ defmodule CadenceWeb.Console.AlarmJSON do
   @threshold_keys ~w(red_low yellow_low yellow_high red_high)
 
   @spec list(map()) :: map()
-  def list(%{observed_at: observed_at, summary: summary, alarms: alarms}) do
-    %{observed_at: observed_at, summary: summary, alarms: Enum.map(alarms, &alarm/1)}
+  def list(%{observed_at: observed_at, summary: summary, total: total, alarms: alarms}) do
+    %{
+      observed_at: observed_at,
+      summary: summary,
+      total: total,
+      alarms: Enum.map(alarms, &alarm/1)
+    }
   end
 
   defp alarm(row) do

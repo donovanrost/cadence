@@ -42,8 +42,8 @@ export CADENCE_SIMULATOR_HTTP_ENABLED=true
 export CADENCE_SIMULATOR_PORT=4101
 export CADENCE_SIMULATOR_ADMIN_API_TOKEN=local-simulator-admin-token
 export CADENCE_SIMULATOR_PROVIDER_API_TOKEN=local-simulator-provider-token
-export CADENCE_SIMULATOR_STORE_PATH="$PWD/var/cadence_simulator_provider.dets"
-export CADENCE_SIMULATOR_DEFINITIONS_PATH="$PWD/legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml"
+export CADENCE_SIMULATOR_STORE_PATH="$PWD/var/cadence_simulator_provider.ets"
+export CADENCE_SIMULATOR_DEFINITIONS_PATH="$PWD/dev/catalogs/demo_spacecraft.yaml"
 
 cd apps/cadence_simulator
 mix run --no-halt
@@ -51,7 +51,7 @@ mix run --no-halt
 
 `CADENCE_SIMULATOR_HTTP_ENABLED` defaults to `false`; the HTTP provider peer is
 not started unless it is enabled. `CADENCE_SIMULATOR_PORT` defaults to `4101`.
-The DETS path defaults to `var/cadence_simulator_provider.dets`, and the
+The ETS snapshot path defaults to `var/cadence_simulator_provider.ets`, and the
 definitions path has no default. Set distinct administrator and provider tokens
 for the normal development flow. When a token is configured, its namespace
 requires that bearer token.
@@ -185,8 +185,11 @@ ambiguous HTTP outcome. Provider behavior separately declares `native`,
 is supported. Cadence follows those declared capabilities rather than assuming
 that every provider accepts an idempotency header.
 
-Scenario and run definitions, reservations, and events are stored in DETS and
-survive restart. High-rate telemetry remains exclusively in Cadence.
+Scenario and run definitions, reservations, and events live in ETS. The
+simulator saves a verified snapshot after changes on a one-second timer and at
+clean shutdown. Successful HTTP mutations wait for the snapshot to be
+published, so concurrent requests can share one disk write. An abrupt exit can
+lose unpublished writes. High-rate telemetry remains exclusively in Cadence.
 
 ## Cadence provider configuration
 

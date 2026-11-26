@@ -1,6 +1,6 @@
 defmodule CadenceWeb.Console.TelemetrySampleController do
   @moduledoc """
-  `GET /api/console/v1/missions/:mission_id/telemetry/samples/:sample_id` (§11c(D) D1): one
+  `GET /api/v1/missions/:mission_id/telemetry/samples/:sample_id` (§11c(D) D1): one
   telemetry sample for Investigate's Sample aside (`Cadence.Reads.ConsoleSample`). Query:
   `point_id` and `spacecraft_id` (required), `receipt_time` (ISO-8601, optional: the exact match),
   `at` (ISO-8601, optional: the sample's generation time, bounding the search to ±60 s).

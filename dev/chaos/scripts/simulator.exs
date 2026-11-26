@@ -8,7 +8,7 @@ Application.put_env(:cadence_simulator, :provider_http,
   port: 4101
 )
 
-Application.put_env(:cadence_simulator, :provider_store, path: "/data/provider.dets")
+Application.put_env(:cadence_simulator, :provider_store, path: "/data/provider.ets")
 
 Application.put_env(:cadence_simulator, :provider_defaults,
   definitions_path: "/lab/demo_spacecraft.yaml"

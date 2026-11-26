@@ -192,7 +192,7 @@ test("newer saved evidence retains the draft and requires explicit version revie
   );
   w.unmount();
 });
-const producer = producerFixture("CADENCE_DERIVED_PAGE", import.meta.url);
+const producer = producerFixture("CADENCE_DERIVED_PAGE");
 test.skipIf(!producer.available)(
   "producer supplied evidence mounts the public editor and yields the explicit action input",
   async () => {

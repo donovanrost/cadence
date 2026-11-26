@@ -15,7 +15,7 @@ defmodule CadenceWeb.Console.CommsAPITest do
       user: user,
       org: org,
       mission: mission,
-      base: "/api/console/v1/missions/#{mission.mission_id}"
+      base: "/api/v1/missions/#{mission.mission_id}"
     }
   end
 

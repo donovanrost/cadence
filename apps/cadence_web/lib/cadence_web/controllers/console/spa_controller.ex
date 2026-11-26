@@ -2,12 +2,15 @@ defmodule CadenceWeb.Console.SPAController do
   @moduledoc """
   Serves the console SPA document for every `/console/*` path. Authentication
   is enforced by the router pipeline (unauthenticated GETs redirect to
-  `/sign-in` and return here after signing in).
+  `/console/sign-in` and return here after signing in).
   """
 
   use CadenceWeb, :controller
 
   alias CadenceWeb.Console.Shell
+
+  @doc "The site root opens the console, which picks the organization and mission."
+  def root(conn, _params), do: redirect(conn, to: "/console")
 
   def index(conn, _params) do
     conn = put_resp_header(conn, "cache-control", "no-store")

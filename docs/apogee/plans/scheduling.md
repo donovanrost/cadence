@@ -18,12 +18,12 @@ fe-ops asks: **M4** (in contact now), **M7** (passes by station in a window), **
 | Contact plans | `ContactPlan` (`draft → pending_approval → approved → executing → partially_reserved / reserved / failed`, versions), execution items (`pending / requesting / reserved / uncertain / rejected / failed`) | App-host only (`cadence.ops.contact_plan_show`). **No list endpoint** (`Management.Contacts.list_plans` exists, unused). Versions give the `r41 → r42` revision. |
 | Re-plan | `FleetRepairs`: repair run from a plan in `executing / partially_reserved / failed`, locking `reserved / uncertain / requesting` commitments | App-host only. Triggered by provider changes, not by a station status. |
 | Reservations | `ProviderReservation` (`requesting … confirmed / active / completed / unknown / rejected / canceled / failed`, `pass_phase`, `delivery_state`) + provider-change review | **Station and antenna live only inside the requested/confirmed snapshot documents.** |
-| Ground stations | `GET /api/console/v1/missions/:m/ground-stations` (session JSON) | Setup data only: `code, provider, region, lifecycle_state`. **No availability, outage or maintenance windows.** |
+| Ground stations | `GET /api/v1/missions/:m/ground-stations` (session JSON) | Setup data only: `code, provider, region, lifecycle_state`. **No availability, outage or maintenance windows.** |
 | Flown data | live runtime per realized contact (token API only); persisted downlink observations keyed by `realized_contact_id`; contact interval events | **No planned-vs-flown read**, no actual AOS/LOS on Cadence records (`RealizedContact` has no end), no per-pass bytes/frames/gaps summary. The simulator produces planned-vs-actual results, but Cadence never ingests them. |
 | Push | none for contacts/plans | Workspace polls every 5 s. The console `mission:<id>` channel has no `contacts` resource. |
 
 **Transport decision (lead):** the SPA won't speak the application-host bridge or the workspace
-header protocol. Every read and action below goes through session-authenticated `/api/console/v1`
+header protocol. Every read and action below goes through session-authenticated `/api/v1`
 endpoints that wrap the existing domain (same authorization, same operation journal semantics:
 client `operation_id`, `accepted / unconfirmed / completed / rejected`, observe without retrying the
 provider). That's the S-list.
@@ -111,7 +111,7 @@ on S9; until then the Contacts tab row shows Review as "not available yet" (ApEm
 5. **With S9:** K3.
 
 ## Ask list for api-ops
-All under `/api/console/v1/missions/:mission_id`, session + CSRF, `{data}` envelope, errors
+All under `/api/v1/missions/:mission_id`, session + CSRF, `{data}` envelope, errors
 `{error:{code,message,details?}}`. Actions carry a client `operation_id` and follow the existing
 journal semantics. Please document each in `docs/apogee/api/scheduling.md`.
 

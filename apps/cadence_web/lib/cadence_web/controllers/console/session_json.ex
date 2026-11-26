@@ -6,7 +6,7 @@ defmodule CadenceWeb.Console.SessionJSON do
   alias Cadence.Organizations.Organization
   alias CadenceWeb.Console.Capabilities
 
-  @socket_path "/socket/console"
+  @socket_path "/socket"
 
   @spec session(%{scope: Scope.t(), organizations: [map()], csrf_token: binary()}) :: map()
   def session(

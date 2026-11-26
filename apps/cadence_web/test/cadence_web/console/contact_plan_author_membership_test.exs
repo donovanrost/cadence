@@ -52,7 +52,7 @@ defmodule CadenceWeb.Console.ContactPlanAuthorMembershipTest do
       named: named,
       people: %{nameless: nameless, outsider: outsider, departed: departed},
       emails: Enum.map([named, nameless, outsider, departed], & &1.email),
-      base: "/api/console/v1/missions/#{mission.mission_id}/contact-plans"
+      base: "/api/v1/missions/#{mission.mission_id}/contact-plans"
     }
   end
 

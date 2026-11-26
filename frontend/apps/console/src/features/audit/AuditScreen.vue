@@ -67,7 +67,7 @@ const extraKinds = ref<readonly string[]>([]);
 watch(log.state, (s) => {
   if (s.status !== "ready") return;
   const known = new Set<string>([...auditKinds, ...extraKinds.value]);
-  const added = s.value.sources.included.filter((k) => !known.has(k));
+  const added = s.value.meta.sources.included.filter((k) => !known.has(k));
   if (added.length > 0) extraKinds.value = [...extraKinds.value, ...added];
 });
 const kindOptions = computed(() => [
@@ -115,14 +115,14 @@ const missionOptions = computed(() => [
     >
       <template #default="{ value }">
         <AuditResults
-          :page="value"
-          :older="log.older.value"
-          :older-unshown="log.olderUnshown.value"
-          :has-more="log.cursor.value !== null"
-          :loading="log.loading.value"
-          :failed="log.failed.value"
+          :events="value.items"
+          :sources="value.meta.sources"
+          :unshown="value.metas.flatMap((meta) => meta.unshown)"
+          :has-more="value.next !== null"
+          :loading="log.moreBusy.value"
+          :failed="log.moreError.value !== null"
           :span="span"
-          @older="log.loadOlder"
+          @older="log.more"
         />
       </template>
     </ApRemote>

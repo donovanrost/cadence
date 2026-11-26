@@ -44,16 +44,17 @@ defmodule Cadence.Configuration.Preview do
           |> Map.update(:holds, Rollback.holds(ops), &(&1 ++ Rollback.holds(ops)))
 
         later = if checked?(result), do: guarded(reader), else: nil
+        result = Map.put(result, :selections, selections(organization_id, mission_id, result))
         Repo.rollback({:preview, result, pair(reader, now, later)})
       end,
       timeout: @statement_timeout_ms + 5_000
     )
     |> case do
       {:error, {:preview, result, :none}} ->
-        {:ok, summarize(result)}
+        {:ok, with_selections(summarize(result), result)}
 
       {:error, {:preview, result, outcome}} ->
-        {:ok, Map.put(summarize(result), :outcome, outcome)}
+        {:ok, result |> summarize() |> with_selections(result) |> Map.put(:outcome, outcome)}
 
       {:error, reason} ->
         {:error, reason}
@@ -62,6 +63,19 @@ defmodule Cadence.Configuration.Preview do
     error in [Postgrex.Error, DBConnection.ConnectionError] ->
       {:error, {:preview_failed, Exception.message(error)}}
   end
+
+  # D3 (#544): what an apply of these ops would select per pinned composition, read after the
+  # ops' writes in this transaction. Submit records it; the apply selects again under its lock.
+  # The generation layer is configured (no compile-time edge), as for Submission.
+  defp selections(organization_id, mission_id, result) do
+    module = Application.get_env(:cadence, :configuration_generation)
+
+    if (checked?(result) and module) && function_exported?(module, :selections, 3),
+      do: module.selections(organization_id, mission_id, result.entries),
+      else: %{}
+  end
+
+  defp with_selections(summary, result), do: Map.put(summary, :selections, result.selections)
 
   defp guarded(nil), do: nil
 

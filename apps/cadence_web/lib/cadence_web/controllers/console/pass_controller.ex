@@ -1,6 +1,6 @@
 defmodule CadenceWeb.Console.PassController do
   @moduledoc """
-  `GET /api/console/v1/missions/:mission_id/passes` (ops M7 = scheduling S1) and one pass,
+  `GET /api/v1/missions/:mission_id/passes` (ops M7 = scheduling S1) and one pass,
   `GET …/passes/:id` (U32). Contract: docs/apogee/api/contacts.md.
   """
 
@@ -14,25 +14,24 @@ defmodule CadenceWeb.Console.PassController do
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Reads.ActionQueue.AttentionItems
   alias Cadence.Reads.{Attention, PassContactFields, Passes, PassUplink}
-  alias CadenceWeb.Console.{PassJSON, PassListParams, Problem, WindowParams}
+  alias CadenceWeb.Console.{PassJSON, PassListParams, Problem, WindowPageParams, WindowParams}
 
   @max_span_s 7 * 86_400
 
   def index(conn, params) do
     with {:ok, window} <-
            WindowParams.parse(PassListParams.with_defaults(params), max_span_s: @max_span_s),
-         {:ok, filters} <- PassListParams.parse(params) do
-      result =
-        Passes.load(
-          org_id(conn),
-          mission_id(conn),
-          window.from,
-          window.to,
-          Map.put(filters, :spacecraft_id, window.spacecraft_id)
-        )
-
-      json(conn, %{data: PassJSON.passes(decorate(conn, result))})
+         {:ok, filters} <- PassListParams.parse(params),
+         {:ok, page} <- WindowPageParams.parse(params, 500),
+         filters = filters |> Map.merge(page) |> Map.put(:spacecraft_id, window.spacecraft_id),
+         {:ok, result} <-
+           Passes.page(org_id(conn), mission_id(conn), window.from, window.to, filters) do
+      json(conn, %{
+        data: PassJSON.passes(decorate(conn, result)),
+        meta: %{next_cursor: result.next_cursor}
+      })
     else
+      {:error, :invalid_cursor} -> WindowPageParams.cursor_error(conn)
       {:error, {:invalid_params, details}} -> Problem.respond(conn, :invalid_params, details)
     end
   end

@@ -31,7 +31,7 @@ export {
 } from "./model.ts";
 export {
   useEpisodeDetail,
-  usePointAlarms,
+  useSisterAlarms,
   usePointTrend,
   useSpacecraftAlarms,
   useSpacecraftEpisodes,

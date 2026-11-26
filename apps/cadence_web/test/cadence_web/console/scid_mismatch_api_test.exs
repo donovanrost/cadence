@@ -70,7 +70,7 @@ defmodule CadenceWeb.Console.ScidMismatchAPITest do
 
     %{
       conn: TestFixtures.member_conn(user),
-      base: "/api/console/v1/missions/#{mission}",
+      base: "/api/v1/missions/#{mission}",
       reservation: booked.reservation,
       craft: craft
     }

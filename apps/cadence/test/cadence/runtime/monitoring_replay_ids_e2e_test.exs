@@ -3,7 +3,7 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
   DECISIONS #99, the end-to-end test (lead 11-17: required before #99's restart). A live mission
   runtime with a catalog limit takes journal-positioned TM frames; the limit fires and the alarm
   episode and event are written with replay-safe ids. Then the crash window #99 exists for: the
-  effects were written but the partition's semantic commit didn't survive. The partition owner is
+  effects were written but the partition's semantic state didn't survive. The partition owner is
   killed and recovers from the store (state from before the input), and the journal replays the
   same bytes, once as the same evidence and once re-cut mid-frame (another batching). Each replay
   re-derives the same transition and finds the same ids: no new rows, no MM_REPLAY_ID_CONFLICT.
@@ -17,6 +17,7 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
   alias Cadence.Applications.SpacecraftConfiguration.{Drafts, Review}
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Catalog.SpacecraftConfigurationInput
+  alias Cadence.CompositionFixtures
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Control.Configuration
   alias Cadence.Control.MissionRuntime, as: ControlMissionRuntime
@@ -76,7 +77,12 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
     profile = profile!(c, revision.catalog_revision_id)
 
     apply!(c, [
-      update("spacecraft_profile", profile, "catalog_revision_id", limited.catalog_revision_id)
+      update(
+        "spacecraft_profile",
+        profile,
+        "composition_id",
+        pin!(c, limited.catalog_revision_id)
+      )
     ])
 
     readmit!(c)
@@ -122,6 +128,272 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
     refute log =~ "MM_REPLAY_ID_CONFLICT"
   end
 
+  # #161/#162: a sample's id comes from its packet (the journal position), not from the evidence
+  # that carried it, so a replay cut into other batches re-derives the same sample ids, and the
+  # monitoring evaluation and transition ids built over them: nothing is written twice.
+  test "a re-cut replay re-derives the same sample ids, and no evaluation or transition twice",
+       c do
+    raise_frames = frames(mode: 50, aux: 0, sequence: 1)
+
+    log =
+      capture_log(fn ->
+        first = ingest!(evidence(c, raise_frames, 0))
+        assert transition?(first, :critical)
+        rows = monitoring_rows(c)
+        assert [_transition] = rows.transitions
+        assert [_evaluation] = rows.evaluations
+
+        crash_window!(c)
+        cut = div(@frame_size, 2) + 1
+        <<head::binary-size(^cut), tail::binary>> = raise_frames
+        refute transition?(ingest!(evidence(c, head, 0)), :critical)
+        replay = ingest!(evidence(c, tail, cut))
+        assert transition?(replay, :critical)
+
+        assert update_ids(replay) == update_ids(first)
+        assert monitoring_rows(c) == rows
+      end)
+
+    refute log =~ "MM_REPLAY_ID_CONFLICT"
+  end
+
+  # #692: the reply names the partition whose snapshot gates the journal's durable ack, and a
+  # stopping partition writes that snapshot, with the offset its stream is processed through.
+  test "a stopping partition snapshots its semantic state and the stream offset", c do
+    bytes = frames(mode: 50, aux: 0, sequence: 1)
+    key = %PartitionKey{affinity: :source_endpoint, value: c.endpoint.source_endpoint_id}
+
+    result = ingest!(evidence(c, bytes, 0))
+    assert result.semantic_snapshot_partition == PartitionKey.identifier(key)
+
+    snapshots = fn ->
+      Repo.all(
+        from(s in "semantic_runtime_snapshots",
+          where: s.mission_id == ^c.mission.mission_id,
+          select: s.resume
+        )
+      )
+    end
+
+    # The stop flushes it; the cadence (60 s, or 2 s idle on a 1 s tick) has not run yet.
+    {:ok, owner} = PartitionOwner.lookup(c.mission.mission_id, key)
+    :ok = PartitionOwner.stop(owner)
+
+    assert [%{@stream => offset}] = snapshots.()
+    assert offset == byte_size(bytes)
+  end
+
+  # #692, the crash test for the snapshot design: a partition is killed mid-window, between two
+  # snapshots. It recovers from the snapshot, the journal replays from the snapshot's offset (and,
+  # to be sure, also from before it), and the state ends identical to the uninterrupted partition's,
+  # with no new effect rows.
+  test "a partition killed between snapshots recovers from the snapshot and the journal replay",
+       c do
+    raise_frames = frames(mode: 50, aux: 0, sequence: 1)
+    clear_frames = frames(mode: 0, aux: 0, sequence: 2)
+    clear_at = byte_size(raise_frames)
+    # The journal's replay hands over the same evidence (its id derives from stream and offsets).
+    raise_evidence = evidence(c, raise_frames, 0)
+    clear_evidence = evidence(c, clear_frames, clear_at)
+
+    log =
+      capture_log(fn ->
+        assert transition?(ingest!(raise_evidence), :critical)
+        snapshot_now!(c)
+
+        # After the snapshot, never snapshotted: the clear, and the effects it wrote.
+        assert transition?(ingest!(clear_evidence), :normal)
+        uninterrupted = semantic_state(c)
+        effects = effect_ids(c)
+        assert [%{resume: %{@stream => ^clear_at}}] = snapshot_rows(c)
+        assert [_episode] = effects.episodes
+
+        kill_partition!(c)
+
+        # The recovered owner holds what the snapshot did: the raise, not the clear.
+        recovered = semantic_state(c)
+        refute recovered == uninterrupted
+        assert recovered.sequence < uninterrupted.sequence
+
+        # The journal replays from the snapshot's offset: the clear, again.
+        assert transition?(ingest!(clear_evidence), :normal)
+        assert semantic_state(c) == uninterrupted
+        assert effect_ids(c) == effects
+
+        # The journal replaying frames the snapshot already holds changes nothing: the state is
+        # not applied to twice, and the same effects are found.
+        ingest!(raise_evidence)
+        assert semantic_state(c) == uninterrupted
+        assert effect_ids(c) == effects
+        assert [%{state: "cleared"}] = episodes(c)
+      end)
+
+    refute log =~ "MM_REPLAY_ID_CONFLICT"
+  end
+
+  # Journal off (DECISIONS #95): there is no journal to replay, and no per-batch log. A crash loses
+  # the semantic memory since the last snapshot, at most 60 s of it; recovery is the snapshot. This
+  # pins what is lost (latest values, algorithm memory, monitoring since the snapshot) and what is
+  # not (the alarm episode, which is a projection written with the batch).
+  test "with no journal to replay, a crash loses the semantic memory since the last snapshot",
+       c do
+    raise_frames = frames(mode: 50, aux: 0, sequence: 1)
+
+    capture_log(fn ->
+      assert transition?(ingest!(evidence(c, raise_frames, 0)), :critical)
+      before = semantic_state(c)
+      assert map_size(before.latest) > 0
+      assert snapshot_rows(c) == []
+      assert [%{state: "active"}] = episodes(c)
+
+      kill_partition!(c)
+
+      lost = semantic_state(c)
+      assert lost.latest == %{}
+      assert lost.algorithm_state == %{}
+      assert lost.sequence == 0
+      # The projected alarm survives; the monitoring prior is re-seeded from it.
+      assert [%{state: "active"}] = episodes(c)
+      assert Enum.all?(Map.values(lost.monitoring_state), &(&1.effective_state != :normal))
+    end)
+  end
+
+  # #831: after a node restart the ETS current-value store is empty until each spacecraft's next
+  # frame. A starting owner seeds it from QuestDB's latest values for its source endpoint, before
+  # any new frame, each with its own (old) time. (The test runtime records into Postgres and has no
+  # QuestDB, so the owner is started by hand under an ETS store with a QuestDB answer injected.)
+  test "a starting owner seeds the ETS store from the history store before any new frame", c do
+    alias Cadence.Telemetry.{CurrentValueStore, HistoryStore}
+    alias Cadence.Telemetry.CurrentValueStore.ETS
+    alias Cadence.Telemetry.Storage.QuestDB.ObservationReader
+
+    mission = c.mission.mission_id
+    endpoint = c.endpoint.source_endpoint_id
+    key = %PartitionKey{affinity: :source_endpoint, value: endpoint}
+    old = ~U[2026-11-20 10:00:00Z]
+
+    columns = ObservationReader.select_columns()
+
+    row = fn point, value ->
+      values = %{
+        "sample_id" => "q-#{point}",
+        "mission_id" => mission,
+        "spacecraft_id" => c.craft.spacecraft_id,
+        "point_id" => point,
+        "point_name" => point,
+        "packet_definition_id" => "pd",
+        "packet_definition_version" => 1,
+        "packet_id" => "pk",
+        "evidence_id" => "ev",
+        "value_kind" => "double",
+        "value_double" => value,
+        "quality_state" => "good",
+        "generation_time" => DateTime.to_iso8601(old),
+        "receipt_time" => DateTime.to_iso8601(old),
+        "realm" => "flight",
+        "data_source_id" => "managed_questdb_primary",
+        "binding_id" => "default_flight_telemetry",
+        "source_endpoint_id" => endpoint,
+        "validity_state" => "canonical"
+      }
+
+      Enum.map(columns, &Map.get(values, &1))
+    end
+
+    exec = fn _sql, _opts ->
+      {:ok,
+       %{
+         "columns" => Enum.map(columns, &%{"name" => &1}),
+         "dataset" => [
+           row.("HEALTH.mode", 50.0),
+           row.("HEALTH.aux", 7.0),
+           row.("HEALTH.other", 1.0)
+         ]
+       }}
+    end
+
+    cache = CurrentValueStore.policy(module: ETS)
+    start_supervised!(CurrentValueStore.child_spec(cache))
+    assert CurrentValueStore.latest_values_for_mission(cache, mission, []) == []
+
+    {:ok, spec} = MissionCoordinator.active_spec(mission)
+    configured = Persistence.configured_policy()
+
+    policy = %{
+      configured
+      | telemetry_storage: %{configured.telemetry_storage | current_value_store_policy: cache}
+    }
+
+    capture_log(fn ->
+      {:ok, owner} =
+        PartitionOwner.start_link(
+          mission_id: mission,
+          partition_key: key,
+          active_activation: spec,
+          binding_set: spec.binding_set,
+          persistence_policy: policy,
+          register?: false,
+          current_value_seed: [
+            history_store_policy: %{
+              backend: HistoryStore.QuestDB,
+              backend_opts: [exec_fun: exec]
+            },
+            spread_ms: 0,
+            notify: self()
+          ]
+        )
+
+      on_exit(fn -> if Process.alive?(owner), do: Process.exit(owner, :kill) end)
+
+      # Before any frame: every point the endpoint wrote is back, as old as it is.
+      assert_receive {:current_values_seeded, {:ok, 3}}, 2_000
+
+      values =
+        Map.new(
+          CurrentValueStore.latest_values_for_mission(cache, mission, []),
+          &{&1.point_id, &1}
+        )
+
+      assert %{engineering_value: 50.0, receipt_time: at} = values["HEALTH.mode"]
+      assert DateTime.compare(at, old) == :eq
+      assert %{engineering_value: 7.0} = values["HEALTH.aux"]
+      # A point no semantic plan evaluates is seeded too.
+      assert %{engineering_value: 1.0} = values["HEALTH.other"]
+    end)
+  end
+
+  # A snapshot when the cadence would not take one yet (60 s, or 2 s idle): the tick says due.
+  defp snapshot_now!(c) do
+    key = %PartitionKey{affinity: :source_endpoint, value: c.endpoint.source_endpoint_id}
+    {:ok, owner} = PartitionOwner.lookup(c.mission.mission_id, key)
+
+    :sys.replace_state(owner, fn state ->
+      %{
+        state
+        | semantic_snapshot_config: Keyword.put(state.semantic_snapshot_config, :idle_ms, 0)
+      }
+    end)
+
+    send(owner, :semantic_snapshot_tick)
+    _ = :sys.get_state(owner)
+    assert [_snapshot] = snapshot_rows(c)
+  end
+
+  defp snapshot_rows(c) do
+    Repo.all(
+      from(s in "semantic_runtime_snapshots",
+        where: s.mission_id == ^c.mission.mission_id,
+        select: %{resume: s.resume}
+      )
+    )
+  end
+
+  defp semantic_state(c) do
+    key = %PartitionKey{affinity: :source_endpoint, value: c.endpoint.source_endpoint_id}
+    {:ok, owner} = PartitionOwner.lookup(c.mission.mission_id, key)
+    :sys.get_state(owner).semantic_state
+  end
+
   # api-ops' wedge (review 11-17). A partition that starts EMPTY (its checkpoint missing, or a
   # basis change) is seeded from the latest alarm states, which hold only NON-normal states and
   # can be later than the frame the journal replays. F1 raises mode and aux; F2 clears aux. After
@@ -153,11 +425,7 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
     refute log =~ "MM_REPLAY_ID_CONFLICT"
   end
 
-  @semantic_tables [
-    "semantic_runtime_commits",
-    "semantic_runtime_heads",
-    "semantic_runtime_checkpoints"
-  ]
+  @semantic_tables ["semantic_runtime_heads", "semantic_runtime_snapshots"]
 
   defp drop_semantic_rows!(c) do
     for table <- Enum.reverse(@semantic_tables) do
@@ -167,6 +435,23 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
 
   defp transitions(%{semantic_result: %{monitoring_results: results}}),
     do: Enum.filter(results, & &1.transition)
+
+  defp update_ids(%{semantic_result: %{parameter_updates: updates}}),
+    do: updates |> Enum.map(& &1.update_id) |> Enum.sort()
+
+  defp monitoring_rows(c) do
+    mission = c.mission.mission_id
+
+    ids = fn table, column ->
+      Repo.all(from(row in table, where: row.mission_id == ^mission, select: field(row, ^column)))
+      |> Enum.sort()
+    end
+
+    %{
+      evaluations: ids.("semantic_monitoring_evaluations", :evaluation_id),
+      transitions: ids.("semantic_alarm_transitions", :transition_id)
+    }
+  end
 
   defp point(result, update_id) do
     Enum.find_value(result.semantic_result.parameter_updates, fn update ->
@@ -323,7 +608,7 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
           "display_name" => "Replay e2e profile",
           "downlink_protocol" => "tm",
           "uplink_protocol" => "tc",
-          "catalog_revision_id" => catalog,
+          "composition_id" => pin!(c, catalog),
           "frame_parameters" => %{"frame_size" => @frame_size, "ocf_length" => 0}
         }
       }
@@ -343,6 +628,9 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
 
     id
   end
+
+  # D3 (#544): a profile pins its catalog's composition; Cadence derives the catalog revision.
+  defp pin!(c, catalog), do: CompositionFixtures.pin!(c.org, c.mission.mission_id, catalog)
 
   defp update(kind, id, path, value),
     do: %{kind: kind, action: :update, entity_id: id, changes: [%{path: path, value: value}]}

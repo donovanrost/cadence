@@ -59,25 +59,75 @@ describe("#235 What changes panel", () => {
     expect(text).toContain("EARENDIL-1, EARENDIL-2, EARENDIL-3 and 2 more");
     expect(text).toContain("Catalog revision: catalog rev 13 → catalog rev 14");
     expect(text).toContain("No changes on 1 spacecraft: EARENDIL-9.");
-    const showAll = w.findAll("button").find((b) => b.text() === "Show all 5");
-    await showAll?.trigger("click");
+    const names = () => w.findAll("li").map((li) => li.text());
+    const toggle = () =>
+      w.findAll("button").find((b) => /^(Show names \(5\)|Hide names)$/.test(b.text()));
+    expect(toggle()?.text()).toBe("Show names (5)");
+    await toggle()?.trigger("click");
     await flushPromises();
     expect(fetch.mock.calls[0]?.[0]).toContain(
       "/activations/act_1/configuration-changes?group=0&offset=0",
     );
-    expect(w.text()).toContain("EARENDIL-1, EARENDIL-2, EARENDIL-3, EARENDIL-4, EARENDIL-5");
+    // #176: a real list, one name per item, not a comma paragraph.
+    expect(names()).toEqual(expect.arrayContaining(["EARENDIL-1", "EARENDIL-4", "EARENDIL-5"]));
     // #244 (B3, A5): a disclosure that stays mounted, so focus isn't dropped.
-    const toggle = () => w.findAll("button").find((b) => /^Show (all 5|first 3)$/.test(b.text()));
-    expect(toggle()?.text()).toBe("Show first 3");
+    expect(toggle()?.text()).toBe("Hide names");
     expect(toggle()?.attributes("aria-expanded")).toBe("true");
     await toggle()?.trigger("click");
-    expect(toggle()?.text()).toBe("Show all 5");
+    expect(toggle()?.text()).toBe("Show names (5)");
     expect(toggle()?.attributes("aria-expanded")).toBe("false");
-    expect(w.text()).not.toContain("EARENDIL-4, EARENDIL-5");
+    expect(names()).not.toContain("EARENDIL-4");
+    // Closing keeps what's loaded: opening again reads nothing.
     await toggle()?.trigger("click");
     await flushPromises();
-    expect(w.text()).toContain("EARENDIL-4, EARENDIL-5");
+    expect(names()).toContain("EARENDIL-4");
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("pages a big group's names: Showing 100 of 250, then Load more by offset (#176)", async () => {
+    const page = (from: number, to: number, next: number | null) =>
+      new Response(
+        JSON.stringify({
+          data: {
+            spacecraft: Array.from({ length: to - from }, (_, i) => craft(from + i)),
+            next_offset: next,
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    const fetch = vi.fn<(url: string) => Promise<Response>>();
+    fetch.mockResolvedValueOnce(page(0, 100, 100)).mockResolvedValueOnce(page(100, 200, 200));
+    vi.stubGlobal("fetch", fetch);
+    const big = configurationChangesReader({
+      groups: [
+        {
+          rows: [catalogRow],
+          first_start: false,
+          telemetry_enabled: true,
+          count: 250,
+          spacecraft: [1, 2, 3].map(craft),
+        },
+      ],
+      total: 250,
+    });
+    const w = mount(ChangesPanel, {
+      props: { changes: big, requestKey, index: "R2" },
+      global: { stubs },
+    });
+    await w
+      .findAll("button")
+      .find((b) => b.text() === "Show names (250)")
+      ?.trigger("click");
+    await flushPromises();
+    expect(w.findAll("li").filter((li) => li.text().startsWith("EARENDIL-"))).toHaveLength(100);
+    expect(w.text()).toContain("Showing 100 of 250");
+    await w
+      .findAll("button")
+      .find((b) => b.text() === "Load more")
+      ?.trigger("click");
+    await flushPromises();
+    expect(fetch.mock.calls[1]?.[0]).toContain("group=0&offset=100");
+    expect(w.text()).toContain("Showing 200 of 250");
   });
 
   it("keeps Approve off while a change can't be shown, and Reject on", async () => {

@@ -2,7 +2,7 @@ defmodule Cadence.Accounts.FixturePasswordsTest do
   @moduledoc """
   #242: the console e2e personas' password set. It's narrow by construction: only an existing
   apogee-qa persona, never the environment admin or a person's account, only with the dev/test
-  flag on, at least 12 characters and not the public default. It signs out every session, records
+  flag on, and at least 12 characters. It signs out every session, records
   the act (never the value), and nothing in `lib/` calls it.
   """
   use Cadence.DataCase, async: false
@@ -68,8 +68,8 @@ defmodule Cadence.Accounts.FixturePasswordsTest do
       assert_unchanged(c.person)
     end
 
-    test "refuses a short password and the public default", c do
-      for bad <- ["short-pass", FixturePasswords.default_password()] do
+    test "refuses a short password", c do
+      for bad <- ["short-pass"] do
         assert {:error, {:invalid, %{password: _}}} =
                  FixturePasswords.set(c.persona.user_id, bad, "apogee-qa")
       end
@@ -110,18 +110,14 @@ defmodule Cadence.Accounts.FixturePasswordsTest do
   end
 
   describe "the script's environment" do
-    test "the password comes from E2E_PERSONA_PASSWORD, else the public default" do
+    test "the password requires E2E_PERSONA_PASSWORD" do
       assert {:ok, @new, :env} =
                FixturePasswords.persona_password(%{"E2E_PERSONA_PASSWORD" => @new})
 
-      default = FixturePasswords.default_password()
-      assert {:ok, ^default, :default} = FixturePasswords.persona_password(%{})
-
-      assert {:ok, ^default, :default} =
-               FixturePasswords.persona_password(%{"E2E_PERSONA_PASSWORD" => ""})
+      assert {:error, _} = FixturePasswords.persona_password(%{})
+      assert {:error, _} = FixturePasswords.persona_password(%{"E2E_PERSONA_PASSWORD" => ""})
 
       assert {:error, _} = FixturePasswords.persona_password(%{"E2E_PERSONA_PASSWORD" => "short"})
-      assert {:error, _} = FixturePasswords.persona_password(%{"E2E_PERSONA_PASSWORD" => default})
     end
 
     test "a reset needs E2E_RESET_PERSONA_PASSWORDS=1 and a password of its own" do

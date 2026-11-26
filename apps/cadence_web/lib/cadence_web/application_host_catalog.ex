@@ -233,17 +233,8 @@ defmodule CadenceWeb.ApplicationHostCatalog do
         %Scope{},
         %{host_context: %HostContext{placement: placement} = host_context}
       )
-      when placement in [:organization, :user, :admin] do
-    case placement do
-      :organization ->
-        %{"scope" => "organization", "organizationId" => host_context.organization_id}
-
-      :user ->
-        %{"scope" => "user", "userId" => host_context.user_id}
-
-      :admin ->
-        %{"scope" => "admin"}
-    end
+      when placement == :user do
+    %{"scope" => "user", "userId" => host_context.user_id}
   end
 
   def scope_document(
@@ -262,7 +253,7 @@ defmodule CadenceWeb.ApplicationHostCatalog do
         %Scope{} = current_scope,
         %{host_context: %HostContext{placement: placement} = host_context}
       )
-      when placement in [:organization, :user, :admin] do
+      when placement == :user do
     %{
       "organizationId" => host_context.organization_id,
       "userId" => host_context.user_id,
@@ -296,7 +287,7 @@ defmodule CadenceWeb.ApplicationHostCatalog do
 
   @spec bridge_base_path(route_context()) :: binary()
   def bridge_base_path(%{host_context: %HostContext{placement: placement}})
-      when placement in [:organization, :user, :admin],
+      when placement == :user,
       do: "/api/cadence/application-host/v1"
 
   def bridge_base_path(%{host_context: %HostContext{placement: :mission, mission_id: mission_id}}) do
@@ -312,184 +303,6 @@ defmodule CadenceWeb.ApplicationHostCatalog do
       }) do
     "/api/cadence/application-host/v1/missions/" <>
       safe_segment(mission_id) <> "/spacecraft/" <> safe_segment(spacecraft_id)
-  end
-
-  @doc "Selects the admitted native or federated workspace path for an application."
-  @spec workspace_href(Scope.t(), route_context(), binary(), keyword()) ::
-          {:ok, binary()} | {:error, :invalid_application_request}
-  def workspace_href(%Scope{} = scope, route_context, application_key, opts \\ [])
-      when is_binary(application_key) do
-    with :ok <- validate_route_identifiers(route_context, application_key) do
-      case admit_application(scope, route_context, application_key, nil, opts) do
-        {:ok, %{surface: surface, release: %{federation: federation}}} ->
-          href =
-            application_href(host_base_path(route_context), application_key, surface.surface_id)
-
-          {:ok,
-           if(
-             federation in [:module_federation, :native_federation],
-             do: href <> "/federated",
-             else: href
-           )}
-
-        {:error, reason} when reason == :no_history or is_tuple(reason) ->
-          {:error, reason}
-
-        {:error, _reason} ->
-          fallback_href(route_context, application_key, nil)
-      end
-    end
-  end
-
-  @doc "Returns the Phoenix LiveView fallback for an admitted application surface."
-  @spec fallback_href(route_context(), binary(), binary() | nil) ::
-          {:ok, binary()} | {:error, :invalid_application_request}
-  def fallback_href(route_context, application_key, surface_id),
-    do: fallback_href(route_context, application_key, surface_id, nil)
-
-  @spec fallback_href(route_context(), binary(), binary() | nil, binary() | nil) ::
-          {:ok, binary()} | {:error, :invalid_application_request}
-  def fallback_href(
-        %{host_context: %HostContext{placement: placement}} = route_context,
-        application_key,
-        surface_id,
-        subject_id
-      )
-      when placement in [:organization, :user, :admin] and is_binary(application_key) do
-    with :ok <- validate_route_identifiers(route_context, application_key),
-         :ok <- validate_optional_identifier(surface_id),
-         :ok <- validate_optional_identifier(subject_id) do
-      {:ok, generic_fallback_href(route_context, application_key, surface_id, subject_id)}
-    end
-  end
-
-  def fallback_href(
-        %{host_context: %HostContext{placement: :mission, mission_id: mission_id}},
-        application_key,
-        surface_id,
-        subject_id
-      )
-      when is_binary(application_key) do
-    with :ok <-
-           validate_route_identifiers(
-             %{host_context: %HostContext{placement: :mission, mission_id: mission_id}},
-             application_key
-           ),
-         :ok <- validate_optional_identifier(surface_id),
-         :ok <- validate_optional_identifier(subject_id) do
-      {:ok,
-       generic_fallback_href(
-         %{host_context: %HostContext{placement: :mission, mission_id: mission_id}},
-         application_key,
-         surface_id,
-         subject_id
-       )}
-    end
-  end
-
-  def fallback_href(
-        %{
-          host_context: %HostContext{
-            placement: :spacecraft,
-            mission_id: mission_id,
-            spacecraft_id: spacecraft_id
-          }
-        },
-        application_key,
-        surface_id,
-        subject_id
-      )
-      when is_binary(application_key) do
-    route_context = %{
-      host_context: %HostContext{
-        placement: :spacecraft,
-        mission_id: mission_id,
-        spacecraft_id: spacecraft_id
-      }
-    }
-
-    with :ok <- validate_route_identifiers(route_context, application_key),
-         :ok <- validate_optional_identifier(surface_id),
-         :ok <- validate_optional_identifier(subject_id) do
-      {:ok, generic_fallback_href(route_context, application_key, surface_id, subject_id)}
-    end
-  end
-
-  defp generic_fallback_href(route_context, application_key, surface_id, subject_id) do
-    base_path = host_base_path(route_context)
-
-    case surface_fallback(route_context, application_key, surface_id, subject_id) do
-      {:ok, path} -> base_path <> path
-      :error -> application_href(base_path, application_key, surface_id)
-    end
-  end
-
-  defp surface_fallback(
-         %{host_context: %HostContext{placement: placement}},
-         application_key,
-         surface_id,
-         subject_id
-       )
-       when is_binary(application_key) and is_binary(surface_id) do
-    with {:ok, definition} <- definition_for(application_key),
-         {:ok, surface} <- ApplicationRegistry.fetch_surface(definition, placement, surface_id),
-         fallback_path when is_binary(fallback_path) <-
-           Map.get(surface.navigation, :fallback_path) do
-      render_surface_fallback(fallback_path, surface.navigation, subject_id)
-    else
-      _invalid -> :error
-    end
-  end
-
-  defp surface_fallback(
-         %{host_context: %HostContext{placement: placement}} = route_context,
-         application_key,
-         nil,
-         subject_id
-       )
-       when is_binary(application_key) do
-    with {:ok, definition} <- definition_for(application_key),
-         {:ok, surface} <- ApplicationRegistry.fetch_default_surface(definition, placement) do
-      surface_fallback(route_context, application_key, surface.surface_id, subject_id)
-    else
-      _invalid -> :error
-    end
-  end
-
-  defp surface_fallback(_route_context, _application_key, _surface_id, _subject_id), do: :error
-
-  defp definition_for(application_key) do
-    case ApplicationRegistry.fetch(application_key) do
-      {:ok, definition} -> {:ok, definition}
-      {:error, _reason} -> catalog_definition(application_key)
-    end
-  end
-
-  defp catalog_definition(application_key) do
-    case CatalogRegistry.fetch(application_key) do
-      {:ok, %CatalogContribution{definition: definition}} -> {:ok, definition}
-      {:error, _reason} -> {:error, :unknown_application}
-    end
-  end
-
-  defp render_surface_fallback(path, navigation, subject_id) do
-    case String.contains?(path, ":subject") do
-      true -> render_subject_fallback(path, navigation, subject_id)
-      false -> {:ok, path}
-    end
-  end
-
-  defp render_subject_fallback(path, navigation, subject_id) do
-    case Ids.path_segment(subject_id) do
-      {:ok, segment} ->
-        {:ok, String.replace(path, ":subject", segment)}
-
-      {:error, :invalid_identifier} ->
-        case Map.get(navigation, :fallback_parent_path) do
-          parent when is_binary(parent) -> {:ok, parent}
-          _missing -> :error
-        end
-    end
   end
 
   defp applications(current_scope, route_context, opts, release_snapshot) do
@@ -539,7 +352,7 @@ defmodule CadenceWeb.ApplicationHostCatalog do
          manifest_url,
          release_snapshot
        )
-       when placement in [:organization, :user, :admin] do
+       when placement == :user do
     with {:ok, contributed} <-
            contributed_applications(current_scope, route_context, manifest_url, release_snapshot) do
       finalize_catalog_applications(contributed)
@@ -722,7 +535,7 @@ defmodule CadenceWeb.ApplicationHostCatalog do
          surface_id,
          release_snapshot
        )
-       when placement in [:organization, :user, :admin] and is_binary(application_key) do
+       when placement == :user and is_binary(application_key) do
     with :ok <- authorize_catalog_access(current_scope, route_context),
          {:ok,
           %CatalogContribution{
@@ -1074,86 +887,11 @@ defmodule CadenceWeb.ApplicationHostCatalog do
     }
   end
 
-  defp application_href(base_path, application_key, nil),
-    do: base_path <> "/applications/" <> safe_segment(application_key)
-
-  defp application_href(base_path, application_key, surface_id),
-    do:
-      base_path <>
-        "/applications/" <> safe_segment(application_key) <> "/" <> safe_segment(surface_id)
-
-  defp host_base_path(%{host_context: %HostContext{placement: :mission, mission_id: mission_id}}),
-    do: "/missions/" <> safe_segment(mission_id)
-
-  defp host_base_path(%{host_context: %HostContext{placement: :organization}}), do: ""
-  defp host_base_path(%{host_context: %HostContext{placement: :user}}), do: "/account"
-  defp host_base_path(%{host_context: %HostContext{placement: :admin}}), do: "/admin"
-
-  defp host_base_path(%{
-         host_context: %HostContext{
-           placement: :spacecraft,
-           mission_id: mission_id,
-           spacecraft_id: spacecraft_id
-         }
-       }),
-       do:
-         "/missions/" <> safe_segment(mission_id) <> "/spacecraft/" <> safe_segment(spacecraft_id)
-
   defp safe_segment(value) do
     case Ids.path_segment(value) do
       {:ok, segment} -> segment
       {:error, :invalid_identifier} -> throw(:invalid_application_request)
     end
-  end
-
-  defp validate_route_identifiers(
-         %{
-           host_context: %HostContext{placement: :organization, organization_id: organization_id}
-         },
-         application_key
-       ),
-       do: validate_identifiers([organization_id, application_key])
-
-  defp validate_route_identifiers(
-         %{host_context: %HostContext{placement: :user, user_id: user_id}},
-         application_key
-       ),
-       do: validate_identifiers([user_id, application_key])
-
-  defp validate_route_identifiers(
-         %{host_context: %HostContext{placement: :admin}},
-         application_key
-       ),
-       do: validate_identifiers([application_key])
-
-  defp validate_route_identifiers(
-         %{host_context: %HostContext{placement: :mission, mission_id: mission_id}},
-         application_key
-       ),
-       do: validate_identifiers([mission_id, application_key])
-
-  defp validate_route_identifiers(
-         %{
-           host_context: %HostContext{
-             placement: :spacecraft,
-             mission_id: mission_id,
-             spacecraft_id: spacecraft_id
-           }
-         },
-         application_key
-       ),
-       do: validate_identifiers([mission_id, spacecraft_id, application_key])
-
-  defp validate_route_identifiers(_route_context, _application_key),
-    do: {:error, :invalid_application_request}
-
-  defp validate_optional_identifier(nil), do: :ok
-  defp validate_optional_identifier(value), do: validate_identifiers([value])
-
-  defp validate_identifiers(values) do
-    if Enum.all?(values, &match?({:ok, _value}, Ids.path_segment(&1))),
-      do: :ok,
-      else: {:error, :invalid_application_request}
   end
 
   defp actor_document(%Scope{user: %{display_name: display_name}}) do
@@ -1168,19 +906,10 @@ defmodule CadenceWeb.ApplicationHostCatalog do
          %Scope{} = current_scope,
          %{host_context: %HostContext{placement: placement}}
        )
-       when placement in [:organization, :user, :admin] do
-    case placement do
-      :organization ->
-        if is_binary(current_scope.organization_id), do: :ok, else: {:error, :forbidden}
-
-      :user ->
-        if current_scope.actor_kind == :user and not is_nil(current_scope.user),
-          do: :ok,
-          else: {:error, :authenticated_user_required}
-
-      :admin ->
-        if Scope.admin_mode?(current_scope), do: :ok, else: {:error, :forbidden}
-    end
+       when placement == :user do
+    if current_scope.actor_kind == :user and not is_nil(current_scope.user),
+      do: :ok,
+      else: {:error, :authenticated_user_required}
   end
 
   defp authorize_catalog_access(

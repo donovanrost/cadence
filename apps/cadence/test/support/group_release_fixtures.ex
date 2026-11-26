@@ -68,7 +68,8 @@ defmodule Cadence.GroupReleaseFixtures do
             @org,
             @mission,
             request.command_request_id,
-            %{"user_id" => "approver"}
+            %{"user_id" => "approver"},
+            admin_mode: false
           )
 
         # Only group submission makes a member (four-eyes audit 11-17, P0): the standalone create
@@ -113,7 +114,7 @@ defmodule Cadence.GroupReleaseFixtures do
       )
 
     {:ok, endpoint} =
-      Cadence.SourceEndpoints.persist_source_endpoint(
+      Cadence.SourceEndpointFixtures.persist(
         @org,
         SourceEndpoint.new(%{
           source_endpoint_id: "source-endpoint-" <> name,

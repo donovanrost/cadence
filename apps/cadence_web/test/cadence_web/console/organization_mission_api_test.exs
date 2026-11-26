@@ -16,7 +16,7 @@ defmodule CadenceWeb.Console.OrganizationMissionAPITest do
       admin: admin,
       member: member,
       existing: existing,
-      base: "/api/console/v1/organizations/#{org.organization_id}/missions"
+      base: "/api/v1/organizations/#{org.organization_id}/missions"
     }
   end
 

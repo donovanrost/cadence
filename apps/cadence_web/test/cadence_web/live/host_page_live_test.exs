@@ -42,7 +42,6 @@ defmodule CadenceWeb.HostPageLiveTest do
   test "ordinary feature navigation retains the LiveView and refreshes shell context" do
     {conn, organization, mission} = navigation_fixture()
     second = TestFixtures.persist_mission!(organization)
-    spacecraft = TestFixtures.persist_spacecraft!(mission)
     # §11c A: "/" left the host (it redirects to the console), so navigation starts in a mission.
     {:ok, view, _html} = live(conn, "/missions/#{second.mission_id}/ops/explore")
     pid = view.pid
@@ -51,10 +50,7 @@ defmodule CadenceWeb.HostPageLiveTest do
           # §11c B: the mission's setup pages redirect to the console; these stay in the host.
           {"/missions/#{mission.mission_id}/ops", "ops", mission.mission_id},
           {"/missions/#{mission.mission_id}/ops/timeline", "ops", mission.mission_id},
-          {"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}",
-           "mission_sidebar", mission.mission_id},
           {"/missions/#{mission.mission_id}/ops/explore", "ops", mission.mission_id},
-          {"/missions/#{mission.mission_id}/ops/activations", "ops", mission.mission_id},
           {"/missions/#{second.mission_id}/ops/explore", "ops", second.mission_id}
         ] do
       render_hook(view, "host:context", %{"path" => path})
@@ -73,26 +69,13 @@ defmodule CadenceWeb.HostPageLiveTest do
     {conn, _organization, mission} = navigation_fixture()
 
     # L7 moved /admin and L13 /provider-accounts to the console; data-operations/manage keeps the
-    # organization-admin policy. §11c A: "/" redirects to the console, so start on the mission.
+    # organization-admin policy. Start on the mission.
     for target <- ["/missions/#{mission.mission_id}/ops/data-operations/manage"] do
       {:ok, view, _html} = live(conn, "/missions/#{mission.mission_id}/ops")
 
-      assert {:error, {:redirect, %{to: "/"}}} =
+      assert {:error, {:redirect, %{to: "/console"}}} =
                render_hook(view, "host:context", %{"path" => target})
     end
-  end
-
-  test "a spacecraft from another mission cannot be selected through a context request" do
-    {conn, organization, mission} = navigation_fixture()
-    other = TestFixtures.persist_mission!(organization)
-    spacecraft = TestFixtures.persist_spacecraft!(other)
-    {:ok, view, _html} = live(conn, "/missions/#{mission.mission_id}/ops")
-    fallback = "/missions/#{mission.mission_id}/spacecraft"
-
-    assert {:error, {:redirect, %{to: ^fallback}}} =
-             render_hook(view, "host:context", %{
-               "path" => "/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}"
-             })
   end
 
   test "revoked browser sessions cannot keep navigating on an existing socket" do
@@ -101,7 +84,7 @@ defmodule CadenceWeb.HostPageLiveTest do
     {:ok, view, _html} = live(conn, path)
     :ok = Cadence.Auth.revoke_user_session(Plug.Conn.get_session(conn, :user_session_token))
 
-    assert {:error, {:redirect, %{to: "/sign-in"}}} =
+    assert {:error, {:redirect, %{to: "/console/sign-in"}}} =
              render_hook(view, "host:context", %{"path" => path})
   end
 

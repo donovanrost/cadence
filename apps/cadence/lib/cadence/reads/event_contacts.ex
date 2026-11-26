@@ -3,13 +3,14 @@ defmodule Cadence.Reads.EventContacts do
   Contact facts for event-log sentences (ux timeline review). A cancelled
   scheduled contact's event carries neither its spacecraft nor its station,
   so they're read from the scheduled contact: the spacecraft from its
-  `spacecraft_runtime:<id>` endpoint ref, the station from its transport.
+  managed source endpoint ref, the station from its transport.
   One lookup per contact on the page; stations and transports once.
   """
 
   alias Cadence.Comms.{StationRefs, TransportStore}
   alias Cadence.Contacts
   alias Cadence.MissionEvents.Entry
+  alias Cadence.SourceEndpoints
 
   @kinds ~w(scheduled_contact_canceled)
 
@@ -96,9 +97,9 @@ defmodule Cadence.Reads.EventContacts do
   defp transport_id(contact), do: (contact.metadata || %{})["transport_id"]
 
   defp spacecraft_id(contact) do
-    Enum.find_value(contact.source_endpoint_refs || [], fn
-      "spacecraft_runtime:" <> id -> id
-      _other -> nil
-    end)
+    Enum.find_value(
+      contact.source_endpoint_refs || [],
+      &SourceEndpoints.spacecraft_id_from_managed_source_endpoint/1
+    )
   end
 end

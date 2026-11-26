@@ -5,7 +5,7 @@ defmodule Cadence.Governance.DecisionRecordRetentionTest do
   refuses UPDATE, DELETE and TRUNCATE, with one test-only bypass honoured only in a test
   database; no lib code that deletes, truncates, drops, prunes or retires names a decision table;
   no foreign key from a decision table cascades a parent's delete; and the bypass setting's name
-  appears nowhere under lib/ or priv/ but its migration.
+  appears nowhere under lib/ or priv/ but the baseline SQL.
   """
   use Cadence.DataCase, async: false
 
@@ -126,12 +126,15 @@ defmodule Cadence.Governance.DecisionRecordRetentionTest do
              "decision table: #{inspect(offenders)}"
   end
 
-  test "the purge setting's name appears in no lib or priv file but its migration" do
+  test "the purge setting's name appears in no lib or priv file but the baseline SQL" do
     files = lib_files() ++ Path.wildcard(Path.join(@root, "apps/*/priv/**/*.{ex,exs,sql}"))
+    baseline = Path.join(@root, "apps/cadence/priv/repo/baseline.sql")
+
+    assert File.read!(baseline) =~ @setting
 
     offenders =
       for file <- files,
-          not String.ends_with?(file, "_decision_records_append_only.exs"),
+          file != baseline,
           File.read!(file) =~ @setting,
           do: Path.relative_to(file, @root)
 

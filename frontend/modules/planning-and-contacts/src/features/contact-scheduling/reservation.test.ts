@@ -162,7 +162,7 @@ test("history links preserve the reviewed change and the independent audit curso
     "/missions/mission-one/ops/contacts/reservation-one?change_id=change-2&before_revision=5&before_audit=audit-20",
   );
 });
-const producer = producerFixture("CADENCE_RESERVATION_REVIEW_MODEL", import.meta.url);
+const producer = producerFixture("CADENCE_RESERVATION_REVIEW_MODEL");
 test.skipIf(!producer.available)("producer-supplied reservation review", async () => {
   const props = jsonFixture(producer.read());
   const detail = admitReservation(props.detail);

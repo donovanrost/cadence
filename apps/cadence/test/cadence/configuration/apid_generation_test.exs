@@ -5,6 +5,7 @@ defmodule Cadence.Configuration.ApidGenerationTest do
   alias Cadence.Applications.SpacecraftConfiguration.{Drafts, Review}
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Catalog.{FleetSnapshot, SpacecraftConfigurationInput}
+  alias Cadence.CompositionFixtures
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Control.Configuration
   alias Cadence.Governance.ActivationPolicy
@@ -92,7 +93,7 @@ defmodule Cadence.Configuration.ApidGenerationTest do
   end
 
   test "all of the catalog's APIDs widens decode only with a HOLD saying so", c do
-    {:ok, staged} = stage(c, pin_ops(c, profile_op("profile-apids-all", c.two, nil)))
+    {:ok, staged} = stage(c, pin_ops(c, profile_op("profile-apids-all", pin(c, c.two), nil)))
 
     assert {:ok, %{checks: checks}} =
              Configuration.preview(c.scope, c.mission.mission_id, staged.change_set_id)
@@ -114,7 +115,7 @@ defmodule Cadence.Configuration.ApidGenerationTest do
 
   test "a list naming APIDs the catalog doesn't define is a field error", c do
     # A field error in the preview's validation (422 details.handled_apids through the API).
-    {:ok, bad} = stage(c, [profile_op("profile-apids-bad", c.two, [42, 99])])
+    {:ok, bad} = stage(c, [profile_op("profile-apids-bad", pin(c, c.two), [42, 99])])
 
     assert {:ok, %{checks: checks}} =
              Configuration.preview(c.scope, c.mission.mission_id, bad.change_set_id)
@@ -126,7 +127,7 @@ defmodule Cadence.Configuration.ApidGenerationTest do
 
   test "a catalog move that leaves listed APIDs undefined is a blocking HOLD", c do
     # Pinned on [42] (valid in rev Two), then the profile moves to a catalog without 42.
-    apply!(c, pin_ops(c, profile_op("profile-apids-42", c.two, [42])))
+    apply!(c, pin_ops(c, profile_op("profile-apids-42", pin(c, c.two), [42])))
 
     {:ok, staged} =
       stage(c, [
@@ -134,7 +135,7 @@ defmodule Cadence.Configuration.ApidGenerationTest do
           kind: "spacecraft_override",
           action: :update,
           entity_id: c.craft.spacecraft_id,
-          changes: [%{path: "catalog_revision_id", value: %{"value" => c.other}}]
+          changes: [%{path: "composition_id", value: %{"value" => pin(c, c.other)}}]
         }
       ])
 
@@ -150,7 +151,9 @@ defmodule Cadence.Configuration.ApidGenerationTest do
     assert {:error, {:holds_blocking, _preview}} = submit(c, staged)
   end
 
-  defp profile_op(id, catalog, apids) do
+  defp pin(c, catalog), do: CompositionFixtures.pin!(c.org, c.mission.mission_id, catalog)
+
+  defp profile_op(id, composition, apids) do
     %{
       kind: "spacecraft_profile",
       action: :create,
@@ -161,7 +164,7 @@ defmodule Cadence.Configuration.ApidGenerationTest do
             "display_name" => "APID profile #{id}",
             "downlink_protocol" => "tm",
             "uplink_protocol" => "tc",
-            "catalog_revision_id" => catalog,
+            "composition_id" => composition,
             "frame_parameters" => %{"frame_size" => 1115, "ocf_length" => 4}
           },
           if(apids, do: %{"handled_apids" => apids}, else: %{})

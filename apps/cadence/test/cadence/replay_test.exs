@@ -561,7 +561,7 @@ defmodule Cadence.ReplayTest do
       })
 
     assert {:ok, ^source_endpoint} =
-             Cadence.SourceEndpoints.persist_source_endpoint(source_endpoint)
+             Cadence.SourceEndpointFixtures.persist(source_endpoint)
 
     source_endpoint
   end

@@ -4,7 +4,7 @@ fe-setup, 2026-11-13. Spec: ux `screens/Admin.md` (c6547f8d). DECISIONS #75. Beh
 (`useAdminMode`). Replaces the LiveView `/admin/**` (HostPageLive + `PlatformAdministrationPage`).
 
 ## What exists (read, 2026-11-13)
-- **No `/api/console/v1/admin` endpoints.** The LiveView pages call `PlatformOverview`, `OrganizationDirectory`,
+- **No `/api/v1/admin` endpoints.** The LiveView pages call `PlatformOverview`, `OrganizationDirectory`,
   `OrganizationCreation`, `OrganizationDetail`, `OrganizationInvitations`, `ServiceIdentityIssuance` through a
   per-visit `action_token`. Authorization: `Cadence.Administration.Access.authorize/1` (admin mode + active user +
   platform_admin), which the console API can call as is.
@@ -25,7 +25,7 @@ fe-setup, 2026-11-13. Spec: ux `screens/Admin.md` (c6547f8d). DECISIONS #75. Beh
 - **Audit:** creating an organization, platform token issuance and admin-mode enter/leave aren't recorded.
   Invitations/memberships are (row metadata → the org's Audit, Access source).
 
-## Proposed endpoints (`/api/console/v1/admin`, every one through `Administration.Access.authorize/1`)
+## Proposed endpoints (`/api/v1/admin`, every one through `Administration.Access.authorize/1`)
 Errors: `403 admin_mode_required` when admin mode lapsed or the capability was lost (the console ends the admin
 chip and shows "Your account can't use platform administration any more."), `422 invalid_params` by field.
 

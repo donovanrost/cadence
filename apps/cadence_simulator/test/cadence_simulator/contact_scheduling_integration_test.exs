@@ -14,6 +14,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
     ContactRequirements,
     FleetPlanner,
     FleetPlanningPolicies,
+    FleetPlanningRuns,
     Planner
   }
 
@@ -46,7 +47,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
   alias CadenceSimulator.Provider.{FleetScenarios, Orchestrator, Router, Store}
 
   @definitions Path.expand(
-                 "../../../../legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml",
+                 "../../../../dev/catalogs/demo_spacecraft.yaml",
                  __DIR__
                )
 
@@ -111,7 +112,9 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
       |> provision_provider_transport(context.telemetry_port)
       |> persist_spacecraft_routing(telemetry?: true)
 
-    search_starts_at = DateTime.utc_now() |> DateTime.add(30) |> DateTime.truncate(:second)
+    # #273: an offer counts as closed within the 60 s lookahead of the approval, and with no route
+    # profile the simulator's offers expire at their pass's start, so the pass starts beyond it.
+    search_starts_at = DateTime.utc_now() |> DateTime.add(120) |> DateTime.truncate(:second)
     search_ends_at = DateTime.add(search_starts_at, 180)
 
     scope = admin_scope(setup)
@@ -929,20 +932,34 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
     concurrency_summary = Agent.get(concurrency, & &1)
     Agent.stop(concurrency)
 
+    refs =
+      FleetPlanningRuns.list_requirement_refs(
+        result.run.organization_id,
+        result.run.mission_id,
+        result.run.fleet_planning_run_id
+      )
+
+    decisions =
+      FleetPlanningRuns.list_decisions(
+        result.run.organization_id,
+        result.run.mission_id,
+        result.run.fleet_planning_run_id
+      )
+
     assert concurrency_summary.maximum > 1
     assert concurrency_summary.maximum <= 16
     assert result.run.lifecycle_state in [:completed, :partial]
     assert result.run.phase == :finished
-    assert length(result.requirement_refs) == 300
-    assert Enum.all?(result.requirement_refs, &(&1.input_state == :searched))
-    assert result.decisions != []
+    assert length(refs) == 300
+    assert Enum.all?(refs, &(&1.input_state == :searched))
+    assert decisions != []
     assert result.plan.lifecycle_state == :draft
     assert result.plan_version.selected_snapshot_ids != []
     assert result.run.candidate_contact_plan_id == result.plan.contact_plan_id
 
     assert get_in(result.run.progress_document, ["requirements_total"]) == 300
 
-    assert Enum.all?(result.decisions, fn decision ->
+    assert Enum.all?(decisions, fn decision ->
              decision.disposition in [:selected, :displaced, :ineligible, :locked] and
                is_map(decision.explanation_document)
            end)

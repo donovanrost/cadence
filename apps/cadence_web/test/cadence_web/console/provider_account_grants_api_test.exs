@@ -52,7 +52,7 @@ defmodule CadenceWeb.Console.ProviderAccountGrantsAPITest do
       admin: admin,
       member: member,
       mission: mission,
-      base: "/api/console/v1/organizations/#{org.organization_id}/provider-accounts/pa-sim"
+      base: "/api/v1/organizations/#{org.organization_id}/provider-accounts/pa-sim"
     }
   end
 

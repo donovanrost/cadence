@@ -148,7 +148,7 @@ defmodule Cadence.Commanding.Groups.AuditRecords do
     |> where(
       [a, r],
       a.organization_id == ^org and a.mission_id == ^mission and not is_nil(a.decided_at) and
-        is_nil(r.command_group_id)
+        is_nil(r.command_group_id) and a.decision != "not_required"
     )
     |> in_window(:decided_at, window)
     |> order_by([a], desc: a.decided_at)

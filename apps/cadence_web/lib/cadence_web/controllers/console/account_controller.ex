@@ -1,6 +1,6 @@
 defmodule CadenceWeb.Console.AccountController do
   @moduledoc """
-  The signed-in user's own password and sessions under `/api/console/v1/account`.
+  The signed-in user's own password and sessions under `/api/v1/account`.
   Contract: docs/apogee/api/session.md.
   """
 

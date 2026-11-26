@@ -13,6 +13,7 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
     FleetPlanningPolicies,
     FleetPlanningRuns,
     FleetRepairs,
+    Planner,
     RepairChain,
     RepairLinks
   }
@@ -105,18 +106,18 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
     assert_received {:fleet_searched, "route-alpha"}
     assert_received {:fleet_searched, "route-beta"}
 
-    assert Enum.map(result.requirement_refs, & &1.contact_requirement_id) ==
+    assert Enum.map(requirement_refs(result), & &1.contact_requirement_id) ==
              Enum.sort([
                requirement_alpha.contact_requirement_id,
                requirement_beta.contact_requirement_id
              ])
 
-    assert Enum.all?(result.requirement_refs, &(&1.input_state == :searched))
-    assert Enum.all?(result.requirement_refs, &(&1.result_state == :satisfied))
-    assert Enum.all?(result.requirement_refs, &is_binary(&1.contact_planning_run_id))
+    assert Enum.all?(requirement_refs(result), &(&1.input_state == :searched))
+    assert Enum.all?(requirement_refs(result), &(&1.result_state == :satisfied))
+    assert Enum.all?(requirement_refs(result), &is_binary(&1.contact_planning_run_id))
 
-    assert Enum.map(result.decisions, & &1.disposition) == [:selected, :selected]
-    assert Enum.map(result.decisions, & &1.rank) == [1, 2]
+    assert Enum.map(decisions(result), & &1.disposition) == [:selected, :selected]
+    assert Enum.map(decisions(result), & &1.rank) == [1, 2]
 
     assert length(result.plan_version.planning_run_refs_document["runs"]) == 2
     assert length(result.plan_version.selected_snapshot_ids) == 2
@@ -148,6 +149,93 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
     refute_received :unexpected_route_search
   end
 
+  test "default fleet search commits a distinct checkpoint and readiness evidence per requirement",
+       context do
+    create_requirement!(context.member_scope, "alpha")
+    create_requirement!(context.member_scope, "beta")
+
+    assert {:ok, result} =
+             FleetPlanner.plan(context.member_scope, @mission_id, run_attrs(),
+               materialize_templates: false,
+               now: @now
+             )
+
+    assert result.run.progress_document["requirements_failed"] == 2
+    assert result.run.progress_document["requirements_searched"] == 0
+    assert [first, second] = requirement_refs(result)
+    assert first.contact_planning_run_id != second.contact_planning_run_id
+
+    for ref <- [first, second] do
+      assert ref.input_state == :failed
+
+      assert {:ok, run} =
+               Planner.fetch_run(@organization_id, @mission_id, ref.contact_planning_run_id)
+
+      assert run.contact_requirement_id == ref.contact_requirement_id
+      assert run.lifecycle_state == :failed
+
+      assert [%{outcome: :not_ready, readiness_document: %{"code" => "missing_source_endpoint"}}] =
+               Planner.list_searches(@organization_id, @mission_id, ref.contact_planning_run_id)
+    end
+  end
+
+  test "resuming the default search reuses committed snapshots and searches only pending refs",
+       context do
+    completed = create_requirement!(context.member_scope, "alpha")
+    pending = create_requirement!(context.member_scope, "beta")
+
+    assert {:ok, run, [_first, _second]} =
+             FleetPlanner.start(context.member_scope, @mission_id, run_attrs(),
+               materialize_templates: false,
+               now: @now
+             )
+
+    assert {:ok, previous} =
+             Planner.run(
+               context.member_scope,
+               @mission_id,
+               completed.contact_requirement_id,
+               1,
+               now: @now,
+               list_routes: &list_routes/3,
+               search_opportunities: &search_opportunities/5
+             )
+
+    assert {:ok, _ref} =
+             FleetPlanningRuns.update_requirement_progress(
+               context.member_scope,
+               @mission_id,
+               run.fleet_planning_run_id,
+               completed.contact_requirement_id,
+               :searched,
+               :pending,
+               %{contact_planning_run_id: previous.run.contact_planning_run_id}
+             )
+
+    assert {:ok, result} =
+             FleetPlanner.run(context.member_scope, @mission_id, run.fleet_planning_run_id,
+               now: @now
+             )
+
+    refs = Map.new(requirement_refs(result), &{&1.contact_requirement_id, &1})
+
+    assert refs[completed.contact_requirement_id].contact_planning_run_id ==
+             previous.run.contact_planning_run_id
+
+    assert refs[pending.contact_requirement_id].input_state == :failed
+    assert result.run.progress_document["requirements_searched"] == 1
+    assert result.run.progress_document["requirements_failed"] == 1
+
+    assert [snapshot] = previous.snapshots
+
+    assert [^snapshot] =
+             Planner.list_snapshots(
+               @organization_id,
+               @mission_id,
+               previous.run.contact_planning_run_id
+             )
+  end
+
   test "one failed provider search yields a partial fleet run and explainable Plan", context do
     requirement_alpha = create_requirement!(context.member_scope, "alpha")
     requirement_beta = create_requirement!(context.member_scope, "beta")
@@ -174,16 +262,19 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
     assert length(result.plan_version.selected_snapshot_ids) == 1
     refute result.plan_version.coverage_document["satisfied"]
 
-    refs = Map.new(result.requirement_refs, &{&1.contact_requirement_id, &1})
+    refs = Map.new(requirement_refs(result), &{&1.contact_requirement_id, &1})
 
     assert refs[requirement_alpha.contact_requirement_id].result_state == :satisfied
     assert refs[requirement_beta.contact_requirement_id].input_state == :failed
     assert refs[requirement_beta.contact_requirement_id].result_state == :failed
 
-    assert get_in(
-             result.run.result_summary_document,
-             ["coverage", requirement_beta.contact_requirement_id, "state"]
-           ) == "unsatisfied"
+    assert get_in(refs[requirement_beta.contact_requirement_id].explanation_document, [
+             "coverage",
+             "state"
+           ]) ==
+             "unsatisfied"
+
+    assert result.run.result_summary_document["coverage_counts"]["unsatisfied"] == 1
   end
 
   test "Requirement drift stops closed before provider search and leaves durable failure",
@@ -229,7 +320,7 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
     assert result.run.failure_document["code"] == "fleet_inputs_stale"
     assert result.run.failure_document["reason_code"] == "fleet_planning_input_drift"
     assert result.plan == nil
-    assert result.decisions == []
+    assert decisions(result) == []
     refute_received :unexpected_drift_search
   end
 
@@ -441,7 +532,7 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
 
     assert length(repaired.plan_version.selected_snapshot_ids) == 1
 
-    assert Enum.any?(repaired.decisions, fn decision ->
+    assert Enum.any?(decisions(repaired), fn decision ->
              decision.contact_opportunity_snapshot_id ==
                locked_snapshot.contact_opportunity_snapshot_id and
                decision.disposition == :locked
@@ -690,6 +781,22 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
 
     assert second.plan_version.locked_snapshot_ids == [replacement_id]
     assert length(second.plan_version.selected_snapshot_ids) == 1
+  end
+
+  defp requirement_refs(%{run: run}) do
+    FleetPlanningRuns.list_requirement_refs(
+      run.organization_id,
+      run.mission_id,
+      run.fleet_planning_run_id
+    )
+  end
+
+  defp decisions(%{run: run}) do
+    FleetPlanningRuns.list_decisions(
+      run.organization_id,
+      run.mission_id,
+      run.fleet_planning_run_id
+    )
   end
 
   defp create_requirement!(scope, suffix) do

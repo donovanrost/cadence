@@ -780,7 +780,7 @@ describe("the HTTP host bridge", () => {
 });
 
 describe("the frontend-only demo host service", () => {
-  it("discovers two independently released applications", () => {
+  it("discovers the released telemetry application", () => {
     const service = new DemoHostService("production");
     const response = service.handle({
       method: "GET",
@@ -791,7 +791,6 @@ describe("the frontend-only demo host service", () => {
 
     expect(response.body.applications.map(({ applicationKey }) => applicationKey)).toEqual([
       "telemetry_decom",
-      "contract_probe",
     ]);
     expect(
       response.body.applications.every(({ release }) => release.federation === "module_federation"),

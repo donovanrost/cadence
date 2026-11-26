@@ -110,6 +110,8 @@ defmodule Cadence.Reads.ContactPlanOverview do
       summary =
         plan |> summary(version, passes, superseded, names) |> Map.put(:repair_of, repair_of)
 
+      coverage = Demand.details(organization_id, mission_id, version, passes)
+
       {:ok,
        summary
        |> Map.merge(%{
@@ -118,8 +120,8 @@ defmodule Cadence.Reads.ContactPlanOverview do
          counts: %{summary.counts | conflicts: length(conflicts)},
          ready_to_approve: summary.ready_to_approve and availability.conflicts == [],
          passes: with_overlaps(organization_id, mission_id, passes, version, stations),
-         demand: demand(organization_id, mission_id, version, passes),
-         unmet: Demand.unmet(organization_id, mission_id, version),
+         demand: coverage.demand,
+         unmet: coverage.unmet,
          provider_freeze: provider_freeze(organization_id, mission_id, plan, version, passes),
          conflicts: conflicts,
          at_risk: availability.at_risk,

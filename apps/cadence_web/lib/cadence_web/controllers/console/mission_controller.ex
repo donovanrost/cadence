@@ -1,5 +1,5 @@
 defmodule CadenceWeb.Console.MissionController do
-  @moduledoc "`GET /api/console/v1/missions/:mission_id` — the mission and its organization."
+  @moduledoc "`GET /api/v1/missions/:mission_id` — the mission and its organization."
 
   use CadenceWeb, :controller
 

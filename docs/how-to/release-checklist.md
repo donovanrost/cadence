@@ -27,10 +27,19 @@ Run before deploying a branch to an environment. Each line names why it exists.
    - **Worked example:** N craft × passes/day × pass seconds × 3 days × byte rate × 1.5. At the dev
      simulator's rate (~14 KB/s, ~50 MB per contact-hour) with 5 passes of 8 min a day: 10 craft ≈
      0.8 GiB, 100 craft ≈ 10 GiB, 500 craft ≈ 49 GiB; 500 craft at a 2 Mbit/s S-band link ≈ 880 GiB.
+   - **The snapshot hold** (#692, DECISIONS #94/#96): the journal's durable cursor follows each
+     partition's semantic snapshot (every 60 s, and 2 s after a pass goes quiet), so a live stream
+     holds up to about a minute more than it used to. Add link byte rate × 60 s per concurrently
+     active stream to the undrained backlog above: ~0.8 MB per stream at the dev rate (500 streams
+     ≈ 420 MB), ~15 MB per stream on a 2 Mbit/s link (500 streams ≈ 7.5 GB). The backlog bytes in
+     the #686 scorecard include it.
    - **Dev:** the default path in a checkout is the repository's `var/ingress_journal`, on the host's
      own disk (the disk that filled on 11-14); fine at 10 craft, but watch host free space.
    To run without it, set `CADENCE_INGRESS_JOURNAL_ENABLED=false` (supported; then a stop during a
-   pass loses that pass's unprocessed bytes).
+   pass loses that pass's unprocessed bytes, and a crash loses up to 60 s of semantic memory: latest
+   values, algorithm memory and monitoring state since the partition's last snapshot. There is no
+   per-batch log to rebuild it from, #692; the alarm episodes already written are kept and the
+   monitoring priors are re-seeded from them).
 4. **Struct changes** (runbook gate, 84aaa0811): if the release adds or removes a struct field, plan
    a node restart, not an in-node reload; in-flight processes hold the old struct.
 5. **Mission-model compiler version** (#559, mission-composition-design.md §3). If the release

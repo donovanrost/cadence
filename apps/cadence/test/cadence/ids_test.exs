@@ -1,6 +1,15 @@
 defmodule Cadence.IdsTest do
   use Cadence.UnitCase, async: false
 
+  test "managed source endpoints keep their persisted format and decode spacecraft IDs" do
+    endpoint_id = Cadence.Ids.managed_source_endpoint_id("fleet:craft-2")
+
+    assert endpoint_id == "spacecraft_runtime:fleet:craft-2"
+    assert Cadence.Ids.spacecraft_id_from_managed_source_endpoint(endpoint_id) == "fleet:craft-2"
+    assert Cadence.Ids.spacecraft_id_from_managed_source_endpoint("source_endpoint_2") == nil
+    assert Cadence.Ids.spacecraft_id_from_managed_source_endpoint(nil) == nil
+  end
+
   test "generates unique ids with a stable per-boot prefix" do
     first_id = Cadence.Ids.new("packet")
     second_id = Cadence.Ids.new("packet")

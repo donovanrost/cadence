@@ -43,7 +43,7 @@ defmodule CadenceWeb.Console.DataSourceBindingsAPITest do
       mission: mission,
       binding: binding,
       to: to,
-      base: "/api/console/v1/missions/#{mission.mission_id}"
+      base: "/api/v1/missions/#{mission.mission_id}"
     }
   end
 

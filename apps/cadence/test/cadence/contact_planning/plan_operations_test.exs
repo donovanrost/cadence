@@ -19,12 +19,20 @@ defmodule Cadence.ContactPlanning.PlanOperationsTest do
     ]
   }
 
-  test "golden digests: one fixed request per action" do
+  # The approver's expected_expired_digest is part of the request (#273; nil when absent).
+  test "golden digests: with and without the expected expired digest" do
     assert PlanOperations.digest(:approve, @request) ==
-             "a0854d493cd7541e2c00e2e5f3e201c8b944914392f1e285d97b403ea7886f4c"
+             "9421c1ee50d99f0a2bbbc3d8bad948de23a0636f11560eea08c0c0379c05a81d"
+
+    assert PlanOperations.digest(:approve, Map.put(@request, :expected_expired_digest, "abc123")) ==
+             "ff23db96ebb43eb7ed5912be74f845414fa054b0cf9f97bcd8aa21e97b0453c7"
 
     assert PlanOperations.digest(:submit, @request) ==
-             "11b324bee0d933ab07e018d492356b7ebb570098306bbb1efaded36a4cfbf747"
+             "95089a90d7c522baa2e5d70b66601252e8d32f13eac6e722a962840c208bced9"
+
+    # A blank digest is the same request as none.
+    assert PlanOperations.digest(:approve, Map.put(@request, :expected_expired_digest, "")) ==
+             PlanOperations.digest(:approve, @request)
   end
 
   test "normalization: whitespace, blank notes and acknowledgement order don't change it" do

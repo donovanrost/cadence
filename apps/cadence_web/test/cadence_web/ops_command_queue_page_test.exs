@@ -132,7 +132,7 @@ defmodule CadenceWeb.OpsCommandQueuePageTest do
   end
 
   test "anonymous visitors redirect and plain members can read command queue details (#62)", c do
-    assert {:error, {:redirect, %{to: "/sign-in"}}} = live(build_conn(), c.path)
+    assert {:error, {:redirect, %{to: "/console/sign-in"}}} = live(build_conn(), c.path)
     member = TestFixtures.persist_user!()
     TestFixtures.grant_membership!(member, c.org)
     {:ok, view, _} = live(TestFixtures.member_conn(member), c.path)

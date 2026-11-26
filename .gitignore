@@ -40,8 +40,6 @@ cadence-*.tar
 # In case you use Node.js/npm, you want to ignore these.
 npm-debug.log
 /assets/node_modules/
-/legacy/cadence_legacy/assets/node_modules/
-/legacy/cadence_legacy/priv/telemetry_logs/
 /apps/cadence_simulator/cadence_simulator
 
 # Transient state for the superpowers brainstorming visual companion.
@@ -49,3 +47,6 @@ npm-debug.log
 
 # TypeScript incremental compiler metadata
 *.tsbuildinfo
+
+# Per-worktree ports and secrets; never commit.
+/mise.local.toml

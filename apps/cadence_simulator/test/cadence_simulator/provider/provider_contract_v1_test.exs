@@ -5,6 +5,7 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
 
   alias CadenceSimulator.Provider
   alias CadenceSimulator.Provider.{Contacts, Orchestrator, Router, Store}
+  alias CadenceSimulator.StoreRestart
   alias Plug.Conn
   alias Plug.Test
 
@@ -15,7 +16,7 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
     ]
   ]
   @definitions Path.expand(
-                 "../../../../../legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml",
+                 "../../../../../dev/catalogs/demo_spacecraft.yaml",
                  __DIR__
                )
 
@@ -80,6 +81,143 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
 
     {:ok, other_run} = Provider.create_run(context.run["scenario_id"], %{"seed" => 99})
     assert request(:get, "/provider/v1/delivery-profiles/#{profile_id}", other_run).status == 404
+  end
+
+  test "search replies while the store is suspended and its offer books after a hard restart",
+       context do
+    delivery_profile = provision_delivery(context)
+    store = Process.whereis(Store)
+    :ok = :sys.suspend(store)
+
+    opportunity =
+      try do
+        task = Task.async(fn -> search_clipped_opportunity(context.run) end)
+        assert {:ok, opportunity} = Task.yield(task, 1_000) || Task.shutdown(task)
+        Process.exit(store, :kill)
+        _replacement = StoreRestart.await(store)
+        opportunity
+      after
+        if Process.alive?(store), do: :sys.resume(store)
+      end
+
+    contact_request = %{
+      "opportunity_ref" => opportunity["id"],
+      "spacecraft_ref" => opportunity["spacecraft_ref"],
+      "service_profile_ref" => opportunity["service_profile_ref"],
+      "delivery_profile_ref" => delivery_profile["id"],
+      "client_reference" => "post-restart-offer"
+    }
+
+    {:ok, other_run} = Provider.create_run(context.run["scenario_id"], %{"seed" => 42})
+    assert request(:post, "/provider/v1/contacts", other_run, contact_request).status == 404
+
+    altered = Map.update!(contact_request, "opportunity_ref", &(&1 <> "x"))
+    assert request(:post, "/provider/v1/contacts", context.run, altered).status == 404
+
+    response =
+      request(:post, "/provider/v1/contacts", context.run, contact_request,
+        "idempotency-key": "post-restart-offer"
+      )
+
+    assert response.status == 201, response.resp_body
+    assert %{"data" => booked} = Jason.decode!(response.resp_body)
+
+    for field <- ["starts_at", "ends_at", "ground_station_ref", "antenna_or_service_pool_ref"] do
+      assert booked[field] == opportunity[field]
+    end
+  end
+
+  test "profile throttling stays outside the snapshot and long configured IDs remain bookable",
+       context do
+    service_id = String.duplicate("service", 500)
+    station_id = String.duplicate("station", 500)
+
+    {:ok, scenario} =
+      Provider.create_scenario(%{
+        "spacecraft_count" => 10_000,
+        "ground_stations" => [
+          %{"id" => "first", "name" => "First"},
+          %{"id" => station_id, "name" => "Second"}
+        ],
+        "service_profiles" => [
+          %{"id" => "first", "display_name" => "First"},
+          %{"id" => service_id, "display_name" => "Second"}
+        ],
+        "route_profiles" => [
+          %{
+            "id" => "transient-throttle",
+            "ground_station_ref" => station_id,
+            "service_profile_ref" => service_id,
+            "antenna_or_service_pool_ref" => "pool",
+            "rate_limit_response_count" => 1
+          }
+        ]
+      })
+
+    {:ok, run} = Provider.create_run(scenario["id"], %{"seed" => 42, "speed" => 100.0})
+
+    delivery_request =
+      Map.put(context.delivery_request, "supported_service_profile_refs", [service_id])
+
+    delivery_profile = provision_delivery(%{run: run, delivery_request: delivery_request})
+    now = DateTime.utc_now()
+
+    params = %{
+      "spacecraft_refs" => ["SC-10000"],
+      "ground_station_refs" => [station_id],
+      "service_profile_ref" => service_id,
+      "starts_at" => now |> DateTime.add(60) |> DateTime.to_iso8601(),
+      "ends_at" => now |> DateTime.add(120) |> DateTime.to_iso8601(),
+      "page_size" => 1
+    }
+
+    search = fn -> request(:post, "/provider/v1/opportunities/search", run, params) end
+    :ok = Store.flush()
+    store = Process.whereis(Store)
+    :ok = :sys.suspend(store)
+
+    opportunity =
+      try do
+        snapshot_entries = Store.diagnostics().mirror_entries
+        assert search.().status == 429
+        result = search.()
+        assert result.status == 200
+        assert %{mirror_entries: ^snapshot_entries, snapshot_pending: false} = Store.diagnostics()
+        assert %{"data" => [opportunity]} = Jason.decode!(result.resp_body)
+        assert byte_size(opportunity["id"]) < 100
+        Process.exit(store, :kill)
+        _replacement = StoreRestart.await(store)
+        opportunity
+      after
+        if Process.alive?(store), do: :sys.resume(store)
+      end
+
+    assert search.().status == 429
+
+    result =
+      request(
+        :post,
+        "/provider/v1/contacts",
+        run,
+        %{
+          "opportunity_ref" => opportunity["id"],
+          "spacecraft_ref" => "SC-10000",
+          "service_profile_ref" => service_id,
+          "delivery_profile_ref" => delivery_profile["id"],
+          "client_reference" => "long-config-refs"
+        },
+        "idempotency-key": "long-config-refs"
+      )
+
+    assert result.status == 201, result.resp_body
+
+    assert %{
+             "data" => %{
+               "ground_station_ref" => ^station_id,
+               "service_profile_ref" => ^service_id
+             }
+           } =
+             Jason.decode!(result.resp_body)
   end
 
   test "profile-backed Contacts keep contact, pass, and delivery state independent", context do
@@ -351,21 +489,6 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
   test "a profile-backed Contact streams telemetry and records delivery counters", context do
     {:ok, listener} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])
     {:ok, {_address, port}} = :inet.sockname(listener)
-    parent = self()
-
-    acceptor =
-      spawn_link(fn ->
-        {:ok, socket} = :gen_tcp.accept(listener, 2_000)
-        {:ok, bytes} = :gen_tcp.recv(socket, 0, 2_000)
-        <<0::2, scid::10, vcid::3, _rest::bitstring>> = bytes
-        send(parent, {:provider_v1_telemetry, byte_size(bytes), scid, vcid})
-        drain_socket(socket)
-      end)
-
-    on_exit(fn ->
-      :gen_tcp.close(listener)
-      if Process.alive?(acceptor), do: Process.exit(acceptor, :normal)
-    end)
 
     {:ok, scenario} =
       Provider.create_scenario(%{
@@ -405,6 +528,22 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
     %{"data" => %{"id" => contact_id}} = Jason.decode!(response.resp_body)
     {:ok, starts_at, _offset} = DateTime.from_iso8601(opportunity["starts_at"])
     {:ok, ends_at, _offset} = DateTime.from_iso8601(opportunity["ends_at"])
+
+    parent = self()
+
+    acceptor =
+      spawn_link(fn ->
+        {:ok, socket} = :gen_tcp.accept(listener, 2_000)
+        {:ok, bytes} = :gen_tcp.recv(socket, 0, 2_000)
+        <<0::2, scid::10, vcid::3, _rest::bitstring>> = bytes
+        send(parent, {:provider_v1_telemetry, byte_size(bytes), scid, vcid})
+        drain_socket(socket)
+      end)
+
+    on_exit(fn ->
+      :gen_tcp.close(listener)
+      if Process.alive?(acceptor), do: Process.exit(acceptor, :normal)
+    end)
 
     :ok = Orchestrator.reconcile(DateTime.add(starts_at, -5))
     :ok = Orchestrator.reconcile(DateTime.add(starts_at, -2))
@@ -450,6 +589,27 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
     assert response.status == 200
     %{"data" => [opportunity | _rest]} = Jason.decode!(response.resp_body)
     opportunity
+  end
+
+  defp search_clipped_opportunity(run) do
+    full = search_opportunity(run)
+    {:ok, from, 0} = DateTime.from_iso8601(full["starts_at"])
+    clipped_end = from |> DateTime.add(1) |> DateTime.to_iso8601()
+
+    response =
+      request(:post, "/provider/v1/opportunities/search", run, %{
+        "spacecraft_refs" => [full["spacecraft_ref"]],
+        "ground_station_refs" => [full["ground_station_ref"]],
+        "service_profile_ref" => full["service_profile_ref"],
+        "starts_at" => full["starts_at"],
+        "ends_at" => clipped_end
+      })
+
+    assert response.status == 200
+    assert %{"data" => [clipped]} = Jason.decode!(response.resp_body)
+    assert clipped["ends_at"] == clipped_end
+    assert clipped["id"] != full["id"]
+    clipped
   end
 
   defp assert_contact(run, contact_id, status, phase, delivery_status) do

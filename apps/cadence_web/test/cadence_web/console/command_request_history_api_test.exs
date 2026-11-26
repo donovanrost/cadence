@@ -13,7 +13,7 @@ defmodule CadenceWeb.Console.CommandRequestHistoryAPITest do
     body =
       user
       |> TestFixtures.member_conn()
-      |> get("/api/console/v1/missions/#{mission.mission_id}/command-requests/nope/history")
+      |> get("/api/v1/missions/#{mission.mission_id}/command-requests/nope/history")
       |> json_response(404)
 
     assert body["code"] == "command_request_not_found" or

@@ -12,11 +12,14 @@ defmodule CadenceWeb.Console.Problem do
     unauthenticated: {401, "Sign in to continue."},
     invalid_csrf: {403, "The request CSRF token is invalid. Reload the page and try again."},
     forbidden: {403, "You do not have permission to do that."},
+    # #753: a service identity's bearer token reaches only the actions that opt in.
+    service_not_allowed: {403, "A service identity can't do that; a person must."},
     scope_mismatch: {403, "That resource belongs to a different organization."},
     not_found: {404, "Not found."},
     mission_not_found: {404, "Mission not found."},
     organization_not_found: {404, "Organization not found."},
     spacecraft_not_found: {404, "Spacecraft not found."},
+    source_endpoint_not_found: {404, "Source endpoint not found."},
     spacecraft_route_not_found: {404, "Extra route not found."},
     profile_not_found: {404, "Profile not found."},
     catalog_revision_not_found: {404, "Catalog revision not found."},
@@ -44,11 +47,13 @@ defmodule CadenceWeb.Console.Problem do
     plan_not_pending: {409, "The plan isn't waiting for approval."},
     # #257: submit only submits; a plan already waiting for approval changes nothing.
     plan_already_submitted: {409, "The plan is already waiting for approval."},
-    # #273 step 1 (until domain's rule approves the rest): the approval is refused while any
-    # selected pass's booking window has closed; nothing is recorded. ux's words (U97).
-    contact_plan_opportunity_expired:
+    # #273: the closed set changed since the approver saw it; every pass's window closed.
+    contact_plan_expired_passes_changed:
       {409,
-       "The booking window has closed for some of this plan's passes, so it can't be approved as it is. Nothing was recorded."},
+       "The booking window closed for more of this plan's passes after you opened it. Nothing was recorded; check the list and approve again."},
+    contact_plan_all_opportunities_expired:
+      {409,
+       "The booking window has closed for all of this plan's passes, so nothing can be booked. Nothing was recorded."},
     contact_plan_self_approval_forbidden:
       {403,
        "You submitted this plan or drafted a version of it since it was last approved, so another org admin approves it."},
@@ -231,6 +236,9 @@ defmodule CadenceWeb.Console.Problem do
     too_many_commands: {422, "Too many unsaved edits. Save to keep going."},
     dashboard_not_ready: {422, "Some widgets aren't ready to save."},
     dashboard_in_use: {409, "A playlist shows this dashboard. Confirm to archive it anyway."},
+    dashboard_id_in_use: {409, "That dashboard id is already in use."},
+    dashboard_import_conflict:
+      {409, "A dashboard with that id exists here with different content."},
     catalog_unavailable: {503, "The command catalog is unavailable right now."},
     alarms_unavailable: {503, "Alarms are unavailable right now."},
     commanding_unavailable: {503, "Commanding is unavailable right now."},
@@ -274,6 +282,9 @@ defmodule CadenceWeb.Console.Problem do
     fleet_planning_occurrence_limit_exceeded:
       {422,
        "This start goes over the limit of template requirements. Include fewer templates, or narrow their targets."},
+    fleet_planning_run_requirement_limit_exceeded:
+      {422,
+       "This start includes too many requirements. Narrow the planning window or the template targets."},
     # U55: cancel or end a pass's contact (the console words each state itself).
     # U65: the model approval gate (words: ux; codes: domain's).
     human_mission_model_approver_required:
@@ -307,6 +318,9 @@ defmodule CadenceWeb.Console.Problem do
     unbooked_contact_unconfirmed:
       {409, "This contact isn't a booked pass. Confirm to release into it anyway."},
     realized_contact_not_found: {404, "Contact not found."},
+    realized_contact_runtime_not_running: {404, "The contact runtime is not running."},
+    path_runtime_not_running: {404, "The path runtime is not running."},
+    runtime_snapshot_unavailable: {503, "The runtime snapshot is unavailable."},
     contact_not_found: {404, "Contact not found."},
     realized_contact_not_releasable: {409, "Not released: the contact has ended."},
     attention_unavailable: {503, "That couldn't be done right now. Try again."},
@@ -323,9 +337,6 @@ defmodule CadenceWeb.Console.Problem do
        "This spacecraft changed since you started editing. Compare the latest saved configuration before saving again."},
     spacecraft_configuration_review_stale:
       {409, "The active fleet configuration changed. Review the latest state and submit again."},
-    spacecraft_configuration_review_is_fleet:
-      {409,
-       "This review covers several spacecraft. Decide it from the activation, where every spacecraft in it is shown."},
     spacecraft_configuration_review_unavailable:
       {409, "Save your current configuration and resolve external changes before submitting it."},
     spacecraft_switch_set_by_change_set:

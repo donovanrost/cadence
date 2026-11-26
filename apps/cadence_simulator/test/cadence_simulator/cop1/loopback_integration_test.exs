@@ -140,7 +140,8 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
-               %{"user_id" => "queue-loopback"}
+               %{"user_id" => "queue-loopback"},
+               admin_mode: false
              )
 
     assert {:ok, %{release_attempt: release_attempt, command_request: released_request}} =
@@ -207,7 +208,7 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
       })
 
     assert {:ok, persisted_source_endpoint} =
-             Cadence.SourceEndpoints.persist_source_endpoint(@organization_id, source_endpoint)
+             Cadence.SourceEndpointFixtures.persist(@organization_id, source_endpoint)
 
     persisted_source_endpoint
   end

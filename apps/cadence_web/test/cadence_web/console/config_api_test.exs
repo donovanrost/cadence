@@ -20,7 +20,7 @@ defmodule CadenceWeb.Console.ConfigAPITest do
       bob: bob,
       org: org,
       mission: mission,
-      base: "/api/console/v1/missions/#{mission.mission_id}/config"
+      base: "/api/v1/missions/#{mission.mission_id}/config"
     }
   end
 
@@ -250,6 +250,51 @@ defmodule CadenceWeb.Console.ConfigAPITest do
       |> Map.fetch!("data")
 
     assert %{"state" => "applied", "revision" => 2} = approved
+  end
+
+  # S9 (#313): a SCID another staged spacecraft holds is refused at stage, on the op's index, with
+  # mms-ux's words and the details the Add screen uses.
+  test "a SCID already staged for another spacecraft is refused with its details", c do
+    approval_required(false)
+
+    op = fn name ->
+      %{
+        "kind" => "spacecraft",
+        "action" => "create",
+        "document" => %{"display_name" => name, "scid" => 312}
+      }
+    end
+
+    assert %{"change_set_id" => _} =
+             c.alice
+             |> call(:post, c.base <> "/stage", %{
+               "summary" => "A",
+               "ops" => [op.("EARENDIL-313")]
+             })
+             |> json_response(201)
+             |> Map.fetch!("data")
+
+    conn =
+      call(c.bob, :post, c.base <> "/stage", %{"summary" => "B", "ops" => [op.("EARENDIL-314")]})
+
+    assert %{
+             "code" => "invalid_op",
+             "details" => %{
+               "index" => 0,
+               "errors" => [
+                 %{
+                   "path" => "scid",
+                   "message" =>
+                     "SCID 312 is already staged for EARENDIL-313 in the open change set; choose another",
+                   "details" => %{
+                     "scid" => 312,
+                     "spacecraft_name" => "EARENDIL-313",
+                     "source" => "staged"
+                   }
+                 }
+               ]
+             }
+           } = json_response(conn, 422)["error"]
   end
 
   test "facade errors keep their codes and details", c do

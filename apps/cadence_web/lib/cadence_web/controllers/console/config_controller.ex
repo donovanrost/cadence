@@ -1,7 +1,7 @@
 defmodule CadenceWeb.Console.ConfigController do
   @moduledoc """
   Mission change sets and configuration revisions under
-  `/api/console/v1/missions/:mission_id/config`: a thin pass-through of
+  `/api/v1/missions/:mission_id/config`: a thin pass-through of
   `Cadence.Control.Configuration`. Contract: docs/apogee/api/changes.md.
   """
 

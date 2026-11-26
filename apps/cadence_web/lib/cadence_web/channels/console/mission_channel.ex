@@ -140,9 +140,15 @@ defmodule CadenceWeb.Console.MissionChannel do
     {:noreply, mark(socket, resource)}
   end
 
-  def handle_info(message, socket)
-      when message in [:fleet_snapshot, :fleet_refresh, :fleet_tick],
-      do: {:noreply, FleetPush.handle(message, socket)}
+  # The fleet push: its queued subscription, the mission source's loads, and the source going down.
+  def handle_info(:fleet_snapshot = message, socket),
+    do: {:noreply, FleetPush.handle(message, socket)}
+
+  def handle_info({:fleet_loaded, _shared, _heard_due?} = message, socket),
+    do: {:noreply, FleetPush.handle(message, socket)}
+
+  def handle_info({:DOWN, _ref, :process, _pid, _reason} = message, socket),
+    do: {:noreply, FleetPush.handle(message, socket)}
 
   def handle_info(:flush, socket) do
     resources = socket.assigns.pending |> MapSet.to_list() |> Enum.sort()

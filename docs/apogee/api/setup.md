@@ -5,6 +5,7 @@ Conventions: [README.md](README.md). Requested shapes: `docs/apogee/plans/setup-
 | Ask | Endpoint | Status |
 | --- | --- | --- |
 | S | `GET /missions/:mission_id/spacecraft` | **implemented** |
+| SN | `GET /missions/:mission_id/spacecraft/names` | **implemented** (#847, `Cadence.Reads.SpacecraftNames`) |
 | R | `GET /missions/:mission_id/readiness` | **implemented** (v1, `Cadence.Reads.Readiness`; domain extends it for change-set preview) |
 | P | `GET /missions/:mission_id/profiles` | **implemented** |
 | SD | `GET /missions/:mission_id/spacecraft/:spacecraft_id` | **implemented** |
@@ -23,7 +24,7 @@ Conventions: [README.md](README.md). Requested shapes: `docs/apogee/plans/setup-
 | kind schema | `GET /missions/:mission_id/config/kinds/:kind/schema` | **implemented** |
 | catalog APIDs | `GET /missions/:mission_id/catalog/revisions/:revision_id/apids` | **implemented** (L17) |
 
-## `GET /api/console/v1/missions/:mission_id/spacecraft`
+## `GET /api/v1/missions/:mission_id/spacecraft`
 
 The Setup spacecraft directory. It is unpaginated (the client filters) and sorted by `scid`, then
 `name`, with spacecraft lacking a SCID last. Refetch on `invalidate` with `spacecraft`.
@@ -36,8 +37,18 @@ The Setup spacecraft directory. It is unpaginated (the client filters) and sorte
    "routing_rule_count": 6,
    "ready": true,
    "last_received_at": null}
-]}}
+], "telemetry": "ok", "scids_in_use": [312], "next_free_scid": 1}}
 ```
+
+- `scids_in_use` (S9, #313; ux U20): every SCID a new spacecraft can't take, as integers, sorted
+  ascending and deduplicated. That's the live spacecraft's, **archived ones included** (they keep
+  their SCID, and SCIDs are unique per mission), plus every SCID a staged op of the mission's open
+  or in-review change set gives a spacecraft (a create, or an update's `scid` change), by any author.
+- `next_free_scid`: the lowest of 1..1023 not in `scids_in_use`, so the two can't disagree. It's
+  never 0 (0 is still accepted when typed), and `null` when none is free. It's a suggestion: staging
+  refuses a SCID another staged op holds (`invalid_op` on `scid`, details `{scid, spacecraft_name,
+  source: "staged" | "request"}`), and preview/apply refuses a live one.
+- Neither field is refreshed by staging: staging invalidates `configuration`, not `spacecraft`.
 
 - `scid`: integer or null. `norad_id`, `plane` and `slot` are integers or null, read from
   spacecraft metadata (`norad_id`, `plane`, `slot`) until domain makes them first-class.
@@ -60,7 +71,7 @@ The Setup spacecraft directory. It is unpaginated (the client filters) and sorte
 
 Errors: `404 mission_not_found`.
 
-## `GET /api/console/v1/missions/:mission_id/profiles`
+## `GET /api/v1/missions/:mission_id/profiles`
 
 Active spacecraft profiles, each at its latest version, sorted by name. Refetch on `invalidate`
 with `spacecraft`.
@@ -89,7 +100,21 @@ with `spacecraft`.
   `profile.last_change` (`{version, revision: null, at, actor: null}`: when the latest version was
   made), or `null` if its history row is missing.
 
-## `GET /api/console/v1/missions/:mission_id/spacecraft/:spacecraft_id`
+## `GET /api/v1/missions/:mission_id/spacecraft/names`
+
+Spacecraft id → name and SCID, for a screen that names the craft its own rows carry (Plan,
+Re-plan) without the fleet read's telemetry and limits (#847). Members of the mission. Both forms
+answer `{data: {names: [{id, name, scid}]}, meta: {next_cursor}}`; `scid` is null for a craft that
+has none yet. Archived spacecraft are included (plans still name them).
+
+- **By ids**: `?ids=a,b,c`, at most 100 (the small sets a screen already knows). Unknown ids are
+  left out. `next_cursor` is null. More than 100 is `422 invalid_params` (`details.ids`).
+- **The whole mission, in pages**: no `ids`. Sorted by name, then id, so pages are stable. `limit`
+  1–500 (default 500; a limit outside 1–500 falls back to 500); pass the previous `meta.next_cursor` as `?cursor=` for the next page, null
+  on the last. There is no unpaged list. A cursor the server didn't make is `422 invalid_params`
+  (`details.cursor`).
+
+## `GET /api/v1/missions/:mission_id/spacecraft/:spacecraft_id`
 
 Refetch on `invalidate` with `spacecraft`.
 
@@ -200,7 +225,7 @@ apply) is never sent. At release it's canceled with `end_reason: spacecraft_arch
 A catalog import makes a mission-model revision; a generation can't introduce it until an
 organization administrator approves it against a comparison report. The console names a model
 by its catalog revision ("catalog rev 4"); the model revision id is Technical details. Base
-`/api/console/v1/missions/:mission_id/mission-model-revisions`.
+`/api/v1/missions/:mission_id/mission-model-revisions`.
 
 - `GET ?status=candidate|approved|rejected|retired` (default `candidate`) → `{revisions: [{id,
   status, imported_at, imported_by {id, name} | null, catalog_revision {id, number, label,
@@ -334,7 +359,7 @@ by its catalog revision ("catalog rev 4"); the model revision id is Technical de
 
 A spacecraft's configuration in the console (director 11-17; ux U94): the host's workspace, over
 the same read model, Drafts and `Control.SpacecraftConfiguration`. Base:
-`/api/console/v1/missions/:mission_id/spacecraft/:spacecraft_id/configuration/workspace`.
+`/api/v1/missions/:mission_id/spacecraft/:spacecraft_id/configuration/workspace`.
 Approve and reject stay on L10 (activation requests of kind `spacecraft_configuration`).
 
 **DECISIONS #109.** Change sets are the only writer of a spacecraft's Telemetry and Commanding
@@ -434,7 +459,7 @@ console's mission scope), so the mission's existence doesn't leak.
 | `forbidden` | 403 | No operate access |
 | `spacecraft_not_found` | 404 | Also when the craft is removed between the access check and the read (#272) |
 
-## `GET /api/console/v1/missions/:mission_id/readiness`
+## `GET /api/v1/missions/:mission_id/readiness`
 
 The shape is setup-shapes.md §R, with **singular** verdict keys (agreed with fe-setup). Refetch on
 `invalidate` with `spacecraft`, `catalog`, `data_sources` or `settings`.
@@ -489,7 +514,7 @@ Rules (v1), by area:
   it). `version_label` is the revision number; open `GET /config/revisions/:n` for the detail.
   It's `null` only if the revisions can't be read.
 
-## `GET /api/console/v1/missions/:mission_id/profiles/:profile_id`
+## `GET /api/v1/missions/:mission_id/profiles/:profile_id`
 
 Profile detail with **schema-driven sections** (`Cadence.SpacecraftType.Schema`, profile-routing
 §3), so the form is generated from the server. Refetch on `invalidate` with `spacecraft` or
@@ -554,7 +579,7 @@ Profile detail with **schema-driven sections** (`Cadence.SpacecraftType.Schema`,
 
 Errors: `404 profile_not_found`.
 
-## `GET /api/console/v1/missions/:mission_id/catalog` (C1)
+## `GET /api/v1/missions/:mission_id/catalog` (C1)
 
 The shape is setup-shapes.md §C1. `?database_id=` selects a database (default: the first by name).
 `database` is `null` when the mission has none. Refetch on `invalidate` with `catalog`.
@@ -608,7 +633,7 @@ The shape is setup-shapes.md §C1. `?database_id=` selects a database (default: 
     Every platform event (`kind: "platform"`) is a platform admin's act. A nameless actor there
     reads "the team that runs Cadence" in the console (ux, #523).
 
-## `GET /api/console/v1/missions/:mission_id/catalog/imports/:import_run_id` (C3)
+## `GET /api/v1/missions/:mission_id/catalog/imports/:import_run_id` (C3)
 
 The shape is setup-shapes.md §C3, plus `declaration_count`.
 
@@ -616,6 +641,9 @@ The shape is setup-shapes.md §C3, plus `declaration_count`.
 - `diagnostics[]`: `{severity: error|warning|info, code, message, path}`, where `path` is a
   " / "-joined XTCE path or `null`. A run can succeed with error diagnostics (unsupported items
   are skipped).
+- `revision`: `{id, number, label, composition_id}` or `null`. `composition_id` (D3, #544) is the
+  revision's one-layer composition: what C3's rollout pins on profiles and overrides (`null` only
+  if the import made none).
 - `base_revision`: the revision before this run's revision in the same database (the highest
   `revision_number` below its own), or `null` (first revision, or no revision produced). It's the
   same base as the revision read's `breaking_base` (the model approval gate above).
@@ -643,7 +671,7 @@ The shape is setup-shapes.md §C3, plus `declaration_count`.
 - Errors: `404 import_run_not_found`.
 - Live: refetch on `invalidate` with `catalog`.
 
-## `GET /api/console/v1/missions/:mission_id/catalog/revisions/:revision_id/rollout` (C3 "Roll out to")
+## `GET /api/v1/missions/:mission_id/catalog/revisions/:revision_id/rollout` (C3 "Roll out to")
 
 What staging this catalog revision on each profile would move, so the options can show
 server-computed effect counts.
@@ -679,7 +707,7 @@ server-computed effect counts.
 - Errors: `404 catalog_revision_not_found`.
 - Live: refetch on `invalidate` with `catalog` or `spacecraft`.
 
-## `GET /api/console/v1/missions/:mission_id/catalog/revisions/:revision_id/apids` (§11 L17)
+## `GET /api/v1/missions/:mission_id/catalog/revisions/:revision_id/apids` (§11 L17)
 
 The APIDs the revision defines, with their packets: the choices for `handled_apids`.
 
@@ -696,7 +724,7 @@ The APIDs the revision defines, with their packets: the choices for `handled_api
 
 ## Source files (§11 L18: K1-K3)
 
-Under `/api/console/v1/missions/:mission_id/catalog/artifacts/:artifact_id`.
+Under `/api/v1/missions/:mission_id/catalog/artifacts/:artifact_id`.
 
 - **K1** `GET` → `{artifact: {id, file_name, format_label, format_version, media_type, size_bytes,
   sha256, uploaded_at, uploaded_by {kind, name} | null, database {id, name}, download_url}, revisions:
@@ -711,7 +739,7 @@ Under `/api/console/v1/missions/:mission_id/catalog/artifacts/:artifact_id`.
 - `download_url` also appears on the catalog index's `revision.artifact` and on the import run's
   `file.artifact {id, download_url}` (null when the run's file is gone).
 
-## `POST /api/console/v1/missions/:mission_id/catalog/imports` (C2, multipart)
+## `POST /api/v1/missions/:mission_id/catalog/imports` (C2, multipart)
 
 Fields: `file` (at most 50 MiB), `database_id` (optional; when absent, `name` is required and creates
 a database), `revision_label`, `revision_notes`. Send `x-csrf-token`. The format is detected from
@@ -723,14 +751,14 @@ the file name and extension (the browser's media type is only a hint).
   `413 file_too_large`. A body over the server's multipart limit is also rejected with `413`
   (code `file_too_large`) before it reaches the controller.
 
-## `GET /api/console/v1/missions/:mission_id/catalog/importers`
+## `GET /api/v1/missions/:mission_id/catalog/importers`
 
 `{"data": {"importers": [{"key": "xtce_1_3", "label": "XTCE 1.3", "extensions": [".xtce", ".xml"]}],
 "max_bytes": 52428800}}`: the accepted-format chips.
 
 ## Organization routes
 
-Base: `/api/console/v1/organizations/:organization_id`. The organization comes from the URL, not
+Base: `/api/v1/organizations/:organization_id`. The organization comes from the URL, not
 the session default. An actor who isn't an active member (or a platform admin in admin mode) gets
 `404 organization_not_found`.
 
@@ -1174,12 +1202,21 @@ bindings can be written. A platform-shared one needs a platform admin in admin m
 ### `GET /missions/:mission_id/apps` (A1)
 
 `{apps: [{key, name, description, platform, installed, state: "installed" | "disabled" |
-"not_installed", version, consequence_if_missing}], permissions: ["apps.install"]}`. These are the
+"not_installed", version, available_version, update_available, consequence_if_missing}],
+spacecraft_count, permissions: ["apps.install"]}`. These are the
 applications installable on a mission, platform ones first, then by name.
 
 - `platform: true` apps are always on and can't be changed.
 - `version` is the installed version, an integer (application versions are integers), or `null`
   when the app isn't installed.
+- `available_version` is the version this deployment ships (an integer), set on every row.
+  `update_available` is true when an installed or disabled app is behind it, by the registry's
+  ordering; the server decides, so clients never compare versions.
+- `spacecraft_count` is how many spacecraft an installation covers: the mission's active
+  spacecraft (counted in SQL), or 1 under a spacecraft.
+- Uninstall is accepted from `installed` and `disabled`, and keeps the app's configuration, so a
+  later install picks it up (`application_installations_test.exs`, "retains configuration across
+  disable, uninstall, and reinstall transitions").
 - `consequence_if_missing` is always `null`: apps don't declare one yet.
 - `apps.install` comes from the check the actions enforce (`:operate_mission`, so any mission
   operator today; DECISIONS #38).
@@ -1356,7 +1393,7 @@ Edits go through change sets (`ground_station` and `transport` kinds; see change
   (default 100); pass `next_cursor` back as `cursor`, and `null` means the last page. This changes with
   DECISIONS #3 (rules on the profile).
 
-## `GET /api/console/v1/missions/:mission_id/providers`
+## `GET /api/v1/missions/:mission_id/providers`
 
 `{providers: [{id, name, provider_type, version, policy_mode, account: {id, name} | null, grant: {id,
 version, state: "active" | "revoked"} | null, status: {lifecycle_state, last_validated_at,
@@ -1377,7 +1414,7 @@ the Stations · Providers tab, sorted by name.
 - `station_count` counts active stations whose `provider` is this provider's name.
 - `permissions`: `["providers.manage"]` for mission admins (`:manage_mission`), else `[]`.
 
-## Mission providers (L12): `/api/console/v1/missions/:mission_id/providers` (owner: api-ops)
+## Mission providers (L12): `/api/v1/missions/:mission_id/providers` (owner: api-ops)
 
 Every write needs `providers.manage` (mission admins; organization admins qualify), else `403
 forbidden`. Each answers with the provider's row as the list shows it.
@@ -1415,7 +1452,7 @@ forbidden`. Each answers with the provider's row as the list shows it.
   - `422 invalid_params {reason: "Say why."}`.
 - `404 provider_not_found` for an unknown or archived provider.
 
-## `GET /api/console/v1/missions/:mission_id/config/kinds/:kind/schema`
+## `GET /api/v1/missions/:mission_id/config/kinds/:kind/schema`
 
 `{kind, fields: [{path, label, type, unit, enum, range, default, required, help, visible_when}]}`
 for generating change-set edit forms. `kind` is `ground_station`, `transport`,
@@ -1522,7 +1559,7 @@ Older per-spacecraft routing rules (`origin: legacy`) become extra routes in bat
 each batch alone in its change set and reviewed by someone other than its stager (approval is
 forced on these sets, whatever the mission's policy).
 
-- `GET /api/console/v1/missions/:mission_id/routes/legacy-conversion` (operate_mission) →
+- `GET /api/v1/missions/:mission_id/routes/legacy-conversion` (operate_mission) →
   `{routes_converted, routes_total, batch_size, batches_total, next_batch: int | null,
   staged_batch: {change_set_id, batch, author: {id, name | null}} | null, unmappable: {count,
   routes: [{routing_rule_id, reason: "transport_has_no_station", spacecraft: {id, name | null}}]},
@@ -1557,3 +1594,24 @@ change set (`GET /config`), so the routing read carries no flag.
   name; never an id. The console adds its verb ('Remove older route …').
 - A rollback past a removal is NO-GO with a validation item: 'The older route “<name>” ·
   <spacecraft> was removed and can't be restored. To route that way again, add an extra route.'
+
+
+## Source endpoints
+
+Mission admins use the session-authenticated `/api/v1/missions/:mission_id` routes to manage
+ingress identity mappings. POST requests require the session's CSRF token.
+
+- `GET /source-endpoints` lists mission endpoints.
+- `GET /spacecraft/:spacecraft_id/source-endpoints` lists only endpoints assigned to that spacecraft.
+- `GET /source-endpoints/:source_endpoint_id` reads one endpoint in the mission.
+- `POST /source-endpoints` creates a mission endpoint, optionally assigned to a spacecraft.
+- `POST /spacecraft/:spacecraft_id/source-endpoints` creates an endpoint assigned to the route's spacecraft.
+
+Lists accept `page` (default 1) and `page_size` (default 50, maximum 100). The response contains
+`data` and `meta` with `page`, `page_size`, and `total_count`. Creation accepts a
+`source_endpoint` object with `source_ref`, `display_name`, optional `scid` and `metadata`, and
+an optional `spacecraft_id` on the mission route. The server generates `source_endpoint_id` and
+returns it with the stored endpoint. Supplying the ID on create returns `422 invalid_params`.
+
+A non-empty `source_ref` identifies an endpoint within its mission and spacecraft scope. Repeating
+that reference returns the existing endpoint with its saved attributes.

@@ -19,7 +19,7 @@ defmodule Cadence.Dev.ReflectOrbital.Fixture do
   def database_path,
     do:
       System.get_env("EARENDIL_DATABASE_PATH") ||
-        Path.expand("../../legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml", __DIR__)
+        Path.expand("../../dev/catalogs/demo_spacecraft.yaml", __DIR__)
 
   def chaos_lab? do
     System.get_env("CADENCE_CHAOS_LAB") == "true" and
@@ -32,11 +32,39 @@ defmodule Cadence.Dev.ReflectOrbital.Fixture do
 
   def metadata, do: %{"synthetic" => true, "fixture" => "reflect-orbital-v1"}
 
-  def spacecraft do
-    Enum.map(1..500, fn index ->
-      plane = div(index - 1, 25)
-      slot = rem(index - 1, 25)
-      name = "EARENDIL-#{String.pad_leading(Integer.to_string(index), 3, "0")}"
+  # Fleet size and site count are parameters so every Head measures the same fleet at 500 and
+  # 1,000 (#715). SCIDs are the craft index, and the simulator accepts 0..1023.
+  @max_spacecraft 1_023
+  @spacecraft_per_plane 25
+
+  def fleet_size do
+    "EARENDIL_SPACECRAFT_COUNT" |> System.get_env("500") |> bounded!(1, @max_spacecraft)
+  end
+
+  def plane_count, do: div(fleet_size() + @spacecraft_per_plane - 1, @spacecraft_per_plane)
+
+  defp bounded!(value, min, max) do
+    case Integer.parse(value) do
+      {n, ""} when n in min..max//1 ->
+        n
+
+      _other ->
+        raise ArgumentError, "expected an integer in #{min}..#{max}, got #{inspect(value)}"
+    end
+  end
+
+  # The simulator names craft PREFIX-<index padded to max(3, digits(count))>; match it.
+  defp spacecraft_name(index, width),
+    do: "EARENDIL-" <> (index |> Integer.to_string() |> String.pad_leading(width, "0"))
+
+  def spacecraft(count \\ fleet_size()) do
+    width = max(3, count |> Integer.to_string() |> String.length())
+    commissioning_from = count - div(count, 20)
+
+    Enum.map(1..count, fn index ->
+      plane = div(index - 1, @spacecraft_per_plane)
+      slot = rem(index - 1, @spacecraft_per_plane)
+      name = spacecraft_name(index, width)
 
       %{
         spacecraft_id: "spacecraft-#{String.downcase(name)}",
@@ -49,7 +77,8 @@ defmodule Cadence.Dev.ReflectOrbital.Fixture do
           Map.merge(metadata(), %{
             "serial_number" => "RO-DEMO-#{1000 + index}",
             "block" => "Block 1 demonstration bus",
-            "operational_phase" => if(index <= 475, do: "routine", else: "commissioning"),
+            "operational_phase" =>
+              if(index <= commissioning_from, do: "routine", else: "commissioning"),
             "plane" => plane + 1,
             "slot" => slot + 1,
             "orbit" => %{
@@ -63,7 +92,8 @@ defmodule Cadence.Dev.ReflectOrbital.Fixture do
             },
             "payload" => %{
               "type" => "steerable solar reflector",
-              "deployment_state" => if(index <= 475, do: "deployed", else: "stowed"),
+              "deployment_state" =>
+                if(index <= commissioning_from, do: "deployed", else: "stowed"),
               "illumination_enabled" => false
             },
             "radio" => %{
@@ -89,24 +119,43 @@ defmodule Cadence.Dev.ReflectOrbital.Fixture do
     "earendil-punta-arenas" => "PUQ",
     "earendil-hartebeesthoek" => "HBK",
     "earendil-perth" => "PER",
-    "earendil-invercargill" => "INV"
+    "earendil-invercargill" => "INV",
+    "earendil-singapore" => "SIN",
+    "earendil-mauritius" => "MRU",
+    "earendil-azores" => "AZO",
+    "earendil-dubai" => "DXB",
+    "earendil-alice-springs" => "ASP"
   }
 
   def station_code(site_id), do: Map.fetch!(@station_codes, site_id)
 
+  @sites [
+    {"svalbard", "Svalbard", "Norway / Arctic", 78.23, 15.41, 6},
+    {"troll", "Troll", "Antarctica", -72.01, 2.54, 4},
+    {"fairbanks", "Fairbanks", "Alaska / North America", 64.84, -147.72, 4},
+    {"kiruna", "Kiruna", "Sweden / Europe", 67.86, 20.23, 4},
+    {"hawaii", "Hawaii", "Pacific / North America", 19.82, -155.47, 3},
+    {"santiago", "Santiago", "Chile / South America", -33.45, -70.67, 3},
+    {"punta-arenas", "Punta Arenas", "Chile / Southern hemisphere", -53.16, -70.91, 4},
+    {"hartebeesthoek", "Hartebeesthoek", "South Africa", -25.89, 27.69, 3},
+    {"perth", "Perth", "Australia / Indian Ocean", -31.95, 115.86, 3},
+    {"invercargill", "Invercargill", "New Zealand / South Pacific", -46.41, 168.35, 4},
+    {"singapore", "Singapore", "Southeast Asia", 1.35, 103.82, 3},
+    {"mauritius", "Mauritius", "Indian Ocean", -20.16, 57.5, 3},
+    {"azores", "Azores", "North Atlantic", 37.74, -25.67, 3},
+    {"dubai", "Dubai", "Middle East", 25.2, 55.27, 3},
+    {"alice-springs", "Alice Springs", "Australia / Interior", -23.7, 133.88, 3}
+  ]
+
+  def site_count do
+    # At least two: a craft's candidate site must differ from its primary. Default 10, the demo and
+    # console e2e set; the scale harness runs 15.
+    "EARENDIL_SITE_COUNT" |> System.get_env("10") |> bounded!(2, length(@sites))
+  end
+
   def sites do
-    [
-      {"svalbard", "Svalbard", "Norway / Arctic", 78.23, 15.41, 6},
-      {"troll", "Troll", "Antarctica", -72.01, 2.54, 4},
-      {"fairbanks", "Fairbanks", "Alaska / North America", 64.84, -147.72, 4},
-      {"kiruna", "Kiruna", "Sweden / Europe", 67.86, 20.23, 4},
-      {"hawaii", "Hawaii", "Pacific / North America", 19.82, -155.47, 3},
-      {"santiago", "Santiago", "Chile / South America", -33.45, -70.67, 3},
-      {"punta-arenas", "Punta Arenas", "Chile / Southern hemisphere", -53.16, -70.91, 4},
-      {"hartebeesthoek", "Hartebeesthoek", "South Africa", -25.89, 27.69, 3},
-      {"perth", "Perth", "Australia / Indian Ocean", -31.95, 115.86, 3},
-      {"invercargill", "Invercargill", "New Zealand / South Pacific", -46.41, 168.35, 4}
-    ]
+    @sites
+    |> Enum.take(site_count())
     |> Enum.with_index()
     |> Enum.map(fn {{id, name, region, latitude, longitude, antennas}, index} ->
       %{
@@ -116,19 +165,23 @@ defmodule Cadence.Dev.ReflectOrbital.Fixture do
         "latitude_deg" => latitude,
         "longitude_deg" => longitude,
         "antenna_count" => antennas,
-        "ingress_port" => 42_100 + index,
-        "uplink_port" => 42_200 + index,
+        "ingress_port" =>
+          String.to_integer(System.get_env("EARENDIL_INGRESS_BASE_PORT", "42100")) + index,
+        "uplink_port" =>
+          String.to_integer(System.get_env("EARENDIL_UPLINK_BASE_PORT", "42200")) + index,
         "synthetic" => true
       }
     end)
   end
 
   def scenario do
+    fleet = spacecraft()
+
     %{
       "id" => scenario_id(),
-      "name" => "Earendil — 500-spacecraft rehearsal",
+      "name" => "Earendil — #{length(fleet)}-spacecraft rehearsal",
       "description" => "Synthetic fleet and ground sites for a Cadence interview demonstration.",
-      "spacecraft_count" => 500,
+      "spacecraft_count" => length(fleet),
       "spacecraft_prefix" => "EARENDIL",
       "ground_stations" => sites(),
       "orbit_readiness" => %{
@@ -147,7 +200,7 @@ defmodule Cadence.Dev.ReflectOrbital.Fixture do
         "rate_hz" => 1.0,
         "noise_amplitude" => 0.05,
         "spacecraft_frames" =>
-          Map.new(spacecraft(), &{&1.display_name, %{"scid" => &1.scid, "vcid" => 0}})
+          Map.new(fleet, &{&1.display_name, %{"scid" => &1.scid, "vcid" => 0}})
       },
       "fault_profile" => %{}
     }

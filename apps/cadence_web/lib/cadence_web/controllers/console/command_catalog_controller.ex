@@ -1,6 +1,6 @@
 defmodule CadenceWeb.Console.CommandCatalogController do
   @moduledoc """
-  `GET /api/console/v1/missions/:mission_id/commands` and
+  `GET /api/v1/missions/:mission_id/commands` and
   `GET …/commands/:command_id` (M17). Contract: docs/apogee/api/commanding.md.
   """
 

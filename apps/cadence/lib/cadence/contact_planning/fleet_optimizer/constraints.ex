@@ -7,6 +7,8 @@ defmodule Cadence.ContactPlanning.FleetOptimizer.Constraints do
     FleetPlanningPolicyVersion
   }
 
+  alias Cadence.ContactPlanning.FleetOptimizer.SelectionIndex
+
   @spec inherent_failures(
           ContactRequirementVersion.t(),
           ContactOpportunitySnapshot.t(),
@@ -86,15 +88,14 @@ defmodule Cadence.ContactPlanning.FleetOptimizer.Constraints do
   @spec dynamic_failures(
           ContactRequirementVersion.t(),
           ContactOpportunitySnapshot.t(),
-          [ContactOpportunitySnapshot.t()],
-          map(),
+          SelectionIndex.t(),
           FleetPlanningPolicyVersion.t()
         ) :: [map()]
-  def dynamic_failures(requirement, snapshot, selected, requirements, policy) do
+  def dynamic_failures(requirement, snapshot, selected, policy) do
     provider_id = provider_id(snapshot)
 
     [
-      same_spacecraft_failure(requirement, snapshot, selected, requirements),
+      same_spacecraft_failure(requirement, snapshot, selected),
       separation_failure(requirement, snapshot, selected),
       resource_failure(snapshot, selected, policy),
       contact_quota_failure(requirement, selected, policy),
@@ -211,15 +212,11 @@ defmodule Cadence.ContactPlanning.FleetOptimizer.Constraints do
     }
   end
 
-  defp same_spacecraft_failure(requirement, snapshot, selected, requirements) do
+  defp same_spacecraft_failure(requirement, snapshot, selected) do
     conflict =
-      Enum.find(selected, fn current ->
-        current_requirement = requirements[requirement_key(current)]
-
-        current_requirement &&
-          current_requirement.spacecraft_id == requirement.spacecraft_id &&
-          overlap?(snapshot, current)
-      end)
+      selected
+      |> SelectionIndex.for_spacecraft(requirement.spacecraft_id)
+      |> Enum.find(&overlap?(snapshot, &1))
 
     if conflict do
       failure(
@@ -234,7 +231,7 @@ defmodule Cadence.ContactPlanning.FleetOptimizer.Constraints do
   defp separation_failure(requirement, snapshot, selected) do
     conflict =
       selected
-      |> Enum.filter(&same_requirement?(&1, requirement))
+      |> SelectionIndex.for_requirement(requirement)
       |> Enum.find(fn current ->
         gap(snapshot, current) < requirement.minimum_separation_seconds
       end)
@@ -258,9 +255,9 @@ defmodule Cadence.ContactPlanning.FleetOptimizer.Constraints do
     capacity = resource_capacity(key, policy)
 
     overlapping =
-      Enum.filter(selected, fn current ->
-        resource_key(current) == key and overlap?(snapshot, current)
-      end)
+      selected
+      |> SelectionIndex.for_resource(snapshot)
+      |> Enum.filter(&overlap?(snapshot, &1))
 
     if length(overlapping) >= capacity do
       failure(
@@ -287,7 +284,7 @@ defmodule Cadence.ContactPlanning.FleetOptimizer.Constraints do
         do: maximum,
         else: subtract_reserve(maximum, reserve)
 
-    if is_integer(effective_maximum) and length(selected) + 1 > effective_maximum do
+    if is_integer(effective_maximum) and selected.count + 1 > effective_maximum do
       code =
         if requirement.priority == :critical,
           do: "global_contact_quota_exhausted",
@@ -297,7 +294,7 @@ defmodule Cadence.ContactPlanning.FleetOptimizer.Constraints do
         true,
         code,
         "Fleet contact quota does not permit this selection.",
-        %{"selected_contacts" => length(selected), "effective_maximum" => effective_maximum}
+        %{"selected_contacts" => selected.count, "effective_maximum" => effective_maximum}
       )
     end
   end
@@ -306,7 +303,7 @@ defmodule Cadence.ContactPlanning.FleetOptimizer.Constraints do
 
   defp provider_contact_quota_failure(provider, selected, policy) do
     maximum = get_in(policy.budget_quota_document, ["per_provider", provider, "max_contacts"])
-    current = Enum.count(selected, &(provider_id(&1) == provider))
+    current = SelectionIndex.provider_count(selected, provider)
 
     if is_integer(maximum) and current + 1 > maximum do
       failure(
@@ -330,7 +327,7 @@ defmodule Cadence.ContactPlanning.FleetOptimizer.Constraints do
 
     projected_cost_failure(
       snapshot,
-      selected,
+      selected.known_cost,
       effective_maximum,
       "global_cost_budget_exhausted",
       "Fleet cost ceiling does not permit this selection."
@@ -346,11 +343,9 @@ defmodule Cadence.ContactPlanning.FleetOptimizer.Constraints do
         ["per_provider", provider, "max_estimated_cost_micros"]
       )
 
-    selected = Enum.filter(selected, &(provider_id(&1) == provider))
-
     projected_cost_failure(
       snapshot,
-      selected,
+      SelectionIndex.provider_cost(selected, provider),
       maximum,
       "provider_cost_budget_exhausted",
       "Provider cost ceiling does not permit this selection.",
@@ -358,7 +353,7 @@ defmodule Cadence.ContactPlanning.FleetOptimizer.Constraints do
     )
   end
 
-  defp projected_cost_failure(snapshot, selected, maximum, code, message, extra \\ %{})
+  defp projected_cost_failure(snapshot, selected_cost, maximum, code, message, extra \\ %{})
 
   defp projected_cost_failure(
          _snapshot,
@@ -370,14 +365,7 @@ defmodule Cadence.ContactPlanning.FleetOptimizer.Constraints do
        ),
        do: nil
 
-  defp projected_cost_failure(snapshot, selected, maximum, code, message, extra) do
-    selected_cost =
-      selected
-      |> Enum.map(&cost/1)
-      |> Enum.map(&known_cost/1)
-      |> Enum.reject(&is_nil/1)
-      |> Enum.sum()
-
+  defp projected_cost_failure(snapshot, selected_cost, maximum, code, message, extra) do
     case cost(snapshot) do
       {:known, micros, _currency} when selected_cost + micros > maximum ->
         failure(
@@ -397,7 +385,7 @@ defmodule Cadence.ContactPlanning.FleetOptimizer.Constraints do
   end
 
   defp redundancy_failure(requirement, snapshot, selected, policy) do
-    current = Enum.filter(selected, &same_requirement?(&1, requirement))
+    current = SelectionIndex.for_requirement(selected, requirement)
 
     if current == [] or requirement.contact_count <= 1 do
       nil
@@ -507,14 +495,6 @@ defmodule Cadence.ContactPlanning.FleetOptimizer.Constraints do
 
   defp subtract_reserve(nil, _reserve), do: nil
   defp subtract_reserve(maximum, reserve), do: max(maximum - reserve, 0)
-
-  defp requirement_key(snapshot),
-    do: {snapshot.contact_requirement_id, snapshot.contact_requirement_version}
-
-  defp same_requirement?(snapshot, requirement),
-    do:
-      snapshot.contact_requirement_id == requirement.contact_requirement_id and
-        snapshot.contact_requirement_version == requirement.version
 
   defp gap(left, right) do
     cond do

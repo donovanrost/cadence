@@ -15,7 +15,7 @@ defmodule CadenceWeb.LayoutsTest do
   end
 
   test "each layout sends one shell variant and semantic context" do
-    for variant <- [:auth, :sidebar, :mission_sidebar, :ops, :user_shell] do
+    for variant <- [:auth, :sidebar, :ops, :user_shell] do
       html = render_component(&apply(Layouts, variant, [&1]), flash: %{}, inner_content: "page")
       vue = LiveVue.Test.get_vue(html, id: "application-shell")
       assert vue.component == "ApplicationShell"

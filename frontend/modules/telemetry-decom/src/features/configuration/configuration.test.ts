@@ -173,7 +173,7 @@ test("refresh retains a revision draft and requires explicit review when the sav
   w.unmount();
 });
 
-const producer = producerFixture("CADENCE_DECOM", import.meta.url);
+const producer = producerFixture("CADENCE_DECOM");
 test.skipIf(!producer.available)(
   "producer supplied configuration mounts the public feature and emits the selected revision",
   async () => {

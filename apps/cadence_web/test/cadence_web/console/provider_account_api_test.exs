@@ -40,7 +40,7 @@ defmodule CadenceWeb.Console.ProviderAccountAPITest do
         validate_credential?: false
       )
 
-    base = "/api/console/v1/organizations/#{org.organization_id}/provider-accounts"
+    base = "/api/v1/organizations/#{org.organization_id}/provider-accounts"
 
     data =
       admin |> TestFixtures.member_conn() |> get(base) |> json_response(200) |> Map.fetch!("data")
@@ -69,7 +69,7 @@ defmodule CadenceWeb.Console.ProviderAccountAPITest do
     org = TestFixtures.persist_org!()
     admin = TestFixtures.persist_user!()
     TestFixtures.grant_membership!(admin, org, role: :organization_admin)
-    base = "/api/console/v1/organizations/#{org.organization_id}"
+    base = "/api/v1/organizations/#{org.organization_id}"
     conn = fn -> TestFixtures.member_conn(admin) end
 
     schema = conn.() |> get(base <> "/provider-adapters/simulator/schema") |> json_response(200)
@@ -229,7 +229,7 @@ defmodule CadenceWeb.Console.ProviderAccountAPITest do
     org = TestFixtures.persist_org!()
     admin = TestFixtures.persist_user!()
     TestFixtures.grant_membership!(admin, org, role: :organization_admin)
-    base = "/api/console/v1/organizations/#{org.organization_id}"
+    base = "/api/v1/organizations/#{org.organization_id}"
     conn = fn -> TestFixtures.member_conn(admin) end
 
     body = %{

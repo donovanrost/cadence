@@ -2,7 +2,7 @@ import { isKnown, type Decoded } from "@/api/index.ts";
 import type { QueueItem } from "./queue.ts";
 import type { ResolutionAction } from "./attentionVocab.ts";
 import type { resolvedReader } from "./attentionReader.ts";
-import { noStop, short } from "./attentionWords.ts";
+import { expiredWords, noStop, short } from "./attentionWords.ts";
 import { diskResolvedWords } from "./journalDisk.ts";
 
 /** Resolved attention rows (U31/U32): what closed each, and the 5 s fade at its old place. */
@@ -73,8 +73,9 @@ export function resolvedWords(r: ResolvedEntry, now: Date = new Date()): string 
       return `Acknowledged by ${r.resolved_by.name ?? "an operator"} at ${at}.`;
   }
   if (r.id.startsWith("attention:archive_quarantine:")) {
-    // U49: archived on retry, or discarded by an operator with a reason.
+    // U49: archived on retry, discarded by an operator with a reason, or expired (#791).
     if (r.action === "retried") return `Archived on retry at ${at}.`;
+    if (r.action === "expired") return expiredWords(at);
     if (r.action === "discarded")
       return `Discarded by ${r.resolved_by.name ?? "an operator"} at ${at}${r.note ? `: ${noStop(r.note)}` : ""}.`;
   }

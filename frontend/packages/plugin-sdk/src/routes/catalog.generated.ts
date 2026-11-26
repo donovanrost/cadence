@@ -401,19 +401,6 @@ export const routeCatalog = {
       description: null,
     },
   },
-  "/missions/:mission_id/ops/activations": {
-    kind: "activation_approvals",
-    layer: "ops",
-    scope: "mission",
-    title: "Activation approvals",
-    queryKeys: [],
-    header: {
-      kind: "collection",
-      breadcrumbs: true,
-      eyebrow: false,
-      description: null,
-    },
-  },
   "/missions/:mission_id/ops/data-operations/manage": {
     kind: "ops_module",
     layer: "ops",

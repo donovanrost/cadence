@@ -546,7 +546,7 @@ defmodule CadenceWeb.ApplicationHostTelemetryControllerTest do
       })
 
     assert {:ok, endpoint} =
-             Cadence.SourceEndpoints.persist_source_endpoint(
+             Cadence.SourceEndpointFixtures.persist(
                context.organization.organization_id,
                endpoint
              )
@@ -554,15 +554,16 @@ defmodule CadenceWeb.ApplicationHostTelemetryControllerTest do
     {revision, endpoint}
   end
 
+  # The console's surface host mints the host session id, CSRF token and pinned scope.
   defp fetch_catalog(conn, context) do
-    response = get(conn, catalog_path(context))
-    {response, json_response(response, 200)}
+    response = get(conn, host_path(context))
+    {response, json_response(response, 200)["data"]["catalog"]}
   end
 
-  defp catalog_path(context),
+  defp host_path(context),
     do:
-      @bridge_prefix <>
-        "/#{context.mission.mission_id}/spacecraft/#{context.spacecraft.spacecraft_id}/catalog"
+      "/api/v1/missions/#{context.mission.mission_id}/apps/telemetry_decom/surfaces/packet_bindings/host" <>
+        "?spacecraft_id=#{context.spacecraft.spacecraft_id}"
 
   defp query_path(context, spacecraft_id \\ nil) do
     spacecraft_id = spacecraft_id || context.spacecraft.spacecraft_id

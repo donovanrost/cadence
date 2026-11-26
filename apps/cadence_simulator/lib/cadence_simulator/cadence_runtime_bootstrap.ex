@@ -12,7 +12,6 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrap do
   @bootstrap_keys [
     :cadence_url,
     :api_token,
-    :organization_id,
     :mission_id,
     :realized_contact_id,
     :path_id,
@@ -23,7 +22,6 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrap do
   @required_bootstrap_keys [
     :cadence_url,
     :api_token,
-    :organization_id,
     :mission_id,
     :realized_contact_id,
     :path_id
@@ -85,13 +83,16 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrap do
       bootstrap_request.cadence_url
       |> String.trim_trailing("/")
       |> Kernel.<>(
-        "/api/organizations/#{bootstrap_request.organization_id}/missions/#{bootstrap_request.mission_id}" <>
-          "/realized_contacts/#{bootstrap_request.realized_contact_id}/paths/#{bootstrap_request.path_id}/runtime"
+        "/api/v1/missions/#{path_segment(bootstrap_request.mission_id)}" <>
+          "/realized-contacts/#{path_segment(bootstrap_request.realized_contact_id)}" <>
+          "/paths/#{path_segment(bootstrap_request.path_id)}/runtime"
       )
 
     headers = [{"authorization", "Bearer " <> bootstrap_request.api_token}]
     http_client.get_json(url, headers: headers, receive_timeout: @default_receive_timeout)
   end
+
+  defp path_segment(id), do: URI.encode(id, &URI.char_unreserved?/1)
 
   defp derive_runtime_opts(:telemetry, bootstrap_request, path_snapshot) do
     with {:ok, provider_runtime} <- select_provider_runtime(path_snapshot, bootstrap_request),

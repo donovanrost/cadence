@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed } from "vue";
 import {
   ApButton,
   ApEmptyState,
@@ -7,24 +6,26 @@ import {
   ApTable,
   ApTag,
   formatAbsolute,
+  formatCount,
   type ApColumn,
 } from "@/ui";
-import type { ReviewRow, ReviewRows } from "./api.ts";
+import type { ReviewRow } from "./api.ts";
 import { bytes, causeText, duration, outcomeTag, ownerWord, stationText } from "./format.ts";
 
 /**
  * R4 · Missed and partial passes. Volume is provider-reported vs what Cadence received (never a
  * planned figure: none exists). No dispute marks: billing is out of scope (DECISIONS #63, U34).
  */
-const props = defineProps<{
-  page: ReviewRows;
-  more: readonly ReviewRow[];
+defineProps<{
+  /** Every page loaded so far, in order. */
+  rows: readonly ReviewRow[];
+  /** How many lost passes match the window, whatever the pages. */
+  total: number;
   hasMore: boolean;
   loading: boolean;
   failed: boolean;
 }>();
 defineEmits<{ more: [] }>();
-const rows = computed(() => [...props.page.rows, ...props.more]);
 const columns: readonly ApColumn[] = [
   { key: "aos", label: "AOS", mono: true },
   { key: "spacecraft", label: "Spacecraft", mono: true },
@@ -72,7 +73,7 @@ const columns: readonly ApColumn[] = [
         <div
           class="flex flex-wrap items-center gap-3 border-t border-hairline px-4 py-2.5 font-mono text-xs text-text-3 uppercase"
         >
-          <span>Showing {{ rows.length }} of {{ page.total }}</span>
+          <span>Showing {{ formatCount(rows.length) }} of {{ formatCount(total) }}</span>
           <ApButton
             v-if="hasMore"
             size="compact"
@@ -81,9 +82,11 @@ const columns: readonly ApColumn[] = [
             @click="$emit('more')"
             >Load more</ApButton
           >
-          <span v-if="failed" class="text-caution-text normal-case"
-            >More passes couldn't load.</span
-          >
+          <!-- ux U72, a11y B6: a failed Load more is said next to it as an alert, always mounted
+            so it's announced; usePagedQuery clears it as Load more starts again. -->
+          <span role="alert" class="text-caution-text normal-case">{{
+            failed ? "More passes couldn't load. Try Load more again." : ""
+          }}</span>
         </div>
       </template>
     </ApTable>

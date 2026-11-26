@@ -165,7 +165,7 @@ test("foreign, malformed and changed review receipts fail admission", () => {
   expect(admitContactPage("reservation", { ...page, sequence: 1 })).toBeNull();
 });
 
-const producer = producerFixture("CADENCE_CONTACT_WORKFLOW", import.meta.url);
+const producer = producerFixture("CADENCE_CONTACT_WORKFLOW");
 test.skipIf(!producer.available)("producer supplied native contact contribution", async () => {
   const supplied = jsonFixture(producer.read()),
     snapshot = fixtureRecord(supplied.snapshot);

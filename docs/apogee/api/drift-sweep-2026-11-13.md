@@ -1,6 +1,6 @@
 # Contract-drift sweep, 2026-11-13 (api, for lead)
 
-Scope: `/api/console/v1` against `docs/apogee/api/*.md`, in lead's order: contacts and passes,
+Scope: `/api/v1` against `docs/apogee/api/*.md`, in lead's order: contacts and passes,
 planning, providers, settings. Each item: what disagrees, the direction of the fix, its state.
 
 - **server→doc** means changing the server to match the doc.

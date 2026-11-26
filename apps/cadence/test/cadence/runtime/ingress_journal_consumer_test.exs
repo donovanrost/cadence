@@ -339,6 +339,10 @@ defmodule Cadence.Runtime.IngressJournalConsumerTest do
     proxy = spawn(fn -> journal_proxy(journal, test, true) end)
     on_exit(fn -> Enum.each([executor, proxy], &Process.exit(&1, :kill)) end)
 
+    retry_scheduler = fn pid, message, delay ->
+      send(test, {:retry_scheduled, pid, message, delay})
+    end
+
     consumer =
       start_supervised!(
         {IngressJournalConsumer,
@@ -349,24 +353,27 @@ defmodule Cadence.Runtime.IngressJournalConsumerTest do
          journal_name: proxy,
          executor_name: executor,
          poll_interval_ms: 5,
+         retry_scheduler: retry_scheduler,
          retry_initial_ms: 100}
       )
 
     assert_receive {:processing_enqueued, _, {^consumer, ref}}, 1_000
     send(consumer, {:provider_ingress_persisted, executor, ref})
     assert_receive :ack_failed, 1_000
+    assert_receive {:retry_scheduled, ^consumer, {:retry, retry_ref}, 100}
 
     assert {:ok, %{phase: :acknowledge, failed_count: 1}} =
              IngressJournalConsumer.snapshot(consumer)
 
+    send(consumer, {:retry, retry_ref})
     assert_receive :ack_retried, 1_000
 
-    assert_eventually(fn ->
-      assert {:ok, %{cursors: %{processing: offset}}} = IngressJournal.snapshot(journal)
-      assert offset == entry.end_offset
-    end)
+    assert {:ok, %{status: :quiesced, acknowledged_batches: 1}} =
+             IngressJournalConsumer.quiesce(consumer)
 
-    refute_receive {:processing_enqueued, _, _}, 50
+    assert {:ok, %{cursors: %{processing: offset}}} = IngressJournal.snapshot(journal)
+    assert offset == entry.end_offset
+    assert {:ok, %{delivered_batches: 1}} = IngressJournalConsumer.snapshot(consumer)
   end
 
   defp journal_proxy(journal, test, fail?) do

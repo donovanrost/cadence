@@ -1,8 +1,8 @@
 import { fileURLToPath } from "node:url";
 
-// Defaults match mise.toml, dev/apogee_qa_personas.exs and docs/apogee/qa/runbook.md.
-// These are public local-development values.
-export const BASE_URL = process.env["BASE_URL"] ?? "http://127.0.0.1:4011";
+// dev/stack env loads the worktree's URL and credentials through mise.
+export const BASE_URL =
+  process.env["BASE_URL"] ?? `http://127.0.0.1:${process.env["PORT"] ?? "4001"}`;
 
 export interface Persona {
   readonly key: PersonaKey;
@@ -12,7 +12,13 @@ export interface Persona {
 
 export type PersonaKey = "admin" | "operator" | "second" | "orgAdmin" | "orgAdmin2";
 
-const personaPassword = process.env["E2E_PERSONA_PASSWORD"] ?? "apogee-qa-password";
+function required(key: string): string {
+  const value = process.env[key];
+  if (!value) throw new Error(`${key} is required; run dev/stack env and use mise exec`);
+  return value;
+}
+
+const personaPassword = required("E2E_PERSONA_PASSWORD");
 
 /**
  * admin: the environment administrator (platform admin mode; can mask capability gating).
@@ -23,7 +29,7 @@ export const PERSONAS: Readonly<Record<PersonaKey, Persona>> = {
   admin: {
     key: "admin",
     email: process.env["CADENCE_ADMIN_EMAIL"] ?? "admin@example.com",
-    password: process.env["CADENCE_ADMIN_PASSWORD"] ?? "change-me",
+    password: required("CADENCE_ADMIN_PASSWORD"),
   },
   operator: { key: "operator", email: "qa-operator@example.com", password: personaPassword },
   second: { key: "second", email: "qa-second@example.com", password: personaPassword },

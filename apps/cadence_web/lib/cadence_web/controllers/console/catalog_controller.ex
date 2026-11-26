@@ -1,7 +1,7 @@
 defmodule CadenceWeb.Console.CatalogController do
   @moduledoc """
   Catalog index (C1), import-run detail and rollout (C3) under
-  `/api/console/v1/missions/:mission_id/catalog`. Contract: docs/apogee/api/setup.md.
+  `/api/v1/missions/:mission_id/catalog`. Contract: docs/apogee/api/setup.md.
   """
 
   use CadenceWeb, :controller

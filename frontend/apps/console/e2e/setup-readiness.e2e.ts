@@ -119,7 +119,7 @@ test.describe("setup readiness", () => {
     test("shows the server's verdict, or says readiness is unavailable; never invents one", async ({
       page,
     }) => {
-      const api = await page.request.get(`/api/console/v1/missions/${DEMO.missionId}/readiness`);
+      const api = await page.request.get(`/api/v1/missions/${DEMO.missionId}/readiness`);
       await openConsole(page, screen);
       const h1 = page.getByRole("heading", { level: 1 });
       if (api.status() === 404) {

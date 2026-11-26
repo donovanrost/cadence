@@ -239,7 +239,7 @@ defmodule CadenceWeb.ControlPlaneApiFixtures do
              Cadence.SpacecraftStore.persist_spacecraft(organization_id, spacecraft)
 
     assert {:ok, _source_endpoint} =
-             Cadence.SourceEndpoints.persist_source_endpoint(organization_id, source_endpoint)
+             Cadence.SourceEndpointFixtures.persist(organization_id, source_endpoint)
 
     assert {:ok, persisted_binding_set} =
              Cadence.Governance.persist_binding_set(organization_id, binding_set)

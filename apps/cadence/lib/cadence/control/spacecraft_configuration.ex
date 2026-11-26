@@ -1,8 +1,6 @@
 defmodule Cadence.Control.SpacecraftConfiguration do
-  @moduledoc "Explicit human submission, direct activation, and review of a spacecraft revision."
-  alias Cadence.Applications.SpacecraftConfiguration.Drafts
+  @moduledoc "Explicit human submission and direct activation of a spacecraft revision; a review is decided from the activation."
   alias Cadence.Applications.SpacecraftConfiguration.Review
-  alias Cadence.Catalog.ConfigurationReviews
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Management.Activations
   alias Cadence.Platform.ScopedReadUpdates
@@ -56,51 +54,5 @@ defmodule Cadence.Control.SpacecraftConfiguration do
     end
   rescue
     _ -> {:ok, %{"outcome" => "application_needs_review"}}
-  end
-
-  def decide(scope, mission_id, spacecraft_id, token, request_id, reason, decision)
-      when is_binary(reason) and byte_size(reason) in 1..4096 and is_binary(request_id) and
-             is_binary(token) and is_binary(mission_id) and is_binary(spacecraft_id) and
-             decision in ["approved", "rejected"] do
-    with {:ok, mission, spacecraft} <- Drafts.authorize(scope, mission_id, spacecraft_id),
-         {:ok, request} <- Activations.fetch(scope, request_id),
-         true <- request.mission_id == mission_id,
-         :ok <- single_spacecraft(request),
-         %{"configuration_token" => reviewed_token} <-
-           ConfigurationReviews.evidence_for(
-             mission.organization_id,
-             mission_id,
-             request.metadata,
-             spacecraft_id
-           ),
-         true <- reviewed_token == token,
-         :ok <- Drafts.exact_token(Drafts.snapshot(mission, spacecraft).token, token) do
-      ControlActivations.review(scope, mission_id, %{
-        "activation_decision" => %{"request_id" => request_id, "reason" => reason},
-        "decision" => decision
-      })
-      |> ScopedReadUpdates.publish_result(
-        :spacecraft_configuration_changed,
-        scope.organization_id,
-        mission_id
-      )
-    else
-      false -> {:error, :spacecraft_configuration_review_stale}
-      nil -> {:error, :spacecraft_configuration_review_stale}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  def decide(_, _, _, _, _, _, _), do: {:error, :invalid_activation_decision}
-
-  # An approval decides everything the review covers, so an approver sees what they decide: a
-  # review of several spacecraft is decided from the activation, which shows every member (#734,
-  # commanding's review). Deciding through one craft's route would approve the others unseen.
-  defp single_spacecraft(request) do
-    if (ConfigurationReviews.count(request.metadata) || 1) > 1,
-      do:
-        {:error,
-         {:spacecraft_configuration_review_is_fleet, %{request_id: request.activation_request_id}}},
-      else: :ok
   end
 end

@@ -56,7 +56,7 @@ the tree moves.
 
 ## L1 · L2 · L3 contact planning (one batch: the legacy pages link to each other)
 **Routes:** L1 R:469, :473, :477; L2 R:465; L3 R:457. All are `HostPageLive` with `host_policy: :ops`. No legacy
-REST route belongs to them. The console's `/api/console/v1/.../contact-planning/*` (R:1003-1075) stays.
+REST route belongs to them. The console's `/api/v1/.../contact-planning/*` (R:1003-1075) stays.
 
 **Delete (only these routes):**
 - **L1:**

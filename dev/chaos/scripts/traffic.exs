@@ -3,7 +3,7 @@ unless System.get_env("CADENCE_CHAOS_LAB") == "true" and
        do: raise("Not the isolated chaos lab")
 
 Application.put_env(:cadence_simulator, :provider_http, enabled: false)
-Application.put_env(:cadence_simulator, :provider_store, path: "/data/traffic.dets")
+Application.put_env(:cadence_simulator, :provider_store, path: "/data/traffic.ets")
 {:ok, _} = Application.ensure_all_started(:cadence_simulator)
 
 rate_hz = System.get_env("LAB_RATE_HZ", "1.0") |> String.to_float()

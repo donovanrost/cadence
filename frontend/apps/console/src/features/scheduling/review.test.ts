@@ -226,11 +226,6 @@ describe("booking windows closed since the approver looked (#273, #340)", () => 
       "Not applied: the booking window closed for 2 more of the proposal's passes after you opened it, so what you'd apply changed. Nothing was booked. Check the list and apply it again.",
     );
   });
-  it("words step 1's interim refusal without a count", () => {
-    expect(approveRefusal(conflict("contact_plan_opportunity_expired"), who).text).toBe(
-      "Not approved: the booking window has closed for some of R41's passes, so R41 can't be booked as it is. Your approval wasn't recorded. To book the others, draft the day again without them.",
-    );
-  });
 });
 
 describe("submit refusals (U97)", () => {

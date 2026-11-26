@@ -4,7 +4,7 @@ Status: **implemented** (P1). This is a thin pass-through of `Cadence.Control.Co
 semantics and shapes live in [domain.md](domain.md); the HTTP mapping is fe-setup's
 setup-shapes.md §K, adopted as is. Conventions: [README.md](README.md).
 
-Base: `/api/console/v1/missions/:mission_id/config`. Write calls need `x-csrf-token`.
+Base: `/api/v1/missions/:mission_id/config`. Write calls need `x-csrf-token`.
 
 | Method + path | Facade | Body | `data` |
 | --- | --- | --- | --- |
@@ -53,6 +53,23 @@ top-level keys are ignored; documents, values and options pass through as JSON.
 Wire encoding: the facade shapes with string keys. Atoms become lowercase strings, times are
 ISO-8601, revision numbers are integers (render them as `rN`), and actors are `{kind, id, name}`.
 
+## The four-eyes record (#117 step 2, DECISIONS #112)
+
+Every decision on a change set is an append-only record (`mission_config_reviews`): the reviewer's
+`approved` or `sent_back`, or a direct apply's own `not_required`. Each names its subject (the set's
+version and a digest of the exact ops it decided), the approval policy in force, `separated_from`
+(the ids the separation check compared: the submitter and every change's author; `[]` on a direct
+apply) and `admin_mode`. An approve names the version the reviewer saw (`expected_version`); a stale
+one answers `409 change_set_changed`, so the recorded digest is the digest of the ops applied.
+- A revision's `applied_by` is whoever ran the apply: on a reviewed set, the reviewer who approved
+  it. The submitter is the change set's `submitted_by`. The apply runs as that person, so on a
+  reviewed set the reviewer is also the `saved_by` of the limit and derived-telemetry versions it
+  saves, and the actor of the organization audit's `config` event for it (api-ops). #236's author
+  check is unaffected: it reads the review's authors, not `saved_by` or `applied_by`.
+- A change set's `reviews` lists reviewer decisions only (`approved | sent_back`). A direct apply's
+  `not_required` record isn't a review; the audit shows it (#239).
+- A direct set's `approval_required` is `false`: its policy is stored now.
+
 ## Who is named (#471)
 
 Every actor in these reads (`opened_by`, `submitted_by`, change `author`, review `actor`,
@@ -80,7 +97,7 @@ with no display name reads their `id` with `name: null`.
 | --- | --- |
 | 409 | `holds_blocking` (details = the preview; at submit, and at approve when a blocking item appeared after the submit (#262)), `catalog_command_in_flight` (details = `{command_request_ids}`), `frozen_in_review`, `change_set_changed`, `path_already_staged` (details = `{change_id, author, kind, entity_id, path, value}`), `reviewer_is_author` (#280: also when a service identity you're accountable for authored a change), `activation_policy_changed`, `entity_gone`, `in_use` (details = `{entity, uses}`: an archive of a transport or station still in use, at stage, submit or review; [setup.md](setup.md)), `conversion_in_progress` (details = `{change_set_id, batch \| null}`: a legacy route conversion batch is staged, so nothing else can be staged until it's applied or discarded; TEMPORARY, [setup.md](setup.md)), `conversion_already_staged`, `open_change_set_not_empty` (the conversion's own) |
 | 403 | `change_set_approver_authors_unknown` (#280; details = `{service: {id, name} \| null}`): a service identity with nobody recorded as accountable authored a change, so nobody can review the set until an org admin records who is. No console route lets a service stage today; the domain allows it, so the check holds anyway |
-| 422 | `invalid_op` (details = `{index, errors: [{path, message}]}`), `reason_required`, `comment_required` (send back only, #521), `nothing_staged`, `not_in_review`, `checks_failed` and `holds_not_acknowledged` (details = the preview), `invalid_range`, `invalid_params` (malformed body; details keyed by field), `nothing_to_convert` (the conversion's) |
+| 422 | `invalid_op` (details = `{index, errors: [{path, message, details?}]}`; a SCID another spacecraft's staged op holds, or an earlier op of the same request gives, is refused at stage on `scid` with `details: {scid, spacecraft_name \| null, source: "staged" \| "request"}`: S9, [setup.md](setup.md)), `reason_required`, `comment_required` (send back only, #521), `nothing_staged`, `not_in_review`, `checks_failed` and `holds_not_acknowledged` (details = the preview), `invalid_range`, `invalid_params` (malformed body; details keyed by field), `nothing_to_convert` (the conversion's) |
 | 403 | `forbidden` |
 | 404 | `change_set_not_found`, `revision_not_found`, `change_not_found`, `op_not_found`, `mission_not_found` |
 | 503 | `apply_interrupted` (submit/approve: nothing changed; safe to retry), `preview_failed` (submit/approve: Cadence couldn't run the checks, a database or connection error; nothing changed, the set keeps its state, safe to retry; details null, the cause is only in the server log; #262: was a 500 at approve and the generic `422 unprocessable` at submit) |

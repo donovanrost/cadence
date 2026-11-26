@@ -58,7 +58,7 @@ matrix, A4 passes for the next 2 h. Rail counts (Fleet, Alarms, Commands, Contac
 | Data | Today | Gap |
 | --- | --- | --- |
 | Spacecraft list (id, name, SCID, profile, plane, slot) | `GET /api/organizations/:org/missions/:mid/spacecraft` returns the full list; plane/slot only in `metadata` | **M1** typed fleet geometry |
-| Per-spacecraft worst limit state | `GET …/mission_health` `scope_summaries[]` (red/yellow/green/blue counts per spacecraft, `apps/cadence/lib/cadence/reads/mission_health.ex:79-114`). The dashboards `ConstellationHealth` source already computes `worst_state` + `:no_data` per spacecraft but only inside the dashboards engine | **M2** one fleet-status read |
+| Per-spacecraft worst limit state | console `GET …/fleet` `spacecraft[]` (`limit_state`, `violating_points`, `worst_point`; the old `mission_health` REST read is gone, #780) and formerly `scope_summaries[]` (red/yellow/green/blue counts per spacecraft, `apps/cadence/lib/cadence/reads/mission_health.ex:79-114`). The dashboards `ConstellationHealth` source already computes `worst_state` + `:no_data` per spacecraft but only inside the dashboards engine | **M2** one fleet-status read |
 | Stale (no TLM > 15 min) per spacecraft | none (per data source only) | **M3** per-spacecraft `last_received_at` + freshness |
 | In contact now, per spacecraft | `RealizedContact.lifecycle_state = active`, but no `spacecraft_id` (via source endpoints/paths) | **M4** active contact → spacecraft |
 | Uplinks queued / awaiting GO | `Cadence.Reads.Commands.summary/3` (`queued_count`, `release_pending_count`, `in_flight_count`), mission-wide only; approval-pending count not exposed | **M5** add to fleet status |
@@ -86,7 +86,7 @@ B3 recommended procedure, B4 same-signature sisters in the plane, technical deta
 | Point history | `GET …/telemetry/points/:point_id/history?spacecraft_id=&from_receipt_time=&to_receipt_time=&limit=` returns raw samples only. Decimation exists only in QuestDB inside dashboards (`reads/telemetry.ex:142-180`) | **M10** decimated history (1 h / 6 orbits / 24 h) |
 | Limit bands over time | `Reads.Limits.definition_intervals/…` (`reads/limits.ex:164-173`) — perfect for bands, not on JSON | **M11** limit intervals for a point |
 | First-crossed time, rate | `Reads.Limits.event_history` gives transitions; rate is derivable client-side from history | include first-crossed in **M9** |
-| Event log | `GET …/mission_events?spacecraft_id=&limit=` (no from/to on REST) | minor: expose from/to |
+| Event log | console `GET …/events?spacecraft_id=&from=&to=&limit=` (the old `mission_events` REST read is gone, #780) | minor: expose from/to |
 | Last LOS / next AOS | none per spacecraft (see **M4/M7**) | **M7** |
 | Umbra / next eclipse | none | **M12** (propagation; see decision D1) |
 | Sisters with the same signature | plane is in metadata; no "same signature" logic | v1: same plane + same point in caution/critical (client-side from **M2/M9**). Real similarity is later |

@@ -59,7 +59,7 @@ test("search rejects cross-scope, stale pins, repeated identities and windows ou
     expect(admitSearch(bad, m.context, found.search, required(m.routes.entries[0]))).toBeNull();
   }
 });
-const producer = producerFixture("CADENCE_SCHEDULE_MODEL", import.meta.url);
+const producer = producerFixture("CADENCE_SCHEDULE_MODEL");
 test.skipIf(!producer.available)("producer-supplied contact scheduling workflow", async () => {
   const model = required(admitContactSchedule(jsonFixture(producer.read()))),
     action = process.env.CADENCE_SCHEDULE_ACTION;

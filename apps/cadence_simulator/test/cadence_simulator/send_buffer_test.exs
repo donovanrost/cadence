@@ -139,10 +139,19 @@ defmodule CadenceSimulator.SendBufferTest do
             ]
           end)
 
+        test_pid = self()
+
+        reconnect_timer = fn _pid ->
+          ref = make_ref()
+          send(test_pid, {:reconnect_scheduled, ref})
+          ref
+        end
+
         {:ok, pid} =
           SendBuffer.start_link(
             output: {:tcp, "127.0.0.1", stale_port},
             runtime_resolver: {FakeRuntimeResolver, :next, [resolver]},
+            reconnect_timer: reconnect_timer,
             batch_timeout: 1_000,
             batch_size: 1_024
           )
@@ -154,7 +163,8 @@ defmodule CadenceSimulator.SendBufferTest do
           :gen_tcp.close(second_live_listener)
         end)
 
-        assert {:ok, first_socket} = :gen_tcp.accept(first_live_listener, 1_000)
+        assert SendBuffer.stats(pid).connected?
+        assert {:ok, first_socket} = :gen_tcp.accept(first_live_listener)
 
         on_exit(fn ->
           if Port.info(first_socket) != nil, do: :gen_tcp.close(first_socket)
@@ -164,11 +174,19 @@ defmodule CadenceSimulator.SendBufferTest do
         :ok = SendBuffer.flush(pid)
         assert {:ok, "first"} == :gen_tcp.recv(first_socket, byte_size("first"), 1_000)
 
+        sender_socket = :sys.get_state(pid).socket
         assert :ok = :inet.setopts(first_socket, linger: {true, 0})
         :gen_tcp.close(first_socket)
 
+        # The peer-close handler and the backoff are driven in order, independent of CI load.
+        send(pid, {:tcp_closed, sender_socket})
+        assert SendBuffer.stats(pid).reconnect_pending?
+        assert_receive {:reconnect_scheduled, reconnect_ref}
+        send(pid, {:timeout, reconnect_ref, :reconnect})
+        assert SendBuffer.stats(pid).connected?
+
         # Reconnect must happen without sacrificing the next generated packet.
-        assert {:ok, second_socket} = :gen_tcp.accept(second_live_listener, 1_000)
+        assert {:ok, second_socket} = :gen_tcp.accept(second_live_listener)
 
         SendBuffer.send_packet(pid, "rotating")
         :ok = SendBuffer.flush(pid)

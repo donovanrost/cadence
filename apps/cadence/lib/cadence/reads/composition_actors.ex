@@ -11,16 +11,12 @@ defmodule Cadence.Reads.CompositionActors do
   - A system actor (a seed, a script): its stored system id, `name` nil (the console says
     "Cadence"), and `run_by: %{id, name}` naming who ran it by the same member rule (#513, as
     `Reads.Catalog.Requesters` does, #516). `run_by` is nil for everyone else.
-  - The composition migration's own actor reads `nil` (mms-engineer): it made nobody's choice.
-
   Never an email: D1 stores kind and ids only. One name lookup per read.
   """
 
   alias Cadence.Control.ActorRef
   alias Cadence.MissionModels.CompositionViews
   alias Cadence.Persistence.JsonDocument
-
-  @migration_actor "migration:20261120060000"
 
   @type actor :: %{
           kind: binary(),
@@ -49,14 +45,10 @@ defmodule Cadence.Reads.CompositionActors do
     ActorRef.names(organization_id, documents ++ runners)
   end
 
-  @doc "One stored actor document as the reads show it (`nil` for the migration's own actor)."
+  @doc "One stored actor document as the reads show it."
   @spec actor(term(), ActorRef.names()) :: actor() | nil
   def actor(document, names) do
     case unwrap(document) do
-      %{"actor_kind" => "system", "system_id" => @migration_actor} = doc
-      when not is_map_key(doc, "run_by") ->
-        nil
-
       %{} = doc ->
         with %{} = actor <- ActorRef.document(doc, names),
              do: Map.put(actor, :run_by, runner(doc, names))

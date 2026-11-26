@@ -9,7 +9,7 @@ defmodule Cadence.GroundNetworks.MissionProviders do
   alias Cadence.GroundNetworks.{MissionProvider, ProviderAccountGrants, ProviderAccounts}
   alias Cadence.GroundNetworks.MissionProviders.ProviderRow, as: MissionProviderRow
   alias Cadence.Missions
-  alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.{BulkLookup, JsonDocument}
   alias Cadence.Repo
 
   @spec persist_provider(Scope.t() | binary(), MissionProvider.t()) ::
@@ -68,6 +68,14 @@ defmodule Cadence.GroundNetworks.MissionProviders do
       nil -> {:error, :mission_provider_not_found}
       %MissionProviderRow{} = row -> {:ok, MissionProviderRow.to_domain(row)}
     end
+  end
+
+  @doc "Exact mission provider versions keyed by `{id, version}`."
+  def fetch_provider_versions(organization_id, mission_id, keys) do
+    MissionProviderRow
+    |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
+    |> BulkLookup.by_version(:provider_id, keys)
+    |> Map.new(&{{&1.provider_id, &1.version}, MissionProviderRow.to_domain(&1)})
   end
 
   @spec list_providers(binary(), binary()) :: [MissionProvider.t()]

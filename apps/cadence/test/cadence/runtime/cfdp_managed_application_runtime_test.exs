@@ -180,7 +180,7 @@ defmodule Cadence.Runtime.CFDPManagedApplicationRuntimeTest do
         source_ref: "provider/cfdp-station"
       })
 
-    assert {:ok, persisted} = Cadence.SourceEndpoints.persist_source_endpoint(source_endpoint)
+    assert {:ok, persisted} = Cadence.SourceEndpointFixtures.persist(source_endpoint)
     persisted
   end
 

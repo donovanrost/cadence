@@ -124,7 +124,7 @@ defmodule CadenceWeb.CommandHistoryReadTest do
     assert snapshot["ops_page"]["context"]["resourceId"] == "history-request"
     refute Map.has_key?(snapshot["ops_page"], "token")
     assert Repo.all(Cadence.Commanding.CommandRequestRow) == before
-    assert {:error, {:redirect, %{to: "/sign-in"}}} = live(build_conn(), path)
+    assert {:error, {:redirect, %{to: "/console/sign-in"}}} = live(build_conn(), path)
   end
 
   test "revoked access and mismatched selections replace previous data with an unavailable envelope",

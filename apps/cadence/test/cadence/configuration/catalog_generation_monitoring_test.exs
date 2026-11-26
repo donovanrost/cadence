@@ -9,6 +9,7 @@ defmodule Cadence.Configuration.CatalogGenerationMonitoringTest do
   alias Cadence.Applications.SpacecraftConfiguration.{Drafts, Review}
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Catalog.SpacecraftConfigurationInput
+  alias Cadence.CompositionFixtures
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Control.Configuration
   alias Cadence.Control.MissionRuntime, as: ControlMissionRuntime
@@ -69,7 +70,7 @@ defmodule Cadence.Configuration.CatalogGenerationMonitoringTest do
     profile = profile!(c, c.rev1)
 
     {:ok, staged} =
-      stage(c, [update("spacecraft_profile", profile, "catalog_revision_id", c.limited)])
+      stage(c, [update("spacecraft_profile", profile, "composition_id", pin(c, c.limited))])
 
     assert {:ok, %{state: :applied}} = submit(c, staged)
 
@@ -86,11 +87,11 @@ defmodule Cadence.Configuration.CatalogGenerationMonitoringTest do
     assert is_binary(stored_parameter_id)
 
     # PartitionOwner's path: resolve against the plan, decode, turn the sample into an Update.
-    assert {:ok, resolved} =
-             MissionModelPlanDecoder.resolve_telemetry_configuration(
-               spec.runtime_plans,
-               configured
-             )
+    assert {:ok, definitions} =
+             MissionModelPlanDecoder.telemetry_packet_definitions(spec.runtime_plans)
+
+    resolved =
+      Enum.find(definitions, &(&1.packet_definition_id == configured.packet_definition_id))
 
     [field] = resolved.fields
     assert field.parameter_id == stored_parameter_id
@@ -171,7 +172,7 @@ defmodule Cadence.Configuration.CatalogGenerationMonitoringTest do
           "display_name" => "Monitoring profile",
           "downlink_protocol" => "tm",
           "uplink_protocol" => "tc",
-          "catalog_revision_id" => catalog,
+          "composition_id" => pin(c, catalog),
           "frame_parameters" => %{"frame_size" => 1115, "ocf_length" => 4}
         }
       }
@@ -191,6 +192,8 @@ defmodule Cadence.Configuration.CatalogGenerationMonitoringTest do
 
     id
   end
+
+  defp pin(c, catalog), do: CompositionFixtures.pin!(c.org, c.mission.mission_id, catalog)
 
   defp update(kind, id, path, value),
     do: %{kind: kind, action: :update, entity_id: id, changes: [%{path: path, value: value}]}

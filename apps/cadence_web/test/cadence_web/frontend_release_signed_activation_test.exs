@@ -437,7 +437,7 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
       })
 
     assert {:ok, endpoint} =
-             Cadence.SourceEndpoints.persist_source_endpoint(
+             Cadence.SourceEndpointFixtures.persist(
                context.organization.organization_id,
                endpoint
              )
@@ -708,11 +708,10 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
   end
 
   defp assert_host_catalog!(context, package) do
-    catalog_response =
-      get(context.member_conn, catalog_path(context), %{application_key: "telemetry_decom"})
+    catalog_response = get(context.member_conn, host_path(context))
 
     assert catalog_response.status == 200
-    catalog = json_response(catalog_response, 200)
+    catalog = json_response(catalog_response, 200)["data"]["catalog"]
     assert [application] = catalog["applications"]
     assert application["applicationKey"] == "telemetry_decom"
     assert application["applicationVersion"] == 1
@@ -750,10 +749,9 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
   end
 
   defp assert_host_query_and_action!(context, revision, endpoint, package) do
-    catalog_response =
-      get(context.member_conn, catalog_path(context), %{application_key: "telemetry_decom"})
+    catalog_response = get(context.member_conn, host_path(context))
 
-    catalog = json_response(catalog_response, 200)
+    catalog = json_response(catalog_response, 200)["data"]["catalog"]
     assert [application] = catalog["applications"]
     assert application["release"]["releaseId"] == package.release["releaseId"]
 
@@ -1299,10 +1297,11 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
 
   defp identity(release), do: Map.take(release, ["application", "package", "surface"])
 
-  defp catalog_path(context),
+  # The console's surface host mints the host session id, CSRF token and pinned scope.
+  defp host_path(context),
     do:
-      @host_catalog_suffix <>
-        "/#{context.mission.mission_id}/spacecraft/#{context.spacecraft.spacecraft_id}/catalog"
+      "/api/v1/missions/#{context.mission.mission_id}/apps/telemetry_decom/surfaces/packet_bindings/host" <>
+        "?spacecraft_id=#{context.spacecraft.spacecraft_id}"
 
   defp query_path(context),
     do:

@@ -286,7 +286,7 @@ test("foreign contexts, privacy claims, cursor ties, forged receipts and malform
     expect(() => readWorkbenchPage(next, p.workbench.context)).toThrow();
   }
 });
-const producer = producerFixture("CADENCE_COMMAND_STAGES_DOCUMENT", import.meta.url);
+const producer = producerFixture("CADENCE_COMMAND_STAGES_DOCUMENT");
 test.skipIf(!producer.available)(
   "actual producer stage workbench controls yield finite Phoenix actions",
   async () => {

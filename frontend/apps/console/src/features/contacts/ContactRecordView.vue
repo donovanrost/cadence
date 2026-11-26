@@ -1,10 +1,16 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
-import { computed, ref, shallowRef, watch } from "vue";
-import { describeApiError, isError, isKnown, useRemoteQuery } from "@/api/index.ts";
+import { computed, ref } from "vue";
+import {
+  describeApiError,
+  isError,
+  isKnown,
+  usePagedQuery,
+  type PageFetcher,
+} from "@/api/index.ts";
 import { ApButton } from "@/ui";
 import { fetchContactRecord, type ContactRecord } from "./records.ts";
-import { holdsFocus, landOnFirstNew } from "./pageFocus.ts";
+import { useShowEarlier } from "./pageFocus.ts";
 import { clock, sentenceCase, span } from "./recordWords.ts";
 
 /**
@@ -28,37 +34,43 @@ const failure = computed(() => {
     ? "No contact record with this id."
     : `Couldn't load the contact record: ${describeApiError(s.error)}`;
 });
-const query = useRemoteQuery(
-  computed(() =>
+type Key = Readonly<{ m: MissionId; c: string }>;
+type Revision = ContactRecord["revisions"]["entries"][number];
+/** The record itself rides on each page; the schedule's revisions are what pages (25 a page). */
+const fetchPage: PageFetcher<Key, Revision, Omit<ContactRecord, "revisions">> = async (
+  k,
+  cursor,
+  signal,
+) => {
+  const page = await fetchContactRecord(k.m, k.c, cursor, signal);
+  if (!page.ok) return page;
+  const { revisions, ...record } = page.value;
+  return {
+    ok: true,
+    value: { items: revisions.entries, next: revisions.next_cursor, meta: record },
+  };
+};
+const query = usePagedQuery(
+  computed<Key | null>(() =>
     opened.value && props.contactId ? { m: props.missionId, c: props.contactId } : null,
   ),
-  (k, signal) => fetchContactRecord(k.m, k.c, null, signal),
+  fetchPage,
+  // A revision has no id of its own; its number is unique within the contact.
+  (rev) => String(rev.revision),
 );
-const c = computed(() => (query.state.value.status === "ready" ? query.state.value.value : null));
-const earlier = shallowRef<ContactRecord["revisions"]["entries"]>([]);
-const cursor = ref<string | null>(null);
-const moreError = ref<string | null>(null);
-watch(c, (v) => {
-  earlier.value = [];
-  cursor.value = v?.revisions.next_cursor ?? null;
-});
+const c = computed(() =>
+  query.state.value.status === "ready" ? query.state.value.value.meta : null,
+);
+/** The schedule's revisions, newest first, every page loaded (Show earlier appends the next). */
+const revisions = computed(() =>
+  query.state.value.status === "ready" ? query.state.value.value.items : [],
+);
+const hasEarlier = computed(
+  () => query.state.value.status === "ready" && query.state.value.value.next !== null,
+);
 const listEl = ref<HTMLElement | null>(null);
 const moreEl = ref<HTMLElement | null>(null);
-async function showEarlier() {
-  if (!cursor.value || !props.contactId) return;
-  const firstNew = revisions.value.length;
-  const page = await fetchContactRecord(props.missionId, props.contactId, cursor.value);
-  // B4 (ux #426): read once the page is back; someone who tabbed away meanwhile keeps their place.
-  const hadFocus = holdsFocus(moreEl.value);
-  if (!page.ok) {
-    moreError.value = `Couldn't load more: ${describeApiError(page.error)}`;
-    return;
-  }
-  earlier.value = [...earlier.value, ...page.value.revisions.entries];
-  cursor.value = page.value.revisions.next_cursor;
-  if (cursor.value === null) await landOnFirstNew(listEl.value, firstNew, hadFocus);
-}
-const revisions = computed(() => [...(c.value?.revisions.entries ?? []), ...earlier.value]);
+const showEarlier = useShowEarlier(query, listEl, moreEl);
 const side = (s: { unrecognized: string } | string) =>
   sentenceCase(isKnown(s) ? s : s.unrecognized);
 const facts = computed(() => {
@@ -142,7 +154,7 @@ const onToggle = (e: Event) => {
       </ul>
       <div ref="moreEl" class="contents">
         <ApButton
-          v-if="cursor"
+          v-if="hasEarlier"
           size="compact"
           variant="ghost"
           class="self-start"
@@ -150,7 +162,14 @@ const onToggle = (e: Event) => {
           >Show earlier</ApButton
         >
       </div>
-      <p v-if="moreError" role="alert" class="m-0 text-caution-text">{{ moreError }}</p>
+      <!-- a11y B6: always mounted so a failed Show earlier is announced; cleared as it starts again. -->
+      <p role="alert" class="m-0 text-caution-text">
+        {{
+          query.moreError.value
+            ? `Couldn't load more: ${describeApiError(query.moreError.value)}`
+            : ""
+        }}
+      </p>
       <p v-if="c.truncated" class="m-0">More paths, sources or intents than shown.</p>
     </div>
   </component>

@@ -75,7 +75,8 @@ defmodule Cadence.Management.Contacts.Store.ContactPlanningRunRow do
     })
   end
 
-  defp domain_attrs(run) do
+  @doc false
+  def domain_attrs(run) do
     %{
       contact_planning_run_id: run.contact_planning_run_id,
       organization_id: run.organization_id,

@@ -6,7 +6,7 @@ import { DEMO } from "./env.ts";
  * state "from another tab" while the UI is open.
  */
 type Json = Record<string, unknown>;
-const base = `/api/console/v1/missions/${DEMO.missionId}`;
+const base = `/api/v1/missions/${DEMO.missionId}`;
 
 function isJson(value: unknown): value is Json {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -20,7 +20,7 @@ async function data(response: { json(): Promise<unknown>; status(): number }): P
 }
 
 async function csrf(request: APIRequestContext): Promise<string> {
-  const token = (await data(await request.get("/api/console/v1/session")))["csrf_token"];
+  const token = (await data(await request.get("/api/v1/session")))["csrf_token"];
   if (typeof token !== "string") throw new Error("session has no csrf_token");
   return token;
 }

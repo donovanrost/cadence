@@ -15,7 +15,7 @@ defmodule CadenceWeb.Console.DashboardAuthoringAPITest do
 
   defp path(c, suffix),
     do:
-      "/api/console/v1/missions/#{c.mission.mission_id}/dashboards/#{c.document.dashboard_id}" <>
+      "/api/v1/missions/#{c.mission.mission_id}/dashboards/#{c.document.dashboard_id}" <>
         suffix
 
   defp post_json(c, suffix, body),

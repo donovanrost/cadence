@@ -28,7 +28,7 @@ defmodule Cadence.Reads.HandStartedPasses do
 
   @doc """
   The rows overlapping `[from, to)`: `{rows, truncated?}`. Filters as the passes read's
-  (`spacecraft_id`, `states`, `order`, `limit`); the station filter is the caller's.
+  (`spacecraft_id`, `states`, `station_refs`, `order`, `limit`, `after`).
   """
   @spec load(binary(), binary(), DateTime.t(), DateTime.t(), map()) :: {[map()], boolean()}
   def load(org, mission, from, to, filters) do
@@ -37,17 +37,36 @@ defmodule Cadence.Reads.HandStartedPasses do
     with {:ok, refs} <- endpoint_refs(owners, Map.get(filters, :spacecraft_id)),
          {:ok, states} <- own_states(Map.get(filters, :states)) do
       {contacts, truncated?} =
-        PassWindows.hand_started(org, mission, from, to,
-          endpoint_refs: refs,
-          states: states,
-          order: Map.get(filters, :order, :asc),
-          limit: Map.get(filters, :limit, 500)
-        )
+        PassWindows.hand_started(org, mission, from, to, window_opts(filters, refs, states))
 
       {rows(org, mission, contacts, owners), truncated?}
     else
       :none -> {[], false}
     end
+  end
+
+  @doc "The matching hand-started contacts in the whole filtered window."
+  def count(org, mission, from, to, filters) do
+    spacecraft_id = Map.get(filters, :spacecraft_id)
+    owners = if spacecraft_id, do: Groups.spacecraft_by_endpoint(org, mission), else: %{}
+
+    with {:ok, refs} <- endpoint_refs(owners, spacecraft_id),
+         {:ok, states} <- own_states(Map.get(filters, :states)) do
+      PassWindows.hand_count(org, mission, from, to, window_opts(filters, refs, states))
+    else
+      :none -> 0
+    end
+  end
+
+  defp window_opts(filters, refs, states) do
+    [
+      endpoint_refs: refs,
+      states: states,
+      station_refs: Map.get(filters, :station_refs),
+      after: Map.get(filters, :after),
+      order: Map.get(filters, :order, :asc),
+      limit: Map.get(filters, :limit, 500)
+    ]
   end
 
   @doc "One hand-started contact's row."
@@ -62,8 +81,8 @@ defmodule Cadence.Reads.HandStartedPasses do
   defp rows(org, mission, contacts, owners) do
     index = StationRefs.index(org, mission)
 
-    crafts =
-      Map.new(Cadence.SpacecraftStore.list_spacecraft(org, mission), &{&1.spacecraft_id, &1})
+    ids = for contact <- contacts, ref <- contact.source_endpoint_refs, id = owners[ref], do: id
+    {:ok, crafts} = Cadence.SpacecraftStore.fetch_spacecrafts_in_batches(org, mission, ids)
 
     people = ContactStart.people(org, contacts)
     Enum.map(contacts, &build(&1, owners, crafts, index, people))
@@ -122,8 +141,14 @@ defmodule Cadence.Reads.HandStartedPasses do
     case contact.source_endpoint_refs |> Enum.map(&owners[&1]) |> Enum.uniq() do
       [id] when is_binary(id) ->
         case Map.get(crafts, id) do
-          nil -> %{id: id, name: nil, scid: nil}
-          craft -> %{id: id, name: craft.display_name, scid: craft.scid}
+          nil ->
+            %{id: id, name: nil, scid: nil}
+
+          %{lifecycle_state: :active} = craft ->
+            %{id: id, name: craft.display_name, scid: craft.scid}
+
+          _archived ->
+            %{id: id, name: nil, scid: nil}
         end
 
       _none_or_several ->

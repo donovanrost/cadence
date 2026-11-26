@@ -2,15 +2,15 @@ defmodule Cadence.Runtime.ReplaySession do
   @moduledoc """
   Public data-plane boundary for isolated deterministic replay execution.
 
-  A replay session owns unregistered partition processes for the duration of a
-  bounded evidence set, drains their runtime records, and stops every process
-  before returning. Callers never depend on partition identity or process
+  A replay session owns unregistered partition processes, and the packet-definition cache they
+  share, for the duration of a bounded evidence set, drains their runtime records, and stops every
+  process before returning. Callers never depend on partition identity or process
   implementation details.
   """
 
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Ingress.RawEvidence
-  alias Cadence.Runtime.{MissionRuntimeSpec, PartitionKey, PartitionOwner}
+  alias Cadence.Runtime.{MissionRuntimeSpec, PacketDefinitionCache, PartitionKey, PartitionOwner}
 
   @type runtime_records :: %{
           capability_records: [term()],
@@ -23,17 +23,25 @@ defmodule Cadence.Runtime.ReplaySession do
           | {:error, term()}
   def process(raw_evidences, %MissionRuntimeSpec{binding_set: %BindingSet{} = binding_set} = spec)
       when is_list(raw_evidences) do
-    case process_all(raw_evidences, spec, binding_set, %{}, []) do
-      {:ok, processing_results, partition_owners} ->
-        finalize(processing_results, partition_owners)
+    # The session hosts its own partition owners, outside any `Runtime.Supervisor`, so it also
+    # hosts the cache they decode their packet definitions into.
+    {:ok, cache} = PacketDefinitionCache.start_link()
 
-      {:error, reason, partition_owners} ->
-        stop_partition_owners(partition_owners)
-        {:error, reason}
+    try do
+      case process_all(raw_evidences, spec, binding_set, cache, %{}, []) do
+        {:ok, processing_results, partition_owners} ->
+          finalize(processing_results, partition_owners)
+
+        {:error, reason, partition_owners} ->
+          stop_partition_owners(partition_owners)
+          {:error, reason}
+      end
+    after
+      GenServer.stop(cache)
     end
   end
 
-  defp process_all([], _spec, _binding_set, partition_owners, acc) do
+  defp process_all([], _spec, _binding_set, _cache, partition_owners, acc) do
     {:ok, acc, partition_owners}
   end
 
@@ -41,6 +49,7 @@ defmodule Cadence.Runtime.ReplaySession do
          [%RawEvidence{} = raw_evidence | remaining],
          spec,
          binding_set,
+         cache,
          partition_owners,
          acc
        ) do
@@ -51,6 +60,7 @@ defmodule Cadence.Runtime.ReplaySession do
            partition_key,
            spec,
            binding_set,
+           cache,
            raw_evidence
          ) do
       {:ok, partition_owner, next_partition_owners} ->
@@ -60,6 +70,7 @@ defmodule Cadence.Runtime.ReplaySession do
               remaining,
               spec,
               binding_set,
+              cache,
               next_partition_owners,
               [processing_result | acc]
             )
@@ -78,6 +89,7 @@ defmodule Cadence.Runtime.ReplaySession do
          %PartitionKey{} = partition_key,
          spec,
          binding_set,
+         cache,
          raw_evidence
        ) do
     case Map.fetch(partition_owners, partition_key) do
@@ -85,17 +97,32 @@ defmodule Cadence.Runtime.ReplaySession do
         {:ok, partition_owner, partition_owners}
 
       :error ->
-        start_partition_owner(partition_owners, partition_key, spec, binding_set, raw_evidence)
+        start_partition_owner(
+          partition_owners,
+          partition_key,
+          spec,
+          binding_set,
+          cache,
+          raw_evidence
+        )
     end
   end
 
-  defp start_partition_owner(partition_owners, partition_key, spec, binding_set, raw_evidence) do
+  defp start_partition_owner(
+         partition_owners,
+         partition_key,
+         spec,
+         binding_set,
+         cache,
+         raw_evidence
+       ) do
     case PartitionOwner.start_link(
            mission_id: spec.mission_id,
            partition_key: partition_key,
            active_activation: spec,
            binding_set: binding_set,
            register?: false,
+           packet_definition_cache: cache,
            persist_runtime_records?: false,
            profiler: :disabled,
            clock_mode: :replay,

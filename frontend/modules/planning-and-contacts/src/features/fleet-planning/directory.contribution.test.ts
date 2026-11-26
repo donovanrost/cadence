@@ -34,7 +34,7 @@ test("public contribution owns admission and uses the existing fleet workflow", 
   ).toThrow();
   wrapper.unmount();
 });
-const producer = producerFixture("CADENCE_FLEET_CONTRIBUTION", import.meta.url);
+const producer = producerFixture("CADENCE_FLEET_CONTRIBUTION");
 test.skipIf(!producer.available)("producer-supplied directory contribution", async () => {
   const snapshot = jsonFixture(producer.read()),
     rawContext = fixtureRecord(snapshot.context);

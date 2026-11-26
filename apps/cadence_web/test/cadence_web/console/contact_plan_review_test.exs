@@ -21,7 +21,7 @@ defmodule CadenceWeb.Console.ContactPlanReviewTest do
       org_id: org.organization_id,
       mission_id: mission.mission_id,
       plan_id: fixture.plan.contact_plan_id,
-      base: "/api/console/v1/missions/#{mission.mission_id}/contact-plans"
+      base: "/api/v1/missions/#{mission.mission_id}/contact-plans"
     }
   end
 

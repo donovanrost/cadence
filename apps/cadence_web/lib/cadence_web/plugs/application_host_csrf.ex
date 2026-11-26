@@ -23,10 +23,6 @@ defmodule CadenceWeb.Plugs.ApplicationHostCSRF do
       |> halt()
   end
 
-  defp problem(%{request_path: "/api/cadence/contact-workspace/v1/" <> _}) do
-    %{"code" => "invalid_csrf"}
-  end
-
   defp problem(_conn) do
     %{
       "schema" => @problem_schema,
@@ -36,9 +32,6 @@ defmodule CadenceWeb.Plugs.ApplicationHostCSRF do
   end
 
   defp json_browser_request?(%Plug.Conn{request_path: request_path}) do
-    String.starts_with?(request_path, [
-      "/api/cadence/application-host/v1/",
-      "/api/cadence/contact-workspace/v1/"
-    ])
+    String.starts_with?(request_path, "/api/cadence/application-host/v1/")
   end
 end

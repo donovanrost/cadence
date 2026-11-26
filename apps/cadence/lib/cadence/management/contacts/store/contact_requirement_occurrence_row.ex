@@ -96,6 +96,14 @@ defmodule Cadence.Management.Contacts.Store.ContactRequirementOccurrenceRow do
     |> validate_generated_binding()
   end
 
+  @doc "Serializes a generated occurrence for bulk insertion."
+  @spec insert_attrs(ContactRequirementOccurrence.t(), DateTime.t()) :: map()
+  def insert_attrs(%ContactRequirementOccurrence{} = occurrence, now) do
+    occurrence
+    |> domain_attrs()
+    |> Map.merge(%{inserted_at: now, updated_at: now})
+  end
+
   @spec to_domain(struct()) :: ContactRequirementOccurrence.t()
   def to_domain(%__MODULE__{} = row) do
     ContactRequirementOccurrence.new(%{

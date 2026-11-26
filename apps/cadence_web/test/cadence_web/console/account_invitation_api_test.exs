@@ -17,7 +17,7 @@ defmodule CadenceWeb.Console.AccountInvitationAPITest do
     invite = fn org, role ->
       admin
       |> TestFixtures.member_conn()
-      |> post("/api/console/v1/organizations/#{org.organization_id}/invitations", %{
+      |> post("/api/v1/organizations/#{org.organization_id}/invitations", %{
         "email" => outsider.email,
         "role" => role
       })
@@ -36,14 +36,14 @@ defmodule CadenceWeb.Console.AccountInvitationAPITest do
   end
 
   defp as(user), do: TestFixtures.member_conn(user)
-  defp mine(user), do: user |> as() |> get("/api/console/v1/account/invitations")
+  defp mine(user), do: user |> as() |> get("/api/v1/account/invitations")
 
   defp answer(user, id, verb),
-    do: user |> as() |> post("/api/console/v1/account/invitations/#{id}/#{verb}")
+    do: user |> as() |> post("/api/v1/account/invitations/#{id}/#{verb}")
 
   defp count(user),
     do:
-      json_response(get(as(user), "/api/console/v1/session"), 200)["data"][
+      json_response(get(as(user), "/api/v1/session"), 200)["data"][
         "pending_invitations_count"
       ]
 
