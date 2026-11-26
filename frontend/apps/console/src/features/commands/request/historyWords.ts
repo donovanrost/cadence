@@ -28,17 +28,23 @@ function uncertainWords(a: Attempt): string {
     : "Cadence couldn't confirm whether it was sent";
 }
 
-/** ux U70 (U29): 'Resolved as not sent by Mira K. at 03:20:05Z.' or who wasn't recorded. */
+/**
+ * ux U70 (U29, U103): 'Resolved as not sent by Mira K. at 03:20:05Z.', '…by ops-automation (a
+ * service identity)…', '…by a service identity…', or who isn't known / wasn't recorded.
+ */
 function resolvedLine(a: Attempt): string {
   const f = a.failure;
   // compared-as-text: resolved codes are api's two words, not_sent and rejected.
   const as = f?.code === "rejected" ? "rejected" : "not sent";
   const when = f?.at ? ` at ${at(f.at)}` : "";
   const by = f?.by;
-  // ux U70: a person or a service identity (an API credential) by its name. A resolution is never
-  // Cadence's own act (api: an automatic timeout records 'unknown', not a resolution).
+  // ux U70: a person by name; a service identity (an API credential) by its name, marked as a
+  // service (U103), or by its kind alone when it has no name. A resolution is never Cadence's own
+  // act (api: an automatic timeout records 'unknown', not a resolution).
+  const service = by?.kind === "service_identity";
   const who = by?.name ?? null;
-  if (who) return `Resolved as ${as} by ${who}${when}`;
+  if (who) return `Resolved as ${as} by ${service ? `${who} (a service identity)` : who}${when}`;
+  if (service) return `Resolved as ${as} by a service identity${when}`;
   return by
     ? `Resolved as ${as}${when}; who resolved it isn't known`
     : `Resolved as ${as}${when}; who resolved it wasn't recorded`;
@@ -138,6 +144,18 @@ const ACTIONS: Readonly<Record<string, string>> = {
 };
 const actionWord = (a: string) => ACTIONS[a] ?? a.replaceAll("_", " ");
 
+/**
+ * ux U70 (U25): a resolver the line can't name is found here by its id: ' · resolved by service
+ * identity key-1', or ' · resolved by key-1' when its kind isn't known. A named one shows nothing.
+ */
+function resolverId(a: Attempt): string {
+  const by = a.failure?.by;
+  if (!by || by.name) return "";
+  return by.kind === "service_identity"
+    ? ` · resolved by service identity ${by.id}`
+    : ` · resolved by ${by.id}`;
+}
+
 /** Technical details lines: ids, phase, severity, generated/recorded times. */
 export function technicalLines(
   attempts: readonly Attempt[],
@@ -145,7 +163,7 @@ export function technicalLines(
 ): string[] {
   const lines = attempts.map(
     (a) =>
-      `Attempt ${a.attempt_id}${a.path_id ? ` · path ${a.path_id}` : ""}${a.transport_binding_id ? ` · binding ${a.transport_binding_id}` : ""}${a.failure_reason ? ` · ${a.failure_reason}` : ""}`,
+      `Attempt ${a.attempt_id}${a.path_id ? ` · path ${a.path_id}` : ""}${a.transport_binding_id ? ` · binding ${a.transport_binding_id}` : ""}${a.failure_reason ? ` · ${a.failure_reason}` : ""}${resolverId(a)}`,
   );
   for (const v of verifiers) {
     const phase = isKnown(v.phase) ? v.phase : v.phase.unrecognized;
