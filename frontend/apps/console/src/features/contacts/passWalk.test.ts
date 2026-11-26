@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { missionId } from "@/api/index.ts";
-import { fetchPasses } from "./passes-api.ts";
+import { fetchPasses, MAX_PASS_PAGES } from "./passes-api.ts";
 
 const pass = (id: string, o: Record<string, unknown> = {}) => ({
   id,
@@ -80,5 +80,17 @@ describe("fetchPasses walks every page of the window", () => {
     vi.stubGlobal("fetch", () => Promise.resolve(replies.shift() ?? new Response("{}")));
     const r = await fetchPasses(missionId("m-1"), window);
     expect(r.ok).toBe(false);
+  });
+
+  it("fails, rather than looping, when the cursor never ends (console-eng on #906)", async () => {
+    let calls = 0;
+    vi.stubGlobal("fetch", () => {
+      calls += 1;
+      return Promise.resolve(page([`p${calls}`], `c${calls}`));
+    });
+    const r = await fetchPasses(missionId("m-1"), window);
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.error.kind).toBe("malformed");
+    expect(calls).toBe(MAX_PASS_PAGES);
   });
 });

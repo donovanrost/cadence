@@ -77,6 +77,7 @@ const executionReader = d.nullable(
     rejected: d.integer,
     failed: d.integer,
     /** #793: the providers of the plan's bookings, sorted; the callout names one or says "the providers". */
+    // free-text: provider display names, shown as written.
     provider_names: d.array(d.string, 100),
   }),
 );

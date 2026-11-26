@@ -4,6 +4,13 @@ import { PASS_PAGE_LIMIT, passPageReader } from "./passList.ts";
 
 /** One page of GET /passes; fetchPasses walks them (exported for decoder tests). */
 export const passesPageReader = passPageReader(passReader);
+/** 100 pages of 500: more than a day of passes at 1,000 spacecraft and 15 stations, several times over. */
+export const MAX_PASS_PAGES = 100;
+const tooManyPages = {
+  kind: "malformed",
+  message: "the passes read has more pages than expected",
+} as const;
+
 /**
  * Every pass in the window (#793): pages of 500 walked to the server's last cursor, each request
  * with the same window and filters (the cursor is bound to them; api #845). The counts are the
@@ -33,7 +40,10 @@ export async function fetchPasses(
   const passes: Pass[] = [...first.value.value.passes];
   const unshown: Unshown[] = [...first.value.value.unshown];
   let cursor = first.value.nextCursor;
-  while (cursor !== null) {
+  // A safety ceiling, not a window limit (console-eng on #906): a cursor that never ends fails
+  // the read, shown with Retry, instead of looping on every invalidation.
+  for (let pages = 1; cursor !== null; pages += 1) {
+    if (pages >= MAX_PASS_PAGES) return { ok: false, error: tooManyPages };
     const next = await page(cursor);
     if (!next.ok) return next;
     passes.push(...next.value.value.passes);
