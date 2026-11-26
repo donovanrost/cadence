@@ -9,24 +9,30 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
   alias Cadence.Jobs
   alias Cadence.Jobs.Runner, as: JobRunner
   alias Cadence.Management.Commanding, as: ManagementCommanding
+  alias Cadence.Organizations.Organization
   alias Cadence.Runtime.MissionModelPlanDecoder
+  alias CadenceWeb.TestFixtures
 
+  # The dev ingest routes (a person's session, console API; #780) push one packet and one frame
+  # through the real ingest path against an activated imported Mission Model, and the decoded
+  # values are read back through the console API.
   defp assert_dev_telemetry_ingress(
-         conn,
-         api_token,
          organization_id,
          mission_id,
          binding_set_id,
          binding_set_version
        ) do
+    user = TestFixtures.persist_user!()
+    TestFixtures.grant_membership!(user, %Organization{organization_id: organization_id})
+
     packet_hex =
       build_space_packet(42, 3, <<12.5::float-32, 1::size(1), 0::size(7)>>)
       |> Base.encode16(case: :lower)
 
     dev_ingress_conn =
-      conn
-      |> authorize(api_token)
-      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/dev/space_packets", %{
+      user
+      |> TestFixtures.member_conn()
+      |> post("/api/console/v1/missions/#{mission_id}/dev/space_packets", %{
         "space_packet" => %{
           "source_ref" => "station-a",
           "packet_hex" => packet_hex
@@ -87,9 +93,9 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
       |> Base.encode16(case: :lower)
 
     dev_tm_ingress_conn =
-      conn
-      |> authorize(api_token)
-      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/dev/tm_frames", %{
+      user
+      |> TestFixtures.member_conn()
+      |> post("/api/console/v1/missions/#{mission_id}/dev/tm_frames", %{
         "tm_frame" => %{
           "source_ref" => "station-b",
           "frame_hex" => tm_frame_hex,
@@ -151,65 +157,27 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
              }
            } = json_response(dev_tm_ingress_conn, 200)
 
-    latest_values_conn =
-      conn
-      |> authorize(api_token)
-      |> get("/api/organizations/#{organization_id}/missions/#{mission_id}/telemetry/latest")
+    assert_console_reads(organization_id, mission_id)
+  end
 
-    assert %{
-             "data" => [
-               %{
-                 "point_id" => "THERM.heater_enabled",
-                 "point_name" => "THERM.heater_enabled",
-                 "engineering_value" => true
-               },
-               %{
-                 "point_id" => "THERM.temperature_c",
-                 "point_name" => "THERM.temperature_c",
-                 "engineering_value" => 12.5
-               }
-             ]
-           } = json_response(latest_values_conn, 200)
+  defp assert_console_reads(organization_id, mission_id) do
+    org = %Organization{organization_id: organization_id}
+    user = TestFixtures.persist_user!()
+    TestFixtures.grant_membership!(user, org)
 
-    latest_value_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/telemetry/points/THERM.temperature_c/latest"
-      )
+    from = DateTime.utc_now() |> DateTime.add(-3_600) |> DateTime.to_iso8601()
+    to = DateTime.utc_now() |> DateTime.add(3_600) |> DateTime.to_iso8601()
 
-    assert %{
-             "data" => %{
-               "point_id" => "THERM.temperature_c",
-               "point_name" => "THERM.temperature_c",
-               "raw_value" => 12.5,
-               "engineering_value" => 12.5
-             }
-           } = json_response(latest_value_conn, 200)
+    history_path =
+      "/api/console/v1/missions/#{mission_id}/telemetry/points/THERM.temperature_c/history" <>
+        "?from=#{URI.encode_www_form(from)}&to=#{URI.encode_www_form(to)}"
 
-    history_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/telemetry/points/THERM.temperature_c/history?limit=10&order=desc"
-      )
+    # Both ingested samples (the packet and the frame) decode to 12.5.
+    assert %{"data" => %{"point_id" => "THERM.temperature_c", "buckets" => buckets}} =
+             user |> TestFixtures.member_conn() |> get(history_path) |> json_response(200)
 
-    assert %{
-             "data" => [
-               %{
-                 "point_id" => "THERM.temperature_c",
-                 "point_name" => "THERM.temperature_c",
-                 "raw_value" => 12.5,
-                 "engineering_value" => 12.5
-               },
-               %{
-                 "point_id" => "THERM.temperature_c",
-                 "point_name" => "THERM.temperature_c",
-                 "raw_value" => 12.5,
-                 "engineering_value" => 12.5
-               }
-             ]
-           } = json_response(history_conn, 200)
+    assert buckets |> Enum.map(& &1["count"]) |> Enum.sum() == 2
+    assert Enum.all?(buckets, &(&1["min"] == 12.5 and &1["max"] == 12.5))
   end
 
   defp assert_command_stage_queue_workflow(context) do
@@ -631,8 +599,6 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
     assert activated_model.revision_id == mission_model_revision_id
 
     assert_dev_telemetry_ingress(
-      conn,
-      api_token,
       organization_id,
       mission_id,
       binding_set_id,

@@ -1,6 +1,10 @@
 defmodule CadenceWeb.Router do
   use CadenceWeb, :router
 
+  require CadenceWeb.Console.DevIngestRoutes, as: DevIngestRoutes
+
+  @dev_ingest_routes Application.compile_env(:cadence_web, :dev_ingest_routes, false)
+
   pipeline :browser do
     plug(CadenceWeb.Plugs.BrowserAccepts)
     plug(:fetch_session)
@@ -854,6 +858,8 @@ defmodule CadenceWeb.Router do
       get("/limits/points/:point_id/intervals", PointController, :limit_intervals)
       get("/action-queue", ActionQueueController, :show)
       get("/counts", OpsCountsController, :show)
+      # #780: development ingest, mounted in dev and test only (compiled out of prod).
+      DevIngestRoutes.mount(@dev_ingest_routes)
       # Dashboards (owner: api-ops). Contract: docs/apogee/api/dashboards.md
       get("/dashboards", DashboardDirectoryController, :index)
       post("/dashboards", DashboardDirectoryController, :create)
@@ -1394,13 +1400,6 @@ defmodule CadenceWeb.Router do
       # services never manage service identities. People issue them in the console.
 
       scope "/missions/:mission_id" do
-        get("/mission_health", MissionHealthController, :show)
-        get("/mission_events", MissionEventController, :index)
-        get("/telemetry/latest", TelemetryController, :latest_values)
-        get("/telemetry/points/:point_id/latest", TelemetryController, :latest_value)
-        get("/telemetry/points/:point_id/history", TelemetryController, :history)
-        post("/dev/space_packets", DevSpacePacketController, :create)
-        post("/dev/tm_frames", DevTMFrameController, :create)
         get("/catalog/importers", CatalogImporterController, :index)
         get("/catalog_artifacts", CatalogArtifactController, :index)
         post("/catalog_artifacts", CatalogArtifactController, :create)

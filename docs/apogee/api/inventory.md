@@ -40,12 +40,8 @@ on success. JSON views are in `W/api/*_json.ex`. Every `…` row passes `authori
 | Identity | ~~`GET`, `POST /api/organizations/:org/missions`~~ | Mission | — | **Removed (#384):** as above. Missions are created in the console (L4). |
 | Identity | `GET /api/organizations/:org/missions/:m` | Mission | `Missions.fetch_mission` | |
 | Identity | ~~`GET`, `POST /api/organizations/:org/service_identities`~~ | ServiceIdentity | — | **Removed (#281):** services never manage service identities; people issue them in the console (O6). |
-| Telemetry | `GET …/telemetry/latest` | Telemetry | `Reads.Telemetry.latest_values_for_mission` | `?spacecraft_id` |
-| Telemetry | `GET …/telemetry/points/:point_id/latest` | Telemetry | `Reads.Telemetry.latest_value` | `data` may be null |
-| Telemetry | `GET …/telemetry/points/:point_id/history` | Telemetry | `Reads.Telemetry.sample_history` | raw samples. `?spacecraft_id&from_receipt_time&to_receipt_time&limit`. No decimation |
-| Telemetry | `POST …/dev/space_packets`, `POST …/dev/tm_frames` | DevSpacePacket, DevTMFrame | `Control.Ingress.process_and_persist` | dev ingest only |
-| Limits/health | `GET …/mission_health` | MissionHealth | `Reads.MissionHealth.summary` | counts, worst state, `point_buckets`, per-spacecraft `scope_summaries`. **The only limits data on REST**: no alarms, limit-interval or limit-definition routes |
-| Events | `GET …/mission_events` | MissionEvent | `Reads.MissionEvents.list_for_mission` | filters `limit, category, kind, severity, spacecraft_id, contact/path ids`. No from/to |
+| Limits/health | ~~`GET …/mission_health`~~ | MissionHealth | — | **Removed (#780):** per-spacecraft worst limit state, violating points and the worst point are in console `GET /fleet`; active alarms in `GET /alarms`. The mission-wide `point_buckets` had no caller. |
+| Events | ~~`GET …/mission_events`~~ | MissionEvent | — | **Removed (#780):** console `GET /events` (window, cursor, kind and severity-floor filters). |
 | Catalog | `GET …/catalog/importers` | CatalogImporter | `Catalog.list_importers` | |
 | Catalog | `GET`, `POST …/catalog_artifacts`; `GET …/catalog_artifacts/:id` | CatalogArtifact | `Catalog.list_artifacts`, `persist_artifact`, `fetch_artifact` | JSON body upload, not multipart |
 | Catalog | `GET`, `POST …/catalog_import_runs`; `GET …/catalog_import_runs/:id` | CatalogImportRun | `Catalog.list_import_runs`, `start_import_run`, `fetch_import_run` | |

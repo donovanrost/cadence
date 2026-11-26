@@ -34,3 +34,6 @@ config :cadence_web, CadenceWeb.Endpoint,
     vite: {PhoenixVite.Npm, :run, [:vite, ~w(dev)]},
     tailwind: {Tailwind, :install_and_run, [:cadence_web, ~w(--watch)]}
   ]
+
+# #780: the development ingest routes exist in dev and test only; prod never sets this.
+config :cadence_web, :dev_ingest_routes, true
