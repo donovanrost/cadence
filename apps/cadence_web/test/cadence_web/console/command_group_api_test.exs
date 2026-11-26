@@ -42,6 +42,13 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
   end
 
   defp base(c), do: "/api/console/v1/missions/#{c.mission.mission_id}"
+
+  # #117 step 4a: a GO carries the review token the decider saw, read from the group itself.
+  defp go(c, id, extra \\ %{}) do
+    data = c.approver |> as() |> get(base(c) <> "/command-groups/#{id}") |> json_response(200)
+    Map.merge(%{"kind" => "go", "expected_review" => data["data"]["review_token"]}, extra)
+  end
+
   defp as(user), do: TestFixtures.member_conn(user)
 
   defp body(c, command, args, extra \\ %{}) do
@@ -185,7 +192,7 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
 
       assert %{"data" => %{"state" => "queued", "events" => events}} =
                as(c.approver)
-               |> post(base(c) <> "/command-groups/#{id}/decision", %{"kind" => "go"})
+               |> post(base(c) <> "/command-groups/#{id}/decision", go(c, id))
                |> json_response(200)
 
       # Only the submitter's acknowledgement; the approver needed none.
@@ -202,7 +209,7 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
       # More work lands on the same lanes after the submit.
       assert json_response(create(c, body(c, "SET_SIGNED", %{"counter" => 1})), 201)
 
-      go = as(c.approver) |> post(base(c) <> "/command-groups/#{id}/decision", %{"kind" => "go"})
+      go = as(c.approver) |> post(base(c) <> "/command-groups/#{id}/decision", go(c, id))
 
       assert %{"error" => %{"code" => "holds_unacknowledged", "details" => %{"holds" => holds}}} =
                json_response(go, 422)
@@ -215,10 +222,10 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
 
       assert %{"data" => %{"state" => "queued", "events" => events}} =
                as(c.approver)
-               |> post(base(c) <> "/command-groups/#{id}/decision", %{
-                 "kind" => "go",
-                 "acknowledged_holds" => ack
-               })
+               |> post(
+                 base(c) <> "/command-groups/#{id}/decision",
+                 go(c, id, %{"acknowledged_holds" => ack})
+               )
                |> json_response(200)
 
       assert %{
@@ -273,12 +280,12 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
 
     assert %{"error" => %{"code" => "command_group_self_approval_not_allowed"}} =
              as(member)
-             |> post(base(c) <> "/command-groups/#{id}/decision", %{"kind" => "go"})
+             |> post(base(c) <> "/command-groups/#{id}/decision", go(c, id))
              |> json_response(403)
 
     assert %{"data" => %{"state" => "queued"}} =
              as(second)
-             |> post(base(c) <> "/command-groups/#{id}/decision", %{"kind" => "go"})
+             |> post(base(c) <> "/command-groups/#{id}/decision", go(c, id))
              |> json_response(200)
   end
 
@@ -373,7 +380,7 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
 
     assert %{"error" => %{"code" => "command_group_self_approval_not_allowed"}} =
              as(c.requester)
-             |> post(base(c) <> "/command-groups/#{id}/decision", %{"kind" => "go"})
+             |> post(base(c) <> "/command-groups/#{id}/decision", go(c, id))
              |> json_response(403)
 
     assert %{

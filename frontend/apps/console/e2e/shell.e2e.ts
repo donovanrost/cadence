@@ -3,7 +3,7 @@ import { missionPath, openConsole } from "./support/console.ts";
 import { DEMO, storageStateFor } from "./support/env.ts";
 import { allow, expect, test } from "./support/fixtures.ts";
 
-// Shell contract: docs/apogee/ARCHITECTURE.md "Shell contract", docs/apogee/qa/e2e.md.
+// Shell contract: frontend/apps/console/ARCHITECTURE.md "Building a screen".
 test.describe("console shell", () => {
   test("a signed-in operator lands on /console with real org and mission context", async ({
     page,

@@ -105,3 +105,7 @@ config :cadence, :env_credentials,
 config :cadence, :fixture_application_contributors, [
   Cadence.TestSupport.SurfaceFixtureApplication
 ]
+
+# The watermark coalescer's own timer cannot use a test's sandbox connection: tests flush through
+# a watermark read or `WatermarkCoalescer.flush/0`.
+config :cadence, :source_watermark_coalescing, interval_ms: :infinity

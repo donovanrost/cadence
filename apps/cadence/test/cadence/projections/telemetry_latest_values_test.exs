@@ -266,30 +266,40 @@ defmodule Cadence.Projections.TelemetryLatestValuesTest do
         generation_time: ~U[2026-06-21 12:00:00Z]
       )
 
+    # The sample row's tenant comes from its mission (the exact lookup below is tenant-scoped).
+    persist_mission_scope("org-test", "mission-alpha")
     persist_sample_scope!(canonical)
     assert :ok = Storage.persist_samples([canonical], organization_id: "org-test")
 
-    assert TelemetryReads.latest_value("mission-alpha", "HK.counter").sample_id ==
-             canonical.sample_id
+    latest = TelemetryReads.latest_value("mission-alpha", "HK.counter")
+    assert latest.sample_id == canonical.sample_id
 
-    [state] =
-      Storage.list_observation_identity_states("mission-alpha",
-        organization_id: "org-test",
-        point_id: "HK.counter"
-      )
+    # First-seen rule (11-17): the canonical sighting wrote no identity-state row, so the decision
+    # names the observation (as a client reads it) and creates the row from the stored sample,
+    # through the configured history store.
+    assert Storage.list_observation_identity_states("mission-alpha", organization_id: "org-test") ==
+             []
 
-    assert {:ok, _state} =
+    storage = latest.provenance["storage"]
+
+    assert {:ok, state} =
              Storage.apply_observation_identity_decision(
-               state.observation_identity_id,
+               storage["observation_identity_id"],
                :mark_conflict,
-               organization_id: state.organization_id,
-               mission_id: state.mission_id,
-               realm: state.realm,
-               data_source_id: state.data_source_id,
-               binding_id: state.binding_id,
+               organization_id: "org-test",
+               mission_id: "mission-alpha",
+               realm: storage["realm"],
+               data_source_id: storage["data_source_id"],
+               binding_id: storage["binding_id"],
+               point_id: latest.point_id,
+               sample_id: latest.sample_id,
+               observed_at: latest.generation_time || latest.receipt_time,
                decision_reason: "operator_quarantined_identity",
                dashboard_runtime_invalidation?: false
              )
+
+    assert state.validity_state == :conflict
+    assert state.latest_sample_id == canonical.sample_id
 
     assert TelemetryReads.latest_value("mission-alpha", "HK.counter") == nil
 

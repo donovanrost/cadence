@@ -1,8 +1,9 @@
 # Telemetry provenance storage: design (api-ops, 11-16)
 
 Owner: **api-ops**. Reviewer: **domain** (reviewed 11-16; its changes are folded in: `binding_rule_id`
-derived, `qualified_name` kept, the algorithm-row rule). Status: **design for the director and the user's sign-off.
-Nothing is built.** This is the provenance row of the storage-growth design items (BACKLOG, "Design
+derived, `qualified_name` kept, the algorithm-row rule). Status: **option B approved
+(user, via director, 11-16; DECISIONS #103); D later in a qa slot; C deferred. `CAPACITY` sized
+before build (section 3, B); nothing is built yet.** This is the provenance row of the storage-growth design items (BACKLOG, "Design
 items"): `provenance_json` on `telemetry_observations` is about two thirds of QuestDB's bytes.
 
 `L` = `apps/cadence/lib/cadence`.
@@ -127,8 +128,14 @@ STRING → VARCHAR conversion as lossless; `STRING` is its legacy type).
     `semantic_id` and `qualified_name`: 4 bytes each per row, with an explicit `CAPACITY` (see
     "Symbol cardinality" below);
   - `identity_ref VARCHAR`, about 30 bytes;
-  - `binding_rule_derived BOOLEAN` (1 byte): the row's binding id is rebuilt from the model.
-- Not written: the `packet_id` and `evidence_id` copies, whose columns are the source, and
+  - `binding_rule_derived BOOLEAN` (1 byte): the row's binding id is rebuilt from the model;
+  - `packet_refs_derived BOOLEAN` (1 byte; as built, domain-reviewed 11-17): the provenance had
+    `packet_id` and `evidence_id` keys equal to the row's own columns, so the reader puts them back
+    from those columns. Packet rows have them, algorithm rows don't, so the reader needs this flag
+    to know whether the keys were there. When either key differs from its column, both stay in the
+    residual.
+- Not written: the `packet_id` and `evidence_id` copies (behind `packet_refs_derived`), whose
+  columns are the source, and
   `binding_rule_id` (domain's review). Its id embeds the model revision, so as a `SYMBOL` its
   dictionary would accumulate revisions × spacecraft × packet types for the table's whole life (a
   symbol dictionary is per column and isn't pruned when partitions drop): past 500k values within a
@@ -143,30 +150,130 @@ STRING → VARCHAR conversion as lossless; `STRING` is its legacy type).
 - `provenance_json` keeps only the **residual**: keys that aren't promoted, such as algorithm
   `source_update_ids` and smoke `source`. For packet rows it is null.
 - The reader rebuilds the same map from columns + residual, so the API output is byte-identical
-  (pin it with a contract test). It also fills the `Sample` struct fields that are nil today.
-- **Saves** ~1,890 bytes: 6 × 4 + ~30 + 1 + null residual (12) ≈ 67 bytes instead of 1,959. Row
+  (pinned by the contract tests, including a write-back round trip). **As built, it does NOT fill
+  the `Sample` struct fields** (domain, 11-17): `Sample.subject_refs/1` reads them, so filling them
+  would change verifier matching on history reads. B is storage-only; filling is its own change.
+- **Saves** ~1,890 bytes: 6 × 4 + ~30 + 2 + null residual (12) ≈ 68 bytes instead of 1,959. Row
   3,006 → **~1,115** (−63%).
 - **Read side:** cheaper. Symbol reads replace a ~1 KB JSON decode per row on every history read,
   and Investigate can show the semantic id or producer without parsing.
 - **Migration:**
-  - `ALTER TABLE ADD COLUMN` is metadata-only and instant; existing partitions read null.
-  - The writer writes both shapes from the cutover. The reader prefers the columns and falls back
-    to decoding the full JSON when they're null (old rows).
+  - `ALTER TABLE ADD COLUMN` is metadata-only and instant; existing partitions read null (flags
+    false). **As built: nine migration files, one column each** (`20261117000000`…`08`): QuestDB
+    9.4.3 refuses a multi-column `ADD COLUMN` on a WAL table ("contains multiple transactions"; found
+    on a throwaway copy), and one file per statement lets a partial run resume. A fresh instance
+    applies 12: the 3 existing base migrations plus these 9.
+  - From the cutover the writer writes the new shape only (columns + residual). The reader decodes
+    the residual and merges the columns over it, so rows from before the columns (columns null,
+    flags false) decode their full JSON as before. No separate fallback path.
   - On dev the old shape ages out under the keep-today+2 rule in three days. In a longer-retention
-    deployment the fallback stays until the oldest retained partition postdates the cutover, then
-    it's deleted.
+    deployment, pre-cutover rows keep decoding their full JSON through the same merge; there is
+    nothing to delete.
   - The same migration file runs on bring-your-own QuestDB (the BYO smoke covers it).
   - Dedup is unaffected: the keys stay `(observed_at, idempotency_key)`, and `idempotency_key`'s
     digest doesn't include provenance.
 - **Symbol cardinality.** Promoted values are bounded by the mission model, not by traffic, and
   size `CAPACITY` for points across ALL tenants in the table, not one mission:
-  - `semantic_id` and `qualified_name`: one per point per mission, ever. `semantic_id` is a hash of
-    the kind and qualified name (`Catalog.MissionModel.Canonical.semantic_id/2`), so it doesn't
-    change with revisions.
-  - `producer_id`'s values are container semantic ids, equally stable; revision and plan grow with
-    revisions (hundreds, not tens of thousands).
-  - Use `CAPACITY` 65,536–262,144 with `NOCACHE` on the larger ones; size per tenant mix before
-    build.
+  - `semantic_id` and `qualified_name`: one per distinct point name, ever. `semantic_id` is a hash
+    of the kind and qualified name only (`Catalog.MissionModel.Canonical.semantic_id/2`), so it
+    doesn't change with revisions and isn't mission-scoped.
+  - `producer_id`'s values are container and algorithm semantic ids, equally stable; revision and
+    plan grow with revisions.
+  - Sized per tenant mix in "Symbol `CAPACITY`" below.
+
+#### Symbol `CAPACITY` (sized 11-16, before build)
+
+**Measured on dev** (Postgres catalog, exact counts on small tables; one bounded 5-minute QuestDB
+window; QuestDB metadata only, no scans):
+
+- 2 organizations, 2 missions, 5 mission model revisions in 8 days (4 + 1).
+- 20 runtime plans: 4 targets per revision (command, monitoring, telemetry, algorithm). Samples
+  carry the telemetry plan or the algorithm plan, so **≤ 2 plan values per revision**.
+- 146 parameters and 10 containers in every revision. The two missions run the same model and
+  share **all 146** semantic ids: the dictionary is keyed by name, not by tenant.
+- The window has 144 distinct `point_id`s, `observable_id`s and `semantic_id`s, and 10 packet
+  definitions, for 1 spacecraft. The existing per-point `SYMBOL`s are the same cardinality class as
+  the new ones, and today they sit at QuestDB's default `CAPACITY` 256 with `CACHE`.
+
+**Which tables hold which tenants:**
+
+- **The platform-shared managed instance** (`isolation_level: :shared`, the default) holds every
+  tenant's rows in one table. **This is the sizing case.**
+- An org- or mission-isolated managed instance holds one tenant.
+- **Bring-your-own instances must be isolated** (`customer_owned`, `org_isolated` or
+  `mission_isolated`; `DataSource.require_byo_isolation_level`), so they also hold one tenant.
+
+**What `CAPACITY` does on our QuestDB:**
+
+- Managed instances run **9.4.3** (docker-compose, the qa runbook, CI and the chaos lab). Dev
+  reports `cairo.auto.scale.symbol.capacity = true` with threshold 0.8 (`SHOW PARAMETERS`). From
+  that setting's arrival in 9.1.0, a dictionary that passes 80% of its capacity is resized instead
+  of slowing down. On managed instances `CAPACITY` is therefore a **starting size**: undersizing
+  costs a resize, not a degraded map.
+- A bring-your-own instance on QuestDB older than 9.1 has a **fixed** capacity. It holds one
+  tenant, though, so the one-tenant row of the table below is its worst case.
+- A dictionary is per column and is never pruned when partitions drop, so size for the table's
+  life, not the retention window.
+
+**Cardinality per column**, over the table's life:
+
+| Column | Grows with |
+|---|---|
+| `semantic_id`, `qualified_name` | distinct point names across every model on the instance, plus names added or renamed by later revisions (tenants on the same model share values) |
+| `producer_id` | distinct container and algorithm names, by the same rule |
+| `mission_model_revision_id` | every revision ever written |
+| `runtime_plan_id` | ≤ 2 × revisions |
+| `producer_kind` | 2 today (`container`, `algorithm`) |
+
+**Tenant mixes at the design's 1,000 spacecraft.** These are assumptions: no deployment measures
+points per model yet, and dev's simulator has 146. Names churn by 10% a year.
+
+| Mix | Tenants × spacecraft | Points / packet types per model | Distinct models | Revisions per model per year |
+|---|---|---:|---:|---:|
+| 1. One constellation | 1 × 1,000 | 20,000 / 500 | 1 | 52 |
+| 2. Mid-size tenants | 20 × 50 | 5,000 / 200 | 20 | 52 |
+| 3. Long tail | 200 × 5 | 1,500 / 50 | 200 | 12 |
+
+**Year-3 dictionary sizes:**
+
+| Mix | `semantic_id`, `qualified_name` | `producer_id` | revisions | plans |
+|---|---:|---:|---:|---:|
+| 1 | 26,000 | 650 | 156 | 312 |
+| 2 | 130,000 | 5,200 | 3,120 | 6,240 |
+| 3 | 390,000 | 13,000 | 7,200 | 14,400 |
+
+**Chosen `CAPACITY`.** The rule is no resize through year 3 except for mix 3's per-point names,
+since a resize is cheap on 9.1+ and a fixed-capacity bring-your-own instance holds one tenant:
+
+| Column | `CAPACITY` | Cache | Year-3 headroom (resize at 0.8) |
+|---|---:|---|---|
+| `semantic_id` | 262,144 | `NOCACHE` | mixes 1–2 never resize (209,715 trigger); mix 3 resizes once, at ~210k names |
+| `qualified_name` | 262,144 | `NOCACHE` | as `semantic_id` |
+| `producer_id` | 16,384 | `CACHE` | 13,107 trigger ≥ mix 3's 13,000 |
+| `mission_model_revision_id` | 16,384 | `CACHE` | 13,107 ≥ 7,200 |
+| `runtime_plan_id` | 32,768 | `CACHE` | 26,214 ≥ 14,400 |
+| `producer_kind` | 256 (default) | `CACHE` | — |
+
+- **`NOCACHE` on the two per-point columns:** a cached dictionary of 10⁵ long strings lives on the
+  Java heap. These columns are written per row but are never filter keys on the read paths in
+  section 2.
+- The other three are small and hot (one revision and plan per active model), so they stay
+  cached.
+- **Dictionary bytes** grow with the values, not the capacity: ~174 bytes per `semantic_id` (85
+  characters, UTF-16) and ~74–124 per `qualified_name`. At 262,144 values that is ~46 MB and ≤33
+  MB per instance, once, against ~214 GiB a day of rows at 1,000 spacecraft.
+- **The capacity-sized hash index cost** is checked on the copy in the build's QuestDB test, not
+  assumed. So is the write cost of `NOCACHE` (domain's review): ingest rows/s for `semantic_id`
+  `CACHE` vs `NOCACHE` at a pass-like batch. If `NOCACHE` costs measurably, `semantic_id` goes
+  `CACHE` (~46 MB of heap is acceptable on managed).
+- **Past year 3** the shared dictionaries keep growing (mix 3 adds ~30k names a year from churn
+  alone, plus new tenants) and are never pruned. Auto-scale covers that on managed; the real bound
+  is the next table generation (D or later). B's reader keeps filtering by `point_id`, never by
+  `semantic_id`, so `NOCACHE` stays off the read path.
+- **Not in B (a note for D's slot):** the existing per-point `SYMBOL`s (`point_id`,
+  `observable_id`, `packet_definition_id`) are still at capacity 256. Managed instances auto-scale.
+  A bring-your-own instance on QuestDB before 9.1 with more than ~200 points is already past them,
+  so `ALTER TABLE … ALTER COLUMN … SYMBOL CAPACITY` could ride with D.
 
 ### C. By reference (a provenance table keyed by hash)
 
@@ -244,6 +351,33 @@ this one.
 
 Owners if approved: api-ops (writer, reader, migration, backfill path), domain (review; the
 provenance contract in the mission model), qa (the slot for D).
+
+## Rollout and rollback (director, 11-17: option A, roll forward)
+
+- **Order:** the QuestDB migration runs BEFORE the restart onto B. qa's pre-flight runs
+  `mix cadence.questdb.migrate --check` from the new build's tree. Exit 0 is schema current; exit 1
+  means migrate first (also when the table doesn't exist yet); exit 2 means the schema is
+  unreadable. Every line names the endpoint it checked. The migrate itself returns only once
+  QuestDB has applied the WAL, so the columns are visible when it says so (qa, #483: right after the
+  ALTERs, `table_columns` showed 4 of 9). The new reader selects the new
+  columns, and line-protocol writes would otherwise create them with the wrong types.
+- **Rollback:** after B lands, a code rollback past B is a last resort. Rows written after B and
+  read by pre-B code show only the residual (for packet rows, only `storage`). A pre-B write-back
+  would re-persist that reduced map. So if a rollback ever happens: **no Data operations writes**
+  (legacy `/ops/data-operations` requests, backfill, late-data accept) until rolled forward, and qa
+  checks that no such job is queued or running before the rollback restart. Why roll forward: dev
+  only, no production, the rows keep their provenance in the columns, and the one harmful path is
+  the parked legacy page.
+- **For L16** (domain's assessment; director's wording, corrected 11-17): any write-back goes
+  through B's writer, which promotes from the rebuilt provenance map; nothing writes
+  `provenance_json` directly or bypasses that writer. The round-trip contract test (read, write
+  back, read: the same provenance and the same columns) pins it.
+- **Readers of provenance keys,** for qa's post-check on a B-written row:
+  - the external telemetry API (`GET …/telemetry/points/:id/{latest,history}`, `data[].provenance`)
+    is the only consumer that reads the keys; it returns the whole map;
+  - the write-back path (backfill / late data, legacy page) copies it;
+  - dashboards, point history, verifier series, limits recompute and Investigate read values,
+    columns and `storage` only, so a read of each checks that the rebuild didn't break them.
 
 ## DECISIONS draft (for the director; the user signs off)
 

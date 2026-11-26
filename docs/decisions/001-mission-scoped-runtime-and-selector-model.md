@@ -300,6 +300,5 @@ as:
 ## See Also
 
 - [Architecture Decision Records](./_index.md)
-- [Legacy Mission Runtime Architecture](../../legacy/cadence_legacy/docs/architecture/mission-runtime.md)
 - Designed GDS reference docs in the adjacent `new-gds` repo, especially
   `spec/00-product-requirements.md` and `spec/10-security-and-authorization.md`

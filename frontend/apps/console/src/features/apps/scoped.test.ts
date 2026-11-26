@@ -9,7 +9,10 @@ describe("scoped apps (L19)", () => {
     const original = globalThis.fetch;
     globalThis.fetch = async (input) => {
       urls.push(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
-      return new Response(JSON.stringify({ data: { apps: [], permissions: [] } }), { status: 200 });
+      return new Response(
+        JSON.stringify({ data: { apps: [], spacecraft_count: 0, permissions: [] } }),
+        { status: 200 },
+      );
     };
     try {
       const signal = new AbortController().signal;

@@ -17,7 +17,9 @@ describe("retired app surfaces (sweep row 2, qa 11:22Z)", () => {
     const urls: string[] = [];
     vi.stubGlobal("fetch", (input: string) => {
       urls.push(input);
-      return Promise.resolve(new Response(JSON.stringify({ data: { apps: [], permissions: [] } })));
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: { apps: [], spacecraft_count: 0, permissions: [] } })),
+      );
     });
     const stub = { template: "<div />" };
     const router = createRouter({
@@ -50,7 +52,9 @@ describe("retired app surfaces (sweep row 2, qa 11:22Z)", () => {
       vi.stubGlobal("fetch", (input: string) => {
         urls.push(input);
         return Promise.resolve(
-          new Response(JSON.stringify({ data: { apps: [], permissions: [] } })),
+          new Response(
+            JSON.stringify({ data: { apps: [], spacecraft_count: 0, permissions: [] } }),
+          ),
         );
       });
       const stub = { template: "<div />" };

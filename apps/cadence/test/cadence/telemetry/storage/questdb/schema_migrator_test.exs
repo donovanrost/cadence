@@ -1,7 +1,7 @@
 defmodule Cadence.Telemetry.Storage.QuestDB.SchemaMigratorTest do
   use Cadence.UnitCase, async: true
 
-  alias Cadence.Telemetry.Storage.QuestDB.SchemaMigrator
+  alias Cadence.Telemetry.Storage.QuestDB.{ObservationReader, ObservationRow, SchemaMigrator}
 
   test "default migrations include telemetry observations schema" do
     assert {:ok, migrations} =
@@ -26,6 +26,7 @@ defmodule Cadence.Telemetry.Storage.QuestDB.SchemaMigratorTest do
                sql: observation_identity_sql,
                checksum: observation_identity_checksum
              }
+             | provenance_migrations
            ] = migrations
 
     assert create_sql =~ "CREATE TABLE IF NOT EXISTS telemetry_observations"
@@ -43,7 +44,29 @@ defmodule Cadence.Telemetry.Storage.QuestDB.SchemaMigratorTest do
              "ADD COLUMN IF NOT EXISTS observation_identity_id STRING"
 
     assert is_binary(observation_identity_checksum)
+
+    # DECISIONS #103: one column per file (QuestDB refuses a multi-column ADD COLUMN on a WAL
+    # table), CAPACITY per the design's tenant-mix sizing.
+    assert Enum.map(
+             provenance_migrations,
+             &{&1.version, &1.sql |> String.split("\n") |> List.last()}
+           ) ==
+             [
+               {"20261117000000",
+                add_column("mission_model_revision_id SYMBOL CAPACITY 16384 CACHE")},
+               {"20261117000001", add_column("runtime_plan_id SYMBOL CAPACITY 32768 CACHE")},
+               {"20261117000002", add_column("producer_kind SYMBOL CAPACITY 256 CACHE")},
+               {"20261117000003", add_column("producer_id SYMBOL CAPACITY 16384 CACHE")},
+               {"20261117000004", add_column("semantic_id SYMBOL CAPACITY 262144 NOCACHE")},
+               {"20261117000005", add_column("qualified_name SYMBOL CAPACITY 262144 NOCACHE")},
+               {"20261117000006", add_column("identity_ref VARCHAR")},
+               {"20261117000007", add_column("binding_rule_derived BOOLEAN")},
+               {"20261117000008", add_column("packet_refs_derived BOOLEAN")}
+             ]
   end
+
+  defp add_column(definition),
+    do: "ALTER TABLE telemetry_observations ADD COLUMN IF NOT EXISTS #{definition};"
 
   test "migration plan sorts files by version and ignores non-migration sql files" do
     migrations_path = temp_migrations_path()
@@ -98,6 +121,161 @@ defmodule Cadence.Telemetry.Storage.QuestDB.SchemaMigratorTest do
              timeout: 15_000,
              http_endpoint: "http://127.0.0.1:9000"
            ] = SchemaMigrator.connection_config([])
+  end
+
+  describe "check/1 (read-only, mix cadence.questdb.migrate --check)" do
+    setup do
+      migrations_path = temp_migrations_path()
+      write_migration(migrations_path, "20260617000001_first.sql", "SELECT 1;")
+      write_migration(migrations_path, "20260617000002_second.sql", "SELECT 2;")
+      %{migrations_path: migrations_path}
+    end
+
+    test "is :ok when the table has every column this build uses and every file is applied", c do
+      exec = schema(SchemaMigrator.required_columns(), ["20260617000001", "20260617000002"])
+
+      assert SchemaMigrator.check(migrations_path: c.migrations_path, exec_fun: exec) == :ok
+      assert_only_selects()
+    end
+
+    test "is behind when the table lacks columns this build reads or writes", c do
+      columns = SchemaMigrator.required_columns() -- ["semantic_id", "packet_refs_derived"]
+      exec = schema(columns, ["20260617000001", "20260617000002"])
+
+      assert {:behind,
+              %{missing_columns: ["semantic_id", "packet_refs_derived"], pending_migrations: []}} =
+               SchemaMigrator.check(migrations_path: c.migrations_path, exec_fun: exec)
+
+      assert_only_selects()
+    end
+
+    test "is behind when a migration file isn't applied", c do
+      exec = schema(SchemaMigrator.required_columns(), ["20260617000001"])
+
+      assert {:behind, %{missing_columns: [], pending_migrations: ["20260617000002"]}} =
+               SchemaMigrator.check(migrations_path: c.migrations_path, exec_fun: exec)
+    end
+
+    test "is an error when the schema can't be read", c do
+      exec = fn sql, _opts ->
+        send(self(), {:sql, sql})
+        {:error, :econnrefused}
+      end
+
+      assert {:error, :econnrefused} =
+               SchemaMigrator.check(migrations_path: c.migrations_path, exec_fun: exec)
+
+      assert_only_selects()
+    end
+
+    # qa (#483): a fresh QuestDB, or the reset's renamed table, has no table yet. That's a schema
+    # to migrate (exit 1), not one that can't be read (exit 2).
+    test "is behind, with every column and file, when the tables don't exist yet", c do
+      exec = fn sql, _opts ->
+        send(self(), {:sql, sql})
+
+        {:error,
+         {:http_error, 400, %{"error" => "table does not exist [table=telemetry_observations]"}}}
+      end
+
+      assert {:behind,
+              %{
+                missing_columns: missing,
+                pending_migrations: ["20260617000001", "20260617000002"]
+              }} =
+               SchemaMigrator.check(migrations_path: c.migrations_path, exec_fun: exec)
+
+      assert missing == SchemaMigrator.required_columns()
+      assert_only_selects()
+    end
+
+    test "the probe and the check compare against the same columns, reader's and writer's" do
+      required = SchemaMigrator.required_columns()
+
+      assert Enum.all?(ObservationReader.select_columns(), &(&1 in required))
+      assert Enum.all?(ObservationRow.columns(), &(Atom.to_string(&1) in required))
+      assert "semantic_id" in required and "packet_refs_derived" in required
+    end
+  end
+
+  describe "await_current/1 (after applying, until QuestDB has applied the WAL)" do
+    setup do
+      migrations_path = temp_migrations_path()
+      write_migration(migrations_path, "20260617000001_first.sql", "SELECT 1;")
+      %{migrations_path: migrations_path}
+    end
+
+    # qa (#483): right after the ALTERs, table_columns showed 4 of 9; a second later, all 9.
+    test "polls until the new columns are visible", c do
+      {:ok, agent} = Agent.start_link(fn -> 0 end)
+      partial = SchemaMigrator.required_columns() -- ["semantic_id", "identity_ref"]
+
+      exec = fn sql, _opts ->
+        cond do
+          sql =~ "table_columns('telemetry_observations')" ->
+            seen = Agent.get_and_update(agent, &{&1, &1 + 1})
+            columns = if seen < 2, do: partial, else: SchemaMigrator.required_columns()
+            {:ok, %{"dataset" => Enum.map(columns, &[&1])}}
+
+          sql =~ "FROM cadence_schema_migrations" ->
+            {:ok, %{"dataset" => [["20260617000001"]]}}
+        end
+      end
+
+      assert :ok =
+               SchemaMigrator.await_current(
+                 migrations_path: c.migrations_path,
+                 exec_fun: exec,
+                 sleep_fun: fn ms -> send(self(), {:slept, ms}) end
+               )
+
+      assert_received {:slept, 250}
+      assert Agent.get(agent, & &1) == 3
+    end
+
+    test "gives up after its timeout with the last check", c do
+      exec = schema(SchemaMigrator.required_columns() -- ["semantic_id"], ["20260617000001"])
+
+      assert {:error,
+              {:schema_not_current,
+               {:behind, %{missing_columns: ["semantic_id"], pending_migrations: []}}}} =
+               SchemaMigrator.await_current(
+                 migrations_path: c.migrations_path,
+                 exec_fun: exec,
+                 await_timeout_ms: 0,
+                 sleep_fun: fn _ms -> :ok end
+               )
+    end
+  end
+
+  defp schema(columns, applied_versions) do
+    fn sql, _opts ->
+      send(self(), {:sql, sql})
+
+      cond do
+        sql =~ "table_columns('telemetry_observations')" ->
+          {:ok, %{"dataset" => Enum.map(columns, &[&1])}}
+
+        sql =~ "FROM cadence_schema_migrations" ->
+          {:ok, %{"dataset" => Enum.map(applied_versions, &[&1])}}
+      end
+    end
+  end
+
+  defp assert_only_selects do
+    sqls = collect_sql([])
+    assert sqls != []
+
+    assert Enum.all?(sqls, &String.starts_with?(String.trim_leading(&1), "SELECT ")),
+           inspect(sqls)
+  end
+
+  defp collect_sql(acc) do
+    receive do
+      {:sql, sql} -> collect_sql([sql | acc])
+    after
+      0 -> Enum.reverse(acc)
+    end
   end
 
   defp temp_migrations_path do

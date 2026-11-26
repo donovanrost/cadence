@@ -10,6 +10,7 @@ defmodule Cadence.Telemetry.Storage.IdentityStateRetentionTest do
   alias Cadence.Telemetry.Storage.{ObservationEnvelope, ObservationIdentityStates, WriteContext}
   alias Cadence.Telemetry.Storage.ObservationIdentityStates.DecisionEventRow
   alias Cadence.Telemetry.Storage.ObservationIdentityStates.TelemetryObservationIdentityStateRow
+  alias Cadence.TestSupport.ObservationIdentityFixtures
   alias Ecto.Adapters.SQL.Sandbox
 
   @now ~U[2026-11-19 12:00:00Z]
@@ -290,11 +291,11 @@ defmodule Cadence.Telemetry.Storage.IdentityStateRetentionTest do
     IdentityStateRetention.run_now(:retention_pass_test)
   end
 
-  # A recorded state (the real write path), then aged and shaped by a direct update.
+  # A state as the write path stored it before the first-seen rule (#157; since then a canonical
+  # first sighting writes no row): the rows retention exists to delete. Aged and shaped by
+  # overrides.
   defp state!(name, overrides) do
     envelope = envelope("sample-#{name}", Keyword.get(overrides, :replay_run_id))
-    :ok = ObservationIdentityStates.record_envelopes([envelope], publish_facts?: false)
-
     last_seen = ago(Keyword.fetch!(overrides, :last_seen_hours_ago))
 
     changes =
@@ -309,11 +310,7 @@ defmodule Cadence.Telemetry.Storage.IdentityStateRetentionTest do
       ])
       |> Keyword.merge(first_seen_at: last_seen, last_seen_at: last_seen)
 
-    {1, _} =
-      TelemetryObservationIdentityStateRow
-      |> where([s], s.observation_identity_id == ^envelope.observation_identity_id)
-      |> Repo.update_all(set: changes)
-
+    ObservationIdentityFixtures.pre_first_seen_state!(envelope, changes)
     envelope.observation_identity_id
   end
 

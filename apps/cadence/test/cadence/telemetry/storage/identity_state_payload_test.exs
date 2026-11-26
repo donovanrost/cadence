@@ -3,12 +3,17 @@ defmodule Cadence.Telemetry.Storage.IdentityStatePayloadTest do
   #359 (b): an identity state's payload no longer copies fields the row (or the observation)
   already stores. Rows written before (with the seven copies) still read, re-deliver and take a
   decision exactly as before: no reader takes those fields from the payload.
+
+  Since the first-seen rule (#157) a canonical first sighting writes no row, so a new row comes
+  from a non-canonical sighting or a decision, and the old-shape rows are the ones written before
+  (`ObservationIdentityFixtures.pre_first_seen_state!/2`).
   """
   use Cadence.DataCase, async: false
 
   alias Cadence.Telemetry.Sample
   alias Cadence.Telemetry.Storage.{ObservationEnvelope, ObservationIdentityStates, WriteContext}
   alias Cadence.Telemetry.Storage.ObservationIdentityStates.TelemetryObservationIdentityStateRow
+  alias Cadence.TestSupport.ObservationIdentityFixtures
 
   # What every state's payload held before #359: three copies of this row's columns and four of
   # the observation's.
@@ -16,7 +21,8 @@ defmodule Cadence.Telemetry.Storage.IdentityStatePayloadTest do
                        supersedes_observation_id source_endpoint_id evidence_id packet_id)
 
   test "a new state's payload carries no copies" do
-    envelope = envelope("sample-new", 1)
+    # A non-canonical first sighting writes the identity's row (first-seen, #157).
+    envelope = envelope("sample-new", 1, :advisory)
     :ok = record(envelope)
 
     assert row(envelope).payload == %{}
@@ -27,8 +33,7 @@ defmodule Cadence.Telemetry.Storage.IdentityStatePayloadTest do
 
   test "a revision rewrites an old-shape payload without the copies" do
     first = envelope("sample-rev-1", 1)
-    :ok = record(first)
-    old_shape!(first)
+    ObservationIdentityFixtures.pre_first_seen_state!(first)
 
     :ok = record(envelope("sample-rev-2", 2))
 
@@ -38,14 +43,12 @@ defmodule Cadence.Telemetry.Storage.IdentityStatePayloadTest do
 
   test "an old-shape row reads, re-delivers and takes a decision as before" do
     envelope = envelope("sample-old", 1)
-    :ok = record(envelope)
-    {:ok, fresh} = ObservationIdentityStates.fetch(envelope.observation_identity_id)
-
-    old_shape!(envelope)
+    ObservationIdentityFixtures.pre_first_seen_state!(envelope)
     {:ok, old} = ObservationIdentityStates.fetch(envelope.observation_identity_id)
 
-    # Every field but the payload reads the same; the copies are only carried along.
-    assert Map.delete(old, :payload) == Map.delete(fresh, :payload)
+    # It reads from its columns; the copies are only carried along.
+    assert %{validity_state: :canonical, canonical_sample_id: "sample-old"} = old
+    assert old.latest_observation_id == envelope.observation_id
     assert Enum.sort(Map.keys(old.payload)) == Enum.sort(@old_payload_keys)
 
     # A re-delivery of the same observation is recognised from the columns: nothing changes.
@@ -74,25 +77,7 @@ defmodule Cadence.Telemetry.Storage.IdentityStatePayloadTest do
   defp row(envelope),
     do: Repo.get!(TelemetryObservationIdentityStateRow, envelope.observation_identity_id)
 
-  # Rewrites the stored payload the way every row before #359 was written.
-  defp old_shape!(envelope) do
-    payload = %{
-      "latest_observation_id" => envelope.observation_id,
-      "latest_sample_id" => envelope.sample_id,
-      "latest_validity_state" => "canonical",
-      "supersedes_observation_id" => nil,
-      "source_endpoint_id" => envelope.source_endpoint_id,
-      "evidence_id" => envelope.evidence_id,
-      "packet_id" => envelope.packet_id
-    }
-
-    {1, _} =
-      TelemetryObservationIdentityStateRow
-      |> where([s], s.observation_identity_id == ^envelope.observation_identity_id)
-      |> Repo.update_all(set: [payload: payload])
-  end
-
-  defp envelope(sample_id, revision) do
+  defp envelope(sample_id, revision, validity_state \\ :canonical) do
     {:ok, context} =
       WriteContext.new(
         organization_id: "org-payload",
@@ -125,7 +110,7 @@ defmodule Cadence.Telemetry.Storage.IdentityStatePayloadTest do
 
     {:ok, envelope} =
       ObservationEnvelope.from_sample(context, sample,
-        validity_state: :canonical,
+        validity_state: validity_state,
         revision: revision
       )
 

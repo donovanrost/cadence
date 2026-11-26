@@ -91,7 +91,7 @@ The default is `admin`; switch with `test.use({ storageState: storageStateFor("o
 - A known defect is a `test.fail(true, "qa issue #N: …")` test; it flips (and fails loudly) when
   fixed, which is the signal to remove the marker and close the issue.
 
-## Shell contract (agreed with lead; see docs/apogee/ARCHITECTURE.md)
+## Shell contract (agreed with lead; see frontend/apps/console/ARCHITECTURE.md)
 
 1. `/console` signed out → redirect to `/sign-in`.
 2. Signed in, `/console` renders a `banner` landmark showing the current org **and** mission names
