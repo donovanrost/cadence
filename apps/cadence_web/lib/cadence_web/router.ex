@@ -1089,6 +1089,9 @@ defmodule CadenceWeb.Router do
         :packets
       )
 
+      # One review of any number of spacecraft (#734). Contract: docs/apogee/api/setup.md
+      post("/configuration/reviews", SpacecraftWorkspaceController, :reviews)
+
       # L19 spacecraft-scope apps (owner: api).
       get("/spacecraft/:spacecraft_id/apps", SpacecraftAppController, :index)
       post("/spacecraft/:spacecraft_id/apps/:key/install", SpacecraftAppController, :install)

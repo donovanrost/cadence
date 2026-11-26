@@ -16,6 +16,7 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
   alias Cadence.MissionModels
   alias Cadence.MissionModels.TelemetryProjection
   alias Cadence.Platform.ScopedReadUpdates
+  alias Cadence.SpacecraftStore
 
   def request(scope, mission_id, spacecraft_id, expected_token, opts \\ []) do
     request_many(scope, mission_id, %{spacecraft_id => expected_token}, opts)
@@ -51,6 +52,46 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
   end
 
   def request_many(_, _, _, _), do: {:error, :spacecraft_configuration_review_unavailable}
+
+  @doc """
+  The tokens (`spacecraft_id => token`) of every spacecraft whose latest saved draft differs from
+  its active configuration: what "review everything that's saved" covers. `{:error,
+  :nothing_to_review}` when there is none.
+
+  Resolved without the configuration lock: `request_many/4` checks every token exactly under it,
+  so a draft saved in between is refused as changed, never reviewed in a different state.
+  """
+  @spec saved_tokens(map(), binary()) :: {:ok, %{binary() => binary()}} | {:error, term()}
+  def saved_tokens(scope, mission_id) do
+    with {:ok, mission} <- ConfigurationDrafts.authorize_mission(scope, mission_id),
+         {:ok, active} <- ConfigurationActive.load(mission),
+         [_ | _] = changed <- changed_since_active(mission, active),
+         {:ok, craft} <-
+           SpacecraftStore.fetch_spacecrafts_in_batches(
+             mission.organization_id,
+             mission_id,
+             Enum.map(changed, & &1.spacecraft_id)
+           ) do
+      tokens =
+        for row <- changed, spacecraft = craft[row.spacecraft_id], into: %{} do
+          {row.spacecraft_id, ConfigurationDrafts.snapshot(mission, spacecraft).token}
+        end
+
+      if map_size(tokens) > 0, do: {:ok, tokens}, else: {:error, :nothing_to_review}
+    else
+      [] -> {:error, :nothing_to_review}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp changed_since_active(mission, active) do
+    mission.organization_id
+    |> ConfigurationDrafts.latest_for_mission(mission.mission_id)
+    |> Enum.reject(fn row ->
+      get_in(active.entries, [row.spacecraft_id, "configuration_revision_id"]) ==
+        row.configuration_revision_id
+    end)
+  end
 
   defp request_locked(scope, mission, _spacecraft, tokens, opts) do
     mission_id = mission.mission_id

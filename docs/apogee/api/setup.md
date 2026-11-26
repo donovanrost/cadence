@@ -404,6 +404,24 @@ Saves a draft; the active configuration stays in use. Answers the fresh snapshot
   was approved but the application couldn't be confirmed.
 - A bad `intent`, or a missing token: `422 invalid_params`.
 
+### `POST /missions/:mission_id/configuration/reviews` `{spacecraft | all_saved, policy_token, intent}` (#734)
+
+One review (or one direct activation) of any number of spacecraft: there is no cap, and the
+review's evidence is stored by hash, not in the activation's metadata. It takes the same
+`policy_token` and `intent: review|activate` as the per-spacecraft submit, and answers its shape plus
+`spacecraft_count`: `{state: approval_pending, request_id, spacecraft_count}`, `{state: active,
+execution_id, spacecraft_count}` or `{state: needs_review, spacecraft_count}`.
+
+- `spacecraft: {spacecraft_id: token}`: exactly these, each with the token its workspace snapshot
+  gave. A token that changed since is `409 spacecraft_configuration_changed`, and nothing is
+  reviewed.
+- `all_saved: true`: every spacecraft whose latest saved draft differs from its active
+  configuration, each at its current token. Nothing differs: `422 nothing_to_review`.
+- Both, neither, an empty map, a non-text token, or no `intent`/`policy_token`: `422 invalid_params`.
+- The other refusals are the submit's (`activation_policy_changed`,
+  `spacecraft_configuration_review_unavailable`, `mission_model_revision_not_approved`, …). Access
+  is the same operate check, over the mission.
+
 ### `GET …/workspace/catalogs/:catalog_revision_id/packets`
 
 `{data: {catalog_id, packets: [{apid, name, definitions}]}}` (≤2048). An unknown catalog
@@ -424,6 +442,7 @@ console's mission scope), so the mission's existence doesn't leak.
 | `activation_policy_changed` | 409 | The policy changed since the snapshot |
 | `spacecraft_switch_set_by_change_set` | 409 | (submit) A change set turned a switch on or off after the draft was saved; save again |
 | `spacecraft_catalog_set_by_profile` | 409 | The catalog is the profile's (a change set sets it) |
+| `nothing_to_review` | 422 | (`POST /configuration/reviews`, `all_saved`) every saved draft is already active |
 | `spacecraft_catalog_required` | 422 | Submit with no catalog |
 | `spacecraft_packet_inputs_required` | 422 | Telemetry on without a source and packets |
 | `spacecraft_catalog_unavailable` | 422 | The catalog revision isn't this mission's |
