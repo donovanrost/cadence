@@ -55,25 +55,37 @@ and the scorecard in [#686](https://github.com/donovanrost/cadence/issues/686).
 ## Laptop measurements
 
 Measured on 2026-11-26 on an arm64 Mac with Elixir 1.20.4, OTP 29, and eight
-normal BEAM schedulers. All paths were active throughout each peak run.
+normal schedulers. The 1,000-path soak used the 256-key batches and the
+five-second flush deadline.
 
-| Peak paths | Window | Received frames/s | Target frames/s | Mean scheduler use | Busiest scheduler, max 1s |
+| Peak paths active throughout | Window | Received frames/s | Target frames/s | Mean scheduler use | Busiest scheduler, max 1s |
 | ---: | ---: | ---: | ---: | ---: | ---: |
 | 50 | 60 s | 650.0 | 650 | 0.16% | 1.25% |
 | 500 | 60 s | 6,472.4 | 6,500 | 1.76% | 7.33% |
-| 1,000 | 600 s | 12,970.9 | 13,000 | 4.13% | 11.90% |
+| 1,000 | 600 s | 12,973.0 | 13,000 | 3.68% | 13.36% |
 
-The 1,000-path memory capture delivered 7,782,541 frames and 8,677,533,215
-bytes. Every path delivered frames in each two-second window, and the slowest
-path averaged 12.96 frames/s. Sampled BEAM memory was 223.3–466.4 MiB.
-The median was 394.1 MiB, the 95th percentile was 451.5 MiB, and the last
-sample was 414.7 MiB. The first and last two-minute medians were 302.5 and
-424.7 MiB.
+The 1,000-path run delivered 7,783,789 frames and 8,678,924,735
+bytes. Every path delivered in each two-second window. The slowest path
+averaged 12.96 frames/s. Sampled BEAM memory ranged between 213.1 and 509.0 MiB,
+with a 367.8 MiB median, a 450.0 MiB p95, and 393.2 MiB in the final sample.
 
-An independent 600-second run completed at 12,969.5 frames/s. The memory
-capture finished sampling and reached the five-second store flush timeout
-during contact shutdown. Store persistence now uses batches of at most 256
-keys, including the final flush.
+Across all 60 diagnostic samples, the store held 11,025 mirror entries,
+16,185,248 mirror bytes, zero dirty keys, 10,011 events, and 9,113,628
+DETS bytes.
+There were zero persistence batches during delivery. Closing the contacts
+took 186.2 ms and the final flush took 214.1 ms.
+After shutdown the store had 14,012 events, 11,568,875 DETS bytes, and
+zero dirty keys.
 
-The 1,000-craft average fixture with 16 per site activated 160 paths and
-delivered 2,079.9 frames/s over 15 seconds.
+| BEAM memory category | First 2 min median MiB | Last 2 min median MiB | Change MiB |
+| --- | ---: | ---: | ---: |
+| Total | 323.3 | 416.1 | +92.8 |
+| Processes | 112.1 | 120.1 | +8.0 |
+| Binaries | 120.4 | 216.9 | +96.5 |
+| ETS | 19.8 | 19.8 | 0.0 |
+
+Binary memory accounted for most of the increase. The provider mirror and
+DETS file stayed the same size throughout the measurement window.
+
+The average fixtures delivered 1,039.9 frames/s with 80 active paths at eight
+craft per site and 2,079.9 frames/s with 160 paths at 16 per site.
