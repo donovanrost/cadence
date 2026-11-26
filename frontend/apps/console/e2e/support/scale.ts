@@ -113,6 +113,7 @@ export async function serveScaledFleet(page: Page, size: number): Promise<Scaled
  *   loading status is left in <main>; checked once per frame on a handful of elements only;
  * - push cost: for each `fleet` frame from the socket, from its arrival to the end of the next
  *   frame's style and layout (forced), so Vue's patch and the layout it causes are both counted.
+ *   It includes the wait for that frame (up to ~16 ms at 60 Hz), so it errs high.
  */
 export async function installScaleProbes(page: Page): Promise<void> {
   await page.addInitScript(() => {

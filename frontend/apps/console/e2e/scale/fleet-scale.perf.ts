@@ -14,7 +14,12 @@ import { median } from "../support/scale-fleet.ts";
 // #176: the console at fleet scale. Each screen loads three times with a 500- and a
 // 1,000-spacecraft fleet (the seeded demo's 500, then clones; GET /fleet and the live push both
 // scaled), and the median of the three must meet console's budgets. Each screen prints one
-// `SCALE {json}` line, so a CI log shows the numbers even when a budget holds.
+// `SCALE {json}` line with its budgets beside the numbers, so a CI log shows them even when a
+// budget holds.
+//
+// Only the fleet is scaled (`scaled: ["fleet"]` in each line). A screen's own per-spacecraft
+// reads (Alarms' episodes, Contacts' passes) still serve the seeded 500, so "Alarms · 1000" means
+// the fleet at 1,000, not every read. Scaling those follows the paged endpoints (#793, #794).
 
 /** Console's budgets on a CI runner (#176). 500 is the floor, so meeting them at 1,000 covers it. */
 const BUDGET = {
@@ -26,13 +31,20 @@ const BUDGET = {
 const LOADS = 3;
 const SIZES = [500, 1_000] as const;
 
-const SCREENS: readonly (readonly [string, string])[] = [
-  ["Fleet", missionPath("fleet")],
-  ["Now", missionPath("now")],
-  ["Alarms", missionPath("alarms")],
-  ["Contacts", missionPath("contacts")],
+/** What this spec scales; every SCALE line says so. */
+const SCALED = ["fleet"] as const;
+
+/**
+ * `live`: the screen subscribes to the `fleet` push (useFleet without `live: false`), so it gets
+ * the scaled snapshot and one full-fleet push is timed. A screen without it has no push cost.
+ */
+const SCREENS: readonly Readonly<{ name: string; path: string; live: boolean }>[] = [
+  { name: "Fleet", path: missionPath("fleet"), live: true },
+  { name: "Now", path: missionPath("now"), live: true },
+  { name: "Alarms", path: missionPath("alarms"), live: true },
+  { name: "Contacts", path: missionPath("contacts"), live: true },
   // The target picker: Targets · live query (C1), one Add spacecraft option per craft.
-  ["Compose", missionPath("commands/new")],
+  { name: "Compose", path: missionPath("commands/new"), live: true },
 ];
 
 /** Budget misses known today, each with its follow-up issue (`Screen · size` → issue). */
@@ -50,23 +62,23 @@ interface Load {
 const pushCount = () => window.__scale?.pushes.length ?? 0;
 
 /** One cold load of `path` with `size` spacecraft, in its own page so routes don't stack. */
-async function load(context: BrowserContext, path: string, size: number, round: number) {
+async function load(
+  context: BrowserContext,
+  screen: (typeof SCREENS)[number],
+  size: number,
+  round: number,
+) {
   const page = await context.newPage();
   try {
     await installScaleProbes(page);
     const fleet = await serveScaledFleet(page, size);
-    await page.goto(path);
+    await page.goto(screen.path);
     const readyMs = await readyAt(page);
-    // A screen on the live push gets the scaled full snapshot first; then one push changes every
-    // row. A screen without the push (no snapshot within 5 s) has no push cost to measure.
-    const live = await page
-      .waitForFunction(() => pushCount() > 0, undefined, { timeout: 5_000 })
-      .then(
-        () => true,
-        () => false,
-      );
+    // A live screen gets the scaled full snapshot first (missing it fails the load: the fixture
+    // or the subscription broke); then one push changes every row.
     let pushMs: number | null = null;
-    if (live) {
+    if (screen.live) {
+      await page.waitForFunction(() => pushCount() > 0, undefined, { timeout: 15_000 });
       const before = await page.evaluate(pushCount);
       await fleet.pushAll(round + 1);
       await page.waitForFunction((n) => pushCount() > n, before);
@@ -100,8 +112,8 @@ const rounded = (l: Load) => ({
 
 test.describe("Console at fleet scale", () => {
   for (const size of SIZES) {
-    for (const [name, path] of SCREENS) {
-      const label = `${name} · ${size}`;
+    for (const screen of SCREENS) {
+      const label = `${screen.name} · ${size}`;
       test(label, async ({ context }) => {
         test.setTimeout(180_000);
         const issue = KNOWN_MISSES[label];
@@ -109,7 +121,7 @@ test.describe("Console at fleet scale", () => {
 
         const loads: Load[] = [];
         for (let round = 0; round < LOADS; round++)
-          loads.push(await load(context, path, size, round));
+          loads.push(await load(context, screen, size, round));
         const pushes = loads.flatMap((l) => (l.pushMs === null ? [] : [l.pushMs]));
         const result: Load = {
           readyMs: median(loads.map((l) => l.readyMs)),
@@ -120,9 +132,11 @@ test.describe("Console at fleet scale", () => {
         };
         console.log(
           `SCALE ${JSON.stringify({
-            screen: name,
+            screen: screen.name,
             size,
+            scaled: SCALED,
             ...rounded(result),
+            budget: BUDGET,
             loads: loads.map(rounded),
           })}`,
         );
