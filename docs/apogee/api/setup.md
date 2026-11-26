@@ -110,7 +110,7 @@ has none yet. Archived spacecraft are included (plans still name them).
 - **By ids**: `?ids=a,b,c`, at most 100 (the small sets a screen already knows). Unknown ids are
   left out. `next_cursor` is null. More than 100 is `422 invalid_params` (`details.ids`).
 - **The whole mission, in pages**: no `ids`. Sorted by name, then id, so pages are stable. `limit`
-  1–500 (default 500); pass the previous `meta.next_cursor` as `?cursor=` for the next page, null
+  1–500 (default 500; a limit outside 1–500 falls back to 500); pass the previous `meta.next_cursor` as `?cursor=` for the next page, null
   on the last. There is no unpaged list. A cursor the server didn't make is `422 invalid_params`
   (`details.cursor`).
 
