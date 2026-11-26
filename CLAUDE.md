@@ -40,4 +40,3 @@ Cadence's architecture is heavily inspired by Cosmos OpenC3, but adapted for Eli
 
 **Text contrast tiers (WCAG AA on the dark surfaces):** informational text (table cells, descriptions, subtitles) is `text-base-content/70` minimum or full `text-base-content`; short secondary text (timestamps, counts, captions) is `/60` minimum; `/40`–`/50` only for true decoration, placeholders, and disabled states; `/20`–`/30` only for borders and `aria-hidden` glyphs. Don't put `text-base-content/NN` next to `hud-label` — the label's own color wins the cascade and the utility is inert.
 
-**Legacy reference:** `legacy/cadence_legacy/` has the visual reference for the HUD aesthetic. Use it for pattern reference, not code copying.

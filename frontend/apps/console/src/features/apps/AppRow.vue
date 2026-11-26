@@ -4,6 +4,8 @@ import type { SpacecraftId } from "@/api";
 import { ApListRow, ApTag } from "@/ui";
 import AppActions from "./AppActions.vue";
 import type { App } from "./api.ts";
+import type { UninstallScope } from "./uninstall-words.ts";
+import { versionMeta } from "./versions.ts";
 
 /** One app: name (a link to its pages once installed, L9), what it does or what's off without it. */
 /** `spacecraftId`: the row is that spacecraft's (L19): its pages and verbs are the spacecraft's. */
@@ -11,6 +13,8 @@ defineProps<{
   missionId: MissionId;
   app: App;
   canInstall: boolean;
+  /** Who an uninstall stops it for, said in the confirm sheet. */
+  uninstallScope: UninstallScope;
   spacecraftId?: SpacecraftId | null;
 }>();
 defineEmits<{ changed: [] }>();
@@ -33,7 +37,7 @@ const word = (a: App) =>
         ? (app.description ?? undefined)
         : (app.consequence_if_missing ?? app.description ?? undefined)
     "
-    :meta="app.version ? `v${app.version}` : undefined"
+    :meta="versionMeta(app)"
   >
     <template v-if="app.surfaces.length > 0 && app.installed" #title>
       <RouterLink
@@ -53,6 +57,7 @@ const word = (a: App) =>
           v-if="!app.platform && canInstall"
           :mission-id="missionId"
           :app="app"
+          :uninstall-scope="uninstallScope"
           :spacecraft-id="spacecraftId ?? null"
           @changed="$emit('changed')"
         />

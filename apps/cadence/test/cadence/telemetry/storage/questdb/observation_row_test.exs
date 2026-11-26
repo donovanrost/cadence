@@ -10,8 +10,8 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationRowTest do
 
     assert statement =~ "INSERT INTO telemetry_observations"
     assert statement =~ "observed_at, generation_time, receipt_time"
-    assert statement =~ "$35"
-    assert length(ObservationRow.columns()) == 35
+    assert statement =~ "$44"
+    assert length(ObservationRow.columns()) == 44
   end
 
   test "serializes envelope into QuestDB row params" do

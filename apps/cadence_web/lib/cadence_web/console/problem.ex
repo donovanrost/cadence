@@ -12,6 +12,8 @@ defmodule CadenceWeb.Console.Problem do
     unauthenticated: {401, "Sign in to continue."},
     invalid_csrf: {403, "The request CSRF token is invalid. Reload the page and try again."},
     forbidden: {403, "You do not have permission to do that."},
+    # #753: a service identity's bearer token reaches only the actions that opt in.
+    service_not_allowed: {403, "A service identity can't do that; a person must."},
     scope_mismatch: {403, "That resource belongs to a different organization."},
     not_found: {404, "Not found."},
     mission_not_found: {404, "Mission not found."},

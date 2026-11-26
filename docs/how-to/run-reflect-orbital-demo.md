@@ -80,7 +80,7 @@ Ctrl-C when finished; the persisted demo remains available.
 | Orbit metadata | 20 planes × 25 spacecraft; 625 km, 97.9° inclination, phased RAAN/anomaly |
 | Bus | Shared version-pinned Earendil Block 1 profile; TM downlink, TC uplink, 1,115-byte frames, VC 0 |
 | Payload metadata | Solar reflector; 475 deployed, 25 stowed for commissioning; illumination disabled |
-| Catalog | Unmodified `legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml`: 10 telemetry packets and 27 commands |
+| Catalog | Unmodified `dev/catalogs/demo_spacecraft.yaml`: 10 telemetry packets and 27 commands |
 | Ground network | 10 synthetic sites with 38 modeled antennas, synchronized through the provider HTTP API |
 | Delivery | 10 version-pinned TCP ingress profiles/transports on loopback ports 42100–42109 |
 | Routing | 500 provider spacecraft mappings; primary and backup routes for each spacecraft |

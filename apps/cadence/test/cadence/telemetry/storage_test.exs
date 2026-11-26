@@ -1,4 +1,5 @@
 defmodule Cadence.Telemetry.StorageTest do
+  alias Cadence.Reads.DataSources
   alias Cadence.Reads.Telemetry, as: TelemetryReads
   use Cadence.ConfigCase, async: false
 
@@ -12,7 +13,8 @@ defmodule Cadence.Telemetry.StorageTest do
     SourceResult
   }
 
-  alias Cadence.Projections.DataSources.Watermarks, as: SourceWatermarks
+  alias Cadence.Projections.DataSources.Watermarks.EventRow
+  alias Cadence.Telemetry.Storage.WatermarkCoalescer
 
   alias Cadence.DataSources.SourceWatermark
 
@@ -316,7 +318,7 @@ defmodule Cadence.Telemetry.StorageTest do
              )
 
     assert [event] =
-             SourceWatermarks.list_source_watermark_events(
+             DataSources.list_source_watermark_events(
                "org-storage",
                "mission-batch-watermark"
              )
@@ -329,6 +331,62 @@ defmodule Cadence.Telemetry.StorageTest do
 
     assert Enum.sort([event.payload["first_sample_id"], event.payload["last_sample_id"]]) ==
              ["batch-counter", "batch-voltage"]
+  end
+
+  test "batches from many paths coalesce into one status row and one event per flush (#690)" do
+    mission = "mission-coalesce"
+
+    receipts = [~U[2026-06-17 12:00:03Z], ~U[2026-06-17 12:00:09Z], ~U[2026-06-17 12:00:06Z]]
+
+    for {receipt, n} <- Enum.with_index(receipts) do
+      sample = %{
+        sample("coalesce-#{n}", mission, "HK.counter", n)
+        | spacecraft_id: "sc-#{n}",
+          receipt_time: receipt
+      }
+
+      assert :ok =
+               Storage.persist_samples(storage_policy(), [sample],
+                 organization_id: "org-storage",
+                 source_watermark_events?: true,
+                 dashboard_runtime_invalidation?: false
+               )
+    end
+
+    # Nothing is written per batch: the read flushes the pending window.
+    assert [] = Cadence.Repo.all(EventRow)
+    assert [status] = DataSources.list_source_watermark_statuses("org-storage", mission)
+
+    assert status.sample_count == 3
+    assert status.latest_receipt_time == ~U[2026-06-17 12:00:09.000000Z]
+    assert status.retention_starts_at == ~U[2026-06-17 12:00:03.000000Z]
+
+    assert [event] = DataSources.list_source_watermark_events("org-storage", mission)
+    assert event.sample_count == 3
+    assert event.payload["observation_count"] == 3
+    assert event.payload["first_sample_id"] == "coalesce-0"
+    assert event.payload["last_sample_id"] == "coalesce-2"
+
+    # A second window advances the same row: one more event, no change to the first.
+    later = %{
+      sample("coalesce-3", mission, "HK.counter", 3)
+      | receipt_time: ~U[2026-06-17 12:01:00Z]
+    }
+
+    assert :ok =
+             Storage.persist_samples(storage_policy(), [later],
+               organization_id: "org-storage",
+               source_watermark_events?: true,
+               dashboard_runtime_invalidation?: false
+             )
+
+    assert :ok = WatermarkCoalescer.flush()
+
+    assert [advanced, _first] =
+             DataSources.list_source_watermark_events("org-storage", mission)
+
+    assert advanced.event_type == :advanced
+    assert advanced.sample_count == 1
   end
 
   test "replay telemetry writes record replay-scoped source watermarks" do
@@ -350,7 +408,7 @@ defmodule Cadence.Telemetry.StorageTest do
     assert envelope.replay_run_id == "replay-run-1"
 
     assert [status] =
-             SourceWatermarks.list_source_watermark_statuses(
+             DataSources.list_source_watermark_statuses(
                "org-storage",
                "mission-storage-replay",
                realm: :replay,

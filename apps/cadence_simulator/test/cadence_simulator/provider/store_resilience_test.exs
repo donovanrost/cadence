@@ -9,7 +9,7 @@ defmodule CadenceSimulator.Provider.StoreResilienceTest do
   alias CadenceSimulator.StoreRestart
 
   @definitions Path.expand(
-                 "../../../../../legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml",
+                 "../../../../../dev/catalogs/demo_spacecraft.yaml",
                  __DIR__
                )
   @dets :cadence_simulator_provider_store

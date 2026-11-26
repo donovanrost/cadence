@@ -8,6 +8,8 @@ defmodule Cadence.Platform.FactPublicationIsolationTest do
   alias Cadence.Projections.DataSources.Health, as: SourceHealth
   alias Cadence.Runtime.{ManagedRecordsPersisted, Persistence}
 
+  alias Cadence.Telemetry.Storage.WatermarkCoalescer
+
   alias Cadence.Telemetry.{
     CurrentValueStore,
     ObservationsCommitted,
@@ -118,10 +120,13 @@ defmodule Cadence.Platform.FactPublicationIsolationTest do
                publish_facts?: true
              )
 
-    assert_fact(:bus_a, {:cadence, :data_sources, :facts}, SourceWatermarkEvent)
-    assert_fact(:bus_a, {:cadence, :telemetry, :facts}, ObservationsCommitted)
     # A canonical first sighting stores no identity row, so it publishes no identity-state fact
     # (#689); the committed observations and the watermark are what readers hear.
+    assert_fact(:bus_a, {:cadence, :telemetry, :facts}, ObservationsCommitted)
+
+    # The watermark is coalesced (#690): its fact goes out, on the batch's own bus, at the flush.
+    assert :ok = WatermarkCoalescer.flush()
+    assert_fact(:bus_a, {:cadence, :data_sources, :facts}, SourceWatermarkEvent)
     refute_any_fact()
 
     # The write landed: storage received this sample with its own identity.
@@ -141,8 +146,11 @@ defmodule Cadence.Platform.FactPublicationIsolationTest do
                publish_facts?: true
              )
 
-    assert_fact(:bus_b, {:cadence, :data_sources, :facts}, SourceWatermarkEvent)
     assert_fact(:bus_b, {:cadence, :telemetry, :facts}, ObservationsCommitted)
+
+    # The watermark is coalesced (#690): its fact goes out, on the batch's own bus, at the flush.
+    assert :ok = WatermarkCoalescer.flush()
+    assert_fact(:bus_b, {:cadence, :data_sources, :facts}, SourceWatermarkEvent)
     refute_any_fact()
 
     assert_received {:telemetry_storage_envelopes,

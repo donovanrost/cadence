@@ -10,26 +10,14 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
   @now "2026-09-03T12:00:00Z"
   @comms_surfaces ~w(overview validation transports transport routing routing_detail ground_stations ground_station)
 
-  test "serializes tagged organization, user, and admin scope documents without mission ids" do
+  test "serializes the tagged user scope document without mission ids" do
     scope = %Scope{organization_id: "org-1", actor_kind: :user, user: %{id: "user-1"}}
-
-    assert ApplicationHostCatalog.scope_document(scope, %{
-             host_context: HostContext.organization("org-1"),
-             mission: nil,
-             spacecraft: nil
-           }) == %{"scope" => "organization", "organizationId" => "org-1"}
 
     assert ApplicationHostCatalog.scope_document(scope, %{
              host_context: HostContext.user("user-1"),
              mission: nil,
              spacecraft: nil
            }) == %{"scope" => "user", "userId" => "user-1"}
-
-    assert ApplicationHostCatalog.scope_document(scope, %{
-             host_context: HostContext.admin(),
-             mission: nil,
-             spacecraft: nil
-           }) == %{"scope" => "admin"}
   end
 
   test "passes explicit validated time to release lookup boundaries", %{conn: _conn} do

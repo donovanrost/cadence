@@ -16,8 +16,3 @@ cover
 **/erl_crash.dump
 **/.env
 **/.env.*
-legacy
-!legacy/cadence_legacy
-!legacy/cadence_legacy/priv
-!legacy/cadence_legacy/priv/databases
-!legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml
