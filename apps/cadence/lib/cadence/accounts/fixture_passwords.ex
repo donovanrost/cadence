@@ -121,6 +121,8 @@ if Mix.env() in [:dev, :test] do
            %{metadata: %{"fixture" => @fixture}} <- UserRow.to_domain(row),
            :ok <-
              store.(Repo, user_id, password, %{"fixture" => @fixture}),
+           # The digests are discarded on purpose: this runs in dev and test only, from the domain
+           # app, with no web layer to disconnect live sockets (#876). Web callers must disconnect.
            {:ok, _signed_out} <- Authentication.revoke_all_user_sessions(Repo, user_id) do
         AccountEvents.record(user_id, @actor, "password_changed", %{
           "all_sessions_signed_out" => true
