@@ -4,20 +4,17 @@ defmodule Cadence.Repo.Migrations.ChangeSetReviewRecord do
   # #117 step 2 (P3; var/four-eyes-record-design.md §5; DECISIONS #112): a change set's review row
   # is a complete four-eyes record. Required fields, no pre-cutover form:
   # - subject_version, subject_digest: the set's version and the digest of the staged ops it
-  #   decided (Configuration.ReviewRecord.digest/1; the apply asserts it);
+  #   decided (Configuration.ReviewRecord.digest/1);
   # - policy_document: the approval policy in force;
   # - separated_from: the actor ids the separation check compared (as #597's), '{}' when none;
   # - admin_mode: whether the decider acted as a platform admin;
   # - decision may be 'not_required' (a direct-path apply's own row), with no comment.
   # Revisions gain submitted_by, required (domain on #616).
   #
-  # mission_config_reviews and mission_config_revisions are append-only by trigger (20261117160000),
-  # so an existing row could never get these required fields. Landing order (domain, #112): this refuses BEFORE any DDL while the
-  # table has rows. The remedy is a dev reset or the reset's designed purge, never a
-  # trigger-disabled DELETE.
+  # Both tables are append-only by trigger (20261117160000) and the new columns are NOT NULL with no
+  # default, so this fails on a database that has rows: drop and reseed the dev database
+  # (docs/TEAM.md, dev data is disposable).
   def up do
-    execute(guard_sql())
-
     alter table(:mission_config_reviews) do
       add(:subject_version, :integer, null: false)
       add(:subject_digest, :string, null: false)
@@ -40,27 +37,14 @@ defmodule Cadence.Repo.Migrations.ChangeSetReviewRecord do
       ADD CONSTRAINT mission_config_reviews_subject_digest_check
         CHECK (subject_digest ~ '^[0-9a-f]{64}$')
     """)
-  end
 
-  @doc """
-  The landing guard, inline so a migration replay never depends on app code (api-ops on #616). Its
-  test loads this file and runs exactly this SQL.
-  """
-  def guard_sql do
-    """
-    DO $$
-    DECLARE reviews bigint; revisions bigint;
-    BEGIN
-      SELECT count(*) INTO reviews FROM mission_config_reviews;
-      SELECT count(*) INTO revisions FROM mission_config_revisions;
-      IF reviews > 0 OR revisions > 0 THEN
-        RAISE EXCEPTION 'mission_config_reviews has % row(s), mission_config_revisions has % row(s): #117 step 2 adds required fields an append-only row can''t get. Remedy: a dev reset, or the reset''s designed decision-record purge, then run again (domain, DECISIONS #112). Never a trigger-disabled DELETE.', reviews, revisions;
-      END IF;
-    END $$;
-    """
+    # ReviewRecord.decisions/2 pages an organization's rows newest first.
+    create(index(:mission_config_reviews, [:organization_id, "decided_at DESC", "review_id DESC"]))
   end
 
   def down do
+    drop(index(:mission_config_reviews, [:organization_id, "decided_at DESC", "review_id DESC"]))
+
     execute("""
     ALTER TABLE mission_config_reviews
       DROP CONSTRAINT mission_config_reviews_subject_digest_check,

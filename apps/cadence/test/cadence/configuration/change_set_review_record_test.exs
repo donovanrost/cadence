@@ -2,10 +2,10 @@ defmodule Cadence.Configuration.ChangeSetReviewRecordTest do
   @moduledoc """
   #117 step 2 (P3; var/four-eyes-record-design.md; DECISIONS #112; domain's five points): a change
   set's decision row is a complete four-eyes record, provable from the row alone. Its subject
-  (version and the digest of the ops it decided, which the apply asserts), its policy, the ids the
+  (version and the digest of the ops it decided), its policy, the ids the
   separation check compared (#599), and admin_mode. A direct apply writes its own not_required
   row in the apply's transaction. Revisions record submitted_by, and applied_by is whoever ran
-  the apply. (The landing guard: ChangeSetReviewLandingGuardTest.)
+  the apply.
   """
   use Cadence.RuntimeCase, async: false
 
@@ -34,7 +34,7 @@ defmodule Cadence.Configuration.ChangeSetReviewRecordTest do
     %{org: org, mission: mission, author: author, reviewer: reviewer, craft: craft}
   end
 
-  test "an approved review records its subject, policy, separated_from and admin_mode; the apply asserts it",
+  test "an approved review records its subject, policy, separated_from and admin_mode",
        c do
     policy(c.author, c.mission.mission_id, "independent")
     {:ok, staged} = stage(c, [switch_op(c.craft.spacecraft_id, "commanding_enabled", false)])
@@ -141,11 +141,6 @@ defmodule Cadence.Configuration.ChangeSetReviewRecordTest do
     # The change set's read lists reviewer decisions only (the console decodes approved | sent_back).
     {:ok, set} = Configuration.change_set(c.author, c.mission.mission_id, staged.change_set_id)
     assert set.reviews == []
-  end
-
-  test "an apply whose ops don't match the reviewed digest is refused, nothing written" do
-    assert {:error, :change_set_changed} =
-             ReviewRecord.decided(%{}, %{}, [], %{digest: String.duplicate("0", 64)}, "review")
   end
 
   test "golden: the digest's canonical term is pinned (#108)" do

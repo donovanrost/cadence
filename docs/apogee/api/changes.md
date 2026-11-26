@@ -59,8 +59,8 @@ Every decision on a change set is an append-only record (`mission_config_reviews
 `approved` or `sent_back`, or a direct apply's own `not_required`. Each names its subject (the set's
 version and a digest of the exact ops it decided), the approval policy in force, `separated_from`
 (the ids the separation check compared: the submitter and every change's author; `[]` on a direct
-apply) and `admin_mode`. A reviewed apply runs exactly the ops its review named; if they differ, it
-answers `409 change_set_changed` and writes nothing.
+apply) and `admin_mode`. An approve names the version the reviewer saw (`expected_version`); a stale
+one answers `409 change_set_changed`, so the recorded digest is the digest of the ops applied.
 - A revision's `applied_by` is whoever ran the apply: on a reviewed set, the reviewer who approved
   it. The submitter is the change set's `submitted_by`. The apply runs as that person, so on a
   reviewed set the reviewer is also the `saved_by` of the limit and derived-telemetry versions it

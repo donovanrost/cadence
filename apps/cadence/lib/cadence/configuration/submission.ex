@@ -117,8 +117,8 @@ defmodule Cadence.Configuration.Submission do
 
         result =
           locked(set, params, proof, fn set ->
-            # #117 step 2: the review names the ops it decided; the apply below runs these ops and
-            # asserts the same digest, and is run by the reviewer (applied_by = whoever applied).
+            # #117 step 2: the review names the ops it decided (the version pinned by expected/2,
+            # under this lock); the apply below runs them, as the reviewer (applied_by).
             digest = set.change_set_id |> ChangeSetStore.staged_ops() |> ReviewRecord.digest()
 
             review =
@@ -134,7 +134,7 @@ defmodule Cadence.Configuration.Submission do
               set.reason,
               set.policy_document,
               [approval(review)],
-              {proof.revision_id, %{digest: digest, admin_mode: admin_mode(params)}}
+              {proof.revision_id, :reviewed}
             )
           end)
 
@@ -179,7 +179,7 @@ defmodule Cadence.Configuration.Submission do
       reason,
       policy,
       [],
-      {revision_id, %{digest: nil, admin_mode: admin_mode}}
+      {revision_id, {:direct, admin_mode}}
     )
   end
 
@@ -191,7 +191,7 @@ defmodule Cadence.Configuration.Submission do
     with :ok <- ActivationPolicy.validate(org, mission, policy),
          head = Ledger.lock_head(org, mission),
          ops = ChangeSetStore.staged_ops(set.change_set_id),
-         :ok <- ReviewRecord.decided(set, applier, ops, record, review_id()),
+         :ok <- record_direct(set, applier, ops, record),
          result = Pipeline.run(org, mission, set.base_revision_number, ops, actor: applier),
          :ok <- clean(result),
          changes = ChangeSetStore.changes(set.change_set_id),
@@ -598,6 +598,12 @@ defmodule Cadence.Configuration.Submission do
   end
 
   defp independent(_set, _reviewer), do: {:error, :forbidden}
+
+  # A reviewed apply's record is its review row; a direct apply writes its own not_required row.
+  defp record_direct(_set, _applier, _ops, :reviewed), do: :ok
+
+  defp record_direct(set, applier, ops, {:direct, admin_mode}),
+    do: ReviewRecord.not_required(set, applier, ops, admin_mode, review_id())
 
   # From the caller's scope (Control.Configuration), never from a request body.
   defp admin_mode(params), do: Map.get(params, :admin_mode) == true

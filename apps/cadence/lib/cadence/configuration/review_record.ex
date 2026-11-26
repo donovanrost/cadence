@@ -5,8 +5,8 @@ defmodule Cadence.Configuration.ReviewRecord do
   apply's `not_required`) names:
 
   - **subject** `{kind: change_set, id, version, digest}`: `digest/1` over the staged ops it
-    decided. The apply recomputes it from the ops it runs and refuses on a mismatch, so approved
-    equals applied, provably from the row.
+    decided. A reviewer decides the version they saw (`expected_version`, checked under the set
+    lock), and the apply runs in the same locked transaction, so the digest names the ops applied.
   - **policy**: the approval policy in force (the set's `policy_document`).
   - **separated_from**: exactly the actor ids the separation check compared (the submitter and
     every change's author, services by their own id), sorted and unique; `[]` when no check ran
@@ -84,16 +84,11 @@ defmodule Cadence.Configuration.ReviewRecord do
   defp author_actor(_other), do: nil
 
   @doc """
-  In the apply's transaction (domain): a reviewed apply runs exactly the ops its review named
-  (`{:error, :change_set_changed}` otherwise, so nothing is written); a direct apply writes its own
-  `not_required` record.
+  A direct apply's own `not_required` record, in the apply's transaction: no review ran, so
+  `separated_from` is `[]`.
   """
-  @spec decided(map(), map(), [map()], map(), binary()) :: :ok | {:error, :change_set_changed}
-  def decided(_set, _applier, ops, %{digest: digest}, _review_id) when is_binary(digest) do
-    if digest(ops) == digest, do: :ok, else: {:error, :change_set_changed}
-  end
-
-  def decided(set, applier, ops, %{digest: nil, admin_mode: admin_mode}, review_id) do
+  @spec not_required(map(), map(), [map()], boolean(), binary()) :: :ok
+  def not_required(set, applier, ops, admin_mode, review_id) do
     write(set, applier, "not_required", nil, review_id, %{
       digest: digest(ops),
       separated_from: [],
