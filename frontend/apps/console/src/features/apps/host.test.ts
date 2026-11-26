@@ -2,20 +2,18 @@ import { describe, expect, it } from "vite-plus/test";
 import { saveOutcome } from "./saveOutcome.ts";
 import { hostRefusal, setupSurfaces } from "./surfaces.ts";
 
-const receipt = { receiptId: "r1", completedAt: "2026-11-13T03:00:00Z", result: {} };
-
 describe("L9 save-outcome seam (DECISIONS #77)", () => {
   it("says what each app's own save did, never 'staged'", () => {
-    expect(saveOutcome("limits", "save_limit_definition", receipt)).toEqual({
+    expect(saveOutcome("limits", "save_limit_definition")).toEqual({
       kind: "saved",
       text: "Saved. It applies now.",
     });
-    expect(saveOutcome("telemetry_decom", "request_activation", receipt)).toEqual({
+    expect(saveOutcome("telemetry_decom", "request_activation")).toEqual({
       kind: "activation_requested",
       text: "Activation requested. It applies once it's approved.",
     });
-    expect(saveOutcome("telemetry_decom", "disable", receipt)).toBeNull();
-    expect(saveOutcome("someone_else", "save_x", receipt)).toBeNull();
+    expect(saveOutcome("telemetry_decom", "disable")).toBeNull();
+    expect(saveOutcome("someone_else", "save_x")).toBeNull();
   });
 });
 

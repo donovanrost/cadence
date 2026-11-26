@@ -7,12 +7,6 @@ import { inApplicationShell } from "./page-portal";
 import { FederatedFullPageSurface } from "./federated_full_page_surface";
 import { MissionApplicationsPage, SpacecraftApplicationsPage } from "../capability-management";
 
-import {
-  SignInPanel,
-  OrganizationAccessPanel,
-  InvitationAcceptancePanel,
-} from "../auth-and-navigation";
-
 const components = new Map<string, Component>([
   ["BrowserHost", BrowserHost],
   ["ApplicationShell", ApplicationShell],
@@ -42,9 +36,6 @@ const components = new Map<string, Component>([
       () => import("./application_host/ApplicationDiagnostics.vue"),
     ),
   ],
-  ["UserSession", inApplicationShell(SignInPanel)],
-  ["NoOrganizationPage", inApplicationShell(OrganizationAccessPanel)],
-  ["OrganizationInvitationPage", inApplicationShell(InvitationAcceptancePanel)],
   ["FederatedFullPageSurface", inApplicationShell(FederatedFullPageSurface)],
   // Retain historical component names while their implementations live in the core feature.
   ["MissionApplicationManagement", inApplicationShell(MissionApplicationsPage)],

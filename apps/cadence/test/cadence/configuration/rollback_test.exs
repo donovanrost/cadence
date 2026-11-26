@@ -144,6 +144,7 @@ defmodule Cadence.Configuration.RollbackTest do
             %{
               kind: "legacy_activation",
               applied_by: %{"kind" => "system", "id" => "test"},
+              submitted_by: %{"kind" => "system", "id" => "test"},
               applied_at: DateTime.utc_now(),
               reason: "legacy",
               summary: "Legacy activation"

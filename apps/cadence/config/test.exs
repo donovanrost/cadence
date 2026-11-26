@@ -108,3 +108,7 @@ config :cadence, :fixture_application_contributors, [
 
 # Retention sweepers (#694) are exercised directly in their tests: no timers in the suite.
 config :cadence, :retention, enabled?: false
+
+# The watermark coalescer's own timer cannot use a test's sandbox connection: tests flush through
+# a watermark read or `WatermarkCoalescer.flush/0`.
+config :cadence, :source_watermark_coalescing, interval_ms: :infinity

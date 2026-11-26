@@ -120,7 +120,13 @@ defmodule Cadence.Configuration.Status do
       submitted_at: set.submitted_at,
       reason: set.reason,
       approval_required: approval_required?(set.policy_document),
-      reviews: Enum.map(ChangeSetStore.reviews(set.change_set_id), &review_view/1),
+      # A reviewer's decisions only: a direct apply's not_required record (#117 step 2) is no review;
+      # it's in the four-eyes record (ReviewRecord.decisions/2) and the audit (#239).
+      reviews:
+        set.change_set_id
+        |> ChangeSetStore.reviews()
+        |> Enum.reject(&(&1.decision == "not_required"))
+        |> Enum.map(&review_view/1),
       failure: set.failure_document,
       applied_revision: set.applied_revision_number
     }
