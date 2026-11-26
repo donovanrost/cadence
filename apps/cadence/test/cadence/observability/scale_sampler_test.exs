@@ -98,11 +98,28 @@ defmodule Cadence.Observability.ScaleSamplerTest do
     alias Cadence.Observability.ScaleSampler.Host
 
     test "parses macOS and Linux load and swap, and counts agents" do
-      assert Host.parse_load("{ 6.35 12.87 21.90 }") == [6.35, 12.87, 21.9]
-      assert Host.parse_load("0.52 0.58 0.59 1/389 12345\n") == [0.52, 0.58, 0.59]
-      assert Host.parse_macos_swap("total = 9216.00M  used = 8028.50M  free = 1187.50M") == 8028.5
-      assert Host.parse_macos_swap("total = 2.00G  used = 1.50G  free = 0.50G") == 1536.0
-      assert Host.parse_linux_swap("SwapTotal:  2097152 kB\nSwapFree:   1048576 kB\n") == 1024.0
+      assert Host.parse_load("{ 6.35 12.87 21.90 }") == %{one: 6.35, five: 12.87, fifteen: 21.9}
+
+      assert Host.parse_load("0.52 0.58 0.59 1/389 12345\n") == %{
+               one: 0.52,
+               five: 0.58,
+               fifteen: 0.59
+             }
+
+      assert Host.parse_macos_swap("total = 9216.00M  used = 8028.50M  free = 1187.50M") == %{
+               swap_used_mb: 8028.5,
+               swap_total_mb: 9216.0
+             }
+
+      assert Host.parse_macos_swap("total = 2.00G  used = 512.00M  free = 1.50G") == %{
+               swap_used_mb: 512.0,
+               swap_total_mb: 2048.0
+             }
+
+      assert Host.parse_linux_swap("SwapTotal:  2097152 kB\nSwapFree:   1048576 kB\n") == %{
+               swap_used_mb: 1024.0,
+               swap_total_mb: 2048.0
+             }
 
       ps = """
       /Users/x/.local/bin/claude --model opus
@@ -113,6 +130,45 @@ defmodule Cadence.Observability.ScaleSamplerTest do
 
       assert Host.count_agents(ps) == 3
     end
+
+    test "a baseline permits load equal to the core count and swap below half" do
+      samples = [host_sample(8.0, 256, 1024), host_sample(5.0, 0, 0)]
+
+      assert Host.capacity(samples, 8) == %{
+               classification: :baseline,
+               max_load_one: 8.0,
+               max_swap_percent: 25.0
+             }
+
+      assert %{metrics: metrics} = Stats.summarize(Enum.map(samples, &%{host: &1}))
+      assert metrics["host.load.one"].max == 8.0
+      assert metrics["host.swap_total_mb"].max == 1024
+    end
+
+    test "any load breach or swap at half capacity makes a ceiling check" do
+      quiet = host_sample(4.0, 512, 2048)
+      high_load = host_sample(8.01, 0, 0)
+      smaller_swap = host_sample(4.0, 256, 512)
+
+      assert %{classification: :ceiling_check, max_load_one: 8.01} =
+               Host.capacity([quiet, high_load, quiet], 8)
+
+      assert %{classification: :ceiling_check, max_swap_percent: 50.0} =
+               Host.capacity([quiet, smaller_swap, quiet], 8)
+    end
+
+    test "missing host readings or core count make a ceiling check" do
+      quiet = host_sample(4.0, 512, 2048)
+
+      assert %{classification: :ceiling_check, max_load_one: 4.0, max_swap_percent: 25.0} =
+               Host.capacity([quiet, host_sample(nil, nil, nil)], 8)
+
+      assert %{classification: :ceiling_check} = Host.capacity([quiet], :unknown)
+    end
+  end
+
+  defp host_sample(load, used, total) do
+    %{load: %{one: load}, swap_used_mb: used, swap_total_mb: total}
   end
 
   describe "the runner's defaults" do
