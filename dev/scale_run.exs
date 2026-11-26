@@ -183,24 +183,37 @@ defmodule Cadence.Dev.ScaleRun do
   defp report_path(label), do: Path.join(@root, "docs/scale/#{Date.utc_today()}-#{label}.md")
 
   defp write_report(path, out, opts, sites, load) do
-    %{meta: meta, metrics: metrics, seconds: seconds, storage: storage} = load.summary
+    %{
+      meta: meta,
+      rows: rows,
+      elapsed_ms: elapsed_ms,
+      counters: counters,
+      metrics: metrics,
+      storage: storage
+    } =
+      load.summary
+
+    per_row = metrics |> Map.drop(Map.keys(counters)) |> Enum.sort()
 
     report = [
       capacity_heading(load.summary.host_capacity, meta.host.logical_cpus, opts[:label]),
       "- Fleet size #{opts[:spacecraft]}, #{sites} sites, #{opts[:shape]} load shape\n",
       per_site_line(opts),
-      "- Requested duration #{opts[:duration]} s, #{seconds} sampler rows " <>
-        "(#{Float.round(opts[:duration] / max(seconds, 1), 2)} s per row on average)\n",
+      "- Requested duration #{opts[:duration]} s, sampled #{Float.round(elapsed_ms / 1_000, 2)} s " <>
+        "across #{rows} rows\n",
       "- Simulator paths sending #{load.paths_sending}/#{load.paths_expected}\n",
       "- Simulator frames sent #{load.frames_sent}, target #{load.frames_per_second_expected} frames/s\n",
-      "- Per-second JSONL \`#{Path.relative_to(out, @root)}\`\n",
+      "- Sampler JSONL \`#{Path.relative_to(out, @root)}\`\n",
       "- Summary JSON \`#{Path.relative_to(load.summary_path, @root)}\`\n\n",
       "## Run settings\n\n| Setting | Value |\n| --- | --- |\n",
       meta_rows(meta),
-      # Counts are per sampler row, which covers about a second only on an unloaded host.
-      "\n## Per-sample metrics\n\nOne row per sampler tick; counts (frames, batches, bytes) are " <>
-        "per row, not per second.\n\n| Metric | p50 | p99 | Max |\n| --- | ---: | ---: | ---: |\n",
-      for {key, stats} <- Enum.sort(metrics) do
+      "\n## Counter totals and rates per second\n\nRates use each row's elapsed time.\n\n" <>
+        "| Metric | Total | p50/s | p99/s | Max/s |\n| --- | ---: | ---: | ---: | ---: |\n",
+      for {key, %{total: total, per_second: stats}} <- Enum.sort(counters) do
+        "| `#{key}` | #{cell(total)} | #{cell(stats.p50)} | #{cell(stats.p99)} | #{cell(stats.max)} |\n"
+      end,
+      "\n## Other per-row metrics\n\n| Metric | p50 | p99 | Max |\n| --- | ---: | ---: | ---: |\n",
+      for {key, stats} <- per_row do
         "| \`#{key}\` | #{cell(stats.p50)} | #{cell(stats.p99)} | #{cell(stats.max)} |\n"
       end,
       "\n## Storage growth\n\n| Database | Table | Rows | Bytes |\n| --- | --- | ---: | ---: |\n",

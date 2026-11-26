@@ -1,15 +1,14 @@
 defmodule Mix.Tasks.Cadence.Scale.Run do
   @moduledoc """
-  Records a per-second scorecard of a running Cadence node while a fleet-scale load runs
-  (#717, epic #217).
+  Records a scorecard of a running Cadence node under fleet-scale load (#717, epic #217).
 
       mix cadence.scale.run --duration 600 --label peak-1000 [--node cadence_3] [--module Mod]
 
   Connects to the worktree's node (`cadence_<CADENCE_DEV_SLOT>`, cookie `CADENCE_ERLANG_COOKIE`,
   both set by `dev/stack env`), starts `Cadence.Observability.ScaleSampler` there, waits
-  `--duration` seconds and stops it. The node writes one JSON line per second to
-  `var/scale/<utc>-<label>.jsonl`; this task writes the run summary (p50/p99/max of every
-  per-second metric) beside it as `.summary.json` and prints the headline numbers.
+  `--duration` seconds and stops it. The node writes a JSON line with the elapsed time for
+  each sample to `var/scale/<utc>-<label>.jsonl`. This task writes the run summary beside it
+  as `.summary.json` and prints counter totals and per-second rate percentiles.
 
   `--module` (repeatable) replaces the watched mailbox modules (default: telemetry's #686 list,
   `ScaleSampler.Mailboxes.default_modules/0`); per module the summary has processes with a
@@ -22,7 +21,7 @@ defmodule Mix.Tasks.Cadence.Scale.Run do
 
   alias Cadence.Telemetry.Storage.QuestDB.RestClient
 
-  @shortdoc "Record a per-second scorecard of a running node under load"
+  @shortdoc "Record a scorecard of a running node under load"
 
   @switches [node: :string, duration: :integer, label: :string, module: :keep, out: :string]
 
@@ -43,12 +42,10 @@ defmodule Mix.Tasks.Cadence.Scale.Run do
   @headline [
     "ecto.queue_ms.p99",
     "ecto.query_ms.p99",
-    "ingest.frames",
     "ingest.journal_lag_ms.p99",
     "ingest.paths",
     "beam.run_queue",
     "beam.scheduler_utilization",
-    "storage.postgres_wal_bytes",
     "storage.questdb_wal_lag.max",
     "host.swap_used_mb",
     "host.agents"
@@ -193,15 +190,21 @@ defmodule Mix.Tasks.Cadence.Scale.Run do
     end)
   end
 
-  defp print(%{seconds: seconds, metrics: metrics, storage: storage}, path) do
-    Mix.shell().info(
-      "\n#{seconds} rows sampled. Per-row p50 / p99 / max (counts are per row; a row covers about 1 s only on an idle host):"
-    )
+  defp print(summary, path) do
+    %{rows: rows, elapsed_ms: elapsed_ms, counters: counters, metrics: metrics, storage: storage} =
+      summary
+
+    Mix.shell().info("\n#{rows} rows sampled over #{Float.round(elapsed_ms / 1_000, 2)} s")
+    Mix.shell().info("Counter rates per second (p50 / p99 / max) and run totals")
+
+    for {key, %{total: total, per_second: stats}} <- Enum.sort(counters) do
+      Mix.shell().info("  #{String.pad_trailing(key, 30)} #{percentiles(stats)} (total #{total})")
+    end
+
+    Mix.shell().info("Other per-row metrics (p50 / p99 / max)")
 
     for key <- @headline, stats = metrics[key], stats != nil do
-      Mix.shell().info(
-        "  #{String.pad_trailing(key, 30)} #{stats.p50} / #{stats.p99} / #{stats.max}"
-      )
+      Mix.shell().info("  #{String.pad_trailing(key, 30)} #{percentiles(stats)}")
     end
 
     for {db, tables} <- storage, {table, delta} <- tables, delta != nil do
@@ -210,4 +213,7 @@ defmodule Mix.Tasks.Cadence.Scale.Run do
 
     Mix.shell().info("Summary: #{path}")
   end
+
+  defp percentiles(stats),
+    do: Enum.map_join([stats.p50, stats.p99, stats.max], " / ", &(&1 || "—"))
 end
