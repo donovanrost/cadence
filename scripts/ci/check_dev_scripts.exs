@@ -1,6 +1,8 @@
 defmodule Cadence.CI.DevScriptCheck do
   @moduledoc false
 
+  # Chaos is a paused lab; OTP cluster scripts run in their own CI test, and the
+  # ingress benchmark is a separate project with its own dependencies.
   @excluded ~w(chaos ingress-benchmark otp_cluster)
 
   def run(argv) do
