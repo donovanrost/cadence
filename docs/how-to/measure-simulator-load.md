@@ -122,3 +122,30 @@ in the final ten minutes. The provider store held at 11,025 mirror entries,
 10,011 events, zero dirty keys, and a 9,114,453-byte DETS file throughout the
 measurement. The first capture delivered all 1,800 samples and then hit a
 five-second DETS timeout at its explicit shutdown flush.
+
+## Shutdown persistence comparison
+
+The 30-minute DETS run reached the five-second explicit flush deadline after
+contact shutdown. Its slowest 256-key insert took 679.2 ms, while the slowest
+sync took 11.2 ms. The store still had the same number of entries throughout
+delivery.
+
+Three short 1,000-path repeats timed both DETS termination and a verified
+ETS snapshot of the same 15,026 entries. The snapshot probe wrote a temporary
+file, synced it, and renamed it into place.
+
+| Repeat | DETS flush ms | DETS terminate pending work ms | DETS close ms | ETS snapshot write and rename ms |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 269.6 | 0.010 | 0.097 | 69.8 |
+| 2 | 224.0 | 0.007 | 0.186 | 72.7 |
+| 3 | 255.5 | 0.005 | 0.147 | 70.6 |
+
+The provider now publishes verified ETS snapshots once per second when there
+are changes, and on clean shutdown. A restart opens the last atomically
+published snapshot. An abrupt exit can lose changes since that publication.
+
+A snapshot-backed 1,000-path run completed 600 seconds at 12,973.5 frames/s.
+All diagnostic rows showed the same 6,147,770-byte published snapshot during
+delivery. Contact shutdown took 215.8 ms and the explicit flush took 245.0 ms,
+including time behind a periodic snapshot that overlapped contact shutdown.
+The subsequent store termination took 0.010 ms.
