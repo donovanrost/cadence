@@ -4,6 +4,7 @@ defmodule Cadence.Protocol.RecordArchive.QuarantineTest do
   storage goes on; anything not proven deterministic stays transient (api-ops' review A-F).
   """
   use Cadence.ProcessDataCase, async: false
+  @moduletag :tmp_dir
 
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Protocol.{PacketRecord, RecordArchive, TransferFrameRecord}
@@ -11,11 +12,7 @@ defmodule Cadence.Protocol.RecordArchive.QuarantineTest do
   alias Cadence.Protocol.RecordArchive.FileSystem.PoisonIsolation
 
   setup context do
-    base_path =
-      Path.join(
-        System.tmp_dir!(),
-        "cadence_archive_quarantine_#{System.unique_integer([:positive])}"
-      )
+    base_path = context.tmp_dir
 
     repo =
       if context[:archive_fault] do
@@ -35,8 +32,6 @@ defmodule Cadence.Protocol.RecordArchive.QuarantineTest do
       )
 
     start_supervised!(RecordArchive.child_spec(policy))
-    on_exit(fn -> File.rm_rf!(base_path) end)
-
     mission_id = "mission-quarantine-#{System.unique_integer([:positive])}"
     persist_mission_scope("org-quarantine-#{System.unique_integer([:positive])}", mission_id)
     %{mission_id: mission_id, policy: policy, base_path: base_path}

@@ -1,10 +1,10 @@
 defmodule Cadence.Architecture.SourceSizeTest do
   use Cadence.UnitCase, async: true
+  @moduletag :tmp_dir
 
   alias Cadence.Architecture.SourceSize
 
-  test "reports production and test files over their limits" do
-    root = fixture_root()
+  test "reports production and test files over their limits", %{tmp_dir: root} do
     production_path = Path.join(root, "apps/cadence/lib/cadence/large.ex")
     test_path = Path.join(root, "apps/cadence/test/cadence/large_test.exs")
 
@@ -22,8 +22,7 @@ defmodule Cadence.Architecture.SourceSizeTest do
              )
   end
 
-  test "reports an oversized test block with its source line" do
-    root = fixture_root()
+  test "reports an oversized test block with its source line", %{tmp_dir: root} do
     path = Path.join(root, "apps/cadence/test/cadence/large_test.exs")
 
     source = """
@@ -57,17 +56,6 @@ defmodule Cadence.Architecture.SourceSizeTest do
     repo_root = SourceSize.repo_root!()
 
     assert SourceSize.repo_root!(Path.join(repo_root, "apps/cadence")) == repo_root
-  end
-
-  defp fixture_root do
-    root =
-      Path.join(
-        System.tmp_dir!(),
-        "cadence-source-size-#{System.unique_integer([:positive, :monotonic])}"
-      )
-
-    on_exit(fn -> File.rm_rf!(root) end)
-    root
   end
 
   defp write_source!(path, source) do

@@ -1,5 +1,6 @@
 defmodule Cadence.IngressArchive.FileSystemIsolationTest do
   use Cadence.ProcessDataCase, async: false
+  @moduletag :tmp_dir
 
   alias Cadence.Ingress.RawEvidence
   alias Cadence.IngressArchive
@@ -10,13 +11,7 @@ defmodule Cadence.IngressArchive.FileSystemIsolationTest do
   @writer_a __MODULE__.WriterA
   @writer_b __MODULE__.WriterB
 
-  setup do
-    test_root =
-      Path.join(
-        System.tmp_dir!(),
-        "cadence_ingress_archive_isolation_#{System.unique_integer([:positive])}"
-      )
-
+  setup %{tmp_dir: test_root} do
     root_a = Path.join(test_root, "instance-a")
     root_b = Path.join(test_root, "instance-b")
 
@@ -44,8 +39,6 @@ defmodule Cadence.IngressArchive.FileSystemIsolationTest do
 
     pid_a = start_supervised!(IngressArchive.child_spec(policy_a))
     pid_b = start_supervised!(IngressArchive.child_spec(policy_b))
-
-    on_exit(fn -> File.rm_rf!(test_root) end)
 
     organization_id = "org-archive-isolation-#{System.unique_integer([:positive])}"
     mission_id = "mission-archive-isolation-#{System.unique_integer([:positive])}"

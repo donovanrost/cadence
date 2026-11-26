@@ -1,5 +1,6 @@
 defmodule Cadence.Protocol.RecordArchive.FileSystem.RetentionTest do
   use Cadence.DataCase, async: false
+  @moduletag :tmp_dir
 
   alias Cadence.Persistence.Retention.Sweeper
   alias Cadence.Protocol.RecordArchive.FileSystem.Retention, as: Rule
@@ -7,15 +8,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.RetentionTest do
 
   @now ~U[2026-11-26 12:00:00Z]
 
-  setup do
-    base =
-      Path.join(
-        System.tmp_dir!(),
-        "cadence_protocol_retention_#{System.unique_integer([:positive])}"
-      )
-
-    File.mkdir_p!(base)
-
+  setup %{tmp_dir: base} do
     saved =
       {Application.get_env(:cadence, :protocol_record_archive),
        Application.get_env(:cadence, :retention)}
@@ -28,7 +21,6 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.RetentionTest do
     Application.put_env(:cadence, :retention, protocol_archive_days: 30)
 
     on_exit(fn ->
-      File.rm_rf!(base)
       {archive, retention} = saved
       restore(:protocol_record_archive, archive)
       restore(:retention, retention)

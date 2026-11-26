@@ -1,5 +1,6 @@
 defmodule Cadence.Protocol.RecordArchive.IndexTest do
   use Cadence.ProcessDataCase, async: false
+  @moduletag :tmp_dir
 
   import Ecto.Query
 
@@ -10,9 +11,8 @@ defmodule Cadence.Protocol.RecordArchive.IndexTest do
   alias Cadence.Replay.Scope
   alias Cadence.Repo
 
-  setup do
+  setup %{tmp_dir: base_path} do
     unique = System.unique_integer([:positive])
-    base_path = Path.join(System.tmp_dir!(), "cadence_archive_index_#{unique}")
 
     policy =
       RecordArchive.policy(
@@ -25,8 +25,6 @@ defmodule Cadence.Protocol.RecordArchive.IndexTest do
       )
 
     start_supervised!(RecordArchive.child_spec(policy))
-    on_exit(fn -> File.rm_rf!(base_path) end)
-
     mission_id = "mission-archive-index-#{unique}"
     persist_mission_scope("org-archive-index-#{unique}", mission_id)
     %{policy: policy, mission_id: mission_id, base_path: base_path}

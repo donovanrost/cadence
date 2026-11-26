@@ -1,5 +1,6 @@
 defmodule Cadence.Telemetry.InstancesTest do
   use Cadence.ProcessDataCase, async: false
+  @moduletag :tmp_dir
 
   alias Cadence.Ingress.RawEvidence
   alias Cadence.IngressArchive
@@ -18,9 +19,8 @@ defmodule Cadence.Telemetry.InstancesTest do
   @runtime_health_a_id {__MODULE__, :runtime_health_a}
   @runtime_health_b_id {__MODULE__, :runtime_health_b}
 
-  setup do
+  setup %{tmp_dir: test_root} do
     unique = System.unique_integer([:positive])
-    test_root = Path.join(System.tmp_dir!(), "cadence_telemetry_instances_#{unique}")
 
     ingress_policy_a =
       ingress_policy(
@@ -80,8 +80,6 @@ defmodule Cadence.Telemetry.InstancesTest do
         name: nil,
         event_route: {__MODULE__, :instance_b}
       )
-
-    on_exit(fn -> File.rm_rf!(test_root) end)
 
     organization_id = "org-telemetry-instances-#{unique}"
     mission_id = "mission-telemetry-instances-#{unique}"

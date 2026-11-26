@@ -24,14 +24,15 @@ defmodule Cadence.Platform.RootLifecycleTest do
   alias Cadence.Runtime.TransportRecordsPersisted
   alias Cadence.Telemetry.{CurrentValueStore, HistoryStore, Profiler, RuntimeHealth, Sample}
 
-  test "two composed roots isolate same-identity behavior and survivor lifecycle" do
+  @tag :tmp_dir
+  test "two composed roots isolate same-identity behavior and survivor lifecycle", %{
+    tmp_dir: test_root
+  } do
     unique = System.unique_integer([:positive])
-    test_root = Path.join(System.tmp_dir!(), "cadence-root-lifecycle-#{unique}")
     organization_id = "root-lifecycle-org-#{unique}"
     mission_id = "root-lifecycle-mission-#{unique}"
     test_pid = self()
 
-    on_exit(fn -> File.rm_rf!(test_root) end)
     Cadence.DataCase.persist_mission_scope(organization_id, mission_id)
 
     alpha = instance(:alpha, test_root, organization_id, mission_id, test_pid)

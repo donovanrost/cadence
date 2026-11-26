@@ -5,6 +5,7 @@ defmodule Cadence.Contacts.JournalReclaimTest do
   stream is marked once for a manual decision).
   """
   use Cadence.DataCase, async: false
+  @moduletag :tmp_dir
 
   import ExUnit.CaptureLog
 
@@ -17,11 +18,8 @@ defmodule Cadence.Contacts.JournalReclaimTest do
   @now ~U[2026-11-17 12:00:00Z]
   @settled_long_ago "2026-11-14T01:44:30Z"
 
-  setup do
+  setup %{tmp_dir: base_path} do
     persist_mission_scope(@org, @mission)
-
-    base_path =
-      Path.join(System.tmp_dir!(), "journal-reclaim-#{System.unique_integer([:positive])}")
 
     previous = Application.get_env(:cadence, :ingress_journal)
 
@@ -36,7 +34,6 @@ defmodule Cadence.Contacts.JournalReclaimTest do
     on_exit(fn ->
       Application.put_env(:cadence, :ingress_journal, previous)
       JournalReclaim.reset_pressure()
-      File.rm_rf!(base_path)
     end)
 
     %{base_path: base_path}

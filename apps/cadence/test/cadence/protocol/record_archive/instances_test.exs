@@ -1,5 +1,6 @@
 defmodule Cadence.Protocol.RecordArchive.InstancesTest do
   use Cadence.ProcessDataCase, async: false
+  @moduletag :tmp_dir
 
   import Ecto.Query
 
@@ -14,10 +15,10 @@ defmodule Cadence.Protocol.RecordArchive.InstancesTest do
   @writer_a Cadence.Protocol.RecordArchive.InstancesTest.WriterA
   @writer_b Cadence.Protocol.RecordArchive.InstancesTest.WriterB
 
-  setup do
+  setup %{tmp_dir: tmp_dir} do
     unique = System.unique_integer([:positive])
-    base_path_a = Path.join(System.tmp_dir!(), "cadence_protocol_archive_a_#{unique}")
-    base_path_b = Path.join(System.tmp_dir!(), "cadence_protocol_archive_b_#{unique}")
+    base_path_a = Path.join(tmp_dir, "instance-a")
+    base_path_b = Path.join(tmp_dir, "instance-b")
 
     policy_a =
       archive_policy(@writer_a, "protocol-archive-instance-a", base_path_a)
@@ -27,11 +28,6 @@ defmodule Cadence.Protocol.RecordArchive.InstancesTest do
 
     start_supervised!(RecordArchive.child_spec(policy_a))
     start_supervised!(RecordArchive.child_spec(policy_b))
-
-    on_exit(fn ->
-      File.rm_rf!(base_path_a)
-      File.rm_rf!(base_path_b)
-    end)
 
     organization_id = "org-protocol-archive-instances-#{unique}"
     mission_id = "mission-protocol-archive-instances-#{unique}"
