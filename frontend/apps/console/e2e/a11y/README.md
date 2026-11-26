@@ -13,27 +13,28 @@ rules are in `docs/apogee/ux/design-language.md` §6, and the pass/fail items ar
 ## Where they run
 
 - **CI:** the `console-e2e` job (`.github/workflows/ci.yml`) runs them on every PR that touches
-  code, in four shards. It is non-blocking and not in `ci-ok`. Each shard boots its own Postgres,
+  code, in two shards. It is non-blocking and not in `ci-ok`. Each shard boots its own Postgres,
   QuestDB, simulator and Phoenix, seeds the Reflect Orbital demo and the QA personas, and uploads
   the Playwright report. To read the sweep from a run, use
   `gh run view --job <id> --log | grep A11Y-SWEEP`.
-- **Locally:** only while you write or fix a spec. Full runs belong in CI. Run against your own
-  worktree's stack, never someone else's. Use the same settings as the CI job:
-  - your own database (`CADENCE_DEV_DATABASE`), Phoenix port (`PORT`) and simulator port
-    (`EARENDIL_SIMULATOR_PORT`, `EARENDIL_PROVIDER_URL`);
-  - the built console (`CONSOLE_VITE_ORIGIN=""`), or the Vite dev server;
-  - the seeds `dev/reflect_orbital_demo.exs`, `dev/apogee_qa_personas.exs` and
-    `dev/reflect_orbital_planning.exs`.
+- **Locally:** only while you write or fix a spec. Full runs belong in CI. Use your own worktree's
+  stack (`docs/dev-environment.md`), never someone else's:
+
+  ```sh
+  dev/stack env      # this worktree's ports, database, test partition and credentials
+  dev/stack up       # Postgres, QuestDB, simulator, Phoenix, and the seeds the specs need
+  dev/stack status   # the Phoenix URL, for BASE_URL
+  ```
 
   Then, from `frontend/apps/console`:
 
   ```sh
-  BASE_URL=http://127.0.0.1:<port> ./node_modules/.bin/playwright test e2e/a11y/<file> \
+  BASE_URL=<phoenix url> mise exec -- ./node_modules/.bin/playwright test e2e/a11y/<file> \
     --project=a11y-desktop-admin --workers=1
   ```
 
-  The personas sign in with `CADENCE_ADMIN_EMAIL`/`_PASSWORD` and `E2E_PERSONA_PASSWORD`
-  (`e2e/support/env.ts`). Never commit a password.
+  `mise exec --` loads the personas' passwords (`E2E_PERSONA_PASSWORD`, `CADENCE_ADMIN_PASSWORD`)
+  from the gitignored `mise.local.toml`. Never commit or paste them.
 
 ## Projects
 
