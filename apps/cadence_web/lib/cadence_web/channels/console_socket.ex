@@ -1,7 +1,7 @@
 defmodule CadenceWeb.ConsoleSocket do
   @moduledoc """
   Session-authenticated socket for the console SPA, mounted at
-  `/socket/console`.
+  `/socket`.
 
   The client connects with `params: {_csrf_token}`; Phoenix only exposes the
   cookie session in `connect_info` when that token is valid, which (together

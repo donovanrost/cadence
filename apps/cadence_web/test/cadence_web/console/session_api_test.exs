@@ -48,7 +48,7 @@ defmodule CadenceWeb.Console.SessionAPITest do
       assert data["platform_admin_eligible"] == false
       assert is_list(data["capabilities"])
       assert is_binary(data["csrf_token"]) and data["csrf_token"] != ""
-      assert data["socket"] == %{"path" => "/socket/console"}
+      assert data["socket"] == %{"path" => "/socket"}
 
       assert [
                %{

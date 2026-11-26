@@ -97,7 +97,7 @@ describe("session contract", () => {
       },
     ],
     csrf_token: "token",
-    socket: { path: "/socket/console" },
+    socket: { path: "/socket" },
   };
 
   it("accepts the documented shape", () => {

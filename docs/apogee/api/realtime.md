@@ -1,4 +1,4 @@
-# Realtime: `/socket/console`
+# Realtime: `/socket`
 
 Status: **socket, `mission:<id>` invalidations and the `fleet` push implemented**. Live points
 and uplink progress are **designed below and not built yet**; see "Planned".
@@ -7,7 +7,7 @@ and uplink progress are **designed below and not built yet**; see "Planned".
 
 ```ts
 import { Socket } from "phoenix";
-const socket = new Socket("/socket/console", { params: { _csrf_token: csrfToken } });
+const socket = new Socket("/socket", { params: { _csrf_token: csrfToken } });
 socket.connect();
 ```
 

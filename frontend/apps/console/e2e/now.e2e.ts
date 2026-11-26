@@ -50,7 +50,7 @@ function queue(page: Page): Locator {
 
 test.describe("Now (J1)", () => {
   // routeDegradedNow refuses the live socket so the fleet fixture isn't overwritten by pushes.
-  test.use({ allowedDiagnostics: allow(/socket\/console/) });
+  test.use({ allowedDiagnostics: allow(/\/socket\/websocket/) });
 
   test.describe("nothing received yet", () => {
     test.beforeEach(async ({ page }) => {
@@ -157,7 +157,9 @@ test.describe("Now (J1)", () => {
   });
 
   test.describe("when the fleet read fails", () => {
-    test.use({ allowedDiagnostics: allow(/\/fleet -> 500/, /status of 500/, /socket\/console/) });
+    test.use({
+      allowedDiagnostics: allow(/\/fleet -> 500/, /status of 500/, /\/socket\/websocket/),
+    });
 
     test("says the fleet status is unavailable and offers retry", async ({ page }) => {
       // The live fleet push would replace the failed read with real data ("No telemetry yet").
