@@ -162,6 +162,29 @@ dashboard.
   missing id, unknown mode); `403 forbidden` (not an author); `404 not_found` (duplicating an
   unknown dashboard).
 
+## D4b: `POST /dashboards {document, identity?, name?, description?}` (import)
+
+Creates a dashboard from a document: the export bundle `GET /dashboards/:id/export` returns, or a
+raw document. The author is the session user, and the import is the dashboard's first saved version
+(version 1) in one transaction with the readiness check, so a failure leaves nothing behind.
+
+- `identity: "copy"` (the default, for the UI): a new dashboard with a new id, named `name` (else
+  "Copy of …"), with `description` (else the document's). `201 {id, version}`.
+- `identity: "keep"`: the document's own `dashboard_id` (organization and mission are the target's;
+  `name` and `description` are not allowed, since renaming would make it another document). So
+  provisioning can re-run: the same id with an identical document is `200 {id, version, existing:
+  true}` and changes nothing; export, import with `keep`, export returns the same document (apart
+  from its version).
+- Errors: `422 invalid_params` with `details.field` `document` (not a document, or its bundle
+  integrity check fails), `identity`, or `name` (given with `keep`); `422 dashboard_not_ready` with
+  the widget issues (an unknown observable or spacecraft among them); `409 dashboard_import_conflict`
+  (`keep`: that id is a different dashboard here), with `details.differences` `{fields, placements:
+  {added, removed, changed}}`; `409 dashboard_id_in_use` (`keep`: the id is taken). A dashboard id is
+  unique across every mission and organization, so the id may belong to another mission: of this
+  organization, `details.mission_id` names it; of another organization, nothing is named. Import
+  the same document into two missions with `copy` (or give each its own id).
+- `403 forbidden` (not an author). The document is at most 256 KiB.
+
 ## D6: `POST /dashboards/:id/views`
 
 `204`. Records that the viewer opened it, for `shortcuts.recent`. The viewer sends it once per
