@@ -64,8 +64,8 @@ defmodule CadenceWeb.Console.FleetAPITest do
     |> LatestAlarmStateRow.changeset()
     |> Repo.insert!()
 
-    Cadence.SemanticObservations.FleetAlarms.refresh(
-      Cadence.Repo,
+    FleetAlarms.refresh(
+      Repo,
       c.mission.organization_id,
       c.mission.mission_id,
       [
