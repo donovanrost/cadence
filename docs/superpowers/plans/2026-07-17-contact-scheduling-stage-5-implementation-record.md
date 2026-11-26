@@ -61,7 +61,7 @@ The implementation was qualified on 2026-07-16 with:
 - the combined simulator provider-contract, 300-spacecraft scale/chaos,
   restart replay, scheduling, TCP, and CCSDS suite: 16 tests passed;
 - `bash scripts/audit-stage-3-provider-migrations.sh`: clean-database and
-  populated-Stage-4 upgrade audit passed;
+  populated-Stage-4 upgrade audit passed (historical result; script retired by #718);
 - `git diff --check`: passed;
 - root `mix precommit`: strict Credo found no issues and the four umbrella test
   suites passed 1,493, 11, 106, and 1,627 tests respectively; the standard web
