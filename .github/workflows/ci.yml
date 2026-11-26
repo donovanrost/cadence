@@ -99,8 +99,23 @@ jobs:
             | sha256sum --check --status
           tar -xzf "$archive" -C "$RUNNER_TEMP" gitleaks
           base=$(git merge-base "$BASE_SHA" "$HEAD_SHA")
+          config="$RUNNER_TEMP/base-gitleaks.toml"
+          if git cat-file -e "$BASE_SHA:.gitleaks.toml" 2>/dev/null; then
+            git show "$BASE_SHA:.gitleaks.toml" > "$config"
+          else
+            printf '[extend]\nuseDefault = true\n' > "$config"
+          fi
+          : > "$RUNNER_TEMP/empty-gitleaksignore"
+          marker='gitleaks:'"allow"
+          git log -p -m --format= --no-ext-diff "$base..$HEAD_SHA" -- . > "$RUNNER_TEMP/pr.patch"
+          if awk -v marker="$marker" '/^\+[^+]/ && index($0, marker) { found=1 } END { exit found ? 0 : 1 }' \
+            "$RUNNER_TEMP/pr.patch"; then
+            echo '::error title=Forbidden scanner suppression::Remove the added scanner allow marker.'
+            exit 1
+          fi
           "$RUNNER_TEMP/gitleaks" git --no-banner --no-color --redact=100 --verbose \
-            --config .gitleaks.toml --log-opts="$base..$HEAD_SHA" .
+            --ignore-gitleaks-allow --gitleaks-ignore-path "$RUNNER_TEMP/empty-gitleaksignore" \
+            --config "$config" --log-opts="$base..$HEAD_SHA" .
 
   quality:
     name: Elixir quality

@@ -3,24 +3,27 @@ title = "Cadence committed-secret checks"
 [extend]
 useDefault = true
 
-# TOML, JSON, and Elixir literal assignments. The value is
+# Literal assignments in application code, shell config, and manifests. The value is
 # the secret group so gitleaks redacts it while retaining the source location.
 [[rules]]
 id = "cadence-secret-assignment"
 description = "Literal assigned to a credential-like key"
-path = '''(?i)\.(?:toml|exs|json)$'''
-regex = '''(?i)["']?[a-z0-9_.-]*(?:password|passwd|secret|token|api[_-]?key|private[_-]?key|cookie|credential)["']?[ \t]*(?:=|:|=>)[ \t]*["'`]([^"'`\r\n]{8,})["'`]'''
+path = '''(?i)(?:\.(?:toml|exs?|json|ya?ml|[cm]?[jt]sx?|vue|sh|bash|zsh)$|(?:^|/)\.env(?:\.[^/]*)?$|(?:^|/)dev/stack$)'''
+regex = '''(?i)["']?[a-z0-9_.-]*(?:password|passwd|secret|token|api[_-]?key|private[_-]?key|cookie|credential)["']?[ \t]*(?:=|:|=>)[ \t]*["']([^"'`\s${}]{8,})["']'''
 secretGroup = 1
 
     [[rules.allowlists]]
     description = "Reviewed existing literal test fixtures"
     condition = "AND"
     regexTarget = "secret"
-    paths = [ '''(^|/)(?:test|browser_test)/''' ]
+    paths = [
+      '''(?:^|/)(?:test|browser_test)/''',
+      '''(?:\.test\.|\.spec\.|\.test-support\.)[cm]?[jt]sx?$''',
+    ]
     regexes = [
-      '''^#\{set\}-#\{phase\}$''',
+      '''^11111111-1111-4111-8111-111111111111$''',
+      '''^22222222-2222-4222-8222-222222222222$''',
       '''^\[REDACTED\]$''',
-      '''^a token/with\+reserved chars$''',
       '''^a-long-enough-password$''',
       '''^a-long-new-password$''',
       '''^a-new-password-1$''',
@@ -30,6 +33,8 @@ secretGroup = 1
       '''^anything$''',
       '''^browser-session-token$''',
       '''^catalog-csrf$''',
+      '''^correct-horse-battery-staple$''',
+      '''^csrf-from-bootstrap$''',
       '''^different$''',
       '''^do-not-render$''',
       '''^durable-password-123$''',
@@ -40,19 +45,28 @@ secretGroup = 1
       '''^must-not-leak$''',
       '''^must-not-persist$''',
       '''^must-not-reach-browser$''',
+      '''^must-not-render$''',
       '''^nested-secret$''',
-      '''^not a UI field$''',
-      '''^not exported$''',
-      '''^not rendered$''',
       '''^not-a-real-token$''',
       '''^not-a-token$''',
+      '''^old-session$''',
+      '''^opaque-opportunity-token$''',
+      '''^opaque-token$''',
+      '''^opaque-token-one$''',
       '''^password$''',
       '''^plaintext$''',
+      '''^private-action$''',
+      '''^private-action-metadata$''',
+      '''^private-actor$''',
       '''^private-adapter-detail$''',
+      '''^private-authoring-metadata$''',
+      '''^private-capability-metadata$''',
       '''^private-details-secret$''',
       '''^private-plan-secret$''',
+      '''^private-provenance$''',
       '''^private-request-secret$''',
       '''^private-sample-marker$''',
+      '''^private-state$''',
       '''^private-token$''',
       '''^provider-secret$''',
       '''^provider-token$''',
@@ -60,13 +74,19 @@ secretGroup = 1
       '''^raw-secret$''',
       '''^reader-default-scan-csrf$''',
       '''^reader-host-csrf$''',
+      '''^refreshed$''',
+      '''^refreshed-csrf$''',
+      '''^replacement$''',
       '''^secret-arg$''',
       '''^secret-bearer$''',
       '''^secret-manager-auth-token$''',
       '''^secret-password$''',
       '''^secret-token$''',
+      '''^session-one$''',
+      '''^settings-page-token$''',
       '''^should-never-persist$''',
-      '''^tok-#\{n\}$''',
+      '''^test-csrf$''',
+      '''^test-secret$''',
       '''^token-alpha$''',
       '''^wrong-password-1$''',
     ]
@@ -78,11 +98,25 @@ secretGroup = 1
     paths = [ '''(?:^|/)apps/cadence/config/(?:dev|test)\.exs$''' ]
     regexes = [ '''^postgres$''' ]
 
+    [[rules.allowlists]]
+    description = "Console invitation field-name label"
+    condition = "AND"
+    regexTarget = "secret"
+    paths = [ '''(?:^|/)frontend/apps/console/src/features/auth/InvitationScreen\.vue$''' ]
+    regexes = [ '''^current-password$''' ]
+
+    [[rules.allowlists]]
+    description = "Vue binding expression, not a literal token"
+    condition = "AND"
+    regexTarget = "secret"
+    paths = [ '''(?:^|/)frontend/apps/console/src/features/people/ServiceIdentityNewScreen\.vue$''' ]
+    regexes = [ '''^issued\.api_token$''' ]
+
 # Elixir module attributes use whitespace instead of an assignment operator.
 [[rules]]
 id = "cadence-elixir-secret-attribute"
 description = "Literal credential in an Elixir module attribute"
-path = '''\.exs$'''
+path = '''\.exs?$'''
 regex = '''(?i)@[a-z0-9_]*(?:password|passwd|secret|token|api_key|private_key|cookie|credential)[ \t]+["']([^"'\r\n]{8,})["']'''
 secretGroup = 1
 
@@ -90,9 +124,13 @@ secretGroup = 1
     description = "Reviewed existing literal test fixtures"
     condition = "AND"
     regexTarget = "secret"
-    paths = [ '''(^|/)(?:test|browser_test)/''' ]
+    paths = [
+      '''(?:^|/)(?:test|browser_test)/''',
+      '''(?:\.test\.|\.spec\.|\.test-support\.)[cm]?[jt]sx?$''',
+    ]
     regexes = [
       '''^a-brand-new-password$''',
+      '''^durable-password-123$''',
       '''^environment-admin-password-123$''',
       '''^existing-password-123$''',
       '''^frontend-release-publisher-test-token$''',
@@ -110,9 +148,38 @@ secretGroup = 1
 [[rules]]
 id = "cadence-secret-environment-fallback"
 description = "Literal fallback for a credential environment variable"
-path = '''(?i)\.(?:exs|[cm]?[jt]sx?)$'''
+path = '''(?i)\.(?:exs?|[cm]?[jt]sx?|vue)$'''
 regex = '''(?i)(?:System\.get_env\([ \t]*["'][A-Z0-9_]*(?:PASSWORD|SECRET|TOKEN|API_KEY|PRIVATE_KEY|COOKIE|CREDENTIAL)[A-Z0-9_]*["'][ \t]*,[ \t]*|process\.env(?:\.[A-Z0-9_]*(?:PASSWORD|SECRET|TOKEN|API_KEY|PRIVATE_KEY|COOKIE|CREDENTIAL)[A-Z0-9_]*|\[["'][A-Z0-9_]*(?:PASSWORD|SECRET|TOKEN|API_KEY|PRIVATE_KEY|COOKIE|CREDENTIAL)[A-Z0-9_]*["']\])[ \t]*(?:\?\?|\|\|)[ \t]*)["'`]([^"'`\r\n]{8,})["'`]'''
 secretGroup = 1
+
+    [[rules.allowlists]]
+    description = "Public local Postgres default in the ingress benchmark"
+    condition = "AND"
+    regexTarget = "secret"
+    paths = [ '''(?:^|/)dev/ingress-benchmark/lib/full_flow_runner\.ex$''' ]
+    regexes = [ '''^postgres$''' ]
+
+# Unquoted values are common in .env files, shell exports, and YAML/TOML config.
+[[rules]]
+id = "cadence-unquoted-secret-assignment"
+description = "Unquoted literal assigned to a credential-like key"
+path = '''(?i)(?:\.(?:toml|ya?ml|sh|bash|zsh)$|(?:^|/)\.env(?:\.[^/]*)?$|(?:^|/)dev/stack$)'''
+regex = '''(?im)^[ \t]*(?:export[ \t]+)?["']?[a-z0-9_.-]*(?:password|passwd|secret|token|api[_-]?key|private[_-]?key|cookie|credential)["']?[ \t]*(?:=|:)[ \t]*([a-z0-9_./-]{8,})[ \t]*(?:#.*)?$'''
+secretGroup = 1
+
+    [[rules.allowlists]]
+    description = "Public local service defaults in CI"
+    condition = "AND"
+    regexTarget = "secret"
+    paths = [ '''(?:^|/)\.github/workflows/ci\.yml$''' ]
+    regexes = [ '''^postgres$''', '''^earendil-local-provider$''' ]
+
+    [[rules.allowlists]]
+    description = "Public local Postgres default in the ingress benchmark"
+    condition = "AND"
+    regexTarget = "secret"
+    paths = [ '''(?:^|/)dev/ingress-benchmark/compose\.full-flow-tmpfs\.yaml$''' ]
+    regexes = [ '''^postgres$''' ]
 
 # These two default-rule hits are synthetic historical evidence and a browser fixture.
 [[rules]]
