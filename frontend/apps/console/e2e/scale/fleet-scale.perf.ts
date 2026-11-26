@@ -5,11 +5,11 @@ import {
   heapMb,
   installScaleProbes,
   longTasks,
-  median,
   pushTimes,
   readyAt,
   serveScaledFleet,
 } from "../support/scale.ts";
+import { median } from "../support/scale-fleet.ts";
 
 // #176: the console at fleet scale. Each screen loads three times with a 500- and a
 // 1,000-spacecraft fleet (the seeded demo's 500, then clones; GET /fleet and the live push both
@@ -47,8 +47,7 @@ interface Load {
   readonly heapMb: number;
 }
 
-const pushCount = () =>
-  (window as unknown as { __scale: { pushes: number[] } }).__scale.pushes.length;
+const pushCount = () => window.__scale?.pushes.length ?? 0;
 
 /** One cold load of `path` with `size` spacecraft, in its own page so routes don't stack. */
 async function load(context: BrowserContext, path: string, size: number, round: number) {

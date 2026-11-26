@@ -1,6 +1,7 @@
 import type { Page, WebSocketRoute } from "@playwright/test";
 import { missionApi } from "./console.ts";
 import { DEMO } from "./env.ts";
+import { changedFleet, isJson, numberOf, scaleFleet, type Json } from "./scale-fleet.ts";
 
 /**
  * Fleet-scale fixtures and probes (#176). The seeded demo mission has 500 spacecraft; a larger
@@ -9,91 +10,17 @@ import { DEMO } from "./env.ts";
  * consistent fleet whichever arrives first.
  */
 
-type Json = Record<string, unknown>;
-
-const STATES = ["critical", "caution", "stale", "nominal", "never_heard"] as const;
-/** Slots per plane for the clones (the demo's planes stay as seeded). */
-const SLOTS = 40;
-
-function isJson(value: unknown): value is Json {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+/** What the in-page probe records (installScaleProbes). */
+export interface ScaleProbe {
+  tasks: number[];
+  readyAt: number | null;
+  pushes: number[];
 }
 
-function rowsOf(data: Json): Json[] {
-  const rows = data["spacecraft"];
-  if (!Array.isArray(rows)) throw new Error("scale fixture: data.spacecraft is not an array");
-  return rows.filter(isJson);
-}
-
-function numberOf(value: unknown): number {
-  return typeof value === "number" ? value : 0;
-}
-
-/** Recomputes the state counts so they partition the rows again (fleetReader's invariant). */
-function withCounts(data: Json, rows: Json[]): Json {
-  const counts = isJson(data["counts"]) ? data["counts"] : {};
-  const tally = Object.fromEntries(
-    STATES.map((s) => [s, rows.filter((r) => r["state"] === s).length]),
-  );
-  return {
-    ...data,
-    spacecraft: rows,
-    counts: {
-      ...counts,
-      ...tally,
-      total: rows.length,
-      fresh: rows.filter((r) => r["stale"] === false && r["last_received_at"] !== null).length,
-      in_contact: counts["in_contact"] === null ? null : rows.filter((r) => r["in_contact"]).length,
-    },
-  };
-}
-
-/**
- * The real fleet `data` grown to `size` rows: the seeded rows first, unchanged, then clones of them
- * on new planes after the highest seeded one. A size at or below the seeded count keeps the
- * seeded rows only (the demo's 500 is the floor).
- */
-export function scaleFleet(data: Json, size: number): Json {
-  const seeded = rowsOf(data);
-  if (seeded.length === 0) throw new Error("scale fixture: the seeded fleet is empty");
-  const maxScid = Math.max(...seeded.map((r) => numberOf(r["scid"])));
-  const maxPlane = Math.max(0, ...seeded.map((r) => numberOf(r["plane"])));
-  const clones = Array.from({ length: Math.max(0, size - seeded.length) }, (_, i) => {
-    const from = seeded[i % seeded.length] ?? {};
-    const n = String(i + 1).padStart(4, "0");
-    return {
-      ...from,
-      id: `${String(from["id"])}-scale-${n}`,
-      name: `Scale ${n}`,
-      scid: maxScid + i + 1,
-      plane: maxPlane + 1 + Math.floor(i / SLOTS),
-      slot: (i % SLOTS) + 1,
-    };
-  });
-  return withCounts(data, [...seeded, ...clones]);
-}
-
-/**
- * A full snapshot in which every row changed: each row's violating-point count and value move,
- * the state rotates through the five states. That is the largest push the server can send.
- */
-export function changedFleet(data: Json, round: number): Json {
-  const rows = rowsOf(data).map((row, i) => {
-    const state = STATES[(i + round) % STATES.length] ?? "nominal";
-    const point = isJson(row["worst_point"]) ? row["worst_point"] : null;
-    return {
-      ...row,
-      state,
-      stale: state === "stale",
-      limit_state: state === "critical" || state === "caution" ? state : "nominal",
-      violating_points: state === "critical" || state === "caution" ? 1 + (round % 3) : 0,
-      worst_point:
-        point && typeof point["value"] === "number"
-          ? { ...point, value: point["value"] + round }
-          : point,
-    };
-  });
-  return withCounts(data, rows);
+declare global {
+  interface Window {
+    __scale?: ScaleProbe;
+  }
 }
 
 /** A Phoenix V2 frame: [join_ref, ref, topic, event, payload]. */
@@ -189,12 +116,8 @@ export async function serveScaledFleet(page: Page, size: number): Promise<Scaled
  */
 export async function installScaleProbes(page: Page): Promise<void> {
   await page.addInitScript(() => {
-    const probe = {
-      tasks: [] as number[],
-      readyAt: null as number | null,
-      pushes: [] as number[],
-    };
-    Object.assign(window, { __scale: probe });
+    const probe: ScaleProbe = { tasks: [], readyAt: null, pushes: [] };
+    window.__scale = probe;
 
     new PerformanceObserver((list) => {
       for (const entry of list.getEntries()) probe.tasks.push(entry.duration);
@@ -252,11 +175,10 @@ export interface LoadMetrics {
 
 /** Waits for the probe's ready mark (ms since navigation start); throws on timeout. */
 export async function readyAt(page: Page, timeoutMs = 30_000): Promise<number> {
-  const handle = await page.waitForFunction(
-    () => (window as unknown as { __scale: { readyAt: number | null } }).__scale.readyAt,
-    undefined,
-    { timeout: timeoutMs, polling: 100 },
-  );
+  const handle = await page.waitForFunction(() => window.__scale?.readyAt ?? null, undefined, {
+    timeout: timeoutMs,
+    polling: 100,
+  });
   const value: unknown = await handle.jsonValue();
   if (typeof value !== "number") throw new Error("scale probe: no ready time");
   return value;
@@ -264,16 +186,12 @@ export async function readyAt(page: Page, timeoutMs = 30_000): Promise<number> {
 
 /** The pushes the probe has timed so far. */
 export async function pushTimes(page: Page): Promise<number[]> {
-  return page.evaluate(() => [
-    ...(window as unknown as { __scale: { pushes: number[] } }).__scale.pushes,
-  ]);
+  return page.evaluate(() => [...(window.__scale?.pushes ?? [])]);
 }
 
 /** Long-task durations so far. */
 export async function longTasks(page: Page): Promise<number[]> {
-  return page.evaluate(() => [
-    ...(window as unknown as { __scale: { tasks: number[] } }).__scale.tasks,
-  ]);
+  return page.evaluate(() => [...(window.__scale?.tasks ?? [])]);
 }
 
 /** JS heap in use after a forced garbage collection, in MB (Chromium, via CDP). */
@@ -288,14 +206,4 @@ export async function heapMb(page: Page): Promise<number> {
   } finally {
     await cdp.detach();
   }
-}
-
-/** The median of an odd-or-even list (mean of the middle two). */
-export function median(values: readonly number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  if (sorted.length === 0) return Number.NaN;
-  return sorted.length % 2 === 1
-    ? (sorted[mid] ?? Number.NaN)
-    : ((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2;
 }
