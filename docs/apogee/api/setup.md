@@ -1174,12 +1174,21 @@ bindings can be written. A platform-shared one needs a platform admin in admin m
 ### `GET /missions/:mission_id/apps` (A1)
 
 `{apps: [{key, name, description, platform, installed, state: "installed" | "disabled" |
-"not_installed", version, consequence_if_missing}], permissions: ["apps.install"]}`. These are the
+"not_installed", version, available_version, update_available, consequence_if_missing}],
+spacecraft_count, permissions: ["apps.install"]}`. These are the
 applications installable on a mission, platform ones first, then by name.
 
 - `platform: true` apps are always on and can't be changed.
 - `version` is the installed version, an integer (application versions are integers), or `null`
   when the app isn't installed.
+- `available_version` is the version this deployment ships (an integer), set on every row.
+  `update_available` is true when an installed or disabled app is behind it, by the registry's
+  ordering; the server decides, so clients never compare versions.
+- `spacecraft_count` is how many spacecraft an installation covers: the mission's active
+  spacecraft (counted in SQL), or 1 under a spacecraft.
+- Uninstall is accepted from `installed` and `disabled`, and keeps the app's configuration, so a
+  later install picks it up (`application_installations_test.exs`, "retains configuration across
+  disable, uninstall, and reinstall transitions").
 - `consequence_if_missing` is always `null`: apps don't declare one yet.
 - `apps.install` comes from the check the actions enforce (`:operate_mission`, so any mission
   operator today; DECISIONS #38).
