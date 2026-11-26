@@ -10,14 +10,14 @@ const hhmm = (iso: string) => `${iso.slice(11, 16)}Z`;
 export const short = (iso: string, now: Date) =>
   `${iso.slice(0, 10) === now.toISOString().slice(0, 10) ? "" : `${iso.slice(5, 10)} `}${hhmm(iso)}`;
 
-/**
- * U37 evidence by failure_kind: what's on disk and why it isn't stored. Never "TSDB", "journal" or
- * "settlement"; the storage outage's own message stays out of the line (Technical details).
- */
 /** How an archive-quarantine item closed when nobody decided (#791): one sentence for the Now row and the Resolved list. */
 export const expiredWords = (at: string): string =>
   `Expired at ${at}: nobody retried or discarded it before its retention ran out, so it was never archived.`;
 
+/**
+ * U37 evidence by failure_kind: what's on disk and why it isn't stored. Never "TSDB", "journal" or
+ * "settlement"; the storage outage's own message stays out of the line (Technical details).
+ */
 export function settlementEvidence(f: SettlementFacts, now: Date = new Date()): string {
   if (f.lost) return lostEvidence(f.queued);
   const one = f.backlog.entries === 1;
