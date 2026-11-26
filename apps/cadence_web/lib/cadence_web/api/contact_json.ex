@@ -1,52 +1,5 @@
 defmodule CadenceWeb.API.ContactJSON do
-  @moduledoc "Contact lifecycle response serialization boundary."
-
-  alias Cadence.Contacts.{
-    ContactAction,
-    Path,
-    ProviderBinding,
-    RealizedContact,
-    ScheduledContact,
-    TransportBinding
-  }
-
-  def scheduled_contact(%ScheduledContact{} = scheduled_contact) do
-    %{
-      scheduled_contact_id: scheduled_contact.scheduled_contact_id,
-      organization_id: scheduled_contact.organization_id,
-      mission_id: scheduled_contact.mission_id,
-      source_endpoint_refs: scheduled_contact.source_endpoint_refs,
-      contact_intents: Enum.map(scheduled_contact.contact_intents, &Atom.to_string/1),
-      link_assignment_refs: json_value(scheduled_contact.link_assignment_refs),
-      path_template_ids: scheduled_contact.path_template_ids,
-      path_template_refs: json_value(scheduled_contact.path_template_refs),
-      paths: Enum.map(scheduled_contact.paths, &contact_path/1),
-      starts_at: iso8601(scheduled_contact.starts_at),
-      ends_at: iso8601(scheduled_contact.ends_at),
-      provider_contact_ref: scheduled_contact.provider_contact_ref,
-      current_revision: scheduled_contact.current_revision,
-      lifecycle_state: Atom.to_string(scheduled_contact.lifecycle_state),
-      realized_contact_id: scheduled_contact.realized_contact_id,
-      metadata: scheduled_contact.metadata
-    }
-  end
-
-  def realized_contact(%RealizedContact{} = realized_contact) do
-    %{
-      realized_contact_id: realized_contact.realized_contact_id,
-      organization_id: realized_contact.organization_id,
-      mission_id: realized_contact.mission_id,
-      scheduled_contact_id: realized_contact.scheduled_contact_id,
-      source_endpoint_refs: realized_contact.source_endpoint_refs,
-      contact_intents: Enum.map(realized_contact.contact_intents, &Atom.to_string/1),
-      paths: Enum.map(realized_contact.paths, &contact_path/1),
-      clock_mode: Atom.to_string(realized_contact.clock_mode),
-      initial_time: iso8601(realized_contact.initial_time),
-      lifecycle_state: Atom.to_string(realized_contact.lifecycle_state),
-      realized_at: iso8601(realized_contact.realized_at),
-      metadata: realized_contact.metadata
-    }
-  end
+  @moduledoc "Legacy realized-contact runtime snapshot serialization boundary."
 
   def realized_contact_runtime_snapshot(snapshot) when is_map(snapshot) do
     %{
@@ -79,53 +32,6 @@ defmodule CadenceWeb.API.ContactJSON do
       transport_runtime_count: snapshot_value(snapshot, :transport_runtime_count, 0),
       transport_runtimes:
         snapshot_list(snapshot, :transport_runtimes, &transport_runtime_snapshot/1)
-    }
-  end
-
-  def contact_action(%ContactAction{} = contact_action) do
-    %{
-      contact_action_id: contact_action.contact_action_id,
-      organization_id: contact_action.organization_id,
-      mission_id: contact_action.mission_id,
-      scheduled_contact_id: contact_action.scheduled_contact_id,
-      realized_contact_id: contact_action.realized_contact_id,
-      action_kind: Atom.to_string(contact_action.action_kind),
-      reason: contact_action.reason,
-      actor: contact_action.actor,
-      metadata: contact_action.metadata,
-      occurred_at: iso8601(contact_action.occurred_at)
-    }
-  end
-
-  defp contact_path(%Path{} = path) do
-    %{
-      path_id: path.path_id,
-      direction: maybe_atom_to_string(path.direction),
-      selection_role: maybe_atom_to_string(path.selection_role),
-      source_endpoint_ref: path.source_endpoint_ref,
-      provider_path_ref: path.provider_path_ref,
-      provider_bindings: Enum.map(path.provider_bindings, &provider_binding/1),
-      transport_bindings: Enum.map(path.transport_bindings, &transport_binding/1),
-      metadata: path.metadata
-    }
-  end
-
-  defp provider_binding(%ProviderBinding{} = provider_binding) do
-    %{
-      provider_binding_id: provider_binding.provider_binding_id,
-      adapter_key: maybe_atom_to_string(provider_binding.adapter_key),
-      configuration: json_value(provider_binding.configuration),
-      metadata: json_value(provider_binding.metadata)
-    }
-  end
-
-  defp transport_binding(%TransportBinding{} = transport_binding) do
-    %{
-      transport_binding_id: transport_binding.transport_binding_id,
-      family_key: maybe_atom_to_string(transport_binding.family_key),
-      target_scope: maybe_atom_to_string(transport_binding.target_scope),
-      configuration: transport_binding.configuration,
-      metadata: transport_binding.metadata
     }
   end
 
