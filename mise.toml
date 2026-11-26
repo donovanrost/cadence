@@ -20,7 +20,7 @@ dir = "apps/cadence_simulator"
 run = "mix run --no-start --no-halt ../../dev/reflect_orbital_simulator.exs"
 
 [tasks.earendil-live]
-description = "Run ten Earendil telemetry feeds at 1 Hz and save the dashboard suite"
+description = "Run Earendil telemetry feeds at 1 Hz per packet family and save the dashboard suite"
 dir = "apps/cadence_simulator"
 run = "elixir --hidden --sname earendil_tm --cookie cadence -S mix run --no-start ../../dev/reflect_orbital_live.exs"
 
