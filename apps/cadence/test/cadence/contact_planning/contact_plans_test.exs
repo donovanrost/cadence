@@ -4,6 +4,7 @@ defmodule Cadence.ContactPlanning.ContactPlansTest do
   alias Cadence.Accounts.{OrganizationMembership, User}
   alias Cadence.Auth.Scope
   alias Cadence.ContactPlanning.{ContactPlans, ContactRequirements, Planner}
+  alias Cadence.Management.Contacts.Store.ContactPlanOpportunityRefRow
   alias Cadence.Management.Contacts.Store.ContactPlanRow
   alias Cadence.Repo
   alias Cadence.Spacecraft
@@ -91,6 +92,32 @@ defmodule Cadence.ContactPlanning.ContactPlansTest do
     assert plan.current_version == 1
     assert version.selected_snapshot_ids == [selected.contact_opportunity_snapshot_id]
     assert version.rejected_snapshot_ids == [rejected.contact_opportunity_snapshot_id]
+
+    selected_ref =
+      Repo.get_by!(ContactPlanOpportunityRefRow,
+        contact_plan_id: plan.contact_plan_id,
+        contact_opportunity_snapshot_id: selected.contact_opportunity_snapshot_id
+      )
+
+    assert {selected_ref.disposition, selected_ref.selection_order} == {"selected", 0}
+
+    assert is_nil(
+             Repo.get_by(ContactPlanOpportunityRefRow,
+               contact_plan_id: plan.contact_plan_id,
+               contact_opportunity_snapshot_id: rejected.contact_opportunity_snapshot_id
+             )
+           )
+
+    assert {:ok, %{entries: [_, %{disposition: :rejected, snapshot: review_rejected}]}} =
+             ContactPlans.list_opportunities_page(
+               @organization_id,
+               @mission_id,
+               plan.contact_plan_id,
+               1,
+               1
+             )
+
+    assert review_rejected.evaluation_document == rejected.evaluation_document
 
     assert version.requirement_refs_document == %{
              "requirements" => [

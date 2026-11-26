@@ -18,6 +18,8 @@ defmodule Cadence.ContactPlanning.ContactPlans do
     RequirementEvaluator
   }
 
+  alias Cadence.Management.Contacts.FleetSnapshotReader
+
   alias Cadence.Missions
 
   alias Cadence.Management.Contacts.Store.ContactOpportunitySnapshotRow
@@ -32,6 +34,8 @@ defmodule Cadence.ContactPlanning.ContactPlans do
   alias Cadence.Management.Contacts.Store.ContactRequirementVersionRow
 
   alias Cadence.Repo
+
+  @insert_batch_size 3_000
 
   defguardp review_page?(version, page)
             when is_integer(version) and version in 1..2_147_483_647 and
@@ -54,8 +58,7 @@ defmodule Cadence.ContactPlanning.ContactPlans do
          {:ok, proposal} <-
            build_proposal(current_scope.organization_id, mission_id, attrs, nil),
          plan_id <- value(attrs, :contact_plan_id, Cadence.Ids.new("contact_plan")),
-         {:ok, version} <-
-           build_version(plan_id, 1, actor_id, now, proposal),
+         {:ok, version} <- build_version(plan_id, 1, actor_id, now, proposal),
          plan <-
            ContactPlan.new(%{
              contact_plan_id: plan_id,
@@ -546,9 +549,13 @@ defmodule Cadence.ContactPlanning.ContactPlans do
          {:ok, runs} <- fetch_runs(organization_id, mission_id, run_ids),
          :ok <- completed_runs(runs),
          requirement_refs <- requirement_refs(runs),
-         {:ok, requirements} <- fetch_requirements(organization_id, mission_id, requirement_refs),
-         {:ok, snapshots} <- fetch_snapshots(organization_id, mission_id, run_ids),
-         :ok <- selected_belongs(selected_ids ++ locked_ids, snapshots),
+         {:ok, requirements} <-
+           fetch_requirements(organization_id, mission_id, requirement_refs),
+         snapshot_ids <-
+           FleetSnapshotReader.snapshot_ids_for_runs(organization_id, mission_id, run_ids),
+         :ok <- selected_belongs(selected_ids ++ locked_ids, snapshot_ids),
+         {:ok, snapshots} <-
+           fetch_snapshots(organization_id, mission_id, selected_ids ++ locked_ids),
          selected <- select_snapshots(snapshots, selected_ids),
          locked <- select_snapshots(snapshots, locked_ids),
          commitments <- selected ++ locked,
@@ -556,7 +563,7 @@ defmodule Cadence.ContactPlanning.ContactPlans do
          searches <- fetch_searches(organization_id, mission_id, run_ids),
          coverage <- coverage(requirements, commitments, searches, runs),
          conflicts <- conflicts(commitments),
-         rejected <- reject_snapshots(snapshots, selected_ids ++ locked_ids),
+         rejected <- reject_snapshot_ids(snapshot_ids, selected_ids ++ locked_ids),
          rationale <- proposal_rationale(attrs, previous),
          {:ok, policy} <- policy_snapshot(requirements, commitments) do
       {:ok,
@@ -590,7 +597,7 @@ defmodule Cadence.ContactPlanning.ContactPlans do
        planning_run_refs_document: planning_run_refs_document,
        selected_snapshot_ids: Enum.map(proposal.selected, & &1.contact_opportunity_snapshot_id),
        locked_snapshot_ids: Enum.map(proposal.locked, & &1.contact_opportunity_snapshot_id),
-       rejected_snapshot_ids: Enum.map(proposal.rejected, & &1.contact_opportunity_snapshot_id),
+       rejected_snapshot_ids: proposal.rejected,
        coverage_document: proposal.coverage,
        conflict_document: proposal.conflicts,
        unsatisfied_document: proposal.unsatisfied,
@@ -609,36 +616,33 @@ defmodule Cadence.ContactPlanning.ContactPlans do
       contact_plan_version: version.version
     }
 
-    requirement_results =
-      Enum.map(proposal.requirement_refs, fn ref ->
+    requirements =
+      Stream.map(proposal.requirement_refs, fn ref ->
         base
         |> Map.merge(%{
           contact_plan_requirement_ref_id: Cadence.Ids.new("contact_plan_requirement_ref"),
           contact_requirement_id: ref["id"],
           contact_requirement_version: ref["version"]
         })
-        |> ContactPlanRequirementRefRow.changeset()
-        |> Repo.insert()
       end)
 
-    run_results =
-      Enum.map(proposal.run_ids, fn run_id ->
+    runs =
+      Stream.map(proposal.run_ids, fn run_id ->
         base
         |> Map.merge(%{
           contact_plan_run_ref_id: Cadence.Ids.new("contact_plan_run_ref"),
           contact_planning_run_id: run_id
         })
-        |> ContactPlanRunRefRow.changeset()
-        |> Repo.insert()
       end)
 
-    opportunity_results =
-      proposal.selected
-      |> Enum.map(&{&1, "selected"})
-      |> Kernel.++(Enum.map(proposal.locked, &{&1, "locked"}))
-      |> Kernel.++(Enum.map(proposal.rejected, &{&1, "rejected"}))
-      |> Enum.with_index()
-      |> Enum.map(fn {{snapshot, disposition}, index} ->
+    commitments =
+      [
+        Stream.map(proposal.selected, &{&1, "selected"}),
+        Stream.map(proposal.locked, &{&1, "locked"})
+      ]
+      |> Stream.concat()
+      |> Stream.with_index()
+      |> Stream.map(fn {{snapshot, disposition}, index} ->
         base
         |> Map.merge(%{
           contact_plan_opportunity_ref_id: Cadence.Ids.new("contact_plan_opportunity_ref"),
@@ -647,17 +651,27 @@ defmodule Cadence.ContactPlanning.ContactPlans do
           selection_order: index,
           reason_document: reference_reason(snapshot, disposition)
         })
-        |> ContactPlanOpportunityRefRow.changeset()
-        |> Repo.insert()
       end)
 
-    case Enum.find(
-           requirement_results ++ run_results ++ opportunity_results,
-           &match?({:error, _}, &1)
-         ) do
-      nil -> :ok
-      {:error, reason} -> {:error, reason}
+    with :ok <- insert_ref_batches(ContactPlanRequirementRefRow, requirements),
+         :ok <- insert_ref_batches(ContactPlanRunRefRow, runs) do
+      # Rejected identities live in the immutable version and their reasons in the snapshots.
+      # Relational refs are needed only for commitments that booking and runtime reads consume.
+      insert_ref_batches(ContactPlanOpportunityRefRow, commitments)
     end
+  end
+
+  defp insert_ref_batches(schema, attrs_stream) do
+    attrs_stream
+    |> Stream.chunk_every(@insert_batch_size)
+    |> Enum.reduce_while(:ok, fn batch, :ok ->
+      rows = Enum.map(batch, &schema.insert_attrs/1)
+      {count, _} = Repo.insert_all(schema, rows)
+
+      if count == length(batch),
+        do: {:cont, :ok},
+        else: {:halt, {:error, :contact_plan_reference_insert_incomplete}}
+    end)
   end
 
   defp reference_reason(snapshot, "selected"),
@@ -671,8 +685,6 @@ defmodule Cadence.ContactPlanning.ContactPlans do
       "eligible" => snapshot.eligible,
       "reason" => "existing_successful_or_uncertain_commitment"
     }
-
-  defp reference_reason(snapshot, "rejected"), do: snapshot.evaluation_document
 
   defp persist_new_plan(plan, version, proposal) do
     Repo.transaction(fn ->
@@ -848,21 +860,11 @@ defmodule Cadence.ContactPlanning.ContactPlans do
       else: {:error, :contact_plan_requirement_version_not_found}
   end
 
-  defp fetch_snapshots(organization_id, mission_id, run_ids) do
+  defp fetch_snapshots(organization_id, mission_id, selected_ids) do
     snapshots =
-      ContactOpportunitySnapshotRow
-      |> where(
-        [snapshot],
-        snapshot.organization_id == ^organization_id and snapshot.mission_id == ^mission_id and
-          snapshot.contact_planning_run_id in ^run_ids
-      )
-      |> order_by([snapshot],
-        asc: snapshot.starts_at,
-        asc: snapshot.contact_opportunity_snapshot_id
-      )
-      |> Repo.all()
-      |> Repo.preload(:search)
-      |> Enum.map(&ContactOpportunitySnapshotRow.to_domain/1)
+      organization_id
+      |> FleetSnapshotReader.list_by_ids(mission_id, selected_ids)
+      |> Enum.sort_by(&{&1.starts_at, &1.contact_opportunity_snapshot_id})
 
     {:ok, snapshots}
   end
@@ -875,8 +877,21 @@ defmodule Cadence.ContactPlanning.ContactPlans do
         search.contact_planning_run_id in ^run_ids
     )
     |> order_by([search], asc: search.route_key)
+    |> select([search], %{
+      contact_planning_run_id: search.contact_planning_run_id,
+      route_key: search.route_key,
+      outcome: search.outcome
+    })
     |> Repo.all()
-    |> Enum.map(&ContactPlanningSearchRow.to_domain/1)
+    |> Enum.map(
+      &Map.update!(&1, :outcome, fn
+        "succeeded_with_results" -> :succeeded_with_results
+        "succeeded_without_results" -> :succeeded_without_results
+        "not_ready" -> :not_ready
+        "excluded_by_requirement" -> :excluded_by_requirement
+        "failed" -> :failed
+      end)
+    )
   end
 
   defp requirement_refs(runs) do
@@ -995,6 +1010,8 @@ defmodule Cadence.ContactPlanning.ContactPlans do
   @doc false
   @spec policy_snapshot([struct()], [struct()]) :: {:ok, map()} | {:error, term()}
   def policy_snapshot(requirements, selected) do
+    requirements_by_key = Map.new(requirements, &{{&1.contact_requirement_id, &1.version}, &1})
+
     requirement_policies =
       requirements
       |> Enum.map(fn requirement ->
@@ -1010,10 +1027,10 @@ defmodule Cadence.ContactPlanning.ContactPlans do
     routes =
       Enum.map(selected, fn snapshot ->
         requirement =
-          Enum.find(requirements, fn requirement ->
-            requirement.contact_requirement_id == snapshot.contact_requirement_id and
-              requirement.version == snapshot.contact_requirement_version
-          end)
+          Map.get(
+            requirements_by_key,
+            {snapshot.contact_requirement_id, snapshot.contact_requirement_version}
+          )
 
         mission_policy = snapshot.route_binding_document["delivery_policy_document"] || %{}
 
@@ -1060,13 +1077,13 @@ defmodule Cadence.ContactPlanning.ContactPlans do
     |> Enum.sort_by(&Map.fetch!(positions, &1.contact_opportunity_snapshot_id))
   end
 
-  defp reject_snapshots(snapshots, selected_ids) do
+  defp reject_snapshot_ids(snapshot_ids, selected_ids) do
     selected = MapSet.new(selected_ids)
-    Enum.reject(snapshots, &MapSet.member?(selected, &1.contact_opportunity_snapshot_id))
+    Enum.reject(snapshot_ids, &MapSet.member?(selected, &1))
   end
 
-  defp selected_belongs(selected_ids, snapshots) do
-    available = MapSet.new(snapshots, & &1.contact_opportunity_snapshot_id)
+  defp selected_belongs(selected_ids, snapshot_ids) do
+    available = MapSet.new(snapshot_ids)
 
     if Enum.all?(selected_ids, &MapSet.member?(available, &1)),
       do: :ok,
