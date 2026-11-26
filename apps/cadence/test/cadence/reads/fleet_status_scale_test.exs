@@ -8,8 +8,7 @@ defmodule Cadence.Reads.FleetStatusScaleTest do
   """
   use Cadence.DataCase, async: false
 
-  # TEMPORARY: untagged for one CI run, to read the runner's numbers.
-  # @moduletag :scale
+  @moduletag :scale
   @moduletag timeout: 600_000
 
   alias Cadence.Limits.Store.LatestStateRow
