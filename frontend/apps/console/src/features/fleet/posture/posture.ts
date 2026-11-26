@@ -1,4 +1,5 @@
 import type { RouteLocationRaw } from "vue-router";
+import type { FleetPostureCounts } from "@/shell";
 import type { OpState } from "@/ui";
 
 /**
@@ -43,6 +44,13 @@ const alarms: RouteLocationRaw = { name: "ops.alarms" };
 /** ux fb5e5ded0 (2): degraded, Cadence can't tell stale from never heard, so they're one chip. */
 export const DEGRADED_SENTENCE =
   "Cadence couldn't read telemetry history, so it can't tell which of these were heard before the restart.";
+
+/** The shell's /counts posture as chip input: the top bar and the dashboard cockpit read it (#847). */
+export const postureFromCounts = (p: FleetPostureCounts): PostureInput => ({
+  counts: p,
+  limits: { configured: p.limits_configured },
+  telemetry: p.telemetry,
+});
 
 export function postureChips({ counts, limits, telemetry }: PostureInput): PostureChip[] {
   if (counts.total === 0) return [];

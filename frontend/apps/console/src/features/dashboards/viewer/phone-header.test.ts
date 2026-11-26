@@ -69,21 +69,20 @@ describe("viewer header on a phone", () => {
 const fleet = vi.hoisted(() => ({
   counts: { critical: 2, caution: 1, stale: 3 },
 }));
+// #847: the cockpit reads the shell's /counts posture, not the fleet's rows.
 vi.mock("@/shell", async (original) => ({
   ...(await original<typeof import("@/shell")>()),
   useMissionScope: () => computed(() => ({ mission: { id: "m1" } })),
-}));
-vi.mock("@/features/fleet/index.ts", async (original) => ({
-  ...(await original<typeof import("@/features/fleet/index.ts")>()),
-  useFleet: () => ({
-    state: computed(() => ({
-      status: "ready",
-      value: {
-        counts: { never_heard: 0, total: 99, ...fleet.counts },
-        limits: { configured: true },
-      },
+  useFleetPosture: () =>
+    computed(() => ({
+      nominal: 0,
+      never_heard: 0,
+      total: 99,
+      limits_configured: true,
+      telemetry: "ok",
+      observed_at: "2026-11-26T15:00:00Z",
+      ...fleet.counts,
     })),
-  }),
 }));
 
 describe("phone status bar (ux 45d26151f): health stays on screen", () => {
