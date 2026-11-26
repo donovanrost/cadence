@@ -1,16 +1,20 @@
 defmodule CadenceWeb.Console.FleetPushTest do
-  use CadenceWeb.ConnCase, async: true
+  # The fleet is read by the mission's FleetSource, a process of its own, so the sandbox is shared.
+  use CadenceWeb.ConnCase, async: false
 
   import Phoenix.ChannelTest, except: [connect: 2, connect: 3, push: 3]
   require Phoenix.ChannelTest
 
   alias Cadence.Platform.ScopedReadUpdates
   alias CadenceWeb.Console.FleetPush
+  alias CadenceWeb.Console.FleetSources
   alias CadenceWeb.ConsoleSocket
   alias CadenceWeb.TestFixtures
 
   @t0 ~U[2026-11-08 02:00:00Z]
   @t1 ~U[2026-11-08 02:00:05Z]
+  # A push the mission's source drives: its read runs in another process, so wait for it.
+  @load_ms 2_000
 
   defp row(id, fields \\ %{}),
     do: Map.merge(%{id: id, state: "nominal", stale: false, last_received_at: @t0}, fields)
@@ -51,27 +55,19 @@ defmodule CadenceWeb.Console.FleetPushTest do
       mission = TestFixtures.persist_mission!(org)
       TestFixtures.persist_spacecraft!(mission, display_name: "EARENDIL-001")
       token = TestFixtures.member_session_token!(user)
-
-      {:ok, socket} =
-        Phoenix.ChannelTest.connect(ConsoleSocket, %{},
-          connect_info: %{session: %{"user_session_token" => token}}
-        )
-
-      {:ok, _reply, socket} = subscribe_and_join(socket, "mission:" <> mission.mission_id, %{})
-      %{org: org, mission: mission, socket: socket}
+      %{org: org, mission: mission, socket: join!(token, mission), token: token}
     end
 
     test "is off until subscribed, then sends a full snapshot", c do
       refute_push("fleet", _payload, 200)
 
       ref = Phoenix.ChannelTest.push(c.socket, "fleet:subscribe", %{})
-      # The reply no longer waits on the fleet read; settle/1 makes reply and snapshot certain.
-      settle(c.socket)
       assert_reply(ref, :ok, %{})
 
       assert_push(
         "fleet",
-        %{seq: 1, full: true, spacecraft: [row], counts: %{total: 1}} = payload
+        %{seq: 1, full: true, spacecraft: [row], counts: %{total: 1}} = payload,
+        @load_ms
       )
 
       assert row.name == "EARENDIL-001"
@@ -81,14 +77,10 @@ defmodule CadenceWeb.Console.FleetPushTest do
     end
 
     test "the tick is a heartbeat; a spacecraft change arrives as a delta row", c do
-      ref = Phoenix.ChannelTest.push(c.socket, "fleet:subscribe", %{})
-      settle(c.socket)
-      assert_reply(ref, :ok, %{})
-      assert_push("fleet", %{seq: 1})
+      subscribed!(c.socket)
 
-      send(c.socket.channel_pid, :fleet_tick)
-      settle(c.socket)
-      assert_push("fleet", %{seq: 2, full: false, spacecraft: [], heard: heard})
+      tick!(c)
+      assert_push("fleet", %{seq: 2, full: false, spacecraft: [], heard: heard}, @load_ms)
       assert heard == %{}
 
       TestFixtures.persist_spacecraft!(c.mission, display_name: "EARENDIL-002")
@@ -111,41 +103,37 @@ defmodule CadenceWeb.Console.FleetPushTest do
       # Suspended, the channel queues both subscribes before it handles either, so the second
       # one meets the :pending state.
       replies = queued(c.socket, ["fleet:subscribe", "fleet:subscribe"])
-      settle(c.socket)
       Enum.each(replies, &assert_reply(&1, :ok, %{}))
-      assert_push("fleet", %{seq: 1, full: true})
-      refute_push("fleet", _payload, 50)
+      assert_push("fleet", %{seq: 1, full: true}, @load_ms)
+      refute_push("fleet", _payload, 200)
     end
 
     test "unsubscribing before the snapshot drops it", c do
-      # Queued in this order, the unsubscribe is handled before the snapshot the subscribe queues.
+      # Queued in this order, the unsubscribe is handled before the subscription the subscribe
+      # queues, so no source is ever asked.
       replies = queued(c.socket, ["fleet:subscribe", "fleet:unsubscribe"])
-      settle(c.socket)
       Enum.each(replies, &assert_reply(&1, :ok, %{}))
-      refute_push("fleet", _payload, 50)
+      refute_push("fleet", _payload, 300)
+      assert source(c) == nil
     end
 
     # fe-ops: a resubscribe on a seq gap is unsubscribe + subscribe back to back, maybe while the
     # first snapshot is still queued. Exactly one full snapshot either way, never seq 1 twice.
     test "subscribe, unsubscribe, subscribe back to back: exactly one snapshot", c do
       replies = queued(c.socket, ["fleet:subscribe", "fleet:unsubscribe", "fleet:subscribe"])
-      settle(c.socket)
       Enum.each(replies, &assert_reply(&1, :ok, %{}))
-      assert_push("fleet", %{seq: 1, full: true})
-      refute_push("fleet", %{seq: 1}, 50)
+      assert_push("fleet", %{seq: 1, full: true}, @load_ms)
+      refute_push("fleet", %{seq: 1}, 200)
     end
 
-    test "unsubscribe stops the push", c do
-      ref = Phoenix.ChannelTest.push(c.socket, "fleet:subscribe", %{})
-      settle(c.socket)
-      assert_reply(ref, :ok, %{})
-      assert_push("fleet", %{seq: 1})
+    test "unsubscribe stops the push, and the mission's source with its last subscriber", c do
+      subscribed!(c.socket)
+      source = source(c)
+      ref = Process.monitor(source)
 
-      ref = Phoenix.ChannelTest.push(c.socket, "fleet:unsubscribe", %{})
-      settle(c.socket)
-      assert_reply(ref, :ok, %{})
-
-      send(c.socket.channel_pid, :fleet_tick)
+      ref_unsub = Phoenix.ChannelTest.push(c.socket, "fleet:unsubscribe", %{})
+      assert_reply(ref_unsub, :ok, %{})
+      assert_receive {:DOWN, ^ref, :process, ^source, :normal}, 1_000
 
       :ok =
         ScopedReadUpdates.publish(
@@ -159,12 +147,104 @@ defmodule CadenceWeb.Console.FleetPushTest do
     end
   end
 
-  # Two round trips to the channel: the first returns once it has handled everything queued
-  # before it (replies sent, the snapshot message queued), the second once it has handled that.
-  # Deterministic whatever the load: no reply or push waits on a timeout.
-  defp settle(socket) do
-    :sys.get_state(socket.channel_pid)
-    :sys.get_state(socket.channel_pid)
+  # #797: a mission's sockets share its fleet reads.
+  describe "one fleet read per mission, fanned out" do
+    setup do
+      org = TestFixtures.persist_org!()
+      user = TestFixtures.persist_user!()
+      TestFixtures.grant_membership!(user, org)
+      mission = TestFixtures.persist_mission!(org)
+      TestFixtures.persist_spacecraft!(mission, display_name: "EARENDIL-001")
+      token = TestFixtures.member_session_token!(user)
+
+      handler = "fleet-source-loads-#{mission.mission_id}"
+
+      :ok =
+        :telemetry.attach(
+          handler,
+          [:cadence_web, :console, :fleet_source, :load, :stop],
+          &__MODULE__.forward_load/4,
+          self()
+        )
+
+      on_exit(fn -> :telemetry.detach(handler) end)
+      %{org: org, mission: mission, token: token}
+    end
+
+    test "three subscribed sockets: one read for their snapshots, one per tick", c do
+      sockets = for _n <- 1..3, do: join!(c.token, c.mission)
+      refs = Enum.map(sockets, &Phoenix.ChannelTest.push(&1, "fleet:subscribe", %{}))
+      Enum.each(refs, &assert_reply(&1, :ok, %{}))
+
+      for _n <- 1..3, do: assert_push("fleet", %{seq: 1, full: true}, @load_ms)
+      assert_loads(c.mission, 1)
+
+      tick!(c)
+      for _n <- 1..3, do: assert_push("fleet", %{seq: 2, full: false}, @load_ms)
+      assert_loads(c.mission, 1)
+    end
+
+    test "a source that goes down is followed again, without a second snapshot", c do
+      socket = join!(c.token, c.mission)
+      subscribed!(socket)
+      assert_loads(c.mission, 1)
+
+      old = source(c)
+      Process.exit(old, :kill)
+
+      # The channel subscribes again, which starts a fresh source; the stream carries on from seq 1.
+      new = wait_for_new_source(c, old)
+      send(new, :tick)
+      assert_push("fleet", %{seq: 2, full: false}, @load_ms)
+      refute_push("fleet", %{seq: 1}, 200)
+    end
+  end
+
+  @doc false
+  def forward_load(_event, _measurements, %{mission_id: mission_id}, test),
+    do: send(test, {:fleet_load, mission_id})
+
+  defp assert_loads(mission, count) do
+    mission_id = mission.mission_id
+    for _n <- 1..count, do: assert_receive({:fleet_load, ^mission_id}, @load_ms)
+    refute_receive {:fleet_load, ^mission_id}, 300
+  end
+
+  defp join!(token, mission) do
+    {:ok, socket} =
+      Phoenix.ChannelTest.connect(ConsoleSocket, %{},
+        connect_info: %{session: %{"user_session_token" => token}}
+      )
+
+    {:ok, _reply, socket} = subscribe_and_join(socket, "mission:" <> mission.mission_id, %{})
+    socket
+  end
+
+  defp subscribed!(socket) do
+    ref = Phoenix.ChannelTest.push(socket, "fleet:subscribe", %{})
+    assert_reply(ref, :ok, %{})
+    assert_push("fleet", %{seq: 1, full: true}, @load_ms)
+  end
+
+  defp source(c) do
+    case Registry.lookup(FleetSources, {c.org.organization_id, c.mission.mission_id}) do
+      [{pid, _value}] -> pid
+      [] -> nil
+    end
+  end
+
+  # The mission's source does its own tick; the test sends it one instead of waiting 10 s.
+  defp tick!(c), do: send(source(c), :tick)
+
+  defp wait_for_new_source(c, old, attempts \\ 50) do
+    case source(c) do
+      pid when is_pid(pid) and pid != old ->
+        pid
+
+      _none_yet when attempts > 0 ->
+        Process.sleep(20)
+        wait_for_new_source(c, old, attempts - 1)
+    end
   end
 
   # Queues the events while the channel is suspended, so they reach it in exactly this order.

@@ -2,32 +2,40 @@ defmodule CadenceWeb.Console.FleetPush do
   @moduledoc """
   The opt-in `fleet` push for `CadenceWeb.Console.MissionChannel`.
 
-  After the client sends `fleet:subscribe`, the channel replies `ok` at once and
-  then pushes one full snapshot (`full: true`, `seq: 1`), built from a message
-  it queues to itself (so the reply never waits on the fleet read), and then
-  deltas with `seq` increasing by one per push. The `:fleet` assign is `nil`
-  (off), `:pending` (subscribed, snapshot queued) or the push state (a map). Rows are full `GET /fleet` rows and replace the client's row by
-  `id`. Material changes (state, limits, worst point, profile, geometry, the
-  `stale` flag) are pushed within about a second of an `alarms`,
-  `spacecraft`, `commanding` or `limits` change. Rows whose only change is
-  `last_received_at` are batched into the `heard` map on the periodic tick
-  (every 10 s), which also catches spacecraft going stale without any event
-  and doubles as a heartbeat (a tick always pushes, possibly with no rows). Contract: `docs/apogee/api/realtime.md`.
+  After the client sends `fleet:subscribe`, the channel replies `ok` at once and then pushes one
+  full snapshot (`full: true`, `seq: 1`), and then deltas with `seq` increasing by one per push.
+  Rows are full `GET /fleet` rows and replace the client's row by `id`. Contract:
+  `docs/apogee/api/realtime.md`.
+
+  The fleet itself is read once per mission by `CadenceWeb.Console.FleetSource` (#797), not per
+  socket. The source owns the timing: material changes (state, limits, worst point, profile,
+  geometry, the `stale` flag) arrive within about a second of an `alarms`, `spacecraft`,
+  `commanding`, `limits` or `contacts` change, and a tick every 10 s batches rows whose only
+  change is `last_received_at` into the `heard` map. The tick always pushes, possibly with no
+  rows, so it doubles as a heartbeat. This module keeps what is per socket: `seq`, the rows last
+  pushed, the diff, and the viewer's command counts.
+
+  The `:fleet` assign is `nil` (off); `:pending` (subscribed, the subscription to the source
+  queued so the reply never waits on it); or a map with the source's monitor ref, `seq` and
+  `rows`. `seq` is 0 while waiting for the source's first load, which becomes the snapshot.
   """
 
-  alias Cadence.Reads.{CommandCounts, FleetStatus}
-  alias CadenceWeb.Console.FleetJSON
+  alias Cadence.Reads.CommandCounts
+  alias CadenceWeb.Console.FleetSource
   alias Phoenix.{Channel, Socket}
 
-  @material_ms 1_000
-  @tick_ms 10_000
   @material_resources ~w(alarms spacecraft commanding limits contacts)
+
+  @type message ::
+          :fleet_snapshot
+          | {:fleet_loaded, map(), boolean()}
+          | {:DOWN, reference(), :process, pid(), term()}
 
   @spec join(Socket.t()) :: Socket.t()
   def join(socket), do: Socket.assign(socket, :fleet, nil)
 
   @doc """
-  Starts the push: queues the full snapshot (`:fleet_snapshot`, handled after the
+  Starts the push: queues the subscription to the source (`:fleet_snapshot`, handled after the
   reply) and marks the socket `:pending`. Subscribing again is a no-op.
   """
   @spec subscribe(Socket.t()) :: Socket.t()
@@ -40,11 +48,75 @@ defmodule CadenceWeb.Console.FleetPush do
     Socket.assign(socket, :fleet, :pending)
   end
 
-  # The full snapshot (seq 1) and the start of the tick. Anything the channel heard while pending
-  # is already in it: the snapshot is read after those messages were handled.
-  defp start(socket) do
-    snapshot = load(socket)
-    rows = snapshot.spacecraft
+  @spec unsubscribe(Socket.t()) :: Socket.t()
+  def unsubscribe(%Socket{assigns: %{fleet: %{source: ref}}} = socket) do
+    Process.demonitor(ref, [:flush])
+    FleetSource.unsubscribe(socket.assigns.organization_id, socket.assigns.mission_id)
+    Socket.assign(socket, :fleet, nil)
+  end
+
+  # A queued subscription is then dropped (handle/2 sees nil).
+  def unsubscribe(%Socket{assigns: %{fleet: :pending}} = socket),
+    do: Socket.assign(socket, :fleet, nil)
+
+  def unsubscribe(socket), do: socket
+
+  @doc "Tells the mission's source about a change when `resource` affects the fleet."
+  @spec note(Socket.t(), binary()) :: Socket.t()
+  def note(%Socket{assigns: %{fleet: %{}}} = socket, resource)
+      when resource in @material_resources do
+    FleetSource.note(socket.assigns.organization_id, socket.assigns.mission_id)
+    socket
+  end
+
+  def note(socket, _resource), do: socket
+
+  @doc """
+  Handles the push's own messages: the queued subscription, the source's loads, and the source
+  going down (then the channel subscribes again and carries on from its `seq`).
+  """
+  @spec handle(message(), Socket.t()) :: Socket.t()
+  def handle(:fleet_snapshot, %Socket{assigns: %{fleet: :pending}} = socket),
+    do: follow(socket, %{seq: 0, rows: %{}})
+
+  # Unsubscribed before it ran, or already following: nothing to do.
+  def handle(:fleet_snapshot, socket), do: socket
+
+  def handle(
+        {:fleet_loaded, shared, _heard_due?},
+        %Socket{assigns: %{fleet: %{seq: 0}}} = socket
+      ),
+      do: start(socket, shared)
+
+  def handle({:fleet_loaded, shared, heard_due?}, %Socket{assigns: %{fleet: %{}}} = socket),
+    do: refresh(socket, shared, heard_due?)
+
+  def handle(
+        {:DOWN, ref, :process, _pid, _reason},
+        %Socket{assigns: %{fleet: %{source: ref}}} = socket
+      ),
+      do: follow(socket, Map.take(socket.assigns.fleet, [:seq, :rows]))
+
+  # A load that was already on its way when the socket unsubscribed.
+  def handle(_message, socket), do: socket
+
+  # Subscribes to the mission's source and starts at once when it has a fresh load to share.
+  defp follow(socket, position) do
+    {source, latest} =
+      FleetSource.subscribe(socket.assigns.organization_id, socket.assigns.mission_id)
+
+    socket = Socket.assign(socket, :fleet, Map.put(position, :source, Process.monitor(source)))
+
+    case {latest, position.seq} do
+      {nil, _seq} -> socket
+      {shared, 0} -> start(socket, shared)
+      {shared, _seq} -> refresh(socket, shared, false)
+    end
+  end
+
+  # The full snapshot (seq 1).
+  defp start(socket, shared) do
+    snapshot = with_commands(socket, shared)
 
     Channel.push(
       socket,
@@ -52,57 +124,10 @@ defmodule CadenceWeb.Console.FleetPush do
       Map.merge(snapshot, %{seq: 1, full: true, heard: %{}, removed: []})
     )
 
-    Socket.assign(socket, :fleet, %{
-      seq: 1,
-      rows: Map.new(rows, &{&1.id, &1}),
-      pushed_at: now_ms(),
-      refresh_timer: nil,
-      tick_timer: Process.send_after(self(), :fleet_tick, @tick_ms)
-    })
-  end
-
-  @spec unsubscribe(Socket.t()) :: Socket.t()
-  def unsubscribe(%Socket{assigns: %{fleet: %{} = fleet}} = socket) do
-    Enum.each([fleet.refresh_timer, fleet.tick_timer], &(&1 && Process.cancel_timer(&1)))
-    Socket.assign(socket, :fleet, nil)
-  end
-
-  # A queued snapshot is then dropped (handle/2 sees nil).
-  def unsubscribe(%Socket{assigns: %{fleet: :pending}} = socket),
-    do: Socket.assign(socket, :fleet, nil)
-
-  def unsubscribe(socket), do: socket
-
-  @doc "Schedules a material refresh (throttled to one per second) when `resource` affects the fleet."
-  @spec note(Socket.t(), binary()) :: Socket.t()
-  def note(%Socket{assigns: %{fleet: %{refresh_timer: nil} = fleet}} = socket, resource)
-      when resource in @material_resources do
-    delay = max(0, fleet.pushed_at + @material_ms - now_ms())
-    timer = Process.send_after(self(), :fleet_refresh, delay)
-    Socket.assign(socket, :fleet, %{fleet | refresh_timer: timer})
-  end
-
-  def note(socket, _resource), do: socket
-
-  @doc "Handles the push's own messages: the queued snapshot and its timers."
-  @spec handle(:fleet_snapshot | :fleet_refresh | :fleet_tick, Socket.t()) :: Socket.t()
-  def handle(:fleet_snapshot, %Socket{assigns: %{fleet: :pending}} = socket), do: start(socket)
-  # Unsubscribed before it ran, or already started: nothing to send.
-  def handle(:fleet_snapshot, socket), do: socket
-
-  def handle(_message, %Socket{assigns: %{fleet: fleet}} = socket) when not is_map(fleet),
-    do: socket
-
-  def handle(:fleet_refresh, socket) do
-    socket
-    |> update_fleet(&%{&1 | refresh_timer: nil})
-    |> refresh(false)
-  end
-
-  def handle(:fleet_tick, socket) do
-    socket
-    |> update_fleet(&%{&1 | tick_timer: Process.send_after(self(), :fleet_tick, @tick_ms)})
-    |> refresh(true)
+    update_fleet(
+      socket,
+      &%{&1 | seq: 1, rows: Map.new(snapshot.spacecraft, fn row -> {row.id, row} end)}
+    )
   end
 
   @doc """
@@ -146,9 +171,8 @@ defmodule CadenceWeb.Console.FleetPush do
   defp heard_only?(old, row),
     do: Map.delete(old, :last_received_at) == Map.delete(row, :last_received_at)
 
-  defp refresh(%Socket{assigns: %{fleet: fleet}} = socket, heard_due?) do
-    snapshot = load(socket)
-    {changed, heard, removed, rows} = diff(fleet.rows, snapshot.spacecraft, heard_due?)
+  defp refresh(%Socket{assigns: %{fleet: fleet}} = socket, shared, heard_due?) do
+    {changed, heard, removed, rows} = diff(fleet.rows, shared.spacecraft, heard_due?)
 
     if changed == [] and heard == %{} and removed == [] and not heard_due? do
       socket
@@ -156,7 +180,9 @@ defmodule CadenceWeb.Console.FleetPush do
       seq = fleet.seq + 1
 
       payload =
-        Map.merge(snapshot, %{
+        socket
+        |> with_commands(shared)
+        |> Map.merge(%{
           seq: seq,
           full: false,
           spacecraft: changed,
@@ -165,19 +191,18 @@ defmodule CadenceWeb.Console.FleetPush do
         })
 
       Channel.push(socket, "fleet", payload)
-      update_fleet(socket, &%{&1 | seq: seq, rows: rows, pushed_at: now_ms()})
+      update_fleet(socket, &%{&1 | seq: seq, rows: rows})
     end
   end
 
-  defp load(%Socket{assigns: %{scope: scope, mission_id: mission_id}}) do
-    fleet = FleetStatus.load(scope.organization_id, mission_id)
-    commands = CommandCounts.load(scope.organization_id, mission_id, scope.user.user_id)
-    limits_configured? = Cadence.Limits.list_limit_definitions(mission_id) != []
-
-    FleetJSON.fleet(fleet, commands, limits_configured?)
-  end
+  # The viewer's own counts: `awaiting_viewer` leaves out what they requested themselves.
+  defp with_commands(%Socket{assigns: %{scope: scope, mission_id: mission_id}}, shared),
+    do:
+      Map.put(
+        shared,
+        :commands,
+        CommandCounts.load(scope.organization_id, mission_id, scope.user.user_id)
+      )
 
   defp update_fleet(socket, fun), do: Socket.assign(socket, :fleet, fun.(socket.assigns.fleet))
-
-  defp now_ms, do: System.monotonic_time(:millisecond)
 end
