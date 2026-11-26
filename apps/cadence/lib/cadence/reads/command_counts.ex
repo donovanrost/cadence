@@ -15,11 +15,23 @@ defmodule Cadence.Reads.CommandCounts do
 
   @spec load(binary(), binary(), binary() | nil) :: map()
   def load(organization_id, mission_id, viewer_user_id) do
+    organization_id
+    |> load_for_viewers(mission_id, [viewer_user_id])
+    |> Map.fetch!(viewer_user_id)
+  end
+
+  @doc """
+  The counts for each of `viewer_user_ids`, keyed by viewer, from one read of the mission's
+  commands: only `awaiting_viewer` differs by viewer, and it is built in memory. For a push that
+  serves many viewers of one mission at once (the live fleet push, #798).
+  """
+  @spec load_for_viewers(binary(), binary(), [binary() | nil]) :: %{(binary() | nil) => map()}
+  def load_for_viewers(organization_id, mission_id, viewer_user_ids) do
     summary = Commands.summary(organization_id, mission_id)
     requests = Cadence.Commanding.list_command_requests(organization_id, mission_id)
     groups = GroupStore.list(organization_id, mission_id, states: [:approval_pending])
 
-    build(summary, requests, viewer_user_id, groups)
+    Map.new(Enum.uniq(viewer_user_ids), &{&1, build(summary, requests, &1, groups)})
   end
 
   @doc """
