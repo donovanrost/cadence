@@ -45,6 +45,22 @@ export type PagedQuery<Item, Meta> = Readonly<{
   refreshError: Readonly<ShallowRef<ApiError | null>>;
   /** Reloads from the first page up to the rows shown, so nothing vanishes (a live change). */
   refetch: () => void;
+  /**
+   * True while a filter change's first page is on its way and the previous filter's rows are still
+   * shown (`scopeOf`). A screen says "Updating…" beside them; Load more waits.
+   */
+  pending: Readonly<ShallowRef<boolean>>;
+}>;
+
+export type PagedQueryOptions<K> = Readonly<{
+  /**
+   * The key without its filters (e.g. the mission), for keys that carry a filter such as a search
+   * box. A key change within the same scope is a filter change: the rows shown stay, `state` stays
+   * ready and `pending` is set until the new first page replaces them, so a search field above the
+   * list never unmounts as the person types (#903). A scope change starts over, showing loading.
+   * Without it, every key change shows loading.
+   */
+  scopeOf?: ((key: K) => unknown) | undefined;
 }>;
 
 /**
@@ -61,16 +77,24 @@ export type PagedQuery<Item, Meta> = Readonly<{
  * - A first page that fails is the state's failure (ApRemote shows it with Retry); a Retry from
  *   there loads afresh, showing loading. A Load more or a refresh that fails keeps the rows and
  *   sets `moreError` or `refreshError`.
+ * - With `scopeOf`, a filter change keeps the rows shown until the new first page lands (`pending`).
+ *   If that page fails, the state is the failure: the old rows don't match the new filter.
  */
 export function usePagedQuery<K, Item, Meta>(
   key: MaybeRefOrGetter<K | null>,
   fetchPage: PageFetcher<K, Item, Meta>,
   idOf: (item: Item) => string,
+  options: PagedQueryOptions<K> = {},
 ): PagedQuery<Item, Meta> {
   const state = shallowRef<RemoteState<Paged<Item, Meta>>>({ status: "loading" });
   const moreBusy = shallowRef(false);
   const moreError = shallowRef<ApiError | null>(null);
   const refreshError = shallowRef<ApiError | null>(null);
+  const pending = shallowRef(false);
+  /** The scope of the rows shown (`scopeOf`), compared as JSON like the key; null when none is. */
+  let shownScope: string | null = null;
+  const scopeSignature = (current: K) =>
+    options.scopeOf ? JSON.stringify(options.scopeOf(current)) : null;
   let controller: AbortController | null = null;
   /** Bumped by every start-over and refresh: a page from before is dropped. */
   let generation = 0;
@@ -81,13 +105,19 @@ export function usePagedQuery<K, Item, Meta>(
     ...new Map(items.map((item) => [idOf(item), item])).values(),
   ];
 
-  /** Pages from the first until `upTo` items are back (at least one page). */
-  async function load(current: K, upTo: number, keep: boolean) {
+  /**
+   * Pages from the first until `upTo` items are back (at least one page). `fresh` shows loading;
+   * `refresh` keeps the rows and a failure is `refreshError`; `filter` keeps the rows while
+   * `pending` and a failure is the state's.
+   */
+  async function load(current: K, upTo: number, mode: "fresh" | "refresh" | "filter") {
     controller?.abort();
     const mine = new AbortController();
     controller = mine;
     const id = ++generation;
     moreBusy.value = false;
+    pending.value = mode === "filter";
+    const keep = mode !== "fresh";
     if (!keep) state.value = { status: "loading" };
     const requestedAt = new Date();
     const items: Item[] = [];
@@ -99,8 +129,12 @@ export function usePagedQuery<K, Item, Meta>(
       const result = await fetchPage(current, cursor, mine.signal);
       if (id !== generation) return;
       if (!result.ok) {
-        if (keep && state.value.status === "ready") refreshError.value = result.error;
-        else state.value = { status: "failed", error: result.error };
+        pending.value = false;
+        if (mode === "refresh" && state.value.status === "ready") refreshError.value = result.error;
+        else {
+          state.value = { status: "failed", error: result.error };
+          shownScope = null;
+        }
         return;
       }
       items.push(...result.value.items);
@@ -110,6 +144,8 @@ export function usePagedQuery<K, Item, Meta>(
     } while (cursor !== null && items.length < upTo);
     if (first === null) return;
     refreshError.value = null;
+    pending.value = false;
+    shownScope = scopeSignature(current);
     state.value = {
       status: "ready",
       value: { items: dedupe(items), next: cursor, meta: first.meta, metas },
@@ -121,10 +157,12 @@ export function usePagedQuery<K, Item, Meta>(
   async function refresh(current: K) {
     refreshing = true;
     try {
-      // Shown rows stay while they reload; from a failure (Retry) it loads afresh.
+      // Shown rows stay while they reload; from a failure (Retry) it loads afresh. During a filter
+      // change the rows shown are the old filter's: it is still that change's first page.
       const s = state.value;
-      if (s.status === "ready") await load(current, s.value.items.length, true);
-      else await load(current, 0, false);
+      if (pending.value) await load(current, 0, "filter");
+      else if (s.status === "ready") await load(current, s.value.items.length, "refresh");
+      else await load(current, 0, "fresh");
     } catch {
       // An aborted request (a key change started over): that load owns the state now.
     } finally {
@@ -140,7 +178,14 @@ export function usePagedQuery<K, Item, Meta>(
   async function more() {
     const s = state.value;
     const current = toValue(key);
-    if (s.status !== "ready" || s.value.next === null || current === null || moreBusy.value) return;
+    if (
+      s.status !== "ready" ||
+      s.value.next === null ||
+      current === null ||
+      moreBusy.value ||
+      pending.value
+    )
+      return;
     const id = generation;
     moreBusy.value = true;
     moreError.value = null;
@@ -184,10 +229,17 @@ export function usePagedQuery<K, Item, Meta>(
         controller?.abort();
         generation += 1;
         moreBusy.value = false;
+        pending.value = false;
+        shownScope = null;
         state.value = { status: "loading" };
         return;
       }
-      void load(current, 0, false).catch(() => undefined);
+      // Rows of the same scope are shown: a filter change keeps them until its first page lands.
+      const filterOnly =
+        state.value.status === "ready" &&
+        shownScope !== null &&
+        shownScope === scopeSignature(current);
+      void load(current, 0, filterOnly ? "filter" : "fresh").catch(() => undefined);
     },
     { immediate: true },
   );
@@ -203,6 +255,7 @@ export function usePagedQuery<K, Item, Meta>(
     moreBusy,
     moreError,
     refreshError,
+    pending,
     refetch: () => {
       const current = toValue(key);
       if (current === null) return;

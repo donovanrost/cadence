@@ -20,6 +20,7 @@ export {
   type PageFetcher,
   type Paged,
   type PagedQuery,
+  type PagedQueryOptions,
 } from "./use-paged-query.ts";
 /** Closed vocabularies that keep the raw server word (typing plan §12 A0). */
 export { isKnown, knownText, vocabularyText, type Unrecognized } from "./decode.ts";
