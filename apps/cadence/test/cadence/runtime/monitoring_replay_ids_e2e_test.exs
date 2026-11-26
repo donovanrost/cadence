@@ -17,6 +17,7 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
   alias Cadence.Applications.SpacecraftConfiguration.{Drafts, Review}
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Catalog.SpacecraftConfigurationInput
+  alias Cadence.CompositionFixtures
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Control.Configuration
   alias Cadence.Control.MissionRuntime, as: ControlMissionRuntime
@@ -76,7 +77,12 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
     profile = profile!(c, revision.catalog_revision_id)
 
     apply!(c, [
-      update("spacecraft_profile", profile, "catalog_revision_id", limited.catalog_revision_id)
+      update(
+        "spacecraft_profile",
+        profile,
+        "composition_id",
+        pin!(c, limited.catalog_revision_id)
+      )
     ])
 
     readmit!(c)
@@ -498,7 +504,7 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
           "display_name" => "Replay e2e profile",
           "downlink_protocol" => "tm",
           "uplink_protocol" => "tc",
-          "catalog_revision_id" => catalog,
+          "composition_id" => pin!(c, catalog),
           "frame_parameters" => %{"frame_size" => @frame_size, "ocf_length" => 0}
         }
       }
@@ -518,6 +524,9 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
 
     id
   end
+
+  # D3 (#544): a profile pins its catalog's composition; Cadence derives the catalog revision.
+  defp pin!(c, catalog), do: CompositionFixtures.pin!(c.org, c.mission.mission_id, catalog)
 
   defp update(kind, id, path, value),
     do: %{kind: kind, action: :update, entity_id: id, changes: [%{path: path, value: value}]}

@@ -25,18 +25,19 @@ defmodule Cadence.Configuration.ReviewRecord do
   alias Cadence.Governance.DecisionRecord
   alias Cadence.Repo
 
-  # The term's version (#108: a golden test pins it). domain: D3's selections join the term; whoever
-  # lands second bumps this to 2 with a new golden.
-  @digest_version 1
+  # The term's version (#108: a golden test pins it). 2: D3's selections joined the term (#544).
+  @digest_version 2
   @limit 200
 
   @doc """
-  sha256 (hex, `Configuration.Document.sha256/1`, the ledger's own content hash) of `[1,
-  [[change_id, position, kind, entity_id, action, payload, base], …]]` over the staged ops in apply
-  order (`ChangeSetStore.staged_ops/1`).
+  sha256 (hex, `Configuration.Document.sha256/1`, the ledger's own content hash) of `[2,
+  [[change_id, position, kind, entity_id, action, payload, base], …], selections]` over the staged
+  ops in apply order (`ChangeSetStore.staged_ops/1`) and the change set's recorded D3 selections
+  (`%{composition_id => revision_id | reason}`, #544; `%{}` when none were recorded): a reviewer
+  decides the ops and the model revisions they run against.
   """
-  @spec digest([map()]) :: binary()
-  def digest(staged_ops) do
+  @spec digest([map()], map() | nil) :: binary()
+  def digest(staged_ops, selections) do
     entries =
       for %{op: op} <- staged_ops,
           do: [
@@ -49,7 +50,7 @@ defmodule Cadence.Configuration.ReviewRecord do
             op.base || %{}
           ]
 
-    Document.sha256([@digest_version, entries])
+    Document.sha256([@digest_version, entries, selections || %{}])
   end
 
   @doc "The ids the separation check compared (`[submitter | authors]` as actors), sorted, unique."
@@ -90,7 +91,7 @@ defmodule Cadence.Configuration.ReviewRecord do
   @spec not_required(map(), map(), [map()], boolean(), binary()) :: :ok
   def not_required(set, applier, ops, admin_mode, review_id) do
     write(set, applier, "not_required", nil, review_id, %{
-      digest: digest(ops),
+      digest: digest(ops, set.selections),
       separated_from: [],
       admin_mode: admin_mode
     })

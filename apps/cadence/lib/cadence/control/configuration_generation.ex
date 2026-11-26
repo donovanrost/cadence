@@ -38,7 +38,14 @@ defmodule Cadence.Control.ConfigurationGeneration do
   alias Cadence.Catalog
   alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Commanding.{Cancellation, RequestActivity}
-  alias Cadence.Control.{ConfigurationApids, ConfigurationSwitches, ModelApprovalGate}
+
+  alias Cadence.Control.{
+    ConfigurationApids,
+    ConfigurationSelections,
+    ConfigurationSwitches,
+    ModelApprovalGate
+  }
+
   alias Cadence.Governance
   alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.MissionModels.CatalogApids
@@ -68,6 +75,31 @@ defmodule Cadence.Control.ConfigurationGeneration do
          ConfigurationSettings.profile_framing_generations?(set.organization_id, set.mission_id),
        do: build_for(input, touched),
        else: {:ok, nil}
+  end
+
+  @doc """
+  D3 (#544): what an apply of the previewed ops could select, for the preview to record at
+  submit: every catalog the mission's pins can run after the ops' writes (the active fleet's, and
+  every profile's and catalog override's), a superset of what the apply derives, read in a fixed
+  number of queries. The apply compares only the compositions it derives, so the superset can't
+  refuse it on a composition it doesn't touch.
+  """
+  @spec selections(String.t(), String.t(), [map()]) :: map()
+  def selections(organization_id, mission_id, entries) do
+    with [_ | _] <- touched_spacecraft(entries),
+         true <- ConfigurationSettings.profile_framing_generations?(organization_id, mission_id),
+         {:ok, mission} <- Missions.fetch_mission(organization_id, mission_id),
+         {:ok, %{activation: %{}} = active} <- Active.load(mission) do
+      running = active.entries |> Map.values() |> Enum.map(& &1["catalog_revision_id"])
+      pinned = ConfigurationSelections.pinned_catalogs(organization_id, mission_id)
+
+      {selected, _pins} =
+        ConfigurationSelections.for_catalogs(organization_id, mission_id, running ++ pinned)
+
+      selected
+    else
+      _nothing -> %{}
+    end
   end
 
   @doc """
@@ -104,7 +136,14 @@ defmodule Cadence.Control.ConfigurationGeneration do
          apids = apid_changes(mission, touched, active.entries),
          :ok <- apids_defined(apids),
          derivations = derivations(targets, switches, ConfigurationApids.derivations(apids)),
-         {:ok, items} <- derive_configurations(mission, active.entries, derivations, input),
+         {:ok, selected} <- selected(mission, set, derivations, active.entries),
+         {:ok, items} <-
+           derive_configurations(
+             mission,
+             active.entries,
+             derivations,
+             Map.put(input, :selected, selected)
+           ),
          {:ok, binding_set} <- next_binding_set(mission, active, items) do
       base = Map.merge(active.entries, Map.new(items, &{&1.id, &1.entry}))
 
@@ -386,9 +425,27 @@ defmodule Cadence.Control.ConfigurationGeneration do
     end
   end
 
+  # D3 (#544): select again under the activation lock (this transaction holds it) and refuse
+  # restage_needed when it differs from what the submit recorded.
+  defp selected(mission, set, derivations, entries) do
+    catalogs =
+      Enum.map(derivations, fn {id, changes} ->
+        changes["catalog_revision_id"] || entries[id]["catalog_revision_id"]
+      end)
+
+    ConfigurationSelections.check(
+      mission.organization_id,
+      mission.mission_id,
+      Map.get(set, :selections),
+      catalogs
+    )
+  end
+
   # One compile input per distinct catalog, passed to every spacecraft on it (Review.
   # cached_inputs/3): step 4 (11-15) read and decoded it once per spacecraft, 499 times.
-  defp derive_configurations(mission, entries, derivations, %{applier: applier}) do
+  defp derive_configurations(mission, entries, derivations, %{applier: applier} = input) do
+    {selected, pins} = Map.get(input, :selected, {%{}, %{}})
+
     derivations
     |> Enum.reduce_while({:ok, [], [], %{}}, fn {id, changes}, {:ok, items, rows, cache} ->
       with running when is_binary(running) <-
@@ -402,7 +459,9 @@ defmodule Cadence.Control.ConfigurationGeneration do
                changes,
                applier["id"]
              ),
-           {:ok, inputs, cache} <- Review.cached_inputs(cache, mission, row.catalog_revision_id),
+           revision = selected_revision(selected, pins, row.catalog_revision_id),
+           {:ok, inputs, cache} <-
+             Review.cached_inputs(cache, mission, row.catalog_revision_id, revision),
            {:ok, item} <- Review.compile(mission, id, row, inputs) do
         {:cont, {:ok, [item | items], [row | rows], cache}}
       else
@@ -412,6 +471,14 @@ defmodule Cadence.Control.ConfigurationGeneration do
     |> case do
       {:ok, items, rows, cache} -> projected(mission, items, rows, cache)
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # The revision a catalog's composition selected (nil: the catalog has no composition, so its own).
+  defp selected_revision(selected, pins, catalog) do
+    case Map.get(pins, catalog) do
+      nil -> nil
+      composition -> ConfigurationSelections.revision_of(Map.get(selected, composition))
     end
   end
 

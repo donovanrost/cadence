@@ -1,5 +1,6 @@
 import type { MissionId } from "@/api/index.ts";
 import { decoders, request, type ApiResult, type Decoded, type Reader } from "@/api";
+import type { RolloutTarget } from "./rollout.ts";
 
 /** Contract: docs/apogee/api/setup.md (C3) = setup-shapes.md §C3 + declaration_count. */
 const { array, boolean, integer, nullable, object, oneOf, optional, string, timestamp, token } =
@@ -66,13 +67,29 @@ export const importRunReader = object({
     }),
     20000,
   ),
-  revision: nullable(object({ id: token, number: count, label: nullable(string) })),
+  revision: nullable(
+    object({
+      id: token,
+      number: count,
+      label: nullable(string),
+      /** D3 (#544): the revision's one-layer composition, what C3 pins. */
+      composition_id: nullable(token),
+    }),
+  ),
   base_revision: nullable(object({ id: token, number: count })),
   diff: nullable(diff),
 });
 
 export type ImportRunDetail = Decoded<typeof importRunReader>;
 export type Diagnostic = ImportRunDetail["diagnostics"][number];
+
+/** C3's target for a run's revision, or null when it has no revision or no composition to pin. */
+export function rolloutTarget(run: ImportRunDetail): RolloutTarget | null {
+  const r = run.revision;
+  return r && r.composition_id
+    ? { id: r.id, number: r.number, compositionId: r.composition_id }
+    : null;
+}
 
 export function fetchImportRun(
   key: Readonly<{ missionId: MissionId; importId: string }>,

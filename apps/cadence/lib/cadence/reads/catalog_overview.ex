@@ -12,6 +12,7 @@ defmodule Cadence.Reads.CatalogOverview do
   alias Cadence.Applications.SpacecraftConfiguration.Drafts
   alias Cadence.Catalog
   alias Cadence.Catalog.{Artifact, ImportRun, Revision}
+  alias Cadence.Catalog.CompositionPins
   alias Cadence.MissionModels
   alias Cadence.MissionModels.CompositionViews
   alias Cadence.Reads.Catalog.{Requesters, RevisionBase}
@@ -278,7 +279,9 @@ defmodule Cadence.Reads.CatalogOverview do
       revision: %{
         id: revision.catalog_revision_id,
         number: revision.revision_number,
-        label: revision.revision_label
+        label: revision.revision_label,
+        # D3 (#544): what C3 pins; a rollout stages this composition, never the catalog revision.
+        composition_id: composition_id(organization_id, mission_id, revision)
       },
       base_revision: base && %{id: base.catalog_revision_id, number: base.revision_number},
       diff:
@@ -290,6 +293,13 @@ defmodule Cadence.Reads.CatalogOverview do
             revision.mission_model_revision_id
           )
     }
+  end
+
+  defp composition_id(organization_id, mission_id, %Revision{catalog_revision_id: id}) do
+    case CompositionPins.for_catalog_revision(organization_id, mission_id, id) do
+      {:ok, composition_id} -> composition_id
+      {:error, :none} -> nil
+    end
   end
 
   defp diagnostic(diagnostic) do

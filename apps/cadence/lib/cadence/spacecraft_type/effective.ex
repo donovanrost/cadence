@@ -19,6 +19,7 @@ defmodule Cadence.SpacecraftType.Effective do
       "packet_protocol" => Atom.to_string(profile.packet_protocol),
       "frame_parameters" => profile.frame_parameters || %{},
       "catalog_revision_id" => profile.catalog_revision_id,
+      "composition_id" => profile.composition_id,
       "handled_apids" => profile.handled_apids
     }
 
