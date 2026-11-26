@@ -42,8 +42,18 @@ defmodule CadenceWeb.Console.ServiceBearerAPITest do
 
   test "the opt-in list is exactly this (additions show up in review)" do
     assert ServiceAccess.allowed() == %{
+             CadenceWeb.Console.CatalogController => [
+               :index,
+               :import_run,
+               :artifact,
+               :download,
+               :apids
+             ],
+             CadenceWeb.Console.CatalogImportController => [:importers, :create],
              CadenceWeb.Console.ContactRuntimeController => [:path_runtime],
-             CadenceWeb.Console.MissionController => [:show]
+             CadenceWeb.Console.MissionController => [:show],
+             CadenceWeb.Console.SpacecraftController => [:index, :names],
+             CadenceWeb.Console.SpacecraftDetailController => [:show]
            }
   end
 

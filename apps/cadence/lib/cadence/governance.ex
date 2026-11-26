@@ -131,35 +131,6 @@ defmodule Cadence.Governance do
   def resolve_packet_definition_versions(organization_id, mission_id, definitions, acc \\ %{}),
     do: PacketDefinitionVersions.resolve(organization_id, mission_id, definitions, acc)
 
-  @spec list_packet_definitions(binary()) :: [PacketDefinition.t()]
-  def list_packet_definitions(mission_id) when is_binary(mission_id) do
-    field_preload_query =
-      from(field_row in PacketDefinitionFieldRow,
-        order_by: [asc: field_row.offset_bits, asc: field_row.field_id]
-      )
-
-    mission_id
-    |> latest_definition_rows(GovernedPacketDefinitionRow, :packet_definition_id)
-    |> Repo.preload(field_rows: field_preload_query)
-    |> Enum.map(&to_packet_definition/1)
-    |> Enum.sort_by(&{&1.apid, &1.packet_name})
-  end
-
-  @spec list_packet_definitions(binary(), binary()) :: [PacketDefinition.t()]
-  def list_packet_definitions(organization_id, mission_id)
-      when is_binary(organization_id) and is_binary(mission_id) do
-    field_preload_query =
-      from(field_row in PacketDefinitionFieldRow,
-        order_by: [asc: field_row.offset_bits, asc: field_row.field_id]
-      )
-
-    organization_id
-    |> latest_definition_rows(mission_id, GovernedPacketDefinitionRow, :packet_definition_id)
-    |> Repo.preload(field_rows: field_preload_query)
-    |> Enum.map(&to_packet_definition/1)
-    |> Enum.sort_by(&{&1.apid, &1.packet_name})
-  end
-
   @spec fetch_binding_set(binary(), binary(), pos_integer()) ::
           {:ok, BindingSet.t()} | {:error, term()}
   def fetch_binding_set(mission_id, binding_set_id, version)
@@ -833,43 +804,6 @@ defmodule Cadence.Governance do
   defp packet_definition_key(%PacketDefinition{} = packet_definition) do
     {packet_definition.mission_id, packet_definition.packet_definition_id,
      packet_definition.version}
-  end
-
-  defp latest_definition_rows(mission_id, schema, definition_id_field)
-       when is_binary(mission_id) and is_atom(definition_id_field) do
-    schema
-    |> where([definition_row], field(definition_row, :mission_id) == ^mission_id)
-    |> order_by([definition_row],
-      asc: field(definition_row, ^definition_id_field),
-      desc: field(definition_row, :version)
-    )
-    |> Repo.all()
-    |> Enum.reduce(%{}, fn definition_row, acc ->
-      definition_id = Map.fetch!(definition_row, definition_id_field)
-      Map.put_new(acc, definition_id, definition_row)
-    end)
-    |> Map.values()
-  end
-
-  defp latest_definition_rows(organization_id, mission_id, schema, definition_id_field)
-       when is_binary(organization_id) and is_binary(mission_id) and
-              is_atom(definition_id_field) do
-    schema
-    |> where(
-      [definition_row],
-      field(definition_row, :organization_id) == ^organization_id and
-        field(definition_row, :mission_id) == ^mission_id
-    )
-    |> order_by([definition_row],
-      asc: field(definition_row, ^definition_id_field),
-      desc: field(definition_row, :version)
-    )
-    |> Repo.all()
-    |> Enum.reduce(%{}, fn definition_row, acc ->
-      definition_id = Map.fetch!(definition_row, definition_id_field)
-      Map.put_new(acc, definition_id, definition_row)
-    end)
-    |> Map.values()
   end
 
   defp put_binding_set_scope(%BindingSet{} = binding_set, organization_id)
