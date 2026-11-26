@@ -35,15 +35,5 @@ defmodule Cadence.Management.Commanding.ApprovedCommandTest do
     assert {:ok, approved_command} = ApprovedCommand.new(request, approval)
     assert approved_command.command_request_id == "request-1"
     assert approved_command.resolved_argument_values == %{"mode" => 2}
-
-    assert ApprovedCommand.matches_request?(approved_command, %{
-             request
-             | lifecycle_state: :queued
-           })
-
-    refute ApprovedCommand.matches_request?(approved_command, %{
-             request
-             | resolved_argument_values: %{"mode" => 3}
-           })
   end
 end

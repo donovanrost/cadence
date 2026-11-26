@@ -78,6 +78,5 @@ describe("per-field settings sources", () => {
     expect(setHereCount(s)).toBe("2 set for this mission");
     expect(setHereCount(section(["organization"]))).toBeNull();
     expect(confirmsReset("cadence.governance")).toBe(true);
-    expect(confirmsReset("commanding.defaults")).toBe(false);
   });
 });

@@ -133,10 +133,10 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
       })
 
     assert {:ok, persisted_request} =
-             Cadence.Commanding.persist_command_request(@organization_id, command_request)
+             Cadence.CommandMemberFixtures.persist(@organization_id, command_request)
 
     assert {:ok, %{queue_entry: queue_entry}} =
-             Cadence.Commanding.enqueue_command_request(
+             Cadence.CommandMemberFixtures.enqueue_and_kick(
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,

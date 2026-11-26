@@ -174,7 +174,7 @@ defmodule Cadence.Governance.ApprovalPolicyChangesTest do
     assert unchanged?(c)
 
     # A section without a who-may-change rule saves as before, with or without a check.
-    refute ScopedSettings.rule_guarded?("commanding.defaults")
+    refute ScopedSettings.rule_guarded?("cadence.pass_review")
   end
 
   # ca-security's third loosening path (director 11-19): clearing a mission's own 'independent'

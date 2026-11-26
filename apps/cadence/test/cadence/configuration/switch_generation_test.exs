@@ -284,8 +284,9 @@ defmodule Cadence.Configuration.SwitchGenerationTest do
       """
       INSERT INTO command_requests (command_request_id, organization_id, mission_id,
         source_endpoint_ref, mission_model_revision_id, command_id, command_name, lifecycle_state,
-        verification_state, requested_at, inserted_at, updated_at)
-      VALUES ($1, $2, $3, $4, 'model', 'command', 'NOOP', $5, $6, now(), now(), now())
+        verification_state, command_group_id, group_target_index, group_position, requested_at,
+        inserted_at, updated_at)
+      VALUES ($1, $2, $3, $4, 'model', 'command', 'NOOP', $5, $6, $7, 0, 0, now(), now(), now())
       """,
       [
         id,
@@ -293,7 +294,8 @@ defmodule Cadence.Configuration.SwitchGenerationTest do
         c.mission.mission_id,
         c.endpoint.source_endpoint_id,
         state,
-        Keyword.get(opts, :verification_state)
+        Keyword.get(opts, :verification_state),
+        Cadence.CommandMemberFixtures.group!(c.org, c.mission.mission_id)
       ]
     )
 

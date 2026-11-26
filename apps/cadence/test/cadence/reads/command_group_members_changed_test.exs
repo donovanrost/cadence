@@ -7,14 +7,12 @@ defmodule Cadence.Reads.CommandGroupMembersChangedTest do
   """
   use Cadence.DataCase, async: false
 
-  import Ecto.Query
   import Cadence.CommandGroupFixtures
 
-  alias Cadence.Commanding.CommandRequestRow
   alias Cadence.Commanding.Groups.GroupStore
+  alias Cadence.CommandMemberFixtures
   alias Cadence.Control.Commanding.{GroupDecision, GroupSubmission}
   alias Cadence.Ids
-  alias Cadence.Management.Commanding, as: ManagementCommanding
   alias Cadence.Reads.CommandGroups
 
   setup do
@@ -41,26 +39,20 @@ defmodule Cadence.Reads.CommandGroupMembersChangedTest do
   end
 
   test "a member row added behind the submission: changed, 2 then 3; the GO agrees", c do
-    {:ok, standalone} =
-      ManagementCommanding.persist_command_request(c.org, %{
+    CommandMemberFixtures.insert!(
+      c.org,
+      %{
         c.member
         | command_request_id: Ids.new("command_request"),
-          lifecycle_state: nil,
-          metadata: %{},
           requested_by: %{"actor_kind" => "user", "user_id" => c.scope.user.user_id}
-      })
-
-    join!(standalone.command_request_id, c.group.command_group_id, 1, 1)
+      },
+      group: c.group.command_group_id,
+      target_index: 1,
+      position: 1
+    )
 
     assert %{members_changed: true, submitted_member_count: 2, current_member_count: 3} = read(c)
     assert {:error, {:command_group_members_changed, 2, 3}} = go(c)
-  end
-
-  test "a member row taken out: changed, 2 then 1; the GO agrees", c do
-    join!(c.member.command_request_id, nil, nil, nil)
-
-    assert %{members_changed: true, submitted_member_count: 2, current_member_count: 1} = read(c)
-    assert {:error, {:command_group_members_changed, 2, 1}} = go(c)
   end
 
   test "a decided group: all three nil", c do
@@ -88,20 +80,5 @@ defmodule Cadence.Reads.CommandGroupMembersChangedTest do
       kind: :go,
       expected_review: GroupDecision.review_token(c.group)
     })
-  end
-
-  # Alters a request's group columns straight in the table (what no product path may do).
-  defp join!(request_id, group_id, target_index, position) do
-    {1, _} =
-      Repo.update_all(
-        from(r in CommandRequestRow, where: r.command_request_id == ^request_id),
-        set: [
-          command_group_id: group_id,
-          group_target_index: target_index,
-          group_position: position
-        ]
-      )
-
-    :ok
   end
 end

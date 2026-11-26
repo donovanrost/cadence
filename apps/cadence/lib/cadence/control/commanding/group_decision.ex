@@ -17,12 +17,14 @@ defmodule Cadence.Control.Commanding.GroupDecision do
     CommandApproval,
     Dispatcher,
     ProcessNamespace,
+    RequestDigest,
     RequestValidation
   }
 
   alias Cadence.Commanding.Groups.{Admission, CommandGroup, GroupStore}
   alias Cadence.Governance.Accountability
-  alias Cadence.Management.Commanding.{ApprovedCommand, RequestAuthoring, RequestReview}
+  alias Cadence.Management.Commanding, as: ManagementCommanding
+  alias Cadence.Management.Commanding.ApprovedCommand
   alias Cadence.Platform.ScopedReadUpdates
 
   @kinds ~w(go go_excluding send_back no_go)a
@@ -44,14 +46,14 @@ defmodule Cadence.Control.Commanding.GroupDecision do
   @doc """
   The members digest (four-eyes design, 'Command groups: the members digest'): over the group's
   member request ids, sorted, each with that request's own review token
-  (`RequestReview.review_token/1`, its content digest; the public route to it, as QueueSubmission's).
+  (`RequestDigest.digest/1`, its content digest).
   """
   @spec members_digest(CommandGroup.t()) :: binary()
   def members_digest(%CommandGroup{} = group) do
     entries =
       group.organization_id
       |> GroupStore.members(group.mission_id, group.command_group_id)
-      |> Enum.map(&[&1.command_request_id, RequestReview.review_token(&1)])
+      |> Enum.map(&[&1.command_request_id, RequestDigest.digest(&1)])
       |> Enum.sort()
 
     AuthoringIdentity.digest({:command_group_members_v1, entries})
@@ -62,7 +64,7 @@ defmodule Cadence.Control.Commanding.GroupDecision do
   # todo(authz): Cedar should decide who may GO / NO-GO / send back this group (DECISIONS #62:
   # any mission operator today, minus self-approval), e.g. by hazard, fleet reach or subsystem.
   def decide(scope, mission_id, group_id, decision) do
-    with {:ok, fresh, _mission} <- RequestAuthoring.authorize(scope, mission_id),
+    with {:ok, fresh, _mission} <- ManagementCommanding.authorize(scope, mission_id),
          :ok <- valid_decision(decision) do
       org = fresh.organization_id
       actor = %{"actor_kind" => "user", "user_id" => fresh.user.user_id}
@@ -300,7 +302,7 @@ defmodule Cadence.Control.Commanding.GroupDecision do
 
     Enum.split_with(
       members,
-      &(not MapSet.member?(excluded, &1.metadata["group"]["target_index"]))
+      &(not MapSet.member?(excluded, &1.group_slot.target_index))
     )
   end
 
@@ -312,7 +314,7 @@ defmodule Cadence.Control.Commanding.GroupDecision do
   # #117 step 4b: each member's approval names its own review token (what the GO covered).
   defp approval(request, decision, actor, now, reason, record) do
     CommandApproval.new(%{
-      subject_digest: RequestReview.review_token(request),
+      subject_digest: RequestDigest.digest(request),
       separated_from: record.separated_from,
       admin_mode: record.admin_mode,
       organization_id: request.organization_id,
@@ -322,7 +324,7 @@ defmodule Cadence.Control.Commanding.GroupDecision do
       decided_by: actor,
       decided_at: now,
       reason: reason,
-      metadata: %{"command_group_id" => request.metadata["group"]["id"]}
+      metadata: %{"command_group_id" => request.command_group_id}
     })
   end
 

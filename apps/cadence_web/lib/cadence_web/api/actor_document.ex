@@ -6,7 +6,7 @@ defmodule CadenceWeb.API.ActorDocument do
   else in the object changes.
 
   It runs only at the REST encoders, never on a domain struct, so a hash computed from the
-  stored document (e.g. `ReviewPrecondition.digest/1`) sees it unchanged.
+  stored document (e.g. `RequestDigest.digest/1`) sees it unchanged.
   """
 
   alias Cadence.Control.ActorRef

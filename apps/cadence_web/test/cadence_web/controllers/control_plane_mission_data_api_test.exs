@@ -336,10 +336,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
     command_requests_conn =
       conn
       |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_requests",
-        %{"command_stage_id" => "command-stage-alpha"}
-      )
+      |> get("/api/organizations/#{organization_id}/missions/#{mission_id}/command_requests")
 
     assert %{"data" => []} = json_response(command_requests_conn, 200)
     :ok

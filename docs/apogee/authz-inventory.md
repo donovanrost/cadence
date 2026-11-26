@@ -56,9 +56,7 @@ share one policy set. Cedar would need:
 | file:line | action | today |
 |---|---|---|
 | `management/commanding/review_access.ex:62` | the shared gate: request, approve, no-go, send back, stage, queue | operator |
-| `management/commanding/request_authoring.ex:8` | author and request a command | operator |
-| `management/commanding/request_review.ex:10` | approve or reject a single request | operator, not the requester |
-| `management/commanding/stage_access.ex:10` | stage, edit, share command stages | operator |
+| `management/commanding.ex:25` | author and request a command (the public gate over `review_access.ex`) | operator |
 | `control/commanding/group_submission.ex:23` | request a command group | operator |
 | `control/commanding/group_decision.ex:40` | GO / NO-GO / send back a group | operator, not the requester |
 | `control/commanding/group_abort.ex:159` | abort or cancel a group (#42) | operator |

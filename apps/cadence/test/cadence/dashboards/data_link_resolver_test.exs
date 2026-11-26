@@ -69,7 +69,8 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
         metadata: %{}
       })
 
-    assert %CommandRequestRow{} = Repo.insert!(CommandRequestRow.changeset(command_request))
+    assert %CommandRequestRow{} =
+             Repo.insert!(Cadence.CommandMemberFixtures.changeset(command_request))
 
     assert %CommandQueueEntryRow{} =
              Repo.insert!(CommandQueueEntryRow.changeset(queue_entry))

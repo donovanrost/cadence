@@ -34,7 +34,6 @@ defmodule Cadence.Reads.ActionQueue do
 
   alias Cadence.Reads.{
     AlarmEpisodes,
-    CommandCounts,
     CommandGroups,
     Commands,
     FleetStatus,
@@ -91,7 +90,6 @@ defmodule Cadence.Reads.ActionQueue do
           mission_id,
           Enum.map(commands.rows, & &1.target)
         ),
-      requests: requests,
       groups_awaiting:
         CommandGroups.list(organization_id, mission_id, viewer_user_id, awaiting_me: true),
       viewer_user_id: viewer_user_id,
@@ -184,54 +182,29 @@ defmodule Cadence.Reads.ActionQueue do
       DateTime.compare(row.occurred_at, cutoff) != :lt
   end
 
-  # A decision waiting on the viewer: standalone approval-pending requests they didn't make,
-  # and command groups awaiting their GO (one each, however many members).
-  defp approval_items(
-         %{command_rows: rows, requests: requests, viewer_user_id: viewer} = input,
-         targets
-       ) do
-    others =
-      requests
-      |> Enum.filter(&(&1.lifecycle_state == :approval_pending and is_nil(&1.metadata["group"])))
-      |> Enum.reject(&(CommandCounts.requester_id(&1) == viewer))
-      |> MapSet.new(& &1.command_request_id)
-
-    waiting =
-      rows
-      |> Enum.filter(&MapSet.member?(others, &1.command_request_id))
-      |> Enum.sort_by(&(&1.requested_at || &1.occurred_at), &Item.earlier?/2)
-
-    groups = Map.get(input, :groups_awaiting, [])
-
-    if waiting == [] and groups == [] do
-      []
-    else
-      Item.new(%{
-        id: "approval:viewer",
-        priority: 2,
-        kind: :approval,
-        state: :caution,
-        since:
-          Item.min_datetime(
-            Enum.map(waiting, & &1.requested_at) ++ Enum.map(groups, & &1.requested_at)
-          ),
-        count: length(waiting) + length(groups),
-        spacecraft: target_members(waiting, targets),
-        command_requests: Enum.map(waiting, &request_ref(&1, targets)),
-        command_groups:
-          Enum.map(
-            groups,
-            &Map.take(&1, [
-              :id,
-              :title,
-              :member_count,
-              :target_count,
-              :requested_by,
-              :requested_at
-            ])
-          )
-      })
-    end
+  # A decision waiting on the viewer: command groups awaiting their GO (one each, however many
+  # members). Every request is a group's member, so there is no request-level decision.
+  defp approval_items(%{groups_awaiting: [_ | _] = groups}, _targets) do
+    Item.new(%{
+      id: "approval:viewer",
+      priority: 2,
+      kind: :approval,
+      state: :caution,
+      since: Item.min_datetime(Enum.map(groups, & &1.requested_at)),
+      count: length(groups),
+      command_groups:
+        Enum.map(
+          groups,
+          &Map.take(&1, [
+            :id,
+            :title,
+            :member_count,
+            :target_count,
+            :requested_by,
+            :requested_at
+          ])
+        )
+    })
   end
 
   defp approval_items(_input, _targets), do: []
