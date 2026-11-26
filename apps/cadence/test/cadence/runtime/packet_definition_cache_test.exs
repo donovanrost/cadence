@@ -120,6 +120,38 @@ defmodule Cadence.Runtime.PacketDefinitionCacheTest do
     assert {:ok, _} = PacketDefinitionCache.fetch(table, "p2", "c")
   end
 
+  test "a revision already cached is held without its plans being sent", %{namespace: namespace} do
+    {_a, %{packet_definitions: {:ok, table}}} = holder(namespace, plans("p1", ["a"]))
+
+    # `%{}` would fail to decode, so a hit that succeeds cannot have used the plans.
+    {_b, cache} = holder(namespace, %{telemetry: %{plan_id: "p1"}})
+
+    assert %{packet_definitions: {:ok, ^table}} = cache
+    assert {:ok, _} = DispatchCache.resolve_packet_definition(cache, configured("a"))
+  end
+
+  test "a plan without an id is never cached, and releases what the caller held", %{
+    namespace: namespace
+  } do
+    first = put_in(plans("ignored", ["a"]), [:telemetry, Access.key(:plan_id)], nil)
+    other = put_in(plans("ignored", ["b"]), [:telemetry, Access.key(:plan_id)], nil)
+
+    assert {:error, :telemetry_plan_without_id} =
+             PacketDefinitionCache.acquire(namespace, nil, first)
+
+    assert {:error, :telemetry_plan_without_id} =
+             PacketDefinitionCache.acquire(namespace, nil, other)
+
+    {:ok, table} = PacketDefinitionCache.acquire(namespace, "p1", plans("p1", ["a"]))
+
+    assert {:error, :telemetry_plan_without_id} =
+             PacketDefinitionCache.acquire(namespace, nil, other)
+
+    assert :ets.info(table, :size) == 0
+    assert :error = PacketDefinitionCache.fetch(table, nil, "a")
+    assert :error = PacketDefinitionCache.fetch(table, nil, "b")
+  end
+
   test "a plan that fails to decode is reported on resolve and caches nothing", %{
     namespace: namespace
   } do
