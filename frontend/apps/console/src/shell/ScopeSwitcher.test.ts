@@ -2,12 +2,12 @@ import { mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { defineComponent, h, nextTick } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
-import { missionId } from "@/api/index.ts";
+import { missionId, organizationId } from "@/api/index.ts";
 import ScopeSwitcher from "./ScopeSwitcher.vue";
 import type { ConsoleScope } from "./scope.ts";
 
 const organization = {
-  id: "org-1",
+  id: organizationId("org-1"),
   slug: "acme",
   name: "Acme",
   role: null,

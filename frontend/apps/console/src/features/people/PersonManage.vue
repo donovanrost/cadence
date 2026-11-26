@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { OrganizationId } from "@/api/index.ts";
 import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { isKnown } from "@/api";
@@ -7,7 +8,7 @@ import { adminErrorText, removeMember, setRole } from "./admin.ts";
 import { roleLabel, roles, type Member, type Role } from "./api.ts";
 
 /** People.md person page · Manage: change role, remove (typed confirm). Org admins only. */
-const props = defineProps<{ orgId: string; member: Member; self: boolean }>();
+const props = defineProps<{ orgId: OrganizationId; member: Member; self: boolean }>();
 const emit = defineEmits<{ changed: [] }>();
 const router = useRouter();
 /** A role the console doesn't know starts empty: the admin picks one rather than overwriting blind. */

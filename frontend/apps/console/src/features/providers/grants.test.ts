@@ -1,3 +1,4 @@
+import { organizationId as orgIdReader } from "@/api/index.ts";
 import { describe, expect, it } from "vite-plus/test";
 import type { ApiError } from "@/api";
 import {
@@ -73,7 +74,7 @@ describe("PA2 credential with nothing registered (api-ops drift sweep)", () => {
       );
     try {
       const r = await fetchAccountDetail(
-        { orgId: "o", accountId: "acc_1" },
+        { orgId: orgIdReader("o"), accountId: "acc_1" },
         new AbortController().signal,
       );
       expect(r.ok && r.value.account.credential).toEqual({

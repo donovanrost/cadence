@@ -1,3 +1,4 @@
+import type { DashboardId } from "@/api/index.ts";
 import type { MissionId } from "@/api/index.ts";
 import {
   DecodeError,
@@ -6,6 +7,7 @@ import {
   type ApiResult,
   type Decoded,
   type Reader,
+  dashboardId as dashboardIdReader,
 } from "@/api";
 import { workspaceSnapshot } from "./model/snapshot.ts";
 
@@ -16,7 +18,7 @@ import { workspaceSnapshot } from "./model/snapshot.ts";
  */
 
 const dashboardHead = d.object({
-  id: d.token,
+  id: dashboardIdReader,
   name: d.string,
   description: d.nullable(d.string),
   tags: d.array(d.string, 64),
@@ -34,7 +36,10 @@ const viewShape = d.object({
 });
 
 /** The view is for the dashboard and mission asked for; a snapshot of anything else is refused. */
-function viewFor(missionId: MissionId, dashboardId: string): Reader<Decoded<typeof viewShape>> {
+function viewFor(
+  missionId: MissionId,
+  dashboardId: DashboardId,
+): Reader<Decoded<typeof viewShape>> {
   return (value, path = "") => {
     const view = viewShape(value, path);
     if (view.dashboard.id !== dashboardId)
@@ -53,7 +58,7 @@ export type Runtime = Readonly<{ from: string; to: string; spacecraftId: string 
 
 export function fetchDashboard(
   missionId: MissionId,
-  dashboardId: string,
+  dashboardId: DashboardId,
   runtime: Runtime,
   signal?: AbortSignal,
 ): Promise<ApiResult<DashboardView>> {

@@ -11,6 +11,7 @@ import {
 } from "./results.ts";
 import type { TelemetryPoint } from "@/features/telemetry/index.ts";
 import { pointItems, telemetryQuery } from "./telemetry.ts";
+import { pointId as pointIdReader } from "@/api/index.ts";
 
 const fleet = Array.from({ length: 500 }, (_, i) => spacecraftRow(i + 1));
 const pages: PageEntry[] = [
@@ -76,7 +77,7 @@ describe("palette rows (qa #12, #13)", () => {
 
 describe("palette telemetry (M23)", () => {
   const point = (id: string, latest: TelemetryPoint["latest"] = null): TelemetryPoint => ({
-    id,
+    id: pointIdReader(id),
     name: id.split(".").at(-1) ?? id,
     description: null,
     has_limits: undefined,

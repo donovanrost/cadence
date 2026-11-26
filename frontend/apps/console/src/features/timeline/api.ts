@@ -7,6 +7,7 @@ import {
   type ApiResult,
   type Decoded,
   type Page,
+  pointId as pointIdReader,
 } from "@/api/index.ts";
 
 /** Contracts: docs/apogee/api/ops.md, `GET …/events` and `…/events/density` (owner api, DECISIONS #26). */
@@ -79,7 +80,7 @@ const event = d.object({
   spacecraft: d.nullable(spacecraftRef),
   refs: d.object({
     alarm_id: d.nullable(d.token),
-    point_id: d.nullable(d.token),
+    point_id: d.nullable(pointIdReader),
     command_request_id: d.nullable(d.token),
     contact_id: d.nullable(d.token),
     /** What the sentence is about, as a link target (ux timeline review #1); null when none. */

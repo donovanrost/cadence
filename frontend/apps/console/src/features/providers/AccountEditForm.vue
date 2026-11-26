@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { OrganizationId } from "@/api/index.ts";
 import { ref } from "vue";
 import { failureOutcome } from "@/features/changes/index.ts";
 import { isKnown } from "@/api";
@@ -19,7 +20,7 @@ import IngestionField from "./IngestionField.vue";
  * Rename (no version), point at a new credential reference, and/or change booking updates (U77):
  * either of the last two saves a new version. Other settings wait for an account detail read.
  */
-const props = defineProps<{ orgId: string; orgSlug: string; account: ProviderAccount }>();
+const props = defineProps<{ orgId: OrganizationId; orgSlug: string; account: ProviderAccount }>();
 const emit = defineEmits<{ saved: [text: string]; cancel: [] }>();
 const name = ref(props.account.name);
 /** U77: the current mode as read; a webhook/hybrid account set up outside the console reads only. */

@@ -1,3 +1,4 @@
+import type { PointId } from "@/api/index.ts";
 import type { MissionId } from "@/api/index.ts";
 import {
   spacecraftId as spacecraftIdReader,
@@ -6,6 +7,7 @@ import {
   requestPage,
   type ApiResult,
   type Decoded,
+  pointId as pointIdReader,
 } from "@/api/index.ts";
 
 /** Contract: docs/apogee/api/ops.md, `GET /api/v1/missions/:mission_id/alarms` (M9). */
@@ -53,7 +55,7 @@ const alarm = d.object({
   id: d.token,
   spacecraft_id: d.nullable(spacecraftIdReader),
   point: d.object({
-    id: d.token,
+    id: pointIdReader,
     name: d.string,
     subsystem: d.nullable(d.string),
     unit: d.nullable(d.string),
@@ -96,7 +98,7 @@ export type AlarmQuery = Readonly<{
   severity?: "critical" | "caution";
   spacecraftId?: string;
   q?: string;
-  pointId?: string;
+  pointId?: PointId;
   plane?: number;
   excludeSpacecraftId?: string;
   limit?: number;

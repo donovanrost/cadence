@@ -7,6 +7,8 @@ import {
   type ApiError,
   type ApiResult,
   type Decoded,
+  dashboardId as dashboardIdReader,
+  type DashboardId,
 } from "@/api";
 
 /**
@@ -36,7 +38,10 @@ const playlist = d.object({
   wallboard_mode: d.boolean,
   updated_at: d.nullable(d.timestamp),
   updated_by: person,
-  dashboards: d.array(d.object({ id: d.token, name: d.string, archived: d.boolean }), 100),
+  dashboards: d.array(
+    d.object({ id: dashboardIdReader, name: d.string, archived: d.boolean }),
+    100,
+  ),
 });
 const detail = d.object({ playlist });
 export type Playlist = Decoded<typeof playlist>;
@@ -46,7 +51,7 @@ export type PlaylistInput = Readonly<{
   description: string;
   dwell_seconds: number;
   wallboard_mode: boolean;
-  dashboard_ids: readonly string[];
+  dashboard_ids: readonly DashboardId[];
 }>;
 /** Domain's bounds (§D24): name 1–120, dwell 5–900 s, 1–100 unique active dashboards. */
 export const DWELL = { min: 5, max: 900 } as const;

@@ -2,8 +2,12 @@ import { defineComponent, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { flushPromises, mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { missionId as missionIdReader, spacecraftId as spacecraftIdReader } from "@/api/index.ts";
-import type { RemoteState } from "@/api/index.ts";
+import {
+  missionId as missionIdReader,
+  spacecraftId as spacecraftIdReader,
+  pointId as pointIdReader,
+} from "@/api/index.ts";
+import type { PointId, RemoteState } from "@/api/index.ts";
 import type { SampleRead } from "./api.ts";
 import { readySample, statusOnly } from "./fixtures.ts";
 import SampleAside from "./SampleAside.vue";
@@ -86,7 +90,7 @@ describe("lead: ?sample= is a permalink", () => {
       api = useSample(
         ref(missionIdReader("m-1")),
         ref(spacecraftIdReader("sc-312")),
-        ref("EPS.VBAT"),
+        ref<PointId | null>(pointIdReader("EPS.VBAT")),
       );
       return () => h("div");
     });
@@ -104,7 +108,7 @@ describe("lead: ?sample= is a permalink", () => {
       "m-1",
       {
         sampleId: "s-1",
-        pointId: "EPS.VBAT",
+        pointId: pointIdReader("EPS.VBAT"),
         spacecraftId: "sc-312",
         receiptTime: "2026-11-08T02:08:12.880Z",
         at: null,

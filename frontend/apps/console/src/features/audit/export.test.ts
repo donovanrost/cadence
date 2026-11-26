@@ -1,3 +1,4 @@
+import { organizationId as orgIdReader } from "@/api/index.ts";
 import { describe, expect, it } from "vite-plus/test";
 import type { AuditEvent, AuditPage, AuditQuery } from "./api.ts";
 import { allEvents, auditCsv, auditFileName } from "./export.ts";
@@ -16,7 +17,7 @@ const event = (id: string): AuditEvent => ({
   change: undefined,
 });
 const query: AuditQuery = {
-  organizationId: "o1",
+  organizationId: orgIdReader("o1"),
   days: 7,
   kinds: [],
   missionId: null,

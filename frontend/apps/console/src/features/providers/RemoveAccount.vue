@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { OrganizationId } from "@/api/index.ts";
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { decoders } from "@/api";
@@ -11,7 +12,7 @@ import { removeAccount, type ProviderAccount } from "./api.ts";
  * kit's in-place one (design-language §7): it opens on Cancel, Esc backs out, and focus returns to
  * the trigger. A refusal is read under the sentence, and the confirm stays open to retry or cancel.
  */
-const props = defineProps<{ orgId: string; account: ProviderAccount }>();
+const props = defineProps<{ orgId: OrganizationId; account: ProviderAccount }>();
 const emit = defineEmits<{ removed: [] }>();
 const router = useRouter();
 const confirming = ref(false);

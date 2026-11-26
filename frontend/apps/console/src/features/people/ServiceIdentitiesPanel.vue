@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { OrganizationId } from "@/api/index.ts";
 import { useRemoteQuery } from "@/api";
 import {
   ApEmptyState,
@@ -13,7 +14,7 @@ import {
 import { fetchServiceIdentities, keyAgeWarning } from "./api.ts";
 
 /** U3 Service identities (org admins). Last use isn't tracked yet, so that column is left out. */
-const props = defineProps<{ organizationId: string }>();
+const props = defineProps<{ organizationId: OrganizationId }>();
 const { state, refetch } = useRemoteQuery(() => props.organizationId, fetchServiceIdentities);
 const now = useNow();
 const columns: readonly ApColumn[] = [

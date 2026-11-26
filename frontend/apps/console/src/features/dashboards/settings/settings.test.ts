@@ -1,3 +1,4 @@
+import { dashboardId as dashIdReader } from "@/api/index.ts";
 import { describe, expect, it } from "vite-plus/test";
 import { missionId as missionIdReader, decode } from "@/api";
 import { settingsReader } from "./api.ts";
@@ -44,7 +45,7 @@ describe("dashboard settings (slice 5, proposed D14)", () => {
       new Response(JSON.stringify({ data: diagnosticsWire }), { status: 200 })) as typeof fetch;
     try {
       const r = await fetchDiagnostics(
-        { missionId: missionIdReader("m"), dashboardId: "d" },
+        { missionId: missionIdReader("m"), dashboardId: dashIdReader("d") },
         new AbortController().signal,
       );
       if (!r.ok) throw new Error("decode");

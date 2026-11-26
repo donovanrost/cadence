@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
-import { spacecraftId as spacecraftIdReader, scid as scidReader, decode } from "@/api/index.ts";
+import {
+  spacecraftId as spacecraftIdReader,
+  scid as scidReader,
+  decode,
+  pointId as pointIdReader,
+} from "@/api/index.ts";
 import { latestMark, pointsReader } from "./api.ts";
 import { spacecraftRow } from "@/features/fleet/index.ts";
 import type { History } from "@/features/investigate/index.ts";
@@ -33,7 +38,7 @@ describe("telemetry selection", () => {
     const { series, dropped } = seriesOf(sel);
     expect(series).toHaveLength(MAX_SERIES);
     expect(dropped).toBe(2);
-    expect(series[0]).toEqual({ scid: 1, pointId: "A" });
+    expect(series[0]).toEqual({ scid: 1, pointId: pointIdReader("A") });
   });
 
   it("styles series with grays and dashes only", () => {
@@ -45,7 +50,7 @@ describe("telemetry selection", () => {
 });
 
 const history = (buckets: [string, number][]): History => ({
-  point_id: "EPS.VBAT",
+  point_id: pointIdReader("EPS.VBAT"),
   unit: "V",
   description: null,
   spacecraft_id: spacecraftIdReader("sc"),
@@ -56,7 +61,7 @@ const history = (buckets: [string, number][]): History => ({
   buckets: buckets.map(([t, v]) => ({ t, t_end: t, min: v - 1, mean: v, max: v + 1, count: 1 })),
 });
 const data = (scid: number, buckets: [string, number][]): SeriesData => ({
-  key: { scid: scidReader(scid), pointId: "EPS.VBAT" },
+  key: { scid: scidReader(scid), pointId: pointIdReader("EPS.VBAT") },
   sc: spacecraftRow(scid),
   history: history(buckets),
 });

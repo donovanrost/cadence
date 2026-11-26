@@ -1,3 +1,4 @@
+import type { OrganizationId } from "@/api/index.ts";
 import {
   actor,
   decoders as d,
@@ -9,6 +10,7 @@ import {
   type ApiResult,
   type Decoded,
   type Role,
+  organizationId as organizationIdReader,
 } from "@/api";
 import { failureOutcome } from "@/features/changes/index.ts";
 
@@ -19,7 +21,7 @@ import { failureOutcome } from "@/features/changes/index.ts";
 const named = d.nullable(d.object({ name: d.string }));
 
 const orgRow = d.object({
-  id: d.token,
+  id: organizationIdReader,
   name: d.string,
   slug: d.token,
   members: d.integer,
@@ -54,7 +56,7 @@ export function checkSlug(slug: string, signal: AbortSignal) {
 
 const delivery = d.known(["submitted", "unavailable"] as const);
 const created = d.object({
-  organization: d.object({ id: d.token, name: d.string, slug: d.token }),
+  organization: d.object({ id: organizationIdReader, name: d.string, slug: d.token }),
   invitation: d.nullable(d.object({ email: d.string, delivery })),
   invitation_error: d.nullable(d.string),
 });
@@ -69,7 +71,7 @@ export function createOrganization(
 
 const orgDetail = d.object({
   organization: d.object({
-    id: d.token,
+    id: organizationIdReader,
     name: d.string,
     slug: d.token,
     created_at: d.nullable(d.timestamp),
@@ -110,7 +112,7 @@ export function fetchOrganization(
 }
 
 /** api-ops f50da0b2: the invitation comes back flat, with `delivery` beside its fields. */
-export function inviteInto(orgId: string, body: Readonly<{ email: string; role: Role }>) {
+export function inviteInto(orgId: OrganizationId, body: Readonly<{ email: string; role: Role }>) {
   return request(
     `/admin/organizations/${encodeURIComponent(orgId)}/invitations`,
     d.object({ id: d.token, email: d.string, delivery }),
@@ -118,7 +120,7 @@ export function inviteInto(orgId: string, body: Readonly<{ email: string; role: 
   );
 }
 
-export function withdrawInvitation(orgId: string, invitationId: string) {
+export function withdrawInvitation(orgId: OrganizationId, invitationId: string) {
   return request(
     `/admin/organizations/${encodeURIComponent(orgId)}/invitations/${encodeURIComponent(invitationId)}`,
     d.object({ id: d.token, state: d.known(["withdrawn"] as const) }),
@@ -131,7 +133,7 @@ const capability = d.object({ key: capabilityKey, label: d.string });
 const identity = d.object({
   id: d.token,
   name: d.string,
-  organization: d.object({ id: d.token, name: d.string }),
+  organization: d.object({ id: organizationIdReader, name: d.string }),
   capabilities: d.array(capability, 20),
   mission: d.nullable(d.object({ id: d.token, name: d.string })),
   created_at: d.timestamp,
@@ -149,7 +151,7 @@ const identities = d.object({
 export type AdminServiceIdentities = Decoded<typeof identities>;
 
 export function fetchServiceIdentities(
-  organizationId: string | null,
+  organizationId: OrganizationId | null,
   signal: AbortSignal,
 ): Promise<ApiResult<AdminServiceIdentities>> {
   const q = organizationId ? `?organization_id=${encodeURIComponent(organizationId)}` : "";
@@ -186,7 +188,7 @@ export function issueServiceIdentity(
   );
 }
 
-export function revokeServiceIdentity(id: string, organizationId: string) {
+export function revokeServiceIdentity(id: string, organizationId: OrganizationId) {
   return request(
     `/admin/service-identities/${encodeURIComponent(id)}?organization_id=${encodeURIComponent(organizationId)}`,
     d.object({ id: d.token, state: d.known(["revoked"] as const) }),
@@ -202,7 +204,7 @@ export const runtimeReasons = [
   "runtime_not_running",
 ] as const;
 const runtimeRow = d.object({
-  organization: d.object({ id: d.token, name: d.string, slug: d.token }),
+  organization: d.object({ id: organizationIdReader, name: d.string, slug: d.token }),
   mission: d.object({ id: d.token, name: d.string, slug: d.token }),
   // The /counts runtime object (U38); keys a node doesn't know may be absent.
   runtime: orNull(
@@ -229,7 +231,7 @@ export function fetchRuntime(_key: true, signal: AbortSignal): Promise<ApiResult
 }
 
 /** api-ops: issue and rotate share ServiceIdentityAdministration; rotating shows the new token once. */
-export function rotateServiceIdentity(id: string, organizationId: string) {
+export function rotateServiceIdentity(id: string, organizationId: OrganizationId) {
   return request(
     `/admin/service-identities/${encodeURIComponent(id)}/rotate`,
     d.object({ service_identity: identity, token: d.string }),

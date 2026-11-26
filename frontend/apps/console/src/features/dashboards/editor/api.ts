@@ -1,3 +1,4 @@
+import type { DashboardId } from "@/api/index.ts";
 import type { MissionId } from "@/api/index.ts";
 import { detailsOf, isError, request, type ApiError, type ApiResult } from "@/api";
 import type { Runtime } from "../api.ts";
@@ -21,7 +22,7 @@ import type { Draft } from "./draft.ts";
 
 /** D7–D13 under `/missions/:m/dashboards/:id` (plans/dashboards.md; api builds on StatelessAuthoring). */
 
-const base = (missionId: MissionId, dashboardId: string) =>
+const base = (missionId: MissionId, dashboardId: DashboardId) =>
   `/missions/${encodeURIComponent(missionId)}/dashboards/${encodeURIComponent(dashboardId)}`;
 const wireRuntime = (r: Runtime) => ({
   from: r.from || null,
@@ -34,7 +35,7 @@ const opts = (body: unknown, signal?: AbortSignal) =>
 
 export function preview(
   missionId: MissionId,
-  dashboardId: string,
+  dashboardId: DashboardId,
   draft: Draft,
   runtime: Runtime,
   signal?: AbortSignal,
@@ -48,7 +49,7 @@ export function preview(
 
 export function save(
   missionId: MissionId,
-  dashboardId: string,
+  dashboardId: DashboardId,
   draft: Draft,
   input: Readonly<{
     message: string;
@@ -70,7 +71,7 @@ export function save(
 
 export function rebase(
   missionId: MissionId,
-  dashboardId: string,
+  dashboardId: DashboardId,
   draft: Draft,
   runtime: Runtime,
 ): Promise<ApiResult<Rebase>> {
@@ -81,7 +82,7 @@ export function rebase(
   );
 }
 
-export function copy(missionId: MissionId, dashboardId: string, draft: Draft, name: string) {
+export function copy(missionId: MissionId, dashboardId: DashboardId, draft: Draft, name: string) {
   return request(
     `${base(missionId, dashboardId)}/copy`,
     copiedReply,
@@ -91,7 +92,7 @@ export function copy(missionId: MissionId, dashboardId: string, draft: Draft, na
 
 export function fetchVersions(
   missionId: MissionId,
-  dashboardId: string,
+  dashboardId: DashboardId,
   signal?: AbortSignal,
 ): Promise<ApiResult<Versions>> {
   return request(
@@ -103,7 +104,7 @@ export function fetchVersions(
 
 export function compareVersions(
   missionId: MissionId,
-  dashboardId: string,
+  dashboardId: DashboardId,
   from: number,
   to: number,
 ) {
@@ -115,7 +116,7 @@ export function compareVersions(
 
 export function restore(
   missionId: MissionId,
-  dashboardId: string,
+  dashboardId: DashboardId,
   version: number,
   expected: number,
 ) {

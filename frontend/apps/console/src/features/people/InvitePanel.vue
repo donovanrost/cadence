@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { OrganizationId } from "@/api/index.ts";
 import { onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { ApButton, ApCallout, ApField, ApPanel, ApSelect } from "@/ui";
@@ -6,7 +7,7 @@ import { errorCode, failureOutcome } from "@/features/changes/index.ts";
 import { inviteFailure, sendInvitation, type Role } from "./api.ts";
 
 /** U2 Invite: email + role (the real roles, DECISIONS #2). Shown only with org.invite. */
-const props = defineProps<{ organizationId: string }>();
+const props = defineProps<{ organizationId: OrganizationId }>();
 const emit = defineEmits<{ invited: [] }>();
 const email = ref("");
 const form = ref<HTMLFormElement | null>(null);

@@ -1,3 +1,4 @@
+import { organizationId as orgIdReader } from "@/api/index.ts";
 import { flushPromises, mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { decoders } from "@/api";
@@ -56,7 +57,7 @@ describe("Remove account (ApInlineConfirm, design-language §7)", () => {
       },
     };
     wrapper = mount(RemoveAccount, {
-      props: { orgId: "org_1", account: account() },
+      props: { orgId: orgIdReader("org_1"), account: account() },
       attachTo: document.body,
     });
     const w = wrapper;

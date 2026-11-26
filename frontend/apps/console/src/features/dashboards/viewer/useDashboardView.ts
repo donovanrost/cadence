@@ -1,3 +1,4 @@
+import type { DashboardId } from "@/api/index.ts";
 import type { MissionId } from "@/api/index.ts";
 import { computed, onScopeDispose, type Ref } from "vue";
 import { useRemoteQuery, type ApiResult } from "@/api";
@@ -62,7 +63,8 @@ export function useLiveRead<T>(
 /** The viewer's D5 read for the URL's runtime. */
 export function useDashboardView(
   missionId: Readonly<Ref<MissionId>>,
-  dashboardId: Readonly<Ref<string>>,
+  /** null pauses the read (Present between dashboards). */
+  dashboardId: Readonly<Ref<DashboardId | null>>,
   runtime: Readonly<Ref<Runtime>>,
   options: LiveOptions,
 ) {
@@ -74,7 +76,16 @@ export function useDashboardView(
   return useLiveRead(
     missionId,
     key,
-    (signal) => fetchDashboard(missionId.value, dashboardId.value, runtime.value, signal),
+    (signal) => {
+      const id = dashboardId.value;
+      // The key is null without an id, so the read never runs then; say so if it ever did.
+      if (id === null)
+        return Promise.resolve({
+          ok: false as const,
+          error: { kind: "not_found" as const, code: "not_found", message: "No dashboard" },
+        });
+      return fetchDashboard(missionId.value, id, runtime.value, signal);
+    },
     options,
   );
 }

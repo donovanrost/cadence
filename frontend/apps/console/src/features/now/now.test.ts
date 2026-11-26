@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { stationId as stationIdReader } from "@/api/index.ts";
+import { stationId as stationIdReader, pointId as pointIdReader } from "@/api/index.ts";
 import { fleetOf, spacecraftRow, statTiles, type RawLimitState } from "@/features/fleet/index.ts";
 import { constellation } from "./constellation.ts";
 import { deriveQueue, GROUP_AT, nowHeadline } from "./queue.ts";
@@ -8,7 +8,7 @@ import { worstStationIssue } from "./stationMeta.ts";
 
 const vbat = (raw: RawLimitState) =>
   ({
-    point_id: "HK.battery_voltage",
+    point_id: pointIdReader("HK.battery_voltage"),
     point_name: "VBAT",
     value: 23.1,
     limit_state: "critical",

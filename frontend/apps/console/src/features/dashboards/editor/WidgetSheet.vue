@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { DashboardId } from "@/api/index.ts";
 import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { ApButton, ApSegmented, ApSheet } from "@/ui";
@@ -22,7 +23,7 @@ import WidgetDisplayFields from "./WidgetDisplayFields.vue";
  */
 const props = defineProps<{
   missionId: MissionId;
-  dashboardId: string;
+  dashboardId: DashboardId;
   baseVersion: number;
   sections: readonly { id: string; title: string }[];
   spacecraft: readonly { id: string; name: string }[];

@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import type { OrganizationId } from "@/api/index.ts";
 import { ref } from "vue";
 import { ApButton, ApCallout, ApSheet } from "@/ui";
 import { rotateServiceIdentity, tokenFailure } from "./api.ts";
 import TokenShown from "./TokenShown.vue";
 
 /** Rotate (api-ops): confirms, then shows the new token once; the old one stops working now. */
-const props = defineProps<{ id: string; name: string; organizationId: string }>();
+const props = defineProps<{ id: string; name: string; organizationId: OrganizationId }>();
 const emit = defineEmits<{ rotated: [] }>();
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
 const token = ref<string | null>(null);

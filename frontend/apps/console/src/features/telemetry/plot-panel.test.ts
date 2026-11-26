@@ -1,14 +1,18 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vite-plus/test";
 import { createMemoryHistory, createRouter } from "vue-router";
-import { scid as scidReader, spacecraftId as spacecraftIdReader } from "@/api/index.ts";
+import {
+  scid as scidReader,
+  spacecraftId as spacecraftIdReader,
+  pointId as pointIdReader,
+} from "@/api/index.ts";
 import { spacecraftRow } from "@/features/fleet/index.ts";
 import type { History } from "@/features/investigate/index.ts";
 import PlotPanel from "./PlotPanel.vue";
 import type { SeriesData } from "./useSeries.ts";
 
 const history = (truncated: boolean): History => ({
-  point_id: "EPS.VBAT",
+  point_id: pointIdReader("EPS.VBAT"),
   unit: "V",
   description: null,
   spacecraft_id: spacecraftIdReader("sc"),
@@ -20,7 +24,7 @@ const history = (truncated: boolean): History => ({
 });
 const rows = (truncated: boolean): SeriesData[] => [
   {
-    key: { scid: scidReader(1), pointId: "EPS.VBAT" },
+    key: { scid: scidReader(1), pointId: pointIdReader("EPS.VBAT") },
     sc: spacecraftRow(1),
     history: history(truncated),
   },

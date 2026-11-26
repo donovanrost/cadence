@@ -1,3 +1,4 @@
+import type { OrganizationId } from "@/api/index.ts";
 import {
   actor,
   decoders as d,
@@ -16,7 +17,7 @@ import { plural } from "@/ui";
  * 11-13). Org admins only (:manage_provider_accounts). Expected versions stand in for the
  * LiveView's evidence map; the server rebuilds it.
  */
-const path = (orgId: string, accountId: string) =>
+const path = (orgId: OrganizationId, accountId: string) =>
   `/organizations/${encodeURIComponent(orgId)}/provider-accounts/${encodeURIComponent(accountId)}`;
 
 const raw: Reader<unknown> = (value) => value;
@@ -69,7 +70,7 @@ const detailReader = d.object({
   permissions: d.array(d.known(["provider_accounts.manage"] as const), 10),
 });
 export type AccountDetail = Decoded<typeof detailReader>;
-export type AccountKey = Readonly<{ orgId: string; accountId: string }>;
+export type AccountKey = Readonly<{ orgId: OrganizationId; accountId: string }>;
 export function fetchAccountDetail(k: AccountKey, signal: AbortSignal) {
   return request(path(k.orgId, k.accountId), detailReader, { signal });
 }

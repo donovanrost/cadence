@@ -1,3 +1,4 @@
+import type { OrganizationId } from "@/api/index.ts";
 import { codeOf, recordOf } from "@/api";
 import {
   decoders as d,
@@ -9,7 +10,8 @@ import {
 } from "@/api";
 
 /** O6 service identity writes (api, setup.md). Org admins only; the token appears ONCE. */
-const base = (orgId: string) => `/organizations/${encodeURIComponent(orgId)}/service-identities`;
+const base = (orgId: OrganizationId) =>
+  `/organizations/${encodeURIComponent(orgId)}/service-identities`;
 
 export type ServiceScope = "organization_admin" | "mission_admin";
 
@@ -25,7 +27,7 @@ export const issuedReader = d.object({
 export type Issued = Decoded<typeof issuedReader>;
 
 export function createServiceIdentity(
-  orgId: string,
+  orgId: OrganizationId,
   body: Readonly<{ name: string; scope: ServiceScope; missionId: string | null }>,
 ): Promise<ApiResult<Issued>> {
   return request(base(orgId), issuedReader, {
@@ -39,7 +41,10 @@ export function createServiceIdentity(
 }
 
 /** The old token stops working immediately. */
-export function rotateServiceIdentity(orgId: string, id: string): Promise<ApiResult<Issued>> {
+export function rotateServiceIdentity(
+  orgId: OrganizationId,
+  id: string,
+): Promise<ApiResult<Issued>> {
   return request(`${base(orgId)}/${encodeURIComponent(id)}/rotate`, issuedReader, {
     method: "POST",
     body: {},
@@ -47,7 +52,7 @@ export function rotateServiceIdentity(orgId: string, id: string): Promise<ApiRes
 }
 
 /** 204: disabled; the token stops working and it leaves the directory. */
-export function revokeServiceIdentity(orgId: string, id: string): Promise<ApiResult<null>> {
+export function revokeServiceIdentity(orgId: OrganizationId, id: string): Promise<ApiResult<null>> {
   return request(`${base(orgId)}/${encodeURIComponent(id)}`, () => null, { method: "DELETE" });
 }
 

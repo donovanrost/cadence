@@ -1,3 +1,4 @@
+import type { OrganizationId } from "@/api/index.ts";
 import { actor, decoders, recordOf, request, type ApiResult, type Decoded } from "@/api";
 import { schemaFieldReader, type KindSchema } from "@/features/changes/index.ts";
 import type { OpState } from "@/ui";
@@ -36,7 +37,7 @@ export type ProviderAccount = Decoded<typeof account>;
 export type ProviderAccounts = Decoded<typeof accountsReader>;
 
 export function fetchProviderAccounts(
-  organizationId: string,
+  organizationId: OrganizationId,
   signal: AbortSignal,
 ): Promise<ApiResult<ProviderAccounts>> {
   return request(
@@ -56,12 +57,15 @@ const testReader = object({
   message: string,
 });
 export type TestResult = Decoded<typeof testReader>;
-const base = (orgId: string) => `/organizations/${encodeURIComponent(orgId)}`;
-const accountPath = (orgId: string, id: string) =>
+const base = (orgId: OrganizationId) => `/organizations/${encodeURIComponent(orgId)}`;
+const accountPath = (orgId: OrganizationId, id: string) =>
   `${base(orgId)}/provider-accounts/${encodeURIComponent(id)}`;
 
 /** Checks the credential reference resolves; `checked` says what was verified (not the provider yet). */
-export function testAccount(orgId: string, accountId: string): Promise<ApiResult<TestResult>> {
+export function testAccount(
+  orgId: OrganizationId,
+  accountId: string,
+): Promise<ApiResult<TestResult>> {
   return request(`${accountPath(orgId, accountId)}/test`, testReader, { method: "POST", body: {} });
 }
 
@@ -87,7 +91,7 @@ export function testSentence(r: TestResult): { tone: "nominal" | "info" | "crit"
 
 /** `{key, fields}` (kind-schema fields), read as a KindSchema named after the adapter. */
 export async function fetchAdapterSchema(
-  key: Readonly<{ orgId: string; adapter: string }>,
+  key: Readonly<{ orgId: OrganizationId; adapter: string }>,
   signal: AbortSignal,
 ): Promise<ApiResult<KindSchema>> {
   const result = await request(
@@ -104,7 +108,7 @@ export type Credential = Readonly<{ backend: string; key: string }>;
 const written = object({ id: token, version: nullable(integer) });
 
 export function createAccount(
-  orgId: string,
+  orgId: OrganizationId,
   body: Readonly<{
     provider_key: string;
     name: string;
@@ -117,7 +121,7 @@ export function createAccount(
 
 /** A new version for settings/credential; a rename alone writes no version (version null). */
 export function updateAccount(
-  orgId: string,
+  orgId: OrganizationId,
   id: string,
   body: Readonly<{
     name?: string;
@@ -128,7 +132,7 @@ export function updateAccount(
   return request(accountPath(orgId, id), written, { method: "PUT", body });
 }
 
-export function removeAccount(orgId: string, id: string): Promise<ApiResult<unknown>> {
+export function removeAccount(orgId: OrganizationId, id: string): Promise<ApiResult<unknown>> {
   return request(accountPath(orgId, id), (v) => v, { method: "DELETE", body: {} });
 }
 

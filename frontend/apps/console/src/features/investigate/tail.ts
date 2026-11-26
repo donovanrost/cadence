@@ -1,5 +1,5 @@
 import { onScopeDispose, shallowRef, watch, type Ref } from "vue";
-import { decode, decoders as d, type Decoded } from "@/api/index.ts";
+import { decode, decoders as d, type Decoded, pointId as pointIdReader } from "@/api/index.ts";
 import { acquireChannel, onReconnect, type ChannelHandle } from "@/live/socket.ts";
 import type { SeriesPoint } from "@/ui";
 
@@ -14,7 +14,7 @@ import type { SeriesPoint } from "@/ui";
 export const M8_LIVE = true;
 
 const sample = d.object({
-  point_id: d.token,
+  point_id: pointIdReader,
   value_json: d.nullable(d.string),
   generation_time: d.timestamp,
   received_at: d.nullable(d.timestamp),

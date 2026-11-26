@@ -1,5 +1,6 @@
 import { computed, onScopeDispose, ref, shallowRef, watch, type Ref } from "vue";
 import { useChannelEvent, useChannelSubscription, useConnection } from "@/live";
+import type { DashboardId } from "@/api/index.ts";
 import type { Runtime } from "../api.ts";
 import {
   applyPush,
@@ -23,7 +24,8 @@ export const LIVE_PUSH = true;
  */
 export function useDashboardLive(
   missionId: Readonly<Ref<string>>,
-  dashboardId: Readonly<Ref<string>>,
+  /** null: no dashboard to follow (Present between dashboards). */
+  dashboardId: Readonly<Ref<DashboardId | null>>,
   runtime: Readonly<Ref<Runtime>>,
   refreshMs: Readonly<Ref<number | null>>,
   paused: Readonly<Ref<boolean>>,

@@ -1,7 +1,7 @@
+import { missionId as missionIdOf } from "@/api/index.ts";
 import { flushPromises, mount } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { decode, outcomeUnknown, type ApiError, type RemoteState } from "@/api";
-import type { MissionId } from "@/api/index.ts";
 import { previewReader, reviewChangeSet, type Preview } from "./actions.ts";
 import { checksRefusal, HOLD_STANDS } from "./checkRefusals.ts";
 import ReviewPanel from "./ReviewPanel.vue";
@@ -110,7 +110,7 @@ describe("#376: Approve and a blocking hold", () => {
   const config = { head: { revision: 5 } } as ConfigState;
   const panel = (preview: RemoteState<Preview>) =>
     mount(ReviewPanel, {
-      props: { missionId: "m1" as MissionId, config, changeSet: set(), preview },
+      props: { missionId: missionIdOf("m1"), config, changeSet: set(), preview },
     });
   const approve = (w: ReturnType<typeof panel>) => w.findAll("button")[0];
   const sendBack = (w: ReturnType<typeof panel>) => w.findAll("button")[1];
