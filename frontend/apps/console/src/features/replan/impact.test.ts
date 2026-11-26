@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api";
-import { passesReader as passesReaderForTests } from "@/features/contacts/api.ts";
+import { passesPageReader as passesReaderForTests } from "@/features/contacts/passes-api.ts";
 import { impactOf } from "./impact.ts";
 
 const pass = (id: string, state: string, planId: string | null, sc: string, station: string) => ({
@@ -29,7 +29,7 @@ describe("impactOf", () => {
     const decoded = decode(passesReaderForTests, {
       from: "2026-11-10T00:00:00Z",
       to: "2026-11-11T00:00:00Z",
-      truncated: false,
+      counts: { total: 0, booked: 0, hand_started: 0, in_contact: 0, upcoming: 0, synthetic: 0 },
       passes: rows,
     });
     if (!decoded.ok) throw decoded.error;
@@ -51,7 +51,7 @@ describe("impactOf", () => {
       },
       pass("other", "rejected", "plan-other-day", "sc-9", "SVL"),
     ]);
-    const impact = impactOf(rows, { id: "r1", repair_of: null }, false);
+    const impact = impactOf(rows, { id: "r1", repair_of: null });
     expect(impact.rows.map((r) => [r.id, r.why])).toEqual([
       ["kir", "Canceled by QA Org Admin · at Simulator"],
       ["haw", "Marked not booked by Mira K."],
@@ -65,9 +65,7 @@ describe("impactOf", () => {
       },
       pass("still", "canceled", "r1", "sc-5", "KIR"),
     ]);
-    expect(impactOf(rows, { id: "r1", repair_of: null }, false).rows.map((r) => r.id)).toEqual([
-      "still",
-    ]);
+    expect(impactOf(rows, { id: "r1", repair_of: null }).rows.map((r) => r.id)).toEqual(["still"]);
   });
   it("uses the server's chain when the plan carries one (api 22d83acd)", () => {
     const rows = read([
@@ -80,7 +78,7 @@ describe("impactOf", () => {
       repair_of: { plan: { id: "r1" } },
       chain: [{ id: "r0" }, { id: "r1" }, { id: "rep2" }],
     };
-    expect(impactOf(rows, plan, false).rows.map((r) => r.id)).toEqual(["root", "mid"]);
+    expect(impactOf(rows, plan).rows.map((r) => r.id)).toEqual(["root", "mid"]);
   });
   it("starts from the parent when opened on a repair, and names the provider only when it ended it", () => {
     const rows = read([
@@ -90,7 +88,7 @@ describe("impactOf", () => {
       },
       pass("b", "canceled", "r1", "sc-3", "FAI"),
     ]);
-    const impact = impactOf(rows, { id: "rep", repair_of: { plan: { id: "r1" } } }, false);
+    const impact = impactOf(rows, { id: "rep", repair_of: { plan: { id: "r1" } } });
     expect(impact.rows.map((r) => r.why)).toEqual([
       "Canceled by Northlight",
       "Canceled at Simulator",
@@ -100,7 +98,7 @@ describe("impactOf", () => {
     const decoded = decode(passesReaderForTests, {
       from: "2026-11-09T00:00:00Z",
       to: "2026-11-10T00:00:00Z",
-      truncated: false,
+      counts: { total: 0, booked: 0, hand_started: 0, in_contact: 0, upcoming: 0, synthetic: 0 },
       passes: [
         pass("a", "rejected", "plan-41", "sc-1", "SVL"),
         pass("b", "confirmed", "plan-41", "sc-2", "FAI"),
@@ -109,7 +107,7 @@ describe("impactOf", () => {
       ],
     });
     if (!decoded.ok) throw decoded.error;
-    const impact = impactOf(decoded.value.passes, { id: "plan-41", repair_of: null }, false);
+    const impact = impactOf(decoded.value.passes, { id: "plan-41", repair_of: null });
     expect(impact.passes).toBe(2);
     expect(impact.spacecraft).toBe(1);
     expect(impact.stations).toEqual(["FAI", "SVL"]);
@@ -126,8 +124,8 @@ describe("impactOf", () => {
         spacecraft: { id: "sc-4", name: null, scid: 1 },
       },
     ]);
-    expect(
-      impactOf(rows, { id: "r1", repair_of: null }, false).rows.map((r) => r.spacecraft),
-    ).toEqual(["Unknown spacecraft"]);
+    expect(impactOf(rows, { id: "r1", repair_of: null }).rows.map((r) => r.spacecraft)).toEqual([
+      "Unknown spacecraft",
+    ]);
   });
 });

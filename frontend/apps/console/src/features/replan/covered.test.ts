@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api";
-import { passesReader } from "@/features/contacts/api.ts";
+import { passesPageReader } from "@/features/contacts/passes-api.ts";
 import { coveredLine, type CoveredPass } from "./covered.ts";
 
 const covered: CoveredPass = {
@@ -12,10 +12,10 @@ const covered: CoveredPass = {
   covered_by: "provider_reservation_single",
 };
 const single = (starts_at: string) => {
-  const r = decode(passesReader, {
+  const r = decode(passesPageReader, {
     from: "2026-11-10T00:00:00Z",
     to: "2026-11-11T00:00:00Z",
-    truncated: false,
+    counts: { total: 0, booked: 0, hand_started: 0, in_contact: 0, upcoming: 0, synthetic: 0 },
     passes: [
       {
         id: "provider_reservation_single",

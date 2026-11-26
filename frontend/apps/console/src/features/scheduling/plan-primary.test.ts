@@ -237,6 +237,7 @@ describe("booking progress (qa: the count must climb)", () => {
     uncertain: 0,
     rejected: 0,
     failed: 0,
+    provider_names: [],
     ...o,
   });
   it("counts sent while executing, booked while confirmations arrive, then settles", () => {

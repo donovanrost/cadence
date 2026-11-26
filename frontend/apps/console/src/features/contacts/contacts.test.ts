@@ -11,7 +11,8 @@ import {
   decode,
   type ApiError,
 } from "@/api/index.ts";
-import { passesReader, type Pass } from "./api.ts";
+import type { Pass } from "./api.ts";
+import { passesPageReader } from "./passes-api.ts";
 import { availabilityBands, passGantt, passStatus } from "./gantt.ts";
 import { attentionReader, type Attention } from "@/features/now/index.ts";
 import { attentionErrorWords, resolutionRecord, whatToDo } from "./attention.ts";
@@ -86,15 +87,15 @@ describe("passes", () => {
     const body = {
       from: "2026-11-09T02:00:00Z",
       to: "2026-11-09T04:00:00Z",
-      truncated: false,
+      counts: { total: 0, booked: 0, hand_started: 0, in_contact: 0, upcoming: 0, synthetic: 0 },
       passes: [
         pass("a"),
         pass("b", { plan: { id: "contact_plan_1", version: 42, day: undefined } }),
       ],
     };
-    expect(decode(passesReader, body).ok).toBe(true);
+    expect(decode(passesPageReader, body).ok).toBe(true);
     // U86 follow-up: an unknown state leaves that pass out, counted; the read still decodes.
-    const odd = decode(passesReader, { ...body, passes: [{ ...pass("a"), state: "maybe" }] });
+    const odd = decode(passesPageReader, { ...body, passes: [{ ...pass("a"), state: "maybe" }] });
     expect(odd.ok && odd.value.passes).toEqual([]);
     expect(odd.ok && odd.value.unshown).toEqual([{ kind: ["contact"], id: "a" }]);
   });

@@ -20,7 +20,7 @@ import { fetchPassOrContact, isHandStarted } from "./handStarted.ts";
  */
 export function useSelectedPass(
   missionId: Ref<MissionId>,
-  passes: Readonly<{ state: Ref<RemoteState<Passes>>; refetch: () => void }>,
+  passes: Readonly<{ state: Ref<RemoteState<Pick<Passes, "passes">>>; refetch: () => void }>,
   shown: Ref<readonly Pass[]>,
   selectedId: Ref<string | null>,
   byId: Ref<ReadonlyMap<string, FleetSpacecraft>>,

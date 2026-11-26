@@ -21,9 +21,7 @@ export function useLostBookings(
   );
   const impact = computed(() => {
     const s = passes.state.value;
-    return s.status === "ready" && live.value
-      ? impactOf(s.value.passes, live.value, s.value.truncated)
-      : null;
+    return s.status === "ready" && live.value ? impactOf(s.value.passes, live.value) : null;
   });
   return {
     state: passes.state,
