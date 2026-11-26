@@ -95,13 +95,6 @@ defmodule Cadence.Applications.OpsConsole do
       actions: ["refresh-fleet-run", "repair-fleet-run"]
     },
     %{
-      id: "activation_requests",
-      purpose: :operations,
-      label: "Activation Requests",
-      path: "/missions/:mission_id/ops/activations",
-      actions: ["decide"]
-    },
-    %{
       id: "commands",
       purpose: :operations,
       label: "Commands",
@@ -206,7 +199,6 @@ defmodule Cadence.Applications.OpsConsole do
     "fleet_planning" => [],
     "fleet_planning_new" => [],
     "fleet_planning_run" => [],
-    "activation_requests" => [],
     "commands" => [],
     "telemetry_explore" => [],
     "data_operations" => [],

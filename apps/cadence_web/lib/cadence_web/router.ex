@@ -280,10 +280,6 @@ defmodule CadenceWeb.Router do
         metadata: %{host_policy: :ops}
       )
 
-      live("/missions/:mission_id/ops/activations", HostPageLive, :index,
-        metadata: %{host_policy: :ops}
-      )
-
       live("/missions/:mission_id/ops/data-operations/manage", HostPageLive, :manage,
         metadata: %{host_policy: :ops_admin}
       )

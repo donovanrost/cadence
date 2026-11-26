@@ -60,7 +60,6 @@ export function configurationFixture(spacecraftId = "spacecraft-1"): Configurati
       applications: `${base}/applications`,
       readiness: `${base}/readiness`,
       communications: `/missions/${mission}/comms`,
-      approvals: `/missions/${mission}/ops/activations`,
       settings: `/missions/${mission}/settings/cadence.governance`,
       ops: null,
     },

@@ -81,12 +81,6 @@ test("each core host route resolves to its registered owner", () => {
       expect(route).not.toHaveProperty("surface");
       continue;
     }
-    if (route.kind === "activation_approvals") {
-      expect(route.path).toBe("/missions/:mission_id/ops/activations");
-      expect(route).not.toHaveProperty("application");
-      expect(route).not.toHaveProperty("surface");
-      continue;
-    }
     if (route.kind === "spacecraft") {
       expect(spacecraftPages[required(route.spacecraftPage)], route.path).toBeDefined();
       expect(route).not.toHaveProperty("application");

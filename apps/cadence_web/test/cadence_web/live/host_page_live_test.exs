@@ -54,7 +54,6 @@ defmodule CadenceWeb.HostPageLiveTest do
           {"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}",
            "mission_sidebar", mission.mission_id},
           {"/missions/#{mission.mission_id}/ops/explore", "ops", mission.mission_id},
-          {"/missions/#{mission.mission_id}/ops/activations", "ops", mission.mission_id},
           {"/missions/#{second.mission_id}/ops/explore", "ops", second.mission_id}
         ] do
       render_hook(view, "host:context", %{"path" => path})
