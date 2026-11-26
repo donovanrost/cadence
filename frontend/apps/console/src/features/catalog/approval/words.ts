@@ -1,5 +1,7 @@
 import {
   codeOf,
+  decoders as d,
+  detailsOf,
   isError,
   isKnown,
   vocabularyText,
@@ -8,6 +10,13 @@ import {
 } from "@/api/index.ts";
 import { formatCount, formatShort } from "@/ui";
 import type { Comparison, DeclarationKind, ModelRevision } from "./api.ts";
+import {
+  actorInSentence,
+  compositionInSentence,
+  isComposed,
+  madeOfParts,
+  type Composition,
+} from "../composition.ts";
 
 /** ux U65 words. Visible text says "catalog rev 4"; the model revision id is Technical details. */
 
@@ -96,6 +105,37 @@ export function replayLine(c: Comparison): string | null {
 
 const when = (iso: string) => formatShort(new Date(iso));
 
+/**
+ * U109, a composed base: "Imported by Mira K. (Bus catalog rev 4) and Ana R. (Payload catalog
+ * rev 2)". People, not events, so no time; a catalog with no named importer drops; none named:
+ * null (no line).
+ */
+export function composedImportersLine(r: ModelRevision): string | null {
+  const c = r.composition;
+  if (!isComposed(c)) return null;
+  const parts = madeOfParts(c);
+  const named = c.imported_layers.flatMap((l, i) => {
+    const people = (r.importers ?? [])
+      .find((x) => x.layer_id === l.layer_id)
+      ?.importers.map(actorInSentence)
+      .filter((n): n is string => n !== null);
+    return people && people.length > 0 ? [`${joinAnd(people)} (${parts[i] ?? ""})`] : [];
+  });
+  return named.length > 0 ? `Imported by ${joinAnd(named)}.` : null;
+}
+
+/** "Composed by Owen P. at 11-20 09:12Z." (U29; U103's forms); null for the migration's (no creator). */
+export function composedByLine(c: Composition): string | null {
+  const who = actorInSentence(c.created_by);
+  if (c.created_by === null) return null;
+  return who
+    ? `Composed by ${who} at ${when(c.created_at)}.`
+    : `Composed at ${when(c.created_at)}.`;
+}
+
+const joinAnd = (xs: readonly string[]) =>
+  xs.length <= 1 ? (xs[0] ?? "") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`;
+
 /** "Imported by Mira K. at 11-14 22:10Z."; null when the importer isn't recorded (its own line). */
 export function importerLine(r: ModelRevision): string | null {
   if (!r.imported_by) return null;
@@ -107,19 +147,60 @@ export function importerLine(r: ModelRevision): string | null {
 export function decidedLine(r: ModelRevision): string | null {
   const dcs = r.decision;
   if (!dcs) return null;
-  const what = vocabularyText(dcs.kind, { approved: "Approved", rejected: "Rejected" });
-  const why = dcs.kind === "rejected" && dcs.reason ? `: “${dcs.reason.trim()}”` : "";
-  const by = dcs.by.name ? ` by ${dcs.by.name}` : "";
+  const what = vocabularyText(dcs.kind, {
+    approved: "Approved",
+    rejected: "Rejected",
+    withdrawn: "Withdrawn",
+  });
+  // U109 (#615): a withdrawal says why, as a rejection does.
+  const why =
+    (dcs.kind === "rejected" || dcs.kind === "withdrawn") && dcs.reason
+      ? `: “${dcs.reason.trim()}”`
+      : "";
+  const by = dcs.by?.name ? ` by ${dcs.by.name}` : "";
   return `${what}${by} at ${when(dcs.at)}${why}.`;
 }
 
-/** U65 row tag: NEEDS APPROVAL (caution) / APPROVED / REJECTED; none otherwise. */
+/** U65 row tag: NEEDS APPROVAL (caution) / APPROVED / REJECTED / WITHDRAWN (off; E2); none otherwise. */
 export function approvalTag(
-  status: "candidate" | "approved" | "rejected" | "retired" | Unrecognized,
-): { label: string; state: "caution" | "neutral" } | null {
+  status: "candidate" | "approved" | "rejected" | "retired" | "withdrawn" | Unrecognized,
+): { label: string; state: "caution" | "neutral" | "off" } | null {
   if (status === "candidate") return { label: "NEEDS APPROVAL", state: "caution" };
   if (status === "approved") return { label: "APPROVED", state: "neutral" };
   if (status === "rejected") return { label: "REJECTED", state: "neutral" };
+  if (status === "withdrawn") return { label: "WITHDRAWN", state: "off" };
+  return null;
+}
+
+/**
+ * U109: what a decision names. A composed base is "composition 3" ("this composition" with no
+ * number); one catalog stays "rev 4" ("this revision" with none), word for word as before D4.
+ */
+export function revisionWord(r: ModelRevision): string {
+  if (isComposed(r.composition)) return compositionInSentence(r.composition);
+  return r.catalog_revision ? `rev ${r.catalog_revision.number}` : "this revision";
+}
+
+/** U109's up-front lines for a composed base ("You …, so another org admin approves composition 3."). */
+function composedCannotDecide(r: ModelRevision, c: Composition): string | null {
+  const why = r.cannot_decide_because;
+  const name = compositionInSentence(c);
+  const service = r.cannot_decide_details?.via_service ?? null;
+  // U100: "Nightly planner, a service identity you're accountable for, …"; nameless, no commas
+  // (mms-ux and ca-ux on #609): "A service identity you're accountable for …".
+  const svc = service
+    ? service.name
+      ? `${service.name}, a service identity you're accountable for,`
+      : "A service identity you're accountable for"
+    : null;
+  if (why === "self_approval")
+    return svc
+      ? `${svc} imported one of its catalogs, so another org admin approves ${name}.`
+      : `You imported one of its catalogs, so another org admin approves ${name}.`;
+  if (why === "composer")
+    return svc
+      ? `${svc} chose this combination of catalogs, so another org admin approves ${name}.`
+      : `You chose this combination of catalogs, so another org admin approves ${name}.`;
   return null;
 }
 
@@ -127,6 +208,10 @@ export function approvalTag(
 export function cannotDecideLine(r: ModelRevision): string | null {
   const why = r.cannot_decide_because;
   if (why === null || why === "not_approvable") return null;
+  if (isComposed(r.composition)) {
+    const composed = composedCannotDecide(r, r.composition);
+    if (composed) return composed;
+  }
   if (why === "self_approval")
     return "You imported this revision, so another org admin has to approve it.";
   if (why === "plans_not_ready")
@@ -179,16 +264,62 @@ export function decisionFailure(
   e: ApiError,
   rev: number | null,
   act: DecisionAct = "approve",
+  viewerId: string | null = null,
+  composedName: string | null = null,
 ): DecisionFailure {
   const base = (text: string, runAgain = false) => ({ text, runAgain });
   if (isError(e, "mission_model_decision_reason_required")) return base("Give a reason first.");
   if (isError(e, "mission_model_decision_reason_too_long"))
     return base(`Keep the reason under ${REASON_MAX.toLocaleString("en-US")} characters.`);
-  return act === "approve" ? approveFailure(e, rev) : rejectFailure(e);
+  return act === "approve" ? approveFailure(e, rev, viewerId, composedName) : rejectFailure(e);
 }
 
-function approveFailure(e: ApiError, rev: number | null): DecisionFailure {
+const notApprovableDetails = d.object({
+  status: d.nullable(
+    d.knownText(["candidate", "approved", "rejected", "retired", "withdrawn"] as const),
+  ),
+});
+
+const alreadyApprovedDetails = d.object({
+  decided_by: d.nullable(d.object({ id: d.nullable(d.string), name: d.nullable(d.string) })),
+  decided_at: d.nullable(d.timestamp),
+});
+
+/**
+ * #260 (#613; mms-ux): approving a revision someone already approved. The viewer: "You already
+ * approved catalog rev 4 at 11-20 06:52Z. Reload to see it." Someone else: "Catalog rev 4 was
+ * already approved by Ana R. at …, so your approval wasn't recorded. Reload to see it." Neither
+ * known: "Not approved: catalog rev 4 was already approved, so …". A nameless approver drops "by".
+ */
+function alreadyApproved(
+  e: ApiError,
+  rev: number | null,
+  viewerId: string | null,
+  composedName: string | null,
+): string {
+  // U109: a composed base is "composition 3" ("this composition"); one catalog as mms-ux's lines.
+  const what = composedName ?? (rev === null ? "this catalog revision" : `catalog rev ${rev}`);
+  const What = `${what.charAt(0).toUpperCase()}${what.slice(1)}`;
+  const det = detailsOf(e, alreadyApprovedDetails);
+  const by = det?.decided_by ?? null;
+  const at = det?.decided_at ?? null;
+  if (by === null || at === null)
+    return `Not approved: ${what} was already approved, so your approval wasn't recorded. Reload to see it.`;
+  if (viewerId !== null && by.id === viewerId)
+    return `You already approved ${what} at ${when(at)}. Reload to see it.`;
+  const name = by.name ? ` by ${by.name}` : "";
+  return `${What} was already approved${name} at ${when(at)}, so your approval wasn't recorded. Reload to see it.`;
+}
+
+function approveFailure(
+  e: ApiError,
+  rev: number | null,
+  viewerId: string | null,
+  composedName: string | null,
+): DecisionFailure {
   const base = (text: string, runAgain = false) => ({ text, runAgain });
+  if (isError(e, "mission_model_revision_already_approved"))
+    return base(alreadyApproved(e, rev, viewerId, composedName));
   if (isError(e, "mission_model_revision_not_in_catalog"))
     return {
       ...base(
@@ -213,10 +344,18 @@ function approveFailure(e: ApiError, rev: number | null): DecisionFailure {
     return base(
       "Not approved: Cadence is still preparing this revision. Your approval wasn't recorded. Try again in a moment.",
     );
-  if (isError(e, "mission_model_revision_not_approvable"))
+  if (isError(e, "mission_model_revision_not_approvable")) {
+    // E2 (#546; mms-ux): a withdrawn revision says so; the page normally shows no Approve then.
+    if (detailsOf(e, notApprovableDetails)?.status === "withdrawn") {
+      const what = composedName ?? (rev === null ? "this catalog revision" : `catalog rev ${rev}`);
+      return base(
+        `Not approved: ${what}'s approval was withdrawn, and it can't be approved again for now. Your approval wasn't recorded.`,
+      );
+    }
     return base(
       "Not approved: this revision was already approved, rejected or replaced, so your approval wasn't recorded.",
     );
+  }
   if (isError(e, "human_mission_model_approver_required"))
     return base(
       "Not approved: only a person can approve a catalog revision, not a service identity. Your approval wasn't recorded.",

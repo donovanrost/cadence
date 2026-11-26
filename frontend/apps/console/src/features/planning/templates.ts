@@ -1,14 +1,15 @@
 import type { MissionId } from "@/api/index.ts";
 import {
   decoders,
+  getAt,
   isRecord,
   jsonObject,
-  pathGet,
-  pathSet,
   request,
+  setAt,
   type ApiResult,
   type Decoded,
   type Reader,
+  type JsonObject,
 } from "@/api";
 import {
   displayValue,
@@ -21,7 +22,7 @@ import {
 
 /** Contract: docs/apogee/api/scheduling.md "Templates (CP3)" + GET /templates/schema. */
 const { array, boolean, integer, nullable, object, string, token } = decoders;
-const doc: Reader<Readonly<Record<string, unknown>>> = jsonObject;
+const doc: Reader<JsonObject> = jsonObject;
 
 export const templateSchemaReader = (value: unknown, path = "") => {
   const r = object({ fields: array(schemaFieldReader, 500), defaults: nullable(doc) })(value, path);
@@ -88,11 +89,6 @@ export function saveTemplate(
   );
 }
 
-/** Read a dotted path from a nested document. */
-export function readPath(doc: unknown, path: string): unknown {
-  return pathGet(doc, path.split("."));
-}
-
 /**
  * The nested document from form values over any depth of dotted paths, starting from `base` (the
  * template's current document or the server defaults) so fields the form doesn't show carry over.
@@ -114,7 +110,7 @@ export function buildNested(
       errors[f.path] = checked.message;
       continue;
     }
-    pathSet(document, f.path.split("."), checked.value);
+    setAt(document, f.path, checked.value);
   }
   return Object.keys(errors).length > 0 ? { ok: false, errors } : { ok: true, document };
 }
@@ -138,7 +134,7 @@ export function maxGapFact(
   // compared-as-text: a schema field path, an open set the server's schema defines
   const f = fields?.find((x) => x.path === "requirement.max_gap_seconds");
   if (!f) return null;
-  const v = readPath(document, f.path);
+  const v = getAt(document, f.path);
   return v === null || v === undefined
     ? { key: f.path, label: f.label, value: "No limit", mono: false }
     : { key: f.path, label: f.label, value: displayValue(f, v), mono: true };

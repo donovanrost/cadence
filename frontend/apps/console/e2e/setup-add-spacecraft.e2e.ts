@@ -83,7 +83,7 @@ test.describe("Add spacecraft wizard, organization admin", () => {
     await expect(page.getByText("NO-GO").first()).toBeVisible();
     const stage = page.getByRole("button", { name: /^Stage/ });
     await expect(stage).toHaveAttribute("aria-disabled", "true");
-    await expect(stage).toHaveAccessibleDescription(/Fix the NO-GO checks first/);
+    await expect(stage).toHaveAccessibleDescription(/Fix \d+ NO-GO checks? first/);
   });
 
   test("keeps the draft across a reload, and the close button keeps it too", async ({ page }) => {

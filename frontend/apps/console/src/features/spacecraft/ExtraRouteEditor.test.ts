@@ -259,7 +259,8 @@ describe("U79 Add / Edit extra route", () => {
         .join(" ");
       expect(text).toContain(e.message);
     }
-    expect(w.get('[role="status"]:not(.sr-only)').text()).toBe(
+    // a11y B6 (#276, ux): a refused submit is an alert.
+    expect(w.get('[role="alert"]:not(.sr-only)').text()).toBe(
       "Nothing was staged. EARENDIL-389 already has this route from its profile.",
     );
     w.unmount();

@@ -2,6 +2,7 @@ defmodule CadenceWeb.Console.ContactPlanReviewTest do
   @moduledoc "Send back (reject) a plan waiting for approval."
   use CadenceWeb.ConnCase, async: false
 
+  alias Cadence.ContactPlanning.PlanSubmissions
   alias CadenceWeb.{ContactPlanningFixtures, TestFixtures}
 
   setup do
@@ -17,6 +18,8 @@ defmodule CadenceWeb.Console.ContactPlanReviewTest do
     %{
       admin: admin,
       member: member,
+      org_id: org.organization_id,
+      mission_id: mission.mission_id,
       plan_id: fixture.plan.contact_plan_id,
       base: "/api/console/v1/missions/#{mission.mission_id}/contact-plans"
     }
@@ -187,6 +190,16 @@ defmodule CadenceWeb.Console.ContactPlanReviewTest do
     assert %{"version" => 2, "decision" => nil, "submitted" => true} = v2
     assert %{"version" => 1, "decision" => "rejected", "submitted" => true} = v1
     assert %{"kind" => _, "id" => _} = v2["created_by"]
+    # #468 (api on #503): the member who created version 1 keeps their id, and no one is named
+    # by email.
+    member_id = c.member.user_id
+    assert %{"kind" => "user", "id" => ^member_id} = v1["created_by"]
+    refute inspect(history) =~ c.member.email
+
+    # #468 C: the submits stored no email in their rounds (PlanResubmission's writer).
+    rounds = PlanSubmissions.list(c.org_id, c.mission_id, c.plan_id)
+    assert rounds != []
+    for r <- rounds, do: refute(inspect(r.actor_document) =~ "@")
 
     admin_id = c.admin.user_id
 

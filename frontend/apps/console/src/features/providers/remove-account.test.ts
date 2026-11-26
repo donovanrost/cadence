@@ -67,7 +67,7 @@ describe("Remove account (ApInlineConfirm, design-language §7)", () => {
     expect(document.activeElement?.textContent?.trim()).toBe("Cancel");
     await group.findAll("button")[1]?.trigger("click");
     await flushPromises();
-    expect(w.get('[aria-live="polite"]').text()).toBe(
+    expect(w.get('[role="alert"]').text()).toBe(
       "Used by Earendil. Unlink it from that mission first.",
     );
     expect(w.find('[role="group"]').exists()).toBe(true);

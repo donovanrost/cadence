@@ -20,6 +20,7 @@ defmodule Cadence.Limits do
     Evaluator,
     Event,
     GovernedLimitDefinitionRow,
+    LimitDefinitionLifecycleEventRow,
     Run,
     TelemetryLimitEvaluationRunRow
   }
@@ -95,8 +96,16 @@ defmodule Cadence.Limits do
     :ok
   end
 
+  @doc """
+  Each limit definition's latest version, leaving out one whose latest version was retired (#481):
+  retiring keeps the versions, so "limits configured" (fleet, counts, the action queue) counted
+  retired definitions. A definition appended again after retirement is listed with its new
+  version; one with no lifecycle record (before #77) is listed as before.
+  """
   @spec list_limit_definitions(binary()) :: [Definition.t()]
   def list_limit_definitions(mission_id) when is_binary(mission_id) do
+    retired = retired_versions(mission_id)
+
     GovernedLimitDefinitionRow
     |> where([row], row.mission_id == ^mission_id)
     |> order_by([row], asc: row.limit_definition_id, desc: row.version)
@@ -105,8 +114,31 @@ defmodule Cadence.Limits do
       Map.put_new(acc, row.limit_definition_id, row)
     end)
     |> Map.values()
+    |> Enum.reject(&MapSet.member?(retired, {&1.limit_definition_id, &1.version}))
     |> Enum.map(&GovernedLimitDefinitionRow.to_domain/1)
     |> Enum.sort_by(& &1.point_id)
+  end
+
+  # The definition versions whose most recent lifecycle event is a retirement.
+  defp retired_versions(mission_id) do
+    LimitDefinitionLifecycleEventRow
+    |> where([event], event.mission_id == ^mission_id)
+    |> order_by([event],
+      asc: event.observed_at,
+      asc: event.inserted_at,
+      asc: event.limit_definition_lifecycle_event_id
+    )
+    |> select(
+      [event],
+      {event.limit_definition_id, event.limit_definition_version, event.event_type}
+    )
+    |> Repo.all()
+    |> Enum.reduce(%{}, fn {id, version, type}, acc -> Map.put(acc, {id, version}, type) end)
+    |> Enum.flat_map(fn
+      {key, "retired"} -> [key]
+      _active -> []
+    end)
+    |> MapSet.new()
   end
 
   @spec fetch_limit_definition(

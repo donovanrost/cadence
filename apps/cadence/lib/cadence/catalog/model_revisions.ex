@@ -7,7 +7,7 @@ defmodule Cadence.Catalog.ModelRevisions do
 
   import Ecto.Query
 
-  alias Cadence.Catalog.RevisionRow
+  alias Cadence.Catalog.{DatabaseRow, RevisionRow}
   alias Cadence.Repo
 
   @type catalog_revision :: %{
@@ -37,6 +37,53 @@ defmodule Cadence.Catalog.ModelRevisions do
     )
     |> Repo.all()
     |> Enum.reduce(%{}, fn row, acc -> Map.put_new(acc, row.model, Map.delete(row, :model)) end)
+  end
+
+  @doc """
+  D2 (#543, domain's rule (b)): for each group of model revisions, the earliest catalog revision in
+  the tenant that names any of them (by `inserted_at`, then `catalog_revision_id`), with its
+  database. A layer's group is the revisions that carry it, so this is the earliest catalog
+  revision that imported the layer. Absent: no catalog revision names any of them.
+  """
+  @spec first_for_groups(binary(), binary(), %{term() => [binary()]}) :: %{
+          term() => %{
+            id: binary(),
+            number: integer(),
+            database: %{id: binary(), name: binary() | nil}
+          }
+        }
+  def first_for_groups(organization_id, mission_id, groups) do
+    ids = groups |> Map.values() |> List.flatten() |> Enum.uniq()
+    rows = ordered(organization_id, mission_id, ids)
+
+    for {key, members} <- groups,
+        members = MapSet.new(members),
+        %{} = row <- [Enum.find(rows, &MapSet.member?(members, &1.model))],
+        into: %{},
+        do: {key, %{id: row.id, number: row.number, database: row.database}}
+  end
+
+  defp ordered(_organization_id, _mission_id, []), do: []
+
+  defp ordered(organization_id, mission_id, ids) do
+    from(row in RevisionRow,
+      left_join: database in DatabaseRow,
+      on:
+        database.catalog_database_id == row.catalog_database_id and
+          database.organization_id == row.organization_id and
+          database.mission_id == row.mission_id,
+      where:
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.mission_model_revision_id in ^ids,
+      order_by: [asc: row.inserted_at, asc: row.catalog_revision_id],
+      select: %{
+        model: row.mission_model_revision_id,
+        id: row.catalog_revision_id,
+        number: row.revision_number,
+        database: %{id: row.catalog_database_id, name: database.name}
+      }
+    )
+    |> Repo.all()
   end
 
   @doc """

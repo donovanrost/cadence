@@ -12,6 +12,7 @@ import {
   ApPanel,
   ApRemote,
   ApTabLinks,
+  useActed,
 } from "@/ui";
 import { useFleet } from "@/features/fleet/index.ts";
 import AlarmRowList from "./AlarmRowList.vue";
@@ -29,7 +30,16 @@ import {
 } from "./list.ts";
 import { useActiveEpisodes, useClearedEpisodes } from "./useAlarms.ts";
 import AlarmFilters from "./AlarmFilters.vue";
-import { filtered, filteredEmpty, matches, shownLine, spacecraftOptions } from "./filters.ts";
+import {
+  craftInSentence,
+  filtered,
+  filteredEmpty,
+  matches,
+  scidsOf,
+  shownLine,
+  spacecraftOptions,
+  type FleetNames,
+} from "./filters.ts";
 import { useAlarmFilters } from "./useAlarmFilters.ts";
 
 /**
@@ -120,7 +130,23 @@ const rowsOf = (episodes: Episodes) => {
   const rows = tabRows(episodes.filter((e) => matches(e, filters.value)));
   return point.value === null ? groupAlarmRows(rows, expanded.value) : rows;
 };
-const nameOf = (id: string) => fleetRows.value.find((sc) => sc.id === id)?.name ?? id;
+/**
+ * U25 and U20 (ux's ruling on #652): a craft's name goes by the fleet read's state. Ready: its name,
+ * or "an unknown spacecraft"; loading: the line waits; failed: "a spacecraft (SCID n)". Never the
+ * internal id.
+ */
+const fleetNames = computed<FleetNames>(() => {
+  const s = fleet.state.value;
+  if (s.status === "ready")
+    return { state: "ready", names: new Map(s.value.spacecraft.map((sc) => [sc.id, sc.name])) };
+  return s.status === "failed" ? { state: "failed" } : { state: "loading" };
+});
+const scids = computed(() =>
+  shown.value.status === "ready" ? scidsOf(shown.value.value.episodes) : new Map<string, number>(),
+);
+const nameOf = (id: string) => craftInSentence(id, scids.value.get(id) ?? null, fleetNames.value);
+/** U86 (ux on #652): names that couldn't be read say so once, with Retry; polite until retried. */
+const fleetActed = useActed(() => fleet.state.value.status === "ready");
 /** Picker: spacecraft with alarms in this tab (severity applied), each with its count. */
 const scOptions = (episodes: Episodes) =>
   spacecraftOptions(
@@ -128,7 +154,7 @@ const scOptions = (episodes: Episodes) =>
       (r) => r.episode,
     ),
     filters.value.spacecraftId,
-    nameOf,
+    fleetNames.value,
   );
 const options = computed(() =>
   shown.value.status === "ready" ? scOptions(shown.value.value.episodes) : [],
@@ -151,11 +177,7 @@ async function loadMore() {
 /** ux U69 A6: the header's newest change, mission-wide (filters don't change it). */
 const lastChange = computed(() =>
   active.state.value.status === "ready"
-    ? lastChangeLine(
-        active.state.value.value.summary.latest_change,
-        (id) => fleetRows.value.find((sc) => sc.id === id)?.name ?? null,
-        now.value,
-      )
+    ? lastChangeLine(active.state.value.value.summary.latest_change, nameOf, now.value)
     : null,
 );
 /** ux U71 A12: the sentence links to its episode in Investigate (needs the spacecraft's SCID). */
@@ -224,6 +246,23 @@ const empty = computed(() =>
         pane
         flush
       >
+        <ApCallout
+          v-if="fleet.state.value.status === 'failed'"
+          tone="caution"
+          :role="fleetActed.role.value"
+        >
+          Spacecraft names couldn't be loaded.
+          <template #action>
+            <ApButton
+              size="compact"
+              @click="
+                fleetActed.mark();
+                fleet.refetch();
+              "
+              >Retry</ApButton
+            >
+          </template>
+        </ApCallout>
         <ApRemote
           :state="shown"
           loading-label="LOADING ALARMS…"
@@ -238,12 +277,15 @@ const empty = computed(() =>
             >
               No active alarms.{{ lastCleared ? ` ${lastCleared}` : "" }}
             </ApCallout>
-            <ApEmptyState
-              v-else-if="rowsOf(value.episodes).length === 0 && filtered(filters)"
-              :headline="filteredEmpty(filters, nameOf)"
-            >
-              <ApButton size="compact" @click="clearFilters">Clear filters</ApButton>
-            </ApEmptyState>
+            <!-- ux on #652: the headline names a craft, so it waits while the fleet read loads. -->
+            <template v-else-if="rowsOf(value.episodes).length === 0 && filtered(filters)">
+              <ApEmptyState
+                v-if="filteredEmpty(filters, nameOf) !== null"
+                :headline="filteredEmpty(filters, nameOf) ?? ''"
+              >
+                <ApButton size="compact" @click="clearFilters">Clear filters</ApButton>
+              </ApEmptyState>
+            </template>
             <ApEmptyState v-else-if="rowsOf(value.episodes).length === 0" :headline="empty" />
             <template v-else>
               <p

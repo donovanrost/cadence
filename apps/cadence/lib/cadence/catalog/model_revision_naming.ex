@@ -31,4 +31,25 @@ defmodule Cadence.Catalog.ModelRevisionNaming do
 
     if named?, do: :ok, else: {:error, :mission_model_revision_not_in_catalog}
   end
+
+  @doc """
+  Which of `mission_model_revision_ids` a catalog revision names, in one query (#542: the guard
+  applied per imported layer of a composition).
+  """
+  @spec named(binary(), binary(), [binary()]) :: MapSet.t()
+  def named(_organization_id, _mission_id, []), do: MapSet.new()
+
+  def named(organization_id, mission_id, mission_model_revision_ids)
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_list(mission_model_revision_ids) do
+    from(row in RevisionRow,
+      where:
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.mission_model_revision_id in ^mission_model_revision_ids,
+      distinct: true,
+      select: row.mission_model_revision_id
+    )
+    |> Repo.all()
+    |> MapSet.new()
+  end
 end

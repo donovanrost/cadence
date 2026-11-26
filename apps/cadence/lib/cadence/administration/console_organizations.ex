@@ -4,12 +4,12 @@ defmodule Cadence.Administration.ConsoleOrganizations do
   only (`Access`). The list is 50 per page by slug, searchable by name or slug, with member and
   mission counts, when it was created and (once recorded) by whom. One organization adds its
   members, pending invitations and missions (up to 500 each). Queries:
-  `Accounts.PlatformDirectory`.
+  `Accounts.PlatformDirectory`. People are named by display name only, never the email
+  (`PlatformNames`, #470).
   """
 
-  alias Cadence.Accounts
   alias Cadence.Accounts.PlatformDirectory
-  alias Cadence.Administration.{Access, PlatformEvents}
+  alias Cadence.Administration.{Access, PlatformEvents, PlatformNames}
 
   @page 50
   @detail_cap 500
@@ -26,7 +26,7 @@ defmodule Cadence.Administration.ConsoleOrganizations do
       members = PlatformDirectory.member_counts(ids)
       missions = PlatformDirectory.mission_counts(ids)
       creators = PlatformEvents.creators(ids)
-      names = names(Map.values(creators))
+      {:ok, names} = PlatformNames.display_names(scope, Map.values(creators))
 
       {:ok,
        %{
@@ -102,15 +102,6 @@ defmodule Cadence.Administration.ConsoleOrganizations do
         :state,
         if(DateTime.before?(now, invitation.expires_at), do: "pending", else: "expired")
       )
-    end)
-  end
-
-  defp names(ids) do
-    Map.new(Enum.uniq(ids), fn id ->
-      case Accounts.fetch_user(id) do
-        {:ok, user} -> {id, user.display_name || user.email}
-        _missing -> {id, nil}
-      end
     end)
   end
 end

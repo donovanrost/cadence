@@ -61,7 +61,10 @@ defmodule Cadence.Reads.Dashboards.Directory do
     shortcuts = shortcuts(active, preferences)
 
     names =
-      Authors.names(Enum.map(rows ++ shortcuts.starred ++ shortcuts.recent, & &1.published_by))
+      Authors.names(
+        scope.organization_id,
+        Enum.map(rows ++ shortcuts.starred ++ shortcuts.recent, & &1.published_by)
+      )
 
     %{
       version: 2,

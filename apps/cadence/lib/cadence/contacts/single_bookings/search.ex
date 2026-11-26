@@ -35,7 +35,9 @@ defmodule Cadence.Contacts.SingleBookings.Search do
   truncated}}`, or `{:error, {:invalid, %{field => message}}}`, `:not_found`, `:forbidden`,
   `:search_unavailable`. No ready route is not an error: `offers: []` with `not_ready`.
   """
-  def run(scope, mission, params) when is_map(params) do
+  def run(scope, mission, params, opts \\ [])
+
+  def run(scope, mission, params, opts) when is_map(params) do
     org = scope.organization_id
 
     with {:ok, query} <- query(params),
@@ -44,7 +46,9 @@ defmodule Cadence.Contacts.SingleBookings.Search do
            ProviderScheduling.list_ready_downlink_routes(org, mission, sc.spacecraft_id),
          {:ok, routes} <- chosen(ready, query.route_keys),
          {:ok, found, failed, truncated} <- search_routes(scope, mission, query, routes) do
-      offers = enrich(org, mission, sc, found)
+      offers =
+        enrich(org, mission, sc, found, Keyword.get(opts, :listener_overlap, &no_overlaps/3))
+
       {kept, hidden} = filter(offers, query)
 
       {:ok,
@@ -60,7 +64,10 @@ defmodule Cadence.Contacts.SingleBookings.Search do
     end
   end
 
-  def run(_scope, _mission, _params), do: {:error, {:invalid, %{"" => "Search for a spacecraft"}}}
+  def run(_scope, _mission, _params, _opts),
+    do: {:error, {:invalid, %{"" => "Search for a spacecraft"}}}
+
+  defp no_overlaps(_org, _mission, _found), do: %{}
 
   defp query(params) do
     with {:ok, from} <- time(params["from"], "from"),
@@ -206,9 +213,12 @@ defmodule Cadence.Contacts.SingleBookings.Search do
     |> Enum.uniq_by(fn {route, offer} -> {route.provider_id, offer["id"]} end)
   end
 
-  defp enrich(org, mission, sc, found) do
+  defp enrich(org, mission, sc, found, listener_overlap) do
     stations = StationRefs.index(org, mission)
     occupancy = occupancy(org, mission, found)
+    # U58 (b), #361: an offer that would lose its start to a one-connection listener. The read
+    # side names the other pass, so the caller passes it in (Contacts doesn't call Reads).
+    listener = listener_overlap.(org, mission, found)
 
     uplink =
       found
@@ -236,6 +246,7 @@ defmodule Cadence.Contacts.SingleBookings.Search do
         uplink_capable: Map.get(uplink, {offer["station"], route.provider_id}, false),
         synthetic: offer["synthetic"] == true,
         cost: offer["cost"],
+        listener_overlap: Map.get(listener, offer["id"]),
         overlaps:
           SingleBookings.overlap(occupancy, %{
             spacecraft_id: sc.spacecraft_id,

@@ -10,6 +10,7 @@ defmodule Cadence.Control.Alarms do
   """
 
   alias Cadence.Accounts
+  alias Cadence.Accounts.MemberNames
   alias Cadence.Alarms.{History, Lifecycle, Notify, Queries}
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Missions
@@ -164,9 +165,10 @@ defmodule Cadence.Control.Alarms do
   defp assignee(_organization_id, nil), do: {:ok, nil}
 
   defp assignee(organization_id, user_id) when is_binary(user_id) do
+    # #469: a member's display name, never an email (reads name them again at read time).
     with {:ok, _membership} <- Accounts.fetch_user_membership(user_id, organization_id),
          {:ok, user} <- Accounts.fetch_user(user_id) do
-      {:ok, %{"id" => user.user_id, "name" => user.display_name || user.email}}
+      {:ok, %{"id" => user.user_id, "name" => member_name(organization_id, user.user_id)}}
     else
       _missing -> {:error, :assignee_not_member}
     end
@@ -174,6 +176,14 @@ defmodule Cadence.Control.Alarms do
 
   defp assignee(_organization_id, _user_id), do: {:error, :assignee_not_member}
 
-  defp actor(%Scope{user: user}),
-    do: %{"kind" => "user", "id" => user.user_id, "name" => user.display_name || user.email}
+  # #469: stored without an email; the name only while a member (reads name it again).
+  defp actor(%Scope{user: user} = scope),
+    do: %{
+      "kind" => "user",
+      "id" => user.user_id,
+      "name" => member_name(scope.organization_id, user.user_id)
+    }
+
+  defp member_name(organization_id, user_id),
+    do: Map.get(MemberNames.display_names(organization_id, [user_id]), user_id)
 end

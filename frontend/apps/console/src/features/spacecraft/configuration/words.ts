@@ -15,8 +15,15 @@ export function draftDiffers(s: ConfigurationSnapshot): boolean {
   return s.saved_version !== null && (s.active === null || !same(s.document, s.active.document));
 }
 
-/** The header's tag, state only (ux U94 (b)): DRAFT SAVED (caution) / NOT SET UP / ACTIVE. */
-export function statusTag(s: ConfigurationSnapshot): Readonly<{ label: string; state: OpState }> {
+/**
+ * The header's tag, state only (ux U94 (b)): UNSAVED EDITS (caution, #595a) / DRAFT SAVED
+ * (caution) / NOT SET UP / ACTIVE.
+ */
+export function statusTag(
+  s: ConfigurationSnapshot,
+  unsaved = false,
+): Readonly<{ label: string; state: OpState }> {
+  if (unsaved) return { label: "Unsaved edits", state: "caution" };
   if (s.saved_version !== null && draftDiffers(s))
     return { label: "Draft saved", state: "caution" };
   if (s.active === null) return { label: "Not set up", state: "off" };
@@ -68,11 +75,12 @@ export function sourceWord(s: ConfigurationSnapshot, id: string | null | undefin
   return s.sources.find((x) => x.id === id)?.name ?? "A packet source that's no longer listed";
 }
 
+/** U40's catalog notation for one APID: "0x2A", "0x101". */
+export const apidHex = (a: number) => `0x${a.toString(16).toUpperCase().padStart(2, "0")}`;
+
 /** U40's chip list as text: "0x2A, 0x2B". */
 export const apidsWord = (apids: readonly number[]) =>
-  apids.length
-    ? apids.map((a) => `0x${a.toString(16).toUpperCase().padStart(2, "0")}`).join(", ")
-    : "None";
+  apids.length ? apids.map(apidHex).join(", ") : "None";
 
 const LINK = { tm: "TM", aos: "AOS", uslp: "USLP", tc: "TC" } as const;
 /**

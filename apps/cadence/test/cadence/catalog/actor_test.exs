@@ -28,20 +28,29 @@ defmodule Cadence.Catalog.ActorTest do
       service_identity: %{service_identity_id: "svc-1", display_name: "Pipeline"}
     }
 
-    assert {:ok,
-            %{
-              "actor_kind" => "user",
-              "user_id" => "u-1",
-              "name" => "Una",
-              "email" => "u@example.test"
-            }} = Actor.from_scope(user)
+    # #471: no email is stored (ca-security's P1 on #462).
+    assert {:ok, %{"actor_kind" => "user", "user_id" => "u-1", "name" => "Una"} = person} =
+             Actor.from_scope(user)
+
+    refute Map.has_key?(person, "email")
 
     assert {:ok,
             %{"actor_kind" => "service", "service_identity_id" => "svc-1", "name" => "Pipeline"}} =
              Actor.from_scope(service)
 
-    assert %{"actor_kind" => "system", "system_id" => "seed:x", "name" => "X seed"} =
-             system = Actor.system("seed:x", "X seed")
+    # #513: a system actor names the person who ran it.
+    assert %{
+             "actor_kind" => "system",
+             "system_id" => "seed:x",
+             "name" => "X seed",
+             "run_by" => "u-runner"
+           } = system = Actor.system("seed:x", "X seed", "u-runner")
+
+    assert :ok = Actor.recorded(system)
+
+    # A system actor recorded without who ran it is refused (#513: nobody accountable).
+    assert {:error, :catalog_import_actor_required} =
+             Actor.recorded(%{"actor_kind" => "system", "system_id" => "seed:x", "name" => "X"})
 
     for {:ok, actor} <- [Actor.from_scope(user), Actor.from_scope(service), {:ok, system}],
         do: refute(Map.has_key?(actor, "id"))
@@ -83,7 +92,11 @@ defmodule Cadence.Catalog.ActorTest do
     assert Catalog.list_import_runs(ctx.org, ctx.mission) == []
   end
 
-  test "the catalog read names an actor the REST API recorded", ctx do
+  # #366 (mms-security, #146's rule; replaces lead 11-17's stored-name reading): the read names
+  # the actor the REST API recorded by who they are now, never by the name or email stored with
+  # it. A person is named only as an active member of the organization; a service only when it
+  # belongs to it. Here neither exists in the organization, so both read with no name.
+  test "the catalog read never sends a stored actor's email or name", ctx do
     rest_user = %{"actor_kind" => "user", "user_id" => "u-2", "user_email" => "rest@example.test"}
 
     rest_service = %{
@@ -92,15 +105,17 @@ defmodule Cadence.Catalog.ActorTest do
       "service_identity_display_name" => "Uploader"
     }
 
-    for {uploaded_by, name} <- [
-          {rest_user, "rest@example.test"},
-          {rest_service, "Uploader"},
-          {%{"user_display_name" => "", "user_email" => "e@example.test"}, "e@example.test"}
+    for {uploaded_by, expected} <- [
+          {rest_user, %{kind: "user", name: nil, run_by: nil}},
+          {rest_service, %{kind: "service", name: nil, run_by: nil}},
+          {%{"user_display_name" => "", "user_email" => "e@example.test"}, nil}
         ] do
       {:ok, artifact} = Catalog.persist_artifact(ctx.org, artifact(ctx, nil, uploaded_by))
 
-      assert {:ok, %{artifact: %{uploaded_by: %{name: ^name}}}} =
+      assert {:ok, %{artifact: %{uploaded_by: ^expected}} = read} =
                CatalogOverview.artifact(ctx.org, ctx.mission, artifact.artifact_id)
+
+      refute inspect(read) =~ "example.test"
     end
 
     {:ok, artifact} = Catalog.persist_artifact(ctx.org, artifact(ctx, nil, %{}))

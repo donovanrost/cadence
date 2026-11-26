@@ -126,8 +126,15 @@ defmodule Cadence.Catalog.MissionModelCompilerTest do
         declarations: systems(["/"]) ++ [declaration]
       })
 
+    # Authored, so it addresses the import's own tree. Two imported layers need a mount each
+    # (#444; mission_model_mount_test.exs covers duplicates across mounted imports).
     duplicate =
-      Layer.new(%{mission_id: "mission-alpha", name: "duplicate", declarations: [declaration]})
+      Layer.new(%{
+        mission_id: "mission-alpha",
+        layer_kind: :authored,
+        name: "duplicate",
+        declarations: [declaration]
+      })
 
     assert {:ok, result} = Compiler.compile([imported, duplicate])
     assert Enum.any?(result.revision.diagnostics, &(&1.code == "MM_DUPLICATE_IDENTITY"))

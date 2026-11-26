@@ -301,7 +301,11 @@ const short = (iso: string) => {
           @brush="brushTo"
         />
       </div>
-      <ApCallout v-if="selection.loadError.value" tone="caution">
+      <ApCallout
+        v-if="selection.loadError.value"
+        tone="caution"
+        :role="selection.loadErrorRole.value"
+      >
         Couldn't load this event: {{ selection.loadError.value }}
         <template #action>
           <ApButton size="compact" variant="secondary" @click="selection.retry">Retry</ApButton>

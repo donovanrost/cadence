@@ -180,7 +180,7 @@ function paste() {
           <ApButton size="compact" variant="ghost" @click="pasting = false">Cancel</ApButton>
         </div>
       </div>
-      <ApCallout v-if="pasteNote" tone="caution">{{ pasteNote }}</ApCallout>
+      <ApCallout v-if="pasteNote" tone="caution" role="alert">{{ pasteNote }}</ApCallout>
       <table class="w-full border-collapse text-sm">
         <thead>
           <tr class="text-left text-text-3">

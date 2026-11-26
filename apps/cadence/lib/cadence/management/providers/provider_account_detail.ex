@@ -6,9 +6,11 @@ defmodule Cadence.Management.Providers.ProviderAccountDetail do
   The console adapter adds the PA1 row and permissions (composition, `ProviderAccountDirectory`).
   """
 
-  alias Cadence.{Accounts, Missions}
+  alias Cadence.Accounts
+  alias Cadence.Accounts.MemberNames
   alias Cadence.Auth.Scope
   alias Cadence.GroundNetworks.{ProviderAccountGrants, ProviderAccounts, ProviderCredentials}
+  alias Cadence.Missions
 
   @spec fetch(Scope.t(), binary()) :: {:ok, map()} | {:error, term()}
   def fetch(%Scope{} = scope, account_id) do
@@ -29,18 +31,38 @@ defmodule Cadence.Management.Providers.ProviderAccountDetail do
              allowed_stations: list(version.guardrails, "allowed_stations")
            }
          },
-         grants:
-           org
-           |> ProviderAccountGrants.list_for_account(account_id)
-           |> Enum.sort_by(& &1.granted_at, {:desc, DateTime})
-           |> Enum.map(&grant_row(&1, names))
+         grants: grants(org, account_id, names)
        }}
     end
   end
 
-  @doc "A grant as PA2 lists it; `names` maps mission ids to names."
-  @spec grant_row(struct(), map()) :: map()
-  def grant_row(grant, names) do
+  defp grants(org, account_id, names) do
+    grants =
+      org
+      |> ProviderAccountGrants.list_for_account(account_id)
+      |> Enum.sort_by(& &1.granted_at, {:desc, DateTime})
+
+    people = people(org, grants)
+    Enum.map(grants, &grant_row(&1, names, people))
+  end
+
+  @doc """
+  The people who granted or revoked `grants` who are active members of `organization_id`, with
+  their display names (nil when they have none): `grant_row/3`'s `people`, one lookup per read.
+  """
+  @spec people(binary(), [struct()]) :: %{binary() => binary() | nil}
+  def people(organization_id, grants),
+    do:
+      MemberNames.members(
+        organization_id,
+        grants |> Enum.flat_map(&[&1.granted_by, &1.revoked_by]) |> Enum.filter(&is_binary/1)
+      )
+
+  @doc """
+  A grant as PA2 lists it; `names` maps mission ids to names, `people` is `people/2`'s answer.
+  """
+  @spec grant_row(struct(), map(), map()) :: map()
+  def grant_row(grant, names, people) do
     restrictions = grant.restrictions || %{}
 
     %{
@@ -53,9 +75,9 @@ defmodule Cadence.Management.Providers.ProviderAccountDetail do
       allowed_stations: list(restrictions, "allowed_stations"),
       max_quota: Map.get(restrictions, "max_quota"),
       reason: grant.grant_reason,
-      granted_by: person(grant.granted_by),
+      granted_by: person(grant.granted_by, people),
       granted_at: grant.granted_at,
-      revoked_by: person(grant.revoked_by),
+      revoked_by: person(grant.revoked_by, people),
       revoked_at: grant.revoked_at,
       revoke_reason: grant.revoke_reason
     }
@@ -84,12 +106,23 @@ defmodule Cadence.Management.Providers.ProviderAccountDetail do
     end
   end
 
-  defp person(user_id) when is_binary(user_id) do
-    case Accounts.fetch_user(user_id) do
-      {:ok, user} -> %{id: user.user_id, name: user.display_name || user.email}
-      _unknown -> nil
+  # #146 (#468): a person is named, and keeps their id, only while an active member of the
+  # account's organization, never by email. A person who isn't (a platform admin, someone who
+  # has left) reads id and name nil; an id that isn't a person reads nil, as before.
+  defp person(user_id, people) when is_binary(user_id) do
+    case Map.fetch(people, user_id) do
+      {:ok, name} -> %{id: user_id, name: name}
+      :error -> outsider(user_id)
     end
   end
 
-  defp person(_none), do: nil
+  defp person(_none, _people), do: nil
+
+  # Only for ids that aren't members: whether the id is a person at all.
+  defp outsider(id) do
+    case Accounts.fetch_user(id) do
+      {:ok, _person} -> %{id: nil, name: nil}
+      _unknown -> nil
+    end
+  end
 end

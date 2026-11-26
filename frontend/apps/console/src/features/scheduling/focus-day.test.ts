@@ -14,6 +14,7 @@ const pass = (id: string, sc: string, from: string, to: string) => ({
   locked: false,
   expires_at: null,
   booking: null,
+  listener_overlap: undefined,
 });
 const plan = {
   passes: [

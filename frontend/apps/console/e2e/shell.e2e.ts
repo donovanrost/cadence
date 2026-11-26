@@ -37,7 +37,8 @@ test.describe("console shell", () => {
 });
 
 test.describe("console shell, capability gating (decision 2, qa #4)", () => {
-  const orgAdminLinks = ["People & access", "Provider accounts", "Audit log"];
+  // People & access is open to members (SetupRail: adminOnly false); these two stay admin-only.
+  const orgAdminLinks = ["Provider accounts", "Audit log"];
 
   test("a member doesn't see organization administration", async ({ browser }) => {
     const context = await browser.newContext({ storageState: storageStateFor("operator") });
@@ -70,8 +71,9 @@ test.describe("console shell, platform admin without a membership", () => {
 test.describe("console shell, signed out", () => {
   test.use({
     storageState: { cookies: [], origins: [] },
-    // The bounce passes through the old /sign-in (no favicon outside the console; qa issues #2).
-    allowedDiagnostics: allow(/\/favicon\.ico/),
+    // The bounce passes through the old /sign-in (no favicon outside the console; qa issues #2),
+    // and a signed-out console's session read answers 401, which it reads as anonymous.
+    allowedDiagnostics: allow(/\/favicon\.ico/, /\/api\/console\/v1\/session/),
   });
 
   test("redirects to the console sign-in screen", async ({ page }) => {

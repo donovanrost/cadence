@@ -9,14 +9,15 @@ defmodule Cadence.Reads.MissionModelApprovals do
   earlier: `against` null, ux U90).
   """
 
+  alias Cadence.Accounts.MemberNames
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Catalog
   alias Cadence.Catalog.ModelRevisions
-  alias Cadence.Control.{Activations, ModelApprovalGate}
-  alias Cadence.Governance.ActivationPolicy
+  alias Cadence.Control.{Activations, ActorRef, ModelApprovalGate}
   alias Cadence.MissionModels
-  alias Cadence.MissionModels.{ApprovalReads, Comparison}
+  alias Cadence.MissionModels.{ApprovalReads, Comparison, CompositionApproval, RevisionDecisions}
   alias Cadence.Reads.Catalog.RevisionBase
+  alias Cadence.Reads.MissionModelApprovals.CompositionKeys
 
   @spec list(Scope.t(), binary(), binary()) :: [map()]
   def list(%Scope{} = scope, mission_id, status) do
@@ -26,13 +27,21 @@ defmodule Cadence.Reads.MissionModelApprovals do
     catalogs = ModelRevisions.for_models(org, mission_id, ids)
     statuses = ApprovalReads.latest_statuses(org, mission_id, ids)
 
+    firsts =
+      Map.new(rows, &{&1.id, org |> Catalog.model_importers(mission_id, &1.id) |> List.first()})
+
+    names = MemberNames.members(org, firsts |> Map.values() |> Enum.reject(&is_nil/1))
+    compositions = CompositionKeys.for_list(org, mission_id, ids)
+
     Enum.map(rows, fn row ->
       %{
         id: row.id,
         status: row.status,
         imported_at: row.imported_at,
-        imported_by: importer(org, mission_id, row.id),
+        imported_by: person_or_nil(firsts[row.id], names),
         catalog_revision: Map.get(catalogs, row.id),
+        # D2 (#543): the composition behind the revision, beside its catalog revision.
+        composition: Map.get(compositions, row.id),
         latest_comparison_status: Map.get(statuses, row.id)
       }
     end)
@@ -50,7 +59,7 @@ defmodule Cadence.Reads.MissionModelApprovals do
         org |> ApprovalReads.latest_reports(mission_id, [revision_id]) |> Map.get(revision_id)
 
       viewer_id = scope.user && scope.user.user_id
-      blocked = cannot_decide(scope, mission_id, row, importers, plans_ready)
+      {blocked, blocked_details} = cannot_decide(scope, mission_id, row, plans_ready)
 
       catalog_revision =
         case ModelRevisions.first_for_model(org, mission_id, row.id) do
@@ -58,38 +67,77 @@ defmodule Cadence.Reads.MissionModelApprovals do
           revision -> catalog_revision(org, mission_id, revision)
         end
 
+      # E1's own check (fe-setup on #581): a composition names the revision and each layer came
+      # from a catalog-named import. A composed revision has no catalog revision of its own.
+      named? = match?({:ok, _}, CompositionApproval.require(org, mission_id, row.id))
+
       {:ok,
-       %{
-         id: row.id,
-         status: row.status,
-         imported_at: row.imported_at,
-         imported_by: first_importer(importers),
-         catalog_revision: catalog_revision,
-         decision: decision(row),
-         viewer_can_decide: is_nil(blocked),
+       row
+       |> base_view(org, importers, catalog_revision, named?, {blocked, blocked_details})
+       |> Map.merge(%{
          viewer_is_importer: is_binary(viewer_id) and viewer_id in importers,
-         cannot_decide_because: blocked,
-         # Approve only (lead 11-17, ux U88): no catalog revision names this model revision, so
-         # domain's guard refuses approving it; Reject stays. cannot_decide_because wins if set.
-         cannot_approve_because: if(is_nil(catalog_revision), do: "not_in_catalog"),
          plans_ready: plans_ready,
          comparison: report && summary(org, mission_id, report)
-       }}
+       })
+       # D2 (#543): composition, importers per layer and breaking_base (CompositionKeys).
+       |> Map.merge(CompositionKeys.read(org, mission_id, row.id))}
     end
+  end
+
+  defp base_view(row, org, importers, catalog_revision, named?, {blocked, blocked_details}) do
+    %{
+      id: row.id,
+      status: row.status,
+      imported_at: row.imported_at,
+      imported_by: first_importer(org, importers),
+      catalog_revision: catalog_revision,
+      decision: decision(row),
+      viewer_can_decide: is_nil(blocked),
+      cannot_decide_because: blocked,
+      # #280 (ux U100): via_service for self_approval through a service; service for
+      # authors_unknown. Nil otherwise.
+      cannot_decide_details: blocked_details,
+      # Approve only (lead 11-17, ux U88): the approve check refuses it as not catalog-named;
+      # Reject stays. cannot_decide_because wins if set.
+      cannot_approve_because: if(named?, do: nil, else: "not_in_catalog")
+    }
   end
 
   @doc """
   Approves against `report_id`; retroactive when a spacecraft already runs the revision (grandfathered,
-  domain 71ce7d850), which the approval records and the audit says.
+  domain 71ce7d850), which the approval records and the audit says. `operation_id` (optional,
+  #260) makes a retry of this approval a replay. An already approved revision's refusal names who
+  decided by C1 (`Control.ActorRef`: never a stored name or an email) and when, both or neither.
   """
-  @spec approve(Scope.t(), binary(), binary(), binary()) :: {:ok, term()} | {:error, term()}
-  def approve(%Scope{} = scope, mission_id, revision_id, report_id) do
+  @spec approve(Scope.t(), binary(), binary(), binary(), binary() | nil) ::
+          {:ok, term()} | {:error, term()}
+  def approve(%Scope{} = scope, mission_id, revision_id, report_id, operation_id \\ nil) do
     retroactive = ModelApprovalGate.running?(scope.organization_id, mission_id, revision_id)
 
-    MissionModels.approve_revision(scope, mission_id, revision_id, report_id,
-      retroactive: retroactive
+    scope
+    |> MissionModels.approve_revision(mission_id, revision_id, report_id,
+      retroactive: retroactive,
+      operation_id: operation_id
     )
+    |> already_decided(scope.organization_id)
   end
+
+  defp already_decided(
+         {:error,
+          {:mission_model_revision_already_approved, %{approved_by: by, approved_at: at}}},
+         organization_id
+       ) do
+    decided_by = by && ActorRef.document(by, ActorRef.names(organization_id, [by]))
+
+    details =
+      if decided_by && at,
+        do: %{decided_by: %{id: decided_by.id, name: decided_by.name}, decided_at: at},
+        else: %{decided_by: nil, decided_at: nil}
+
+    {:error, {:mission_model_revision_already_approved, details}}
+  end
+
+  defp already_decided(result, _organization_id), do: result
 
   @doc "Runs a comparison for the revision (synchronous; reports dedupe on content)."
   @spec compare(Scope.t(), binary(), binary()) :: {:ok, map()} | {:error, term()}
@@ -226,8 +274,9 @@ defmodule Cadence.Reads.MissionModelApprovals do
   defp person(%{"id" => id} = by), do: %{id: id, name: by["display_name"] || by["name"]}
   defp person(_none), do: nil
 
-  # The first reason the viewer can't decide, in ux's order; nil when they can.
-  defp cannot_decide(scope, mission_id, row, importers, plans_ready) do
+  # The first reason the viewer can't decide, in ux's order (nil when they can), with the separation
+  # refusal's details when that's the reason.
+  defp cannot_decide(scope, mission_id, row, plans_ready) do
     viewer_id = scope.user && scope.user.user_id
 
     cond do
@@ -235,19 +284,17 @@ defmodule Cadence.Reads.MissionModelApprovals do
         organization_id: scope.organization_id,
         mission_id: mission_id
       }) != :ok ->
-        "not_admin"
+        {"not_admin", nil}
 
       row.status != "candidate" ->
-        "not_approvable"
-
-      separation?(scope.organization_id, mission_id) and viewer_id in importers ->
-        "self_approval"
-
-      not plans_ready ->
-        "plans_not_ready"
+        {"not_approvable", nil}
 
       true ->
-        nil
+        case RevisionDecisions.separation(scope.organization_id, mission_id, row.id, viewer_id) do
+          {:refused, refusal} -> refused(scope, mission_id, row, refusal)
+          {:ok, _checked} when not plans_ready -> {"plans_not_ready", nil}
+          {:ok, _checked} -> {nil, nil}
+        end
     end
   end
 
@@ -267,19 +314,43 @@ defmodule Cadence.Reads.MissionModelApprovals do
     )
   end
 
-  defp separation?(org, mission_id),
-    do: ActivationPolicy.evidence(org, mission_id)["separation_of_duties"] == true
+  # D2 (#543): a self refusal that is the composer's alone reads "composer" (E1's precedence: an
+  # importer who also composed stays self_approval), with the same via_service details.
+  defp refused(scope, mission_id, row, %{reason: :self} = refusal) do
+    viewer_id = scope.user && scope.user.user_id
 
-  defp importer(org, mission_id, revision_id),
-    do: org |> Catalog.model_importers(mission_id, revision_id) |> first_importer()
+    if CompositionKeys.composer?(scope.organization_id, mission_id, row.id, viewer_id),
+      do: {"composer", %{via_service: refusal.via_service}},
+      else: separation_reason(refusal)
+  end
 
-  defp first_importer([id | _]), do: %{id: id, name: user_name(id)}
-  defp first_importer([]), do: nil
+  defp refused(_scope, _mission_id, _row, refusal), do: separation_reason(refusal)
 
-  defp user_name(id) do
-    case Cadence.Accounts.fetch_user(id) do
-      {:ok, user} -> user.display_name || user.email
-      _missing -> nil
+  defp separation_reason(%{reason: :self, via_service: nil}), do: {"self_approval", nil}
+
+  defp separation_reason(%{reason: :self, via_service: via}),
+    do: {"self_approval", %{via_service: via}}
+
+  defp separation_reason(%{reason: :authors_unknown, service: service}),
+    do: {"authors_unknown", %{service: service}}
+
+  # #366 (mms-security, #146's rule): the importer is named only while an active member of the
+  # mission's organization, checked at read time, and never by email. An active member with no
+  # display name keeps their id with `name: nil` (api-ops on #487: membership, not a name, is the
+  # line for the id, as Configuration.ActorNames). Anyone else (a platform admin from another
+  # organization, someone who has left) is `%{id: nil, name: nil}`, so neither their name nor their
+  # id reaches this organization; it still reads as recorded, not as "Importer not recorded".
+  defp first_importer(org, [id | _]),
+    do: person_or_nil(id, MemberNames.members(org, [id]))
+
+  defp first_importer(_org, []), do: nil
+
+  defp person_or_nil(nil, _names), do: nil
+
+  defp person_or_nil(id, names) do
+    case Map.fetch(names, id) do
+      {:ok, name} -> %{id: id, name: name}
+      :error -> %{id: nil, name: nil}
     end
   end
 

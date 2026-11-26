@@ -3,9 +3,11 @@ import { computed } from "vue";
 import { ApStatusMark, stateTextClass } from "@/ui";
 import type { WorkspacePlacement } from "../model/snapshot.ts";
 import { constellation, limitLabel, limitMark, type HealthCell } from "../model/widget-data.ts";
+import { useWidgetName } from "./widget-name.ts";
 
 /** Worst limit state per spacecraft. Counts lead, so the problems read first. */
 const props = defineProps<{ placement: WorkspacePlacement }>();
+const name = useWidgetName(() => props.placement);
 const cells = computed(() => constellation(props.placement));
 const order: readonly HealthCell["state"][] = ["red", "yellow", "blue", "no_data", "green"];
 const counts = computed(() =>
@@ -16,7 +18,13 @@ const counts = computed(() =>
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 flex-col gap-3 overflow-auto px-3 py-2">
+  <!-- B1: the scroll box is a tab stop named by its widget. -->
+  <div
+    class="flex h-full min-h-0 flex-col gap-3 overflow-auto px-3 py-2"
+    role="region"
+    tabindex="0"
+    :aria-label="name"
+  >
     <ul class="flex flex-wrap gap-4 text-xs">
       <li v-for="{ state, count } in counts" :key="state" class="flex items-center gap-1.5">
         <ApStatusMark :state="limitMark[state]" />
@@ -31,11 +39,11 @@ const counts = computed(() =>
         v-for="cell in cells"
         :key="cell.id"
         class="grid h-5 w-5 place-items-center border border-hairline bg-vacuum"
-        role="img"
         :title="`${cell.id}: ${limitLabel[cell.state]}`"
-        :aria-label="`${cell.id}: ${limitLabel[cell.state]}`"
       >
+        <!-- B2: a list item keeps its role (axe list); the words are text, not role=img. -->
         <ApStatusMark :state="limitMark[cell.state]" />
+        <span class="sr-only">{{ cell.id }}: {{ limitLabel[cell.state] }}</span>
       </li>
     </ul>
   </div>

@@ -9,7 +9,8 @@
 #     each with a source endpoint and Telemetry Decom installed (Communications is a platform app,
 #     on every mission already);
 #   - the catalog "qa-l10 demo copy" (demo_spacecraft.yaml) imported under the seed's own system
-#     actor, never a person, so its mission model is a CANDIDATE any admin may approve;
+#     actor, naming the administrator who ran it (#513): its mission model is a CANDIDATE that any
+#     OTHER admin may approve (the runner counts as its importer);
 #   - a QA provider on the dev simulator: credential (the env variable named, never its value),
 #     account, grant to the QA mission, mission provider, then validate and sync;
 #   - one direct TCP-client transport and one downlink routing rule to 23565-1;
@@ -103,7 +104,7 @@ defmodule Cadence.Dev.ApogeeQaMission do
     profile = ensure_profile(@qa1)
     craft = Enum.map([1, 2], &ensure_spacecraft(@qa1, &1, &1, profile))
     Enum.each(craft, &ensure_decom(scope, @qa1, &1))
-    revision = ensure_catalog(@qa1)
+    revision = ensure_catalog(@qa1, scope.user.user_id)
     provider = Provider.ensure_provider(scope, offline?)
     transport = Provider.ensure_direct_transport()
     Provider.ensure_route(hd(craft), transport)
@@ -129,7 +130,7 @@ defmodule Cadence.Dev.ApogeeQaMission do
     profile = ensure_profile(@qa2)
     craft = ensure_spacecraft(@qa2, 1, @qa2_scid, profile)
     ensure_decom(scope, @qa2, craft)
-    revision = ensure_catalog(@qa2)
+    revision = ensure_catalog(@qa2, scope.user.user_id)
 
     IO.puts("""
     QA mission 2 ready: #{mission.display_name} (#{mission.slug}, #{mission.mission_id}).
@@ -286,11 +287,14 @@ defmodule Cadence.Dev.ApogeeQaMission do
     end
   end
 
-  # Imported under the seed's own system actor (Cadence itself, Catalog.Actor), never a person:
-  # an importer can't approve the model under the independent policy, and no person ran this.
-  defp seed_actor, do: Actor.system("seed:apogee-qa-mission-v1", "QA mission seed")
+  # Imported under the seed's own system actor (Cadence itself, Catalog.Actor), naming the person
+  # who ran it (#513, MM-2): the environment's administrator this seed acts as. They count as the
+  # model's importer, so under 'independent' the server refuses their approval of it; a second
+  # admin approves (DECISIONS #113(4)). The seed still writes no approval decision or setting (#250).
+  defp seed_actor(run_by),
+    do: Actor.system("seed:apogee-qa-mission-v1", "QA mission seed", run_by)
 
-  defp ensure_catalog(m) do
+  defp ensure_catalog(m, run_by) do
     case Catalog.fetch_database(@organization_id, m.mission_id, m.catalog_id) do
       {:ok, _} ->
         :ok
@@ -302,7 +306,7 @@ defmodule Cadence.Dev.ApogeeQaMission do
             name: m.catalog_name,
             catalog_family: :combined,
             default_importer_key: "cadence_yaml",
-            created_by: seed_actor(),
+            created_by: seed_actor(run_by),
             description: "The repository's demo_spacecraft.yaml, for #{m.display_name}.",
             metadata: @metadata
           })
@@ -310,11 +314,11 @@ defmodule Cadence.Dev.ApogeeQaMission do
 
     case Catalog.list_revisions(@organization_id, m.mission_id, m.catalog_id) do
       [revision | _] -> revision
-      [] -> import_revision(m)
+      [] -> import_revision(m, run_by)
     end
   end
 
-  defp import_revision(m) do
+  defp import_revision(m, run_by) do
     source = File.read!(F.database_path())
     digest = :crypto.hash(:sha256, source) |> Base.encode16(case: :lower)
 
@@ -327,7 +331,7 @@ defmodule Cadence.Dev.ApogeeQaMission do
         format_key: "cadence_yaml",
         media_type: "application/yaml",
         source_artifact: source,
-        uploaded_by: seed_actor(),
+        uploaded_by: seed_actor(run_by),
         metadata: @metadata
       })
 
@@ -338,7 +342,7 @@ defmodule Cadence.Dev.ApogeeQaMission do
         m.catalog_id,
         artifact,
         "cadence_yaml",
-        requested_by: seed_actor()
+        requested_by: seed_actor(run_by)
       )
 
     await_import(m, run.import_run_id, 240)

@@ -35,3 +35,32 @@ export function refocusFirst(...candidates: readonly (HTMLElement | null | undef
     target.setAttribute("tabindex", "-1");
   target?.focus();
 }
+
+const FIELD =
+  "input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled])";
+
+/**
+ * Where focus goes when a chip leaves with its × focused (A5), in order: the next chip's ×, the
+ * previous chip's ×, then the group's field (a search box or an Add select beside the chips, up to
+ * three levels out). The group is the nearest `[data-ap-chips]`, else the chip's parent (its list
+ * when each chip sits in an <li>). Read before the chip leaves the page.
+ */
+export function chipFocusCandidates(remove: HTMLElement): readonly (HTMLElement | null)[] {
+  const chip = remove.closest<HTMLElement>("[data-ap-chip]") ?? remove;
+  const parent = chip.parentElement;
+  const group =
+    chip.closest<HTMLElement>("[data-ap-chips]") ??
+    (parent?.tagName === "LI" ? parent.parentElement : parent);
+  if (!group) return [];
+  const buttons = Array.from(group.querySelectorAll<HTMLElement>("[data-ap-chip-remove]"));
+  const at = buttons.indexOf(remove);
+  let field: HTMLElement | null = null;
+  for (let box: HTMLElement | null = group, up = 0; box && up < 3 && !field; up++) {
+    field =
+      Array.from(box.querySelectorAll<HTMLElement>(FIELD)).find(
+        (f) => !f.closest("[data-ap-chip]"),
+      ) ?? null;
+    box = box.parentElement;
+  }
+  return [buttons[at + 1] ?? null, at > 0 ? (buttons[at - 1] ?? null) : null, field];
+}

@@ -12,15 +12,45 @@ defmodule CadenceWeb.API.CommandingJSON do
   }
 
   alias Cadence.Persistence.JsonDocument
+  alias CadenceWeb.API.ActorDocument
 
-  def command_stage(%CommandStage{} = stage) do
+  @doc """
+  #465: the actor names a response's records need, loaded once (`ActorDocument.names/2`), under
+  their own organization. Pass the result to each encoder; one record alone loads its own.
+  """
+  @spec actor_names([struct()]) :: map()
+  def actor_names([]), do: ActorDocument.names(nil, [])
+
+  def actor_names([first | _] = records),
+    do: ActorDocument.names(first.organization_id, Enum.flat_map(records, &actors/1))
+
+  defp actors(%CommandStage{owner: owner}), do: [owner]
+  defp actors(%CommandRequest{requested_by: by}), do: [by]
+  defp actors(%CommandApproval{decided_by: by}), do: [by]
+  defp actors(%CommandQueueEntry{enqueued_by: by}), do: [by]
+  defp actors(%CommandReleaseAttempt{released_by: by}), do: [by]
+  defp actors(_record), do: []
+
+  @doc "#465: encodes a list's records with `encode/2`, loading their actor names once."
+  @spec encode_all([struct()], (struct(), map() -> map())) :: [map()]
+  def encode_all(records, encode) do
+    names = actor_names(records)
+    Enum.map(records, &encode.(&1, names))
+  end
+
+  defp names_for(nil, record), do: actor_names([record])
+  defp names_for(names, _record), do: names
+
+  def command_stage(%CommandStage{} = stage, names \\ nil) do
+    names = names_for(names, stage)
+
     %{
       command_stage_id: stage.command_stage_id,
       organization_id: stage.organization_id,
       mission_id: stage.mission_id,
       stage_name: stage.stage_name,
       description: stage.description,
-      owner: stage.owner,
+      owner: ActorDocument.actor(stage.owner, names),
       visibility: Atom.to_string(stage.visibility),
       lifecycle_state: Atom.to_string(stage.lifecycle_state),
       metadata: stage.metadata
@@ -48,7 +78,9 @@ defmodule CadenceWeb.API.CommandingJSON do
     }
   end
 
-  def command_request(%CommandRequest{} = request) do
+  def command_request(%CommandRequest{} = request, names \\ nil) do
+    names = names_for(names, request)
+
     %{
       command_request_id: request.command_request_id,
       organization_id: request.organization_id,
@@ -63,7 +95,7 @@ defmodule CadenceWeb.API.CommandingJSON do
       priority: request.priority,
       not_before: iso8601(request.not_before),
       expires_at: iso8601(request.expires_at),
-      requested_by: JsonDocument.encode(request.requested_by),
+      requested_by: request.requested_by |> JsonDocument.encode() |> ActorDocument.actor(names),
       source_command_stage_id: request.source_command_stage_id,
       source_staged_command_item_id: request.source_staged_command_item_id,
       argument_values: JsonDocument.encode(request.argument_values),
@@ -84,21 +116,25 @@ defmodule CadenceWeb.API.CommandingJSON do
     }
   end
 
-  def command_approval(%CommandApproval{} = approval) do
+  def command_approval(%CommandApproval{} = approval, names \\ nil) do
+    names = names_for(names, approval)
+
     %{
       command_approval_id: approval.command_approval_id,
       organization_id: approval.organization_id,
       mission_id: approval.mission_id,
       command_request_id: approval.command_request_id,
       decision: Atom.to_string(approval.decision),
-      decided_by: JsonDocument.encode(approval.decided_by),
+      decided_by: approval.decided_by |> JsonDocument.encode() |> ActorDocument.actor(names),
       decided_at: iso8601(approval.decided_at),
       reason: approval.reason,
       metadata: JsonDocument.encode(approval.metadata)
     }
   end
 
-  def command_queue_entry(%CommandQueueEntry{} = entry) do
+  def command_queue_entry(%CommandQueueEntry{} = entry, names \\ nil) do
+    names = names_for(names, entry)
+
     %{
       command_queue_entry_id: entry.command_queue_entry_id,
       organization_id: entry.organization_id,
@@ -111,13 +147,15 @@ defmodule CadenceWeb.API.CommandingJSON do
       not_before: iso8601(entry.not_before),
       expires_at: iso8601(entry.expires_at),
       lifecycle_state: Atom.to_string(entry.lifecycle_state),
-      enqueued_by: JsonDocument.encode(entry.enqueued_by),
+      enqueued_by: entry.enqueued_by |> JsonDocument.encode() |> ActorDocument.actor(names),
       enqueued_at: iso8601(entry.enqueued_at),
       metadata: JsonDocument.encode(entry.metadata)
     }
   end
 
-  def command_release_attempt(%CommandReleaseAttempt{} = attempt) do
+  def command_release_attempt(%CommandReleaseAttempt{} = attempt, names \\ nil) do
+    names = names_for(names, attempt)
+
     %{
       command_release_attempt_id: attempt.command_release_attempt_id,
       organization_id: attempt.organization_id,
@@ -142,7 +180,7 @@ defmodule CadenceWeb.API.CommandingJSON do
       lifecycle_state: Atom.to_string(attempt.lifecycle_state),
       verification_state: maybe_atom_to_string(attempt.verification_state),
       failure_reason: attempt.failure_reason,
-      released_by: JsonDocument.encode(attempt.released_by),
+      released_by: attempt.released_by |> JsonDocument.encode() |> ActorDocument.actor(names),
       attempted_at: iso8601(attempt.attempted_at),
       released_at: iso8601(attempt.released_at),
       metadata: JsonDocument.encode(attempt.metadata)

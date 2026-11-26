@@ -1,8 +1,17 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
-import { computed } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { useRemoteQuery } from "@/api";
-import { ApCallout, ApKeyValue, ApPanel, ApRemote, ApTable, formatAbsolute, plural } from "@/ui";
+import {
+  ApCallout,
+  ApKeyValue,
+  ApPanel,
+  ApRemote,
+  ApTable,
+  formatAbsolute,
+  refocusFirst,
+  plural,
+} from "@/ui";
 import type { ApColumn } from "@/ui";
 import { fetchTemplate } from "./api.ts";
 import RequirementEnd from "./RequirementEnd.vue";
@@ -14,6 +23,7 @@ import {
   requirementFacts,
   type RequirementDetail,
 } from "./requirements.ts";
+import VersionByCell from "./VersionByCell.vue";
 
 /** P4 requirement, read: its facts, how it ended, where a template's lives, and its versions. */
 const props = defineProps<{
@@ -22,7 +32,32 @@ const props = defineProps<{
   endable: boolean;
   canEdit: boolean;
 }>();
-defineEmits<{ ended: [] }>();
+const emit = defineEmits<{ ended: [] }>();
+/**
+ * #244 (A5): a successful Close or Cancel unmounts RequirementEnd (its confirm had focus) once the
+ * refetch shows it ended. Focus moves to the ended line when it appears.
+ */
+const endedBox = ref<HTMLElement | null>(null);
+let justEnded = false;
+function onEnded() {
+  justEnded = true;
+  emit("ended");
+}
+// fe-ops on #584: a pending move never outlives the requirement it was for.
+watch(
+  () => props.requirement.id,
+  () => (justEnded = false),
+);
+watch(
+  () => endedLine(props.requirement),
+  async (line) => {
+    if (!line || !justEnded) return;
+    justEnded = false;
+    await nextTick();
+    // B4 (ux's #431 rule): only when focus was lost (the kit's refocusFirst).
+    refocusFirst(endedBox.value);
+  },
+);
 const schema = useRemoteQuery(() => props.missionId, fetchRequirementSchema);
 const template = useRemoteQuery(
   () =>
@@ -47,7 +82,9 @@ const columns: readonly ApColumn[] = [
 </script>
 
 <template>
-  <ApCallout v-if="endedLine(requirement)" tone="off">{{ endedLine(requirement) }}</ApCallout>
+  <div v-if="endedLine(requirement)" ref="endedBox" tabindex="-1" data-ended-line>
+    <ApCallout tone="off">{{ endedLine(requirement) }}</ApCallout>
+  </div>
   <ApCallout v-if="requirement.template_id" tone="info"
     >Change it in its template:
     <RouterLink
@@ -72,7 +109,7 @@ const columns: readonly ApColumn[] = [
     :mission-id="missionId"
     :requirement="requirement"
     :occurrence="occurrence"
-    @ended="$emit('ended')"
+    @ended="onEnded"
   />
   <ApPanel index="Q2" title="History" :meta="plural(requirement.versions.length, 'version')" flush>
     <ApTable
@@ -83,7 +120,7 @@ const columns: readonly ApColumn[] = [
     >
       <template #cell-version="{ row }">v{{ row.version }}</template>
       <template #cell-at="{ row }">{{ formatAbsolute(new Date(row.created_at)) }}</template>
-      <template #cell-by="{ row }">{{ row.actor?.name ?? "Not recorded" }}</template>
+      <template #cell-by="{ row }"><VersionByCell :actor="row.actor" /></template>
     </ApTable>
   </ApPanel>
   <p v-if="!canEdit" class="m-0 text-sm text-text-3">Org admins change contact planning.</p>

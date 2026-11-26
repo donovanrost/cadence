@@ -8,7 +8,9 @@ defmodule Cadence.Catalog.ImportExecution do
 
   alias Cadence.Catalog.Diagnostic
   alias Cadence.Catalog.MissionModel.CompilerResult, as: MissionModelCompilerResult
+  alias Cadence.Catalog.MissionModel.Revision, as: MissionModelRevision
   alias Cadence.MissionModels
+  alias Cadence.MissionModels.Compositions
 
   @type outcome :: %{
           imported_definition_count: non_neg_integer(),
@@ -16,12 +18,19 @@ defmodule Cadence.Catalog.ImportExecution do
           result_document: map()
         }
 
-  @spec persist(binary(), binary(), ImportResult.t()) :: {:ok, outcome()} | {:error, term()}
-  def persist(organization_id, import_run_id, %ImportResult{} = import_result)
+  @spec persist(binary(), binary(), ImportResult.t(), map()) ::
+          {:ok, outcome()} | {:error, term()}
+  def persist(
+        organization_id,
+        import_run_id,
+        %ImportResult{} = import_result,
+        requested_by \\ %{}
+      )
       when is_binary(organization_id) and is_binary(import_run_id) do
     with :ok <- require_declaration_layers(import_result),
          {:ok, mission_model_result} <-
-           MissionModels.compile_layers(import_result.bundle.declaration_layers) do
+           MissionModels.compile_layers(import_result.bundle.declaration_layers),
+         :ok <- compose(organization_id, import_result, mission_model_result, requested_by) do
       {:ok,
        %{
          imported_definition_count: import_result.imported_definition_count,
@@ -32,6 +41,41 @@ defmodule Cadence.Catalog.ImportExecution do
            |> Map.put("import_run_id", import_run_id)
            |> Map.put("mission_model", mission_model_document(mission_model_result))
        }}
+    end
+  end
+
+  # D1 (#541; design §1): an import creates its own one-layer composition at '/', with the importer
+  # as creator, and links its revision when the revision is usable, so a fresh import can be
+  # approved and pinned as before. An unusable revision (blocking diagnostics) gets no link and
+  # the import still completes with its diagnostics, as today.
+  defp compose(organization_id, %ImportResult{bundle: %{declaration_layers: [layer]}}, result, by) do
+    with {:ok, composition} <-
+           Compositions.insert_or_get(
+             organization_id,
+             layer.mission_id,
+             [{layer.layer_id, "/"}],
+             by
+           ) do
+      link(organization_id, layer.mission_id, composition, result)
+    end
+  end
+
+  # Importers emit one layer; anything else is D4's multi-import path, not an import's own.
+  defp compose(_organization_id, _import_result, _result, _by), do: :ok
+
+  defp link(organization_id, mission_id, composition, %MissionModelCompilerResult{} = result) do
+    if MissionModelRevision.valid?(result.revision) do
+      with {:ok, _revision_id} <-
+             Compositions.effective_revision(
+               organization_id,
+               mission_id,
+               composition.composition_id,
+               nil,
+               compiled: result
+             ),
+           do: :ok
+    else
+      :ok
     end
   end
 

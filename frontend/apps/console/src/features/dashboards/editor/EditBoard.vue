@@ -111,6 +111,7 @@ watch(
       <EditSectionHead
         :section="s.section"
         :count="s.placements.length"
+        :position="i + 1"
         :first="i === 0"
         :last="i === sections.length - 1"
         @add-widget="emit('edit', null, s.section.id)"

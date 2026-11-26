@@ -80,8 +80,19 @@ describe("#320: the review panel", () => {
     await w.find("textarea, input").setValue("Looks right");
     expect(w.get("[data-review-blocked]").text()).toBe(AUTHOR);
     for (const b of buttons(w)) expect(b.attributes("aria-disabled")).toBe("true");
-    // A6: the line is also each disabled button's description.
-    expect(w.findAll(".sr-only").map((s) => s.text())).toEqual([AUTHOR, AUTHOR]);
+    // #313 (A6): the reason is said once; the field and both buttons point at that one line.
+    const lineId = w.get("[data-review-blocked]").attributes("id");
+    expect(lineId).toBeTruthy();
+    for (const b of buttons(w)) expect(b.attributes("aria-describedby")).toBe(lineId);
+    const field = w.get("input");
+    expect(field.attributes("aria-describedby")?.split(" ")).toContain(lineId);
+    expect(w.findAll(".sr-only").map((s) => s.text())).not.toContain(AUTHOR);
+    // The Comment typed so far is kept, read-only (never disabled).
+    const input = field.element;
+    if (!(input instanceof HTMLInputElement)) throw new Error("not an input");
+    expect(input.readOnly).toBe(true);
+    expect(input.disabled).toBe(false);
+    expect(input.value).toBe("Looks right");
     expect(w.text()).not.toContain("Technical details");
   });
 

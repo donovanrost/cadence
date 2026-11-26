@@ -11,6 +11,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningPoliciesTest do
 
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Contacts.Store.FleetPlanningPolicyApprovalRow
+  alias Cadence.Persistence.JsonDocument
   alias Cadence.PolicyReviewer
 
   @organization_id "org-fleet-planning-policy"
@@ -131,6 +132,23 @@ defmodule Cadence.ContactPlanning.FleetPlanningPoliciesTest do
                  select: row.policy_document
                )
              )
+
+    # #466: the stored decider is kind, id and display name only, with no email.
+    reviewer = PolicyReviewer.reviewer(context.admin_scope).user
+
+    assert [stored_actor] =
+             Cadence.Repo.all(
+               from(row in FleetPlanningPolicyApprovalRow,
+                 where: row.fleet_planning_policy_id == ^policy.fleet_planning_policy_id,
+                 select: row.actor_document
+               )
+             )
+
+    assert JsonDocument.unwrap_value(stored_actor) == %{
+             "kind" => "user",
+             "user_id" => reviewer.user_id,
+             "display_name" => reviewer.display_name
+           }
   end
 
   test "a new draft version leaves the approved version active until exact approval", context do

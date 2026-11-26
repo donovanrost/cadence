@@ -15,6 +15,7 @@ import {
   type ApColumn,
   type ApCrumb,
 } from "@/ui";
+import { refetchKeepingFocus } from "../focus-fallback.ts";
 import MoreMenu from "../viewer/MoreMenu.vue";
 import { kindWord, type LibraryRow } from "./api.ts";
 import RenameSheet from "./RenameSheet.vue";
@@ -44,6 +45,8 @@ const q = computed({
 });
 const page = computed(() => Math.max(1, Number(route.query.page) || 1));
 const list = useLibraryList(missionId, q, page);
+/** A5: a deleted widget's row leaves with its ⋯; focus goes to the page heading. */
+const refetchAfterDelete = refetchKeepingFocus(() => list.state.value, list.refetch);
 const rename = ref<InstanceType<typeof RenameSheet> | null>(null);
 const retire = ref<InstanceType<typeof RetireSheet> | null>(null);
 const columns: readonly ApColumn[] = [
@@ -97,6 +100,7 @@ function act(row: LibraryRow, id: "rename" | "delete") {
           <ApEmptyState
             v-if="value.items.length === 0"
             :headline="q ? `Nothing in the library matches “${q}”` : 'The library is empty'"
+            :announce="q !== ''"
             sentence="Save a widget to the library from a dashboard's editor to reuse it."
           />
           <ApTable
@@ -139,6 +143,6 @@ function act(row: LibraryRow, id: "rename" | "delete") {
       </ApRemote>
     </ApPanel>
     <RenameSheet ref="rename" :mission-id="missionId" @done="list.refetch" />
-    <RetireSheet ref="retire" :mission-id="missionId" @done="list.refetch" />
+    <RetireSheet ref="retire" :mission-id="missionId" @done="refetchAfterDelete" />
   </div>
 </template>

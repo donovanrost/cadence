@@ -369,7 +369,12 @@ confirm_unbooked: bool (default false)}`; `operate_mission`, a fresh human (GO/N
 "expected_review": "<review_token>"}`. Returns the group. A note is required except for `go`.
 `go_excluding` rejects the named targets' members ("excluded at review").
 
-Errors: `403 command_group_self_approval_not_allowed`, `403 not_the_requested_approver`,
+Errors: `403 command_group_self_approval_not_allowed` (#622, #280: the requester counts as people,
+as on a single request, so a service requester is its issuer and rotators; details
+`{via_service: {id, name}}` when it came through a service you're accountable for, none when you
+requested it yourself), `403 command_group_approver_authors_unknown` (details `{service}`: a service
+nobody is recorded as accountable for requested it, so nobody can decide it; fail closed),
+`403 not_the_requested_approver`,
 `409 command_group_not_pending`, `409 command_group_review_stale`, `409 command_group_basis_changed`
 (the active catalog changed since submit, so resubmit), `409 command_group_members_changed` (GO
 only: the group's member rows no longer match what submission recorded; details
@@ -646,6 +651,26 @@ Discards the draft. The response is `204` (idempotent).
 draft is deleted in the same transaction, **only if it is still at that revision**, so a newer
 autosave from another tab survives.
 
+## REST commanding: actors (#465)
+
+Every actor object the pre-console REST commanding API sends (a command stage's `owner`, a command
+request's `requested_by`, an approval's `decided_by`, a queue entry's `enqueued_by`, a release
+attempt's `released_by`, alone or inside the decide, enqueue and release answers) is `{kind, id,
+name}` or `null`, never the stored actor document (#146, through #472's `ActorRef`):
+
+- `kind`: `user`, `service` or `system`.
+- A person is named, and keeps their `id`, only while they hold an active membership in the
+  record's organization, checked at read time; `name` is null when they have no display name.
+  Anyone else (someone who has left, a platform admin from another organization) is `{kind:
+  "user", id: null, name: null}`.
+- A service identity of the organization keeps its `id` and its live display name; another
+  organization's is `{kind: "service", id: null, name: null}`.
+- The system actor reads as stored (`{kind: "system", id, name}`).
+- A stored document Cadence can't read makes the whole field `null`.
+- Never an email: the rows written before #466 that hold one stay as they are (#116), and it never
+  leaves the server. The stored keys (`actor_kind`, `user_id`, `service_identity_id`,
+  `user_display_name`, …) are gone from the answer; read `kind` and `id`.
+
 ## REST command requests: command-group members (owner: api-ops; four-eyes P0, 2026-11-18)
 
 The pre-console REST API under `/api/organizations/:organization_id/missions/:mission_id`
@@ -661,9 +686,17 @@ used to succeed is now refused.
 | `POST /command_requests/:id/enqueue` | `409 command_request_in_group` | The same, for queueing. Nothing was queued. | The group's GO queues its members. |
 | `POST /command_queue_entries/:id/release` | `409 command_group_not_armed` | The entry is a group member and its group isn't armed (`queued`, after its GO), judged from the server's group row. Nothing was released. | Give the group its GO; its release goes through the group. |
 | `POST /command_requests` | `422 command_request_group_reserved` | The request's `metadata` names a group (`metadata["group"]`). Nothing was created. | Submit the group: `POST /api/console/v1/missions/:mission_id/command-groups`. Drop group keys from a standalone request's `metadata`. |
+| `POST /command_requests/:id/approve` | `403 command_request_approver_authors_unknown` (#280) | The request was made through a service identity with nobody recorded as accountable for it, so nobody can approve it. Nothing was recorded. | An org admin records who is accountable (People › Service identities), then a person outside them approves. |
 
 The `message` is ux U87's words: "This command is part of a command group. Approve it with the
 group's GO/NO-GO.", "A command joins a command group only when the group is submitted." and
 "This command's group hasn't been given its GO, so it can't be sent." Membership is read from the
 server's group records, never from a caller's metadata. Requests outside any group are unchanged. The console's named release already refused an unarmed group (`command_group_not_armed`
 under `refused`, in the release section above).
+
+**Service requesters (#280, ux U100).** A request made through a service identity counts as made by
+the people accountable for it (its issuer and rotators, and anyone an org admin records). Approving
+it as one of them is refused with the same reason as approving your own,
+`command_request_self_approval_not_allowed`. Before, a service requester had no `user_id`, so
+that check passed. This REST envelope carries no `details`, so the service isn't named here; the
+console's refusals name it (`details.via_service`).

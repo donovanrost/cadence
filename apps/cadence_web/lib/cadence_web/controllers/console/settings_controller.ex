@@ -20,12 +20,17 @@ defmodule CadenceWeb.Console.SettingsController do
   def update(conn, %{"section_key" => key} = params) do
     expected = if is_integer(params["expected_version"]), do: params["expected_version"]
 
+    # #499: the digest of the grants the console showed, confirming their suspension.
+    acknowledged =
+      if is_binary(params["acknowledged_suspensions"]), do: params["acknowledged_suspensions"]
+
     case ConsoleSettings.save(
            conn.assigns.current_scope,
            mission_id(conn),
            key,
            params["values"],
-           expected
+           expected,
+           acknowledged_suspensions: acknowledged
          ) do
       {:ok, result} -> conn |> put_status(:created) |> json(%{data: ConfigJSON.encode(result)})
       {:error, reason} -> save_error(conn, key, reason)
@@ -43,6 +48,10 @@ defmodule CadenceWeb.Console.SettingsController do
       do: error(conn, reason),
       else: refuse(conn, :forbidden, approval_words(conn))
   end
+
+  # #499: the tightening would suspend grants: the list and its digest, nothing written.
+  defp save_error(conn, _key, {:approval_tightening_suspends_grants, details}),
+    do: Problem.respond(conn, :approval_tightening_suspends_grants, details)
 
   defp save_error(conn, _key, reason), do: error(conn, reason)
 

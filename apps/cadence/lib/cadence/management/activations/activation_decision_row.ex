@@ -38,10 +38,17 @@ defmodule Cadence.Management.Activations.ActivationDecisionRow do
     :decided_at
   ]
 
+  # #521: a reason is required unless the decision is an approval (DecisionRecord's rule): a
+  # change-set approval may carry no comment.
   def changeset(%ActivationDecision{} = decision) do
-    %__MODULE__{}
-    |> cast(domain_attrs(decision), @fields)
-    |> validate_required(@fields)
+    changeset = cast(%__MODULE__{}, domain_attrs(decision), @fields)
+
+    required =
+      if get_field(changeset, :decision) in [:approved, "approved"],
+        do: @fields -- [:reason],
+        else: @fields
+
+    validate_required(changeset, required)
   end
 
   def to_domain(%__MODULE__{} = row) do

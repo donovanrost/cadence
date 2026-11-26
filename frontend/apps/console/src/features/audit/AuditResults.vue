@@ -52,7 +52,12 @@ const unshown = computed(() => [...props.page.unshown, ...props.olderUnshown]);
             @click="$emit('older')"
             >Load older</ApButton
           >
-          <span v-if="failed" class="text-caution-text">Older events couldn't load.</span>
+          <!-- #244 (B6): it answers the person's own click, so an alert (ca-ux, as #410), always
+            mounted and in the tree (no display:none, ux) so it's announced; useAuditLog clears the
+            flag as Older starts, so a repeat failure is said again. -->
+          <span role="alert" class="text-caution-text">{{
+            failed ? "Older events couldn't load. Try Load older again." : ""
+          }}</span>
         </div>
       </template>
     </AuditTable>

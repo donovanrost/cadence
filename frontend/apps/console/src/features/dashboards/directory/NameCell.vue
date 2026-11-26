@@ -8,7 +8,10 @@ defineProps<{ row: DirectoryRow }>();
 
 <template>
   <span class="flex min-w-0 items-center gap-2">
-    <span v-if="row.starred" class="text-text-3" aria-label="Starred">★</span>
+    <template v-if="row.starred"
+      ><span class="text-text-3" aria-hidden="true">★</span
+      ><span class="sr-only">Starred</span></template
+    >
     <RouterLink
       :to="{ name: 'ops.dashboard', params: { dashboardId: row.id } }"
       class="min-w-0 truncate text-readout underline-offset-2 hover:underline"

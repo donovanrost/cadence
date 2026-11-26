@@ -25,18 +25,31 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Drafts do
   alias Cadence.SourceEndpoints
   alias Cadence.SpacecraftStore
 
-  def authorize(
-        %Scope{mission_id: scoped, user: %{user_id: user_id}} = scope,
-        mission_id,
-        spacecraft_id
-      )
-      when is_binary(user_id) and is_binary(mission_id) and is_binary(spacecraft_id) and
-             (is_nil(scoped) or scoped == mission_id) do
-    with :ok <-
-           Policy.authorize(scope, :operate_mission, %{
-             organization_id: scope.organization_id,
-             mission_id: mission_id
-           }),
+  @doc """
+  Whether `scope` may save a spacecraft configuration draft in `mission_id`: a person, in this
+  mission's scope, who may operate it. `authorize/3` runs exactly this, and the workspace
+  snapshot's `can_save` reads it, so the two can't drift (lead on #620).
+  """
+  @spec may_save?(Scope.t(), binary()) :: boolean()
+  def may_save?(scope, mission_id), do: permitted(scope, mission_id) == :ok
+
+  defp permitted(
+         %Scope{mission_id: scoped, user: %{user_id: user_id}} = scope,
+         mission_id
+       )
+       when is_binary(user_id) and is_binary(mission_id) and
+              (is_nil(scoped) or scoped == mission_id) do
+    Policy.authorize(scope, :operate_mission, %{
+      organization_id: scope.organization_id,
+      mission_id: mission_id
+    })
+  end
+
+  defp permitted(_scope, _mission_id), do: {:error, :invalid_spacecraft_scope}
+
+  def authorize(%Scope{} = scope, mission_id, spacecraft_id)
+      when is_binary(mission_id) and is_binary(spacecraft_id) do
+    with :ok <- permitted(scope, mission_id),
          {:ok, mission} <- Missions.fetch_mission(scope.organization_id, mission_id),
          {:ok, spacecraft} <-
            SpacecraftStore.fetch_spacecraft(scope.organization_id, mission_id, spacecraft_id) do

@@ -1,9 +1,21 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import { ApButton, formatShort } from "@/ui";
 import type { Change } from "./shapes.ts";
 
-/** K1 row head: summary, author and staged time, Withdraw (when allowed), Details toggle. */
-defineProps<{ change: Change; canWithdraw: boolean; open: boolean; busy: boolean }>();
+/**
+ * K1 row head: summary, author and staged time, Withdraw (when allowed), Details toggle. #313 K9
+ * (ux §10; a11y B7): Withdraw is the `×`, named and titled "Withdraw <change> from r<next>".
+ */
+const props = defineProps<{
+  change: Change;
+  canWithdraw: boolean;
+  open: boolean;
+  busy: boolean;
+  /** The revision this set applies as (head + 1). */
+  nextRevision: number;
+}>();
+const withdrawName = computed(() => `Withdraw ${props.change.summary} from r${props.nextRevision}`);
 defineEmits<{ withdraw: []; toggle: [] }>();
 </script>
 
@@ -22,11 +34,13 @@ defineEmits<{ withdraw: []; toggle: [] }>();
       v-if="canWithdraw"
       size="compact"
       variant="ghost"
-      :aria-label="`Withdraw ${change.summary}`"
+      data-withdraw
+      :aria-label="withdrawName"
+      :title="withdrawName"
       :disabled="busy"
       disabled-reason="Working…"
       @click="$emit('withdraw')"
-      >Withdraw</ApButton
+      ><span aria-hidden="true">×</span></ApButton
     >
     <ApButton size="compact" variant="ghost" :aria-expanded="open" @click="$emit('toggle')">{{
       open ? "Hide" : "Details"

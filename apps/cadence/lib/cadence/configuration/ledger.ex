@@ -42,7 +42,9 @@ defmodule Cadence.Configuration.Ledger do
   @spec record(HeadRow.t(), map(), [map()]) :: {:ok, RevisionRow.t()} | {:error, term()}
   def record(%HeadRow{} = head, attrs, entries) do
     number = head.revision_number + 1
-    revision_id = Ids.new("config_revision")
+    # #261: a caller may choose the id before its transaction, to prove the revision is its own
+    # if the connection drops.
+    revision_id = Map.get(attrs, :revision_id) || Ids.new("config_revision")
 
     revision = %RevisionRow{
       revision_id: revision_id,

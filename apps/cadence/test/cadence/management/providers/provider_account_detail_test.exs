@@ -21,11 +21,11 @@ defmodule Cadence.Management.Providers.ProviderAccountDetailTest do
 
   test "a known mission reads its name" do
     assert %{mission: %{id: "m-1", name: "Earendil"}} =
-             ProviderAccountDetail.grant_row(grant("m-1"), %{"m-1" => "Earendil"})
+             ProviderAccountDetail.grant_row(grant("m-1"), %{"m-1" => "Earendil"}, %{})
   end
 
   test "a mission with no name on record reads as its id, never null" do
     assert %{mission: %{id: "m-gone", name: "m-gone"}} =
-             ProviderAccountDetail.grant_row(grant("m-gone"), %{"m-1" => "Earendil"})
+             ProviderAccountDetail.grant_row(grant("m-gone"), %{"m-1" => "Earendil"}, %{})
   end
 end

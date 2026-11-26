@@ -5,6 +5,8 @@ config :opentelemetry, traces_exporter: :none
 # Uplink sessions are qualified only by signed provider attestations (#44 D2); without
 # provider evidence a session stays blocked (fencing_unproven).
 config :cadence, :uplink_session_policy, Cadence.Control.UplinkSessionQualification
+# #499: a tightening of a mission's approval setting suspends grants approved by one person.
+config :cadence, :approval_tightening, Cadence.ContactPlanning.GrantSuspension
 
 config :logger, :default_formatter,
   metadata: [

@@ -1,4 +1,4 @@
-import { isRecord } from "@/api";
+import { setAt, type JsonObject } from "@/api";
 import {
   displayValue,
   type FormValues,
@@ -19,7 +19,7 @@ export type NewProfileForm = Readonly<{
   schema: KindSchema;
   values: FormValues;
   /** Copied as-is from the source profile (duplicate only): routing rules and app settings. */
-  carried: Readonly<Record<string, unknown>>;
+  carried: JsonObject;
 }>;
 
 /** Blank: the kind schema minus the name, each field at its default. */
@@ -56,26 +56,14 @@ export function duplicateForm(
   return { schema: { kind: "spacecraft_profile", fields }, values, carried };
 }
 
-/** Sets `value` at a dotted path, creating objects on the way (`frame_parameters.frame_size`). */
-function setPath(doc: Record<string, unknown>, path: string, value: unknown) {
-  const keys = path.split(".");
-  let at = doc;
-  for (const k of keys.slice(0, -1)) {
-    const next = at[k];
-    const obj: Record<string, unknown> = isRecord(next) ? { ...next } : {};
-    at[k] = obj;
-    at = obj;
-  }
-  at[keys.at(-1) ?? path] = value;
-}
-
 export function createOp(
   name: string,
-  carried: Readonly<Record<string, unknown>>,
+  carried: JsonObject,
   changes: readonly Readonly<{ path: string; value: unknown }>[],
 ): StageOp {
   // keyed-by-text: a create document keyed by the kind schema's field paths, not a word map
   const document: Record<string, unknown> = { ...carried, display_name: name.trim() };
-  for (const c of changes) setPath(document, c.path, c.value);
+  // #192: the shared dotted-path write; copy-on-write, so `carried`'s nested objects stay as they are.
+  for (const c of changes) setAt(document, c.path, c.value);
   return { kind: "spacecraft_profile", action: "create", document };
 }

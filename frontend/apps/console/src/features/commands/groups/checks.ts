@@ -11,6 +11,7 @@ import {
   type TwoPersonReason,
 } from "./api.ts";
 import type { GroupEvent } from "./show.ts";
+import { withdrawnSentence } from "./withdrawnSentence.ts";
 
 /**
  * Preflight checks → poll rows (Command.md C3, CommandFlow A2). Only checks the server computed
@@ -37,6 +38,8 @@ const LABELS: Readonly<Record<CheckKey, string>> = {
   contact: "Contact",
   two_person: "Two-person",
   changed_since_submit: "Since submit",
+  // U109: mapped by key, never by text.
+  model_approval_withdrawn: "Composition",
 };
 
 /** commanding.md: why a target's identity doesn't resolve (per_target reason). */
@@ -146,6 +149,8 @@ function sentence(check: PreflightCheck, pf: Preflight, nameOf: TargetName): str
       return check.result === "go"
         ? "Same targets, catalog and values as submitted"
         : "Something changed since it was submitted (catalog, targets or values)";
+    case "model_approval_withdrawn":
+      return withdrawnSentence(check, pf, nameOf);
     default:
       return `${words(checkKeyText(check.key))}: ${RESULT_WORD[check.result]}`;
   }

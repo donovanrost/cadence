@@ -228,17 +228,25 @@ export function useQueueCommand(
           : "Marking…";
   }
 
-  function sentenceFor(item: QueueItem, canRun: boolean): string {
-    if (running.value.has(item.key)) return busyWord(item);
-    const base =
+  /**
+   * What follows the row's own sentence: who may act (when this viewer can't) and the last
+   * outcome's note. A linked sentence (U66 sentenceParts) shows it after its parts (#243).
+   */
+  function tailFor(item: QueueItem, canRun: boolean): string {
+    const noAccess =
       item.command && !canRun
-        ? `${item.sentence} ${noAccessText(item.command.kind, item.command.targets)}`
+        ? noAccessText(item.command.kind, item.command.targets)
         : item.job && !canRun
-          ? `${item.sentence} ${NO_ACCESS_JOB}`
-          : item.sentence;
-    const note = notes.value[item.key];
-    return note ? `${base} ${note}` : base;
+          ? NO_ACCESS_JOB
+          : null;
+    return [noAccess, notes.value[item.key] ?? null].filter((t) => t !== null).join(" ");
   }
 
-  return { running, run, sentenceFor, busyWord, said };
+  function sentenceFor(item: QueueItem, canRun: boolean): string {
+    if (running.value.has(item.key)) return busyWord(item);
+    const tail = tailFor(item, canRun);
+    return tail ? `${item.sentence} ${tail}` : item.sentence;
+  }
+
+  return { running, run, sentenceFor, tailFor, busyWord, said };
 }

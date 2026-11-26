@@ -1,7 +1,8 @@
 defmodule Cadence.Administration.ServiceIdentityAdministration do
   @moduledoc """
   Service identity writes for the console's People page (O6): create, rotate the key, revoke.
-  Organization admins only (`:manage_service_identities`).
+  Organization admins who are people only (`:manage_service_identities`; a service identity is
+  refused, #281), and the issuer or rotator holds every capability the identity has.
 
   The API token is returned **once**, by create and rotate, and never again: Cadence stores
   only its digest. Rotating invalidates the old token immediately; revoking disables the
@@ -11,8 +12,17 @@ defmodule Cadence.Administration.ServiceIdentityAdministration do
   mission; `mission_id` required).
   """
 
+  alias Cadence.Accounts
   alias Cadence.Auth
-  alias Cadence.Auth.{Policy, Scope, ServiceIdentity, ServiceIdentityKeys}
+
+  alias Cadence.Auth.{
+    Policy,
+    Scope,
+    ServiceAccountability,
+    ServiceIdentity,
+    ServiceIdentityKeys
+  }
+
   alias Cadence.Missions
 
   @capabilities %{"organization_admin" => :organization_admin, "mission_admin" => :mission_admin}
@@ -21,14 +31,11 @@ defmodule Cadence.Administration.ServiceIdentityAdministration do
   def create(%Scope{} = scope, organization_id, params) do
     with :ok <- authorize(scope, organization_id),
          {:ok, attrs} <- validate(organization_id, params),
+         :ok <- Policy.ensure_holds_capabilities(scope, attrs.capabilities),
          {:ok, %{service_identity: identity, api_token: token}} <-
            Auth.issue_service_identity(
-             ServiceIdentity.new(
-               Map.merge(attrs, %{
-                 organization_id: organization_id,
-                 metadata: %{"created_by" => scope_actor(scope)}
-               })
-             )
+             ServiceIdentity.new(Map.put(attrs, :organization_id, organization_id)),
+             scope
            ) do
       {:ok, issued(identity, token)}
     end
@@ -37,8 +44,10 @@ defmodule Cadence.Administration.ServiceIdentityAdministration do
   @spec rotate(Scope.t(), binary(), binary()) :: {:ok, map()} | {:error, term()}
   def rotate(%Scope{} = scope, organization_id, service_identity_id) do
     with :ok <- authorize(scope, organization_id),
+         {:ok, identity} <- Auth.fetch_service_identity(organization_id, service_identity_id),
+         :ok <- Policy.ensure_holds_capabilities(scope, identity.capabilities),
          {:ok, %{service_identity: identity, api_token: token}} <-
-           ServiceIdentityKeys.rotate(organization_id, service_identity_id) do
+           ServiceIdentityKeys.rotate(organization_id, service_identity_id, scope) do
       {:ok, issued(identity, token)}
     end
   end
@@ -62,6 +71,32 @@ defmodule Cadence.Administration.ServiceIdentityAdministration do
       # Shown once: Cadence keeps only its digest.
       api_token: token
     }
+
+  @doc """
+  Records people as accountable for a service identity (#280): its acts then count as theirs,
+  and as the recording admin's, for approvals. Org admins only, people only; each named person
+  must be an active member of the organization. The rows are the audit (who, whom, when).
+  """
+  @spec record_accountable(Scope.t(), binary(), binary(), map()) :: :ok | {:error, term()}
+  def record_accountable(%Scope{} = scope, organization_id, service_identity_id, params) do
+    user_ids = params |> Map.get("user_ids", []) |> List.wrap()
+
+    with :ok <- authorize(scope, organization_id),
+         :ok <- members(organization_id, user_ids) do
+      ServiceAccountability.attribute(scope, organization_id, service_identity_id, user_ids)
+    end
+  end
+
+  defp members(organization_id, user_ids) do
+    if Enum.all?(user_ids, &member?(organization_id, &1)),
+      do: :ok,
+      else: {:error, {:invalid, %{user_ids: "must be people in this organization"}}}
+  end
+
+  defp member?(organization_id, user_id) when is_binary(user_id) and user_id != "",
+    do: match?({:ok, _}, Accounts.fetch_user_membership(user_id, organization_id))
+
+  defp member?(_organization_id, _user_id), do: false
 
   defp validate(organization_id, params) do
     name = params |> Map.get("name", "") |> to_string() |> String.trim()
@@ -107,9 +142,6 @@ defmodule Cadence.Administration.ServiceIdentityAdministration do
 
   defp blank_to_nil(value) when is_binary(value) and value != "", do: value
   defp blank_to_nil(_value), do: nil
-
-  defp scope_actor(%Scope{user: %{user_id: id}}), do: %{"kind" => "user", "id" => id}
-  defp scope_actor(_scope), do: %{"kind" => "unknown"}
 
   defp authorize(scope, organization_id),
     do: Policy.authorize(scope, :manage_service_identities, %{organization_id: organization_id})

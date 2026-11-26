@@ -8,6 +8,7 @@ defmodule Cadence.MissionModels.TelemetryProjection do
 
   alias Cadence.Catalog.MissionModel.{Revision, RuntimePlan}
   alias Cadence.Catalog.Revision, as: CatalogRevision
+  alias Cadence.Governance
   alias Cadence.MissionModels
   alias Cadence.Runtime.MissionModelPlanDecoder
   alias Cadence.Telemetry.PacketDefinition
@@ -27,9 +28,30 @@ defmodule Cadence.MissionModels.TelemetryProjection do
          {:ok, %Revision{} = revision} <-
            MissionModels.fetch_revision(organization_id, mission_id, revision_id),
          {:ok, plans} <-
-           MissionModels.fetch_runtime_plans(organization_id, mission_id, revision_id) do
-      build(catalog_revision, revision, plans)
+           MissionModels.fetch_runtime_plans(organization_id, mission_id, revision_id),
+         {:ok, telemetry} <- build(catalog_revision, revision, plans),
+         {:ok, telemetry, _acc} <- resolve_versions(telemetry, organization_id, mission_id) do
+      {:ok, telemetry}
     end
+  end
+
+  @doc """
+  `telemetry` with its packet definitions' versions resolved by content (#534): every path that
+  builds a binding set from a projection names the version the stored copy keeps. `load/3` does
+  this; a caller of the pure `build/3` (Review) does it with its generation's `acc`, so one
+  generation over several catalogs gives distinct contents distinct versions.
+  """
+  @spec resolve_versions(t(), binary() | nil, binary(), map()) :: {:ok, t(), map()}
+  def resolve_versions(
+        %{packet_definitions: definitions} = telemetry,
+        organization_id,
+        mission_id,
+        acc \\ %{}
+      ) do
+    {:ok, resolved, acc} =
+      Governance.resolve_packet_definition_versions(organization_id, mission_id, definitions, acc)
+
+    {:ok, %{telemetry | packet_definitions: resolved}, acc}
   end
 
   @doc "The projection from an already-read mission-model revision and its runtime plans."

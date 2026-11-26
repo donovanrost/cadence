@@ -1,6 +1,5 @@
 import {
   actor,
-  actorKinds,
   decoders as d,
   request,
   stationRef,
@@ -72,14 +71,12 @@ export const planRow = {
   version: d.integer,
   state: planState,
   window: d.object({ from: d.nullable(d.timestamp), to: d.nullable(d.timestamp) }),
-  /** `kind: system` = an automatic run ("Cadence"); null only when unknown (api af0279d1). */
-  author: d.nullable(
-    d.object({
-      kind: d.optional(d.knownText(actorKinds)),
-      id: d.optional(d.token),
-      name: d.string,
-    }),
-  ),
+  /**
+   * `kind: system` = an automatic run ("Cadence"); null only when unknown (api af0279d1). A person
+   * is named only as a member (#466/#485, #468): a nameless member reads name null, anyone else id
+   * and name null (readers first for #485).
+   */
+  author: d.nullable(actor),
   counts: d.object({
     passes: d.integer,
     minutes: d.integer,
@@ -109,8 +106,14 @@ export function byAuthor(
   author: PlanSummary["author"],
   automatic: "automatic repair" | "automatic draft" = "automatic repair",
 ): string {
+  // A person whose name isn't shown: the clause drops, never a blank or an id (U25, as U105's
+  // nameless proposer).
   if (!author) return "";
-  return author.kind === "system" ? ` by ${author.name} (${automatic})` : ` by ${author.name}`;
+  if (author.kind === "system") return ` by ${author.name ?? "Cadence"} (${automatic})`;
+  // ca-ux on #530 (U73/#371): a service identity says so; nameless, the clause still says what drafted it.
+  if (author.kind === "service")
+    return author.name ? ` by ${author.name} (a service identity)` : " by a service identity";
+  return author.name === null ? "" : ` by ${author.name}`;
 }
 
 /** ux: K1 names the drafter only when it isn't you (a person other than `userId`, or the system). */

@@ -133,7 +133,9 @@ function close() {
       <ApCallout v-if="unavailable" tone="caution">{{ words.COUNTS_UNAVAILABLE }}</ApCallout>
       <p v-else-if="!lines" role="status" class="m-0 text-md text-text-3">Counting missions…</p>
       <template v-else>
-        <ApCallout v-if="changed" tone="caution">{{ words.changedLine(changed) }}</ApCallout>
+        <ApCallout v-if="changed" tone="caution" role="alert">{{
+          words.changedLine(changed)
+        }}</ApCallout>
         <p class="m-0 text-md text-text-2" aria-live="polite">{{ lines.blast }}</p>
         <ApCallout v-if="lines.live" tone="crit">{{ lines.live }}</ApCallout>
         <ApSelect

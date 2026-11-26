@@ -51,11 +51,29 @@ export function childRecord(parent: Record<string, unknown>, key: string): Recor
   return fresh;
 }
 
-/** Sets `value` at `keys`, creating intermediate objects as needed. */
+/**
+ * Sets `value` at `keys`, creating intermediate objects as needed (a non-object on the way is
+ * replaced). Copy-on-write: each object it descends through is a fresh shallow copy, so a nested
+ * object `doc` shares with a caller's (e.g. `{ ...carried }`) is never changed in place (#192).
+ */
 export function pathSet(doc: Record<string, unknown>, keys: readonly string[], value: unknown) {
   const last = keys.at(-1);
   if (last === undefined) return;
   let at = doc;
-  for (const key of keys.slice(0, -1)) at = childRecord(at, key);
+  for (const key of keys.slice(0, -1)) {
+    const current = at[key];
+    const next: Record<string, unknown> = isRecord(current) ? { ...current } : {};
+    at[key] = next;
+    at = next;
+  }
   at[last] = value;
 }
+
+/**
+ * #192: the console's one dotted schema-path read and write (`frame_parameters.frame_size`), for
+ * planning, profiles and kind schemas alike, so no screen carries its own path code.
+ */
+export const getAt = (doc: unknown, path: string): unknown => pathGet(doc, path.split("."));
+
+export const setAt = (doc: Record<string, unknown>, path: string, value: unknown): void =>
+  pathSet(doc, path.split("."), value);

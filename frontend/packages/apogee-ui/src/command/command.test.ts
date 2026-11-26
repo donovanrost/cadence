@@ -23,6 +23,27 @@ describe("ApNumberField", () => {
     expect(wrapper.text()).toContain("Out of range. Allowed: 0–12 °C.");
     expect(wrapper.get("input").attributes("aria-invalid")).toBe("true");
   });
+
+  it("shows a server's refusal under the field, and its own reading wins (#595a)", () => {
+    const wrapper = mount(ApNumberField, {
+      props: {
+        label: "Frame size",
+        unit: "bytes",
+        integer: true,
+        modelValue: "1115",
+        error: "Too big.",
+      },
+    });
+    const input = wrapper.get("input");
+    expect(input.attributes("aria-invalid")).toBe("true");
+    const id = input.attributes("aria-describedby")?.split(" ").at(-1) ?? "";
+    expect(wrapper.get(`[id="${id}"]`).text()).toBe("Too big.");
+    const typo = mount(ApNumberField, {
+      props: { label: "Frame size", integer: true, modelValue: "11.5", error: "Too big." },
+    });
+    expect(typo.text()).toContain("Enter a whole number.");
+    expect(typo.text()).not.toContain("Too big.");
+  });
 });
 
 const options = [

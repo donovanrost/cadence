@@ -4,6 +4,8 @@ defmodule Cadence.Control.Commanding.GroupDecisionTest do
   import Ecto.Query
   import Cadence.CommandGroupFixtures
 
+  alias Cadence.Auth
+  alias Cadence.Auth.ServiceIdentity
   alias Cadence.Commanding.{CommandApprovalRow, CommandQueueEntryRow}
   alias Cadence.Commanding.Groups.GroupStore
   alias Cadence.Control.Commanding.{GroupDecision, GroupSubmission}
@@ -92,6 +94,66 @@ defmodule Cadence.Control.Commanding.GroupDecisionTest do
 
     assert {:error, :not_the_requested_approver} =
              GroupDecision.decide(c.approver, c.mission, named.command_group_id, %{kind: :go})
+  end
+
+  # #622 (#280; ca-security P2): a group's requester counts as people, as a single request's does.
+  test "a service-requested group refuses the service's accountable person and accepts another admin",
+       c do
+    {:ok, %{service_identity: service}} =
+      Auth.issue_service_identity(
+        ServiceIdentity.new(%{
+          organization_id: c.org,
+          mission_id: c.mission,
+          display_name: "Release bot",
+          capabilities: [:mission_admin]
+        }),
+        c.approver
+      )
+
+    service_id = service.service_identity_id
+    as_requested_by(c, %{"actor_kind" => "service", "service_identity_id" => service_id})
+
+    assert {:error,
+            {:command_group_self_approval_not_allowed,
+             %{via_service: %{id: ^service_id, name: "Release bot"}}}} =
+             decide(c, c.approver, %{kind: :go, expected_review: review(c)})
+
+    # api-ops on #626: every decision, not only GO.
+    assert {:error,
+            {:command_group_self_approval_not_allowed, %{via_service: %{id: ^service_id}}}} =
+             decide(c, c.approver, %{kind: :no_go, note: "Not today", expected_review: review(c)})
+
+    other = operator!(c, "Third Operator")
+    assert {:ok, _} = decide(c, other, %{kind: :go, expected_review: review(c)})
+  end
+
+  test "a decider who isn't a person is refused, on its own (ca-security on #626)", c do
+    service_scope = %{c.approver | user: nil}
+
+    assert {:error, _refused} =
+             decide(c, service_scope, %{kind: :go, expected_review: review(c)})
+  end
+
+  test "a service nobody is accountable for refuses everyone (fail closed)", c do
+    as_requested_by(c, %{
+      "actor_kind" => "service",
+      "service_identity_id" => "service_identity:nobody"
+    })
+
+    assert {:error, {:command_group_approver_authors_unknown, %{service: _}}} =
+             decide(c, c.approver, %{kind: :go, expected_review: review(c)})
+  end
+
+  defp as_requested_by(c, document) do
+    Repo.update_all(
+      from(g in "command_groups", where: g.command_group_id == ^c.group.command_group_id),
+      set: [requested_by_document: %{"value" => document}]
+    )
+  end
+
+  defp review(c) do
+    {:ok, group} = GroupStore.fetch(c.org, c.mission, c.group.command_group_id)
+    GroupDecision.review_token(group)
   end
 
   test "a stale review token is refused", c do

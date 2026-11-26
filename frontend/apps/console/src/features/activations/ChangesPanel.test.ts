@@ -66,6 +66,18 @@ describe("#235 What changes panel", () => {
       "/activations/act_1/configuration-changes?group=0&offset=0",
     );
     expect(w.text()).toContain("EARENDIL-1, EARENDIL-2, EARENDIL-3, EARENDIL-4, EARENDIL-5");
+    // #244 (B3, A5): a disclosure that stays mounted, so focus isn't dropped.
+    const toggle = () => w.findAll("button").find((b) => /^Show (all 5|first 3)$/.test(b.text()));
+    expect(toggle()?.text()).toBe("Show first 3");
+    expect(toggle()?.attributes("aria-expanded")).toBe("true");
+    await toggle()?.trigger("click");
+    expect(toggle()?.text()).toBe("Show all 5");
+    expect(toggle()?.attributes("aria-expanded")).toBe("false");
+    expect(w.text()).not.toContain("EARENDIL-4, EARENDIL-5");
+    await toggle()?.trigger("click");
+    await flushPromises();
+    expect(w.text()).toContain("EARENDIL-4, EARENDIL-5");
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it("keeps Approve off while a change can't be shown, and Reject on", async () => {

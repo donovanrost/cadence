@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { ApStatusMark, ApTable, formatCount, type ApColumn } from "@/ui";
+import { ApStatusMark, ApTable, ApTag, formatCount, type ApColumn } from "@/ui";
+import { compositionTitle, isComposed, madeOfLine } from "@/features/catalog/composition.ts";
 import {
   catalogRevText,
   lastChangeText,
@@ -46,7 +47,16 @@ const columns = computed((): readonly ApColumn[] => {
       >
     </template>
     <template #cell-catalog="{ row }">
-      <span v-if="row.catalogRevision">{{
+      <!-- U109: a composed profile reads Composition 3 with Made of as the muted second line;
+        COMPOSED only where it could pass for one catalog (no number, Made of alone). -->
+      <template v-if="isComposed(row.composition)">
+        <span v-if="compositionTitle(row.composition)">{{
+          compositionTitle(row.composition)
+        }}</span>
+        <ApTag v-else state="neutral" label="Composed" />
+        <span class="block font-sans text-xs text-text-3">{{ madeOfLine(row.composition) }}</span>
+      </template>
+      <span v-else-if="row.catalogRevision">{{
         catalogRevText(row.catalogRevision) ?? "a catalog revision"
       }}</span>
       <span v-else class="font-sans text-text-3">Set per spacecraft</span>
