@@ -72,7 +72,7 @@ test.describe("console shell, signed out", () => {
   test.use({
     storageState: { cookies: [], origins: [] },
     // A signed-out console's session read answers 401, which it reads as anonymous.
-    allowedDiagnostics: allow(/\/api\/console\/v1\/session/),
+    allowedDiagnostics: allow(/\/api\/v1\/session/),
   });
 
   test("redirects to the console sign-in screen", async ({ page }) => {
