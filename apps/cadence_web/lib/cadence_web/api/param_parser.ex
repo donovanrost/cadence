@@ -253,17 +253,6 @@ defmodule CadenceWeb.API.ParamParser do
     end
   end
 
-  def telemetry_history_order(params) when is_map(params) do
-    case Map.get(params, "order") do
-      nil -> {:ok, nil}
-      :asc -> {:ok, :asc}
-      "asc" -> {:ok, :asc}
-      :desc -> {:ok, :desc}
-      "desc" -> {:ok, :desc}
-      _other -> {:error, {:invalid_param, "order", :unknown_atom}}
-    end
-  end
-
   def string_or_string_list(params, key) do
     case Map.get(params, key) do
       nil ->
@@ -498,66 +487,6 @@ defmodule CadenceWeb.API.ParamParser do
       optional_map(params, key, %{})
     else
       {:ok, nil}
-    end
-  end
-
-  def required_packet_binary(params) when is_map(params) do
-    packet_hex = string_value(params, "packet_hex")
-    packet_base64 = string_value(params, "packet_base64")
-
-    cond do
-      is_binary(packet_hex) and is_binary(packet_base64) ->
-        {:error, {:invalid_param, "packet_hex", :mutually_exclusive_with_packet_base64}}
-
-      is_binary(packet_hex) ->
-        decode_packet_hex(packet_hex)
-
-      is_binary(packet_base64) ->
-        decode_packet_base64(packet_base64)
-
-      true ->
-        {:error, {:invalid_param, "packet_hex_or_packet_base64", :required}}
-    end
-  end
-
-  def required_frame_binary(params) when is_map(params) do
-    frame_hex = string_value(params, "frame_hex")
-    frame_base64 = string_value(params, "frame_base64")
-
-    cond do
-      is_binary(frame_hex) and is_binary(frame_base64) ->
-        {:error, {:invalid_param, "frame_hex", :mutually_exclusive_with_frame_base64}}
-
-      is_binary(frame_hex) ->
-        decode_packet_hex(frame_hex)
-
-      is_binary(frame_base64) ->
-        decode_packet_base64(frame_base64)
-
-      true ->
-        {:error, {:invalid_param, "frame_hex_or_frame_base64", :required}}
-    end
-  end
-
-  def decode_packet_hex(packet_hex) when is_binary(packet_hex) do
-    normalized_hex =
-      packet_hex
-      |> String.replace(~r/[\s_]/u, "")
-      |> String.replace_prefix("0x", "")
-      |> String.replace_prefix("0X", "")
-
-    case Base.decode16(normalized_hex, case: :mixed) do
-      {:ok, raw_packet} -> {:ok, raw_packet}
-      :error -> {:error, {:invalid_param, "packet_hex", :hex}}
-    end
-  end
-
-  def decode_packet_base64(packet_base64) when is_binary(packet_base64) do
-    normalized_base64 = String.replace(packet_base64, ~r/\s+/u, "")
-
-    case Base.decode64(normalized_base64) do
-      {:ok, raw_packet} -> {:ok, raw_packet}
-      :error -> {:error, {:invalid_param, "packet_base64", :base64}}
     end
   end
 

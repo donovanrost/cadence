@@ -1420,11 +1420,6 @@ defmodule CadenceWeb.Router do
       scope "/missions/:mission_id" do
         get("/mission_health", MissionHealthController, :show)
         get("/mission_events", MissionEventController, :index)
-        get("/telemetry/latest", TelemetryController, :latest_values)
-        get("/telemetry/points/:point_id/latest", TelemetryController, :latest_value)
-        get("/telemetry/points/:point_id/history", TelemetryController, :history)
-        post("/dev/space_packets", DevSpacePacketController, :create)
-        post("/dev/tm_frames", DevTMFrameController, :create)
         get("/catalog/importers", CatalogImporterController, :index)
         get("/catalog_artifacts", CatalogArtifactController, :index)
         post("/catalog_artifacts", CatalogArtifactController, :create)
