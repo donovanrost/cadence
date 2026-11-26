@@ -33,9 +33,9 @@ defmodule CadenceWeb.Console.ServiceBearerAPITest do
     Map.put(base, :token, token)
   end
 
-  # Phoenix.ConnTest skips CSRF by default; these requests check it for real.
   @prefix "/api/v1"
 
+  # Phoenix.ConnTest skips CSRF by default; these requests check it for real.
   defp csrf_checked, do: build_conn() |> put_private(:plug_skip_csrf_protection, false)
 
   defp bearer(token), do: csrf_checked() |> put_req_header("authorization", "Bearer " <> token)
@@ -91,7 +91,14 @@ defmodule CadenceWeb.Console.ServiceBearerAPITest do
 
     assert build_conn() |> with_cookie.() |> get(path) |> json_response(200)
 
-    for header <- ["Bearer not-a-token", "Bearer ", "Basic abc", "bearer #{c.token}"] do
+    # A person's session token is never a bearer: no personal bearer tokens (#747).
+    for header <- [
+          "Bearer not-a-token",
+          "Bearer ",
+          "Basic abc",
+          "bearer #{c.token}",
+          "Bearer #{session}"
+        ] do
       conn =
         build_conn()
         |> with_cookie.()

@@ -778,16 +778,7 @@ defmodule CadenceWeb.Router do
   scope "/api", CadenceWeb do
     pipe_through([:api, :authenticated_api])
 
-    get("/current_scope", CurrentScopeController, :show)
-
     scope "/organizations/:organization_id" do
-      # No organization read and no mission list or create here (#384, director 11-19): a REST
-      # bearer is always a service identity, and organization-level acts are a person's (#282).
-      get("/missions/:mission_id", MissionController, :show)
-
-      # No service_identities here (#281): a REST bearer is always a service identity, and
-      # services never manage service identities. People issue them in the console.
-
       scope "/missions/:mission_id" do
         get("/command_stages", CommandStageController, :index)
         post("/command_stages", CommandStageController, :create)
