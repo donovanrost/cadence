@@ -64,8 +64,12 @@ defmodule Cadence.Runtime.MissionModelPlanDecoderTest do
         fields: [FieldDefinition.new(%{name: "stale", size_bits: 8, data_type: :uint})]
       })
 
-    assert {:ok, %PacketDefinition{} = packet_definition} =
-             MissionModelPlanDecoder.resolve_telemetry_configuration(persisted_plans, configured)
+    assert {:ok, definitions} =
+             MissionModelPlanDecoder.telemetry_packet_definitions(persisted_plans)
+
+    assert %PacketDefinition{} =
+             packet_definition =
+             Enum.find(definitions, &(&1.packet_definition_id == configured.packet_definition_id))
 
     assert packet_definition.packet_name == "HK"
     assert Enum.map(packet_definition.fields, & &1.size_bits) == [16, 1]
@@ -92,23 +96,8 @@ defmodule Cadence.Runtime.MissionModelPlanDecoderTest do
     assert command_basis.operational_binding.significance == :hazardous
   end
 
-  test "fails closed without a native plan or matching telemetry definition" do
+  test "fails closed without a native plan" do
     compilation = compilation()
-
-    configured =
-      PacketDefinition.new(%{
-        packet_definition_id: "semantic:container:missing",
-        mission_id: "mission-alpha",
-        packet_name: "Other",
-        apid: 42,
-        fields: []
-      })
-
-    assert {:error, {:mission_model_packet_definition_not_found, "semantic:container:missing"}} =
-             MissionModelPlanDecoder.resolve_telemetry_configuration(
-               compilation.plans,
-               configured
-             )
 
     assert {:error, {:mission_model_runtime_plan_required, :telemetry}} =
              MissionModelPlanDecoder.telemetry_packet_definitions(
