@@ -69,6 +69,29 @@ defmodule Cadence.Telemetry.Storage.QuestDB.PhysicalSampleReaderTest do
     assert actual.provenance["storage"]["validity_state"] == "superseded"
   end
 
+  test "the row's revision is read and carried in the storage provenance, as ETS and Postgres do" do
+    sample = Fixtures.sample()
+    stored = put_in(sample.provenance["storage"]["revision"], 2)
+
+    assert {:ok, sql} = PhysicalSampleReader.query_sql(Fixtures.query())
+    assert sql =~ "revision"
+
+    assert {:ok, %{sample: with_revision}} =
+             PhysicalSampleReader.fetch(Fixtures.query(),
+               exec_fun: fn _, _ -> {:ok, Fixtures.questdb_result([stored])} end
+             )
+
+    assert with_revision.provenance["storage"]["revision"] == 2
+
+    # A row without one (NULL) gets no key, never an invented revision.
+    assert {:ok, %{sample: without}} =
+             PhysicalSampleReader.fetch(Fixtures.query(),
+               exec_fun: fn _, _ -> {:ok, Fixtures.questdb_result([sample])} end
+             )
+
+    refute Map.has_key?(without.provenance["storage"], "revision")
+  end
+
   test "missing, ambiguous, mismatched, malformed and failed reads remain distinct" do
     sample = Fixtures.sample()
 

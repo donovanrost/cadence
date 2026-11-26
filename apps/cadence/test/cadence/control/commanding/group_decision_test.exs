@@ -60,7 +60,8 @@ defmodule Cadence.Control.Commanding.GroupDecisionTest do
              decide(c, c.approver, %{
                kind: :go_excluding,
                excluded: ["sc-2"],
-               note: "sc-2 in safe mode"
+               note: "sc-2 in safe mode",
+               expected_review: GroupDecision.review_token(c.group)
              })
 
     by_target = Enum.group_by(members(c), & &1.metadata["group"]["target_index"])
@@ -154,6 +155,33 @@ defmodule Cadence.Control.Commanding.GroupDecisionTest do
   defp review(c) do
     {:ok, group} = GroupStore.fetch(c.org, c.mission, c.group.command_group_id)
     GroupDecision.review_token(group)
+  end
+
+  # #117 step 4a (domain, ca-security): GO must carry the token, and the token covers WHICH
+  # requests are members, not only how many (the members digest).
+  test "a GO without the review token is refused, fail closed", c do
+    assert {:error, :command_group_review_stale} = decide(c, c.approver, %{kind: :go})
+
+    assert {:error, :command_group_review_stale} =
+             decide(c, c.approver, %{kind: :go_excluding, excluded: ["sc-2"], note: "x"})
+  end
+
+  test "swapping one member for another at the same count changes the token, so GO is refused",
+       c do
+    token = GroupDecision.review_token(c.group)
+    digest = GroupDecision.members_digest(c.group)
+    [first | _] = members(c)
+
+    # Another request takes the first member's place: same count, different members.
+    Repo.update_all(
+      from(r in "command_requests", where: r.command_request_id == ^first.command_request_id),
+      set: [command_request_id: first.command_request_id <> "-swapped"]
+    )
+
+    refute GroupDecision.members_digest(c.group) == digest
+
+    assert {:error, :command_group_review_stale} =
+             decide(c, c.approver, %{kind: :go, expected_review: token})
   end
 
   test "a stale review token is refused", c do

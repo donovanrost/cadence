@@ -77,7 +77,7 @@ defmodule Cadence.Telemetry.Storage.QuestDB.SmokeTest do
     assert result.bounded_history_count == 1
     assert result.decimated_bucket_count == 1
     assert result.watermark.sample_count == 1
-    assert length(result.applied_migrations) == 3
+    assert length(result.applied_migrations) == 12
 
     sqls = received_sqls([])
 

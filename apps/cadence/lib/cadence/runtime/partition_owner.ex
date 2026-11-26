@@ -42,8 +42,11 @@ defmodule Cadence.Runtime.PartitionOwner do
   alias Cadence.SemanticRuntime
   alias Cadence.SemanticRuntime.{AlarmRules, PlanDecoder, Result, Scope, State, Store, Update}
 
+  alias Cadence.Platform.ReplayId
+
   alias Cadence.Runtime.PartitionOwner.{
     DispatchCache,
+    EffectIds,
     MonitoringSeed,
     PartitionBuilder,
     RuntimeRecords,
@@ -277,7 +280,9 @@ defmodule Cadence.Runtime.PartitionOwner do
     persist_runtime_records? = Keyword.get(opts, :persist_runtime_records?, true)
 
     persistence_policy =
-      Keyword.get_lazy(opts, :persistence_policy, &Persistence.configured_policy/0)
+      opts
+      |> Keyword.get_lazy(:persistence_policy, &Persistence.configured_policy/0)
+      |> Map.put(:runtime_writer, Keyword.get(opts, :runtime_writer, Persistence))
 
     clock_mode = Keyword.get(opts, :clock_mode, :live)
 
@@ -314,7 +319,11 @@ defmodule Cadence.Runtime.PartitionOwner do
            ),
          semantic_timers <-
            build_semantic_timers(active_activation, timer_service, semantic_timer_cursors) do
-      case maybe_persist_runtime_records(persist_runtime_records?, runtime_records) do
+      case maybe_persist_runtime_records(
+             persist_runtime_records?,
+             runtime_records,
+             persistence_policy
+           ) do
         {:ok, pending_runtime_records} ->
           {:ok,
            %{
@@ -493,7 +502,8 @@ defmodule Cadence.Runtime.PartitionOwner do
                        capability_records: [],
                        action_requests: [],
                        timer_events: previous_timer_events
-                     })
+                     }),
+                     state.persistence_policy
                    ) do
               _ = TimerService.cancel_all(state.timer_service)
               cancel_semantic_timers(state.semantic_timers)
@@ -520,15 +530,15 @@ defmodule Cadence.Runtime.PartitionOwner do
             else
               {:error, reason} ->
                 _ = TimerService.cancel_all(timer_service)
-                {:stop, reason, {:error, reason}, state}
+                {:stop, tripped(reason), {:error, reason}, state}
             end
 
           {:error, reason} ->
-            {:stop, reason, {:error, reason}, state}
+            {:stop, tripped(reason), {:error, reason}, state}
         end
 
       {:error, reason} ->
-        {:stop, reason, {:error, reason}, state}
+        {:stop, tripped(reason), {:error, reason}, state}
     end
   end
 
@@ -579,6 +589,8 @@ defmodule Cadence.Runtime.PartitionOwner do
          raw_outputs <- Enum.flat_map(dispatch_result.dispatch_results, & &1.outputs),
          {:ok, outputs, semantic_result, next_state} <-
            process_semantic_outputs(raw_outputs, next_state),
+         {:ok, effect_ordinals} <-
+           semantic_effect_ordinals(raw_evidence.mission_id, semantic_result, next_state),
          {:ok, pending_runtime_records} <-
            TelemetryProfiler.with_runtime_component(
              raw_evidence.mission_id,
@@ -586,7 +598,8 @@ defmodule Cadence.Runtime.PartitionOwner do
              fn ->
                maybe_persist_runtime_records(
                  next_state.persist_runtime_records?,
-                 all_runtime_records
+                 all_runtime_records,
+                 next_state.persistence_policy
                )
              end
            ) do
@@ -605,6 +618,9 @@ defmodule Cadence.Runtime.PartitionOwner do
          dispatch_decisions: dispatch_decisions,
          outputs: outputs,
          semantic_result: semantic_result,
+         # The stream ordinals of this result's monitoring effects (DECISIONS #99), for the alarm
+         # writer's replay-safe ids.
+         effect_ordinals: effect_ordinals,
          observation_context:
            MissionRuntimeSpec.observation_context(next_state.active_activation),
          alarm_rules:
@@ -612,6 +628,20 @@ defmodule Cadence.Runtime.PartitionOwner do
          runtime_records: all_runtime_records
        }, %{next_state | pending_runtime_records: pending_runtime_records}}
     end
+  end
+
+  defp semantic_effect_ordinals(mission_id, semantic_result, state),
+    do: result_effect_ordinals(mission_id, state.partition_key, semantic_result)
+
+  # The stream ordinals of a semantic result's effect sources (DECISIONS #99), for the alarm
+  # writer's replay-safe ids.
+  defp result_effect_ordinals(mission_id, partition_key, result) do
+    stream_keys =
+      result.parameter_updates
+      |> Enum.map(&metadata_value(&1, :effect_source))
+      |> ReplayId.stream_keys()
+
+    EffectIds.ordinals(mission_id, PartitionKey.identifier(partition_key), stream_keys)
   end
 
   defp process_semantic_outputs(outputs, %{active_activation: activation} = state) do
@@ -709,14 +739,17 @@ defmodule Cadence.Runtime.PartitionOwner do
         |> Enum.filter(&(&1.producer_kind == :algorithm))
         |> Enum.map(&derived_sample(&1, activation))
 
-      with :ok <-
-             Persistence.persist_semantic_timer_result(
+      with {:ok, effect_ordinals} <-
+             result_effect_ordinals(activation.mission_id, partition_key, entry.result),
+           :ok <-
+             runtime_writer(persistence_policy).persist_semantic_timer_result(
                persistence_policy,
                activation,
                entry.result,
                derived_samples,
                at: entry.at,
-               timer_key: entry.timer_key
+               timer_key: entry.timer_key,
+               effect_ordinals: effect_ordinals
              ),
            :ok <-
              Store.mark_timer_projected(
@@ -769,6 +802,7 @@ defmodule Cadence.Runtime.PartitionOwner do
           evidence_id: sample.evidence_id,
           trigger_sample_id: sample.sample_id,
           trigger_frame_ref: Sample.encode_frame_ref(sample.frame_ref),
+          effect_source: Sample.encode_journal_frame(sample.journal_frame),
           generation_time_source:
             sample.generation_time_source && Atom.to_string(sample.generation_time_source)
         }
@@ -840,7 +874,7 @@ defmodule Cadence.Runtime.PartitionOwner do
 
         case execute_semantic_timer(entry, timer_state) do
           {:ok, next_state} -> {:noreply, next_state}
-          {:error, reason} -> {:stop, retirement_reason(reason, state), state}
+          {:error, reason} -> {:stop, tripped(retirement_reason(reason, state)), state}
         end
 
       _other ->
@@ -981,14 +1015,17 @@ defmodule Cadence.Runtime.PartitionOwner do
          result,
          derived_samples
        ) do
-    with :ok <-
-           Persistence.persist_semantic_timer_result(
+    with {:ok, effect_ordinals} <-
+           result_effect_ordinals(state.active_activation.mission_id, state.partition_key, result),
+         :ok <-
+           runtime_writer(state.persistence_policy).persist_semantic_timer_result(
              state.persistence_policy,
              state.active_activation,
              result,
              derived_samples,
              at: entry.due_at,
-             timer_key: entry.timer_key
+             timer_key: entry.timer_key,
+             effect_ordinals: effect_ordinals
            ) do
       Store.mark_timer_projected(
         state.active_activation,
@@ -1061,12 +1098,16 @@ defmodule Cadence.Runtime.PartitionOwner do
     all_runtime_records =
       merge_runtime_records(next_state.pending_runtime_records, runtime_records)
 
-    case maybe_persist_runtime_records(next_state.persist_runtime_records?, all_runtime_records) do
+    case maybe_persist_runtime_records(
+           next_state.persist_runtime_records?,
+           all_runtime_records,
+           next_state.persistence_policy
+         ) do
       {:ok, pending_runtime_records} ->
         {:noreply, %{next_state | pending_runtime_records: pending_runtime_records}}
 
       {:error, reason} ->
-        {:stop, reason, state}
+        {:stop, tripped(reason), state}
     end
   end
 
@@ -1496,37 +1537,67 @@ defmodule Cadence.Runtime.PartitionOwner do
     )
   end
 
-  defp persist_runtime_records(%{
-         capability_records: capability_records,
-         action_requests: action_requests,
-         timer_events: timer_events
-       })
+  defp persist_runtime_records(
+         %{
+           capability_records: capability_records,
+           action_requests: action_requests,
+           timer_events: timer_events
+         },
+         _policy
+       )
        when capability_records == [] and action_requests == [] and timer_events == [] do
     :ok
   end
 
-  defp persist_runtime_records(%{
-         capability_records: capability_records,
-         action_requests: action_requests,
-         timer_events: timer_events
-       }) do
-    Persistence.persist_managed_runtime_records(
+  defp persist_runtime_records(
+         %{
+           capability_records: capability_records,
+           action_requests: action_requests,
+           timer_events: timer_events
+         },
+         policy
+       ) do
+    runtime_writer(policy).persist_managed_runtime_records(
       capability_records,
       action_requests,
       timer_events
     )
   end
 
-  defp maybe_persist_runtime_records(true, runtime_records) do
-    case persist_runtime_records(runtime_records) do
-      :ok -> {:ok, empty_runtime_records()}
-      {:error, reason} -> {:error, reason}
+  defp maybe_persist_runtime_records(true, runtime_records, policy) do
+    with {:ok, runtime_records} <- EffectIds.assign(runtime_records),
+         :ok <- persist_runtime_records(runtime_records, policy) do
+      {:ok, empty_runtime_records()}
     end
   end
 
-  defp maybe_persist_runtime_records(false, runtime_records) do
+  defp maybe_persist_runtime_records(false, runtime_records, _policy) do
     {:ok, runtime_records}
   end
+
+  # Where runtime records and semantic timer results are written: Persistence, unless the owner
+  # was started with `runtime_writer:` (a module with the same two functions; tests).
+  defp runtime_writer(policy), do: Map.get(policy, :runtime_writer, Persistence)
+
+  # A replay-id conflict (DECISIONS #99) is a bug the retry hits again. On the timer and activation
+  # reconcile paths (reconcile runs in every live partition at once) the owner stops with a shutdown
+  # so its transient child isn't restarted: one restart per tripped partition
+  # would let a few partitions tripping together exhaust the mission's partition pool and take
+  # every partition of the mission down. The coordinator backs the partition off instead
+  # (MissionCoordinator.owner_down/3) and starts it again on the next request after the delay.
+  # check_replay has already logged MM_REPLAY_ID_CONFLICT at error level.
+  defp tripped(reason) do
+    if replay_id_conflict?(reason), do: {:shutdown, {:replay_id_tripped, reason}}, else: reason
+  end
+
+  # Today's error reasons nest the conflict in tuples only. A conflict wrapped in a map or list
+  # isn't found and falls back to the abnormal exit (restart and count): the old behaviour.
+  defp replay_id_conflict?({:replay_id_conflict, _kind, _id}), do: true
+
+  defp replay_id_conflict?(reason) when is_tuple(reason),
+    do: reason |> Tuple.to_list() |> Enum.any?(&replay_id_conflict?/1)
+
+  defp replay_id_conflict?(_reason), do: false
 
   defp drain_timer_records(state) do
     case next_timer_entry(state.timer_service) do

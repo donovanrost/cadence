@@ -47,6 +47,9 @@ defmodule Cadence.Telemetry.DataManagement.ObservationIdentityDecisions do
       :canonical_observation_id,
       :canonical_sample_id,
       :canonical_revision,
+      :point_id,
+      :sample_id,
+      :observed_at,
       :decision_reason,
       :reason,
       :decided_at,
@@ -137,6 +140,10 @@ defmodule Cadence.Telemetry.DataManagement.ObservationIdentityDecisions do
     |> put_compact_attr(:canonical_observation_id, get_attr(item, :canonical_observation_id))
     |> put_compact_attr(:canonical_sample_id, get_attr(item, :canonical_sample_id))
     |> put_compact_attr(:canonical_revision, get_attr(item, :canonical_revision))
+    # Read only when the identity has no row yet (first-seen rule): the observation's exact lookup.
+    |> put_compact_attr(:point_id, get_attr(item, :point_id))
+    |> put_compact_attr(:sample_id, get_attr(item, :sample_id))
+    |> put_compact_attr(:observed_at, get_attr(item, :observed_at))
     |> put_compact_attr(:decision_reason, get_attr(item, :decision_reason))
   end
 

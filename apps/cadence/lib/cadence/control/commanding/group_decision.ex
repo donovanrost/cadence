@@ -22,19 +22,40 @@ defmodule Cadence.Control.Commanding.GroupDecision do
 
   alias Cadence.Commanding.Groups.{Admission, CommandGroup, GroupStore}
   alias Cadence.Governance.Accountability
-  alias Cadence.Management.Commanding.{ApprovedCommand, RequestAuthoring}
+  alias Cadence.Management.Commanding.{ApprovedCommand, RequestAuthoring, RequestReview}
   alias Cadence.Platform.ScopedReadUpdates
 
   @kinds ~w(go go_excluding send_back no_go)a
   @group_states %{go: :queued, go_excluding: :queued, send_back: :sent_back, no_go: :rejected}
 
-  @doc "Token for optimistic review: changes whenever the group's reviewable content does."
+  @doc """
+  Token for optimistic review: changes whenever the group's reviewable content does, including
+  WHICH requests are its members (#117 step 4a, the members digest: swapping one member for
+  another at the same count changes it). Recomputed, never stored, so no stored hash moves (#108).
+  """
   @spec review_token(CommandGroup.t()) :: binary()
   def review_token(%CommandGroup{} = group),
     do:
       AuthoringIdentity.digest(
-        {group.command_group_id, group.state, group.preflight, group.member_count}
+        {group.command_group_id, group.state, group.preflight, group.member_count,
+         members_digest(group)}
       )
+
+  @doc """
+  The members digest (four-eyes design, 'Command groups: the members digest'): over the group's
+  member request ids, sorted, each with that request's own review token
+  (`RequestReview.review_token/1`, its content digest; the public route to it, as QueueSubmission's).
+  """
+  @spec members_digest(CommandGroup.t()) :: binary()
+  def members_digest(%CommandGroup{} = group) do
+    entries =
+      group.organization_id
+      |> GroupStore.members(group.mission_id, group.command_group_id)
+      |> Enum.map(&[&1.command_request_id, RequestReview.review_token(&1)])
+      |> Enum.sort()
+
+    AuthoringIdentity.digest({:command_group_members_v1, entries})
+  end
 
   @spec decide(Cadence.Auth.Scope.t(), binary(), binary(), map()) ::
           {:ok, CommandGroup.t()} | {:error, term()}
@@ -111,7 +132,7 @@ defmodule Cadence.Control.Commanding.GroupDecision do
       group.requested_approver_user_id not in [nil, actor["user_id"]] ->
         {:error, :not_the_requested_approver}
 
-      Map.get(decision, :expected_review) not in [nil, review_token(group)] ->
+      stale?(group, decision) ->
         {:error, :command_group_review_stale}
 
       not known_targets?(group, Map.get(decision, :excluded, [])) ->
@@ -121,6 +142,15 @@ defmodule Cadence.Control.Commanding.GroupDecision do
         :ok
     end
   end
+
+  # #117 step 4a (domain, ca-security): a GO, with or without exclusions, must carry the token the
+  # reviewer saw (fail closed: the console always sends it), recomputed here under the group lock.
+  # Send back and NO-GO keep it optional, as before.
+  defp stale?(group, %{kind: kind} = decision) when kind in [:go, :go_excluding],
+    do: Map.get(decision, :expected_review) != review_token(group)
+
+  defp stale?(group, decision),
+    do: Map.get(decision, :expected_review) not in [nil, review_token(group)]
 
   defp known_targets?(group, excluded) do
     ids = MapSet.new(group.targets, & &1["spacecraft_id"])

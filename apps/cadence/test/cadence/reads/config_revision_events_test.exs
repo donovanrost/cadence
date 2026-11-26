@@ -28,6 +28,7 @@ defmodule Cadence.Reads.ConfigRevisionEventsTest do
       kind: Keyword.fetch!(attrs, :kind),
       rolls_back_to: Keyword.get(attrs, :rolls_back_to),
       applied_by: %{"kind" => "user", "id" => "user-1", "name" => "Mira K."},
+      submitted_by: %{"kind" => "user", "id" => "user-1"},
       applied_at: applied_at,
       reason: "test",
       summary: "test",

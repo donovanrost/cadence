@@ -8,6 +8,8 @@ defmodule Cadence.Platform.FactPublicationIsolationTest do
   alias Cadence.Projections.DataSources.Health, as: SourceHealth
   alias Cadence.Runtime.{ManagedRecordsPersisted, Persistence}
 
+  alias Cadence.Telemetry.Storage.WatermarkCoalescer
+
   alias Cadence.Telemetry.{
     CurrentValueStore,
     ObservationIdentityStateChanged,
@@ -120,9 +122,22 @@ defmodule Cadence.Platform.FactPublicationIsolationTest do
              )
 
     assert_fact(:bus_a, {:cadence, :telemetry, :facts}, ObservationIdentityStateChanged)
-    assert_fact(:bus_a, {:cadence, :data_sources, :facts}, SourceWatermarkEvent)
     assert_fact(:bus_a, {:cadence, :telemetry, :facts}, ObservationsCommitted)
+
+    # The watermark is coalesced (#690): its fact goes out, on the batch's own bus, at the flush.
+    assert :ok = WatermarkCoalescer.flush()
+    assert_fact(:bus_a, {:cadence, :data_sources, :facts}, SourceWatermarkEvent)
     refute_any_fact()
+
+    # The write landed: storage received this sample with its own identity.
+    assert_received {:telemetry_storage_envelopes,
+                     [
+                       %{
+                         sample_id: "sample-a",
+                         mission_id: ^mission_id,
+                         observation_identity_id: identity_a
+                       }
+                     ]}
 
     assert :ok =
              Storage.persist_samples(policy_b, [sample("sample-b", mission_id, 2)],
@@ -132,11 +147,28 @@ defmodule Cadence.Platform.FactPublicationIsolationTest do
              )
 
     assert_fact(:bus_b, {:cadence, :telemetry, :facts}, ObservationIdentityStateChanged)
-    assert_fact(:bus_b, {:cadence, :data_sources, :facts}, SourceWatermarkEvent)
     assert_fact(:bus_b, {:cadence, :telemetry, :facts}, ObservationsCommitted)
+
+    # The watermark is coalesced (#690): its fact goes out, on the batch's own bus, at the flush.
+    assert :ok = WatermarkCoalescer.flush()
+    assert_fact(:bus_b, {:cadence, :data_sources, :facts}, SourceWatermarkEvent)
     refute_any_fact()
 
-    assert length(Storage.list_observation_identity_states(mission_id)) == 2
+    assert_received {:telemetry_storage_envelopes,
+                     [
+                       %{
+                         sample_id: "sample-b",
+                         mission_id: ^mission_id,
+                         observation_identity_id: identity_b
+                       }
+                     ]}
+
+    assert is_binary(identity_a) and is_binary(identity_b) and identity_a != identity_b
+    refute_received {:telemetry_storage_envelopes, _more}
+
+    # First-seen rule (11-17): canonical first sightings write no identity-state row. Both writes
+    # landed (storage received each sample and its identity above) and published on their own bus.
+    assert Storage.list_observation_identity_states(mission_id) == []
 
     assert :ok = Persistence.persist_managed_runtime_records(bus_a, [], [], [])
     assert_fact(:bus_a, {:cadence, :runtime, :facts}, ManagedRecordsPersisted)

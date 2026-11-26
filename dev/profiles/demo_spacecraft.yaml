@@ -13,7 +13,7 @@ bootstrap:
   source_endpoint_id: source-endpoint-001
   source_ref: sc-001
   source_endpoint_display_name: SC-001 Primary Endpoint
-  definitions_path: ../../legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml
+  definitions_path: ../../dev/catalogs/demo_spacecraft.yaml
   downlink_provider_port: 4100
   contact_start_delay_seconds: 1
   contact_duration_seconds: 28800
@@ -21,7 +21,7 @@ bootstrap:
 
 simulator:
   runtime_mode: telemetry
-  definitions: ../../legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml
+  definitions: ../../dev/catalogs/demo_spacecraft.yaml
   target: SIM-1
   rate: 1.0
   provider: database
