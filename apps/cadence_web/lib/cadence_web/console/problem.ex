@@ -298,6 +298,8 @@ defmodule CadenceWeb.Console.Problem do
       {409, "Not approved: Cadence is still preparing this revision. Try again in a moment."},
     mission_model_revision_not_approvable:
       {409, "Not approved: this revision was already approved, rejected or replaced."},
+    mission_model_revision_not_withdrawable:
+      {409, "Not withdrawn: only an approved revision's approval can be withdrawn."},
     mission_model_revision_not_found: {404, "Mission model revision not found."},
     mission_model_comparison_report_not_found: {404, "Comparison report not found."},
     mission_model_decision_reason_required: {422, "Give a reason first."},

@@ -330,6 +330,7 @@ defmodule CadenceWeb.Router do
       post("/mission-model-revisions/:id/comparison", MissionModelRevisionController, :compare)
       post("/mission-model-revisions/:id/approve", MissionModelRevisionController, :approve)
       post("/mission-model-revisions/:id/reject", MissionModelRevisionController, :reject)
+      post("/mission-model-revisions/:id/withdraw", MissionModelRevisionController, :withdraw)
       post("/passes/:id/end-contact", PassContactController, :finish)
       # U46 named release (owner: api). Contract: docs/apogee/api/commanding.md
       post(

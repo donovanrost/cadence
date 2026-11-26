@@ -339,6 +339,26 @@ by its catalog revision ("catalog rev 4"); the model revision id is Technical de
   decided_at | null}`, both set or both null. `decided_by` names an active member (C1: a person
   no longer a member reads `{id: null, name: null}`; never a stored name or an email). Before
   #260 this answered `200` with the revision unchanged (breaking).
+- `POST /:id/withdraw {reason, operation_id?}` (E2, #546; U109 "Withdrawing an approval") →
+  `200` the read, with `status: "withdrawn"` and `decision: {kind: "withdrawn", by, at,
+  report_id: null, reason}`, plus `replayed`.
+  - Only an approved revision, and only an org admin with the authority to approve. No four-eyes:
+    withdrawing narrows what can run and stops nothing.
+  - `withdrawn` is final: approve refuses it, and running that model again takes a new revision.
+  - The decision is an append-only `mission_model_decisions` record.
+  - Every read carries `viewer_can_withdraw` (an approved revision and a viewer who may approve).
+  - Refusals: `422 mission_model_decision_reason_required` / `…_too_long`, `403 forbidden`, `403
+    human_mission_model_approver_required`, `409 mission_model_revision_not_withdrawable` (not
+    approved, or already withdrawn by another operation). A service identity's bearer is refused
+    `403 service_not_allowed` before it reaches the action.
+  - The same `operation_id` by the same person replays `200` with `replayed: true`.
+  - After a withdrawal:
+    - staging a pin to that composition is a validation NO-GO with `details.reason: "withdrawn"`
+      and `details.decision {revision_id, kind, by: {id, name}, at, reason}`, unless an older
+      approved, runnable revision of the same composition is left, which staging then selects
+      and records;
+    - an in-flight set's apply refuses `409 restage_needed` with `current_reason: "withdrawn"`
+      and the same `decision`.
 - The catalog read's revision rows (`GET /catalog?database_id=`) carry `model {revision_id,
   status} | null` for the row tag (NEEDS APPROVAL / APPROVED / REJECTED).
   - `composition_id` (D2, #543): the id of the composition behind the row's model revision, or
@@ -405,7 +425,8 @@ switches. The editable `document` never carries them; they're read-only in `swit
   craft's own configuration sets it.
 - `catalogs` (≤100): `{id, name, label, number, approval_status, declarations, packets, commands}`,
   where `number` is the catalog revision number (U65's "catalog rev 14") and `approval_status`
-  (#595b) is its mission-model revision's gate state: `candidate | approved | rejected | retired`.
+  (#595b) is its mission-model revision's gate state: `candidate | approved | rejected | retired |
+  withdrawn`.
   (`withdrawn` isn't a model revision state; a withdrawn approval is E2's, #546.)
 - `fleet` (≤100, this craft first): `{id, name, scid, active_catalog_id, has_changes}`, plus
   `fleet_total`.
