@@ -17,6 +17,7 @@ defmodule Cadence.Management.Contacts.Store.FleetPlanningRunRequirementRefRow do
     field(:mission_id, :string)
     field(:contact_requirement_id, :string)
     field(:contact_requirement_version, :integer)
+    field(:input_content_sha256, :string)
     field(:contact_planning_run_id, :string)
     field(:input_state, :string)
     field(:result_state, :string)
@@ -32,6 +33,7 @@ defmodule Cadence.Management.Contacts.Store.FleetPlanningRunRequirementRefRow do
     :mission_id,
     :contact_requirement_id,
     :contact_requirement_version,
+    :input_content_sha256,
     :contact_planning_run_id,
     :input_state,
     :result_state,
@@ -45,11 +47,24 @@ defmodule Cadence.Management.Contacts.Store.FleetPlanningRunRequirementRefRow do
     %__MODULE__{}
     |> cast(domain_attrs(ref), @fields)
     |> validate_required(@required_fields)
+    |> validate_format(:input_content_sha256, ~r/\A[0-9a-f]{64}\z/)
     |> common_validations()
     |> unique_constraint(
       [:fleet_planning_run_id, :contact_requirement_id, :contact_requirement_version],
       name: :fleet_planning_run_requirement_refs_input_uniq
     )
+  end
+
+  @doc "Validated attributes for chunked insert_all; insert_all does not create timestamps."
+  def insert_attrs(%FleetPlanningRunRequirementRef{} = ref) do
+    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+
+    ref
+    |> changeset()
+    |> Ecto.Changeset.apply_action!(:insert)
+    |> Map.from_struct()
+    |> Map.take(@fields)
+    |> Map.merge(%{inserted_at: now, updated_at: now})
   end
 
   @spec progress_changeset(struct(), map()) :: Ecto.Changeset.t()
@@ -74,6 +89,7 @@ defmodule Cadence.Management.Contacts.Store.FleetPlanningRunRequirementRefRow do
       mission_id: row.mission_id,
       contact_requirement_id: row.contact_requirement_id,
       contact_requirement_version: row.contact_requirement_version,
+      input_content_sha256: row.input_content_sha256,
       contact_planning_run_id: row.contact_planning_run_id,
       input_state: row.input_state,
       result_state: row.result_state,
@@ -98,6 +114,7 @@ defmodule Cadence.Management.Contacts.Store.FleetPlanningRunRequirementRefRow do
       mission_id: ref.mission_id,
       contact_requirement_id: ref.contact_requirement_id,
       contact_requirement_version: ref.contact_requirement_version,
+      input_content_sha256: ref.input_content_sha256,
       contact_planning_run_id: ref.contact_planning_run_id,
       input_state: Atom.to_string(ref.input_state),
       result_state: Atom.to_string(ref.result_state),
