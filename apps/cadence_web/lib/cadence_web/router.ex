@@ -169,21 +169,9 @@ defmodule CadenceWeb.Router do
       :federated
     )
 
-    # These shells stay in the authenticated browser scope so the Phoenix
-    # host can establish organization, user, and admin context from the
-    # current session without inventing a mission resource.
-    get(
-      "/applications/:application_key/federated",
-      ApplicationHostController,
-      :organization_federated
-    )
-
-    get(
-      "/applications/:application_key/:surface_id/federated",
-      ApplicationHostController,
-      :organization_federated
-    )
-
+    # The user shell stays in the authenticated browser scope so the Phoenix host can establish
+    # user context from the current session without inventing a mission resource. No application
+    # installs at organization or admin scope, so there is no shell for either.
     get(
       "/account/applications/:application_key/federated",
       ApplicationHostController,
@@ -194,18 +182,6 @@ defmodule CadenceWeb.Router do
       "/account/applications/:application_key/:surface_id/federated",
       ApplicationHostController,
       :user_federated
-    )
-
-    get(
-      "/admin/applications/:application_key/federated",
-      ApplicationHostController,
-      :admin_federated
-    )
-
-    get(
-      "/admin/applications/:application_key/:surface_id/federated",
-      ApplicationHostController,
-      :admin_federated
     )
 
     get(

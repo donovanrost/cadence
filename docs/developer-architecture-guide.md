@@ -52,8 +52,6 @@ At the Workspace project level:
   external peers.
 - `packages/xtce` contains reusable XTCE 1.3 document parsing and offline
   schema validation.
-- `legacy/cadence_legacy` is a preserved reference snapshot of the previous
-  system and is useful for migration and performance comparisons.
 
 Conceptually, the system has three authority planes and two cross-cutting
 structures:

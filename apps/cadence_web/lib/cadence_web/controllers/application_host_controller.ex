@@ -47,14 +47,8 @@ defmodule CadenceWeb.ApplicationHostController do
     end
   end
 
-  def organization_federated(conn, params),
-    do: federated(conn, Map.put(params, "host_scope", "organization"))
-
   def user_federated(conn, params),
     do: federated(conn, Map.put(params, "host_scope", "user"))
-
-  def admin_federated(conn, params),
-    do: federated(conn, Map.put(params, "host_scope", "admin"))
 
   @spec catalog(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def catalog(conn, params) when is_map(params) do
@@ -69,20 +63,10 @@ defmodule CadenceWeb.ApplicationHostController do
       |> put_resp_header("cache-control", "no-store")
       |> json(catalog)
     else
-      {:error, reason} -> catalog_problem(conn, catalog_reason(reason, params))
+      {:error, reason} -> catalog_problem(conn, reason)
       _other -> catalog_problem(conn, :application_catalog_unavailable)
     end
   end
-
-  # §11c A + L13: no application has an organization-scope surface any more, so an organization
-  # catalog is empty. Say that, not mission_not_found; the route stays until a later #80 shrink.
-  defp catalog_reason(:application_catalog_unavailable, params) do
-    if requested_scope(params) == "organization",
-      do: :no_organization_applications,
-      else: :application_catalog_unavailable
-  end
-
-  defp catalog_reason(reason, _params), do: reason
 
   @spec query(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def query(conn, params) when is_map(params) do
@@ -414,39 +398,18 @@ defmodule CadenceWeb.ApplicationHostController do
 
   defp fetch_generic_route_context(%Scope{} = current_scope, params) do
     case requested_scope(params) do
-      "organization" ->
-        fetch_organization_route_context(current_scope, params)
-
       "user" ->
         fetch_user_route_context(current_scope, params)
-
-      "admin" ->
-        fetch_admin_route_context(current_scope, params)
 
       _other ->
         {:error, :scope_mismatch}
     end
   end
 
-  defp fetch_organization_route_context(%Scope{organization_id: organization_id}, params)
-       when is_binary(organization_id) do
-    requested_organization_id = Map.get(params, "organization_id")
-
-    if generic_scope_ids_match?(params, :organization, organization_id) and
-         (is_nil(requested_organization_id) or requested_organization_id == organization_id) do
-      {:ok,
-       %{host_context: HostContext.organization(organization_id), mission: nil, spacecraft: nil}}
-    else
-      {:error, :scope_mismatch}
-    end
-  end
-
-  defp fetch_organization_route_context(%Scope{}, _params), do: {:error, :scope_mismatch}
-
   defp fetch_user_route_context(%Scope{actor_kind: :user, user: %{user_id: user_id}}, params) do
     requested_user_id = Map.get(params, "user_id")
 
-    if generic_scope_ids_match?(params, :user, user_id) and
+    if generic_scope_ids_match?(params, user_id) and
          (is_nil(requested_user_id) or requested_user_id == user_id) do
       {:ok, %{host_context: HostContext.user(user_id), mission: nil, spacecraft: nil}}
     else
@@ -456,14 +419,6 @@ defmodule CadenceWeb.ApplicationHostController do
 
   defp fetch_user_route_context(%Scope{}, _params),
     do: {:error, :authenticated_user_required}
-
-  defp fetch_admin_route_context(%Scope{} = current_scope, params) do
-    if Scope.admin_mode?(current_scope) and generic_scope_ids_match?(params, :admin, nil) do
-      {:ok, %{host_context: HostContext.admin(), mission: nil, spacecraft: nil}}
-    else
-      {:error, :forbidden}
-    end
-  end
 
   defp authorize_route_scope(
          %Scope{} = current_scope,
@@ -477,14 +432,8 @@ defmodule CadenceWeb.ApplicationHostController do
 
   defp authorize_route_scope(%Scope{} = current_scope, params) do
     case requested_scope(params) do
-      "organization" when is_binary(current_scope.organization_id) ->
-        :ok
-
       "user" when current_scope.actor_kind == :user ->
         :ok
-
-      "admin" ->
-        if Scope.admin_mode?(current_scope), do: :ok, else: {:error, :forbidden}
 
       _other ->
         {:error, :scope_mismatch}
@@ -567,17 +516,11 @@ defmodule CadenceWeb.ApplicationHostController do
 
   defp requested_scope(_params), do: nil
 
-  defp generic_scope_ids_match?(params, scope, expected_id) do
-    keys = ["organization_id", "user_id", "mission_id", "spacecraft_id"]
-
-    allowed_key =
-      if scope == :organization, do: "organization_id", else: if(scope == :user, do: "user_id")
-
-    Enum.all?(keys, fn key ->
+  defp generic_scope_ids_match?(params, expected_user_id) do
+    Enum.all?(["organization_id", "user_id", "mission_id", "spacecraft_id"], fn key ->
       value = Map.get(params, key)
 
-      (key == allowed_key and value in [nil, expected_id]) or
-        (key != allowed_key and is_nil(value))
+      if key == "user_id", do: value in [nil, expected_user_id], else: is_nil(value)
     end)
   end
 
@@ -770,30 +713,19 @@ defmodule CadenceWeb.ApplicationHostController do
   end
 
   defp catalog_url(
-         %{host_context: %HostContext{placement: placement} = host_context} = route_context,
+         %{host_context: %HostContext{placement: :user, user_id: user_id}} = route_context,
          application_key,
          surface_id
        )
-       when placement in [:organization, :user, :admin] and is_binary(application_key) and
-              is_binary(surface_id) do
+       when is_binary(application_key) and is_binary(surface_id) do
     base = ApplicationHostCatalog.bridge_base_path(route_context) <> "/catalog"
 
-    scope_query =
-      case placement do
-        :organization ->
-          %{"scope" => "organization", "organization_id" => host_context.organization_id}
-
-        :user ->
-          %{"scope" => "user", "user_id" => host_context.user_id}
-
-        :admin ->
-          %{"scope" => "admin"}
-      end
-
-    query =
-      scope_query
-      |> Map.put("application_key", application_key)
-      |> Map.put("surface_id", surface_id)
+    query = %{
+      "scope" => "user",
+      "user_id" => user_id,
+      "application_key" => application_key,
+      "surface_id" => surface_id
+    }
 
     base <> "?" <> URI.encode_query(query)
   end
@@ -871,15 +803,6 @@ defmodule CadenceWeb.ApplicationHostController do
       :not_found,
       "application_unavailable",
       "The requested application is not available in this scope."
-    )
-  end
-
-  defp catalog_problem(conn, :no_organization_applications) do
-    problem(
-      conn,
-      :not_found,
-      "no_organization_applications",
-      "No applications are installed at the organization level."
     )
   end
 

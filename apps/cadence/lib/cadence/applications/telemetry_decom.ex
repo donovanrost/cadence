@@ -51,6 +51,7 @@ defmodule Cadence.Applications.TelemetryDecom do
   alias Cadence.Auth.Scope
   alias Cadence.Catalog
   alias Cadence.Catalog.Revision
+  alias Cadence.Catalog.TelemetryBinding
   alias Cadence.Extensions.Presentation.ReferenceDefinition
   alias Cadence.Governance
   alias Cadence.Management.Activations.ActivationRequest
@@ -1024,7 +1025,7 @@ defmodule Cadence.Applications.TelemetryDecom do
       Enum.map(packet_definitions, fn packet_definition ->
         CapabilityInstance.new(%{
           capability_instance_id:
-            capability_instance_id(
+            TelemetryBinding.capability_instance_id(
               telemetry.mission_model_revision.revision_id,
               config.source_endpoint_id,
               packet_definition.packet_definition_id
@@ -1041,7 +1042,7 @@ defmodule Cadence.Applications.TelemetryDecom do
         packet_definition = capability_instance.runtime_configuration
 
         BindingRule.new(%{
-          binding_rule_id: capability_instance.capability_instance_id <> ":rule",
+          binding_rule_id: TelemetryBinding.rule_id(capability_instance.capability_instance_id),
           capability_instance_id: capability_instance.capability_instance_id,
           selector: %{
             scope: %{
@@ -1073,10 +1074,6 @@ defmodule Cadence.Applications.TelemetryDecom do
           rules: rules
         })
     }
-  end
-
-  defp capability_instance_id(revision_id, source_endpoint_id, packet_definition_id) do
-    "mission_model_telemetry:#{revision_id}:#{source_endpoint_id}:#{packet_definition_id}"
   end
 
   defp parse_handled_apids(attrs) do
