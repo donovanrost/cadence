@@ -102,6 +102,19 @@ defmodule Cadence.Reads.Telemetry do
     )
   end
 
+  @doc """
+  The newest receipt time per spacecraft over the mission's current values, `%{spacecraft_id =>
+  DateTime}`, without reading the values (#798). Options as the other current-value reads.
+  """
+  @spec last_receipts(binary(), binary(), keyword()) :: %{binary() => DateTime.t()}
+  def last_receipts(_organization_id, mission_id, opts \\ [])
+      when is_binary(mission_id) and is_list(opts) do
+    policy =
+      Keyword.get_lazy(opts, :current_value_store_policy, &CurrentValueStore.configured_policy/0)
+
+    CurrentValueStore.last_receipts(policy, mission_id)
+  end
+
   @spec sample_history(binary(), binary(), keyword()) :: [Sample.t()]
   def sample_history(mission_id, point_id, opts \\ [])
       when is_binary(mission_id) and is_binary(point_id) and is_list(opts) do
