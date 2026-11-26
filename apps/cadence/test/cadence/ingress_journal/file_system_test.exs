@@ -96,12 +96,13 @@ defmodule Cadence.IngressJournal.FileSystemTest do
 
     test "an unreadable stream.term isn't listed; a path outside the base is never removed",
          ctx do
+      base_path = Path.join(ctx.tmp_dir, "base")
+      ctx = %{ctx | tmp_dir: base_path, opts: Keyword.put(ctx.opts, :base_path, base_path)}
       %{directory: directory} = stored!(ctx, [:processing, :archive])
       File.write!(Path.join(directory, "stream.term"), "not a term")
       assert FileSystem.stored_stream_directories(ctx.tmp_dir) == []
 
-      outside =
-        Path.join(System.tmp_dir!(), "cadence-reclaim-#{System.unique_integer([:positive])}")
+      outside = Path.join(Path.dirname(ctx.tmp_dir), "outside")
 
       File.mkdir_p!(outside)
 
@@ -111,7 +112,6 @@ defmodule Cadence.IngressJournal.FileSystemTest do
       end
 
       assert File.dir?(outside)
-      File.rm_rf!(outside)
     end
   end
 

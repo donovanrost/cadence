@@ -1,5 +1,6 @@
 defmodule Cadence.Telemetry.Storage.QuestDB.SchemaMigratorTest do
   use Cadence.UnitCase, async: true
+  @moduletag :tmp_dir
 
   alias Cadence.Telemetry.Storage.QuestDB.{ObservationReader, ObservationRow, SchemaMigrator}
 
@@ -51,9 +52,9 @@ defmodule Cadence.Telemetry.Storage.QuestDB.SchemaMigratorTest do
     assert rest == []
   end
 
-  test "migration plan sorts files by version and ignores non-migration sql files" do
-    migrations_path = temp_migrations_path()
-
+  test "migration plan sorts files by version and ignores non-migration sql files", %{
+    tmp_dir: migrations_path
+  } do
     write_migration(
       migrations_path,
       "20260617000002_second.sql",
@@ -74,9 +75,7 @@ defmodule Cadence.Telemetry.Storage.QuestDB.SchemaMigratorTest do
     assert Enum.map(migrations, & &1.name) == ["first", "second"]
   end
 
-  test "migration plan excludes applied versions" do
-    migrations_path = temp_migrations_path()
-
+  test "migration plan excludes applied versions", %{tmp_dir: migrations_path} do
     write_migration(
       migrations_path,
       "20260617000001_first.sql",
@@ -128,8 +127,7 @@ defmodule Cadence.Telemetry.Storage.QuestDB.SchemaMigratorTest do
   end
 
   describe "check/1 (read-only, mix cadence.questdb.migrate --check)" do
-    setup do
-      migrations_path = temp_migrations_path()
+    setup %{tmp_dir: migrations_path} do
       write_migration(migrations_path, "20260617000001_first.sql", "SELECT 1;")
       write_migration(migrations_path, "20260617000002_second.sql", "SELECT 2;")
       %{migrations_path: migrations_path}
@@ -203,8 +201,7 @@ defmodule Cadence.Telemetry.Storage.QuestDB.SchemaMigratorTest do
   end
 
   describe "await_current/1 (after applying, until QuestDB has applied the WAL)" do
-    setup do
-      migrations_path = temp_migrations_path()
+    setup %{tmp_dir: migrations_path} do
       write_migration(migrations_path, "20260617000001_first.sql", "SELECT 1;")
       %{migrations_path: migrations_path}
     end
@@ -280,17 +277,6 @@ defmodule Cadence.Telemetry.Storage.QuestDB.SchemaMigratorTest do
     after
       0 -> Enum.reverse(acc)
     end
-  end
-
-  defp temp_migrations_path do
-    path =
-      Path.join([
-        System.tmp_dir!(),
-        "cadence-questdb-migrations-#{System.unique_integer([:positive])}"
-      ])
-
-    File.mkdir_p!(path)
-    path
   end
 
   defp write_migration(migrations_path, filename, sql) do

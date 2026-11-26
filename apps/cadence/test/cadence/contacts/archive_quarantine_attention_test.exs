@@ -1,6 +1,7 @@
 defmodule Cadence.Contacts.ArchiveQuarantineAttentionTest do
   @moduledoc "DECISIONS #88 / ux U49: the archive_quarantine Now item, retry and discard."
   use Cadence.ProcessDataCase, async: false
+  @moduletag :tmp_dir
 
   import Ecto.Query
 
@@ -15,13 +16,7 @@ defmodule Cadence.Contacts.ArchiveQuarantineAttentionTest do
   alias Cadence.Protocol.RecordArchive.Quarantine
   alias Cadence.ProviderChangeFixtures
 
-  setup do
-    base_path =
-      Path.join(
-        System.tmp_dir!(),
-        "cadence_quarantine_attention_#{System.unique_integer([:positive])}"
-      )
-
+  setup %{tmp_dir: base_path} do
     config = [
       module: FileSystem,
       base_path: base_path,
@@ -37,7 +32,6 @@ defmodule Cadence.Contacts.ArchiveQuarantineAttentionTest do
 
     on_exit(fn ->
       Application.put_env(:cadence, :protocol_record_archive, previous)
-      File.rm_rf!(base_path)
     end)
 
     org = "org-quarantine-attention-#{System.unique_integer([:positive])}"

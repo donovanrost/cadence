@@ -15,18 +15,11 @@ defmodule Cadence.Persistence.PersistTelemetryIngressArchiveTest do
   alias Cadence.Runtime.DispatchRecords.DispatchDecisionRow
   alias Cadence.Telemetry.{CurrentValueStore, Storage}
 
-  test "does not persist dispatch decisions when packet and raw evidence rows are archived outside Postgres" do
-    ingress_base_path =
-      Path.join(
-        System.tmp_dir!(),
-        "cadence_ingress_archive_dispatch_#{System.unique_integer([:positive])}"
-      )
-
-    protocol_base_path =
-      Path.join(
-        System.tmp_dir!(),
-        "cadence_protocol_archive_dispatch_#{System.unique_integer([:positive])}"
-      )
+  @tag :tmp_dir
+  test "does not persist dispatch decisions when packet and raw evidence rows are archived outside Postgres",
+       %{tmp_dir: tmp_dir} do
+    ingress_base_path = Path.join(tmp_dir, "ingress")
+    protocol_base_path = Path.join(tmp_dir, "protocol")
 
     persistence_policy =
       filesystem_persistence_policy(ingress_base_path, protocol_base_path)
