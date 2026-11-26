@@ -8,7 +8,6 @@ defmodule Cadence.Reads.FleetStatusScaleTest do
   """
   use Cadence.DataCase, async: false
 
-  @moduletag :scale
   @moduletag timeout: 600_000
 
   alias Cadence.Limits.Store.LatestStateRow
