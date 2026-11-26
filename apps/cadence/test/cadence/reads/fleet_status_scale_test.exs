@@ -11,7 +11,7 @@ defmodule Cadence.Reads.FleetStatusScaleTest do
   @moduletag :scale
   @moduletag timeout: 600_000
 
-  alias Cadence.Limits.Store.LatestStateRow
+  alias Cadence.Limits.Store.{FleetSummary, LatestStateRow}
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Reads.FleetStatus
   alias Cadence.Spacecraft
@@ -77,7 +77,7 @@ defmodule Cadence.Reads.FleetStatusScaleTest do
       end
 
     for chunk <- Enum.chunk_every(rows, 2_000), do: Repo.insert_all(LatestStateRow, chunk)
-    Cadence.Limits.Store.FleetSummary.refresh(Repo, @mission, :all)
+    FleetSummary.refresh(Repo, @mission, :all)
     Repo.query!("ANALYZE telemetry_latest_limit_states")
     Repo.query!("ANALYZE telemetry_fleet_limit_summaries")
 

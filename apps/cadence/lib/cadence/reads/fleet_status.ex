@@ -83,8 +83,9 @@ defmodule Cadence.Reads.FleetStatus do
 
   # What the live read needs of limits and telemetry, from the database and the cache and never by
   # reading every value (#798): the limit conditions per spacecraft (`FleetSummary`, one
-  # statement over a row per spacecraft), each spacecraft's newest receipt (the current-value store keeps it as values are
-  # recorded) and the durable history's. A fixed number of reads however large the fleet is.
+  # statement over a row per spacecraft), each spacecraft's newest receipt (the current-value
+  # store keeps it as values are recorded) and the durable history's. A fixed number of reads
+  # however large the fleet is.
   defp live_inputs(organization_id, mission_id) do
     summaries = FleetSummary.load(organization_id, mission_id)
     durable = durable(organization_id, mission_id)
