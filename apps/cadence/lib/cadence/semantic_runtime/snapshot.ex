@@ -43,8 +43,12 @@ defmodule Cadence.SemanticRuntime.Snapshot do
     field(:snapshotted_at, :utc_datetime_usec)
   end
 
-  @doc "Replaces the partition's snapshot. The caller holds the head lock and has validated the writer."
-  @spec put(map(), PartitionKey.t(), pos_integer(), State.t(), resume()) :: :ok
+  @doc """
+  Replaces the partition's snapshot; returns the size of its encoded state in bytes. The caller
+  holds the head lock and has validated the writer.
+  """
+  @spec put(map(), PartitionKey.t(), pos_integer(), State.t(), resume()) ::
+          {:ok, non_neg_integer()}
   def put(spec, %PartitionKey{} = key, epoch, %State{} = state, resume) when is_map(resume) do
     identity = identity(spec, key)
     state_term = Terms.encode(state)
@@ -69,7 +73,7 @@ defmodule Cadence.SemanticRuntime.Snapshot do
          [:version, :ownership_epoch, :state_term, :resume, :integrity_sha256, :snapshotted_at]}
     )
 
-    :ok
+    {:ok, byte_size(state_term)}
   end
 
   @doc """

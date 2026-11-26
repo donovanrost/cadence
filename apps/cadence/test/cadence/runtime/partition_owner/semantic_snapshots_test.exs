@@ -14,7 +14,7 @@ defmodule Cadence.Runtime.PartitionOwner.SemanticSnapshotsTest do
     {spec, input_id} = Fixture.runtime_spec()
     key = PartitionKey.new(%{affinity: :source_endpoint, value: "cadence-snapshots"})
     plan = PlanDecoder.decode(spec.runtime_plans)
-    {:ok, empty, writer} = Store.recover_writer(spec, key, plan)
+    {:ok, empty, writer, _resume} = Store.recover(spec, key)
 
     state = %{
       mission_id: spec.mission_id,
@@ -52,7 +52,7 @@ defmodule Cadence.Runtime.PartitionOwner.SemanticSnapshotsTest do
 
   test "nothing is snapshotted until the state changed, and not before the interval or idle time",
        %{state: state, spec: spec, key: key} = ctx do
-    assert state == SemanticSnapshots.tick(state)
+    assert {:ok, ^state} = SemanticSnapshots.tick(state)
     assert :missing = Snapshot.fetch(spec, key)
 
     state = state |> process(ctx, 1) |> SemanticSnapshots.track(result(90, 100))
@@ -60,7 +60,7 @@ defmodule Cadence.Runtime.PartitionOwner.SemanticSnapshotsTest do
     assert state.semantic_resume == %{@stream => 90}
 
     # Dirty, but neither 60 s since the last snapshot nor 60 s idle.
-    assert ^state = SemanticSnapshots.tick(state)
+    assert {:ok, ^state} = SemanticSnapshots.tick(state)
     assert :missing = Snapshot.fetch(spec, key)
   end
 
@@ -70,7 +70,7 @@ defmodule Cadence.Runtime.PartitionOwner.SemanticSnapshotsTest do
     state = %{state | semantic_snapshot_config: [interval_ms: 60_000, idle_ms: 0, tick_ms: nil]}
     state = state |> process(ctx, 1) |> SemanticSnapshots.track(result(90, 100))
 
-    state = SemanticSnapshots.tick(state)
+    assert {:ok, state} = SemanticSnapshots.tick(state)
 
     refute state.semantic_dirty?
     assert {:ok, stored, %{@stream => 90}} = Snapshot.fetch(spec, key)
@@ -79,7 +79,7 @@ defmodule Cadence.Runtime.PartitionOwner.SemanticSnapshotsTest do
     assert_receive {:semantic_snapshot_durable, ^partition, @stream, 90}
 
     # Clean: no second snapshot, no second notice.
-    assert ^state = SemanticSnapshots.tick(state)
+    assert {:ok, ^state} = SemanticSnapshots.tick(state)
     refute_receive {:semantic_snapshot_durable, _, _, _}, 20
   end
 
@@ -88,7 +88,7 @@ defmodule Cadence.Runtime.PartitionOwner.SemanticSnapshotsTest do
     state = %{state | semantic_snapshot_config: [interval_ms: 0, idle_ms: 60_000, tick_ms: nil]}
     state = state |> process(ctx, 1) |> SemanticSnapshots.track(result(90, 100))
 
-    assert %{semantic_dirty?: false} = SemanticSnapshots.tick(state)
+    assert {:ok, %{semantic_dirty?: false}} = SemanticSnapshots.tick(state)
     assert {:ok, _state, %{@stream => 90}} = Snapshot.fetch(spec, key)
   end
 
@@ -122,10 +122,50 @@ defmodule Cadence.Runtime.PartitionOwner.SemanticSnapshotsTest do
        %{state: state, spec: spec, key: key, plan: plan} = ctx do
     SemanticSnapshotNotifier.subscribe(@stream)
     state = state |> process(ctx, 1) |> SemanticSnapshots.track(result(90, 100))
-    assert {:ok, _state, _writer} = Store.recover_writer(spec, key, plan)
+    assert {:ok, _state, _writer, _resume} = Store.recover(spec, key)
 
     assert %{semantic_dirty?: true} = SemanticSnapshots.stop(state)
     refute_receive {:semantic_snapshot_stopped, _, _}, 20
+  end
+
+  test "frames the recovered snapshot already includes are skipped, and only those", %{
+    state: state
+  } do
+    at = ~U[2026-11-26 12:00:00Z]
+    recovered = Map.put(state, :semantic_replay_floor, %{@stream => 400})
+    frame = fn stream, offset -> %{journal_frame: {stream, offset, at}} end
+
+    assert SemanticSnapshots.skip_replayed?(recovered, frame.(@stream, 399))
+    refute SemanticSnapshots.skip_replayed?(recovered, frame.(@stream, 400))
+    refute SemanticSnapshots.skip_replayed?(recovered, frame.(@stream, 900))
+    # Another stream, or no journal frame at all, is never skipped.
+    refute SemanticSnapshots.skip_replayed?(recovered, frame.("another", 0))
+    refute SemanticSnapshots.skip_replayed?(recovered, %{journal_frame: nil})
+    # An owner that recovered nothing skips nothing.
+    refute SemanticSnapshots.skip_replayed?(state, frame.(@stream, 0))
+  end
+
+  test "a timer firing makes a gated partition's state due for a snapshot", %{state: state} do
+    assert %{semantic_dirty?: true} = SemanticSnapshots.touch(state)
+
+    ungated = %{state | semantic_writer: nil}
+    assert ^ungated = SemanticSnapshots.touch(ungated)
+  end
+
+  test "a recovering partition tells the consumers it gated which offsets it recovered", %{
+    state: state,
+    key: key
+  } do
+    partition = PartitionKey.identifier(key)
+    SemanticSnapshotNotifier.subscribe_partition(partition)
+    recovered = Map.put(state, :semantic_replay_floor, %{@stream => 400})
+
+    assert :ok = SemanticSnapshots.announce_recovery(recovered)
+    assert_receive {:semantic_partition_recovered, ^partition, %{@stream => 400}}
+
+    # No semantic writer, nothing recovered, nothing announced.
+    assert :ok = SemanticSnapshots.announce_recovery(%{recovered | semantic_writer: nil})
+    refute_receive {:semantic_partition_recovered, _, _}, 20
   end
 
   test "a resume offset never moves back, and falls back to the batch's end", %{state: state} do
@@ -143,9 +183,9 @@ defmodule Cadence.Runtime.PartitionOwner.SemanticSnapshotsTest do
     state = state |> process(ctx, 1) |> SemanticSnapshots.track(result(90, 100))
 
     # Another owner takes the partition.
-    assert {:ok, _state, _writer} = Store.recover_writer(spec, key, plan)
+    assert {:ok, _state, _writer, _resume} = Store.recover(spec, key)
 
-    assert %{semantic_dirty?: true} = SemanticSnapshots.tick(state)
+    assert {:fenced, %{semantic_dirty?: true}} = SemanticSnapshots.tick(state)
     assert :missing = Snapshot.fetch(spec, key)
     refute_receive {:semantic_snapshot_durable, _, _, _}, 20
   end

@@ -9,10 +9,17 @@ defmodule Cadence.Runtime.PartitionOwner.SemanticSnapshots do
   consumer is told, and only then may its durable cursor pass those offsets
   (`Cadence.Runtime.IngressJournalConsumer`).
 
+  This is also the partition's only semantic persistence: there is no per-batch log. A recovering
+  owner loads its last snapshot (`Store.recover/2`) and the journal replays from the snapshot's
+  offsets; `skip_replayed?/2` keeps the frames the snapshot already includes from being applied to
+  the state a second time. A partition that persists no journal loses at most the memory since its
+  last snapshot (about 60 s).
+
   The owner state keys this module reads and writes: `semantic_resume` (stream id => offset),
-  `semantic_dirty?`, `semantic_snapshot_at` and `semantic_input_at` (monotonic ms), and
-  `semantic_snapshot_config`. Without a semantic writer (no plan, or runtime records not
-  persisted) nothing is tracked, snapshotted or gated.
+  `semantic_replay_floor` (the snapshot's offsets as recovered), `semantic_dirty?`,
+  `semantic_snapshot_at` and `semantic_input_at` (monotonic ms), and `semantic_snapshot_config`.
+  Without a semantic writer (no plan, or runtime records not persisted) nothing is tracked,
+  snapshotted or gated.
   """
 
   require Logger
@@ -23,11 +30,12 @@ defmodule Cadence.Runtime.PartitionOwner.SemanticSnapshots do
 
   @defaults [interval_ms: 60_000, idle_ms: 2_000, tick_ms: 1_000]
 
-  @doc "The initial state keys."
+  @doc "The initial state keys (recovery's own values, already in the state, win)."
   @spec init(keyword()) :: map()
   def init(opts) do
     %{
       semantic_resume: %{},
+      semantic_replay_floor: %{},
       semantic_dirty?: false,
       semantic_snapshot_at: now(),
       semantic_input_at: now(),
@@ -69,16 +77,58 @@ defmodule Cadence.Runtime.PartitionOwner.SemanticSnapshots do
     end
   end
 
-  @doc "The tick: snapshots when due."
-  @spec tick(map()) :: map()
+  @doc "The state changed without a batch (a timer fired): a snapshot is due when the cadence says."
+  @spec touch(map()) :: map()
+  def touch(state) do
+    if gated?(state),
+      do: state |> Map.put(:semantic_dirty?, true) |> Map.put(:semantic_input_at, now()),
+      else: state
+  end
+
+  @doc """
+  The tick: snapshots when due. `{:fenced, state}` when another owner has taken the partition
+  (this one must stop); any other failure keeps the state dirty for the next tick.
+  """
+  @spec tick(map()) :: {:ok, map()} | {:fenced, map()}
   def tick(state) do
     schedule(state)
-    if due?(state), do: snapshot(state), else: state
+
+    if due?(state) do
+      case snapshot(state) do
+        {:ok, state} -> {:ok, state}
+        {:error, :semantic_runtime_fenced, state} -> {:fenced, state}
+        {:error, _reason, state} -> {:ok, state}
+      end
+    else
+      {:ok, state}
+    end
+  end
+
+  @doc """
+  Whether a sample's frame is already in the recovered state: the snapshot includes every frame of
+  its stream that starts before the snapshot's offset, so a replay must not apply it again. Samples
+  with no journal frame are never skipped.
+  """
+  @spec skip_replayed?(map(), map()) :: boolean()
+  def skip_replayed?(%{semantic_replay_floor: floor}, %{journal_frame: {stream, offset, _at}}),
+    do: offset < Map.get(floor, stream, 0)
+
+  def skip_replayed?(_state, _sample), do: false
+
+  @doc "Tells the streams' consumers this owner recovered from a snapshot, so they replay from it."
+  @spec announce_recovery(map()) :: :ok
+  def announce_recovery(%{semantic_writer: nil}), do: :ok
+
+  def announce_recovery(state) do
+    SemanticSnapshotNotifier.recovered(
+      PartitionKey.identifier(state.partition_key),
+      state.semantic_replay_floor
+    )
   end
 
   @doc "Snapshots now if there is anything unsnapshotted."
   @spec flush(map()) :: map()
-  def flush(%{semantic_dirty?: true} = state), do: snapshot(state)
+  def flush(%{semantic_dirty?: true} = state), do: state |> snapshot() |> unwrap()
   def flush(state), do: state
 
   @doc """
@@ -137,6 +187,7 @@ defmodule Cadence.Runtime.PartitionOwner.SemanticSnapshots do
 
   defp due?(_state), do: false
 
+  # `{:ok, state}`, or `{:error, reason, state}` with the state still dirty.
   defp snapshot(state) do
     case Store.snapshot(
            state.active_activation,
@@ -151,19 +202,22 @@ defmodule Cadence.Runtime.PartitionOwner.SemanticSnapshots do
           state.semantic_resume
         )
 
-        %{state | semantic_dirty?: false, semantic_snapshot_at: now()}
+        {:ok, %{state | semantic_dirty?: false, semantic_snapshot_at: now()}}
 
       {:error, reason} ->
-        # Fenced or stale: the next batch hits the same fence and retires this owner. Anything
-        # else retries at the next tick; the journal is not released past the last snapshot.
+        # Fenced: another owner has the partition, and the caller stops. Anything else retries at
+        # the next tick; the journal is not released past the last snapshot.
         Logger.warning("Semantic snapshot failed: #{inspect(reason)}",
           mission_id: state.mission_id,
           partition_id: PartitionKey.identifier(state.partition_key)
         )
 
-        state
+        {:error, reason, state}
     end
   end
+
+  defp unwrap({:ok, state}), do: state
+  defp unwrap({:error, _reason, state}), do: state
 
   defp now, do: System.monotonic_time(:millisecond)
 end

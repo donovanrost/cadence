@@ -1,6 +1,6 @@
 defmodule Cadence.SemanticRuntime.Terms do
   @moduledoc """
-  Safe decoding of persisted semantic runtime terms (commits and checkpoints).
+  Safe decoding of persisted semantic runtime terms (snapshots).
 
   `binary_to_term(..., [:safe])` refuses atoms the VM hasn't created yet. Persisted terms carry
   the semantic runtime's struct fields and states (e.g. `MonitoringResult`'s `:candidate_state`),
@@ -11,7 +11,7 @@ defmodule Cadence.SemanticRuntime.Terms do
   Releases preload all modules, where the retry never triggers.
   """
 
-  @spec decode(binary()) :: {:ok, term()} | {:error, :semantic_runtime_commit_decode_failed}
+  @spec decode(binary()) :: {:ok, term()} | {:error, :semantic_runtime_snapshot_decode_failed}
   def decode(binary) when is_binary(binary) do
     {:ok, safe_decode(binary)}
   rescue
@@ -21,7 +21,7 @@ defmodule Cadence.SemanticRuntime.Terms do
       try do
         {:ok, safe_decode(binary)}
       rescue
-        ArgumentError -> {:error, :semantic_runtime_commit_decode_failed}
+        ArgumentError -> {:error, :semantic_runtime_snapshot_decode_failed}
       end
   end
 

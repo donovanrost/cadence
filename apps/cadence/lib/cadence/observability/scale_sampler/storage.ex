@@ -16,7 +16,7 @@ defmodule Cadence.Observability.ScaleSampler.Storage do
   @doc "Telemetry's #686 Postgres tables on the ingest path."
   @spec default_postgres_tables() :: [binary()]
   def default_postgres_tables do
-    ~w(telemetry_observation_identity_states semantic_runtime_commits protocol_archive_segments
+    ~w(telemetry_observation_identity_states semantic_runtime_snapshots protocol_archive_segments
        record_identities ingress_archive_evidence_entries data_source_watermark_events
        partition_stream_keys)
   end

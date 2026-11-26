@@ -36,7 +36,10 @@ Run before deploying a branch to an environment. Each line names why it exists.
    - **Dev:** the default path in a checkout is the repository's `var/ingress_journal`, on the host's
      own disk (the disk that filled on 11-14); fine at 10 craft, but watch host free space.
    To run without it, set `CADENCE_INGRESS_JOURNAL_ENABLED=false` (supported; then a stop during a
-   pass loses that pass's unprocessed bytes).
+   pass loses that pass's unprocessed bytes, and a crash loses up to 60 s of semantic memory: latest
+   values, algorithm memory and monitoring state since the partition's last snapshot. There is no
+   per-batch log to rebuild it from, #692; the alarm episodes already written are kept and the
+   monitoring priors are re-seeded from them).
 4. **Struct changes** (runbook gate, 84aaa0811): if the release adds or removes a struct field, plan
    a node restart, not an in-node reload; in-flight processes hold the old struct.
 5. **Mission-model compiler version** (#559, mission-composition-design.md §3). If the release
