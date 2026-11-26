@@ -25,6 +25,8 @@ defmodule Cadence.Telemetry.Storage.QuestDB.SeedLatestOnMeasureTest do
     mission = "mission-seed-measure-#{System.unique_integer([:positive])}"
     now = DateTime.utc_now()
 
+    write_stale!(mission, DateTime.add(now, -3 * 86_400, :second))
+
     for crafts <- [25, 100, 200] do
       write_craft_range!(mission, now, crafts)
       total = crafts * @points * @rows_per_point
@@ -40,6 +42,23 @@ defmodule Cadence.Telemetry.Storage.QuestDB.SeedLatestOnMeasureTest do
         end
 
       sorted = Enum.sort(timings)
+
+      # The restart case: a spacecraft last heard three days ago, with the newer rows all other
+      # spacecraft's (the symbols are not indexed, so the scan walks back over them).
+      stale =
+        for _ <- 1..5 do
+          {micros, {:ok, %{"dataset" => rows}}} =
+            :timer.tc(fn -> RestClient.exec(latest_on(mission, "sc-stale"), []) end)
+
+          assert length(rows) == @points
+          micros / 1_000
+        end
+
+      IO.puts(
+        "QUESTDB SEED MEASURE (stale, last heard 3 days ago, #{total} newer rows from other " <>
+          "spacecraft): median #{Float.round(Enum.sort(stale) |> Enum.at(2), 1)} ms, " <>
+          "max #{Float.round(Enum.max(stale), 1)} ms"
+      )
 
       IO.puts(
         "QUESTDB SEED MEASURE: table #{total} rows (#{crafts} spacecraft x #{@points} points x " <>
@@ -68,6 +87,21 @@ defmodule Cadence.Telemetry.Storage.QuestDB.SeedLatestOnMeasureTest do
     end
 
     Process.put(:written, crafts)
+  end
+
+  defp write_stale!(mission, at) do
+    for p <- 1..@points, r <- 1..@rows_per_point do
+      envelope(
+        mission,
+        "sc-stale",
+        "HK.p#{p}",
+        "stale-#{p}-#{r}",
+        DateTime.add(at, r, :second),
+        r
+      )
+    end
+    |> Enum.chunk_every(2_000)
+    |> Enum.each(&write_observations!/1)
   end
 
   defp craft_envelopes(mission, now, n) do
