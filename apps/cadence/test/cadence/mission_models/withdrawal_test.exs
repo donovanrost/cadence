@@ -228,6 +228,10 @@ defmodule Cadence.MissionModels.WithdrawalTest do
       # A profile change regenerates the craft's entry without a catalog change, so it never reaches
       # the selection check: the gate's own check refuses the withdrawn revision it already runs.
       model = c.model
+      # The preview records the composition's withdrawn answer (what submit records); a blocking
+      # preview HOLD for this path comes with E2b's withdrawn_pins read.
+      {:ok, preview} = Configuration.preview(c.scope, c.mid, staged.change_set_id)
+      assert preview.selections[c.composition] == "withdrawn"
       assert {:error, {:mission_model_revision_not_approved, [^model]}} = submit(c, staged)
       assert {:ok, %{status: :withdrawn}} = MissionModels.fetch_revision(c.org, c.mid, model)
     end
