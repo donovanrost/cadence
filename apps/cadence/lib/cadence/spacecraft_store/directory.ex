@@ -23,7 +23,10 @@ defmodule Cadence.SpacecraftStore.Directory do
     |> active(mission_id)
     |> matching(filter)
     |> after_name(after_key)
-    |> order_by([row], asc: row.display_name, asc: row.spacecraft_id)
+    |> order_by([row],
+      asc: fragment(~s(? COLLATE "C"), row.display_name),
+      asc: row.spacecraft_id
+    )
     |> limit(^limit)
     |> Repo.all()
     |> Enum.map(&SpacecraftRow.to_domain/1)
@@ -66,7 +69,8 @@ defmodule Cadence.SpacecraftStore.Directory do
       where(
         query,
         [row],
-        row.display_name > ^name or (row.display_name == ^name and row.spacecraft_id > ^id)
+        fragment(~s(? COLLATE "C" > ? COLLATE "C"), row.display_name, ^name) or
+          (row.display_name == ^name and row.spacecraft_id > ^id)
       )
 
   defp matching(query, %{text: text} = filter) when is_binary(text) and text != "" do

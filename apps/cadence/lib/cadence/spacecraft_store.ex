@@ -304,7 +304,7 @@ defmodule Cadence.SpacecraftStore do
              limit > 0 do
     from(row in SpacecraftRow,
       where: row.organization_id == ^organization_id and row.mission_id == ^mission_id,
-      order_by: [asc: row.display_name, asc: row.spacecraft_id],
+      order_by: [asc: fragment(~s(? COLLATE "C"), row.display_name), asc: row.spacecraft_id],
       limit: ^limit,
       select: %{"id" => row.spacecraft_id, "name" => row.display_name, "scid" => row.scid}
     )
@@ -319,7 +319,8 @@ defmodule Cadence.SpacecraftStore do
       where(
         query,
         [row],
-        row.display_name > ^name or (row.display_name == ^name and row.spacecraft_id > ^id)
+        fragment(~s(? COLLATE "C" > ? COLLATE "C"), row.display_name, ^name) or
+          (row.display_name == ^name and row.spacecraft_id > ^id)
       )
 
   @doc "Scoped identity-only subquery for composing paged searches without materializing the fleet."
