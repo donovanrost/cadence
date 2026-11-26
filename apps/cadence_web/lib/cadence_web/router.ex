@@ -120,14 +120,6 @@ defmodule CadenceWeb.Router do
     delete("/session", UserSessionController, :delete)
     put("/session/organization", UserSessionController, :update)
 
-    get("/missions/:mission_id/ops/contact-workspace", ContactWorkspaceController, :show)
-
-    get(
-      "/missions/:mission_id/ops/contact-workspace/records/:contact_id",
-      ContactWorkspaceController,
-      :show
-    )
-
     get(
       "/missions/:mission_id/catalog/artifacts/:artifact_id/download",
       CatalogArtifactDownloadController,
@@ -884,14 +876,6 @@ defmodule CadenceWeb.Router do
     post("/promotions", FrontendReleasePublisherController, :promote)
   end
 
-  scope "/api/cadence/contact-workspace/v1", CadenceWeb do
-    pipe_through([:browser, :require_authenticated_user])
-
-    get("/missions/:mission_id/schedule", ContactWorkspaceController, :schedule)
-    get("/missions/:mission_id/records/:contact_id", ContactWorkspaceController, :record)
-    post("/missions/:mission_id/actions/:action", ContactWorkspaceController, :execute)
-  end
-
   scope "/api/cadence/application-host/v1", CadenceWeb do
     pipe_through([:browser, :require_authenticated_user, :application_host_json])
 
@@ -955,66 +939,6 @@ defmodule CadenceWeb.Router do
         get("/catalog_import_runs/:import_run_id", CatalogImportRunController, :show)
         get("/spacecraft", SpacecraftController, :index)
         get("/spacecraft/:spacecraft_id", SpacecraftController, :show)
-        get("/provider_profiles", ProviderProfileController, :index)
-        post("/provider_profiles", ProviderProfileController, :create)
-
-        get(
-          "/provider_profiles/:provider_profile_id/versions",
-          ProviderProfileController,
-          :versions
-        )
-
-        get(
-          "/provider_profiles/:provider_profile_id/versions/:version",
-          ProviderProfileController,
-          :show_version
-        )
-
-        get("/provider_profiles/:provider_profile_id", ProviderProfileController, :show)
-        patch("/provider_profiles/:provider_profile_id", ProviderProfileController, :update)
-        delete("/provider_profiles/:provider_profile_id", ProviderProfileController, :delete)
-        get("/transport_profiles", TransportProfileController, :index)
-        post("/transport_profiles", TransportProfileController, :create)
-
-        get(
-          "/transport_profiles/:transport_profile_id/versions",
-          TransportProfileController,
-          :versions
-        )
-
-        get(
-          "/transport_profiles/:transport_profile_id/versions/:version",
-          TransportProfileController,
-          :show_version
-        )
-
-        get("/transport_profiles/:transport_profile_id", TransportProfileController, :show)
-        patch("/transport_profiles/:transport_profile_id", TransportProfileController, :update)
-        delete("/transport_profiles/:transport_profile_id", TransportProfileController, :delete)
-        get("/path_templates", PathTemplateController, :index)
-        post("/path_templates", PathTemplateController, :create)
-
-        post(
-          "/path_templates/:path_template_id/link_assignments",
-          LinkAssignmentController,
-          :apply_template
-        )
-
-        get("/path_templates/:path_template_id/versions", PathTemplateController, :versions)
-
-        get(
-          "/path_templates/:path_template_id/versions/:version",
-          PathTemplateController,
-          :show_version
-        )
-
-        get("/path_templates/:path_template_id", PathTemplateController, :show)
-        patch("/path_templates/:path_template_id", PathTemplateController, :update)
-        delete("/path_templates/:path_template_id", PathTemplateController, :delete)
-        get("/link_assignments", LinkAssignmentController, :index)
-        post("/link_assignments", LinkAssignmentController, :create)
-        get("/link_assignments/:link_assignment_id", LinkAssignmentController, :show)
-        delete("/link_assignments/:link_assignment_id", LinkAssignmentController, :delete)
         get("/spacecraft/:spacecraft_id/source_endpoints", SourceEndpointController, :index)
         post("/spacecraft/:spacecraft_id/source_endpoints", SourceEndpointController, :create)
 
@@ -1074,24 +998,6 @@ defmodule CadenceWeb.Router do
           :show
         )
 
-        get("/scheduled_contacts", ScheduledContactController, :index)
-        post("/scheduled_contacts", ScheduledContactController, :create)
-        get("/scheduled_contacts/:scheduled_contact_id", ScheduledContactController, :show)
-
-        post(
-          "/scheduled_contacts/:scheduled_contact_id/realize",
-          ScheduledContactController,
-          :realize
-        )
-
-        post(
-          "/scheduled_contacts/:scheduled_contact_id/cancel",
-          ScheduledContactController,
-          :cancel
-        )
-
-        get("/realized_contacts", RealizedContactController, :index)
-
         get(
           "/realized_contacts/:realized_contact_id/runtime",
           RealizedContactController,
@@ -1103,16 +1009,6 @@ defmodule CadenceWeb.Router do
           RealizedContactController,
           :path_runtime
         )
-
-        get("/realized_contacts/:realized_contact_id", RealizedContactController, :show)
-
-        post(
-          "/realized_contacts/:realized_contact_id/end_early",
-          RealizedContactController,
-          :end_early
-        )
-
-        get("/contact_actions", ContactActionController, :index)
 
         get("/packet_definitions", PacketDefinitionController, :index)
         post("/packet_definitions", PacketDefinitionController, :create)
