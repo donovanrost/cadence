@@ -7,6 +7,7 @@ defmodule CadenceWeb.Console.CommandGroupParams do
   from the body (DECISIONS #30).
   """
 
+  alias Cadence.Commanding.Groups.Validation
   alias Cadence.Management.Commanding.ArgumentDocument
 
   @max_text 4_000
@@ -16,6 +17,26 @@ defmodule CadenceWeb.Console.CommandGroupParams do
     "send_back" => :send_back,
     "no_go" => :no_go
   }
+
+  @doc """
+  The spacecraft ids of an endpoints read: a list (POST body) or a comma list (the GET query), at
+  most the size guard's `max_targets`, each once.
+  """
+  @spec spacecraft_ids(map()) :: {:ok, [binary()]} | {:error, term()}
+  def spacecraft_ids(%{"spacecraft_ids" => ids}) when is_binary(ids),
+    do: spacecraft_ids(%{"spacecraft_ids" => String.split(ids, ",", trim: true)})
+
+  def spacecraft_ids(%{"spacecraft_ids" => ids}) when is_list(ids) do
+    max = Validation.bounds().max_targets
+
+    with {:ok, ids} <- string_list(ids, "spacecraft_ids") do
+      if length(ids) > max,
+        do: {:error, {:command_group_too_large, %{max_targets: max, targets: length(ids)}}},
+        else: {:ok, Enum.uniq(ids)}
+    end
+  end
+
+  def spacecraft_ids(_params), do: {:ok, []}
 
   @spec draft(map()) :: {:ok, map()} | {:error, {:invalid_params, map()}}
   def draft(params) when is_map(params) do

@@ -380,9 +380,12 @@ defmodule CadenceWeb.Router do
       )
 
       post("/command-groups/preflight", CommandGroupController, :preflight)
+      post("/command-endpoints", CommandGroupController, :endpoints)
       get("/command-groups", CommandGroupController, :index)
       post("/command-groups", CommandGroupController, :create)
       get("/command-groups/:command_group_id", CommandGroupController, :show)
+      get("/command-groups/:command_group_id/targets", CommandGroupController, :targets)
+      get("/command-groups/:command_group_id/events", CommandGroupController, :events)
 
       get(
         "/command-groups/:command_group_id/preflight",

@@ -37,7 +37,7 @@ defmodule Cadence.Reads.CommandPreflightTest do
     assert is_binary(basis)
     assert %{ackable: nil, hold_basis: nil} = result(preflight.checks, :identity)
 
-    assert %{evidence: %{max_targets: 1_000, max_commands: 16, max_members: 5_000}} =
+    assert %{evidence: %{max_targets: 5_000, max_commands: 16, max_members: 20_000}} =
              result(preflight.checks, :size)
 
     refute Enum.any?(preflight.checks, &(&1.key in [:plan_impact, :umbra_margin]))
