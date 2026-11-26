@@ -35,11 +35,6 @@ function showActive() {
 function showFocused(event: FocusEvent) {
   if (event.target instanceof HTMLElement) reveal(event.target);
 }
-/*
- * flex-none: the strip scrolls sideways (overflow-x-auto), so in a screen's flex column it has no
- * automatic minimum height and would shrink to nothing when the screen overflows; the next panel
- * then sits over its links (#189: Telemetry at 390, T1 Points over Explore and Dashboards).
- */
 /**
  * ux #349: a strip cut off on a narrow screen shows that it scrolls. The edge with more links
  * behind it fades, and the fade goes once that end is reached.
@@ -81,6 +76,12 @@ watch(() => props.links, showActive, { deep: true });
     @scroll.passive="measure"
     @focusin="showFocused"
   >
+    <!--
+      flex-none (above): the strip scrolls sideways (overflow-x-auto), so in a screen's flex column
+      it has no automatic minimum height and would shrink to nothing when the screen overflows; the
+      next panel then sits over its links (#189: Telemetry at 390, T1 Points over Explore and
+      Dashboards).
+    -->
     <RouterLink
       v-for="link in links"
       :key="link.key"
