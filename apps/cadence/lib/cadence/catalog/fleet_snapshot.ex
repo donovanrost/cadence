@@ -1,16 +1,15 @@
 defmodule Cadence.Catalog.FleetSnapshot do
   @moduledoc """
   The per-spacecraft configuration entries an activation admits ("the fleet"), with one read
-  API over both metadata versions (`docs/apogee/domain/fleet-snapshot.md`).
+  API (`docs/apogee/domain/fleet-snapshot.md`).
 
-  - **v1** (legacy): entries inline in `metadata["spacecraft_configurations"]`.
-  - **v2**: metadata carries only `"fleet" => %{"mission_id", "sha256", "count"}`. Entries live in
-    content-addressed tables: an unchanged spacecraft re-uses its entry row, an identical fleet
-    re-uses its fleet row, and nothing is copied into activation rows, active rows or events.
+  Metadata carries only `"fleet" => %{"mission_id", "sha256", "count"}`. Entries live in
+  content-addressed tables: an unchanged spacecraft re-uses its entry row, an identical fleet
+  re-uses its fleet row, and nothing is copied into activation rows, active rows or events. A
+  fleet has no size cap.
 
   Entries are validated once, by `store/2`. Readers ask for what they need (one spacecraft, one
-  source endpoint, the commanding groups) instead of decoding the whole fleet. v1 rows stay
-  readable; a mission moves to v2 on its next activation.
+  source endpoint, the commanding groups) instead of decoding the whole fleet.
   """
 
   import Ecto.Query
@@ -70,22 +69,12 @@ defmodule Cadence.Catalog.FleetSnapshot do
   @spec fleet?(map()) :: boolean()
   def fleet?(%{"spacecraft_configuration_version" => 2, "fleet" => %{}}), do: true
 
-  def fleet?(%{"spacecraft_configuration_version" => 1, "spacecraft_configurations" => _}),
-    do: true
-
   def fleet?(_metadata), do: false
 
   @doc "Stable identity of the fleet, for equality checks."
   @spec fleet_sha256(map()) :: String.t() | nil
   def fleet_sha256(%{"spacecraft_configuration_version" => 2, "fleet" => %{"sha256" => sha}}),
     do: sha
-
-  def fleet_sha256(%{"spacecraft_configuration_version" => 1} = metadata) do
-    case SpacecraftModelBindings.entries(metadata) do
-      {:ok, entries} -> entries |> JsonDocument.encode() |> ContentHash.term_sha256()
-      {:error, _} -> nil
-    end
-  end
 
   def fleet_sha256(_metadata), do: nil
 
@@ -98,7 +87,7 @@ defmodule Cadence.Catalog.FleetSnapshot do
     end
   end
 
-  def entries(metadata), do: SpacecraftModelBindings.entries(metadata)
+  def entries(_metadata), do: {:error, :invalid_spacecraft_model_bindings}
 
   @doc "One spacecraft's entry."
   @spec entry(map(), String.t()) :: {:ok, map()} | {:error, :spacecraft_model_not_active}
@@ -108,14 +97,7 @@ defmodule Cadence.Catalog.FleetSnapshot do
     |> one_entry(&where(&1, [m], m.spacecraft_id == ^spacecraft_id))
   end
 
-  def entry(metadata, spacecraft_id) do
-    with {:ok, entries} <- SpacecraftModelBindings.entries(metadata),
-         %{} = entry <- entries[spacecraft_id] do
-      {:ok, entry}
-    else
-      _ -> {:error, :spacecraft_model_not_active}
-    end
-  end
+  def entry(_metadata, _spacecraft_id), do: {:error, :spacecraft_model_not_active}
 
   @doc "The entry of the spacecraft that owns a source endpoint."
   @spec entry_for_source(map(), String.t()) ::
@@ -127,8 +109,7 @@ defmodule Cadence.Catalog.FleetSnapshot do
     |> one_entry(&where(&1, [m], fragment("? = ANY(?)", ^source_id, m.source_endpoint_ids)))
   end
 
-  def entry_for_source(metadata, source_id),
-    do: SpacecraftModelBindings.entry_for_source(metadata, source_id)
+  def entry_for_source(_metadata, _source_id), do: {:error, :spacecraft_model_not_active}
 
   @doc "Spacecraft ids in the fleet, sorted."
   @spec spacecraft_ids(map()) :: [String.t()]
@@ -143,12 +124,7 @@ defmodule Cadence.Catalog.FleetSnapshot do
     end
   end
 
-  def spacecraft_ids(metadata) do
-    case SpacecraftModelBindings.entries(metadata) do
-      {:ok, entries} -> entries |> Map.keys() |> Enum.sort()
-      {:error, _} -> []
-    end
-  end
+  def spacecraft_ids(_metadata), do: []
 
   @doc "`spacecraft_id => catalog_revision_id` without loading entries."
   @spec catalog_usage(map()) :: %{String.t() => String.t()}
@@ -162,12 +138,7 @@ defmodule Cadence.Catalog.FleetSnapshot do
     end
   end
 
-  def catalog_usage(metadata) do
-    case SpacecraftModelBindings.entries(metadata) do
-      {:ok, entries} -> Map.new(entries, fn {id, entry} -> {id, entry["catalog_revision_id"]} end)
-      {:error, _} -> %{}
-    end
-  end
+  def catalog_usage(_metadata), do: %{}
 
   @doc "Commanding-enabled entries only (`spacecraft_id => entry`)."
   @spec commanding_entries(map()) :: {:ok, map()} | {:error, term()}
@@ -182,10 +153,7 @@ defmodule Cadence.Catalog.FleetSnapshot do
     end
   end
 
-  def commanding_entries(metadata) do
-    with {:ok, entries} <- SpacecraftModelBindings.entries(metadata),
-         do: {:ok, Map.filter(entries, fn {_id, entry} -> entry["commanding_enabled"] end)}
-  end
+  def commanding_entries(_metadata), do: {:error, :invalid_spacecraft_model_bindings}
 
   defp persist(mission_id, fleet_sha, hashed) do
     now = DateTime.utc_now()

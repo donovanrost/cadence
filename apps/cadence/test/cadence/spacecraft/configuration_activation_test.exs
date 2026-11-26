@@ -158,10 +158,7 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
     {:ok, entries} = FleetSnapshot.entries(activation.metadata)
 
     assert :ok =
-             TelemetryDecom.activation_applied(
-               active.binding_set,
-               %{"spacecraft_configuration_version" => 1, "spacecraft_configurations" => entries}
-             )
+             TelemetryDecom.activation_applied(active.binding_set, {:fleet, entries})
 
     {:ok, first_config} =
       TelemetryDecom.fetch_config(
@@ -510,21 +507,24 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
     refute Map.has_key?(entry, "mission_model_comparison")
     assert :ok = SpacecraftModelBindings.validate(c.org, c.mission.mission_id, request.metadata)
 
-    # Tamper with the entries in their inline (v1) form; validation applies to both forms.
+    # Tamper with the stored entries: validation reads what the fleet holds.
     {:ok, entries} = FleetSnapshot.entries(request.metadata)
-    inline = %{"spacecraft_configuration_version" => 1, "spacecraft_configurations" => entries}
-    path = ["spacecraft_configurations", c.first.spacecraft_id, "mission_model"]
+    path = [c.first.spacecraft_id, "mission_model"]
 
-    wrong_revision = put_in(inline, path ++ ["content_sha256"], String.duplicate("0", 64))
+    tampered = fn entries ->
+      {:ok, fleet} = FleetSnapshot.store(c.mission.mission_id, entries)
+      FleetSnapshot.metadata(fleet, nil)
+    end
+
+    wrong_revision =
+      tampered.(put_in(entries, path ++ ["content_sha256"], String.duplicate("0", 64)))
 
     assert {:error, {:mission_model_manifest_mismatch, :revision_content}} =
              SpacecraftModelBindings.validate(c.org, c.mission.mission_id, wrong_revision)
 
     wrong_plan =
-      put_in(
-        inline,
-        path ++ ["plans", "command", "content_sha256"],
-        String.duplicate("0", 64)
+      tampered.(
+        put_in(entries, path ++ ["plans", "command", "content_sha256"], String.duplicate("0", 64))
       )
 
     assert {:error, :mission_model_runtime_plan_manifest_mismatch} =

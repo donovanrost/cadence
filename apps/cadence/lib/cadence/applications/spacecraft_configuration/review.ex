@@ -9,8 +9,8 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
   alias Cadence.Applications.TelemetryDecom
   alias Cadence.Applications.TelemetryDecom.Config
   alias Cadence.Catalog
+  alias Cadence.Catalog.ConfigurationReviews
   alias Cadence.Catalog.FleetSnapshot
-  alias Cadence.Catalog.SpacecraftModelBindings
   alias Cadence.Governance
   alias Cadence.Management.Activations
   alias Cadence.MissionModels
@@ -21,13 +21,14 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
     request_many(scope, mission_id, %{spacecraft_id => expected_token}, opts)
   end
 
-  @max_review_batch SpacecraftModelBindings.max_review_batch()
-
-  @doc "Reviews an exact, bounded set of spacecraft drafts as one governed activation."
+  @doc """
+  Reviews an exact set of spacecraft drafts (`spacecraft_id => token`) as one governed activation.
+  There is no cap on the set: the evidence is stored by hash, not in the activation's metadata.
+  """
   def request_many(scope, mission_id, tokens, opts \\ [])
 
   def request_many(scope, mission_id, tokens, opts)
-      when is_map(tokens) and map_size(tokens) in 1..@max_review_batch do
+      when is_map(tokens) and map_size(tokens) > 0 do
     {spacecraft_id, _token} = tokens |> Enum.sort() |> hd()
 
     with {:ok, mission, spacecraft} <-
@@ -60,7 +61,8 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
          {:ok, _} <- Governance.persist_binding_set(scope.organization_id, binding_set),
          entries <- Map.merge(active.entries, Map.new(prepared, &{&1.id, &1.entry})),
          {:ok, fleet} <- FleetSnapshot.store(mission_id, entries),
-         metadata <- FleetSnapshot.metadata(fleet, review_evidence(prepared, active)) do
+         {:ok, review} <- ConfigurationReviews.store(mission_id, Enum.map(prepared, & &1.review)),
+         metadata <- FleetSnapshot.metadata(fleet, review_evidence(review, active)) do
       Activations.request(
         scope,
         mission_id,
@@ -85,9 +87,9 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
            {:ok, inputs, cache} <- cached_inputs(cache, mission, current.row.catalog_revision_id),
            {:ok, item} <- compile(mission, id, current.row, inputs) do
         review = %{
-          "spacecraft_id" => id,
-          "configuration_revision_id" => current.row.configuration_revision_id,
-          "configuration_token" => current.token
+          id: id,
+          configuration_revision_id: current.row.configuration_revision_id,
+          configuration_token: current.token
         }
 
         {:cont, {:ok, [Map.put(item, :review, review) | prepared], cache}}
@@ -137,20 +139,9 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
   @spec binding_set(map(), map(), [map()]) :: struct()
   def binding_set(mission, active, items), do: replace_contributions(mission, active, items)
 
-  defp review_evidence([item], active),
+  defp review_evidence(review, active),
     do:
-      Map.put(
-        item.review,
-        "base_activation_id",
-        active.activation && active.activation.activation_id
-      )
-
-  defp review_evidence(items, active) do
-    %{
-      "spacecraft_reviews" => Map.new(items, &{&1.id, &1.review}),
-      "base_activation_id" => active.activation && active.activation.activation_id
-    }
-  end
+      ConfigurationReviews.metadata(review, active.activation && active.activation.activation_id)
 
   def ready(%{"catalog_revision_id" => nil}), do: {:error, :spacecraft_catalog_required}
 

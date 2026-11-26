@@ -2,6 +2,7 @@ defmodule Cadence.Control.SpacecraftConfiguration do
   @moduledoc "Explicit human submission, direct activation, and review of a spacecraft revision."
   alias Cadence.Applications.SpacecraftConfiguration.Drafts
   alias Cadence.Applications.SpacecraftConfiguration.Review
+  alias Cadence.Catalog.ConfigurationReviews
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Management.Activations
   alias Cadence.Platform.ScopedReadUpdates
@@ -64,10 +65,9 @@ defmodule Cadence.Control.SpacecraftConfiguration do
     with {:ok, mission, spacecraft} <- Drafts.authorize(scope, mission_id, spacecraft_id),
          {:ok, request} <- Activations.fetch(scope, request_id),
          true <- request.mission_id == mission_id,
-         true <-
-           get_in(request.metadata, ["configuration_review", "spacecraft_id"]) == spacecraft_id,
-         true <-
-           get_in(request.metadata, ["configuration_review", "configuration_token"]) == token,
+         %{"configuration_token" => reviewed_token} <-
+           ConfigurationReviews.evidence_for(request.metadata, spacecraft_id),
+         true <- reviewed_token == token,
          :ok <- Drafts.exact_token(Drafts.snapshot(mission, spacecraft).token, token) do
       ControlActivations.review(scope, mission_id, %{
         "activation_decision" => %{"request_id" => request_id, "reason" => reason},
@@ -80,6 +80,7 @@ defmodule Cadence.Control.SpacecraftConfiguration do
       )
     else
       false -> {:error, :spacecraft_configuration_review_stale}
+      nil -> {:error, :spacecraft_configuration_review_stale}
       {:error, reason} -> {:error, reason}
     end
   end

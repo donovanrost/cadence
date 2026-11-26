@@ -2,6 +2,21 @@
 
 Owner: **domain**. Status: **built** (`ddc72c2e`, DECISIONS #23). Reviewer: director.
 
+**Completed by #734 (supersedes the "As built" notes below where they differ):**
+- **Review evidence is out of metadata too.** `configuration_review` is
+  `%{"review" => %{"mission_id", "sha256", "count"}, "base_activation_id" => _}`; the evidence
+  (the reviewed configuration revision and token of each spacecraft) lives in
+  `spacecraft_configuration_reviews` / `spacecraft_configuration_review_members`, keyed by
+  content hash like the fleet and read through `Cadence.Catalog.ConfigurationReviews`. A review
+  of one spacecraft is a set of one. `Management.Activations.latest_spacecraft_request` joins
+  through the members table (indexed by spacecraft).
+- **No caps.** The 2,000-spacecraft / 8,000-source / 16 MiB fleet bounds and the 500-spacecraft
+  review batch are deleted; activation metadata is constant-size, so the plain 64 KiB command-basis
+  filter applies to every row.
+- **v1 is gone.** Inline `spacecraft_configurations` metadata is no longer read anywhere
+  (dev data is dropped and reseeded). `TelemetryDecom.activation_applied/2` takes `{:fleet, entries}`;
+  `PartitionMetadata` is deleted (nothing was left to project).
+
 **As built, and how it differs from the draft below:**
 - **Fleets are keyed by their own hash, not by request.** Metadata v2 is
   `%{"spacecraft_configuration_version" => 2, "fleet" => %{"mission_id", "sha256", "count"},

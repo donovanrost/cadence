@@ -9,7 +9,7 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Authors do
   import Ecto.Query
 
   alias Cadence.Applications.SpacecraftConfiguration.{Active, RevisionRow}
-  alias Cadence.Catalog.SpacecraftModelBindings
+  alias Cadence.Catalog.ConfigurationReviews
   alias Cadence.Repo
 
   @doc """
@@ -21,9 +21,10 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Authors do
   """
   @spec by_spacecraft(map(), map()) :: {:ok, %{binary() => [binary()]}} | {:error, term()}
   def by_spacecraft(mission, %{"configuration_review" => _} = metadata) do
-    with {:ok, ids} <- SpacecraftModelBindings.reviewed_spacecraft_ids(metadata),
+    with {:ok, evidence} <- ConfigurationReviews.evidence(metadata),
+         ids = evidence |> Map.keys() |> Enum.sort(),
          {:ok, active} <- Active.load(mission),
-         {:ok, reviewed} <- reviewed_versions(mission, metadata, ids) do
+         {:ok, reviewed} <- reviewed_versions(mission, evidence, ids) do
       {:ok, authors(mission, reviewed, active.entries)}
     else
       {:error, {:activation_approver_authors_unknown, _ids}} = unknown -> unknown
@@ -37,11 +38,10 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Authors do
   # approval runs this under its locks; api-ops, lead 11-18). A craft whose review names no
   # revision, or whose revision is missing or another craft's, fails closed: the first such craft
   # in review order, as before.
-  defp reviewed_versions(mission, metadata, ids) do
+  defp reviewed_versions(mission, evidence, ids) do
     revision_ids =
       Map.new(ids, fn id ->
-        {id,
-         (SpacecraftModelBindings.review_for(metadata, id) || %{})["configuration_revision_id"]}
+        {id, (evidence[id] || %{})["configuration_revision_id"]}
       end)
 
     rows = revision_rows(mission, revision_ids |> Map.values() |> Enum.filter(&is_binary/1))
@@ -97,7 +97,7 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Authors do
   defp floor_version(active_entry), do: (active_entry || %{})["configuration_version"] || 0
 
   defp reviewed_ids(metadata) do
-    case SpacecraftModelBindings.reviewed_spacecraft_ids(metadata) do
+    case ConfigurationReviews.spacecraft_ids(metadata) do
       {:ok, ids} -> ids
       _unreadable -> []
     end

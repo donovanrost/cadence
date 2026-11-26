@@ -162,7 +162,7 @@ defmodule Cadence.Control.Activations do
            :ok <-
              TelemetryDecom.activation_applied(
                binding_set,
-               applied_metadata(approved_activation.metadata)
+               applied(approved_activation.metadata)
              ) do
         complete_execution(execution_row, activation, now(opts))
       end
@@ -301,15 +301,12 @@ defmodule Cadence.Control.Activations do
   end
 
   # TelemetryDecom runs in the data plane and can't read stored fleets; hand it the entries.
-  defp applied_metadata(%{"spacecraft_configuration_version" => 2} = metadata) do
+  defp applied(%{"spacecraft_configuration_version" => 2} = metadata) do
     case FleetSnapshot.entries(metadata) do
-      {:ok, entries} ->
-        %{"spacecraft_configuration_version" => 1, "spacecraft_configurations" => entries}
-
-      {:error, _reason} ->
-        metadata
+      {:ok, entries} -> {:fleet, entries}
+      {:error, _reason} -> metadata
     end
   end
 
-  defp applied_metadata(metadata), do: metadata
+  defp applied(metadata), do: metadata
 end

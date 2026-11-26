@@ -8,9 +8,9 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
   alias Cadence.Applications.SpacecraftConfiguration.Active, as: ConfigurationActive
   alias Cadence.Applications.SpacecraftConfiguration.CatalogAuthority
   alias Cadence.Applications.SpacecraftConfiguration.Drafts, as: ConfigurationDrafts
+  alias Cadence.Catalog.ConfigurationReviews
   alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Catalog.SpacecraftConfigurationInput, as: ConfigurationInput
-  alias Cadence.Catalog.SpacecraftModelBindings
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Reads.CatalogCompositions
   alias Cadence.Reads.Spacecraft.ConfigurationCatalogs
@@ -215,7 +215,7 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
       Activations.latest_spacecraft_request(mission.organization_id, mission.mission_id, id)
 
     if request do
-      evidence = SpacecraftModelBindings.review_for(request.metadata, id)
+      evidence = ConfigurationReviews.evidence_for(request.metadata, id)
 
       applied =
         get_in(active.entries, [id, "configuration_revision_id"]) ==

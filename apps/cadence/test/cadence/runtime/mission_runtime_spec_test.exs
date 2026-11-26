@@ -77,19 +77,24 @@ defmodule Cadence.Runtime.MissionRuntimeSpecTest do
              })
   end
 
-  test "partition input is independent of unrelated fleet metadata and preserves semantic identity" do
+  test "partition input carries the same constant-size fleet reference and preserves semantic identity" do
     bindings = BindingSet.new(%{mission_id: "mission", rules: []})
 
-    configurations =
-      Map.new(1..500, fn id ->
-        {"craft-#{id}",
-         %{"source_endpoint_ids" => ["source-#{id}"], "document" => Enum.to_list(1..100)}}
-      end)
+    # A fleet and its review are references (#734), so a 10,000-craft mission's metadata is the
+    # same size as a 5-craft one's: nothing is projected per partition.
+    metadata = %{
+      "spacecraft_configuration_version" => 2,
+      "fleet" => %{"mission_id" => "mission", "sha256" => "fleet-sha", "count" => 10_000},
+      "configuration_review" => %{
+        "review" => %{"mission_id" => "mission", "sha256" => "review-sha", "count" => 10_000},
+        "base_activation_id" => "previous"
+      }
+    }
 
     spec =
       struct(MissionRuntimeSpec,
         binding_set: bindings,
-        metadata: %{"spacecraft_configurations" => configurations},
+        metadata: metadata,
         activation_id: "admitted",
         generation: 3,
         runtime_basis_sha256: "unchanged"
@@ -98,11 +103,9 @@ defmodule Cadence.Runtime.MissionRuntimeSpecTest do
     compact = MissionRuntimeSpec.compact(spec)
     partition = %PartitionKey{affinity: :source_endpoint, value: "source-1"}
     assert {:ok, selected} = MissionRuntimeSpec.partition_input(compact, partition)
-    assert map_size(selected.metadata["spacecraft_configurations"]) == 1
-    assert selected.metadata["spacecraft_configurations"]["craft-1"] == configurations["craft-1"]
+    assert selected.metadata == metadata
     assert MissionRuntimeSpec.identity(selected) == MissionRuntimeSpec.identity(spec)
     assert MissionRuntimeSpec.expand(compact) == spec
-    assert :erts_debug.flat_size(selected) < div(:erts_debug.flat_size(spec), 100)
   end
 
   defp basis(id, fields) do

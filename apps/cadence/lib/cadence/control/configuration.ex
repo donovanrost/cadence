@@ -388,10 +388,7 @@ defmodule Cadence.Control.Configuration do
              ),
            {:ok, entries} <- FleetSnapshot.entries(activation.metadata),
            :ok <-
-             TelemetryDecom.activation_applied(binding_set, %{
-               "spacecraft_configuration_version" => 1,
-               "spacecraft_configurations" => entries
-             }) do
+             TelemetryDecom.activation_applied(binding_set, {:fleet, entries}) do
         :applied
       else
         _failed -> :degraded

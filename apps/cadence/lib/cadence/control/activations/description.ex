@@ -6,7 +6,7 @@ defmodule Cadence.Control.Activations.Description do
   the `activation_apply` attention items so both say the same thing.
   """
 
-  alias Cadence.Catalog.SpacecraftModelBindings
+  alias Cadence.Catalog.ConfigurationReviews
 
   @decom %{key: "telemetry_decom", name: "Telemetry Decom"}
 
@@ -54,7 +54,7 @@ defmodule Cadence.Control.Activations.Description do
   defp spacecraft_ids(%{"triggering_spacecraft_id" => id}) when is_binary(id), do: [id]
 
   defp spacecraft_ids(metadata) do
-    case SpacecraftModelBindings.reviewed_spacecraft_ids(metadata) do
+    case ConfigurationReviews.spacecraft_ids(metadata) do
       {:ok, ids} -> ids
       {:error, _not_reviewed} -> []
     end

@@ -10,6 +10,7 @@ defmodule CadenceWeb.ActivationLifecycleTest do
 
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Auth.Scope
+  alias Cadence.Catalog.ConfigurationReviews
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Activations
   alias Cadence.OperationalEvents.EventRow
@@ -105,9 +106,9 @@ defmodule CadenceWeb.ActivationLifecycleTest do
   end
 
   test "a configuration request supersedes only older ones reviewing overlapping spacecraft", c do
-    {:ok, a} = request(c, c.binding_set_id, reviews(["sc-a"]))
-    {:ok, b} = request(c, c.binding_set_id, reviews(["sc-b"]))
-    {:ok, ab} = request(c, c.binding_set_id, reviews(["sc-a", "sc-c"]))
+    {:ok, a} = request(c, c.binding_set_id, reviews(c, ["sc-a"]))
+    {:ok, b} = request(c, c.binding_set_id, reviews(c, ["sc-b"]))
+    {:ok, ab} = request(c, c.binding_set_id, reviews(c, ["sc-a", "sc-c"]))
 
     assert {:ok, %{state: :superseded, superseded_by: by}} =
              Activations.fetch(c.scope, a.activation_request_id)
@@ -118,21 +119,22 @@ defmodule CadenceWeb.ActivationLifecycleTest do
              Activations.fetch(c.scope, b.activation_request_id)
   end
 
-  defp reviews([one]), do: reviews(one)
+  # Review evidence is stored by hash; the metadata carries only its reference (#734).
+  defp reviews(c, ids) do
+    {:ok, stored} =
+      ConfigurationReviews.store(
+        c.mission,
+        Enum.map(
+          ids,
+          &%{id: &1, configuration_revision_id: "r-#{&1}", configuration_token: "t-#{&1}"}
+        )
+      )
 
-  defp reviews(ids) when is_list(ids),
-    do: %{
-      "spacecraft_configuration_version" => 1,
-      "configuration_review" => %{
-        "spacecraft_reviews" => Map.new(ids, &{&1, %{"configuration_token" => "t-#{&1}"}})
-      }
+    %{
+      "spacecraft_configuration_version" => 2,
+      "configuration_review" => ConfigurationReviews.metadata(stored, nil)
     }
-
-  defp reviews(id),
-    do: %{
-      "spacecraft_configuration_version" => 1,
-      "configuration_review" => %{"spacecraft_id" => id}
-    }
+  end
 
   defp request(c, binding_set_id, metadata \\ %{}),
     do: Activations.request(c.requester, c.mission, binding_set_id, 1, metadata: metadata)

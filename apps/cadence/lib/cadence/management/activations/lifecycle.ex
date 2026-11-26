@@ -19,7 +19,7 @@ defmodule Cadence.Management.Activations.Lifecycle do
   import Ecto.Query
 
   alias Cadence.Auth.Scope
-  alias Cadence.Catalog.SpacecraftModelBindings
+  alias Cadence.Catalog.ConfigurationReviews
   alias Cadence.Management.Activations.{ActivationDecision, ActivationDecisionRow}
   alias Cadence.Management.Activations.{ActivationRequest, ActivationRequestRow}
   alias Cadence.OperationalEvents
@@ -143,7 +143,7 @@ defmodule Cadence.Management.Activations.Lifecycle do
   defp reviewed(%{"change_set" => %{"spacecraft_ids" => ids}}) when is_list(ids), do: ids
 
   defp reviewed(metadata) do
-    case SpacecraftModelBindings.reviewed_spacecraft_ids(metadata) do
+    case ConfigurationReviews.spacecraft_ids(metadata) do
       {:ok, ids} -> ids
       {:error, _not_reviewed} -> []
     end
