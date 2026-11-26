@@ -99,7 +99,7 @@ test("route drift is a type error", () => {
   expectTypeOf(href("/missions/:mission_id/ops", { mission_id: "m" })).toEqualTypeOf<Href>();
   expectTypeOf<RouteHeaderKind<"/missions/:mission_id/ops/alarms">>().toEqualTypeOf<"collection">();
   expectTypeOf<
-    RouteHeaderKind<"/missions/:mission_id/ops/commands/requests/:command_request_id">
+    RouteHeaderKind<"/missions/:mission_id/ops/commands/requests/:command_request_id/history">
   >().toEqualTypeOf<"resource">();
   // @ts-expect-error -- routes that do not exist cannot be linked
   expect(() => href("/missions/:mission_id/ops/nowhere", { mission_id: "m" })).not.toThrow();

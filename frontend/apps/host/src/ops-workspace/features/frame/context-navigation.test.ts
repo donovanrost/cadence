@@ -23,7 +23,7 @@ test("operators see the Act group without a built-in role and links preserve com
     ),
   );
   expect(required(required(nav.groups[1]).items[0]).href).toBe(
-    "/missions/mission%2F1/ops/commands/workspace?focus_command_id=cmd%2Fa%3Fb",
+    "/missions/mission%2F1/ops/commands?focus_command_id=cmd%2Fa%3Fb",
   );
   expect(required(required(nav.groups[1]).items[0]).active).toBe(true);
 });

@@ -215,20 +215,6 @@ defmodule CadenceWeb.API.CommandingJSON do
     }
   end
 
-  def command_request_decision_result(%{
-        approval: %CommandApproval{} = approval,
-        command_request: %CommandRequest{} = request
-      }) do
-    %{approval: command_approval(approval), command_request: command_request(request)}
-  end
-
-  def command_request_enqueue_result(%{
-        queue_entry: %CommandQueueEntry{} = entry,
-        command_request: %CommandRequest{} = request
-      }) do
-    %{queue_entry: command_queue_entry(entry), command_request: command_request(request)}
-  end
-
   def command_queue_entry_release_result(%{
         release_attempt: %CommandReleaseAttempt{} = attempt,
         queue_entry: %CommandQueueEntry{} = entry,

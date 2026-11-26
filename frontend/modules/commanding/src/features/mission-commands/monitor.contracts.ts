@@ -72,7 +72,6 @@ export type CommandObservation = {
 };
 export type CommandMonitorModel = {
   version: 1;
-  can_review: boolean;
   organization_id: string;
   mission_id: string;
   observed_at: string;

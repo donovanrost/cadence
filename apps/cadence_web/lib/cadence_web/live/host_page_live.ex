@@ -2,8 +2,6 @@ defmodule CadenceWeb.HostPageLive do
   @moduledoc "Authenticated context and event transport for the persistent Vue host."
   use CadenceWeb, :live_view
 
-  alias CadenceWeb.SettingsPage
-
   alias Cadence.Reads.OperationalContext
 
   alias CadenceWeb.{
@@ -128,203 +126,6 @@ defmodule CadenceWeb.HostPageLive do
 
   def handle_event(
         "host:ops-page:read",
-        %{"path" => path, "id" => id} = params,
-        socket
-      )
-      when id in ["commanding.stages", "commanding.stage-create", "commanding.stage-workbench"] do
-    with true <- CadenceWeb.OpsCommandStagesPage.matches_read?(socket, params),
-         {:ok, info} <- resolve_path(path),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- CadenceWeb.OpsCommandStagesPage.matches_read?(socket, params) do
-      {page, socket} = CadenceWeb.OpsCommandStagesPage.read(socket)
-      {:reply, %{ok: true, snapshot: page}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event(
-        "host:ops-page:read",
-        %{"path" => path, "id" => "commanding.workspace"} = params,
-        socket
-      ) do
-    with true <- CadenceWeb.OpsCommandWorkspacePage.matches_read?(socket, params),
-         {:ok, info} <- resolve_path(path),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- CadenceWeb.OpsCommandWorkspacePage.matches_read?(socket, params) do
-      {page, socket} = CadenceWeb.OpsCommandWorkspacePage.read(socket)
-      {:reply, %{ok: true, snapshot: page}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event(
-        "host:ops-page",
-        %{"path" => path, "id" => "commanding.workspace", "event" => event, "input" => input} =
-          params,
-        socket
-      ) do
-    with true <- CadenceWeb.OpsCommandWorkspacePage.matches_action?(socket, params),
-         {:ok, info} <- resolve_path(path),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- CadenceWeb.OpsCommandWorkspacePage.matches_action?(socket, params) do
-      {result, socket} = CadenceWeb.OpsCommandWorkspacePage.action(socket, event, input)
-      {:reply, %{ok: true, snapshot: result}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event(
-        "host:ops-page",
-        %{
-          "path" => path,
-          "id" => id,
-          "event" => event,
-          "input" => input
-        } =
-          params,
-        socket
-      )
-      when id in ["commanding.stages", "commanding.stage-create", "commanding.stage-workbench"] do
-    with true <- CadenceWeb.OpsCommandStagesPage.matches_action?(socket, params),
-         {:ok, info} <- resolve_path(path),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- CadenceWeb.OpsCommandStagesPage.matches_action?(socket, params) do
-      {result, socket} = CadenceWeb.OpsCommandStagesPage.action(socket, event, input)
-      {:reply, %{ok: true, snapshot: result}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event(
-        "host:ops-page:read",
-        %{"path" => path, "id" => "commanding.authoring"} = params,
-        socket
-      ) do
-    with true <- CadenceWeb.OpsCommandAuthoringPage.matches_read?(socket, params),
-         {:ok, info} <- resolve_path(path),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- CadenceWeb.OpsCommandAuthoringPage.matches_read?(socket, params) do
-      {page, socket} = CadenceWeb.OpsCommandAuthoringPage.read(socket)
-      {:reply, %{ok: true, snapshot: page}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event(
-        "host:ops-page",
-        %{
-          "path" => path,
-          "id" => "commanding.authoring",
-          "event" => event,
-          "input" => input
-        } =
-          params,
-        socket
-      ) do
-    with true <- CadenceWeb.OpsCommandAuthoringPage.matches_action?(socket, params),
-         {:ok, info} <- resolve_path(path),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- CadenceWeb.OpsCommandAuthoringPage.matches_action?(socket, params) do
-      {result, socket} = CadenceWeb.OpsCommandAuthoringPage.action(socket, event, input)
-      {:reply, %{ok: true, snapshot: result}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event(
-        "host:ops-page:read",
-        %{"path" => path, "id" => "commanding.queue-submission"} = params,
-        socket
-      ) do
-    with true <- CadenceWeb.OpsCommandQueuePage.matches_read?(socket, params),
-         {:ok, info} <- resolve_path(path),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- CadenceWeb.OpsCommandQueuePage.matches_read?(socket, params) do
-      {page, socket} = CadenceWeb.OpsCommandQueuePage.read(socket)
-      {:reply, %{ok: true, snapshot: page}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event(
-        "host:ops-page",
-        %{
-          "path" => path,
-          "id" => "commanding.queue-submission",
-          "event" => event,
-          "input" => input
-        } =
-          params,
-        socket
-      ) do
-    with true <- CadenceWeb.OpsCommandQueuePage.matches_action?(socket, params),
-         {:ok, info} <- resolve_path(path),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- CadenceWeb.OpsCommandQueuePage.matches_action?(socket, params) do
-      {result, socket} = CadenceWeb.OpsCommandQueuePage.action(socket, event, input)
-      {:reply, %{ok: true, snapshot: result}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event(
-        "host:ops-page:read",
-        %{"path" => path, "id" => "commanding.review"} = params,
-        socket
-      ) do
-    with true <- CadenceWeb.OpsCommandReviewPage.matches_read?(socket, params),
-         {:ok, info} <- resolve_path(path),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- CadenceWeb.OpsCommandReviewPage.matches_read?(socket, params) do
-      {page, socket} = CadenceWeb.OpsCommandReviewPage.read(socket)
-      {:reply, %{ok: true, snapshot: page}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event(
-        "host:ops-page",
-        %{
-          "path" => path,
-          "id" => "commanding.review",
-          "event" => event,
-          "input" => input
-        } =
-          params,
-        socket
-      ) do
-    with true <- CadenceWeb.OpsCommandReviewPage.matches_action?(socket, params),
-         {:ok, info} <- resolve_path(path),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- CadenceWeb.OpsCommandReviewPage.matches_action?(socket, params) do
-      {result, socket} = CadenceWeb.OpsCommandReviewPage.action(socket, event, input)
-      {:reply, %{ok: true, snapshot: result}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event(
-        "host:ops-page:read",
         %{"path" => path, "id" => "planning.plan-review"} = params,
         socket
       ) do
@@ -434,27 +235,6 @@ defmodule CadenceWeb.HostPageLive do
   def handle_event(_event, _params, socket), do: {:reply, %{ok: false}, socket}
 
   @impl true
-  def handle_info({:settings_changed, org, mission}, socket) do
-    if SettingsPage.relevant?(socket, org, mission) do
-      case prepare_context(socket, socket.assigns.host_path) do
-        {:ok, socket} -> {:noreply, socket}
-        {:halt, socket} -> {:noreply, socket}
-        :error -> {:noreply, socket}
-      end
-    else
-      {:noreply, socket}
-    end
-  end
-
-  def handle_info({:commanding_changed, org, mission}, socket),
-    do: {:noreply, CadenceWeb.OpsCommandWorkspacePage.changed(socket, org, mission)}
-
-  def handle_info({:command_workspace_flush, token}, socket),
-    do: {:noreply, CadenceWeb.OpsCommandWorkspacePage.flush(socket, token)}
-
-  def handle_info({:command_workspace_reconcile, token}, socket),
-    do: {:noreply, CadenceWeb.OpsCommandWorkspacePage.reconcile(socket, token)}
-
   # L21: the notifications page is gone (DECISIONS #79); these broadcasts refresh nothing here.
   def handle_info({event, _record}, socket)
       when event in [:notification_created, :notification_updated, :invitation_accepted],
@@ -464,7 +244,6 @@ defmodule CadenceWeb.HostPageLive do
     with {:ok, info} <- resolve_path(path),
          {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params) do
       socket = assign(socket, host_path: path, page_title: "Cadence")
-      socket = SettingsPage.prepare(socket, info, path)
 
       socket =
         assign(socket,
@@ -474,11 +253,6 @@ defmodule CadenceWeb.HostPageLive do
         |> CadenceWeb.OpsExplorationPage.prepare(info, path)
         |> CadenceWeb.OpsCommandPage.prepare(info, path)
         |> CadenceWeb.OpsCommandHistoryPage.prepare(info, path)
-        |> CadenceWeb.OpsCommandReviewPage.prepare(info, path)
-        |> CadenceWeb.OpsCommandQueuePage.prepare(info, path)
-        |> CadenceWeb.OpsCommandAuthoringPage.prepare(info, path)
-        |> CadenceWeb.OpsCommandStagesPage.prepare(info, path)
-        |> CadenceWeb.OpsCommandWorkspacePage.prepare(info, path)
         |> CadenceWeb.OpsAlarmConditionsPage.prepare(info, path)
         |> CadenceWeb.OpsFleetDirectoryPage.prepare(info, path)
         |> CadenceWeb.OpsFleetWorkflowPage.prepare(info, path)

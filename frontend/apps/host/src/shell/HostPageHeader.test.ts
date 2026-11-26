@@ -7,7 +7,7 @@ import { href } from "@cadence/plugin-sdk/routes";
 import HostPage from "./HostPage.vue";
 
 const alarms = "/missions/:mission_id/ops/alarms";
-const request = "/missions/:mission_id/ops/commands/requests/:command_request_id";
+const request = "/missions/:mission_id/ops/commands/requests/:command_request_id/history";
 const breadcrumbs = [{ label: "Kestrel", href: "/missions/m" }, { label: "Alarms" }];
 let wrapper: ReturnType<typeof mount> | undefined;
 afterEach(() => {

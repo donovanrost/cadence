@@ -1,9 +1,8 @@
 defmodule CadenceWeb.CommandingActorAssignmentApiTest do
   @moduledoc """
-  DECISIONS #30: commanding actors (owner, requested_by, decided_by, enqueued_by, released_by)
+  DECISIONS #30: commanding actors (owner, released_by)
   always come from the authenticated scope. A request that names one gets 422
-  `actor_not_assignable`, so a client can't act as someone else or approve its own request as
-  another user.
+  `actor_not_assignable`, so a client can't act as someone else.
   """
   use CadenceWeb.ConnCase, async: false
 
@@ -60,61 +59,6 @@ defmodule CadenceWeb.CommandingActorAssignmentApiTest do
     )
   end
 
-  test "stage submission refuses requested_by", c do
-    refused(
-      c,
-      :post,
-      "/command_stages/stage-x/submit",
-      %{"submission" => %{"staged_command_item_ids" => ["item-1"], "requested_by" => @someone}},
-      "requested_by"
-    )
-  end
-
-  test "command request create refuses requested_by", c do
-    refused(
-      c,
-      :post,
-      "/command_requests",
-      %{
-        "command_request" => %{
-          "source_endpoint_ref" => "ep-1",
-          "mission_model_revision_id" => "rev-1",
-          "command_id" => "cmd-1",
-          "requested_by" => @someone
-        }
-      },
-      "requested_by"
-    )
-  end
-
-  test "approve and reject refuse decided_by", c do
-    refused(
-      c,
-      :post,
-      "/command_requests/req-1/approve",
-      %{"approval" => %{"decided_by" => @someone}},
-      "decided_by"
-    )
-
-    refused(
-      c,
-      :post,
-      "/command_requests/req-1/reject",
-      %{"rejection" => %{"decided_by" => @someone}},
-      "decided_by"
-    )
-  end
-
-  test "enqueue refuses enqueued_by", c do
-    refused(
-      c,
-      :post,
-      "/command_requests/req-1/enqueue",
-      %{"queue_entry" => %{"enqueued_by" => @someone}},
-      "enqueued_by"
-    )
-  end
-
   test "release refuses released_by", c do
     refused(
       c,
@@ -129,9 +73,9 @@ defmodule CadenceWeb.CommandingActorAssignmentApiTest do
     refused(
       c,
       :post,
-      "/command_requests/req-1/approve",
-      %{"approval" => %{"decided_by" => nil}},
-      "decided_by"
+      "/command_queue_entries/qe-1/release",
+      %{"release_attempt" => %{"realized_contact_id" => "rc-1", "released_by" => nil}},
+      "released_by"
     )
   end
 end

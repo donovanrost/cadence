@@ -135,8 +135,7 @@ defmodule CadenceWeb.OpsShellHook do
 
       attach_hook(socket, :ops_context_refresh, :handle_info, fn
         {:commanding_changed, org, mission}, socket ->
-          # The workspace also consumes the notice to invalidate its own read.
-          {:cont, CommandUpdates.changed(socket, org, mission)}
+          {:halt, CommandUpdates.changed(socket, org, mission)}
 
         {:ops_command_context_flush, token}, socket ->
           {:halt, CommandUpdates.flush(socket, token)}

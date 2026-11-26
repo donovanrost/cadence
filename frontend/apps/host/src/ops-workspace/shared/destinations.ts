@@ -35,7 +35,7 @@ export function workspaceGroups(
           item("timeline", "Timeline", "hero-clock"),
         ],
       ],
-      ["act", "Act", [item("commands", "Commands", "hero-command-line", "commands/workspace")]],
+      ["act", "Act", [item("commands", "Commands", "hero-command-line")]],
       [
         "plan",
         "Plan",

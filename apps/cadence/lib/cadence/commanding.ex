@@ -1090,26 +1090,6 @@ defmodule Cadence.Commanding do
     end
   end
 
-  @spec submit_staged_command_items(binary(), binary(), binary(), [binary()], map()) ::
-          {:ok, [CommandRequest.t()]} | {:error, term()}
-  def submit_staged_command_items(
-        organization_id,
-        mission_id,
-        command_stage_id,
-        staged_command_item_ids,
-        requested_by \\ %{}
-      )
-      when is_binary(organization_id) and is_binary(mission_id) and is_binary(command_stage_id) and
-             is_list(staged_command_item_ids) and is_map(requested_by) do
-    StageStore.submit_items(
-      organization_id,
-      mission_id,
-      command_stage_id,
-      staged_command_item_ids,
-      requested_by
-    )
-  end
-
   defp complete_release_success(
          %CommandQueueEntryRow{} = queue_entry_row,
          %CommandRequestRow{} = request_row,

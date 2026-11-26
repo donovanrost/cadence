@@ -8,7 +8,6 @@ defmodule Cadence.Control.Commanding do
   alias Cadence.Commanding.CommandReleaseAttempt
   alias Cadence.Commanding.ProcessNamespace
   alias Cadence.GroundNetworks
-  alias Cadence.Management.Commanding, as: ManagementCommanding
   alias Cadence.Management.Commanding.ApprovedCommand
   alias Cadence.Platform.{PreparedSendEvidence, ResolutionEvidence}
   alias Cadence.Runtime.Commanding, as: RuntimeCommanding
@@ -127,25 +126,6 @@ defmodule Cadence.Control.Commanding do
       enqueued_by,
       opts
     )
-  end
-
-  @spec enqueue_approved_command(binary(), binary(), binary(), map(), keyword()) ::
-          {:ok, map()} | {:error, term()}
-  def enqueue_approved_command(
-        organization_id,
-        mission_id,
-        command_request_id,
-        enqueued_by \\ %{},
-        opts \\ []
-      ) do
-    with {:ok, approved_command} <-
-           ManagementCommanding.fetch_approved_command(
-             organization_id,
-             mission_id,
-             command_request_id
-           ) do
-      enqueue(approved_command, enqueued_by, opts)
-    end
   end
 
   defdelegate dispatch_queue_lane(

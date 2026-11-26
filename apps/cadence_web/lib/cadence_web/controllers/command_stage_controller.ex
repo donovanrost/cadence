@@ -99,35 +99,4 @@ defmodule CadenceWeb.CommandStageController do
       json(conn, %{data: CommandingJSON.command_stage(persisted_command_stage)})
     end
   end
-
-  def submit(conn, %{
-        "organization_id" => organization_id,
-        "mission_id" => mission_id,
-        "command_stage_id" => command_stage_id,
-        "submission" => submission_params
-      }) do
-    with {:ok, _mission} <-
-           ControlPlaneAccess.authorize_mission(
-             conn.assigns.current_scope,
-             organization_id,
-             mission_id
-           ),
-         {:ok, {staged_command_item_ids, requested_by}} <-
-           CommandingParams.command_stage_submission(
-             submission_params,
-             default_requested_by: ControlPlaneAccess.actor_document(conn.assigns.current_scope)
-           ),
-         {:ok, command_requests} <-
-           Commanding.submit_staged_command_items(
-             organization_id,
-             mission_id,
-             command_stage_id,
-             staged_command_item_ids,
-             requested_by
-           ) do
-      json(conn, %{
-        data: CommandingJSON.encode_all(command_requests, &CommandingJSON.command_request/2)
-      })
-    end
-  end
 end

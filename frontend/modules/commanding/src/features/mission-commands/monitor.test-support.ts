@@ -46,7 +46,6 @@ export function commandObservation(id = "request-a"): CommandObservation {
 export function monitorFixture(): CommandMonitorModel {
   return {
     version: 1,
-    can_review: true,
     organization_id: "org-1",
     mission_id: "mission-1",
     observed_at: "2026-09-08T12:03:30.123456Z",

@@ -108,9 +108,7 @@ defmodule CadenceWeb.MixProject do
   # The federation browser tests. With CADENCE_BROWSER_SHARD=k/n (CI's parallel browser jobs)
   # only every n-th file from the k-th runs, so the order balances the shards; a shard with no
   # file has nothing to run.
-  @federation_browser_tests [
-    "browser_test/cadence_web/assets/command_workspace_browser_test.exs"
-  ]
+  @federation_browser_tests []
 
   # The node contract tests for the browser harness run once: unsharded, or in shard 1.
   defp run_browser_contract_tests(_args) do

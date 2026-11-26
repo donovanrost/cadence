@@ -5,17 +5,10 @@
   "type": "module",
   "exports": {
     "./settings": "./src/settings.ts",
-    "./workspace": "./src/workspace.ts",
     ".": "./src/index.ts",
     "./mission-commands": "./src/mission-commands.ts",
     "./spacecraft-commanding": "./src/spacecraft-commanding.ts",
-    "./command-review": "./src/command-review.ts",
-    "./command-authoring": "./src/command-authoring.ts",
-    "./command-stages": "./src/command-stages.ts",
-    "./stage-create": "./src/stage-create.ts",
-    "./stage-workbench": "./src/stage-workbench.ts",
-    "./command-history": "./src/command-history.ts",
-    "./queue-submission": "./src/queue-submission.ts"
+    "./command-history": "./src/command-history.ts"
   },
   "scripts": {
     "typecheck": "vue-tsc -b",

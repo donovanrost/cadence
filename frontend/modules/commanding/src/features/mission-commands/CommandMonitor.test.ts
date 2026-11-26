@@ -33,7 +33,6 @@ test("admission validates the semantic model, bounds, evidence and exact scope",
   expect("actions" in commandMonitorContribution).toBe(false);
   const mutate = [
     (m: unknown) => (fixtureRecordAt(m).version = 2),
-    (m: unknown) => (fixtureRecordAt(m).can_review = "true"),
     (m: unknown) => (fixtureRecordAt(m).organization_id = "foreign"),
     (m: unknown) => (fixtureRecordAt(m).page_size = 100),
     (m: unknown) => (fixtureRecordAt(m).status = "empty"),
@@ -234,51 +233,6 @@ test("refresh handles rejected reads and query admission rejects unsupported or 
   expect(monitorHref("mission/a", readMonitorQuery({ focus_command_id: "request/a?b" }))).toBe(
     "/missions/mission%2Fa/ops/commands?focus_command_id=request%2Fa%3Fb",
   );
-});
-
-test("managed request review links preserve native modifier clicks and tolerate legacy IDs", async () => {
-  const { wrapper, navigate } = setup();
-  try {
-    const link = wrapper.get('[data-command-review="request-a"]');
-    expect(link.attributes("href")).toBe("/missions/mission-1/ops/commands/requests/request-a");
-    await link.trigger("click", { ctrlKey: true });
-    expect(navigate).not.toHaveBeenCalled();
-    await link.trigger("click");
-    expect(navigate).toHaveBeenCalledExactlyOnceWith(link.attributes("href"));
-    const legacy = monitorFixture();
-    legacy.rows = [commandObservation("legacy/request")];
-    await wrapper.setProps({ model: readCommandMonitor(legacy, monitorContext) });
-    expect(wrapper.find('[data-command-request="legacy/request"]').exists()).toBe(true);
-    expect(wrapper.find("[data-command-review]").exists()).toBe(false);
-    expect(wrapper.get('[data-command-follow="legacy/request"]').attributes("href")).toContain(
-      "legacy%2Frequest",
-    );
-  } finally {
-    wrapper.unmount();
-  }
-});
-
-test("monitoring operators keep evidence and focus without privileged review links", () => {
-  const model = monitorFixture();
-  model.can_review = false;
-  const { wrapper } = setup(model);
-  try {
-    expect(wrapper.find('[data-command-request="request-a"]').exists()).toBe(true);
-    expect(wrapper.find('[data-command-follow="request-a"]').exists()).toBe(true);
-    expect(wrapper.find("[data-command-review]").exists()).toBe(false);
-  } finally {
-    wrapper.unmount();
-  }
-});
-
-test("creation uses the public command authoring route only for admitted managers", async () => {
-  const c = setup();
-  expect(c.header.href("command-monitor-create")).toBe(
-    `/missions/${monitorContext.missionId}/ops/commands/new`,
-  );
-  await c.wrapper.setProps({ model: { ...monitorFixture(), can_review: false } });
-  expect(c.header.has("command-monitor-create")).toBe(false);
-  c.wrapper.unmount();
 });
 
 test.each(["release_pending", "release_uncertain"] as const)(

@@ -52,11 +52,9 @@ on success. JSON views are in `W/api/*_json.ex`. Every `…` row passes `authori
 | Comms | transport_profiles: same 7 routes | TransportProfile | `Contacts.*_transport_profile*` | legacy model. The current UI uses Transports via the bridge |
 | Comms | path_templates: same 7 routes, plus `POST /:id/link_assignments` | PathTemplate, LinkAssignment | `Contacts.*_path_template*`, `apply_link_template` | legacy "link template" model |
 | Comms | `GET`, `POST …/link_assignments`; `GET`, `DELETE …/link_assignments/:id` | LinkAssignment | `Contacts.*_link_assignment` | legacy |
-| Commanding | `GET`, `POST …/command_stages`; `GET`, `PATCH /:id`; `POST /:id/submit` | CommandStage | `Management.Commanding.*_command_stage`, `submit_staged_command_items` | |
+| Commanding | `GET`, `POST …/command_stages`; `GET`, `PATCH /:id` | CommandStage | `Management.Commanding.*_command_stage` | submit removed (#708) |
 | Commanding | `GET`, `POST …/command_stages/:id/items`; `GET`, `PATCH …/staged_command_items/:id` | StagedCommandItem | `Management.Commanding.*_staged_command_item*` | |
-| Commanding | `GET`, `POST …/command_requests`; `GET /:id` | CommandRequest | `Management.Commanding.{list,persist,fetch}_command_request*` | |
-| Commanding | `POST …/command_requests/:id/approve`, `/reject` | CommandRequest | `Management.Commanding.approve_/reject_command_request` | |
-| Commanding | `POST …/command_requests/:id/enqueue` | CommandRequest | `Control.Commanding.enqueue_approved_command` | |
+| Commanding | `GET …/command_requests`, `/:id` | CommandRequest | `Management.Commanding.{list,fetch}_command_request*` | create, approve, reject and enqueue removed (#708): commands go through command groups |
 | Commanding | `GET …/command_approvals`, `/:id` | CommandApproval | `Management.Commanding.list_/fetch_command_approval*` | |
 | Commanding | `GET …/command_queue_entries`, `/:id`; `POST /:id/release` | CommandQueueEntry | `Projections.CommandStatus.*`, `Control.Commanding.release_command_queue_entry` | **no cancel/abort route** |
 | Commanding | `GET …/command_release_attempts`, `/:id` | CommandReleaseAttempt | `Projections.CommandStatus.*_release_attempt*` | |
