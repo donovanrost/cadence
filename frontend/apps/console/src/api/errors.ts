@@ -213,6 +213,7 @@ export const errorCodes = [
   "fleet_planning_requirement_not_active",
   // U52 (api 6af9e279d): a start's template fan-out over the limit; details {count, limit}.
   "fleet_planning_occurrence_limit_exceeded",
+  "fleet_planning_run_requirement_limit_exceeded",
   "fleet_repair_horizon_exceeded",
   // U76 (api 1a5976482): POST …/repairs with no attempts left, or a window it can't use.
   "fleet_repair_attempt_limit_exceeded",

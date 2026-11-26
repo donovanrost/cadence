@@ -281,6 +281,9 @@ defmodule CadenceWeb.Console.Problem do
     fleet_planning_occurrence_limit_exceeded:
       {422,
        "This start goes over the limit of template requirements. Include fewer templates, or narrow their targets."},
+    fleet_planning_run_requirement_limit_exceeded:
+      {422,
+       "This start includes too many requirements. Narrow the planning window or the template targets."},
     # U55: cancel or end a pass's contact (the console words each state itself).
     # U65: the model approval gate (words: ux; codes: domain's).
     human_mission_model_approver_required:
