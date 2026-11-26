@@ -26,7 +26,13 @@ An identity that has a row tracks every later sighting as before: counts, canoni
 
 One `SELECT … FOR UPDATE` of the batch's existing rows, in identity order. Then, per envelope:
 
-- **row exists:** update it as before;
+- **row exists:** update it as before. A row an operator decided (`decision_event_id` set) is the
+  exception (#369; lead's ruling: a revision never clears a decision). The update changes only
+  the counts, `latest_*` and the seen times. It keeps `canonical_*`, `validity_state`,
+  `decision_reason`, `decided_at` and the payload's `decision`, which `EffectiveSelection` reads.
+  A decision stands until an operator changes it. `latest_revision` > `canonical_revision` then
+  shows that a newer revision arrived (U106). Tests: `observation_identity_decision_survives_test.exs`
+  (each decision kind: decide, then re-sight, then a revision);
 - **no row, canonical:** nothing;
 - **no row, non-canonical:** `INSERT … ON CONFLICT DO NOTHING`. If another batch or a decision committed the row first, this sighting updates that row under its lock. The unique key never raises.
 
