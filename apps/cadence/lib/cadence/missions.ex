@@ -47,12 +47,14 @@ defmodule Cadence.Missions do
   @doc """
   The organization a mission belongs to, or nil when there is no such mission.
 
-  A mission never changes organization, so a found answer is memoized in the calling process
-  (#687): the ingest path's long-lived processes (archive writers, the persistence projector,
-  storage) ask this for every batch and every mission-owned row, and now pay one query per mission
-  for their lifetime instead of one per call. A miss is not memoized, so a mission created later
-  is found. The memo lives and dies with the process: nothing is shared across processes or
-  nodes, so there is nothing to invalidate.
+  A mission never changes organization (the database refuses it: the `missions_scope_immutable`
+  trigger), so a found answer is memoized in the calling process (#687): the ingest path's
+  long-lived processes (archive writers, the persistence projector, storage) ask this for every
+  batch and every mission-owned row, and now pay one query per mission for their lifetime instead
+  of one per call. A miss is not memoized, so a mission created later is found. The memo lives and
+  dies with the process: nothing is shared across processes or nodes, so there is nothing to
+  invalidate. After a dev database reset, restart the node: a long-lived process could otherwise
+  keep a mission id the reseed gave to another organization.
   """
   @spec organization_id_for_mission(binary()) :: binary() | nil
   def organization_id_for_mission(mission_id) when is_binary(mission_id) do
