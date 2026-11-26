@@ -36,7 +36,11 @@ planning-policy versions, and the K1 submit race (a template version plus, if ne
 
 ## Personas
 
-Sessions are saved per persona by `e2e/auth.setup.ts` (users seeded by `dev/apogee_qa_personas.exs`).
+`dev/stack up` currently seeds only the environment admin through the REST client. The other
+personas await invitation-token delivery (#745) and the rest of the #752 seed migration; specs
+requiring them are not ready on a freshly reset worktree.
+
+Once invitations are available, `e2e/auth.setup.ts` saves sessions for the personas below.
 The default is `admin`; switch with `test.use({ storageState: storageStateFor("operator") })`.
 
 | Key | User | Use for |
@@ -47,9 +51,9 @@ The default is `admin`; switch with `test.use({ storageState: storageStateFor("o
 | `orgAdmin` | `qa-org-admin@example.com`, organization admin | admin UI without platform admin (default) |
 | `orgAdmin2` | `qa-org-admin-2@example.com`, organization admin | approvals the author can't give (#38, policy versions) |
 
-The persona password comes from `E2E_PERSONA_PASSWORD` and the admin password from
-`CADENCE_ADMIN_PASSWORD`; `dev/stack env` writes both to the gitignored `mise.local.toml`.
-Run Playwright through `mise exec --` so it reads the same credentials as the seeds. `BASE_URL`
+The admin password comes from `CADENCE_ADMIN_PASSWORD`; `dev/stack env` writes it to the
+gitignored `mise.local.toml`. Run Playwright through `mise exec --` so it reads the same
+credentials as the seed. `BASE_URL`
 defaults to the slot's Phoenix URL.
 
 ## Specs that touch shared state

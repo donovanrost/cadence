@@ -189,11 +189,9 @@ case "$command" in
     wait_http "http://127.0.0.1:$sim_port" simulator
     start_process phoenix "$root" mise run cadence
     wait_http "http://127.0.0.1:$server_port/health/ready" phoenix
-    for seed in reflect_orbital_demo apogee_qa_personas reflect_orbital_planning apogee_qa_mission; do
-      run_mix run --no-start "../../dev/$seed.exs"
-    done
     start_process console "$root/frontend" corepack pnpm --filter @cadence/console dev --host 127.0.0.1
     wait_http "http://127.0.0.1:$console_port/console/" console
+    MIX_INSTALL_DIR="$state/mix-install" mise exec -- elixir "$root/dev/seed/earendil.exs"
     status
     ;;
 esac
