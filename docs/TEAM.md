@@ -63,7 +63,13 @@ git -C <repo> fetch origin && git -C <repo> worktree add --detach <worktrees>/<h
 hc run --bg --name <handle> --no-parent --no-notify --keep --label team=cadence --label head=<your handle> \
   --cwd <worktrees>/<handle>
 hc send <handle> "claude --model <model> --effort <level> --permission-mode auto"
-# Codex instead: hc send <handle> "codex -c model_reasoning_effort=high"
+# Codex instead: sandboxed to its worktree, approvals off (it never blocks on a dialog). <git> is the
+# main repo's .git (~/projects/cadence/cadence/.git on both laptops); a worktree's HEAD,
+# refs, config and objects live there. Verified in the sandbox: gh, mix deps.get, git commit/push/branch -D, docker,
+# a targeted mix test against local Postgres.
+# hc send <handle> "codex -s workspace-write -a never -c model_reasoning_effort=high \
+#   -c sandbox_workspace_write.network_access=true \
+#   -c 'sandbox_workspace_write.writable_roots=[\"<git>\",\"<git>/worktrees/<handle>\",\"$HOME/.hex\",\"$HOME/.mix\",\"$HOME/.cache\",\"$HOME/Library/pnpm\"]'"
 hc send <handle> "<brief: role, area, first task, pointer to docs/TEAM.md>"
 ```
 
