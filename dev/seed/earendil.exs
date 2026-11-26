@@ -20,14 +20,113 @@ defmodule EarendilSeed do
     {client, organization_id, mission_id} =
       phase("organization and mission", fn -> scope(client, email) end)
 
+    {client, _revision_id} = phase("catalog import", fn -> seed_catalog(client, mission_id) end)
     seed_fleet(client, mission_id, count)
 
     IO.puts("Earendil: organization #{organization_id}, mission #{mission_id}")
 
-    IO.puts("  orbit elements wait on #732; dashboard import waits on #746")
-    IO.puts("  #{sites} requested sites, provider and profile configuration review wait on #734")
+    IO.puts("  orbit elements wait on #732; dashboards await an applied fleet and #745")
+    IO.puts("  #{sites} requested sites, provider and profile setup remain in later REST phases")
+    IO.puts("  bulk spacecraft configuration review waits on #734")
     IO.puts("  second-person invitations and approval wait on #745")
     IO.puts("total: #{elapsed(started)}")
+  end
+
+  defp seed_catalog(client, mission_id) do
+    path = "/missions/#{mission_id}/catalog"
+    {client, catalog} = request!(client, :get, path)
+
+    if get_in(catalog, ["database", "current_revision", "id"]) do
+      revision = catalog["database"]["current_revision"]
+      IO.puts("  catalog revision #{revision["number"]} already imported")
+      {client, revision["id"]}
+    else
+      {client, run_id} = start_catalog_import(client, path, catalog)
+      await_catalog(client, path, run_id, 120)
+    end
+  end
+
+  defp start_catalog_import(client, path, catalog) do
+    source =
+      Path.expand("../../dev/catalogs/demo_spacecraft.yaml", __DIR__)
+      |> File.read!()
+      |> with_demo_verifiers()
+
+    fields = [
+      file: {source, filename: "demo_spacecraft.yaml", content_type: "application/yaml"},
+      revision_label: "Earendil demo",
+      revision_notes: "Synthetic command and telemetry catalog"
+    ]
+
+    fields =
+      case catalog["database"] do
+        %{"id" => id} -> Keyword.put(fields, :database_id, id)
+        _ -> Keyword.put(fields, :name, "Demo Spacecraft — Command & Telemetry")
+      end
+
+    {client, response} = request!(client, :post, path <> "/imports", nil, multipart: fields)
+    {client, response["import_run_id"]}
+  end
+
+  defp await_catalog(_client, _path, _run_id, 0), do: fail!("catalog import", "timed out")
+
+  defp await_catalog(client, path, run_id, remaining) do
+    {client, run} = request!(client, :get, path <> "/imports/#{run_id}")
+
+    case run["status"] do
+      "succeeded" ->
+        revision = run["revision"]
+        IO.puts("  catalog revision #{revision["number"]} imported")
+        {client, revision["id"]}
+
+      "failed" ->
+        fail!("catalog import", run["diagnostics"])
+
+      _running ->
+        Process.sleep(500)
+        await_catalog(client, path, run_id, remaining - 1)
+    end
+  end
+
+  @verified_commands ~w(NOOP RESET_COUNTERS SET_MODE)
+  @verifiers """
+      verifiers:
+        - name: Uplink started
+          phase: start
+          timeout_ms: 30000
+          success_criteria:
+            criteria_type: comparison
+            subject_ref: transport:started
+            comparison: equal
+            value: true
+        - name: Accepted on board
+          phase: completion
+          timeout_ms: 30000
+          success_criteria:
+            criteria_type: comparison
+            subject_ref: transport:completed
+            comparison: equal
+            value: true
+  """
+  @mode_verifier """
+        - name: Mode applied
+          phase: completion
+          timeout_ms: 60000
+          success_criteria:
+            criteria_type: comparison
+            subject_ref: telemetry:HK.sc_mode
+            comparison: equal
+            value_from_argument: mode
+            use_calibrated: false
+  """
+
+  defp with_demo_verifiers(source) do
+    Enum.reduce(@verified_commands, source, fn name, acc ->
+      line = "  - name: #{name}\n"
+      ^line = if String.contains?(acc, line), do: line, else: fail!("catalog", "#{name} missing")
+      suffix = if name == "SET_MODE", do: @verifiers <> @mode_verifier, else: @verifiers
+      String.replace(acc, line, line <> suffix, global: false)
+    end)
   end
 
   defp seed_fleet(client, mission_id, count) do
@@ -187,6 +286,11 @@ defmodule EarendilSeed do
     ]
 
     options = if body, do: Keyword.put(options, :json, body), else: options
+
+    options =
+      if opts[:multipart],
+        do: Keyword.put(options, :form_multipart, opts[:multipart]),
+        else: options
 
     case Req.request(options) do
       {:ok, response} -> response!(client, method, path, response)
