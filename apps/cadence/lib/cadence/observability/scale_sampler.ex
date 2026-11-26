@@ -12,15 +12,17 @@ defmodule Cadence.Observability.ScaleSampler do
     `[:cadence, :ingest, :journal, :backlog]` maxima. Missing measurements are skipped, not 0
     (a batch acknowledged after a restart omits them, #686).
   - `beam`: run queue, scheduler utilization, process count, memory (MB)
-  - `mailboxes`: message-queue length of each name in `:processes`, plus the top `:top` overall
-  - `postgres`: WAL bytes written that second
+  - `mailboxes`: per watched module, the processes with a backlog and their sum and max, plus
+    the busiest processes (`ScaleSampler.Mailboxes`)
+  - `storage`: Postgres WAL bytes that second, QuestDB WAL lag (`ScaleSampler.Storage`)
 
-  The sampler's own WAL query is excluded from `ecto`.
+  The summary adds the run's settings (`meta`) and, per watched table, rows and bytes written
+  over the run in Postgres and QuestDB. The sampler's own queries are excluded from `ecto`.
   """
 
   use GenServer
 
-  alias Cadence.Observability.ScaleSampler.Stats
+  alias Cadence.Observability.ScaleSampler.{Mailboxes, Stats, Storage}
 
   @repo_event [:cadence, :repo, :query]
   @batch_event [:cadence, :ingest, :batch, :stop]
@@ -30,15 +32,16 @@ defmodule Cadence.Observability.ScaleSampler do
 
   @doc """
   Starts the sampler. Options: `:out` (JSON lines path, required), `:interval_ms` (1000),
-  `:processes` (registered names to watch, default []), `:top` (5), `:postgres` (true: sample
-  WAL bytes; false where there's no database to ask).
+  `:modules` (mailboxes to watch, default []), `:top` (5), `:postgres_tables` /
+  `:questdb_tables` (`Storage` defaults), `:postgres` (true; false where there's no database to
+  ask) and `:questdb_exec` (a `sql -> result` function for QuestDB; no QuestDB probes without it).
   """
   @spec start(keyword()) :: GenServer.on_start()
   def start(opts), do: GenServer.start(__MODULE__, opts, name: __MODULE__)
 
-  @doc "Stops the sampler and returns the run summary (`Stats.summarize/1` of every row)."
+  @doc "Stops the sampler and returns the run summary: `meta`, `storage` deltas and `metrics`."
   @spec stop() :: {:ok, map()}
-  def stop, do: GenServer.call(__MODULE__, :stop, 30_000)
+  def stop, do: GenServer.call(__MODULE__, :stop, 60_000)
 
   @impl true
   def init(opts) do
@@ -48,31 +51,33 @@ defmodule Cadence.Observability.ScaleSampler do
     File.mkdir_p!(Path.dirname(out))
     table = :ets.new(__MODULE__, [:duplicate_bag, :public, write_concurrency: true])
     handler = "cadence-scale-sampler-#{System.unique_integer([:positive])}"
-    config = %{table: table, sampler: self()}
+    events = [@repo_event, @batch_event, @backlog_event]
 
     :ok =
-      :telemetry.attach_many(
-        handler,
-        [@repo_event, @batch_event, @backlog_event],
-        &__MODULE__.handle_event/4,
-        config
-      )
+      :telemetry.attach_many(handler, events, &__MODULE__.handle_event/4, %{
+        table: table,
+        sampler: self()
+      })
 
-    state0 = %{
-      table: table,
-      handler: handler,
-      out: File.open!(out, [:write, :utf8]),
-      interval_ms: Keyword.get(opts, :interval_ms, 1_000),
-      processes: Keyword.get(opts, :processes, []),
-      top: Keyword.get(opts, :top, 5),
-      wall_time_was_on?: :erlang.system_flag(:scheduler_wall_time, true),
-      scheduler: scheduler_sample(),
-      postgres?: Keyword.get(opts, :postgres, true),
-      wal: nil,
-      rows: []
-    }
+    state =
+      %{
+        table: table,
+        handler: handler,
+        out: File.open!(out, [:write, :utf8]),
+        interval_ms: Keyword.get(opts, :interval_ms, 1_000),
+        modules: Keyword.get(opts, :modules, []),
+        top: Keyword.get(opts, :top, 5),
+        postgres?: Keyword.get(opts, :postgres, true),
+        questdb_exec: Keyword.get(opts, :questdb_exec),
+        pg_tables: Keyword.get(opts, :postgres_tables, Storage.default_postgres_tables()),
+        qdb_tables: Keyword.get(opts, :questdb_tables, Storage.default_questdb_tables()),
+        wall_time_was_on?: :erlang.system_flag(:scheduler_wall_time, true),
+        scheduler: scheduler_sample(),
+        started_at: DateTime.utc_now(),
+        rows: []
+      }
+      |> then(&Map.merge(&1, %{wal: wal(&1), storage_start: storage_snapshot(&1)}))
 
-    state = %{state0 | wal: wal_position(state0)}
     Process.send_after(self(), :tick, state.interval_ms)
     {:ok, state}
   end
@@ -99,9 +104,8 @@ defmodule Cadence.Observability.ScaleSampler do
     put(table, :backlog_age_ms, measurements[:oldest_unacked_age_ms])
   end
 
-  defp put(_table, _key, nil), do: true
   defp put(table, key, value) when is_number(value), do: :ets.insert(table, {key, value})
-  defp put(_table, _key, _other), do: true
+  defp put(_table, _key, _missing), do: true
 
   @impl true
   def handle_info(:tick, state) do
@@ -112,30 +116,38 @@ defmodule Cadence.Observability.ScaleSampler do
   @impl true
   def handle_call(:stop, _from, state) do
     state = record(state)
-    {:stop, :normal, {:ok, Stats.summarize(Enum.reverse(state.rows))}, state}
+
+    summary =
+      state.rows
+      |> Enum.reverse()
+      |> Stats.summarize()
+      |> Map.put(:meta, meta(state))
+      |> Map.put(:storage, storage_deltas(state))
+
+    {:stop, :normal, {:ok, summary}, state}
   end
 
   @impl true
   def terminate(_reason, state) do
     :telemetry.detach(state.handler)
-
-    unless state.wall_time_was_on?,
-      do: :erlang.system_flag(:scheduler_wall_time, false)
-
+    unless state.wall_time_was_on?, do: :erlang.system_flag(:scheduler_wall_time, false)
     File.close(state.out)
   end
 
   defp record(state) do
     scheduler = scheduler_sample()
-    wal = wal_position(state)
+    wal = wal(state)
 
     row = %{
       t: DateTime.utc_now() |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601(),
       ecto: ecto(state.table),
       ingest: ingest(state.table),
       beam: beam(state.scheduler, scheduler),
-      mailboxes: mailboxes(state.processes, state.top),
-      postgres: %{wal_bytes: wal_delta(state.wal, wal)}
+      mailboxes: Mailboxes.sample(state.modules, state.top),
+      storage: %{
+        postgres_wal_bytes: delta(state.wal, wal),
+        questdb_wal_lag: if(state.questdb_exec, do: Storage.questdb_wal_lag(state.questdb_exec))
+      }
     }
 
     IO.write(state.out, [Jason.encode!(row), "\n"])
@@ -192,60 +204,47 @@ defmodule Cadence.Observability.ScaleSampler do
     if total > 0, do: Float.round(active / total, 3), else: nil
   end
 
-  defp mailboxes(names, top) do
-    watched =
-      Map.new(names, fn name ->
-        len =
-          case Process.whereis(name) do
-            nil -> nil
-            pid -> queue_len(pid)
-          end
+  defp wal(%{postgres?: true}), do: Storage.wal_position()
+  defp wal(_state), do: nil
 
-        {inspect(name), len}
-      end)
-
-    busiest =
-      Process.list()
-      |> Enum.flat_map(fn pid ->
-        case queue_len(pid) do
-          len when is_integer(len) and len > 0 -> [{pid, len}]
-          _none -> []
-        end
-      end)
-      |> Enum.sort_by(&elem(&1, 1), :desc)
-      |> Enum.take(top)
-      |> Enum.map(fn {pid, len} -> %{process: label(pid), len: len} end)
-
-    %{watched: watched, top: busiest}
-  end
-
-  defp queue_len(pid) do
-    case Process.info(pid, :message_queue_len) do
-      {:message_queue_len, len} -> len
-      nil -> nil
-    end
-  end
-
-  defp label(pid) do
-    case Process.info(pid, :registered_name) do
-      {:registered_name, name} when is_atom(name) and name != [] -> inspect(name)
-      _unnamed -> inspect(pid)
-    end
-  end
-
-  defp wal_position(%{postgres?: false}), do: nil
-
-  defp wal_position(_state) do
-    sql = "select pg_wal_lsn_diff(pg_current_wal_lsn(), '0/0')::bigint"
-
-    case Cadence.Repo.query(sql, [], log: false) do
-      {:ok, %{rows: [[position]]}} -> position
-      {:error, _reason} -> nil
-    end
-  end
-
-  defp wal_delta(previous, current) when is_integer(previous) and is_integer(current),
+  defp delta(previous, current) when is_integer(previous) and is_integer(current),
     do: current - previous
 
-  defp wal_delta(_previous, _current), do: nil
+  defp delta(_previous, _current), do: nil
+
+  defp storage_snapshot(state) do
+    %{
+      postgres: if(state.postgres?, do: Storage.postgres_tables(state.pg_tables), else: %{}),
+      questdb:
+        if(state.questdb_exec,
+          do: Storage.questdb_tables(state.questdb_exec, state.qdb_tables),
+          else: %{}
+        )
+    }
+  end
+
+  defp storage_deltas(state) do
+    finish = storage_snapshot(state)
+
+    %{
+      postgres: Storage.deltas(state.storage_start.postgres, finish.postgres),
+      questdb: Storage.deltas(state.storage_start.questdb, finish.questdb)
+    }
+  end
+
+  # What makes two runs comparable; the git sha is added by the runner.
+  defp meta(state) do
+    journal = Application.get_env(:cadence, :ingress_journal, [])
+
+    %{
+      node: node(),
+      started_at: DateTime.to_iso8601(state.started_at),
+      otp: System.otp_release(),
+      elixir: System.version(),
+      schedulers: System.schedulers_online(),
+      pool_size: Application.get_env(:cadence, Cadence.Repo, [])[:pool_size],
+      journal_enabled: Keyword.get(journal, :enabled?),
+      journal_durability: Keyword.get(journal, :durability)
+    }
+  end
 end

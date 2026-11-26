@@ -3,7 +3,7 @@ defmodule Mix.Tasks.Cadence.Scale.Run do
   Records a per-second scorecard of a running Cadence node while a fleet-scale load runs
   (#717, epic #217).
 
-      mix cadence.scale.run --duration 600 --label peak-1000 [--node cadence_3] [--process Name]
+      mix cadence.scale.run --duration 600 --label peak-1000 [--node cadence_3] [--module Mod]
 
   Connects to the worktree's node (`cadence_<CADENCE_DEV_SLOT>`, cookie `CADENCE_ERLANG_COOKIE`,
   both set by `dev/stack env`), starts `Cadence.Observability.ScaleSampler` there, waits
@@ -11,16 +11,30 @@ defmodule Mix.Tasks.Cadence.Scale.Run do
   `var/scale/<utc>-<label>.jsonl`; this task writes the run summary (p50/p99/max of every
   per-second metric) beside it as `.summary.json` and prints the headline numbers.
 
-  `--process` (repeatable) names registered processes whose mailbox lengths are recorded each
-  second, e.g. `--process Cadence.RecordArchive.FileSystem.Writer`. The top 5 mailboxes are
-  always recorded. The load itself (the fleet seed and the simulator) is started separately.
+  `--module` (repeatable) replaces the watched mailbox modules (default: telemetry's #686 list,
+  `ScaleSampler.Mailboxes.default_modules/0`); per module the summary has processes with a
+  backlog, sum and max, plus the 5 busiest processes overall. The summary also records the git
+  sha, the node's settings (pool size, journal) and per-table Postgres and QuestDB growth.
+  The load itself (the fleet seed and the simulator) is started separately.
   """
 
   use Mix.Task
 
+  alias Cadence.Telemetry.Storage.QuestDB.RestClient
+
   @shortdoc "Record a per-second scorecard of a running node under load"
 
-  @switches [node: :string, duration: :integer, label: :string, process: :keep, out: :string]
+  @switches [node: :string, duration: :integer, label: :string, module: :keep, out: :string]
+
+  # Telemetry's #686 list: singletons and per-mission processes on the ingest path.
+  @default_modules [
+    Cadence.Protocol.RecordArchive.FileSystem.Writer,
+    Cadence.Platform.EventBus,
+    Cadence.Dashboards.RuntimeFactConsumer,
+    Cadence.Dashboards.RuntimeCache,
+    Cadence.Runtime.CapabilityRegistry,
+    Cadence.Runtime.MissionCoordinator
+  ]
 
   @headline [
     "ecto.queue_ms.p99",
@@ -30,7 +44,8 @@ defmodule Mix.Tasks.Cadence.Scale.Run do
     "ingest.paths",
     "beam.run_queue",
     "beam.scheduler_utilization",
-    "postgres.wal_bytes"
+    "storage.postgres_wal_bytes",
+    "storage.questdb_wal_lag.max"
   ]
 
   @impl true
@@ -39,13 +54,20 @@ defmodule Mix.Tasks.Cadence.Scale.Run do
     duration = Keyword.get(opts, :duration) || Mix.raise("--duration <seconds> is required")
     label = Keyword.get(opts, :label, "run")
     out = Keyword.get(opts, :out) || default_out(label)
-    processes = opts |> Keyword.get_values(:process) |> Enum.map(&Module.concat([&1]))
+    modules = opts |> Keyword.get_values(:module) |> Enum.map(&Module.concat([&1]))
     node = connect!(Keyword.get(opts, :node) || default_node())
 
-    {:ok, _pid} = rpc!(node, :start, [[out: out, processes: processes]])
+    sampler_opts = [
+      out: out,
+      modules: if(modules == [], do: @default_modules, else: modules),
+      questdb_exec: &RestClient.exec/1
+    ]
+
+    {:ok, _pid} = rpc!(node, :start, [sampler_opts])
     Mix.shell().info("Sampling #{node} for #{duration} s into #{out}")
     wait(duration)
     {:ok, summary} = rpc!(node, :stop, [])
+    summary = put_in(summary, [:meta, :git_sha], git_sha())
 
     summary_path = String.replace_suffix(out, ".jsonl", ".summary.json")
     File.write!(summary_path, Jason.encode_to_iodata!(summary, pretty: true))
@@ -58,6 +80,13 @@ defmodule Mix.Tasks.Cadence.Scale.Run do
   end
 
   defp repo_root, do: Path.expand("../../../../..", __DIR__)
+
+  defp git_sha do
+    case System.cmd("git", ["rev-parse", "HEAD"], cd: repo_root(), stderr_to_stdout: true) do
+      {sha, 0} -> String.trim(sha)
+      _not_a_checkout -> nil
+    end
+  end
 
   defp default_node do
     case System.get_env("CADENCE_DEV_SLOT") do
@@ -106,13 +135,17 @@ defmodule Mix.Tasks.Cadence.Scale.Run do
     end)
   end
 
-  defp print(%{seconds: seconds, metrics: metrics}, path) do
+  defp print(%{seconds: seconds, metrics: metrics, storage: storage}, path) do
     Mix.shell().info("\n#{seconds} s sampled. Per-second p50 / p99 / max:")
 
     for key <- @headline, stats = metrics[key], stats != nil do
       Mix.shell().info(
         "  #{String.pad_trailing(key, 30)} #{stats.p50} / #{stats.p99} / #{stats.max}"
       )
+    end
+
+    for {db, tables} <- storage, {table, delta} <- tables, delta != nil do
+      Mix.shell().info("  #{db} #{table}: #{inspect(delta)}")
     end
 
     Mix.shell().info("Summary: #{path}")

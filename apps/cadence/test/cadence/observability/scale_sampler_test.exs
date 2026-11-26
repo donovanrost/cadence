@@ -25,6 +25,61 @@ defmodule Cadence.Observability.ScaleSamplerTest do
     end
   end
 
+  defmodule Slow do
+    @moduledoc false
+    use GenServer
+    @impl true
+    def init(state), do: {:ok, state}
+    @impl true
+    def handle_info(:block, state) do
+      Process.sleep(500)
+      {:noreply, state}
+    end
+
+    def handle_info(_message, state), do: {:noreply, state}
+  end
+
+  describe "Mailboxes" do
+    test "groups backlogged processes by module: count, sum and max" do
+      {:ok, a} = GenServer.start(Slow, nil)
+      {:ok, b} = GenServer.start(Slow, nil)
+      for pid <- [a, b], do: send(pid, :block)
+      for _ <- 1..3, do: send(a, :queued)
+      send(b, :queued)
+      Process.sleep(20)
+
+      %{by_module: by_module, top: top} = ScaleSampler.Mailboxes.sample([Slow], 3)
+      assert %{processes: 2, sum: 4, max: 3} = by_module[inspect(Slow)]
+      assert [%{len: 3, module: module} | _] = top
+      assert module == inspect(Slow)
+    end
+
+    test "QuestDB probes use the given exec; nil when it fails" do
+      exec = fn
+        "select sequencerTxn" <> _ -> {:ok, %{"dataset" => [[3, false], [1, true]]}}
+        "select sum(diskSize)" <> _ -> {:ok, %{"dataset" => [[2048, 10]]}}
+      end
+
+      assert ScaleSampler.Storage.questdb_wal_lag(exec) == %{sum: 4, max: 3, suspended: 1}
+
+      assert ScaleSampler.Storage.questdb_tables(exec, ["t"]) == %{
+               "t" => %{bytes: 2048, rows: 10}
+             }
+
+      assert ScaleSampler.Storage.questdb_wal_lag(fn _sql -> {:error, :down} end) == nil
+    end
+
+    test "Storage.deltas subtracts start from end, nil where a side is missing" do
+      start = %{"a" => %{rows: 10, bytes: 100}, "b" => nil}
+      finish = %{"a" => %{rows: 15, bytes: 160}, "b" => %{rows: 1, bytes: 1}}
+
+      assert ScaleSampler.Storage.deltas(start, finish) == %{
+               "a" => %{rows: 5, bytes: 60},
+               "b" => nil
+             }
+    end
+  end
+
   describe "sampling" do
     setup do
       out = Path.join(System.tmp_dir!(), "scale-#{System.unique_integer([:positive])}.jsonl")
@@ -33,7 +88,8 @@ defmodule Cadence.Observability.ScaleSamplerTest do
     end
 
     test "aggregates ingest events per second, omitting missing measurements", %{out: out} do
-      {:ok, _pid} = ScaleSampler.start(out: out, interval_ms: 60_000, postgres: false)
+      {:ok, _pid} =
+        ScaleSampler.start(out: out, interval_ms: 60_000, postgres: false, modules: [Slow])
 
       batch = [:cadence, :ingest, :batch, :stop]
       meta = %{path_id: "path-1", mission_id: "m"}
@@ -47,7 +103,11 @@ defmodule Cadence.Observability.ScaleSamplerTest do
       :telemetry.execute(batch, %{}, meta)
       :telemetry.execute([:cadence, :ingest, :journal, :backlog], %{bytes: 900}, meta)
 
-      assert {:ok, %{seconds: 1, metrics: metrics}} = ScaleSampler.stop()
+      assert {:ok, %{seconds: 1, metrics: metrics, meta: meta, storage: storage}} =
+               ScaleSampler.stop()
+
+      assert %{node: _, otp: _, schedulers: _} = meta
+      assert storage == %{postgres: %{}, questdb: %{}}
       assert metrics["ingest.batches"].max == 3
       assert metrics["ingest.frames"].max == 6
       assert metrics["ingest.bytes"].max == 150
@@ -57,11 +117,20 @@ defmodule Cadence.Observability.ScaleSamplerTest do
       assert metrics["beam.processes"].max > 0
 
       [line] = out |> File.read!() |> String.split("\n", trim: true)
-      assert %{"ingest" => %{"frames" => 6}, "mailboxes" => %{"top" => _}} = Jason.decode!(line)
+
+      assert %{
+               "ingest" => %{"frames" => 6},
+               "mailboxes" => %{"top" => _, "by_module" => by_module}
+             } =
+               Jason.decode!(line)
+
+      assert Map.has_key?(by_module, inspect(Slow))
     end
 
     test "detaches its handlers when stopped", %{out: out} do
-      {:ok, _pid} = ScaleSampler.start(out: out, interval_ms: 60_000, postgres: false)
+      {:ok, _pid} =
+        ScaleSampler.start(out: out, interval_ms: 60_000, postgres: false, modules: [Slow])
+
       {:ok, _summary} = ScaleSampler.stop()
 
       handlers = :telemetry.list_handlers([:cadence, :ingest, :batch, :stop])
