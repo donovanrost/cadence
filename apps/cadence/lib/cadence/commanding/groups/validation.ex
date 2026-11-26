@@ -169,15 +169,21 @@ defmodule Cadence.Commanding.Groups.Validation do
   defp pick(nil, failure), do: {nil, failure}
   defp pick(%SourceEndpoint{} = endpoint, _failure), do: {endpoint, nil}
 
+  # One locked read for every target's endpoint, shared by all its members (500 targets is one
+  # read, not 500 x commands). Runs inside `validate/4`'s transaction.
+  defp locked_targets(resolved, org, mission) do
+    case SourceEndpoints.fetch_command_authoring_targets(
+           org,
+           mission,
+           for(%{failure: nil, source_endpoint_id: id} <- resolved, do: id)
+         ) do
+      {:ok, targets} -> targets
+      {:error, reason} -> Repo.rollback(reason)
+    end
+  end
+
   defp validate_members(resolved, draft, org, mission, requested_by, now, snapshot) do
-    # One locked read for every target's endpoint, shared by all its members (500 targets is one
-    # read, not 500 x commands).
-    {:ok, targets} =
-      SourceEndpoints.fetch_command_authoring_targets(
-        org,
-        mission,
-        for(%{failure: nil, source_endpoint_id: id} <- resolved, do: id)
-      )
+    targets = locked_targets(resolved, org, mission)
 
     {members, failures} =
       for %{failure: nil} = target <- resolved,
