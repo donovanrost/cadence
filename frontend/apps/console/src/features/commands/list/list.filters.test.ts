@@ -69,10 +69,10 @@ describe("Commands pages (A5c)", () => {
     );
     await flushPromises();
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain("limit=100&q=heater&stage=in_flight");
-    expect(await pages?.more()).toBe("c");
+    await pages?.more();
     expect(String(fetchMock.mock.calls[1]?.[0])).toContain("cursor=c1");
     const s = pages?.state.value;
-    expect(s?.status === "ready" ? s.value.rows.map((r) => r.id) : null).toEqual(["a", "b", "c"]);
+    expect(s?.status === "ready" ? s.value.items.map((r) => r.id) : null).toEqual(["a", "b", "c"]);
     expect(s?.status === "ready" ? s.value.next : "x").toBeNull();
     scope.stop();
   });
