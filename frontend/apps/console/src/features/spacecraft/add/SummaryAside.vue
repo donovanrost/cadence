@@ -35,7 +35,7 @@ const continueReason = computed(() => {
   <ApPanel index="A4" title="What happens">
     <div class="flex flex-col gap-4">
       <div class="grid grid-cols-3 gap-px border border-hairline bg-hairline">
-        <ApStatTile label="New SC" :value="count" />
+        <ApStatTile label="New spacecraft" :value="count" />
         <ApStatTile label="Routing rules" :value="null" caption="added later" />
         <ApStatTile label="Fleet" :value="count === null ? null : fleet + count" />
       </div>

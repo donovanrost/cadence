@@ -80,6 +80,28 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   @impl true
   def uplink_session(provider_runtime), do: GenServer.call(provider_runtime, :uplink_session)
 
+  @doc """
+  Whether a provider configuration asks for the profile's shared listener (#87: `listener:
+  "shared"`). The runtime's own test (`normalize_configuration/1`); planning reads it too (#361).
+  """
+  @spec shared_listener_config?(map()) :: boolean()
+  def shared_listener_config?(configuration) when is_map(configuration),
+    do:
+      Map.get(configuration, :listener, Map.get(configuration, "listener")) in [:shared, "shared"]
+
+  def shared_listener_config?(_configuration), do: false
+
+  @doc """
+  Whether a listen-mode binding on a path of `direction` binds its OWN socket on its host:port,
+  so a second contact on the same endpoint at the same time fails `eaddrinuse`
+  (`listener_in_use`). Only a shared-listener downlink registers with the profile's acceptor
+  instead (`start_socket_provider/3`); uplink always keeps its own listener. Planning's
+  listener-overlap flag (#361, U58 (b)) uses this rule, not a copy of it.
+  """
+  @spec own_listener?(map(), :uplink | :downlink) :: boolean()
+  def own_listener?(configuration, direction),
+    do: not (direction == :downlink and shared_listener_config?(configuration))
+
   @impl true
   def drop_unverified_peer(provider_runtime, peer, reason),
     do: GenServer.call(provider_runtime, {:drop_unverified_peer, peer, reason})
@@ -725,11 +747,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       # (#87) A listen-mode downlink shares one listener per profile when the profile says
       # "listener" => "shared" (opt-in while profiles are moved over); the single-registration
       # fallback is opt-in too.
-      shared_listener?:
-        Map.get(configuration, :listener, Map.get(configuration, "listener")) in [
-          :shared,
-          "shared"
-        ],
+      shared_listener?: shared_listener_config?(configuration),
       fallback_single_registration?:
         Map.get(
           configuration,

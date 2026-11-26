@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, watch } from "vue";
 import type { ApiError, RemoteState } from "@/api";
-import { ApButton, ApCallout, ApPanel, ApRemote, refocusFirst } from "@/ui";
+import { ApButton, ApCallout, ApPanel, ApRemote, refocusFirst, useActed } from "@/ui";
 import type { Preview } from "./actions.ts";
 import ChecksBody from "./ChecksBody.vue";
 import { checkingLine, heldLabel, RECHECK_FAILED, type HeldChecks } from "./checks-view.ts";
@@ -24,7 +24,10 @@ const props = withDefaults(
   }>(),
   { held: null, done: null, nowCount: 0 },
 );
-defineEmits<{ retry: [] }>();
+const emit = defineEmits<{ retry: [] }>();
+/** B6 (#276): a preview that fails after Reload is an alert; on load, polite. A held recheck is crit. */
+const reloaded = useActed(() => props.preview.status === "ready");
+const retry = reloaded.after(() => emit("retry"));
 
 /** Say why checks didn't run, by cause (ux pass 2 #7). */
 function failureText(error: ApiError): string {
@@ -77,10 +80,14 @@ watch(
     >
       {{ status }}
     </p>
-    <ApCallout v-if="preview.status === 'failed'" :tone="held ? 'crit' : 'caution'">
+    <ApCallout
+      v-if="preview.status === 'failed'"
+      :tone="held ? 'crit' : 'caution'"
+      :role="held ? 'alert' : reloaded.role.value"
+    >
       {{ held ? RECHECK_FAILED : failureText(preview.error) }}
       <template #action
-        ><ApButton size="compact" @click="$emit('retry')">{{
+        ><ApButton size="compact" @click="retry">{{
           held ? "Try again" : "Reload"
         }}</ApButton></template
       >

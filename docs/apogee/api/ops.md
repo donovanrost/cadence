@@ -577,8 +577,12 @@ Errors: `404 spacecraft_not_found`.
     `catalog.profile` is the one its profile (with its overrides) sets. Either can be `null`. When
     both are set and differ, show the "Running rev 14; the profile is on rev 15" caution (the same
     rule as the Readiness catalog finding, DECISIONS #65).
+  - `catalog.running.composition` and `catalog.profile.composition` (D2, #543): the composition
+    behind this revision (shape in setup.md's 'Compositions' section), or null.
 - **G2 `overrides`:** this spacecraft's overrides only, labelled from the profile schema (`label`,
   `unit` may be null). Values are JSON text; `null` means not set. `[]` → "Uses its profile as is."
+  - `composition` (D2, #543): for a `catalog_revision_id` override, the composition behind the
+    catalog revision it sets (shape in setup.md's 'Compositions' section); null for any other.
 - **G3 `routing_rules`:** as `/spacecraft/:id`, plus the transport's `station` (null when the
   transport names none).
 - **G4 `pending`:** the mission's open or in-review change set when it has changes touching this
@@ -681,7 +685,12 @@ request), so housekeeping rows don't starve a filtered page. Fewer than `limit` 
 - `text` is an operator sentence naming what the event is about, built on the server (ux review
   2026-11-09-timeline #1): "Flight telemetry source caught up to 10:23:54Z", "Contact with
   EARENDIL-004 completed, 10:22:54Z–10:23:52Z", "Dashboard Comms payload v1 published by Mira K.",
-  "Catalog rev 2 (QA-E2E re-import) registered". Unknown kinds fall back to the sentence-case key
+  "Catalog rev 2 (QA-E2E re-import) registered". A person is named ("by Mira K.") only while
+  an active member of the mission's organization (#472, #146 C1). Otherwise the "by" clause is
+  dropped, never an id or email (ux U25). Cadence's own act reads "by Cadence", and a service
+  identity of the organization "by Nightly planner (a service identity)" (U70). One that can't be
+  named reads "by a service identity", never its id (#488, ca-ux). Names come from the live
+  rows (`Control.ActorRef`), never from a stored actor document. Unknown kinds fall back to the sentence-case key
   plus the spacecraft ("Limit violation on EARENDIL-004"), never Title Case. `detail` is `null`.
 - Contact events (`scheduled_contact_*`, `realized_contact_*`) have kind `contact`. A realized
   contact that completed reads "ended (not verified)" until S9 verifies it. A provider-cancelled

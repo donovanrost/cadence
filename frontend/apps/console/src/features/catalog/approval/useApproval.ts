@@ -1,6 +1,12 @@
 import { ref, type Ref } from "vue";
 import { describeApiError } from "@/api/index.ts";
-import { approveRevision, rejectRevision, runComparison, type ModelKey } from "./api.ts";
+import {
+  approvalOps,
+  approveRevision,
+  rejectRevision,
+  runComparison,
+  type ModelKey,
+} from "./api.ts";
 import { decisionFailure, type DecisionFailure } from "./words.ts";
 
 /**
@@ -11,7 +17,12 @@ export function useApproval(
   key: Readonly<Ref<ModelKey>>,
   rev: () => number | null,
   refetch: () => void,
+  /** #260: the signed-in person, so an already-approved refusal can say "You already approved…". */
+  viewerId: string | null = null,
+  /** U109: a composed base's name in a sentence ("composition 3"); null for one catalog. */
+  composedName: () => string | null = () => null,
 ) {
+  const ops = approvalOps();
   const busy = ref<"run" | "approve" | "reject" | null>(null);
   /** The last refusal, and which write it came from (a reject's shows in its sheet). */
   const failure = ref<(DecisionFailure & { from: "run" | "approve" | "reject" }) | null>(null);
@@ -39,9 +50,13 @@ export function useApproval(
     busy.value = "approve";
     failure.value = null;
     try {
-      const r = await approveRevision(key.value, reportId);
+      const r = await approveRevision(key.value, reportId, ops(key.value.revisionId, reportId));
       if (r.ok) refetch();
-      else failure.value = { ...decisionFailure(r.error, rev(), "approve"), from: "approve" };
+      else
+        failure.value = {
+          ...decisionFailure(r.error, rev(), "approve", viewerId, composedName()),
+          from: "approve",
+        };
     } finally {
       busy.value = null;
     }

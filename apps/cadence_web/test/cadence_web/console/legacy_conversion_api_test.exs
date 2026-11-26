@@ -10,6 +10,8 @@ defmodule CadenceWeb.Console.LegacyConversionAPITest do
 
   alias Cadence.Comms.{GroundStation, GroundStationStore, RoutingRule, RoutingRuleStore}
   alias Cadence.Comms.{Transport, TransportStore}
+  alias Cadence.Configuration.Submission
+  alias Cadence.Governance.ActivationPolicy
   alias CadenceWeb.TestFixtures
 
   setup do
@@ -72,6 +74,8 @@ defmodule CadenceWeb.Console.LegacyConversionAPITest do
       stager: TestFixtures.member_conn(stager),
       reviewer: TestFixtures.member_conn(reviewer),
       base: "/api/console/v1/missions/#{mission.mission_id}",
+      org_id: org.organization_id,
+      mission_id: mission.mission_id,
       rule: rule
     }
   end
@@ -113,6 +117,25 @@ defmodule CadenceWeb.Console.LegacyConversionAPITest do
              }
            } =
              read(c.reviewer, c, "/config")
+  end
+
+  # fe-setup on #555: the mission is 'direct', but a conversion batch is forced to need a second
+  # person, so its submit is a Request review and a refusal there opens "Not sent for review:".
+  test "a conversion set's submit is a Request review even under 'direct'", c do
+    assert %{"data" => %{"change_set_id" => set_id}} =
+             c.stager |> post(c.base <> "/routes/legacy-conversion", %{}) |> json_response(201)
+
+    refute ActivationPolicy.evidence(c.org_id, c.mission_id)[
+             "approval_required"
+           ]
+
+    assert Submission.needs_approval?(c.org_id, c.mission_id, set_id)
+
+    refute Submission.needs_approval?(
+             c.org_id,
+             c.mission_id,
+             "change_set_missing"
+           )
   end
 
   test "while a batch is staged: no second batch, and no other staging", c do

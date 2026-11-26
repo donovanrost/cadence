@@ -21,18 +21,18 @@ staged bar appears or updates, with a one-time 2s `raised` wash on the bar. No t
 
 | Surface | Stage CTA | Staged change summary (bar + list) |
 | --- | --- | --- |
-| Profile field edit (P1) + P4 aside | `Stage edit` | `Block 1 · framing.tm_frame_length 1,115 → 1,279 · 499 SC` |
+| Profile field edit (P1) + P4 aside | `Stage edit` | `Block 1 · framing.tm_frame_length 1,115 → 1,279 · 499 spacecraft` |
 | Profile routing rule (P2) | `Stage rule change` | `Block 1 · routing adds INU · +500 routes` |
 | Override reset (P3 `Reset`) | `Stage reset` | `EARENDIL-047 · reset VBAT red limit to profile` |
 | Add spacecraft (S2) | `Stage 50 spacecraft` | `50 new spacecraft (Block 2)` |
-| Catalog rollout (S3 C3) | `Stage rev 15 for Block 2` | `Catalog rev 15 → Block 2 · 50 SC` |
+| Catalog rollout (S3 C3) | `Stage rev 15 for Block 2` | `Catalog rev 15 → Block 2 · 50 spacecraft` |
 | Station, transport, data source, app setting edits | `Stage change` | `Svalbard · antenna 2 disabled` |
 Fields with a staged edit render the Profile board's edited state everywhere they appear: inset
 3px white left bar, `raised` bg, label suffix `· staged`, old value struck in mono `text-4`, new
 value in the input. Panel meta counts them: `INHERITED BY 500 · 1 EDIT STAGED`.
 
 **P4 Staged edit aside** (shown while a field is dirty and not yet staged): field path (mono),
-`− old` (crit-text) / `+ new` (nominal-text) lines, tiles `Changes 499 SC` / `Keeps 1 SC`, checks
+`− old` (crit-text) / `+ new` (nominal-text) lines, tiles `Changes 499 spacecraft` / `Keeps 1 spacecraft`, checks
 as callouts (caution "1,279-byte frames need flight software 3.2. **0 of 499** run it today…"),
 the keeps explanation ("EARENDIL-389 keeps its pinned 1,115 override"), primary `Stage edit`,
 secondary `Discard`. Effect counts come from the server (dry-run), not computed in the browser.
@@ -71,9 +71,9 @@ STAGED · NOT APPLIED   2 changes: 50 new spacecraft (Block 2), catalog rev 15 �
 lbl "EARENDIL · STAGED CHANGES"
 h1 "Apply r6 · 2 changes"                                  base r5 · staged 14:02Z–14:40Z
 ┌ K1 Changes (flex 999) ─────────────────────────────┐ ┌ K3 Apply (aside, sticky) ───────┐
-│ ▸ 50 new spacecraft (Block 2)       Mira K.    [×] │ │ tiles: Changes 2 · SC 549 · Routes +300
-│   diff: table of the 50 + routes                   │ │ Readiness after: 0 blockers (=) │
-│ ▸ Catalog rev 15 → Block 2 · 50 SC  Mira K.    [×] │ │ Why (required textarea)         │
+│ ▸ 50 new spacecraft (Block 2)       Mira K.    [×] │ │ 2 · Spacecraft 549 · Routes +300│
+│   diff: table of the 50 + routes                   │ │ Readiness after: 0 blockers …   │
+│ ▸ Catalog rev 15 → Block 2 · 50 spacecraft  [×]    │ │ Why (required textarea)         │
 ├ K2 Checks (GO / NO-GO poll) ───────────────────────┤ │ [Apply as r6]  (commit, 46px)   │
 │ Conflicts · Readiness · In flight · Compatibility  │ │ [Request review] (policy)       │
 └────────────────────────────────────────────────────┘ └─────────────────────────────────┘
@@ -113,16 +113,29 @@ h1 "Apply r6 · 2 changes"                                  base r5 · staged 14
     someone else." / "Checks couldn't run: the connection dropped." / "Checks ran, but the server's reply wasn't
     understood."
     - The first load, with no previous check, still reads `Running checks…`.
-- **K3 Apply aside:** tiles Changes · SC · Routes (changes, resulting fleet size, routes delta) and the readiness
-  delta line; the authors are a meta line, not a tile (ux, audit K9: four-eyes needs them). **Why** textarea
-  (required, 10+ chars; goes in the audit and the revision list; "Say why (10 characters or more)."); caption "Goes
-  in the revision and the audit log"; primary `Apply as r6`.
+- **K3 Apply aside:** tiles Changes · Spacecraft · Routes (changes, resulting fleet size, routes delta) and the readiness
+  delta line; the authors are a meta line, not a tile (ux, audit K9: four-eyes needs them). Words (ca-ux 11-20,
+  from the preview's `outcome`, #522):
+  - `Spacecraft` (U102: the word, never "SC"): the fleet after applying (`outcome.spacecraft.after`), "549".
+    `Routes`: the usable routes added minus removed, "+300", "−50", "0", or both when both are nonzero, "+300 −50"
+    (counts with separators). Routes are the per-spacecraft routes a profile's rules generate, never the rules.
+  - Readiness line: "Readiness after: 0 blockers (no change) · 2 cautions (no change) · 0 not set up (was 1)".
+    Blockers always; caution, stale and not set up only when nonzero now or after; each change in words, never
+    "(=)".
+  - `outcome` null (the pipeline halted, or a read failed): the tiles stay, `Spacecraft —` and `Routes —`, and in
+    place of the readiness line the muted "Cadence couldn't work out these changes' effect on the fleet and its
+    readiness. The checks still run." (ux: never drop the tiles silently).
+  - Authors, muted under the tiles: "Staged by you, Mira K. and 2 more". The viewer first as "you"; a service with
+    "(a service identity)" (U103); nameless people drop from the names but count; up to 3, then "and N more"; nobody
+    named, "Staged by 2 people". Never an id.
+  - **Why** textarea (required, 10+ chars; goes in the audit and the revision list; "Say why (10 characters or
+    more)."); caption "Goes in the revision and the audit log"; primary `Apply as r6`.
   - Apply's disabled reasons (A6), first that applies: "Waiting for checks."; a NO-GO names it, "Can't apply yet:
     <the NO-GO's line>"; "Acknowledge the holds first."; "Say why (10 characters or more)."; without the apply
     capability, the page says who can apply, never only "You can stage changes but not apply them."
   - If mission policy requires review (DECISIONS #7 pattern, policy-driven): primary becomes `Request review`, and
-    after sending, "Sent for review. An org member who didn't stage any of these changes approves or sends it
-    back."
+    after sending, "Sent for review. Another person who didn't stage any of these changes approves it or sends
+    it back." (ca-ux 11-20, #320: the sender can't review either.)
   - **The reviewer** (distinct from **every** author in the set, change-sets §7; capability-gated) sees `Approve &
     apply as r6` and `Send back`. The comment is optional on Approve and required for Send back ("Add a comment for
     the author."; ux, audit K9). If the server requires one on Approve, that's an api item, not words. After Send
@@ -218,6 +231,14 @@ Ask an org admin to make changes." Never hide the data, only the controls.
 ## 6. v1 seam (retired)
 Change sets are live, so the v1 seam (DECISIONS #1, U2: no staged bar, direct v1 CTAs) is gone. Stage points stage
 into the mission's change set; there's no v1 binding left.
+
+## 7. The monitoring lane (U108)
+Limits, derived points and alarm rules are staged in a second lane, **Monitoring**, beside **Configuration**
+(ADR-020 addendum, DECISIONS #93). Each lane has its own open set, staged bar line, review page
+(`M/setup/changes/monitoring`), and neither freezes the other. A monitoring set in review doesn't pause monitoring
+staging (only its own points are blocked); the configuration lane keeps §2's *In review* state (DECISIONS #13).
+Revisions share one sequence. Under "Applies without approval" the monitoring editors apply in one step (`Apply now`, inline preview),
+with no trip here. U108 has the words and the checks.
 
 ## Questions for domain (model must answer these for the UX to hold)
 1. One open change set per mission, shared by all authors? (UX assumes yes.)

@@ -35,6 +35,9 @@ defmodule Cadence.Applications.OpsConsole.Actions.PlanReviewWorkflow do
       {:error, :forbidden} -> {:rejected, ["forbidden"]}
       # Under 'independent' approval the requester can't approve their own plan (director 11-15).
       {:error, :contact_plan_self_approval_forbidden} -> {:rejected, ["forbidden"]}
+      # #280: refused before anything was recorded, like the line above.
+      {:error, {:contact_plan_self_approval_forbidden, _via}} -> {:rejected, ["forbidden"]}
+      {:error, {:contact_plan_approver_authors_unknown, _}} -> {:rejected, ["forbidden"]}
       {:error, reason} when reason in @no_effect -> {:rejected, ["review_changed"]}
       # A newer version overtook it (ContactPlans): nothing was approved or booked.
       {:error, {reason, _detail}} when reason in @superseded -> {:rejected, ["review_changed"]}

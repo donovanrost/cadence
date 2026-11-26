@@ -1,6 +1,7 @@
 defmodule CadenceWeb.ActivationJSON do
   @moduledoc false
 
+  alias CadenceWeb.API.ActorDocument
   alias CadenceWeb.API.CatalogJSON, as: CatalogJSON
 
   alias Cadence.Activations.BindingSetActivation
@@ -19,7 +20,7 @@ defmodule CadenceWeb.ActivationJSON do
       binding_set_content_sha256: request.binding_set_content_sha256,
       change_class: Atom.to_string(request.change_class),
       state: Atom.to_string(request.state),
-      requester_actor: request.requester_actor_document,
+      requester_actor: ActorDocument.public(request.requester_actor_document),
       policy: request.policy_document,
       metadata: request.metadata,
       requested_at: iso8601(request.requested_at),
@@ -35,7 +36,7 @@ defmodule CadenceWeb.ActivationJSON do
       organization_id: decision.organization_id,
       mission_id: decision.mission_id,
       decision: Atom.to_string(decision.decision),
-      actor: decision.actor_document,
+      actor: ActorDocument.public(decision.actor_document),
       reason: decision.reason,
       decided_at: iso8601(decision.decided_at)
     }
@@ -49,7 +50,7 @@ defmodule CadenceWeb.ActivationJSON do
       organization_id: execution.organization_id,
       mission_id: execution.mission_id,
       status: Atom.to_string(execution.status),
-      executor_actor: execution.executor_actor_document,
+      executor_actor: ActorDocument.public(execution.executor_actor_document),
       activation_id: execution.activation_id,
       generation: execution.generation,
       binding_set_content_sha256: execution.binding_set_content_sha256,
@@ -67,13 +68,24 @@ defmodule CadenceWeb.ActivationJSON do
     }
   end
 
-  @spec approval_result(ActivationRequest.t(), ActivationDecision.t(), ActivationExecution.t()) ::
-          map()
-  def approval_result(request, decision, execution) do
+  @doc """
+  The approve answer once the approval is recorded (#263): `outcome` is `applied` when the apply
+  succeeded, else `needs_review` (it failed, didn't finish, or couldn't start; `execution` is null
+  when none was recorded). Never a refusal: the approval stands.
+  """
+  @spec approval_result(
+          ActivationRequest.t(),
+          ActivationDecision.t(),
+          ActivationExecution.t() | nil,
+          binary()
+        ) :: map()
+  def approval_result(request, decision, execution, outcome)
+      when outcome in ["applied", "needs_review"] do
     %{
       request: request(request),
       decision: decision(decision),
-      execution: execution(execution)
+      execution: execution && execution(execution),
+      outcome: outcome
     }
   end
 

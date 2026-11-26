@@ -2,6 +2,8 @@ defmodule CadenceWeb.Console.SpacecraftAppAPITest do
   @moduledoc "L19: the apps installable on one spacecraft."
   use CadenceWeb.ConnCase, async: false
 
+  import Ecto.Query
+
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Applications.TelemetryDecom
   alias Cadence.Auth.Scope
@@ -95,5 +97,74 @@ defmodule CadenceWeb.Console.SpacecraftAppAPITest do
 
     assert state.(c.base) == "activation_pending"
     refute state.(other_base) == "activation_pending"
+
+    # #471 (#146's rule): the requester is named while an active member; never by email.
+    requested_by = fn ->
+      c
+      |> get_conn(c.base)
+      |> json_response(200)
+      |> get_in(["data", "apps"])
+      |> Enum.find(&(&1["key"] == "telemetry_decom"))
+      |> get_in(["status", "activation_request", "requested_by"])
+    end
+
+    assert requested_by.() == %{"name" => c.user.display_name}
+
+    id = c.user.user_id
+
+    Cadence.Repo.update_all(
+      from(u in Cadence.Accounts.UserRow, where: u.user_id == ^id),
+      set: [display_name: ""]
+    )
+
+    assert requested_by.() == nil
+  end
+
+  # An outsider can't request at all (forbidden), so the case is a requester who has since left.
+  test "a requester who has left the organization isn't named, and no email is sent", c do
+    c.user |> TestFixtures.member_conn() |> post(c.base <> "/telemetry_decom/install", %{})
+
+    binding =
+      BindingSet.new(%{
+        organization_id: c.org.organization_id,
+        mission_id: c.mission.mission_id,
+        binding_set_id: TelemetryDecom.binding_set_id(c.mission.mission_id),
+        version: 1
+      })
+
+    {:ok, binding} = Cadence.Governance.persist_binding_set(c.org.organization_id, binding)
+
+    leaver = TestFixtures.persist_user!(display_name: "Former Member")
+    membership = TestFixtures.grant_membership!(leaver, c.org, role: :organization_admin)
+
+    scope = %Scope{
+      actor_kind: :user,
+      user: leaver,
+      organization_id: c.org.organization_id,
+      mission_id: c.mission.mission_id,
+      organization_membership: membership,
+      capabilities: MapSet.new([:organization_admin])
+    }
+
+    {:ok, _request} =
+      Activations.request(scope, c.mission.mission_id, binding.binding_set_id, 1,
+        metadata: %{"triggering_spacecraft_id" => c.craft.spacecraft_id}
+      )
+
+    leaver_id = leaver.user_id
+
+    Cadence.Repo.update_all(
+      from(m in Cadence.Accounts.OrganizationMembershipRow, where: m.user_id == ^leaver_id),
+      set: [lifecycle_state: "revoked"]
+    )
+
+    body = c |> get_conn(c.base) |> json_response(200)
+    app = Enum.find(body["data"]["apps"], &(&1["key"] == "telemetry_decom"))
+
+    assert %{"state" => "activation_pending", "activation_request" => %{"requested_by" => nil}} =
+             app["status"]
+
+    refute Jason.encode!(body) =~ leaver.email
+    refute Jason.encode!(body) =~ "Former Member"
   end
 end

@@ -2,7 +2,7 @@
 import type { MissionId } from "@/api/index.ts";
 import { computed, ref, watch } from "vue";
 import { fieldErrors, useRemoteQuery } from "@/api";
-import { failureOutcome, SchemaForm, type FormValues } from "@/features/changes/index.ts";
+import { SchemaForm, type FormValues } from "@/features/changes/index.ts";
 import { ApButton, ApCallout, ApEmptyState, ApField, ApPanel, ApRemote } from "@/ui";
 import PolicyDecision from "./PolicyDecision.vue";
 import {
@@ -12,6 +12,7 @@ import {
   groupSummaries,
   groupTitles,
   initialValues,
+  policySaveFailure,
   REASON_MAX,
   savePolicy,
 } from "./policy.ts";
@@ -60,7 +61,7 @@ async function save() {
           tone: "nominal",
           text: `Saved as v${result.value.version}. It's active once another admin approves it.`,
         }
-      : { tone: "crit", text: failureOutcome(result.error, "changed").sentence };
+      : { tone: "crit", text: policySaveFailure(result.error) };
     refetch();
   } finally {
     busy.value = false;

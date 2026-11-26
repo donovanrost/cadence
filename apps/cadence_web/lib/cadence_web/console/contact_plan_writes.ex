@@ -64,8 +64,20 @@ defmodule CadenceWeb.Console.ContactPlanWrites do
   def refuse(conn, _plan_id, {:contact_plan_self_approval_forbidden, because}),
     do:
       Problem.respond(conn, :contact_plan_self_approval_forbidden, %{
-        because: Atom.to_string(because)
+        because: Atom.to_string(because),
+        via_service: nil
       })
+
+  # #280 (U100): a service identity the approver is accountable for submitted or wrote it.
+  def refuse(conn, _plan_id, {:contact_plan_self_approval_forbidden, because, via}),
+    do:
+      Problem.respond(conn, :contact_plan_self_approval_forbidden, %{
+        because: Atom.to_string(because),
+        via_service: via
+      })
+
+  def refuse(conn, _plan_id, {:contact_plan_approver_authors_unknown, details}),
+    do: Problem.respond(conn, :contact_plan_approver_authors_unknown, details)
 
   def refuse(conn, plan_id, :contact_plan_not_pending_approval),
     do: Problem.respond(conn, :plan_not_pending, not_pending(conn, plan_id))
@@ -150,8 +162,9 @@ defmodule CadenceWeb.Console.ContactPlanWrites do
     decision =
       case Scheduling.latest_decision(org_id(conn), mission_id(conn), plan_id) do
         %{actor_document: %{"id" => id} = actor, decided_at: at} ->
-          # The plan read's own rule for a decider's name (ContactPlanOverview).
-          name = actor["display_name"] || actor["name"] || actor["email"]
+          # The plan read's own rule for a decider's name (ContactPlanOverview). Never the
+          # email a row written before #466 may hold.
+          name = actor["display_name"] || actor["name"]
           %{decided_by: %{id: id, name: name}, decided_at: at}
 
         _none ->

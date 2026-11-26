@@ -12,8 +12,10 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovalsTest do
     PlanSubmissions
   }
 
+  alias Cadence.Control.PlanResubmission
   alias Cadence.Governance.ActivationPolicy
-  alias Cadence.Management.Contacts.Store.ContactPlanApprovalRow
+  alias Cadence.Management.Contacts.Store.{ContactPlanApprovalRow, ContactPlanVersionRow}
+  alias Cadence.Persistence.JsonDocument
   alias Cadence.Spacecraft
 
   @organization_id "org-contact-plan-approvals"
@@ -106,9 +108,19 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovalsTest do
              "kind" => "user",
              "id" => context.admin_scope.user.user_id,
              "user_id" => context.admin_scope.user.user_id,
-             "display_name" => context.admin_scope.user.display_name,
-             "email" => context.admin_scope.user.email
+             "display_name" => context.admin_scope.user.display_name
            }
+
+    # #466: the stored row carries the same document, with no email.
+    assert [stored_actor] =
+             Repo.all(
+               from(row in ContactPlanApprovalRow,
+                 where: row.contact_plan_id == ^plan.contact_plan_id,
+                 select: row.actor_document
+               )
+             )
+
+    assert JsonDocument.unwrap_value(stored_actor) == approval.actor_document
 
     assert approval.actor_kind == :user
     assert approval.actor_id == context.admin_scope.user.user_id
@@ -527,6 +539,183 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovalsTest do
 
     assert revised.current_version == 2
     assert version_two.content_sha256 != version.content_sha256
+  end
+
+  describe "#277: every author since the last approval is kept apart, not only the last cut" do
+    setup context do
+      %{admin_plan: admin_plan(context)}
+    end
+
+    test "the administrator who drafted v1 can't approve v2 that a member cut", context do
+      %{plan: plan, version: v2} = send_back_and_cut(context)
+
+      assert {:error, :contact_plan_self_approval_forbidden} =
+               approve_as(context.admin_scope, %{plan: plan, version: v2})
+
+      assert approved_rows(plan.contact_plan_id) == []
+    end
+
+    test "nor after the console's resubmit, whose server cut is the member's", context do
+      %{plan: plan} = context.admin_plan
+      send_back(context, plan)
+
+      assert {:ok, {:submitted, _answer}} =
+               PlanResubmission.submit(
+                 context.member_scope,
+                 @mission_id,
+                 plan.contact_plan_id,
+                 %{operation_id: "op-277-resubmit", expected_version: 1},
+                 fn _version -> :ok end
+               )
+
+      assert {:ok, pending, v2} =
+               ContactPlans.fetch(@organization_id, @mission_id, plan.contact_plan_id)
+
+      assert v2.version == 2
+      assert v2.created_by == context.member_scope.user.user_id
+
+      assert {:error, :contact_plan_self_approval_forbidden} =
+               approve_as(context.admin_scope, %{plan: pending, version: v2})
+    end
+
+    test "an administrator who authored nothing approves, and the record names who they were kept apart from",
+         context do
+      %{plan: plan, version: v2} = send_back_and_cut(context)
+
+      assert {:ok, _approved, _version, _approval} =
+               approve_as(other_admin_scope(context), %{plan: plan, version: v2})
+
+      assert [separated_from] = approved_rows(plan.contact_plan_id)
+
+      assert separated_from ==
+               Enum.sort([context.admin_scope.user.user_id, context.member_scope.user.user_id])
+    end
+
+    test "authors before the last approval on record don't count", context do
+      %{plan: plan} = send_back_and_cut(context)
+
+      assert {:ok, _draft, v3} =
+               ContactPlans.version(context.member_scope, @mission_id, plan.contact_plan_id, 2, %{
+                 rationale: "The member's second revision"
+               })
+
+      assert {:ok, pending} =
+               ContactPlans.submit(
+                 context.member_scope,
+                 @mission_id,
+                 plan.contact_plan_id,
+                 3,
+                 "Revised again"
+               )
+
+      # v2 approved on record: only v3's author (and the submitter) count, not v1's.
+      record_prior_approval(plan, 2)
+
+      assert {:ok, _approved, _version, _approval} =
+               approve_as(context.admin_scope, %{plan: pending, version: v3})
+
+      assert [[member]] = approved_rows(plan.contact_plan_id) -- [[]]
+      assert member == context.member_scope.user.user_id
+    end
+  end
+
+  describe "#277: authors the check can't name" do
+    test "a system cut (neither a person nor a service) counts no one", context do
+      set_created_by(context.plan.contact_plan_id, 1, "cadence:fleet-planner")
+
+      assert {:ok, _plan, _version, _approval} = approve(context)
+
+      assert [separated_from] = approved_rows(context.plan.contact_plan_id)
+      assert "cadence:fleet-planner" in separated_from
+    end
+
+    test "a version with no recorded author fails closed", context do
+      set_created_by(context.plan.contact_plan_id, 1, "")
+
+      assert {:error, {:contact_plan_approver_authors_unknown, %{service: nil}}} =
+               approve(context)
+
+      assert approved_rows(context.plan.contact_plan_id) == []
+    end
+  end
+
+  # Another administrator sends the administrator's plan back; the member cuts v2 and submits it.
+  defp send_back_and_cut(context) do
+    %{plan: plan} = context.admin_plan
+    send_back(context, plan)
+
+    assert {:ok, _draft, v2} =
+             ContactPlans.version(context.member_scope, @mission_id, plan.contact_plan_id, 1, %{
+               rationale: "The member's revision"
+             })
+
+    assert {:ok, pending} =
+             ContactPlans.submit(
+               context.member_scope,
+               @mission_id,
+               plan.contact_plan_id,
+               2,
+               "Revised"
+             )
+
+    %{plan: pending, version: v2}
+  end
+
+  defp send_back(context, plan) do
+    {:ok, _plan, version} =
+      ContactPlans.fetch(@organization_id, @mission_id, plan.contact_plan_id)
+
+    assert {:ok, _sent_back, _version, _decision} =
+             ContactPlanApprovals.reject(
+               other_admin_scope(context),
+               @mission_id,
+               plan.contact_plan_id,
+               version.version,
+               version.content_sha256,
+               "Needs the backup station",
+               now: DateTime.add(@now, 1, :second)
+             )
+  end
+
+  # The separated_from of every approval of the plan.
+  defp approved_rows(plan_id) do
+    Repo.all(
+      from(row in ContactPlanApprovalRow,
+        where: row.contact_plan_id == ^plan_id and row.decision == "approved",
+        order_by: row.contact_plan_version,
+        select: row.separated_from
+      )
+    )
+  end
+
+  # An approval of `version` on record, written around the code (no path re-approves a plan).
+  defp record_prior_approval(plan, version) do
+    Repo.insert_all("contact_plan_approvals", [
+      %{
+        contact_plan_approval_id: "approval-277-prior-#{plan.contact_plan_id}",
+        organization_id: @organization_id,
+        mission_id: @mission_id,
+        contact_plan_id: plan.contact_plan_id,
+        contact_plan_version: version,
+        decision: "approved",
+        content_sha256: String.duplicate("a", 64),
+        actor_kind: "user",
+        actor_id: "earlier-approver",
+        actor_document: JsonDocument.wrap_value(%{"kind" => "user", "id" => "earlier-approver"}),
+        decided_at: @now,
+        inserted_at: @now
+      }
+    ])
+  end
+
+  defp set_created_by(plan_id, version, created_by) do
+    {1, _} =
+      Repo.update_all(
+        from(v in ContactPlanVersionRow,
+          where: v.contact_plan_id == ^plan_id and v.version == ^version
+        ),
+        set: [created_by: created_by]
+      )
   end
 
   # A plan an administrator wrote and submitted, from the same planning snapshot; the setup's own

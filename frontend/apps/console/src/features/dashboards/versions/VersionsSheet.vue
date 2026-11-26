@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
 import { computed, nextTick, ref } from "vue";
-import { ApButton, ApCallout, ApSheet } from "@/ui";
+import { announcePolite, ApButton, ApCallout, ApSheet } from "@/ui";
 import ChangeList from "../editor/ChangeList.vue";
 import type { SourceWarning } from "../editor/contracts.ts";
 import JsonDiffView from "./JsonDiffView.vue";
 import VersionRows from "./VersionRows.vue";
-import { useVersions } from "./useVersions.ts";
+import { compareSentence, useVersions } from "./useVersions.ts";
 import { focusLost, refocus } from "../focus-fallback.ts";
 
 /**
@@ -24,6 +24,13 @@ const selected = ref<number[]>([]);
 const json = ref(false);
 const pending = ref<number | null>(null);
 const pair = computed(() => (selected.value.length === 2 ? selected.value : null));
+
+/** B6: a compare's outcome is read (a failure is the crit callout, an alert). */
+async function compare([a, b]: readonly number[]) {
+  await v.compare(a ?? 0, b ?? 0);
+  const c = v.comparison.value;
+  if (!v.error.value && c) announcePolite(compareSentence(c));
+}
 
 /**
  * Focus (a11y A1, A5): the first version's checkbox once the list arrives, unless the user has
@@ -123,7 +130,7 @@ defineExpose({ open });
         class="mr-auto"
         :disabled="!pair"
         disabled-reason="Pick two versions."
-        @click="pair && v.compare(pair[0] ?? 0, pair[1] ?? 0)"
+        @click="pair && compare(pair)"
         >Compare</ApButton
       >
       <ApButton variant="primary" @click="sheet?.close()">Close</ApButton>

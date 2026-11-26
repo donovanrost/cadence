@@ -246,6 +246,46 @@ defmodule CadenceWeb.Console.DataSourceBindingsAPITest do
     assert %{"display_name" => "Cadence managed store"} = List.last(events)["to"]
   end
 
+  # #471 (#146's rule): on an organization's own binding, a member is named; someone outside the
+  # organization (a platform admin acting as support) is recorded but neither named nor
+  # identified, and nobody's email is sent.
+  test "an organization's binding history names members only, never by email", c do
+    n = System.unique_integer([:positive])
+
+    {:ok, own} =
+      DataSources.persist_data_binding(
+        %DataBinding{
+          binding_id: "org_telemetry_#{n}",
+          organization_id: c.org.organization_id,
+          mission_id: c.mission.mission_id,
+          realm: "flight",
+          logical_source: :telemetry,
+          data_source_id: c.binding.data_source_id
+        },
+        actor_id: c.member.user_id
+      )
+
+    {:ok, _changed} =
+      DataSources.persist_data_binding(%{own | data_source_id: c.to.data_source_id},
+        actor_id: c.admin.user_id
+      )
+
+    body =
+      c.member
+      |> TestFixtures.member_conn()
+      |> get(c.base <> "/data-source-bindings/#{own.binding_id}/events")
+      |> json_response(200)
+
+    assert %{"data" => %{"events" => [changed, registered]}} = body
+    assert changed["actor"] == %{"id" => nil, "name" => nil}
+    assert registered["actor"] == %{"id" => c.member.user_id, "name" => "Mira K."}
+
+    encoded = Jason.encode!(body)
+    refute encoded =~ c.admin.email
+    refute encoded =~ c.admin.user_id
+    refute encoded =~ c.member.email
+  end
+
   defp admin_conn(c) do
     c.admin
     |> TestFixtures.member_conn()

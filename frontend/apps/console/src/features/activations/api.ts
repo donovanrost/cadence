@@ -360,10 +360,33 @@ export function replacedBy(r: ActivationRequest): string | null {
   return r.state === "superseded" ? (r.superseded_by ?? null) : null;
 }
 
+/** #280 (U94): the service identity a separation refusal came through, when it did. */
+const separation = d.object({
+  via_service: orNull(d.object({ id: d.string, name: d.nullable(d.string) })),
+});
+
+/**
+ * U94 (#275, readers first): the requester refusal, under the old code and the new one. When it came
+ * through a service identity the person is accountable for, that service is named (U20: "you
+ * requested this" would be untrue); a nameless one drops its name, never shows its id (U25).
+ */
+function requesterRefusal(error: ApiError): string {
+  const via = detailsOf(error, separation)?.via_service ?? null;
+  const ending = "so another person approves it. Your approval wasn't recorded.";
+  if (via === null) return `Not approved: you requested this, ${ending}`;
+  const service = via.name?.trim()
+    ? `${via.name}, a service identity you're accountable for,`
+    : "a service identity you're accountable for";
+  return `Not approved: ${service} requested this, ${ending}`;
+}
+
 /** One sentence for a refused decision (U20). */
 export function decideFailure(error: ApiError): string {
-  if (isError(error, "self_approval_forbidden"))
-    return "You requested this. Someone else approves it.";
+  if (
+    isError(error, "activation_self_approval_forbidden") ||
+    isError(error, "self_approval_forbidden")
+  )
+    return requesterRefusal(error);
   if (isError(error, "not_requester")) return "Only the person who requested it can withdraw it.";
   if (isError(error, "not_pending")) return "It's already decided. Reload to see how.";
   if (isError(error, "nothing_to_resume"))

@@ -79,7 +79,9 @@ const pickDay = (t: number | null) =>
       />
     </ApPageHeader>
     <ApTabLinks :links="contactsSections" active="review" label="Contacts sections" />
-    <ApCallout v-if="exporter.failure.value" tone="caution">{{ exporter.failure.value }}</ApCallout>
+    <ApCallout v-if="exporter.failure.value" tone="caution" role="alert">{{
+      exporter.failure.value
+    }}</ApCallout>
     <SummarySection :state="summary.state.value" @retry="summary.refetch" />
     <ApRemote :state="daily.state.value" loading-label="Loading 30 days…" @retry="daily.refetch">
       <template #default="{ value }"><DailyPanel :daily="value" :day="win.day.value" /></template>

@@ -3,15 +3,15 @@ import { computed, ref } from "vue";
 import { useRemoteQuery } from "@/api";
 import {
   ApButton,
-  ApCallout,
+  type ApColumn,
   ApField,
   ApPageHeader,
   ApPanel,
   ApRemote,
   ApTable,
   formatShort,
+  OutcomeCallout,
   plural,
-  type ApColumn,
 } from "@/ui";
 import { fetchOrganizations } from "./api.ts";
 import OrganizationCreate from "./OrganizationCreate.vue";
@@ -44,7 +44,7 @@ function created(text: { tone: "nominal" | "caution"; text: string }) {
   <ApPageHeader label="Platform admin · organizations" :title="title" size="reading">
     <ApButton variant="primary" @click="create?.open()">Create organization</ApButton>
   </ApPageHeader>
-  <ApCallout v-if="note" :tone="note.tone">{{ note.text }}</ApCallout>
+  <OutcomeCallout v-if="note" :outcome="note" />
   <ApField v-model="q" label="Filter" hidden-label placeholder="Filter by name or slug" />
   <ApPanel index="O1" title="Organizations" flush>
     <ApRemote

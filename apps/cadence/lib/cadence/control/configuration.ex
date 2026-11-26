@@ -59,6 +59,14 @@ defmodule Cadence.Control.Configuration do
          do: Status.change_set(mission.mission_id, change_set_id)
   end
 
+  @doc """
+  Whether submitting the set is a Request review (see `Submission.needs_approval?/3`). It doesn't
+  authorize: only for wording a submit the caller already authorized, never as a read (api-ops).
+  """
+  @spec needs_approval?(Scope.t(), String.t(), String.t()) :: boolean()
+  def needs_approval?(%Scope{} = scope, mission_id, change_set_id),
+    do: Submission.needs_approval?(scope.organization_id, mission_id, change_set_id)
+
   @spec stage(Scope.t(), String.t(), map(), [map()]) :: {:ok, map()} | {:error, term()}
   def stage(%Scope{} = scope, mission_id, attrs, ops) do
     with {:ok, mission} <- Access.authorize(scope, mission_id, :stage) do
@@ -112,30 +120,64 @@ defmodule Cadence.Control.Configuration do
   @doc """
   Dry run of the staged set (`change_set_id`) or of unstaged ops (`{:ops, ops}`, e.g. the
   Profile P4 aside). Nothing is written.
+
+  `opts`: `outcome:` a module with `reader/3` and `shape/1` (`Reads.ChangeSetOutcome`, passed by
+  the console's preview endpoints, #522) adds K3's `outcome`. Submit and review never pass one.
   """
-  @spec preview(Scope.t(), String.t(), String.t() | {:ops, [map()]}) ::
+  @spec preview(Scope.t(), String.t(), String.t() | {:ops, [map()]}, keyword()) ::
           {:ok, Preview.t()} | {:error, term()}
-  def preview(%Scope{} = scope, mission_id, {:ops, ops}) do
+  def preview(scope, mission_id, arg, opts \\ [])
+
+  def preview(%Scope{} = scope, mission_id, {:ops, ops}, opts) do
     with {:ok, mission} <- Access.authorize(scope, mission_id, :read),
          {:ok, prepared} <- Staging.prepare_ops(mission.organization_id, mission.mission_id, ops) do
       head = Ledger.ensure_head(mission.organization_id, mission.mission_id)
 
       mission.organization_id
-      |> Preview.run(mission.mission_id, head.revision_number, prepared)
+      |> Preview.run(
+        mission.mission_id,
+        head.revision_number,
+        prepared,
+        outcome_opts(opts, mission, prepared)
+      )
+      |> with_outcome(opts)
       |> ScidSharing.for_viewer(scope, mission)
     end
   end
 
-  def preview(%Scope{} = scope, mission_id, change_set_id) when is_binary(change_set_id) do
+  def preview(%Scope{} = scope, mission_id, change_set_id, opts) when is_binary(change_set_id) do
     with {:ok, mission} <- Access.authorize(scope, mission_id, :read),
          {:ok, set} <- ChangeSetStore.fetch(mission.mission_id, change_set_id) do
       ops = ChangeSetStore.staged_ops(set.change_set_id)
 
       mission.organization_id
-      |> Preview.run(mission.mission_id, set.base_revision_number, ops)
+      |> Preview.run(
+        mission.mission_id,
+        set.base_revision_number,
+        ops,
+        outcome_opts(opts, mission, ops)
+      )
+      |> with_outcome(opts)
       |> ScidSharing.for_viewer(scope, mission)
     end
   end
+
+  # #522: only the explicit preview carries `outcome` (K3); the submit and review gate doesn't.
+  defp outcome_opts(opts, mission, ops) do
+    case Keyword.get(opts, :outcome) do
+      nil -> []
+      module -> [outcome: module.reader(mission.organization_id, mission.mission_id, ops)]
+    end
+  end
+
+  defp with_outcome({:ok, preview}, opts) do
+    case Keyword.get(opts, :outcome) do
+      nil -> {:ok, preview}
+      module -> {:ok, Map.update(preview, :outcome, nil, &module.shape/1)}
+    end
+  end
+
+  defp with_outcome(error, _opts), do: error
 
   @doc "Params: `reason` (required), `expected_version`, `acknowledged_holds`."
   @spec submit(Scope.t(), String.t(), String.t(), map()) :: {:ok, map()} | {:error, term()}

@@ -8,7 +8,9 @@ defmodule Cadence.TestSupport.CatalogTestActor do
   alias Cadence.Catalog.Actor
 
   @spec system() :: Actor.t()
-  def system, do: Actor.system("test:catalog-fixture", "Cadence test fixture")
+  # #513: a system actor names the person who ran it; for fixtures, a runner id no test approves as.
+  def system,
+    do: Actor.system("test:catalog-fixture", "Cadence test fixture", "test-fixture-runner")
 
   @doc "`opts` with the test system actor as `requested_by`, unless it names one already."
   @spec opts(keyword()) :: keyword()

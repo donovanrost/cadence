@@ -17,7 +17,7 @@ defmodule CadenceWeb.Console.ConfigController do
     SpacecraftOps
   }
 
-  alias Cadence.Reads.{ChangeSetViewer, ConfigKindSchema, ConfigLabels}
+  alias Cadence.Reads.{ChangeSetOutcome, ChangeSetViewer, ConfigKindSchema, ConfigLabels}
   alias CadenceWeb.Console.{ConfigJSON, ConfigParams, Problem}
 
   def show(conn, _params) do
@@ -61,7 +61,7 @@ defmodule CadenceWeb.Console.ConfigController do
 
   def preview_set(conn, %{"change_set_id" => id}),
     do:
-      Configuration.preview(scope(conn), mission_id(conn), id)
+      Configuration.preview(scope(conn), mission_id(conn), id, outcome: ChangeSetOutcome)
       |> labelled(conn)
       |> with_active_configuration(conn)
       |> wrap()
@@ -72,7 +72,9 @@ defmodule CadenceWeb.Console.ConfigController do
          {:ok, ops} <-
            params(SpacecraftOps.prepare(scope(conn).organization_id, mission_id(conn), ops)),
          {:ok, preview} <-
-           Configuration.preview(scope(conn), mission_id(conn), {:ops, ops})
+           Configuration.preview(scope(conn), mission_id(conn), {:ops, ops},
+             outcome: ChangeSetOutcome
+           )
            |> labelled(conn)
            |> with_active_configuration(conn) do
       ok(conn, preview)
@@ -93,7 +95,17 @@ defmodule CadenceWeb.Console.ConfigController do
          {:ok, result} <- Configuration.submit(scope(conn), mission_id(conn), id, submit) do
       ok(conn, applied_with_configuration(result, conn))
     end
-    |> reply(conn)
+    |> reply(assign(conn, :submit_act, submit_act(conn, id)))
+  end
+
+  # mms-ux (for ca-ux): a submit's refusals name its act. Under 'needs a second person's approval'
+  # the button is Request review, so the server-worded refusals open "Not sent for review:". The
+  # act is the submit's own decision, a legacy route conversion's forced approval included
+  # (fe-setup on #555), not a second read of the mission's setting.
+  defp submit_act(conn, change_set_id) do
+    if Configuration.needs_approval?(scope(conn), mission_id(conn), change_set_id),
+      do: :request_review,
+      else: :apply
   end
 
   def review(conn, %{"change_set_id" => id} = body) do

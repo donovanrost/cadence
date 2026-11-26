@@ -45,7 +45,8 @@ defmodule CadenceWeb.CommandingActorAssignmentApiTest do
 
     assert %{
              "data" => %{
-               "owner" => %{"actor_kind" => "service", "service_identity_id" => "svc-bootstrap"}
+               # #465: REST names an actor as {kind, id, name}, never the stored document.
+               "owner" => %{"kind" => "service", "id" => "svc-bootstrap"}
              }
            } =
              created

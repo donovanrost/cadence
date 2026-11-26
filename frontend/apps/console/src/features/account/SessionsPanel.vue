@@ -3,14 +3,14 @@ import { ref } from "vue";
 import { useRemoteQuery } from "@/api";
 import {
   ApButton,
-  ApCallout,
+  type ApColumn,
   ApPanel,
   ApRemote,
   ApTable,
   ApTag,
   formatShort,
+  OutcomeCallout,
   plural,
-  type ApColumn,
 } from "@/ui";
 import { fetchSessions, signOutOthers, signOutSession } from "./api.ts";
 
@@ -90,7 +90,7 @@ const others = () =>
             >Sign out other sessions</ApButton
           >
           <span v-else class="text-sm text-text-3">Only this session is signed in.</span>
-          <ApCallout v-if="note" :tone="note.tone">{{ note.text }}</ApCallout>
+          <OutcomeCallout v-if="note" :outcome="note" />
         </div>
       </template>
     </ApRemote>

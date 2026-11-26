@@ -33,8 +33,7 @@ defmodule Cadence.Contacts.ProviderChangeApprovalsTest do
     ProviderReservationRow
   }
 
-  alias Cadence.ProviderChangeFixtures
-  alias Cadence.Repo
+  alias Cadence.{ProviderChangeFixtures, Repo}
 
   test "an organization admin approves the exact proposal and appends one revision" do
     context = pending_change()
@@ -88,6 +87,7 @@ defmodule Cadence.Contacts.ProviderChangeApprovalsTest do
              )
 
     assert audit.action == "provider_change.approved"
+    refute inspect([approval.actor_document, audit.actor_document]) =~ "email"
   end
 
   test "stale hash and superseded revision cannot be approved" do

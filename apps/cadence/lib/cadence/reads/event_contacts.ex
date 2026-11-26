@@ -57,6 +57,17 @@ defmodule Cadence.Reads.EventContacts do
         end
       end)
 
+    facts_for(organization_id, mission_id, contacts)
+  end
+
+  @doc """
+  `contact_facts/3` for scheduled contacts the caller already holds: no per-contact lookup, only
+  the transports and stations, once (#361's listener overlap reads, api-ops).
+  """
+  @spec facts_for(binary(), binary(), [map()]) :: map()
+  def facts_for(_organization_id, _mission_id, []), do: %{}
+
+  def facts_for(organization_id, mission_id, contacts) do
     transport_ids =
       contacts |> Enum.map(&transport_id/1) |> Enum.reject(&is_nil/1) |> Enum.uniq()
 

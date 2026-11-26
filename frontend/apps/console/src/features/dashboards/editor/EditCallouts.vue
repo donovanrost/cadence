@@ -1,15 +1,15 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import { ApButton, ApCallout, formatClock } from "@/ui";
+import { computed, watch } from "vue";
+import { ApButton, ApCallout, formatClock, refocusFirst } from "@/ui";
 import type { SkippedEvent } from "./contracts.ts";
-import type { Conflict, Notice } from "./useEditSession.ts";
+import type { Notice, ShownConflict } from "./useEditSession.ts";
 
 /**
  * Edit-mode callouts: someone saved meanwhile (Continue editing / Discard mine), plus the
  * session's latest notice (a refused edit, edits that no longer apply, the command cap).
  */
 const props = defineProps<{
-  conflict: Conflict | null;
+  conflict: ShownConflict | null;
   notice: Notice | null;
   busy: boolean;
   resumed: boolean;
@@ -17,6 +17,14 @@ const props = defineProps<{
   retiredLibrary: boolean;
 }>();
 const emit = defineEmits<{ continue: []; discardMine: [] }>();
+/** A5: Continue editing and Discard mine take the callout, and the focused button, with them. */
+watch(
+  () => props.conflict,
+  (now, was) => {
+    if (was && !now) refocusFirst();
+  },
+  { flush: "post" },
+);
 const savedLine = computed(() => {
   const c = props.conflict;
   if (!c) return "";
@@ -58,7 +66,7 @@ const noticeText = computed(() => {
 </script>
 
 <template>
-  <ApCallout v-if="conflict" tone="caution">
+  <ApCallout v-if="conflict" tone="caution" :role="conflict.refused ? 'alert' : 'status'">
     {{ savedLine }}
     <template #action>
       <span class="flex gap-2">
@@ -83,6 +91,7 @@ const noticeText = computed(() => {
   <ApCallout
     v-if="noticeText"
     :tone="notice?.kind === 'skipped' || notice?.kind === 'too_many_commands' ? 'caution' : 'crit'"
+    role="alert"
   >
     {{ noticeText }}
   </ApCallout>

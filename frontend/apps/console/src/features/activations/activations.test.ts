@@ -218,9 +218,25 @@ describe("app activation approvals (L10)", () => {
       kind === "forbidden"
         ? { kind, code, message: "Refused." }
         : { kind, code, message: "Refused.", details: null };
-    expect(decideFailure(refused("forbidden", "self_approval_forbidden"))).toBe(
-      "You requested this. Someone else approves it.",
+    // U94 (#275): the old code and the new one read the same requester line.
+    for (const code of ["self_approval_forbidden", "activation_self_approval_forbidden"])
+      expect(decideFailure(refused("forbidden", code))).toBe(
+        "Not approved: you requested this, so another person approves it. Your approval wasn't recorded.",
+      );
+    const via = (via_service: unknown): ApiError => ({
+      kind: "forbidden",
+      code: "activation_self_approval_forbidden",
+      message: "Refused.",
+      details: { via_service },
+    });
+    // #280: through a service identity the person is accountable for; nameless, never its id.
+    expect(decideFailure(via({ id: "svc_1", name: "Nightly planner" }))).toBe(
+      "Not approved: Nightly planner, a service identity you're accountable for, requested this, so another person approves it. Your approval wasn't recorded.",
     );
+    expect(decideFailure(via({ id: "svc_1", name: null }))).toBe(
+      "Not approved: a service identity you're accountable for requested this, so another person approves it. Your approval wasn't recorded.",
+    );
+    expect(decideFailure(via(null))).toContain("Not approved: you requested this");
     expect(decideFailure(refused("conflict", "not_pending"))).toContain("already decided");
     expect(decideFailure(refused("forbidden", "not_requester"))).toBe(
       "Only the person who requested it can withdraw it.",

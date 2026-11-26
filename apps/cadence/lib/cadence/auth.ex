@@ -7,7 +7,7 @@ defmodule Cadence.Auth do
 
   alias Cadence.Accounts
   alias Cadence.Accounts.OrganizationMembership
-  alias Cadence.Auth.{Policy, Scope, ServiceIdentity, ServiceIdentityRow}
+  alias Cadence.Auth.{Policy, Scope, ServiceAccountability, ServiceIdentity, ServiceIdentityRow}
   alias Cadence.Missions
   alias Cadence.Organizations
   alias Cadence.Repo
@@ -18,13 +18,17 @@ defmodule Cadence.Auth do
           api_token: binary()
         }
 
-  @spec issue_service_identity(ServiceIdentity.t()) ::
+  @doc """
+  Issues a service identity on behalf of `issued_by`, the acting scope. Its actor is recorded as
+  accountable for the identity in the same transaction (#280, `ServiceAccountability`).
+  """
+  @spec issue_service_identity(ServiceIdentity.t(), Scope.t()) ::
           {:ok, issued_service_identity()} | {:error, term()}
-  def issue_service_identity(%ServiceIdentity{} = service_identity) do
+  def issue_service_identity(%ServiceIdentity{} = service_identity, %Scope{} = issued_by) do
     api_token = generate_api_token()
 
     with :ok <- validate_service_identity_scope(service_identity) do
-      persist_service_identity(service_identity, api_token)
+      persist_service_identity(service_identity, api_token, issued_by)
     end
   end
 
@@ -177,22 +181,27 @@ defmodule Cadence.Auth do
     Organizations.fetch_organization(organization_membership.organization_id)
   end
 
-  defp persist_service_identity(%ServiceIdentity{} = service_identity, api_token) do
+  defp persist_service_identity(%ServiceIdentity{} = service_identity, api_token, issued_by) do
     case Repo.transaction(fn ->
-           insert_service_identity_or_rollback(service_identity, api_token)
+           insert_service_identity_or_rollback(service_identity, api_token, issued_by)
          end) do
       {:ok, result} -> {:ok, result}
       {:error, reason} -> {:error, reason}
     end
   end
 
-  defp insert_service_identity_or_rollback(%ServiceIdentity{} = service_identity, api_token) do
-    case insert_service_identity(Repo, service_identity, api_token) do
-      {:ok, persisted_service_identity} ->
-        %{service_identity: persisted_service_identity, api_token: api_token}
-
-      {:error, reason} ->
-        Repo.rollback(reason)
+  defp insert_service_identity_or_rollback(service_identity, api_token, issued_by) do
+    with {:ok, persisted} <- insert_service_identity(Repo, service_identity, api_token),
+         :ok <-
+           ServiceAccountability.record(
+             persisted.organization_id,
+             persisted.service_identity_id,
+             :issued,
+             issued_by
+           ) do
+      %{service_identity: persisted, api_token: api_token}
+    else
+      {:error, reason} -> Repo.rollback(reason)
     end
   end
 
@@ -229,6 +238,21 @@ defmodule Cadence.Auth do
   end
 
   @doc """
+  Which of `ids` are service identities, in any organization (#472: so a shared actor read can
+  say "a service" for another organization's identity without naming it or sending its id).
+  """
+  @spec service_identity_ids([binary()]) :: MapSet.t(binary())
+  def service_identity_ids([]), do: MapSet.new()
+
+  def service_identity_ids(ids) when is_list(ids) do
+    ServiceIdentityRow
+    |> where([r], r.service_identity_id in ^Enum.uniq(ids))
+    |> select([r], r.service_identity_id)
+    |> Repo.all()
+    |> MapSet.new()
+  end
+
+  @doc """
   `%{service_identity_id => display_name}` for the ids that belong to `organization_id` and have a
   display name; another organization's identity is left out (mms-security 11-19, #146).
   """
@@ -246,6 +270,25 @@ defmodule Cadence.Auth do
     |> select([r], {r.service_identity_id, r.display_name})
     |> Repo.all()
     |> Map.new()
+  end
+
+  @doc """
+  `%{service_identity_id => display_name | nil}` for the ids that belong to `organization_id`,
+  a nameless one included (nil). Another organization's identity is left out (#471).
+  """
+  @spec organization_service_identities(binary(), [binary()]) :: %{binary() => binary() | nil}
+  def organization_service_identities(_organization_id, []), do: %{}
+
+  def organization_service_identities(organization_id, ids)
+      when is_binary(organization_id) and is_list(ids) do
+    ServiceIdentityRow
+    |> where(
+      [r],
+      r.organization_id == ^organization_id and r.service_identity_id in ^Enum.uniq(ids)
+    )
+    |> select([r], {r.service_identity_id, r.display_name})
+    |> Repo.all()
+    |> Map.new(fn {id, name} -> {id, if(is_binary(name) and name != "", do: name)} end)
   end
 
   @doc "Active service identities with key creation time (no token material), by name."

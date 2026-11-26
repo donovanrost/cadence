@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useConnection, useMissionInvalidation } from "@/live";
@@ -13,7 +13,7 @@ import { LIVE_PUSH, useDashboardLive } from "../viewer/useDashboardLive.ts";
 import { fetchPlaylist, playlistDeleted } from "./api.ts";
 import PresentLine from "./PresentLine.vue";
 import { usePresent } from "./usePresent.ts";
-import { inDialog } from "../focus-fallback.ts";
+import { focusedControlOwns, inDialog, refocus } from "../focus-fallback.ts";
 
 /**
  * Present a playlist (ux): a kiosk takeover rotating its dashboards through the viewer's own read
@@ -65,9 +65,12 @@ const connection = useConnection();
 /** Esc or Exit: back to Playlists, whose Present for this playlist takes focus again (ux). */
 const leave = () =>
   void router.push({ name: "ops.dashboards.playlists", state: { presentFocus: id.value } });
-/** From anywhere in the takeover, but not from a sheet it opened (Inspect's Esc closes only it). */
+/**
+ * From anywhere in the takeover, but not from a sheet it opened (Inspect's Esc closes only it),
+ * and not over a focused control that uses the key (B8: Space on a button presses it).
+ */
 function onKey(event: KeyboardEvent) {
-  if (inDialog(event)) return;
+  if (inDialog(event) || focusedControlOwns(event)) return;
   if (event.key === "ArrowRight") show.next();
   else if (event.key === "ArrowLeft") show.previous();
   else if (event.key === " ") {
@@ -75,6 +78,13 @@ function onKey(event: KeyboardEvent) {
     show.togglePause();
   } else if (event.key === "Escape") leave();
 }
+/** B4, A5: each step re-reads the board; focus that was in the old one goes to the new heading. */
+const heading = ref<HTMLElement | null>(null);
+watch(
+  () => shown.value.status,
+  () => refocus(heading.value),
+  { flush: "post" },
+);
 onMounted(() => window.addEventListener("keydown", onKey));
 onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 </script>
@@ -114,7 +124,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
         :aria-label="show.current.value?.name ?? 'Dashboard'"
         class="flex min-h-0 flex-1 flex-col gap-2"
       >
-        <h2 class="m-0 font-display text-sm uppercase tracking-title text-text-2">
+        <h2 ref="heading" class="m-0 font-display text-sm uppercase tracking-title text-text-2">
           {{ show.current.value?.name }}
         </h2>
         <ViewerBody :state="shown" :stale="connection === 'offline'" @retry="view.refetch" />

@@ -43,10 +43,14 @@ defmodule Cadence.Configuration.Access do
     end
   end
 
-  @doc ~s(Durable actor document `%{"kind", "id", "name"}` for audit fields.)
+  @doc """
+  Durable actor document `%{"kind", "id", "name"}` for audit fields. A person's `name` is their
+  display name or nil, never their email (#471, ca-security's P1 on #462). Reads name actors
+  through `Configuration.ActorNames` by id, so the stored name is only a record of the time.
+  """
   @spec actor(Scope.t()) :: map()
   def actor(%Scope{actor_kind: :user, user: user}),
-    do: %{"kind" => "user", "id" => user.user_id, "name" => user.display_name || user.email}
+    do: %{"kind" => "user", "id" => user.user_id, "name" => present(user.display_name)}
 
   def actor(%Scope{actor_kind: :service, service_identity: service}),
     do: %{
@@ -54,6 +58,9 @@ defmodule Cadence.Configuration.Access do
       "id" => service.service_identity_id,
       "name" => service.display_name
     }
+
+  defp present(name) when is_binary(name) and name != "", do: name
+  defp present(_none), do: nil
 
   @doc "Key identifying an actor for author comparisons."
   @spec actor_key(map()) :: String.t()

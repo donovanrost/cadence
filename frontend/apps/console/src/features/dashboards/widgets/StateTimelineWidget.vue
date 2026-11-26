@@ -1,13 +1,22 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { WorkspacePlacement } from "../model/snapshot.ts";
-import { formatTime, limitLabel, stateLanes, type LimitState } from "../model/widget-data.ts";
+import {
+  formatTime,
+  laneSentence,
+  limitLabel,
+  segmentLine,
+  stateLanes,
+  type LimitState,
+} from "../model/widget-data.ts";
+import { useWidgetName } from "./widget-name.ts";
 
 /**
  * State lanes. Limit-carrying segments use the state fills (with the word in the segment and
  * its title); plain enum states use neutral steps only (no hues, OpsLists rule).
  */
 const props = defineProps<{ placement: WorkspacePlacement; now: number }>();
+const name = useWidgetName(() => props.placement);
 const lanes = computed(() => stateLanes(props.placement, props.now));
 const span = computed(() => {
   const segments = lanes.value.flatMap((lane) => lane.segments);
@@ -36,12 +45,24 @@ const title = (state: string, limit: LimitState | null, from: number) =>
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 flex-col gap-2 overflow-auto px-3 py-2">
+  <!-- B1: the scroll box is a tab stop named by its widget. -->
+  <div
+    class="flex h-full min-h-0 flex-col gap-2 overflow-auto px-3 py-2"
+    role="region"
+    tabindex="0"
+    :aria-label="name"
+  >
     <div v-for="lane in lanes" :key="lane.key" class="space-y-1">
       <p class="truncate font-display text-xs uppercase tracking-tag text-text-3">
         {{ lane.label }}
       </p>
-      <div class="relative h-6 overflow-hidden border border-hairline-faint bg-vacuum">
+      <!-- B5: each lane is an image with a sentence; its segments are the picture, so the list
+           after it says each state and when it started. -->
+      <div
+        class="relative h-6 overflow-hidden border border-hairline-faint bg-vacuum"
+        role="img"
+        :aria-label="laneSentence(lane.label, lane.segments)"
+      >
         <div
           v-for="segment in lane.segments"
           :key="segment.key"
@@ -51,10 +72,11 @@ const title = (state: string, limit: LimitState | null, from: number) =>
           :title="title(segment.state, segment.limit, segment.from)"
         >
           <span class="truncate">{{ segment.state }}</span>
-          <!-- The limit is colour and hover title otherwise (a11y B2). -->
-          <span v-if="segment.limit" class="sr-only">, {{ limitLabel[segment.limit] }}</span>
         </div>
       </div>
+      <ul class="sr-only">
+        <li v-for="segment in lane.segments" :key="segment.key">{{ segmentLine(segment) }}</li>
+      </ul>
     </div>
   </div>
 </template>

@@ -20,6 +20,7 @@ const pass = (
   locked: false,
   expires_at: expires === null ? null : `2026-11-13T${expires}:00Z`,
   booking: b,
+  listener_overlap: undefined,
 });
 const ksat = { id: "p-ksat", name: "KSAT" };
 type Plan = Parameters<typeof offerClock>[0];
@@ -49,6 +50,11 @@ describe("K1 offer clock (ux)", () => {
       "KSAT's offer for EARENDIL-012 · SVB-1 · 17:00Z expires at 16:15Z. Send before then, or that pass can't be booked.",
     );
     expect(c?.snapshotId).toBe("s1");
+  });
+
+  it("names a craft it can't read as 'Unknown spacecraft', never its id (#237, U25)", () => {
+    const c = offerClock(plan([pass("s1", "17:00", "16:15")], "16:15"), () => null, now);
+    expect(c?.passText).toBe("Unknown spacecraft · SVB-1 · 17:00Z");
   });
 
   it("never counts up from an expired offer: moves to the next live one and counts the lapsed", () => {

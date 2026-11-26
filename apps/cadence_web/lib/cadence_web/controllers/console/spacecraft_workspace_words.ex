@@ -54,6 +54,10 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceWords do
       "An org admin approves #{pronoun} in Setup › Catalog first."
   end
 
+  # #534 (mms-ux): the draft is untouched, so nothing else needs saying.
+  def message(:packet_definition_version_taken, :submit, _ctx),
+    do: "Not sent: another change saved a packet definition at the same moment. Send it again."
+
   def message(:spacecraft_catalog_required, _action, _ctx),
     do: "Not sent: choose a catalog revision first."
 

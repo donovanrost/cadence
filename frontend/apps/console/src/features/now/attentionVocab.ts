@@ -31,6 +31,8 @@ export const attentionSources = [
   "contact_scid_mismatch",
   // U84 (api, after #99): processing stuck on a fault in Cadence ("Stuck processing").
   "replay_conflict",
+  // U109 (E2, #546): a craft on a composition that's no longer approved.
+  "model_approval_withdrawn",
 ] as const;
 /** pass_resolution conflicts (ops.md §attention). */
 export const attentionConflicts = [

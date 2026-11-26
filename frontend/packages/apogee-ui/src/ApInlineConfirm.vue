@@ -21,7 +21,7 @@ import { focusFirstConnected } from "./lib/focus.ts";
  *   may leave and it stays open.
  * - The trigger slot gets aria-expanded, aria-controls and the click that opens it.
  * - One open at a time: opening another cancels this one.
- * - A refusal is a line under the sentence in a polite live region; focus stays, and the confirm
+ * - A refusal is a line under the sentence, announced as an alert (B6, #463); focus stays, and the confirm
  *   stays open for Cancel or a retry.
  */
 const props = withDefaults(
@@ -37,7 +37,7 @@ const props = withDefaults(
     busyReason?: string | undefined;
     /** Why the action can't run yet (e.g. 'Give a reason first.'); null when it can. */
     blocked?: string | null | undefined;
-    /** The server's refusal, read politely under the sentence. */
+    /** The server's refusal, announced as an alert under the sentence (B6, #463). */
     refusal?: string | null | undefined;
     /** Where focus goes when the trigger is gone after the action (the row's new state line). */
     returnFocus?: HTMLElement | (() => HTMLElement | null) | null | undefined;
@@ -136,8 +136,9 @@ onBeforeUnmount(() => {
   >
     <div class="flex flex-col">
       <p :id="`${id}-q`" class="m-0"><slot /></p>
-      <!-- Always displayed (an empty region has no height) so a refusal is announced. -->
-      <p aria-live="polite" class="m-0 mt-1 text-sm text-caution-text empty:mt-0">
+      <!-- Always displayed (an empty region has no height) so a refusal is announced; a refusal of
+        the person's own act is an alert (a11y B6, #463), not a polite status. -->
+      <p role="alert" class="m-0 mt-1 text-sm text-caution-text empty:mt-0">
         {{ refusal ?? "" }}
       </p>
     </div>

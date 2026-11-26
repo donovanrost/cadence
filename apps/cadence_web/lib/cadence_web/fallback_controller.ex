@@ -208,6 +208,24 @@ defmodule CadenceWeb.FallbackController do
     |> json(%{errors: [%{field: to_string(field), reason: format_reason(reason)}]})
   end
 
+  # #280: REST's envelope has no details (api 11-19). Through a service, the self-approval refusal
+  # answers exactly as the direct one does; the unknown-authors refusal is its own 403.
+  def call(conn, {:error, {:command_request_self_approval_not_allowed, id, _details}}),
+    do: call(conn, {:error, {:command_request_self_approval_not_allowed, id}})
+
+  def call(conn, {:error, {:command_request_approver_authors_unknown, _id, _details}}),
+    do: error_response(conn, :forbidden, "command_request_approver_authors_unknown")
+
+  # REST activations (#280): through a service, the self-approval refusal answers as before.
+  def call(conn, {:error, {:activation_self_approval_forbidden, %{}}}),
+    do: call(conn, {:error, :activation_self_approval_forbidden})
+
+  # #280's service form and #236's spacecraft-list form (#434): one code; REST activations carry
+  # no details.
+  def call(conn, {:error, {:activation_approver_authors_unknown, details}})
+      when is_map(details) or is_list(details),
+      do: error_response(conn, :forbidden, "activation_approver_authors_unknown")
+
   def call(conn, {:error, %Changeset{} = changeset}) do
     conn
     |> put_status(:unprocessable_entity)

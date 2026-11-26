@@ -1,6 +1,6 @@
 # Proposal: the federation browser job in `ci-ok`, after a speed-up
 
-Owner: devops. Status: **proposal, 2026-11-13**. Basis: the first fully green run, #62's PR
+Owner: devops. Status: **done: the browser shards joined `ci-ok` on 2026-11-19** (see the end). Basis: the first fully green run, #62's PR
 run 43378880714, where "Phoenix producer contracts and federation browser" took **11:18**.
 
 ## Where the 11:18 goes
@@ -89,3 +89,21 @@ making the browser suite required.
 
 Frontend quality (4:56, `pnpm verify`) stays in `frontend.yml` for now. It's independent and
 already under 5 min, and it can join `ci-ok` as-is once #63 shows it steady.
+
+## Joined `ci-ok` (2026-11-19)
+
+Both browser shards are in `ci-ok`'s `needs` now, so a failing shard fails the required check. On 11-19, PR #403's
+own change broke `SettingsBrowserTest:19` in "Federation browser (1/2)" (run 44574127956, job 135738952310)
+while `ci-ok` stayed green.
+
+Tally from 2026-11-13T08:21Z (#71 merged) to 2026-11-19 ~17:3xZ: every attempt of every completed `ci.yml` run, 352
+runs (`gh api …/runs/<id>/jobs?filter=all`):
+
+| Job | Success | Failure | Cancelled | Skipped |
+| --- | ---: | ---: | ---: | ---: |
+| Federation browser (both shards) | 327 | 1 | 35 | 122 |
+
+The one failure was real, not a flake: #403's own change (only an org admin may loosen an approval setting), and
+the browser test saved as a plain member. api fixed it in #403 (81c638ed8). Cancelled = superseded runs
+(concurrency), not failures. Skipped = docs-only changes.
+

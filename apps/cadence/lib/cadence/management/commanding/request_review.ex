@@ -9,12 +9,13 @@ defmodule Cadence.Management.Commanding.RequestReview do
 
   # todo(authz): Cedar should decide who may approve or reject this request (any mission
   # operator today, DECISIONS #62, minus self-approval), e.g. by hazard or subsystem.
-  def decide(scope, mission, request, input) do
+  # `opts` reach the approve (a test seam for #263's approved-command check).
+  def decide(scope, mission, request, input, opts \\ []) do
     with {:ok, fresh, _} <- ReviewAccess.authorize(scope, mission),
          {:ok, _} <- Ids.path_segment(request),
          {:ok, decision, reason, review} <- admit(input) do
       actor = %{"actor_kind" => "user", "user_id" => fresh.user.user_id}
-      opts = [reason: reason, expected_review: review]
+      opts = Keyword.merge(opts, reason: reason, expected_review: review)
 
       result =
         case decision do
@@ -76,6 +77,15 @@ defmodule Cadence.Management.Commanding.RequestReview do
 
   defp receipt({:error, {:command_request_self_approval_not_allowed, _}}),
     do: {:rejected, "A different person must review this request."}
+
+  # #280: through a service identity the reviewer is accountable for.
+  defp receipt({:error, {:command_request_self_approval_not_allowed, _, _via}}),
+    do: {:rejected, "A different person must review this request."}
+
+  defp receipt({:error, {:command_request_approver_authors_unknown, _, _service}}),
+    do:
+      {:rejected,
+       "No one can approve this yet: Cadence can't tell who sent this command request."}
 
   # ux U87.
   defp receipt({:error, :command_request_in_group}),

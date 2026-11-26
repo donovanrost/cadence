@@ -149,6 +149,13 @@ describe("SignInScreen", () => {
     await w.get("form").trigger("submit");
     await flushPromises();
     expect(w.text()).toContain("Too many attempts. Try again in 0:42.");
+    // ux #276: the wait is said once as an alert; the ticking countdown isn't a live region.
+    await flushPromises();
+    expect(w.get('p[role="alert"]').text()).toBe("Too many attempts. Try again in 42 seconds.");
+    const liveWithCountdown = w
+      .findAll('[role="status"], [role="alert"]')
+      .filter((e) => e.text().includes("0:42"));
+    expect(liveWithCountdown).toHaveLength(0);
     // Blocked: the primary is disabled with the countdown as its reason (a disabled ApButton isn't a submit).
     const primary = w.findAll("button").find((b) => b.text().startsWith("Sign in"));
     expect(primary?.attributes("aria-disabled")).toBe("true");

@@ -20,12 +20,69 @@ const grant = d.object({
   maximum_horizon_seconds: d.integer,
   maximum_contacts: d.integer,
   maximum_execution_concurrency: d.integer,
-  valid_from: d.timestamp,
-  valid_until: d.timestamp,
-  /** `expired` is computed: active with valid_until passed. */
-  state: d.known(["active", "revoked", "expired"] as const),
+  /** #283: null on a proposal (validity starts at approval, `validity_seconds` long). */
+  valid_from: d.nullable(d.timestamp),
+  valid_until: d.nullable(d.timestamp),
+  /**
+   * #283 (U105): proposals. `expired` is derived on read: an active or suspended grant past
+   * valid_until, or a proposal undecided past proposal_expires_at. #499: `suspended`, by a
+   * tightening of the approval setting, until a second admin resumes it. An unknown state reads as
+   * unrecognized.
+   */
+  state: d.known([
+    "proposed",
+    "active",
+    "suspended",
+    "rejected",
+    "revoked",
+    "withdrawn",
+    "expired",
+  ] as const),
+  /** #499: who saved the tightening that suspended it, when, and at which level; null otherwise. */
+  suspension: orNull(
+    d.object({
+      at: d.timestamp,
+      by: orNull(actor),
+      settings_revision: orNull(d.integer),
+      level: orNull(d.knownText(["mission", "organization"] as const)),
+    }),
+  ),
   approved_by: orNull(actor),
-  approved_at: d.timestamp,
+  approved_at: d.nullable(d.timestamp),
+  /**
+   * #283 keys, read as null when an older server leaves them out (readers first). Person objects are
+   * {id, name}, both null for a non-member.
+   */
+  validity_seconds: orNull(d.integer),
+  proposed_by: orNull(actor),
+  proposed_at: orNull(d.timestamp),
+  proposal_expires_at: orNull(d.timestamp),
+  rejected_by: orNull(actor),
+  rejected_at: orNull(d.timestamp),
+  // free-text: the reason the deciding admin gave when rejecting it.
+  rejection_reason: orNull(d.string),
+  withdrawn_by: orNull(actor),
+  withdrawn_at: orNull(d.timestamp),
+  replaces_grant_id: orNull(d.token),
+  viewer_can_decide: orNull(d.boolean),
+  cannot_decide_because: orNull(
+    d.knownText([
+      "not_admin",
+      "not_a_person",
+      "proposer",
+      // #499: the grant's original approver, for a suspended grant's resume.
+      "approved",
+      "accountable",
+      "authors_unknown",
+      "not_proposed",
+      "policy_changed",
+    ] as const),
+  ),
+  cannot_decide_details: orNull(d.object({ grantee: orNull(actor), service: orNull(actor) })),
+  /** #497: the viewer may narrow it now (the server's flag; the console never computes it). */
+  viewer_can_narrow: orNull(d.boolean),
+  /** #497: issued before #283, so it can only be revoked; its proposal fields read null. */
+  issued_before_two_person_approval: orNull(d.boolean),
   // free-text: the reason the admin gave when granting it.
   reason: d.nullable(d.string),
   revoked_by: orNull(actor),
@@ -36,7 +93,7 @@ const grant = d.object({
 });
 export type Grant = Decoded<typeof grant>;
 
-const grantsReader = d.object({
+export const grantsReader = d.object({
   grants: d.array(grant, 500),
   service_identities: d.array(
     d.object({ id: d.token, name: d.string, state: d.known(["active", "disabled"] as const) }),
@@ -50,6 +107,8 @@ const grantsReader = d.object({
   }),
   policy_version: d.nullable(d.integer),
   permissions: d.array(d.known(["grants.manage"] as const), 10),
+  /** #283: the mission's approval setting for grants; null from an older server. */
+  approval_setting: orNull(d.knownText(["independent", "direct"] as const)),
 });
 export type Grants = Decoded<typeof grantsReader>;
 
@@ -69,11 +128,57 @@ export type GrantBody = Readonly<{
 export function issueGrant(missionId: MissionId, body: GrantBody) {
   return request(base(missionId), d.object({ grant }), { method: "POST", body });
 }
+/** #283: revoke is at once and never refused for a reason or a hash; a reason goes when given. */
 export function revokeGrant(missionId: MissionId, g: Grant, reason: string) {
+  const why = reason.trim();
   return request(`${base(missionId)}/${encodeURIComponent(g.id)}/revoke`, d.object({ grant }), {
     method: "POST",
-    body: { reason, sha256: g.sha256 },
+    body: why ? { reason: why } : {},
   });
+}
+
+/** #283 decisions answer the grant and whether this was a replay of an earlier operation_id. */
+const decided = d.object({ grant, replayed: orNull(d.boolean) });
+export type Decided = Decoded<typeof decided>;
+const decide = (missionId: MissionId, g: Grant, act: string, body: Record<string, unknown>) =>
+  request(`${base(missionId)}/${encodeURIComponent(g.id)}/${act}`, decided, {
+    method: "POST",
+    body,
+  });
+/** Approve the proposal as read (its sha256). */
+export const approveGrant = (missionId: MissionId, g: Grant, operationId: string) =>
+  decide(missionId, g, "approve", { sha256: g.sha256, operation_id: operationId });
+export const rejectGrant = (missionId: MissionId, g: Grant, reason: string, operationId: string) =>
+  decide(missionId, g, "reject", { reason, operation_id: operationId });
+export type NarrowChanges = Readonly<
+  Partial<{
+    allowed_actions: readonly string[];
+    maximum_horizon_seconds: number;
+    maximum_contacts: number;
+    maximum_execution_concurrency: number;
+    validity_seconds: number;
+  }>
+>;
+/** #499: resume a suspended grant as read (its sha256); refused like approve. */
+export const resumeGrant = (missionId: MissionId, g: Grant, operationId: string) =>
+  decide(missionId, g, "resume", { sha256: g.sha256, operation_id: operationId });
+export const narrowGrant = (
+  missionId: MissionId,
+  g: Grant,
+  changes: NarrowChanges,
+  operationId: string,
+) => decide(missionId, g, "narrow", { changes, operation_id: operationId });
+
+/**
+ * #257's rule for operation ids (as reviewOps): a retry of the SAME request reuses its id, so the
+ * server replays what already happened; a changed request is a new id.
+ */
+export function operationIds(newId: () => string = () => crypto.randomUUID()) {
+  let last: Readonly<{ key: string; id: string }> | null = null;
+  return (key: string): string => {
+    if (last?.key !== key) last = { key, id: newId() };
+    return last.id;
+  };
 }
 
 const ACTION_WORDS: Readonly<Record<Grant["allowed_actions"][number], string>> = {
@@ -84,27 +189,66 @@ const ACTION_WORDS: Readonly<Record<Grant["allowed_actions"][number], string>> =
   approve: "approve",
   unrecognized: "other",
 };
-/** "plan, repair, submit". */
+/** "plan, repair, submit" (the table cell). */
 export const canText = (g: Grant) => g.allowed_actions.map((a) => ACTION_WORDS[a]).join(", ");
+/** "plan, repair and submit" (in a sentence, #519). */
+export function canList(g: Grant): string {
+  const words = g.allowed_actions.map((a) => ACTION_WORDS[a]);
+  return words.length < 2
+    ? (words[0] ?? "")
+    : `${words.slice(0, -1).join(", ")} and ${words.at(-1) ?? ""}`;
+}
 /** "48h 00m · 40 contacts · 2 at once". */
 export const limitsText = (g: Grant) =>
   `${formatDuration(g.maximum_horizon_seconds)} · ${plural(g.maximum_contacts, "contact")} · ${g.maximum_execution_concurrency} at once`;
 
-export function grantTag(g: Grant): { state: "nominal" | "off" | "stale"; label: string } {
+/** U105's state tags (mark + word, B2). */
+export function grantTag(g: Grant): {
+  state: "nominal" | "caution" | "off" | "stale";
+  label: string;
+} {
   switch (g.state) {
+    case "proposed":
+      return { state: "caution", label: "PROPOSED" };
     case "active":
       return { state: "nominal", label: "ACTIVE" };
+    case "suspended":
+      return { state: "caution", label: "SUSPENDED" };
     case "expired":
       return { state: "stale", label: "EXPIRED" };
+    case "rejected":
+      return { state: "off", label: "REJECTED" };
+    case "withdrawn":
+      return { state: "off", label: "WITHDRAWN" };
     case "revoked":
+      return { state: "off", label: "REVOKED" };
     case "unrecognized":
-      return { state: "off", label: g.state === "revoked" ? "REVOKED" : "UNKNOWN" };
+      return { state: "off", label: "UNKNOWN" };
   }
 }
-export const untilText = (g: Grant) => formatShort(new Date(g.valid_until));
+/**
+ * "12-19 06:40Z". A proposal (valid_until null until approval) reads its validity from approval
+ * (U105): whole days, else whole hours, else the exact span, never rounded; "Set at approval"
+ * without one. A decided proposal with no valid_until (rejected, withdrawn, expired) reads "—"
+ * (ca-ux, #496).
+ */
+export function untilText(g: Grant): string {
+  if (g.valid_until !== null) return formatShort(new Date(g.valid_until));
+  if (g.state !== "proposed") return "—";
+  const s = g.validity_seconds;
+  return s === null ? "Set at approval" : `${validitySpan(s)} from approval`;
+}
 
-/** "Night ops bot", or its id when the identity is gone. */
-export const identityName = (g: Grant) => g.service_identity.name ?? g.service_identity.id;
+/** A validity length: whole days, else whole hours, else the exact span, never rounded. */
+export const validitySpan = (s: number) =>
+  s % 86_400 === 0
+    ? plural(s / 86_400, "day")
+    : s % 3_600 === 0
+      ? plural(s / 3_600, "hour")
+      : formatDuration(s);
+
+/** "Night ops bot"; a null name reads "Unknown service identity", never its id (U25, U105). */
+export const identityName = (g: Grant) => g.service_identity.name ?? "Unknown service identity";
 
 /** 422 messages with no field of their own (the grant as a whole, the policy evidence). */
 export const generalError = (errors: Readonly<Record<string, string>>) =>

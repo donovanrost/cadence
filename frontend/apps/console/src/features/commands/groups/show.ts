@@ -191,6 +191,10 @@ const event = d.object({
       key: d.optional(d.token),
       hold_basis: d.optional(d.nullable(d.string)),
       at_decision: d.optional(d.boolean),
+      // #546 (ca-engineer): the HOLD's evidence as acknowledged; the Composition check names its targets.
+      evidence: d.optional(
+        d.nullable(d.object({ spacecraft_ids: d.optional(d.array(d.token, 1_000)) })),
+      ),
       // expired (U75): how many went out, and how many it ended.
       sent: d.optional(d.integer),
       not_sent: d.optional(d.integer),

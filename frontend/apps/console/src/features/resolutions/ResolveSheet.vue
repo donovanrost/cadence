@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
-import { computed, ref } from "vue";
-import { ApButton, ApCallout, ApSheet } from "@/ui";
+import { computed, nextTick, ref } from "vue";
+import { ApButton, ApCallout, ApSheet, refocusFirst } from "@/ui";
 import ResolveFields from "./ResolveFields.vue";
 import { failureText, outcomeText, resolveUnconfirmed, type ResolveAction } from "./api.ts";
 import type { ResolvablePass } from "./types.ts";
@@ -65,8 +65,13 @@ async function submit() {
       ...(booked.value ? { provider_reference: reference.value.trim() } : {}),
     });
     if (r.ok) {
+      // #244 (A5): the outcome shows in the sheet; the parent's refresh (which removes this pass's
+      // row, and the sheet with it) waits until the person closes it.
       outcome.value = outcomeText(r.value, provider.value);
-      emit("resolved");
+      resolvedOnClose = true;
+      // The primary that had focus unmounts as the outcome mounts with its text (ux on #590).
+      await nextTick();
+      refocusFirst(outcomeBox.value);
       return;
     }
     const f = failureText(r.error, provider.value);
@@ -77,13 +82,22 @@ async function submit() {
     busy.value = false;
   }
 }
+const outcomeBox = ref<HTMLElement | null>(null);
+let resolvedOnClose = false;
+function onClosed() {
+  if (!resolvedOnClose) return;
+  resolvedOnClose = false;
+  emit("resolved");
+}
 </script>
 
 <template>
   <!-- Kit ApSheet (focus return, Escape); the first field takes focus, Enter submits. -->
-  <ApSheet ref="sheet" :title="title" initial-focus="input, textarea">
+  <ApSheet ref="sheet" :title="title" initial-focus="input, textarea" @closed="onClosed">
     <form class="flex flex-col gap-4" @submit.prevent="submit">
-      <ApCallout v-if="outcome" tone="info">{{ outcome }}</ApCallout>
+      <div v-if="outcome" ref="outcomeBox" tabindex="-1">
+        <ApCallout tone="info">{{ outcome }}</ApCallout>
+      </div>
       <ResolveFields
         v-else
         v-model:reference="reference"

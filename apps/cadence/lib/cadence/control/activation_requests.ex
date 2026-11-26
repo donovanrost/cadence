@@ -14,7 +14,10 @@ defmodule Cadence.Control.ActivationRequests do
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.Management.Activations.Directory
+  alias Cadence.Platform.ExitShape
   alias Cadence.Platform.ScopedReadUpdates
+
+  require Logger
 
   @tabs %{"pending" => :pending, "decided" => :decided}
   @reason_bytes 1..4096
@@ -72,6 +75,9 @@ defmodule Cadence.Control.ActivationRequests do
   @spec approve(Scope.t(), binary(), binary(), map(), keyword()) ::
           {:ok, map()} | {:error, term()}
   def approve(%Scope{} = scope, mission_id, request_id, params, opts \\ []) do
+    # `:execute` is a test seam for an apply that exits (default `ControlActivations.execute/1`).
+    {run, opts} = Keyword.pop(opts, :execute, &ControlActivations.execute/1)
+
     with {:ok, reason} <- reason(params["reason"]),
          {:ok, request} <- pending(scope, mission_id, request_id),
          {:ok, _request, _decision, approved} <-
@@ -79,7 +85,7 @@ defmodule Cadence.Control.ActivationRequests do
            |> ControlActivations.approve(request_id, reason, opts)
            |> Refusals.explain(scope.organization_id, mission_id, request)
            |> decision_result() do
-      outcome = scope |> execute(approved) |> outcome()
+      outcome = run |> execute(approved) |> outcome()
       announce(scope, mission_id)
       reply(scope, mission_id, request_id, outcome)
     end
@@ -132,11 +138,24 @@ defmodule Cadence.Control.ActivationRequests do
   defp refusal?(reason),
     do: reason in [:activation_execution_in_progress, :activation_request_not_found, :forbidden]
 
-  # An apply that raised still leaves the request approved: it reads as needs_review.
-  defp execute(_scope, approved) do
-    ControlActivations.execute(approved)
+  # An apply that raised, exited (a pool or GenServer timeout) or threw still leaves the request
+  # approved: it reads as needs_review, never a 500 for a recorded approval (#263, ca-security).
+  defp execute(run, approved) do
+    run.(approved)
   rescue
     _error -> {:error, :activation_execution_raised}
+  catch
+    :exit, reason -> exited(approved, "exit: " <> ExitShape.describe(reason))
+    :throw, value -> exited(approved, "throw: " <> ExitShape.describe(value))
+  end
+
+  defp exited(approved, cause) do
+    Logger.error(
+      "activation request #{approved.activation_request_id}: approved, but its apply didn't " <>
+        "finish: " <> (cause |> String.split("\n", parts: 2) |> hd())
+    )
+
+    {:error, :activation_execution_raised}
   end
 
   defp outcome({:ok, %{status: :succeeded}}), do: "applied"
@@ -155,8 +174,10 @@ defmodule Cadence.Control.ActivationRequests do
     end
   end
 
+  # #275: the kind-prefixed code, as every other kind's (U94; requester only: an author gets
+  # #236's activation_approver_authored_content). #280 (U100): via_service is always sent.
   defp decision_result({:error, :activation_self_approval_forbidden}),
-    do: {:error, :self_approval_forbidden}
+    do: {:error, {:activation_self_approval_forbidden, %{via_service: nil}}}
 
   defp decision_result({:error, :activation_request_not_pending_approval}),
     do: {:error, {:not_pending, nil}}

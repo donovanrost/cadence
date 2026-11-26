@@ -15,6 +15,7 @@ defmodule Cadence.Reads.PassContactRecord do
   """
 
   alias Cadence.Accounts
+  alias Cadence.Accounts.MemberNames
   alias Cadence.Control.Contacts
 
   @max_paths 100
@@ -99,9 +100,11 @@ defmodule Cadence.Reads.PassContactRecord do
            cursor
          ) do
       {:ok, page} ->
+        people = MemberNames.members(org, Enum.map(page.entries, & &1.created_by))
+
         {:ok,
          %{
-           entries: Enum.map(page.entries, &revision/1),
+           entries: Enum.map(page.entries, &revision(&1, people)),
            next_cursor: page.next && Integer.to_string(page.next)
          }}
 
@@ -145,13 +148,13 @@ defmodule Cadence.Reads.PassContactRecord do
       initial_time: r.initial_time
     }
 
-  defp revision(r) do
+  defp revision(r, people) do
     snapshot = r.snapshot_document || %{}
 
     %{
       revision: r.revision,
       created_at: r.created_at,
-      created_by: creator(r.created_by),
+      created_by: creator(r.created_by, people),
       provider_change_id: r.provider_reservation_change_id,
       starts_at: snapshot["starts_at"],
       ends_at: snapshot["ends_at"],
@@ -203,19 +206,29 @@ defmodule Cadence.Reads.PassContactRecord do
 
   defp tagged(values, side), do: values |> Enum.uniq() |> Enum.map(&%{id: &1, side: side})
 
-  # As plan history's created_by: a person, Cadence itself, or an id we can't name.
-  defp creator(nil), do: nil
-  defp creator("cadence" <> _ = id), do: %{kind: "system", id: id, name: "Cadence"}
-  defp creator("system" <> _ = id), do: %{kind: "system", id: id, name: "Cadence"}
+  # As plan history's created_by: a person, Cadence itself, or an id we can't name. A person is
+  # named, and keeps their id, only while an active member of the mission's organization
+  # (`people`, one lookup per page; #146, #468); any other person reads id and name nil.
+  defp creator(nil, _people), do: nil
+  defp creator("cadence" <> _ = id, _people), do: %{kind: "system", id: id, name: "Cadence"}
+  defp creator("system" <> _ = id, _people), do: %{kind: "system", id: id, name: "Cadence"}
 
-  defp creator(id) when is_binary(id) do
-    case Accounts.fetch_user(id) do
-      {:ok, user} -> %{kind: "user", id: id, name: user.display_name || user.email}
-      _other -> %{kind: nil, id: id, name: nil}
+  defp creator(id, people) when is_binary(id) do
+    case Map.fetch(people, id) do
+      {:ok, name} -> %{kind: "user", id: id, name: name}
+      :error -> outsider(id)
     end
   end
 
-  defp creator(_other), do: nil
+  defp creator(_other, _people), do: nil
+
+  # Only for ids that aren't members: whether the id is a person at all.
+  defp outsider(id) do
+    case Accounts.fetch_user(id) do
+      {:ok, _person} -> %{kind: "user", id: nil, name: nil}
+      _other -> %{kind: nil, id: id, name: nil}
+    end
+  end
 
   defp text(nil), do: nil
   defp text(value), do: to_string(value)

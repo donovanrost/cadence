@@ -8,7 +8,7 @@ defmodule CadenceWeb.Console.StationAvailabilityController do
   use CadenceWeb, :controller
 
   alias Cadence.Comms.StationAvailability
-  alias Cadence.Reads.StationImpact
+  alias Cadence.Reads.{StationImpact, StationWindowActors}
   alias CadenceWeb.Console.{Problem, StationAvailabilityJSON, WindowParams}
 
   @kinds ~w(outage maintenance degraded)
@@ -17,6 +17,8 @@ defmodule CadenceWeb.Console.StationAvailabilityController do
   def index(conn, params) do
     with {:ok, at} <- time(params, "at", DateTime.utc_now()),
          {:ok, statuses} <- StationAvailability.status(scope(conn), mission(conn), :all, at) do
+      statuses = named(conn, statuses)
+
       json(conn, %{
         data: %{at: at, stations: Enum.map(statuses, &StationAvailabilityJSON.status/1)}
       })
@@ -36,6 +38,9 @@ defmodule CadenceWeb.Console.StationAvailabilityController do
              window.from,
              window.to
            ) do
+      # One name lookup for the status and its windows (#468).
+      [status | windows] = named(conn, [status | windows])
+
       json(conn, %{
         data: %{
           status: StationAvailabilityJSON.status(status),
@@ -53,7 +58,9 @@ defmodule CadenceWeb.Console.StationAvailabilityController do
     with {:ok, attrs} <- window_attrs(params),
          {:ok, window} <-
            StationAvailability.schedule(scope(conn), mission(conn), station_id, attrs) do
-      conn |> put_status(:created) |> json(%{data: StationAvailabilityJSON.window(window)})
+      conn
+      |> put_status(:created)
+      |> json(%{data: StationAvailabilityJSON.window(named(conn, window))})
     else
       error -> problem(conn, error)
     end
@@ -63,7 +70,7 @@ defmodule CadenceWeb.Console.StationAvailabilityController do
     reason = if is_binary(params["reason"]), do: params["reason"]
 
     case StationAvailability.clear(scope(conn), mission(conn), window_id, reason) do
-      {:ok, window} -> json(conn, %{data: StationAvailabilityJSON.window(window)})
+      {:ok, window} -> json(conn, %{data: StationAvailabilityJSON.window(named(conn, window))})
       error -> problem(conn, error)
     end
   end
@@ -144,6 +151,9 @@ defmodule CadenceWeb.Console.StationAvailabilityController do
        do: Problem.respond(conn, reason)
 
   defp problem(conn, _error), do: Problem.respond(conn, :not_found)
+
+  # #146 (#468): operators are named only as active members of the mission's organization.
+  defp named(conn, views), do: StationWindowActors.named(views, scope(conn).organization_id)
 
   defp scope(conn), do: conn.assigns.current_scope
   defp mission(conn), do: conn.assigns.current_mission.mission_id

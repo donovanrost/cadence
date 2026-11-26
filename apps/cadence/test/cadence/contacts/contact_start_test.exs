@@ -13,8 +13,9 @@ defmodule Cadence.Contacts.ContactStartTest do
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.Applications.TelemetryDecomFixtures
   alias Cadence.Contacts
-  alias Cadence.Contacts.{ContactStartAttention, ContactStore, Scheduler}
+  alias Cadence.Contacts.{ContactStartAttention, ContactStore, ListenerOverlap, Scheduler}
   alias Cadence.Contacts.{Path, ProviderBinding, ScheduledContact}
+  alias Cadence.Reads.PassListenerOverlap
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
   alias Cadence.Telemetry.PacketDefinition
@@ -297,6 +298,58 @@ defmodule Cadence.Contacts.ContactStartTest do
 
   # Every pass uses the same provider profile, as materialized contacts do: one provider binding
   # id and one fixed listen port.
+  # #361 (domain's condition 5): planning's flag and the runtime's refusal agree on one fixture,
+  # the same listener and the same loser, and the loser binds as the earlier pass lets go.
+  test "the booking-time overlap flag names the pass the runtime refuses, for the seconds it waits",
+       ctx do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    port = free_port()
+    first = schedule!(ctx, "first", DateTime.add(now, -60), DateTime.add(now, 60), port)
+    second = schedule!(ctx, "second", DateTime.add(now, -30), DateTime.add(now, 600), port)
+
+    flags = ListenerOverlap.for_scheduled([first, second])
+    first_id = first.scheduled_contact_id
+
+    assert %{with: ^first_id, loses: "this", seconds: 90, direction: :downlink} =
+             flags[second.scheduled_contact_id]
+
+    assert %{loses: "other"} = flags[first_id]
+    assert flags[second.scheduled_contact_id].listener.port == port
+
+    # The read's wire shape (Reads.Passes rows): this mission's pass named, the listener only for
+    # Technical details, state booked.
+    wire =
+      PassListenerOverlap.for_rows(ctx.organization_id, ctx.mission_id, [
+        %{starts_at: second.starts_at, ends_at: second.ends_at}
+      ])
+
+    assert %{
+             seconds: 90,
+             loses: "this",
+             direction: "downlink",
+             count: 1,
+             listener: %{port: ^port},
+             with: %{state: "booked", starts_at: first_start, spacecraft: %{} = spacecraft}
+           } = wire[second.scheduled_contact_id]
+
+    assert first_start == first.starts_at
+    assert Map.has_key?(spacecraft, :id) and Map.has_key?(spacecraft, :name)
+
+    # The runtime: the flagged loser is the one refused with listener_in_use…
+    assert {:ok, _summary} = Contacts.reconcile(ctx.mission_id, now)
+    second_run = run_id(second)
+
+    assert {:ok, %{metadata: %{"start_failure" => %{"reason" => "listener_in_use"}}}} =
+             ContactStore.fetch_realized(ctx.mission_id, second_run)
+
+    # …and it binds once the earlier pass ends (+60 s, so 90 s after its own start).
+    assert {:ok, _} = Contacts.reconcile(ctx.mission_id, DateTime.add(now, 61))
+
+    assert_eventually(fn ->
+      Cadence.Runtime.realized_contact_running?(ctx.mission_id, second_run)
+    end)
+  end
+
   defp schedule!(ctx, name, starts_at, ends_at, port) do
     id = "#{name}-#{System.unique_integer([:positive])}"
 

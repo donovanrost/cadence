@@ -6,10 +6,10 @@ defmodule Cadence.Control.ActivationRequests.Rows do
   may decide it. `detail/3` adds server-made facts and the decom comparison report.
   """
 
-  alias Cadence.Accounts
   alias Cadence.Control.ActivationRequests.ConfigurationChanges
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Control.Activations.{ApplyAttention, Description}
+  alias Cadence.Control.ActorRef
   alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.Management.Activations.Directory
   alias Cadence.SpacecraftStore
@@ -35,11 +35,14 @@ defmodule Cadence.Control.ActivationRequests.Rows do
     viewer = scope.user && scope.user.user_id
     now = DateTime.utc_now()
 
+    # #470 (#146 C1): people and services named by ActorRef under this organization, never by a
+    # name or email stored in the document.
     names =
-      requests
-      |> Enum.map(& &1.requester_actor_document)
-      |> Kernel.++(Enum.map(Map.values(decisions), & &1.actor))
-      |> user_names()
+      ActorRef.names(
+        org,
+        Enum.map(requests, & &1.requester_actor_document) ++
+          Enum.map(Map.values(decisions), & &1.actor)
+      )
 
     Enum.map(requests, fn request ->
       description = Description.describe(request.metadata || %{})
@@ -131,28 +134,7 @@ defmodule Cadence.Control.ActivationRequests.Rows do
       reason: decision.reason
     }
 
-  defp actor(%{} = document, names) do
-    id = document["id"]
-    kind = document["kind"] || "user"
-    name = document["display_name"] || document["name"] || Map.get(names, id)
-    %{kind: kind, id: id, name: name}
-  end
-
-  defp actor(_none, _names), do: nil
-
-  defp user_names(documents) do
-    for %{"id" => id} = document <- documents,
-        is_binary(id),
-        (document["kind"] || "user") == "user",
-        is_nil(document["display_name"] || document["name"]),
-        uniq: true,
-        into: %{} do
-      case Accounts.fetch_user(id) do
-        {:ok, user} -> {id, user.display_name || user.email}
-        _missing -> {id, nil}
-      end
-    end
-  end
+  defp actor(document, names), do: ActorRef.document(document, names)
 
   defp details(org, mission_id, request, description) do
     [

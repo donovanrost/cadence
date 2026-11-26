@@ -18,7 +18,7 @@ defmodule CadenceWeb.CommandStageController do
          {:ok, filters} <- CommandingParams.command_stage_filters(params) do
       command_stages =
         Commanding.list_command_stages(organization_id, mission_id, filters)
-        |> Enum.map(&CommandingJSON.command_stage/1)
+        |> CommandingJSON.encode_all(&CommandingJSON.command_stage/2)
 
       json(conn, %{data: command_stages})
     end
@@ -125,7 +125,9 @@ defmodule CadenceWeb.CommandStageController do
              staged_command_item_ids,
              requested_by
            ) do
-      json(conn, %{data: Enum.map(command_requests, &CommandingJSON.command_request/1)})
+      json(conn, %{
+        data: CommandingJSON.encode_all(command_requests, &CommandingJSON.command_request/2)
+      })
     end
   end
 end

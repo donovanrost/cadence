@@ -38,6 +38,7 @@ import { targetOfAttention } from "./attention.ts";
 import SettlementBlock from "./SettlementBlock.vue";
 import CutOffNote from "./CutOffNote.vue";
 import ScidMismatchNote from "./ScidMismatchNote.vue";
+import ListenerOverlapNote from "./ListenerOverlapNote.vue";
 import ContactStartBlock from "./ContactStartBlock.vue";
 import ArchiveBlock from "./ArchiveBlock.vue";
 import IngressBlock from "./IngressBlock.vue";
@@ -266,6 +267,7 @@ const countdown = computed(() => {
         :mismatch="pass.scid_mismatch"
         :spacecraft="spacecraft?.name ?? pass.spacecraft?.name ?? null"
       />
+      <ListenerOverlapNote :overlap="pass.listener_overlap" />
       <AttentionBlock
         v-if="resolutionItem"
         :mission-id="missionId"

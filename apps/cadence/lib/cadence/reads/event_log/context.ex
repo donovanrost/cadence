@@ -4,24 +4,22 @@ defmodule Cadence.Reads.EventLog.Context do
   people, dashboards and stations only when the page's entries mention them.
   """
 
+  alias Cadence.Accounts.MemberNames
   alias Cadence.Comms.StationRefs
+  alias Cadence.Control.ActorRef
   alias Cadence.Dashboards.DocumentStore
   alias Cadence.Reads.EventSentences
 
   # Names the sentences use: spacecraft always, people and dashboards only when the page has them.
   @spec load(binary(), binary(), list()) :: map()
   def load(organization_id, mission_id, entries) do
+    # #472 (#146 C1): a person is named only while an active member of this organization,
+    # checked now; anyone else has no entry, and the sentence drops "by" (ux U25).
     users =
-      entries
-      |> Enum.map(&EventSentences.actor_id(&1.actor))
-      |> Enum.reject(&is_nil/1)
-      |> Enum.uniq()
-      |> Map.new(fn id ->
-        case Cadence.Accounts.fetch_user(id) do
-          {:ok, user} -> {id, user.display_name || user.email}
-          _missing -> {id, nil}
-        end
-      end)
+      MemberNames.display_names(
+        organization_id,
+        entries |> Enum.map(&EventSentences.actor_id(&1.actor)) |> Enum.reject(&is_nil/1)
+      )
 
     dashboards =
       if Enum.any?(entries, &String.starts_with?(to_string(&1.kind), "dashboard_")),
@@ -40,10 +38,15 @@ defmodule Cadence.Reads.EventLog.Context do
     %{
       spacecraft: spacecraft_names(organization_id, mission_id),
       users: users,
+      # #488: every actor on the page (people, services, Cadence) through ActorRef, once.
+      actors: ActorRef.names(organization_id, Enum.map(entries, &actor_document(&1.actor))),
       dashboards: dashboards,
       stations: stations
     }
   end
+
+  defp actor_document(%{"value" => value}), do: value
+  defp actor_document(value), do: value
 
   defp spacecraft_names(organization_id, mission_id) do
     organization_id

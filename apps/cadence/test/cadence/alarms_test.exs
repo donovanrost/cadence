@@ -3,8 +3,7 @@ defmodule Cadence.AlarmsTest do
 
   import Cadence.ConfigurationFixtures
 
-  alias Cadence.Accounts.{OrganizationMembershipRow, UserRow}
-  alias Cadence.Alarms.{Episodes, Ground, Notify}
+  alias Cadence.Alarms.{EpisodeEventRow, EpisodeRow, Episodes, Ground, Notify}
   alias Cadence.Control.Alarms
   alias Cadence.Limits.Event
   alias Cadence.Reads.AlarmEpisodes
@@ -99,6 +98,7 @@ defmodule Cadence.AlarmsTest do
     test "acknowledge is idempotent and publishes",
          %{alice: alice, mission: mission, episode: episode} = ctx do
       Notify.subscribe(ctx.org, mission)
+      # #469: named only as a member of the organization (member_scope persists Alice's).
 
       assert {:ok, %{status: :acknowledged, acknowledged_by: %{name: "Alice"}}} =
                Alarms.acknowledge(alice, mission, episode.id)
@@ -112,11 +112,16 @@ defmodule Cadence.AlarmsTest do
 
       assert {:error, :assignee_not_member} = Alarms.assign(alice, mission, episode.id, "nobody")
 
+      # Bob's user and membership are persisted by ConfigurationFixtures.member_scope (#471).
       bob_id = ctx.bob.user.user_id
-      persist_member(ctx.org, ctx.bob)
 
       assert {:ok, %{assignee: %{id: ^bob_id, name: "Bob"}, status: :new}} =
                Alarms.assign(alice, mission, episode.id, bob_id)
+
+      # #469: the stored assignee and actor documents carry no email.
+      stored = Repo.get_by!(EpisodeRow, episode_id: episode.id)
+      refute inspect(stored.assignee) =~ "@"
+      refute inspect(stored.acknowledged_by) =~ "@"
     end
 
     test "hand off needs a note; cleared episodes take notes only", ctx do
@@ -147,6 +152,43 @@ defmodule Cadence.AlarmsTest do
   end
 
   describe "console read" do
+    # #469 (ca-security, dashboards): an outsider's old-form documents (stored before #469 with
+    # an email for a name) never reach the read: the assignee, who acknowledged, each event's
+    # actor and an assignment payload's from/to read {id: nil, name: nil}. No email, no id.
+    test "an outsider's old-form documents read with neither email nor id (#469)", ctx do
+      observe(ctx, :caution, 0)
+      [episode] = list(ctx)
+      {:ok, _} = Alarms.assign(ctx.alice, ctx.mission, episode.id, ctx.bob.user.user_id)
+      {:ok, _} = Alarms.acknowledge(ctx.alice, ctx.mission, episode.id)
+
+      old = %{"id" => "outsider-469", "name" => "out@example.test"}
+      actor = Map.put(old, "kind", "user")
+      id = episode.id
+
+      Repo.update_all(from(e in EpisodeRow, where: e.episode_id == ^id),
+        set: [assignee: old, acknowledged_by: actor]
+      )
+
+      Repo.update_all(from(e in EpisodeEventRow, where: e.episode_id == ^id), set: [actor: actor])
+
+      Repo.update_all(
+        from(e in EpisodeEventRow, where: e.episode_id == ^id and e.kind == "assigned"),
+        set: [payload: %{"from" => old, "to" => old, "note" => nil}]
+      )
+
+      assert {:ok, read} = AlarmEpisodes.get(ctx.alice, ctx.mission, id)
+
+      assert read.assignee == %{id: nil, name: nil}
+      assert read.acknowledged_by == %{kind: "user", id: nil, name: nil}
+      assert Enum.all?(read.events, &(&1.actor == %{kind: "user", id: nil, name: nil}))
+
+      assert [%{"from" => %{"id" => nil, "name" => nil}, "to" => %{"id" => nil, "name" => nil}}] =
+               for(%{payload: %{"from" => _} = payload} <- read.events, do: payload)
+
+      refute inspect(read) =~ "@"
+      refute inspect(read) =~ "outsider-469"
+    end
+
     test "lists episodes with spacecraft and a summary", ctx do
       {:ok, sc} =
         SpacecraftStore.persist_spacecraft(
@@ -217,11 +259,5 @@ defmodule Cadence.AlarmsTest do
   defp list(ctx, filters \\ %{}) do
     {:ok, episodes} = Alarms.list_episodes(ctx.alice, ctx.mission, filters)
     episodes
-  end
-
-  defp persist_member(_org, scope) do
-    Repo.insert!(UserRow.changeset(scope.user))
-
-    Repo.insert!(OrganizationMembershipRow.changeset(scope.organization_membership))
   end
 end

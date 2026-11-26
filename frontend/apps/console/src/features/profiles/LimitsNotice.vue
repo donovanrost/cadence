@@ -9,7 +9,11 @@ import { ApCallout, ApPanel } from "@/ui";
     <ApCallout tone="info"
       >Limits apply mission-wide per point; per-profile limits aren't supported yet. They're set in
       the Limits app:
-      <RouterLink :to="{ name: 'setup.apps' }" class="text-readout hover:underline">Apps</RouterLink
+      <!-- P7 (#313): the Limits app by name, not the Apps list. -->
+      <RouterLink
+        :to="{ name: 'setup.app', params: { appKey: 'limits' } }"
+        class="text-readout hover:underline"
+        >Limits</RouterLink
       >.</ApCallout
     >
   </ApPanel>

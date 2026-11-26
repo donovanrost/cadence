@@ -62,7 +62,12 @@ export function fetchSettings(
 export function saveSection(
   scope: SettingsScope,
   key: string,
-  body: Readonly<{ values: Readonly<Record<string, unknown>>; expected_version: number | null }>,
+  body: Readonly<{
+    values: Readonly<Record<string, unknown>>;
+    expected_version: number | null;
+    /** #499: the digest of the grants the person saw this save suspend, to go ahead. */
+    acknowledged_suspensions?: string;
+  }>,
 ): Promise<ApiResult<{ version: number }>> {
   return request(`${base(scope)}/${encodeURIComponent(key)}`, object({ version: integer }), {
     method: "PUT",

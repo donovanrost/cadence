@@ -16,7 +16,7 @@ defmodule Cadence.ContactPlanning.PlanSupersession do
   state, the console shows it dimmed with why.
   """
 
-  alias Cadence.Accounts
+  alias Cadence.Accounts.MemberNames
 
   alias Cadence.ContactPlanning.{
     ContactPlans,
@@ -52,15 +52,31 @@ defmodule Cadence.ContactPlanning.PlanSupersession do
       now: DateTime.utc_now()
     }
 
-    Map.new(pairs, fn {plan, _version} ->
-      superseded =
-        if plan.lifecycle_state in @open,
-          do:
-            plan
-            |> plan_changes(Map.get(refs, plan.contact_plan_id, []), requirements, context)
-            |> summarize()
+    summaries =
+      Map.new(pairs, fn {plan, _version} ->
+        superseded =
+          if plan.lifecycle_state in @open,
+            do:
+              plan
+              |> plan_changes(Map.get(refs, plan.contact_plan_id, []), requirements, context)
+              |> summarize()
 
-      {plan.contact_plan_id, superseded}
+        {plan.contact_plan_id, superseded}
+      end)
+
+    named(summaries, organization_id)
+  end
+
+  # #146 (#468): `by` names a person only while they're an active member of the plan's
+  # organization, never by email; anyone else (a service, a platform admin, someone who has left)
+  # reads nil, as a service always did. One batched lookup for the whole read.
+  defp named(summaries, organization_id) do
+    ids = for {_plan, %{by: id}} <- summaries, is_binary(id), uniq: true, do: id
+    names = MemberNames.display_names(organization_id, ids)
+
+    Map.new(summaries, fn
+      {plan_id, %{by: id} = summary} -> {plan_id, %{summary | by: actor(id, names)}}
+      other -> other
     end)
   end
 
@@ -260,18 +276,18 @@ defmodule Cadence.ContactPlanning.PlanSupersession do
 
     %{
       at: latest.at,
-      by: actor(latest.by),
+      by: latest.by,
       reason: reason,
       changes: changes |> Enum.map(& &1.change) |> Enum.uniq()
     }
   end
 
-  defp actor(user_id) when is_binary(user_id) do
-    case Accounts.fetch_user(user_id) do
-      {:ok, user} -> %{name: user.display_name || user.email}
-      _system -> nil
+  defp actor(user_id, names) when is_binary(user_id) do
+    case Map.fetch(names, user_id) do
+      {:ok, name} -> %{name: name}
+      :error -> nil
     end
   end
 
-  defp actor(_none), do: nil
+  defp actor(_none, _names), do: nil
 end

@@ -2,7 +2,7 @@ import type { MissionId } from "@/api/index.ts";
 import { computed, type Ref } from "vue";
 import { useRemoteQuery, type ApiResult } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
-import { formatClock, formatRelative, plural } from "@/ui";
+import { formatClock, formatCount, formatRelative, plural } from "@/ui";
 import { fetchGroups, type Preflight } from "../groups/api.ts";
 import { goHoldReason } from "../groups/checks.ts";
 import { fetchGroup, fetchReview, type Group } from "../groups/show.ts";
@@ -73,11 +73,13 @@ export function namelessTargets(
   };
 }
 
-/** "Low power safe · 4 SC", "Mira K. · T+12m", the release sentence and the stack lines. */
+/** "Low power safe · 4 spacecraft", "Mira K. · T+12m", the release sentence and the stack lines. */
 export function yourGoWords(group: Group, nameOf: PersonName, now: Date) {
   const nb = group.release?.not_before;
   return {
-    title: `${group.title} · ${group.target_count} SC`,
+    // U102 (ux 11-20): never "SC"; "spacecraft" reads the same in the singular and the plural.
+    // ux on #580: the count takes its thousands separator ("1,200 spacecraft").
+    title: `${group.title} · ${formatCount(group.target_count)} spacecraft`,
     by: `${nameOf(group.requested_by.user_id)} · ${formatRelative(new Date(group.requested_at), now)}`,
     release: nb
       ? `Held until ${formatClock(new Date(nb))}Z, then each target at its next AOS.`

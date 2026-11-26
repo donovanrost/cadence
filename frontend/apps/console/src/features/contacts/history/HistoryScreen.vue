@@ -3,7 +3,6 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useMissionScope, useSmallScreen } from "@/shell/index.ts";
 import {
-  useNow,
   ApButton,
   ApCallout,
   ApEmptyState,
@@ -11,6 +10,8 @@ import {
   ApPanel,
   ApSheet,
   ApTabLinks,
+  useActed,
+  useNow,
 } from "@/ui";
 import { contactsSections } from "../sections.ts";
 import { useSelectedPass } from "../useSelectedPass.ts";
@@ -76,6 +77,9 @@ watch(
 );
 
 const ready = computed(() => h.ledger.state.value.status === "ready");
+/** B6 (#276): a ledger that fails after a week, filter or Try again is an alert; on load, polite. */
+const ledgerActed = useActed(ready);
+const go = ledgerActed.after(h.go);
 const short = computed(() => h.shortDays.value.length > 0);
 const counts = computed(() => (ready.value ? rowCounts(h.rows.value) : null));
 const meta = computed(() =>
@@ -97,7 +101,7 @@ const sheetTitle = computed(() => {
   const p = pick.selected.value;
   return drawerTitle("pass", p ? look.spacecraftName(p) : null, p ? stationName(p.station) : null);
 });
-const clear = () => h.go({ spacecraft: undefined, station: undefined, state: undefined });
+const clear = () => go({ spacecraft: undefined, station: undefined, state: undefined });
 </script>
 
 <template>
@@ -110,7 +114,7 @@ const clear = () => h.go({ spacecraft: undefined, station: undefined, state: und
       :week="h.query.value.week"
       :span="h.span.value"
       :now="now.getTime()"
-      @week="(w) => h.go({ week: w })"
+      @week="(w) => go({ week: w })"
     />
     <HistoryFilters
       :query="h.query.value"
@@ -119,7 +123,7 @@ const clear = () => h.go({ spacecraft: undefined, station: undefined, state: und
       :names="look.names.value"
       :counts="counts"
       :short="short"
-      @filter="h.go"
+      @filter="go"
     />
     <ApCallout v-for="d in h.shortDays.value" :key="d.day" tone="info">{{
       shortDayCallout(d)
@@ -137,10 +141,16 @@ const clear = () => h.go({ spacecraft: undefined, station: undefined, state: und
         >
           LOADING…
         </p>
-        <ApCallout v-else-if="h.ledger.state.value.status === 'failed'" tone="caution">
+        <ApCallout
+          v-else-if="h.ledger.state.value.status === 'failed'"
+          tone="caution"
+          :role="ledgerActed.role.value"
+        >
           Contact history couldn't load.
           <template #action
-            ><ApButton size="compact" @click="h.ledger.refetch">Try again</ApButton></template
+            ><ApButton size="compact" @click="ledgerActed.after(h.ledger.refetch)()"
+              >Try again</ApButton
+            ></template
           >
         </ApCallout>
         <ApEmptyState
@@ -148,7 +158,7 @@ const clear = () => h.go({ spacecraft: undefined, station: undefined, state: und
           :headline="emptyText(h.span.value, now.getTime(), look.names.value)"
         >
           <ApButton v-if="filtered" size="compact" @click="clear">Clear filters</ApButton>
-          <ApButton v-else size="compact" @click="h.go({ week: older })">‹ Older week</ApButton>
+          <ApButton v-else size="compact" @click="go({ week: older })">‹ Older week</ApButton>
         </ApEmptyState>
         <HistoryTable
           v-else

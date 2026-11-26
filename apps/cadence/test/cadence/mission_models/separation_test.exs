@@ -1,0 +1,125 @@
+defmodule Cadence.MissionModels.SeparationTest do
+  @moduledoc """
+  `RevisionDecisions.separation/4` is the importer/approver separation check approval itself runs
+  (DECISIONS #92 a), and the approval read calls it rather than repeating it. For each policy and
+  viewer, the three answers agree: separation/4, the read's `self_approval`, and approving.
+  """
+  use Cadence.DataCase, async: false
+
+  alias Cadence.Accounts.{OrganizationMembership, User}
+  alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
+  alias Cadence.Auth.Scope
+  alias Cadence.Catalog.Actor
+  alias Cadence.Governance.ActivationPolicy
+  alias Cadence.MissionModels
+  alias Cadence.MissionModels.{Comparison, RevisionDecisions, RevisionRow}
+  alias Cadence.Reads.MissionModelApprovals
+
+  setup do
+    org = "org-model-separation-#{System.unique_integer([:positive])}"
+    mid = "mission-model-separation-#{System.unique_integer([:positive])}"
+    %{organization: organization} = persist_mission_scope(org, mid)
+    importer = scope(organization, "importer-a")
+    {:ok, actor} = Actor.from_scope(importer)
+    revision = Fixtures.persist_imported_revision!(org, mid, approve: false, requested_by: actor)
+
+    %{
+      org: org,
+      mid: mid,
+      importer: importer,
+      other: scope(organization, "admin-c"),
+      model: revision.mission_model_revision_id
+    }
+  end
+
+  test "independent: the importer is refused by all three; another admin by none", c do
+    assert {:refused, %{reason: :self, via_service: nil, service: nil}} =
+             RevisionDecisions.separation(c.org, c.mid, c.model, "importer-a")
+
+    assert read_reason(c.importer, c) == "self_approval"
+    assert {:error, :mission_model_self_approval_forbidden} = approve(c.importer, c)
+
+    assert {:ok, %{policy: policy, importers: ["importer-a"]}} =
+             RevisionDecisions.separation(c.org, c.mid, c.model, "admin-c")
+
+    refute read_reason(c.other, c) == "self_approval"
+    assert {:ok, %{status: :approved}} = approve(c.other, c)
+
+    # Approval records the policy separation/4 checked.
+    assert Repo.get!(RevisionRow, c.model).approved_by["value"]["policy"] == policy
+  end
+
+  test "direct: the importer may approve, and all three agree", c do
+    policy = ActivationPolicy.load(c.org, c.mid)
+
+    assert {:ok, _} =
+             ActivationPolicy.save(c.other, c.mid, policy.token, %{
+               "value" => %{"approval_requirement" => "direct"}
+             })
+
+    assert {:ok, %{importers: ["importer-a"]}} =
+             RevisionDecisions.separation(c.org, c.mid, c.model, "importer-a")
+
+    refute read_reason(c.importer, c) == "self_approval"
+    assert {:ok, %{status: :approved}} = approve(c.importer, c)
+  end
+
+  # #280 (mms-security's review of 4b13d1b87): with no person, separation can't tell the viewer
+  # from an importer, so under 'independent' it fails closed. Approval never gets here without a
+  # person (human approver required first), and the read answers not_admin before it.
+  test "no person (nil) is refused under independent", c do
+    assert {:refused, %{reason: :self, via_service: nil, service: nil}} =
+             RevisionDecisions.separation(c.org, c.mid, c.model, nil)
+  end
+
+  # #513 (MM-2): a seed imports under Cadence's system actor and names the person who ran it; that
+  # person counts as the importer, so the server refuses their approval of the seeded model.
+  test "a seeded model's runner can't approve it under independent; another admin can", c do
+    seeded =
+      Fixtures.persist_imported_revision!(c.org, c.mid,
+        approve: false,
+        requested_by: Actor.system("seed:test-513", "Test seed", "seed-runner")
+      )
+
+    model = seeded.mission_model_revision_id
+    runner = scope(c.other.organization, "seed-runner")
+
+    assert {:refused, %{reason: :self}} =
+             RevisionDecisions.separation(c.org, c.mid, model, "seed-runner")
+
+    {:ok, report} = Comparison.run(c.org, c.mid, model, "separation-binding", 1)
+
+    assert {:error, :mission_model_self_approval_forbidden} =
+             MissionModels.approve_revision(runner, c.mid, model, report["comparison_report_id"])
+
+    assert {:ok, %{status: :approved}} =
+             MissionModels.approve_revision(c.other, c.mid, model, report["comparison_report_id"])
+
+    assert Repo.get!(RevisionRow, model).approved_by["value"]["importer_recorded"] == true
+  end
+
+  defp read_reason(scope, c) do
+    {:ok, read} = MissionModelApprovals.read(scope, c.mid, c.model)
+    read.cannot_decide_because
+  end
+
+  defp approve(scope, c) do
+    {:ok, report} = Comparison.run(c.org, c.mid, c.model, "separation-binding", 1)
+    MissionModels.approve_revision(scope, c.mid, c.model, report["comparison_report_id"])
+  end
+
+  defp scope(organization, user_id) do
+    Scope.new(%{
+      user:
+        User.new(%{user_id: user_id, email: "#{user_id}@example.test", display_name: user_id}),
+      organization_id: organization.organization_id,
+      organization: organization,
+      organization_membership:
+        OrganizationMembership.new(%{
+          user_id: user_id,
+          organization_id: organization.organization_id,
+          role: :organization_admin
+        })
+    })
+  end
+end

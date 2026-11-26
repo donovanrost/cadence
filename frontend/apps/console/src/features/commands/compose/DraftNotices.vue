@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ApButton, ApCallout } from "@/ui";
+import { ApButton, ApCallout, OutcomeCallout } from "@/ui";
 import type { StoredDraft } from "./saved.ts";
 import { savedWhen, type DraftNotice, type DraftStatus } from "./useComposeDraft.ts";
 
@@ -64,5 +64,7 @@ defineEmits<{ resume: []; discardOffered: []; keepMine: []; retry: [] }>();
       <ApButton size="compact" @click="$emit('retry')">Try again</ApButton>
     </template>
   </ApCallout>
-  <ApCallout v-if="notice" :tone="notice.tone">{{ notice.text }}</ApCallout>
+  <!-- The read on opening is a first load (polite); the rest follow the person's act (#276). -->
+  <ApCallout v-if="notice?.onLoad" :tone="notice.tone">{{ notice.text }}</ApCallout>
+  <OutcomeCallout v-else-if="notice" :outcome="notice" />
 </template>

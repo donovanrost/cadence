@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import type { RemoteState } from "@/api";
+import { ListenerOverlapNote } from "@/features/contacts/index.ts";
 import { ApButton, ApEmptyState, ApKeyValue, ApPanel, ApTag, formatDuration } from "@/ui";
 import AlternativesList from "./AlternativesList.vue";
 import StationIssues from "./StationIssues.vue";
 import type { StationHits } from "./unavailable.ts";
 import { stationCode, stationName, type Alternatives, type PlanDetail } from "./api.ts";
-import type { SpacecraftName } from "./names.ts";
+import { craftLabel, type SpacecraftName } from "./names.ts";
+import { useArmedRefocus } from "./useArmedRefocus.ts";
 
 /**
  * D · Selected: a drafted pass (Remove) or another window (Add), then the focused spacecraft's
@@ -39,6 +41,21 @@ const other = computed(() => {
     ? (a.value.alternatives.find((x) => x.snapshot_id === props.selected) ?? null)
     : null;
 });
+/**
+ * #244 (A5): Remove ↔ Add swap in place once the edit lands (the selection stays). After the
+ * person's own click, focus goes to the replacement if it was lost (fe-ops on #590: armed only by
+ * that click, never by a background refetch).
+ */
+const actions = ref<HTMLElement | null>(null);
+const swapFocus = useArmedRefocus(
+  () => (drafted.value ? "drafted" : other.value ? "other" : null),
+  () => actions.value?.querySelector<HTMLElement>("button") ?? null,
+);
+function act(kind: "add" | "remove", snapshotId: string) {
+  swapFocus.arm();
+  if (kind === "add") emit("add", snapshotId);
+  else emit("remove", snapshotId);
+}
 const pass = computed(
   () =>
     drafted.value ??
@@ -94,20 +111,23 @@ const items = computed(() => {
     <template v-if="pass">
       <div class="mb-3 flex flex-wrap items-center gap-2.5">
         <span class="font-mono text-base font-semibold">{{
-          nameOf(pass.spacecraft_id)?.name ?? pass.spacecraft_id
+          craftLabel(nameOf(pass.spacecraft_id))
         }}</span>
         <ApTag v-if="pass.synthetic" state="stale" label="Synthetic" />
       </div>
       <ApKeyValue :items="items" />
+      <!-- U58 (b), #361: a plan pass that may lose its start to a one-connection listener. -->
+      <ListenerOverlapNote :overlap="drafted?.listener_overlap" class="mt-3" />
       <p class="m-0 mt-3 text-md text-text-3">
         Provider-supplied. Cadence doesn't compute passes yet.
       </p>
-      <div v-if="editable" class="mt-3">
+      <div v-if="editable" ref="actions" class="mt-3">
         <ApButton
           v-if="drafted && !drafted.locked"
           size="compact"
           :disabled="busy"
-          @click="emit('remove', drafted.snapshot_id)"
+          disabled-reason="Working…"
+          @click="act('remove', drafted.snapshot_id)"
           >Remove pass</ApButton
         >
         <ApButton
@@ -115,7 +135,8 @@ const items = computed(() => {
           size="compact"
           variant="primary"
           :disabled="busy"
-          @click="emit('add', other.snapshot_id)"
+          disabled-reason="Working…"
+          @click="act('add', other.snapshot_id)"
           >Add pass</ApButton
         >
       </div>

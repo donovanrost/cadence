@@ -139,16 +139,29 @@ defmodule Cadence.Commanding.RequestStore do
              }),
            {:ok, approval_row} <- Repo.insert(CommandApprovalRow.changeset(approval)),
            {:ok, updated_request_row} <-
-             Repo.update(CommandRequestRow.lifecycle_changeset(request_row, decision)) do
-        %{
-          approval: CommandApprovalRow.to_domain(approval_row),
-          command_request: CommandRequestRow.to_domain(updated_request_row)
-        }
+             Repo.update(CommandRequestRow.lifecycle_changeset(request_row, decision)),
+           result = %{
+             approval: CommandApprovalRow.to_domain(approval_row),
+             command_request: CommandRequestRow.to_domain(updated_request_row)
+           },
+           {:ok, additions} <- before_commit(opts, result) do
+        Map.merge(result, additions)
       else
         {:error, reason} -> Repo.rollback(reason)
       end
     end)
     |> ReadUpdates.publish_result(:commanding_changed, organization_id, mission_id)
+  end
+
+  # #263: a check of the decided request and its approval that must hold for the decision to be
+  # recorded (the management plane's approved command). It runs inside the transaction, after the
+  # writes and before the commit, so a failure refuses with nothing written: an answer after the
+  # commit is always the decision that was recorded. `{:ok, additions}` merges into the result.
+  defp before_commit(opts, result) do
+    case Keyword.get(opts, :before_commit) do
+      nil -> {:ok, %{}}
+      check when is_function(check, 1) -> check.(result)
+    end
   end
 
   defp lock_request_row(organization_id, mission_id, command_request_id) do

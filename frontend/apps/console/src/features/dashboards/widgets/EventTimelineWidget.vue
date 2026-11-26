@@ -3,8 +3,10 @@ import { computed } from "vue";
 import { ApStatusMark, type OpState } from "@/ui";
 import type { WorkspacePlacement } from "../model/snapshot.ts";
 import { events, formatTime } from "../model/widget-data.ts";
+import { useWidgetName } from "./widget-name.ts";
 
 const props = defineProps<{ placement: WorkspacePlacement }>();
+const name = useWidgetName(() => props.placement);
 const rows = computed(() => events(props.placement));
 const mark = (severity: string | null): OpState =>
   severity === "critical" || severity === "error"
@@ -15,7 +17,8 @@ const mark = (severity: string | null): OpState =>
 </script>
 
 <template>
-  <ol class="h-full min-h-0 space-y-2 overflow-auto px-3 py-2">
+  <!-- B1: the scroll box is a tab stop named by its widget. -->
+  <ol class="h-full min-h-0 space-y-2 overflow-auto px-3 py-2" tabindex="0" :aria-label="name">
     <li v-for="row in rows" :key="row.key" class="flex gap-2.5">
       <span class="mt-1.5"><ApStatusMark :state="mark(row.severity)" /></span>
       <div class="min-w-0">

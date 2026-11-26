@@ -1,0 +1,50 @@
+import { mount } from "@vue/test-utils";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { ref } from "vue";
+import ChangesOutcome from "./ChangesOutcome.vue";
+import { decode } from "@/api";
+import type { SubmitResult } from "./actions.ts";
+import { submitReader } from "./submitResult.ts";
+
+/** #276 follow-up (lead, fe-setup on #614): the outcome is said once, in the words shown. */
+const said = vi.hoisted(() => ({ texts: [] as string[] }));
+vi.mock("@cadence/apogee-ui", async (original) => ({
+  ...(await original<typeof import("@cadence/apogee-ui")>()),
+  announcePolite: (text: string) => said.texts.push(text),
+}));
+vi.mock("@/shell", async (original) => ({
+  ...(await original<typeof import("@/shell")>()),
+  useRuntimeStatus: () => ref(undefined),
+}));
+afterEach(() => {
+  said.texts = [];
+});
+const stubs = { RouterLink: { template: "<a><slot /></a>" } };
+
+describe("ChangesOutcome's announcements", () => {
+  it("announces the staged line in exactly the words it shows", () => {
+    const w = mount(ChangesOutcome, {
+      props: { outcome: null, stagedNotice: 2, next: 7 },
+      global: { stubs },
+    });
+    expect(said.texts).toHaveLength(1);
+    expect(w.text().replace(/\s+/g, " ").trim()).toContain(said.texts[0] ?? "(nothing said)");
+  });
+
+  it("doesn't say Sent for review again when a refetch swaps in the same state", async () => {
+    const inReview = (): SubmitResult => {
+      const r = decode(submitReader, { state: "in_review", change_set_id: "cs-1", version: 3 });
+      if (!r.ok) throw r.error;
+      return r.value;
+    };
+    const w = mount(ChangesOutcome, {
+      props: { outcome: inReview(), stagedNotice: null, next: null },
+      global: { stubs },
+    });
+    expect(said.texts).toEqual([
+      "Sent for review. Another person who didn't stage any of these changes approves it or sends it back.",
+    ]);
+    await w.setProps({ outcome: inReview() });
+    expect(said.texts).toHaveLength(1);
+  });
+});

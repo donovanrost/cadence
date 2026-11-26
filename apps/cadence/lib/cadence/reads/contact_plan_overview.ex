@@ -9,7 +9,6 @@ defmodule Cadence.Reads.ContactPlanOverview do
   and the latest end), since plans don't store a horizon.
   """
 
-  alias Cadence.Accounts
   alias Cadence.Comms.StationRefs
 
   alias Cadence.ContactPlanning.{
@@ -22,10 +21,11 @@ defmodule Cadence.Reads.ContactPlanOverview do
     StationConflicts
   }
 
+  alias Cadence.Control.ActorRef
   alias Cadence.GroundNetworks.MissionProviders
   alias Cadence.Management.Contacts
   alias Cadence.Reads.ContactPlanOverview.Demand
-  alias Cadence.Reads.{PlanApproval, PlanMeasures, PlanRounds}
+  alias Cadence.Reads.{PassListenerOverlap, PlanApproval, PlanMeasures, PlanRounds}
 
   @list_cap 100
 
@@ -38,12 +38,15 @@ defmodule Cadence.Reads.ContactPlanOverview do
       ids = Enum.map(plans, fn {plan, _} -> plan.contact_plan_id end)
       superseded = PlanSupersession.check_many(organization_id, mission_id, plans)
       repairs = FleetPlanningRuns.repairs_for(organization_id, mission_id, ids)
+      # #468: one name lookup for every plan's author.
+      names = ActorRef.names(organization_id, Enum.map(plans, fn {p, v} -> author(p, v) end))
 
       Enum.map(plans, fn {plan, _version} = pair ->
-        {pair, Map.get(superseded, plan.contact_plan_id), Map.get(repairs, plan.contact_plan_id)}
+        {pair, Map.get(superseded, plan.contact_plan_id), Map.get(repairs, plan.contact_plan_id),
+         names}
       end)
     end)
-    |> Enum.map(fn {{plan, version}, superseded, repair_of} ->
+    |> Enum.map(fn {{plan, version}, superseded, repair_of, names} ->
       passes =
         Contacts.selected_opportunities(
           organization_id,
@@ -52,7 +55,7 @@ defmodule Cadence.Reads.ContactPlanOverview do
           version.version
         )
 
-      plan |> summary(version, passes, superseded) |> Map.put(:repair_of, repair_of)
+      plan |> summary(version, passes, superseded, names) |> Map.put(:repair_of, repair_of)
     end)
     |> Enum.filter(&on_day?(&1, filters[:day]))
   end
@@ -102,7 +105,10 @@ defmodule Cadence.Reads.ContactPlanOverview do
 
       approval = PlanApproval.latest(organization_id, mission_id, plan_id, version.version)
 
-      summary = plan |> summary(version, passes, superseded) |> Map.put(:repair_of, repair_of)
+      names = ActorRef.names(organization_id, [author(plan, version)])
+
+      summary =
+        plan |> summary(version, passes, superseded, names) |> Map.put(:repair_of, repair_of)
 
       {:ok,
        summary
@@ -111,7 +117,7 @@ defmodule Cadence.Reads.ContactPlanOverview do
          latest_version: current.version,
          counts: %{summary.counts | conflicts: length(conflicts)},
          ready_to_approve: summary.ready_to_approve and availability.conflicts == [],
-         passes: Enum.map(passes, &pass(&1, version, stations)),
+         passes: with_overlaps(organization_id, mission_id, passes, version, stations),
          demand: demand(organization_id, mission_id, version, passes),
          unmet: Demand.unmet(organization_id, mission_id, version),
          provider_freeze: provider_freeze(organization_id, mission_id, plan, version, passes),
@@ -192,7 +198,7 @@ defmodule Cadence.Reads.ContactPlanOverview do
   defp ready?(_superseded, _version, _passes), do: false
 
   # A draft overtaken by newer requirement or template versions reads as `superseded`, with why.
-  defp summary(plan, version, passes, superseded) do
+  defp summary(plan, version, passes, superseded, names) do
     {starts, ends} = span(passes)
     unsatisfied = (version.unsatisfied_document || %{})["requirements"] || []
     conflicts = (version.conflict_document || %{})["items"] || []
@@ -203,7 +209,7 @@ defmodule Cadence.Reads.ContactPlanOverview do
       state: state(plan, superseded),
       superseded: superseded,
       window: %{from: starts, to: ends},
-      author: actor(version.created_by || plan.created_by),
+      author: actor(author(plan, version), names),
       counts: %{
         # The whole plan, kept (locked) passes included: what the Gantt shows.
         passes: length(passes),
@@ -219,6 +225,17 @@ defmodule Cadence.Reads.ContactPlanOverview do
       version_created_at: version.created_at,
       updated_at: plan.updated_at
     }
+  end
+
+  # U58 (b), #361: each pass's listener overlap (null when none).
+  defp with_overlaps(org, mission, passes, version, stations) do
+    overlaps = PassListenerOverlap.for_plan(org, mission, passes, stations)
+
+    Enum.map(passes, fn snapshot ->
+      snapshot
+      |> pass(version, stations)
+      |> Map.put(:listener_overlap, overlaps[snapshot.contact_opportunity_snapshot_id])
+    end)
   end
 
   defp pass(%ContactOpportunitySnapshot{} = snapshot, version, stations) do
@@ -256,22 +273,24 @@ defmodule Cadence.Reads.ContactPlanOverview do
 
   defp list_opts(_filters), do: []
 
+  defp author(plan, version), do: version.created_by || plan.created_by
+
   # Who made the plan version: a person (`created_by` is usually a user id), Cadence itself for an
   # automatic run (`{kind: "system", name: "Cadence"}`), or nil when it isn't known (ux).
-  defp actor(%{"display_name" => name}) when is_binary(name), do: %{kind: "user", name: name}
-  defp actor(%{"name" => name}) when is_binary(name), do: %{kind: "user", name: name}
-  defp actor(%{"email" => email}) when is_binary(email), do: %{kind: "user", name: email}
+  # #146 (#468): through ActorRef (`names`, one lookup per read under the plan's organization): an
+  # active member keeps their id and is named by display name (or nil); anyone else reads id and
+  # name nil. A stored document's name (or an email an older one holds) is never shown.
+  defp actor("cadence" <> _, _names), do: %{kind: "system", name: "Cadence"}
+  defp actor("system" <> _, _names), do: %{kind: "system", name: "Cadence"}
 
-  defp actor(id) when is_binary(id) do
-    case Accounts.fetch_user(id) do
-      {:ok, user} -> %{kind: "user", id: id, name: user.display_name || user.email}
-      _not_a_user -> system_actor(id)
+  defp actor(id, names) when is_binary(id) do
+    case ActorRef.ref(id, names) do
+      # Neither a person nor a service: not known (and its id isn't echoed).
+      %{kind: "system"} -> nil
+      actor -> actor
     end
   end
 
-  defp actor(_other), do: nil
-
-  defp system_actor("cadence" <> _), do: %{kind: "system", name: "Cadence"}
-  defp system_actor("system" <> _), do: %{kind: "system", name: "Cadence"}
-  defp system_actor(_unknown), do: nil
+  defp actor(%{} = document, names), do: ActorRef.document(document, names)
+  defp actor(_other, _names), do: nil
 end

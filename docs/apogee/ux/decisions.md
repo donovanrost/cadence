@@ -1481,9 +1481,40 @@ Technical details.
 - **(b) Booking-time overlap flag** (on the plan's passes, Book a pass offers, and the booked pass on Contacts):
   - Tag `LISTENER OVERLAP` (caution ▲) on the **later** pass, the one that loses time.
   - Sentence on the later pass: "Overlaps EARENDIL-006's SNTG 00:05Z pass by 26 s. Santiago's listener takes one
-    connection at a time, so this pass loses its first 26 s."
+    connection at a time, so this pass may lose up to 26 s of its start."
   - On the earlier pass, no tag, only a `text-3` note: "EARENDIL-001's SNTG 00:13Z pass overlaps this one by 26 s
-    and loses its start."
+    and may lose up to 26 s of its start."
+  - **The seconds** (fe-ops, #361): they're the overlap of the runtime's claim windows, lead and teardown included,
+    so they're an upper bound on what's lost, never tied to AOS. Hence "may lose up to N s of its start", never
+    "its first N s" or "after AOS". Durations as §4 ("1 m 40 s" past a minute).
+  - **Either pass may lose** (`loses: "either"`: both claim the listener at the same moment, so whichever connects
+    second loses its start). Both passes get the tag and the same sentence, each naming the other: "Overlaps
+    EARENDIL-006's SNTG 00:05Z pass by 26 s. Santiago's listener takes one connection at a time, and both claim it
+    at once, so whichever connects second may lose up to 26 s of its start." No `text-3` note on either.
+  - **Several overlaps on one pass** (the object names the worst, the most seconds lost, plus `count`): the
+    sentence names the worst and counts the rest: "Overlaps EARENDIL-006's SNTG 00:05Z pass by 40 s and 2 other
+    passes. Santiago's listener takes one connection at a time, so this pass may lose up to 40 s of its start."
+    With `loses: "either"` on the worst, its "and both claim it at once, so whichever…" form, with "and 2 other
+    passes" after the first clause. The other passes' own entries carry their own sentences. On the earlier pass's
+    note with several: "EARENDIL-001's SNTG 00:13Z pass and 2 other passes overlap this one; the longest overlap is
+    40 s."
+  - **Open-ended, no number** (`seconds: null`: neither pass has a set end, so the overlap can't be measured;
+    fe-ops, #361): the same sentences without a number, never a guessed one (U20). Later pass: "Overlaps
+    EARENDIL-006's SNTG 00:05Z pass. Santiago's listener takes one connection at a time, so this pass may lose its
+    start." Earlier pass's note: "EARENDIL-001's SNTG 00:13Z pass overlaps this one and may lose its start." Either:
+    "…and both claim it at once, so whichever connects second may lose its start." Several: "Overlaps EARENDIL-006's
+    SNTG 00:05Z pass and 2 other passes. … may lose its start."; the earlier pass's note with several: "…and 2
+    other passes overlap this one." (no longest).
+  - **Settled in the build** (fe-ops, #650):
+    - No station on the other pass: its time stands alone, "EARENDIL-006's 00:05Z pass"; with neither, "EARENDIL-006's
+      pass". One other overlapping pass: "and 1 other pass".
+    - Durations past an hour: "1 h 5 m" (§4).
+    - The tag's word is "Listener overlap" (the kit renders `LISTENER OVERLAP`). On the plan's Gantt the bar's
+      description adds " · listener overlap" beside U45's caution mark, so the mark has its word (B2).
+    - Technical details: "listener host:port · direction · N s · N passes" ("no end" when `seconds` is null).
+  - **Nameless forms** (fe-ops, #635): a null `with` spacecraft name reads "an unknown spacecraft's SNTG 00:05Z
+    pass" (U25's sentence form, as designers §3), never an id. A null station name uses its code, "SNTG's listener".
+    With neither, "The station's listener".
   - A Book a pass offer carries the sentence before booking, and booking is still allowed. On the plan's Gantt,
     the later pass gets U45's ▲ ("Needs attention" in the legend).
   - **Refuse variant (uplink), only if the director picks it:** the offer can't be booked. Disabled reason: "Can't
@@ -1494,7 +1525,8 @@ Technical details.
   - (a): `holder {realized_contact_id, spacecraft name, station code, starts_at, ends_at}`, plus
     `frames_lost` (int | null) only when it's really counted.
   - (b): per pass `listener_overlap {with {spacecraft name, station code, starts_at}, seconds, loses: this |
-    other, direction}`.
+    other | either, direction, count}` (ca-engineer's shape on #361: `with` and `seconds` are the worst overlap,
+    `count` how many passes overlap it).
 
 ### U59 · Command groups in the organization audit (api's proposal; lead and director decide scope) (api / fe-setup)
 One entry per decision, not per member. The verbs match the request log (groups/words.ts) and U46, so the audit and
@@ -2334,6 +2366,46 @@ change set like any override. There's no separate routes editor.
         keeps happening, tell the team that runs Cadence for you."; `Request review` "Not sent for review: Cadence
         couldn't run the checks, so nothing changed. Try again; …" (same ending). The button stays enabled; the Why
         and the hold acknowledgement stay filled.
+      - K3's submit meeting 409 `packet_definition_version_taken` (#534, #550; another change saved a packet
+        definition at the same moment; nothing written, retryable; the definition's id and version only in Technical
+        details): `Apply as r5` "Not applied: another change saved a packet definition at the same moment, so nothing
+        changed. Try again."; `Request review` "Not sent for review: … so nothing changed. Try again."; Approve "Not
+        approved: another change saved a packet definition at the same moment, so nothing was applied and the change
+        set stays in review. Your approval wasn't recorded. Try again." The buttons stay enabled.
+    - **K3's submit refused, per code** (#310, #552; ca-ux 11-20, mms-ux's follow-up). Each line opens by the act the
+      button named (`Apply as r5` "Not applied:", `Request review` "Not sent for review:"), says "so nothing changed",
+      then what to do. Never the server's text as the line, and never a mechanical rewrite of the older sentences:
+      - `change_set_changed`: "Not applied: someone changed the change set while you were looking, so nothing
+        changed. It's been reloaded; check it, then apply again." / "Not sent for review: … It's been reloaded;
+        check it, then send it for review again."
+      - `activation_policy_changed` (on a submit; the review path's line is U94's): "Not applied: the mission's
+        approval setting changed while you had this open, so nothing changed. Check whether it now needs review, then
+        apply or send it for review." / "Not sent for review: the mission's approval setting changed while you had
+        this open, so nothing changed. Check whether it still needs review, then apply or send it for review." (ux)
+      - `checks_failed`: "Not applied: a check says NO-GO, so nothing changed. Fix the NO-GO items, then apply
+        again." / "Not sent for review: … then send it for review again."
+      - `holds_not_acknowledged`: "Not applied: some holds aren't acknowledged yet, so nothing changed. Read and
+        acknowledge them, then apply again." / "Not sent for review: … then send it for review again."
+      - `holds_blocking`: "Not applied: a blocking hold stands, so nothing changed. It can't be acknowledged; apply
+        once it clears (the checks show it)." / "Not sent for review: … send it for review once it clears (the
+        checks show it)."
+      - `catalog_command_in_flight`: "Not applied: commands started on the affected spacecraft, so nothing changed.
+        Try again when they finish." / "Not sent for review: commands started on the affected spacecraft, so nothing
+        changed. Try again when they finish."
+      - `nothing_staged`: "Not applied: nothing is staged, so there's nothing to apply." / "Not sent for review:
+        nothing is staged, so there's nothing to review."
+      - `invalid_op` / `invalid_params`: "Not applied: some changes aren't valid, so nothing changed." / "Not sent for
+        review: some changes aren't valid, so nothing changed." then the list, each field by its kind schema's label where there is one (no raw paths, #308), up
+        to five, then "and N more".
+      - `reason_required`: the Why field's own message, "Say why (10 characters or more).", not a callout.
+      - An unknown code: "Not applied: Cadence refused this, so nothing changed." / "Not sent for review: Cadence
+        refused this, so nothing changed." with the code and the server's message in Technical details.
+      - Codes worded elsewhere keep their lines: U82's in-use, U63/U65, the conversion refusal, `preview_failed`
+        and `packet_definition_version_taken` above.
+    - **K3's Apply, disabled** (A6): a NO-GO names what stops it, "Can't apply yet: <the NO-GO item's line, as the
+      checks word it>"; when the button is `Request review`, "Can't send for review yet: <the same line>" (mms-ux). Without the apply capability (unreachable for people today: stage and apply both need
+      operate_mission; defensive): "You can't apply changes on Earendil, so someone who can operate it applies
+      them." No role word (U104). The server's 403 is the backstop.
     - Read fields (api v3.2, final): the button is `Stage batch <next_batch> of <batches_total>`; progress is
       routes_converted of routes_total. No per-craft "in batch 3" line. An author with no name: drop the name
       ("Batch 3 is already staged." / "Staged earlier."), never the id.
@@ -3378,11 +3450,25 @@ are api's, switched on with `knownErrorCode`.
   `approval_setting` in the read, the console offers `Request approval` to everyone and never guesses.
 - **Approve refusals:**
   - 403 `contact_plan_self_approval_forbidden`, `because: "submitted"`: "Not approved: you submitted this plan, so
-    another org admin approves it. Your approval wasn't recorded and nothing was booked." `because: "edited"` (api: the
-    author of the version being approved, so the drafter): "Not approved: you drafted this version of the plan, so
-    another org admin approves it. Your approval wasn't recorded and nothing was booked." Then Approve is disabled
-    (A6) with the sentence without "Not approved:" and the ending, muted; Send back stays. (No authors-unknown case
-    for plans: the plan and version rows always carry their actor.)
+    another org admin approves it. Your approval wasn't recorded and nothing was booked." `because: "edited"` (api: an author of
+    any version since the plan was last approved, the one being approved included, #277): "Not approved: you drafted a
+    version of this plan since it was last approved, so another org admin approves it. Your approval wasn't recorded
+    and nothing was booked." (It used to say "this version", untrue for an earlier version's author.) Then Approve is
+    disabled (A6) with the sentence without "Not approved:" and the ending, muted; Send back stays.
+  - 403 `contact_plan_approver_authors_unknown` (#277; ca-engineer: reachable only when a service identity made one of
+    the plan's versions since its last approval and no one is recorded as accountable for it). A send-back doesn't
+    clear it (the version stays in the window until an approval); recording who's accountable does, and so does
+    drafting the day again, which makes a new plan:
+    - `details.service` `{id, name}`: "Not approved: Nightly planner made one of this plan's versions since it was
+      last approved and has no one recorded as accountable for it, so this can't be approved yet. An org admin
+      records who's accountable in People › Service identities. Your approval wasn't recorded. You can also draft
+      the day again so a new plan replaces this one." With a null `name`, U100's plan line below.
+    - `details.service` null (a guard: `created_by` is NOT NULL, so it can't happen today): "Not approved: Cadence
+      can't tell who made one of this plan's versions since it was last approved, so it can't check that you weren't
+      one of them. Your approval wasn't recorded. Draft the day again so a new plan replaces this one; if it keeps
+      happening, tell the team that runs Cadence for you."
+    - No up-front form: no plan read carries a `cannot_decide_because` (ca-engineer), so the 403 is the only place it
+      shows. If a read adds one, the same line without "Not approved:" and U95's sentence.
   - 403 `forbidden`: "Not approved: only an org admin approves contact plans. Your approval wasn't recorded."
   - 409 `plan_not_pending` (`state`; `decided_by` and `decided_at` together or neither): "R41 was already approved by
     Ana R. at 03:46Z, so your approval wasn't recorded. Reload to see it." / "…already sent back by Ana R. at
@@ -3526,9 +3612,21 @@ groups, provider changes, qualification cases (no service authors them).
   - `{id, name}` (a service whose accountable people aren't recorded; under an automation grant it can be the approving
     service): "Not approved: Nightly planner has no one recorded as accountable for it, so this can't be approved yet.
     An org admin records who's accountable in People › Service identities. Your approval wasn't recorded." With a
-    null `name`: "the service identity that imported this revision" (requested this, submitted this plan, sent this
-    command request; the approving one under a grant: "the service identity approving for this automation") in its
-    place, never an id (U25; the id goes in Technical details).
+    null `name`: "the service identity that imported this revision" (sent this command request;
+    the approving one under a grant: "the service identity approving for this automation") in its place, never an
+    id (U25; the id goes in Technical details).
+    - **Plans say "a service identity that made one of this plan's versions since it was last approved"** (#277:
+      separation counts every version's author since the last approval, so "submitted this plan" could be untrue):
+      "Not approved: a service identity that made one of this plan's versions since it was last approved has no one
+      recorded as accountable for it, so this can't be approved yet. An org admin records who's accountable in People
+      › Service identities. Your approval wasn't recorded. You can also draft the day again so a new plan replaces
+      this one." (U97 has the named form.)
+    - **Activations say "a service identity involved in this request"** (api's #453 question, from mms-security's
+      review). Since #435 the unnamed service may be the requester or the author of a version the request
+      includes, such as a change set's applier, and the 403 doesn't say which, so "requested this" could be untrue
+      (U20). "Not approved: a service identity involved in this request has no one recorded as accountable for it,
+      so this can't be approved yet. An org admin records who's accountable in People › Service identities. Your
+      approval wasn't recorded." If the details ever name the role, the line names it instead.
   - null (no service involved), or absent (an older server): the kind's own authors-unknown line (in #280 only
     activations can send null, via #236; the others are kept for safety and won't show today): U94's for activations ("Not approved: Cadence can't tell who
     saved this configuration…"). Kinds that had none get the same form: "Not approved: Cadence can't tell who made
@@ -3869,6 +3967,20 @@ fixes their words and lists what the legacy pages offered that the console doesn
   it was and not who: "11-19 05:40Z by a service identity", as U70 (mms-security: the kind names no one and says it
   wasn't a person). A person with no name, or no actor, shows the time alone, never an id (U25). (Amended 11-19,
   fe-setup's #364 question and ux's #371.)
+- **A system run that records who ran it** (#516, mms-security; `run_by` on the system actor, in `requested_by`,
+  `uploaded_by`, `revisions[].actor` and the REST reads). A seed import run by a person counts that person as the
+  importer, so the approval panel says "Imported by Mira K." (U65). The run's row says the same person, or the two
+  would disagree and the row would hide why Mira K. can't approve it (U20, U89).
+  - `run_by.name`: "11-19 05:40Z by Cadence, run by Mira K." It's one event and one time (U29), with U103's system
+    line first.
+  - `run_by` with a null name: "11-19 05:40Z by Cadence, run by a person". It says what ran it, not who, as U103's
+    "by a service identity" does. `run_by` carries no id (name only), so there's no id to show anywhere.
+  - `run_by` is always a person, never a service identity, so it never takes the service mark. It's named only while
+    they're an active member of the mission's organization (#146's rule); otherwise, such as a platform admin running
+    a seed for support or someone who has left, it reads "run by a person" (mms-security).
+  - `run_by` null (an older system run): "by Cadence", as above.
+  - The same rule applies wherever a system actor is shown: the Started cell, a source file's uploaded-by line and a
+    revision's actor.
   Data: the run row stores `requested_by` (an actor: kind and user id), so the runs read adds its display name
   (#146's read; fe-setup assigns it).
 
@@ -3963,6 +4075,9 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
     - `not_admin`: no actions; the panel's line ends "Org admins approve grants."
     - `not_proposed`: no panel (the row's state says why).
     - `not_a_person`: never shown in the console (a service can't sign in); as `not_admin` if it is.
+    - `policy_changed` (#497: the mission's approval setting changed since the proposal, so approving would answer
+      the 409 below): "The mission's approval setting changed after this grant was proposed, so it can't be approved.
+      It has to be proposed again." Reject stays, so the proposal can be cleared.
     - A reason the console doesn't know: "You can't approve this grant, so another org admin approves it." with the
       code in Technical details.
 - **Approve refusals** (nothing recorded; each says "Your approval wasn't recorded." after the why, U95):
@@ -4018,10 +4133,160 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
   Technical details only): "Not narrowed: this
   change gives Nightly planner more than it has now (Contacts per plan, at most), so it needs approval. Propose it as
   a new grant instead." Without `fields`, the same without the bracket. The console offers only narrower values in the sheet, so this is the backstop.
-- **Revoke** stays one act, at once, with a reason, even while a widening of the same grant is proposed. If one is,
+  - Nothing changed (422 `automation_grant_narrow_unchanged`, #497): "Not narrowed: these values are the ones the
+    grant has now, so nothing changed. Choose less than it allows, or cancel." Up front (A6/A7), `Narrow` is disabled
+    until a value is narrower, with the reason "Choose less than the grant allows now."; the 422 is the backstop.
+- **Access the person doesn't hold** (403 `automation_grant_capability_required`, #497; #281's rule: whoever proposes,
+  grants or approves must hold every capability the grant gives; no `details`). **Unreachable today:** an org admin
+  holds every capability a grant can give; the lines are for when that changes. By the act:
+  - Propose: "Not proposed: this grant would let Nightly planner do something you can't do yourself, so you can't
+    propose it. Ask an org admin who can do everything it allows to propose it."
+  - Grant (under "Applies without approval"): "Not granted: this grant would let Nightly planner do something you
+    can't do yourself, so you can't grant it. Ask an org admin who can do everything it allows to grant it."
+  - Approve: "Not approved: this grant lets Nightly planner do something you can't do yourself, so you can't approve
+    it. An org admin who can do everything it allows approves it. Your approval wasn't recorded."
+  - No list of what's beyond them: the 403 carries none (U20), so the lines don't name it. With no name, "the service
+    identity this grant is for" replaces "Nightly planner".
+- **Revoke** stays one act, at once, with a reason, even while a widening of the same grant is proposed. If a widening is proposed,
   the revoke sheet adds: "This also withdraws the proposal waiting for approval, so it can't switch automation
   back on later." (A widening proposal records `replaces_grant_id`; revoking that grant withdraws it in the same
-  transaction.)
+  transaction.) The reason is the console's rule (ux, #514): the server no longer requires one, and for a one-person
+  tightening the reason is the only record of why. So `Revoke` stays disabled with "Give a reason first." (A7) until
+  there's a reason; no 422 is behind it.
+- **A grant made before Cadence checked grants against the approval setting** (#497; the row's
+  `issued_before_two_person_approval: true`) can only be revoked. Never "legacy" or "two-person" on screen, and not
+  "before grants needed a second person's approval", which isn't true on a mission set to "Applies without approval"
+  (ux).
+  - The row's state line adds, muted: "Made before Cadence checked grants against the mission's approval setting, so
+    it can only be revoked. To change it, propose a new grant."
+  - Up front (A6/A7): `Narrow…` is disabled with "This grant can only be revoked. To change it, propose a new
+    grant." `Revoke…` stays.
+  - The backstop, 409 `automation_grant_legacy`, by the act: Narrow "Not narrowed: this grant was made before Cadence
+    checked grants against the mission's approval setting, so it can only be revoked. Nothing changed. To change it,
+    propose a new grant."; Approve "Not approved: this grant was made before Cadence checked grants against the
+    mission's approval setting, so it can only be revoked. Your approval wasn't recorded."; Reject "Not rejected: …
+    so it can only be revoked. Nothing changed." (Approve and Reject can't show on an active grant, so those two are
+    for completeness.)
+- **Suspended** (#499, the director's ruling on #283; api's shape 11-19). Changing a mission's approval setting to
+  "Needs a second person's approval" suspends each active grant that became active on one person's approval. A
+  suspended grant authorizes nothing until it's resumed. Revoke stays, as on an active grant. A grant made before
+  Cadence checked grants against the setting is never suspended (ca-security). A suspension never extends a grant's
+  validity: past `valid_until`, a suspended grant reads `expired` (`EXPIRED`, the active grant's line), and resuming
+  it answers the `expired` refusal below (api).
+  - Tag `SUSPENDED` (caution, mark + word, B2).
+  - Row line (`suspension {at, by, settings_revision, level}`; who and when one event, U29), by the setting now in
+    force (the read's `approval_setting`). `level` (api 11-19) says which save tightened it: `mission` "Suspended
+    when Mira K. changed the mission's approval setting to Needs a second person's approval at 11-19 22:40Z. A
+    second org admin resumes it."; `organization` "Suspended when Mira K. changed the organization's approval setting
+    to Needs a second person's approval at 11-19 22:40Z. …" (an organization default reaches inheriting missions).
+    `level` missing or unknown: "…changed the approval setting for this mission to …", which claims neither. `by`
+    with no name: "Suspended when the mission's (organization's) approval setting changed to Needs a second person's
+    approval at 11-19 22:40Z." (the next sentence likewise). If the setting is back to "Applies without approval":
+    "An org admin resumes it." The setting unread: "A second org admin resumes it." (the stricter form; the answer
+    says what happened).
+  - `Resume…` (a sheet, as approve: `sha256`, `operation_id`): title `Resume the grant`, commit `Resume`, muted line
+    "It takes effect again at once. Nightly planner can act under it until 12-19 06:40Z." After a resumed answer:
+    "Resumed. Nightly planner can act under it until 12-19 06:40Z." Any other answer (U20): "Cadence didn't confirm
+    that it resumed. Reload to see it." A replay (`replayed: true`) shows as this one's result.
+  - Up front (A6), from `viewer_can_decide` / `cannot_decide_because` / `cannot_decide_details`, which cover a
+    suspended grant ("decide" = resume). `Resume…` is disabled with its reason; Revoke stays:
+    - `approved` (the grant's original approver): "You approved this grant, so another org admin resumes it."
+    - `proposer`: "You proposed this grant, so another org admin resumes it."
+    - `accountable` (`.grantee`): "You're accountable for Nightly planner, so another org admin resumes its grant."
+    - `authors_unknown` (`.service`): "Nightly planner has no one recorded as accountable for it, so its grant can't
+      be resumed yet. An org admin records who's accountable in People › Service identities."
+    - `not_admin`: no actions; the row line stands. Unknown reason: "You can't resume this grant, so another org
+      admin resumes it." with the code in Technical details.
+  - Refusals (nothing changed; why, then "Nothing changed.", then the reader's act):
+    - 403 `automation_grant_self_approval_forbidden`: `because: "approved"` "Not resumed: you approved this grant,
+      so another org admin resumes it. Nothing changed."; `"proposed"` "Not resumed: you proposed this grant, so
+      another org admin resumes it. Nothing changed."; `"accountable"` (`grantee`) "Not resumed: you're accountable
+      for Nightly planner, so another org admin resumes its grant. Nothing changed."
+    - 403 `automation_grant_approver_authors_unknown` (`service`): "Not resumed: Nightly planner has no one recorded
+      as accountable for it, so its grant can't be resumed yet. Nothing changed. An org admin records who's
+      accountable in People › Service identities."
+    - 403 `automation_grant_capability_required`: "Not resumed: this grant lets Nightly planner do something you
+      can't do yourself, so you can't resume it. Nothing changed. Ask an org admin who can do everything it allows
+      to resume it."
+    - 409 `automation_grant_legacy`: "Not resumed: this grant was made before Cadence checked grants against the
+      mission's approval setting, so it can only be revoked. Nothing changed. To change it, propose a new grant."
+    - 409 `automation_grant_not_suspended` (`state`): `expired` "Not resumed: this grant's validity ended, so it
+      can't be resumed. Nothing changed. To go on, propose a new grant."; another state in words: `active`
+      "Not resumed: it's active again. Nothing changed. Reload to see it."; `revoked` "Not resumed: it was revoked.
+      Nothing changed. Reload to see it."; any other, or unknown: "Not resumed: it isn't suspended any more. Nothing
+      changed. Reload to see it."
+    - 409 `grant_changed`: "Not resumed: the grant changed after you opened it. Nothing changed. Reload to see it,
+      then resume it again."
+    - 403 `authenticated_user_required`: "Not resumed: only a person can resume a grant, not a service identity.
+      Nothing changed." (unreachable today, as the other person-only lines.)
+    - `duplicate_operation`: "Not resumed: Cadence matched this to an earlier, different request, so nothing
+      changed. Reload and try again." Unknown code: "Not resumed: Cadence refused this. Nothing changed." with the
+      code in Technical details.
+  - Settled in the build (#565, fe-ops; agreed by ca-ux and ca-engineer):
+    - A suspended grant whose `suspension` is null: "Suspended. A second org admin resumes it." ("An org admin…" under
+      "Applies without approval"), never the tag alone.
+    - Up front, `policy_changed` on a suspended grant (the setting changed after the suspension): "The approval setting
+      for this mission changed after this grant was suspended, so who can resume it may have changed. Reload to see
+      it." (#509's neutral form; the reason doesn't say which level) (a known reason, so no code shown), and never the viewer-blaming "You can't resume…".
+    - An unknown resume reason's code goes in Technical details in the row's State cell (a menu item can't hold it).
+      Resume's busy reason: "Resuming…". After a separation refusal (approved, proposed, accountable, authors
+      unknown, capability), Resume stays off until a reload, including on reopen, with the A6 reason "Resume was refused.
+      Reload to see the grant as it is now." (ux); after `grant_changed`, a duplicate
+      or a failed request it stays on, since trying again (after a reload) is the fix.
+    - Narrowing a suspended grant (allowed by `viewer_can_narrow`): "Narrowed. Once it's resumed, Nightly planner can
+      plan and submit, planning up to 48h 00m ahead, 40 contacts per plan, 2 at once, until 12-19 06:40Z." An active
+      grant keeps "can now".
+    - Revoke's sheet line: on a suspended grant "Nightly planner won't act under this grant again."; on an active one
+      "Nightly planner can't act under this grant once it's revoked." (never "stops acting now": in-flight work isn't
+      the revoke's answer). Nothing about plans already submitted unless api confirms what happens to them.
+  - Audit: "Suspended the grant for Nightly planner, when the mission's approval setting changed to Needs a second
+    person's approval" (`organization`: "the organization's"; no level: "the approval setting for this mission";
+    the settings saver as who); "Resumed the grant for Nightly planner".
+  - **The settings save that suspends** (Mission settings and Organization settings, Governance; fe-setup's screen,
+    SettingsAuditProviders.md points here). Saving "Needs a second person's approval" can answer 409
+    `approval_tightening_suspends_grants` (`details {grants: [{id, mission {id, name}, service {id, name|null},
+    allowed_actions, valid_until}], digest}`); nothing is written. The section shows, in place of its save line, a
+    caution callout (role="alert", the person's act refused for now), then saves again with
+    `acknowledged_suspensions: digest` on confirm. In step with #430's audit words: option words, names up to 3
+    then "and N more", what the save will do, never "now".
+    - Lead: "Saving this suspends 3 automation grants: Nightly planner, Relay sync and Ops bot. Until a second org
+      admin resumes each, its service can't act under it." One: "Saving this suspends 1 automation grant: Nightly
+      planner. Until a second org admin resumes it, Nightly planner can't act under it." More than 3: "…: Nightly
+      planner, Relay sync, Ops bot and 2 more." A service with no name: "Unknown service identity" (U25), never
+      the id. Organization level adds the missions: "…suspends 4 automation grants on 2 missions: …", and names
+      each service once, with a count when it has grants on more than one mission: "Nightly planner (2 missions),
+      Relay sync". The Show all list stays per grant.
+    - `Show all` lists each grant: "Nightly planner · plan, submit · until 12-19 06:40Z" (U105's action words); at
+      organization level, the mission first: "EARENDIL · Nightly planner · …". Each mission links `Open grants` to
+      its Contact planning page. A mission with no name: "Unknown mission".
+    - Buttons: `Save and suspend 3 grants` (`1 grant`) and `Cancel` (focus starts on Cancel; Cancel closes the
+      callout and leaves the setting unsaved, as the field shows).
+    - The list changed on the resend (a new 409 with a new list): "The grants this would suspend changed, so nothing
+      was saved. Check the list, then save again." above the new list and buttons.
+- **Words the build settled** (fe-ops' nearest forms in #514, agreed by ca-ux; U105 hadn't given them):
+  - Result lines (each only on the answer's confirmed state, U20; otherwise "Cadence didn't confirm the approval /
+    rejection / revoke. Reload to see it."): Approve "Approved. Nightly planner can act under it until 12-19
+    06:40Z."; Reject "Rejected. Nightly planner won't act under this grant."; Revoke "Revoked. Nightly planner can't
+    act under this grant any more." (never "stops now": in-flight runs aren't the revoke's answer).
+  - Reject sheet: title `Reject the proposed grant`, body "Nightly planner won't act under this grant. To try again,
+    propose a new grant.", commit `Reject`; a reason is required ("Give a reason first.", A7), the 422's field
+    message under the field.
+  - Narrow result (the answer's grant): "Narrowed. Nightly planner can now plan and submit, planning up to 48h 00m
+    ahead, 40 contacts per plan, 2 at once, until 12-19 06:40Z." (counts through plural()).
+  - Narrow fields: hint "Now <value>. Choose the same or less."; larger "That's more than the grant allows now. To
+    widen it, propose a new grant."; no actions "Keep at least one."; not a whole number "Enter a whole number above
+    0."
+  - `automation_grant_not_proposed` while `decided_by` is a bare id: the decider isn't named (U25): "This grant was
+    already approved at 11-19 06:52Z, so your approval wasn't recorded. Reload to see it." (U95, as the named form); when the id is the viewer's, "You already approved this
+    grant at …". With `{id, name}`, U105's named form.
+  - Reject on a grant no longer proposed: "Not rejected: this grant was already approved, so nothing changed. Reload
+    to see it." (likewise expired and withdrawn).
+  - `grant_changed` on Approve: "Not approved: this grant changed after you opened it. Your approval wasn't
+    recorded. Reload to see it."; Narrow or Revoke on a grant no longer active: "Not narrowed: this grant isn't active
+    any more, so nothing changed. Reload to see it." / "Not revoked: this grant isn't active any more, so nothing
+    changed. Reload to see it."; an unknown narrow code: "Not narrowed: Cadence
+    refused this change, so nothing changed." with the code in Technical details.
+  - A proposer with no name: the clause drops ("Proposed at 11-19 06:40Z · decide by …").
 - **Widening** (more actions, more services, longer validity) is a new proposal, worded as the sheet above.
 - **Audit** (who and when as one event, U29): "Proposed a grant for Nightly planner", "Granted Nightly planner
   automation (no approval needed under this mission's setting)" for a grant that takes effect at once, "Approved Mira K.'s grant for
@@ -4100,3 +4365,338 @@ is about, so the name reuses it; no short noun is invented per kind.
 - Built once in the panel from the row's title, not per row kind, so a new kind gets it for free.
 - A row without a title (none today) uses its kind and position, as B7 says: "Discard, row 3".
 - Sheets the buttons open keep their own titles (A2); this is only the button's name.
+
+### U108 · The monitoring lane: limits, derived points and alarm rules through change sets (#28; DECISIONS #92 phase 3, #93; ADR-020 addendum, change-set lanes) (domain / api / mms-ux / the squads that build the editors)
+**The UX spec for phase 3's monitoring lane** in domain's mission-model build plan (#440,
+`docs/apogee/domain/mission-model-build-plan.md`, issue J). It applies U64 (the user's four conditions) to domain's
+design. Limits, alarm rules and derived points are change-set kinds in a second lane, **monitoring**. The lanes
+never freeze each other, and revisions from both share one sequence. Monitoring has one **open** set per mission;
+its sets in review don't count, so review never closes it. Configuration is unchanged (DECISIONS #13): one shared
+set, frozen while in review. Applying a monitoring set recompiles the effective model and
+activates it, and the set's review is the approval of the authored layer. U43 (limit words) and U42 (a derived point
+in use) still hold. Domain's answers on #438 (11-19) settled the model points.
+
+- **Words.** The lanes are **Configuration** and **Monitoring**. The kind words on Changes are `Limits` (U43),
+  `Derived point` and `Alarm rule`. Summaries follow U43: "Add derived point BATT_HEALTH" / "Edit …" / "Retire …";
+  "Add alarm rule <name>" / "Edit …" / "Retire …". Mission limits on a point the catalog limits read "Replace
+  catalog limits for BATT_V". Point names are in mono. Visible text never says "layer", "authored layer",
+  "effective revision" or "recompile". The effective model revision ids go in Technical details, as with U65.
+- **Where they're edited (IA).** Setup gets **Monitoring** (`M/setup/monitoring`, tabs `limits` · `derived` ·
+  `alarm-rules`). It replaces the Limits and Derived telemetry entries in Setup › Apps once the old modules retire.
+  - Each tab lists imported and authored definitions together. A `Source` column reads `Catalog rev 4`
+    (read-only; its row says "From the catalog. Change it by importing a new revision.") or `Mission` (editable).
+  - Ops opens the same editor as a side sheet: `Edit limits…` on a point's row in Investigate and on an alarm. Ops
+    shows no staged bar; the sheet shows its own outcome.
+- **Operational relief stays outside (U64 1).** Acknowledge and Shelve on Alarms never stage anything. The limit
+  editor opened from an alarm doesn't offer them, and nothing in it suggests an edit is how to quiet an alarm.
+- **Live and staged side by side, and who staged it (U64 4).** Each field shows the live value. When a change to it
+  is staged, the staged value shows beside it as the Profile board's edited state (Changes.md §1), and the meta reads
+  "Staged by Mira K. at 14:02Z" (U29; a service is marked as U70 says). In a set under review it reads "In review ·
+  staged by Mira K. at 14:02Z".
+  - **A point staged by someone else** (in the open set): the editor shows it, and its actions are disabled up front
+    (A6) with "Mira K. has BATT_V's limits staged (at 14:02Z). Change them in that staged change, or ask Mira K. to
+    withdraw it." plus `Open the staged change`. The refusal, path_already_staged, is the same sentence after "Not
+    staged:" (or "Not applied:" from `Apply now`). Without a name (U25): "BATT_V's limits are already staged (at
+    14:02Z). Change them in that staged change, or ask whoever staged them to withdraw it."
+  - **A point in a set under review** (the one block review leaves, domain #438 2): disabled the same way with
+    "BATT_V's limits are in a change set under review (staged by Mira K. at 14:02Z). You can change them once it's
+    applied or sent back." Without a name: "(staged at 14:02Z)". The refusal opens "Not staged:" or "Not
+    applied:". Only that point is blocked; every other point stays editable.
+  - With you as the stager, the editor opens your staged values instead, so neither shows to you.
+- **Apply now, when monitoring changes apply without approval (U64 2).** The editor's primary is `Apply now`. It
+  makes a one-change set from your edit and applies it at once; others' staged monitoring changes stay staged,
+  untouched (domain #438 1). Its preview is inline, above the button:
+  - the change as `− old` / `+ new` rows;
+  - the checks (below), with their holds and NO-GOs;
+  - the effect, "Applies to 500 spacecraft" (from the server's dry run, never counted in the browser);
+  - a required `Why` (10 characters or more, as Changes.md K3). With one hold it takes that hold's placeholder
+    (U43).
+  - Outcome, with U91's verbs: "Applied as r7. The runtime is applying it." then "BATT_V is checked against the new
+    limits from 14:02:10Z." If the runtime hasn't applied it, U91's caution line. Never "Saved".
+- **Stage change, when monitoring changes need a second person's approval.** Staging and review are as in
+  Changes.md, on the monitoring lane.
+  - The Ops sheet's outcome after staging: "Staged. BATT_V's limits change when another person approves and
+    applies them in Setup › Changes." plus `Open monitoring changes`.
+  - The reviewer is never one of the set's authors (U97's family); refusals are Changes.md §3's.
+- **Replacing the catalog's limits** (domain #438 3: the mission's limit wins, only as an explicit replace). When the
+  point has limits from the catalog, the editor says so above the action, before anything is staged: "BATT_V has
+  red limits from catalog rev 4 (3.10–4.20 V). These replace them on this mission." The action names it:
+  `Stage replacement` / `Apply replacement now`. No check result is needed for it then.
+- **Two lanes on Changes.**
+  - **Staged bar:** one line per lane with an open set or a set in review: `CONFIGURATION · 2 changes: …  [Review &
+    apply]` (its in-review state as Changes.md §2) and `MONITORING · 1 change: Edit limits for BATT_V · 1 set in
+    review  [Review & apply]`. Neither button
+    carries a revision number: with one sequence, the number depends on which set applies first. It shows on the
+    review page's commit (`Apply as r6`), and Changes.md §2's `Review & apply as r6` drops its number once the lane
+    ships.
+  - **Review page:** `M/setup/changes` (Configuration) and `M/setup/changes/monitoring`. A tab pair at the top
+    reads `Configuration · 2` / `Monitoring · 1`. The page and its h1 name the lane: "Apply monitoring changes · 1
+    change". Sets of that lane in review are listed above the open set, one line each: "In review · 3 changes ·
+    sent for review by Mira K. at 14:02Z" (no name: "sent for review at 14:02Z") plus `Open review`.
+  - **Review doesn't pause monitoring staging** (domain #438 2, monitoring only). Sending a monitoring set for
+    review leaves the lane open, and new edits start its next set. frozen_in_review on the monitoring lane fires
+    only for a point in a set under review, with the words above. Configuration keeps Changes.md §2's *In review*
+    state ("r6 in review · staging is paused"), its frozen_in_review and its disabled Stages, and U79's
+    conversion_in_progress still holds while a conversion set is in review.
+- **Checks (K2) on the monitoring lane.**
+  - **Compiles** ("Every limit, derived point and alarm rule compiles against the live model"): NO-GO. Each
+    failure names the definition, then what it refers to. Dangling reference: "BATT_HEALTH uses BATT_SOC_PCT,
+    which isn't in the live model." With the cause when the server gives it: "… (renamed or removed in catalog rev
+    5)."
+  - **Conflicts with the catalog:** a replaced catalog limit that changed since the replacement (the fingerprint
+    drifted) is a NO-GO on whichever set causes the drift, until someone confirms or retires the mission's limit:
+    "BATT_V's catalog limits changed in catalog rev 5 after this mission replaced them. Confirm the mission's
+    limits again or retire them in Monitoring." plus `Open in Monitoring`. In Monitoring, that row's editor offers
+    `Confirm replacement`, a monitoring change like any other. A catalog rollout causes it on the configuration
+    lane, so it shows in C3's dry run (U102) too, as the dangling reference does.
+  - U43's limit_alarm_active and U42's derived_point_in_use, unchanged.
+- **Across the lanes.** The lanes never freeze each other, but they compile together. A configuration set that would
+  leave a monitoring definition dangling gets a NO-GO on the configuration lane, and in C3's dry run (U102) too, so
+  a catalog rollout that would fail at review can't be staged from the catalog page: "Catalog rev 5 removes BATT_V,
+  which 2 limits and 1 derived point use. Retire or change them in monitoring changes first." The names go behind
+  `Show all`, as U42 lists them. The fix goes through the monitoring lane, which the configuration set's review
+  doesn't block. These are the two cross-lane checks: a dangling reference and a drifted replacement (above). The
+  lanes never stage the same thing, so there's no overlap check.
+- **Revisions.** One sequence: a monitoring apply takes the mission's next revision number (r6 configuration, r7
+  monitoring), ordered by when each applies. The Revisions list tags it `Monitoring`, Timeline reads `Config r7
+  applied · Monitoring · 1 change · Mira K.`, and roll back works as for any revision.
+- **The model gate.** Applying a monitoring set never puts anything up for catalog approval (U65), because domain
+  counts the effective revisions as approved. No catalog row, panel or Now item mentions them.
+- **Catalog and spacecraft surfaces keep naming the catalog revision.** U65 and U102 (Catalog, a revision's page,
+  C3), U94 (a spacecraft's configuration and What changes) and U99 never show a monitoring apply. A spacecraft
+  stays "on catalog rev 14" after one. Effective model revision ids appear only in Technical details, including the
+  revision page's "Mission model revision" row.
+- **The old side stores.** Dev has nothing to move (0 rows, domain 11-19), so they retire as code, with no screen.
+  If an environment ever has rows, a person stages them in the console as a monitoring set, "Move 48 limits and 6
+  derived points from the old apps", and another applies it under four-eyes. Never a script, and never under
+  someone's name (TEAM RULE, Controls). No history backfill (#92).
+- **Per-spacecraft limits (open with the user, #92).** Domain recommends declarations scoped to a context, one
+  revision for the fleet. If the user adopts that, each definition gets `Applies to`: `All spacecraft` (default),
+  a profile, or a context (U43's named sets, `ECLIPSE`). Summaries name it as U43 does: "Edit ECLIPSE limits for
+  BATT_V", "Edit limits for BATT_V on Block 2". Per-spacecraft deltas in any other form come back to ux.
+  - **The Profile page's hook** (mms-ux): limits scoped to a profile sit beside Profile P3's overrides, so the
+    profile's summary carries a line with the server's count, e.g. "3 limits apply only to this profile · Open in
+    Monitoring". Its words come with the follow-up once the user rules.
+
+### U109 · Mission composition on MM&S screens: naming a composition, "Made of", approving one, and one that's no longer approved (#537 D/E; reads #543, #581; console #538, #546) (mms-ux / api / fe-setup / domain / ca-ux)
+A composition is the set of catalogs a mission model is made from (#537). D2 (#581) puts `composition` beside every
+catalog revision a read shows. Until D4 (a composition with more than one catalog) every composition has one
+catalog, and **every screen reads exactly as today**. The composed forms below show only when `imported_layers` has
+more than one entry. Visible text never says "layer", "effective revision", "mount" or "lineage" (U108). Words
+agreed with ux 11-20.
+
+- **Naming it.**
+  - One catalog: "catalog rev 4" everywhere, as today (U17, U65). Its composition number isn't shown.
+  - Several: "composition 3" in a sentence, `Composition 3` where it stands alone (a cell, a heading), from
+    `number`. With `number` null: "this composition" in a sentence, and where it stands alone, the Made of line alone.
+    Never an id (U25). It's not a revision: no "rev", no "r".
+  - The neutral tag `COMPOSED` marks it only where it could pass for one catalog (see the profiles cell below).
+- **Made of** (its catalogs, in the server's order): "Made of: Bus catalog rev 4 · Payload catalog rev 2". Each
+  catalog leads with its database's name (`catalog_revision.database.name`). The place it sits (the mount's last
+  part, in parentheses) is added only when the name doesn't tell two apart or there's no name: "EPS catalog rev 4
+  (bus) · EPS catalog rev 2 (payload)"; "catalog rev 4 (bus)". The catalog at '/' never gets one. A catalog the server
+  can't name (`catalog_revision` null): "an imported catalog (bus)". Up to 3, then "and N more" with `Show all`.
+  Full mounts, layer ids and the composition id go in Technical details.
+  - Data note (#581): a catalog's revision is the earliest one that imported it, which can be in a different
+    database from the one a profile names. Show it as sent; the console never "corrects" it.
+- **Where it shows** (#538, readers first):
+  - Profiles list, Catalog cell: `Composition 3`, with Made of as the cell's muted second line. The `COMPOSED` tag
+    shows only where the cell would otherwise look like one catalog (no number, so only Made of shows; ux).
+    Profile detail: the summary's "catalog rev 4" part reads "composition 3", and Made of sits under the header.
+  - Overrides (P3): the value reads "composition 3" where it reads "catalog rev 4" today.
+  - Spacecraft configuration (U94): the `Catalog revision` field keeps its label and reads "Composition 3" with Made
+    of under it. What changes rows: "Catalog revision: catalog rev 14 → composition 3".
+  - L10 rows: as What changes.
+  - Catalog revision rows (A1 Revisions): nothing new. Every row is its own one-catalog composition until D4. D4's
+    words come with D4.
+  - A monitoring apply (U108) never changes any of these.
+- **Approving a composition** (U65's page for a composed base; a one-catalog base keeps today's page word for word):
+  - Header: `Composition 3`, Made of under it, then "Composed by Owen P. at 11-20 09:12Z" (`created_by` +
+    `created_at`, U29; actor forms as U103: "Nightly planner (a service identity)", "Cadence, run by Mira K.",
+    "run by a person"). `created_by` null (the migration's): no line.
+  - Importers (`importers` per catalog, the separation set): "Imported by Mira K. (Bus catalog rev 4) and Ana R.
+    (Payload catalog rev 2)". These are people, not events, so there's no time here; each catalog's own page has
+    U65's "Imported by … at …". A catalog with no named importer drops from the line; none named: no line.
+  - Up front (`cannot_decide_because`, A6; never computed in the console):
+    - `self_approval`: "You imported one of its catalogs, so another org admin approves composition 3." With
+      `via_service`: "Nightly planner, a service identity you're accountable for, imported one of its catalogs, so
+      another org admin approves composition 3."
+    - `composer`: "You chose this combination of catalogs, so another org admin approves composition 3." With
+      `via_service`: "Nightly planner, a service identity you're accountable for, chose this combination of
+      catalogs, so another org admin approves composition 3." (U65/U105's "You …, so another org admin approves
+      it." form; ux.)
+    - `authors_unknown`: U99/U100's line with "composition 3" in place of "rev 4".
+    - No number: "…approves this composition."
+  - The approve refusals (E1's codes, the backstop) take U95's form: "Not approved: you chose this combination of
+    catalogs, so another org admin approves it. Your approval wasn't recorded." (and the `self` / `via_service`
+    forms likewise).
+  - The button: `Approve composition 3` (B7), where it reads `Approve rev 4` today.
+  - Breaking changes (U102 as amended, from the top-level `breaking_base`): "…compared with composition 2" when the
+    base is composed, "…compared with rev 3" when it's one catalog. No base: "Cadence has nothing earlier to compare
+    composition 3 with, so it can't tell what it breaks. Check what uses its commands and points before you
+    stage." A page reads one breaking source: one-catalog pages keep `catalog_revision.breaking_base` (#363, #387)
+    until D4.
+  - C3 on its page (when D3's pins arrive): U102's lines with "composition 3": "Spacecraft can't move to composition
+    3 until it's approved.", "Composition 3 was rejected, so spacecraft can't move to it.", "Composition 3 is retired,
+    so spacecraft can't move to it. Any already on it keep it."
+- **A composition that's no longer approved** (E2, #546; amended 11-20 after mms-security's correction and ux's #546
+  comment; ca-ux co-owns the command hold). Only a withdrawal or a rejection of the craft's own revision counts, never
+  a newer approval of another one (#537 §5). Until #600, a withdrawal is final: a withdrawn revision can't be approved
+  again (#546), so no line offers that.
+  "Composition 3" below is the composition's name ("catalog rev 4" for one catalog; "this composition" with no
+  number).
+  - **When they show:** the state line, the attention item and the hold show whenever the revision a craft **is on**
+    (its active configuration's) is withdrawn or rejected, from `approval_withdrawn` on the selection read. That holds
+    whatever else is approved, because until a new configuration is applied the craft is still on the withdrawn
+    content (mms-security, #546).
+  - **The way out depends on what's left:**
+    - An earlier approved, runnable version is left: "Stage a new configuration to move it to composition 3's earlier
+      approved version." Staging isn't refused. The next staging shows that version openly, with the line
+      "Composition 3's newest approval was withdrawn by Ana R. at 11-20 09:12Z, so this configuration uses its
+      earlier approved version." (rejected: "…was rejected by Ana R. at …"; no name: "…was withdrawn at 11-20
+      09:12Z…").
+    - None is left: "Move it to an approved composition." Staging this composition is refused (below).
+  - The craft's state line (spacecraft page, configuration), caution: "Composition 3 is no longer approved: Ana R.
+    withdrew its approval at 11-20 09:12Z: “<reason>”. EARENDIL-004 stays on it until a new configuration is
+    applied. <the way out>" (The reason is quoted, as U65; with none, the sentence ends at the time.) Rejected:
+    "…Ana R. rejected it at …". No name: "its approval was withdrawn at 11-20 09:12Z". The decision's record goes in
+    Technical details (until #600, the revision and the decision's time; then the record's id).
+  - Attention item, a Now queue row (U31's form and ranking): P1 when the craft has a pass within 2 h or in
+    progress, else P2 (it needs `spacecraft_id` to rank). Title "EARENDIL-004 · On composition 3, which is no longer
+    approved."; secondary "Approval withdrawn by Ana R. at 11-20 09:12Z: “<reason>”. <the way out>"; action `Open
+    EARENDIL-004`. Several craft are one row each (U31 ranks them by pass). It resolves when the craft is on an
+    approved revision. A craft with no name reads "Unknown spacecraft · On composition 3, …" (U25), with the action
+    `Open spacecraft` (ux).
+  - A new configuration when nothing approved is left (refused at staging and at activation, the gate's own check;
+    D3's `restage_needed` names the record in `details.decision`): "Not staged: EARENDIL-004 is on composition 3,
+    which is no longer approved, so it can't take a new configuration that uses it. Move it to an approved
+    composition first." ("Not sent:" in the U94 workspace.)
+  - **The command hold** (ca-security; Compose and the decide panel name a HOLD by its check, U60). Its check key is
+    `model_approval_withdrawn` (#546; it covers withdrawn and rejected), and its label is `Composition`, mapped by
+    key, never by text. So: "Acknowledge the Composition HOLD", and in the log "Acknowledged the Composition HOLD on
+    EARENDIL-004". Each new withdrawal holds again, and only new submissions meet it. When the check passes, its GO
+    sentence is "Every target is on an approved composition." (fe-ops, #632); while no target is composed (every
+    mission until D4), "Every target is on an approved catalog revision." (one catalog reads as today).
+    - The log names the targets from `hold_acknowledged`'s `payload.evidence.spacecraft_ids` (ca-engineer, #546):
+      "Acknowledged the Composition HOLD on EARENDIL-004" (several: up to 3 names, then "and N more"; an unnamed craft
+      "Unknown spacecraft", never an id). Without the evidence: "Acknowledged the Composition HOLD" (#632).
+    - A decision kind the console doesn't know (neither withdrawn nor rejected) says only what's known: "EARENDIL-004
+      is on composition 3, which is no longer approved since 11-20 09:12Z. …" in the HOLD, and "No longer approved
+      since 11-20 09:12Z." on the Now row, never the withdrawn form (U20; #632).
+    - One target: "EARENDIL-004 is on composition 3, whose approval Ana R. withdrew at 11-20 09:12Z: “<reason>”.
+      Acknowledge the HOLD to send this request to EARENDIL-004 anyway." Rejected: "…composition 3, which Ana R.
+      rejected at 11-20 09:12Z: “<reason>”. …". No name: "…composition 3, whose approval was withdrawn at 11-20
+      09:12Z. …". The reason names the record, as the attention item does (mms-security).
+    - Several targets (a group): "3 of the 12 targets are on a composition that's no longer approved: EARENDIL-004,
+      EARENDIL-007 and EARENDIL-011. Acknowledge the HOLD to send this request to them anyway." Up to 3 names, then
+      "and N more".
+    - Acknowledging clears only this HOLD; GO, the other checks and the pass still decide (U20), so the line
+      promises nothing more. Placeholder: "Why it's safe to command it" (several targets: "…command them"). The
+      reviewer's side needs nothing new (DecisionPanel's line for a HOLD the author's notes don't cover).
+  - Note for builders, not screen text: telemetry keeps flowing and the craft stays on its composition, so no
+    screen says either stopped.
+- **Withdrawing an approval** (E2, #546; `POST …/withdraw {reason, operation_id?}`; a person with
+  `:approve_mission_model`, no separation needed, since it only tightens). On U65's page for an approved revision,
+  shown when the read's `viewer_can_withdraw` is true (ca-engineer):
+  - The action `Withdraw approval…` (accessible name "Withdraw approval of catalog rev 4", B7) opens a sheet. It has a
+    required field, so focus goes to `Reason` (A1), and the consequence lines describe it (`aria-describedby`). Title:
+    "Withdraw approval of catalog rev 4?" Line: "Spacecraft on it stay on it, but they can't take a new configuration
+    that uses it, and new commands to them meet a hold until they move to an approved version. Nothing that's running
+    stops." Then, while #600 is open: "This can't be undone for now: the same catalog content can't be approved again
+    until a later Cadence update." (mms-security, ca-engineer: withdrawn is final, and the revision's id comes from its
+    content.)
+  - `Reason`, required: up front "Give a reason first." (A7). 422 on the field: "Say why." / "Keep the reason under
+    2,000 characters." Commit `Withdraw approval` (danger), `Cancel`.
+  - After it (a status, B6): "Approval withdrawn. Spacecraft on catalog rev 4 can't take a new configuration that
+    uses it." The page then reads the tag `WITHDRAWN` (off) and the decided line "Withdrawn by Ana R. at 11-20
+    09:12Z: “<reason>”." (U29; no name: "Withdrawn at …").
+  - 409 `mission_model_revision_not_withdrawable` by `status` (U97 / #260's shape; `decided_by` and `decided_at`
+    both or neither):
+    - `candidate`: "Not withdrawn: catalog rev 4 isn't approved, so there's nothing to withdraw. Nothing changed."
+    - `rejected`: "Catalog rev 4 was rejected by Ana R. at 11-20 09:12Z, so there's nothing to withdraw. Nothing
+      changed." Without them: "Not withdrawn: catalog rev 4 was rejected, so there's nothing to withdraw. Nothing
+      changed."
+    - `withdrawn`, by the viewer: "You already withdrew its approval at 11-20 09:12Z. Reload to see it." By someone
+      else: "Catalog rev 4's approval was already withdrawn by Ana R. at 11-20 09:12Z, so nothing changed. Reload to
+      see it." Without them: "Not withdrawn: its approval was already withdrawn, so nothing changed. Reload to see
+      it."
+    - `retired`: "Not withdrawn: catalog rev 4 is retired, so its approval can't be withdrawn. Nothing changed." (A
+      retired revision may have been approved; ux on #615, built in #630.)
+    - A status the console doesn't know: "Not withdrawn: catalog rev 4 can't be withdrawn as it stands, so nothing
+      changed. Reload to see it." with the status in Technical details.
+  - 403 `forbidden`: "Not withdrawn: only an org admin can withdraw an approval. Nothing changed." 403
+    `human_mission_model_approver_required`: "Not withdrawn: only a person can withdraw an approval, not a service
+    identity. Nothing changed."
+  - A replay (same `operation_id`, actor and reason) shows as the original result.
+  - The catalog list's row for a withdrawn revision carries the same `WITHDRAWN` (off) tag as its page.
+  - Approve on a withdrawn revision (the backstop; the page shows no Approve): 409
+    `mission_model_revision_not_approvable` with `status: "withdrawn"` reads "Not approved: catalog rev 4's approval
+    was withdrawn, and it can't be approved again for now. Your approval wasn't recorded." (composed: "composition
+    3's approval…"; no number: "this catalog revision's approval…"). Built in #630.
+  - The audit line (ca-engineer, #546): "Withdrew the approval of catalog rev 4", with the reason in the reason
+    column; the approval it withdrew stays listed. Composed: "…of composition 3" (D4 names composed revisions in
+    every reader, #446).
+  - Elsewhere: C3's place (U102) on a withdrawn revision reads "Catalog rev 4's approval was withdrawn, so spacecraft
+    can't move to it."; an import that matches it (U99) reads "This file matches catalog rev 4, whose approval was
+    withdrawn, so no new revision was created." with `Open rev 4`.
+- **Pins, versions and the next staging** (D3, #544; #577's read, agreed on #577 11-20). A pin uses the newest
+  approved, runnable version of its composition. "Catalog rev 4" below is the pin's name by the naming rule above
+  ("composition 3" when composed).
+  - **Staging a pin that can't run** (field errors on `composition_id`, no final period; the numbers come in the
+    error's details):
+    - Not approved: "Catalog rev 4 isn't approved yet; an org admin approves it in Setup › Catalog first"
+    - Only an approval made under an earlier version of Cadence: "Catalog rev 4 was approved for an earlier version
+      of Cadence, so it needs approving again; an org admin does that in Setup › Catalog"
+    - The catalog revision and the composition disagree (a client bug): "Cadence couldn't match this to catalog rev
+      4; choose the catalog revision again"
+  - **The version changed after staging** (409 `restage_needed`, D3 §3; nothing is written; details per entry
+    `{composition_id, recorded_revision_id, current_revision_id | null, current_reason | null}` plus the catalog
+    revision numbers, and E2's `decision`). The why, by `current_reason`:
+    - a newer version was approved: "a newer approved version of catalog rev 4 is now the one to use"
+    - the staged version was withdrawn (E2): "catalog rev 4's approval was withdrawn by Ana R. at 11-20 09:12Z" (no
+      name: "…was withdrawn at …")
+    - the staged version doesn't run on this Cadence update: "the version of catalog rev 4 it staged doesn't run on
+      this version of Cadence"
+    - none approved is left (`current_revision_id` null): "no approved version of catalog rev 4 is left"
+    - unknown or missing: "the version of catalog rev 4 it staged isn't the one to use any more"
+    - Several entries: the first why, then "and 2 more catalog revisions changed too"; all of them in `Show all`.
+  - Lines, by the act (U95's order; the console words them from the code):
+    - `Apply as r5`: "Not applied: <why>, so nothing changed. Stage it again to use the current version."
+    - `Request review`: "Not sent for review: <why>, so nothing changed. Stage it again to use the current
+      version."
+    - Approve: "Not approved: <why>, so nothing was applied and the change set stays in review. Your approval wasn't
+      recorded. Send it back so it can be staged again."
+    - The action beside the apply and request-review lines is `Stage again` ("Stage again with the current version
+      of catalog rev 4", B7). With none approved left, there's no action, and the line ends "Move it to an approved
+      composition first." in place of "Stage it again…"; the Approve form ends "Send it back so it can move to an
+      approved composition." (ca-ux).
+  - **A newer version waiting** (`selection.newer_candidate`; rejected and non-runnable ones are never sent): on the
+    craft's and the profile's configuration, "A newer version of catalog rev 4, from a Cadence update, has been
+    waiting for approval since 11-20 06:52Z. Until it's approved, EARENDIL-004 stays on the earlier one." with `Open
+    it` (the candidate's page). The Cadence version itself never shows.
+  - **Nothing approved and runnable** (`selection.selected` null): "Catalog rev 4 needs approving again after a
+    Cadence update."
+  - **The approval page** (`next_staging_selects`): "Approving it doesn't change anything that's running. 12
+    spacecraft on 2 profiles take this version the next time a configuration is staged for them." With open change
+    sets that need staging again: "1 open change set will need staging again." Up to 3 craft names, then "and N
+    more".
+  - **Attention** (source `composition_candidate`, U31 rows):
+    - `candidate_waiting`, P2: "Catalog rev 4 · A newer version from a Cadence update is waiting for approval.";
+      secondary "12 spacecraft on 2 profiles take it once it's approved and their configuration is next staged.";
+      `Review` (the candidate's page).
+    - `nothing_selectable`, high (P1 when one of the craft has a pass within 2 h, else P2): "Catalog rev 4 · Needs
+      approving again after a Cadence update."; secondary "12 spacecraft on 2 profiles can't take a new
+      configuration until it's approved." With a candidate, `Review` opens it. Without one, by `compile.status`:
+      - running or queued: "Cadence is making a version of it for this update. It's ready for approval when this row
+        changes. 12 spacecraft on 2 profiles can't take a new configuration until then." No button.
+      - failed: "Cadence couldn't make a version of it for this update, so 12 spacecraft on 2 profiles can't take a
+        new configuration." `Try again` ("Try again: make a version of catalog rev 4", B7); the error in Technical
+        details.
+      - not run: "Cadence hasn't made a version of it for this update yet, so …" `Make it now` ("Make it now: make a
+        version of catalog rev 4", B7).
+      - After pressing: the status "Cadence is making a version of catalog rev 4 for this update." Without the
+        import right: no button, and the secondary ends "Someone who can import catalogs can start it." A status the
+        console doesn't know: the not-run line with no button, the status in Technical details.
+      - Never "compile" or "recompile" on screen (U108).
+- **Not here:** D4's composition editor (choosing catalogs, places, collisions) and its re-key HOLD, which lists
+  every identity that changes before the change set is saved (#537 §1). Their words come with D4.

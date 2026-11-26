@@ -7,13 +7,16 @@ defmodule CadenceWeb.Console.ActivationRequestController do
   use CadenceWeb, :controller
 
   alias Cadence.Control.ActivationRequests
+  alias Cadence.Reads.CatalogCompositions
   alias CadenceWeb.Console.{ApproveRefusals, ConfigJSON, Problem}
 
   def index(conn, params),
     do: respond(conn, ActivationRequests.list(scope(conn), mission_id(conn), params))
 
-  def show(conn, %{"request_id" => id}),
-    do: respond(conn, ActivationRequests.get(scope(conn), mission_id(conn), id))
+  def show(conn, %{"request_id" => id}) do
+    result = ActivationRequests.get(scope(conn), mission_id(conn), id)
+    respond(conn, with_compositions(conn, result))
+  end
 
   # #235: one page of a configuration change group's spacecraft names.
   def configuration_change_names(conn, %{"request_id" => id} = params),
@@ -35,6 +38,21 @@ defmodule CadenceWeb.Console.ActivationRequestController do
   def resume(conn, %{"request_id" => id}),
     do: respond(conn, ActivationRequests.resume(scope(conn), mission_id(conn), id))
 
+  # D2 (#543): each catalog revision a configuration change names carries its composition. Added
+  # here, in the read layer, so Control doesn't depend on Reads.
+  defp with_compositions(conn, {:ok, %{configuration_changes: %{} = changes} = detail}) do
+    changes =
+      CatalogCompositions.configuration_changes(
+        scope(conn).organization_id,
+        mission_id(conn),
+        changes
+      )
+
+    {:ok, %{detail | configuration_changes: changes}}
+  end
+
+  defp with_compositions(_conn, result), do: result
+
   defp respond(conn, {:ok, data}), do: json(conn, %{data: ConfigJSON.encode(data)})
   defp respond(conn, {:error, reason}), do: error(conn, reason)
 
@@ -51,14 +69,35 @@ defmodule CadenceWeb.Console.ActivationRequestController do
   defp error(conn, {:approve_refused, code, details}),
     do: ApproveRefusals.respond(conn, code, details)
 
+  # #236: an author of the configuration being activated can't approve it (nothing recorded).
+  # Both #236 clauses take only the details map Refusals.explain builds (or #280's service map),
+  # never a raw id list, which falls through to the generic refusal (mms-security).
+  defp error(conn, {:activation_approver_authored_content, %{} = details}),
+    do: ApproveRefusals.authored(conn, details)
+
+  # #236 fail-closed and #280 (one wire code, ux U100): who made it can't be established, so nobody
+  # may approve it as it stands. details.service picks the line: null for #236's unreadable
+  # configuration authors (Refusals.explain builds that map), {id, name} for #280's service.
+  defp error(conn, {:activation_approver_authors_unknown, %{} = details}),
+    do: ApproveRefusals.authors_unknown(conn, details)
+
   defp error(conn, {:not_resumable, code}),
     do: Problem.respond(conn, :not_resumable, %{error_code: code})
+
+  # #275 (U94): the requester's refusal, kind-prefixed. #280 (U100): it always says whether it
+  # came through a service.
+  defp error(conn, {:activation_self_approval_forbidden, %{} = details}),
+    do:
+      Problem.respond(
+        conn,
+        :activation_self_approval_forbidden,
+        Map.put_new(details, :via_service, nil)
+      )
 
   defp error(conn, reason)
        when reason in [
               :activation_request_not_found,
               :configuration_changes_group_not_found,
-              :self_approval_forbidden,
               :not_requester,
               :activation_policy_changed,
               :activation_execution_in_progress

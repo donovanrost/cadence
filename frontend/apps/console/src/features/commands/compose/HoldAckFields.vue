@@ -3,6 +3,8 @@ import { computed } from "vue";
 import { ApButton, ApCallout, ApTextarea } from "@/ui";
 import { checkKeyText, HOLD_NOTE_MAX, type PreflightCheck } from "../groups/api.ts";
 import { checkLabel, type HoldAcks } from "../groups/checks.ts";
+import { holdPlaceholder } from "../groups/withdrawn.ts";
+import { heldCount } from "../groups/withdrawnSentence.ts";
 
 /**
  * #60/#61: a note per ackable HOLD, stamped with the hold_basis it was written against. If the HOLD
@@ -17,6 +19,8 @@ const rows = computed(() =>
     key: checkKeyText(c.key),
     label: checkLabel(c.key),
     basis: c.hold_basis ?? null,
+    // U109: the Composition HOLD's note asks why it's safe to command the held targets.
+    placeholder: c.key === "model_approval_withdrawn" ? holdPlaceholder(heldCount(c)) : undefined,
   })),
 );
 const stale = (key: string, basis: string | null) => {
@@ -35,6 +39,7 @@ const stale = (key: string, basis: string | null) => {
       :model-value="acks[c.key]?.note ?? ''"
       :label="`Acknowledge the ${c.label} HOLD`"
       :hint="hint"
+      :placeholder="c.placeholder"
       :maxlength="HOLD_NOTE_MAX"
       :rows="2"
       @update:model-value="(note: string) => $emit('ack', c.key, c.basis, note)"

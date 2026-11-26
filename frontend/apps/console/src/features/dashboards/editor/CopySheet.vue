@@ -57,7 +57,7 @@ defineExpose({ open });
 
 <template>
   <ApSheet ref="sheet" title="Save as copy" initial-focus="input">
-    <ApCallout v-if="copied" tone="caution">{{ copied.note }}</ApCallout>
+    <ApCallout v-if="copied" tone="caution" role="alert">{{ copied.note }}</ApCallout>
     <div v-else class="flex flex-col gap-3">
       <ApField v-model="title" label="Name" required />
       <p v-if="draft?.commands.length" class="m-0 text-sm text-text-3">

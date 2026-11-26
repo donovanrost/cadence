@@ -254,8 +254,10 @@ defmodule CadenceWeb.Console.MissionModelRevisionAPITest do
       |> json_response(200)
       |> get_in(["data", "database", "revisions"])
 
-    assert [%{"model" => %{"revision_id" => id, "status" => "candidate"}} | _] = revisions
+    assert [%{"model" => %{"revision_id" => id, "status" => "candidate"}} = row | _] = revisions
     assert id == c.revision
+    # D2 (#543): and the id of the composition behind that model (the import's own).
+    assert %{"composition_id" => "mission_model_composition:" <> _} = row
   end
 
   test "reject needs a reason, records it, reaches the audit, and only a candidate can be rejected",
