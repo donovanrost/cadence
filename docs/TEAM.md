@@ -98,7 +98,8 @@ Laptop 1 worktrees live in `~/.herdr/worktrees/cadence/<handle>`. The new agent 
 
 ## Communicating
 
-- `hc send <handle> "[from <you>] <message>"`. Laptop-2 agents are `donovans-macbook-pro-1/<handle>`.
+- `hc send <handle> "[from <you>] <message>"`. From laptop 1, laptop-2 agents are `donovans-macbook-pro-1/<handle>`;
+  from laptop 2, laptop-1 agents are `laptop1/<handle>` (the CTO is `laptop1/t11`).
   Keep it to a few lines; longer things go in the issue or PR and you send the link.
 - Tell the CTO (`t11` on laptop 1, handle `cto`) about: a milestone done, a blocker you can't clear, a decision
   above your area, a hire or fire. Not routine progress; that goes on the board.
