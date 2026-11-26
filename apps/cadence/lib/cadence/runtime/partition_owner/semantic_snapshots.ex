@@ -76,10 +76,33 @@ defmodule Cadence.Runtime.PartitionOwner.SemanticSnapshots do
     if due?(state), do: snapshot(state), else: state
   end
 
-  @doc "Snapshots now if there is anything unsnapshotted (shutdown)."
+  @doc "Snapshots now if there is anything unsnapshotted."
   @spec flush(map()) :: map()
   def flush(%{semantic_dirty?: true} = state), do: snapshot(state)
   def flush(state), do: state
+
+  @doc """
+  The owner is stopping: a final snapshot, then the streams' consumers are told it no longer
+  gates them. If the final snapshot did not commit it keeps gating, so the journal still holds
+  what its last good snapshot needs (a restarted owner gates again with its first batch).
+  """
+  @spec stop(map()) :: map()
+  def stop(state) do
+    if gated?(state) do
+      state = flush(state)
+
+      if state.semantic_dirty? == false do
+        SemanticSnapshotNotifier.stopped(
+          PartitionKey.identifier(state.partition_key),
+          state.semantic_resume
+        )
+      end
+
+      state
+    else
+      state
+    end
+  end
 
   @doc "The progress a batch result reports to the journal consumer: who gates it, or nil."
   @spec partition(map(), map()) :: binary() | nil

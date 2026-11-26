@@ -266,6 +266,16 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
   def handle_info({:semantic_snapshot_durable, _partition, _stream_id, _offset}, state),
     do: {:noreply, state}
 
+  # A partition stopped after its final snapshot: it must not pin the durable cursor for good.
+  def handle_info({:semantic_snapshot_stopped, partition, stream_id}, state)
+      when stream_id == state.stream_id do
+    gate = SnapshotGate.release(state.snapshot_gate, partition)
+    {:noreply, release_snapshot(%{state | snapshot_gate: gate})}
+  end
+
+  def handle_info({:semantic_snapshot_stopped, _partition, _stream_id}, state),
+    do: {:noreply, state}
+
   # Trapping exits (#270): a linked process's normal exit changes nothing; any other stops the
   # consumer with the same reason, as an untrapped link would.
   def handle_info({:EXIT, _pid, :normal}, state), do: {:noreply, state}

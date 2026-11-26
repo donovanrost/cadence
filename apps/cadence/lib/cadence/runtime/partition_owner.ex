@@ -193,8 +193,8 @@ defmodule Cadence.Runtime.PartitionOwner do
   end
 
   @impl true
-  def terminate(_reason, %{semantic_dirty?: true} = state) do
-    _ = SemanticSnapshots.flush(state)
+  def terminate(_reason, %{semantic_resume: _resume} = state) do
+    _ = SemanticSnapshots.stop(state)
     :ok
   end
 

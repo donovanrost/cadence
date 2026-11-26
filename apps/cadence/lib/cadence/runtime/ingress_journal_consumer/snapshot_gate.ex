@@ -34,6 +34,15 @@ defmodule Cadence.Runtime.IngressJournalConsumer.SnapshotGate do
   def snapshotted(gate, partition, offset),
     do: %{gate | offsets: Map.update(gate.offsets, partition, offset, &max(&1, offset))}
 
+  @doc "`partition` stopped after its final snapshot: it gates no longer."
+  @spec release(t(), binary()) :: t()
+  def release(gate, partition),
+    do: %{
+      gate
+      | partitions: MapSet.delete(gate.partitions, partition),
+        offsets: Map.delete(gate.offsets, partition)
+    }
+
   @doc """
   The durable resume point for a batch whose processing finished at `finished`, given the
   journal's current durable resume point `floor` (never lowered).

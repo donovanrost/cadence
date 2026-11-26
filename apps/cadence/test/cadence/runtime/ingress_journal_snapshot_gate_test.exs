@@ -47,6 +47,27 @@ defmodule Cadence.Runtime.IngressJournalSnapshotGateTest do
       gate = SnapshotGate.snapshotted(gate, "p1", 50)
       assert SnapshotGate.limit(gate, 500, 100) == 250
     end
+
+    test "a partition that stopped after its final snapshot gates no longer" do
+      gate =
+        SnapshotGate.new()
+        |> SnapshotGate.note("p1")
+        |> SnapshotGate.note("p2")
+        |> SnapshotGate.snapshotted("p1", 400)
+        |> SnapshotGate.snapshotted("p2", 250)
+
+      assert SnapshotGate.limit(gate, 500, 100) == 250
+
+      gate = SnapshotGate.release(gate, "p2")
+      assert SnapshotGate.limit(gate, 500, 100) == 400
+
+      gate = SnapshotGate.release(gate, "p1")
+      assert SnapshotGate.limit(gate, 500, 100) == 500
+
+      # A restarted partition gates again from its first batch, from the floor.
+      gate = SnapshotGate.note(gate, "p1")
+      assert SnapshotGate.limit(gate, 500, 100) == 100
+    end
   end
 
   @tag :tmp_dir
@@ -77,6 +98,38 @@ defmodule Cadence.Runtime.IngressJournalSnapshotGateTest do
 
     snapshotted(consumer, "p1", a.stream_id, b.end_offset)
     assert resume(journal) == b.end_offset
+  end
+
+  @tag :tmp_dir
+  test "a partition that stopped after its final snapshot stops pinning the journal", ctx do
+    %{journal: journal, consumer: consumer, entries: [a, b]} = start_stream(ctx.tmp_dir, 2)
+
+    {_raw, ref} = next_batch()
+    persisted(consumer, ref, "p1")
+    {_raw, ref} = next_batch()
+    persisted(consumer, ref, "p1")
+    assert resume(journal) == 0
+
+    # Another stream's partition stopping changes nothing.
+    send(consumer, {:semantic_snapshot_stopped, "p1", "another-stream"})
+    _ = :sys.get_state(consumer)
+    assert resume(journal) == 0
+
+    send(consumer, {:semantic_snapshot_stopped, "p1", a.stream_id})
+    _ = :sys.get_state(consumer)
+    assert resume(journal) == b.end_offset
+  end
+
+  @tag :tmp_dir
+  test "a partition that stopped reaches the consumer through the notifier", ctx do
+    %{journal: journal, consumer: consumer, entries: [a]} = start_stream(ctx.tmp_dir, 1)
+    {_raw, ref} = next_batch()
+    persisted(consumer, ref, "p1")
+    assert resume(journal) == 0
+
+    assert :ok = SemanticSnapshotNotifier.stopped("p1", %{a.stream_id => a.end_offset})
+    _ = :sys.get_state(consumer)
+    assert resume(journal) == a.end_offset
   end
 
   @tag :tmp_dir

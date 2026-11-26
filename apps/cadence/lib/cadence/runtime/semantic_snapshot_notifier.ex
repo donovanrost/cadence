@@ -3,7 +3,9 @@ defmodule Cadence.Runtime.SemanticSnapshotNotifier do
   Tells a journal's processing consumer how far a partition's semantic snapshot reaches
   (DECISIONS #94/#96). The consumer's durable cursor may only follow snapshots, so the partition
   sends `{:semantic_snapshot_durable, partition_id, stream_id, offset}` to every consumer of each
-  stream its snapshot covers, once the snapshot is committed.
+  stream its snapshot covers, once the snapshot is committed. A partition that stops for good
+  after its final snapshot sends `{:semantic_snapshot_stopped, partition_id, stream_id}`, so it
+  stops gating.
 
   A `:pg` scope carries it, so it reaches a consumer on another node. Consumers subscribe per
   stream; both sides tolerate the scope not running (a host without the runtime, tests).
@@ -31,6 +33,23 @@ defmodule Cadence.Runtime.SemanticSnapshotNotifier do
       for {stream_id, offset} <- resume,
           consumer <- :pg.get_members(@scope, stream_id) do
         send(consumer, {:semantic_snapshot_durable, partition_id, stream_id, offset})
+      end
+    end
+
+    :ok
+  end
+
+  @doc """
+  Tells the consumers of every stream in `resume` that `partition_id` has stopped after its final
+  snapshot: it no longer gates their durable cursor. A partition that comes back gates again with
+  its first batch.
+  """
+  @spec stopped(binary(), %{binary() => non_neg_integer()}) :: :ok
+  def stopped(partition_id, resume) when is_map(resume) do
+    if running?() do
+      for {stream_id, _offset} <- resume,
+          consumer <- :pg.get_members(@scope, stream_id) do
+        send(consumer, {:semantic_snapshot_stopped, partition_id, stream_id})
       end
     end
 

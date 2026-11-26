@@ -102,6 +102,32 @@ defmodule Cadence.Runtime.PartitionOwner.SemanticSnapshotsTest do
     assert clean.semantic_dirty? == false
   end
 
+  test "a stopping partition snapshots, then tells its streams it gates no longer",
+       %{state: state, spec: spec, key: key} = ctx do
+    SemanticSnapshotNotifier.subscribe(@stream)
+    partition = PartitionKey.identifier(key)
+    state = state |> process(ctx, 1) |> SemanticSnapshots.track(result(90, 100))
+
+    assert %{semantic_dirty?: false} = SemanticSnapshots.stop(state)
+    assert {:ok, _state, %{@stream => 90}} = Snapshot.fetch(spec, key)
+    assert_receive {:semantic_snapshot_durable, ^partition, @stream, 90}
+    assert_receive {:semantic_snapshot_stopped, ^partition, @stream}
+
+    # Nothing unsnapshotted: it still says so.
+    assert %{semantic_dirty?: false} = SemanticSnapshots.stop(%{state | semantic_dirty?: false})
+    assert_receive {:semantic_snapshot_stopped, ^partition, @stream}
+  end
+
+  test "a stopping partition whose final snapshot fails keeps gating",
+       %{state: state, spec: spec, key: key, plan: plan} = ctx do
+    SemanticSnapshotNotifier.subscribe(@stream)
+    state = state |> process(ctx, 1) |> SemanticSnapshots.track(result(90, 100))
+    assert {:ok, _state, _writer} = Store.recover_writer(spec, key, plan)
+
+    assert %{semantic_dirty?: true} = SemanticSnapshots.stop(state)
+    refute_receive {:semantic_snapshot_stopped, _, _}, 20
+  end
+
   test "a resume offset never moves back, and falls back to the batch's end", %{state: state} do
     state = SemanticSnapshots.track(state, result(nil, 100))
     assert state.semantic_resume == %{@stream => 100}
