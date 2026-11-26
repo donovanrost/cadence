@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useRemoteQuery, type RemoteState } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
 import { ApKeyValue } from "@/ui";
-import { episodeFor, fetchEpisodes, type Alarms } from "@/features/alarms/index.ts";
+import { episodeFor, fetchEpisodes, type AlarmsPage } from "@/features/alarms/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 import AlarmTrendPanel from "./AlarmTrendPanel.vue";
@@ -20,7 +20,9 @@ import { DEFAULT_RANGE, lastCleared, pickAlarm, type RangeKey } from "./model.ts
 const props = defineProps<{
   sc: FleetSpacecraft;
   fleet: readonly FleetSpacecraft[];
-  alarms: RemoteState<Alarms>;
+  alarms: RemoteState<AlarmsPage>;
+  /** Load more of this spacecraft's alarms (#827). */
+  more: { load: () => void; busy: boolean; failed: boolean };
   limitsConfigured: boolean;
 }>();
 defineEmits<{ retry: [] }>();
@@ -33,6 +35,27 @@ const alarm = computed(() => {
   const point = typeof route.query.point === "string" ? route.query.point : null;
   return state.status === "ready" ? pickAlarm(state.value.alarms, id, point) : null;
 });
+
+// An alarm asked for (?alarm=, ?point=) that is on a page not loaded yet: load pages until it
+// arrives or there are none left, so a deep link never lands on the wrong alarm (#827).
+watch(
+  () => {
+    const s = props.alarms;
+    const id = typeof route.query.alarm === "string" ? route.query.alarm : null;
+    const point = typeof route.query.point === "string" ? route.query.point : null;
+    if (s.status !== "ready" || s.value.next === null || props.more.busy || props.more.failed)
+      return false;
+    const found =
+      id !== null
+        ? s.value.alarms.some((a) => a.id === id)
+        : point === null || s.value.alarms.some((a) => a.point.id === point);
+    return !found;
+  },
+  (missing) => {
+    if (missing) props.more.load();
+  },
+  { immediate: true },
+);
 
 const scope = useMissionScope();
 const missionId = computed(() => scope.value.mission.id);
@@ -117,6 +140,7 @@ const details = computed(() => [
         v-model:range="range"
         :sc="sc"
         :alarms="alarms"
+        :more="more"
         :limits-configured="limitsConfigured"
         :alarm="alarm"
         :episode="episode"

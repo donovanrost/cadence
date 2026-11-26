@@ -21,8 +21,8 @@ defineEmits<{ more: [] }>();
 <template>
   <div class="flex flex-wrap items-center gap-3">
     <p class="m-0 font-mono text-xs text-text-3 uppercase">
-      Showing {{ shown.toLocaleString("en-US") }} of {{ total.toLocaleString("en-US") }}
-      {{ what }}, worst first
+      Showing {{ shown.toLocaleString("en-US") }} of {{ total.toLocaleString("en-US") }} {{ what }},
+      worst first
     </p>
     <ApButton
       size="compact"

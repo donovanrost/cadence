@@ -20,9 +20,7 @@ const PAGE = 200;
  */
 export function useSpacecraftAlarms(missionId: Ref<MissionId>, spacecraftId: Ref<string | null>) {
   return useAlarmPages(missionId, () =>
-    spacecraftId.value
-      ? { state: "active", spacecraftId: spacecraftId.value, limit: PAGE }
-      : null,
+    spacecraftId.value ? { state: "active", spacecraftId: spacecraftId.value, limit: PAGE } : null,
   );
 }
 

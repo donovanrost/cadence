@@ -16,7 +16,12 @@ export {
   type Thresholds,
 } from "./api.ts";
 export { default as AlarmsMore } from "./AlarmsMore.vue";
-export { useAlarmPages, type AlarmPages, type AlarmsMeta, type AlarmsPage } from "./useAlarmPages.ts";
+export {
+  useAlarmPages,
+  type AlarmPages,
+  type AlarmsMeta,
+  type AlarmsPage,
+} from "./useAlarmPages.ts";
 export { formatLimitLike, formatValue, withUnit } from "./format.ts";
 export {
   ALARM_PERMISSIONS,
