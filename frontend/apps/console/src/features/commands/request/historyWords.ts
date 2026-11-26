@@ -144,7 +144,6 @@ const ACTIONS: Readonly<Record<string, string>> = {
 };
 const actionWord = (a: string) => ACTIONS[a] ?? a.replaceAll("_", " ");
 
-/** Technical details lines: ids, phase, severity, generated/recorded times. */
 /**
  * ux U70 (U25): a resolver the line can't name is found here by its id: ' · resolved by service
  * identity key-1', or ' · resolved by key-1' when its kind isn't known. A named one shows nothing.
@@ -157,6 +156,7 @@ function resolverId(a: Attempt): string {
     : ` · resolved by ${by.id}`;
 }
 
+/** Technical details lines: ids, phase, severity, generated/recorded times. */
 export function technicalLines(
   attempts: readonly Attempt[],
   verifiers: readonly HistoryVerifier[],
