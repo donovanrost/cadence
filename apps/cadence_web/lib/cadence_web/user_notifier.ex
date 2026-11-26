@@ -4,7 +4,7 @@ defmodule CadenceWeb.UserNotifier do
 
   @impl true
   def deliver(invitation, organization, token) do
-    url = CadenceWeb.Endpoint.url() <> "/invitations/" <> URI.encode_www_form(token)
+    url = CadenceWeb.Endpoint.url() <> "/console/invitations/" <> URI.encode_www_form(token)
     deliver_organization_invitation(invitation, organization, url)
   end
 

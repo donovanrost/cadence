@@ -165,7 +165,7 @@ defmodule CadenceWeb.ActivationApprovalsTest do
     token = snapshot(view)["token"]
     :ok = Cadence.Auth.revoke_user_session(get_session(context.conn, :user_session_token))
     act(view, context.path, token, pending, "rejected")
-    assert_redirect(view, "/sign-in")
+    assert_redirect(view, "/console/sign-in")
 
     assert {:ok, %{state: :approval_pending}} =
              Activations.fetch(context.scope, pending.activation_request_id)

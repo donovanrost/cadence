@@ -165,7 +165,7 @@ defmodule CadenceWeb.OpsFleetDirectoryPageTest do
       "token" => original["token"]
     })
 
-    assert_redirect(view, "/sign-in")
+    assert_redirect(view, "/console/sign-in")
   end
 
   defp create_run(c),

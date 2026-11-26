@@ -86,13 +86,13 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     end
   end
 
-  test "the generic compatibility shell is protected and its Comms fallback reaches the console",
+  test "the generic compatibility shell is protected",
        %{
          conn: conn
        } do
     assert conn
            |> get("/missions/mission-missing/applications/comms_overview/federated")
-           |> redirected_to() == "/sign-in"
+           |> redirected_to() == "/console/sign-in"
 
     {member_conn, _organization, mission, _scope} = signed_in_scope_and_mission()
 
@@ -121,12 +121,6 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
 
     refute federated_html =~ "plugin-host.css"
     assert federated_html =~ ~s(href="/assets/app.css")
-
-    # §11c B7: the fallback href is the legacy Comms URL, which now redirects to the console.
-    assert {:error, {:redirect, %{to: "/console/" <> fallback}}} =
-             live(member_conn, "/missions/#{mission.mission_id}/comms")
-
-    assert String.ends_with?(fallback, "/setup/comms")
   end
 
   test "organization and admin scope catalogs are refused: only user, mission and spacecraft scopes exist" do
@@ -605,7 +599,7 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
   test "unauthenticated application-host requests use the browser gate", %{conn: conn} do
     response = get(conn, catalog_path("mission-missing"))
 
-    assert redirected_to(response) == "/sign-in"
+    assert redirected_to(response) == "/console/sign-in"
   end
 
   test "authenticated host routes negotiate JSON inside the browser pipeline" do

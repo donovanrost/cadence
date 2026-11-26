@@ -218,7 +218,7 @@ defmodule CadenceWeb.SpacecraftIdentityTest do
     token = token(view)
     :ok = Cadence.Auth.revoke_user_session(get_session(conn, :user_session_token))
     act(view, identity, token, values())
-    assert_redirect(view, "/sign-in")
+    assert_redirect(view, "/console/sign-in")
 
     assert {:ok, ^craft} =
              SpacecraftStore.fetch_spacecraft(

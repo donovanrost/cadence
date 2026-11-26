@@ -26,7 +26,7 @@ defmodule CadenceWeb.OpsContactDetailLiveTest do
   test "contact detail remains authentication scoped" do
     {_conn, _user, _organization, mission} = signed_in_user_org_and_mission()
 
-    assert {:error, {:redirect, %{to: "/sign-in"}}} =
+    assert {:error, {:redirect, %{to: "/console/sign-in"}}} =
              live(build_conn(), ~p"/missions/#{mission.mission_id}/ops/contacts/reservation-1")
   end
 

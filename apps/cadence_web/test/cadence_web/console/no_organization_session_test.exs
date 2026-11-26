@@ -1,7 +1,6 @@
-defmodule CadenceWeb.NoOrganizationControllerTest do
+defmodule CadenceWeb.Console.NoOrganizationSessionTest do
   @moduledoc """
-  /no-organization now redirects to the console's screen (L5); the pending-invitation count the
-  old page showed is the console session's `pending_invitations_count` (L21), checked here.
+  The console's no-organization screen reads the session's `pending_invitations_count`.
   """
   use CadenceWeb.ConnCase, async: true
   alias Cadence.Accounts
@@ -11,10 +10,8 @@ defmodule CadenceWeb.NoOrganizationControllerTest do
   alias Cadence.Repo
   alias CadenceWeb.TestFixtures
 
-  test "an authenticated recipient goes to the console's screen, with no invitations counted" do
+  test "a user without invitations has none counted" do
     user = TestFixtures.persist_user!()
-    conn = user |> TestFixtures.member_conn() |> get("/no-organization")
-    assert redirected_to(conn) == "/console/no-organization"
     assert no_organization_page(TestFixtures.member_conn(user))["pending_invitations_count"] == 0
   end
 
@@ -56,12 +53,6 @@ defmodule CadenceWeb.NoOrganizationControllerTest do
     invitation!(user)
     invitation!(user)
     assert no_organization_page(TestFixtures.member_conn(user))["pending_invitations_count"] == 2
-  end
-
-  test "signed out, it goes to the console's screen too (which sends you to sign in)", %{
-    conn: conn
-  } do
-    assert redirected_to(get(conn, "/no-organization")) == "/console/no-organization"
   end
 
   defp invitation!(user) do

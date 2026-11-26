@@ -257,7 +257,7 @@ defmodule CadenceWeb.OpsPlanReviewPageTest do
       "token" => fresh["token"]
     })
 
-    assert_redirect(view, "/sign-in")
+    assert_redirect(view, "/console/sign-in")
   end
 
   test "native reason bounds admit UTF8 text beyond the generic request boundary", c do

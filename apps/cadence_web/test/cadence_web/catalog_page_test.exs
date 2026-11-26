@@ -94,7 +94,7 @@ defmodule CadenceWeb.CatalogPageTest do
     {:ok, view, _} = live(conn, path)
     :ok = Cadence.Auth.revoke_user_session(get_session(conn, :user_session_token))
     render_hook(view, "host:context", %{"path" => path})
-    assert_redirect(view, "/sign-in")
+    assert_redirect(view, "/console/sign-in")
   end
 
   defp snapshot(view), do: LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]

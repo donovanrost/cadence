@@ -18,8 +18,7 @@ defmodule CadenceWeb.SpacecraftTelemetrySurfaceTest do
     path =
       ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/spacecraft/telemetry_decom"
 
-    applications_path =
-      ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications"
+    applications_path = "/console"
 
     assert {:error, {:live_redirect, %{to: ^applications_path}}} = live(conn, path)
 
@@ -54,7 +53,7 @@ defmodule CadenceWeb.SpacecraftTelemetrySurfaceTest do
   end
 
   test "unauthenticated telemetry requests redirect to sign in" do
-    assert {:error, {:redirect, %{to: "/sign-in"}}} =
+    assert {:error, {:redirect, %{to: "/console/sign-in"}}} =
              live(
                build_conn(),
                "/missions/mission-test/spacecraft/spacecraft-test/applications/telemetry_decom/manage"

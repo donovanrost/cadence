@@ -35,7 +35,7 @@ The worktree is fully isolated from the main checkout: its own DB (so our migrat
 
 ## Login
 
-- URL: http://127.0.0.1:4011/sign-in (prefer `127.0.0.1`: the endpoint binds IPv4 only,
+- URL: http://127.0.0.1:4011/console/sign-in (prefer `127.0.0.1`: the endpoint binds IPv4 only,
   and `localhost` can resolve to `::1`; cookies don't carry across the two hostnames either)
 - Email `admin@example.com`, password `change-me` (from `mise.toml`
   `CADENCE_ADMIN_EMAIL` / `CADENCE_ADMIN_PASSWORD`; the env administrator, created on server
