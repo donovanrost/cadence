@@ -2,8 +2,8 @@ defmodule Cadence.Applications.HistoricalWorkflowRequestTest do
   use Cadence.DataCase, async: false
 
   alias Cadence.Applications.{ActionRequest, HostContext}
-  alias Cadence.Applications.OpsConsole.Actions.HistoricalWorkflowRequest
   alias Cadence.Applications.OpsConsole.ActionProvider
+  alias Cadence.Applications.OpsConsole.Actions.HistoricalWorkflowRequest
   alias Cadence.Auth.{Scope, ServiceIdentity}
   alias Cadence.DataSources.{DataBinding, DataSource}
   alias Cadence.Management.DataSources.Store
