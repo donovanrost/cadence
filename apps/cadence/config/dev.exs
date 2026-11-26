@@ -48,4 +48,4 @@ config :cadence, :env_credentials,
 config :cadence, Cadence.Control.IdentityStateRetention, observation_retention_hours: 48
 
 # The dev store keeps two days of observations: Cadence's own retention job now drops the rest.
-config :cadence, :telemetry_observation_retention, enabled?: true, default_days: 2
+config :cadence, :telemetry_observation_retention, enabled?: true, retention_days: 2

@@ -4,16 +4,19 @@ defmodule Cadence.Telemetry.Storage.QuestDB.Retention do
   needs.
 
   QuestDB has no row delete, only whole-partition drops, and the table holds every mission's
-  rows in the same day partitions. A partition is therefore dropped only when it is wholly older
-  than the **longest** retention in force: the platform default, or the largest per-mission
-  override. A mission configured for a shorter retention than another's keeps its data as long as
-  the longest, because the space cannot be freed any other way.
+  rows in the same day partitions, so retention is one platform setting. There is deliberately no
+  per-mission retention here: on a shared table it could only lengthen every mission's retention,
+  never shorten its own. If a mission ever needs its own, that is a storage-design question
+  (per-mission tables, or another partitioning), not a config key.
 
   Settings (`config :cadence, :telemetry_observation_retention`):
 
-    * `default_days`: the platform default (30);
-    * `mission_days`: `%{mission_id => days}` overrides;
+    * `retention_days`: how long observations are kept (30);
     * `max_drops_per_run`: a bound on one run (31).
+
+  Several nodes run the job, so two may drop the same partitions. A failed drop re-reads the
+  partitions: if the ones it meant to drop are already gone (another node dropped them) that is
+  success, and if some remain it retries those once.
 
   A run measures the table first (`table_partitions`), drops the expired partitions in one
   `ALTER TABLE ... DROP PARTITION LIST`, and emits
@@ -35,12 +38,10 @@ defmodule Cadence.Telemetry.Storage.QuestDB.Retention do
           active?: boolean()
         }
 
-  @doc "The retention in force for the whole table: the longest of the default and the overrides."
+  @doc "How many days of observations the table keeps."
   @spec retention_days(keyword()) :: pos_integer()
-  def retention_days(settings \\ settings()) do
-    overrides = settings |> Keyword.get(:mission_days, %{}) |> Map.values()
-    Enum.max([Keyword.get(settings, :default_days, @default_days) | overrides])
-  end
+  def retention_days(settings \\ settings()),
+    do: Keyword.get(settings, :retention_days, @default_days)
 
   @doc "Whole days before `now`: the instant a partition must be wholly older than to be dropped."
   @spec cutoff(DateTime.t(), pos_integer()) :: DateTime.t()
@@ -124,14 +125,30 @@ defmodule Cadence.Telemetry.Storage.QuestDB.Retention do
 
   defp parse_time(_value), do: nil
 
-  defp drop([], _exec, _exec_opts), do: :ok
+  defp drop(doomed, exec, exec_opts, retry? \\ true)
+  defp drop([], _exec, _exec_opts, _retry?), do: :ok
 
-  defp drop(doomed, exec, exec_opts) do
+  defp drop(doomed, exec, exec_opts, retry?) do
     names = doomed |> Enum.map_join(", ", &SQL.quote_string(&1.name))
 
     case exec.("ALTER TABLE #{@table} DROP PARTITION LIST #{names}", exec_opts) do
       {:ok, _result} -> :ok
-      {:error, reason} -> {:error, {:drop_partition_failed, reason}}
+      {:error, reason} -> after_failed_drop(doomed, reason, exec, exec_opts, retry?)
+    end
+  end
+
+  # Another node may have dropped some or all of them first: look again at what is left.
+  defp after_failed_drop(doomed, reason, exec, exec_opts, retry?) do
+    with true <- retry?,
+         {:ok, now_there} <- partitions(exec, exec_opts) do
+      names = MapSet.new(now_there, & &1.name)
+
+      case Enum.filter(doomed, &MapSet.member?(names, &1.name)) do
+        [] -> :ok
+        remaining -> drop(remaining, exec, exec_opts, false)
+      end
+    else
+      _no_retry_or_unreadable -> {:error, {:drop_partition_failed, reason}}
     end
   end
 

@@ -21,13 +21,11 @@ defmodule Cadence.Telemetry.Storage.QuestDB.RetentionTest do
     end
   end
 
-  defp settings(overrides \\ []),
-    do: Keyword.merge([default_days: 7, mission_days: %{}], overrides)
+  defp settings(overrides \\ []), do: Keyword.merge([retention_days: 7], overrides)
 
-  test "the retention in force is the longest of the default and the per-mission overrides" do
+  test "the retention is the one platform setting, 30 days by default" do
     assert Retention.retention_days(settings()) == 7
-    assert Retention.retention_days(settings(mission_days: %{"a" => 3, "b" => 90})) == 90
-    assert Retention.retention_days(settings(mission_days: %{"a" => 3})) == 7
+    assert Retention.retention_days([]) == 30
   end
 
   test "only inactive partitions wholly older than the cutoff expire" do
@@ -131,6 +129,62 @@ defmodule Cadence.Telemetry.Storage.QuestDB.RetentionTest do
                settings: settings(max_drops_per_run: 2),
                exec_fun: exec(dataset, self())
              )
+  end
+
+  # A fake /exec for two nodes dropping at once: the first listing is `before`, every later one
+  # `after_race`; a drop naming `fail_on` fails ("another node got there"), any other succeeds.
+  defp racing_exec(listing_before, listing_after, fail_on) do
+    parent = self()
+    {:ok, listings} = Agent.start_link(fn -> 0 end)
+
+    fn sql, _opts ->
+      send(parent, {:sql, sql})
+
+      cond do
+        sql =~ "table_partitions" ->
+          first? = Agent.get_and_update(listings, &{&1 == 0, &1 + 1})
+
+          {:ok,
+           %{
+             "columns" => @columns,
+             "dataset" => if(first?, do: listing_before, else: listing_after)
+           }}
+
+        sql =~ fail_on ->
+          {:error, :partition_does_not_exist}
+
+        true ->
+          {:ok, %{}}
+      end
+    end
+  end
+
+  test "a drop another node partly made is retried for what remains" do
+    active = partition("2026-11-25", 5, true)
+    before = [partition("2026-10-01", 10), partition("2026-10-02", 10), active]
+    # By the re-read, the other node has dropped 2026-10-01.
+    exec =
+      racing_exec(before, [partition("2026-10-02", 10), active], "'2026-10-01', '2026-10-02'")
+
+    assert {:ok, %{dropped: ["2026-10-01", "2026-10-02"]}} =
+             Retention.run(now: @now, settings: settings(), exec_fun: exec)
+
+    assert_receive {:sql,
+                    "ALTER TABLE telemetry_observations DROP PARTITION LIST '2026-10-01', '2026-10-02'"}
+
+    assert_receive {:sql, "ALTER TABLE telemetry_observations DROP PARTITION LIST '2026-10-02'"}
+  end
+
+  test "a drop another node already made in full is success, with no retry" do
+    active = partition("2026-11-25", 5, true)
+    before = [partition("2026-10-01", 10), active]
+    exec = racing_exec(before, [active], "2026-10-01")
+
+    assert {:ok, %{dropped: ["2026-10-01"]}} =
+             Retention.run(now: @now, settings: settings(), exec_fun: exec)
+
+    assert_receive {:sql, "ALTER TABLE" <> _}
+    refute_receive {:sql, "ALTER TABLE" <> _}
   end
 
   test "failures are returned, not raised" do
