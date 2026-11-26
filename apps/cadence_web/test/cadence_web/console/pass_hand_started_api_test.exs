@@ -7,9 +7,11 @@ defmodule CadenceWeb.Console.PassHandStartedAPITest do
   use CadenceWeb.ConnCase, async: false
 
   alias Cadence.Contacts.ContactStore
+  alias Cadence.Contacts.ContactStore.RealizedContactRow
   alias Cadence.Contacts.RealizedContact
   alias Cadence.ProviderChangeFixtures
   alias Cadence.Reads.Passes
+  alias Cadence.Repo
   alias CadenceWeb.TestFixtures
 
   setup do
@@ -73,14 +75,46 @@ defmodule CadenceWeb.Console.PassHandStartedAPITest do
 
   defp show(c, id, base \\ nil), do: c.conn |> get("#{base || c.base}/#{id}")
 
-  defp list(c, query) do
+  defp page(c, query) do
     from = c.booked.reservation.starts_at |> DateTime.add(-1800) |> DateTime.to_iso8601()
     to = c.booked.reservation.starts_at |> DateTime.add(3600) |> DateTime.to_iso8601()
 
     c.conn
     |> get(c.base <> "?" <> URI.encode_query(Map.merge(%{"from" => from, "to" => to}, query)))
     |> json_response(200)
-    |> get_in(["data", "passes"])
+  end
+
+  defp list(c, query), do: get_in(page(c, query), ["data", "passes"])
+
+  test "the cursor keeps both rows when a booked row and a hand-started row tie", c do
+    reservation = c.booked.reservation
+    id = reservation.provider_reservation_id
+
+    contact =
+      hand!(c.booked, "retry", DateTime.add(reservation.starts_at, -60), :active, %{
+        "start_failure" => %{"started_at" => DateTime.to_iso8601(reservation.starts_at)}
+      })
+
+    row = Repo.get!(RealizedContactRow, contact.realized_contact_id)
+    Ecto.Changeset.change(row, realized_contact_id: id) |> Repo.update!()
+    filters = %{"include" => "hand_started", "limit" => 1}
+
+    assert %{
+             "data" => %{"counts" => counts, "passes" => [%{"id" => ^id, "booked" => true}]},
+             "meta" => %{"next_cursor" => cursor}
+           } = page(c, filters)
+
+    assert %{"total" => 3, "booked" => 1, "hand_started" => 2} = counts
+
+    assert %{
+             "data" => %{
+               "counts" => ^counts,
+               "passes" => [%{"id" => ^id, "booked" => false, "starts_at" => started_at}]
+             }
+           } = page(c, Map.put(filters, "cursor", cursor))
+
+    assert {:ok, at, 0} = DateTime.from_iso8601(started_at)
+    assert DateTime.compare(at, reservation.starts_at) == :eq
   end
 
   describe "GET /passes/:id by contact id" do

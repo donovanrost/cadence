@@ -10,9 +10,11 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
     ContactGaps,
     ContactOpportunitySnapshot,
     ContactRequirementVersion,
+    ContentHash,
     FleetOptimizationResult,
     FleetOptimizer.Constraints,
     FleetOptimizer.Scoring,
+    FleetOptimizer.SelectionIndex,
     FleetPlanningPolicyVersion,
     RequirementEvaluator
   }
@@ -57,52 +59,93 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
              now,
              Keyword.get(opts, :occupied, [])
            ) do
-      scarcity = scarcity(initial.feasible)
-
-      state =
-        requirements
-        |> demand_order(scarcity)
-        |> Enum.reduce(initial, fn requirement, state ->
-          allocate_requirement(requirement, scarcity, requirements, policy, now, state)
-        end)
-        |> improve_locally(requirements, policy, scarcity, now)
-        |> assign_ranks()
-
-      selected = ordered_selected(state.selected)
-      coverage = coverage(requirements, selected, policy)
-
-      {:ok,
-       %FleetOptimizationResult{
-         selected_snapshot_ids: Enum.map(selected, & &1.contact_opportunity_snapshot_id),
-         selected_snapshots: selected,
-         decisions: ordered_decisions(state.decisions),
-         coverage_by_requirement: coverage,
-         resource_summary:
-           state
-           |> selected_with_lock_count(selected)
-           |> Map.merge(Constraints.resource_summary(selected, policy)),
-         budget_summary: Constraints.budget_summary(selected, policy),
-         termination_document: %{
-           "algorithm_key" => @algorithm_key,
-           "algorithm_version" => @algorithm_version,
-           "reason" => "bounded_search_complete",
-           "greedy_candidate_evaluations" => state.greedy_evaluations,
-           "local_improvement_evaluations" => state.improvement_evaluations,
-           "local_improvement_replacements" => state.improvement_replacements,
-           "local_improvement_limit" => policy.scoring_document["local_improvement_limit"],
-           "configured_local_improvement_width" =>
-             policy.scoring_document["local_improvement_width"],
-           "effective_local_improvement_width" => 1,
-           "considered_snapshot_count" => length(snapshots),
-           "selected_snapshot_count" => length(selected),
-           "locked_snapshot_count" => MapSet.size(locked_ids)
-         }
-       }}
+      finish_optimization(initial, requirements, policy, now, length(snapshots), locked_ids)
     end
   end
 
   def optimize(_requirements, _snapshots, _policy, _opts),
     do: {:error, :invalid_fleet_optimizer_inputs}
+
+  @doc "Optimizes a bounded stream of stored snapshots without retaining the full fleet in memory."
+  @spec optimize_stream(
+          [ContactRequirementVersion.t()],
+          Enumerable.t(),
+          FleetPlanningPolicyVersion.t(),
+          keyword()
+        ) :: {:ok, FleetOptimizationResult.t()} | {:error, term()}
+  def optimize_stream(requirements, snapshots, %FleetPlanningPolicyVersion{} = policy, opts \\ [])
+      when is_list(requirements) and is_list(opts) do
+    now = opts |> Keyword.get(:now, DateTime.utc_now()) |> DateTime.truncate(:microsecond)
+    locked_commitments = Keyword.get(opts, :locked_commitments, [])
+
+    locked_ids =
+      opts
+      |> Keyword.get(:locked_snapshot_ids, [])
+      |> MapSet.new()
+      |> MapSet.union(MapSet.new(locked_commitments, & &1.contact_opportunity_snapshot_id))
+
+    with {:ok, requirements} <- normalize_requirements(requirements, policy),
+         {:ok, initial, snapshot_count} <-
+           initialize_stream(
+             Stream.concat(snapshots, locked_commitments),
+             requirements,
+             policy,
+             locked_ids,
+             now,
+             Keyword.get(opts, :occupied, [])
+           ) do
+      finish_optimization(initial, requirements, policy, now, snapshot_count, locked_ids)
+    end
+  end
+
+  defp finish_optimization(initial, requirements, policy, now, snapshot_count, locked_ids) do
+    scarcity = initial.feasible_counts
+
+    state =
+      try do
+        requirements
+        |> demand_order(scarcity)
+        |> Enum.reduce(initial, fn requirement, state ->
+          allocate_requirement(requirement, scarcity, requirements, policy, now, state)
+        end)
+      after
+        :ets.delete(initial.feasible_table)
+      end
+      |> Map.delete(:feasible_table)
+      |> improve_locally(requirements, policy, scarcity, now)
+      |> assign_ranks()
+
+    selected = ordered_selected(state.selected)
+    coverage = coverage(requirements, state.selection_index, policy)
+
+    {:ok,
+     %FleetOptimizationResult{
+       selected_snapshot_ids: Enum.map(selected, & &1.contact_opportunity_snapshot_id),
+       selected_snapshots: selected,
+       decisions: ordered_decisions(state.decisions),
+       coverage_by_requirement: coverage,
+       resource_summary:
+         state
+         |> selected_with_lock_count(selected)
+         |> Map.merge(Constraints.resource_summary(selected, policy)),
+       budget_summary: Constraints.budget_summary(selected, policy),
+       termination_document: %{
+         "algorithm_key" => @algorithm_key,
+         "algorithm_version" => @algorithm_version,
+         "reason" => "bounded_search_complete",
+         "greedy_candidate_evaluations" => state.greedy_evaluations,
+         "local_improvement_evaluations" => state.improvement_evaluations,
+         "local_improvement_replacements" => state.improvement_replacements,
+         "local_improvement_limit" => policy.scoring_document["local_improvement_limit"],
+         "configured_local_improvement_width" =>
+           policy.scoring_document["local_improvement_width"],
+         "effective_local_improvement_width" => 1,
+         "considered_snapshot_count" => snapshot_count,
+         "selected_snapshot_count" => length(selected),
+         "locked_snapshot_count" => MapSet.size(locked_ids)
+       }
+     }}
+  end
 
   defp normalize_requirements(requirements, policy) do
     requirements
@@ -181,16 +224,7 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
   end
 
   defp initialize(snapshots, requirements, policy, locked_ids, now, occupied) do
-    initial = %{
-      all: Map.new(snapshots, &{&1.contact_opportunity_snapshot_id, &1}),
-      feasible: [],
-      selected: [],
-      locked_ids: locked_ids,
-      decisions: %{},
-      greedy_evaluations: 0,
-      improvement_evaluations: 0,
-      improvement_replacements: 0
-    }
+    initial = initial_state(policy, locked_ids)
 
     snapshots
     |> Enum.reduce_while(
@@ -198,9 +232,128 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
       &initialize_snapshot(&1, &2, requirements, policy, locked_ids, now, occupied)
     )
     |> case do
-      {:ok, state} -> {:ok, %{state | feasible: Enum.reverse(state.feasible)}}
-      {:error, reason} -> {:error, reason}
+      {:ok, state} ->
+        {:ok, state}
+
+      {:error, reason} ->
+        :ets.delete(initial.feasible_table)
+        {:error, reason}
     end
+  end
+
+  defp initialize_stream(snapshots, requirements, policy, locked_ids, now, occupied) do
+    initial = initial_state(policy, locked_ids)
+    seen = :ets.new(:fleet_optimizer_seen, [:set, :private])
+
+    context = %{
+      requirements: requirements,
+      policy: policy,
+      locked_ids: locked_ids,
+      now: now,
+      occupied: occupied,
+      seen: seen
+    }
+
+    result =
+      try do
+        Enum.reduce_while(snapshots, {:ok, initial, 0}, fn snapshot, {:ok, state, count} ->
+          accept_stream_snapshot(snapshot, state, count, context)
+        end)
+      after
+        :ets.delete(seen)
+      end
+
+    case result do
+      {:ok, state, count} ->
+        if MapSet.subset?(locked_ids, state.found_locked_ids) do
+          {:ok, state, count}
+        else
+          :ets.delete(initial.feasible_table)
+          {:error, :fleet_optimizer_locked_snapshot_not_found}
+        end
+
+      {:error, reason} ->
+        :ets.delete(initial.feasible_table)
+        {:error, reason}
+    end
+  end
+
+  defp accept_stream_snapshot(snapshot, state, count, context) do
+    case validate_stream_snapshot(snapshot, context.policy, context.seen) do
+      :new ->
+        initialize_stream_snapshot(snapshot, state, count, context)
+
+      :duplicate ->
+        {:cont, {:ok, state, count}}
+
+      {:error, reason} ->
+        {:halt, {:error, reason}}
+    end
+  end
+
+  defp initialize_stream_snapshot(snapshot, state, count, context) do
+    case initialize_snapshot(
+           snapshot,
+           {:ok, state},
+           context.requirements,
+           context.policy,
+           context.locked_ids,
+           context.now,
+           context.occupied
+         ) do
+      {:cont, {:ok, updated}} ->
+        found =
+          if MapSet.member?(context.locked_ids, snapshot.contact_opportunity_snapshot_id),
+            do: MapSet.put(updated.found_locked_ids, snapshot.contact_opportunity_snapshot_id),
+            else: updated.found_locked_ids
+
+        {:cont, {:ok, %{updated | found_locked_ids: found}, count + 1}}
+
+      {:halt, error} ->
+        {:halt, error}
+    end
+  end
+
+  defp validate_stream_snapshot(%ContactOpportunitySnapshot{} = snapshot, policy, seen) do
+    if snapshot.organization_id != policy.organization_id or
+         snapshot.mission_id != policy.mission_id do
+      {:error, :fleet_optimizer_scope_mismatch}
+    else
+      id = snapshot.contact_opportunity_snapshot_id
+
+      case :ets.lookup(seen, id) do
+        [] ->
+          :ets.insert(seen, {id, snapshot.content_sha256})
+          :new
+
+        [{^id, hash}] when hash == snapshot.content_sha256 ->
+          :duplicate
+
+        [_conflict] ->
+          {:error, {:fleet_optimizer_snapshot_identity_collision, id}}
+      end
+    end
+  end
+
+  defp validate_stream_snapshot(_snapshot, _policy, _seen),
+    do: {:error, :invalid_fleet_optimizer_snapshot}
+
+  defp initial_state(policy, locked_ids) do
+    %{
+      feasible_table: :ets.new(:fleet_optimizer_feasible, [:bag, :private]),
+      feasible_counts: %{},
+      selected: [],
+      selection_index: SelectionIndex.new(),
+      locked_ids: locked_ids,
+      found_locked_ids: MapSet.new(),
+      decisions: %{},
+      score_documents: %{},
+      improvement_limit: policy.scoring_document["local_improvement_limit"],
+      top_displaced: :gb_sets.new(),
+      greedy_evaluations: 0,
+      improvement_evaluations: 0,
+      improvement_replacements: 0
+    }
   end
 
   defp initialize_snapshot(
@@ -225,8 +378,8 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
       {nil, false} ->
         {:cont, {:ok, put_ineligible(state, snapshot, missing_requirement_failures(snapshot))}}
 
-      {_requirement, true} ->
-        {:cont, {:ok, add_locked_snapshot(state, snapshot)}}
+      {requirement, true} ->
+        {:cont, {:ok, add_locked_snapshot(state, snapshot, requirement)}}
 
       {requirement, false} ->
         case held_by_single_booking(snapshot, occupied) do
@@ -279,9 +432,10 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
     ]
   end
 
-  defp add_locked_snapshot(state, snapshot) do
+  defp add_locked_snapshot(state, snapshot, requirement) do
     state
     |> Map.update!(:selected, &[snapshot | &1])
+    |> Map.update!(:selection_index, &SelectionIndex.add(&1, snapshot, requirement))
     |> put_decision(
       snapshot,
       :locked,
@@ -295,17 +449,28 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
 
   defp classify_snapshot(state, requirement, snapshot, policy, now) do
     case Constraints.inherent_failures(requirement, snapshot, policy, now) do
-      [] -> Map.update!(state, :feasible, &[snapshot | &1])
-      failures -> put_ineligible(state, snapshot, failures)
+      [] ->
+        key = snapshot_key(snapshot)
+        :ets.insert(state.feasible_table, {key, snapshot})
+        Map.update!(state, :feasible_counts, &Map.update(&1, key, 1, fn count -> count + 1 end))
+
+      failures ->
+        put_ineligible(state, snapshot, failures)
     end
   end
 
   defp allocate_requirement(requirement, scarcity, requirements, policy, now, state) do
+    key = requirement_key(requirement)
+
     candidates =
-      Enum.filter(state.feasible, fn snapshot ->
-        same_requirement?(snapshot, requirement) and
-          not Map.has_key?(state.decisions, snapshot.contact_opportunity_snapshot_id)
-      end)
+      state.feasible_table
+      |> :ets.lookup(key)
+      |> Enum.map(&elem(&1, 1))
+
+    :ets.delete(state.feasible_table, key)
+
+    candidates =
+      Enum.reject(candidates, &Map.has_key?(state.decisions, &1.contact_opportunity_snapshot_id))
 
     allocate_candidates(
       requirement,
@@ -338,22 +503,25 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
          now,
          state
        ) do
-    scored =
+    {scored, score_documents} =
       candidates
-      |> Enum.map(fn snapshot ->
-        {score, document} =
+      |> Enum.map_reduce(state.score_documents, fn snapshot, cache ->
+        {score, document, cache} =
           Scoring.score(
             requirement,
             snapshot,
             scarcity[requirement_key(requirement)],
-            state.selected,
+            state.selection_index,
             policy,
-            now
+            now,
+            cache
           )
 
-        {snapshot, score, document}
+        {{snapshot, score, document}, cache}
       end)
-      |> order_candidates(requirement, state.selected)
+
+    scored = order_candidates(scored, requirement, state.selection_index)
+    state = %{state | score_documents: score_documents}
 
     [{snapshot, score, score_document} | _rest] = scored
     remaining = Enum.reject(candidates, &same_snapshot?(&1, snapshot))
@@ -361,7 +529,7 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
 
     state =
       cond do
-        coverage_satisfied?(requirement, state.selected, policy) ->
+        coverage_satisfied?(requirement, state.selection_index, policy) ->
           put_decision(
             state,
             snapshot,
@@ -373,7 +541,7 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
             "A higher-ranked feasible selection already satisfies this Requirement."
           )
 
-        extra_without_gap_gain?(requirement, snapshot, state.selected) ->
+        extra_without_gap_gain?(requirement, snapshot, state.selection_index) ->
           put_decision(
             state,
             snapshot,
@@ -392,7 +560,6 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
             snapshot,
             score,
             score_document,
-            requirements,
             policy
           )
       end
@@ -417,7 +584,7 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
       end)
 
   defp order_candidates(scored, requirement, selected) do
-    own = Enum.filter(selected, &same_requirement?(&1, requirement))
+    own = SelectionIndex.for_requirement(selected, requirement)
 
     Enum.sort_by(scored, fn {snapshot, score, _document} ->
       {requirement_gap(requirement, [snapshot | own]), -score, snapshot.starts_at,
@@ -429,7 +596,7 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
   defp extra_without_gap_gain?(%{max_gap_seconds: nil}, _snapshot, _selected), do: false
 
   defp extra_without_gap_gain?(requirement, snapshot, selected) do
-    own = Enum.filter(selected, &same_requirement?(&1, requirement))
+    own = SelectionIndex.for_requirement(selected, requirement)
 
     length(own) >= requirement.contact_count and
       requirement_gap(requirement, [snapshot | own]) >= requirement_gap(requirement, own)
@@ -458,19 +625,18 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
          snapshot,
          score,
          score_document,
-         requirements,
          policy
        ) do
     case Constraints.dynamic_failures(
            requirement,
            snapshot,
-           state.selected,
-           requirements,
+           state.selection_index,
            policy
          ) do
       [] ->
         state
         |> Map.update!(:selected, &[snapshot | &1])
+        |> Map.update!(:selection_index, &SelectionIndex.add(&1, snapshot, requirement))
         |> put_decision(
           snapshot,
           :selected,
@@ -496,18 +662,13 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
   end
 
   defp improve_locally(state, requirements, policy, scarcity, now) do
-    limit = policy.scoring_document["local_improvement_limit"]
-
     candidates =
-      state.decisions
-      |> Map.values()
-      |> Enum.filter(&(&1.disposition == :displaced))
-      |> Enum.sort_by(&{-&1.score, &1.contact_opportunity_snapshot_id})
-      |> Enum.take(limit)
+      state.top_displaced
+      |> :gb_sets.to_list()
+      |> Enum.map(fn {_negative_score, _id, snapshot} -> snapshot end)
 
-    Enum.reduce(candidates, state, fn decision, state ->
+    Enum.reduce(candidates, state, fn candidate, state ->
       state = Map.update!(state, :improvement_evaluations, &(&1 + 1))
-      candidate = state.all[decision.contact_opportunity_snapshot_id]
       requirement = requirements[snapshot_key(candidate)]
 
       case improvement_swap(
@@ -526,23 +687,37 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
   end
 
   defp improvement_swap(candidate, requirement, requirements, policy, scarcity, now, state) do
+    candidate_key = snapshot_key(candidate)
+
     removable =
       state.selected
       |> Enum.reject(&MapSet.member?(state.locked_ids, &1.contact_opportunity_snapshot_id))
+      |> Enum.filter(fn snapshot ->
+        snapshot_key(snapshot) == candidate_key or
+          length(
+            SelectionIndex.for_requirement(
+              state.selection_index,
+              requirements[snapshot_key(snapshot)]
+            )
+          ) >
+            1
+      end)
       |> Enum.sort_by(fn snapshot ->
         decision = state.decisions[snapshot.contact_opportunity_snapshot_id]
         {decision.score, snapshot.contact_opportunity_snapshot_id}
       end)
 
     Enum.find_value(removable, :unchanged, fn current ->
-      selected_without_current = Enum.reject(state.selected, &same_snapshot?(&1, current))
+      current_requirement = requirements[snapshot_key(current)]
+
+      without_current =
+        SelectionIndex.remove(state.selection_index, current, current_requirement)
 
       with true <-
              Constraints.dynamic_failures(
                requirement,
                candidate,
-               selected_without_current,
-               requirements,
+               without_current,
                policy
              ) == [],
            {candidate_score, candidate_score_document} <-
@@ -550,12 +725,14 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
                requirement,
                candidate,
                scarcity[requirement_key(requirement)],
-               selected_without_current,
+               without_current,
                policy,
                now
              ),
            current_decision <- state.decisions[current.contact_opportunity_snapshot_id],
            true <- candidate_score > current_decision.score,
+           selected_without_current <-
+             Enum.reject(state.selected, &same_snapshot?(&1, current)),
            new_selected <- [candidate | selected_without_current],
            true <-
              protected_coverage_preserved?(
@@ -571,6 +748,10 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
         improved =
           state
           |> Map.put(:selected, new_selected)
+          |> Map.put(
+            :selection_index,
+            SelectionIndex.add(without_current, candidate, requirement)
+          )
           |> put_decision(
             current,
             :displaced,
@@ -640,12 +821,16 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
     |> Map.values()
     |> Enum.sort_by(&{&1.contact_requirement_id, &1.version})
     |> Map.new(fn requirement ->
-      {requirement.contact_requirement_id, requirement_coverage(requirement, selected, policy)}
+      {requirement.contact_requirement_id,
+       requirement_coverage(
+         requirement,
+         SelectionIndex.for_requirement(selected, requirement),
+         policy
+       )}
     end)
   end
 
   defp requirement_coverage(requirement, selected, policy) do
-    selected = Enum.filter(selected, &same_requirement?(&1, requirement))
     evaluation = RequirementEvaluator.evaluate_selection(requirement, selected)
     redundancy = redundancy_evaluation(requirement, selected, policy)
     satisfied = evaluation["satisfied"] and redundancy["satisfied"]
@@ -672,7 +857,12 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
   end
 
   defp coverage_satisfied?(requirement, selected, policy),
-    do: requirement_coverage(requirement, selected, policy)["satisfied"]
+    do:
+      requirement_coverage(
+        requirement,
+        SelectionIndex.for_requirement(selected, requirement),
+        policy
+      )["satisfied"]
 
   defp redundancy_evaluation(requirement, selected, policy) do
     target = requirement.contact_count
@@ -725,11 +915,6 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
     }
   end
 
-  defp scarcity(feasible) do
-    feasible
-    |> Enum.frequencies_by(&snapshot_key/1)
-  end
-
   defp demand_order(requirements, scarcity) do
     requirements
     |> Map.values()
@@ -771,16 +956,16 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
          code,
          message
        ) do
+    {score_document, score_sha256, state} = shared_score_document(state, score_document)
+
     decision = %{
       contact_opportunity_snapshot_id: snapshot.contact_opportunity_snapshot_id,
       disposition: disposition,
       score: score,
       rank: nil,
-      hard_constraint_document: %{
-        "satisfied" => failures == [],
-        "failures" => failures
-      },
+      hard_constraint_document: constraint_document(failures),
       score_document: score_document,
+      score_document_sha256: score_sha256,
       explanation_document: %{
         "code" => code,
         "message" => message,
@@ -789,12 +974,46 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
       }
     }
 
-    put_in(
-      state,
-      [:decisions, snapshot.contact_opportunity_snapshot_id],
-      decision
-    )
+    state =
+      put_in(
+        state,
+        [:decisions, snapshot.contact_opportunity_snapshot_id],
+        decision
+      )
+
+    track_displaced(state, snapshot, disposition, score)
   end
+
+  defp track_displaced(state, snapshot, :displaced, score) do
+    candidate = {-score, snapshot.contact_opportunity_snapshot_id, snapshot}
+    top = :gb_sets.add(candidate, state.top_displaced)
+
+    top =
+      if :gb_sets.size(top) > state.improvement_limit,
+        do: :gb_sets.del_element(:gb_sets.largest(top), top),
+        else: top
+
+    %{state | top_displaced: top}
+  end
+
+  defp track_displaced(state, _snapshot, _disposition, _score), do: state
+
+  defp shared_score_document(state, %{"components" => components} = document) do
+    case Map.fetch(state.score_documents, components) do
+      {:ok, {shared, sha256}} ->
+        {shared, sha256, state}
+
+      :error ->
+        sha256 = ContentHash.sha256(document)
+        {document, sha256, put_in(state, [:score_documents, components], {document, sha256})}
+    end
+  end
+
+  defp shared_score_document(state, document),
+    do: {document, ContentHash.sha256(document), state}
+
+  defp constraint_document([]), do: %{"satisfied" => true, "failures" => []}
+  defp constraint_document(failures), do: %{"satisfied" => false, "failures" => failures}
 
   defp ordered_selected(selected) do
     Enum.sort_by(selected, fn snapshot ->

@@ -1,10 +1,10 @@
 defmodule Cadence.Observability.ScaleSampler do
   @moduledoc """
-  A per-second scorecard of a running node under fleet-scale load (#717, epic #217).
+  A scorecard of a running node under fleet-scale load (#717, epic #217).
 
   Started for one measurement by `mix cadence.scale.run` (over RPC), never by the application:
-  it attaches its own `:telemetry` handlers, uniquely named and detached when it stops. Every
-  second it writes one JSON line to `:out`:
+  it attaches its own `:telemetry` handlers, uniquely named and detached when it stops. Each
+  sample writes one JSON line to `:out` with the actual interval in `elapsed_ms`:
 
   - `ecto`: query count and queue/query time p50/p99/max (ms), from `[:cadence, :repo, :query]`
   - `ingest`: telemetry's `[:cadence, :ingest, :batch, :stop]` sums (entries, bytes, frames,
@@ -14,14 +14,15 @@ defmodule Cadence.Observability.ScaleSampler do
   - `beam`: run queue, scheduler utilization, process count, memory (MB)
   - `mailboxes`: per watched module, the processes with a backlog and their sum and max, plus
     the busiest processes (`ScaleSampler.Mailboxes`)
-  - `storage`: Postgres WAL bytes that second, QuestDB WAL lag (`ScaleSampler.Storage`)
+  - `storage`: Postgres WAL bytes that interval, QuestDB WAL lag (`ScaleSampler.Storage`)
   - `host`: load average, swap used and agent processes on the machine (`ScaleSampler.Host`)
 
   It never outlives its run: it monitors `:owner` (the runner, usually on another node; a
   Ctrl-C or a lost connection stops it) and stops itself at `:max_ms` whatever happens.
 
   The summary adds the run's settings (`meta`) and, per watched table, rows and bytes written
-  over the run in Postgres and QuestDB. The sampler's own queries are excluded from `ecto`.
+  over the run in Postgres and QuestDB. Counters have run totals and per-second percentiles
+  computed using each row's own interval. The sampler excludes its own queries from `ecto`.
   """
 
   use GenServer
@@ -44,7 +45,7 @@ defmodule Cadence.Observability.ScaleSampler do
   @spec start(keyword()) :: GenServer.on_start()
   def start(opts), do: GenServer.start(__MODULE__, opts, name: __MODULE__)
 
-  @doc "Stops the sampler and returns the run summary: `meta`, `storage` deltas and `metrics`."
+  @doc "Stops the sampler and returns the run summary, including rates and totals."
   @spec stop() :: {:ok, map()}
   def stop, do: GenServer.call(__MODULE__, :stop, 60_000)
 
@@ -59,13 +60,6 @@ defmodule Cadence.Observability.ScaleSampler do
     File.mkdir_p!(Path.dirname(out))
     table = :ets.new(__MODULE__, [:duplicate_bag, :public, write_concurrency: true])
     handler = "cadence-scale-sampler-#{System.unique_integer([:positive])}"
-    events = [@repo_event, @batch_event, @backlog_event]
-
-    :ok =
-      :telemetry.attach_many(handler, events, &__MODULE__.handle_event/4, %{
-        table: table,
-        sampler: self()
-      })
 
     state =
       %{
@@ -80,13 +74,24 @@ defmodule Cadence.Observability.ScaleSampler do
         pg_tables: Keyword.get(opts, :postgres_tables, Storage.default_postgres_tables()),
         qdb_tables: Keyword.get(opts, :questdb_tables, Storage.default_questdb_tables()),
         wall_time_was_on?: :erlang.system_flag(:scheduler_wall_time, true),
-        scheduler: scheduler_sample(),
-        started_at: DateTime.utc_now(),
         owner: Keyword.get(opts, :owner),
         rows: []
       }
       |> disable_unreachable_questdb()
-      |> then(&Map.merge(&1, %{wal: wal(&1), storage_start: storage_snapshot(&1)}))
+      |> then(&Map.merge(&1, %{storage_start: storage_snapshot(&1), wal: wal(&1)}))
+      |> Map.merge(%{
+        scheduler: scheduler_sample(),
+        started_at: DateTime.utc_now(),
+        sampled_at_us: System.monotonic_time(:microsecond)
+      })
+
+    :ok =
+      :telemetry.attach_many(
+        handler,
+        [@repo_event, @batch_event, @backlog_event],
+        &__MODULE__.handle_event/4,
+        %{table: table, sampler: self()}
+      )
 
     Process.send_after(self(), :tick, state.interval_ms)
     {:ok, state}
@@ -155,13 +160,19 @@ defmodule Cadence.Observability.ScaleSampler do
   end
 
   defp record(state) do
+    sampled_at_us = System.monotonic_time(:microsecond)
+    timestamp = DateTime.utc_now() |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601()
+    # Drain counters at the interval boundary, before querying storage and the host.
+    ecto = ecto(state.table)
+    ingest = ingest(state.table)
     scheduler = scheduler_sample()
     wal = wal(state)
 
     row = %{
-      t: DateTime.utc_now() |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601(),
-      ecto: ecto(state.table),
-      ingest: ingest(state.table),
+      t: timestamp,
+      elapsed_ms: (sampled_at_us - state.sampled_at_us) / 1_000,
+      ecto: ecto,
+      ingest: ingest,
       beam: beam(state.scheduler, scheduler),
       mailboxes: Mailboxes.sample(state.modules, state.top),
       host: Host.sample(),
@@ -172,7 +183,14 @@ defmodule Cadence.Observability.ScaleSampler do
     }
 
     IO.write(state.out, [Jason.encode!(row), "\n"])
-    %{state | scheduler: scheduler, wal: wal, rows: [row | state.rows]}
+
+    %{
+      state
+      | sampled_at_us: sampled_at_us,
+        scheduler: scheduler,
+        wal: wal,
+        rows: [row | state.rows]
+    }
   end
 
   defp ecto(table) do

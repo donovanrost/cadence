@@ -16,6 +16,7 @@ defmodule Cadence.Management.Contacts do
   }
 
   alias Cadence.Management.Contacts.ApprovedContactPlan
+  alias Cadence.Management.Contacts.Store.PlanDemandCounts
 
   defdelegate create_plan(current_scope, mission_id, attrs, opts \\ []),
     to: ContactPlans,
@@ -87,6 +88,14 @@ defmodule Cadence.Management.Contacts do
   defdelegate fetch_requirement_version(organization_id, mission_id, requirement_id, version),
     to: ContactRequirements,
     as: :fetch_version
+
+  defdelegate fetch_requirement_versions(organization_id, mission_id, pins),
+    to: ContactRequirements,
+    as: :fetch_versions
+
+  defdelegate plan_demand_counts(organization_id, mission_id, evaluations, unmet),
+    to: PlanDemandCounts,
+    as: :load
 
   defdelegate list_approvals(organization_id, mission_id, plan_id),
     to: ContactPlanApprovals,

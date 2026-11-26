@@ -22,6 +22,13 @@ defmodule CadenceSimulator.Provider.Router do
     Contract.error(conn, 404, "not_found", "resource not found")
   end
 
+  # Search uses POST for its filters. Its offers are reconstructed from the persisted run.
+  defp flush_mutations(
+         %{method: "POST", path_info: ["provider", "v1", "opportunities", "search"]} = conn,
+         _opts
+       ),
+       do: conn
+
   defp flush_mutations(%{method: method} = conn, _opts)
        when method in ["POST", "PUT", "PATCH", "DELETE"] do
     token = Store.persistence_token()

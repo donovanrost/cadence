@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from "vue";
 import { RouterLink, useRoute, useRouter, type RouteLocationRaw } from "vue-router";
-import { useMissionScope } from "@/shell/index.ts";
+import { useFleetPosture, useMissionScope } from "@/shell/index.ts";
 import {
   plural,
   useNow,
@@ -84,9 +84,9 @@ function selectPoint(pointId: string | null) {
 const fleetRows = computed(() =>
   fleet.state.value.status === "ready" ? fleet.state.value.value.spacecraft : [],
 );
-const limitsOff = computed(
-  () => fleet.state.value.status === "ready" && !fleet.state.value.value.limits.configured,
-);
+/** Ground limits off, from the shell's /counts posture (#847), not the fleet read's envelope. */
+const posture = useFleetPosture();
+const limitsOff = computed(() => posture.value?.limits_configured === false);
 const counts = computed(() =>
   active.state.value.status === "ready"
     ? tabCounts(

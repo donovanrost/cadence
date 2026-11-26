@@ -14,6 +14,8 @@ defmodule Cadence.Management.Contacts.PlanningResults do
     ContactPlanningSearch
   }
 
+  alias Cadence.Management.Contacts.FleetSnapshotReader
+
   alias Cadence.Management.Contacts.Store.{
     ContactOpportunitySnapshotRow,
     ContactPlanningRunRow,
@@ -189,6 +191,19 @@ defmodule Cadence.Management.Contacts.PlanningResults do
       |> Enum.map(&ContactOpportunitySnapshotRow.to_domain/1)
     end)
   end
+
+  @doc "Streams compact immutable opportunity snapshots for fleet optimization."
+  def stream_fleet_snapshots(organization_id, mission_id, run_ids),
+    do: FleetSnapshotReader.stream(organization_id, mission_id, run_ids)
+
+  @doc "Finds the planning runs that supplied selected fleet opportunities."
+  def planning_run_ids_for_fleet_snapshots(organization_id, mission_id, snapshot_ids),
+    do:
+      FleetSnapshotReader.planning_run_ids_for_snapshots(
+        organization_id,
+        mission_id,
+        snapshot_ids
+      )
 
   @doc "A bounded live run ledger; the selected run must be fetched by its exact identity."
   def list_runs_page(organization_id, mission_id, requirement_id, page)

@@ -89,12 +89,12 @@ const pickDay = (t: number | null) =>
     <ApRemote :state="lost.state.value" loading-label="Loading lost passes…" @retry="lost.refetch">
       <template #default="{ value }"
         ><LostPanel
-          :page="value"
-          :more="lost.more.value"
-          :has-more="lost.cursor.value !== null"
-          :loading="lost.loading.value"
-          :failed="lost.failed.value"
-          @more="lost.loadMore"
+          :rows="value.items"
+          :total="value.meta.total"
+          :has-more="value.next !== null"
+          :loading="lost.moreBusy.value"
+          :failed="lost.moreError.value !== null"
+          @more="lost.more"
       /></template>
     </ApRemote>
   </div>

@@ -1,8 +1,7 @@
 defmodule Cadence.Reads.ContactFindings do
   @moduledoc """
   Contacts D4 "Needs a decision" (M22): problems across the mission's live bookings in a window
-  (default: the next 6 h), each with a sentence. Built on the passes read (`Reads.Passes`) and
-  station availability (S7):
+  (default: the next 6 h), each with a sentence. Derived from bookings and station availability:
 
   - `station_double_booked` (caution): two live bookings at the same station overlap. Bookings
     on different named antennas of the station don't conflict.
@@ -16,67 +15,92 @@ defmodule Cadence.Reads.ContactFindings do
   console offers "Open in Plan".
   """
 
-  alias Cadence.Comms.StationAvailability
-  alias Cadence.Reads.Passes
+  alias Cadence.Comms.{StationAvailability, StationRefs}
+  alias Cadence.Contacts.FindingWindows
+  alias Cadence.Reads.WindowCursor
   alias Cadence.SpacecraftStore
 
-  @live ~w(requesting pending confirmed active)
   @default_max_gap_s 4 * 3600
+  @default_limit 100
 
-  @spec load(binary(), binary(), DateTime.t(), DateTime.t(), keyword()) :: map()
+  @spec load(binary(), binary(), DateTime.t(), DateTime.t(), keyword()) ::
+          {:ok, map()} | {:error, :invalid_cursor}
   def load(organization_id, mission_id, from, to, opts \\ []) do
     max_gap_s = Keyword.get(opts, :max_gap_s, @default_max_gap_s)
+    limit = Keyword.get(opts, :limit, @default_limit)
 
-    %{passes: rows, truncated: truncated} =
-      Passes.load(organization_id, mission_id, DateTime.add(from, -max_gap_s), to)
+    basis =
+      {:contact_findings, organization_id, mission_id, DateTime.to_unix(from, :microsecond),
+       DateTime.to_unix(to, :microsecond), max_gap_s}
 
-    build(%{
-      from: from,
-      to: to,
-      max_gap_s: max_gap_s,
-      truncated: truncated,
-      passes: rows,
-      outages: StationAvailability.blocking_windows(organization_id, mission_id, from, to),
-      spacecraft: SpacecraftStore.list_spacecraft(organization_id, mission_id)
-    })
+    with {:ok, after_key} <- WindowCursor.decode(Keyword.get(opts, :cursor), basis, [0]) do
+      stations = StationRefs.index(organization_id, mission_id)
+
+      craft =
+        Map.new(SpacecraftStore.active_identities(organization_id, mission_id), &{&1.id, &1})
+
+      {counts, rows} =
+        FindingWindows.page(organization_id, mission_id, from, to,
+          max_gap_s: max_gap_s,
+          limit: limit,
+          after: after_key,
+          station_ids_by_ref: Map.new(stations, fn {ref, station} -> {ref, station.id} end),
+          spacecraft_ids: Map.keys(craft),
+          outages: StationAvailability.blocking_windows(organization_id, mission_id, from, to)
+        )
+
+      truncated = length(rows) > limit
+      findings = Enum.map(Enum.take(rows, limit), &finding(&1, stations, craft))
+
+      next_cursor =
+        if truncated do
+          finding = List.last(findings)
+          WindowCursor.encode(finding.at, finding.id, 0, basis)
+        end
+
+      {:ok,
+       %{
+         from: from,
+         to: to,
+         max_gap_s: max_gap_s,
+         counts: counts,
+         truncated: truncated,
+         next_cursor: next_cursor,
+         findings: findings
+       }}
+    end
   end
 
-  @doc "Pure builder over pass rows (`Reads.Passes`), outages by station id and spacecraft."
-  @spec build(map()) :: map()
-  def build(%{from: from, to: to, max_gap_s: max_gap_s} = input) do
-    live = Enum.filter(input.passes, &(&1.state in @live))
-    in_window = Enum.filter(live, &DateTime.after?(&1.ends_at, from))
+  defp finding(%{"kind" => "station_double_booked"} = fact, stations, craft),
+    do:
+      double_booked(
+        booking(fact["first"], stations, craft),
+        booking(fact["second"], stations, craft)
+      )
 
-    findings =
-      double_bookings(in_window) ++
-        outage_bookings(in_window, input.outages) ++
-        gaps(input.spacecraft, live, from, to, max_gap_s)
+  defp finding(%{"kind" => "booked_into_outage"} = fact, stations, craft),
+    do: outage_booked(booking(fact["first"], stations, craft), fact["id"])
+
+  defp finding(%{"kind" => "coverage_gap"} = fact, _stations, craft),
+    do: gap(Map.fetch!(craft, fact["spacecraft_id"]), utc(fact["at"]), utc(fact["gap_end"]))
+
+  defp booking(fact, stations, craft) do
+    id = fact["spacecraft_id"]
+    antenna = fact["antenna_ref"]
 
     %{
-      from: from,
-      to: to,
-      max_gap_s: max_gap_s,
-      truncated: Map.get(input, :truncated, false),
-      findings: Enum.sort_by(findings, & &1.at, DateTime),
-      counts: %{
-        conflicts: Enum.count(findings, &(&1.kind != "coverage_gap")),
-        gaps: Enum.count(findings, &(&1.kind == "coverage_gap"))
-      }
+      id: fact["id"],
+      spacecraft_id: id,
+      spacecraft: Map.get(craft, id, %{id: id, name: nil, scid: nil}),
+      station: StationRefs.resolve(fact["station_ref"], stations),
+      antenna: antenna && %{id: antenna},
+      starts_at: utc(fact["starts_at"]),
+      ends_at: utc(fact["ends_at"]),
+      state: fact["state"]
     }
   end
 
-  defp double_bookings(passes) do
-    passes
-    |> Enum.group_by(&station_key/1)
-    |> Enum.reject(fn {key, _passes} -> is_nil(key) end)
-    |> Enum.flat_map(fn {_key, station_passes} ->
-      station_passes
-      |> Enum.sort_by(& &1.starts_at, DateTime)
-      |> Enum.chunk_every(2, 1, :discard)
-      |> Enum.filter(fn [a, b] -> overlap_s(a, b) > 0 and same_antenna?(a, b) end)
-      |> Enum.map(fn [a, b] -> double_booked(a, b) end)
-    end)
-  end
+  defp utc(value), do: value |> NaiveDateTime.from_iso8601!() |> DateTime.from_naive!("Etc/UTC")
 
   defp double_booked(a, b) do
     station = a.station
@@ -97,90 +121,41 @@ defmodule Cadence.Reads.ContactFindings do
     }
   end
 
-  defp outage_bookings(passes, outages) do
-    for pass <- passes,
-        id = pass.station.id,
-        is_binary(id),
-        window =
-          StationAvailability.overlaps?(Map.get(outages, id, []), pass.starts_at, pass.ends_at),
-        window != nil do
-      %{
-        id: "booked_into_outage:#{pass.id}:#{window.window_id}",
-        kind: "booked_into_outage",
-        severity: "critical",
-        at: pass.starts_at,
-        station: pass.station,
-        spacecraft: pass.spacecraft,
-        passes: [pass(pass)],
-        overlap_s: nil,
-        message:
-          "#{craft(pass)}'s pass at #{station_label(pass.station)} falls in a station outage.",
-        fix: nil
-      }
-    end
+  defp outage_booked(pass, id) do
+    %{
+      id: id,
+      kind: "booked_into_outage",
+      severity: "critical",
+      at: pass.starts_at,
+      station: pass.station,
+      spacecraft: pass.spacecraft,
+      passes: [pass(pass)],
+      overlap_s: nil,
+      message:
+        "#{craft(pass)}'s pass at #{station_label(pass.station)} falls in a station outage.",
+      fix: nil
+    }
   end
 
-  defp gaps(spacecraft, passes, from, to, max_gap_s) do
-    by_craft = Enum.group_by(passes, & &1.spacecraft_id)
+  defp gap(spacecraft, gap_from, gap_to) do
+    gap_s = DateTime.diff(gap_to, gap_from)
 
-    for craft <- spacecraft,
-        {gap_from, gap_to} <- craft_gaps(Map.get(by_craft, craft.spacecraft_id, []), from, to),
-        DateTime.diff(gap_to, gap_from) > max_gap_s do
-      gap_s = DateTime.diff(gap_to, gap_from)
-      spacecraft = %{id: craft.spacecraft_id, name: craft.display_name, scid: craft.scid}
-
-      %{
-        id: "coverage_gap:#{craft.spacecraft_id}:#{DateTime.to_unix(gap_from)}",
-        kind: "coverage_gap",
-        severity: "critical",
-        at: gap_from,
-        station: nil,
-        spacecraft: spacecraft,
-        passes: [],
-        gap: %{from: gap_from, to: gap_to, seconds: gap_s},
-        overlap_s: nil,
-        message: "#{spacecraft.name || craft.spacecraft_id} has no pass for #{duration(gap_s)}.",
-        fix: nil
-      }
-    end
-  end
-
-  # Stretches without a live pass, from the last pass before the window (or its start) to the
-  # window's end. A stretch still open at `to` counts up to `to`.
-  defp craft_gaps(passes, from, to) do
-    sorted = Enum.sort_by(passes, & &1.starts_at, DateTime)
-    before = sorted |> Enum.filter(&DateTime.before?(&1.ends_at, from)) |> List.last()
-    inside = Enum.reject(sorted, &DateTime.before?(&1.ends_at, from))
-    start = (before && before.ends_at) || from
-
-    {gaps, last_end} =
-      Enum.reduce(inside, {[], start}, fn pass, {acc, cursor} ->
-        acc =
-          if DateTime.after?(pass.starts_at, cursor),
-            do: [{cursor, pass.starts_at} | acc],
-            else: acc
-
-        {acc, later(cursor, pass.ends_at)}
-      end)
-
-    gaps = if DateTime.before?(last_end, to), do: [{last_end, to} | gaps], else: gaps
-
-    gaps
-    |> Enum.reverse()
-    |> Enum.filter(fn {_gap_from, gap_to} -> DateTime.after?(gap_to, from) end)
+    %{
+      id: "coverage_gap:#{spacecraft.id}:#{DateTime.to_unix(gap_from)}",
+      kind: "coverage_gap",
+      severity: "critical",
+      at: gap_from,
+      station: nil,
+      spacecraft: spacecraft,
+      passes: [],
+      gap: %{from: gap_from, to: gap_to, seconds: gap_s},
+      overlap_s: nil,
+      message: "#{spacecraft.name || spacecraft.id} has no pass for #{duration(gap_s)}.",
+      fix: nil
+    }
   end
 
   defp later(a, b), do: if(DateTime.after?(b, a), do: b, else: a)
-
-  defp station_key(%{station: %{id: id}}) when is_binary(id), do: id
-  defp station_key(%{station: %{ref: ref}}) when is_binary(ref), do: ref
-  defp station_key(_pass), do: nil
-
-  defp same_antenna?(%{antenna: %{id: a}}, %{antenna: %{id: b}})
-       when is_binary(a) and is_binary(b),
-       do: a == b
-
-  defp same_antenna?(_a, _b), do: true
 
   defp overlap_s(a, b) do
     start = later(a.starts_at, b.starts_at)

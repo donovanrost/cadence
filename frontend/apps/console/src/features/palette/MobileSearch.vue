@@ -102,6 +102,7 @@ useTabTrap(root, () => emit("close"));
       :groups="groups"
       :query="query.trim()"
       :sources="empty ? {} : search.sources.value"
+      :alarms-truncated="!empty && search.alarmsTruncated.value"
       @open="open"
       :expanded="expanded"
       @expand="(g) => (expanded = new Set([...expanded, g]))"

@@ -156,7 +156,7 @@ defmodule Cadence.Configuration.ReviewRecord do
 
   defp before(query, %DateTime{} = at), do: where(query, [row], row.decided_at < ^at)
 
-  # The table's check allows exactly these (migration 20261121090000).
+  # The table's check allows exactly these.
   defp decision("approved"), do: :approved
   defp decision("sent_back"), do: :sent_back
   defp decision("not_required"), do: :not_required

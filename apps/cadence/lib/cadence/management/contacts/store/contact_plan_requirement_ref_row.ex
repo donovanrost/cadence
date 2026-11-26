@@ -26,6 +26,9 @@ defmodule Cadence.Management.Contacts.Store.ContactPlanRequirementRefRow do
     :contact_requirement_version
   ]
 
+  @doc false
+  def insert_attrs(attrs), do: attrs
+
   def changeset(attrs) when is_map(attrs) do
     %__MODULE__{}
     |> cast(attrs, @fields)

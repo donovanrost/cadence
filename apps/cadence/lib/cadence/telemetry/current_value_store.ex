@@ -29,12 +29,14 @@ defmodule Cadence.Telemetry.CurrentValueStore do
   @callback latest_value(binary(), binary(), keyword(), keyword()) :: Sample.t() | nil
   @callback latest_values_for_mission(binary(), keyword()) :: [Sample.t()]
   @callback latest_values_for_mission(binary(), keyword(), keyword()) :: [Sample.t()]
+  @callback last_receipts(binary(), keyword()) :: %{binary() => DateTime.t()}
   @callback reset() :: :ok
   @callback reset(binary()) :: :ok
   @callback reset(:all | binary(), keyword()) :: :ok
 
   @optional_callbacks hot_path_safe?: 1,
                       latest_value: 4,
+                      last_receipts: 2,
                       latest_values_for_mission: 3,
                       record_samples: 2,
                       replace_value: 5,
@@ -184,6 +186,30 @@ defmodule Cadence.Telemetry.CurrentValueStore do
   def latest_values_for_mission(_organization_id, mission_id, opts)
       when is_binary(mission_id) and is_list(opts) do
     latest_values_for_mission(mission_id, opts)
+  end
+
+  @doc """
+  The newest receipt time of every spacecraft's current values in the mission: `%{spacecraft_id =>
+  DateTime}`, without reading the values (the fleet read needs only this, #798). A backend with no
+  `last_receipts/2` is read the long way, through its values.
+  """
+  @spec last_receipts(policy(), binary()) :: %{binary() => DateTime.t()}
+  def last_receipts(%{backend_opts: backend_opts} = policy, mission_id)
+      when is_binary(mission_id) do
+    backend = backend(policy)
+
+    if function_exported?(backend, :last_receipts, 2) do
+      backend.last_receipts(mission_id, backend_opts)
+    else
+      policy |> latest_values_for_mission(mission_id, []) |> newest_by_spacecraft()
+    end
+  end
+
+  defp newest_by_spacecraft(samples) do
+    samples
+    |> Enum.reject(&(is_nil(&1.spacecraft_id) or is_nil(&1.receipt_time)))
+    |> Enum.group_by(& &1.spacecraft_id, & &1.receipt_time)
+    |> Map.new(fn {id, times} -> {id, Enum.max(times, DateTime)} end)
   end
 
   @spec reset() :: :ok

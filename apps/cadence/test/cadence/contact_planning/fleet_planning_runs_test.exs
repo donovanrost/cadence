@@ -6,11 +6,13 @@ defmodule Cadence.ContactPlanning.FleetPlanningRunsTest do
 
   alias Cadence.ContactPlanning.{
     ContactRequirements,
+    ContentHash,
     FleetPlanningPolicies,
     FleetPlanningRuns
   }
 
   alias Cadence.Management.Contacts.Store.FleetPlanningRunRow
+  alias Cadence.Management.Contacts.Store.FleetPlanningScoreDocumentRow
   alias Cadence.Persistence.JsonDocument
   alias Cadence.PolicyReviewer
   alias Cadence.Spacecraft
@@ -57,6 +59,44 @@ defmodule Cadence.ContactPlanning.FleetPlanningRunsTest do
       policy: policy,
       policy_version: policy_version
     }
+  end
+
+  test "identical score documents are stored separately for each mission" do
+    other_organization_id = "org-fleet-planning-score-other"
+    other_mission_id = "mission-fleet-planning-score-other"
+    persist_mission_scope(other_organization_id, other_mission_id)
+
+    document = %{"total" => 100, "components" => %{"priority" => 1}}
+    sha256 = ContentHash.sha256(document)
+
+    rows = [
+      FleetPlanningScoreDocumentRow.insert_attrs(
+        document,
+        sha256,
+        @organization_id,
+        @mission_id
+      ),
+      FleetPlanningScoreDocumentRow.insert_attrs(
+        document,
+        sha256,
+        other_organization_id,
+        other_mission_id
+      )
+    ]
+
+    assert {2, nil} = Cadence.Repo.insert_all(FleetPlanningScoreDocumentRow, rows)
+
+    assert %FleetPlanningScoreDocumentRow{organization_id: @organization_id} =
+             Cadence.Repo.get_by!(FleetPlanningScoreDocumentRow,
+               mission_id: @mission_id,
+               score_document_sha256: sha256
+             )
+
+    assert %FleetPlanningScoreDocumentRow{organization_id: ^other_organization_id} =
+             Cadence.Repo.get_by!(FleetPlanningScoreDocumentRow,
+               mission_id: other_mission_id,
+               score_document_sha256: sha256
+             )
   end
 
   test "directory pages are bounded, ordered, filtered, and scoped", context do

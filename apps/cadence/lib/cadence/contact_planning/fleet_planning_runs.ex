@@ -23,7 +23,8 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
     ContactRequirementVersionRow,
     FleetPlanningDecisionRow,
     FleetPlanningRunRequirementRefRow,
-    FleetPlanningRunRow
+    FleetPlanningRunRow,
+    FleetPlanningScoreDocumentRow
   }
 
   alias Cadence.Repo
@@ -33,6 +34,8 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
   # Safety bound, not a planning batch size. A 1,000 spacecraft, 4/day weekly run is 28,000.
   @maximum_requirements 100_000
   @insert_batch_size 500
+  @decision_batch_size 4_000
+  @coverage_batch_size 2_000
   @document_limit 256 * 1_024
 
   @spec maximum_requirements() :: pos_integer()
@@ -235,30 +238,36 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
 
   @spec list_decisions(binary(), binary(), binary()) :: [FleetPlanningDecision.t()]
   def list_decisions(organization_id, mission_id, run_id) do
-    FleetPlanningDecisionRow
-    |> where(
-      [decision],
-      decision.organization_id == ^organization_id and decision.mission_id == ^mission_id and
-        decision.fleet_planning_run_id == ^run_id
-    )
+    visible_decisions(organization_id, mission_id, run_id)
+    |> with_score_evidence()
     |> order_by([decision],
       asc_nulls_last: decision.rank,
       desc: decision.score,
       asc: decision.contact_opportunity_snapshot_id
     )
     |> Repo.all()
-    |> Enum.map(&FleetPlanningDecisionRow.to_domain/1)
+    |> Enum.map(fn {decision, evidence} ->
+      FleetPlanningDecisionRow.to_domain(decision, evidence)
+    end)
+  end
+
+  @spec selected_snapshot_ids(binary(), binary(), binary()) :: {[binary()], [binary()]}
+  def selected_snapshot_ids(organization_id, mission_id, run_id) do
+    visible_decisions(organization_id, mission_id, run_id)
+    |> where([decision], decision.disposition in ["selected", "locked"])
+    |> order_by([decision], asc: decision.rank)
+    |> select([decision], {decision.disposition, decision.contact_opportunity_snapshot_id})
+    |> Repo.all()
+    |> Enum.reduce({[], []}, fn
+      {"selected", id}, {selected, locked} -> {[id | selected], locked}
+      {"locked", id}, {selected, locked} -> {selected, [id | locked]}
+    end)
+    |> then(fn {selected, locked} -> {Enum.reverse(selected), Enum.reverse(locked)} end)
   end
 
   @doc "Bounded optimizer decisions in rank, score and snapshot identity order."
   def decisions_page(org, mission, run_id, page) when is_integer(page) and page in 1..1_000_000 do
-    query =
-      FleetPlanningDecisionRow
-      |> where(
-        [d],
-        d.organization_id == ^org and d.mission_id == ^mission and
-          d.fleet_planning_run_id == ^run_id
-      )
+    query = visible_decisions(org, mission, run_id) |> with_score_evidence()
 
     rows =
       query
@@ -274,8 +283,36 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
     %{
       page: page,
       more: length(rows) > 10,
-      entries: rows |> Enum.take(10) |> Enum.map(&FleetPlanningDecisionRow.to_domain/1)
+      entries:
+        rows
+        |> Enum.take(10)
+        |> Enum.map(fn {decision, evidence} ->
+          FleetPlanningDecisionRow.to_domain(decision, evidence)
+        end)
     }
+  end
+
+  defp with_score_evidence(query) do
+    query
+    |> join(:inner, [decision, _run], evidence in FleetPlanningScoreDocumentRow,
+      on:
+        evidence.mission_id == decision.mission_id and
+          evidence.score_document_sha256 == decision.score_document_sha256
+    )
+    |> select([decision, _run, evidence], {decision, evidence})
+  end
+
+  defp visible_decisions(organization_id, mission_id, run_id) do
+    FleetPlanningDecisionRow
+    |> join(:inner, [decision], run in FleetPlanningRunRow,
+      on: run.fleet_planning_run_id == decision.fleet_planning_run_id
+    )
+    |> where(
+      [decision, run],
+      decision.organization_id == ^organization_id and decision.mission_id == ^mission_id and
+        decision.fleet_planning_run_id == ^run_id and
+        run.phase in ["materializing_plan", "finished"]
+    )
   end
 
   @spec advance_phase(
@@ -493,17 +530,67 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
   end
 
   @spec persist_decisions(Scope.t(), binary(), binary(), [map()]) ::
-          {:ok, [FleetPlanningDecision.t()]} | {:error, term()}
+          {:ok, non_neg_integer()} | {:error, term()}
   def persist_decisions(%Scope{} = scope, mission_id, run_id, decisions)
       when is_list(decisions) do
     with :ok <- authorize_member(scope, mission_id),
          {:ok, run} <- fetch(scope.organization_id, mission_id, run_id),
-         :ok <- optimizing_run(run),
-         {:ok, normalized} <- build_decisions(run, decisions) do
-      Repo.transaction(fn -> replace_decisions(run_id, normalized) end)
-      |> normalize_list_result()
+         :ok <- optimizing_run(run) do
+      with :ok <- persist_score_documents(run, decisions) do
+        replace_decisions(run, decisions)
+      end
     end
   end
+
+  @spec persist_coverage(Scope.t(), binary(), binary(), map()) :: :ok | {:error, term()}
+  def persist_coverage(%Scope{} = scope, mission_id, run_id, coverage) when is_map(coverage) do
+    with :ok <- authorize_member(scope, mission_id),
+         {:ok, run} <- fetch(scope.organization_id, mission_id, run_id),
+         :ok <- optimizing_run(run) do
+      persist_coverage_rows(run, coverage)
+    end
+  end
+
+  defp persist_coverage_rows(run, coverage) do
+    run.organization_id
+    |> list_requirement_refs(run.mission_id, run.fleet_planning_run_id)
+    |> Stream.map(&coverage_ref(&1, coverage))
+    |> Stream.chunk_every(@coverage_batch_size)
+    |> Enum.reduce_while(:ok, fn batch, :ok ->
+      rows = Enum.map(batch, &FleetPlanningRunRequirementRefRow.insert_attrs/1)
+
+      {count, _} =
+        Repo.insert_all(FleetPlanningRunRequirementRefRow, rows,
+          on_conflict:
+            {:replace, [:input_state, :result_state, :explanation_document, :updated_at]},
+          conflict_target: [:fleet_planning_run_requirement_ref_id]
+        )
+
+      if count == length(batch),
+        do: {:cont, :ok},
+        else: {:halt, {:error, :fleet_planning_coverage_persistence_incomplete}}
+    end)
+  end
+
+  defp coverage_ref(ref, coverage) do
+    result = Map.fetch!(coverage, ref.contact_requirement_id)
+
+    {input_state, result_state} =
+      if ref.input_state == :failed,
+        do: {:failed, :failed},
+        else: {:searched, coverage_state(result["state"])}
+
+    %{
+      ref
+      | input_state: input_state,
+        result_state: result_state,
+        explanation_document: Map.put(ref.explanation_document, "coverage", result)
+    }
+  end
+
+  defp coverage_state("satisfied"), do: :satisfied
+  defp coverage_state("partial"), do: :partial
+  defp coverage_state("unsatisfied"), do: :unsatisfied
 
   defp persist_run(run, requirements) do
     Repo.transaction(fn ->
@@ -521,40 +608,37 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
   end
 
   defp insert_requirement_refs(run, requirements) do
-    refs =
-      Enum.map(requirements, fn {_requirement, version} ->
-        FleetPlanningRunRequirementRef.new(%{
-          fleet_planning_run_id: run.fleet_planning_run_id,
-          organization_id: run.organization_id,
-          mission_id: run.mission_id,
-          contact_requirement_id: version.contact_requirement_id,
-          contact_requirement_version: version.version,
-          input_content_sha256: version.content_sha256,
-          input_state: :pending,
-          result_state: :pending,
-          explanation_document: %{}
-        })
-      end)
-
     inserted =
-      refs
+      requirements
       |> Stream.chunk_every(@insert_batch_size)
       |> Enum.reduce([], fn batch, acc ->
-        rows = Enum.map(batch, &FleetPlanningRunRequirementRefRow.insert_attrs/1)
+        refs = requirement_refs_for_batch(run, batch)
+        rows = Enum.map(refs, &FleetPlanningRunRequirementRefRow.insert_attrs/1)
         {count, _} = Repo.insert_all(FleetPlanningRunRequirementRefRow, rows)
 
         if count != length(batch), do: Repo.rollback(:fleet_planning_run_requirement_refs_invalid)
 
-        persisted =
-          Enum.zip(batch, rows)
-          |> Enum.map(fn {ref, row} ->
-            %{ref | inserted_at: row.inserted_at, updated_at: row.updated_at}
-          end)
-
-        [persisted | acc]
+        [refs | acc]
       end)
 
     {:ok, inserted |> Enum.reverse() |> List.flatten()}
+  end
+
+  defp requirement_refs_for_batch(run, requirements) do
+    now = DateTime.utc_now()
+
+    Enum.map(requirements, fn {_requirement, version} ->
+      FleetPlanningRunRequirementRef.new(%{
+        fleet_planning_run_id: run.fleet_planning_run_id,
+        organization_id: run.organization_id,
+        mission_id: run.mission_id,
+        contact_requirement_id: version.contact_requirement_id,
+        contact_requirement_version: version.version,
+        input_content_sha256: version.content_sha256,
+        inserted_at: now,
+        updated_at: now
+      })
+    end)
   end
 
   defp build_run(
@@ -807,19 +891,110 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
     end
   end
 
-  defp replace_decisions(run_id, decisions) do
+  defp persist_score_documents(run, decisions) do
+    result =
+      Enum.reduce_while(decisions, {:ok, %{}}, fn decision, {:ok, documents} ->
+        document = Map.fetch!(decision, :score_document)
+
+        sha256 =
+          Map.get(decision, :score_document_sha256) || ContentHash.sha256(document)
+
+        case Map.fetch(documents, sha256) do
+          :error -> {:cont, {:ok, Map.put(documents, sha256, document)}}
+          {:ok, ^document} -> {:cont, {:ok, documents}}
+          {:ok, _other} -> {:halt, {:error, :fleet_planning_score_document_hash_collision}}
+        end
+      end)
+
+    with {:ok, documents} <- result,
+         true <-
+           Enum.all?(documents, fn {sha256, document} ->
+             ContentHash.sha256(document) == sha256
+           end) do
+      documents
+      |> Enum.map(fn {sha256, document} ->
+        FleetPlanningScoreDocumentRow.insert_attrs(
+          document,
+          sha256,
+          run.organization_id,
+          run.mission_id
+        )
+      end)
+      |> Enum.chunk_every(@decision_batch_size)
+      |> Enum.each(fn rows ->
+        Repo.insert_all(FleetPlanningScoreDocumentRow, rows,
+          on_conflict: :nothing,
+          conflict_target: [:mission_id, :score_document_sha256]
+        )
+      end)
+
+      :ok
+    else
+      false -> {:error, :fleet_planning_score_document_hash_invalid}
+      error -> error
+    end
+  end
+
+  defp replace_decisions(run, decisions) do
+    clear_decisions(run.fleet_planning_run_id)
+
+    result =
+      decisions
+      |> Stream.chunk_every(@decision_batch_size)
+      |> Task.async_stream(
+        fn batch ->
+          rows = Enum.map(batch, &decision_insert_attrs(&1, run))
+          {count, _} = Repo.insert_all(FleetPlanningDecisionRow, rows)
+
+          if count == length(batch),
+            do: {:ok, count},
+            else: {:error, :fleet_planning_decisions_invalid}
+        end,
+        max_concurrency: 4,
+        timeout: :infinity,
+        ordered: false
+      )
+      |> Enum.reduce_while({:ok, 0}, fn
+        {:ok, {:ok, count}}, {:ok, total} -> {:cont, {:ok, total + count}}
+        {:ok, {:error, reason}}, _total -> {:halt, {:error, reason}}
+        {:exit, reason}, _total -> {:halt, {:error, reason}}
+      end)
+
+    case result do
+      {:ok, _count} ->
+        result
+
+      {:error, _reason} ->
+        clear_decisions(run.fleet_planning_run_id)
+        result
+    end
+  rescue
+    error in ArgumentError ->
+      clear_decisions(run.fleet_planning_run_id)
+      {:error, {:invalid_fleet_planning_decision, error.message}}
+
+    error ->
+      clear_decisions(run.fleet_planning_run_id)
+      reraise error, __STACKTRACE__
+  end
+
+  defp clear_decisions(run_id) do
     FleetPlanningDecisionRow
     |> where([decision], decision.fleet_planning_run_id == ^run_id)
     |> Repo.delete_all()
-
-    Enum.map(decisions, &insert_decision!/1)
   end
 
-  defp insert_decision!(decision) do
-    case Repo.insert(FleetPlanningDecisionRow.changeset(decision)) do
-      {:ok, row} -> FleetPlanningDecisionRow.to_domain(row)
-      {:error, reason} -> Repo.rollback(reason)
-    end
+  defp decision_insert_attrs(attrs, run) do
+    sha256 =
+      Map.get(attrs, :score_document_sha256) ||
+        ContentHash.sha256(Map.fetch!(attrs, :score_document))
+
+    attrs
+    |> Map.put(:fleet_planning_run_id, run.fleet_planning_run_id)
+    |> Map.put(:organization_id, run.organization_id)
+    |> Map.put(:mission_id, run.mission_id)
+    |> FleetPlanningDecision.new()
+    |> FleetPlanningDecisionRow.insert_attrs(sha256)
   end
 
   defp advance_transaction(
@@ -966,21 +1141,6 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
   defp allowed_phase_transition(:materializing_plan, :finished), do: :ok
   defp allowed_phase_transition(_expected, _next), do: {:error, :invalid_fleet_planning_phase}
 
-  defp build_decisions(run, decisions) do
-    decisions
-    |> Enum.map(fn attrs ->
-      FleetPlanningDecision.new(
-        attrs
-        |> Map.put(:fleet_planning_run_id, run.fleet_planning_run_id)
-        |> Map.put(:organization_id, run.organization_id)
-        |> Map.put(:mission_id, run.mission_id)
-      )
-    end)
-    |> then(&{:ok, &1})
-  rescue
-    error in ArgumentError -> {:error, {:invalid_fleet_planning_decision, error.message}}
-  end
-
   defp optimizing_run(%FleetPlanningRun{phase: :optimizing}), do: :ok
   defp optimizing_run(_run), do: {:error, :fleet_planning_run_not_optimizing}
 
@@ -1073,8 +1233,6 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
 
   defp normalize_single_result({:ok, run}), do: {:ok, run}
   defp normalize_single_result({:error, reason}), do: {:error, reason}
-  defp normalize_list_result({:ok, items}), do: {:ok, items}
-  defp normalize_list_result({:error, reason}), do: {:error, reason}
 
   defp document_size(document),
     do: document |> :erlang.term_to_binary([:deterministic]) |> byte_size()

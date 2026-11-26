@@ -92,6 +92,8 @@ export function usePagedQuery<K, Item, Meta>(
     const requestedAt = new Date();
     const items: Item[] = [];
     const metas: Meta[] = [];
+    /** The first page, once it arrived: its meta is the list's (a Meta may itself be undefined). */
+    let first: { meta: Meta } | null = null;
     let cursor: string | null = null;
     do {
       const result = await fetchPage(current, cursor, mine.signal);
@@ -103,14 +105,14 @@ export function usePagedQuery<K, Item, Meta>(
       }
       items.push(...result.value.items);
       metas.push(result.value.meta);
+      first ??= { meta: result.value.meta };
       cursor = result.value.next;
     } while (cursor !== null && items.length < upTo);
-    const [meta] = metas;
-    if (meta === undefined) return;
+    if (first === null) return;
     refreshError.value = null;
     state.value = {
       status: "ready",
-      value: { items: dedupe(items), next: cursor, meta, metas },
+      value: { items: dedupe(items), next: cursor, meta: first.meta, metas },
       receivedAt: new Date(),
       requestedAt,
     };
@@ -158,7 +160,7 @@ export function usePagedQuery<K, Item, Meta>(
           meta: s.value.meta,
           metas: [...s.value.metas, result.value.meta],
         },
-        receivedAt: new Date(),
+        // `receivedAt` stays the first page's: older pages don't make the newest rows any fresher.
       };
     } catch {
       // Aborted by a start-over.

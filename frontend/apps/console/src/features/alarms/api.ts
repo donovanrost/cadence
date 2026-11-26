@@ -3,6 +3,7 @@ import {
   spacecraftId as spacecraftIdReader,
   decoders as d,
   request,
+  requestPage,
   type ApiResult,
   type Decoded,
 } from "@/api/index.ts";
@@ -99,6 +100,8 @@ export type AlarmQuery = Readonly<{
   plane?: number;
   excludeSpacecraftId?: string;
   limit?: number;
+  /** A previous page's next cursor. */
+  cursor?: string;
 }>;
 
 export function alarmQueryString(query: AlarmQuery): string {
@@ -111,6 +114,7 @@ export function alarmQueryString(query: AlarmQuery): string {
   if (query.plane !== undefined) params.set("plane", String(query.plane));
   if (query.excludeSpacecraftId) params.set("exclude_spacecraft_id", query.excludeSpacecraftId);
   if (query.limit !== undefined) params.set("limit", String(query.limit));
+  if (query.cursor) params.set("cursor", query.cursor);
   const text = params.toString();
   return text ? `?${text}` : "";
 }
@@ -122,6 +126,20 @@ export function fetchAlarms(
 ): Promise<ApiResult<Alarms>> {
   return request(
     `/missions/${encodeURIComponent(missionId)}/alarms${alarmQueryString(query)}`,
+    alarmsReader,
+    signal ? { signal } : {},
+  );
+}
+
+/** One page of alarms and its next cursor (null on the last page). */
+export function fetchAlarmPage(
+  missionId: MissionId,
+  query: AlarmQuery,
+  cursor: string | null,
+  signal?: AbortSignal,
+) {
+  return requestPage(
+    `/missions/${encodeURIComponent(missionId)}/alarms${alarmQueryString(cursor ? { ...query, cursor } : query)}`,
     alarmsReader,
     signal ? { signal } : {},
   );

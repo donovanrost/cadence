@@ -106,18 +106,18 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
     assert_received {:fleet_searched, "route-alpha"}
     assert_received {:fleet_searched, "route-beta"}
 
-    assert Enum.map(result.requirement_refs, & &1.contact_requirement_id) ==
+    assert Enum.map(requirement_refs(result), & &1.contact_requirement_id) ==
              Enum.sort([
                requirement_alpha.contact_requirement_id,
                requirement_beta.contact_requirement_id
              ])
 
-    assert Enum.all?(result.requirement_refs, &(&1.input_state == :searched))
-    assert Enum.all?(result.requirement_refs, &(&1.result_state == :satisfied))
-    assert Enum.all?(result.requirement_refs, &is_binary(&1.contact_planning_run_id))
+    assert Enum.all?(requirement_refs(result), &(&1.input_state == :searched))
+    assert Enum.all?(requirement_refs(result), &(&1.result_state == :satisfied))
+    assert Enum.all?(requirement_refs(result), &is_binary(&1.contact_planning_run_id))
 
-    assert Enum.map(result.decisions, & &1.disposition) == [:selected, :selected]
-    assert Enum.map(result.decisions, & &1.rank) == [1, 2]
+    assert Enum.map(decisions(result), & &1.disposition) == [:selected, :selected]
+    assert Enum.map(decisions(result), & &1.rank) == [1, 2]
 
     assert length(result.plan_version.planning_run_refs_document["runs"]) == 2
     assert length(result.plan_version.selected_snapshot_ids) == 2
@@ -162,7 +162,7 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
 
     assert result.run.progress_document["requirements_failed"] == 2
     assert result.run.progress_document["requirements_searched"] == 0
-    assert [first, second] = result.requirement_refs
+    assert [first, second] = requirement_refs(result)
     assert first.contact_planning_run_id != second.contact_planning_run_id
 
     for ref <- [first, second] do
@@ -217,7 +217,7 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
                now: @now
              )
 
-    refs = Map.new(result.requirement_refs, &{&1.contact_requirement_id, &1})
+    refs = Map.new(requirement_refs(result), &{&1.contact_requirement_id, &1})
 
     assert refs[completed.contact_requirement_id].contact_planning_run_id ==
              previous.run.contact_planning_run_id
@@ -262,7 +262,7 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
     assert length(result.plan_version.selected_snapshot_ids) == 1
     refute result.plan_version.coverage_document["satisfied"]
 
-    refs = Map.new(result.requirement_refs, &{&1.contact_requirement_id, &1})
+    refs = Map.new(requirement_refs(result), &{&1.contact_requirement_id, &1})
 
     assert refs[requirement_alpha.contact_requirement_id].result_state == :satisfied
     assert refs[requirement_beta.contact_requirement_id].input_state == :failed
@@ -320,7 +320,7 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
     assert result.run.failure_document["code"] == "fleet_inputs_stale"
     assert result.run.failure_document["reason_code"] == "fleet_planning_input_drift"
     assert result.plan == nil
-    assert result.decisions == []
+    assert decisions(result) == []
     refute_received :unexpected_drift_search
   end
 
@@ -532,7 +532,7 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
 
     assert length(repaired.plan_version.selected_snapshot_ids) == 1
 
-    assert Enum.any?(repaired.decisions, fn decision ->
+    assert Enum.any?(decisions(repaired), fn decision ->
              decision.contact_opportunity_snapshot_id ==
                locked_snapshot.contact_opportunity_snapshot_id and
                decision.disposition == :locked
@@ -781,6 +781,22 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
 
     assert second.plan_version.locked_snapshot_ids == [replacement_id]
     assert length(second.plan_version.selected_snapshot_ids) == 1
+  end
+
+  defp requirement_refs(%{run: run}) do
+    FleetPlanningRuns.list_requirement_refs(
+      run.organization_id,
+      run.mission_id,
+      run.fleet_planning_run_id
+    )
+  end
+
+  defp decisions(%{run: run}) do
+    FleetPlanningRuns.list_decisions(
+      run.organization_id,
+      run.mission_id,
+      run.fleet_planning_run_id
+    )
   end
 
   defp create_requirement!(scope, suffix) do

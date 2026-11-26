@@ -55,8 +55,8 @@ defmodule Cadence.Commanding.StagedCommandItemRow do
     |> unique_constraint(:staged_command_item_id, name: :staged_command_items_pkey)
     |> validate_number(:priority, greater_than_or_equal_to: 0)
     |> validate_number(:item_order, greater_than_or_equal_to: 0)
-    |> unique_constraint([:mission_id, :staged_command_item_id],
-      name: :staged_command_items_scope_idx
+    |> unique_constraint([:organization_id, :mission_id, :staged_command_item_id],
+      name: :staged_command_items_org_scope_idx_uniq
     )
   end
 

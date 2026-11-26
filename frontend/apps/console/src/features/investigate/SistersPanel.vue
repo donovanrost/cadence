@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { useMissionScope } from "@/shell/index.ts";
 import { useNow, ApCallout, ApEmptyState, ApListRow, ApPanel, ApRemote } from "@/ui";
-import { formatValue, withUnit, type Alarm } from "@/features/alarms/index.ts";
+import { AlarmsMore, formatValue, withUnit, type Alarm } from "@/features/alarms/index.ts";
 import { fleetOpState, type FleetSpacecraft } from "@/features/fleet/index.ts";
 import { sisters } from "./model.ts";
 import PlaneRing from "./PlaneRing.vue";
@@ -42,6 +42,18 @@ const rows = computed(() => {
     ? sisters(s.value.alarms, props.fleet, props.sc, props.alarm.point.id)
     : [];
 });
+/** How many sisters are in alarm on this point, from the server (all pages, not those loaded). */
+const inAlarm = computed(() => {
+  const s = pointAlarms.state.value;
+  return s.status === "ready" ? s.value.total : rows.value.length;
+});
+/** Set while only part of them is loaded (#827). */
+const partial = computed(() => {
+  const s = pointAlarms.state.value;
+  return s.status === "ready" && s.value.next !== null
+    ? { shown: s.value.alarms.length, total: s.value.total }
+    : null;
+});
 const tones = computed(
   () =>
     new Map(
@@ -56,7 +68,7 @@ const tones = computed(
   <ApPanel
     index="B4"
     :title="`${planeLabel} · same point in limits`"
-    v-bind="alarm && sc.plane !== null ? { meta: `${rows.length} of ${planeSize}` } : {}"
+    v-bind="alarm && sc.plane !== null ? { meta: `${inAlarm} of ${planeSize}` } : {}"
     pane
     flush
   >
@@ -77,6 +89,16 @@ const tones = computed(
       loading-label="LOADING…"
       @retry="pointAlarms.refetch"
     >
+      <AlarmsMore
+        v-if="partial"
+        class="border-b border-hairline-faint px-4 py-2"
+        :shown="partial.shown"
+        :total="partial.total"
+        :what="`${planeLabel.toLowerCase()} sisters in alarm`"
+        :busy="pointAlarms.moreBusy.value"
+        :failed="pointAlarms.moreError.value !== null"
+        @more="pointAlarms.more()"
+      />
       <div class="flex justify-center border-b border-hairline-faint py-2">
         <PlaneRing :fleet="fleet" :sc="sc" :sisters="tones" />
       </div>

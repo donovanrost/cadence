@@ -568,12 +568,16 @@ defmodule CadenceWeb.Router do
       post("/attention/provider_change/:id/approve", ProviderChangeController, :approve)
       post("/attention/provider_change/:id/reject", ProviderChangeController, :reject)
       post("/attention/provider_change/:id/acknowledge", ProviderChangeController, :acknowledge)
+      # U37 (#847): one pass's open settlement item, without reading the action queue.
+      get("/attention/contact_settlement", AttentionController, :settlement)
       post("/attention/:source/:id/acknowledge", AttentionController, :acknowledge)
       post("/attention/:source/:id/resolve", AttentionController, :resolve)
       post("/attention/:source/:id/retry", AttentionController, :retry)
 
       # -- Setup (owner: api). Contracts: docs/apogee/api/setup.md
       get("/spacecraft", SpacecraftController, :index)
+      # #847: before :spacecraft_id, so "names" isn't read as an id.
+      get("/spacecraft/names", SpacecraftController, :names)
       get("/spacecraft/:spacecraft_id", SpacecraftDetailController, :show)
       get("/spacecraft/:spacecraft_id/source-endpoints", SourceEndpointController, :index)
       post("/spacecraft/:spacecraft_id/source-endpoints", SourceEndpointController, :create)

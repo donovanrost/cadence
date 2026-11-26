@@ -358,5 +358,11 @@ defmodule CadenceWeb.Console.ContactPlanAPITest do
     assert sc == fixture.craft.spacecraft_id
     assert detail["ready_to_approve"] == false
     assert detail["demand"]["rule_met"] == 0
+
+    assert detail["demand"]["coverage"] == %{
+             "spacecraft_uncovered" => 1,
+             "contacts_short" => 1,
+             "gaps" => 1
+           }
   end
 end

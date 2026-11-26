@@ -12,17 +12,55 @@ defmodule Cadence.Observability.ScaleSamplerTest do
       assert %{p50: 2.5, max: 2.5} = Stats.distribution([2.5])
     end
 
-    test "summarize takes every numeric leaf across seconds and skips the rest" do
+    test "summarize takes every numeric leaf across rows and skips the rest" do
       rows = [
         %{t: "a", ingest: %{frames: 10, duration_us: %{p99: 5, max: nil}}},
         %{t: "b", ingest: %{frames: 30, duration_us: %{p99: 7, max: nil}}}
       ]
 
-      assert %{seconds: 2, metrics: metrics} = Stats.summarize(rows)
+      assert %{rows: 2, metrics: metrics} = Stats.summarize(rows)
       assert metrics["ingest.frames"] == %{p50: 10, p99: 30, max: 30}
       assert metrics["ingest.duration_us.p99"] == %{p50: 5, p99: 7, max: 7}
       refute Map.has_key?(metrics, "t")
       refute Map.has_key?(metrics, "ingest.duration_us.max")
+    end
+
+    test "normalizes each uneven interval before taking counter rate percentiles" do
+      rows = [
+        %{elapsed_ms: 500, ingest: %{frames: 210, samples: 0, paths: 3}},
+        %{elapsed_ms: 2_000, ingest: %{frames: 400, samples: 800, paths: 2}},
+        %{elapsed_ms: 4_000, ingest: %{frames: 600, samples: 400, paths: 4}}
+      ]
+
+      assert %{rows: 3, elapsed_ms: 6_500, metrics: metrics, counters: counters} =
+               Stats.summarize(rows)
+
+      assert counters["ingest.frames"] == %{
+               total: 1_210,
+               per_second: %{p50: 200.0, p99: 420.0, max: 420.0}
+             }
+
+      assert counters["ingest.samples"] == %{
+               total: 1_200,
+               per_second: %{p50: 100.0, p99: 400.0, max: 400.0}
+             }
+
+      assert metrics["ingest.frames"].p50 == 400
+      assert metrics["ingest.paths"].p50 == 3
+      refute Map.has_key?(counters, "ingest.paths")
+    end
+
+    test "counts a zero-duration row in totals while leaving its rate unknown" do
+      assert %{counters: counters} =
+               Stats.summarize([
+                 %{elapsed_ms: 0, ecto: %{count: 4}},
+                 %{elapsed_ms: 2_000, ecto: %{count: 0}}
+               ])
+
+      assert counters["ecto.count"] == %{
+               total: 4,
+               per_second: %{p50: 0.0, p99: 0.0, max: 0.0}
+             }
     end
   end
 
@@ -218,7 +256,7 @@ defmodule Cadence.Observability.ScaleSamplerTest do
       %{out: out}
     end
 
-    test "aggregates ingest events per second, omitting missing measurements", %{out: out} do
+    test "writes the interval and aggregates its ingest events", %{out: out} do
       {:ok, _pid} =
         ScaleSampler.start(
           out: out,
@@ -240,8 +278,23 @@ defmodule Cadence.Observability.ScaleSamplerTest do
       :telemetry.execute(batch, %{}, meta)
       :telemetry.execute([:cadence, :ingest, :journal, :backlog], %{bytes: 900}, meta)
 
-      assert {:ok, %{seconds: 1, metrics: metrics, meta: meta, storage: storage}} =
-               ScaleSampler.stop()
+      assert {:ok, summary} = ScaleSampler.stop()
+
+      assert %{
+               rows: 1,
+               elapsed_ms: elapsed_ms,
+               counters: counters,
+               metrics: metrics,
+               meta: meta,
+               storage: storage
+             } = summary
+
+      assert elapsed_ms > 0
+
+      assert counters["ingest.frames"] == %{
+               total: 6,
+               per_second: Stats.distribution([6_000 / elapsed_ms])
+             }
 
       assert %{node: _, otp: _, schedulers: _} = meta
       assert storage == %{postgres: %{}, questdb: %{}}
@@ -256,6 +309,7 @@ defmodule Cadence.Observability.ScaleSamplerTest do
       [line] = out |> File.read!() |> String.split("\n", trim: true)
 
       assert %{
+               "elapsed_ms" => ^elapsed_ms,
                "ingest" => %{"frames" => 6},
                "mailboxes" => %{"top" => _, "by_module" => by_module}
              } =
