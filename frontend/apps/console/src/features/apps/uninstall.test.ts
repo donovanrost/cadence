@@ -82,4 +82,30 @@ describe("Uninstall on a mission app (#679)", () => {
     await flushPromises();
     expect(w.find('[role="alert"]').exists()).toBe(true);
   });
+
+  it("keeps focus in the row after the Uninstall button is gone", async () => {
+    call.fn.mockResolvedValue({ kind: "applied", app: app("not_installed") });
+    const w = mountActions("installed");
+    const open = w.findAll("button").find((b) => b.text() === "Uninstall");
+    await open?.trigger("click");
+    await w
+      .findAll("dialog button")
+      .find((b) => b.text() === "Uninstall Limits")
+      ?.trigger("click");
+    await flushPromises();
+    // The screen refetches and hands the row its new state: the Uninstall button leaves.
+    await w.setProps({ app: app("not_installed") });
+    await flushPromises();
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement?.textContent).toBe("Install");
+    w.unmount();
+  });
+
+  it("describes the dialog by its consequence lines", async () => {
+    const w = mountActions("installed");
+    const dialog = w.find("dialog");
+    const lines = dialog.attributes("aria-describedby");
+    expect(lines).toBeTruthy();
+    expect(dialog.find(`[id="${lines}"]`).text()).toContain("Its configuration is kept.");
+  });
 });
