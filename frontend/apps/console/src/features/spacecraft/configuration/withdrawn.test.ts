@@ -35,8 +35,12 @@ const composed = comp([layer("a", 4), layer("b", 7)]);
 const oneCatalog = comp([layer("a", 4)]);
 
 const ana = { kind: "user", id: "u-ana", name: "Ana R." };
-const withdrawn = (decision: Record<string, unknown> = {}): ApprovalWithdrawn => {
+const withdrawn = (
+  decision: Record<string, unknown> = {},
+  extra: Record<string, unknown> = {},
+): ApprovalWithdrawn => {
   const r = decode(approvalWithdrawnReader, {
+    ...extra,
     revision_id: "mission_model_revision:r3",
     decision: {
       kind: "withdrawn",
@@ -104,6 +108,27 @@ describe("withdrawnStateLine (U109's caution words)", () => {
   it("says only what's known for a decision kind it doesn't know (U20)", () => {
     expect(withdrawnStateLine(withdrawn({ kind: "revoked" }), composed, "EARENDIL-004")).toBe(
       "Composition 3 is no longer approved since 11-20 09:12Z. EARENDIL-004 stays on it until a new configuration is applied.",
+    );
+  });
+
+  it("ends with U109's way out, by what the next staging would select", () => {
+    const earlier = {
+      revision_id: "mission_model_revision:r2",
+      catalog_revision: { id: "cr-2", number: 2, label: "v2", database_id: "db-a" },
+    };
+    expect(
+      withdrawnStateLine(withdrawn({}, { earlier_approved: earlier }), composed, "EARENDIL-004"),
+    ).toBe(
+      "Composition 3 is no longer approved: Ana R. withdrew its approval at 11-20 09:12Z: “Wrong TM table”. EARENDIL-004 stays on it until a new configuration is applied. Stage a new configuration to move it to composition 3's earlier approved version.",
+    );
+    expect(
+      withdrawnStateLine(withdrawn({}, { earlier_approved: null }), oneCatalog, "EARENDIL-004"),
+    ).toMatch(
+      /stays on it until a new configuration is applied\. Move it to an approved composition\.$/,
+    );
+    // A server from before #924's follow-up doesn't say what's left: no way out, never a guess.
+    expect(withdrawnStateLine(withdrawn(), composed, "EARENDIL-004")).toMatch(
+      /until a new configuration is applied\.$/,
     );
   });
 

@@ -11,13 +11,30 @@ import { formatAbsolute, formatShort } from "@/ui";
 /**
  * E2b (#546, #924; U109): a craft whose running revision's approval was withdrawn or rejected.
  * The workspace read carries it as `active.approval_withdrawn`, and the directory row as
- * `approval_withdrawn`: `{revision_id, decision: {kind, by, at, reason}}`, or null. The key is
- * optional so the console reads a server from before #924.
+ * `approval_withdrawn`: `{revision_id, earlier_approved, decision: {kind, by, at, reason}}`, or
+ * null. The keys are optional so the console reads a server from before #924 and its follow-up.
  */
 export const approvalDecisionKinds = ["withdrawn", "rejected"] as const;
 
+/** What the next staging would select instead (#924 follow-up), or null when nothing approved is left. */
+const earlierApproved = d.object({
+  revision_id: d.token,
+  catalog_revision: d.object({
+    id: d.token,
+    number: d.integer,
+    // free-text: the catalog revision's own label, shown as written.
+    label: d.nullable(d.string),
+    database_id: d.token,
+  }),
+});
+
 export const approvalWithdrawnReader = d.object({
   revision_id: d.token,
+  /**
+   * The way out (U109): an earlier approved, runnable version the next staging would move to, or
+   * null when none is left. Absent on a server from before #924's follow-up.
+   */
+  earlier_approved: d.optional(d.nullable(earlierApproved)),
   decision: d.object({
     // Open on purpose: a decision kind this console doesn't know reads U109's neutral form.
     kind: d.knownText(approvalDecisionKinds),
@@ -65,21 +82,31 @@ function decisionClause(w: ApprovalWithdrawn): string {
  * until a new configuration is applied." A decision kind the console doesn't know says only what's
  * known: "… is no longer approved since 11-20 09:12Z." (U20).
  *
- * U109's way out ("Stage a new configuration to move it to …'s earlier approved version." or "Move
- * it to an approved composition.") depends on whether an earlier approved version is left, which
- * #924's wire doesn't carry yet, so the line ends before it rather than guess.
+ * Then U109's way out, by `earlier_approved`: "Stage a new configuration to move it to composition
+ * 3's earlier approved version." when one is left, "Move it to an approved composition." when null.
+ * Absent (a server from before #924's follow-up): the line ends before it rather than guess.
  */
 export function withdrawnStateLine(
   w: ApprovalWithdrawn,
   composition: Composition | null | undefined,
   craft: string | null,
 ): string {
-  const name = capital(compositionName(composition));
+  const named = compositionName(composition);
+  const name = capital(named);
   const who = craft?.trim() ? craft : "This spacecraft";
   const stays = `${who} stays on it until a new configuration is applied.`;
+  const out = wayOut(w, named);
+  const tail = out ? `${stays} ${out}` : stays;
   if (!isKnown(w.decision.kind))
-    return `${name} is no longer approved since ${formatShort(new Date(w.decision.at))}. ${stays}`;
-  return `${name} is no longer approved: ${decisionClause(w)}. ${stays}`;
+    return `${name} is no longer approved since ${formatShort(new Date(w.decision.at))}. ${tail}`;
+  return `${name} is no longer approved: ${decisionClause(w)}. ${tail}`;
+}
+
+/** U109's way out, or null when the server doesn't say what's left. */
+function wayOut(w: ApprovalWithdrawn, named: string): string | null {
+  if (w.earlier_approved === undefined) return null;
+  if (w.earlier_approved === null) return "Move it to an approved composition.";
+  return `Stage a new configuration to move it to ${named}'s earlier approved version.`;
 }
 
 /** Technical details (U109, until #600): the revision and the decision's time. */
