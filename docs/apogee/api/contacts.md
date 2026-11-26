@@ -351,6 +351,13 @@ receipt span), `last_seen_at` (bumped while more keep arriving), `actions` (`["r
 - Discard is `POST …/attention/archive_quarantine/:id/resolve {action_text}` (the reason,
   required, at most 200 characters): the entries leave the quarantine unarchived;
   `resolution.action: "discarded"`, `note` the reason.
+- **Expiry (#791).** Nobody has to clear an item: an entry is kept for the protocol archive's
+  retention (`protocol_archive_days`, 30 by default) plus a review margin (`quarantine_review_days`,
+  7), counted from when its record was received (first sighting without one). The item's
+  `expires_at` is when its last entry expires. Then the item closes by itself:
+  `resolution.action: "expired"`, `resolved_by: {kind: "system"}`, no note, and `counts` those of the
+  last chunk removed. Retried and discarded items' records are kept 30 days
+  (`quarantine_resolution_days`), so "recently resolved" is at most that old.
 - `acknowledge` answers `409 attention_item_not_open`. `403 forbidden` for non-operators, `404
   attention_item_not_found`, `422 invalid_params {action_text}` / `reason_required`, and `503
   attention_unavailable` when the archive can't be reached.

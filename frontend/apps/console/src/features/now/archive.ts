@@ -3,6 +3,7 @@ import type { RouteLocationRaw } from "vue-router";
 import { request } from "@/api/index.ts";
 import { plural } from "@/ui";
 import { attentionReader, serverKey, short, type Attention } from "./attention.ts";
+import { expiredWords } from "./attentionWords.ts";
 import { passLabel } from "./ingress.ts";
 import type { QueueItem } from "./queue.ts";
 
@@ -68,6 +69,7 @@ export function archiveClosed(a: Attention): string | null {
   if (a.state !== "resolved" || !r) return null;
   if (r.action === "discarded")
     return `Discarded by ${r.actor.name ?? "an operator"} at ${hhmm(r.at)}${r.note ? `: ${r.note.replace(/[.!?]+$/, "")}` : ""}.`;
+  if (r.action === "expired") return expiredWords(hhmm(r.at));
   return `Archived on retry at ${hhmm(r.at)}.`;
 }
 

@@ -110,7 +110,8 @@ defmodule Cadence.Application do
       Cadence.IngressArchive.Retention,
       Cadence.Telemetry.Storage.ObservationIdentityStates.Retention,
       Cadence.Projections.DataSources.Watermarks.Retention,
-      Cadence.Protocol.RecordArchive.FileSystem.Retention
+      Cadence.Protocol.RecordArchive.FileSystem.Retention,
+      Cadence.Protocol.RecordArchive.Quarantine.Retention
     ])
   end
 
