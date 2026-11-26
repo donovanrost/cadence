@@ -7,6 +7,7 @@ defmodule Cadence.Activations.FleetConfigurationTest do
   alias Cadence.Catalog.SpacecraftConfigurationInput
   alias Cadence.Control.ActivationRequests
   alias Cadence.Control.Activations, as: ControlActivations
+  alias Cadence.Control.SpacecraftConfiguration, as: SpacecraftConfigurationControl
   alias Cadence.Control.SpacecraftModelBindings
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Activations
@@ -98,6 +99,43 @@ defmodule Cadence.Activations.FleetConfigurationTest do
 
     assert {:ok, %{review: %{state: "active"}}} =
              ConfigurationRead.load(c.scope, c.mission, last.spacecraft_id, "changes")
+  end
+
+  # #734 / #727: 1,000 spacecraft through one review request, from "everything that's saved" to
+  # the applied fleet. The timings print so the PR can quote them.
+  @tag timeout: 900_000
+  test "1,000 spacecraft are reviewed and activated in one request (#734)", c do
+    fleet = [
+      c.first
+      | Enum.map(2..1_000, fn i ->
+          Fixtures.persist_spacecraft!(c.org, c.mission.mission_id, display_name: "Fleet #{i}")
+        end)
+    ]
+
+    for craft <- fleet, do: save(c, craft)
+
+    {saved_us, {:ok, tokens}} =
+      :timer.tc(fn -> Review.saved_tokens(c.scope, c.mission.mission_id) end)
+
+    assert map_size(tokens) == 1_000
+
+    {review_us, {:ok, request}} =
+      :timer.tc(fn -> Review.request_many(c.scope, c.mission.mission_id, tokens) end)
+
+    assert byte_size(Jason.encode!(request.metadata)) < 2_000
+    assert {:ok, approved} = Activations.fetch_approved(request.activation_request_id)
+    {apply_us, {:ok, execution}} = :timer.tc(fn -> ControlActivations.execute(approved) end)
+    assert execution.status == :succeeded
+
+    IO.puts(
+      "1,000 spacecraft: saved_tokens #{div(saved_us, 1000)} ms, review #{div(review_us, 1000)} ms, " <>
+        "apply #{div(apply_us, 1000)} ms"
+    )
+
+    assert {:ok, active} = Active.load(c.mission)
+    assert map_size(active.entries) == 1_000
+
+    assert {:error, :nothing_to_review} = Review.saved_tokens(c.scope, c.mission.mission_id)
   end
 
   @tag timeout: 300_000

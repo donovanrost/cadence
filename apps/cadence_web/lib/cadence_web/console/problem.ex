@@ -337,6 +337,8 @@ defmodule CadenceWeb.Console.Problem do
        "This spacecraft changed since you started editing. Compare the latest saved configuration before saving again."},
     spacecraft_configuration_review_stale:
       {409, "The active fleet configuration changed. Review the latest state and submit again."},
+    nothing_to_review:
+      {422, "Nothing to review: every saved spacecraft configuration is already active."},
     spacecraft_configuration_review_unavailable:
       {409, "Save your current configuration and resolve external changes before submitting it."},
     spacecraft_switch_set_by_change_set:
