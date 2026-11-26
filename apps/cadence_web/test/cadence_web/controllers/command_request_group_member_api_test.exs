@@ -1,9 +1,10 @@
 defmodule CadenceWeb.CommandRequestGroupMemberApiTest do
   @moduledoc """
   Four-eyes audit 11-17, P0, at the HTTP layer: the REST approve, reject and enqueue refuse a
-  command-group member with 409 `command_request_in_group` and ux U87's words, and the REST
-  create refuses a request that names a group in its metadata (422
-  `command_request_group_reserved`). A group's members are decided only by its GO/NO-GO.
+  command-group member with 409 `command_request_in_group`, each in the words for the act tried
+  (ux U87, amended, #121), and the REST create refuses a request that names a group in its
+  metadata (422 `command_request_group_reserved`). A group's members are decided only by its
+  GO/NO-GO.
   """
   use CadenceWeb.ConnCase, async: false
 
@@ -15,7 +16,11 @@ defmodule CadenceWeb.CommandRequestGroupMemberApiTest do
   alias Cadence.Commanding.Groups.GroupStore
   alias Cadence.Control.Commanding.GroupSubmission
 
-  @words "This command is part of a command group. Approve it with the group's GO/NO-GO."
+  @approve_words "This command is part of a command group. Approve it with the group's GO/NO-GO."
+  @reject_words "This command is part of a command group. Reject it with the group's NO-GO."
+  @enqueue_words "This command is part of a command group. Its group's GO queues it."
+  @create_words "Not created: this request names a command group. " <>
+                  "A group's commands are submitted with the group."
 
   setup %{conn: conn} do
     c = setup!(2)
@@ -55,21 +60,15 @@ defmodule CadenceWeb.CommandRequestGroupMemberApiTest do
 
   defp post_json(c, path, body), do: c.conn |> authorize(c.token) |> post(c.base <> path, body)
 
-  test "approve and reject of a group member are 409 with U87's words", c do
-    id = c.member.command_request_id
-
-    for path <- ["/#{id}/approve", "/#{id}/reject"] do
-      body = %{"approval" => %{"reason" => "one member alone"}}
-
-      assert %{"errors" => [%{"reason" => "command_request_in_group", "message" => @words}]} =
-               c |> post_json(path, body) |> json_response(409)
-    end
-
-    [member] = Enum.filter(members(c), &(&1.command_request_id == id))
-    assert member.lifecycle_state == :approval_pending
+  test "approve of a group member is 409 in the approve words", c do
+    assert_in_group(c, "approve", @approve_words)
   end
 
-  test "enqueue of a group member is refused, approved or not", c do
+  test "reject of a group member is 409 in the reject words (#121)", c do
+    assert_in_group(c, "reject", @reject_words)
+  end
+
+  test "enqueue of a group member is refused, approved or not, in the enqueue words (#121)", c do
     id = c.member.command_request_id
 
     # Waiting for the GO it has no approval, so the enqueue stops there first.
@@ -92,7 +91,7 @@ defmodule CadenceWeb.CommandRequestGroupMemberApiTest do
         })
       ])
 
-    assert %{"errors" => [%{"reason" => "command_request_in_group", "message" => @words}]} =
+    assert %{"errors" => [%{"reason" => "command_request_in_group", "message" => @enqueue_words}]} =
              c |> post_json("/#{id}/enqueue", %{}) |> json_response(409)
   end
 
@@ -105,7 +104,7 @@ defmodule CadenceWeb.CommandRequestGroupMemberApiTest do
              |> json_response(409)
   end
 
-  test "create refuses a request that names a group in its metadata", c do
+  test "create refuses a request that names a group in its metadata, in U87's words", c do
     before = members(c) |> Enum.map(& &1.command_request_id) |> Enum.sort()
 
     body = %{
@@ -121,10 +120,25 @@ defmodule CadenceWeb.CommandRequestGroupMemberApiTest do
       }
     }
 
-    assert %{"errors" => [%{"reason" => "command_request_group_reserved"}]} =
+    assert %{
+             "errors" => [
+               %{"reason" => "command_request_group_reserved", "message" => @create_words}
+             ]
+           } =
              c |> post_json("", body) |> json_response(422)
 
     assert members(c) |> Enum.map(& &1.command_request_id) |> Enum.sort() == before
+  end
+
+  defp assert_in_group(c, act, words) do
+    id = c.member.command_request_id
+    body = %{"approval" => %{"reason" => "one member alone"}}
+
+    assert %{"errors" => [%{"reason" => "command_request_in_group", "message" => ^words}]} =
+             c |> post_json("/#{id}/#{act}", body) |> json_response(409)
+
+    [member] = Enum.filter(members(c), &(&1.command_request_id == id))
+    assert member.lifecycle_state == :approval_pending
   end
 
   defp members(c), do: GroupStore.members(c.org, c.mission, c.group.command_group_id)

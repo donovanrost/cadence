@@ -158,13 +158,14 @@ defmodule CadenceWeb.FallbackController do
   end
 
   # Four-eyes audit 11-17, P0: a command-group member is decided, queued and released only through
-  # its group; and only group submission makes a request a member. ux U87's words.
+  # its group; and only group submission makes a request a member. Reached only from
+  # CommandRequestController, whose action is the act tried: ux U87 (amended, #121) words each one.
   def call(conn, {:error, :command_request_in_group}) do
     error_response(
       conn,
       :conflict,
       "command_request_in_group",
-      "This command is part of a command group. Approve it with the group's GO/NO-GO."
+      in_group_message(action_name(conn))
     )
   end
 
@@ -173,7 +174,8 @@ defmodule CadenceWeb.FallbackController do
       conn,
       :unprocessable_entity,
       "command_request_group_reserved",
-      "A command joins a command group only when the group is submitted."
+      "Not created: this request names a command group. " <>
+        "A group's commands are submitted with the group."
     )
   end
 
@@ -237,6 +239,19 @@ defmodule CadenceWeb.FallbackController do
     |> put_status(:unprocessable_entity)
     |> json(%{errors: [%{reason: format_reason(reason)}]})
   end
+
+  defp in_group_message(:reject),
+    do: "This command is part of a command group. Reject it with the group's NO-GO."
+
+  defp in_group_message(:enqueue),
+    do: "This command is part of a command group. Its group's GO queues it."
+
+  defp in_group_message(:approve),
+    do: "This command is part of a command group. Approve it with the group's GO/NO-GO."
+
+  # An action with no words of its own names no act, so it never gives a wrong instruction.
+  defp in_group_message(_action),
+    do: "This command is part of a command group. Use its group instead."
 
   defp error_response(conn, status, code) do
     conn
