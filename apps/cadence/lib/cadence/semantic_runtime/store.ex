@@ -9,7 +9,17 @@ defmodule Cadence.SemanticRuntime.Store do
   alias Cadence.Repo
   alias Cadence.Runtime.{MissionRuntimeSpec, PartitionKey}
   alias Cadence.SemanticRuntime
-  alias Cadence.SemanticRuntime.{Checkpoint, CommitRow, HeadRow, Result, State, Terms, Writer}
+
+  alias Cadence.SemanticRuntime.{
+    Checkpoint,
+    CommitRow,
+    HeadRow,
+    Result,
+    Snapshot,
+    State,
+    Terms,
+    Writer
+  }
 
   @doc "Commits only if this ownership epoch still holds the exact recovered predecessor."
   def commit(
@@ -40,6 +50,32 @@ defmodule Cadence.SemanticRuntime.Store do
       result,
       state
     )
+  end
+
+  @doc """
+  Writes the partition's semantic snapshot (DECISIONS #94/#96): `state` and `resume` (journal
+  stream id => the offset the state includes). Only the exact current writer may: a fenced or
+  stale owner gets the same error a commit gets and writes nothing.
+  """
+  @spec snapshot(MissionRuntimeSpec.t(), PartitionKey.t(), Writer.t(), State.t(), map()) ::
+          :ok | {:error, term()}
+  def snapshot(spec, partition_key, %Writer{} = writer, %State{} = state, resume)
+      when is_map(resume) do
+    outcome =
+      Repo.transaction(fn ->
+        head = lock_head(spec, partition_key)
+        validate_writer!(head, spec, partition_key, writer)
+        Snapshot.put(spec, partition_key, writer.epoch, state, resume)
+      end)
+
+    case outcome do
+      {:ok, :ok} ->
+        :ok
+
+      {:error, reason} ->
+        emit(reason, spec, partition_key, writer)
+        {:error, reason}
+    end
   end
 
   @doc "Fences previous writers, restores a checkpoint, and verifies the remaining durable suffix."

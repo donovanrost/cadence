@@ -151,6 +151,32 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
     refute log =~ "MM_REPLAY_ID_CONFLICT"
   end
 
+  # #692: the reply names the partition whose snapshot gates the journal's durable ack, and a
+  # stopping partition writes that snapshot, with the offset its stream is processed through.
+  test "a stopping partition snapshots its semantic state and the stream offset", c do
+    bytes = frames(mode: 50, aux: 0, sequence: 1)
+    key = %PartitionKey{affinity: :source_endpoint, value: c.endpoint.source_endpoint_id}
+
+    result = ingest!(evidence(c, bytes, 0))
+    assert result.semantic_snapshot_partition == PartitionKey.identifier(key)
+
+    snapshots = fn ->
+      Repo.all(
+        from(s in "semantic_runtime_snapshots",
+          where: s.mission_id == ^c.mission.mission_id,
+          select: s.resume
+        )
+      )
+    end
+
+    # The stop flushes it; the cadence (60 s, or 2 s idle on a 1 s tick) has not run yet.
+    {:ok, owner} = PartitionOwner.lookup(c.mission.mission_id, key)
+    :ok = PartitionOwner.stop(owner)
+
+    assert [%{@stream => offset}] = snapshots.()
+    assert offset == byte_size(bytes)
+  end
+
   # api-ops' wedge (review 11-17). A partition that starts EMPTY (its checkpoint missing, or a
   # basis change) is seeded from the latest alarm states, which hold only NON-normal states and
   # can be later than the frame the journal replays. F1 raises mode and aux; F2 clears aux. After
@@ -185,7 +211,8 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
   @semantic_tables [
     "semantic_runtime_commits",
     "semantic_runtime_heads",
-    "semantic_runtime_checkpoints"
+    "semantic_runtime_checkpoints",
+    "semantic_runtime_snapshots"
   ]
 
   defp drop_semantic_rows!(c) do

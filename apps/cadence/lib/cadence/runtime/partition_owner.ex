@@ -10,6 +10,7 @@ defmodule Cadence.Runtime.PartitionOwner do
 
   alias Cadence.Runtime.AdmittedFraming
   alias Cadence.Runtime.Cluster
+  alias Cadence.Runtime.PartitionOwner.SemanticSnapshots
 
   alias Cadence.ApplicationDispatch.{
     BindingSet,
@@ -181,6 +182,7 @@ defmodule Cadence.Runtime.PartitionOwner do
         {:ok, state} ->
           {:ok,
            state
+           |> start_semantic_snapshots(opts)
            |> Map.put(:admission_monitor, monitor)
            |> Map.put(:admission_source, Keyword.get(opts, :spec_source))}
 
@@ -189,6 +191,14 @@ defmodule Cadence.Runtime.PartitionOwner do
       end
     end
   end
+
+  @impl true
+  def terminate(_reason, %{semantic_resume: _resume} = state) do
+    _ = SemanticSnapshots.stop(state)
+    :ok
+  end
+
+  def terminate(_reason, _state), do: :ok
 
   @impl true
   def handle_continue(:initialize, %{initialization_options: opts} = initial_state) do
@@ -254,12 +264,23 @@ defmodule Cadence.Runtime.PartitionOwner do
       {:ok, state} ->
         {:noreply,
          state
+         |> start_semantic_snapshots(opts)
          |> Map.put(:admission_monitor, initial_state.admission_monitor)
          |> Map.put(:admission_source, initial_state.admission_source)}
 
       {:stop, reason} ->
         {:stop, {:shutdown, {:partition_initialization_failed, reason}}, initial_state}
     end
+  end
+
+  # Once recovered (a partition blocked in recovery must still die on a supervisor's signal), an
+  # owner that snapshots traps exits, so a shutdown reaches terminate/2 and writes the last
+  # snapshot.
+  defp start_semantic_snapshots(state, opts) do
+    state = Map.merge(state, SemanticSnapshots.init(Keyword.get(opts, :semantic_snapshot, [])))
+    if SemanticSnapshots.gated?(state), do: Process.flag(:trap_exit, true)
+    SemanticSnapshots.schedule(state)
+    state
   end
 
   defp initialize(opts) do
@@ -858,6 +879,13 @@ defmodule Cadence.Runtime.PartitionOwner do
     {:stop, {:shutdown, {:admission_lost, reason}}, state}
   end
 
+  def handle_info(:semantic_snapshot_tick, state), do: {:noreply, SemanticSnapshots.tick(state)}
+
+  # Trapping exits: a linked process's normal exit changes nothing; any other stops the owner
+  # with the same reason, as an untrapped link would.
+  def handle_info({:EXIT, _pid, :normal}, state), do: {:noreply, state}
+  def handle_info({:EXIT, _pid, reason}, state), do: {:stop, reason, state}
+
   def handle_info({:global_name_conflict, _name}, state) do
     {:stop, {:shutdown, :name_conflict}, state}
   end
@@ -1049,6 +1077,16 @@ defmodule Cadence.Runtime.PartitionOwner do
 
   defp handle_processing_reply({:ok, processing_result, next_state}, _state) do
     metadata = processing_result.raw_evidence.metadata || %{}
+
+    # The reply tells the journal consumer which snapshot gates its durable ack (nil: none).
+    next_state = SemanticSnapshots.track(next_state, processing_result)
+
+    processing_result =
+      Map.put(
+        processing_result,
+        :semantic_snapshot_partition,
+        SemanticSnapshots.partition(next_state, processing_result)
+      )
 
     next_state =
       if Map.has_key?(metadata, "journal_stream_id") or Map.has_key?(metadata, :journal_stream_id) do
