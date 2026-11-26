@@ -18,17 +18,48 @@ export function useSpacecraftAlarms(missionId: Ref<MissionId>, spacecraftId: Ref
     spacecraftId.value ? { m: missionId.value, sc: spacecraftId.value } : null,
   );
   const query = useRemoteQuery(key, (k, signal) => {
-    return fetchAlarms(k.m, { state: "active", spacecraftId: k.sc }, signal);
+    return fetchAlarms(k.m, { state: "active", spacecraftId: k.sc, limit: 200 }, signal);
   });
   useMissionInvalidation(missionId, ["alarms", "limits"], query.refetch);
   return query;
 }
 
-/** Active alarms on one point across the mission (B4 sisters). */
-export function usePointAlarms(missionId: Ref<MissionId>, pointId: Ref<string | null>) {
-  const key = computed(() => (pointId.value ? { m: missionId.value, p: pointId.value } : null));
+/** The sisters' read: who, on which point, in which plane (null: nothing to ask). */
+export type SisterQuery = Readonly<{ pointId: string; plane: number; spacecraftId: string }>;
+
+/**
+ * B4 sisters: the active alarms on one point in one plane, other than this spacecraft's. The
+ * server filters by plane (the plane is its own spacecraft, so at most a plane's worth of rows)
+ * and counts them (`total`); `limit` 1 is a count. Never the mission's alarms.
+ */
+export function useSisterAlarms(
+  missionId: Ref<MissionId>,
+  sister: Ref<SisterQuery | null>,
+  limit = 200,
+) {
+  const key = computed(() =>
+    sister.value
+      ? {
+          m: missionId.value,
+          p: sister.value.pointId,
+          plane: sister.value.plane,
+          sc: sister.value.spacecraftId,
+          limit,
+        }
+      : null,
+  );
   const query = useRemoteQuery(key, (k, signal) => {
-    return fetchAlarms(k.m, { state: "active", q: k.p }, signal);
+    return fetchAlarms(
+      k.m,
+      {
+        state: "active",
+        pointId: k.p,
+        plane: k.plane,
+        excludeSpacecraftId: k.sc,
+        limit: k.limit,
+      },
+      signal,
+    );
   });
   useMissionInvalidation(missionId, ["alarms", "limits"], query.refetch);
   return query;

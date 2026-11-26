@@ -27,8 +27,7 @@ import {
   usePointTrend,
   useSpacecraftAlarms,
   useSpacecraftEpisodes,
-  usePointAlarms,
-  sisters as sistersOf,
+  useSisterAlarms,
 } from "@/features/investigate/index.ts";
 import MobileAlarmPanel from "./MobileAlarmPanel.vue";
 import YourGoBlock from "./YourGoBlock.vue";
@@ -85,19 +84,23 @@ function refreshEpisode() {
 
 /**
  * Mobile.md §1's "3 sisters in P07 …": same plane, same point out of limits now (B4's v1 rule).
- * It says "out of limits", not "trending": nothing here computes a trend across sisters.
+ * It says "out of limits", not "trending": nothing here computes a trend across sisters. The
+ * server counts them (`total`, one row asked for): the phone never loads the fleet's alarms.
  */
-const pointAlarms = usePointAlarms(
+const pointAlarms = useSisterAlarms(
   missionId,
-  computed(() => (sc.value?.plane == null ? null : (alarm.value?.point.id ?? null))),
+  computed(() =>
+    sc.value?.plane == null || !alarm.value
+      ? null
+      : { pointId: alarm.value.point.id, plane: sc.value.plane, spacecraftId: sc.value.id },
+  ),
+  1,
 );
 const sisterLine = computed(() => {
   const s = pointAlarms.state.value;
-  const f = fleet.state.value;
   const me = sc.value;
-  const a = alarm.value;
-  if (s.status !== "ready" || f.status !== "ready" || !me || !a || me.plane === null) return null;
-  const n = sistersOf(s.value.alarms, f.value.spacecraft, me, a.point.id).length;
+  if (s.status !== "ready" || !me || me.plane === null) return null;
+  const n = s.value.total;
   const plane = `P${String(me.plane).padStart(2, "0")}`;
   return n === 0 ? null : `${n} ${n === 1 ? "sister" : "sisters"} in ${plane} out of limits`;
 });

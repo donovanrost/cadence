@@ -9,7 +9,7 @@ import { sisters } from "./model.ts";
 import PlaneRing from "./PlaneRing.vue";
 import SisterSpark from "./SisterSpark.vue";
 import { aosShort } from "./sisters.ts";
-import { usePointAlarms } from "./useInvestigate.ts";
+import { useSisterAlarms } from "./useInvestigate.ts";
 
 /**
  * B4 · Same plane, same point currently in limits: the plane ring, then each sister with its value,
@@ -24,9 +24,13 @@ const props = defineProps<{
 const scope = useMissionScope();
 const now = useNow();
 const SPARKS = 12;
-const pointAlarms = usePointAlarms(
+const pointAlarms = useSisterAlarms(
   computed(() => scope.value.mission.id),
-  computed(() => (props.sc.plane === null ? null : (props.alarm?.point.id ?? null))),
+  computed(() =>
+    props.sc.plane === null || !props.alarm
+      ? null
+      : { pointId: props.alarm.point.id, plane: props.sc.plane, spacecraftId: props.sc.id },
+  ),
 );
 const planeLabel = computed(() =>
   props.sc.plane === null ? "Plane" : `Plane ${String(props.sc.plane).padStart(2, "0")}`,

@@ -20,7 +20,7 @@ export function useMobileSearch(missionId: Ref<MissionId>, raw: Ref<string>) {
   const now = useNow();
   const fleet = useFleet(missionId, { live: false });
   const alarms = useRemoteQuery(missionId, (m, signal) =>
-    fetchAlarms(m, { state: "active" }, signal),
+    fetchAlarms(m, { state: "active", limit: 200 }, signal),
   );
   useMissionInvalidation(missionId, ["alarms"], alarms.refetch);
   const requests = useRemoteQuery(missionId, (m, signal) => fetchGroups(m, {}, signal));
