@@ -14,11 +14,11 @@ Not on the canvas; build as a reading-layout form"). Replaces the `New mission` 
 - The outside-console `POST /api/organizations/:organization_id/missions` (`MissionController.create`,
   `:manage_missions`) takes the same pair through `IdentityParams.mission/2`. (Retired by #384, director
   2026-11-19, with `IdentityParams`.)
-- The console already reads `GET /api/console/v1/organizations/:id/missions` (`{missions: [{id, slug, name,
+- The console already reads `GET /api/v1/organizations/:id/missions` (`{missions: [{id, slug, name,
   spacecraft_count, worst_state}]}`, pass-2 #11).
 - Nothing records a mission's creation, so org Audit can't say who created it.
 
-## Proposed endpoints (`/api/console/v1/organizations/:organization_id`)
+## Proposed endpoints (`/api/v1/organizations/:organization_id`)
 Who may create: organization admins (and platform admins), the same people the console shows `New mission` to
 (`canAdministerOrganization`). Everyone else gets `403 forbidden`.
 

@@ -1,6 +1,6 @@
 defmodule CadenceWeb.Console.OrganizationController do
   @moduledoc """
-  Organization-level reads under `/api/console/v1/organizations/:organization_id`
+  Organization-level reads under `/api/v1/organizations/:organization_id`
   (the `console_organization` pipeline authorizes membership). Contract:
   docs/apogee/api/setup.md.
   """

@@ -38,7 +38,7 @@ defmodule CadenceWeb.Console.ContactPlanApproveHardeningTest do
       member: member,
       admin_membership: admin_membership,
       plan_id: plan_id,
-      base: "/api/console/v1/missions/#{mission.mission_id}/contact-plans"
+      base: "/api/v1/missions/#{mission.mission_id}/contact-plans"
     }
 
     post_as(c, member, "submit", %{"operation_id" => "op-submit", "expected_version" => 1})

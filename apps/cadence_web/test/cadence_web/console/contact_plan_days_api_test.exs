@@ -17,7 +17,7 @@ defmodule CadenceWeb.Console.ContactPlanDaysAPITest do
       admin: admin,
       member: member,
       plan_id: fixture.plan.contact_plan_id,
-      base: "/api/console/v1/missions/#{mission.mission_id}/contact-plans"
+      base: "/api/v1/missions/#{mission.mission_id}/contact-plans"
     }
   end
 

@@ -1,6 +1,6 @@
 defmodule CadenceWeb.Console.SpacecraftDetailController do
   @moduledoc """
-  `GET /api/console/v1/missions/:mission_id/spacecraft/:spacecraft_id`, and one extra route's
+  `GET /api/v1/missions/:mission_id/spacecraft/:spacecraft_id`, and one extra route's
   document for its editor (`…/routes/:route_id`, ux U79). Contract: docs/apogee/api/setup.md.
   """
 

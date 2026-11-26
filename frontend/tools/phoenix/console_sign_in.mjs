@@ -4,9 +4,9 @@
 // (frontend/apps/console/e2e), so the smokes skip it.
 
 export const CONSOLE_SIGN_IN_PATH = "/console/sign-in";
-export const CONSOLE_SIGN_IN_API_PATH = "/api/console/v1/auth/sign-in";
+export const CONSOLE_SIGN_IN_API_PATH = "/api/v1/auth/sign-in";
 /** The console bootstrap read; signed out it answers 401 (its sign-in screen asks first). */
-export const CONSOLE_SESSION_PATH = "/api/console/v1/session";
+export const CONSOLE_SESSION_PATH = "/api/v1/session";
 
 /**
  * Runs IN THE PAGE, on the Phoenix origin: reads the CSRF token the console document carries for
@@ -91,7 +91,7 @@ export function assertConsoleSignedIn(result) {
 export async function signInThroughConsole(page, { base, email, password, path }) {
   if (typeof path !== "string" || !path.startsWith("/"))
     throw new Error("signInThroughConsole needs an absolute path to open after signing in");
-  await page.goto(base + "/api/health");
+  await page.goto(base + "/health/live");
   const result = await page.evaluate(
     consoleSignInInPage,
     consoleSignInRequest({ email, password }),

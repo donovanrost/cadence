@@ -14,7 +14,7 @@ defmodule CadenceWeb.Console.DashboardSharingAPITest do
 
   defp path(c, suffix),
     do:
-      "/api/console/v1/missions/#{c.mission.mission_id}/dashboards/#{c.document.dashboard_id}" <>
+      "/api/v1/missions/#{c.mission.mission_id}/dashboards/#{c.document.dashboard_id}" <>
         suffix
 
   defp call(c, method, suffix, body \\ %{}) do
@@ -124,7 +124,7 @@ defmodule CadenceWeb.Console.DashboardSharingAPITest do
   # the organization. Once the creator has left, another member sees {id: null, name: null}: no
   # email and no id in the record or its message.
   test "D20 records name an outsider by neither email nor id (#469)", c do
-    base = "/api/console/v1/missions/#{c.mission.mission_id}"
+    base = "/api/v1/missions/#{c.mission.mission_id}"
     rename = %{"event" => "rename", "input" => %{"name" => "Current", "description" => ""}}
 
     assert {:ok, _saved} =
@@ -178,7 +178,7 @@ defmodule CadenceWeb.Console.DashboardSharingAPITest do
   end
 
   test "D20: a share's link opens until revoked; a snapshot's says who deleted it", c do
-    base = "/api/console/v1/missions/#{c.mission.mission_id}"
+    base = "/api/v1/missions/#{c.mission.mission_id}"
     open = fn suffix -> c.user |> TestFixtures.member_conn() |> get(base <> suffix) end
 
     # A share shows the current version: save once so the fixture has one.

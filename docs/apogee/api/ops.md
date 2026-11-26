@@ -20,7 +20,7 @@ is yours too.
 | shell | `GET /missions/:mission_id/counts` (lead) | **implemented** |
 | M17 | `GET /missions/:mission_id/commands[/:command_id]`: see [commanding.md](commanding.md) | **implemented** |
 
-## `GET /api/console/v1/missions/:mission_id/fleet`
+## `GET /api/v1/missions/:mission_id/fleet`
 
 The fleet's operational state, one row per spacecraft, with the Now stat-strip counts.
 Refetch on `invalidate` with `alarms`, `spacecraft` or `commanding` (and `telemetry` if you show
@@ -124,7 +124,7 @@ Errors: `404 mission_not_found`.
 Size: about 600 bytes per row, roughly 300 KB for 500 spacecraft before gzip. It is unpaginated
 by design (the matrix needs every row). The planned `fleet` channel delta sends only changed rows.
 
-## `GET /api/console/v1/missions/:mission_id/alarms`
+## `GET /api/v1/missions/:mission_id/alarms`
 
 Limit alarms from the latest limit-state projection, one row per (spacecraft, point, limit set).
 Refetch on `invalidate` with `alarms` (limit-state *transitions* only) or `limits` (definition
@@ -179,7 +179,7 @@ values get `422 invalid_params` with `details`.
   set yet (api-ops backlog, with M23).
 - **Not yet:** the D6 alarm lifecycle (ack/assign/hand-off).
 
-## `GET /api/console/v1/missions/:mission_id/counts`
+## `GET /api/v1/missions/:mission_id/counts`
 
 Small counts for the shell (Ops rail, mobile on-call tabs, the top bar's posture), so the shell
 doesn't load `GET /fleet` (~300 KB) for numbers. Refetch on `invalidate` with `alarms`,
@@ -258,7 +258,7 @@ about 10 s (`posture.stale` changes with time).
 
 Errors: `404 mission_not_found`.
 
-## `GET /api/console/v1/missions/:mission_id/action-queue`
+## `GET /api/v1/missions/:mission_id/action-queue`
 
 The viewer's ranked action queue (Now A2), ranked by ux U11. Refetch on `invalidate` with `alarms`,
 `commanding`, `spacecraft`, `limits`, `catalog`, `data_sources`, `settings` or `attention`, plus `telemetry`
@@ -451,7 +451,7 @@ Every item has every field; fields that don't apply to its `kind` are `null` (or
 
 Errors: `404 mission_not_found`.
 
-## `GET /api/console/v1/missions/:mission_id/spacecraft/:spacecraft_id/passes` (Investigate Passes tab, owner: api): built
+## `GET /api/v1/missions/:mission_id/spacecraft/:spacecraft_id/passes` (Investigate Passes tab, owner: api): built
 
 This endpoint covers P1 and the queued counts for P3 (ux Investigate.md 24a160b8; fe-ops agreed the
 shape). The passes come from existing reads, so the row logic isn't copied:
@@ -498,7 +498,7 @@ shape). The passes come from existing reads, so the row logic isn't copied:
 
 Errors: `404 spacecraft_not_found`.
 
-## `GET /api/console/v1/missions/:mission_id/spacecraft/:spacecraft_id/uplink` (Investigate Uplink tab): built
+## `GET /api/v1/missions/:mission_id/spacecraft/:spacecraft_id/uplink` (Investigate Uplink tab): built
 
 "Can I command this spacecraft now, and what's going up?" (Investigate.md, Tab · Uplink.)
 
@@ -543,7 +543,7 @@ Errors: `404 spacecraft_not_found`.
 - Errors: `404 spacecraft_not_found`, `404 mission_not_found`. Refetch on `invalidate`
   `commanding`, `contacts` and `attention`.
 
-## `GET /api/console/v1/missions/:mission_id/spacecraft/:spacecraft_id/configuration` (Investigate Configuration tab): built
+## `GET /api/v1/missions/:mission_id/spacecraft/:spacecraft_id/configuration` (Investigate Configuration tab): built
 
 "What is this spacecraft running, and what changed?" (Investigate.md, Tab · Configuration). Read-only.
 
@@ -606,7 +606,7 @@ windows are capped at 31 days; intervals are not. Bad values get `422 invalid_pa
 `details` keyed by parameter. URL-encode `point_id` (ids contain dots, and some may contain
 slashes).
 
-## `GET /api/console/v1/missions/:mission_id/telemetry/points/:point_id/history`
+## `GET /api/v1/missions/:mission_id/telemetry/points/:point_id/history`
 
 Decimated history by **generation time** (it falls back to receipt time for samples without one).
 The data is fixed-width buckets on a UTC-day grid (multiples of `bucket_width_ms` from midnight UTC of
@@ -633,7 +633,7 @@ the window's first day, the same as QuestDB `ALIGN TO CALENDAR`); there are at m
 - Refetch on `invalidate` with `telemetry`, throttled. For a live tail, prefer the planned
   `spacecraft:<id>` `points` push.
 
-## `GET /api/console/v1/missions/:mission_id/limits/points/:point_id/intervals`
+## `GET /api/v1/missions/:mission_id/limits/points/:point_id/intervals`
 
 The limit-definition bands in effect over the window, for drawing bands behind the history chart.
 
@@ -655,7 +655,7 @@ The limit-definition bands in effect over the window, for drawing bands behind t
   its bands.
 - Refetch on `invalidate` with `limits`.
 
-## `GET /api/console/v1/missions/:mission_id/events` (owner: api, DECISIONS #26)
+## `GET /api/v1/missions/:mission_id/events` (owner: api, DECISIONS #26)
 
 The event log for Investigate B2 and Timeline. It reads the canonical mission timeline (projected
 mission events merged with operational events). Refetch on `invalidate` with `events` or `alarms`.
@@ -775,21 +775,21 @@ request), so housekeeping rows don't starve a filtered page. Fewer than `limit` 
   like `kind`, so keep following `next_cursor`. Anything else → `422 invalid_params`
   (`details.severity_at_least`).
 
-## `GET /api/console/v1/missions/:mission_id/events/raw-kinds?from&to` (U69 A9b picker, owner: api)
+## `GET /api/v1/missions/:mission_id/events/raw-kinds?from&to` (U69 A9b picker, owner: api)
 
 `{"data": {"from", "to", "raw_kinds": [{"raw_kind": "command_released", "kind": "command", "count": 12}]}}`:
 every raw kind in the window with its console `kind` and how many events, most frequent first.
 Counted like `/events/density` (no rows loaded), plus the merged configuration revisions and
 off-plan bookings. Window at most 31 days (default the last day).
 
-## `GET /api/console/v1/missions/:mission_id/events/:event_id` (U69 A8b, owner: api)
+## `GET /api/v1/missions/:mission_id/events/:event_id` (U69 A8b, owner: api)
 
 `{"data": {"event": <one event, the row shape above, with record>}}`: a Timeline permalink. The id
 is a row's `id` (URL-encode it; ids contain `:`). Works for stored mission and operational events
 and for the rows the Timeline merges in (applied configuration revisions, off-plan bookings). Use
 `event.at` to centre the window. `404 event_not_found`.
 
-## `GET /api/console/v1/missions/:mission_id/events/density`
+## `GET /api/v1/missions/:mission_id/events/density`
 
 `{"data": {"bucket_s": 900, "buckets": [{"t", "critical", "caution", "nominal", "info"}], "truncated": false}}`.
 Same filters, `plane` included (no cursor). `bucket_s` is 60–86400 (default: about 96 buckets over the window). Buckets
@@ -798,7 +798,7 @@ are aligned to `from`; empty buckets are omitted. The window is at most 31 days.
 are loaded, so `truncated` is `false`); with one, at most 5,000 events are read (`truncated: true`
 beyond that). Both count the same way as the list (same kinds, severities and duplicate rule).
 
-## `GET /api/console/v1/missions/:mission_id/telemetry/points` (M23, owner: api)
+## `GET /api/v1/missions/:mission_id/telemetry/points` (M23, owner: api)
 
 Point search for Telemetry explore (T1) and ⌘K Telemetry. Query: `q` (a case-insensitive
 substring of the id, name or description; empty lists everything), `spacecraft_id` (optional;
@@ -834,7 +834,7 @@ must be a mission spacecraft), and `limit` 1–200 (default 50).
 
 ## One sample (§11c(D) D1, owner: api)
 
-`GET /api/console/v1/missions/:mission_id/telemetry/samples/:sample_id?point_id=&spacecraft_id=&receipt_time=&at=`
+`GET /api/v1/missions/:mission_id/telemetry/samples/:sample_id?point_id=&spacecraft_id=&receipt_time=&at=`
 → `{data: {status, sample}}`. `point_id` and `spacecraft_id` (the console spacecraft id) are
 required; `receipt_time` (ISO-8601) makes the match exact: pass it when you have it (the alarm
 episode's `trigger.receipt_time`, an event's `sample.receipt_time`). Without it, `at` (the

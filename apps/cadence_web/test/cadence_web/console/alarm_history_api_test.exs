@@ -75,7 +75,7 @@ defmodule CadenceWeb.Console.AlarmHistoryAPITest do
     })
   end
 
-  defp base(c), do: "/api/console/v1/missions/#{c.mission.mission_id}"
+  defp base(c), do: "/api/v1/missions/#{c.mission.mission_id}"
 
   defp get_json(c, path, status \\ 200),
     do: c.user |> TestFixtures.member_conn() |> get(base(c) <> path) |> json_response(status)

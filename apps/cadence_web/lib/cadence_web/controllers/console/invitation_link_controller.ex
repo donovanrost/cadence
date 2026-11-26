@@ -1,6 +1,6 @@
 defmodule CadenceWeb.Console.InvitationLinkController do
   @moduledoc """
-  L5 invitation links for the console (`/api/console/v1/auth/invitations/:token`), signed in or
+  L5 invitation links for the console (`/api/v1/auth/invitations/:token`), signed in or
   out. The server decides the case from the token and the session; the client never says which
   account it is. Accepting by an existing account goes through its current password and the
   attempt limit (748fcbc9); joining as the signed-in user and declining reuse api's L21 functions.

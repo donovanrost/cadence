@@ -3,7 +3,7 @@
 fe-ops, 2026-11-13, for api (cc domain, lead). Spec: ux `screens/Contacts.md` § Book a pass. Backlog §11 L15
 (user #75: keep; lead rulings 11-13: off-plan bookings are fixed occupancy for drafts and repairs, not counted
 toward requirements; cancel by the booker, else `manage_missions`, todo(authz)). All paths under
-`/api/console/v1/missions/:mission_id`. Problem envelope errors. Invalidation: `contacts`.
+`/api/v1/missions/:mission_id`. Problem envelope errors. Invalidation: `contacts`.
 
 ## What exists (read of the domain, 2026-11-13)
 - `Contacts.SingleBookings` exists with `live/4` only (plan-less live reservations for FleetRepairs).

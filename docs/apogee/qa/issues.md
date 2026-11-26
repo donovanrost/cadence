@@ -139,7 +139,7 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
 
 ### 11. `/config` 500 on first access (suspected race)
 
-- During a parallel e2e run (Readiness screen), `GET /api/console/v1/missions/mission-earendil-demo/config`
+- During a parallel e2e run (Readiness screen), `GET /api/v1/missions/mission-earendil-demo/config`
   returned 500 once. Immediately after, it returned 200 with a `baseline` head whose `applied_at`
   (23:17:43Z) matched that run, so the baseline was created lazily then. Two first requests
   creating the baseline concurrently is the likely cause. Server log had already rotated.
@@ -333,7 +333,7 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
 
 ### 51. Org Audit times out: credential resolves flood provider_audit_entries
 
-- Repro (2026-11-12 23:55Z to 11-13 00:32Z, :4011): `GET /api/console/v1/organizations/org-reflect-orbital-demo/audit`
+- Repro (2026-11-12 23:55Z to 11-13 00:32Z, :4011): `GET /api/v1/organizations/org-reflect-orbital-demo/audit`
   answers 500 after 31 486 ms (request GOdxdoA8GzrbQXwA0Gch) and 72 991 ms (GOdxgL1W6BuGdeEABl0H),
   `DBConnection.ConnectionError tcp recv (idle): closed` at `ProviderAudit.list_entries/2`
   (ground_networks/provider_audit.ex:73) via `OrganizationAudit.ProviderAccountEvents.list/1`.
@@ -372,7 +372,7 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
 ### 53. Contact planning requirements read 500s (to_existing_atom load order)
 
 - Repro (2026-11-13 08:34Z in the §6 sweep, again by API at 08:47Z, :4011 booted 07:30Z):
-  `GET /api/console/v1/missions/mission-earendil-demo/contact-planning/requirements?page=1&limit=50&source=one_off`
+  `GET /api/v1/missions/mission-earendil-demo/contact-planning/requirements?page=1&limit=50&source=one_off`
   → 500 `ArgumentError` at `Cadence.Control.PlanningRequirements.choice/3`
   (lib/cadence/control/planning_requirements.ex:303) ← `filters/1` :284 ← `list/3` :40 ←
   `ContactRequirementController.index/2`.

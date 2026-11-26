@@ -41,7 +41,7 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
     }
   end
 
-  defp base(c), do: "/api/console/v1/missions/#{c.mission.mission_id}"
+  defp base(c), do: "/api/v1/missions/#{c.mission.mission_id}"
 
   # #117 step 4a: a GO carries the review token the decider saw, read from the group itself.
   defp go(c, id, extra \\ %{}) do

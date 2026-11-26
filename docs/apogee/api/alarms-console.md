@@ -3,7 +3,7 @@
 Owner: **api-ops** (DECISIONS #22). Conventions: [README.md](README.md). Domain facade and
 semantics: [alarms.md](alarms.md) (domain), design `docs/apogee/domain/alarm-lifecycle.md`.
 
-Base: `/api/console/v1/missions/:mission_id/alarm-episodes`. Writes need `x-csrf-token`.
+Base: `/api/v1/missions/:mission_id/alarm-episodes`. Writes need `x-csrf-token`.
 Refetch on `invalidate` with `alarms`, which now also fires on every episode change (domain's
 `:alarms_changed`: catalog transitions, ground evaluations and lifecycle commands).
 

@@ -14,7 +14,7 @@ const artifact: ArtifactPage["artifact"] = {
   uploaded_at: "2026-11-12T14:03:00Z",
   uploaded_by: { kind: "user" as const, id: null, name: "Mira K." },
   database: { id: "db1", name: "Flight" },
-  download_url: "/api/console/v1/missions/m/catalog/artifacts/art_1/download",
+  download_url: "/api/v1/missions/m/catalog/artifacts/art_1/download",
 };
 
 describe("catalog source file (L18)", () => {

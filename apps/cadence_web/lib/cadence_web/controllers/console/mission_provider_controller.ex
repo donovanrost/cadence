@@ -1,7 +1,7 @@
 defmodule CadenceWeb.Console.MissionProviderController do
   @moduledoc """
   L12 (owner: api-ops): mission-provider writes under
-  `/api/console/v1/missions/:mission_id/providers`. The list is `CommsController.providers`.
+  `/api/v1/missions/:mission_id/providers`. The list is `CommsController.providers`.
   Contract: docs/apogee/api/setup.md §Mission providers (L12). Mission admins.
 
   Validate and sync answer `200` with `result.ok: false` when the provider refuses, can't be

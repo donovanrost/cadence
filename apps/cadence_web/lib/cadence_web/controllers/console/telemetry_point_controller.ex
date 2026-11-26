@@ -1,6 +1,6 @@
 defmodule CadenceWeb.Console.TelemetryPointController do
   @moduledoc """
-  M23 point search, `GET /api/console/v1/missions/:mission_id/telemetry/points`.
+  M23 point search, `GET /api/v1/missions/:mission_id/telemetry/points`.
   Contract: docs/apogee/api/ops.md.
   """
 

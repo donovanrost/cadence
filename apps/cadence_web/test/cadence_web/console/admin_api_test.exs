@@ -24,7 +24,7 @@ defmodule CadenceWeb.Console.AdminAPITest do
     |> Plug.Test.init_test_session(%{admin_mode_expires_at: System.system_time(:second) + 600})
   end
 
-  defp api(path), do: "/api/console/v1/admin" <> path
+  defp api(path), do: "/api/v1/admin" <> path
 
   @row_keys ~w(capabilities created_at created_by id last_used_at mission name organization)
 
@@ -271,7 +271,7 @@ defmodule CadenceWeb.Console.AdminAPITest do
     conn = TestFixtures.member_conn(c.admin)
 
     entered =
-      post(conn, "/api/console/v1/session/admin-mode", %{
+      post(conn, "/api/v1/session/admin-mode", %{
         "password" => TestFixtures.default_password()
       })
 
@@ -286,7 +286,7 @@ defmodule CadenceWeb.Console.AdminAPITest do
     })
     |> json_response(201)
 
-    left = entered |> recycle() |> delete("/api/console/v1/session/admin-mode")
+    left = entered |> recycle() |> delete("/api/v1/session/admin-mode")
     assert response(left, 204)
 
     body = c |> admin_conn() |> get(api("/audit")) |> response(200)
@@ -300,7 +300,7 @@ defmodule CadenceWeb.Console.AdminAPITest do
     org_audit =
       c.member
       |> TestFixtures.member_conn()
-      |> get("/api/console/v1/organizations/#{c.org.organization_id}/audit?kinds=platform")
+      |> get("/api/v1/organizations/#{c.org.organization_id}/audit?kinds=platform")
       |> json_response(200)
       |> get_in(["data", "events"])
 

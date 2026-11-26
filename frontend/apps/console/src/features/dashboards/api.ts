@@ -11,7 +11,7 @@ import { workspaceSnapshot } from "./model/snapshot.ts";
 
 /**
  * Dashboards endpoints (plans/dashboards.md, "D5 proposed shape"). Base
- * `/api/console/v1/missions/:m/dashboards`. Invalidation: `dashboards` (document) plus
+ * `/api/v1/missions/:m/dashboards`. Invalidation: `dashboards` (document) plus
  * `telemetry`, `limits`, `alarms`, `events` (data).
  */
 

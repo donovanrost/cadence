@@ -12,7 +12,7 @@ defmodule CadenceWeb.Console.AttentionAPITest do
     user = TestFixtures.persist_user!(display_name: "Mira K.")
     TestFixtures.grant_membership!(user, c.organization)
     conflict!(c, user)
-    Map.merge(c, %{user: user, base: "/api/console/v1/missions/#{c.mission_id}"})
+    Map.merge(c, %{user: user, base: "/api/v1/missions/#{c.mission_id}"})
   end
 
   defp conflict!(c, user) do

@@ -1,6 +1,6 @@
 defmodule CadenceWeb.Console.ServiceIdentityController do
   @moduledoc """
-  Service identity writes (O6) under `/api/console/v1/organizations/:organization_id`: create,
+  Service identity writes (O6) under `/api/v1/organizations/:organization_id`: create,
   rotate, revoke, and recording who is accountable (#280). Create and rotate return the API token once. Contract:
   docs/apogee/api/setup.md.
   """

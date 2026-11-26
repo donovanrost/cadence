@@ -48,7 +48,7 @@ defmodule CadenceWeb.Console.UplinkReadinessAPITest do
       endpoint: endpoint,
       reservation: reservation,
       key: key,
-      base: "/api/console/v1/missions/#{mission.mission_id}"
+      base: "/api/v1/missions/#{mission.mission_id}"
     }
   end
 

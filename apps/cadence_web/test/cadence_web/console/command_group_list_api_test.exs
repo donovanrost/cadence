@@ -9,7 +9,7 @@ defmodule CadenceWeb.Console.CommandGroupListAPITest do
     user = TestFixtures.persist_user!(display_name: "Operator")
     TestFixtures.grant_membership!(user, org, role: :organization_admin)
     mission = TestFixtures.persist_mission!(org)
-    %{user: user, base: "/api/console/v1/missions/#{mission.mission_id}/command-groups"}
+    %{user: user, base: "/api/v1/missions/#{mission.mission_id}/command-groups"}
   end
 
   defp get_json(c, query), do: c.user |> TestFixtures.member_conn() |> get(c.base <> query)

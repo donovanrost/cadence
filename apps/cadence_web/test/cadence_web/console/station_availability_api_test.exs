@@ -21,7 +21,7 @@ defmodule CadenceWeb.Console.StationAvailabilityAPITest do
         })
       )
 
-    %{user: user, base: "/api/console/v1/missions/#{mission.mission_id}/station-availability"}
+    %{user: user, base: "/api/v1/missions/#{mission.mission_id}/station-availability"}
   end
 
   defp conn(c), do: TestFixtures.member_conn(c.user)

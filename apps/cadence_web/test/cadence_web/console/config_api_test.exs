@@ -20,7 +20,7 @@ defmodule CadenceWeb.Console.ConfigAPITest do
       bob: bob,
       org: org,
       mission: mission,
-      base: "/api/console/v1/missions/#{mission.mission_id}/config"
+      base: "/api/v1/missions/#{mission.mission_id}/config"
     }
   end
 

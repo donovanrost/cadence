@@ -23,7 +23,7 @@ defmodule CadenceWeb.Console.ContactTemplateAPITest do
       admin: admin,
       member: member,
       crafts: crafts,
-      base: "/api/console/v1/missions/#{mission.mission_id}/contact-planning"
+      base: "/api/v1/missions/#{mission.mission_id}/contact-planning"
     }
   end
 

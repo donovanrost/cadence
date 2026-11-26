@@ -14,7 +14,7 @@ here and reviews them. Change this file in the same PR as the pattern it describ
 | Shell, router, API client, live socket | `src/{shell,router,api,live}/**`                                                                                                                                                 |
 | Browser tests                          | `e2e/` (Playwright; `e2e/a11y/` holds the axe passes)                                                                                                                            |
 | Build output                           | `apps/cadence_web/priv/static/console/` (gitignored)                                                                                                                             |
-| Phoenix glue                           | `CadenceWeb.Console.Shell` (serves the index), the `/api/console/v1` scope, `CadenceWeb.ConsoleSocket` at `/socket/console`                                                      |
+| Phoenix glue                           | `CadenceWeb.Console.Shell` (serves the index), the `/api/v1` scope, `CadenceWeb.ConsoleSocket` at `/socket/console`                                                              |
 
 Features import shared code only through the public entries:
 
@@ -83,7 +83,7 @@ params are in `src/router/route-map*.ts`, and `route-map.test.ts` checks the two
 ## Session, scope and auth
 
 - Phoenix serves `/console/*` only to an authenticated session. Signed out, the browser goes to
-  `/sign-in` and comes back afterwards. `/api/console/v1/*` answers with JSON 401 instead of
+  `/sign-in` and comes back afterwards. `/api/v1/*` answers with JSON 401 instead of
   redirecting, and the client turns that into a full-page redirect.
 - On boot the app reads the session (user, organizations with missions, capabilities, CSRF token,
   socket path). The shell shows a boot state until the session is read.

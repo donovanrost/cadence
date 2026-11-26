@@ -46,7 +46,7 @@ defmodule CadenceWeb.Console.ListenClaimsAPITest do
       port: port,
       user: user,
       mission_a: mission_a,
-      base_b: "/api/console/v1/missions/#{mission_b.mission_id}/config"
+      base_b: "/api/v1/missions/#{mission_b.mission_id}/config"
     }
   end
 

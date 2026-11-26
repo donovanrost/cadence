@@ -1,6 +1,6 @@
 defmodule CadenceWeb.Console.ProviderAccountController do
   @moduledoc """
-  PA1 provider accounts under `/api/console/v1/organizations/:organization_id`.
+  PA1 provider accounts under `/api/v1/organizations/:organization_id`.
   Contract: docs/apogee/api/setup.md.
   """
 

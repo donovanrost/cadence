@@ -18,7 +18,7 @@ defmodule CadenceWeb.Console.ActionQueueAPITest do
   defp get_queue(c, mission_id \\ nil) do
     c.user
     |> TestFixtures.member_conn()
-    |> get("/api/console/v1/missions/#{mission_id || c.mission.mission_id}/action-queue")
+    |> get("/api/v1/missions/#{mission_id || c.mission.mission_id}/action-queue")
   end
 
   test "an empty mission has only setup items, ranked P3", c do
