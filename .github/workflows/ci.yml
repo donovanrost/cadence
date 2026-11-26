@@ -168,7 +168,7 @@ jobs:
           key: ${{ env.CADENCE_BUILD_KEY }}
 
   test-core:
-    name: Core tests (${{ matrix.partition }}/4)
+    name: Core tests (${{ matrix.partition }}/2)
     needs: changes
     if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-24.04
@@ -176,7 +176,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        partition: [1, 2, 3, 4]
+        # Two, not four: each job pays ~2.5 min of setup, and runner slots are the bottleneck (#730).
+        partition: [1, 2]
     env:
       MIX_TEST_PARTITION: ${{ matrix.partition }}
     services:
@@ -203,9 +204,9 @@ jobs:
       - name: Tune Postgres for throwaway test data
         run: scripts/ci/tune_postgres.sh
       - uses: ./.github/actions/setup-cadence
-      - name: mix test --partitions 4
+      - name: mix test --partitions 2
         working-directory: apps/cadence
-        run: mix test --partitions 4 --slowest-modules 10
+        run: mix test --partitions 2 --slowest-modules 10
         env:
           # Producer tests run their real frontend consumers; each consumer that reads its
           # producer's fixture appends itself here. producer-coverage checks all of them ran.
@@ -477,7 +478,7 @@ jobs:
   # job's env only; nothing passes between jobs and nothing is stored. Sign-in goes through the API
   # (no typed password in a trace), and a leak check gates every upload.
   console-e2e:
-    name: Console e2e (${{ matrix.shard }}/4)
+    name: Console e2e (${{ matrix.shard }}/2)
     needs: [changes, browser-assets]
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
@@ -486,7 +487,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        # Two, not four: a shard spends ~5 min on setup, compile and seeds and ~1.5 min on specs (#730).
+        shard: [1, 2]
     services:
       postgres:
         image: postgres:17
@@ -610,7 +612,7 @@ jobs:
         id: specs
         working-directory: frontend/apps/console
         run: >-
-          corepack pnpm exec playwright test --shard=${{ matrix.shard }}/4
+          corepack pnpm exec playwright test --shard=${{ matrix.shard }}/2
           --project=desktop --project=a11y-desktop-admin --project=a11y-desktop-member
           --project=a11y-phone-admin --project=a11y-phone-member
       # ci-handoff.md §1: the specs that stage a change set run alone, on one shard.
