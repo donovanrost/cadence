@@ -5,8 +5,6 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
   alias Cadence.Comms.{
     GroundStation,
     GroundStationStore,
-    RoutingRule,
-    RoutingRuleStore,
     Transport,
     TransportStore,
     UplinkResolution
@@ -17,6 +15,7 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
   alias Cadence.Dev.ReflectOrbital.Configuration
   alias Cadence.Dev.ReflectOrbital.Fixture, as: F
   alias Cadence.Dev.ReflectOrbital.Planning
+  alias Cadence.Dev.RouteChanges
   alias Cadence.GroundNetworks
 
   alias Cadence.GroundNetworks.{
@@ -52,12 +51,18 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
     provider = seed_provider(scope)
     transports = seed_sites(provider, deliveries)
     uplinks = seed_uplinks(provider, uplink_deliveries)
-    {fleet_ms, :ok} = :timer.tc(fn -> seed_fleet(transports, uplinks) end, :millisecond)
-    Configuration.prepare(scope)
+    {fleet_ms, :ok} = :timer.tc(&seed_fleet/0, :millisecond)
+    routing = seed_routes(transports, uplinks)
+
+    case routing do
+      :applied -> Configuration.prepare(scope)
+      :in_review -> Configuration.import_revision(run_by: scope.user.user_id)
+    end
+
     # A second seeded admin approves the imported mission-model revision (user decision 11-25).
     approved = scope.user |> Approver.scope() |> Approver.approve_candidates()
     Planning.prepare(scope)
-    verify!()
+    verify!(routing)
     server_url = "http://127.0.0.1:#{System.get_env("PORT", "4001")}"
 
     n = F.fleet_size()
@@ -65,18 +70,26 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
 
     IO.puts("""
 
-    Reflect Orbital / Earendil is ready for #{email}.
+    Reflect Orbital / Earendil setup completed for #{email}.
     #{n} spacecraft, #{F.plane_count()} planes, #{F.site_count()} simulated sites, #{antennas} antennas.
-    #{n} provider mappings, #{2 * n} primary/backup downlink routes and #{n} primary uplinks.
-    #{n} saved configurations share demo_spacecraft.yaml: 10 telemetry packets and 27 commands.
+    #{n} provider mappings. #{route_status(routing, n)}
     Mission-model revisions approved by the seeded second admin: #{length(approved)}.
-    Fleet rows (spacecraft, switches, sources, routes) written in #{fleet_ms} ms.
+    Fleet rows (spacecraft, switches, sources) written in #{fleet_ms} ms.
     Configuration activation remains an explicit review step in Cadence.
     Simulator environment: #{F.run_id()}
     Console: #{server_url}/console (organization Reflect Orbital, mission Earendil)
     All spacecraft, orbits, sites, and telemetry definitions are synthetic.
     """)
+
+    routing
   end
+
+  defp route_status(:applied, n),
+    do: "#{2 * n} primary/backup downlinks, #{n} primary uplinks and #{n} saved configurations."
+
+  defp route_status(:in_review, _n),
+    do:
+      "Extra routes await independent review. Rerun the seed after approval to save spacecraft configurations."
 
   defp seed_scope(user) do
     {:ok, organization} =
@@ -323,7 +336,7 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
     end)
   end
 
-  defp seed_fleet(transports, uplinks) do
+  defp seed_fleet do
     {:ok, _profile} =
       Cadence.SpacecraftTypeStore.persist_spacecraft_type(
         F.organization_id(),
@@ -339,21 +352,18 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
         })
       )
 
-    sites = length(transports)
-
     # One transaction per chunk, not per craft: commit cost dominated at 1,000 craft (#715).
     F.spacecraft()
-    |> Enum.with_index()
     |> Enum.chunk_every(@fleet_chunk)
     |> Enum.each(fn chunk ->
       {:ok, :ok} =
-        Repo.transaction(fn -> Enum.each(chunk, &seed_craft(&1, transports, uplinks, sites)) end,
+        Repo.transaction(fn -> Enum.each(chunk, &seed_craft/1) end,
           timeout: :infinity
         )
     end)
   end
 
-  defp seed_craft({attrs, index}, transports, uplinks, sites) do
+  defp seed_craft(attrs) do
     {:ok, craft} =
       Cadence.SpacecraftStore.persist_spacecraft(F.organization_id(), Spacecraft.new(attrs))
 
@@ -376,73 +386,89 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
         display_name: "#{craft.display_name} TT&C",
         metadata: F.metadata()
       })
-
-    # Primary and candidate sites are half the site ring apart.
-    {primary_site, _transport} = primary = Enum.at(transports, rem(index, sites))
-    seed_route(craft, primary, :primary)
-    seed_route(craft, Enum.at(transports, rem(index + div(sites, 2), sites)), :candidate)
-    seed_uplink_route(craft, Map.fetch!(uplinks, primary_site["id"]))
   end
 
-  defp seed_route(craft, {site, transport}, role) do
-    id = "route-#{craft.spacecraft_id}-#{role}"
+  defp seed_routes(transports, uplinks) do
+    client = RouteChanges.sign_in(F.organization_id())
+    existing = RouteChanges.extra_route_ids(client, F.mission_id(), F.profile_id())
+    sites = length(transports)
 
-    ensure_record(
-      RoutingRuleStore.fetch_routing_rule(F.organization_id(), F.mission_id(), id),
-      fn ->
-        RoutingRuleStore.create_routing_rule(
-          F.organization_id(),
-          RoutingRule.new(%{
-            routing_rule_id: id,
-            mission_id: F.mission_id(),
-            spacecraft_id: craft.spacecraft_id,
-            display_name: "#{site["name"]} — #{role}",
-            purpose_label: "TT&C downlink",
-            direction: :inbound,
-            transport_id: transport.transport_id,
-            transport_version: transport.version,
-            role: role,
-            metadata: Map.merge(F.metadata(), %{"ground_station_id" => site["id"]})
-          })
-        )
+    ops =
+      F.spacecraft()
+      |> Enum.with_index()
+      |> Enum.flat_map(fn {craft, index} ->
+        # Primary and candidate sites are half the site ring apart.
+        {site, _} = primary = Enum.at(transports, rem(index, sites))
+        candidate = Enum.at(transports, rem(index + div(sites, 2), sites))
+        uplink = Map.fetch!(uplinks, site["id"])
+
+        [
+          downlink_op(craft.spacecraft_id, primary, "primary"),
+          downlink_op(craft.spacecraft_id, candidate, "candidate"),
+          uplink_op(craft.spacecraft_id, uplink)
+        ]
+      end)
+      |> Enum.reject(&MapSet.member?(existing, &1.entity_id))
+
+    # Older fixture transports carried the station only in metadata. The extra-route kind
+    # validates the actual station reference, so stage those bindings before the routes.
+    bindings =
+      for {site, transport} <- transports,
+          transport.ground_station_id != site["id"] do
+        %{
+          kind: "transport",
+          action: "update",
+          entity_id: transport.transport_id,
+          changes: [%{path: "ground_station_id", value: site["id"]}]
+        }
       end
+
+    RouteChanges.submit(
+      client,
+      F.mission_id(),
+      "earendil-routes",
+      "Seed Earendil extra routes",
+      bindings ++ ops
     )
   end
 
-  # The primary uplink lands at the craft's primary downlink site, so a pass booked there can
-  # carry the uplink leg (DECISIONS #46) and command preflight resolves (#41).
-  defp seed_uplink_route(craft, {site, transport}) do
-    id = "route-#{craft.spacecraft_id}-uplink"
-
-    ensure_record(
-      RoutingRuleStore.fetch_routing_rule(F.organization_id(), F.mission_id(), id),
-      fn ->
-        RoutingRuleStore.create_routing_rule(
-          F.organization_id(),
-          RoutingRule.new(%{
-            routing_rule_id: id,
-            mission_id: F.mission_id(),
-            spacecraft_id: craft.spacecraft_id,
-            display_name: "#{site["name"]} — uplink",
-            purpose_label: "TT&C uplink",
-            direction: :outbound,
-            transport_id: transport.transport_id,
-            transport_version: transport.version,
-            role: :primary,
-            ground_station_id: site["id"],
-            metadata: Map.merge(F.metadata(), %{"ground_station_id" => site["id"]})
-          })
-        )
-      end
+  defp downlink_op(craft_id, {site, transport}, role) do
+    RouteChanges.route(
+      "spacecraft_route_#{craft_id}-#{role}",
+      craft_id,
+      site["id"],
+      transport.transport_id,
+      "#{site["name"]} — #{role}",
+      "TT&C downlink",
+      role,
+      "none"
     )
   end
 
-  defp verify! do
+  # The primary uplink lands at the primary downlink site (DECISIONS #46).
+  defp uplink_op(craft_id, {site, transport}) do
+    RouteChanges.route(
+      "spacecraft_route_#{craft_id}-uplink",
+      craft_id,
+      site["id"],
+      transport.transport_id,
+      "#{site["name"]} — uplink",
+      "TT&C uplink",
+      "none",
+      "primary"
+    )
+  end
+
+  defp verify!(routing) do
     fleet = Cadence.SpacecraftStore.list_spacecraft(F.organization_id(), F.mission_id())
     n = F.fleet_size()
     ^n = length(fleet)
     ^n = fleet |> Enum.map(& &1.scid) |> Enum.uniq() |> length()
 
+    if routing == :applied, do: verify_routes!(fleet)
+  end
+
+  defp verify_routes!(fleet) do
     Enum.each(fleet, fn craft ->
       {:ok, %{routes: routes, findings: []}} =
         ProviderScheduling.list_ready_downlink_routes(
@@ -465,7 +491,7 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
     [] = unresolved
 
     IO.puts(
-      "Verified: all #{n} spacecraft have unique SCIDs, two ready downlink routes and one " <>
+      "Verified: all #{length(fleet)} spacecraft have unique SCIDs, two ready downlink routes and one " <>
         "resolved primary uplink."
     )
   end
@@ -529,8 +555,7 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
               :provider_account_grant_not_found,
               :mission_provider_not_found,
               :provider_not_found,
-              :transport_not_found,
-              :routing_rule_not_found
+              :transport_not_found
             ] do
     {:ok, record} = create.()
     record

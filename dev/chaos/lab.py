@@ -227,7 +227,12 @@ def seed():
     pod = pod_names()[0]
     for action in ("questdb", "seed", "activate", "contacts"):
         print(f"Preparing {action} on {pod}", flush=True)
-        rpc(pod, f'System.put_env("LAB_ACTION", "{action}"); Code.eval_file("/lab/scripts/seed.exs")')
+        result = rpc(pod, f'System.put_env("LAB_ACTION", "{action}"); Code.eval_file("/lab/scripts/seed.exs")',
+                     capture=action == "seed")
+        if action == "seed":
+            print(result.stdout, end="", flush=True)
+            if "EARENDIL_ROUTES_IN_REVIEW" in result.stdout.splitlines():
+                return
     # Explicitly recover the persisted activation on all replicas before starting traffic.
     for pod in pod_names():
         rpc(pod, f'IO.inspect(Cadence.Control.Missions.ensure_started("{MISSION}"))')

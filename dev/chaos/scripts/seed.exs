@@ -1,4 +1,6 @@
-for file <- ~w(fixture configuration planning seed activation live_contacts) do
+Code.require_file("/lab/seed/route_changes.exs")
+
+for file <- ~w(fixture configuration planning approver seed activation live_contacts) do
   Code.require_file("/lab/reflect_orbital/#{file}.exs")
 end
 
@@ -6,7 +8,9 @@ unless Cadence.Dev.ReflectOrbital.Fixture.chaos_lab?(), do: raise("Not the isola
 
 case System.fetch_env!("LAB_ACTION") do
   "seed" ->
-    Cadence.Dev.ReflectOrbital.Seed.run()
+    if Cadence.Dev.ReflectOrbital.Seed.run() == :in_review do
+      IO.puts("EARENDIL_ROUTES_IN_REVIEW")
+    end
 
   "activate" ->
     # Explicitly synthetic mission; this changes only the lab Earendil policy.
