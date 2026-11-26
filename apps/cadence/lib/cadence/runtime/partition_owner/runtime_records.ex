@@ -7,6 +7,9 @@ defmodule Cadence.Runtime.PartitionOwner.RuntimeRecords do
   alias Cadence.Protocol.PacketRecord
   alias Cadence.Runtime.{ManagedActionRequest, ManagedCapabilityRecord, ManagedTimerEvent}
 
+  # Initialization has no input time; a fixed one keeps its id stable across restarts.
+  @init_receipt_us DateTime.to_unix(~U[2020-01-01 00:00:00Z], :microsecond)
+
   def empty do
     %{
       capability_records: [],
@@ -51,11 +54,11 @@ defmodule Cadence.Runtime.PartitionOwner.RuntimeRecords do
       ],
       action_requests:
         Enum.map(action_requests, fn action_request ->
-          build_managed_action_request(
-            capability_instance,
-            execution_context,
-            action_request,
-            packet_record
+          capability_instance
+          |> build_managed_action_request(execution_context, action_request, packet_record)
+          |> Map.put(
+            :effect_source,
+            effect_source(event_kind, capability_instance, execution_context, opts)
           )
         end),
       timer_events:
@@ -125,6 +128,41 @@ defmodule Cadence.Runtime.PartitionOwner.RuntimeRecords do
       request_document: Map.from_struct(action_request),
       requested_at: execution_context.current_time
     }
+  end
+
+  # What an action request's replay-safe id derives from (DECISIONS #99): the journal frame that
+  # completed the packet; a timer's own stream and fire time; or, for a managed application's
+  # initialization, its activation and binding set version (a restart re-runs init and must get
+  # the same request back, never a second one). nil (no journal position) keeps an Ids.new id.
+  defp effect_source(event_kind, capability_instance, execution_context, opts) do
+    packet_record = Keyword.get(opts, :packet_record)
+    timer_key = Keyword.get(opts, :timer_key)
+
+    cond do
+      match?(%PacketRecord{journal_frame: {_, _, _}}, packet_record) ->
+        {stream, offset, receipt} = packet_record.journal_frame
+        [stream, offset, DateTime.to_unix(receipt, :microsecond)]
+
+      is_binary(timer_key) ->
+        [
+          "timer:" <> capability_instance.capability_instance_id <> ":" <> timer_key,
+          0,
+          DateTime.to_unix(execution_context.current_time, :microsecond)
+        ]
+
+      event_kind == :initialized ->
+        [
+          "init:" <>
+            execution_context.activation_id <>
+            ":" <>
+            capability_instance.capability_instance_id,
+          execution_context.binding_set_version,
+          @init_receipt_us
+        ]
+
+      true ->
+        nil
+    end
   end
 
   def timer_event(

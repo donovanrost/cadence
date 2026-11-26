@@ -106,7 +106,8 @@ defmodule Cadence.Reads.CommandGroupsTest do
       GroupDecision.decide(c.approver, c.mission, group.command_group_id, %{
         kind: :go_excluding,
         excluded: ["sc-2"],
-        note: "safe mode"
+        note: "safe mode",
+        expected_review: GroupDecision.review_token(group)
       })
 
     {:ok, _} = GroupAbort.abort(c.approver, c.mission, group.command_group_id, "Stand down")

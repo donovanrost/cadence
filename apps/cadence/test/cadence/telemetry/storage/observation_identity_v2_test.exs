@@ -18,14 +18,11 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityV2Test do
         envelope("sample-#{count}", generation_time: @shared_time, frame_ref: {:seq, 42, count})
       end
 
+    assert envelopes |> Enum.map(& &1.observation_identity_id) |> Enum.uniq() |> length() == 8
+
+    # First-seen rule (11-17): canonical first sightings write no identity-state row.
     assert :ok = ObservationIdentityStates.record_envelopes(envelopes, publish_facts?: false)
-
-    states = ObservationIdentityStates.list_for_selection(@mission)
-    assert length(states) == 8
-    assert Enum.all?(states, &(&1.canonical_count == 1))
-
-    assert states |> Enum.map(& &1.canonical_sample_id) |> Enum.sort() ==
-             for(count <- 100..107, do: "sample-#{count}")
+    assert ObservationIdentityStates.list_for_selection(@mission) == []
   end
 
   test "the same frame replayed from the journal stays one identity, at revision 2" do
@@ -41,7 +38,13 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityV2Test do
       )
 
     assert first.observation_identity_id == replayed.observation_identity_id
-    assert :ok = ObservationIdentityStates.record_envelopes([first], publish_facts?: false)
+    assert replayed.revision == 2
+    refute replayed.observation_id == first.observation_id
+
+    # The identity has a row once something is said about it (here an advisory sighting); the
+    # replay then updates that one row.
+    advisory = %{first | validity_state: :advisory}
+    assert :ok = ObservationIdentityStates.record_envelopes([advisory], publish_facts?: false)
     assert :ok = ObservationIdentityStates.record_envelopes([replayed], publish_facts?: false)
 
     assert [state] = ObservationIdentityStates.list_for_selection(@mission)

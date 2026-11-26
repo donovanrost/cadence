@@ -56,5 +56,7 @@ defmodule Cadence.Commanding.CommandApproval do
   defp normalize_decision("approved"), do: :approved
   defp normalize_decision(:rejected), do: :rejected
   defp normalize_decision("rejected"), do: :rejected
-  defp normalize_decision(_other), do: :approved
+  # #117 step 4a (ca-security, domain): an unknown decision never reads as approved.
+  defp normalize_decision(other),
+    do: raise(ArgumentError, "unknown command approval decision: #{inspect(other)}")
 end

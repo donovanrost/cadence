@@ -261,13 +261,23 @@ defmodule Cadence.Telemetry.Storage.ObservationEnvelope do
   end
 
   defp observation_id(%__MODULE__{} = envelope, observation_identity_id) do
-    stable_digest([
+    observation_id_for(
       observation_identity_id,
       envelope.sample_id,
       envelope.packet_id,
       envelope.evidence_id,
       envelope.revision
-    ])
+    )
+  end
+
+  @doc """
+  The observation id of the row this identity, sample, packet refs and revision produce. The
+  identity-state decision seed checks a stored row's revision against it (11-17).
+  """
+  @spec observation_id_for(binary(), binary(), binary() | nil, binary() | nil, pos_integer()) ::
+          binary()
+  def observation_id_for(observation_identity_id, sample_id, packet_id, evidence_id, revision) do
+    stable_digest([observation_identity_id, sample_id, packet_id, evidence_id, revision])
   end
 
   defp idempotency_key(%__MODULE__{} = envelope) do

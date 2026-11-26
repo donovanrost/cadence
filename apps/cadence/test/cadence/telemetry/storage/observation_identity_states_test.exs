@@ -26,34 +26,30 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStatesTest do
     refute_receive {:"$gen_cast", {:cadence_fact, {:cadence, :telemetry, :facts}, _fact}}
   end
 
-  test "records the first canonical observation for an identity" do
+  test "a canonical first sighting writes no row (first-seen rule)" do
     envelope = envelope(sample_id: "sample-1", revision: 1)
 
     assert :ok = ObservationIdentityStates.record_envelopes([envelope])
-    assert {:ok, state} = ObservationIdentityStates.fetch(envelope.observation_identity_id)
 
-    assert state.canonical_observation_id == envelope.observation_id
-    assert state.canonical_sample_id == "sample-1"
-    assert state.canonical_revision == 1
-    assert state.latest_observation_id == envelope.observation_id
-    assert state.realm == :flight
-    assert state.validity_state == :canonical
-    assert state.canonical_count == 1
-    assert state.duplicate_count == 0
-    assert state.conflict_count == 0
+    assert {:error, :observation_identity_state_not_found} =
+             ObservationIdentityStates.fetch(envelope.observation_identity_id)
   end
 
   test "records more than one insert batch without losing identities" do
     envelopes =
       for index <- 1..1_001 do
-        envelope(sample_id: "sample-batch-#{index}", point_id: "HK.point_#{index}")
+        envelope(
+          sample_id: "sample-batch-#{index}",
+          point_id: "HK.point_#{index}",
+          validity_state: :advisory
+        )
       end
 
     assert :ok = ObservationIdentityStates.record_envelopes(envelopes, publish_facts?: false)
 
     states = ObservationIdentityStates.list_for_selection("mission-identity")
     assert length(states) == 1_001
-    assert Enum.all?(states, &(&1.canonical_count == 1))
+    assert Enum.all?(states, &(&1.advisory_count == 1))
 
     assert %{rows: [[0]]} =
              Repo.query!(
@@ -66,7 +62,9 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStatesTest do
   end
 
   test "keeps existing decisions and ordered revisions when mixing new and existing identities" do
-    existing = envelope(sample_id: "sample-existing", point_id: "HK.existing")
+    existing =
+      envelope(sample_id: "sample-existing", point_id: "HK.existing", validity_state: :advisory)
+
     fresh = envelope(sample_id: "sample-new", point_id: "HK.new")
 
     duplicate =
@@ -99,15 +97,22 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStatesTest do
     assert preserved == decided
     assert {:ok, revised} = ObservationIdentityStates.fetch(fresh.observation_identity_id)
     assert revised.canonical_observation_id == correction.observation_id
-    assert revised.canonical_count == 2
+    # fresh (a canonical first sighting) wrote nothing; the duplicate created the row.
+    assert revised.canonical_count == 1
     assert revised.duplicate_count == 1
   end
 
   test "invalid batches roll back and publish no state facts" do
     event_bus = start_event_bus()
     assert :ok = TelemetryFacts.subscribe(event_bus, self())
-    valid = envelope(sample_id: "sample-rollback", point_id: "HK.valid")
-    invalid = %{envelope(sample_id: "sample-invalid", point_id: "HK.invalid") | revision: 0}
+
+    valid =
+      envelope(sample_id: "sample-rollback", point_id: "HK.valid", validity_state: :advisory)
+
+    invalid = %{
+      envelope(sample_id: "sample-invalid", point_id: "HK.invalid", validity_state: :advisory)
+      | revision: 0
+    }
 
     assert {:error, %Ecto.Changeset{}} =
              ObservationIdentityStates.record_envelopes([valid, invalid], event_bus: event_bus)
@@ -118,7 +123,7 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStatesTest do
     refute_receive {:"$gen_cast", {:cadence_fact, {:cadence, :telemetry, :facts}, _fact}}
   end
 
-  test "keeps canonical selection while counting alternate-path duplicates" do
+  test "a duplicate sighting creates the row its canonical first sighting didn't, and counts it" do
     canonical = envelope(sample_id: "sample-primary", data_source_id: "ds-primary")
 
     duplicate =
@@ -133,17 +138,17 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStatesTest do
     assert :ok = ObservationIdentityStates.record_envelopes([canonical, duplicate])
     assert {:ok, state} = ObservationIdentityStates.fetch(canonical.observation_identity_id)
 
-    assert state.canonical_observation_id == canonical.observation_id
-    assert state.canonical_sample_id == "sample-primary"
+    # First-seen rule: the canonical sighting wrote no row; the duplicate created it.
+    assert state.canonical_observation_id == nil
     assert state.latest_observation_id == duplicate.observation_id
     assert state.latest_sample_id == "sample-backup"
-    assert state.validity_state == :canonical
-    assert state.canonical_count == 1
+    assert state.validity_state == :duplicate
+    assert state.canonical_count == 0
     assert state.duplicate_count == 1
   end
 
   test "replayed observation writes are idempotent for identity counters" do
-    envelope = envelope(sample_id: "sample-idempotent", revision: 1)
+    envelope = envelope(sample_id: "sample-idempotent", revision: 1, validity_state: :advisory)
 
     assert :ok = ObservationIdentityStates.record_envelopes([envelope])
     assert :ok = ObservationIdentityStates.record_envelopes([envelope])
@@ -151,16 +156,15 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStatesTest do
     assert {:ok, state} = ObservationIdentityStates.fetch(envelope.observation_identity_id)
 
     assert state.latest_observation_id == envelope.observation_id
-    assert state.canonical_observation_id == envelope.observation_id
-    assert state.canonical_count == 1
+    assert state.canonical_count == 0
     assert state.duplicate_count == 0
     assert state.conflict_count == 0
     assert state.superseded_count == 0
-    assert state.advisory_count == 0
+    assert state.advisory_count == 1
   end
 
   test "promotes a higher canonical revision and records supersession metadata" do
-    initial = envelope(sample_id: "sample-initial", revision: 1)
+    initial = envelope(sample_id: "sample-initial", revision: 1, validity_state: :advisory)
 
     correction =
       envelope(
@@ -176,24 +180,24 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStatesTest do
     assert state.canonical_observation_id == correction.observation_id
     assert state.canonical_sample_id == "sample-correction"
     assert state.canonical_revision == 2
-    assert state.canonical_count == 2
+    assert state.canonical_count == 1
     assert state.decision_reason == "canonical_revision"
     # #359 (b): the latest observation is the column; the payload keeps only the supersession.
     assert state.latest_observation_id == correction.observation_id
     assert state.payload == %{"supersedes_observation_id" => initial.observation_id}
   end
 
-  test "records conflicts without promoting them to canonical" do
+  test "a conflict sighting creates the row without promoting itself to canonical" do
     canonical = envelope(sample_id: "sample-canonical")
     conflict = envelope(sample_id: "sample-conflict", validity_state: :conflict)
 
     assert :ok = ObservationIdentityStates.record_envelopes([canonical, conflict])
     assert {:ok, state} = ObservationIdentityStates.fetch(canonical.observation_identity_id)
 
-    assert state.canonical_observation_id == canonical.observation_id
+    assert state.canonical_observation_id == nil
     assert state.latest_observation_id == conflict.observation_id
     assert state.validity_state == :conflict
-    assert state.canonical_count == 1
+    assert state.canonical_count == 0
     assert state.conflict_count == 1
   end
 
@@ -304,7 +308,7 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStatesTest do
   end
 
   test "requires tenant context when applying observation identity decisions" do
-    envelope = envelope(sample_id: "sample-decision-context")
+    envelope = envelope(sample_id: "sample-decision-context", validity_state: :advisory)
     assert :ok = ObservationIdentityStates.record_envelopes([envelope])
 
     assert {:error, {:missing_field, :organization_id}} =
@@ -314,13 +318,18 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStatesTest do
                mission_id: envelope.mission_id
              )
 
-    assert {:error, :observation_identity_state_not_found} =
+    # In another mission's scope the identity has no row, so the decision needs the observation
+    # (first-seen rule) and the row in this mission is untouched.
+    assert {:error, {:missing_field, :sample_id}} =
              Storage.apply_observation_identity_decision(
                envelope.observation_identity_id,
                :mark_conflict,
                organization_id: envelope.organization_id,
                mission_id: "wrong-mission"
              )
+
+    assert {:ok, %{validity_state: :advisory}} =
+             ObservationIdentityStates.fetch(envelope.observation_identity_id)
   end
 
   test "keeps replay identity states and decisions isolated by replay run" do
@@ -421,13 +430,26 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStatesTest do
   end
 
   test "lists decision events by mission source observable and time window" do
-    in_range = envelope(sample_id: "sample-decision-list-in-range", point_id: "HK.counter")
+    in_range =
+      envelope(
+        sample_id: "sample-decision-list-in-range",
+        point_id: "HK.counter",
+        validity_state: :advisory
+      )
 
     out_of_range =
-      envelope(sample_id: "sample-decision-list-out-of-range", point_id: "HK.counter")
+      envelope(
+        sample_id: "sample-decision-list-out-of-range",
+        point_id: "HK.counter",
+        validity_state: :advisory
+      )
 
     other_point =
-      envelope(sample_id: "sample-decision-list-other-point", point_id: "HK.voltage")
+      envelope(
+        sample_id: "sample-decision-list-other-point",
+        point_id: "HK.voltage",
+        validity_state: :advisory
+      )
 
     assert :ok = ObservationIdentityStates.record_envelopes([in_range, out_of_range, other_point])
 
@@ -560,14 +582,16 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStatesTest do
         sample_id: "sample-rehearsal",
         realm: :rehearsal,
         data_source_id: "ds-rehearsal",
-        point_id: "HK.voltage"
+        point_id: "HK.voltage",
+        validity_state: :advisory
       )
 
     other_mission =
       envelope(
         sample_id: "sample-other-mission",
         mission_id: "mission-other",
-        point_id: "HK.counter"
+        point_id: "HK.counter",
+        validity_state: :advisory
       )
 
     assert :ok =
@@ -602,7 +626,12 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStatesTest do
   end
 
   test "exposes identity state reads through the telemetry storage API" do
-    envelope = envelope(sample_id: "sample-public-api", spacecraft_id: "sc-public")
+    envelope =
+      envelope(
+        sample_id: "sample-public-api",
+        spacecraft_id: "sc-public",
+        validity_state: :advisory
+      )
 
     assert :ok = ObservationIdentityStates.record_envelopes([envelope])
 
@@ -620,9 +649,18 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStatesTest do
   end
 
   test "bulk fetches identity states by observation identity id" do
-    first = envelope(sample_id: "sample-bulk-first", point_id: "HK.counter")
-    second = envelope(sample_id: "sample-bulk-second", point_id: "HK.voltage")
-    other_mission = envelope(sample_id: "sample-bulk-other-mission", mission_id: "mission-other")
+    first =
+      envelope(sample_id: "sample-bulk-first", point_id: "HK.counter", validity_state: :advisory)
+
+    second =
+      envelope(sample_id: "sample-bulk-second", point_id: "HK.voltage", validity_state: :advisory)
+
+    other_mission =
+      envelope(
+        sample_id: "sample-bulk-other-mission",
+        mission_id: "mission-other",
+        validity_state: :advisory
+      )
 
     assert :ok = ObservationIdentityStates.record_envelopes([first, second, other_mission])
 
