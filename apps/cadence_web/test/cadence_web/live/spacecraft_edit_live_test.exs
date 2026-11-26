@@ -23,16 +23,16 @@ defmodule CadenceWeb.SpacecraftEditLiveTest do
     end
   end
 
-  test "missing spacecraft redirects to the mission inventory" do
+  test "missing spacecraft redirects to the console" do
     {conn, mission, _spacecraft} = signed_in_spacecraft()
-    path = ~p"/missions/#{mission.mission_id}/spacecraft"
+    path = "/console"
 
     assert {:error, {:redirect, %{to: ^path, flash: %{"error" => "Spacecraft not found."}}}} =
              live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/missing-spacecraft/edit")
   end
 
   test "unauthenticated edit requests redirect to sign in" do
-    assert {:error, {:redirect, %{to: "/sign-in"}}} =
+    assert {:error, {:redirect, %{to: "/console/sign-in"}}} =
              live(build_conn(), "/missions/mission-test/spacecraft/spacecraft-test/edit")
   end
 

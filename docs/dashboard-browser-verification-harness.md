@@ -29,7 +29,7 @@ To point the same harness at another static artifact or running page:
 ```sh
 node apps/cadence_web/assets/test/dashboard_viewport_smoke.mjs --url http://127.0.0.1:4001/missions/<mission-id>/ops/dashboards/<dashboard-id>
 node apps/cadence_web/assets/test/dashboard_viewport_smoke.mjs --profile rendered-dashboard --html /tmp/rendered-dashboard.html
-node apps/cadence_web/assets/test/dashboard_viewport_smoke.mjs --profile live-dashboard --url http://localhost:4001/missions/<mission-id>/ops/dashboards/<dashboard-id> --login-url http://localhost:4001/sign-in --login-email operator@example.test --login-password password
+node apps/cadence_web/assets/test/dashboard_viewport_smoke.mjs --profile live-dashboard --url http://localhost:4001/missions/<mission-id>/ops/dashboards/<dashboard-id> --login-url http://localhost:4001/console/sign-in --login-email operator@example.test --login-password password
 ```
 
 ## Test Isolation

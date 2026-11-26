@@ -217,7 +217,7 @@ defmodule CadenceWeb.CommandMonitorReadTest do
 
     assert snapshot["ops_page"]["data"]["focus"]["row"]["id"] == "request-a"
     assert snapshot["ops_page"]["id"] == "commanding.monitor"
-    assert {:error, {:redirect, %{to: "/sign-in"}}} = live(build_conn(), path)
+    assert {:error, {:redirect, %{to: "/console/sign-in"}}} = live(build_conn(), path)
   end
 
   # Direct persisted fixtures isolate read projection from approval/release effects.

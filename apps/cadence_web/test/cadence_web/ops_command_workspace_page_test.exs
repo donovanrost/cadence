@@ -510,7 +510,7 @@ defmodule CadenceWeb.OpsCommandWorkspacePageTest do
 
   test "a member demoted from admin keeps preparation access (DECISIONS #62)", c do
     path = path(c) <> "&focus_command_id=missing-command"
-    assert {:error, {:redirect, %{to: "/sign-in"}}} = live(build_conn(), path)
+    assert {:error, {:redirect, %{to: "/console/sign-in"}}} = live(build_conn(), path)
     {:ok, view, _} = live(TestFixtures.member_conn(c.user), path)
     captured = page(view, c.mission)
 

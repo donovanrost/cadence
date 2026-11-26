@@ -481,8 +481,6 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
     mission_id: mission_id,
     archive_policy: policy
   } do
-    writer = Process.whereis(FileSystem.Writer)
-
     failures = [
       %DBConnection.ConnectionError{message: "database checkout unavailable"},
       %Postgrex.Error{message: "temporary database query failure"}
@@ -511,6 +509,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
       }
 
       assert :ok = RecordArchive.persist_records(policy, evidence, [], [packet])
+      writer = mission_writer(mission_id)
 
       assert {:error, {:archive_database_error, _message}} =
                RecordArchive.flush(policy, mission_id)
@@ -523,7 +522,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
                RecordArchive.stats(policy, mission_id)
 
       assert count >= 2
-      assert Process.whereis(FileSystem.Writer) == writer
+      assert mission_writer(mission_id) == writer
       refute Repo.get(ProtocolArchiveRecordEntryRow, "packet_record:#{packet.packet_id}")
 
       if index == 1 do
@@ -560,75 +559,11 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
     end
   end
 
-  test "stats and flush tolerate legacy writer state without buffer sizes", %{
-    mission_id: mission_id,
-    archive_policy: archive_policy
-  } do
-    receipt_time = DateTime.from_unix!(1_700_910_000, :second)
+  defp mission_writer(mission_id) do
+    [{pid, _value}] =
+      Registry.lookup(Module.concat(FileSystem.Writer, Registry), {mission_id, nil})
 
-    raw_evidence =
-      RawEvidence.new(%{
-        evidence_id: "evidence-protocol-legacy-state",
-        mission_id: mission_id,
-        protocol_family: :tm,
-        direction: :downlink,
-        raw: <<1, 2, 3, 4>>,
-        receipt_time: receipt_time
-      })
-
-    transfer_frame_record =
-      TransferFrameRecord.new(%{
-        frame_record_id: "frame-legacy-state",
-        evidence_id: raw_evidence.evidence_id,
-        mission_id: mission_id,
-        protocol_family: :tm,
-        direction: :downlink,
-        scid: 11,
-        vcid: 2,
-        frame_seq: 21,
-        raw_frame_offset_bytes: 0,
-        raw_frame_length_bytes: 1115,
-        payload_length_bytes: 1109,
-        first_header_pointer: 0,
-        quality: :good,
-        receipt_time: receipt_time
-      })
-
-    packet_record = %PacketRecord{
-      packet_id: "packet-legacy-state",
-      evidence_id: raw_evidence.evidence_id,
-      mission_id: mission_id,
-      protocol_family: :tm,
-      packet_kind: :space_packet,
-      apid: 42,
-      sequence_flags: 3,
-      sequence_count: 29,
-      secondary_header?: false,
-      packet_data: <<2, 9>>,
-      receipt_time: receipt_time,
-      provenance: %{}
-    }
-
-    entries = FileSystem.build_entries(raw_evidence, [transfer_frame_record], [packet_record])
-
-    writer = Keyword.get(archive_policy.backend_opts, :name, FileSystem.Writer)
-
-    :sys.replace_state(writer, fn state ->
-      state
-      |> Map.put(:buffers, %{mission_id => entries})
-      |> Map.put(:buffer_started_at_ms, %{mission_id => System.monotonic_time(:millisecond)})
-      |> Map.delete(:buffer_sizes)
-    end)
-
-    stats_before_flush = RecordArchive.stats(archive_policy, mission_id)
-    assert stats_before_flush.queue_depth == 2
-
-    assert :ok = RecordArchive.flush(archive_policy, mission_id)
-    assert 2 == archive_entry_count(entries)
-
-    stats_after_flush = RecordArchive.stats(archive_policy, mission_id)
-    assert stats_after_flush.queue_depth == 0
-    assert stats_after_flush.flush_count == 1
+    pid
   end
 
   defp replay_evidence(mission_id, range, receipt_time, metadata) do

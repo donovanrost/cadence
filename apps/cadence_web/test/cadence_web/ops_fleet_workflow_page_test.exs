@@ -245,7 +245,7 @@ defmodule CadenceWeb.OpsFleetWorkflowPageTest do
       }
     })
 
-    assert_redirect(view, "/sign-in")
+    assert_redirect(view, "/console/sign-in")
 
     {:ok, run} =
       FleetPlanningRuns.fetch(c.organization_id, c.mission_id, c.run.fleet_planning_run_id)

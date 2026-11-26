@@ -148,22 +148,16 @@ Return to the repository root for aggregate Workspace gates. Root `mix test`
 runs every project's default suite and intentionally does not route
 `apps/<child>/...` or `packages/<child>/...` paths to child projects.
 
-The default hk pre-commit hook runs the shared quality checks and tests only
-the Mix projects affected by the staged changes:
+The default hk pre-commit hook runs the shared quality checks (format, compile
+with warnings as errors, credo, workspace, extensions and architecture checks)
+and no tests. Full suites run in CI; run the tests for the area you touched:
 
 ```bash
 cd ../..
-mix precommit.affected
+mix precommit.checks
 ```
 
-Workspace follows the declared path dependencies transitively. For
-example, a `ccsds` change also tests `cadence`, `cadence_simulator`, and
-`cadence_web`, while a `cadence_web`-only change tests only `cadence_web`.
-Each project's configuration and lockfile affect that project and its declared
-dependents. Root orchestration and Workspace policy changes affect every
-project.
-
-Inspect the current selection and package graph with:
+To see which projects a change affects, and the package graph:
 
 ```bash
 mix workspace.run -t test --affected

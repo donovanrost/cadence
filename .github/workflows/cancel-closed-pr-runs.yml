@@ -1,0 +1,30 @@
+name: Cancel a closed PR's CI
+
+# Closing or merging a PR doesn't cancel its queued CI, and queued jobs hold the account's
+# ~20 runner slots (#730). This cancels every unfinished CI run of the PR's head branch.
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  actions: write
+
+jobs:
+  cancel:
+    name: Cancel unfinished CI runs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Cancel runs of the closed PR's branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          ids=$(gh run list --workflow ci.yml --branch "$BRANCH" --limit 50 \
+            --json databaseId,status,event \
+            --jq '.[] | select(.event == "pull_request" and .status != "completed") | .databaseId')
+          for id in $ids; do
+            gh run cancel "$id" && echo "cancelled $id"
+          done
+          echo "done (${ids:-none})"

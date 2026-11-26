@@ -291,7 +291,8 @@ defmodule Cadence.CommandingTest do
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
-               %{"user_id" => "requester-1"}
+               %{"user_id" => "requester-1"},
+               admin_mode: false
              )
 
     assert {:error, {:command_request_requires_approval, ^persisted_request_id}} =
@@ -299,7 +300,8 @@ defmodule Cadence.CommandingTest do
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
-               %{"user_id" => "queue-operator"}
+               %{"user_id" => "queue-operator"},
+               admin_mode: false
              )
 
     assert {:ok,
@@ -313,7 +315,8 @@ defmodule Cadence.CommandingTest do
                @mission_id,
                persisted_request.command_request_id,
                %{"user_id" => "reviewer-1"},
-               reason: "Reviewed by flight director"
+               reason: "Reviewed by flight director",
+               admin_mode: false
              )
 
     assert %CommandApproval{} = approval
@@ -344,7 +347,8 @@ defmodule Cadence.CommandingTest do
     assert {:ok, %{queue_entry: queue_entry, command_request: queued_request}} =
              Cadence.Control.Commanding.enqueue(
                approved_command,
-               %{"user_id" => "queue-operator"}
+               %{"user_id" => "queue-operator"},
+               admin_mode: false
              )
 
     assert %CommandQueueEntry{} = queue_entry
@@ -375,7 +379,8 @@ defmodule Cadence.CommandingTest do
                @organization_id,
                @mission_id,
                low_priority_request.command_request_id,
-               %{"user_id" => "queue-operator"}
+               %{"user_id" => "queue-operator"},
+               admin_mode: false
              )
 
     assert {:ok, %{queue_entry: first_high_priority_queue_entry}} =
@@ -383,7 +388,8 @@ defmodule Cadence.CommandingTest do
                @organization_id,
                @mission_id,
                first_high_priority_request.command_request_id,
-               %{"user_id" => "queue-operator"}
+               %{"user_id" => "queue-operator"},
+               admin_mode: false
              )
 
     assert {:ok, %{queue_entry: second_high_priority_queue_entry}} =
@@ -391,7 +397,8 @@ defmodule Cadence.CommandingTest do
                @organization_id,
                @mission_id,
                second_high_priority_request.command_request_id,
-               %{"user_id" => "queue-operator"}
+               %{"user_id" => "queue-operator"},
+               admin_mode: false
              )
 
     listed_queue_entries =
@@ -471,7 +478,8 @@ defmodule Cadence.CommandingTest do
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
-               %{"user_id" => "queue-operator"}
+               %{"user_id" => "queue-operator"},
+               admin_mode: false
              )
 
     realized_contact =
@@ -610,7 +618,8 @@ defmodule Cadence.CommandingTest do
         @organization_id,
         @mission_id,
         request.command_request_id,
-        %{}
+        %{},
+        admin_mode: false
       )
 
     provider =
@@ -679,7 +688,8 @@ defmodule Cadence.CommandingTest do
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
-               %{"user_id" => "queue-operator"}
+               %{"user_id" => "queue-operator"},
+               admin_mode: false
              )
 
     provider_binding =
@@ -794,7 +804,8 @@ defmodule Cadence.CommandingTest do
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
-               %{"user_id" => "queue-operator"}
+               %{"user_id" => "queue-operator"},
+               admin_mode: false
              )
 
     provider_binding =
@@ -927,7 +938,8 @@ defmodule Cadence.CommandingTest do
                @organization_id,
                @mission_id,
                low_priority_request.command_request_id,
-               %{"user_id" => "queue-operator"}
+               %{"user_id" => "queue-operator"},
+               admin_mode: false
              )
 
     assert {:ok, %{queue_entry: high_priority_queue_entry}} =
@@ -935,7 +947,8 @@ defmodule Cadence.CommandingTest do
                @organization_id,
                @mission_id,
                high_priority_request.command_request_id,
-               %{"user_id" => "queue-operator"}
+               %{"user_id" => "queue-operator"},
+               admin_mode: false
              )
 
     realized_contact = persist_active_uplink_contact(source_endpoint.source_endpoint_id)
@@ -989,7 +1002,8 @@ defmodule Cadence.CommandingTest do
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
-               %{"user_id" => "reviewer-verify"}
+               %{"user_id" => "reviewer-verify"},
+               admin_mode: false
              )
 
     assert {:ok, %{queue_entry: queue_entry}} =
@@ -997,7 +1011,8 @@ defmodule Cadence.CommandingTest do
                @organization_id,
                @mission_id,
                approved_request.command_request_id,
-               %{"user_id" => "queue-verify"}
+               %{"user_id" => "queue-verify"},
+               admin_mode: false
              )
 
     realized_contact = persist_active_uplink_contact(source_endpoint.source_endpoint_id)
@@ -1134,7 +1149,8 @@ defmodule Cadence.CommandingTest do
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
-               %{"user_id" => "reviewer-timeout"}
+               %{"user_id" => "reviewer-timeout"},
+               admin_mode: false
              )
 
     assert {:ok, %{queue_entry: queue_entry}} =
@@ -1142,7 +1158,8 @@ defmodule Cadence.CommandingTest do
                @organization_id,
                @mission_id,
                approved_request.command_request_id,
-               %{"user_id" => "queue-timeout"}
+               %{"user_id" => "queue-timeout"},
+               admin_mode: false
              )
 
     realized_contact = persist_active_uplink_contact(source_endpoint.source_endpoint_id)
@@ -1207,7 +1224,8 @@ defmodule Cadence.CommandingTest do
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
-               %{"user_id" => "queue-transport-phases"}
+               %{"user_id" => "queue-transport-phases"},
+               admin_mode: false
              )
 
     realized_contact =
@@ -1314,7 +1332,8 @@ defmodule Cadence.CommandingTest do
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
-               %{"user_id" => "queue-cop1-timeout"}
+               %{"user_id" => "queue-cop1-timeout"},
+               admin_mode: false
              )
 
     realized_contact =
@@ -1399,7 +1418,8 @@ defmodule Cadence.CommandingTest do
           @organization_id,
           @mission_id,
           request.command_request_id,
-          %{"user_id" => "queue-38"}
+          %{"user_id" => "queue-38"},
+          admin_mode: false
         )
 
       %{
@@ -1671,7 +1691,8 @@ defmodule Cadence.CommandingTest do
               @organization_id,
               @mission_id,
               request.command_request_id,
-              %{"user_id" => "queue-33-#{n}"}
+              %{"user_id" => "queue-33-#{n}"},
+              admin_mode: false
             )
 
           %{request: request, entry: entry}

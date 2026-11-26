@@ -14,7 +14,7 @@ defmodule CadenceWeb.UserAuth do
         {:cont, socket}
 
       _other ->
-        {:halt, redirect(socket, to: "/sign-in")}
+        {:halt, redirect(socket, to: "/console/sign-in")}
     end
   end
 

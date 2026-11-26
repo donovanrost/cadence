@@ -37,7 +37,7 @@ Build and run the simulator from its own application directory:
 cd apps/cadence_simulator
 mix escript.build
 ./cadence_simulator telemetry \
-  --definitions ../../legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml \
+  --definitions ../../dev/catalogs/demo_spacecraft.yaml \
   --tcp 127.0.0.1:4200 \
   --rate 800 \
   --metrics-sample-rate 0
@@ -103,7 +103,7 @@ Pass variants directly to the simulator CLI. For example:
 
 ```bash
 ./cadence_simulator telemetry \
-  --definitions ../../legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml \
+  --definitions ../../dev/catalogs/demo_spacecraft.yaml \
   --tcp 127.0.0.1:4200 \
   --rate 1600 \
   --metrics-sample-rate 0 \
