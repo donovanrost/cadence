@@ -88,6 +88,8 @@ defmodule Cadence.OTPClusterSpike.Cluster do
     {:ok, peer, node} =
       :peer.start_link(%{
         name: ~c"cadence_spike_#{System.pid()}_#{index}",
+        host: ~c"127.0.0.1",
+        longnames: true,
         connection: :standard_io,
         env: [
           {~c"ERL_EPMD_ADDRESS", ~c"127.0.0.1"},

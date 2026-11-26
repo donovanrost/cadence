@@ -31,6 +31,11 @@ defmodule Cadence.OTPClusterSpikeTest do
 
     assert Enum.sort(Map.keys(listeners)) == expected_names
 
+    for peer <- peers do
+      [_, host] = peer.node |> Atom.to_string() |> String.split("@", parts: 2)
+      assert {:ok, {127, 0, 0, 1}} = :inet.getaddr(String.to_charlist(host), :inet)
+    end
+
     {:ok, interfaces} = :inet.getifaddrs()
 
     other_addresses =
