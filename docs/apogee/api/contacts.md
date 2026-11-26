@@ -542,6 +542,16 @@ signed-in user (#30).
   `422 invalid_params` (`details.action_text`), `422 actor_not_assignable` (the body names an
   actor field), `404 mission_not_found`.
 
+### `GET /api/v1/missions/:mission_id/attention/contact_settlement?reservation_id=…` (#847)
+
+The open `contact_settlement` item for one pass's booking (U37, the Contacts drawer), so the drawer
+doesn't read the whole action queue. Members of the mission.
+
+- `200 {data: <attention object>}`, the same object as the queue row's `attention`, or
+  `{data: null}` when the pass has no open settlement item.
+- It reads only the mission's open unsettled contacts, not the fleet.
+- Errors: `422 invalid_params` (`details.reservation_id`: missing), `404 mission_not_found`.
+
 ### Uplink readiness (U33, DECISIONS #58/#59)
 
 Readiness comes from domain's live view of uplink sessions (`Control.UplinkReadiness`). The

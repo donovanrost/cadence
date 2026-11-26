@@ -43,6 +43,16 @@ defmodule Cadence.Contacts.ContactSettlementAttention do
     |> Enum.sort_by(&(&1.raised_at || @epoch), DateTime)
   end
 
+  @doc """
+  The open item for one pass's booking (`provider_reservation_id`), or nil: what the Contacts
+  drawer shows for that pass (U37). Reads only the mission's open unsettled contacts, not the
+  action queue (#847).
+  """
+  @spec for_reservation(binary(), binary(), binary()) :: map() | nil
+  def for_reservation(org, mission, reservation_id) do
+    org |> items(mission) |> Enum.find(&(&1.provider_reservation_id == reservation_id))
+  end
+
   @spec resolved_since(binary(), binary(), DateTime.t()) :: [map()]
   def resolved_since(org, mission, %DateTime{} = since) do
     replayed =
