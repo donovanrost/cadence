@@ -241,6 +241,14 @@ export const groupReader = d.object({
   commands: d.array(command, 16),
   /** U75: set once any member ended expired. */
   expiry: expiryReader,
+  /**
+   * ux U92 "Up front" (#120): while pending, whether the member rows changed since submission (the
+   * GO refusal's own test) and both counts; null outside approval_pending (always sent,
+   * MemberCheck.read_fields/2). Null blocks nothing (U20).
+   */
+  members_changed: d.nullable(d.boolean),
+  submitted_member_count: d.nullable(d.integer),
+  current_member_count: d.nullable(d.integer),
   release: d.nullable(
     d.object({
       not_before: d.nullable(d.timestamp),

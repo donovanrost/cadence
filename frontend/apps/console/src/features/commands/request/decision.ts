@@ -62,11 +62,14 @@ export function noGoAfter(review: Preflight | null, excluded: ReadonlySet<string
 
 export function decisionOptions(group: Group, flagged: readonly Flagged[]): DecisionOption[] {
   const n = group.target_count;
+  // ux U92 "Up front" (#120): a changed group's GO options say why GO is off; the uplink count is
+  // the submitted one, so it would mislead.
+  const changed = membersChangedUpFront(group);
   const options: DecisionOption[] = [
     {
       value: "go",
       title: "GO as requested",
-      description: `${plural(n, "target")} · ${plural(group.member_count, "uplink")}`,
+      description: changed ?? `${plural(n, "target")} · ${plural(group.member_count, "uplink")}`,
       commitLabel: `Sign GO · ${plural(n, "target")}`,
     },
   ];
@@ -77,7 +80,9 @@ export function decisionOptions(group: Group, flagged: readonly Flagged[]): Deci
     options.push({
       value: "go_excluding",
       title: many ? `GO, excluding ${flagged.length} flagged targets` : `GO, excluding ${names}`,
-      description: `${many ? `Excludes ${names}. ` : ""}${plural(n - flagged.length, "target")}; the rest are rejected as excluded at review.`,
+      description:
+        changed ??
+        `${many ? `Excludes ${names}. ` : ""}${plural(n - flagged.length, "target")}; the rest are rejected as excluded at review.`,
       needsNote: true,
       commitLabel: `Sign GO · ${plural(n - flagged.length, "target")}`,
     });
@@ -132,13 +137,31 @@ const ERROR_WORDS: Readonly<Partial<Record<ErrorCode, string>>> = {
  */
 export function membersChangedLine(details: unknown): string {
   const c = decode(memberCounts, details);
+  return changedWords(
+    "Not released: this",
+    c.ok ? c.value.submitted_member_count : undefined,
+    c.ok ? c.value.current_member_count : undefined,
+  );
+}
+/**
+ * ux U92 "Up front" (#120): the read says the group changed, so GO is off before a click with U92's
+ * line less "Not released: " (nothing was tried); null when the flag is false or null.
+ */
+export function membersChangedUpFront(group: Group): string | null {
+  if (group.members_changed !== true) return null;
+  return changedWords("This", group.submitted_member_count, group.current_member_count);
+}
+/** U92's sentence after its opening; the bracket only with both counts (api-ops). */
+function changedWords(
+  opening: string,
+  submitted: number | null | undefined,
+  current: number | null | undefined,
+): string {
   const counts =
-    c.ok &&
-    c.value.submitted_member_count !== undefined &&
-    c.value.current_member_count !== undefined
-      ? ` (${c.value.submitted_member_count} then, ${c.value.current_member_count} now)`
+    submitted !== undefined && submitted !== null && current !== undefined && current !== null
+      ? ` (${submitted} then, ${current} now)`
       : "";
-  return `Not released: this group's commands changed after it was submitted${counts}, so it isn't what was reviewed. Give it NO-GO and submit the commands again. Tell the team that runs Cadence for you: a group shouldn't change after it's submitted.`;
+  return `${opening} group's commands changed after it was submitted${counts}, so it isn't what was reviewed. Give it NO-GO and submit the commands again. Tell the team that runs Cadence for you: a group shouldn't change after it's submitted.`;
 }
 /** U92 (api-ops): both counts, or the bracket goes. */
 const memberCounts = d.object({
