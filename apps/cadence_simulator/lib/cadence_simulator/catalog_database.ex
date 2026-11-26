@@ -36,21 +36,18 @@ defmodule CadenceSimulator.CatalogDatabase do
   @spec load_yaml(binary(), map(), keyword()) :: {:ok, t()} | {:error, term()}
   def load_yaml(content, source_attrs \\ %{}, opts \\ [])
       when is_binary(content) and is_map(source_attrs) and is_list(opts) do
-    source =
-      Source.new(%{
-        artifact_id: get(source_attrs, :artifact_id, Ids.new("simulator_catalog")),
-        organization_id: get(source_attrs, :organization_id),
-        mission_id: get(source_attrs, :mission_id, "simulator"),
-        catalog_family: get(source_attrs, :catalog_family, :combined),
-        artifact_name: get(source_attrs, :artifact_name, "simulator-catalog.yaml"),
-        format_key: get(source_attrs, :format_key, "cadence_yaml"),
-        format_version: get(source_attrs, :format_version),
-        media_type: get(source_attrs, :media_type, "application/yaml"),
-        source_artifact: content,
-        metadata: get(source_attrs, :metadata, %{})
-      })
+    load(yaml_source(content, source_attrs), opts)
+  end
 
-    load(source, opts)
+  @doc false
+  def load_yaml_with_document(content, source_attrs) do
+    source = yaml_source(content, source_attrs)
+    context = %{import_run_id: Ids.new("simulator_import")}
+
+    with {:ok, result, document} <- CadenceYamlDatabase.import_with_document(source, context),
+         {:ok, database} <- compile(source, result) do
+      {:ok, database, document}
+    end
   end
 
   @spec load(Source.t(), keyword()) :: {:ok, t()} | {:error, term()}
@@ -59,9 +56,29 @@ defmodule CadenceSimulator.CatalogDatabase do
     import_run_id = Keyword.get(opts, :import_run_id, Ids.new("simulator_import"))
 
     with :ok <- validate(importer, source),
-         {:ok, %ImportResult{} = import_result} <-
-           importer.import(source, %{import_run_id: import_run_id}),
-         {:ok, %CompilerResult{} = compilation} <-
+         {:ok, %ImportResult{} = result} <-
+           importer.import(source, %{import_run_id: import_run_id}) do
+      compile(source, result)
+    end
+  end
+
+  defp yaml_source(content, source_attrs) do
+    Source.new(%{
+      artifact_id: get(source_attrs, :artifact_id, Ids.new("simulator_catalog")),
+      organization_id: get(source_attrs, :organization_id),
+      mission_id: get(source_attrs, :mission_id, "simulator"),
+      catalog_family: get(source_attrs, :catalog_family, :combined),
+      artifact_name: get(source_attrs, :artifact_name, "simulator-catalog.yaml"),
+      format_key: get(source_attrs, :format_key, "cadence_yaml"),
+      format_version: get(source_attrs, :format_version),
+      media_type: get(source_attrs, :media_type, "application/yaml"),
+      source_artifact: content,
+      metadata: get(source_attrs, :metadata, %{})
+    })
+  end
+
+  defp compile(source, import_result) do
+    with {:ok, %CompilerResult{} = compilation} <-
            Compiler.compile(import_result.bundle.declaration_layers),
          {:ok, packet_definitions} <- decode_telemetry(compilation),
          {:ok, command_definitions} <- decode_commands(compilation) do

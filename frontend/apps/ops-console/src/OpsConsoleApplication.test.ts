@@ -222,14 +222,6 @@ const expectedSurfaceTable = [
     "cadence.ops.fleet_planning_run",
     ["refresh-fleet-run", "repair-fleet-run"],
   ],
-  [
-    "activation_requests",
-    "operations",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.activation_requests",
-    ["decide"],
-  ],
   ["commands", "operations", "mission", "ops_workspace", "cadence.ops.commands", []],
   [
     "telemetry_explore",
@@ -511,13 +503,13 @@ describe("Ops Console federated application", () => {
       result: {},
     });
     const wrapper = mount(OpsConsoleApplication, {
-      props: propsFor(query, execute, "activation_requests"),
+      props: propsFor(query, execute, "data_sources"),
     });
     await flushPromises();
 
     window.dispatchEvent(
       new CustomEvent("cadence:ops-event", {
-        detail: { eventName: "decide", payload: { request_id: "request-1" } },
+        detail: { eventName: "enable-source", payload: { request_id: "request-1" } },
       }),
     );
     await flushPromises();
@@ -525,9 +517,9 @@ describe("Ops Console federated application", () => {
     expect(execute).toHaveBeenCalledWith({
       applicationKey: "ops_console",
       applicationVersion: 1,
-      surfaceId: "activation_requests",
+      surfaceId: "data_sources",
       surfaceVersion: 1,
-      actionId: "decide",
+      actionId: "enable-source",
       input: { request_id: "request-1" },
       context,
     });
@@ -543,13 +535,13 @@ describe("Ops Console federated application", () => {
       result: { status: "completed" },
     });
     const wrapper = mount(OpsConsoleApplication, {
-      props: propsFor(query, execute, "activation_requests"),
+      props: propsFor(query, execute, "data_sources"),
     });
     await flushPromises();
 
     window.dispatchEvent(
       new CustomEvent("cadence:ops-event", {
-        detail: { eventName: "decide", payload: { request_id: "request-1" } },
+        detail: { eventName: "enable-source", payload: { request_id: "request-1" } },
       }),
     );
     await flushPromises();
@@ -567,13 +559,13 @@ describe("Ops Console federated application", () => {
       result: { status: "completed" },
     });
     const wrapper = mount(OpsConsoleApplication, {
-      props: propsFor(query, execute, "activation_requests"),
+      props: propsFor(query, execute, "data_sources"),
     });
     await flushPromises();
 
     window.dispatchEvent(
       new CustomEvent("cadence:ops-event", {
-        detail: { eventName: "decide", payload: { request_id: "request-1" } },
+        detail: { eventName: "enable-source", payload: { request_id: "request-1" } },
       }),
     );
     await flushPromises();
@@ -585,7 +577,6 @@ describe("Ops Console federated application", () => {
 
   it("admits native route roots and excludes obsolete widgets and inherited object names", () => {
     const required = [
-      "OpsActivationRequests",
       "OpsAlarms",
       "OpsCommands",
       "OpsConsoleLanding",
@@ -629,18 +620,18 @@ describe("Ops Console federated application", () => {
     expect(manifest.application).toMatchObject({ applicationKey: "ops_console", version: 1 });
     expect(manifest.application.installableScopes).toEqual(["mission"]);
     expect(manifest.surfaces).toEqual(surfaceContracts);
-    expect(surfaceContracts).toHaveLength(18);
-    expect(new Set(surfaceContracts.map((surface) => surface.surfaceId)).size).toBe(18);
+    expect(surfaceContracts).toHaveLength(17);
+    expect(new Set(surfaceContracts.map((surface) => surface.surfaceId)).size).toBe(17);
     // The data-operations surfaces declare no host actions (their native page does the work).
-    expect(surfaceContracts.flatMap((surface) => surface.actions)).toHaveLength(45);
+    expect(surfaceContracts.flatMap((surface) => surface.actions)).toHaveLength(44);
     expect(
       new Set(
         surfaceContracts.flatMap((surface) =>
           surface.actions.map((action) => `${surface.surfaceId}:${action}`),
         ),
       ).size,
-    ).toBe(45);
-    expect(new Set(surfaceContracts.flatMap((surface) => surface.actions)).size).toBe(34);
+    ).toBe(44);
+    expect(new Set(surfaceContracts.flatMap((surface) => surface.actions)).size).toBe(33);
     expect(
       surfaceContracts.slice(2).every((surface) => {
         const componentName = `Ops${surface.surfaceId.replace(/(^|_)(\w)/g, (_: string, _prefix: string, letter: string) => letter.toUpperCase())}`;

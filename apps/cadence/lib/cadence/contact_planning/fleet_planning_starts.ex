@@ -65,6 +65,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
     with {:ok, as_of} <- review_as_of(evidence),
          {:ok, inputs} <- FleetStartInputs.load(scope, mission_id, window, true, as_of),
          true <- inputs.evidence === evidence,
+         :ok <- prefer_index_scans_for_materialization(),
          {:ok, generated, materialization} <- materialize(scope, mission_id, inputs),
          :ok <- supersede(scope, inputs),
          requirements <- requirement_pairs(inputs, generated),
@@ -88,6 +89,15 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
       false -> Repo.rollback(:fleet_planning_review_changed)
       {:error, reason} -> Repo.rollback(reason)
     end
+  end
+
+  defp prefer_index_scans_for_materialization do
+    # PostgreSQL caches RI trigger plans per backend. A new fleet can create its parent rows
+    # inside this transaction before table statistics see them; a broad or sequential FK plan
+    # then revisits prior inserts for each child. The exact-key indexes and this transaction-
+    # local setting keep both cold and previously used backends on indexed lookups.
+    Repo.query!("SET LOCAL enable_seqscan = off")
+    :ok
   end
 
   defp record_operation(_scope, _mission_id, _run, nil), do: :ok

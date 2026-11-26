@@ -20,9 +20,10 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Index do
   Another frame sequence, another APID, or other packet bytes at the same id has another digest,
   which is a real conflict.
 
-  A transfer frame's entry carries no payload bytes (the evidence's bytes live in the ingress
-  archive, and its hash changes when a replay regroups the journal), so its digest covers its
-  identity columns and its lengths.
+  A transfer frame's entry carries no payload bytes, but it carries `frame_sha256`, the hash of the
+  frame's own raw bytes taken where they are in hand (`TMFrameIngress`; never the evidence's hash,
+  which changes when a replay regroups the journal). Its digest covers its identity columns, its
+  lengths and that hash, so another frame under the same id is a conflict like another packet.
   """
 
   import Ecto.Query
@@ -169,13 +170,18 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Index do
     }
   end
 
-  @digest_version "archive_identity_v1"
+  @digest_version "archive_identity_v2"
 
   # sha256(version <> canonical JSON of [[name, value], ...] in a fixed order <> sha256 of the payload)
   @doc false
   @spec digest(map()) :: binary()
   def digest(%{"record_kind" => @frame_kind} = entry),
-    do: digest(entry, @frame_identity ++ ~w(raw_frame_length_bytes payload_length_bytes), <<>>)
+    do:
+      digest(
+        entry,
+        @frame_identity ++ ~w(raw_frame_length_bytes payload_length_bytes frame_sha256),
+        <<>>
+      )
 
   def digest(%{"record_kind" => @packet_kind} = entry),
     do: digest(entry, @packet_identity, packet_bytes(entry))
