@@ -143,15 +143,25 @@ defmodule Cadence.Catalog.ConfigurationReviews do
   def covering(_organization_id, _mission_id, [], _spacecraft_id), do: MapSet.new()
 
   def covering(organization_id, mission_id, shas, spacecraft_id) do
-    MemberRow
-    |> where(
-      [m],
-      m.organization_id == ^organization_id and m.mission_id == ^mission_id and
-        m.spacecraft_id == ^spacecraft_id and m.review_sha256 in ^shas
-    )
-    |> select([m], m.review_sha256)
+    organization_id
+    |> member_shas(mission_id, spacecraft_id)
+    |> where([m], m.review_sha256 in ^shas)
     |> Repo.all()
     |> MapSet.new()
+  end
+
+  @doc """
+  A query of the review shas that cover `spacecraft_id` (indexed by spacecraft), for another context to
+  filter its own rows by without reaching into this context's persistence rows.
+  """
+  @spec member_shas(String.t(), String.t(), String.t()) :: Ecto.Query.t()
+  def member_shas(organization_id, mission_id, spacecraft_id) do
+    from(m in MemberRow,
+      where:
+        m.organization_id == ^organization_id and m.mission_id == ^mission_id and
+          m.spacecraft_id == ^spacecraft_id,
+      select: m.review_sha256
+    )
   end
 
   @doc "The review's own sha, or nil."

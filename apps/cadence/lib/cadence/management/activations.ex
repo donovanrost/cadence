@@ -155,18 +155,15 @@ defmodule Cadence.Management.Activations do
   @doc "Latest review evidence for one spacecraft, without exposing persistence rows."
   def latest_spacecraft_request(organization_id, mission_id, spacecraft_id) do
     # Through the review's member table (indexed by spacecraft), not a scan of every request's metadata.
+    shas = ConfigurationReviews.member_shas(organization_id, mission_id, spacecraft_id)
+
     row =
       from(request in ActivationRequestRow,
-        join: member in ConfigurationReviews.MemberRow,
-        on:
-          member.organization_id == request.organization_id and
-            member.mission_id == request.mission_id and member.spacecraft_id == ^spacecraft_id and
-            member.review_sha256 ==
-              fragment(
-                "? #>> '{value,configuration_review,review,sha256}'",
-                request.metadata
-              ),
-        where: request.organization_id == ^organization_id and request.mission_id == ^mission_id,
+        where:
+          request.organization_id == ^organization_id and request.mission_id == ^mission_id and
+            fragment("? #>> '{value,configuration_review,review,sha256}'", request.metadata) in subquery(
+              shas
+            ),
         order_by: [desc: request.requested_at, desc: request.activation_request_id],
         limit: 1
       )
