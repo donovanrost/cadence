@@ -10,6 +10,7 @@ import {
   type Scid,
   type SpacecraftId,
 } from "@/api/index.ts";
+import { approvalWithdrawnKey, type ApprovalWithdrawn } from "./configuration/withdrawn.ts";
 
 /**
  * The Setup spacecraft directory, a page at a time (#796).
@@ -32,6 +33,8 @@ export type SpacecraftRow = Readonly<{
   ready: boolean;
   /** null: never heard since creation ("Awaiting first AOS"). */
   lastReceivedAt: string | null;
+  /** E2b (#546; U109): its running revision's approval was withdrawn or rejected, else null. */
+  approvalWithdrawn: ApprovalWithdrawn | null;
 }>;
 
 /** api: `degraded` = the history store didn't answer, so last-received is live-only (may be incomplete). */
@@ -91,6 +94,7 @@ const directoryRow: Reader<SpacecraftRow> = (value, path = "") => {
     routing_rule_count: count,
     ready: boolean,
     last_received_at: nullable(timestamp),
+    approval_withdrawn: approvalWithdrawnKey,
   })(value, path);
   // `ready` is defined by the contract; a row claiming ready without its parts is malformed.
   if (raw.ready && (raw.scid === null || raw.profile === null || raw.routing_rule_count === 0))
@@ -109,6 +113,7 @@ const directoryRow: Reader<SpacecraftRow> = (value, path = "") => {
     routingRuleCount: raw.routing_rule_count,
     ready: raw.ready,
     lastReceivedAt: raw.last_received_at,
+    approvalWithdrawn: raw.approval_withdrawn ?? null,
   };
 };
 

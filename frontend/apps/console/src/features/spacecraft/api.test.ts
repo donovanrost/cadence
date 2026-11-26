@@ -138,3 +138,32 @@ describe("S9 (#313): the directory's SCIDs in use", () => {
     );
   });
 });
+
+/** E2b (#546, #924; U109): a row whose running revision's approval was withdrawn or rejected. */
+describe("the directory row's approval_withdrawn", () => {
+  const withdrawal = {
+    revision_id: "mission_model_revision:r3",
+    decision: {
+      kind: "withdrawn",
+      by: { kind: "user", id: "u-ana", name: "Ana R." },
+      at: "2026-11-20T09:12:00Z",
+      reason: null,
+    },
+  };
+  it("reads it, and an approved row or a server before #924 as null", () => {
+    const sent = decode(
+      directoryPageReader,
+      page({ spacecraft: [row({ approval_withdrawn: withdrawal })] }),
+    );
+    expect(sent.ok && sent.value.rows[0]?.approvalWithdrawn?.revision_id).toBe(
+      "mission_model_revision:r3",
+    );
+    const approved = decode(
+      directoryPageReader,
+      page({ spacecraft: [row({ approval_withdrawn: null })] }),
+    );
+    expect(approved.ok && approved.value.rows[0]?.approvalWithdrawn).toBeNull();
+    const before = decode(directoryPageReader, page({ spacecraft: [row()] }));
+    expect(before.ok && before.value.rows[0]?.approvalWithdrawn).toBeNull();
+  });
+});

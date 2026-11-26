@@ -8,6 +8,7 @@ import {
   type Decoded,
 } from "@/api/index.ts";
 import { compositionKey } from "@/features/catalog/composition.ts";
+import { approvalWithdrawnKey } from "./withdrawn.ts";
 
 /**
  * (B) a spacecraft's configuration workspace (director 11-17; ux U94; api's shape diff, ported
@@ -90,6 +91,8 @@ export const snapshotReader = d.object({
       document: documentReader,
       /** D2: the composition behind the active document's catalog revision. */
       composition: compositionKey,
+      /** E2b (#546, #924; U109): the running revision's withdrawn or rejected approval, or null. */
+      approval_withdrawn: approvalWithdrawnKey,
     }),
   ),
   review: d.nullable(
