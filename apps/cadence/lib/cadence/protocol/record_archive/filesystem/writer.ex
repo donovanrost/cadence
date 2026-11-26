@@ -1,579 +1,245 @@
-# credo:disable-for-this-file Credo.Check.Refactor.Nesting
 defmodule Cadence.Protocol.RecordArchive.FileSystem.Writer do
   @moduledoc false
-
-  use GenServer
-
-  require Logger
+  # The archive's writers (#688): one `Writer.Mission` process per partition, started on demand
+  # under a DynamicSupervisor and found through a Registry, so a slow or failing flush stalls only
+  # its own partition. `partition_key/1` is the one place that decides the partition (a mission
+  # today); moving to a finer key (a path) changes only that function.
 
   alias Cadence.Ingress.RawEvidence
-  alias Cadence.Persistence.OrganizationScope
-  alias Cadence.Platform.ScopedReadUpdates
   alias Cadence.Protocol.{PacketRecord, TransferFrameRecord}
-  alias Cadence.Protocol.RecordArchive.{FileSystem, Quarantine}
-  alias Cadence.Protocol.RecordArchive.FileSystem.PoisonIsolation
+  alias Cadence.Protocol.RecordArchive.FileSystem
+  alias Cadence.Protocol.RecordArchive.FileSystem.Writer.Mission
   alias Cadence.Repo
 
   @default_flush_interval_ms 250
   @default_flush_count 250
 
+  @type batch :: [{RawEvidence.t(), [TransferFrameRecord.t()], [PacketRecord.t()]}]
+
+  @doc "The partition one piece of evidence is archived under: `{mission_id, partition}`."
+  @spec partition_key(RawEvidence.t()) :: {binary(), term()}
+  def partition_key(%RawEvidence{mission_id: mission_id}), do: {mission_id, nil}
+
   def child_spec(opts) when is_list(opts) do
     %{
       id: Keyword.get(opts, :child_id, server(opts)),
-      start: {__MODULE__, :start_link, [opts]}
+      start: {__MODULE__, :start_link, [opts]},
+      type: :supervisor
     }
   end
 
   def start_link(opts) when is_list(opts) do
-    GenServer.start_link(__MODULE__, opts, name: server(opts))
+    Supervisor.start_link(
+      [
+        {Registry, keys: :unique, name: registry(opts)},
+        {DynamicSupervisor, strategy: :one_for_one, name: writers(opts)}
+      ],
+      strategy: :one_for_all,
+      name: server(opts)
+    )
   end
 
   @spec enqueue(RawEvidence.t(), [TransferFrameRecord.t()], [PacketRecord.t()]) ::
           :ok | {:error, term()}
-  def enqueue(%RawEvidence{} = raw_evidence, transfer_frame_records, packet_records)
-      when is_list(transfer_frame_records) and is_list(packet_records) do
-    enqueue(raw_evidence, transfer_frame_records, packet_records, [])
-  end
+  def enqueue(raw_evidence, transfer_frame_records, packet_records),
+    do: enqueue(raw_evidence, transfer_frame_records, packet_records, [])
 
   @spec enqueue(RawEvidence.t(), [TransferFrameRecord.t()], [PacketRecord.t()], keyword()) ::
           :ok | {:error, term()}
   def enqueue(%RawEvidence{} = raw_evidence, transfer_frame_records, packet_records, opts)
-      when is_list(transfer_frame_records) and is_list(packet_records) and is_list(opts) do
-    GenServer.call(
-      server(opts),
-      {:enqueue, raw_evidence, transfer_frame_records, packet_records}
-    )
-  end
+      when is_list(transfer_frame_records) and is_list(packet_records) and is_list(opts),
+      do: enqueue_many([{raw_evidence, transfer_frame_records, packet_records}], opts)
 
-  @spec enqueue_many([{RawEvidence.t(), [TransferFrameRecord.t()], [PacketRecord.t()]}]) ::
-          :ok | {:error, term()}
-  def enqueue_many(records_batch) when is_list(records_batch) do
-    enqueue_many(records_batch, [])
-  end
+  @spec enqueue_many(batch()) :: :ok | {:error, term()}
+  def enqueue_many(records_batch), do: enqueue_many(records_batch, [])
 
-  @spec enqueue_many(
-          [{RawEvidence.t(), [TransferFrameRecord.t()], [PacketRecord.t()]}],
-          keyword()
-        ) :: :ok | {:error, term()}
+  @spec enqueue_many(batch(), keyword()) :: :ok | {:error, term()}
   def enqueue_many(records_batch, opts) when is_list(records_batch) and is_list(opts) do
-    GenServer.call(server(opts), {:enqueue_many, records_batch})
+    with {:ok, by_partition} <- build_entries(records_batch),
+         :ok <- check_backpressure(by_partition, opts) do
+      enqueue_partitions(by_partition, opts)
+    end
+  end
+
+  defp enqueue_partitions(by_partition, opts) do
+    Enum.reduce_while(by_partition, :ok, fn {key, entries}, :ok ->
+      case call(opts, key, {:enqueue, entries}, 5_000) do
+        :ok -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
   end
 
   @spec flush(binary() | nil) :: :ok | {:error, term()}
-  def flush(mission_id \\ nil) do
-    flush(mission_id, [])
-  end
+  def flush(mission_id \\ nil), do: flush(mission_id, [])
 
   @spec flush(binary() | nil, keyword()) :: :ok | {:error, term()}
   def flush(mission_id, opts)
       when (is_binary(mission_id) or is_nil(mission_id)) and is_list(opts) do
-    GenServer.call(server(opts), {:flush, mission_id}, :infinity)
-  end
-
-  @spec stats(binary()) :: map()
-  def stats(mission_id) when is_binary(mission_id) do
-    stats(mission_id, [])
-  end
-
-  @spec stats(binary(), keyword()) :: map()
-  def stats(mission_id, opts) when is_binary(mission_id) and is_list(opts) do
-    GenServer.call(server(opts), {:stats, mission_id})
-  end
-
-  @spec reset_stats(binary()) :: :ok
-  def reset_stats(mission_id) when is_binary(mission_id) do
-    reset_stats(mission_id, [])
-  end
-
-  @spec reset_stats(binary(), keyword()) :: :ok
-  def reset_stats(mission_id, opts) when is_binary(mission_id) and is_list(opts) do
-    GenServer.call(server(opts), {:reset_stats, mission_id})
-  end
-
-  @spec reset() :: :ok
-  def reset do
-    reset([])
-  end
-
-  @spec reset(keyword()) :: :ok
-  def reset(opts) when is_list(opts) do
-    GenServer.call(server(opts), :reset, :infinity)
-  end
-
-  @impl true
-  def init(opts) do
-    {:ok,
-     %{
-       base_path: Keyword.fetch!(opts, :base_path),
-       repo: Keyword.get(opts, :repo, Repo),
-       archive_backend: FileSystem.archive_backend(opts),
-       flush_interval_ms: Keyword.get(opts, :flush_interval_ms, @default_flush_interval_ms),
-       flush_count: Keyword.get(opts, :flush_count, @default_flush_count),
-       buffers: %{},
-       segment_ids: %{},
-       retry_counts: %{},
-       buffer_sizes: %{},
-       timer_refs: %{},
-       buffer_started_at_ms: %{},
-       metrics: %{}
-     }}
-  end
-
-  @impl true
-  def handle_call(
-        {:enqueue, %RawEvidence{} = raw_evidence, transfer_frame_records, packet_records},
-        _from,
-        state
-      ) do
-    state = normalize_state(state)
-    entries = FileSystem.build_entries(raw_evidence, transfer_frame_records, packet_records)
-
-    if entries == [] do
-      {:reply, :ok, state}
-    else
-      enqueue_reply(state, [{raw_evidence.mission_id, entries}])
-    end
-  end
-
-  def handle_call({:enqueue_many, records_batch}, _from, state) when is_list(records_batch) do
-    state = normalize_state(state)
-
-    case normalize_records_batch(records_batch) do
-      {:ok, mission_entries} ->
-        enqueue_reply(state, mission_entries)
-
-      {:error, reason} ->
-        {:reply, {:error, reason}, state}
-    end
-  end
-
-  def handle_call({:flush, nil}, _from, state) do
-    state = normalize_state(state)
-
-    case flush_all_missions(state) do
-      {:ok, next_state} ->
-        {:reply, :ok, next_state}
-
-      {:error, mission_id, reason, next_state} ->
-        {:reply, {:error, reason},
-         reschedule_flush(next_state, mission_id, retry_delay_ms(next_state, mission_id))}
-    end
-  end
-
-  def handle_call({:flush, mission_id}, _from, state) when is_binary(mission_id) do
-    state = normalize_state(state)
-
-    case flush_mission(state, mission_id) do
-      {:ok, next_state} ->
-        {:reply, :ok, next_state}
-
-      {:error, reason, next_state} ->
-        {:reply, {:error, reason},
-         reschedule_flush(next_state, mission_id, retry_delay_ms(next_state, mission_id))}
-    end
-  end
-
-  def handle_call({:stats, mission_id}, _from, state) when is_binary(mission_id) do
-    state = normalize_state(state)
-    {:reply, build_stats(state, mission_id), state}
-  end
-
-  def handle_call({:reset_stats, mission_id}, _from, state) when is_binary(mission_id) do
-    state = normalize_state(state)
-    {:reply, :ok, put_in(state.metrics[mission_id], zero_metrics())}
-  end
-
-  def handle_call(:reset, _from, state) do
-    state = normalize_state(state)
-    _ = File.rm_rf(state.base_path)
-
-    {:reply, :ok,
-     %{
-       state
-       | buffers: %{},
-         segment_ids: %{},
-         retry_counts: %{},
-         buffer_sizes: %{},
-         timer_refs: %{},
-         buffer_started_at_ms: %{},
-         metrics: %{}
-     }}
-  end
-
-  defp flush_all_missions(state) do
-    Enum.reduce_while(Map.keys(state.buffers), {:ok, state}, fn mission_id, {:ok, acc_state} ->
-      flush_mission_entry(acc_state, mission_id)
+    mission_id
+    |> running(opts)
+    |> Enum.reduce_while(:ok, fn key, :ok ->
+      case call_running(opts, key, :flush, :infinity) do
+        :ok -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
     end)
   end
 
-  defp flush_mission_entry(acc_state, mission_id) do
-    case flush_mission(acc_state, mission_id) do
-      {:ok, next_state} -> {:cont, {:ok, next_state}}
-      {:error, reason, next_state} -> {:halt, {:error, mission_id, reason, next_state}}
+  @spec stats(binary()) :: map()
+  def stats(mission_id), do: stats(mission_id, [])
+
+  @spec stats(binary(), keyword()) :: map()
+  def stats(mission_id, opts) when is_binary(mission_id) and is_list(opts) do
+    case running(mission_id, opts) do
+      [] -> Mission.idle_stats()
+      keys -> keys |> Enum.map(&call_running(opts, &1, :stats, 5_000)) |> merge_stats()
     end
   end
 
-  @impl true
-  def handle_info({:flush_mission, mission_id, flush_ref}, state) do
-    state = normalize_state(state)
+  @spec reset_stats(binary()) :: :ok
+  def reset_stats(mission_id), do: reset_stats(mission_id, [])
 
-    case Map.get(state.timer_refs, mission_id) do
-      {timer_ref, ^flush_ref} ->
-        _ = Process.cancel_timer(timer_ref)
-        state = update_in(state.timer_refs, &Map.delete(&1, mission_id))
-        flush_scheduled_mission(state, mission_id)
-
-      _other ->
-        {:noreply, state}
-    end
+  @spec reset_stats(binary(), keyword()) :: :ok
+  def reset_stats(mission_id, opts) when is_binary(mission_id) and is_list(opts) do
+    mission_id |> running(opts) |> Enum.each(&call_running(opts, &1, :reset_stats, 5_000))
   end
 
-  defp flush_scheduled_mission(state, mission_id) do
-    case flush_mission(state, mission_id) do
-      {:ok, next_state} ->
-        {:noreply, next_state}
+  @spec reset() :: :ok
+  def reset, do: reset([])
 
-      {:error, reason, next_state} ->
-        Logger.error("protocol record archive flush failed for #{mission_id}: #{inspect(reason)}")
-
-        {:noreply,
-         reschedule_flush(next_state, mission_id, retry_delay_ms(next_state, mission_id))}
-    end
+  @spec reset(keyword()) :: :ok
+  def reset(opts) when is_list(opts) do
+    nil |> running(opts) |> Enum.each(&call_running(opts, &1, :reset, :infinity))
+    _ = File.rm_rf(Keyword.fetch!(opts, :base_path))
+    :ok
   end
 
-  defp retry_delay_ms(state, mission_id) do
-    failures = Map.get(state.retry_counts, mission_id, 0)
-    multiplier = Integer.pow(2, min(max(failures - 1, 0), 5))
-    min(max(state.flush_interval_ms, 250) * multiplier, 5_000)
+  # One batch can name several missions: they are checked first, so a backpressured partition
+  # refuses the whole batch before any other partition has taken a copy of it.
+  defp check_backpressure(by_partition, _opts) when length(by_partition) < 2, do: :ok
+
+  defp check_backpressure(by_partition, opts) do
+    Enum.find_value(by_partition, :ok, fn {{mission_id, _partition} = key, _entries} ->
+      if call_running(opts, key, :backpressured?, 5_000) == true,
+        do: {:error, {:protocol_archive_backpressured, mission_id}}
+    end)
   end
 
-  defp maybe_schedule_flush(state, mission_id) do
-    if Map.has_key?(state.timer_refs, mission_id) do
-      state
-    else
-      schedule_flush(state, mission_id, state.flush_interval_ms)
-    end
-  end
-
-  defp reschedule_flush(state, mission_id, delay_ms)
-       when is_integer(delay_ms) and delay_ms >= 0 do
-    state
-    |> cancel_flush_timer(mission_id)
-    |> schedule_flush(mission_id, delay_ms)
-  end
-
-  defp schedule_flush(state, mission_id, delay_ms) when is_integer(delay_ms) and delay_ms >= 0 do
-    flush_ref = make_ref()
-    timer_ref = Process.send_after(self(), {:flush_mission, mission_id, flush_ref}, delay_ms)
-    put_in(state.timer_refs[mission_id], {timer_ref, flush_ref})
-  end
-
-  defp flush_mission(state, mission_id) do
-    case Map.get(state.buffers, mission_id) do
-      nil ->
-        {:ok, cancel_flush_timer(state, mission_id)}
-
-      queue ->
-        state =
-          state
-          |> cancel_flush_timer(mission_id)
-          |> update_in([:segment_ids], fn ids ->
-            Map.put_new_lazy(ids, mission_id, &FileSystem.new_segment_id/0)
-          end)
-
-        entries = :queue.to_list(queue)
-        flush_started_us = System.monotonic_time(:microsecond)
-
-        case persist_entries(state, mission_id, entries) do
-          {:ok, segment_size_bytes} ->
-            flush_duration_us = System.monotonic_time(:microsecond) - flush_started_us
-
-            completed_at = DateTime.utc_now()
-
-            next_state =
-              state
-              |> update_in([:buffers], &Map.delete(&1, mission_id))
-              |> update_in([:segment_ids], &Map.delete(&1, mission_id))
-              |> update_in([:retry_counts], &Map.delete(&1, mission_id))
-              |> update_in([:buffer_sizes], &Map.delete(&1, mission_id))
-              |> update_in([:buffer_started_at_ms], &Map.delete(&1, mission_id))
-              |> update_in([:metrics, mission_id], fn metrics ->
-                metrics
-                |> ensure_metrics()
-                |> Map.update!(:flush_count, &(&1 + 1))
-                |> Map.update!(:flushed_count, &(&1 + length(entries)))
-                |> Map.update!(:segment_count, &(&1 + 1))
-                |> Map.update!(:flushed_bytes_total, &(&1 + segment_size_bytes))
-                |> Map.update!(:flush_total_us, &(&1 + flush_duration_us))
-                |> Map.put(:last_completed_at, completed_at)
-                |> Map.put(:last_flush_error, nil)
-              end)
-
-            {:ok, next_state}
-
-          {:error, reason, quarantined} ->
-            state
-            |> drop_quarantined(mission_id, quarantined)
-            |> failed_flush(mission_id, reason)
-
-          {:error, reason} ->
-            failed_flush(state, mission_id, reason)
-        end
-    end
-  end
-
-  defp failed_flush(state, mission_id, reason) do
-    next_state =
-      state
-      |> update_in(
-        [:retry_counts],
-        &Map.update(&1, mission_id, 1, fn count -> count + 1 end)
-      )
-      |> update_in([:metrics, mission_id], fn metrics ->
-        metrics
-        |> ensure_metrics()
-        |> Map.update!(:flush_failure_count, &(&1 + 1))
-        |> Map.put(:last_flush_error, inspect(reason))
-      end)
-
-    {:error, reason, next_state}
-  end
-
-  defp persist_entries(state, mission_id, entries) do
-    # Backpressure keeps this batch unchanged until indexing succeeds. Reuse its
-    # immutable object on retry instead of leaking a new segment on every error.
-    segment_id = Map.fetch!(state.segment_ids, mission_id)
-    organization_id = OrganizationScope.organization_id_for_mission(mission_id)
-
-    opts = [
-      base_path: state.base_path,
-      organization_id: organization_id,
-      archive_backend: state.archive_backend,
-      repo: state.repo
-    ]
-
-    # DECISIONS #88: entries that can never be indexed are quarantined and the rest flushes, so
-    # the mission's storage goes on (their own samples included); anything else stays transient.
-    quarantine = &Quarantine.put(mission_id, organization_id, &1, DateTime.utc_now())
-
-    case PoisonIsolation.persist(segment_id, entries, opts, quarantine) do
-      {:ok, %{size_bytes: size_bytes, quarantined: quarantined}} ->
-        announce_quarantine(organization_id, mission_id, quarantined)
-        {:ok, size_bytes}
-
-      {:error, reason, quarantined} ->
-        announce_quarantine(organization_id, mission_id, quarantined)
-        {:error, reason, quarantined}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  rescue
-    exception in [DBConnection.ConnectionError, Postgrex.Error] ->
-      # Ecto raises on checkout/connection/query failures. Keep the buffer and
-      # use the same retry path as an explicit persistence error; never report
-      # archival success or restart the writer after an unavailable database.
-      {:error, {:archive_database_error, Exception.message(exception)}}
-  end
-
-  defp announce_quarantine(_organization_id, _mission_id, []), do: :ok
-
-  defp announce_quarantine(organization_id, mission_id, quarantined) do
-    Logger.warning(
-      "protocol record archive quarantined #{length(quarantined)} entries for #{mission_id}"
-    )
-
-    ScopedReadUpdates.publish(:attention_changed, organization_id, mission_id)
-  end
-
-  # A flush that ended transient after quarantining some entries: they leave the buffer, and the
-  # retry takes a fresh segment id (the retained one held them), so every retry makes progress.
-  defp drop_quarantined(state, mission_id, quarantined) do
-    gone = MapSet.new(quarantined, &{&1.entry["record_kind"], &1.entry["record_id"]})
-
-    queue =
-      state.buffers
-      |> Map.fetch!(mission_id)
-      |> :queue.filter(&(not MapSet.member?(gone, {&1["record_kind"], &1["record_id"]})))
-
-    state
-    |> put_in([:buffers, mission_id], queue)
-    |> put_in([:buffer_sizes, mission_id], :queue.len(queue))
-    |> update_in([:segment_ids], &Map.delete(&1, mission_id))
-  end
-
-  defp cancel_flush_timer(state, mission_id) do
-    case Map.pop(state.timer_refs, mission_id) do
-      {nil, _timer_refs} ->
-        state
-
-      {{timer_ref, _flush_ref}, timer_refs} ->
-        _ = Process.cancel_timer(timer_ref)
-        %{state | timer_refs: timer_refs}
-    end
-  end
-
-  defp maybe_mark_buffer_started(state, mission_id, buffered_size, enqueue_ms)
-       when is_integer(buffered_size) do
-    if buffered_size == 0 do
-      put_in(state.buffer_started_at_ms[mission_id], enqueue_ms)
-    else
-      state
-    end
-  end
-
-  defp build_stats(state, mission_id) do
-    metrics = ensure_metrics(Map.get(state.metrics, mission_id))
-    queue_depth = Map.get(state.buffer_sizes, mission_id, 0)
-
-    oldest_buffered_age_ms =
-      case Map.get(state.buffer_started_at_ms, mission_id) do
-        nil -> 0
-        started_at_ms -> max(System.monotonic_time(:millisecond) - started_at_ms, 0)
-      end
-
-    %{
-      queue_depth: queue_depth,
-      processing?: Map.has_key?(state.timer_refs, mission_id),
-      backpressured?: Map.has_key?(state.retry_counts, mission_id),
-      oldest_buffered_age_ms: oldest_buffered_age_ms,
-      flush_count: metrics.flush_count,
-      flush_failure_count: metrics.flush_failure_count,
-      last_error: metrics.last_flush_error,
-      last_flush_error: metrics.last_flush_error,
-      last_completed_at: metrics.last_completed_at,
-      flushed_count: metrics.flushed_count,
-      segment_count: metrics.segment_count,
-      flush_total_us: metrics.flush_total_us,
-      avg_flush_us: average(metrics.flush_total_us, metrics.flush_count),
-      flushed_bytes_total: metrics.flushed_bytes_total,
-      avg_segment_bytes: average(metrics.flushed_bytes_total, metrics.segment_count)
-    }
-  end
-
-  defp ensure_metrics(nil), do: zero_metrics()
-  defp ensure_metrics(metrics), do: Map.merge(zero_metrics(), metrics)
-
-  defp normalize_state(state) do
-    buffers =
-      state
-      |> Map.get(:buffers, %{})
-      |> Enum.into(%{}, fn {mission_id, buffer} -> {mission_id, normalize_buffer(buffer)} end)
-
-    buffer_sizes =
-      case Map.get(state, :buffer_sizes) do
-        nil ->
-          build_buffer_sizes(buffers)
-
-        buffer_sizes ->
-          Enum.reduce(buffers, buffer_sizes, fn {mission_id, buffer}, acc ->
-            Map.put_new(acc, mission_id, buffer_length(buffer))
-          end)
-      end
-
-    state
-    |> Map.put(:buffers, buffers)
-    |> Map.put(:buffer_sizes, buffer_sizes)
-    |> Map.put_new(:segment_ids, %{})
-    |> Map.put_new(:retry_counts, %{})
-  end
-
-  defp normalize_buffer(buffer) when is_list(buffer), do: :queue.from_list(buffer)
-
-  defp normalize_buffer({front, rear} = queue) when is_list(front) and is_list(rear), do: queue
-
-  defp build_buffer_sizes(buffers) do
-    Enum.into(buffers, %{}, fn {mission_id, buffer} -> {mission_id, buffer_length(buffer)} end)
-  end
-
-  defp buffer_length(buffer) when is_list(buffer), do: length(buffer)
-
-  defp buffer_length({front, rear}) when is_list(front) and is_list(rear),
-    do: :queue.len({front, rear})
-
-  defp normalize_records_batch(records_batch) do
-    Enum.reduce_while(records_batch, {:ok, []}, fn
+  # The caller builds the entries, so the writer only buffers and writes.
+  defp build_entries(records_batch) do
+    records_batch
+    |> Enum.reduce_while({:ok, []}, fn
       {%RawEvidence{} = raw_evidence, transfer_frame_records, packet_records}, {:ok, acc}
       when is_list(transfer_frame_records) and is_list(packet_records) ->
         entries = FileSystem.build_entries(raw_evidence, transfer_frame_records, packet_records)
-        {:cont, {:ok, [{raw_evidence.mission_id, entries} | acc]}}
+        {:cont, {:ok, [{partition_key(raw_evidence), entries} | acc]}}
 
       _other, {:ok, _acc} ->
         {:halt, {:error, :invalid_protocol_record_batch}}
     end)
     |> case do
-      {:ok, mission_entries} -> {:ok, Enum.reverse(mission_entries)}
-      {:error, reason} -> {:error, reason}
+      {:ok, keyed} ->
+        {:ok,
+         keyed
+         |> Enum.reverse()
+         |> Enum.reject(fn {_key, entries} -> entries == [] end)
+         |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+         |> Enum.map(fn {key, lists} -> {key, Enum.concat(lists)} end)}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
-  defp enqueue_reply(state, mission_entries) do
-    case Enum.find(mission_entries, fn {mission_id, _entries} ->
-           Map.has_key?(state.retry_counts, mission_id)
-         end) do
-      nil ->
-        {:reply, :ok, enqueue_entries(state, mission_entries)}
+  # Starts the partition's writer if needed; a writer that idled out between the lookup and the
+  # call is started again once.
+  defp call(opts, key, message, timeout, attempts \\ 2) do
+    pid = ensure_started(opts, key)
+    GenServer.call(pid, message, timeout)
+  catch
+    :exit, {reason, _call} when reason in [:noproc, :normal] and attempts > 1 ->
+      call(opts, key, message, timeout, attempts - 1)
+  end
 
-      {mission_id, _entries} ->
-        # The journal still owns unacknowledged work. A failed flush must not
-        # let its caller's retries append another copy of that same batch.
-        {:reply, {:error, {:protocol_archive_backpressured, mission_id}}, state}
+  defp call_running(opts, key, message, timeout) do
+    case Registry.lookup(registry(opts), key) do
+      [{pid, _value}] ->
+        try do
+          GenServer.call(pid, message, timeout)
+        catch
+          :exit, {reason, _call} when reason in [:noproc, :normal] -> idle_reply(message)
+        end
+
+      [] ->
+        idle_reply(message)
     end
   end
 
-  defp enqueue_entries(state, []), do: state
+  defp idle_reply(:stats), do: Mission.idle_stats()
+  defp idle_reply(:backpressured?), do: false
+  defp idle_reply(_message), do: :ok
 
-  defp enqueue_entries(state, mission_entries) do
-    enqueue_ms = System.monotonic_time(:millisecond)
+  defp ensure_started(opts, {mission_id, _partition} = key) do
+    case Registry.lookup(registry(opts), key) do
+      [{pid, _value}] ->
+        pid
 
-    mission_entries
-    |> Enum.reject(fn {_mission_id, entries} -> entries == [] end)
-    |> Enum.group_by(fn {mission_id, _entries} -> mission_id end, fn {_mission_id, entries} ->
-      entries
-    end)
-    |> Enum.reduce(state, fn {mission_id, entry_lists}, acc ->
-      merged_entries = List.flatten(entry_lists)
-      buffered_queue = Map.get(acc.buffers, mission_id, :queue.new())
-      buffered_size = Map.get(acc.buffer_sizes, mission_id, 0)
-      next_queue = queue_join(buffered_queue, merged_entries)
-      next_size = buffered_size + length(merged_entries)
+      [] ->
+        child =
+          {Mission,
+           name: {:via, Registry, {registry(opts), key}},
+           mission_id: mission_id,
+           base_path: Keyword.fetch!(opts, :base_path),
+           repo: Keyword.get(opts, :repo, Repo),
+           archive_backend: FileSystem.archive_backend(opts),
+           flush_interval_ms: Keyword.get(opts, :flush_interval_ms, @default_flush_interval_ms),
+           flush_count: Keyword.get(opts, :flush_count, @default_flush_count)}
 
-      next_state =
-        acc
-        |> put_in([:buffers, mission_id], next_queue)
-        |> put_in([:buffer_sizes, mission_id], next_size)
-        |> maybe_mark_buffer_started(mission_id, buffered_size, enqueue_ms)
-        |> maybe_schedule_flush(mission_id)
-
-      if next_size >= next_state.flush_count do
-        reschedule_flush(next_state, mission_id, 0)
-      else
-        next_state
-      end
-    end)
+        case DynamicSupervisor.start_child(writers(opts), child) do
+          {:ok, pid} -> pid
+          {:error, {:already_started, pid}} -> pid
+        end
+    end
   end
 
-  defp queue_join(queue, []), do: queue
-
-  defp queue_join(queue, entries) do
-    :queue.join(queue, :queue.from_list(entries))
+  # The keys of the running writers: a mission's, or all of them for `nil`.
+  defp running(mission_id, opts) do
+    guard = if mission_id, do: [{:==, {:element, 1, :"$1"}, mission_id}], else: []
+    Registry.select(registry(opts), [{{:"$1", :_, :_}, guard, [:"$1"]}])
   end
 
-  defp zero_metrics do
-    %{
-      flush_count: 0,
-      flush_failure_count: 0,
-      last_flush_error: nil,
-      last_completed_at: nil,
-      flushed_count: 0,
-      segment_count: 0,
-      flush_total_us: 0,
-      flushed_bytes_total: 0
-    }
+  defp merge_stats([one]), do: one
+
+  defp merge_stats(many) do
+    sum = fn field -> many |> Enum.map(& &1[field]) |> Enum.sum() end
+    flushes = sum.(:flush_count)
+    segments = sum.(:segment_count)
+
+    many
+    |> hd()
+    |> Map.merge(%{
+      queue_depth: sum.(:queue_depth),
+      processing?: Enum.any?(many, & &1.processing?),
+      backpressured?: Enum.any?(many, & &1.backpressured?),
+      oldest_buffered_age_ms: many |> Enum.map(& &1.oldest_buffered_age_ms) |> Enum.max(),
+      flush_count: flushes,
+      flush_failure_count: sum.(:flush_failure_count),
+      flushed_count: sum.(:flushed_count),
+      batches_flushed: sum.(:batches_flushed),
+      avg_batches_per_flush: ratio(sum.(:batches_flushed), flushes),
+      segment_count: segments,
+      flush_total_us: sum.(:flush_total_us),
+      avg_flush_us: ratio(sum.(:flush_total_us), flushes),
+      flushed_bytes_total: sum.(:flushed_bytes_total),
+      avg_segment_bytes: ratio(sum.(:flushed_bytes_total), segments)
+    })
   end
 
-  defp average(_total, 0), do: 0.0
-  defp average(total, count), do: total / count
+  defp ratio(_total, 0), do: 0.0
+  defp ratio(total, count), do: total / count
 
   defp server(opts), do: Keyword.get(opts, :name, __MODULE__)
+  defp registry(opts), do: Module.concat(server(opts), Registry)
+  defp writers(opts), do: Module.concat(server(opts), Writers)
 end
