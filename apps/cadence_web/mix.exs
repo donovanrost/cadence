@@ -106,10 +106,9 @@ defmodule CadenceWeb.MixProject do
   end
 
   # The federation browser tests. With CADENCE_BROWSER_SHARD=k/n (CI's parallel browser jobs)
-  # only every n-th file from the k-th runs, so the order balances the shards: the two
-  # federation-fixture suites, which build every plugin, are the heaviest and alternate.
+  # only every n-th file from the k-th runs, so the order balances the shards; a shard with no
+  # file has nothing to run.
   @federation_browser_tests [
-    "test/cadence_web/ops_contact_scheduling_page_test.exs",
     "browser_test/cadence_web/assets/command_workspace_browser_test.exs"
   ]
 
@@ -140,6 +139,14 @@ defmodule CadenceWeb.MixProject do
         {k, n} -> shard_files(@federation_browser_tests, k, n)
       end
 
+    run_browser_files(files)
+  end
+
+  # `mix test` without files would run every browser_smoke test, so an empty shard runs nothing.
+  defp run_browser_files([]),
+    do: Mix.shell().info("No federation browser test files in this shard")
+
+  defp run_browser_files(files) do
     Mix.Task.reenable("cmd")
 
     Mix.Task.run(
@@ -149,13 +156,8 @@ defmodule CadenceWeb.MixProject do
     )
   end
 
-  defp shard_files(files, k, n) do
-    case for({file, index} <- Enum.with_index(files), rem(index, n) == k - 1, do: file) do
-      # mix test without files would run every browser_smoke test instead of none.
-      [] -> Mix.raise("CADENCE_BROWSER_SHARD=#{k}/#{n} selects no browser test files")
-      selected -> selected
-    end
-  end
+  defp shard_files(files, k, n),
+    do: for({file, index} <- Enum.with_index(files), rem(index, n) == k - 1, do: file)
 
   defp browser_shard do
     case System.get_env("CADENCE_BROWSER_SHARD") do
