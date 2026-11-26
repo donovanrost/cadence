@@ -57,6 +57,42 @@ defmodule Cadence.ContactPlanning.FleetOptimizerTest do
              "requirement_already_satisfied"
   end
 
+  test "streamed snapshots retain decisions and reject missing locked evidence" do
+    requirement = requirement("stream")
+
+    first =
+      snapshot(requirement, "first", 3_600, 4_500, provider: "provider-a", station: "station-a")
+
+    second =
+      snapshot(requirement, "second", 5_400, 6_300,
+        provider: "provider-a",
+        station: "station-a"
+      )
+
+    policy = policy()
+
+    assert {:ok, expected} =
+             FleetOptimizer.optimize([requirement], [first, second], policy, now: @now)
+
+    assert {:ok, streamed} =
+             FleetOptimizer.optimize_stream(
+               [requirement],
+               Stream.map([second, first, second], & &1),
+               policy,
+               now: @now
+             )
+
+    assert streamed.selected_snapshot_ids == expected.selected_snapshot_ids
+    assert streamed.decisions == expected.decisions
+    assert streamed.coverage_by_requirement == expected.coverage_by_requirement
+
+    assert {:error, :fleet_optimizer_locked_snapshot_not_found} =
+             FleetOptimizer.optimize_stream([requirement], Stream.map([], & &1), policy,
+               now: @now,
+               locked_snapshot_ids: ["snapshot-missing"]
+             )
+  end
+
   test "earlier demand wins and same-spacecraft overlap is a hard fleet constraint" do
     early =
       requirement("early",

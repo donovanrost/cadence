@@ -5,7 +5,9 @@ defmodule Cadence.Management.Contacts.Store.FleetPlanningDecisionRow do
 
   import Ecto.Changeset
 
+  alias Cadence.ContactPlanning.ContentHash
   alias Cadence.ContactPlanning.FleetPlanningDecision
+  alias Cadence.Management.Contacts.Store.FleetPlanningScoreDocumentRow
   alias Cadence.Persistence.JsonDocument
 
   @primary_key {:fleet_planning_decision_id, :string, autogenerate: false}
@@ -20,8 +22,15 @@ defmodule Cadence.Management.Contacts.Store.FleetPlanningDecisionRow do
     field(:score, :integer)
     field(:rank, :integer)
     field(:hard_constraint_document, :map, default: %{})
-    field(:score_document, :map, default: %{})
+    field(:score_document_sha256, :string)
     field(:explanation_document, :map, default: %{})
+
+    belongs_to(:score_evidence, FleetPlanningScoreDocumentRow,
+      type: :string,
+      foreign_key: :score_document_sha256,
+      references: :score_document_sha256,
+      define_field: false
+    )
 
     timestamps()
   end
@@ -36,7 +45,7 @@ defmodule Cadence.Management.Contacts.Store.FleetPlanningDecisionRow do
     :score,
     :rank,
     :hard_constraint_document,
-    :score_document,
+    :score_document_sha256,
     :explanation_document
   ]
 
@@ -56,7 +65,7 @@ defmodule Cadence.Management.Contacts.Store.FleetPlanningDecisionRow do
   end
 
   @spec to_domain(struct()) :: FleetPlanningDecision.t()
-  def to_domain(%__MODULE__{} = row) do
+  def to_domain(%__MODULE__{score_evidence: %FleetPlanningScoreDocumentRow{} = evidence} = row) do
     FleetPlanningDecision.new(%{
       fleet_planning_decision_id: row.fleet_planning_decision_id,
       fleet_planning_run_id: row.fleet_planning_run_id,
@@ -67,13 +76,25 @@ defmodule Cadence.Management.Contacts.Store.FleetPlanningDecisionRow do
       score: row.score,
       rank: row.rank,
       hard_constraint_document: JsonDocument.unwrap_value(row.hard_constraint_document),
-      score_document: JsonDocument.unwrap_value(row.score_document),
+      score_document: JsonDocument.unwrap_value(evidence.score_document),
       explanation_document: JsonDocument.unwrap_value(row.explanation_document),
       inserted_at: row.inserted_at
     })
   end
 
-  defp domain_attrs(decision) do
+  @spec insert_attrs(FleetPlanningDecision.t(), binary()) :: map()
+  def insert_attrs(%FleetPlanningDecision{} = decision, sha256) do
+    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+
+    decision
+    |> domain_attrs(sha256)
+    |> Map.put(:inserted_at, now)
+  end
+
+  defp domain_attrs(decision),
+    do: domain_attrs(decision, ContentHash.sha256(decision.score_document))
+
+  defp domain_attrs(decision, sha256) do
     %{
       fleet_planning_decision_id: decision.fleet_planning_decision_id,
       fleet_planning_run_id: decision.fleet_planning_run_id,
@@ -84,7 +105,7 @@ defmodule Cadence.Management.Contacts.Store.FleetPlanningDecisionRow do
       score: decision.score,
       rank: decision.rank,
       hard_constraint_document: JsonDocument.wrap_value(decision.hard_constraint_document),
-      score_document: JsonDocument.wrap_value(decision.score_document),
+      score_document_sha256: sha256,
       explanation_document: JsonDocument.wrap_value(decision.explanation_document)
     }
   end

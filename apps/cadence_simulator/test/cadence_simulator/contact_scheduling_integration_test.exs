@@ -14,6 +14,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
     ContactRequirements,
     FleetPlanner,
     FleetPlanningPolicies,
+    FleetPlanningRuns,
     Planner
   }
 
@@ -931,20 +932,34 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
     concurrency_summary = Agent.get(concurrency, & &1)
     Agent.stop(concurrency)
 
+    refs =
+      FleetPlanningRuns.list_requirement_refs(
+        result.run.organization_id,
+        result.run.mission_id,
+        result.run.fleet_planning_run_id
+      )
+
+    decisions =
+      FleetPlanningRuns.list_decisions(
+        result.run.organization_id,
+        result.run.mission_id,
+        result.run.fleet_planning_run_id
+      )
+
     assert concurrency_summary.maximum > 1
     assert concurrency_summary.maximum <= 16
     assert result.run.lifecycle_state in [:completed, :partial]
     assert result.run.phase == :finished
-    assert length(result.requirement_refs) == 300
-    assert Enum.all?(result.requirement_refs, &(&1.input_state == :searched))
-    assert result.decisions != []
+    assert length(refs) == 300
+    assert Enum.all?(refs, &(&1.input_state == :searched))
+    assert decisions != []
     assert result.plan.lifecycle_state == :draft
     assert result.plan_version.selected_snapshot_ids != []
     assert result.run.candidate_contact_plan_id == result.plan.contact_plan_id
 
     assert get_in(result.run.progress_document, ["requirements_total"]) == 300
 
-    assert Enum.all?(result.decisions, fn decision ->
+    assert Enum.all?(decisions, fn decision ->
              decision.disposition in [:selected, :displaced, :ineligible, :locked] and
                is_map(decision.explanation_document)
            end)
