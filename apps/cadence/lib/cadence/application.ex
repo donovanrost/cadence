@@ -104,7 +104,8 @@ defmodule Cadence.Application do
   defp retention_children do
     Cadence.Persistence.Retention.children([
       Cadence.Runtime.PartitionStreamKeys.Retention,
-      Cadence.IngressArchive.Retention
+      Cadence.IngressArchive.Retention,
+      Cadence.Protocol.RecordArchive.FileSystem.Retention
     ])
   end
 
