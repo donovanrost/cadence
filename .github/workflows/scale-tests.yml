@@ -83,7 +83,7 @@ jobs:
           --output "$RUNNER_TEMP/scale-test-results"
       - name: Upload logs and timings
         if: ${{ !cancelled() && (steps.repeat.outcome == 'success' || steps.repeat.outcome == 'failure') }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d32962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: scale-test-results-${{ github.run_attempt }}
           path: ${{ runner.temp }}/scale-test-results/
