@@ -1,8 +1,10 @@
 import { onBeforeUnmount, onMounted, ref, watch, type Ref } from "vue";
 
 /**
- * Windowed rows for long tables (lead's kit, 11-15; Fleet at 1,000 craft). Fixed row height: the
- * rows in view plus `overscan` either side render, between spacers of the skipped rows' height.
+ * Windowed rows for long tables and lists (lead's kit, 11-15; Fleet at 1,000 craft). Fixed row
+ * height: the rows in view plus `overscan` either side render, between spacers of the skipped
+ * rows' height. A table's rows carry `aria-rowindex` (ApTable); a list's items carry
+ * `data-row-index`, their 0-based index (Fleet's phone list, #868).
  */
 export type VirtualOptions = Readonly<{ rowHeight: number; overscan?: number | undefined }>;
 
@@ -63,9 +65,21 @@ export function scrollingAncestor(el: HTMLElement | null): HTMLElement | null {
   return null;
 }
 
+/** The 0-based row of a focused element: a list item's `data-row-index`, or a table row's. */
+function rowIndexOf(target: EventTarget | null): number | null {
+  const row =
+    target instanceof Element ? target.closest("[data-row-index], tr[aria-rowindex]") : null;
+  if (!row) return null;
+  const index = row.hasAttribute("data-row-index")
+    ? Number(row.getAttribute("data-row-index"))
+    : Number(row.getAttribute("aria-rowindex")) - 2;
+  return Number.isFinite(index) ? index : null;
+}
+
 /**
- * The live window for a table body: listens to its scroller (given, else the nearest scrolling
- * ancestor, else the window) and resizes, once per animation frame, and to focus inside the body.
+ * The live window for a table body or a list: listens to its scroller (given, else the nearest
+ * scrolling ancestor, else the window) and resizes, once per animation frame, and to focus inside
+ * the body, so a focused row stays rendered.
  */
 export function useRowWindow(
   body: Readonly<Ref<HTMLElement | null>>,
@@ -111,9 +125,7 @@ export function useRowWindow(
     if (!frame) measure();
   };
   const onFocus = (e: FocusEvent) => {
-    const row = e.target instanceof Element ? e.target.closest("tr[aria-rowindex]") : null;
-    const index = row ? Number(row.getAttribute("aria-rowindex")) - 2 : NaN;
-    focused.value = Number.isFinite(index) ? index : null;
+    focused.value = rowIndexOf(e.target);
     measure();
   };
   const detach = () => {

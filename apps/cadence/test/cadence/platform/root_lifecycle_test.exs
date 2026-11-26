@@ -657,7 +657,7 @@ defmodule Cadence.Platform.RootLifecycleTest do
       })
 
     assert %CommandRequestRow{} =
-             Cadence.Repo.insert!(CommandRequestRow.changeset(command_request))
+             Cadence.Repo.insert!(Cadence.CommandMemberFixtures.changeset(command_request))
 
     assert %CommandQueueEntryRow{} =
              Cadence.Repo.insert!(CommandQueueEntryRow.changeset(queue_entry))

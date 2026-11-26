@@ -43,7 +43,7 @@ const rule = object({
    * U79 (api, additive; optional until it lands): where the route comes from, the extra route it
    * belongs to (Edit / Remove key on it; two legs share one), and its station.
    */
-  origin: decoders.optional(decoders.knownText(["legacy", "profile", "spacecraft"] as const)),
+  origin: decoders.optional(decoders.knownText(["profile", "spacecraft"] as const)),
   route_id: decoders.optional(nullable(token)),
   station: decoders.optional(
     nullable(

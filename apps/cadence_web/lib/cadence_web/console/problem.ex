@@ -298,6 +298,8 @@ defmodule CadenceWeb.Console.Problem do
       {409, "Not approved: Cadence is still preparing this revision. Try again in a moment."},
     mission_model_revision_not_approvable:
       {409, "Not approved: this revision was already approved, rejected or replaced."},
+    mission_model_revision_not_withdrawable:
+      {409, "Not withdrawn: only an approved revision's approval can be withdrawn."},
     mission_model_revision_not_found: {404, "Mission model revision not found."},
     mission_model_comparison_report_not_found: {404, "Comparison report not found."},
     mission_model_decision_reason_required: {422, "Give a reason first."},
@@ -337,6 +339,8 @@ defmodule CadenceWeb.Console.Problem do
        "This spacecraft changed since you started editing. Compare the latest saved configuration before saving again."},
     spacecraft_configuration_review_stale:
       {409, "The active fleet configuration changed. Review the latest state and submit again."},
+    nothing_to_review:
+      {422, "Nothing to review: every saved spacecraft configuration is already active."},
     spacecraft_configuration_review_unavailable:
       {409, "Save your current configuration and resolve external changes before submitting it."},
     spacecraft_switch_set_by_change_set:

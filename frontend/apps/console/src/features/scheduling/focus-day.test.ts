@@ -26,6 +26,7 @@ const plan = {
   demand: {
     rule_met: 0,
     rule_total: 1,
+    coverage: { spacecraft_uncovered: 1, contacts_short: 1, gaps: 1 },
     spacecraft: [
       {
         spacecraft_id: "sc1",

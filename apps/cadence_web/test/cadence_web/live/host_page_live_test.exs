@@ -42,7 +42,6 @@ defmodule CadenceWeb.HostPageLiveTest do
   test "ordinary feature navigation retains the LiveView and refreshes shell context" do
     {conn, organization, mission} = navigation_fixture()
     second = TestFixtures.persist_mission!(organization)
-    spacecraft = TestFixtures.persist_spacecraft!(mission)
     # §11c A: "/" left the host (it redirects to the console), so navigation starts in a mission.
     {:ok, view, _html} = live(conn, "/missions/#{second.mission_id}/ops/explore")
     pid = view.pid
@@ -51,8 +50,6 @@ defmodule CadenceWeb.HostPageLiveTest do
           # §11c B: the mission's setup pages redirect to the console; these stay in the host.
           {"/missions/#{mission.mission_id}/ops", "ops", mission.mission_id},
           {"/missions/#{mission.mission_id}/ops/timeline", "ops", mission.mission_id},
-          {"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}",
-           "mission_sidebar", mission.mission_id},
           {"/missions/#{mission.mission_id}/ops/explore", "ops", mission.mission_id},
           {"/missions/#{second.mission_id}/ops/explore", "ops", second.mission_id}
         ] do
@@ -79,19 +76,6 @@ defmodule CadenceWeb.HostPageLiveTest do
       assert {:error, {:redirect, %{to: "/console"}}} =
                render_hook(view, "host:context", %{"path" => target})
     end
-  end
-
-  test "a spacecraft from another mission cannot be selected through a context request" do
-    {conn, organization, mission} = navigation_fixture()
-    other = TestFixtures.persist_mission!(organization)
-    spacecraft = TestFixtures.persist_spacecraft!(other)
-    {:ok, view, _html} = live(conn, "/missions/#{mission.mission_id}/ops")
-    fallback = "/console"
-
-    assert {:error, {:redirect, %{to: ^fallback}}} =
-             render_hook(view, "host:context", %{
-               "path" => "/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}"
-             })
   end
 
   test "revoked browser sessions cannot keep navigating on an existing socket" do

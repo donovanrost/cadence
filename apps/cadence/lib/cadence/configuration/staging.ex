@@ -12,7 +12,7 @@ defmodule Cadence.Configuration.Staging do
 
   import Ecto.Query
 
-  alias Cadence.Configuration.{ChangeRow, ChangeSetStore, Document, Kinds, OpRow}
+  alias Cadence.Configuration.{ChangeRow, ChangeSetStore, Document, Kinds, OpRow, Translation}
   alias Cadence.Ids
   alias Cadence.Repo
 
@@ -136,11 +136,12 @@ defmodule Cadence.Configuration.Staging do
 
   defp prepare_all(organization_id, mission_id, ops) do
     deleting = deleting(mission_id, ops)
+    documents = prefetch_documents(organization_id, mission_id, ops)
 
     ops
     |> Enum.with_index()
     |> Enum.reduce_while({:ok, []}, fn {op, index}, {:ok, acc} ->
-      case prepare(organization_id, mission_id, op, deleting) do
+      case prepare(organization_id, mission_id, op, deleting, documents) do
         {:ok, prepared} -> {:cont, {:ok, [prepared | acc]}}
         {:error, errors} when is_list(errors) -> {:halt, {:error, {:invalid_op, index, errors}}}
         # A kind's own refusal with details (e.g. {:in_use, uses}, ux U82) passes through as is.
@@ -153,11 +154,27 @@ defmodule Cadence.Configuration.Staging do
     end
   end
 
-  defp prepare(organization_id, mission_id, op, deleting) do
+  defp prefetch_documents(org, mission, ops) do
+    edits =
+      for op <- ops,
+          {:ok, action} <- [action(op)],
+          action in ["update", "delete"],
+          is_binary(Map.get(op, :entity_id)),
+          {:ok, kind} <- [kind(op)],
+          function_exported?(kind, :load_batch, 3),
+          do: {kind, op.entity_id}
+
+    edits
+    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+    |> Map.new(fn {kind, ids} -> {kind, kind.load(org, mission, ids)} end)
+  end
+
+  defp prepare(organization_id, mission_id, op, deleting, documents) do
     with {:ok, kind} <- kind(op),
          {:ok, action} <- action(op),
          {:ok, options} <- options(kind, action, Map.get(op, :options)),
-         {:ok, prepared} <- prepare(kind, action, organization_id, mission_id, op, deleting) do
+         {:ok, prepared} <-
+           prepare(kind, action, organization_id, mission_id, op, deleting, documents) do
       {:ok, put_options(prepared, options)}
     end
   end
@@ -179,22 +196,29 @@ defmodule Cadence.Configuration.Staging do
   defp put_options(prepared, options),
     do: %{prepared | payload: Map.put(prepared.payload, "options", options)}
 
-  defp prepare(kind, "create", organization_id, mission_id, op, _deleting) do
+  defp prepare(kind, "create", organization_id, mission_id, op, _deleting, _documents) do
     entity_id = Map.get(op, :entity_id) || Ids.new(kind.id_prefix())
 
-    with {:ok, document} <- kind.normalize(:create, entity_id, Document.normalize(op[:document])),
+    with {:ok, document} <-
+           Translation.document(
+             kind,
+             organization_id,
+             mission_id,
+             Document.normalize(op[:document])
+           ),
+         {:ok, document} <- kind.normalize(:create, entity_id, document),
          entity_id = Map.get(op, :entity_id) || create_entity_id(kind, document, entity_id),
          :ok <- not_live(kind, organization_id, mission_id, entity_id, document) do
       {:ok, op_attrs(kind, "create", entity_id, %{"document" => document}, %{}, [])}
     end
   end
 
-  defp prepare(kind, action, organization_id, mission_id, op, deleting) do
+  defp prepare(kind, action, organization_id, mission_id, op, deleting, documents) do
     entity_id = Map.get(op, :entity_id)
 
-    with {:ok, current} <- current(kind, organization_id, mission_id, entity_id),
+    with {:ok, current} <- current(kind, organization_id, mission_id, entity_id, documents),
          :ok <- stage_check(kind, organization_id, mission_id, action, entity_id, deleting) do
-      prepare_existing(kind, action, entity_id, current, op)
+      prepare_existing(kind, action, {organization_id, mission_id}, entity_id, current, op)
     end
   end
 
@@ -219,14 +243,16 @@ defmodule Cadence.Configuration.Staging do
       else: minted
   end
 
-  defp prepare_existing(kind, "delete", entity_id, current, _op) do
+  defp prepare_existing(kind, "delete", _tenant, entity_id, current, _op) do
     with {:ok, _} <- kind.normalize(:delete, entity_id, nil) do
       {:ok, op_attrs(kind, "delete", entity_id, %{}, %{"sha256" => Document.sha256(current)}, [])}
     end
   end
 
-  defp prepare_existing(kind, "update", entity_id, current, op) do
+  defp prepare_existing(kind, "update", {organization_id, mission_id}, entity_id, current, op) do
     with {:ok, changes} <- changes(op, current),
+         {:ok, changes} <-
+           Translation.changes(kind, organization_id, mission_id, current, changes),
          {:ok, proposed} <- kind.normalize(:update, entity_id, Document.patch(current, changes)) do
       changes = Enum.map(changes, &%{&1 | "value" => Document.get(proposed, &1["path"])})
       paths = Enum.map(changes, & &1["path"])
@@ -251,11 +277,14 @@ defmodule Cadence.Configuration.Staging do
 
   defp change_value(change), do: Map.get(change, :value, Map.get(change, "value"))
 
-  defp current(_kind, _organization_id, _mission_id, nil),
+  defp current(_kind, _organization_id, _mission_id, nil, _documents),
     do: {:error, [%{path: "entity_id", message: "Choose what to change"}]}
 
-  defp current(kind, organization_id, mission_id, entity_id) do
-    case Map.get(kind.load(organization_id, mission_id, [entity_id]), entity_id) do
+  defp current(kind, organization_id, mission_id, entity_id, documents) do
+    live =
+      Map.get_lazy(documents, kind, fn -> kind.load(organization_id, mission_id, [entity_id]) end)
+
+    case Map.get(live, entity_id) do
       nil -> {:error, absent(kind, organization_id, mission_id, entity_id)}
       document -> {:ok, Document.normalize(document)}
     end

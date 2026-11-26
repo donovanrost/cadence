@@ -40,18 +40,29 @@ const filter = computed(() => parseFilter(route.query));
 /**
  * OpsLists.md › Fleet, option A: with room, the table panel fills to the bottom and is the one
  * vertical scroller (headings and Name stay). With under 360px for it, the screen scrolls
- * instead (option C). Phones get the row list, and the matrix keeps its layout.
+ * instead (option C). Phones get the row list and, like option C, the screen scrolls: the panel
+ * takes its full height and is no pane of its own (#868; as a pane it shrank to the ~57px left
+ * under the filters and showed one craft). The matrix keeps its layout.
  */
 const screen = ref<HTMLElement | null>(null);
 const panel = ref<ComponentPublicInstance | null>(null);
 const small = useSmallScreen();
 const tableView = computed(() => view.value === "table" && !small.value);
+const phoneList = computed(() => view.value === "table" && small.value);
 const boxed = useTableBox(screen, panel, tableView);
 const screenClass = computed(() =>
-  boxed.value ? "" : tableView.value ? "overflow-auto" : "max-console:overflow-auto",
+  boxed.value
+    ? ""
+    : tableView.value || phoneList.value
+      ? "overflow-auto"
+      : "max-console:overflow-auto",
 );
 const panelClass = computed(() =>
-  boxed.value ? "min-h-0 flex-1" : tableView.value ? "flex-none" : "console:min-h-0 console:flex-1",
+  boxed.value
+    ? "min-h-0 flex-1"
+    : tableView.value || phoneList.value
+      ? "flex-none"
+      : "console:min-h-0 console:flex-1",
 );
 
 const go = (query: Parameters<typeof router.replace>[0]) =>
@@ -98,7 +109,7 @@ const title = computed(() => {
           ref="panel"
           index="F1"
           :title="view === 'table' ? 'Fleet table' : 'Fleet matrix'"
-          pane
+          :pane="!phoneList"
           flush
           :class="panelClass"
         >
@@ -108,15 +119,13 @@ const title = computed(() => {
           >
             <ApButton size="compact" @click="setFilter(NO_FILTER)">Clear filters</ApButton>
           </ApEmptyState>
+          <!-- One list for the viewport, never both: the phone's list renders a link per craft,
+            and hidden with CSS on a desktop it still cost Fleet's first render at 1,000. -->
           <template v-else-if="view === 'table'">
+            <FleetRowList v-if="small" :rows="narrowed(value).rows" :total="value.counts.total" />
             <FleetTable
-              class="max-md:hidden"
+              v-else
               :boxed="boxed"
-              :rows="narrowed(value).rows"
-              :total="value.counts.total"
-            />
-            <FleetRowList
-              class="md:hidden"
               :rows="narrowed(value).rows"
               :total="value.counts.total"
             />

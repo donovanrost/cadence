@@ -12,6 +12,7 @@ defmodule Cadence.Reads.CatalogOverview do
   alias Cadence.Applications.SpacecraftConfiguration.Drafts
   alias Cadence.Catalog
   alias Cadence.Catalog.{Artifact, ImportRun, Revision}
+  alias Cadence.Catalog.CompositionPins
   alias Cadence.MissionModels
   alias Cadence.MissionModels.CompositionViews
   alias Cadence.Reads.Catalog.{Requesters, RevisionBase}
@@ -123,14 +124,12 @@ defmodule Cadence.Reads.CatalogOverview do
       |> named_actors(organization_id)
 
     revision_by_run = Map.new(revisions, &{&1.import_run_id, &1})
+    revisions = with_model_status(revisions, organization_id, mission_id)
 
     %{
       id: id,
       current_revision: current(organization_id, mission_id, List.first(revisions)),
-      revisions:
-        revisions
-        |> with_model_status(organization_id, mission_id)
-        |> Enum.map(&Map.drop(&1, [:import_run_id, :model_revision_id])),
+      revisions: Enum.map(revisions, &Map.drop(&1, [:import_run_id, :model_revision_id])),
       import_runs: run_rows(organization_id, Enum.take(runs, @run_limit), revision_by_run, labels)
     }
   end
@@ -200,7 +199,9 @@ defmodule Cadence.Reads.CatalogOverview do
         :declaration_count,
         :command_count,
         :telemetry_count,
-        :spacecraft_count
+        :spacecraft_count,
+        # #752: what a profile pins for this revision (D3), without listing every revision.
+        :composition_id
       ])
 
   # #146 (U103): each row's requested_by, from two batched name queries per table.
@@ -278,7 +279,9 @@ defmodule Cadence.Reads.CatalogOverview do
       revision: %{
         id: revision.catalog_revision_id,
         number: revision.revision_number,
-        label: revision.revision_label
+        label: revision.revision_label,
+        # D3 (#544): what C3 pins; a rollout stages this composition, never the catalog revision.
+        composition_id: composition_id(organization_id, mission_id, revision)
       },
       base_revision: base && %{id: base.catalog_revision_id, number: base.revision_number},
       diff:
@@ -290,6 +293,13 @@ defmodule Cadence.Reads.CatalogOverview do
             revision.mission_model_revision_id
           )
     }
+  end
+
+  defp composition_id(organization_id, mission_id, %Revision{catalog_revision_id: id}) do
+    case CompositionPins.for_catalog_revision(organization_id, mission_id, id) do
+      {:ok, composition_id} -> composition_id
+      {:error, :none} -> nil
+    end
   end
 
   defp diagnostic(diagnostic) do

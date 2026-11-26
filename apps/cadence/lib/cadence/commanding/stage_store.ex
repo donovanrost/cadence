@@ -1,16 +1,13 @@
 defmodule Cadence.Commanding.StageStore do
   @moduledoc """
-  Persists command stages and staged items, including batch submission into requests.
+  Persists command stages and staged items.
   """
 
   import Ecto.Query
 
   alias Ecto.Changeset
-  alias Ecto.Multi
 
   alias Cadence.Commanding.{
-    CommandRequest,
-    CommandRequestRow,
     CommandStage,
     CommandStageRow,
     LifecyclePolicy,
@@ -19,7 +16,6 @@ defmodule Cadence.Commanding.StageStore do
     StagedCommandItemRow
   }
 
-  alias Cadence.Ids
   alias Cadence.Missions
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Platform.ScopedReadUpdates, as: ReadUpdates
@@ -232,211 +228,6 @@ defmodule Cadence.Commanding.StageStore do
     |> Enum.map(&StagedCommandItemRow.to_domain/1)
   end
 
-  @spec submit_items(binary(), binary(), binary(), [binary()], map()) ::
-          {:ok, [CommandRequest.t()]} | {:error, term()}
-  def submit_items(
-        organization_id,
-        mission_id,
-        command_stage_id,
-        staged_command_item_ids,
-        requested_by
-      )
-      when is_binary(organization_id) and is_binary(mission_id) and is_binary(command_stage_id) and
-             is_list(staged_command_item_ids) and is_map(requested_by) do
-    with :ok <- valid_submission_ids(staged_command_item_ids) do
-      with_locked_stage(organization_id, mission_id, command_stage_id, fn stage_row ->
-        submit_locked(stage_row, staged_command_item_ids, requested_by)
-      end)
-      |> ReadUpdates.publish_result(:commanding_changed, organization_id, mission_id)
-    end
-  end
-
-  defp valid_submission_ids(ids) do
-    if length(ids) in 1..25 and Enum.all?(ids, &Ids.valid_identifier?/1) and
-         length(Enum.uniq(ids)) == length(ids),
-       do: :ok,
-       else: {:error, :invalid_staged_command_selection}
-  end
-
-  @doc "Reserves and resolves an exact finite batch without inserting formal requests."
-  def preview_items(org, mission, stage_id, ids, actor) do
-    with :ok <- valid_submission_ids(ids) do
-      with_locked_stage(org, mission, stage_id, &preview_locked_items(&1, ids, actor))
-    end
-  end
-
-  defp preview_locked_items(stage, ids, actor) do
-    with :ok <- LifecyclePolicy.ensure_stage_editable(stage),
-         {:ok, rows} <-
-           fetch_submission_item_rows(
-             stage.organization_id,
-             stage.mission_id,
-             stage.command_stage_id,
-             ids
-           ) do
-      requests = Enum.map(rows, &build_stage_request(&1, actor))
-
-      RequestValidation.with_authoring_requests(
-        requests,
-        :current,
-        %{},
-        &hold_batch(rows, &1, &2)
-      )
-    end
-  end
-
-  defp hold_batch(rows, validated, snapshot) do
-    requests = Enum.map(validated, &elem(&1, 0))
-
-    with :ok <- unexpired_requests(Enum.zip(rows, requests)) do
-      {:ok,
-       %{
-         requests: requests,
-         expected_basis: snapshot.token,
-         targets:
-           Map.new(validated, fn {request, state} ->
-             {request.command_request_id, state.target_token}
-           end),
-         target_rows:
-           Map.new(validated, fn {request, state} ->
-             {request.command_request_id, state.target}
-           end)
-       }}
-    end
-  end
-
-  @doc "Persists server-held batch semantics while the reviewed model and targets remain locked."
-  def submit_reviewed_items(org, mission, stage_id, held, before_insert) do
-    ids = Enum.map(held.requests, & &1.source_staged_command_item_id)
-
-    with :ok <- valid_submission_ids(ids),
-         true <-
-           is_binary(held.expected_basis) and
-             Enum.all?(held.requests, &is_binary(held.targets[&1.command_request_id])) do
-      with_locked_stage(
-        org,
-        mission,
-        stage_id,
-        &submit_locked_review(&1, ids, held, before_insert)
-      )
-      |> ReadUpdates.publish_result(:commanding_changed, org, mission)
-    else
-      false -> {:error, :command_stage_changed}
-      error -> error
-    end
-  end
-
-  defp submit_locked_review(stage, ids, held, before_insert) do
-    with :ok <- LifecyclePolicy.ensure_stage_editable(stage),
-         {:ok, rows} <-
-           fetch_submission_item_rows(
-             stage.organization_id,
-             stage.mission_id,
-             stage.command_stage_id,
-             ids
-           ),
-         true <- reviewed_intent_matches?(rows, held.requests) do
-      revalidate_submission(stage, ids, rows, held, before_insert)
-    else
-      false -> {:error, :command_stage_changed}
-      error -> error
-    end
-  end
-
-  defp revalidate_submission(stage, ids, rows, held, before_insert) do
-    RequestValidation.with_authoring_requests(
-      held.requests,
-      held.expected_basis,
-      held.targets,
-      fn validated, _ ->
-        with true <- Enum.map(validated, &elem(&1, 0)) == held.requests,
-             :ok <- before_insert.() do
-          insert_validated_submission(stage, ids, rows, validated)
-        else
-          false -> {:error, :command_stage_changed}
-          error -> error
-        end
-      end
-    )
-  end
-
-  defp reviewed_intent_matches?(rows, requests) do
-    fields =
-      ~w(organization_id mission_id source_endpoint_ref mission_model_revision_id command_id argument_values priority not_before expires_at requested_by source_command_stage_id source_staged_command_item_id metadata)a
-
-    length(rows) == length(requests) and
-      Enum.all?(Enum.zip(rows, requests), fn {row, request} ->
-        current = build_stage_request(row, request.requested_by)
-        reviewed_intent = %{request | metadata: Map.delete(request.metadata, "validation_basis")}
-        Map.take(current, fields) == Map.take(reviewed_intent, fields)
-      end)
-  end
-
-  defp submit_locked(stage_row, item_ids, requested_by) do
-    with :ok <- LifecyclePolicy.ensure_stage_editable(stage_row),
-         {:ok, item_rows} <-
-           fetch_submission_item_rows(
-             stage_row.organization_id,
-             stage_row.mission_id,
-             stage_row.command_stage_id,
-             item_ids
-           ) do
-      requests = Enum.map(item_rows, &build_stage_request(&1, requested_by))
-
-      RequestValidation.with_authoring_requests(requests, :current, %{}, fn validated, _ ->
-        insert_validated_submission(stage_row, item_ids, item_rows, validated)
-      end)
-    end
-  end
-
-  defp insert_validated_submission(stage, ids, item_rows, validated) do
-    pairs = Enum.zip(item_rows, Enum.map(validated, fn {request, _} -> request end))
-    with :ok <- unexpired_requests(pairs), do: insert_submission(stage, ids, pairs)
-  end
-
-  defp unexpired_requests(pairs) do
-    Enum.reduce_while(pairs, :ok, fn {_, request}, :ok ->
-      case LifecyclePolicy.ensure_request_not_expired(request) do
-        :ok -> {:cont, :ok}
-        error -> {:halt, error}
-      end
-    end)
-  end
-
-  # The third CommandRequestRow insert besides RequestStore's two: it doesn't refuse a group
-  # marker because build_stage_request builds the metadata server-side and nests the item's own
-  # metadata under "stage_item_metadata", so a top-level "group" can't arrive (four-eyes P0;
-  # pinned in commanding_test).
-  defp insert_submission(stage_row, item_ids, validated_requests) do
-    multi =
-      validated_requests
-      |> Enum.reduce(Multi.new(), fn {item_row, request}, multi ->
-        multi
-        |> Multi.insert(
-          {:command_request, request.command_request_id},
-          CommandRequestRow.changeset(request)
-        )
-        |> Multi.update(
-          {:staged_command_item, item_row.staged_command_item_id},
-          StagedCommandItemRow.submission_changeset(item_row, request.command_request_id)
-        )
-      end)
-      |> maybe_mark_stage_submitted(stage_row, item_ids)
-
-    case Repo.transaction(multi) do
-      {:ok, _changes} ->
-        {:ok,
-         fetch_submitted_requests(
-           validated_requests,
-           stage_row.organization_id,
-           stage_row.mission_id
-         )}
-
-      {:error, _operation, reason, _changes_so_far} ->
-        {:error, reason}
-    end
-  end
-
   defp with_locked_stage(organization_id, mission_id, stage_id, operation) do
     Repo.transaction(fn ->
       case Repo.one(
@@ -455,77 +246,6 @@ defmodule Cadence.Commanding.StageStore do
 
   defp unwrap_locked({:ok, value}), do: value
   defp unwrap_locked({:error, reason}), do: Repo.rollback(reason)
-
-  defp fetch_submitted_requests(validated_requests, organization_id, mission_id) do
-    Enum.map(validated_requests, fn {_row, request} ->
-      fetch_submitted_request(
-        organization_id,
-        mission_id,
-        request.command_request_id
-      )
-    end)
-  end
-
-  defp fetch_submitted_request(organization_id, mission_id, command_request_id) do
-    CommandRequestRow
-    |> Repo.get_by!(
-      organization_id: organization_id,
-      mission_id: mission_id,
-      command_request_id: command_request_id
-    )
-    |> CommandRequestRow.to_domain()
-  end
-
-  defp maybe_mark_stage_submitted(
-         %Multi{} = multi,
-         %CommandStageRow{} = stage_row,
-         submitted_item_ids
-       ) do
-    remaining_draft_count =
-      StagedCommandItemRow
-      |> where(
-        [row],
-        row.organization_id == ^stage_row.organization_id and
-          row.mission_id == ^stage_row.mission_id and
-          row.command_stage_id == ^stage_row.command_stage_id and
-          row.lifecycle_state == "draft" and
-          row.staged_command_item_id not in ^submitted_item_ids
-      )
-      |> select([row], count(row.staged_command_item_id))
-      |> Repo.one()
-
-    if remaining_draft_count == 0 do
-      Multi.update(
-        multi,
-        :command_stage_submitted,
-        CommandStageRow.lifecycle_changeset(stage_row, :submitted)
-      )
-    else
-      multi
-    end
-  end
-
-  defp build_stage_request(item_row, requested_by) do
-    CommandRequest.new(%{
-      mission_id: item_row.mission_id,
-      organization_id: item_row.organization_id,
-      source_endpoint_ref: item_row.source_endpoint_ref,
-      mission_model_revision_id: item_row.mission_model_revision_id,
-      command_id: item_row.command_id,
-      priority: item_row.priority,
-      not_before: item_row.not_before,
-      expires_at: item_row.expires_at,
-      requested_by: requested_by,
-      source_command_stage_id: item_row.command_stage_id,
-      source_staged_command_item_id: item_row.staged_command_item_id,
-      argument_values: JsonDocument.unwrap_value(item_row.argument_values_document),
-      metadata: %{
-        "notes" => item_row.notes,
-        "stage_item_order" => item_row.item_order,
-        "stage_item_metadata" => JsonDocument.unwrap_value(item_row.metadata_document)
-      }
-    })
-  end
 
   defp fetch_stage_row(organization_id, mission_id, command_stage_id) do
     case Repo.get_by(CommandStageRow,
@@ -546,56 +266,6 @@ defmodule Cadence.Commanding.StageStore do
          ) do
       nil -> {:error, :staged_command_item_not_found}
       %StagedCommandItemRow{} = row -> {:ok, row}
-    end
-  end
-
-  defp fetch_submission_item_rows(
-         organization_id,
-         mission_id,
-         command_stage_id,
-         staged_command_item_ids
-       ) do
-    normalized_ids =
-      staged_command_item_ids
-      |> Enum.filter(&is_binary/1)
-      |> Enum.uniq()
-
-    item_rows =
-      StagedCommandItemRow
-      |> where(
-        [row],
-        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-          row.command_stage_id == ^command_stage_id and
-          row.staged_command_item_id in ^normalized_ids
-      )
-      |> where([row], fragment("octet_length(?::text)", row.argument_values_document) <= 32_768)
-      |> where([row], fragment("octet_length(?::text)", row.metadata_document) <= 65_536)
-      |> order_by([row], asc: row.item_order, asc: row.staged_command_item_id)
-      |> lock("FOR UPDATE")
-      |> Repo.all()
-
-    cond do
-      normalized_ids == [] ->
-        {:error, :no_staged_command_items_selected}
-
-      length(item_rows) != length(normalized_ids) ->
-        found_ids = MapSet.new(Enum.map(item_rows, & &1.staged_command_item_id))
-
-        missing_ids =
-          normalized_ids
-          |> Enum.reject(&MapSet.member?(found_ids, &1))
-          |> Enum.sort()
-
-        {:error, {:staged_command_items_not_found, missing_ids}}
-
-      Enum.any?(item_rows, &(&1.lifecycle_state != "draft")) ->
-        row = Enum.find(item_rows, &(&1.lifecycle_state != "draft"))
-
-        {:error,
-         {:staged_command_item_not_editable, row.staged_command_item_id, row.lifecycle_state}}
-
-      true ->
-        {:ok, item_rows}
     end
   end
 

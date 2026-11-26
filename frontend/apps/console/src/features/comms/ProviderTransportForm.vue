@@ -62,7 +62,7 @@ const form = computed(() => ({
 const blocked = computed(() => blockedReason(form.value, ready.value));
 const busy = ref(false);
 const failure = ref<string | null>(null);
-/** #413: a refusal's way out (U79 conversion_in_progress: Open change set), beside its words. */
+/** #413: a refusal's way out (e.g. Open the report), beside its words. */
 const failureLink = ref<FailureOutcome["link"] | null>(null);
 
 async function stage() {

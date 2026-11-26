@@ -13,12 +13,9 @@ defmodule Cadence.CommandingTest do
   alias CCSDS.Transport.COP1.CLCW
 
   alias Cadence.Commanding.{
-    CommandApproval,
-    CommandQueueEntry,
     CommandQueueEntryRow,
     CommandReleaseAttempt,
     CommandRequest,
-    CommandRequestRow,
     CommandStage,
     CommandVerifierInstance,
     ReleaseStore,
@@ -133,230 +130,6 @@ defmodule Cadence.CommandingTest do
     assert listed_item.priority == 1
   end
 
-  test "a staged item whose metadata names a command group submits as a non-member (P0 pin)",
-       %{source_endpoint: source_endpoint, command_model: command_model} do
-    {:ok, stage} =
-      ManagementCommanding.persist_command_stage(
-        @organization_id,
-        CommandStage.new(%{
-          mission_id: @mission_id,
-          stage_name: "Forged group",
-          owner: %{"user_id" => "user-456"},
-          visibility: :shared
-        })
-      )
-
-    group = %{"id" => "command-group-forged", "target_index" => 0, "position" => 0}
-
-    {:ok, item} =
-      ManagementCommanding.persist_staged_command_item(
-        @organization_id,
-        StagedCommandItem.new(%{
-          mission_id: @mission_id,
-          command_stage_id: stage.command_stage_id,
-          source_endpoint_ref: source_endpoint.source_endpoint_id,
-          mission_model_revision_id: command_model.revision_id,
-          command_id: fetch_command_id(command_model, "SET_MODE"),
-          argument_values: %{"mode" => 1},
-          priority: 2,
-          item_order: 0,
-          metadata: %{"group" => group}
-        })
-      )
-
-    assert {:ok, [request]} =
-             ManagementCommanding.submit_staged_command_items(
-               @organization_id,
-               @mission_id,
-               stage.command_stage_id,
-               [item.staged_command_item_id],
-               %{"user_id" => "user-789"}
-             )
-
-    row = Repo.get!(CommandRequestRow, request.command_request_id)
-    assert row.command_group_id == nil
-    refute Map.has_key?(request.metadata, "group")
-    assert request.metadata["stage_item_metadata"] == %{"group" => group}
-  end
-
-  test "submits staged command items into approval-pending command requests when review is required",
-       %{
-         source_endpoint: source_endpoint,
-         command_model: command_model
-       } do
-    command_stage =
-      CommandStage.new(%{
-        mission_id: @mission_id,
-        stage_name: "Pass Load",
-        owner: %{"user_id" => "user-456"},
-        visibility: :shared
-      })
-
-    assert {:ok, persisted_stage} =
-             ManagementCommanding.persist_command_stage(@organization_id, command_stage)
-
-    staged_command_item =
-      StagedCommandItem.new(%{
-        mission_id: @mission_id,
-        command_stage_id: persisted_stage.command_stage_id,
-        source_endpoint_ref: source_endpoint.source_endpoint_id,
-        mission_model_revision_id: command_model.revision_id,
-        command_id: fetch_command_id(command_model, "SET_MODE"),
-        argument_values: %{"mode" => 1},
-        priority: 2,
-        item_order: 0,
-        notes: "Checked by ops"
-      })
-
-    assert {:ok, persisted_item} =
-             ManagementCommanding.persist_staged_command_item(
-               @organization_id,
-               staged_command_item
-             )
-
-    assert {:ok, [command_request]} =
-             ManagementCommanding.submit_staged_command_items(
-               @organization_id,
-               @mission_id,
-               persisted_stage.command_stage_id,
-               [persisted_item.staged_command_item_id],
-               %{"user_id" => "user-789"}
-             )
-
-    assert command_request.lifecycle_state == :approval_pending
-    assert command_request.command_name == "SET_MODE"
-    assert command_request.source_command_stage_id == persisted_stage.command_stage_id
-    assert command_request.source_staged_command_item_id == persisted_item.staged_command_item_id
-    assert command_request.argument_values == %{"mode" => 1}
-    assert command_request.resolved_argument_values == %{"delay_s" => 5, "mode" => 1}
-    assert command_request.priority == 2
-    assert command_request.significance == :hazardous
-    assert command_request.critical == true
-    assert command_request.hazardous == true
-    assert command_request.release_policy_hint == "confirmation_required"
-    assert command_request.requested_by == %{"user_id" => "user-789"}
-
-    assert {:ok, fetched_item} =
-             ManagementCommanding.fetch_staged_command_item(
-               @organization_id,
-               @mission_id,
-               persisted_item.staged_command_item_id
-             )
-
-    assert fetched_item.lifecycle_state == :submitted
-    assert fetched_item.submitted_command_request_id == command_request.command_request_id
-
-    assert {:ok, fetched_stage} =
-             ManagementCommanding.fetch_command_stage(
-               @organization_id,
-               @mission_id,
-               persisted_stage.command_stage_id
-             )
-
-    assert fetched_stage.lifecycle_state == :submitted
-
-    [listed_request] =
-      ManagementCommanding.list_command_requests(
-        @organization_id,
-        @mission_id,
-        command_stage_id: persisted_stage.command_stage_id
-      )
-
-    assert listed_request.command_request_id == command_request.command_request_id
-  end
-
-  test "approves hazardous command requests with separation of duties and then enqueues them", %{
-    source_endpoint: source_endpoint,
-    command_model: command_model
-  } do
-    command_request =
-      CommandRequest.new(%{
-        mission_id: @mission_id,
-        source_endpoint_ref: source_endpoint.source_endpoint_id,
-        mission_model_revision_id: command_model.revision_id,
-        command_id: fetch_command_id(command_model, "SET_MODE"),
-        argument_values: %{"mode" => 2},
-        requested_by: %{"user_id" => "requester-1"}
-      })
-
-    assert {:ok, persisted_request} =
-             ManagementCommanding.persist_command_request(@organization_id, command_request)
-
-    assert persisted_request.lifecycle_state == :approval_pending
-
-    persisted_request_id = persisted_request.command_request_id
-
-    assert {:error, {:command_request_self_approval_not_allowed, ^persisted_request_id}} =
-             ManagementCommanding.approve_command_request(
-               @organization_id,
-               @mission_id,
-               persisted_request.command_request_id,
-               %{"user_id" => "requester-1"},
-               admin_mode: false
-             )
-
-    assert {:error, {:command_request_requires_approval, ^persisted_request_id}} =
-             Cadence.Commanding.enqueue_command_request(
-               @organization_id,
-               @mission_id,
-               persisted_request.command_request_id,
-               %{"user_id" => "queue-operator"},
-               admin_mode: false
-             )
-
-    assert {:ok,
-            %{
-              approval: approval,
-              command_request: approved_request,
-              approved_command: approved_command
-            }} =
-             ManagementCommanding.approve_command_request(
-               @organization_id,
-               @mission_id,
-               persisted_request.command_request_id,
-               %{"user_id" => "reviewer-1"},
-               reason: "Reviewed by flight director",
-               admin_mode: false
-             )
-
-    assert %CommandApproval{} = approval
-    assert approval.decision == :approved
-    assert approval.reason == "Reviewed by flight director"
-    assert approved_request.lifecycle_state == :approved
-    assert approved_command.command_request_id == persisted_request.command_request_id
-    assert is_binary(approved_command.content_sha256)
-
-    assert {:ok, fetched_approval} =
-             ManagementCommanding.fetch_command_approval(
-               @organization_id,
-               @mission_id,
-               approval.command_approval_id
-             )
-
-    assert fetched_approval.command_request_id == persisted_request.command_request_id
-
-    [listed_approval] =
-      ManagementCommanding.list_command_approvals(
-        @organization_id,
-        @mission_id,
-        command_request_id: persisted_request.command_request_id
-      )
-
-    assert listed_approval.command_approval_id == approval.command_approval_id
-
-    assert {:ok, %{queue_entry: queue_entry, command_request: queued_request}} =
-             Cadence.Control.Commanding.enqueue(
-               approved_command,
-               %{"user_id" => "queue-operator"},
-               admin_mode: false
-             )
-
-    assert %CommandQueueEntry{} = queue_entry
-    assert queue_entry.queue_lane_key == source_endpoint.source_endpoint_id
-    assert queue_entry.priority == persisted_request.priority
-    assert queued_request.lifecycle_state == :queued
-  end
-
   test "queues safe command requests by priority within a source endpoint lane", %{
     source_endpoint: source_endpoint,
     command_model: command_model
@@ -375,7 +148,7 @@ defmodule Cadence.CommandingTest do
     assert second_high_priority_request.lifecycle_state == :validated
 
     assert {:ok, %{queue_entry: low_priority_queue_entry}} =
-             Cadence.Commanding.enqueue_command_request(
+             Cadence.CommandMemberFixtures.enqueue_and_kick(
                @organization_id,
                @mission_id,
                low_priority_request.command_request_id,
@@ -384,7 +157,7 @@ defmodule Cadence.CommandingTest do
              )
 
     assert {:ok, %{queue_entry: first_high_priority_queue_entry}} =
-             Cadence.Commanding.enqueue_command_request(
+             Cadence.CommandMemberFixtures.enqueue_and_kick(
                @organization_id,
                @mission_id,
                first_high_priority_request.command_request_id,
@@ -393,7 +166,7 @@ defmodule Cadence.CommandingTest do
              )
 
     assert {:ok, %{queue_entry: second_high_priority_queue_entry}} =
-             Cadence.Commanding.enqueue_command_request(
+             Cadence.CommandMemberFixtures.enqueue_and_kick(
                @organization_id,
                @mission_id,
                second_high_priority_request.command_request_id,
@@ -444,7 +217,7 @@ defmodule Cadence.CommandingTest do
       })
 
     assert {:error, {:missing_required_command_argument, "mode"}} =
-             Cadence.Commanding.persist_command_request(
+             Cadence.CommandMemberFixtures.persist(
                @organization_id,
                missing_required_request
              )
@@ -459,7 +232,7 @@ defmodule Cadence.CommandingTest do
       })
 
     assert {:error, {:unknown_command_arguments, ["bogus"]}} =
-             Cadence.Commanding.persist_command_request(
+             Cadence.CommandMemberFixtures.persist(
                @organization_id,
                unknown_argument_request
              )
@@ -474,7 +247,7 @@ defmodule Cadence.CommandingTest do
       persist_safe_command_request(command_model, source_endpoint, 1, %{"label" => "release"})
 
     assert {:ok, %{queue_entry: queue_entry}} =
-             Cadence.Commanding.enqueue_command_request(
+             Cadence.CommandMemberFixtures.enqueue_and_kick(
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
@@ -614,7 +387,7 @@ defmodule Cadence.CommandingTest do
     request = persist_safe_command_request(c.command_model, c.source_endpoint, 1, %{})
 
     {:ok, %{queue_entry: queue}} =
-      Cadence.Commanding.enqueue_command_request(
+      Cadence.CommandMemberFixtures.enqueue_and_kick(
         @organization_id,
         @mission_id,
         request.command_request_id,
@@ -684,7 +457,7 @@ defmodule Cadence.CommandingTest do
       })
 
     assert {:ok, %{queue_entry: queue_entry}} =
-             Cadence.Commanding.enqueue_command_request(
+             Cadence.CommandMemberFixtures.enqueue_and_kick(
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
@@ -800,7 +573,7 @@ defmodule Cadence.CommandingTest do
       })
 
     assert {:ok, %{queue_entry: queue_entry}} =
-             Cadence.Commanding.enqueue_command_request(
+             Cadence.CommandMemberFixtures.enqueue_and_kick(
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
@@ -934,7 +707,7 @@ defmodule Cadence.CommandingTest do
       persist_safe_command_request(command_model, source_endpoint, 1, %{"label" => "high"})
 
     assert {:ok, %{queue_entry: low_priority_queue_entry}} =
-             Cadence.Commanding.enqueue_command_request(
+             Cadence.CommandMemberFixtures.enqueue_and_kick(
                @organization_id,
                @mission_id,
                low_priority_request.command_request_id,
@@ -943,7 +716,7 @@ defmodule Cadence.CommandingTest do
              )
 
     assert {:ok, %{queue_entry: high_priority_queue_entry}} =
-             Cadence.Commanding.enqueue_command_request(
+             Cadence.CommandMemberFixtures.enqueue_and_kick(
                @organization_id,
                @mission_id,
                high_priority_request.command_request_id,
@@ -995,10 +768,10 @@ defmodule Cadence.CommandingTest do
       })
 
     assert {:ok, persisted_request} =
-             Cadence.Commanding.persist_command_request(@organization_id, command_request)
+             Cadence.CommandMemberFixtures.persist(@organization_id, command_request)
 
     assert {:ok, %{command_request: approved_request}} =
-             Cadence.Commanding.approve_command_request(
+             Cadence.CommandMemberFixtures.approve(
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
@@ -1007,7 +780,7 @@ defmodule Cadence.CommandingTest do
              )
 
     assert {:ok, %{queue_entry: queue_entry}} =
-             Cadence.Commanding.enqueue_command_request(
+             Cadence.CommandMemberFixtures.enqueue_and_kick(
                @organization_id,
                @mission_id,
                approved_request.command_request_id,
@@ -1142,10 +915,10 @@ defmodule Cadence.CommandingTest do
       })
 
     assert {:ok, persisted_request} =
-             Cadence.Commanding.persist_command_request(@organization_id, command_request)
+             Cadence.CommandMemberFixtures.persist(@organization_id, command_request)
 
     assert {:ok, %{command_request: approved_request}} =
-             Cadence.Commanding.approve_command_request(
+             Cadence.CommandMemberFixtures.approve(
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
@@ -1154,7 +927,7 @@ defmodule Cadence.CommandingTest do
              )
 
     assert {:ok, %{queue_entry: queue_entry}} =
-             Cadence.Commanding.enqueue_command_request(
+             Cadence.CommandMemberFixtures.enqueue_and_kick(
                @organization_id,
                @mission_id,
                approved_request.command_request_id,
@@ -1217,10 +990,10 @@ defmodule Cadence.CommandingTest do
       })
 
     assert {:ok, persisted_request} =
-             Cadence.Commanding.persist_command_request(@organization_id, command_request)
+             Cadence.CommandMemberFixtures.persist(@organization_id, command_request)
 
     assert {:ok, %{queue_entry: queue_entry}} =
-             Cadence.Commanding.enqueue_command_request(
+             Cadence.CommandMemberFixtures.enqueue_and_kick(
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
@@ -1328,7 +1101,7 @@ defmodule Cadence.CommandingTest do
       })
 
     assert {:ok, %{queue_entry: queue_entry}} =
-             Cadence.Commanding.enqueue_command_request(
+             Cadence.CommandMemberFixtures.enqueue_and_kick(
                @organization_id,
                @mission_id,
                persisted_request.command_request_id,
@@ -1414,7 +1187,7 @@ defmodule Cadence.CommandingTest do
         persist_safe_command_request(command_model, source_endpoint, 1, %{"label" => "38"})
 
       {:ok, %{queue_entry: entry}} =
-        Cadence.Commanding.enqueue_command_request(
+        Cadence.CommandMemberFixtures.enqueue_and_kick(
           @organization_id,
           @mission_id,
           request.command_request_id,
@@ -1687,7 +1460,7 @@ defmodule Cadence.CommandingTest do
           request = persist_burst_request(command_model, source_endpoint)
 
           {:ok, %{queue_entry: entry}} =
-            Cadence.Commanding.enqueue_command_request(
+            Cadence.CommandMemberFixtures.enqueue_and_kick(
               @organization_id,
               @mission_id,
               request.command_request_id,
@@ -1768,7 +1541,7 @@ defmodule Cadence.CommandingTest do
 
   defp persist_burst_request(command_model, source_endpoint) do
     {:ok, request} =
-      Cadence.Commanding.persist_command_request(
+      Cadence.CommandMemberFixtures.persist(
         @organization_id,
         CommandRequest.new(%{
           mission_id: @mission_id,
@@ -2005,7 +1778,7 @@ defmodule Cadence.CommandingTest do
       })
 
     assert {:ok, persisted_request} =
-             Cadence.Commanding.persist_command_request(@organization_id, command_request)
+             Cadence.CommandMemberFixtures.persist(@organization_id, command_request)
 
     persisted_request
   end

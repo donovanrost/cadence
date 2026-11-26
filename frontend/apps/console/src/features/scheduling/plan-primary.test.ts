@@ -3,6 +3,11 @@ import { stationId as stationIdReader } from "@/api/index.ts";
 import type { PlanDetail } from "./api.ts";
 import { planHeaderTail, planPrimary, type PlanPrimary } from "./plan-primary.ts";
 
+const NO_GAPS = { spacecraft_uncovered: 0, contacts_short: 0, gaps: 0 };
+
+/** One uncovered spacecraft, as the server counts it (#793) for a plan with one unmet gap. */
+const ONE_GAP = { spacecraft_uncovered: 1, contacts_short: 0, gaps: 1 };
+const gapDemand = { rule_met: 2, rule_total: 3, coverage: ONE_GAP, spacecraft: [], rules: [] };
 const plan = (over: Partial<PlanDetail>): PlanDetail => ({
   id: "plan_1",
   version: 41,
@@ -14,7 +19,7 @@ const plan = (over: Partial<PlanDetail>): PlanDetail => ({
   updated_at: "2026-11-09T10:00:00Z",
   created_at: null,
   passes: [],
-  demand: { rule_met: 3, rule_total: 3, spacecraft: [], rules: [] },
+  demand: { rule_met: 3, rule_total: 3, coverage: NO_GAPS, spacecraft: [], rules: [] },
   unmet: [],
   conflicts: [],
   at_risk: [],
@@ -86,7 +91,9 @@ describe("planPrimary", () => {
 
   it("asks everyone to request approval unless the mission applies without approval (U97)", () => {
     for (const setting of [undefined, null, "independent"] as const) {
-      expect(planPrimary(plan({ unmet: [gap], approval_setting: setting }), true)).toMatchObject({
+      expect(
+        planPrimary(plan({ unmet: [gap], demand: gapDemand, approval_setting: setting }), true),
+      ).toMatchObject({
         kind: "sheet",
         act: "submit",
         label: "Accept 1 gap and request approval",
@@ -113,7 +120,9 @@ describe("planPrimary", () => {
       confirm: "This sends R41 and approves it, and booking starts for its 12 passes.",
       note: "No second person's approval is needed, as this mission's setting allows. Sending and approving are both recorded.",
     });
-    expect(planPrimary(plan({ approval_setting: "direct", unmet: [gap] }), true)).toMatchObject({
+    expect(
+      planPrimary(plan({ approval_setting: "direct", unmet: [gap], demand: gapDemand }), true),
+    ).toMatchObject({
       act: "submit_approve",
       label: "Accept 1 gap, approve and book",
     });
@@ -237,6 +246,7 @@ describe("booking progress (qa: the count must climb)", () => {
     uncertain: 0,
     rejected: 0,
     failed: 0,
+    provider_names: [],
     ...o,
   });
   it("counts sent while executing, booked while confirmations arrive, then settles", () => {

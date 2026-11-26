@@ -121,73 +121,9 @@ defmodule CadenceWeb.Router do
   scope "/", CadenceWeb do
     pipe_through([:browser, :require_authenticated_scope])
 
-    delete("/session", UserSessionController, :delete)
-    put("/session/organization", UserSessionController, :update)
-
-    get(
-      "/missions/:mission_id/catalog/artifacts/:artifact_id/download",
-      CatalogArtifactDownloadController,
-      :show
-    )
-
-    get(
-      "/missions/:mission_id/applications/:application_key/federated",
-      ApplicationHostController,
-      :federated
-    )
-
-    get(
-      "/missions/:mission_id/applications/:application_key/:surface_id/federated",
-      ApplicationHostController,
-      :federated
-    )
-
-    get(
-      "/missions/:mission_id/spacecraft/:spacecraft_id/applications/:application_key/federated",
-      ApplicationHostController,
-      :federated
-    )
-
-    get(
-      "/missions/:mission_id/spacecraft/:spacecraft_id/applications/:application_key/:surface_id/federated",
-      ApplicationHostController,
-      :federated
-    )
-
-    # The user shell stays in the authenticated browser scope so the Phoenix host can establish
-    # user context from the current session without inventing a mission resource. No application
-    # installs at organization or admin scope, so there is no shell for either.
-    get(
-      "/account/applications/:application_key/federated",
-      ApplicationHostController,
-      :user_federated
-    )
-
-    get(
-      "/account/applications/:application_key/:surface_id/federated",
-      ApplicationHostController,
-      :user_federated
-    )
-
     live_session :application,
       on_mount: [{CadenceWeb.UserAuth, :require_user_scope}],
       layout: {CadenceWeb.Layouts, :host} do
-      live("/missions/:mission_id/spacecraft/:spacecraft_id", HostPageLive, :show,
-        metadata: %{host_policy: :spacecraft_show}
-      )
-
-      live("/missions/:mission_id/spacecraft/:spacecraft_id/identity", HostPageLive, :identity,
-        metadata: %{host_policy: :spacecraft_show}
-      )
-
-      live("/missions/:mission_id/spacecraft/:spacecraft_id/edit", HostPageLive, :edit,
-        metadata: %{host_policy: :spacecraft_show}
-      )
-
-      live("/missions/:mission_id/catalog/artifacts/:artifact_id", HostPageLive, :show,
-        metadata: %{host_policy: :catalog}
-      )
-
       live("/missions/:mission_id/ops", HostPageLive, :index, metadata: %{host_policy: :ops})
 
       live("/missions/:mission_id/ops/data-operations", HostPageLive, :index,
@@ -230,41 +166,10 @@ defmodule CadenceWeb.Router do
         metadata: %{host_policy: :ops}
       )
 
-      live("/missions/:mission_id/ops/commands/workspace", HostPageLive, :index,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/commands/stages", HostPageLive, :index,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/commands/stages/new", HostPageLive, :new,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/commands/stages/:command_stage_id", HostPageLive, :show,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/commands/new", HostPageLive, :new,
-        metadata: %{host_policy: :ops}
-      )
-
       live(
         "/missions/:mission_id/ops/commands/requests/:command_request_id/history",
         HostPageLive,
         :show,
-        metadata: %{host_policy: :ops}
-      )
-
-      live(
-        "/missions/:mission_id/ops/commands/requests/:command_request_id/queue",
-        HostPageLive,
-        :show,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/commands/requests/:command_request_id", HostPageLive, :show,
         metadata: %{host_policy: :ops}
       )
 
@@ -278,47 +183,6 @@ defmodule CadenceWeb.Router do
 
       live("/missions/:mission_id/ops/data-operations/manage", HostPageLive, :manage,
         metadata: %{host_policy: :ops_admin}
-      )
-    end
-
-    live_session :mission,
-      on_mount: [
-        {CadenceWeb.OrganizationAuth, :require_organization_scope},
-        {CadenceWeb.MissionAuth, :load_mission},
-        {CadenceWeb.UserAuth, :attach_user_menu}
-      ],
-      layout: {CadenceWeb.Layouts, :mission_sidebar} do
-      live(
-        "/missions/:mission_id/applications/:application_key",
-        ApplicationHostLive,
-        :show
-      )
-
-      live(
-        "/missions/:mission_id/applications/:application_key/:surface_id",
-        ApplicationHostLive,
-        :show
-      )
-    end
-
-    live_session :spacecraft_show,
-      on_mount: [
-        {CadenceWeb.OrganizationAuth, :require_organization_scope},
-        {CadenceWeb.MissionAuth, :load_mission},
-        {CadenceWeb.SpacecraftAuth, :load_spacecraft},
-        {CadenceWeb.UserAuth, :attach_user_menu}
-      ],
-      layout: {CadenceWeb.Layouts, :mission_sidebar} do
-      live(
-        "/missions/:mission_id/spacecraft/:spacecraft_id/applications/:application_key",
-        ApplicationHostLive,
-        :show
-      )
-
-      live(
-        "/missions/:mission_id/spacecraft/:spacecraft_id/applications/:application_key/:surface_id",
-        ApplicationHostLive,
-        :show
       )
     end
   end
@@ -337,6 +201,7 @@ defmodule CadenceWeb.Router do
     pipe_through(:console_api)
 
     get("/session", SessionController, :show)
+    delete("/session", SessionController, :delete)
     put("/session/organization", SessionController, :update_organization)
     # L6 admin mode step-up (owner: api-ops). Contract: docs/apogee/api/session.md
     post("/session/admin-mode", SessionController, :enter_admin_mode)
@@ -465,6 +330,7 @@ defmodule CadenceWeb.Router do
       post("/mission-model-revisions/:id/comparison", MissionModelRevisionController, :compare)
       post("/mission-model-revisions/:id/approve", MissionModelRevisionController, :approve)
       post("/mission-model-revisions/:id/reject", MissionModelRevisionController, :reject)
+      post("/mission-model-revisions/:id/withdraw", MissionModelRevisionController, :withdraw)
       post("/passes/:id/end-contact", PassContactController, :finish)
       # U46 named release (owner: api). Contract: docs/apogee/api/commanding.md
       post(
@@ -615,6 +481,9 @@ defmodule CadenceWeb.Router do
         SpacecraftWorkspaceController,
         :packets
       )
+
+      # One review of any number of spacecraft (#734). Contract: docs/apogee/api/setup.md
+      post("/configuration/reviews", SpacecraftWorkspaceController, :reviews)
 
       # L19 spacecraft-scope apps (owner: api).
       get("/spacecraft/:spacecraft_id/apps", SpacecraftAppController, :index)
@@ -893,16 +762,6 @@ defmodule CadenceWeb.Router do
   scope "/api/cadence/application-host/v1", CadenceWeb do
     pipe_through([:browser, :require_authenticated_user, :application_host_json])
 
-    get("/missions/:mission_id/catalog", ApplicationHostController, :catalog)
-
-    get(
-      "/missions/:mission_id/spacecraft/:spacecraft_id/catalog",
-      ApplicationHostController,
-      :catalog
-    )
-
-    get("/catalog", ApplicationHostController, :catalog)
-
     post("/missions/:mission_id/query", ApplicationHostController, :query)
 
     post(
@@ -918,40 +777,17 @@ defmodule CadenceWeb.Router do
       ApplicationHostController,
       :actions
     )
-
-    post("/query", ApplicationHostController, :query)
-    post("/actions", ApplicationHostController, :actions)
   end
 
   scope "/api", CadenceWeb do
     pipe_through([:api, :authenticated_api])
 
-    get("/current_scope", CurrentScopeController, :show)
-
     scope "/organizations/:organization_id" do
-      # No organization read and no mission list or create here (#384, director 11-19): a REST
-      # bearer is always a service identity, and organization-level acts are a person's (#282).
-      get("/missions/:mission_id", MissionController, :show)
-
-      # No service_identities here (#281): a REST bearer is always a service identity, and
-      # services never manage service identities. People issue them in the console.
-
       scope "/missions/:mission_id" do
-        get("/catalog/importers", CatalogImporterController, :index)
-        get("/catalog_artifacts", CatalogArtifactController, :index)
-        post("/catalog_artifacts", CatalogArtifactController, :create)
-        get("/catalog_artifacts/:artifact_id", CatalogArtifactController, :show)
-        get("/catalog_import_runs", CatalogImportRunController, :index)
-        post("/catalog_import_runs", CatalogImportRunController, :create)
-        get("/catalog_import_runs/:import_run_id", CatalogImportRunController, :show)
-        get("/spacecraft", SpacecraftController, :index)
-        get("/spacecraft/:spacecraft_id", SpacecraftController, :show)
-
         get("/command_stages", CommandStageController, :index)
         post("/command_stages", CommandStageController, :create)
         get("/command_stages/:command_stage_id", CommandStageController, :show)
         patch("/command_stages/:command_stage_id", CommandStageController, :update)
-        post("/command_stages/:command_stage_id/submit", CommandStageController, :submit)
 
         get("/command_stages/:command_stage_id/items", StagedCommandItemController, :index)
         post("/command_stages/:command_stage_id/items", StagedCommandItemController, :create)
@@ -965,11 +801,7 @@ defmodule CadenceWeb.Router do
         )
 
         get("/command_requests", CommandRequestController, :index)
-        post("/command_requests", CommandRequestController, :create)
         get("/command_requests/:command_request_id", CommandRequestController, :show)
-        post("/command_requests/:command_request_id/approve", CommandRequestController, :approve)
-        post("/command_requests/:command_request_id/reject", CommandRequestController, :reject)
-        post("/command_requests/:command_request_id/enqueue", CommandRequestController, :enqueue)
 
         get("/command_approvals", CommandApprovalController, :index)
         get("/command_approvals/:command_approval_id", CommandApprovalController, :show)
@@ -997,29 +829,6 @@ defmodule CadenceWeb.Router do
           "/command_verifier_instances/:command_verifier_instance_id",
           CommandVerifierInstanceController,
           :show
-        )
-
-        get("/packet_definitions", PacketDefinitionController, :index)
-        post("/packet_definitions", PacketDefinitionController, :create)
-
-        post("/binding_sets", BindingSetController, :create)
-        get("/binding_sets/:binding_set_id/versions/:version", BindingSetController, :show)
-
-        post("/activations", ActivationController, :create)
-        get("/activations/active", ActivationController, :show)
-        get("/activation_requests", ActivationController, :index)
-        get("/activation_requests/:activation_request_id", ActivationController, :show_request)
-
-        post(
-          "/activation_requests/:activation_request_id/approve",
-          ActivationController,
-          :approve
-        )
-
-        post(
-          "/activation_requests/:activation_request_id/reject",
-          ActivationController,
-          :reject
         )
       end
     end

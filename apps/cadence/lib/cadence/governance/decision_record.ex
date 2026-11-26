@@ -48,6 +48,10 @@ defmodule Cadence.Governance.DecisionRecord do
     fleet_planning_policy_approvals
     provider_change_approvals
     automation_grant_decisions
+    spacecraft_configuration_reviews
+    spacecraft_configuration_review_members
+    activation_change_set_spacecraft
+    mission_model_decisions
   )
 
   @enforce_keys [:actor, :decision, :decided_at, :subject]

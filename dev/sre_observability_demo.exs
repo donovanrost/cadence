@@ -17,13 +17,12 @@ defmodule Cadence.Dev.SreObservabilityDemo do
   alias Cadence.Missions.Mission
   alias Cadence.Observability
   alias Cadence.Organizations.Organization
+  alias Cadence.Reads.MissionModels.ActiveBasis
   alias Cadence.Runtime.MissionRuntimeSpec
   alias Cadence.Spacecraft
   alias Cadence.Telemetry.DataManagement
   alias Cadence.Telemetry.PacketDefinition
   alias Cadence.Telemetry.Profiler
-
-  require Logger
 
   @definitions """
   version: "1.0.0"
@@ -200,8 +199,7 @@ defmodule Cadence.Dev.SreObservabilityDemo do
       end
     else
       nil -> :ok
-      {:error, :not_found} -> :ok
-      {:error, reason} -> {:error, reason}
+      {:error, :user_not_found} -> :ok
     end
   end
 
@@ -675,13 +673,17 @@ defmodule Cadence.Dev.SreObservabilityDemo do
   end
 
   defp persist_command_context(ids, observed_at) do
+    revision_id =
+      ActiveBasis.active_revision_id(ids.organization_id, ids.mission_id) ||
+        raise "SRE demo command needs an active mission model revision; see #902"
+
     request =
       CommandRequest.new(%{
         command_request_id: ids.command_request_id,
         organization_id: ids.organization_id,
         mission_id: ids.mission_id,
         source_endpoint_ref: ids.source_endpoint_id,
-        command_snapshot_id: "#{ids.mission_id}-command-snapshot",
+        mission_model_revision_id: revision_id,
         command_id: "EPS_SET_CHARGE_MODE",
         command_name: "EPS_SET_CHARGE_MODE",
         command_display_name: "Set battery charge mode",

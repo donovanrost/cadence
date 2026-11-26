@@ -203,13 +203,6 @@ defmodule Cadence.Commanding do
     StageStore.list_items(organization_id, mission_id, opts)
   end
 
-  @spec persist_command_request(binary(), CommandRequest.t()) ::
-          {:ok, CommandRequest.t()} | {:error, term()}
-  def persist_command_request(organization_id, %CommandRequest{} = command_request)
-      when is_binary(organization_id) do
-    RequestStore.persist_request(organization_id, command_request)
-  end
-
   @spec fetch_command_request(binary(), binary(), binary()) ::
           {:ok, CommandRequest.t()} | {:error, term()}
   def fetch_command_request(organization_id, mission_id, command_request_id)
@@ -221,50 +214,6 @@ defmodule Cadence.Commanding do
   def list_command_requests(organization_id, mission_id, opts \\ [])
       when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
     RequestStore.list_requests(organization_id, mission_id, opts)
-  end
-
-  @spec approve_command_request(binary(), binary(), binary(), map(), keyword()) ::
-          {:ok, %{approval: CommandApproval.t(), command_request: CommandRequest.t()}}
-          | {:error, term()}
-  def approve_command_request(
-        organization_id,
-        mission_id,
-        command_request_id,
-        approved_by,
-        opts \\ []
-      )
-      when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(command_request_id) and is_map(approved_by) and is_list(opts) do
-    RequestStore.decide_request(
-      organization_id,
-      mission_id,
-      command_request_id,
-      :approved,
-      approved_by,
-      opts
-    )
-  end
-
-  @spec reject_command_request(binary(), binary(), binary(), map(), keyword()) ::
-          {:ok, %{approval: CommandApproval.t(), command_request: CommandRequest.t()}}
-          | {:error, term()}
-  def reject_command_request(
-        organization_id,
-        mission_id,
-        command_request_id,
-        rejected_by,
-        opts \\ []
-      )
-      when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(command_request_id) and is_map(rejected_by) and is_list(opts) do
-    RequestStore.decide_request(
-      organization_id,
-      mission_id,
-      command_request_id,
-      :rejected,
-      rejected_by,
-      opts
-    )
   end
 
   @spec fetch_command_approval(binary(), binary(), binary()) ::
@@ -279,40 +228,6 @@ defmodule Cadence.Commanding do
   def list_command_approvals(organization_id, mission_id, opts \\ [])
       when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
     RequestStore.list_approvals(organization_id, mission_id, opts)
-  end
-
-  @spec enqueue_command_request(binary(), binary(), binary(), map(), keyword()) ::
-          {:ok, %{command_request: CommandRequest.t(), queue_entry: CommandQueueEntry.t()}}
-          | {:error, term()}
-  def enqueue_command_request(
-        organization_id,
-        mission_id,
-        command_request_id,
-        enqueued_by \\ %{},
-        opts \\ []
-      )
-      when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(command_request_id) and is_map(enqueued_by) and is_list(opts) do
-    case RequestQueueStore.enqueue_request(
-           organization_id,
-           mission_id,
-           command_request_id,
-           enqueued_by,
-           opts
-         ) do
-      {:ok, %{queue_entry: queue_entry} = result} ->
-        maybe_schedule_queue_lane_dispatch(
-          process_namespace(opts),
-          queue_entry.organization_id,
-          queue_entry.mission_id,
-          queue_entry.queue_lane_key
-        )
-
-        {:ok, result}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
   end
 
   @spec fetch_command_queue_entry(binary(), binary(), binary()) ::
@@ -1088,26 +1003,6 @@ defmodule Cadence.Commanding do
          {:command_release_outcome_uncertain, attempt.command_release_attempt_id,
           %{transmission: reason, persistence: persistence_reason}}}
     end
-  end
-
-  @spec submit_staged_command_items(binary(), binary(), binary(), [binary()], map()) ::
-          {:ok, [CommandRequest.t()]} | {:error, term()}
-  def submit_staged_command_items(
-        organization_id,
-        mission_id,
-        command_stage_id,
-        staged_command_item_ids,
-        requested_by \\ %{}
-      )
-      when is_binary(organization_id) and is_binary(mission_id) and is_binary(command_stage_id) and
-             is_list(staged_command_item_ids) and is_map(requested_by) do
-    StageStore.submit_items(
-      organization_id,
-      mission_id,
-      command_stage_id,
-      staged_command_item_ids,
-      requested_by
-    )
   end
 
   defp complete_release_success(

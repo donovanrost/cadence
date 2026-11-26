@@ -96,8 +96,6 @@ defmodule CadenceWeb.API.CommandingJSON do
       not_before: iso8601(request.not_before),
       expires_at: iso8601(request.expires_at),
       requested_by: request.requested_by |> JsonDocument.encode() |> ActorDocument.actor(names),
-      source_command_stage_id: request.source_command_stage_id,
-      source_staged_command_item_id: request.source_staged_command_item_id,
       argument_values: JsonDocument.encode(request.argument_values),
       resolved_argument_values: JsonDocument.encode(request.resolved_argument_values),
       significance: maybe_atom_to_string(request.significance),
@@ -213,20 +211,6 @@ defmodule CadenceWeb.API.CommandingJSON do
       failure_reason: verifier.failure_reason,
       metadata: JsonDocument.encode(verifier.metadata)
     }
-  end
-
-  def command_request_decision_result(%{
-        approval: %CommandApproval{} = approval,
-        command_request: %CommandRequest{} = request
-      }) do
-    %{approval: command_approval(approval), command_request: command_request(request)}
-  end
-
-  def command_request_enqueue_result(%{
-        queue_entry: %CommandQueueEntry{} = entry,
-        command_request: %CommandRequest{} = request
-      }) do
-    %{queue_entry: command_queue_entry(entry), command_request: command_request(request)}
   end
 
   def command_queue_entry_release_result(%{

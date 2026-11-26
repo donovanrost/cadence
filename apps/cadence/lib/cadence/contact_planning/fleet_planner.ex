@@ -156,9 +156,8 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
   defp optimize_phase(scope, mission_id, run, opts) do
     with {:ok, policy} <- exact_policy(run),
          :ok <- ensure_active_policy(run, policy),
-         refs <- requirement_refs(run),
-         {:ok, requirements} <- exact_requirements(run, refs),
-         {:ok, snapshots} <- planning_snapshots(run, refs),
+         {:ok, requirements} <- FleetPlanningRuns.optimization_requirements(run),
+         snapshots <- planning_snapshots(run),
          {:ok, locked_commitments} <- FleetRepairInputs.locked_commitments(run),
          {:ok, optimization} <-
            FleetOptimizer.optimize_stream(
@@ -428,29 +427,9 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
     end
   end
 
-  defp planning_snapshots(run, refs) do
-    snapshots =
-      PlanningResults.stream_fleet_snapshots(
-        run.organization_id,
-        run.mission_id,
-        planning_run_ids(refs)
-      )
-
-    {:ok, snapshots}
-  end
-
-  defp planning_run_ids(%{fleet_planning_run_id: _} = run) do
-    run.organization_id
-    |> FleetPlanningRuns.list_requirement_refs(run.mission_id, run.fleet_planning_run_id)
-    |> planning_run_ids()
-  end
-
-  defp planning_run_ids(refs) when is_list(refs) do
-    refs
-    |> Enum.map(& &1.contact_planning_run_id)
-    |> Enum.reject(&is_nil/1)
-    |> Enum.uniq()
-    |> Enum.sort()
+  defp planning_snapshots(run) do
+    run_ids = run |> FleetPlanningRuns.planning_run_ids() |> Enum.sort()
+    PlanningResults.stream_fleet_snapshots(run.organization_id, run.mission_id, run_ids)
   end
 
   defp checkpoint_coverage(scope, run, coverage) do
@@ -468,7 +447,7 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
     planning_run_ids =
       run
       |> selected_planning_run_ids(selected_ids ++ locked_ids)
-      |> Enum.concat(planning_run_ids(run))
+      |> Enum.concat(FleetPlanningRuns.planning_run_ids(run))
       |> Enum.concat(source_planning_run_ids(run))
       |> Enum.uniq()
       |> Enum.sort()
@@ -544,9 +523,10 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
   defp ensure_current_inputs(run) do
     with {:ok, policy} <- exact_policy(run),
          :ok <- ensure_active_policy(run, policy),
-         {:ok, _requirements} <- exact_requirements(run) do
+         true <- FleetPlanningRuns.requirements_current?(run) do
       :ok
     else
+      false -> {:error, :fleet_planning_input_drift}
       {:error, reason} -> {:error, reason}
     end
   end
@@ -581,8 +561,6 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
       run.fleet_planning_run_id
     )
   end
-
-  defp exact_requirements(run), do: exact_requirements(run, requirement_refs(run))
 
   defp exact_requirements(run, refs) do
     refs

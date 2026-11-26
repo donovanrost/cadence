@@ -12,8 +12,16 @@ defmodule CadenceWeb.Console.ServiceAccess do
   """
 
   @allowed %{
+    # #748: pipelines and simulators read the catalog (its overview, import runs, artifacts and
+    # their bytes, a revision's APIDs), and a service may import a catalog as itself (#280, #435
+    # count it as the importer). Reimport, rollout and approval stay a person's.
+    CadenceWeb.Console.CatalogController => [:index, :import_run, :artifact, :download, :apids],
+    CadenceWeb.Console.CatalogImportController => [:importers, :create],
     CadenceWeb.Console.ContactRuntimeController => [:path_runtime],
-    CadenceWeb.Console.MissionController => [:show]
+    CadenceWeb.Console.MissionController => [:show],
+    # #748: spacecraft reads (directory, names, one craft).
+    CadenceWeb.Console.SpacecraftController => [:index, :names],
+    CadenceWeb.Console.SpacecraftDetailController => [:show]
   }
 
   @doc "The allowed `{controller, actions}` map."

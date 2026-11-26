@@ -14,7 +14,7 @@ in `L/reads/`** and the domain functions the controllers call. Console endpoints
 
 | Route family | Pipeline | Authenticates with | Policy | SPA as-is? |
 | --- | --- | --- | --- | --- |
-| `/api/organizations/:org/...`, `/api/current_scope` | `:api` + `:authenticated_api` (`FetchCurrentScope`, `RequireCurrentScope`) | Only `authorization: Bearer <token>`, resolved by `Cadence.Auth.authenticate_api_token/1` against **active `ServiceIdentityRow`s**. No session is fetched, so cookies are ignored. No header gives 401 `{errors:[{reason:"unauthenticated"}]}` | Mission routes use `ControlPlaneAccess.authorize_mission/3`, which is `:manage_mission` (`platform_admin`, `organization_admin`, or `mission_admin` on that mission). Org routes use `:read_organization` and `:manage_missions`, both `organization_admin` (the REST service-identity routes were removed, #281) | **No.** Service identities only. Plain members also fail `:manage_mission`. `current_scope` there describes the service actor |
+| `/api/organizations/:org/...` | `:api` + `:authenticated_api` (`FetchCurrentScope`, `RequireCurrentScope`) | Only `authorization: Bearer <token>`, resolved by `Cadence.Auth.authenticate_api_token/1` against **active `ServiceIdentityRow`s**. No session is fetched, so cookies are ignored. No header gives 401 `{errors:[{reason:"unauthenticated"}]}` | Mission routes use `ControlPlaneAccess.authorize_mission/3`, which is `:manage_mission` (`platform_admin`, `organization_admin`, or `mission_admin` on that mission). Org routes use `:read_organization` and `:manage_missions`, both `organization_admin` (the REST service-identity routes were removed, #281) | **No.** Service identities only. Plain members also fail `:manage_mission`. `current_scope` there describes the service actor |
 | `/api/cadence/application-host/v1/...` | `:browser` + `RequireAuthenticatedScope` + `:application_host_json` | Session cookie. CSRF via `ApplicationHostCSRF` (`x-csrf-token`, JSON 403 `invalid_csrf`). On non-GET, `x-cadence-poc-session` must match the `application_host_session_id` issued by the first GET (returned as `sessionId` by `GET .../catalog`). Actions also need `idempotency-key` | `:read_application_catalog`, which is `:operate_mission` with **the session's current org** (`current_scope.organization_id`). After that, surface admission plus each action's own policy | Technically yes, but it's the wrong shape: versioned surface envelopes and presentation output (§3) |
 | `/api/cadence/contact-workspace/v1/...` | `:browser` + `RequireAuthenticatedScope` | Session cookie, CSRF (`x-csrf-token`), plus `x-cadence-workspace-user` and `x-cadence-workspace-organization`, which must equal the session's user and current org on **every** call, GET included. A mismatch gives 409 `session_changed` | `:operate_mission` in the session's current org (active user only) | Mostly. The mission must be in the session's current org, so cross-org tabs break. Problems are `{code}` only |
 | `/health/live`, `/health/ready` | `:api` | none | none | Yes, but it's only infra (`GET /api/health` deleted, #747) |
@@ -35,10 +35,10 @@ on success. JSON views are in `W/api/*_json.ex`. Every `…` row passes `authori
 
 | Area | Method + path | Controller | Calls | Note |
 | --- | --- | --- | --- | --- |
-| Identity | `GET /api/current_scope` | CurrentScope | `IdentityJSON.current_scope` | service actor document |
+| Identity | ~~`GET /api/current_scope`~~ | ~~CurrentScope~~ | — | **Removed (#754, #747):** no caller; the console's `GET /api/v1/session` is the scope read. |
 | Identity | ~~`GET /api/organizations/:org`~~ | ~~Organization~~ | — | **Removed (#384):** a bearer is always a service, and organization-level acts are a person's (#282). |
 | Identity | ~~`GET`, `POST /api/organizations/:org/missions`~~ | Mission | — | **Removed (#384):** as above. Missions are created in the console (L4). |
-| Identity | `GET /api/organizations/:org/missions/:m` | Mission | `Missions.fetch_mission` | |
+| Identity | ~~`GET /api/organizations/:org/missions/:m`~~ | ~~Mission~~ | — | **Removed (#754, #747):** a service reads its mission at `GET /api/v1/missions/:m` with its bearer (opted in, `Console.ServiceAccess`). |
 | Identity | ~~`GET`, `POST /api/organizations/:org/service_identities`~~ | ServiceIdentity | — | **Removed (#281):** services never manage service identities; people issue them in the console (O6). |
 | Limits/health | ~~`GET …/mission_health`~~ | MissionHealth | — | **Removed (#780):** per-spacecraft worst limit state, violating points and the worst point are in console `GET /fleet`; active alarms in `GET /alarms`. The mission-wide `point_buckets` had no caller. |
 | Events | ~~`GET …/mission_events`~~ | MissionEvent | — | **Removed (#780):** console `GET /events` (window, cursor, kind and severity-floor filters). |
@@ -52,11 +52,9 @@ on success. JSON views are in `W/api/*_json.ex`. Every `…` row passes `authori
 | Comms | transport_profiles: same 7 routes | TransportProfile | `Contacts.*_transport_profile*` | legacy model. The current UI uses Transports via the bridge |
 | Comms | path_templates: same 7 routes, plus `POST /:id/link_assignments` | PathTemplate, LinkAssignment | `Contacts.*_path_template*`, `apply_link_template` | legacy "link template" model |
 | Comms | `GET`, `POST …/link_assignments`; `GET`, `DELETE …/link_assignments/:id` | LinkAssignment | `Contacts.*_link_assignment` | legacy |
-| Commanding | `GET`, `POST …/command_stages`; `GET`, `PATCH /:id`; `POST /:id/submit` | CommandStage | `Management.Commanding.*_command_stage`, `submit_staged_command_items` | |
+| Commanding | `GET`, `POST …/command_stages`; `GET`, `PATCH /:id` | CommandStage | `Management.Commanding.*_command_stage` | submit removed (#708) |
 | Commanding | `GET`, `POST …/command_stages/:id/items`; `GET`, `PATCH …/staged_command_items/:id` | StagedCommandItem | `Management.Commanding.*_staged_command_item*` | |
-| Commanding | `GET`, `POST …/command_requests`; `GET /:id` | CommandRequest | `Management.Commanding.{list,persist,fetch}_command_request*` | |
-| Commanding | `POST …/command_requests/:id/approve`, `/reject` | CommandRequest | `Management.Commanding.approve_/reject_command_request` | |
-| Commanding | `POST …/command_requests/:id/enqueue` | CommandRequest | `Control.Commanding.enqueue_approved_command` | |
+| Commanding | `GET …/command_requests`, `/:id` | CommandRequest | `Management.Commanding.{list,fetch}_command_request*` | create, approve, reject and enqueue removed (#708): commands go through command groups |
 | Commanding | `GET …/command_approvals`, `/:id` | CommandApproval | `Management.Commanding.list_/fetch_command_approval*` | |
 | Commanding | `GET …/command_queue_entries`, `/:id`; `POST /:id/release` | CommandQueueEntry | `Projections.CommandStatus.*`, `Control.Commanding.release_command_queue_entry` | **no cancel/abort route** |
 | Commanding | `GET …/command_release_attempts`, `/:id` | CommandReleaseAttempt | `Projections.CommandStatus.*_release_attempt*` | |

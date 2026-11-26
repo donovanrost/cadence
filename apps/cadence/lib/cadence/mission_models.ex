@@ -282,6 +282,11 @@ defmodule Cadence.MissionModels do
     to: RevisionDecisions,
     as: :reject
 
+  @doc "A withdrawn revision's withdrawal record, or nil (E2, #546)."
+  defdelegate revision_withdrawal(organization_id, mission_id, revision_id),
+    to: RevisionDecisions,
+    as: :withdrawal
+
   @doc "People's model decisions in the mission, for the organization audit."
   defdelegate list_model_decisions(organization_id, mission_id),
     to: RevisionDecisions,

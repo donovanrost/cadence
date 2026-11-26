@@ -61,7 +61,7 @@ defmodule Cadence.Configuration.ChangeSetReviewRecordTest do
              policy_document: %{"approval_required" => true}
            } = review
 
-    assert review.subject_digest == ReviewRecord.digest(ops)
+    assert review.subject_digest == ReviewRecord.digest(ops, selections(c, staged))
     # #599: exactly what the separation check compared, the submitter and the change's author.
     assert review.separated_from == [c.author.user.user_id]
     assert review.actor["id"] == c.reviewer.user.user_id
@@ -134,7 +134,7 @@ defmodule Cadence.Configuration.ChangeSetReviewRecordTest do
            ] =
              reviews(staged)
 
-    assert row.subject_digest == ReviewRecord.digest(ops)
+    assert row.subject_digest == ReviewRecord.digest(ops, selections(c, staged))
     assert row.actor["id"] == c.author.user.user_id
     assert row.policy_document["approval_required"] == false
 
@@ -143,7 +143,7 @@ defmodule Cadence.Configuration.ChangeSetReviewRecordTest do
     assert set.reviews == []
   end
 
-  test "golden: the digest's canonical term is pinned (#108)" do
+  test "golden: the digest's canonical term is pinned (#108; v2 adds D3's selections, #544)" do
     op = %{
       change_id: "change-1",
       position: 0,
@@ -154,8 +154,12 @@ defmodule Cadence.Configuration.ChangeSetReviewRecordTest do
       base: %{"commanding_enabled" => true}
     }
 
-    assert ReviewRecord.digest([%{op: op}]) ==
-             "314373b72d91a73e0fb117bf904f568722ab37a0f6bab03e25b98a419724071b"
+    assert ReviewRecord.digest([%{op: op}], %{"composition-1" => "revision-1"}) ==
+             "19e7a349d80176b06b07d2831e288ad30aa5fb06d47502a742e2f5e1aab89496"
+
+    # The selections are in the term: another revision is another digest.
+    refute ReviewRecord.digest([%{op: op}], %{"composition-1" => "revision-2"}) ==
+             ReviewRecord.digest([%{op: op}], %{"composition-1" => "revision-1"})
   end
 
   test "decisions/2 pages with a before cursor, newest first", c do
@@ -183,6 +187,13 @@ defmodule Cadence.Configuration.ChangeSetReviewRecordTest do
         select: r.review_id
       )
     )
+  end
+
+  # What the submit recorded (D3, #544): the mission's catalog pin selects its composition's revision.
+  defp selections(c, staged) do
+    {:ok, set} = ChangeSetStore.fetch(c.mission.mission_id, staged.change_set_id)
+    assert map_size(set.selections) > 0
+    set.selections
   end
 
   defp reviews(staged),

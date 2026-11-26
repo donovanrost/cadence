@@ -17,13 +17,7 @@ import { fetchSpacecraftDetail } from "@/features/spacecraft/index.ts";
 import { fetchScopedApps } from "./api.ts";
 import { fetchSurfaceHost } from "./host.ts";
 import type { SaveOutcome } from "./saveOutcome.ts";
-import {
-  hostRefusal,
-  isSubjectSurface,
-  retiredSurfaceHome,
-  setupSurfaces,
-  subjectSurfaceHome,
-} from "./surfaces.ts";
+import { hostRefusal, retiredSurfaceHome, setupSurfaces } from "./surfaces.ts";
 import SurfaceMount from "./SurfaceMount.vue";
 
 /**
@@ -47,19 +41,11 @@ const app = computed(() =>
     ? (apps.state.value.value.apps.find((a) => a.key === appKey.value) ?? null)
     : null,
 );
-// A one-record surface has no tab: from a tab it would open with no record (subjectSurfaceHome).
-const surfaces = computed(() =>
-  setupSurfaces(app.value?.surfaces ?? []).filter(
-    (s) => !isSubjectSurface(appKey.value, s.surface_id),
-  ),
-);
+const surfaces = computed(() => setupSurfaces(app.value?.surfaces ?? []));
 // A retired surface (a bookmark or an old link) goes to its console home, never an empty tab (ux),
-// without first asking the server for a host it no longer has (qa 11:22Z). So does a one-record
-// surface, to the console screen that owns its record (lead, qa 11-16).
-const retiredHome = computed(
-  () =>
-    retiredSurfaceHome(appKey.value, paramText(route.params, "surface"), spacecraftId.value) ??
-    subjectSurfaceHome(appKey.value, paramText(route.params, "surface"), route.query),
+// without first asking the server for a host it no longer has (qa 11:22Z).
+const retiredHome = computed(() =>
+  retiredSurfaceHome(appKey.value, paramText(route.params, "surface"), spacecraftId.value),
 );
 watch(
   retiredHome,

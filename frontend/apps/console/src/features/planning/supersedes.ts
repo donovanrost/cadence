@@ -4,7 +4,7 @@ import { planStates } from "@/features/scheduling/index.ts";
 import { decidedReader, type Decided } from "./decided.ts";
 
 /** Contract: docs/apogee/api/scheduling.md, "Dry run before saving" (writes nothing). */
-const { array, integer, nullable, object, optional, string, token } = decoders;
+const { array, integer, nullable, object, string, token } = decoders;
 
 const draftsShape = {
   drafts: array(
@@ -19,8 +19,8 @@ const draftsShape = {
   ),
 };
 const reader = object(draftsShape);
-/** A template's read also carries the days an edit leaves alone (U48); absent until api ships it. */
-const templateReader = object({ ...draftsShape, decided: optional(decidedReader) });
+/** A template's read also carries the days an edit leaves alone (U48), counted by the server (#793). */
+const templateReader = object({ ...draftsShape, decided_counts: decidedReader });
 export type SupersededDraft = Decoded<typeof reader>["drafts"][number];
 
 export async function fetchTemplateSupersedes(
@@ -33,7 +33,7 @@ export async function fetchTemplateSupersedes(
     { signal },
   );
   return r.ok
-    ? { ok: true, value: { drafts: r.value.drafts, decided: r.value.decided ?? null } }
+    ? { ok: true, value: { drafts: r.value.drafts, decided: r.value.decided_counts } }
     : r;
 }
 

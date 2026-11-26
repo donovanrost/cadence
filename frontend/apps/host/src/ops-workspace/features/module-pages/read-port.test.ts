@@ -3,7 +3,7 @@ import type { OpsPageReadRequest } from "@cadence/plugin-sdk/ops-pages";
 import { createOpsReadPort } from "./read-port";
 
 test("live readers capture identity, discard stale notifications and dispose once", async () => {
-  const id = "commanding.workspace",
+  const id = "commanding.monitor",
     token = "11111111-1111-4111-8111-111111111111";
   const context = { organizationId: "org", missionId: "mission" };
   let active = true,

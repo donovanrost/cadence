@@ -250,7 +250,7 @@ defmodule Cadence.Reads.OrganizationAuditNamesTest do
         revision_id: "settings-470-#{actor_id}",
         organization_id: @org,
         scope_key: "organization",
-        section_id: "commanding.defaults",
+        section_id: "cadence.pass_review",
         version: 1,
         document: %{"value" => %{}, "allow_override" => true},
         actor_id: actor_id,

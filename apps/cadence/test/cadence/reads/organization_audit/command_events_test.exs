@@ -117,6 +117,8 @@ defmodule Cadence.Reads.OrganizationAudit.CommandEventsTest do
           lifecycle_state: "canceled",
           requested_at: now,
           command_group_id: group_id,
+          group_target_index: t - 1,
+          group_position: k,
           metadata_document: %{
             "value" => %{
               "cancellation" => %{

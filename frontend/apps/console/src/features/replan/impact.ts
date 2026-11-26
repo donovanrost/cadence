@@ -18,7 +18,6 @@ export type Impact = Readonly<{
   passes: number;
   spacecraft: number;
   stations: readonly string[];
-  truncated: boolean;
 }>;
 
 function why(p: Pass & { state: LostState }): string {
@@ -71,7 +70,7 @@ export type ImpactPlan = Readonly<{
 }>;
 
 /** The day's bookings that didn't hold and no applied repair replaced: what A Impact lists. */
-export function impactOf(passes: readonly Pass[], plan: ImpactPlan, truncated: boolean): Impact {
+export function impactOf(passes: readonly Pass[], plan: ImpactPlan): Impact {
   const chain = chainOf(passes, plan);
   const lost = passes.flatMap((p) =>
     p.plan && chain.has(p.plan.id) && isLost(p.state) && !p.replaced_by
@@ -91,7 +90,6 @@ export function impactOf(passes: readonly Pass[], plan: ImpactPlan, truncated: b
     passes: lost.length,
     spacecraft: new Set(lost.map((p) => p.spacecraft_id)).size,
     stations,
-    truncated,
   };
 }
 

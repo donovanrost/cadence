@@ -314,7 +314,7 @@ defmodule Cadence.Commanding.ReleaseLaneTest do
 
   defp enqueue(c),
     do:
-      RequestQueueStore.enqueue_request(
+      Cadence.CommandMemberFixtures.enqueue(
         c.org,
         c.mission,
         c.request.command_request_id,

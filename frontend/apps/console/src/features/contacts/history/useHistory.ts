@@ -82,7 +82,7 @@ export function useHistory(missionId: Ref<MissionId>, now: Ref<Date>) {
    * so selecting one is read on its own and comes back as `handStarted` (fe-ops 57167b5eb).
    */
   const passes = {
-    state: computed((): RemoteState<Passes> => {
+    state: computed((): RemoteState<Pick<Passes, "passes" | "unshown">> => {
       const s = ledger.state.value;
       if (s.status !== "ready") return s;
       const booked: Pass[] = s.value.passes.filter((r): r is Pass => !isHandStarted(r));

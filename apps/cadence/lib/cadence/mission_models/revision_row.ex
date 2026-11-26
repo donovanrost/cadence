@@ -57,6 +57,11 @@ defmodule Cadence.MissionModels.RevisionRow do
     )
   end
 
+  # E2 (#546): the decision itself is the append-only `mission_model_decisions` row written in the
+  # same transaction; the approval columns stay as they were (who approved what was withdrawn).
+  def status_changeset(%__MODULE__{status: "approved"} = row, :withdrawn, _actor, _at),
+    do: change(row, status: "withdrawn")
+
   def status_changeset(%__MODULE__{} = row, :rejected, actor, at) do
     change(row,
       status: "rejected",

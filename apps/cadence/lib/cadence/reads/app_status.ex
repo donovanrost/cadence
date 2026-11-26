@@ -21,7 +21,7 @@ defmodule Cadence.Reads.AppStatus do
 
   alias Cadence.Applications.{ApplicationDefinition, HostContext, TelemetryDecom}
   alias Cadence.Auth.Scope
-  alias Cadence.Control.Activations.Description
+  alias Cadence.Catalog.RequestSpacecraft
   alias Cadence.Management.Activations
   alias Cadence.Reads.Applications
 
@@ -94,7 +94,7 @@ defmodule Cadence.Reads.AppStatus do
              binding_set_id: TelemetryDecom.binding_set_id(mission_id),
              limit: 50
            ) do
-      Enum.find(requests, &touches?(&1, spacecraft_id))
+      Enum.find(requests, touches?(scope.organization_id, mission_id, requests, spacecraft_id))
     else
       _none -> nil
     end
@@ -102,12 +102,9 @@ defmodule Cadence.Reads.AppStatus do
 
   defp pending_request(_scope, _definition, _host_context), do: nil
 
-  defp touches?(_request, nil), do: true
+  defp touches?(_org, _mission_id, _requests, nil), do: fn _request -> true end
 
-  defp touches?(request, spacecraft_id) do
-    case Description.describe(request.metadata || %{}).spacecraft_ids do
-      [] -> true
-      ids -> spacecraft_id in ids
-    end
-  end
+  # Two queries however many requests there are (#734), not one per request.
+  defp touches?(org, mission_id, requests, spacecraft_id),
+    do: RequestSpacecraft.touching(org, mission_id, requests, spacecraft_id)
 end

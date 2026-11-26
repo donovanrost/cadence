@@ -26,8 +26,6 @@ defmodule Cadence.Commanding.CommandRequestRow do
     field(:not_before, :utc_datetime_usec)
     field(:expires_at, :utc_datetime_usec)
     field(:requested_by_document, :map, default: %{})
-    field(:source_command_stage_id, :string)
-    field(:source_staged_command_item_id, :string)
     field(:argument_values_document, :map, default: %{})
     field(:resolved_argument_values_document, :map, default: %{})
     field(:significance, :string)
@@ -63,7 +61,10 @@ defmodule Cadence.Commanding.CommandRequestRow do
     :argument_values_document,
     :resolved_argument_values_document,
     :metadata_document,
-    :requested_at
+    :requested_at,
+    :command_group_id,
+    :group_target_index,
+    :group_position
   ]
 
   @spec changeset(CommandRequest.t()) :: Ecto.Changeset.t()
@@ -77,6 +78,10 @@ defmodule Cadence.Commanding.CommandRequestRow do
       name: :command_requests_org_scope_idx_uniq
     )
     |> unique_constraint(:command_request_id, name: :command_requests_pkey)
+    |> foreign_key_constraint(:command_group_id, name: :command_requests_command_group_fk)
+    |> unique_constraint([:command_group_id, :group_target_index, :group_position],
+      name: :command_requests_group_member_idx
+    )
   end
 
   @spec lifecycle_changeset(struct(), atom()) :: Ecto.Changeset.t()
@@ -111,8 +116,6 @@ defmodule Cadence.Commanding.CommandRequestRow do
       not_before: row.not_before,
       expires_at: row.expires_at,
       requested_by: JsonDocument.unwrap_value(row.requested_by_document),
-      source_command_stage_id: row.source_command_stage_id,
-      source_staged_command_item_id: row.source_staged_command_item_id,
       argument_values: JsonDocument.unwrap_value(row.argument_values_document),
       resolved_argument_values: JsonDocument.unwrap_value(row.resolved_argument_values_document),
       significance: row.significance,
@@ -127,6 +130,8 @@ defmodule Cadence.Commanding.CommandRequestRow do
       service_subtype: row.service_subtype,
       opcode: JsonDocument.unwrap_value(row.opcode_document),
       requested_at: row.requested_at,
+      command_group_id: row.command_group_id,
+      group_slot: %{target_index: row.group_target_index, position: row.group_position},
       metadata: JsonDocument.unwrap_value(row.metadata_document)
     })
   end
@@ -151,8 +156,6 @@ defmodule Cadence.Commanding.CommandRequestRow do
       not_before: command_request.not_before,
       expires_at: command_request.expires_at,
       requested_by_document: JsonDocument.wrap_value(command_request.requested_by),
-      source_command_stage_id: command_request.source_command_stage_id,
-      source_staged_command_item_id: command_request.source_staged_command_item_id,
       argument_values_document: JsonDocument.wrap_value(command_request.argument_values),
       resolved_argument_values_document:
         JsonDocument.wrap_value(command_request.resolved_argument_values),
@@ -172,21 +175,15 @@ defmodule Cadence.Commanding.CommandRequestRow do
       service_subtype: command_request.service_subtype,
       opcode_document: JsonDocument.wrap_value(command_request.opcode),
       requested_at: command_request.requested_at,
-      metadata_document: JsonDocument.wrap_value(command_request.metadata)
+      metadata_document: JsonDocument.wrap_value(command_request.metadata),
+      command_group_id: command_request.command_group_id,
+      group_target_index: slot(command_request, :target_index),
+      group_position: slot(command_request, :position)
     }
-    |> Map.merge(group_columns(command_request.metadata))
   end
 
-  # A group member carries `metadata["group"] = %{"id", "target_index", "position"}`; the row
-  # mirrors it into indexed columns (docs/apogee/domain/group-requests.md §2).
-  defp group_columns(%{
-         "group" => %{"id" => id, "target_index" => target, "position" => position}
-       })
-       when is_binary(id) and is_integer(target) and is_integer(position),
-       do: %{command_group_id: id, group_target_index: target, group_position: position}
-
-  defp group_columns(_metadata),
-    do: %{command_group_id: nil, group_target_index: nil, group_position: nil}
+  defp slot(%{group_slot: nil}, _key), do: nil
+  defp slot(%{group_slot: slot}, key), do: Map.fetch!(slot, key)
 
   defp all_fields do
     [
@@ -204,8 +201,6 @@ defmodule Cadence.Commanding.CommandRequestRow do
       :not_before,
       :expires_at,
       :requested_by_document,
-      :source_command_stage_id,
-      :source_staged_command_item_id,
       :argument_values_document,
       :resolved_argument_values_document,
       :significance,

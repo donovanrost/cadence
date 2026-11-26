@@ -4,10 +4,8 @@ defmodule Cadence.Governance.ScopedSettingsTest do
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Auth.Scope
   alias Cadence.Governance.ActivationPolicy
-  alias Cadence.Management.Activations
-  alias Cadence.Management.Commanding.WorkspaceSettings
-  alias Cadence.Platform.ScopedReadUpdates
-  alias Cadence.Platform.ScopedSettings
+  alias Cadence.Management.{Activations, PassReviewSettingsSection}
+  alias Cadence.Platform.{PassReviewSettings, ScopedReadUpdates, ScopedSettings}
 
   setup do
     org = "settings-org-#{System.unique_integer([:positive])}"
@@ -98,20 +96,20 @@ defmodule Cadence.Governance.ScopedSettingsTest do
              })
   end
 
-  test "sections own validation and saving Commanding does not change Governance", c do
+  test "sections own validation and saving Pass review does not change Governance", c do
     governance = ActivationPolicy.load(c.org, c.mission)
-    commanding = WorkspaceSettings.load(c.org, c.mission)
+    pass_review = PassReviewSettings.load(c.org, c.mission)
 
     assert {:ok, revision} =
-             WorkspaceSettings.save(c.scope, c.mission, commanding.token, %{
-               "value" => %{"shelf" => "minimized"}
+             PassReviewSettingsSection.save(c.scope, c.mission, pass_review.token, %{
+               "value" => %{"pass_realized_threshold" => 0.9}
              })
 
     assert ActivationPolicy.load(c.org, c.mission) == governance
-    assert WorkspaceSettings.load(c.org, c.mission).effective == %{"shelf" => "minimized"}
+    assert PassReviewSettings.load(c.org, c.mission).effective["pass_realized_threshold"] == 0.9
 
     assert [%{id: id, actor_id: "maya", version: 1}] =
-             ScopedSettings.history(c.org, c.mission, "commanding.defaults")
+             ScopedSettings.history(c.org, c.mission, "cadence.pass_review")
 
     assert id == revision.revision_id
 

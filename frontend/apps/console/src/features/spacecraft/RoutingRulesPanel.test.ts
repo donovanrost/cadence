@@ -2,14 +2,8 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { decode, missionId } from "@/api/index.ts";
-import RoutingRulesPanel from "./RoutingRulesPanel.vue";
-
-// The panel reads the open set (useConfigState), which listens for config changes live.
-vi.mock("@/live", async (original) => ({
-  ...(await original<typeof import("@/live")>()),
-  useMissionInvalidation: () => undefined,
-}));
 import { detailReader } from "./detail.ts";
+import RoutingRulesPanel from "./RoutingRulesPanel.vue";
 
 const inu = { id: "gs-1", code: "INU", name: "Inuvik" };
 const rule = (r: Record<string, unknown>) => ({
@@ -46,7 +40,6 @@ function rules() {
         station: inu,
         direction: "outbound",
       }),
-      rule({ id: "old-1", name: "Old AWA", origin: "legacy", route_id: null, station: null }),
     ],
     readiness: { ready: true, checks: [] },
   });
@@ -102,19 +95,6 @@ describe("Setup › Spacecraft › Routing (U79)", () => {
     const { w } = await render();
     expect(row(w, "SVB primary")?.text()).toContain("From profile");
     expect(row(w, "INU · EARENDIL-389")?.text()).toContain("This spacecraft only");
-    expect(row(w, "Old AWA")?.text()).toContain("This spacecraft only");
-    w.unmount();
-  });
-
-  it("gives a legacy route its quiet line and a reachable reason instead of actions", async () => {
-    const { w } = await render();
-    const old = row(w, "Old AWA");
-    expect(old?.text()).toContain("Set up on the old routing page.");
-    const reason = old
-      ?.findAll("span")
-      .find((s) => s.text() === "Older routes can't be edited here until they're converted.");
-    expect(reason?.attributes("tabindex")).toBe("0");
-    expect(old?.text()).not.toContain("Edit");
     w.unmount();
   });
 
@@ -151,70 +131,11 @@ describe("Setup › Spacecraft › Routing (U79)", () => {
     w.unmount();
   });
 
-  it("a conversion_in_progress refusal on Remove… keeps its Open change set link (#413)", async () => {
-    const { w, router } = await render();
-    vi.stubGlobal("fetch", (url: string) =>
-      Promise.resolve(
-        url.endsWith("/stage")
-          ? new Response(
-              JSON.stringify({
-                error: {
-                  code: "conversion_in_progress",
-                  message: "A conversion batch is staged.",
-                  details: { change_set_id: "cs-9", batch: 3 },
-                },
-              }),
-              { status: 409 },
-            )
-          : new Response(JSON.stringify({ data: {} })),
-      ),
-    );
-    await w
-      .findAll("button")
-      .find((b) => b.text() === "Remove…")
-      ?.trigger("click");
-    await flushPromises();
-    [...document.querySelectorAll("button")]
-      .find((b) => b.textContent?.trim() === "Stage removal")
-      ?.click();
-    await flushPromises();
-    expect(document.body.textContent).toContain("Batch 3 of the route conversion is staged");
-    const open = [...document.querySelectorAll("a")].find(
-      (a) => a.textContent?.trim() === "Open change set",
-    );
-    expect(open?.getAttribute("href")).toBe("/changes");
-    expect(router.currentRoute.value.name).toBe("setup.spacecraft.one");
-    w.unmount();
-  });
-
-  it("shows tags but no Add, Edit, Remove… or reason to someone who can't stage", async () => {
+  it("shows tags but no Add, Edit or Remove… to someone who can't stage", async () => {
     const { w } = await render(false);
     expect(w.text()).toContain("This spacecraft only");
     expect(w.text()).not.toContain("Add extra route");
     expect(w.text()).not.toContain("Remove…");
-    expect(w.text()).not.toContain("Older routes can't be edited here until they're converted.");
     w.unmount();
-  });
-});
-
-describe("ux U79 (TEMPORARY, deleted with 9ac6dc8ee): the route conversion callout", () => {
-  const mountWith = (rs: ReturnType<typeof rules>) =>
-    mount(RoutingRulesPanel, {
-      props: {
-        missionId: missionId("m-1"),
-        spacecraftName: "EARENDIL-389",
-        rules: rs,
-        canStage: true,
-      },
-      global: {
-        stubs: { LegacyConversionCallout: { template: "<p data-conversion />" }, RouterLink: true },
-      },
-    });
-
-  it("sits above the list only when it has routes from the old routing page", () => {
-    vi.stubGlobal("fetch", () => Promise.resolve(new Response(JSON.stringify({ data: {} }))));
-    expect(mountWith(rules()).find("[data-conversion]").exists()).toBe(true);
-    const withoutLegacy = rules().filter((r) => r.origin !== "legacy");
-    expect(mountWith(withoutLegacy).find("[data-conversion]").exists()).toBe(false);
   });
 });

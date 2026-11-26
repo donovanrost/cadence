@@ -6,10 +6,9 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
   import CadenceWeb.ControlPlaneApiFixtures
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet, CapabilityInstance}
-  alias Cadence.Commanding.ApprovalDecisions
+  alias Cadence.Auth.ServiceIdentity
   alias Cadence.Jobs
   alias Cadence.Jobs.Runner, as: JobRunner
-  alias Cadence.Management.Commanding, as: ManagementCommanding
   alias Cadence.Organizations.Organization
   alias Cadence.Runtime.MissionModelPlanDecoder
   alias CadenceWeb.TestFixtures
@@ -161,6 +160,48 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
     assert_console_reads(organization_id, mission_id)
   end
 
+  # #748: the catalog goes in through the one API (/api/v1) as a mission-pinned service, an
+  # opted-in action; the run's result document is read back from the domain, as the console read omits it.
+  defp import_catalog!(conn, organization_id, mission_id, file_name, yaml) do
+    # /api/v1 admits a mission-pinned service only; the bootstrap identity spans the organization.
+    {:ok, %{api_token: api_token}} =
+      Cadence.Auth.issue_service_identity(
+        ServiceIdentity.new(%{
+          service_identity_id: "svc-catalog-import-#{System.unique_integer([:positive])}",
+          organization_id: organization_id,
+          mission_id: mission_id,
+          display_name: "Catalog import pipeline",
+          capabilities: [:mission_admin]
+        }),
+        %Cadence.Auth.Scope{
+          actor_kind: :user,
+          organization_id: organization_id,
+          user: %Cadence.Accounts.User{user_id: "user-service-issuer"}
+        }
+      )
+
+    path = Path.join(System.tmp_dir!(), "#{System.unique_integer([:positive])}-#{file_name}")
+    File.write!(path, yaml)
+    on_exit(fn -> File.rm(path) end)
+
+    import_conn =
+      conn
+      |> authorize(api_token)
+      |> post("/api/v1/missions/#{mission_id}/catalog/imports", %{
+        "name" => "API catalog",
+        "file" => %Plug.Upload{path: path, filename: file_name, content_type: "application/yaml"}
+      })
+
+    assert %{"data" => %{"import_run_id" => import_run_id}} = json_response(import_conn, 202)
+    assert [claimed_job] = Jobs.claim_jobs(1)
+    assert {:ok, _completed_job} = JobRunner.run_job(claimed_job.job_id)
+
+    assert {:ok, %{result_document: result_document}} =
+             Cadence.Catalog.fetch_import_run(organization_id, mission_id, import_run_id)
+
+    {import_run_id, result_document}
+  end
+
   defp assert_console_reads(organization_id, mission_id) do
     org = %Organization{organization_id: organization_id}
     user = TestFixtures.persist_user!()
@@ -189,7 +230,6 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
       mission_id: mission_id,
       source_endpoint_id: source_endpoint_id,
       mission_model_revision_id: mission_model_revision_id,
-      noop_command_id: noop_command_id,
       set_mode_command_id: set_mode_command_id
     } = context
 
@@ -291,280 +331,49 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
              ]
            } = json_response(staged_command_items_conn, 200)
 
-    submitted_command_requests_conn =
-      conn
-      |> authorize(api_token)
-      |> post(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_stages/command-stage-alpha/submit",
-        %{
-          "submission" => %{
-            "staged_command_item_ids" => ["staged-command-item-alpha"]
-          }
-        }
-      )
-
-    assert %{
-             "data" => [
-               %{
-                 "command_request_id" => staged_command_request_id,
-                 "lifecycle_state" => "approval_pending",
-                 "source_command_stage_id" => "command-stage-alpha",
-                 "source_staged_command_item_id" => "staged-command-item-alpha"
-               }
-             ]
-           } = json_response(submitted_command_requests_conn, 200)
-
+    # Requests exist only as members of a command group (DECISIONS #61/#62), so a stage's items
+    # leave no request behind: the REST stage cannot be submitted.
     command_requests_conn =
       conn
       |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_requests",
-        %{"command_stage_id" => "command-stage-alpha"}
-      )
+      |> get("/api/organizations/#{organization_id}/missions/#{mission_id}/command_requests")
 
-    assert %{
-             "data" => [
-               %{
-                 "command_request_id" => ^staged_command_request_id,
-                 "lifecycle_state" => "approval_pending"
-               }
-             ]
-           } = json_response(command_requests_conn, 200)
-
-    # Approval is a human decision and the approver is the authenticated actor (DECISIONS #30),
-    # so the service identity can't approve through REST.
-    service_approval_conn =
-      conn
-      |> authorize(api_token)
-      |> post(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_requests/#{staged_command_request_id}/approve",
-        %{"approval" => %{"reason" => "Reviewed for uplink"}}
-      )
-
-    assert json_response(service_approval_conn, 422)
-
-    # A human operator approves (the console / LiveView path).
-    assert {:ok, %{approval: approval, command_request: approved_request}} =
-             ManagementCommanding.approve_command_request(
-               organization_id,
-               mission_id,
-               staged_command_request_id,
-               %{"actor_kind" => "user", "user_id" => "reviewer-1"},
-               reason: "Reviewed for uplink",
-               admin_mode: false
-             )
-
-    command_approval_id = approval.command_approval_id
-    assert approved_request.lifecycle_state == :approved
-
-    command_approvals_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_approvals",
-        %{"command_request_id" => staged_command_request_id}
-      )
-
-    assert %{
-             "data" => [
-               %{
-                 "command_approval_id" => ^command_approval_id,
-                 "decision" => "approved"
-               }
-             ]
-           } = json_response(command_approvals_conn, 200)
-
-    command_queue_entry_conn =
-      conn
-      |> authorize(api_token)
-      |> post(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_requests/#{staged_command_request_id}/enqueue",
-        %{
-          "queue_entry" => %{}
-        }
-      )
-
-    assert %{
-             "data" => %{
-               "queue_entry" => %{
-                 "command_queue_entry_id" => staged_queue_entry_id,
-                 "queue_lane_key" => ^source_endpoint_id,
-                 "priority" => 2
-               },
-               "command_request" => %{
-                 "command_request_id" => ^staged_command_request_id,
-                 "lifecycle_state" => "queued"
-               }
-             }
-           } = json_response(command_queue_entry_conn, 200)
-
-    direct_command_request_conn =
-      conn
-      |> authorize(api_token)
-      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/command_requests", %{
-        "command_request" => %{
-          "command_request_id" => "command-request-noop",
-          "source_endpoint_ref" => source_endpoint_id,
-          "mission_model_revision_id" => mission_model_revision_id,
-          "command_id" => noop_command_id,
-          "priority" => 1
-        }
-      })
-
-    assert %{
-             "data" => %{
-               "command_request_id" => "command-request-noop",
-               "lifecycle_state" => "validated"
-             }
-           } = json_response(direct_command_request_conn, 201)
-
-    noop_queue_entry_conn =
-      conn
-      |> authorize(api_token)
-      |> post(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_requests/command-request-noop/enqueue",
-        %{
-          "queue_entry" => %{}
-        }
-      )
-
-    assert %{
-             "data" => %{
-               "queue_entry" => %{
-                 "command_queue_entry_id" => noop_queue_entry_id,
-                 "priority" => 1
-               }
-             }
-           } = json_response(noop_queue_entry_conn, 200)
-
-    # #117 step 4b (api-ops on #639): the release recorded not_required in the four-eyes record,
-    # but the REST approvals read doesn't show it: decision stays approved | rejected there.
-    assert Enum.any?(
-             ApprovalDecisions.decisions(organization_id),
-             &(&1.decision == :not_required and &1.subject.id == "command-request-noop")
-           )
-
-    for params <- [%{"command_request_id" => "command-request-noop"}, %{}] do
-      approvals_conn =
-        conn
-        |> authorize(api_token)
-        |> get(
-          "/api/organizations/#{organization_id}/missions/#{mission_id}/command_approvals",
-          params
-        )
-
-      assert %{"data" => approvals} = json_response(approvals_conn, 200)
-      assert Enum.all?(approvals, &(&1["decision"] in ["approved", "rejected"]))
-      refute Enum.any?(approvals, &(&1["command_request_id"] == "command-request-noop"))
-    end
-
-    command_queue_entries_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_queue_entries",
-        %{"queue_lane_key" => source_endpoint_id}
-      )
-
-    assert %{
-             "data" => [
-               %{"command_queue_entry_id" => ^noop_queue_entry_id, "priority" => 1},
-               %{"command_queue_entry_id" => ^staged_queue_entry_id, "priority" => 2}
-             ]
-           } = json_response(command_queue_entries_conn, 200)
-
-    %{
-      noop_queue_entry_id: noop_queue_entry_id,
-      staged_command_request_id: staged_command_request_id,
-      staged_queue_entry_id: staged_queue_entry_id
-    }
+    assert %{"data" => []} = json_response(command_requests_conn, 200)
+    :ok
   end
 
   test "authenticated mission API activates an imported Mission Model and ingests dev space packets",
        %{
          conn: conn
        } do
-    %{conn: conn, api_token: api_token, organization_id: organization_id, mission_id: mission_id} =
+    %{conn: conn, organization_id: organization_id, mission_id: mission_id} =
       bootstrap(conn)
 
-    artifact_conn =
-      conn
-      |> authorize(api_token)
-      |> post(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/catalog_artifacts",
-        %{
-          "catalog_artifact" => %{
-            "artifact_id" => "artifact-yaml-alpha",
-            "catalog_family" => "combined",
-            "artifact_name" => "mission-alpha-dev.yaml",
-            "format_key" => "cadence_yaml",
-            "media_type" => "application/yaml",
-            "source_artifact" => %{
-              "yaml" => """
-              version: "1.0.0"
+    yaml = """
+    version: "1.0.0"
 
-              packets:
-                - name: THERM
-                  apid: 42
-                  items:
-                    - name: temperature_c
-                      bit_offset: 0
-                      bit_size: 32
-                      data_type: float
-                      endianness: big
-                    - name: heater_enabled
-                      bit_offset: 32
-                      bit_size: 1
-                      data_type: bool
+    packets:
+      - name: THERM
+        apid: 42
+        items:
+          - name: temperature_c
+            bit_offset: 0
+            bit_size: 32
+            data_type: float
+            endianness: big
+          - name: heater_enabled
+            bit_offset: 32
+            bit_size: 1
+            data_type: bool
 
-              commands:
-                - name: NOOP
-                  opcode: 0x01
-              """
-            }
-          }
-        }
-      )
+    commands:
+      - name: NOOP
+        opcode: 0x01
+    """
 
-    assert %{"data" => %{"artifact_id" => "artifact-yaml-alpha"}} =
-             json_response(artifact_conn, 201)
-
-    import_run_conn =
-      conn
-      |> authorize(api_token)
-      |> post(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/catalog_import_runs",
-        %{
-          "catalog_import_run" => %{
-            "artifact_id" => "artifact-yaml-alpha",
-            "importer_key" => "cadence_yaml"
-          }
-        }
-      )
-
-    assert %{"data" => %{"import_run_id" => import_run_id}} = json_response(import_run_conn, 201)
-
-    assert [{:ok, claimed_job}] =
-             Jobs.claim_jobs(1)
-             |> Enum.map(fn job -> {:ok, job} end)
-
-    assert {:ok, _completed_job} = JobRunner.run_job(claimed_job.job_id)
-
-    import_run_show_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/catalog_import_runs/#{import_run_id}"
-      )
-
-    assert %{
-             "data" => %{
-               "result_document" =>
-                 %{
-                   "mission_model" => %{"revision_id" => mission_model_revision_id}
-                 } = result_document
-             }
-           } = json_response(import_run_show_conn, 200)
+    {import_run_id,
+     %{"mission_model" => %{"revision_id" => mission_model_revision_id}} = result_document} =
+      import_catalog!(conn, organization_id, mission_id, "mission-alpha-dev.yaml", yaml)
 
     assert {:ok, plans} =
              Cadence.MissionModels.fetch_runtime_plans(
@@ -630,7 +439,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
     )
   end
 
-  test "authenticated mission API manages command stages, requests, approvals, and queue entries",
+  test "authenticated mission API manages command stages and their items",
        %{conn: conn} do
     %{conn: conn, api_token: api_token, organization_id: organization_id, mission_id: mission_id} =
       bootstrap(conn)
@@ -664,103 +473,52 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
     assert %{"data" => %{"source_endpoint_id" => source_endpoint_id}} =
              json_response(source_endpoint_conn, 201)
 
-    artifact_conn =
-      conn
-      |> authorize(api_token)
-      |> post(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/catalog_artifacts",
-        %{
-          "catalog_artifact" => %{
-            "artifact_id" => "artifact-commanding-api",
-            "artifact_name" => "commanding-api.yaml",
-            "catalog_family" => "combined",
-            "format_key" => "cadence_yaml",
-            "media_type" => "application/yaml",
-            "source_artifact" => """
-            version: "1.0.0"
+    yaml = """
+    version: "1.0.0"
 
-            commands:
-              - name: NOOP
-                opcode: 0x01
-                parameters: []
-              - name: SET_MODE
-                opcode: 0x03
-                is_hazardous: true
-                hazard_description: "Mode changes affect safing behavior"
-                requires_confirmation: true
-                parameters:
-                  - name: mode
-                    data_type: uint
-                    required: true
-                    bit_offset: 0
-                    bit_length: 8
-                  - name: delay_s
-                    data_type: uint
-                    required: false
-                    default_value: 5
-                    bit_offset: 8
-                    bit_length: 8
-                verifiers:
-                  - name: Release Accepted
-                    phase: acceptance
-                    timeout_ms: 1000
-                    success_criteria:
-                      criteria_type: comparison
-                      subject_ref: transport:accepted
-                      comparison: equal
-                      value: true
-                  - name: Mode Applied
-                    phase: completion
-                    timeout_ms: 5000
-                    success_criteria:
-                      criteria_type: comparison
-                      subject_ref: mode_state
-                      comparison: equal
-                      value: 3
-            """
-          }
-        }
-      )
+    commands:
+      - name: NOOP
+        opcode: 0x01
+        parameters: []
+      - name: SET_MODE
+        opcode: 0x03
+        is_hazardous: true
+        hazard_description: "Mode changes affect safing behavior"
+        requires_confirmation: true
+        parameters:
+          - name: mode
+            data_type: uint
+            required: true
+            bit_offset: 0
+            bit_length: 8
+          - name: delay_s
+            data_type: uint
+            required: false
+            default_value: 5
+            bit_offset: 8
+            bit_length: 8
+        verifiers:
+          - name: Release Accepted
+            phase: acceptance
+            timeout_ms: 1000
+            success_criteria:
+              criteria_type: comparison
+              subject_ref: transport:accepted
+              comparison: equal
+              value: true
+          - name: Mode Applied
+            phase: completion
+            timeout_ms: 5000
+            success_criteria:
+              criteria_type: comparison
+              subject_ref: mode_state
+              comparison: equal
+              value: 3
+    """
 
-    assert %{"data" => %{"artifact_id" => "artifact-commanding-api"}} =
-             json_response(artifact_conn, 201)
-
-    import_run_conn =
-      conn
-      |> authorize(api_token)
-      |> post(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/catalog_import_runs",
-        %{
-          "catalog_import_run" => %{
-            "artifact_id" => "artifact-commanding-api",
-            "importer_key" => "cadence_yaml"
-          }
-        }
-      )
-
-    assert %{"data" => %{"import_run_id" => import_run_id}} = json_response(import_run_conn, 201)
-
-    assert [{:ok, claimed_job}] =
-             Jobs.claim_jobs(1)
-             |> Enum.map(fn job -> {:ok, job} end)
-
-    assert {:ok, _completed_job} = JobRunner.run_job(claimed_job.job_id)
-
-    import_run_show_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/catalog_import_runs/#{import_run_id}"
-      )
-
-    assert %{
-             "data" => %{
-               "result_document" =>
-                 %{
-                   "mission_model" => %{"revision_id" => mission_model_revision_id}
-                 } = result_document
-             }
-           } = json_response(import_run_show_conn, 200)
+    {_import_run_id,
+     %{"mission_model" => %{"revision_id" => mission_model_revision_id}} = result_document} =
+      import_catalog!(conn, organization_id, mission_id, "commanding-api.yaml", yaml)
 
     assert {:ok, runtime_plans} =
              Cadence.MissionModels.fetch_runtime_plans(
@@ -778,149 +536,16 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
 
     assert command_model.revision_id == mission_model_revision_id
 
-    noop_command_id = fetch_command_id(runtime_plans, "NOOP")
     set_mode_command_id = fetch_command_id(runtime_plans, "SET_MODE")
 
-    %{
-      noop_queue_entry_id: noop_queue_entry_id,
-      staged_command_request_id: staged_command_request_id,
-      staged_queue_entry_id: staged_queue_entry_id
-    } =
-      assert_command_stage_queue_workflow(%{
-        conn: conn,
-        api_token: api_token,
-        organization_id: organization_id,
-        mission_id: mission_id,
-        source_endpoint_id: source_endpoint_id,
-        mission_model_revision_id: mission_model_revision_id,
-        noop_command_id: noop_command_id,
-        set_mode_command_id: set_mode_command_id
-      })
-
-    realized_contact =
-      persist_active_uplink_contact_for_command_release(
-        organization_id,
-        mission_id,
-        source_endpoint_id
-      )
-
-    release_queue_entry_conn =
-      conn
-      |> authorize(api_token)
-      |> post(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_queue_entries/#{noop_queue_entry_id}/release",
-        %{"release_attempt" => %{"realized_contact_id" => realized_contact.realized_contact_id}}
-      )
-
-    assert %{
-             "data" => %{
-               "release_attempt" => %{
-                 "command_release_attempt_id" => command_release_attempt_id,
-                 "command_queue_entry_id" => ^noop_queue_entry_id,
-                 "realized_contact_id" => realized_contact_id,
-                 "path_id" => "uplink-path-commanding-api",
-                 "transport_binding_id" => "uplink-gateway-commanding-api",
-                 "lifecycle_state" => "released",
-                 "verification_state" => "not_required",
-                 "encoded_binary_base64" => encoded_binary_base64
-               },
-               "queue_entry" => %{
-                 "command_queue_entry_id" => ^noop_queue_entry_id,
-                 "lifecycle_state" => "released"
-               },
-               "command_request" => %{
-                 "command_request_id" => "command-request-noop",
-                 "lifecycle_state" => "released",
-                 "verification_state" => "not_required"
-               }
-             }
-           } = json_response(release_queue_entry_conn, 200)
-
-    assert realized_contact_id == realized_contact.realized_contact_id
-    assert Base.decode64!(encoded_binary_base64) == <<0x01>>
-
-    command_release_attempts_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_release_attempts",
-        %{"command_queue_entry_id" => noop_queue_entry_id}
-      )
-
-    assert %{
-             "data" => [
-               %{
-                 "command_release_attempt_id" => ^command_release_attempt_id,
-                 "command_queue_entry_id" => ^noop_queue_entry_id,
-                 "lifecycle_state" => "released"
-               }
-             ]
-           } = json_response(command_release_attempts_conn, 200)
-
-    command_release_attempt_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_release_attempts/#{command_release_attempt_id}"
-      )
-
-    assert %{
-             "data" => %{
-               "command_release_attempt_id" => ^command_release_attempt_id,
-               "transport_binding_id" => "uplink-gateway-commanding-api",
-               "lifecycle_state" => "released",
-               "verification_state" => "not_required"
-             }
-           } = json_response(command_release_attempt_conn, 200)
-
-    staged_release_queue_entry_conn =
-      conn
-      |> authorize(api_token)
-      |> post(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_queue_entries/#{staged_queue_entry_id}/release",
-        %{"release_attempt" => %{"realized_contact_id" => realized_contact.realized_contact_id}}
-      )
-
-    assert %{
-             "data" => %{
-               "release_attempt" => %{
-                 "command_queue_entry_id" => ^staged_queue_entry_id,
-                 "lifecycle_state" => "released",
-                 "verification_state" => "pending"
-               },
-               "command_request" => %{
-                 "command_request_id" => ^staged_command_request_id,
-                 "verification_state" => "pending"
-               }
-             }
-           } = json_response(staged_release_queue_entry_conn, 200)
-
-    command_verifier_instances_conn =
-      conn
-      |> authorize(api_token)
-      |> get(
-        "/api/organizations/#{organization_id}/missions/#{mission_id}/command_verifier_instances",
-        %{"command_request_id" => staged_command_request_id}
-      )
-
-    assert %{"data" => command_verifier_instances} =
-             json_response(command_verifier_instances_conn, 200)
-
-    assert length(command_verifier_instances) == 2
-
-    assert %{
-             "command_request_id" => ^staged_command_request_id,
-             "verifier_name" => "Release Accepted",
-             "phase" => "acceptance",
-             "lifecycle_state" => "satisfied",
-             "matched_record_kind" => "transport_action_request"
-           } = Enum.find(command_verifier_instances, &(&1["phase"] == "acceptance"))
-
-    assert %{
-             "command_request_id" => ^staged_command_request_id,
-             "verifier_name" => "Mode Applied",
-             "phase" => "completion",
-             "lifecycle_state" => "pending"
-           } = Enum.find(command_verifier_instances, &(&1["phase"] == "completion"))
+    assert_command_stage_queue_workflow(%{
+      conn: conn,
+      api_token: api_token,
+      organization_id: organization_id,
+      mission_id: mission_id,
+      source_endpoint_id: source_endpoint_id,
+      mission_model_revision_id: mission_model_revision_id,
+      set_mode_command_id: set_mode_command_id
+    })
   end
 end

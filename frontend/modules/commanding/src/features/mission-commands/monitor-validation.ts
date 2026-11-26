@@ -147,7 +147,6 @@ function observation(value: unknown) {
 export function readCommandMonitor(value: unknown, context: OpsPageContext): CommandMonitorModel {
   const m = object(value, [
     "version",
-    "can_review",
     "organization_id",
     "mission_id",
     "observed_at",
@@ -164,7 +163,6 @@ export function readCommandMonitor(value: unknown, context: OpsPageContext): Com
   ]);
   if (
     m.version !== 1 ||
-    typeof m.can_review !== "boolean" ||
     !text(m.organization_id) ||
     !text(m.mission_id) ||
     m.organization_id !== context.organizationId ||

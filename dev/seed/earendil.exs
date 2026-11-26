@@ -44,7 +44,9 @@ defmodule EarendilSeed do
     {client, organization_id, mission_id} =
       phase("organization and mission", fn -> scope(client, email) end)
 
-    {client, revision_id} = phase("catalog import", fn -> seed_catalog(client, mission_id) end)
+    # D3 (#544): the profile pins a composition only once its catalog is approved, which needs a
+    # second person (#745); until then the profile carries no catalog pin.
+    {client, _revision_id} = phase("catalog import", fn -> seed_catalog(client, mission_id) end)
     site_rows = Enum.take(@site_rows, sites)
     phase("simulator run", fn -> ensure_simulator(count, site_rows) end)
 
@@ -54,7 +56,7 @@ defmodule EarendilSeed do
       end)
 
     client = phase("dashboard source probe", fn -> probe_dashboard_source(client, mission_id) end)
-    seed_fleet(client, mission_id, count, site_rows, revision_id)
+    seed_fleet(client, mission_id, count, site_rows)
     phase("dashboard import", fn -> seed_dashboards(client, organization_id, mission_id) end)
 
     IO.puts("Earendil: organization #{organization_id}, mission #{mission_id}")
@@ -62,6 +64,11 @@ defmodule EarendilSeed do
     IO.puts("  orbit elements wait on #732")
     IO.puts("  #{sites} station and profile changes await the fleet's independent review")
     IO.puts("  second-person invitations and approval wait on #745")
+
+    IO.puts(
+      "  the profile's catalog pin waits on catalog approval (#745), then Setup › Catalog › Roll out"
+    )
+
     IO.puts("  spacecraft configuration drafts wait on an applied fleet and bulk review #734")
     IO.puts("total: #{elapsed(started)}")
   end
@@ -321,7 +328,7 @@ defmodule EarendilSeed do
     {client, provider_id}
   end
 
-  defp seed_fleet(client, mission_id, count, site_rows, revision_id) do
+  defp seed_fleet(client, mission_id, count, site_rows) do
     {client, existing} =
       phase("fleet read", fn ->
         {client, body} = request!(client, :get, "/missions/#{mission_id}/spacecraft")
@@ -339,7 +346,7 @@ defmodule EarendilSeed do
         IO.puts("Earendil fleet: a change set is open; review it before rerunning the seed")
 
       true ->
-        stage_fleet(client, mission_id, missing, site_rows, revision_id)
+        stage_fleet(client, mission_id, missing, site_rows)
     end
   end
 
@@ -376,17 +383,17 @@ defmodule EarendilSeed do
     client
   end
 
-  defp stage_fleet(client, mission_id, missing, site_rows, revision_id) do
+  defp stage_fleet(client, mission_id, missing, site_rows) do
     {client, setup} =
       phase("stage sites and profile", fn ->
-        stage_setup(client, mission_id, site_rows, revision_id)
+        stage_setup(client, mission_id, site_rows)
       end)
 
     {client, staged} =
       phase("stage #{length(missing)} spacecraft", fn ->
         Enum.reduce(Enum.chunk_every(missing, @batch_size), {client, setup}, fn batch,
                                                                                 {client, _last} ->
-          stage_batch(client, mission_id, batch, revision_id)
+          stage_batch(client, mission_id, batch)
         end)
       end)
 
@@ -409,10 +416,10 @@ defmodule EarendilSeed do
         IO.puts("  approval waits on #745: invite a second person and use that person's session")
   end
 
-  defp stage_setup(client, mission_id, site_rows, revision_id) do
+  defp stage_setup(client, mission_id, site_rows) do
     station_ops = Enum.map(site_rows, &station_op/1)
 
-    ops = station_ops ++ [profile_op(revision_id)]
+    ops = station_ops ++ [profile_op()]
     path = "/missions/#{mission_id}/config"
     {client, preview} = request!(client, :post, path <> "/preview", %{ops: ops})
     unless preview["verdict"] == "go", do: fail!("setup preview", preview)
@@ -424,7 +431,7 @@ defmodule EarendilSeed do
     })
   end
 
-  defp profile_op(revision_id) do
+  defp profile_op do
     %{
       kind: "spacecraft_profile",
       action: "create",
@@ -435,7 +442,6 @@ defmodule EarendilSeed do
         uplink_protocol: "tc",
         frame_parameters: %{frame_size: 1115, ocf_length: 0, fecf: false},
         applications: %{telemetry_decom: %{}},
-        catalog_revision_id: revision_id,
         metadata: %{"synthetic" => true, "fixture" => "reflect-orbital-v1"}
       }
     }
@@ -462,12 +468,12 @@ defmodule EarendilSeed do
     }
   end
 
-  defp stage_batch(client, mission_id, batch, revision_id) do
+  defp stage_batch(client, mission_id, batch) do
     ops = Enum.map(batch, &spacecraft_op/1)
 
     {client, preview} =
       request!(client, :post, "/missions/#{mission_id}/config/preview", %{
-        ops: [profile_op(revision_id) | ops]
+        ops: [profile_op() | ops]
       })
 
     unless preview["verdict"] == "go", do: fail!("fleet preview", preview)

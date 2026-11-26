@@ -9,25 +9,27 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
   alias Cadence.Applications.TelemetryDecom
   alias Cadence.Applications.TelemetryDecom.Config
   alias Cadence.Catalog
+  alias Cadence.Catalog.ConfigurationReviews
   alias Cadence.Catalog.FleetSnapshot
-  alias Cadence.Catalog.SpacecraftModelBindings
   alias Cadence.Governance
   alias Cadence.Management.Activations
   alias Cadence.MissionModels
   alias Cadence.MissionModels.TelemetryProjection
   alias Cadence.Platform.ScopedReadUpdates
+  alias Cadence.SpacecraftStore
 
   def request(scope, mission_id, spacecraft_id, expected_token, opts \\ []) do
     request_many(scope, mission_id, %{spacecraft_id => expected_token}, opts)
   end
 
-  @max_review_batch SpacecraftModelBindings.max_review_batch()
-
-  @doc "Reviews an exact, bounded set of spacecraft drafts as one governed activation."
+  @doc """
+  Reviews an exact set of spacecraft drafts (`spacecraft_id => token`) as one governed activation.
+  There is no cap on the set: the evidence is stored by hash, not in the activation's metadata.
+  """
   def request_many(scope, mission_id, tokens, opts \\ [])
 
   def request_many(scope, mission_id, tokens, opts)
-      when is_map(tokens) and map_size(tokens) in 1..@max_review_batch do
+      when is_map(tokens) and map_size(tokens) > 0 do
     {spacecraft_id, _token} = tokens |> Enum.sort() |> hd()
 
     with {:ok, mission, spacecraft} <-
@@ -51,6 +53,46 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
 
   def request_many(_, _, _, _), do: {:error, :spacecraft_configuration_review_unavailable}
 
+  @doc """
+  The tokens (`spacecraft_id => token`) of every spacecraft whose latest saved draft differs from
+  its active configuration: what "review everything that's saved" covers. `{:error,
+  :nothing_to_review}` when there is none.
+
+  Resolved without the configuration lock: `request_many/4` checks every token exactly under it,
+  so a draft saved in between is refused as changed, never reviewed in a different state.
+  """
+  @spec saved_tokens(map(), binary()) :: {:ok, %{binary() => binary()}} | {:error, term()}
+  def saved_tokens(scope, mission_id) do
+    with {:ok, mission} <- ConfigurationDrafts.authorize_mission(scope, mission_id),
+         {:ok, active} <- ConfigurationActive.load(mission),
+         [_ | _] = changed <- changed_since_active(mission, active),
+         {:ok, craft} <-
+           SpacecraftStore.fetch_spacecrafts_in_batches(
+             mission.organization_id,
+             mission_id,
+             Enum.map(changed, & &1.spacecraft_id)
+           ) do
+      tokens =
+        for row <- changed, spacecraft = craft[row.spacecraft_id], into: %{} do
+          {row.spacecraft_id, ConfigurationDrafts.snapshot(mission, spacecraft).token}
+        end
+
+      if map_size(tokens) > 0, do: {:ok, tokens}, else: {:error, :nothing_to_review}
+    else
+      [] -> {:error, :nothing_to_review}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp changed_since_active(mission, active) do
+    mission.organization_id
+    |> ConfigurationDrafts.latest_for_mission(mission.mission_id)
+    |> Enum.reject(fn row ->
+      get_in(active.entries, [row.spacecraft_id, "configuration_revision_id"]) ==
+        row.configuration_revision_id
+    end)
+  end
+
   defp request_locked(scope, mission, _spacecraft, tokens, opts) do
     mission_id = mission.mission_id
 
@@ -60,7 +102,13 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
          {:ok, _} <- Governance.persist_binding_set(scope.organization_id, binding_set),
          entries <- Map.merge(active.entries, Map.new(prepared, &{&1.id, &1.entry})),
          {:ok, fleet} <- FleetSnapshot.store(mission_id, entries),
-         metadata <- FleetSnapshot.metadata(fleet, review_evidence(prepared, active)) do
+         {:ok, review} <-
+           ConfigurationReviews.store(
+             mission.organization_id,
+             mission_id,
+             Enum.map(prepared, & &1.review)
+           ),
+         metadata <- FleetSnapshot.metadata(fleet, review_evidence(review, active)) do
       Activations.request(
         scope,
         mission_id,
@@ -85,9 +133,9 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
            {:ok, inputs, cache} <- cached_inputs(cache, mission, current.row.catalog_revision_id),
            {:ok, item} <- compile(mission, id, current.row, inputs) do
         review = %{
-          "spacecraft_id" => id,
-          "configuration_revision_id" => current.row.configuration_revision_id,
-          "configuration_token" => current.token
+          id: id,
+          configuration_revision_id: current.row.configuration_revision_id,
+          configuration_token: current.token
         }
 
         {:cont, {:ok, [Map.put(item, :review, review) | prepared], cache}}
@@ -137,20 +185,9 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
   @spec binding_set(map(), map(), [map()]) :: struct()
   def binding_set(mission, active, items), do: replace_contributions(mission, active, items)
 
-  defp review_evidence([item], active),
+  defp review_evidence(review, active),
     do:
-      Map.put(
-        item.review,
-        "base_activation_id",
-        active.activation && active.activation.activation_id
-      )
-
-  defp review_evidence(items, active) do
-    %{
-      "spacecraft_reviews" => Map.new(items, &{&1.id, &1.review}),
-      "base_activation_id" => active.activation && active.activation.activation_id
-    }
-  end
+      ConfigurationReviews.metadata(review, active.activation && active.activation.activation_id)
 
   def ready(%{"catalog_revision_id" => nil}), do: {:error, :spacecraft_catalog_required}
 
@@ -251,7 +288,9 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
 
   # #534: the telemetry's packet definition versions are resolved by content, with `acc` carrying
   # the generation's resolutions across its catalogs (amendment 1).
-  defp catalog_inputs(mission, catalog_id, acc) do
+  # D3 (#544): `revision_id` is the revision the catalog's composition selected; nil keeps the
+  # catalog's own (a catalog with no composition, as before).
+  defp catalog_inputs(mission, catalog_id, acc, revision_id \\ nil) do
     with {:ok, catalog} <-
            Catalog.fetch_revision(mission.organization_id, mission.mission_id, catalog_id),
          :ok <- has_mission_model(catalog),
@@ -259,7 +298,7 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
            MissionModels.fetch_revision(
              mission.organization_id,
              mission.mission_id,
-             catalog.mission_model_revision_id
+             revision_id || catalog.mission_model_revision_id
            ),
          {:ok, plans} <-
            MissionModels.fetch_runtime_plans(
@@ -293,8 +332,11 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
   cache also carries the generation's resolved packet definition versions, so its catalogs give
   distinct contents distinct versions (#534).
   """
-  @spec cached_inputs(map(), map(), binary()) :: {:ok, map(), map()} | {:error, term()}
-  def cached_inputs(cache, mission, catalog_id) do
+  @spec cached_inputs(map(), map(), binary(), binary() | nil) ::
+          {:ok, map(), map()} | {:error, term()}
+  # Keyed by catalog: within a generation a catalog's composition selects one revision, and
+  # ApplicationInputs.resync_packet_inputs/3 reads the inputs by catalog.
+  def cached_inputs(cache, mission, catalog_id, revision_id \\ nil) do
     case Map.fetch(cache, catalog_id) do
       {:ok, inputs} ->
         {:ok, inputs, cache}
@@ -302,7 +344,7 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
       :error ->
         acc = Map.get(cache, @versions, %{})
 
-        with {:ok, inputs, acc} <- catalog_inputs(mission, catalog_id, acc),
+        with {:ok, inputs, acc} <- catalog_inputs(mission, catalog_id, acc, revision_id),
              do: {:ok, inputs, cache |> Map.put(catalog_id, inputs) |> Map.put(@versions, acc)}
     end
   end

@@ -173,7 +173,7 @@ defmodule Cadence.Control.Activations.ApplyAttention do
 
   defp describe(request_id) do
     case ManagementActivations.fetch_approved(request_id) do
-      {:ok, approved} -> Description.describe(approved.metadata)
+      {:ok, approved} -> Description.describe(approved, ids: true)
       {:error, _not_approved} -> Description.describe(%{})
     end
   end

@@ -19,7 +19,7 @@ defmodule Cadence.Control.ActivationRequests.ConfigurationChanges do
   """
   alias Cadence.Applications.SpacecraftConfiguration.{Active, Drafts}
   alias Cadence.Catalog
-  alias Cadence.Catalog.SpacecraftModelBindings
+  alias Cadence.Catalog.ConfigurationReviews
   alias Cadence.SourceEndpoints
   alias Cadence.SpacecraftStore
 
@@ -62,7 +62,11 @@ defmodule Cadence.Control.ActivationRequests.ConfigurationChanges do
   """
   @spec reviewed(map(), map()) :: map() | nil
   def reviewed(mission, %{metadata: %{"configuration_review" => _} = metadata}) do
-    case SpacecraftModelBindings.reviewed_spacecraft_ids(metadata) do
+    case ConfigurationReviews.spacecraft_ids(
+           mission.organization_id,
+           mission.mission_id,
+           metadata
+         ) do
       {:ok, ids} ->
         shown = Enum.take(ids, @page)
         names = names_for(mission, shown)
@@ -98,9 +102,11 @@ defmodule Cadence.Control.ActivationRequests.ConfigurationChanges do
          state: :approval_pending,
          metadata: %{"configuration_review" => _} = metadata
        }) do
-    with {:ok, ids} <- SpacecraftModelBindings.reviewed_spacecraft_ids(metadata),
+    with {:ok, evidence} <-
+           ConfigurationReviews.evidence(mission.organization_id, mission.mission_id, metadata),
+         ids = evidence |> Map.keys() |> Enum.sort(),
          {:ok, active} <- Active.load(mission) do
-      reviewed = reviewed_documents(mission, metadata, ids)
+      reviewed = reviewed_documents(mission, evidence, ids)
       lookups = lookups(mission, reviewed, active, ids)
 
       groups =
@@ -119,13 +125,12 @@ defmodule Cadence.Control.ActivationRequests.ConfigurationChanges do
 
   # The reviewed version of each craft: its latest saved version, one query, kept only when it IS
   # the reviewed one (a craft saved since the review is stale; it's counted in `total` only).
-  defp reviewed_documents(mission, metadata, ids) do
+  defp reviewed_documents(mission, evidence, ids) do
     latest = Drafts.latest_many(mission.organization_id, mission.mission_id, ids)
 
     for id <- ids,
         %{configuration_revision_id: revision, document: document} <- [latest[id]],
-        revision ==
-          (SpacecraftModelBindings.review_for(metadata, id) || %{})["configuration_revision_id"],
+        revision == (evidence[id] || %{})["configuration_revision_id"],
         into: %{},
         do: {id, document}
   end

@@ -42,7 +42,7 @@ defmodule Cadence.Reads.VerifierSeries.Points do
 
   # One entry per telemetry verifier on the member's command: {{position, subject}, order, plan, id}.
   defp entries(member, plans_for) do
-    position = member.metadata["group"]["position"]
+    position = member.group_slot.position
 
     for {plan, order} <- Enum.with_index(plans_for.(member)),
         subject = subject(plan),

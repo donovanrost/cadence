@@ -53,6 +53,14 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceJSON do
   # Approved, but the application couldn't be confirmed (the host's 'application_needs_review').
   def submit_result(%{"outcome" => "application_needs_review"}), do: %{state: "needs_review"}
 
+  @doc "The bulk review's answer: `submit_result/1` plus how many spacecraft it covers."
+  def reviews_result(%{spacecraft_count: count} = result),
+    do:
+      result
+      |> Map.delete(:spacecraft_count)
+      |> submit_result()
+      |> Map.put(:spacecraft_count, count)
+
   def packets(%{catalog_id: id, packets: packets}), do: %{catalog_id: id, packets: packets}
 
   # A stored document predating a key reads it as the empty document does.

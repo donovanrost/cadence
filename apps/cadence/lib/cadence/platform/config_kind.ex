@@ -157,13 +157,49 @@ defmodule Cadence.Platform.ConfigKind do
               prepared :: [map()]
             ) :: :ok | {:error, {:invalid_op, non_neg_integer(), [field_error()]}}
 
+  @doc """
+  Rewrites a staged document before `normalize/3`, with the tenant in hand, AT STAGING ONLY (never
+  at apply): e.g. D3 derives a profile's `catalog_revision_id` from the composition it pins
+  (#544). `previous` is the live document (nil for a create), `touched` the paths the op
+  sets. Paths it changes beyond `touched` are staged as further changes, so the staged op names
+  exactly what apply will write.
+  """
+  @callback translate(
+              String.t(),
+              String.t(),
+              previous :: document() | nil,
+              proposed :: document(),
+              touched :: [String.t()]
+            ) :: {:ok, document()} | {:error, [field_error()]}
+
+  @doc """
+  Optionally runs a consecutive group of distinct entities together. Earlier operations are
+  already visible in the transaction. The pipeline still checks bases and records revisions.
+  """
+  @callback load_batch(String.t(), String.t(), [String.t()]) :: {map(), term()}
+
+  @doc """
+  Validates and writes the batch. Return one outcome per transition, in order, including
+  `{:invalid, fields}` for every transition that `validate/6` would reject. The pipeline delegates
+  validation to this callback and runs kinds that export `effect/7` through the single-op path.
+  """
+  @callback write_batch(String.t(), String.t(), [map()], term()) ::
+              {:ok, [{:ok, document() | nil} | {:invalid, [field_error()]}]}
+              | {:error, String.t(), term()}
+              | {:error, term()}
+  @callback batchable?(map()) :: boolean()
+
   @optional_callbacks stage_check: 5,
                       stage_conflicts: 4,
+                      translate: 5,
                       absent_errors: 3,
                       effect: 7,
                       normalize_options: 2,
                       finalize: 3,
                       holds: 3,
                       after_commit: 3,
-                      create_entity_id: 1
+                      create_entity_id: 1,
+                      load_batch: 3,
+                      write_batch: 4,
+                      batchable?: 1
 end

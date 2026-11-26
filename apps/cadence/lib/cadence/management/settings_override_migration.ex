@@ -22,7 +22,6 @@ defmodule Cadence.Management.SettingsOverrideMigration do
     PassReviewSettingsSection
   }
 
-  alias Cadence.Management.Commanding.WorkspaceSettings
   alias Cadence.Missions
   alias Cadence.Platform.ScopedSettings
 
@@ -31,7 +30,6 @@ defmodule Cadence.Management.SettingsOverrideMigration do
   @governance ["cadence.governance"]
   @providers %{
     "cadence.governance" => {ActivationPolicy, "Governance"},
-    "commanding.defaults" => {WorkspaceSettings, "Commanding"},
     "cadence.pass_review" => {PassReviewSettingsSection, "Pass review"},
     "cadence.configuration" => {ConfigurationSettingsSection, "Configuration"}
   }

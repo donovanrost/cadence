@@ -160,6 +160,19 @@ defmodule Cadence.SpacecraftTypeStore do
     end
   end
 
+  @doc "Fetches the pinned profile versions in bounded batches."
+  def fetch_spacecraft_type_versions_in_batches(organization_id, mission_id, references) do
+    references
+    |> Enum.uniq()
+    |> Enum.chunk_every(@max_batch_size)
+    |> Enum.reduce_while({:ok, %{}}, fn batch, {:ok, found} ->
+      case fetch_spacecraft_type_versions(organization_id, mission_id, batch) do
+        {:ok, versions} -> {:cont, {:ok, Map.merge(found, versions)}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
   defp bounded_references(references) do
     references = Enum.take(references, @max_batch_size + 1)
 
@@ -256,5 +269,18 @@ defmodule Cadence.SpacecraftTypeStore do
          {:organization_mission_mismatch, existing_organization_id, organization_id,
           type.mission_id}}
     end
+  end
+
+  @doc "The distinct catalog revisions the mission's profiles pin (D3, #544). One query."
+  @spec pinned_catalog_revision_ids(String.t(), String.t()) :: [String.t()]
+  def pinned_catalog_revision_ids(organization_id, mission_id) do
+    from(profile in SpacecraftTypeRow,
+      where:
+        profile.organization_id == ^organization_id and profile.mission_id == ^mission_id and
+          not is_nil(profile.catalog_revision_id),
+      distinct: true,
+      select: profile.catalog_revision_id
+    )
+    |> Repo.all()
   end
 end

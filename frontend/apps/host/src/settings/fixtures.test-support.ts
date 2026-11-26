@@ -17,15 +17,6 @@ export const settingsMetadata: readonly SettingsSectionDefinition[] = [
     description: "Who has to agree before configuration changes and app activations take effect.",
     owner: { kind: "host", label: "Cadence" },
   },
-  {
-    id: "commanding.defaults",
-    slot: "settings.section",
-    version: 1,
-    scopes: ["organization", "mission"],
-    title: "Commanding",
-    description: "Defaults for preparing commands in the workspace.",
-    owner: { kind: "application", applicationKey: "ops_console", label: "Commanding" },
-  },
 ];
 export function settingsValue(scope: SettingsContext["scope"] = "mission") {
   return {

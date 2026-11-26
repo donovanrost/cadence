@@ -47,6 +47,15 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Drafts do
 
   defp permitted(_scope, _mission_id), do: {:error, :invalid_spacecraft_scope}
 
+  @doc "`authorize/3` for the mission as a whole: the mission, when `scope` may save its drafts."
+  @spec authorize_mission(Scope.t(), binary()) :: {:ok, struct()} | {:error, term()}
+  def authorize_mission(%Scope{} = scope, mission_id) when is_binary(mission_id) do
+    with :ok <- permitted(scope, mission_id),
+         do: Missions.fetch_mission(scope.organization_id, mission_id)
+  end
+
+  def authorize_mission(_scope, _mission_id), do: {:error, :invalid_spacecraft_scope}
+
   def authorize(%Scope{} = scope, mission_id, spacecraft_id)
       when is_binary(mission_id) and is_binary(spacecraft_id) do
     with :ok <- permitted(scope, mission_id),
@@ -98,6 +107,23 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Drafts do
     )
     |> Repo.all()
     |> Map.new(&{&1.spacecraft_id, &1})
+  end
+
+  @doc "Each spacecraft's latest saved revision id in the mission, in one query (only what `saved_tokens` compares)."
+  @spec latest_for_mission(binary(), binary()) :: [
+          %{spacecraft_id: binary(), configuration_revision_id: binary()}
+        ]
+  def latest_for_mission(organization_id, mission_id) do
+    from(row in ConfigurationRevisionRow,
+      where: row.organization_id == ^organization_id and row.mission_id == ^mission_id,
+      distinct: row.spacecraft_id,
+      order_by: [asc: row.spacecraft_id, desc: row.version],
+      select: %{
+        spacecraft_id: row.spacecraft_id,
+        configuration_revision_id: row.configuration_revision_id
+      }
+    )
+    |> Repo.all()
   end
 
   @doc "Catalog references from each spacecraft’s latest saved configuration in this mission."

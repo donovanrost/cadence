@@ -6,57 +6,15 @@ defmodule Cadence.Commanding.RequestQueueStore do
   import Ecto.Query
 
   alias Cadence.Commanding.{
-    CommandApproval,
-    CommandApprovalRow,
     CommandQueueEntry,
     CommandQueueEntryRow,
-    CommandRequest,
     CommandRequestRow,
     LifecyclePolicy,
-    QueueLaneLock,
-    QueueLaneSequence
+    QueueLaneLock
   }
 
-  alias Cadence.Management.Commanding.RequestReview
   alias Cadence.Platform.ScopedReadUpdates, as: ReadUpdates
   alias Cadence.Repo
-
-  @spec enqueue_request(binary(), binary(), binary(), map(), keyword()) ::
-          {:ok, %{command_request: CommandRequest.t(), queue_entry: CommandQueueEntry.t()}}
-          | {:error, term()}
-  def enqueue_request(
-        organization_id,
-        mission_id,
-        command_request_id,
-        enqueued_by,
-        opts
-      )
-      when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(command_request_id) and is_map(enqueued_by) and is_list(opts) do
-    Repo.transaction(fn ->
-      with {:ok, request_row} <- lock_request(organization_id, mission_id, command_request_id),
-           :ok <- LifecyclePolicy.ensure_request_not_in_group(request_row),
-           :ok <- LifecyclePolicy.ensure_request_queueable(request_row),
-           :ok <- LifecyclePolicy.ensure_request_not_expired(request_row),
-           :ok <-
-             ensure_request_not_already_queued(organization_id, mission_id, command_request_id),
-           {:ok, sequence} <- QueueLaneSequence.next(request_row),
-           :ok <- LifecyclePolicy.ensure_request_not_expired(request_row),
-           :ok <- validate_request(request_row, opts),
-           :ok <- record_not_required(request_row, enqueued_by, opts),
-           {:ok, queue_row} <- insert_queue_entry(request_row, sequence, enqueued_by, opts),
-           {:ok, updated_request_row} <-
-             Repo.update(CommandRequestRow.lifecycle_changeset(request_row, :queued)) do
-        %{
-          queue_entry: CommandQueueEntryRow.to_domain(queue_row),
-          command_request: CommandRequestRow.to_domain(updated_request_row)
-        }
-      else
-        {:error, reason} -> Repo.rollback(reason)
-      end
-    end)
-    |> ReadUpdates.publish_result(:commanding_changed, organization_id, mission_id)
-  end
 
   defp lock_request(organization_id, mission_id, command_request_id) do
     row =
@@ -73,61 +31,6 @@ defmodule Cadence.Commanding.RequestQueueStore do
       nil -> {:error, :command_request_not_found}
       %CommandRequestRow{} -> {:ok, row}
     end
-  end
-
-  # #117 step 4b: a request released without a second GO (its policy needs none: it's
-  # `validated`, never `approved`) gets its own not_required record, in this release's transaction.
-  # The actor is whoever released it (a person acted); separated_from is empty (no check ran);
-  # admin_mode has no default (#112), so a releaser that omits it raises. An approved request
-  # already has its decision row.
-  defp record_not_required(%CommandRequestRow{lifecycle_state: "validated"} = row, by, opts) do
-    approval =
-      CommandApproval.new(%{
-        organization_id: row.organization_id,
-        mission_id: row.mission_id,
-        command_request_id: row.command_request_id,
-        decision: :not_required,
-        decided_by: by,
-        decided_at: DateTime.utc_now(),
-        subject_digest: RequestReview.review_token(CommandRequestRow.to_domain(row)),
-        separated_from: [],
-        admin_mode: Keyword.fetch!(opts, :admin_mode)
-      })
-
-    case Repo.insert(CommandApprovalRow.changeset(approval)) do
-      {:ok, _row} -> :ok
-      {:error, changeset} -> {:error, changeset}
-    end
-  end
-
-  defp record_not_required(_row, _by, _opts), do: :ok
-
-  defp validate_request(row, opts) do
-    case Keyword.get(opts, :before_enqueue) do
-      nil -> :ok
-      check when is_function(check, 1) -> check.(CommandRequestRow.to_domain(row))
-      _ -> {:error, :invalid_queue_precondition}
-    end
-  end
-
-  defp insert_queue_entry(request_row, sequence, enqueued_by, opts) do
-    CommandQueueEntry.new(%{
-      organization_id: request_row.organization_id,
-      mission_id: request_row.mission_id,
-      command_request_id: request_row.command_request_id,
-      source_endpoint_ref: request_row.source_endpoint_ref,
-      queue_lane_key: request_row.source_endpoint_ref,
-      priority: request_row.priority,
-      queue_sequence: sequence,
-      not_before: request_row.not_before,
-      expires_at: request_row.expires_at,
-      lifecycle_state: :pending,
-      enqueued_by: enqueued_by,
-      enqueued_at: Keyword.get(opts, :enqueued_at, DateTime.utc_now()),
-      metadata: Keyword.get(opts, :metadata, %{})
-    })
-    |> CommandQueueEntryRow.changeset()
-    |> Repo.insert()
   end
 
   @spec fetch_queue_entry(binary(), binary(), binary()) ::
@@ -398,17 +301,6 @@ defmodule Cadence.Commanding.RequestQueueStore do
       queue_lane_key: row.queue_lane_key
     })
     |> Repo.all()
-  end
-
-  defp ensure_request_not_already_queued(organization_id, mission_id, command_request_id) do
-    case Repo.get_by(CommandQueueEntryRow,
-           organization_id: organization_id,
-           mission_id: mission_id,
-           command_request_id: command_request_id
-         ) do
-      nil -> :ok
-      %CommandQueueEntryRow{} -> {:error, {:command_request_already_queued, command_request_id}}
-    end
   end
 
   defp next_release_candidate(

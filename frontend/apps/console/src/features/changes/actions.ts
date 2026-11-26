@@ -11,7 +11,6 @@ import {
   type Decoded,
   detailsOf,
 } from "@/api";
-import { conversionInProgress } from "./conversion-refusal.ts";
 
 /** Change-set writes and the dry run. Contract: docs/apogee/api/changes.md. */
 const { array, integer, object, string, token } = decoders;
@@ -142,8 +141,7 @@ export type StageOp = Readonly<{
     | "spacecraft"
     | "spacecraft_profile"
     | "spacecraft_override"
-    | "spacecraft_route"
-    | "legacy_routing_rule";
+    | "spacecraft_route";
   action: "create" | "update" | "delete";
   entity_id?: string;
   document?: Readonly<Record<string, unknown>>;
@@ -220,8 +218,6 @@ export function failureOutcome(
       changed: null,
       sentence: `The server failed while answering, so it isn't clear whether anything was ${verb}. Check Staged changes and Revisions now, before trying again.`,
     };
-  const converting = conversionInProgress(error);
-  if (converting) return converting;
   // Field-level rejections (e.g. DECISIONS #36 catalog refusal) name the field and the route.
   const fields = invalidOpDetails(error);
   if (fields && fields.errors.length > 0)

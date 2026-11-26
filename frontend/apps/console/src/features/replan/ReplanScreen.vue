@@ -114,7 +114,7 @@ const step = computed(() => {
   return state === "draft" || state === "pending_approval" ? 1 : 2;
 });
 /** Interrupted booking: callout + whether anything is left to continue (ux 1a906155). */
-const stopped = useBookingStopped(missionId, footerPlan);
+const stopped = useBookingStopped(footerPlan);
 /** #257 (U97): Apply's act and words by the approval setting; U28: it sends moves and adds. */
 const applyCopy = computed(() => {
   const p = proposal.value;

@@ -84,6 +84,49 @@ defmodule Cadence.Configuration.SpacecraftRouteKindTest do
     assert own_routes(ctx) == []
   end
 
+  test "route preview and apply use the same query count for one or 40 two-leg routes", ctx do
+    for action <- [:preview, :apply] do
+      counts =
+        for size <- [1, 40] do
+          ops = for _ <- 1..size, do: create("spacecraft_route", extra(ctx))
+
+          count_queries(fn ->
+            case action do
+              :preview ->
+                assert {:ok, %{verdict: :go, diffs: diffs}} =
+                         Configuration.preview(ctx.alice, ctx.mission, {:ops, ops})
+
+                assert length(diffs) == size
+
+              :apply ->
+                assert length(apply_ops(ctx, "Batch recovery routes", ops)) == size
+            end
+          end)
+        end
+
+      assert [count, count] = counts
+      assert count > 0
+    end
+
+    assert length(own_routes(ctx)) == 82
+
+    ids = own_routes(ctx) |> Enum.map(& &1.profile_rule_id) |> Enum.uniq()
+
+    counts =
+      for size <- [1, 40] do
+        ops =
+          for id <- Enum.take(ids, size),
+              do: update("spacecraft_route", id, "purpose_label", "Operations")
+
+        count_queries(fn ->
+          assert {:ok, %{verdict: :go}} =
+                   Configuration.preview(ctx.alice, ctx.mission, {:ops, ops})
+        end)
+      end
+
+    assert [edit_count, edit_count] = counts
+  end
+
   test "a route the profile already gives is refused, in ux's words", ctx do
     doc = %{extra(ctx) | "ground_station_id" => ctx.ids.svb, "uplink" => "none"}
 
@@ -97,6 +140,48 @@ defmodule Cadence.Configuration.SpacecraftRouteKindTest do
     assert %{items: [%{errors: [error]}]} = Enum.find(checks, &(&1.key == "validation"))
     assert error.path == "ground_station_id"
     assert error.message == "EARENDIL-001 already has this route from its profile."
+  end
+
+  test "batch planning reports the same field errors as single route validation", ctx do
+    [other] =
+      apply_ops(ctx, "Second spacecraft", [
+        create("spacecraft", spacecraft_doc("EARENDIL-002", 2, {ctx.ids.profile, 1}))
+      ])
+
+    [route_id] = apply_ops(ctx, "Recovery via Inuvik", [create("spacecraft_route", extra(ctx))])
+    current = Map.fetch!(SpacecraftRoute.load(ctx.org, ctx.mission, [route_id]), route_id)
+
+    transitions = [
+      %{
+        action: :create,
+        id: unique("covered-by-profile"),
+        current: nil,
+        proposed: %{extra(ctx) | "ground_station_id" => ctx.ids.svb, "uplink" => "none"}
+      },
+      %{
+        action: :create,
+        id: unique("missing-transport"),
+        current: nil,
+        proposed: Map.put(extra(ctx), "transport_id", "missing-transport")
+      },
+      %{
+        action: :update,
+        id: route_id,
+        current: current,
+        proposed: %{current | "spacecraft_id" => other}
+      }
+    ]
+
+    expected =
+      for %{action: action, id: id, current: current, proposed: proposed} <- transitions do
+        assert {:error, fields} =
+                 SpacecraftRoute.validate(ctx.org, ctx.mission, action, id, current, proposed)
+
+        {:invalid, fields}
+      end
+
+    {_, rows} = SpacecraftRoute.load_batch(ctx.org, ctx.mission, Enum.map(transitions, & &1.id))
+    assert {:ok, ^expected} = SpacecraftRoute.write_batch(ctx.org, ctx.mission, transitions, rows)
   end
 
   test "a leg the station's transport can't carry is refused", ctx do
@@ -290,6 +375,27 @@ defmodule Cadence.Configuration.SpacecraftRouteKindTest do
       |> Enum.filter(&(&1.origin == origin))
 
   defp own_routes(ctx), do: routes(ctx, :spacecraft)
+
+  defp count_queries(fun) do
+    key = make_ref()
+
+    :ok =
+      :telemetry.attach(key, [:cadence, :repo, :query], &__MODULE__.count_query/4, {self(), key})
+
+    try do
+      Process.put(key, 0)
+      fun.()
+      Process.get(key)
+    after
+      :telemetry.detach(key)
+      Process.delete(key)
+    end
+  end
+
+  @doc false
+  def count_query(_event, _measurements, _metadata, {owner, key}) do
+    if self() == owner, do: Process.put(key, Process.get(key) + 1)
+  end
 
   defp apply_ops(%{alice: alice, mission: mission}, summary, ops) do
     {:ok, staged} = Configuration.stage(alice, mission, %{summary: summary}, ops)

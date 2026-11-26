@@ -39,12 +39,10 @@ vi.mock("./host-browser-history", async () => {
 import { hostBrowserHistory } from "./host-browser-history";
 import BrowserHost from "./BrowserHost.vue";
 import OpsModulePage from "../ops-workspace/features/module-pages/OpsModulePage.vue";
-import SpacecraftPage from "../mission-and-spacecraft/SpacecraftPage.vue";
 
 import { createHostRouter, hostRoute, shellForRoute } from "./host-navigation";
 import routes from "../routes.json";
 import { monitorFixture } from "../../../../modules/commanding/src/features/mission-commands/monitor.test-support";
-import { workspaceFixture as commandWorkspaceFixture } from "../../../../modules/commanding/src/features/workspace/fixtures.test-support";
 import { readMonitorQuery } from "../../../../modules/commanding/src/features/mission-commands/monitor-query";
 import {
   fixture as explorationFixture,
@@ -80,15 +78,10 @@ function requestedPath(index: number): string {
 }
 let wrapper: VueWrapper | undefined;
 const view = () => required(wrapper);
-/**
- * A mission's neutral host page (it renders unavailable without catalog data). L4 removed the
- * mission list, §11c A organization settings and §11c B mission settings and the mission home, so
- * the tests stand on the catalog artifact page (L18), the host's last mission-sidebar page.
- */
-const missionPage = (mission: string) => `/missions/${mission}/catalog/artifacts/artifact-1`;
+/** A mission's neutral host page: an Ops module page that has no page data yet. */
+const missionPage = (mission: string) => `/missions/${mission}/ops/alarms`;
 const neutralPath = missionPage("mission-1");
-const onNeutral = (root: VueWrapper = view()) =>
-  root.findComponent({ name: "CatalogPage" }).exists();
+const onNeutral = (root: VueWrapper = view()) => root.findComponent(OpsModulePage).exists();
 const hostPath = (root: VueWrapper = view()) =>
   root.get("[data-host-path]").attributes("data-host-path");
 async function flushHostUpdates() {
@@ -388,7 +381,9 @@ test("late navigation and live-prop responses cannot replace the committed missi
   await reply(0, snapshot(missionPage("mission-a"), "mission-a"));
   await app.setProps({ snapshot: snapshot(missionPage("mission-a"), "mission-a") });
   expect(hostPath(app)).toBe(missionPage("mission-b"));
-  expect(app.find('a[href="/missions/mission-b/spacecraft"]').exists()).toBe(true);
+  expect(app.getComponent(OpsModulePage).props("context")).toMatchObject({
+    missionId: "mission-b",
+  });
 });
 
 test("compiled contact navigation use the same host guard and query parameters cannot replace path identity", async () => {
@@ -420,37 +415,31 @@ test("denied context preserves the displayed page and reports a recoverable fail
 test("Back and Forward reenter the guard without replacing the Vue shell", async () => {
   const app = await start();
   const shell = required(nativeElement(app.element));
-  const spacecraftPath = "/missions/mission-a/spacecraft/sc-1";
-  await click(spacecraftPath);
-  await reply(0, snapshot(spacecraftPath, "mission-a"));
+  const alarmsPath = "/missions/mission-a/ops/alarms";
+  await click(alarmsPath);
+  await reply(0, snapshot(alarmsPath, "mission-a"));
   hostBrowserHistory.go(-1);
   await flushHostUpdates();
   expect(requestedPath(1)).toBe(neutralPath);
   await reply(1, snapshot(neutralPath, "mission-1"));
   hostBrowserHistory.go(1);
   await flushHostUpdates();
-  await reply(2, snapshot(spacecraftPath, "mission-a"));
+  await reply(2, snapshot(alarmsPath, "mission-a"));
   expect(app.element).toBe(shell);
-  expect(app.getComponent(SpacecraftPage).props("page")).toBe("spacecraft_configuration");
+  expect(app.getComponent(OpsModulePage).props("contributionId")).toBe("limits.alarm-conditions");
 });
 
-// Application surfaces are served by the Phoenix application host, not this router.
-const hostRoutes = routes.filter((route) => route.kind !== "application_surface");
+// Only Ops pages are served by this router.
+const hostRoutes = routes.filter(
+  (route) => route.kind === "ops_module" || route.kind === "ops_workspace",
+);
 test("every catalog path selects its declared frontend route, including static/dynamic siblings", async () => {
   const router = createHostRouter(createMemoryHistory());
   for (const route of hostRoutes) {
     const path = route.path.replace(/:([a-z_]+)/g, (_, name) => `${name}-test`);
     const resolved = router.resolve(path);
     expect(resolved.meta.host, path).toEqual(route);
-    expect(shellForRoute(route), path).toBe(
-      route.path === "/missions/:mission_id/ops" || route.path.includes("/ops/")
-        ? "ops"
-        : route.scope === "user"
-          ? "user_shell"
-          : ["mission", "spacecraft"].includes(route.scope)
-            ? "mission_sidebar"
-            : "sidebar",
-    );
+    expect(shellForRoute(route), path).toBe("ops");
   }
 });
 
@@ -520,59 +509,6 @@ test("fleet directory is host-composed and captured reads retain evidence across
   expect(onNeutral()).toBe(true);
 });
 
-test("live commanding notices are isolated to the captured path and token and stop after departure", async () => {
-  await start();
-  const path = "/missions/mission_one/ops/commands/workspace";
-  const data = commandWorkspaceFixture();
-  const state = snapshot(path, "mission_one");
-  state.context.organization.organization_id = "org_one";
-  const envelope = {
-    id: "commanding.workspace",
-    slot: "ops.page",
-    version: 1,
-    status: "ready",
-    token: "11111111-1111-4111-8111-111111111111",
-    context: data.directory.context,
-    data,
-  };
-  await click(path);
-  await reply(0, { ...state, ops_page: envelope });
-  expect(view().find("#command-workspace").exists()).toBe(true);
-  await reply(1, envelope); // Initial reconciliation after subscribing.
-  await view().get("#workspace-shared-argument-0").setValue("unfinished");
-  const handler = required(
-    transport.handleEvent.mock.calls.find(([name]) => name === "cadence:ops-page-changed"),
-  )[1];
-  const notice = { path, id: envelope.id, token: envelope.token };
-  for (const invalid of [
-    null,
-    {},
-    { ...notice, path: "/missions/other/ops/commands/workspace" },
-    { ...notice, token: "old" },
-    { ...notice, id: "other" },
-  ])
-    handler(invalid);
-  await flushPromises();
-  expect(transport.requests).toHaveLength(2);
-  handler(notice);
-  expect(transport.requests[2]).toMatchObject({ event: "host:ops-page:read", payload: notice });
-  await reply(2, envelope);
-  expect(view().get<HTMLInputElement>("#workspace-shared-argument-0").element.value).toBe(
-    "unfinished",
-  );
-  await click(neutralPath);
-  await reply(3, snapshot(neutralPath, "mission-1"));
-  handler(notice);
-  await flushPromises();
-  expect(transport.requests).toHaveLength(4);
-  view().unmount();
-  handler(notice);
-  expect(transport.requests).toHaveLength(4);
-  expect(transport.removeHandleEvent).toHaveBeenCalledWith(
-    transport.handleEvent.mock.results[0]?.value,
-  );
-});
-
 test("core timeline filters, selected evidence and older pages restore through persistent Ops history", async () => {
   await start();
   const base = "/missions/mission-1/ops/timeline";
@@ -631,11 +567,7 @@ test("core timeline filters, selected evidence and older pages restore through p
   expect(transport.requests.every((request) => request.event === "host:context")).toBe(true);
 });
 
-const routeComponents = {
-  spacecraft: "SpacecraftPage",
-  catalog: "CatalogPage",
-  ops_module: "OpsModulePage",
-};
+const routeComponents = { ops_module: "OpsModulePage" };
 const routeStubs = Object.fromEntries(
   [...Object.values(routeComponents), "WorkspaceLanding", "TimelinePage"].map((name) => [
     name,
@@ -668,9 +600,7 @@ test.each(hostRoutes)("the host handles $path ($kind)", async (entry) => {
 });
 
 test("an unrecognized catalog kind is contained by the host", async () => {
-  const route = required(
-    routes.find((route) => route.path === "/missions/:mission_id/catalog/artifacts/:artifact_id"),
-  );
+  const route = required(routes.find((route) => route.path === "/missions/:mission_id/ops/alarms"));
   const kind = route.kind;
   try {
     route.kind = "unsupported-test-kind";

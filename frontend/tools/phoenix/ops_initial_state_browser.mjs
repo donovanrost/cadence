@@ -45,9 +45,6 @@ const routes = [
   // L8a/L8b: every legacy dashboards page redirects to the console; L11 the data-sources pages;
   // L1-L3 the planning policy and contact requirement pages (DECISIONS #79).
   "/ops/commands",
-  "/ops/commands/new",
-  "/ops/commands/stages",
-  "/ops/commands/stages/new",
   "/ops/explore",
   "/ops/alarms",
   "/ops/timeline",

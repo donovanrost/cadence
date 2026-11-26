@@ -22,12 +22,13 @@ import {
   rolloutOps,
   stageLabel,
   type RolloutChoice,
+  type RolloutTarget,
 } from "./rollout.ts";
 import { useRolloutDryRun } from "./useRolloutDryRun.ts";
 
 /** C3 Roll out to (Catalog.md, #65): stage this revision by profile or on a few spacecraft. */
 const props = defineProps<{
-  revision: Readonly<{ id: string; number: number }>;
+  revision: RolloutTarget;
   /** U102: what the server knows about breaking changes; staging needs them checked (no C2 yet). */
   breaking: Breaking;
 }>();
@@ -54,7 +55,7 @@ const choice = computed((): RolloutChoice | null => {
     };
   return null;
 });
-const ops = computed(() => (choice.value ? rolloutOps(props.revision.id, choice.value) : []));
+const ops = computed(() => (choice.value ? rolloutOps(props.revision, choice.value) : []));
 const dryRun = useRolloutDryRun(missionId, ops);
 
 const profileOf = (id: string) =>

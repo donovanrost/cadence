@@ -65,8 +65,29 @@ defmodule Cadence.Control.ModelApprovalGate do
   def check(organization_id, mission_id, entries, running, binding_set) do
     introduced = introduced(entries, running)
 
-    with :ok <- approved(organization_id, mission_id, Map.keys(introduced)) do
+    with :ok <- not_withdrawn(organization_id, mission_id, entries, running),
+         :ok <- approved(organization_id, mission_id, Map.keys(introduced)) do
       compared(organization_id, mission_id, introduced, binding_set)
+    end
+  end
+
+  # E2 (#546; commanding's review): a withdrawn revision is never grandfathered. A craft this
+  # generation gives a new entry can't stay on a withdrawn revision it already runs; a craft the
+  # generation doesn't touch keeps running it (§5: nothing auto-stops).
+  defp not_withdrawn(organization_id, mission_id, entries, running) do
+    touched =
+      for {id, entry} <- entries,
+          entry != running[id],
+          revision = revision_id(entry),
+          is_binary(revision),
+          uniq: true,
+          do: revision
+
+    statuses = MissionModels.revision_statuses(organization_id, mission_id, touched)
+
+    case touched |> Enum.filter(&(statuses[&1] == :withdrawn)) |> Enum.sort() do
+      [] -> :ok
+      withdrawn -> {:error, {:mission_model_revision_not_approved, withdrawn}}
     end
   end
 

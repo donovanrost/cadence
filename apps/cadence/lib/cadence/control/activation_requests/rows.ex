@@ -45,7 +45,7 @@ defmodule Cadence.Control.ActivationRequests.Rows do
       )
 
     Enum.map(requests, fn request ->
-      description = Description.describe(request.metadata || %{})
+      description = Description.describe(request)
       decision = Map.get(decisions, request.activation_request_id)
 
       %{
@@ -71,7 +71,7 @@ defmodule Cadence.Control.ActivationRequests.Rows do
   @spec detail(map(), binary(), map()) :: map()
   def detail(scope, mission_id, request) do
     [row] = rows(scope, mission_id, [request])
-    description = Description.describe(request.metadata || %{})
+    description = Description.describe(request, ids: true)
     mission = mission(scope.organization_id, mission_id)
     reviewed = (mission && ConfigurationChanges.reviewed(mission, request)) || %{}
 

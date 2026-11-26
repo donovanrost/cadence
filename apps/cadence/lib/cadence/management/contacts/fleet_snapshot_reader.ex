@@ -4,7 +4,12 @@ defmodule Cadence.Management.Contacts.FleetSnapshotReader do
   import Ecto.Query
 
   alias Cadence.ContactPlanning.ContactOpportunitySnapshot
-  alias Cadence.Management.Contacts.Store.ContactOpportunitySnapshotRow
+
+  alias Cadence.Management.Contacts.Store.{
+    ContactOpportunitySnapshotRow,
+    ContactPlanningSearchRow
+  }
+
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Repo
 
@@ -44,16 +49,32 @@ defmodule Cadence.Management.Contacts.FleetSnapshotReader do
     run_ids
     |> Stream.chunk_every(@run_batch_size)
     |> Stream.flat_map(fn ids ->
-      rows =
-        ContactOpportunitySnapshotRow
-        |> join(:inner, [snapshot], search in assoc(snapshot, :search))
-        |> where(
-          [snapshot],
-          snapshot.organization_id == ^organization_id and snapshot.mission_id == ^mission_id and
-            snapshot.contact_planning_run_id in ^ids
+      # Each bounded group drives the snapshot index by run ID. Keep this lookup local
+      # to the requested run so a fresh fleet cannot turn each batch into a mission scan.
+      snapshots =
+        from(snapshot in ContactOpportunitySnapshotRow,
+          where: snapshot.contact_planning_run_id == parent_as(:requested).id,
+          offset: 0
         )
-        |> select([snapshot, _search], map(snapshot, ^@optimizer_fields))
-        |> select_merge([snapshot, search], %{
+
+      rows =
+        from(requested in fragment("(SELECT unnest(?::text[]) AS id)", ^Enum.uniq(ids)),
+          as: :requested
+        )
+        |> join(:inner_lateral, [], snapshot in subquery(snapshots), on: true)
+        |> join(:inner, [_, snapshot], search in ContactPlanningSearchRow,
+          on: search.contact_planning_search_id == snapshot.contact_planning_search_id
+        )
+        |> where(
+          [_, snapshot],
+          snapshot.organization_id == ^organization_id and snapshot.mission_id == ^mission_id
+        )
+        |> select([_, snapshot, _search], map(snapshot, ^@optimizer_fields))
+        |> select_merge([_, snapshot, search], %{
+          starts_at: type(snapshot.starts_at, :utc_datetime_usec),
+          ends_at: type(snapshot.ends_at, :utc_datetime_usec),
+          expires_at: type(snapshot.expires_at, :utc_datetime_usec),
+          captured_at: type(snapshot.captured_at, :utc_datetime_usec),
           route_binding_document:
             fragment(
               "jsonb_build_object('spacecraft_id', ? #>> '{value,spacecraft_id}', 'provider_id', ? #>> '{value,provider_id}', 'provider_account_grant_id', ? #>> '{value,provider_account_grant_id}', 'route_key', ? #>> '{value,route_key}')",
@@ -111,36 +132,28 @@ defmodule Cadence.Management.Contacts.FleetSnapshotReader do
   end
 
   def snapshot_ids_for_runs(organization_id, mission_id, run_ids) do
-    run_ids
-    |> Enum.chunk_every(@run_batch_size)
-    |> Enum.flat_map(fn ids ->
-      ContactOpportunitySnapshotRow
-      |> where(
-        [snapshot],
-        snapshot.organization_id == ^organization_id and snapshot.mission_id == ^mission_id and
-          snapshot.contact_planning_run_id in ^ids
-      )
-      |> select([snapshot], {snapshot.starts_at, snapshot.contact_opportunity_snapshot_id})
-      |> Repo.all()
-    end)
+    ContactOpportunitySnapshotRow
+    |> where(
+      [snapshot],
+      snapshot.organization_id == ^organization_id and snapshot.mission_id == ^mission_id and
+        snapshot.contact_planning_run_id in ^run_ids
+    )
+    |> select([snapshot], {snapshot.starts_at, snapshot.contact_opportunity_snapshot_id})
+    |> Repo.all()
     |> Enum.sort()
     |> Enum.map(&elem(&1, 1))
   end
 
   def planning_run_ids_for_snapshots(organization_id, mission_id, snapshot_ids) do
-    snapshot_ids
-    |> Enum.chunk_every(500)
-    |> Enum.flat_map(fn ids ->
-      ContactOpportunitySnapshotRow
-      |> where(
-        [snapshot],
-        snapshot.organization_id == ^organization_id and snapshot.mission_id == ^mission_id and
-          snapshot.contact_opportunity_snapshot_id in ^ids
-      )
-      |> select([snapshot], snapshot.contact_planning_run_id)
-      |> Repo.all()
-    end)
-    |> Enum.uniq()
+    ContactOpportunitySnapshotRow
+    |> where(
+      [snapshot],
+      snapshot.organization_id == ^organization_id and snapshot.mission_id == ^mission_id and
+        snapshot.contact_opportunity_snapshot_id in ^snapshot_ids
+    )
+    |> select([snapshot], snapshot.contact_planning_run_id)
+    |> distinct(true)
+    |> Repo.all()
   end
 
   defp compact(row, plan?) do

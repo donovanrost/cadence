@@ -1,8 +1,6 @@
 defmodule CadenceWeb.FrontendReleaseActivationTest do
   use Cadence.DataCase, async: false
 
-  require Phoenix.LiveViewTest
-
   import Phoenix.ConnTest
   import Plug.Conn
 
@@ -608,10 +606,9 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     mission_id = route_context.mission.mission_id
     member_conn = TestFixtures.member_conn(scope.user)
 
-    # This pre-activation catalog only bootstraps the host session and CSRF token
+    # This pre-activation host load only bootstraps the host session and CSRF token
     # used by the post-activation query and action requests below.
-    catalog_bootstrap_conn = get(member_conn, catalog_path(mission_id))
-    catalog_bootstrap = json_response(catalog_bootstrap_conn, 200)
+    {catalog_bootstrap_conn, catalog_bootstrap} = host_session(member_conn, scope, mission_id)
 
     {_document, _payload, release} =
       admit_release!(
@@ -641,9 +638,6 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
 
     scope_document = ApplicationHostCatalog.scope_document(scope, route_context)
 
-    package_mismatch_catalog_response =
-      get(member_conn, targeted_catalog_path(mission_id))
-
     query_response =
       post_host_bridge(catalog_bootstrap_conn, catalog_bootstrap, query_path(mission_id), %{
         "applicationKey" => "comms_overview",
@@ -672,7 +666,7 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
         "reader-package-mismatch-contributed-action"
       )
 
-    for response <- [package_mismatch_catalog_response, query_response, action_response] do
+    for response <- [query_response, action_response] do
       assert %{
                "schema" => "cadence.application-host-problem.v1",
                "code" => "application_unavailable",
@@ -708,7 +702,7 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
              )
   end
 
-  test "post-cutover no_history is sanitized for catalog, registered query, and action paths" do
+  test "post-cutover no_history is sanitized for registered query and action paths" do
     user = TestFixtures.persist_user!()
     organization = TestFixtures.persist_org!()
     membership = TestFixtures.grant_membership!(user, organization)
@@ -724,10 +718,10 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
 
     member_conn = TestFixtures.member_conn(user)
 
-    # This pre-activation catalog only bootstraps the host session and CSRF token
+    # This pre-activation host load only bootstraps the host session and CSRF token
     # used by the post-activation query and action requests below.
-    catalog_bootstrap_conn = get(member_conn, catalog_path(mission.mission_id))
-    catalog_bootstrap = json_response(catalog_bootstrap_conn, 200)
+    {catalog_bootstrap_conn, catalog_bootstrap} =
+      host_session(member_conn, scope, mission.mission_id)
 
     scope_document =
       ApplicationHostCatalog.scope_document(scope, %{
@@ -744,8 +738,6 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
 
     assert {:ok, %{status: 201}} =
              activate(document, "reader-no-history-controller-key", @http_now)
-
-    no_history_catalog_response = get(member_conn, catalog_path(mission.mission_id))
 
     # §11c B11: the legacy application management page redirects to the console's Setup apps.
 
@@ -782,7 +774,7 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
         "reader-no-history-action"
       )
 
-    for response <- [no_history_catalog_response, query_response, action_response] do
+    for response <- [query_response, action_response] do
       assert %{
                "schema" => "cadence.application-host-problem.v1",
                "code" => "application_unavailable",
@@ -2075,11 +2067,20 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     end
   end
 
-  defp catalog_path(mission_id),
-    do: @host_catalog_suffix <> "/" <> mission_id <> "/catalog"
+  # The console's surface host mints the host session id, CSRF token and pinned scope (limits is
+  # installed here only to have a surface to load).
+  defp host_session(member_conn, scope, mission_id) do
+    {:ok, _installation} =
+      ApplicationInstallations.install(scope, HostContext.mission(mission_id), "limits")
 
-  defp targeted_catalog_path(mission_id),
-    do: catalog_path(mission_id) <> "?application_key=comms_overview&surface_id=overview"
+    conn =
+      get(
+        member_conn,
+        "/api/v1/missions/#{mission_id}/apps/limits/surfaces/manage/host"
+      )
+
+    {conn, json_response(conn, 200)["data"]["catalog"]}
+  end
 
   defp query_path(mission_id),
     do: @host_catalog_suffix <> "/" <> mission_id <> "/query"

@@ -3,7 +3,7 @@ defmodule Cadence.Runtime.BindingSetIndexTest do
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet, CapabilityInstance}
   alias Cadence.Platform.ContentHash
-  alias Cadence.Runtime.{BindingSetIndex, PartitionKey, PartitionMetadata}
+  alias Cadence.Runtime.{BindingSetIndex, PartitionKey}
 
   test "normalization stays small across messages and restores the exact governed value" do
     configuration = Enum.map(1..200, &%{field: &1, offset: &1 * 8, scale: {1, 2}})
@@ -103,47 +103,5 @@ defmodule Cadence.Runtime.BindingSetIndexTest do
              })
 
     assert BindingSetIndex.materialize(index) == bindings
-  end
-
-  test "fleet review evidence is projected without dropping source context or capability metadata" do
-    a = %{
-      "source_endpoint_ids" => ["a", "a-tc"],
-      "configuration_revision_id" => "a-v1",
-      "document" => %{}
-    }
-
-    b = %{
-      "source_endpoint_ids" => ["b"],
-      "configuration_revision_id" => "b-v1",
-      "document" => %{}
-    }
-
-    metadata = %{
-      "spacecraft_configurations" => %{"craft-a" => a, "craft-b" => b},
-      "spacecraft_configuration_version" => 1,
-      "custom_capability" => %{mode: :enabled},
-      "configuration_review" => %{
-        "base_activation_id" => "previous",
-        "spacecraft_reviews" => %{"craft-a" => %{token: "a"}, "craft-b" => %{token: "b"}}
-      }
-    }
-
-    projected =
-      PartitionMetadata.project(metadata, %PartitionKey{affinity: :source_endpoint, value: "a-tc"})
-
-    assert projected["spacecraft_configurations"] == %{"craft-a" => a}
-
-    assert projected["configuration_review"] == %{
-             "base_activation_id" => "previous",
-             "spacecraft_reviews" => %{"craft-a" => %{token: "a"}}
-           }
-
-    assert projected["custom_capability"] == metadata["custom_capability"]
-    assert projected["spacecraft_configuration_version"] == 1
-
-    assert PartitionMetadata.project(metadata, %PartitionKey{affinity: :mission, value: "mission"}) ==
-             metadata
-
-    assert PartitionMetadata.project(%{custom: true}, %PartitionKey{}) == %{custom: true}
   end
 end

@@ -85,6 +85,8 @@ config :cadence,
   catalog_revisions: Cadence.Catalog,
   # A catalog revision's APIDs, for profile/override handled_apids (L22), configured likewise.
   catalog_apids: Cadence.MissionModels.CatalogApids,
+  # D3's composition pin rules (#544) for the profile and override kinds, configured likewise.
+  composition_pins: Cadence.MissionModels.CompositionPin,
   # Builds runtime activations for profile-framed change-set applies (DECISIONS #36).
   configuration_generation: Cadence.Control.ConfigurationGeneration,
   ecto_repos: [Cadence.Repo],

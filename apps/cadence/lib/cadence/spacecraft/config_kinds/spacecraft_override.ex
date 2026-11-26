@@ -60,6 +60,10 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftOverride do
           not (is_map(value) and Map.has_key?(value, "value")) ->
             [F.error(key, "Give the override a value")]
 
+          # mms-security on #581: the pin is a composition id, never its display number.
+          path(key) == "composition_id" and not is_binary(value["value"]) ->
+            [F.error(key, "Choose a mission composition")]
+
           true ->
             F.text(value, "reason", 1..500, label: "Reason")
             |> Enum.map(&%{&1 | path: key <> ".reason"})
@@ -75,7 +79,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftOverride do
   @impl true
   # DECISIONS #36/#65: a catalog override moves the spacecraft's catalog through a generation;
   # it must name a catalog revision that exists.
-  def validate(organization_id, mission_id, _action, entity_id, _previous, proposed)
+  def validate(organization_id, mission_id, _action, entity_id, previous, proposed)
       when is_map(proposed) do
     errors =
       Enum.flat_map(proposed, fn {key, value} ->
@@ -87,12 +91,67 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftOverride do
         else
           _ok -> []
         end
-      end) ++ apids_errors(organization_id, mission_id, entity_id, proposed)
+      end) ++
+        apids_errors(organization_id, mission_id, entity_id, proposed) ++
+        pins().errors(
+          organization_id,
+          mission_id,
+          pin(previous),
+          pin(proposed),
+          "composition_id"
+        )
 
     if errors == [], do: :ok, else: {:error, errors}
   end
 
   def validate(_organization_id, _mission_id, _action, _entity_id, _previous, _proposed), do: :ok
+
+  @impl true
+  # D3 (#544): the client overrides the composition; Cadence derives the catalog override from it,
+  # with the composition override's reason.
+  def translate(organization_id, mission_id, _previous, proposed, touched) do
+    with {:ok, {catalog, composition}} <-
+           pins().derive(
+             organization_id,
+             mission_id,
+             value(proposed, "composition_id"),
+             if("catalog_revision_id" in touched, do: value(proposed, "catalog_revision_id"))
+           ) do
+      reason = reason(proposed, "composition_id")
+
+      {:ok,
+       proposed
+       |> put_pin("catalog_revision_id", catalog, reason)
+       |> put_pin("composition_id", composition, reason)}
+    end
+  end
+
+  defp put_pin(document, key, nil, _reason), do: Map.put(document, key, nil)
+
+  defp put_pin(document, key, value, reason) do
+    case Map.get(document, key) do
+      %{"value" => ^value} -> document
+      _other -> Map.put(document, key, %{"value" => value, "reason" => reason})
+    end
+  end
+
+  defp reason(document, key) do
+    case Map.get(document || %{}, key) do
+      %{"reason" => reason} when is_binary(reason) -> reason
+      _none -> nil
+    end
+  end
+
+  defp pin(document) do
+    {value(document, "catalog_revision_id"), value(document, "composition_id")}
+  end
+
+  defp value(document, key) do
+    case Map.get(document || %{}, key) do
+      %{"value" => value} -> value
+      _none -> nil
+    end
+  end
 
   @impl true
   def write(organization_id, mission_id, :update, id, previous, proposed, _options) do
@@ -186,4 +245,8 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftOverride do
       _no_profile -> nil
     end
   end
+
+  # D3's pin rules (#544) live with the mission model (Cadence.MissionModels.CompositionPin),
+  # configured so this kind has no compile-time edge to the catalog context.
+  defp pins, do: Application.fetch_env!(:cadence, :composition_pins)
 end

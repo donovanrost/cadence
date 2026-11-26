@@ -24,8 +24,12 @@ defmodule CadenceWeb.LimitsFeatureTest do
     {:ok, installation} = ApplicationInstallations.install(scope, host, "limits")
     prefix = "/api/cadence/application-host/v1/missions/#{mission.mission_id}"
 
+    # The console's surface host mints the bridge session (host session id, CSRF token, pinned scope).
     response =
-      get(TestFixtures.member_conn(user), prefix <> "/catalog", %{"application_key" => "limits"})
+      get(
+        TestFixtures.member_conn(user),
+        "/api/v1/missions/#{mission.mission_id}/apps/limits/surfaces/manage/host"
+      )
 
     %{
       scope: scope,
@@ -34,7 +38,7 @@ defmodule CadenceWeb.LimitsFeatureTest do
       org: org,
       mission: mission,
       conn: response,
-      catalog: json_response(response, 200),
+      catalog: json_response(response, 200)["data"]["catalog"],
       prefix: prefix
     }
   end

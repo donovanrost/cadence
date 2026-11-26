@@ -5,44 +5,48 @@ import { formatCount, plural } from "@/ui";
  * ux U48 (domain's template-version fix): the template's days an edit leaves alone, from the
  * template supersedes dry run. Kept = planned or started; done = closed or canceled by an operator.
  */
-const { array, object, string, timestamp, token } = decoders;
-const day = object({ occurrence_at: timestamp, date: string, spacecraft_ids: array(token, 5000) });
+const { array, integer, nullable, object, string } = decoders;
+/**
+ * One group's exact counts from the server (#793, api #845): distinct UTC days, requirements, and
+ * the first and last day. `dates` lists the days only when there are 3 or fewer.
+ */
+const group = object({
+  days: integer,
+  requirements: integer,
+  dates: array(string, 3),
+  first_date: nullable(string),
+  last_date: nullable(string),
+});
 export const decidedReader = object({
-  planned_or_started: array(day, 5000),
-  closed: array(day, 5000),
-  canceled: array(day, 5000),
+  planned_or_started: group,
+  closed: group,
+  canceled: group,
 });
 export type Decided = Decoded<typeof decidedReader>;
-type DecidedDay = Decided["closed"][number];
+type DecidedGroup = Decided["closed"];
 
 /** "2026-11-14" → "11-14" (ux §4). */
 const md = (date: string) => date.slice(5);
-
-/** A group's distinct days (sorted) and its requirement count (U48: the sum of spacecraft ids). */
-function tally(days: readonly DecidedDay[]) {
-  const dates = [...new Set(days.map((d) => d.date))].sort();
-  const requirements = days.reduce((n, d) => n + d.spacecraft_ids.length, 0);
-  return { dates, requirements };
-}
 
 /**
  * One group's sentence, without the full stop; null when the group is empty. Up to 3 days are listed
  * after a colon; above that the span follows the noun (ux: at the end it reads as a window).
  */
 function clause(
-  days: readonly DecidedDay[],
+  group: DecidedGroup,
   adjective: string,
   verb: (one: boolean, byRequirement: boolean, spanned: boolean) => string,
 ): string | null {
-  const { dates, requirements } = tally(days);
-  const n = dates.length;
+  const { days: n, requirements, dates } = group;
   if (n === 0) return null;
   const spanned = n > 3;
   const byRequirement = requirements !== n;
   const noun = byRequirement
     ? `${formatCount(requirements)} ${adjective}requirements on ${plural(n, "day")}`
     : plural(n, `${adjective}day`, `${adjective}days`);
-  const span = spanned ? ` between ${md(dates[0] ?? "")} and ${md(dates.at(-1) ?? "")}` : "";
+  const span = spanned
+    ? ` between ${md(group.first_date ?? "")} and ${md(group.last_date ?? "")}`
+    : "";
   const list = spanned ? "" : `: ${dates.map(md).join(", ")}`;
   return `${noun}${span}${verb(n === 1 && !byRequirement, byRequirement, spanned)}${list}`;
 }

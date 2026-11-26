@@ -78,6 +78,48 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceController do
         "intent" => "Send token, policy_token and intent (review or activate)."
       })
 
+  @doc """
+  `POST /configuration/reviews` (#734): one review, or one direct activation, of any number of
+  spacecraft. Body: `{spacecraft: {id => token}}` or `{all_saved: true}` (every spacecraft whose
+  saved draft differs from its active configuration), with `policy_token` and `intent`
+  (`review` | `activate`) as the per-spacecraft submit takes them.
+  """
+  def reviews(conn, %{"policy_token" => policy, "intent" => intent} = params)
+      when is_binary(policy) and intent in ["review", "activate"] do
+    intent = if intent == "review", do: :review, else: :activate
+
+    case selection(params) do
+      {:ok, selection} ->
+        case Control.submit_many(scope(conn), mission_id(conn), selection, policy, intent) do
+          {:ok, result} -> json(conn, %{data: SpacecraftWorkspaceJSON.reviews_result(result)})
+          {:error, reason} -> error(conn, reason, :submit, nil)
+        end
+
+      :error ->
+        refuse(conn, :invalid_params, :submit, nil, %{
+          "spacecraft" => "Send spacecraft (id to token) or all_saved: true."
+        })
+    end
+  end
+
+  def reviews(conn, _params),
+    do:
+      refuse(conn, :invalid_params, :submit, nil, %{
+        "intent" => "Send policy_token and intent (review or activate)."
+      })
+
+  defp selection(%{"all_saved" => true} = params) when not is_map_key(params, "spacecraft"),
+    do: {:ok, :all_saved}
+
+  defp selection(%{"spacecraft" => tokens} = params)
+       when is_map(tokens) and map_size(tokens) > 0 and not is_map_key(params, "all_saved") do
+    if Enum.all?(tokens, fn {id, token} -> is_binary(id) and is_binary(token) end),
+      do: {:ok, {:spacecraft, tokens}},
+      else: :error
+  end
+
+  defp selection(_params), do: :error
+
   def packets(conn, %{"spacecraft_id" => id, "catalog_revision_id" => catalog_id}) do
     case ConfigurationCatalogs.packets(scope(conn), mission_id(conn), id, catalog_id) do
       {:ok, choices} ->
@@ -172,9 +214,12 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceController do
   # The craft's name for the words (never an id); the draft's catalog revision for the model gate.
   defp context(conn, code, id) do
     name =
-      case SpacecraftStore.fetch_spacecraft(scope(conn).organization_id, mission_id(conn), id) do
-        {:ok, craft} -> craft.display_name
-        {:error, _} -> nil
+      with true <- is_binary(id),
+           {:ok, craft} <-
+             SpacecraftStore.fetch_spacecraft(scope(conn).organization_id, mission_id(conn), id) do
+        craft.display_name
+      else
+        _ -> nil
       end
 
     %{
@@ -184,7 +229,8 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceController do
   end
 
   defp draft_catalog(conn, id) do
-    with %{document: %{"catalog_revision_id" => catalog_id}} when is_binary(catalog_id) <-
+    with true <- is_binary(id),
+         %{document: %{"catalog_revision_id" => catalog_id}} when is_binary(catalog_id) <-
            Drafts.latest(scope(conn).organization_id, mission_id(conn), id),
          {:ok, revision} <-
            Catalog.fetch_revision(scope(conn).organization_id, mission_id(conn), catalog_id) do

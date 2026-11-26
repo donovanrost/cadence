@@ -8,8 +8,8 @@ defmodule Cadence.Control.Commanding.GroupDecisionTest do
   alias Cadence.Auth.ServiceIdentity
   alias Cadence.Commanding.{CommandApprovalRow, CommandQueueEntryRow}
   alias Cadence.Commanding.Groups.GroupStore
+  alias Cadence.Commanding.RequestDigest
   alias Cadence.Control.Commanding.{GroupDecision, GroupSubmission}
-  alias Cadence.Management.Commanding.RequestReview
 
   setup do
     c = setup!(3)
@@ -65,7 +65,7 @@ defmodule Cadence.Control.Commanding.GroupDecisionTest do
                expected_review: GroupDecision.review_token(c.group)
              })
 
-    by_target = Enum.group_by(members(c), & &1.metadata["group"]["target_index"])
+    by_target = Enum.group_by(members(c), & &1.group_slot.target_index)
     assert [%{lifecycle_state: :rejected}] = by_target[1]
     assert [%{lifecycle_state: :queued}] = by_target[0]
     assert queue_count(c) == 2
@@ -190,7 +190,7 @@ defmodule Cadence.Control.Commanding.GroupDecisionTest do
   test "a GO's records: each member's token, separated_from, admin_mode; the members digest and excluded ids",
        c do
     before = members(c)
-    tokens = Map.new(before, &{&1.command_request_id, RequestReview.review_token(&1)})
+    tokens = Map.new(before, &{&1.command_request_id, RequestDigest.digest(&1)})
     digest = GroupDecision.members_digest(c.group)
 
     assert {:ok, decided} =
@@ -214,7 +214,7 @@ defmodule Cadence.Control.Commanding.GroupDecisionTest do
 
     excluded =
       before
-      |> Enum.filter(&(&1.metadata["group"]["target_index"] == 1))
+      |> Enum.filter(&(&1.group_slot.target_index == 1))
       |> Enum.map(& &1.command_request_id)
       |> Enum.sort()
 

@@ -14,7 +14,7 @@ defmodule Cadence.Contacts.ProfileStore do
   alias Cadence.Missions
   alias Cadence.Persistence.JsonDocument
 
-  alias Cadence.Persistence.BulkLookup
+  alias Cadence.Persistence.{BulkInsert, BulkLookup}
   alias Cadence.Repo
 
   @spec persist_provider_profile(binary(), ProviderProfile.t()) ::
@@ -322,6 +322,16 @@ defmodule Cadence.Contacts.ProfileStore do
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  @doc false
+  def persist_route_gateways(profiles) do
+    BulkInsert.changesets(
+      TransportProfileRow,
+      Stream.map(profiles, &TransportProfileRow.changeset/1),
+      on_conflict: :nothing,
+      conflict_target: [:mission_id, :transport_profile_id, :version]
+    )
   end
 
   @spec fetch_transport_profile(binary(), binary()) ::

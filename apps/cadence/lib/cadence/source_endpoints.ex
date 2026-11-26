@@ -14,7 +14,7 @@ defmodule Cadence.SourceEndpoints do
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Listing
   alias Cadence.Missions
-  alias Cadence.Persistence.BulkLookup
+  alias Cadence.Persistence.{BulkInsert, BulkLookup}
   alias Cadence.Repo
   alias Cadence.SourceEndpoints.{SourceEndpoint, SourceEndpointRow}
   alias Cadence.Spacecraft
@@ -341,6 +341,49 @@ defmodule Cadence.SourceEndpoints do
 
       nil ->
         persist_managed_source_endpoint(organization_id, spacecraft, source_endpoint_id)
+    end
+  end
+
+  @doc "Ensures the runtime endpoints of one mission's prefetched spacecraft in batches."
+  def ensure_managed_source_endpoints(organization_id, mission_id, spacecraft) do
+    ids = Enum.map(spacecraft, &managed_source_endpoint_id(&1.spacecraft_id))
+
+    metadata =
+      SourceEndpointRow
+      |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
+      |> BulkLookup.by_id(:source_endpoint_id, ids)
+      |> Map.new(fn row ->
+        {row.source_endpoint_id, SourceEndpointRow.to_domain(row).metadata}
+      end)
+
+    changesets =
+      Enum.zip_with(spacecraft, ids, fn craft, id ->
+        organization_id
+        |> managed_source_endpoint(craft, id, Map.get(metadata, id, %{}))
+        |> SourceEndpointRow.changeset()
+      end)
+
+    on_conflict =
+      from(row in SourceEndpointRow,
+        where: row.organization_id == ^organization_id and row.mission_id == ^mission_id,
+        update: [
+          set: [
+            spacecraft_id: fragment("EXCLUDED.spacecraft_id"),
+            source_ref: fragment("EXCLUDED.source_ref"),
+            scid: fragment("EXCLUDED.scid"),
+            display_name: fragment("EXCLUDED.display_name"),
+            metadata: fragment("EXCLUDED.metadata")
+          ]
+        ]
+      )
+
+    case BulkInsert.changesets(SourceEndpointRow, changesets,
+           on_conflict: on_conflict,
+           conflict_target: :source_endpoint_id
+         ) do
+      {:ok, count} when count == length(ids) -> :ok
+      {:ok, _count} -> {:error, :source_endpoint_not_found}
+      {:error, reason} -> {:error, reason}
     end
   end
 

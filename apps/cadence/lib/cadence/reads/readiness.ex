@@ -18,7 +18,6 @@ defmodule Cadence.Reads.Readiness do
   alias Cadence.Comms.{
     FramingDrift,
     GroundStationStore,
-    RoutingRule,
     RoutingRuleStore,
     TransportStore
   }
@@ -46,23 +45,24 @@ defmodule Cadence.Reads.Readiness do
 
   @spec evaluate(binary(), binary()) :: map()
   def evaluate(organization_id, mission_id) do
-    rules = RoutingRuleStore.list_routing_rules(organization_id, mission_id)
+    routing = RoutingRuleStore.readiness_counts(organization_id, mission_id)
 
     organization_id
-    |> facts(mission_id, rules)
+    |> facts(mission_id, routing)
     |> Rules.build()
     |> Map.put(:evaluated_at, DateTime.utc_now())
   end
 
-  defp facts(organization_id, mission_id, rules) do
+  defp facts(organization_id, mission_id, routing) do
     %{
-      fleet: fleet(organization_id, mission_id, rules),
+      fleet: fleet(organization_id, mission_id, routing.without_routing),
       catalog: catalog(organization_id, mission_id),
       comms: %{
         transport_count: length(TransportStore.list_transports(organization_id, mission_id)),
-        routing_rule_count: Enum.count(rules, &usable?/1),
+        routing_rule_count: routing.routing_rule_count,
         framing_drift: FramingDrift.audit(organization_id, mission_id)
       },
+      routing: routing,
       stations: %{
         count: length(GroundStationStore.list_ground_stations(organization_id, mission_id))
       },
@@ -75,15 +75,10 @@ defmodule Cadence.Reads.Readiness do
     }
   end
 
-  defp fleet(organization_id, mission_id, rules) do
+  defp fleet(organization_id, mission_id, without_routing) do
     summary = Cadence.SpacecraftStore.fleet_summary(organization_id, mission_id)
     profiles = Cadence.SpacecraftTypeStore.list_spacecraft_types(organization_id, mission_id)
     latest = Map.new(profiles, &{&1.spacecraft_type_id, &1.version})
-
-    covered =
-      rules |> Enum.filter(&usable?/1) |> MapSet.new(& &1.spacecraft_id)
-
-    spacecraft = Cadence.SpacecraftStore.list_spacecraft(organization_id, mission_id)
 
     drifted =
       Enum.filter(summary.profile_version_counts, fn count ->
@@ -95,7 +90,7 @@ defmodule Cadence.Reads.Readiness do
       total: summary.total,
       missing_scid: summary.missing_scid,
       missing_profile: summary.missing_profile,
-      without_routing: Enum.count(spacecraft, &(not MapSet.member?(covered, &1.spacecraft_id))),
+      without_routing: without_routing,
       drifted: drifted |> Enum.map(& &1.count) |> Enum.sum(),
       drifted_profile_ids: drifted |> Enum.map(& &1.spacecraft_type_id) |> Enum.uniq(),
       profile_count: length(profiles)
@@ -131,14 +126,17 @@ defmodule Cadence.Reads.Readiness do
   # runtime one) unless its decode configuration names one. Several endpoints, none managed and
   # none named: Cadence can't tell which carries its telemetry.
   defp ambiguous_endpoints(organization_id, mission_id) do
-    organization_id
-    |> SourceEndpoints.list_source_endpoints(mission_id)
-    |> Enum.group_by(& &1.spacecraft_id)
-    |> Enum.filter(fn {spacecraft_id, endpoints} ->
-      is_binary(spacecraft_id) and length(endpoints) > 1 and
-        not Enum.any?(endpoints, &TelemetryDecom.managed_runtime_source_endpoint?/1) and
-        not named_endpoint?(organization_id, mission_id, spacecraft_id)
-    end)
+    ambiguous =
+      organization_id
+      |> SourceEndpoints.list_source_endpoints(mission_id)
+      |> Enum.group_by(& &1.spacecraft_id)
+      |> Enum.filter(fn {spacecraft_id, endpoints} ->
+        is_binary(spacecraft_id) and length(endpoints) > 1 and
+          not Enum.any?(endpoints, &TelemetryDecom.managed_runtime_source_endpoint?/1)
+      end)
+
+    ambiguous
+    |> exclude_named_endpoints(organization_id, mission_id)
     |> Enum.map(fn {spacecraft_id, endpoints} ->
       %{
         spacecraft_id: spacecraft_id,
@@ -148,11 +146,16 @@ defmodule Cadence.Reads.Readiness do
     |> Enum.sort_by(& &1.spacecraft_id)
   end
 
-  defp named_endpoint?(organization_id, mission_id, spacecraft_id) do
-    case TelemetryDecom.fetch_config(organization_id, mission_id, spacecraft_id) do
-      {:ok, %{source_endpoint_id: id}} when is_binary(id) -> true
-      _not_named -> false
-    end
+  defp exclude_named_endpoints([], _organization_id, _mission_id), do: []
+
+  defp exclude_named_endpoints(ambiguous, organization_id, mission_id) do
+    named =
+      for config <- TelemetryDecom.list_configs(organization_id, mission_id),
+          is_binary(config.source_endpoint_id),
+          into: MapSet.new(),
+          do: config.spacecraft_id
+
+    Enum.reject(ambiguous, fn {id, _endpoints} -> MapSet.member?(named, id) end)
   end
 
   defp data_source_statuses(organization_id, mission_id) do
@@ -190,7 +193,4 @@ defmodule Cadence.Reads.Readiness do
         )
     }
   end
-
-  defp usable?(%RoutingRule{lifecycle_state: :active, enabled?: true}), do: true
-  defp usable?(_rule), do: false
 end

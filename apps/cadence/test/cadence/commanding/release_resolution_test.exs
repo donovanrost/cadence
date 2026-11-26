@@ -44,7 +44,7 @@ defmodule Cadence.Commanding.ReleaseResolutionTest do
       })
 
     {:ok, %{queue_entry: entry}} =
-      RequestQueueStore.enqueue_request(
+      Cadence.CommandMemberFixtures.enqueue(
         c.org,
         c.mission,
         request.command_request_id,
@@ -131,15 +131,6 @@ defmodule Cadence.Commanding.ReleaseResolutionTest do
     assert result.queue_entry.lifecycle_state == :canceled
     assert result.command_request.lifecycle_state == :canceled
     assert result.queue_entry.command_queue_entry_id == c.queue.command_queue_entry_id
-
-    assert {:error, _} =
-             RequestQueueStore.enqueue_request(
-               c.org,
-               c.mission,
-               c.request.command_request_id,
-               %{},
-               admin_mode: false
-             )
 
     assert {:ok,
             %{disposition: "contradictory", release_attempt: %{lifecycle_state: :release_failed}}} =

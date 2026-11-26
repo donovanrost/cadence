@@ -43,7 +43,10 @@ defmodule CadenceWeb.Endpoint do
   plug(CadenceWeb.Plugs.FrontendReleasePublisher)
   plug(CadenceWeb.Plugs.FrontendReleaseRequestBody)
 
-  if Mix.env() == :dev do
+  # Dev only, and not on the console-e2e CI server (config/dev.exs `:tidewave?`): its toolbar loads
+  # from tidewave.ai into every page and scans the DOM, which the fleet-scale budgets were timing
+  # as Fleet's longest task (#867).
+  if Application.compile_env(:cadence_web, :tidewave?, false) do
     plug(Tidewave)
   end
 

@@ -237,13 +237,20 @@ defmodule Cadence.Accounts.Authentication do
     upsert_local_credential(repo, user_id, @password_provider_key, password, metadata)
   end
 
-  @spec revoke_all_user_sessions(Ecto.Repo.t(), binary()) :: :ok
+  @doc """
+  Deletes every session of the user. Returns their token digests, so a caller in the web layer
+  disconnects their live sockets (`CadenceWeb.ConsoleSocket.disconnect_sessions/1`, #876) once
+  the transaction it ran in has committed.
+  """
+  @spec revoke_all_user_sessions(Ecto.Repo.t(), binary()) :: {:ok, [binary()]}
   def revoke_all_user_sessions(repo, user_id) when is_binary(user_id) do
-    UserSessionTokenRow
-    |> where([row], row.user_id == ^user_id)
-    |> repo.delete_all()
+    {_count, digests} =
+      UserSessionTokenRow
+      |> where([row], row.user_id == ^user_id)
+      |> select([row], row.token_digest)
+      |> repo.delete_all()
 
-    :ok
+    {:ok, digests}
   end
 
   @spec issue_browser_session(User.t(), binary() | nil) ::

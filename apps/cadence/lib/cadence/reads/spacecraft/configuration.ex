@@ -8,9 +8,9 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
   alias Cadence.Applications.SpacecraftConfiguration.Active, as: ConfigurationActive
   alias Cadence.Applications.SpacecraftConfiguration.CatalogAuthority
   alias Cadence.Applications.SpacecraftConfiguration.Drafts, as: ConfigurationDrafts
+  alias Cadence.Catalog.ConfigurationReviews
   alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Catalog.SpacecraftConfigurationInput, as: ConfigurationInput
-  alias Cadence.Catalog.SpacecraftModelBindings
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Reads.CatalogCompositions
   alias Cadence.Reads.Spacecraft.ConfigurationCatalogs
@@ -146,8 +146,7 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
            applications: base <> "/applications",
            communications: "/missions/#{mission.mission_id}/comms",
            readiness: base <> "/readiness",
-           settings: "/missions/#{mission.mission_id}/settings/cadence.governance",
-           ops: ops_href(mission, active_entry)
+           settings: "/missions/#{mission.mission_id}/settings/cadence.governance"
          }
        }}
     end
@@ -202,19 +201,18 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
     )
   end
 
-  defp ops_href(_mission, nil), do: nil
-
-  defp ops_href(mission, %{"commanding_enabled" => true, "source_endpoint_ids" => [id | _]}),
-    do: "/missions/#{mission.mission_id}/ops/commands/workspace?target=#{URI.encode_www_form(id)}"
-
-  defp ops_href(_, _), do: nil
-
   defp review(mission, id, current, active) do
     request =
       Activations.latest_spacecraft_request(mission.organization_id, mission.mission_id, id)
 
     if request do
-      evidence = SpacecraftModelBindings.review_for(request.metadata, id)
+      evidence =
+        ConfigurationReviews.evidence_for(
+          mission.organization_id,
+          mission.mission_id,
+          request.metadata,
+          id
+        )
 
       applied =
         get_in(active.entries, [id, "configuration_revision_id"]) ==

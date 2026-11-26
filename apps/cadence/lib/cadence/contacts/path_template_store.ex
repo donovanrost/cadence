@@ -18,7 +18,7 @@ defmodule Cadence.Contacts.PathTemplateStore do
   alias Cadence.Contacts.TransportProfile
   alias Cadence.Listing
   alias Cadence.Missions
-  alias Cadence.Persistence.BulkLookup
+  alias Cadence.Persistence.{BulkInsert, BulkLookup}
   alias Cadence.Repo
 
   @spec persist(binary(), PathTemplate.t()) ::
@@ -242,6 +242,45 @@ defmodule Cadence.Contacts.PathTemplateStore do
 
       persist(organization_id, tombstone)
     end
+  end
+
+  @doc false
+  def persist_route_templates(templates) do
+    BulkInsert.changesets(PathTemplateRow, Stream.map(templates, &PathTemplateRow.changeset/1),
+      on_conflict: :nothing,
+      conflict_target: [:mission_id, :path_template_id, :version]
+    )
+  end
+
+  @doc false
+  def retire_route_templates(organization_id, mission_id, retired_by) do
+    now = DateTime.utc_now()
+
+    tombstones =
+      PathTemplateRow
+      |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
+      |> distinct([row], row.path_template_id)
+      |> order_by([row], desc: row.version)
+      |> BulkLookup.by_id(:path_template_id, Map.keys(retired_by))
+      |> Enum.reject(&(&1.lifecycle_state == "deleted"))
+      |> Enum.map(fn row ->
+        template = PathTemplateRow.to_domain(row)
+
+        %{
+          template
+          | version: template.version + 1,
+            lifecycle_state: :deleted,
+            metadata:
+              template.metadata
+              |> Map.put(
+                "retired_by_routing_rule",
+                Map.fetch!(retired_by, template.path_template_id)
+              )
+              |> Map.put("deleted_at", now)
+        }
+      end)
+
+    persist_route_templates(tombstones)
   end
 
   @spec fetch_ref(binary() | nil, binary(), map()) ::

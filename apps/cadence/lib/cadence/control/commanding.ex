@@ -8,8 +8,6 @@ defmodule Cadence.Control.Commanding do
   alias Cadence.Commanding.CommandReleaseAttempt
   alias Cadence.Commanding.ProcessNamespace
   alias Cadence.GroundNetworks
-  alias Cadence.Management.Commanding, as: ManagementCommanding
-  alias Cadence.Management.Commanding.ApprovedCommand
   alias Cadence.Platform.{PreparedSendEvidence, ResolutionEvidence}
   alias Cadence.Runtime.Commanding, as: RuntimeCommanding
   alias Cadence.Runtime.{TransmitCommand, TransportRecords}
@@ -94,57 +92,6 @@ defmodule Cadence.Control.Commanding do
            }),
          {:ok, evidence} <- ResolutionEvidence.new(Scope.audit_actor(scope), attrs) do
       LegacyCommanding.resolve_release_attempt(scope.organization_id, mission, id, evidence)
-    end
-  end
-
-  @doc """
-  Checks the approved basis under the request and lane locks before admission.
-
-  An internal `:before_enqueue` callback may reject the locked request. Dispatch
-  is scheduled only after the store transaction commits.
-  """
-  @spec enqueue(ApprovedCommand.t(), map(), keyword()) :: {:ok, map()} | {:error, term()}
-  def enqueue(%ApprovedCommand{} = approved_command, enqueued_by \\ %{}, opts \\ []) do
-    before_enqueue = Keyword.get(opts, :before_enqueue, fn _request -> :ok end)
-
-    opts =
-      opts
-      |> Keyword.put(:before_enqueue, fn request ->
-        if ApprovedCommand.matches_request?(approved_command, request),
-          do: before_enqueue.(request),
-          else: {:error, :approved_command_basis_changed}
-      end)
-      |> Keyword.update(
-        :metadata,
-        %{approved_content_sha256: approved_command.content_sha256},
-        &Map.put(&1, :approved_content_sha256, approved_command.content_sha256)
-      )
-
-    LegacyCommanding.enqueue_command_request(
-      approved_command.organization_id,
-      approved_command.mission_id,
-      approved_command.command_request_id,
-      enqueued_by,
-      opts
-    )
-  end
-
-  @spec enqueue_approved_command(binary(), binary(), binary(), map(), keyword()) ::
-          {:ok, map()} | {:error, term()}
-  def enqueue_approved_command(
-        organization_id,
-        mission_id,
-        command_request_id,
-        enqueued_by \\ %{},
-        opts \\ []
-      ) do
-    with {:ok, approved_command} <-
-           ManagementCommanding.fetch_approved_command(
-             organization_id,
-             mission_id,
-             command_request_id
-           ) do
-      enqueue(approved_command, enqueued_by, opts)
     end
   end
 

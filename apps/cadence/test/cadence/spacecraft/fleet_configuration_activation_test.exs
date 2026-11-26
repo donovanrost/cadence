@@ -5,7 +5,9 @@ defmodule Cadence.Activations.FleetConfigurationTest do
   alias Cadence.Applications.TelemetryDecom
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Catalog.SpacecraftConfigurationInput
+  alias Cadence.Control.ActivationRequests
   alias Cadence.Control.Activations, as: ControlActivations
+  alias Cadence.Control.SpacecraftConfiguration, as: SpacecraftConfigurationControl
   alias Cadence.Control.SpacecraftModelBindings
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Activations
@@ -43,7 +45,8 @@ defmodule Cadence.Activations.FleetConfigurationTest do
 
     tokens = Map.new(fleet, fn craft -> {craft.spacecraft_id, save(c, craft)} end)
     assert {:ok, request} = Review.request_many(c.scope, c.mission.mission_id, tokens)
-    assert byte_size(Jason.encode!(request.metadata)) > 65_536
+    # The metadata is a fleet reference and a review reference (#734), not 500 entries.
+    assert byte_size(Jason.encode!(request.metadata)) < 2_000
     assert {:ok, approved} = Activations.fetch_approved(request.activation_request_id)
 
     {{:ok, execution}, queries, rows} =
@@ -98,8 +101,45 @@ defmodule Cadence.Activations.FleetConfigurationTest do
              ConfigurationRead.load(c.scope, c.mission, last.spacecraft_id, "changes")
   end
 
+  # #734 / #727: 1,000 spacecraft through one review request, from "everything that's saved" to
+  # the applied fleet. The timings print so the PR can quote them.
+  @tag timeout: 900_000
+  test "1,000 spacecraft are reviewed and activated in one request (#734)", c do
+    fleet = [
+      c.first
+      | Enum.map(2..1_000, fn i ->
+          Fixtures.persist_spacecraft!(c.org, c.mission.mission_id, display_name: "Fleet #{i}")
+        end)
+    ]
+
+    for craft <- fleet, do: save(c, craft)
+
+    {saved_us, {:ok, tokens}} =
+      :timer.tc(fn -> Review.saved_tokens(c.scope, c.mission.mission_id) end)
+
+    assert map_size(tokens) == 1_000
+
+    {review_us, {:ok, request}} =
+      :timer.tc(fn -> Review.request_many(c.scope, c.mission.mission_id, tokens) end)
+
+    assert byte_size(Jason.encode!(request.metadata)) < 2_000
+    assert {:ok, approved} = Activations.fetch_approved(request.activation_request_id)
+    {apply_us, {:ok, execution}} = :timer.tc(fn -> ControlActivations.execute(approved) end)
+    assert execution.status == :succeeded
+
+    IO.puts(
+      "1,000 spacecraft: saved_tokens #{div(saved_us, 1000)} ms, review #{div(review_us, 1000)} ms, " <>
+        "apply #{div(apply_us, 1000)} ms"
+    )
+
+    assert {:ok, active} = Active.load(c.mission)
+    assert map_size(active.entries) == 1_000
+
+    assert {:error, :nothing_to_review} = Review.saved_tokens(c.scope, c.mission.mission_id)
+  end
+
   @tag timeout: 300_000
-  test "a 550-spacecraft fleet activates in two review batches", c do
+  test "a 550-spacecraft fleet is one review: there is no batch cap (#734)", c do
     fleet = [
       c.first
       | Enum.map(2..550, fn i ->
@@ -107,19 +147,15 @@ defmodule Cadence.Activations.FleetConfigurationTest do
         end)
     ]
 
-    {block1, block2} = Enum.split(fleet, 500)
-
-    for batch <- [block1, block2] do
-      tokens = Map.new(batch, fn craft -> {craft.spacecraft_id, save(c, craft)} end)
-      assert {:ok, request} = Review.request_many(c.scope, c.mission.mission_id, tokens)
-      assert {:ok, approved} = Activations.fetch_approved(request.activation_request_id)
-      assert {:ok, %{status: :succeeded}} = ControlActivations.execute(approved)
-    end
+    tokens = Map.new(fleet, fn craft -> {craft.spacecraft_id, save(c, craft)} end)
+    assert {:ok, request} = Review.request_many(c.scope, c.mission.mission_id, tokens)
+    assert {:ok, approved} = Activations.fetch_approved(request.activation_request_id)
+    assert {:ok, %{status: :succeeded}} = ControlActivations.execute(approved)
 
     assert {:ok, active} = Active.load(c.mission)
     assert map_size(active.entries) == 550
 
-    last = List.last(block2)
+    last = List.last(fleet)
     source = hd(active.entries[last.spacecraft_id]["source_endpoint_ids"])
 
     assert {:ok, _basis} =
@@ -182,12 +218,28 @@ defmodule Cadence.Activations.FleetConfigurationTest do
     assert {:error, :activation_self_approval_forbidden} =
              Activations.approve(c.scope, request.activation_request_id, "Reviewed fleet")
 
-    assert {:ok, execution} =
-             ControlActivations.approve_and_execute(
-               Fixtures.user_scope(c.org, "reviewer"),
+    # A review of several spacecraft is decided from the activation, which shows every member
+    # (#734, commanding's review): the activation route is the one decision path.
+    assert {:error, {:activation_self_approval_forbidden, _via}} =
+             ActivationRequests.approve(
+               c.scope,
+               c.mission.mission_id,
                request.activation_request_id,
-               "Reviewed both spacecraft"
+               %{
+                 "reason" => "Reviewed fleet"
+               }
              )
+
+    assert {:ok, %{outcome: "applied"}} =
+             ActivationRequests.approve(
+               Fixtures.user_scope(c.org, "reviewer"),
+               c.mission.mission_id,
+               request.activation_request_id,
+               %{"reason" => "Reviewed both spacecraft"}
+             )
+
+    assert {:ok, execution} =
+             ControlActivations.fetch_execution(request.activation_request_id)
 
     assert execution.status == :succeeded
   end
@@ -209,14 +261,9 @@ defmodule Cadence.Activations.FleetConfigurationTest do
     refute first.metadata["spacecraft_configuration_revision_id"]
   end
 
-  test "an empty or oversized review is rejected", c do
+  test "an empty review is rejected", c do
     assert {:error, :spacecraft_configuration_review_unavailable} =
              Review.request_many(c.scope, c.mission.mission_id, %{})
-
-    tokens = Map.new(1..501, &{"spacecraft-#{&1}", "token"})
-
-    assert {:error, :spacecraft_configuration_review_unavailable} =
-             Review.request_many(c.scope, c.mission.mission_id, tokens)
   end
 
   # Queries the calling process runs inside `fun`, and the rows they return.

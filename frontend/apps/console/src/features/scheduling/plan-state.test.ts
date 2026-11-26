@@ -4,6 +4,8 @@ import { describe, expect, it } from "vite-plus/test";
 import { planDetailReader, plansReader, type Draft, type PlanSummary } from "./api.ts";
 import { planView } from "./plan-state.ts";
 
+const NO_GAPS = { spacecraft_uncovered: 0, contacts_short: 0, gaps: 0 };
+
 const ready = <T>(value: T) => ({ status: "ready" as const, value, receivedAt: new Date(0) });
 const run = (state: Draft["run"]["state"]): Draft => ({
   run: {
@@ -180,7 +182,7 @@ describe("plan detail chain_head (qa #30)", () => {
       ready_to_approve: false,
       updated_at: "2026-11-10T10:00:00Z",
       passes: [],
-      demand: { rule_met: 0, rule_total: 0, spacecraft: [], rules: [] },
+      demand: { rule_met: 0, rule_total: 0, coverage: NO_GAPS, spacecraft: [], rules: [] },
       unmet: [],
       conflicts: [],
       chain: [{ id: "root", version: 1 }],

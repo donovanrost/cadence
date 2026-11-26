@@ -13,7 +13,7 @@ defmodule CadenceWeb.ApplicationHostActionResponseTest do
   alias Cadence.Repo
   alias CadenceWeb.TestFixtures
 
-  @catalog_suffix "/api/cadence/application-host/v1/missions"
+  @bridge_suffix "/api/cadence/application-host/v1/missions"
 
   setup do
     user = TestFixtures.persist_user!()
@@ -21,12 +21,18 @@ defmodule CadenceWeb.ApplicationHostActionResponseTest do
     _membership = TestFixtures.grant_membership!(user, organization)
     mission = TestFixtures.persist_mission!(organization, display_name: "Routing Mission")
     member_conn = TestFixtures.member_conn(user)
-    catalog_conn = get(member_conn, @catalog_suffix <> "/#{mission.mission_id}/catalog")
+
+    # The console's surface host mints the bridge session (host session id, CSRF token, pinned scope).
+    catalog_conn =
+      get(
+        member_conn,
+        "/api/v1/missions/#{mission.mission_id}/apps/comms/surfaces/routing_new/host"
+      )
 
     %{
       mission: mission,
       catalog_conn: catalog_conn,
-      catalog: json_response(catalog_conn, 200),
+      catalog: json_response(catalog_conn, 200)["data"]["catalog"],
       scope: %{
         "organizationId" => organization.organization_id,
         "missionId" => mission.mission_id,
@@ -68,7 +74,7 @@ defmodule CadenceWeb.ApplicationHostActionResponseTest do
     |> put_req_header("x-csrf-token", c.catalog["session"]["csrfToken"])
     |> put_req_header("idempotency-key", key)
     |> post(
-      @catalog_suffix <> "/#{c.mission.mission_id}/actions",
+      @bridge_suffix <> "/#{c.mission.mission_id}/actions",
       Jason.encode!(%{
         "applicationKey" => "comms",
         "applicationVersion" => 1,

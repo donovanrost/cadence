@@ -76,6 +76,9 @@ const executionReader = d.nullable(
     uncertain: d.integer,
     rejected: d.integer,
     failed: d.integer,
+    /** #793: the providers of the plan's bookings, sorted; the callout names one or says "the providers". */
+    // free-text: provider display names, shown as written.
+    provider_names: d.array(d.string, 100),
   }),
 );
 
@@ -182,6 +185,12 @@ export const planDetailReader = d.object({
   demand: d.object({
     rule_met: d.integer,
     rule_total: d.integer,
+    /** #793 (api #845): U23 coverage counted by the server over the whole plan, at any fleet size. */
+    coverage: d.object({
+      spacecraft_uncovered: d.integer,
+      contacts_short: d.integer,
+      gaps: d.integer,
+    }),
     spacecraft: d.array(
       d.object({
         spacecraft_id: d.token,

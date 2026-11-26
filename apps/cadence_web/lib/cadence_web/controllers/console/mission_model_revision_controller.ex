@@ -9,6 +9,7 @@ defmodule CadenceWeb.Console.MissionModelRevisionController do
 
   use CadenceWeb, :controller
 
+  alias Cadence.Control.ModelWithdrawal
   alias Cadence.MissionModels
   alias Cadence.Reads.MissionModelApprovals
   alias CadenceWeb.Console.Problem
@@ -81,6 +82,27 @@ defmodule CadenceWeb.Console.MissionModelRevisionController do
     end
   end
 
+  # E2 (#546; U109 "Withdrawing an approval"): an approved revision's approval taken back, with a
+  # required reason. Answers the revision read; a retry with the same `operation_id` replays.
+  def withdraw(conn, %{"id" => id} = params) do
+    case operation_id(params["operation_id"]) do
+      {:ok, operation_id} ->
+        conn
+        |> scope()
+        |> ModelWithdrawal.withdraw(mission_id(conn), id, params["reason"],
+          operation_id: operation_id
+        )
+        |> withdrawn(conn, id)
+
+      {:error, details} ->
+        Problem.respond(conn, :invalid_params, details)
+    end
+  end
+
+  defp withdrawn({:ok, {:replayed, _revision}}, conn, id), do: read(conn, id, true)
+  defp withdrawn({:ok, _revision}, conn, id), do: read(conn, id, false)
+  defp withdrawn({:error, reason}, conn, _id), do: error(conn, reason)
+
   defp decide(conn, id, decision) do
     case decision.() do
       {:ok, _revision} -> show(conn, %{"id" => id})
@@ -104,7 +126,8 @@ defmodule CadenceWeb.Console.MissionModelRevisionController do
             mission_model_runtime_plans_not_ready mission_model_revision_not_approvable
             mission_model_revision_not_found mission_model_comparison_report_not_found
             mission_model_decision_reason_required mission_model_decision_reason_too_long
-            mission_model_no_active_binding_set mission_model_revision_not_in_catalog)a
+            mission_model_no_active_binding_set mission_model_revision_not_in_catalog
+            mission_model_revision_not_withdrawable)a
 
   # #280 (U100): the self-approval refusal always says whether it came through a service.
   defp error(conn, :mission_model_self_approval_forbidden),

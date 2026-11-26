@@ -10,7 +10,7 @@ defmodule Cadence.Comms.GroundStationStore do
   alias Cadence.Comms.{GroundStation, GroundStationRow}
   alias Cadence.Listing
   alias Cadence.Missions
-  alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.{BulkLookup, JsonDocument}
   alias Cadence.Repo
 
   @spec persist_ground_station(binary(), GroundStation.t()) ::
@@ -108,6 +108,15 @@ defmodule Cadence.Comms.GroundStationStore do
       page: page,
       page_size: page_size
     }
+  end
+
+  @doc false
+  def fetch_ground_stations(organization_id, mission_id, ids) do
+    GroundStationRow
+    |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
+    |> where([row], row.lifecycle_state == "active")
+    |> BulkLookup.by_id(:ground_station_id, ids)
+    |> Enum.map(&GroundStationRow.to_domain/1)
   end
 
   @spec update_ground_station(binary(), binary(), binary(), map()) ::

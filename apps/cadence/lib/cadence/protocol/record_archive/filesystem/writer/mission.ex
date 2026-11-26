@@ -34,6 +34,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Writer.Mission do
 
     {:ok,
      new_state(%{
+       name: Keyword.fetch!(opts, :name),
        mission_id: Keyword.fetch!(opts, :mission_id),
        base_path: Keyword.fetch!(opts, :base_path),
        repo: Keyword.fetch!(opts, :repo),
@@ -131,15 +132,23 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Writer.Mission do
   def handle_info({:flush, _stale_ref}, state), do: {:noreply, state}
 
   # A writer with nothing buffered, nothing retrying and no call since the last check goes away;
-  # the next enqueue starts a fresh one.
+  # the next enqueue starts a fresh one. It drops its own name first, synchronously: the Registry
+  # removes a dead process's name only asynchronously, so a lookup in that window would hand the
+  # next caller a pid that is already gone (and `start_child` would say `already_started` for it).
+  # A caller that already held this pid gets `:noproc`/`:normal`, and the front's retry then finds
+  # no writer and starts a fresh one.
   def handle_info(:idle_check, state) do
     if state.size == 0 and state.retries == 0 and not state.active? do
+      unregister(state.name)
       {:stop, :normal, state}
     else
       Process.send_after(self(), :idle_check, @idle_check_ms)
       {:noreply, %{state | active?: false}}
     end
   end
+
+  defp unregister({:via, Registry, {registry, key}}), do: Registry.unregister(registry, key)
+  defp unregister(_name), do: :ok
 
   # A failed flush keeps its buffer and retries on a timer.
   defp run_flush(state) do

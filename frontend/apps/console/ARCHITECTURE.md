@@ -79,6 +79,14 @@ params are in `src/router/route-map*.ts`, and `route-map.test.ts` checks the two
   responses, and keeps the last value while it refetches. It exposes a `RemoteState<T>` that a
   screen renders with `<ApRemote :state @retry>`. Refetch on server changes with
   `useMissionInvalidation(missionId, [resources], refetch)`.
+- Cursor-paged lists use `usePagedQuery(key, fetchPage, idOf)`: Load more (`more`, `moreBusy`,
+  `moreError`), and a live `refetch` that keeps the rows shown (a failure is `refreshError`; say it
+  with an always-mounted `role="status"` line). A key that carries a filter (a search box) passes
+  `{ scopeOf }`, the key without its filters: a filter change then keeps the rows, `state` stays
+  ready and `pending` is set until the new first page lands, so a field above the list never
+  unmounts while someone types. Show `pending` as "Updating…". A filter page that fails is the
+  state's failure (the old rows don't match the new filter), so render the field outside
+  `ApRemote` and outside any `state.status === 'ready'` gate, or it unmounts on that failure.
 
 ## Session, scope and auth
 

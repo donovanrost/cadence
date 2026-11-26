@@ -1,6 +1,5 @@
 defmodule Cadence.Control.SpacecraftConfiguration do
-  @moduledoc "Explicit human submission, direct activation, and review of a spacecraft revision."
-  alias Cadence.Applications.SpacecraftConfiguration.Drafts
+  @moduledoc "Explicit human submission and direct activation of a spacecraft revision; a review is decided from the activation."
   alias Cadence.Applications.SpacecraftConfiguration.Review
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Management.Activations
@@ -19,6 +18,34 @@ defmodule Cadence.Control.SpacecraftConfiguration do
   end
 
   def submit(_, _, _, _, _, _), do: {:error, :invalid_activation_decision}
+
+  @doc """
+  One governed review (or direct activation) of many spacecraft, with no cap: `selection` is
+  `{:spacecraft, %{id => token}}` or `:all_saved` (every spacecraft whose saved draft differs from
+  its active configuration). The result carries `spacecraft_count` beside `submit/6`'s.
+  """
+  def submit_many(scope, mission_id, selection, policy_token, intent)
+      when intent in [:review, :activate] and is_binary(policy_token) and is_binary(mission_id) do
+    with {:ok, tokens} <- tokens(scope, mission_id, selection),
+         {:ok, request} <-
+           Review.request_many(scope, mission_id, tokens,
+             expected_policy_token: policy_token,
+             expected_approval_required: intent == :review
+           ),
+         {:ok, result} <- complete_submission(scope, mission_id, request, intent) do
+      {:ok, Map.put(result, :spacecraft_count, map_size(tokens))}
+    end
+  end
+
+  def submit_many(_, _, _, _, _), do: {:error, :invalid_activation_decision}
+
+  defp tokens(scope, mission_id, :all_saved), do: Review.saved_tokens(scope, mission_id)
+
+  defp tokens(_scope, _mission_id, {:spacecraft, tokens}) when map_size(tokens) > 0,
+    do: {:ok, tokens}
+
+  defp tokens(_scope, _mission_id, _selection),
+    do: {:error, :spacecraft_configuration_review_unavailable}
 
   defp complete_submission(_scope, _mission, request, :review),
     do: {:ok, %{state: "approval_pending", request_id: request.activation_request_id}}
@@ -56,33 +83,4 @@ defmodule Cadence.Control.SpacecraftConfiguration do
   rescue
     _ -> {:ok, %{"outcome" => "application_needs_review"}}
   end
-
-  def decide(scope, mission_id, spacecraft_id, token, request_id, reason, decision)
-      when is_binary(reason) and byte_size(reason) in 1..4096 and is_binary(request_id) and
-             is_binary(token) and is_binary(mission_id) and is_binary(spacecraft_id) and
-             decision in ["approved", "rejected"] do
-    with {:ok, mission, spacecraft} <- Drafts.authorize(scope, mission_id, spacecraft_id),
-         {:ok, request} <- Activations.fetch(scope, request_id),
-         true <- request.mission_id == mission_id,
-         true <-
-           get_in(request.metadata, ["configuration_review", "spacecraft_id"]) == spacecraft_id,
-         true <-
-           get_in(request.metadata, ["configuration_review", "configuration_token"]) == token,
-         :ok <- Drafts.exact_token(Drafts.snapshot(mission, spacecraft).token, token) do
-      ControlActivations.review(scope, mission_id, %{
-        "activation_decision" => %{"request_id" => request_id, "reason" => reason},
-        "decision" => decision
-      })
-      |> ScopedReadUpdates.publish_result(
-        :spacecraft_configuration_changed,
-        scope.organization_id,
-        mission_id
-      )
-    else
-      false -> {:error, :spacecraft_configuration_review_stale}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  def decide(_, _, _, _, _, _, _), do: {:error, :invalid_activation_decision}
 end

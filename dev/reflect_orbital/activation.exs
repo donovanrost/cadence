@@ -80,26 +80,23 @@ defmodule Cadence.Dev.ReflectOrbital.Activation do
 
     unless already_active? do
       policy = ActivationPolicy.load(F.organization_id(), F.mission_id())
-      batch = Cadence.Catalog.SpacecraftModelBindings.max_review_batch()
 
-      # One review covers at most `batch` spacecraft (500 today), so a larger fleet activates in
-      # batches; each review adds its craft to the active binding set (#715).
+      # One review covers the whole fleet, however many spacecraft (no batch cap, #734).
       snapshots
       |> Enum.reject(fn {id, snapshot} ->
         get_in(active.entries, [id, "configuration_revision_id"]) ==
           snapshot.row.configuration_revision_id
       end)
       |> Enum.sort()
-      |> Enum.chunk_every(batch)
-      |> Enum.each(&activate_batch(scope, policy, &1))
+      |> then(&activate(scope, policy, &1))
     end
 
     verify(mission, fleet, revision)
   end
 
   # One review and its execution, with their wall times (#715).
-  defp activate_batch(scope, policy, chunk) do
-    tokens = Map.new(chunk, fn {id, snapshot} -> {id, snapshot.token} end)
+  defp activate(scope, policy, entries) do
+    tokens = Map.new(entries, fn {id, snapshot} -> {id, snapshot.token} end)
 
     {ms, request} =
       :timer.tc(

@@ -2,7 +2,8 @@ defmodule Cadence.CommandReviewFixtures do
   @moduledoc false
   alias Cadence.Accounts.{OrganizationMembership, OrganizationMembershipRow, User, UserRow}
   alias Cadence.Auth.Scope
-  alias Cadence.Commanding.{CommandRequest, CommandRequestRow}
+  alias Cadence.Commanding.CommandRequest
+  alias Cadence.CommandMemberFixtures
   alias Cadence.Ids
   alias Cadence.Missions
   alias Cadence.Missions.Mission
@@ -78,6 +79,6 @@ defmodule Cadence.CommandReviewFixtures do
         )
       )
 
-    request |> CommandRequestRow.changeset() |> Repo.insert!() |> CommandRequestRow.to_domain()
+    CommandMemberFixtures.insert!(c.org, request)
   end
 end

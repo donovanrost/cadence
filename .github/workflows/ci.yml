@@ -10,10 +10,6 @@ on:
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   push:
     branches: [develop, main]
-  # Twice a day on develop (the default branch, where schedules run), so jobs on probation outside
-  # ci-ok keep collecting runs when no PRs land. Free on a public repo; `changes` treats it like a push.
-  schedule:
-    - cron: "17 5,17 * * *"
   workflow_dispatch:
 
 permissions:
@@ -36,7 +32,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       pull-requests: read
-    # Pushes and schedules run everything. A PR runs the jobs its paths can affect:
+    # Pushes run everything. A PR runs the jobs its paths can affect:
     # - code: anything but docs (browser, console e2e, publication, JS audit)
     # - backend: code outside the console app and its kit (Elixir quality and suites). Elixir tests
     #   still execute frontend/modules and frontend/apps/host producer code, so those count.
@@ -128,6 +124,12 @@ jobs:
           fi
           echo "::warning title=Incremental compile failed::Checking again with a forced full build (stale build-cache types can cause false warnings)."
           mix workspace.run -t compile --order postorder --early-stop --env-var MIX_ENV=test -- --force --warnings-as-errors
+      - name: Compile dev scripts without running entrypoints
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        working-directory: apps/cadence_simulator
+        env:
+          MIX_ENV: test
+        run: mix run --no-start --no-compile ../../scripts/ci/check_dev_scripts.exs
       - name: Format
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: mix format.all --check-formatted
@@ -456,7 +458,7 @@ jobs:
           retention-days: 7
 
   # #242: the console's Playwright specs (e2e and a11y) against a real stack, one per shard.
-  # Non-blocking: not in ci-ok during its probation week; the director decides when it joins.
+  # Required through ci-ok (#409). A flaky spec goes to console to fix; it is not a reason to ungate.
   # Each shard boots its own Postgres, QuestDB, simulator and Phoenix and seeds them (devops on
   # #242: the simulator keeps its own reservations, so a restored dump wouldn't match it).
   # Credentials (lead, director): each shard makes its own random passwords, masked, kept in this
@@ -468,7 +470,6 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
@@ -1034,6 +1035,7 @@ jobs:
         ingest-journal-off,
         questdb-integration,
         rest-seed-smoke,
+        console-e2e,
       ]
     if: always()
     runs-on: ubuntu-24.04

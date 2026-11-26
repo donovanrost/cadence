@@ -109,9 +109,6 @@ defmodule Cadence.Management.ConsoleSettings do
               "immediately, such as limits, aren't covered."
         )
       ],
-      "commanding.defaults" => [
-        enum("shelf", "Command shelf", [{"expanded", "Expanded"}, {"minimized", "Minimized"}])
-      ],
       "cadence.pass_review" => [
         number("pass_realized_threshold", "A pass counts as realized at",
           help: "The share of its planned window it must fly."
@@ -148,7 +145,7 @@ defmodule Cadence.Management.ConsoleSettings do
     end
   end
 
-  defp enum(path, label, options, opts \\ []),
+  defp enum(path, label, options, opts),
     do:
       field(path, label, :enum,
         enum: Enum.map(options, fn {value, text} -> %{value: value, label: text} end),

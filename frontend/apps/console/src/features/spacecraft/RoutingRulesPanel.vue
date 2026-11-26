@@ -1,13 +1,9 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
-import { useConfigState } from "@/features/changes/index.ts";
 import { ApButton, ApEmptyState, ApPanel, ApTable, ApTag, type ApColumn } from "@/ui";
-import LegacyConversionCallout from "./LegacyConversionCallout.vue";
-import OlderRouteRemove from "./OlderRouteRemove.vue";
 import RemoveRouteSheet from "./RemoveRouteSheet.vue";
 import { directionLabel, type RoutingRule } from "./detail.ts";
-import { stagedRemovals } from "./older-route.ts";
 import { actionRows, routeTag, stationWord } from "./routes.ts";
 
 /**
@@ -22,17 +18,8 @@ const props = defineProps<{
   canStage: boolean;
 }>();
 const active = computed(() => props.rules.filter((r) => r.active));
-/** ux U79 (TEMPORARY, deleted with 9ac6dc8ee): the conversion callout, above a list with legacy rows. */
-const hasLegacy = computed(() => props.rules.some((r) => r.origin === "legacy"));
 const routeOf = computed(() => actionRows(active.value));
 const remover = ref<InstanceType<typeof RemoveRouteSheet> | null>(null);
-/** ux U79: an older route whose removal is in the open set (inferred from it, per api/lead). */
-const config = useConfigState(props.missionId);
-const removals = computed(() =>
-  config.state.value.status === "ready"
-    ? stagedRemovals(config.state.value.value.change_set)
-    : null,
-);
 const columns = computed((): readonly ApColumn[] => [
   { key: "name", label: "Rule" },
   { key: "source", label: "Source" },
@@ -62,7 +49,6 @@ function remove(rule: RoutingRule) {
     <div v-if="canStage" class="flex justify-end border-b border-hairline px-4 py-2.5">
       <ApButton size="compact" :to="{ query: { route: 'new' } }">Add extra route</ApButton>
     </div>
-    <LegacyConversionCallout v-if="hasLegacy" :mission-id="missionId" />
 
     <ApEmptyState
       v-if="active.length === 0"
@@ -79,16 +65,6 @@ function remove(rule: RoutingRule) {
     >
       <template #cell-name="{ row }">
         {{ row.name }}<span v-if="row.purpose" class="text-text-4"> · {{ row.purpose }}</span>
-        <span v-if="routeTag(row)?.note" class="block text-sm text-text-3">{{
-          routeTag(row)?.note
-        }}</span>
-        <!-- ux A6: why there's no Edit, as reachable text (not a disabled button). -->
-        <span
-          v-if="canStage && routeTag(row)?.reason"
-          tabindex="0"
-          class="block text-sm text-text-3"
-          >{{ routeTag(row)?.reason }}</span
-        >
       </template>
       <template #cell-source="{ row }">
         <ApTag v-if="routeTag(row)" :label="routeTag(row)?.label" />
@@ -108,13 +84,6 @@ function remove(rule: RoutingRule) {
           <ApButton size="compact" :to="{ query: { route: routeOf.get(row.id) } }">Edit</ApButton>
           <ApButton size="compact" variant="ghost" @click="remove(row)">Remove…</ApButton>
         </span>
-        <OlderRouteRemove
-          v-else-if="row.origin === 'legacy'"
-          :mission-id="missionId"
-          :rule="row"
-          :spacecraft-name="spacecraftName"
-          :staged="removals?.has(row.id) ?? false"
-        />
       </template>
     </ApTable>
     <RemoveRouteSheet ref="remover" :mission-id="missionId" :spacecraft-name="spacecraftName" />

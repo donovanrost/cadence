@@ -157,26 +157,6 @@ defmodule CadenceWeb.FallbackController do
     error_response(conn, :not_found, "packet_definition_not_found")
   end
 
-  # Four-eyes audit 11-17, P0: a command-group member is decided, queued and released only through
-  # its group; and only group submission makes a request a member. ux U87's words.
-  def call(conn, {:error, :command_request_in_group}) do
-    error_response(
-      conn,
-      :conflict,
-      "command_request_in_group",
-      "This command is part of a command group. Approve it with the group's GO/NO-GO."
-    )
-  end
-
-  def call(conn, {:error, :command_request_group_reserved}) do
-    error_response(
-      conn,
-      :unprocessable_entity,
-      "command_request_group_reserved",
-      "A command joins a command group only when the group is submitted."
-    )
-  end
-
   def call(conn, {:error, :command_group_not_armed}) do
     error_response(
       conn,
@@ -208,14 +188,6 @@ defmodule CadenceWeb.FallbackController do
     |> json(%{errors: [%{field: to_string(field), reason: format_reason(reason)}]})
   end
 
-  # #280: REST's envelope has no details (api 11-19). Through a service, the self-approval refusal
-  # answers exactly as the direct one does; the unknown-authors refusal is its own 403.
-  def call(conn, {:error, {:command_request_self_approval_not_allowed, id, _details}}),
-    do: call(conn, {:error, {:command_request_self_approval_not_allowed, id}})
-
-  def call(conn, {:error, {:command_request_approver_authors_unknown, _id, _details}}),
-    do: error_response(conn, :forbidden, "command_request_approver_authors_unknown")
-
   # REST activations (#280): through a service, the self-approval refusal answers as before.
   def call(conn, {:error, {:activation_self_approval_forbidden, %{}}}),
     do: call(conn, {:error, :activation_self_approval_forbidden})
@@ -231,16 +203,6 @@ defmodule CadenceWeb.FallbackController do
     |> put_status(:unprocessable_entity)
     |> json(%{errors: translate_errors(changeset)})
   end
-
-  # #117 step 4a: REST approve and reject require the review token, and refuse a stale one.
-  def call(conn, {:error, :command_review_required}),
-    do: call(conn, {:error, {:invalid_param, "approval.expected_review", :required}})
-
-  def call(conn, {:error, :command_review_invalid}),
-    do: call(conn, {:error, {:invalid_param, "approval.expected_review", :invalid}})
-
-  def call(conn, {:error, :command_review_changed}),
-    do: error_response(conn, :conflict, "command_review_changed")
 
   def call(conn, {:error, reason}) do
     conn

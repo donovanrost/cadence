@@ -3,7 +3,7 @@ defmodule CadenceWeb.API.CommandingParams do
 
   import CadenceWeb.API.ParamParser
 
-  alias Cadence.Commanding.{CommandRequest, CommandStage, StagedCommandItem}
+  alias Cadence.Commanding.{CommandStage, StagedCommandItem}
 
   @command_stage_visibility_values [:private, :shared]
   @command_stage_lifecycle_states [:draft, :in_review, :ready_to_submit, :submitted, :canceled]
@@ -195,80 +195,13 @@ defmodule CadenceWeb.API.CommandingParams do
     end
   end
 
-  @spec command_stage_submission(map(), keyword()) ::
-          {:ok, {[binary()], map()}} | {:error, term()}
-  def command_stage_submission(params, opts \\ []) when is_map(params) and is_list(opts) do
-    with {:ok, staged_command_item_ids} <- required_string_list(params, "staged_command_item_ids"),
-         {:ok, requested_by} <-
-           scope_actor(params, "requested_by", opts, :default_requested_by) do
-      {:ok, {staged_command_item_ids, requested_by || %{}}}
-    end
-  end
-
-  @spec command_request(binary(), binary(), map(), keyword()) ::
-          {:ok, CommandRequest.t()} | {:error, term()}
-  def command_request(organization_id, mission_id, params, opts \\ [])
-      when is_binary(organization_id) and is_binary(mission_id) and is_map(params) and
-             is_list(opts) do
-    with {:ok, source_endpoint_ref} <- required_string(params, "source_endpoint_ref"),
-         {:ok, mission_model_revision_id} <- required_string(params, "mission_model_revision_id"),
-         {:ok, command_id} <- required_string(params, "command_id"),
-         {:ok, priority} <- non_neg_integer(params, "priority", 3),
-         {:ok, not_before} <- optional_datetime(params, "not_before"),
-         {:ok, expires_at} <- optional_datetime(params, "expires_at"),
-         {:ok, requested_by} <-
-           scope_actor(params, "requested_by", opts, :default_requested_by) do
-      {:ok,
-       CommandRequest.new(%{
-         command_request_id: string_value(params, "command_request_id"),
-         organization_id: organization_id,
-         mission_id: mission_id,
-         source_endpoint_ref: source_endpoint_ref,
-         mission_model_revision_id: mission_model_revision_id,
-         command_id: command_id,
-         priority: priority,
-         not_before: not_before,
-         expires_at: expires_at,
-         requested_by: requested_by || %{},
-         argument_values: map_value(params, "argument_values"),
-         metadata: map_value(params, "metadata")
-       })}
-    end
-  end
-
   @spec command_request_filters(map()) :: {:ok, keyword()} | {:error, term()}
   def command_request_filters(params) when is_map(params) do
     with {:ok, lifecycle_state} <- optional_command_request_lifecycle_state(params) do
       {:ok,
        []
        |> maybe_put_opt(:source_endpoint_ref, string_value(params, "source_endpoint_ref"))
-       |> maybe_put_opt(:command_stage_id, string_value(params, "command_stage_id"))
        |> maybe_put_opt(:lifecycle_state, lifecycle_state)}
-    end
-  end
-
-  @spec command_approval(binary(), map(), keyword()) :: {:ok, keyword()} | {:error, term()}
-  def command_approval(command_request_id, params, opts \\ [])
-      when is_binary(command_request_id) and is_map(params) and is_list(opts) do
-    with {:ok, decided_by} <-
-           scope_actor(params, "decided_by", opts, :default_decided_by) do
-      {:ok,
-       [
-         reason: string_value(params, "reason"),
-         decided_by: decided_by || %{},
-         metadata: map_value(params, "metadata"),
-         require_review: true
-       ] ++ expected_review(params)}
-    end
-  end
-
-  # #117 step 4a (breaking, commanding.md): the review token the decider saw is required, and
-  # ReviewPrecondition.required/1 refuses without it, after the human-approver check. An absent
-  # token sends no key at all (an explicit nil would read as a stale review, before that check).
-  defp expected_review(params) do
-    case string_value(params, "expected_review") do
-      token when is_binary(token) -> [expected_review: token]
-      _absent -> []
     end
   end
 
@@ -279,18 +212,6 @@ defmodule CadenceWeb.API.CommandingParams do
        []
        |> maybe_put_opt(:command_request_id, string_value(params, "command_request_id"))
        |> maybe_put_opt(:decision, decision)}
-    end
-  end
-
-  @spec command_queue_entry(map(), keyword()) :: {:ok, keyword()} | {:error, term()}
-  def command_queue_entry(params, opts \\ []) when is_map(params) and is_list(opts) do
-    with {:ok, enqueued_by} <-
-           scope_actor(params, "enqueued_by", opts, :default_enqueued_by) do
-      {:ok,
-       [
-         enqueued_by: enqueued_by || %{},
-         metadata: map_value(params, "metadata")
-       ]}
     end
   end
 

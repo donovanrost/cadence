@@ -162,8 +162,6 @@ defmodule Cadence.Dashboards.DataLinkResolver.CommandTargets do
       row("Expires at", request.expires_at),
       row("Requested at", request.requested_at),
       row("Requested by", request.requested_by),
-      row("Source command stage", request.source_command_stage_id),
-      row("Source staged command item", request.source_staged_command_item_id),
       row("Argument values", request.argument_values),
       row("Resolved argument values", request.resolved_argument_values),
       row("Significance", request.significance),

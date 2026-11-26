@@ -95,7 +95,7 @@ defmodule Cadence.Configuration.Submission do
 
     locked(set, params, proof, fn set ->
       ReviewRecord.write(set, reviewer, "sent_back", comment, proof.review_id, %{
-        digest: set.change_set_id |> ChangeSetStore.staged_ops() |> ReviewRecord.digest(),
+        digest: ReviewRecord.digest(ChangeSetStore.staged_ops(set.change_set_id), set.selections),
         separated_from: ReviewRecord.separated_from(ReviewRecord.compared(set)),
         admin_mode: admin_mode(params)
       })
@@ -119,7 +119,8 @@ defmodule Cadence.Configuration.Submission do
           locked(set, params, proof, fn set ->
             # #117 step 2: the review names the ops it decided (the version pinned by expected/2,
             # under this lock); the apply below runs them, as the reviewer (applied_by).
-            digest = set.change_set_id |> ChangeSetStore.staged_ops() |> ReviewRecord.digest()
+            digest =
+              ReviewRecord.digest(ChangeSetStore.staged_ops(set.change_set_id), set.selections)
 
             review =
               ReviewRecord.write(set, reviewer, "approved", comment, proof.review_id, %{
@@ -156,22 +157,31 @@ defmodule Cadence.Configuration.Submission do
     end
   end
 
-  defp submit_locked(set, actor, reason, %{"approval_required" => true} = policy, _preview, _ids) do
+  # D3 (#544): the submit records what its preview selected per pinned composition; the apply,
+  # now or after review, selects again under the activation lock and refuses restage_needed.
+  defp submit_locked(set, actor, reason, %{"approval_required" => true} = policy, preview, _ids) do
     set =
       ChangeSetStore.update_set(set,
         state: "in_review",
         submitted_by: actor,
         submitted_at: DateTime.utc_now(),
         reason: reason,
-        policy_document: policy
+        policy_document: policy,
+        selections: Map.get(preview, :selections, %{})
       )
 
     %{state: :in_review, change_set_id: set.change_set_id, version: set.version}
   end
 
   # The direct path: the apply writes its own not_required record (#117 step 2).
-  defp submit_locked(set, actor, reason, policy, _preview, {revision_id, admin_mode}) do
-    set = %{set | submitted_by: actor, reason: reason, policy_document: policy}
+  defp submit_locked(set, actor, reason, policy, preview, {revision_id, admin_mode}) do
+    set = %{
+      set
+      | submitted_by: actor,
+        reason: reason,
+        policy_document: policy,
+        selections: Map.get(preview, :selections, %{})
+    }
 
     execute_locked(
       set,
@@ -222,6 +232,8 @@ defmodule Cadence.Configuration.Submission do
         submitted_by: set.submitted_by || applier,
         submitted_at: set.submitted_at || now,
         reason: reason,
+        # The record's digest covers them (#544), so a direct apply stores them too.
+        selections: set.selections,
         failure_document: nil,
         closed_at: now
       )

@@ -339,10 +339,32 @@ by its catalog revision ("catalog rev 4"); the model revision id is Technical de
   decided_at | null}`, both set or both null. `decided_by` names an active member (C1: a person
   no longer a member reads `{id: null, name: null}`; never a stored name or an email). Before
   #260 this answered `200` with the revision unchanged (breaking).
+- `POST /:id/withdraw {reason, operation_id?}` (E2, #546; U109 "Withdrawing an approval") →
+  `200` the read, with `status: "withdrawn"` and `decision: {kind: "withdrawn", by, at,
+  report_id: null, reason}`, plus `replayed`.
+  - Only an approved revision, and only an org admin with the authority to approve. No four-eyes:
+    withdrawing narrows what can run and stops nothing.
+  - `withdrawn` is final: approve refuses it, and running that model again takes a new revision.
+  - The decision is an append-only `mission_model_decisions` record.
+  - Every read carries `viewer_can_withdraw` (an approved revision and a viewer who may approve).
+  - Refusals: `422 mission_model_decision_reason_required` / `…_too_long`, `403 forbidden`, `403
+    human_mission_model_approver_required`, `409 mission_model_revision_not_withdrawable` (not
+    approved, or already withdrawn by another operation). A service identity's bearer is refused
+    `403 service_not_allowed` before it reaches the action.
+  - The same `operation_id` by the same person replays `200` with `replayed: true`.
+  - After a withdrawal:
+    - staging a pin to that composition is a validation NO-GO with `details.reason: "withdrawn"`
+      and `details.decision {revision_id, kind, by: {id, name}, at, reason}`, unless an older
+      approved, runnable revision of the same composition is left, which staging then selects
+      and records;
+    - an in-flight set's apply refuses `409 restage_needed` with `current_reason: "withdrawn"`
+      and the same `decision`.
 - The catalog read's revision rows (`GET /catalog?database_id=`) carry `model {revision_id,
   status} | null` for the row tag (NEEDS APPROVAL / APPROVED / REJECTED).
   - `composition_id` (D2, #543): the id of the composition behind the row's model revision, or
     null.
+  - `current_revision.composition_id` (#748, for #752): the same for the current revision, so a
+    client can pin it (D3) without listing the revisions.
 - Preview HOLD `mission_model_not_approved` (blocking; compatibility check): `details
   {catalog_revision_id, catalog_revision_number, catalog_database_id, mission_model_revision_id}`.
 - Apply refusals: `409 mission_model_revision_not_approved {mission_model_revision_ids,
@@ -403,7 +425,8 @@ switches. The editable `document` never carries them; they're read-only in `swit
   craft's own configuration sets it.
 - `catalogs` (≤100): `{id, name, label, number, approval_status, declarations, packets, commands}`,
   where `number` is the catalog revision number (U65's "catalog rev 14") and `approval_status`
-  (#595b) is its mission-model revision's gate state: `candidate | approved | rejected | retired`.
+  (#595b) is its mission-model revision's gate state: `candidate | approved | rejected | retired |
+  withdrawn`.
   (`withdrawn` isn't a model revision state; a withdrawn approval is E2's, #546.)
 - `fleet` (≤100, this craft first): `{id, name, scid, active_catalog_id, has_changes}`, plus
   `fleet_total`.
@@ -429,6 +452,24 @@ Saves a draft; the active configuration stays in use. Answers the fresh snapshot
   was approved but the application couldn't be confirmed.
 - A bad `intent`, or a missing token: `422 invalid_params`.
 
+### `POST /missions/:mission_id/configuration/reviews` `{spacecraft | all_saved, policy_token, intent}` (#734)
+
+One review (or one direct activation) of any number of spacecraft: there is no cap, and the
+review's evidence is stored by hash, not in the activation's metadata. It takes the same
+`policy_token` and `intent: review|activate` as the per-spacecraft submit, and answers its shape plus
+`spacecraft_count`: `{state: approval_pending, request_id, spacecraft_count}`, `{state: active,
+execution_id, spacecraft_count}` or `{state: needs_review, spacecraft_count}`.
+
+- `spacecraft: {spacecraft_id: token}`: exactly these, each with the token its workspace snapshot
+  gave. A token that changed since is `409 spacecraft_configuration_changed`, and nothing is
+  reviewed.
+- `all_saved: true`: every spacecraft whose latest saved draft differs from its active
+  configuration, each at its current token. Nothing differs: `422 nothing_to_review`.
+- Both, neither, an empty map, a non-text token, or no `intent`/`policy_token`: `422 invalid_params`.
+- The other refusals are the submit's (`activation_policy_changed`,
+  `spacecraft_configuration_review_unavailable`, `mission_model_revision_not_approved`, …). Access
+  is the same operate check, over the mission.
+
 ### `GET …/workspace/catalogs/:catalog_revision_id/packets`
 
 `{data: {catalog_id, packets: [{apid, name, definitions}]}}` (≤2048). An unknown catalog
@@ -449,6 +490,7 @@ console's mission scope), so the mission's existence doesn't leak.
 | `activation_policy_changed` | 409 | The policy changed since the snapshot |
 | `spacecraft_switch_set_by_change_set` | 409 | (submit) A change set turned a switch on or off after the draft was saved; save again |
 | `spacecraft_catalog_set_by_profile` | 409 | The catalog is the profile's (a change set sets it) |
+| `nothing_to_review` | 422 | (`POST /configuration/reviews`, `all_saved`) every saved draft is already active |
 | `spacecraft_catalog_required` | 422 | Submit with no catalog |
 | `spacecraft_packet_inputs_required` | 422 | Telemetry on without a source and packets |
 | `spacecraft_catalog_unavailable` | 422 | The catalog revision isn't this mission's |
@@ -499,7 +541,7 @@ Rules (v1), by area:
 | --- | --- | --- |
 | fleet | `no_spacecraft` blocker → `spacecraft_new`; `spacecraft_missing_scid`, `spacecraft_without_profile` blocker → `spacecraft_list`; `spacecraft_without_routing_rule` blocker → `comms`; `spacecraft_on_older_profile_version` caution → `profile` (one profile) or `spacecraft_list` | |
 | catalog | `no_catalog`, `catalog_without_revision` blocker → `catalog_import` | detail "rev N · used by M spacecraft", or "rev N" ("rN" is reserved for mission config revisions) |
-| comms | `no_transports` blocker → `comms` | |
+| comms | `no_transports`, `spacecraft_without_downlink` blocker → `comms`; `spacecraft_with_multiple_uplinks`, `spacecraft_with_disabled_route` caution → `comms` | |
 | stations | `no_ground_stations` not_set_up → `station` | `unknown` when stations exist, because station health isn't tracked (never ready by default) |
 | data_sources | `data_source_unavailable` blocker, `data_source_degraded` caution → `data_source` (id when it is just one) | `unknown` when no health has been reported |
 | planning (no tile) | `planning_not_set_up` not_set_up → `contact_planning` | from `/contact-plans/setup` |
@@ -507,6 +549,13 @@ Rules (v1), by area:
 
 - Units are singular when the count is 1.
 - `affected_count` is 0 for findings that aren't about a set of items.
+- Route findings count affected active spacecraft once per cause across materialized profile and
+  extra routes. The multiple-uplinks finding counts distinct enabled primary routes with an
+  outbound or bidirectional leg. One rule across several stations is a single uplink choice.
+  The downlink
+  blocker applies to spacecraft with an enabled route. Spacecraft without enabled routes use
+  `spacecraft_without_routing_rule`. The disabled-route finding covers active disabled rows.
+  Archived routes and profile routes excluded by an override are outside these counts.
 - Findings are sorted by severity (blocker first), then area order.
 - `recent_changes` (R2): the mission's last 5 configuration revisions, newest first:
   `[{at, kind: "change_set" | "rollback" | "legacy_activation", version_label: "r3", summary,
@@ -641,6 +690,9 @@ The shape is setup-shapes.md §C3, plus `declaration_count`.
 - `diagnostics[]`: `{severity: error|warning|info, code, message, path}`, where `path` is a
   " / "-joined XTCE path or `null`. A run can succeed with error diagnostics (unsupported items
   are skipped).
+- `revision`: `{id, number, label, composition_id}` or `null`. `composition_id` (D3, #544) is the
+  revision's one-layer composition: what C3's rollout pins on profiles and overrides (`null` only
+  if the import made none).
 - `base_revision`: the revision before this run's revision in the same database (the highest
   `revision_number` below its own), or `null` (first revision, or no revision produced). It's the
   same base as the revision read's `breaking_base` (the model approval gate above).

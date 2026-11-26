@@ -75,12 +75,15 @@ defmodule Cadence.Reads.MissionModelApprovals do
        row
        |> base_view(org, importers, catalog_revision, named?, {blocked, blocked_details})
        |> Map.merge(%{
+         # E2 (#546): Withdraw approval… shows on an approved revision for whoever may approve.
+         viewer_can_withdraw: row.status == "approved" and may_decide?(scope, mission_id),
          viewer_is_importer: is_binary(viewer_id) and viewer_id in importers,
          plans_ready: plans_ready,
          comparison: report && summary(org, mission_id, report)
        })
        # D2 (#543): composition, importers per layer and breaking_base (CompositionKeys).
-       |> Map.merge(CompositionKeys.read(org, mission_id, row.id))}
+       |> Map.merge(CompositionKeys.read(org, mission_id, row.id))
+       |> withdrawn(org, mission_id, row)}
     end
   end
 
@@ -270,6 +273,36 @@ defmodule Cadence.Reads.MissionModelApprovals do
     }
 
   defp decision(_row), do: nil
+
+  # E2 (#546): a withdrawn revision's decision is its append-only withdrawal record.
+  defp withdrawn(view, org, mission_id, %{status: "withdrawn", id: id}) do
+    case MissionModels.revision_withdrawal(org, mission_id, id) do
+      nil ->
+        view
+
+      record ->
+        Map.put(view, :decision, %{
+          kind: "withdrawn",
+          by: person(record.actor),
+          at: record.decided_at,
+          report_id: nil,
+          reason: record.reason,
+          retroactive: false
+        })
+    end
+  end
+
+  defp withdrawn(view, _org, _mission_id, _row), do: view
+
+  # A person who may approve (`:approve_mission_model`); a service never decides.
+  defp may_decide?(%Scope{actor_kind: :user} = scope, mission_id),
+    do:
+      Policy.authorize(scope, :approve_mission_model, %{
+        organization_id: scope.organization_id,
+        mission_id: mission_id
+      }) == :ok
+
+  defp may_decide?(_scope, _mission_id), do: false
 
   defp person(%{"id" => id} = by), do: %{id: id, name: by["display_name"] || by["name"]}
   defp person(_none), do: nil

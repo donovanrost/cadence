@@ -6,8 +6,8 @@ defmodule Cadence.Control.Commanding.GroupSubmissionTest do
 
   alias Cadence.Commanding.{CommandApprovalRow, CommandQueueEntryRow}
   alias Cadence.Commanding.Groups.GroupStore
+  alias Cadence.Commanding.RequestDigest
   alias Cadence.Control.Commanding.GroupSubmission
-  alias Cadence.Management.Commanding.RequestReview
 
   setup do
     setup!(2)
@@ -38,7 +38,7 @@ defmodule Cadence.Control.Commanding.GroupSubmissionTest do
 
     assert Enum.map(
              members,
-             &{&1.metadata["group"]["target_index"], &1.metadata["group"]["position"]}
+             &{&1.group_slot.target_index, &1.group_slot.position}
            ) ==
              [{0, 0}, {0, 1}, {1, 0}, {1, 1}]
 
@@ -72,7 +72,7 @@ defmodule Cadence.Control.Commanding.GroupSubmissionTest do
       assert row.decided_by_document["value"]["user_id"] == c.scope.user.user_id
 
       assert row.subject_digest ==
-               RequestReview.review_token(%{member | lifecycle_state: :queued})
+               RequestDigest.digest(%{member | lifecycle_state: :queued})
     end
   end
 

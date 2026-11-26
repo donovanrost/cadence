@@ -2,7 +2,7 @@ import type { MissionId } from "@/api/index.ts";
 import { computed, onScopeDispose, type Ref } from "vue";
 import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
-import { fetchPasses } from "./api.ts";
+import { fetchPasses } from "./passes-api.ts";
 
 /** Changes arrive as `contacts` invalidations (S10); this only slides the window forward. */
 export const WINDOW_SLIDE_MS = 5 * 60_000;

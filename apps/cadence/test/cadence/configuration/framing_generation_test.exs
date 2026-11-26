@@ -3,7 +3,7 @@ defmodule Cadence.Configuration.FramingGenerationTest do
 
   alias Cadence.Applications.SpacecraftConfiguration.{Drafts, Review}
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
-  alias Cadence.Catalog.{FleetSnapshot, SpacecraftConfigurationInput}
+  alias Cadence.Catalog.{FleetSnapshot, RequestSpacecraft, SpacecraftConfigurationInput}
   alias Cadence.Comms.{RoutingRule, RoutingRuleStore, TransportStore}
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Control.{Configuration, ConfigurationRollback}
@@ -48,7 +48,10 @@ defmodule Cadence.Configuration.FramingGenerationTest do
     assert {:ok, entry} = FleetSnapshot.entry(active.metadata, c.craft.spacecraft_id)
     assert entry["framing_authority"] == "profile"
     assert entry["framing"]["frame_size"] == 1279
-    assert %{"change_set" => %{"spacecraft_ids" => [_]}} = active.metadata
+    assert %{"change_set" => %{"count" => 1}} = active.metadata
+
+    assert [_] =
+             RequestSpacecraft.ids(c.org, c.mission.mission_id, active.metadata)
 
     assert {:ok, spec} = Cadence.Runtime.Missions.applied_spec(c.mission.mission_id)
     [source | _] = entry["source_endpoint_ids"]

@@ -12,6 +12,7 @@ defmodule CadenceWeb.ConsoleSocket do
 
   use Phoenix.Socket
 
+  alias Cadence.Accounts.Token
   alias CadenceWeb.Console.Access
 
   channel("mission:*", CadenceWeb.Console.MissionChannel)
@@ -27,7 +28,7 @@ defmodule CadenceWeb.ConsoleSocket do
        assign(socket,
          console_credentials: credentials,
          user_id: scope.user.user_id,
-         console_session_id: session_id(credentials.session_token)
+         console_session_digest: Token.digest(credentials.session_token)
        )}
     else
       _unauthenticated -> :error
@@ -37,18 +38,27 @@ defmodule CadenceWeb.ConsoleSocket do
   def connect(_params, _socket, _connect_info), do: :error
 
   @impl true
-  def id(socket), do: socket_id(socket.assigns.console_session_id)
+  def id(socket), do: id_for_token_digest(socket.assigns.console_session_digest)
 
   @doc "Socket id for a browser session token; broadcast `disconnect` to it on sign-out."
   @spec id_for_session_token(binary()) :: binary()
   def id_for_session_token(session_token) when is_binary(session_token),
-    do: socket_id(session_id(session_token))
+    do: id_for_token_digest(Token.digest(session_token))
 
-  defp socket_id(session_id), do: "console_session:" <> session_id
+  @doc """
+  Socket id for a session by its stored token digest (`Cadence.Accounts.Token.digest/1`), the one
+  derivation every socket id goes through. A session revoked from Account in another browser is
+  known only by its digest (#876).
+  """
+  @spec id_for_token_digest(binary()) :: binary()
+  def id_for_token_digest(token_digest) when is_binary(token_digest),
+    do: "console_session:" <> token_digest
 
-  defp session_id(session_token) do
-    :sha256
-    |> :crypto.hash(session_token)
-    |> Base.url_encode64(padding: false)
+  @doc "Disconnects the live sockets of each session in `token_digests` (signed out elsewhere)."
+  @spec disconnect_sessions([binary()]) :: :ok
+  def disconnect_sessions(token_digests) when is_list(token_digests) do
+    Enum.each(token_digests, fn digest ->
+      CadenceWeb.Endpoint.broadcast(id_for_token_digest(digest), "disconnect", %{})
+    end)
   end
 end

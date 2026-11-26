@@ -2,12 +2,12 @@ defmodule Cadence.Applications.ActionRequest do
   @moduledoc """
   Typed request for a host-standard or application-defined operation.
 
-  `origin` is the host the request came through: `:console` (the console's app surface host) or
-  `:legacy_host` (the legacy application host). The host sets it, never the client; providers
-  that keep a save trail (limits, derived telemetry) record it and refuse a save without one.
+  `origin` is the host the request came through: `:console` (the console's app surface host). The
+  host sets it, never the client; providers that keep a save trail (limits, derived telemetry)
+  record it and refuse a save without one.
   """
 
-  @type origin :: :console | :legacy_host
+  @type origin :: :console
 
   @type t :: %__MODULE__{
           application_key: binary(),
@@ -37,6 +37,5 @@ defmodule Cadence.Applications.ActionRequest do
   @doc "The save trail's `via` for a request's origin; `:error` when the host set none."
   @spec via(t()) :: {:ok, binary()} | {:error, :action_origin_required}
   def via(%__MODULE__{origin: :console}), do: {:ok, "console"}
-  def via(%__MODULE__{origin: :legacy_host}), do: {:ok, "legacy_host"}
   def via(%__MODULE__{}), do: {:error, :action_origin_required}
 end
