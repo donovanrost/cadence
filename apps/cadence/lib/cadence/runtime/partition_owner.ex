@@ -30,9 +30,9 @@ defmodule Cadence.Runtime.PartitionOwner do
     CapabilityRegistry,
     Clock,
     MissionAdmission,
-    MissionModelPlanDecoder,
     MissionRuntime,
     MissionRuntimeSpec,
+    PacketDefinitionCache,
     PartitionKey,
     Persistence,
     ProcessNamespace,
@@ -45,6 +45,7 @@ defmodule Cadence.Runtime.PartitionOwner do
   alias Cadence.Platform.ReplayId
 
   alias Cadence.Runtime.PartitionOwner.{
+    DispatchCache,
     EffectIds,
     MonitoringSeed,
     PartitionBuilder,
@@ -60,6 +61,8 @@ defmodule Cadence.Runtime.PartitionOwner do
           profiler: TelemetryProfiler.dependency(),
           partition_key: PartitionKey.t(),
           active_activation: MissionRuntimeSpec.t(),
+          dispatch_cache: DispatchCache.t(),
+          packet_definition_cache: GenServer.server(),
           binding_set: BindingSet.t(),
           runtime_binding_set: BindingSet.t(),
           managed_application_states: %{required(binary()) => term()},
@@ -265,6 +268,15 @@ defmodule Cadence.Runtime.PartitionOwner do
     partition_key = Keyword.fetch!(opts, :partition_key)
     active_activation = Keyword.fetch!(opts, :active_activation)
     binding_set = Keyword.fetch!(opts, :binding_set)
+
+    # The decoded packet definitions live in a cache the host provides: its namespace's (the
+    # runtime's `Runtime.Supervisor` starts one), or a pid a host with its own tree passes in
+    # (`ReplaySession`).
+    packet_definition_cache =
+      Keyword.get_lazy(opts, :packet_definition_cache, fn ->
+        PacketDefinitionCache.name(process_namespace)
+      end)
+
     persist_runtime_records? = Keyword.get(opts, :persist_runtime_records?, true)
 
     persistence_policy =
@@ -320,6 +332,9 @@ defmodule Cadence.Runtime.PartitionOwner do
              profiler: Keyword.get(opts, :profiler, TelemetryProfiler),
              partition_key: partition_key,
              active_activation: active_activation,
+             packet_definition_cache: packet_definition_cache,
+             dispatch_cache:
+               DispatchCache.acquire(packet_definition_cache, active_activation.runtime_plans),
              binding_set: binding_set,
              runtime_binding_set: runtime_binding_set,
              managed_application_states: managed_application_states,
@@ -497,6 +512,11 @@ defmodule Cadence.Runtime.PartitionOwner do
                %{
                  state
                  | active_activation: activation,
+                   dispatch_cache:
+                     DispatchCache.acquire(
+                       state.packet_definition_cache,
+                       activation.runtime_plans
+                     ),
                    binding_set: binding_set,
                    runtime_binding_set: runtime_binding_set,
                    managed_application_states: managed_application_states,
@@ -1226,11 +1246,7 @@ defmodule Cadence.Runtime.PartitionOwner do
   end
 
   defp execute_work_item(%PacketRecord{} = packet_record, %WorkItem{} = work_item, state) do
-    with {:ok, %Descriptor{} = descriptor} <-
-           CapabilityRegistry.fetch_descriptor(
-             state.process_namespace.capability_registry,
-             work_item.handler_key
-           ) do
+    with {:ok, %Descriptor{} = descriptor, state} <- fetch_descriptor(state, work_item) do
       case descriptor.kind do
         :semantic_handler ->
           execute_semantic_handler(packet_record, work_item, state)
@@ -1244,15 +1260,28 @@ defmodule Cadence.Runtime.PartitionOwner do
     end
   end
 
+  defp fetch_descriptor(state, %WorkItem{handler_key: handler_key}) do
+    with {:ok, descriptor, cache} <-
+           DispatchCache.fetch_descriptor(
+             state.dispatch_cache,
+             state.process_namespace.capability_registry,
+             handler_key
+           ) do
+      {:ok, descriptor, %{state | dispatch_cache: cache}}
+    end
+  end
+
   defp execute_semantic_handler(%PacketRecord{} = packet_record, %WorkItem{} = work_item, state) do
-    with {:ok, handler_module} <-
-           CapabilityRegistry.fetch_family(
+    with {:ok, handler_module, cache} <-
+           DispatchCache.fetch_module(
+             state.dispatch_cache,
              state.process_namespace.capability_registry,
              work_item.handler_key
            ),
+         state = %{state | dispatch_cache: cache},
          {:ok, runtime_configuration} <-
-           MissionModelPlanDecoder.resolve_telemetry_configuration(
-             state.active_activation.runtime_plans,
+           DispatchCache.resolve_packet_definition(
+             state.dispatch_cache,
              work_item.handler_configuration
            ),
          runtime_work_item <- %WorkItem{

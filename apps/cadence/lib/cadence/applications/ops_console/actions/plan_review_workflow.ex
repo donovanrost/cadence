@@ -10,7 +10,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.PlanReviewWorkflow do
     contact_plan_not_executable contact_plan_not_approved contact_plan_not_found
     invalid_plan_evidence invalid_plan_decision scope_mismatch forbidden unauthorized
     stale_contact_plan_content contact_plan_not_satisfied contact_plan_approval_policy_not_satisfied
-    contact_plan_opportunity_expired contact_plan_policy_snapshot_changed
+    contact_plan_expired_passes_changed contact_plan_all_opportunities_expired
+    contact_plan_policy_snapshot_changed
     contact_plan_requirement_not_found contact_plan_requirement_not_active
     contact_plan_requirement_changed contact_plan_requirement_version_not_found
     contact_plan_version_not_found contact_plan_decision_reason_required)a

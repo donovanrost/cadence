@@ -16,7 +16,8 @@ defmodule Cadence.Dev.ReflectOrbital.Configuration do
     apids = telemetry.packet_definitions |> Enum.map(& &1.apid) |> Enum.uniq() |> Enum.sort()
     10 = length(apids)
     fleet = Cadence.SpacecraftStore.list_spacecraft(F.organization_id(), F.mission_id())
-    500 = length(fleet)
+    n = F.fleet_size()
+    ^n = length(fleet)
 
     fleet
     |> Enum.with_index(1)
@@ -48,7 +49,7 @@ defmodule Cadence.Dev.ReflectOrbital.Configuration do
       end
 
       if rem(index, 50) == 0,
-        do: IO.puts("Configured #{index}/500 spacecraft for telemetry and commanding")
+        do: IO.puts("Configured #{index}/#{n} spacecraft for telemetry and commanding")
     end)
 
     %{mission: mission, revision: revision, apids: apids, fleet: fleet}

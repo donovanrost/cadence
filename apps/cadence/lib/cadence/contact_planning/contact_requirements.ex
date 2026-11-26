@@ -55,6 +55,42 @@ defmodule Cadence.ContactPlanning.ContactRequirements do
     :max_gap_seconds
   ]
 
+  @doc "Persists a prepared fleet materialization batch inside the caller's transaction."
+  def insert_materialized_batch([]), do: :ok
+
+  def insert_materialized_batch(items) when is_list(items) do
+    case insert_materialized_rows(ContactRequirementRow, items, & &1.requirement) do
+      :ok -> insert_materialized_rows(ContactRequirementVersionRow, items, & &1.version)
+      error -> error
+    end
+  end
+
+  defp insert_materialized_rows(schema, items, selector) do
+    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+
+    rows =
+      Enum.map(items, fn item ->
+        item
+        |> selector.()
+        |> schema.changeset()
+        |> Changeset.apply_action!(:insert)
+        |> Map.from_struct()
+        |> Map.take(schema.__schema__(:fields))
+        |> maybe_add_timestamps(schema, now)
+      end)
+
+    {count, _} = Repo.insert_all(schema, rows)
+    if count == length(items), do: :ok, else: {:error, :fleet_planning_review_changed}
+  end
+
+  defp maybe_add_timestamps(attrs, schema, now) do
+    if :inserted_at in schema.__schema__(:fields) do
+      Map.merge(attrs, %{inserted_at: now, updated_at: now})
+    else
+      attrs
+    end
+  end
+
   @spec create(Scope.t(), binary(), map(), keyword()) ::
           {:ok, ContactRequirement.t(), ContactRequirementVersion.t()} | {:error, term()}
   def create(%Scope{} = current_scope, mission_id, attrs, opts \\ []) do

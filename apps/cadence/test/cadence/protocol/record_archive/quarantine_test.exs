@@ -144,6 +144,33 @@ defmodule Cadence.Protocol.RecordArchive.QuarantineTest do
     assert segments(c) == before
   end
 
+  test "a packet whose stored bytes are not valid base64 is quarantined as data_rejected, not raised",
+       c do
+    {evidence, [packet]} = packet_batch(c.mission_id, "bad-base64", "SC-OK")
+    {good_evidence, [good_packet]} = packet_batch(c.mission_id, "good-base64", "SC-OK")
+
+    entries =
+      Enum.map(
+        FileSystem.build_entries(evidence, [], [packet]),
+        &Map.put(&1, "packet_data_base64", "not base64!")
+      ) ++
+        FileSystem.build_entries(good_evidence, [], [good_packet])
+
+    quarantine = fn _poisoned -> :ok end
+    opts = [base_path: c.base_path, repo: Cadence.Repo]
+
+    assert {:ok,
+            %{
+              quarantined: [%{error_code: "data_rejected", entry: entry, error: error}],
+              indexed: 1
+            }} =
+             PoisonIsolation.persist(FileSystem.new_segment_id(), entries, opts, quarantine)
+
+    assert entry["record_id"] == packet.packet_id
+    assert error =~ "not valid base64"
+    assert length(segments(c)) == 1
+  end
+
   test "an error that fails every entry is environmental: nothing is quarantined", c do
     for n <- 1..2 do
       {evidence, packets} = packet_batch(c.mission_id, "all-bad-#{n}", "SC-\u0000")

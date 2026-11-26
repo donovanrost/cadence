@@ -13,60 +13,43 @@ defmodule Cadence.Telemetry.Storage.QuestDB.SchemaMigratorTest do
                name: "create_telemetry_observations",
                sql: create_sql,
                checksum: create_checksum
-             },
-             %{
-               version: "20260627000000",
-               name: "enable_telemetry_observation_dedup",
-               sql: dedup_sql,
-               checksum: dedup_checksum
-             },
-             %{
-               version: "20260628000000",
-               name: "add_telemetry_observation_identity_id",
-               sql: observation_identity_sql,
-               checksum: observation_identity_checksum
              }
-             | provenance_migrations
+             | rest
            ] = migrations
 
     assert create_sql =~ "CREATE TABLE IF NOT EXISTS telemetry_observations"
     assert create_sql =~ "TIMESTAMP(observed_at) PARTITION BY DAY WAL"
     assert create_sql =~ "DEDUP UPSERT KEYS(observed_at, idempotency_key)"
+    assert create_sql =~ "observation_identity_id STRING"
     assert is_binary(create_checksum)
 
-    assert dedup_sql =~ "ALTER TABLE telemetry_observations"
-    assert dedup_sql =~ "DEDUP ENABLE UPSERT KEYS(observed_at, idempotency_key)"
-    assert is_binary(dedup_checksum)
+    # Sized for 1,000+ craft: the symbols that grow with the fleet carry an explicit capacity.
+    for column <- ~w(spacecraft_id source_endpoint_id) do
+      assert create_sql =~ "#{column} SYMBOL CAPACITY 4096"
+    end
 
-    assert observation_identity_sql =~ "ALTER TABLE telemetry_observations"
+    for column <- ~w(observable_id point_id) do
+      assert create_sql =~ "#{column} SYMBOL CAPACITY 16384"
+    end
 
-    assert observation_identity_sql =~
-             "ADD COLUMN IF NOT EXISTS observation_identity_id STRING"
+    # DECISIONS #103: provenance as typed columns, CAPACITY per the design's tenant-mix sizing, in
+    # the one create (a WAL table refuses a multi-column ADD COLUMN, and dev is disposable).
+    for definition <- [
+          "mission_model_revision_id SYMBOL CAPACITY 16384 CACHE",
+          "runtime_plan_id SYMBOL CAPACITY 32768 CACHE",
+          "producer_kind SYMBOL CAPACITY 256 CACHE",
+          "producer_id SYMBOL CAPACITY 16384 CACHE",
+          "semantic_id SYMBOL CAPACITY 262144 NOCACHE",
+          "qualified_name SYMBOL CAPACITY 262144 NOCACHE",
+          "identity_ref VARCHAR",
+          "binding_rule_derived BOOLEAN",
+          "packet_refs_derived BOOLEAN"
+        ] do
+      assert create_sql =~ definition
+    end
 
-    assert is_binary(observation_identity_checksum)
-
-    # DECISIONS #103: one column per file (QuestDB refuses a multi-column ADD COLUMN on a WAL
-    # table), CAPACITY per the design's tenant-mix sizing.
-    assert Enum.map(
-             provenance_migrations,
-             &{&1.version, &1.sql |> String.split("\n") |> List.last()}
-           ) ==
-             [
-               {"20261117000000",
-                add_column("mission_model_revision_id SYMBOL CAPACITY 16384 CACHE")},
-               {"20261117000001", add_column("runtime_plan_id SYMBOL CAPACITY 32768 CACHE")},
-               {"20261117000002", add_column("producer_kind SYMBOL CAPACITY 256 CACHE")},
-               {"20261117000003", add_column("producer_id SYMBOL CAPACITY 16384 CACHE")},
-               {"20261117000004", add_column("semantic_id SYMBOL CAPACITY 262144 NOCACHE")},
-               {"20261117000005", add_column("qualified_name SYMBOL CAPACITY 262144 NOCACHE")},
-               {"20261117000006", add_column("identity_ref VARCHAR")},
-               {"20261117000007", add_column("binding_rule_derived BOOLEAN")},
-               {"20261117000008", add_column("packet_refs_derived BOOLEAN")}
-             ]
+    assert rest == []
   end
-
-  defp add_column(definition),
-    do: "ALTER TABLE telemetry_observations ADD COLUMN IF NOT EXISTS #{definition};"
 
   test "migration plan sorts files by version and ignores non-migration sql files" do
     migrations_path = temp_migrations_path()

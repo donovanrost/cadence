@@ -62,23 +62,25 @@ defmodule Cadence.ContactPlanning.FleetRunReviews do
     do: state in [:queued, :running] and phase != :finished
 
   defp exact_inputs(run, policy, refs) do
-    expected = run.input_document["requirements"]
-
     actual =
-      Enum.map(refs, &{&1.contact_requirement_id, &1.contact_requirement_version}) |> Enum.sort()
+      Enum.map(refs, fn ref ->
+        {ref.contact_requirement_id, ref.contact_requirement_version, ref.input_content_sha256}
+      end)
 
-    with true <- is_list(expected) and length(expected) in 1..10_000,
+    with true <- refs != [],
          true <- run.input_document["requirement_count"] == length(refs),
          true <- run.input_document["policy_content_sha256"] == policy.content_sha256,
-         true <- Enum.all?(expected, &is_map/1),
-         expected_refs <-
-           Enum.map(expected, &{&1["contact_requirement_id"], &1["contact_requirement_version"]})
-           |> Enum.sort(),
-         true <- expected_refs == actual,
-         true <- length(Enum.uniq(actual)) == length(actual) do
+         true <- Enum.all?(actual, fn {_id, _version, hash} -> is_binary(hash) end),
+         true <- matching_inputs?(run.input_document, actual),
+         true <- length(Enum.uniq_by(actual, &elem(&1, 0))) == length(actual) do
       :ok
     else
       _ -> {:error, :fleet_run_inputs_unavailable}
     end
   end
+
+  defp matching_inputs?(%{"requirements_sha256" => expected}, actual),
+    do: expected == ContentHash.sha256(Enum.sort(actual))
+
+  defp matching_inputs?(_, _), do: false
 end

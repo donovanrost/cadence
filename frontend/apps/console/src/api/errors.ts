@@ -213,6 +213,7 @@ export const errorCodes = [
   "fleet_planning_requirement_not_active",
   // U52 (api 6af9e279d): a start's template fan-out over the limit; details {count, limit}.
   "fleet_planning_occurrence_limit_exceeded",
+  "fleet_planning_run_requirement_limit_exceeded",
   "fleet_repair_horizon_exceeded",
   // U76 (api 1a5976482): POST …/repairs with no attempts left, or a window it can't use.
   "fleet_repair_attempt_limit_exceeded",
@@ -241,9 +242,8 @@ export const errorCodes = [
   "contact_plan_day_already_planned",
   "contact_plan_replaced",
   "contact_plan_all_opportunities_expired",
-  // #273 (api): the closed set changed since the approver looked; step 1's interim refusal.
+  // #273 (api): the closed set changed since the approver looked.
   "contact_plan_expired_passes_changed",
-  "contact_plan_opportunity_expired",
   "template_not_found",
   "requirement_not_found",
   "requirement_not_active",

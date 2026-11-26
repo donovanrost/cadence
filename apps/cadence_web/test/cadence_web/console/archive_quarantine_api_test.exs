@@ -13,7 +13,7 @@ defmodule CadenceWeb.Console.ArchiveQuarantineAPITest do
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Protocol.{RecordArchive, TransferFrameRecord}
   alias Cadence.Protocol.RecordArchive.FileSystem
-  alias Cadence.Protocol.RecordArchive.FileSystem.RecordEntryRow
+  alias Cadence.Protocol.RecordArchive.FileSystem.IdentityRow
   alias Cadence.ProviderChangeFixtures
   alias Cadence.Repo
   alias CadenceWeb.TestFixtures
@@ -145,7 +145,7 @@ defmodule CadenceWeb.Console.ArchiveQuarantineAPITest do
              }
            } = c.conn |> post(path, %{}) |> json_response(200)
 
-    Repo.delete_all(from(r in RecordEntryRow, where: r.record_id == ^c.archived.frame_record_id))
+    Repo.delete_all(from(r in IdentityRow, where: r.record_id == ^c.archived.frame_record_id))
 
     assert %{
              "data" => %{

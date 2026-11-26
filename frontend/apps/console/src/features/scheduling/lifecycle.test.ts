@@ -92,13 +92,15 @@ describe("U61 approval refusals", () => {
       )?.text,
     ).toBe("Not approved: R44 replaced this plan at 10:05Z.");
     const all = lifecycleRefusal(
-      conflict("contact_plan_all_opportunities_expired", { expired_count: 36, day: "2026-11-16" }),
+      conflict("contact_plan_all_opportunities_expired", {
+        expired: { count: 36, reservable_count: 0, items: [] },
+        expired_digest: "d1",
+      }),
       now,
     );
     expect(all?.text).toBe(
       "Not approved: the booking window has closed for all 36 of its passes, so nothing could be booked.",
     );
-    expect(all?.planRestOf).toBe("2026-11-16");
   });
 
   it("still refuses in words when details are missing, and planErrorText uses them", () => {

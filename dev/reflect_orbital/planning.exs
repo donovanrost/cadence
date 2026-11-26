@@ -25,14 +25,17 @@ defmodule Cadence.Dev.ReflectOrbital.Planning do
     {:ok, organization} = Cadence.Organizations.fetch_organization(F.organization_id())
     {user, membership} = admin_member(System.get_env("EARENDIL_DEMO_EMAIL", "admin@example.com"))
 
-    prepare(Scope.new(%{user: user, organization: organization, organization_membership: membership}))
+    prepare(
+      Scope.new(%{user: user, organization: organization, organization_membership: membership})
+    )
   end
 
   # The given user when they are a Reflect Orbital member; otherwise the first
   # organization admin of Reflect Orbital (the env admin may not be a member).
   defp admin_member(email) do
     with {:ok, user} <- Cadence.Accounts.fetch_user_by_email(email),
-         {:ok, membership} <- Cadence.Accounts.fetch_user_membership(user.user_id, F.organization_id()) do
+         {:ok, membership} <-
+           Cadence.Accounts.fetch_user_membership(user.user_id, F.organization_id()) do
       {user, membership}
     else
       _not_member ->
@@ -40,8 +43,11 @@ defmodule Cadence.Dev.ReflectOrbital.Planning do
                Cadence.Accounts.list_organization_members(F.organization_id()),
                &(&1.membership.role == :organization_admin)
              ) do
-          %{user: user, membership: membership} -> {user, membership}
-          nil -> raise "No Reflect Orbital organization admin to seed planning as (set EARENDIL_DEMO_EMAIL)"
+          %{user: user, membership: membership} ->
+            {user, membership}
+
+          nil ->
+            raise "No Reflect Orbital organization admin to seed planning as (set EARENDIL_DEMO_EMAIL)"
         end
     end
   end
@@ -63,7 +69,8 @@ defmodule Cadence.Dev.ReflectOrbital.Planning do
         policy.fleet_planning_policy_id
 
       {:error, :fleet_planning_policy_not_found} ->
-        {:ok, policy, version} = FleetPlanningPolicies.create(scope, F.mission_id(), policy_attrs())
+        {:ok, policy, version} =
+          FleetPlanningPolicies.create(scope, F.mission_id(), policy_attrs())
 
         if F.chaos_lab?() do
           {:ok, _, _, _} =
@@ -114,7 +121,11 @@ defmodule Cadence.Dev.ReflectOrbital.Planning do
     |> Enum.each(fn craft ->
       # Templates are created active.
       {:ok, _template, _version} =
-        ContactRequirementTemplates.create(scope, F.mission_id(), template_attrs(craft.spacecraft_id))
+        ContactRequirementTemplates.create(
+          scope,
+          F.mission_id(),
+          template_attrs(craft.spacecraft_id)
+        )
     end)
 
     F.organization_id()

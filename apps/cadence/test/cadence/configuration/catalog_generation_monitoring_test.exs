@@ -86,11 +86,11 @@ defmodule Cadence.Configuration.CatalogGenerationMonitoringTest do
     assert is_binary(stored_parameter_id)
 
     # PartitionOwner's path: resolve against the plan, decode, turn the sample into an Update.
-    assert {:ok, resolved} =
-             MissionModelPlanDecoder.resolve_telemetry_configuration(
-               spec.runtime_plans,
-               configured
-             )
+    assert {:ok, definitions} =
+             MissionModelPlanDecoder.telemetry_packet_definitions(spec.runtime_plans)
+
+    resolved =
+      Enum.find(definitions, &(&1.packet_definition_id == configured.packet_definition_id))
 
     [field] = resolved.fields
     assert field.parameter_id == stored_parameter_id
