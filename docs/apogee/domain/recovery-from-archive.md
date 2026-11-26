@@ -128,6 +128,11 @@ frames its snapshot already includes (`SemanticSnapshots.skip_replayed?/2`), so 
 nothing twice. Journal off: nothing replays, and a crash loses the memory since the last snapshot
 (pinned by `monitoring_replay_ids_e2e_test.exs`).
 
+**A superseded owner is fenced at its next snapshot, not its next batch** (accepted, #692 review):
+the previous owner keeps processing until its next snapshot write (one interval, 60 s) fails on the
+new epoch and it stops. Its snapshot cannot overwrite the new owner's; its effects are insert-or-get
+under the same replay-safe ids, so nothing duplicates.
+
 **The archive isn't written at all on the TCP path.**
 - The FileSystem archive's `persist_raw_evidence_multi` is a no-op (`L/ingress_archive/filesystem.ex:40-45`).
 - The projector runs with `archive_raw_evidence?: false` (`L/runtime/persistence.ex:109-115`).

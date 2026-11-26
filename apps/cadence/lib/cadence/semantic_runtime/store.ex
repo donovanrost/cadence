@@ -9,6 +9,14 @@ defmodule Cadence.SemanticRuntime.Store do
   per-stream offsets the snapshot holds; effect ids are derived from (stream, offset), so the
   replay repeats nothing (#476, #480). A partition that persists no journal (journal off) loses at
   most the memory since its last snapshot (about 60 s).
+
+  **A superseded owner is fenced at its next snapshot, not at its next batch.** Taking the
+  partition bumps the ownership epoch, but the previous owner only learns it when it next writes a
+  snapshot (within one interval, 60 s, or when it goes idle), and then stops. Until then it keeps
+  processing and writing effects. That is accepted: its snapshot write is fenced, so it can never
+  overwrite the new owner's recovery point, and its effects (samples, alarm transitions, episodes,
+  managed requests) are insert-or-get under the same replay-safe ids the new owner derives from
+  the same (stream, offset), so nothing duplicates.
   """
 
   import Ecto.Query
