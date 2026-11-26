@@ -42,34 +42,24 @@ defmodule Cadence.Dashboards.Creation do
   another mission (`{:invalid, {:id_in_use, mission_id}}`, in the same organization only) or
   organization (`{:invalid, :id_in_use}`, naming nothing) already holds is refused. A dashboard id
   is unique across all of them, since it is the table's primary key.
+
+  The id is checked, then inserted, so two imports of one id can both find it free. The loser's
+  insert hits the primary key; for a kept id that is not an error but the same question asked
+  again, now that the id exists: identical is `existing?: true`, different is a conflict.
+  `opts[:after_check]` (a function of no arguments, for tests) runs between the check and the
+  insert, to hold two imports at exactly that point.
   """
-  def create(scope, mission, model, input) do
+  def create(scope, mission, model, input, opts \\ []) do
     with :ok <- authorize(scope, mission),
          {:ok, fields} <- fields(input, model.mode),
          {:ok, document} <- document(scope, mission, model, fields) do
-      case CurrentVersions.create(scope.organization_id, document, created_by: scope.user.user_id) do
-        {:ok, saved} ->
-          {:ok,
-           %{dashboard_id: saved.dashboard_id, version: Document.version(saved), mode: model.mode}}
+      if after_check = opts[:after_check], do: after_check.()
 
-        # Creating publishes the first version: a readiness failure says what to fix.
-        {:error, {:invalid_dashboard_document, _result}} = not_ready ->
-          not_ready
-
-        error ->
-          Logger.warning("dashboard creation failed: #{inspect(error, limit: 20)}")
-          {:error, :unknown}
-      end
+      insert(scope, mission, model, fields, document)
     else
       # An import that keeps its id met the identical dashboard already there: nothing to do.
       {:existing, %Document{} = existing} ->
-        {:ok,
-         %{
-           dashboard_id: existing.dashboard_id,
-           version: Document.version(existing),
-           mode: model.mode,
-           existing?: true
-         }}
+        existing_result(existing, model)
 
       other ->
         other
@@ -128,6 +118,55 @@ defmodule Cadence.Dashboards.Creation do
   end
 
   defp fields(_, _), do: {:invalid, :fields}
+
+  defp insert(scope, mission, model, fields, document) do
+    case CurrentVersions.create(scope.organization_id, document, created_by: scope.user.user_id) do
+      {:ok, saved} ->
+        {:ok,
+         %{dashboard_id: saved.dashboard_id, version: Document.version(saved), mode: model.mode}}
+
+      # Creating publishes the first version: a readiness failure says what to fix.
+      {:error, {:invalid_dashboard_document, _result}} = not_ready ->
+        not_ready
+
+      # Another import took the id between the check and the insert.
+      {:error, %Ecto.Changeset{} = changeset} = error ->
+        if keep?(model, fields) and id_taken?(changeset),
+          do: document |> keep(scope, mission) |> after_lost_race(model),
+          else: failed(error)
+
+      error ->
+        failed(error)
+    end
+  end
+
+  defp failed(error) do
+    Logger.warning("dashboard creation failed: #{inspect(error, limit: 20)}")
+    {:error, :unknown}
+  end
+
+  defp keep?(%{mode: "import"}, %{identity: :keep}), do: true
+  defp keep?(_model, _fields), do: false
+
+  defp id_taken?(%Ecto.Changeset{errors: errors}) do
+    Enum.any?(errors, fn {_field, {_message, info}} -> info[:constraint] == :unique end)
+  end
+
+  # The id is taken now: whatever the check says about it is the answer. `{:ok, _}` would mean the
+  # id vanished again between two statements, which is not an answer to give.
+  defp after_lost_race({:ok, _free}, _model), do: {:error, :unknown}
+  defp after_lost_race({:existing, existing}, model), do: existing_result(existing, model)
+  defp after_lost_race(answer, _model), do: answer
+
+  defp existing_result(%Document{} = existing, model) do
+    {:ok,
+     %{
+       dashboard_id: existing.dashboard_id,
+       version: Document.version(existing),
+       mode: model.mode,
+       existing?: true
+     }}
+  end
 
   defp identity(value) when value in ["copy", "keep"], do: {:ok, String.to_existing_atom(value)}
   defp identity(_other), do: {:field, "identity"}

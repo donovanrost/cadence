@@ -183,6 +183,9 @@ raw document. The author is the session user, and the import is the dashboard's 
   unique across every mission and organization, so the id may belong to another mission: of this
   organization, `details.mission_id` names it; of another organization, nothing is named. Import
   the same document into two missions with `copy` (or give each its own id).
+- Two imports of one id at once: the loser's insert hits the id's primary key, and for `keep` that
+  is answered, not raised: the id is checked again, so an identical document is `200 existing`
+  and a different one is the `409` above.
 - `403 forbidden` (not an author). The document is at most 256 KiB.
 
 ## D6: `POST /dashboards/:id/views`
