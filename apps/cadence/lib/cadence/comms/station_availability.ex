@@ -338,8 +338,9 @@ defmodule Cadence.Comms.StationAvailability do
     end
   end
 
+  # #146 (#468): never an email in a stored actor; reads name people through ActorRef.
   defp actor(%Scope{actor_kind: :user, user: user}),
-    do: %{"kind" => "user", "id" => user.user_id, "name" => user.display_name || user.email}
+    do: %{"kind" => "user", "id" => user.user_id, "name" => user.display_name}
 
   defp actor(%Scope{} = scope), do: Scope.audit_actor(scope)
 

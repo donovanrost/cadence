@@ -1,6 +1,6 @@
 import { formatCount, plural } from "@/ui";
 import { stationCode, type PlanDetail } from "./api.ts";
-import type { SpacecraftName } from "./names.ts";
+import { craftLabel, type SpacecraftName } from "./names.ts";
 
 /** One unconfirmed pass, as listed and as handed to the `row-actions` slot (U32, fe-setup). */
 export type UnconfirmedPass = Readonly<{
@@ -50,7 +50,7 @@ export function unconfirmedView(
   const passes = u.passes.flatMap((x): UnconfirmedPass[] => {
     const p = byId.get(x.snapshot_id);
     if (!p) return [];
-    const spacecraft = nameOf(p.spacecraft_id)?.name ?? p.spacecraft_id ?? "unknown spacecraft";
+    const spacecraft = craftLabel(nameOf(p.spacecraft_id));
     const station = stationCode(p.station);
     const when = shortWhen(p.starts_at, today);
     return [

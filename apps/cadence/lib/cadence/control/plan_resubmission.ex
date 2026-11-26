@@ -22,6 +22,7 @@ defmodule Cadence.Control.PlanResubmission do
   """
 
   alias Cadence.Auth.Scope
+  alias Cadence.Control.ActorRef
 
   alias Cadence.ContactPlanning.{
     ContactPlan,
@@ -138,8 +139,9 @@ defmodule Cadence.Control.PlanResubmission do
       |> PlanSubmissions.list(mission_id, plan.contact_plan_id)
       |> Enum.find(&(&1.contact_plan_version == version.version))
       |> case do
-        %{actor_document: %{"id" => id} = actor, submitted_at: at} ->
-          %{submitted_by: %{id: id, name: actor["name"]}, submitted_at: at}
+        # #146 (#468): named only as an active member, never by a stored name or email.
+        %{actor_document: %{} = doc, submitted_at: at} ->
+          submitted_by(ActorRef.document(doc, ActorRef.names(organization_id, [doc])), at)
 
         _none ->
           %{submitted_by: nil, submitted_at: nil}
@@ -226,14 +228,19 @@ defmodule Cadence.Control.PlanResubmission do
     end
   end
 
+  # Who and when, both or neither (U29); a form ActorRef can't read is neither.
+  defp submitted_by(nil, _at), do: %{submitted_by: nil, submitted_at: nil}
+  defp submitted_by(by, at), do: %{submitted_by: Map.take(by, [:id, :name]), submitted_at: at}
+
   defp expected(version, version), do: :ok
   defp expected(_current, _expected), do: {:error, :contact_plan_version_changed}
 
   defp reason(reason) when is_binary(reason) and byte_size(reason) > 0, do: reason
   defp reason(_reason), do: @default_reason
 
+  # #146 (#468): never an email in a stored actor; reads name people through ActorRef.
   defp actor(%Scope{user: %{user_id: id} = user}),
-    do: %{"kind" => "user", "id" => id, "name" => user.display_name || user.email}
+    do: %{"kind" => "user", "id" => id, "name" => user.display_name}
 
   defp actor(%Scope{service_identity: %{service_identity_id: id} = identity}),
     do: %{"kind" => "service", "id" => id, "name" => Map.get(identity, :display_name)}

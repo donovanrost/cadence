@@ -14,7 +14,9 @@ defmodule Cadence.Runtime.TCPIngestQuestDBTest do
 
   setup :setup_questdb
 
-  test "every frame lands in QuestDB once, with its own receipt time and identity", c do
+  # #491: a receipt time is stamped per socket read (RawEvidence), so frames that arrive in one
+  # read share it, in production as here; identity is per frame, not per receipt time.
+  test "every frame lands in QuestDB once, with its own identity and a receipt time", c do
     %{mission_id: mission_id, port: port} = start_tcp_contact!()
     {:ok, socket} = :gen_tcp.connect(~c"127.0.0.1", port, [:binary, packet: 0, active: false])
     on_exit(fn -> :gen_tcp.close(socket) end)
@@ -34,7 +36,7 @@ defmodule Cadence.Runtime.TCPIngestQuestDBTest do
 
     # One packet with one point per frame (the fixture's catalog): 8 rows, no more, no fewer.
     assert length(rows) == 8, "expected 8 rows in QuestDB, got #{length(rows)}"
-    assert rows |> Enum.map(& &1["receipt_time"]) |> Enum.uniq() |> length() == 8
+    assert Enum.all?(rows, &is_binary(&1["receipt_time"]))
     assert rows |> Enum.map(& &1["observation_identity_id"]) |> Enum.uniq() |> length() == 8
     assert Enum.all?(rows, &(&1["validity_state"] == "canonical"))
     assert rows |> Enum.map(& &1["idempotency_key"]) |> Enum.uniq() |> length() == 8

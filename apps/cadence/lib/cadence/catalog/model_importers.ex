@@ -11,8 +11,11 @@ defmodule Cadence.Catalog.ModelImporters do
     declarations' provenance carries the run id), so a reimport, which makes no catalog revision,
     makes a model revision only its run names: whoever ran it is its importer. A reimport never
     changes the original revision's importers. A run's requester counts only when it is a user
-    actor (`"actor_kind" => "user"` with its `"user_id"`), so a service or system actor
-    (`Catalog.Actor`) never does; a failed run counts no one.
+    actor (`"actor_kind" => "user"` with its `"user_id"`); a failed run counts no one.
+
+  `list/3` is the people named directly. `actors/3` adds the service identities that imported it,
+  whose accountable people count for separation (#280). A system actor counts the person who ran
+  it (`run_by`, #513); one recorded before #513 counts no one.
 
   Empty when no importer was recorded. Both columns are `JsonDocument`-wrapped (`{"value": …}`).
   """
@@ -25,46 +28,114 @@ defmodule Cadence.Catalog.ModelImporters do
 
   @spec list(binary(), binary(), binary()) :: [binary()]
   def list(organization_id, mission_id, mission_model_revision_id) do
+    organization_id
+    |> actors(mission_id, mission_model_revision_id)
+    |> Enum.flat_map(fn
+      {:user, id} -> [id]
+      _service -> []
+    end)
+  end
+
+  @doc """
+  Every actor who imported the revision, people and service identities alike (#280): a service's
+  accountable people count for separation (`Governance.Accountability`). The system actor and
+  unrecorded actors count no one, as before.
+  """
+  @spec actors(binary(), binary(), binary()) :: [{:user, binary()} | {:service, binary()}]
+  def actors(organization_id, mission_id, mission_model_revision_id) do
     revisions =
-      from(row in RevisionRow,
-        where:
-          row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-            row.mission_model_revision_id == ^mission_model_revision_id,
-        select: row.created_by
-      )
-      |> Repo.all()
+      organization_id
+      |> revision_creators(mission_id, mission_model_revision_id)
       |> Enum.map(&revision_importer/1)
 
     runs =
-      from(run in ImportRunRow,
-        where:
-          run.organization_id == ^organization_id and run.mission_id == ^mission_id and
-            run.status == "completed" and
-            fragment(
-              "? -> 'value' -> 'mission_model' ->> 'revision_id' = ?",
-              run.result_document,
-              ^mission_model_revision_id
-            ),
-        select: run.requested_by
-      )
-      |> Repo.all()
+      organization_id
+      |> run_requesters(mission_id, mission_model_revision_id)
       |> Enum.map(&run_importer/1)
 
     (revisions ++ runs) |> Enum.reject(&is_nil/1) |> Enum.uniq()
   end
 
+  defp revision_creators(organization_id, mission_id, mission_model_revision_id) do
+    from(row in RevisionRow,
+      where:
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.mission_model_revision_id == ^mission_model_revision_id,
+      select: row.created_by
+    )
+    |> Repo.all()
+  end
+
+  defp run_requesters(organization_id, mission_id, mission_model_revision_id) do
+    from(run in ImportRunRow,
+      where:
+        run.organization_id == ^organization_id and run.mission_id == ^mission_id and
+          run.status == "completed" and
+          fragment(
+            "? -> 'value' -> 'mission_model' ->> 'revision_id' = ?",
+            run.result_document,
+            ^mission_model_revision_id
+          ),
+      select: run.requested_by
+    )
+    |> Repo.all()
+  end
+
+  @doc """
+  D2 (#543): the stored actor documents `actors/3` counts, unwrapped (one per counted actor), so a
+  read can name each the way it was recorded: a seed's system actor keeps its `run_by` (#513).
+  """
+  @spec documents(binary(), binary(), binary()) :: [map()]
+  def documents(organization_id, mission_id, mission_model_revision_id) do
+    revisions =
+      for doc <- revision_creators(organization_id, mission_id, mission_model_revision_id),
+          actor <- [revision_importer(doc)],
+          actor != nil,
+          do: {actor, JsonDocument.unwrap_value(doc)}
+
+    runs =
+      for doc <- run_requesters(organization_id, mission_id, mission_model_revision_id),
+          actor <- [run_importer(doc)],
+          actor != nil,
+          do: {actor, JsonDocument.unwrap_value(doc)}
+
+    (revisions ++ runs) |> Enum.uniq_by(&elem(&1, 0)) |> Enum.map(&elem(&1, 1))
+  end
+
+  @doc """
+  The separation actor a stored actor document counts as, or nil when it counts no one: the rule
+  a catalog revision's `created_by` follows, so a mission composition's `created_by` (#542, the
+  composer joins separation) counts the same way. A system actor counts its `run_by` (#513), one
+  without counts no one (a migrated composition).
+  """
+  @spec actor_of(map() | nil) :: {:user, binary()} | {:service, binary()} | nil
+  def actor_of(created_by), do: revision_importer(created_by)
+
   defp revision_importer(created_by) do
     case JsonDocument.unwrap_value(created_by) do
-      %{"user_id" => id} when is_binary(id) and id != "" -> id
-      %{"id" => id} when is_binary(id) and id != "" -> id
+      %{"actor_kind" => "service"} = actor -> service(actor)
+      %{"actor_kind" => "system"} = actor -> runner(actor)
+      %{"user_id" => id} when is_binary(id) and id != "" -> {:user, id}
+      %{"id" => id} when is_binary(id) and id != "" -> {:user, id}
       _not_recorded -> nil
     end
   end
 
   defp run_importer(requested_by) do
     case JsonDocument.unwrap_value(requested_by) do
-      %{"actor_kind" => "user", "user_id" => id} when is_binary(id) and id != "" -> id
-      _not_a_person -> nil
+      %{"actor_kind" => "user", "user_id" => id} when is_binary(id) and id != "" -> {:user, id}
+      %{"actor_kind" => "service"} = actor -> service(actor)
+      %{"actor_kind" => "system"} = actor -> runner(actor)
+      _not_counted -> nil
     end
   end
+
+  # #513 (MM-2): a seed or task runs as Cadence's system actor, and the person who ran it counts
+  # as its importer, so they can't approve the model it imported. A system actor recorded before
+  # #513 has no `run_by` and counts no one, as before.
+  defp runner(%{"run_by" => id}) when is_binary(id) and id != "", do: {:user, id}
+  defp runner(_actor), do: nil
+
+  defp service(%{"service_identity_id" => id}) when is_binary(id) and id != "", do: {:service, id}
+  defp service(_actor), do: nil
 end

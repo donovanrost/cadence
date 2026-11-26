@@ -45,7 +45,7 @@ afterEach(() => {
 async function remove(ids: string[], id: string) {
   const w = mount(EditBoard, { props: { preview: preview(ids) }, attachTo: document.body });
   const head = w.findAll("header").find((h) => h.find(`[data-section-heading="${id}"]`).exists());
-  await head?.get('button[aria-label="More section actions"]').trigger("click");
+  await head?.get('button[aria-label^="More actions for section"]').trigger("click");
   await head
     ?.findAll("button")
     .find((b) => b.text().startsWith("Remove section"))

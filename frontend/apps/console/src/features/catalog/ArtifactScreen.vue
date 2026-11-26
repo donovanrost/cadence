@@ -84,7 +84,7 @@ async function again() {
           Import again runs the importer on this file and makes a new candidate revision. Nothing
           changes on spacecraft until you roll it out.
         </p>
-        <ApCallout v-if="failure" tone="caution"
+        <ApCallout v-if="failure" tone="caution" role="alert"
           >{{ failure.text }}
           <template v-if="failure.runId" #action
             ><ApButton size="compact" @click="toRun(failure.runId)">Open it</ApButton></template

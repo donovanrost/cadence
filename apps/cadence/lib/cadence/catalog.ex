@@ -328,6 +328,33 @@ defmodule Cadence.Catalog do
     to: ModelImporters,
     as: :list
 
+  @doc "Every actor who imported a mission-model revision, services included (#280)."
+  @spec model_import_actors(binary(), binary(), binary()) :: [
+          {:user, binary()} | {:service, binary()}
+        ]
+  defdelegate model_import_actors(organization_id, mission_id, mission_model_revision_id),
+    to: ModelImporters,
+    as: :actors
+
+  @doc "The separation actor a stored actor document counts as (`ModelImporters.actor_of/1`)."
+  @spec model_import_actor_of(map() | nil) :: {:user, binary()} | {:service, binary()} | nil
+  defdelegate model_import_actor_of(created_by), to: ModelImporters, as: :actor_of
+
+  @doc "The stored importer documents `model_import_actors/3` counts (D2, #543)."
+  defdelegate model_import_documents(organization_id, mission_id, mission_model_revision_id),
+    to: ModelImporters,
+    as: :documents
+
+  @doc "Which of the mission-model revisions a catalog revision names; see `ModelRevisionNaming`."
+  @spec catalog_named_model_revisions(binary(), binary(), [binary()]) :: MapSet.t()
+  defdelegate catalog_named_model_revisions(
+                organization_id,
+                mission_id,
+                mission_model_revision_ids
+              ),
+              to: Cadence.Catalog.ModelRevisionNaming,
+              as: :named
+
   @doc "`:ok` when a catalog revision names the mission-model revision; see `ModelRevisionNaming`."
   defdelegate require_named_model_revision(
                 organization_id,
@@ -697,7 +724,8 @@ defmodule Cadence.Catalog do
         case ImportExecution.persist(
                run.organization_id,
                run.import_run_id,
-               import_result
+               import_result,
+               run.requested_by || %{}
              ) do
           {:ok, outcome} ->
             completed_run =

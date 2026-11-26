@@ -141,6 +141,31 @@ describe("plan state decoding (#52)", () => {
     const read = plansReader({ plans: [row("unconfirmed"), row("something_new")] });
     expect(read.plans.map((p) => p.state)).toEqual(["unconfirmed", "unrecognized"]);
   });
+
+  it("reads #485's authors: a nameless member, a non-member, and Cadence without an id", () => {
+    const row = (author: unknown) => ({
+      id: "p",
+      version: 1,
+      state: "draft",
+      window: { from: null, to: null },
+      author,
+      counts: { passes: 1, minutes: 8, conflicts: 0, unsatisfied: 0 },
+      ready_to_approve: false,
+      updated_at: "2026-11-10T10:00:00Z",
+    });
+    const read = plansReader({
+      plans: [
+        row({ kind: "user", id: "u1", name: null }),
+        row({ kind: "user", id: null, name: null }),
+        row({ kind: "system", name: "Cadence" }),
+      ],
+    });
+    expect(read.plans.map((p) => p.author)).toEqual([
+      { kind: "user", id: "u1", name: null },
+      { kind: "user", id: null, name: null },
+      { kind: "system", id: null, name: "Cadence" },
+    ]);
+  });
 });
 
 describe("plan detail chain_head (qa #30)", () => {

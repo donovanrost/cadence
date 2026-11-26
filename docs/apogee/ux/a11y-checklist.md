@@ -69,8 +69,12 @@ and 390 as admin and member, as before, and record results in the screen's `qa/a
    widget 3"), never a name ending in a space. A list row's buttons reuse the row's title: "Discard, EARENDIL-001,
    SNTG 00:13Z pass, 3 connections refused" (U107). `aria-keyshortcuts` lists every key it answers, modifiers
    included. (#189 'name')
-8. **Screen-wide keys never override a focused control.** Present's Space, ←/→ and Kiosk's Esc act only when focus
-   isn't on a button, link, field or other control; Space on a focused button presses that button. (#189, Present)
+8. **Screen-wide keys never override a focused control that uses that key.** Present's Space and ←/→ and Kiosk's
+   Esc yield to the focused control only when it uses the key. Space presses a button, link or summary and ticks a
+   box. The arrow keys move in a field, a radio group, tabs, a menu, a listbox, a grid, a tree or a slider. A focused
+   button doesn't use the arrows, so ←/→ still step slides from it; Space on it presses it. Esc yields only to an
+   open sheet or menu, which it closes; from a focused field it still leaves Kiosk or Present. (#189, Present; #245's
+   `focusedControlOwns`)
 
 ## C. Surfaces to check by hand (opened, confirmed, closed)
 | Screen | What to open or do | Specific checks |
@@ -83,7 +87,7 @@ and 390 as admin and member, as before, and record results in the screen's `qa/a
 | Uplink & verify | Per-point verifier plots (U51); a target row's `OWN VALUES` line | Each plot has a sentence and a caption naming its targets |
 | Dashboards viewer | Kiosk (Esc out); Present (←/→, Space, Esc); a section's disclosure; `⋯` menu | Keys work with focus anywhere in the takeover; after Esc, focus returns to `⋯ › Kiosk`; collapsed sections say `3 WIDGETS` |
 | Dashboards edit | `Add section` sheet; a heading's `Edit` and `⋯` (Move up/down/Remove section…); Remove's in-place callout; `Save…` | A; a disabled Move's reason ("It's already first.") is read; after Remove, focus goes to the next section's heading, else the previous one's, else `Add section`; widgets move by keyboard (the ⠿ handle: arrows move, Shift+arrows resize, each move announced; dashboards 8e14ea148) |
-| Admin › data source bindings | `Switch…` (U53): type-to-confirm; `History` | A; the confirm input is labelled `Type default_flight_telemetry to confirm`; Switch's disabled reason is read; when counts change the line is announced (polite) and the typed name clears |
+| Admin › data source bindings | `Switch…` (U53): type-to-confirm; `History` | A; the confirm input is labelled `Type default_flight_telemetry to confirm`; Switch's disabled reason is read; when counts change the line is announced and the typed name clears: polite for a background re-count, an alert when the person's own `Switch` meets the 409's fresh counts (a refusal, B6; #601) |
 | Mission settings | Per-field `Override` / `Change` / `Reset to inherited`; a ratio field's hint and `Use 90%` | `Use 90%` follows the field in Tab order; Reset's outcome line is announced |
 | Contact planning | Requirement page: `Plan 11-14`, the inline `book a pass` link; occurrence `Close…` / `Cancel…` | A; the inline link is distinguishable without colour (underline) |
 | Timeline | A fold group; a row's link | Fold buttons have `aria-expanded` and the group's label ("Telemetry stored") |

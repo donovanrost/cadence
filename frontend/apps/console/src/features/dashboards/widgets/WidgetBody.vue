@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, provide, toRef } from "vue";
 import type { WorkspacePlacement, WorkspaceSnapshot } from "../model/snapshot.ts";
 import { hasData } from "../model/widget-data.ts";
 import ValueTileWidget from "./ValueTileWidget.vue";
@@ -8,6 +8,7 @@ import TableWidget from "./TableWidget.vue";
 import StateTimelineWidget from "./StateTimelineWidget.vue";
 import EventTimelineWidget from "./EventTimelineWidget.vue";
 import ConstellationHealthWidget from "./ConstellationHealthWidget.vue";
+import { WIDGET_NAME } from "./widget-name.ts";
 
 /** Dispatches a placement to its renderer. Errors stay inside the widget; the grid never breaks. */
 const props = defineProps<{
@@ -16,7 +17,10 @@ const props = defineProps<{
   now: number;
   group: string;
   chartId: string;
+  /** The panel's name for the widget (B7: "Untitled widget 3"), for its region and caption. */
+  name?: string | undefined;
 }>();
+provide(WIDGET_NAME, toRef(props, "name"));
 const unavailable: Readonly<
   Record<Extract<WorkspacePlacement, { status: "unavailable" }>["reason"], string>
 > = {

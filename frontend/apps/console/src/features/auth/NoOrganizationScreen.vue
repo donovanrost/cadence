@@ -23,12 +23,12 @@ onMounted(async () => {
   else session.value = s.value;
 });
 const list = useRemoteQuery(() => (session.value ? (true as const) : null), fetchMyInvitations);
-const note = ref<string | null>(null);
+const note = ref<{ text: string; failed: boolean } | null>(null);
 /** L6 (lead): the shell's step-up sheet works without AppShell; then the admin area (L7: /admin). */
 const adminSheet = ref<InstanceType<typeof AdminModeSheet> | null>(null);
 const adminOn = ref(false);
-function changed(text: string | null) {
-  note.value = text;
+function changed(text: string | null, failed: boolean) {
+  note.value = text === null ? null : { text, failed };
   list.refetch();
 }
 </script>
@@ -44,7 +44,9 @@ function changed(text: string | null) {
       Loading…
     </p>
     <template v-else>
-      <ApCallout v-if="note" tone="info">{{ note }}</ApCallout>
+      <ApCallout v-if="note" tone="info" :role="note.failed ? 'alert' : 'status'">{{
+        note.text
+      }}</ApCallout>
       <template v-if="list.state.value.status === 'ready' && list.state.value.value.length > 0">
         <h1 class="m-0 font-display text-[24px] font-semibold tracking-head uppercase">
           You have {{ list.state.value.value.length }}

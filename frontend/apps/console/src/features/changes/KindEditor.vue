@@ -2,7 +2,7 @@
 import type { ApiError, MissionId } from "@/api/index.ts";
 import { computed, ref, watch } from "vue";
 import { useRouter, type RouteLocationRaw } from "vue-router";
-import { useRemoteQuery } from "@/api";
+import { setAt, useRemoteQuery } from "@/api";
 import { ApButton, ApPanel, ApRemote } from "@/ui";
 import { failureOutcome, stageChange, type FailureOutcome } from "./actions.ts";
 import FailureOutcomeCallout from "./FailureOutcomeCallout.vue";
@@ -110,21 +110,10 @@ function useSuggestion() {
 const show = (v: unknown) =>
   v === null ? "cleared" : typeof v === "string" ? v : JSON.stringify(v);
 
-/** Nested document from dotted paths (create). */
+/** A create's document from its field changes, through the shared dotted-path write (#192). */
 function toDocument(changes: readonly { path: string; value: unknown }[]) {
   const doc: Record<string, unknown> = {};
-  for (const { path, value } of changes) {
-    const keys = path.split(".");
-    let at = doc;
-    keys.slice(0, -1).forEach((k) => {
-      const next = at[k];
-      at = (at[k] = next !== null && typeof next === "object" ? next : {}) as Record<
-        string,
-        unknown
-      >;
-    });
-    at[keys.at(-1) ?? path] = value;
-  }
+  for (const { path, value } of changes) setAt(doc, path, value);
   return doc;
 }
 

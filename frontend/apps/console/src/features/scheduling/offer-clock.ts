@@ -1,6 +1,6 @@
 import { formatCountdown, formatHourMinute } from "@/ui";
 import { stationCode, type PlanDetail, type PlanPass } from "./api.ts";
-import type { SpacecraftName } from "./names.ts";
+import { craftLabel, type SpacecraftName } from "./names.ts";
 
 /**
  * K1 header clock (ux, ScheduleFlow K1): providers publish no day-level cutoff, so the clock is
@@ -98,7 +98,7 @@ export function offerClock(
 
   const passText = subject
     ? [
-        nameOf(subject.spacecraft_id)?.name ?? subject.spacecraft_id ?? "unknown spacecraft",
+        craftLabel(nameOf(subject.spacecraft_id)),
         stationCode(subject.station),
         formatHourMinute(new Date(subject.starts_at)),
       ].join(" · ")

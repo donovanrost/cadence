@@ -22,6 +22,7 @@ import {
 } from "./api.ts";
 import { bookingLook } from "./booking-state.ts";
 import type { SpacecraftName } from "./names.ts";
+import { overlapWords, type ListenerOverlap } from "@/features/contacts/listenerOverlap.ts";
 
 /** B · Draft by station: the plan's passes; the focused spacecraft ringed, conflicts dashed caution. */
 const props = defineProps<{
@@ -50,6 +51,9 @@ const window = computed(() => {
   const from = Date.parse(`${props.day}T00:00:00Z`);
   return { from, to: from + 86_400_000 };
 });
+/** U58 (b), #361: the pass that may lose its start to a one-connection listener (this or either). */
+const losesStart = (p: Readonly<{ listener_overlap?: ListenerOverlap | null | undefined }>) =>
+  overlapWords(p.listener_overlap)?.tag === true;
 const clashing = computed(() => new Set(props.plan.conflicts.flatMap((c) => c.snapshot_ids)));
 const down = computed(
   () =>
@@ -117,7 +121,9 @@ const draftedBars = computed<GanttBar[]>(() =>
                   ? "focused"
                   : "own",
       label: sc ? String(sc.scid) : undefined,
-      description: `${who} · ${stationName(p.station)} · ${p.starts_at.slice(11, 16)}–${p.ends_at.slice(11, 16)}Z${clashing.value.has(p.snapshot_id) ? " · conflict" : ""}${down.value.has(p.snapshot_id) ? " · station down" : risky.value.has(p.snapshot_id) ? " · station degraded, may lose data" : ""}${unconfirmed.value.has(p.snapshot_id) ? ` · UNCONFIRMED · sent ${unconfirmed.value.get(p.snapshot_id)?.slice(11, 16) ?? "?"}Z` : booked ? ` · ${booked.word}${p.booking?.reason && p.booking.reason !== "sending" ? `: ${p.booking.reason.replaceAll("_", " ")}` : ""}` : ""}`,
+      // U58 (b), #361: the pass that may lose its start gets U45's caution mark, said in words too.
+      ...(losesStart(p) ? { attention: "caution" as const } : {}),
+      description: `${who} · ${stationName(p.station)} · ${p.starts_at.slice(11, 16)}–${p.ends_at.slice(11, 16)}Z${clashing.value.has(p.snapshot_id) ? " · conflict" : ""}${down.value.has(p.snapshot_id) ? " · station down" : risky.value.has(p.snapshot_id) ? " · station degraded, may lose data" : ""}${unconfirmed.value.has(p.snapshot_id) ? ` · UNCONFIRMED · sent ${unconfirmed.value.get(p.snapshot_id)?.slice(11, 16) ?? "?"}Z` : booked ? ` · ${booked.word}${p.booking?.reason && p.booking.reason !== "sending" ? `: ${p.booking.reason.replaceAll("_", " ")}` : ""}` : ""}${losesStart(p) ? " · listener overlap" : ""}`,
     };
   }),
 );

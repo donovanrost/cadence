@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { onMounted, ref } from "vue";
 import { failureOutcome } from "@/features/changes/index.ts";
 import { ApButton, ApCallout, ApField, ApSegmented } from "@/ui";
 import { createShare, type DataVisibility, type SettingsKey } from "./api.ts";
@@ -12,6 +12,9 @@ const expires = ref("");
 const error = ref<string | null>(null);
 const failure = ref<string | null>(null);
 const busy = ref(false);
+/** A1: focus starts on the form's first control (the chosen Data option); Esc is Cancel (A4). */
+const form = ref<HTMLFormElement | null>(null);
+onMounted(() => form.value?.querySelector<HTMLElement>('[tabindex="0"], input')?.focus());
 const options = [
   { value: "with_data", label: "With data" },
   { value: "definition_only", label: "Definition only" },
@@ -40,7 +43,12 @@ async function create() {
 </script>
 
 <template>
-  <form class="flex flex-col gap-3 border-b border-hairline p-4" @submit.prevent="create">
+  <form
+    ref="form"
+    class="flex flex-col gap-3 border-b border-hairline p-4"
+    @submit.prevent="create"
+    @keydown.esc.stop="emit('cancel')"
+  >
     <ApSegmented
       :model-value="data"
       label="Data"

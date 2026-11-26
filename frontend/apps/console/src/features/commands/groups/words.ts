@@ -3,6 +3,7 @@ import { formatHourMinute, plural, type OpState } from "@/ui";
 import type { GroupState, MemberStage } from "./api.ts";
 import { checkLabel } from "./checks.ts";
 import { releaseClause, type ReleaseLogContext } from "./release.ts";
+import { craftList } from "./withdrawn.ts";
 import {
   outcomeKeys,
   reasonText,
@@ -206,8 +207,15 @@ export function eventText(
       return `${who} noted${note}`;
     case "aborted":
       return `${who} aborted${p?.reason ? `: “${reasonText(p.reason)}”` : ""} · ${p?.canceled ?? 0} canceled, ${p?.already_started?.length ?? 0} already started`;
-    case "hold_acknowledged":
-      return `${who} acknowledged the ${p?.key ? checkLabel(p.key) : "a"} HOLD${p?.at_decision ? " at GO" : ""}${note}`;
+    case "hold_acknowledged": {
+      // #546 (ca-ux): the targets the HOLD named, when its evidence lists them; names, never ids.
+      const ids = p?.evidence?.spacecraft_ids ?? [];
+      const names = ids.map(
+        (id) => targets.find((t) => t.spacecraft_id === id)?.name ?? "Unknown spacecraft",
+      );
+      const on = names.length ? ` on ${craftList(names)}` : "";
+      return `${who} acknowledged the ${p?.key ? checkLabel(p.key) : "a"} HOLD${on}${p?.at_decision ? " at GO" : ""}${note}`;
+    }
     case "member_canceled":
       return `${who} canceled one uplink${p?.reason ? `: “${reasonText(p.reason)}”` : ""}`;
     case "member_failed": {

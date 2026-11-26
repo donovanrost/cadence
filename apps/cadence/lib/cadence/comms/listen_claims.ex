@@ -64,7 +64,7 @@ defmodule Cadence.Comms.ListenClaims do
     claimed? =
       Enum.any?(
         profile_claims(mission_id, port) ++ transport_claims(mission_id, port),
-        &overlap?(&1, endpoint)
+        &overlaps?(&1, endpoint)
       )
 
     if claimed?, do: {:error, {:listen_endpoint_claimed, endpoint}}, else: :ok
@@ -168,10 +168,15 @@ defmodule Cadence.Comms.ListenClaims do
   end
 
   # Two binds collide on the same port when either is a wildcard or both name the same host.
-  defp overlap?(%{port: port, host: a}, %{port: port, host: b}),
+  @doc """
+  Whether two listen endpoints collide on the node: the same port, and the same host or either
+  a wildcard. The claim check's own comparison; planning's listener overlap uses it too (#361).
+  """
+  @spec overlaps?(endpoint(), endpoint()) :: boolean()
+  def overlaps?(%{port: port, host: a}, %{port: port, host: b}),
     do: a == b or a in @wildcard_hosts or b in @wildcard_hosts
 
-  defp overlap?(_claim, _endpoint), do: false
+  def overlaps?(_claim, _endpoint), do: false
 
   defp get(map, key), do: Map.get(map, key, Map.get(map, Atom.to_string(key)))
 

@@ -33,6 +33,8 @@ export {
   jsonObject,
   pathGet,
   pathSet,
+  getAt,
+  setAt,
   recordOf,
   type JsonObject,
 } from "./json.ts";

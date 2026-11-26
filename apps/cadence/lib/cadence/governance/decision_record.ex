@@ -8,13 +8,16 @@ defmodule Cadence.Governance.DecisionRecord do
 
   - `actor`: `{kind, id}`, only from the session scope (`Scope.audit_actor/1`), never a parameter.
   - `decision`: approved, rejected, sent_back, withdrawn, acknowledged, or `not_required` (the
-    policy needed no second person, so the act went straight through).
+    policy needed no second person, so the act went straight through). Automation grants (#283,
+    api-ops 11-19) add `proposed` (what a second person will approve), `revoked` and `narrowed`
+    (tightenings: never refused for want of a reason or digest).
   - `reason`: required for rejected, sent_back and withdrawn; optional otherwise. Blank after
     trimming counts as absent.
   - `decided_at`: server time.
-  - `subject`: what was reviewed, `%{kind, id, version, digest}`. `digest` is the content hash or
-    the review token the approver's screen carried; required for approved and not_required, since
-    the apply compares its own digest with it (approved = applied).
+  - `subject`: what was reviewed, `%{kind, id, version, digest, previous_digest}`. `digest` is the
+    content hash or the review token the approver's screen carried; required for approved,
+    not_required, proposed and narrowed, since the apply compares its own digest with it
+    (approved = applied). `previous_digest` is set only for narrowed (the content it replaced).
   - `policy`: the policy snapshot or token at decision time.
   - `separated_from`: the actor ids the separation check compared against (author, submitter,
     importer, requester); empty when the policy didn't require separation.
@@ -26,9 +29,12 @@ defmodule Cadence.Governance.DecisionRecord do
 
   alias Cadence.Auth.Scope
 
-  @decisions ~w(approved rejected sent_back withdrawn acknowledged not_required)a
+  # #499 (api-ops' contract): `suspended` (a tightening of the approval setting, never blocked:
+  # the server records the hash, none is required) and `resumed` (an approval-like act on the
+  # hash the approver saw).
+  @decisions ~w(approved rejected sent_back withdrawn acknowledged not_required proposed revoked narrowed suspended resumed)a
   @reason_required ~w(rejected sent_back withdrawn)a
-  @digest_required ~w(approved not_required)a
+  @digest_required ~w(approved not_required proposed narrowed resumed)a
 
   # Pure decision tables: append-only, guarded by triggers (migration
   # 20261117160000_decision_records_append_only). A path joins by adding its table here.
@@ -41,6 +47,7 @@ defmodule Cadence.Governance.DecisionRecord do
     contact_plan_submissions
     fleet_planning_policy_approvals
     provider_change_approvals
+    automation_grant_decisions
   )
 
   @enforce_keys [:actor, :decision, :decided_at, :subject]
@@ -59,7 +66,8 @@ defmodule Cadence.Governance.DecisionRecord do
           required(:kind) => String.t(),
           required(:id) => String.t(),
           optional(:version) => integer() | nil,
-          optional(:digest) => String.t() | nil
+          optional(:digest) => String.t() | nil,
+          optional(:previous_digest) => String.t() | nil
         }
 
   @type t :: %__MODULE__{
@@ -151,14 +159,22 @@ defmodule Cadence.Governance.DecisionRecord do
 
   defp subject(decision, %{kind: kind, id: id} = subject)
        when is_binary(kind) and kind != "" and is_binary(id) and id != "" do
-    digest = Map.get(subject, :digest)
+    cond do
+      decision in @digest_required and not text?(Map.get(subject, :digest)) ->
+        {:error, :decision_record_digest_required}
 
-    if decision in @digest_required and not (is_binary(digest) and digest != ""),
-      do: {:error, :decision_record_digest_required},
-      else: {:ok, Map.merge(%{version: nil, digest: nil}, subject)}
+      not optional_text?(Map.get(subject, :previous_digest)) ->
+        {:error, :decision_record_previous_digest_invalid}
+
+      true ->
+        {:ok, Map.merge(%{version: nil, digest: nil, previous_digest: nil}, subject)}
+    end
   end
 
   defp subject(_decision, _subject), do: {:error, :decision_record_subject_required}
+
+  defp text?(value), do: is_binary(value) and value != ""
+  defp optional_text?(value), do: is_nil(value) or text?(value)
 
   defp separated_from(ids) when is_list(ids) do
     if Enum.all?(ids, &(is_binary(&1) and &1 != "")),

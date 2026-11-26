@@ -3,9 +3,12 @@ defmodule Cadence.Configuration.ChangeSetsTest do
 
   import Cadence.ConfigurationFixtures
 
+  alias Cadence.Auth
+  alias Cadence.Auth.{Scope, ServiceIdentity}
   alias Cadence.Comms.GroundStationStore
-  alias Cadence.Configuration.{ChangeSetStore, Submission}
+  alias Cadence.Configuration.{Access, ChangeSetStore, Ledger, Submission}
   alias Cadence.Control.Configuration
+  alias Cadence.Organizations
   alias Cadence.Platform.ScopedReadUpdates
 
   setup do
@@ -273,6 +276,49 @@ defmodule Cadence.Configuration.ChangeSetsTest do
       assert {:ok, _} = fetch_station(ctx, station_id)
     end
 
+    # #280: a service's changes count as its accountable people's. No console route lets a service
+    # stage today; this keeps the review check right if a path ever does.
+    test "a service's change set can't be reviewed by the person who issued the service",
+         %{org: org, alice: alice, bob: bob, mission: mission} do
+      {:ok, organization} = Organizations.fetch_organization(org)
+
+      {:ok, %{service_identity: service}} =
+        Auth.issue_service_identity(
+          ServiceIdentity.new(%{
+            organization_id: org,
+            mission_id: mission,
+            display_name: "Config bot",
+            capabilities: [:mission_admin]
+          }),
+          alice
+        )
+
+      bot =
+        Scope.new(%{
+          organization_id: org,
+          organization: organization,
+          service_identity: service
+        })
+
+      {:ok, staged} =
+        Configuration.stage(bot, mission, %{summary: "Bot"}, [station_op("Kiruna")])
+
+      assert {:ok, %{state: :in_review, version: version}} =
+               Configuration.submit(bot, mission, staged.change_set_id, params(staged))
+
+      assert {:error, :reviewer_is_author} =
+               Configuration.review(alice, mission, staged.change_set_id, :approve, %{
+                 comment: "mine, through the bot",
+                 expected_version: version
+               })
+
+      assert {:ok, %{state: :applied}} =
+               Configuration.review(bob, mission, staged.change_set_id, :approve, %{
+                 comment: "Looks right",
+                 expected_version: version
+               })
+    end
+
     test "send back reopens the set", %{alice: alice, bob: bob, mission: mission} do
       {:ok, staged} =
         Configuration.stage(alice, mission, %{summary: "Add"}, [station_op("Weilheim")])
@@ -304,10 +350,23 @@ defmodule Cadence.Configuration.ChangeSetsTest do
         ])
 
       {:ok, before} = ChangeSetStore.fetch(ctx.mission, staged.change_set_id)
-      assert {:error, :apply_interrupted} = Submission.landed(before)
+      # #261: landed/2 takes what this request wrote (its revision id, chosen before the apply).
+      proof = %{
+        actor: Access.actor(alice),
+        act: :submit,
+        version: before.version + 1,
+        reason: params(staged).reason,
+        policy: nil,
+        revision_id: "config_revision-not-yet"
+      }
+
+      assert {:error, :apply_interrupted} = Submission.landed(before, proof)
 
       {:ok, %{state: :applied, revision: 2}} =
         Configuration.submit(alice, ctx.mission, staged.change_set_id, params(staged))
+
+      {:ok, %{revision_id: landed_id}} = Ledger.fetch_revision(ctx.mission, 2)
+      proof = %{proof | revision_id: landed_id}
 
       assert {:ok,
               %{
@@ -317,7 +376,7 @@ defmodule Cadence.Configuration.ChangeSetsTest do
                 kinds: ["ground_station"],
                 runtime: :not_applicable,
                 activation_payload: nil
-              }} = Submission.landed(before)
+              }} = Submission.landed(before, proof)
     end
   end
 

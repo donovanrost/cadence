@@ -13,7 +13,7 @@ defmodule Cadence.Reads.PassContactFields do
   and uplink-dropped contacts skipped) and `window_moves` (the provider's moves, newest first), and U50's `second_connections_refused`.
   """
 
-  alias Cadence.Accounts
+  alias Cadence.Accounts.MemberNames
   alias Cadence.Commanding
   alias Cadence.Comms.StationRefs
   alias Cadence.Contacts.{ContactAction, ListenerRefusalAttention, OpenContacts, PassContacts}
@@ -32,14 +32,30 @@ defmodule Cadence.Reads.PassContactFields do
         Enum.map(rows, & &1.scheduled_contact_id) |> Enum.reject(&is_nil/1)
       )
 
+    people = people(org, Map.values(facts))
+
     Enum.map(rows, fn row ->
       fact = Map.get(facts, row.scheduled_contact_id)
 
       Map.merge(row, %{
         contact_action: action(fact, now),
-        contact_ended: ended(fact)
+        contact_ended: ended(fact, people)
       })
     end)
+  end
+
+  # #146 (#468): the people who ended these contacts, named only while active members of the
+  # mission's organization: one lookup for the whole read, never an email.
+  defp people(org, facts) do
+    ids =
+      for %{ending: %ContactAction{actor: %{} = actor}} <- facts,
+          user?(actor),
+          id = value(actor, "id") || value(actor, "user_id"),
+          is_binary(id),
+          uniq: true,
+          do: id
+
+    MemberNames.members(org, ids)
   end
 
   @spec detail(binary(), binary(), map(), DateTime.t()) :: map()
@@ -95,9 +111,12 @@ defmodule Cadence.Reads.PassContactFields do
 
   def action(_fact, _now), do: nil
 
-  @doc "How the contact ended, or nil."
-  @spec ended(map() | nil) :: map() | nil
-  def ended(%{ending: %ContactAction{} = action}) do
+  @doc """
+  How the contact ended, or nil. `by` names a person from `people` (active members of the
+  mission's organization, #468); any other person reads id and name nil.
+  """
+  @spec ended(map() | nil, %{binary() => binary() | nil}) :: map() | nil
+  def ended(%{ending: %ContactAction{} = action}, people) do
     metadata = action.metadata || %{}
     actor = action.actor || %{}
     cause = value(metadata, "cause") || if(user?(actor), do: "operator")
@@ -110,7 +129,7 @@ defmodule Cadence.Reads.PassContactFields do
           else: "canceled"
         ),
       cause: cause,
-      by: by(actor),
+      by: by(actor, people),
       at: action.occurred_at,
       reason: if(provider?, do: value(metadata, "provider_reason"), else: action.reason),
       reason_code: value(metadata, "provider_reason_code")
@@ -119,7 +138,7 @@ defmodule Cadence.Reads.PassContactFields do
 
   # No action record (lead 11-14): `at` from the lifecycle's cancel time when it has one;
   # `cause` and `by` stay null. Every new cancel or end writes an action, so this is legacy only.
-  def ended(%{state: :canceled} = fact),
+  def ended(%{state: :canceled} = fact, _people),
     do: %{
       kind: "canceled",
       cause: nil,
@@ -129,30 +148,28 @@ defmodule Cadence.Reads.PassContactFields do
       reason_code: nil
     }
 
-  def ended(_fact), do: nil
+  def ended(_fact, _people), do: nil
 
-  defp by(actor) do
+  defp by(actor, people) do
     kind = value(actor, "kind")
     id = value(actor, "id") || value(actor, "user_id")
 
     # Null rather than a half actor (lead 11-14).
     cond do
       is_nil(kind) or is_nil(id) -> nil
-      kind == "user" -> %{kind: "user", id: id, name: user_name(id)}
+      kind == "user" -> person(id, people)
       true -> %{kind: kind, id: id, name: nil}
     end
   end
 
   defp user?(actor), do: value(actor, "kind") == "user"
 
-  defp user_name(id) when is_binary(id) do
-    case Accounts.fetch_user(id) do
-      {:ok, user} -> user.display_name || user.email
-      _missing -> nil
+  defp person(id, people) do
+    case Map.fetch(people, id) do
+      {:ok, name} -> %{kind: "user", id: id, name: name}
+      :error -> %{kind: "user", id: nil, name: nil}
     end
   end
-
-  defp user_name(_id), do: nil
 
   # Stored metadata comes back with string keys; freshly built with atoms.
   @keys %{

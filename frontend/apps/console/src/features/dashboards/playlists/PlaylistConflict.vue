@@ -16,7 +16,7 @@ const line = computed(() => {
 </script>
 
 <template>
-  <ApCallout tone="caution">
+  <ApCallout tone="caution" role="alert">
     {{ line }}
     <template #action>
       <span class="flex gap-2">

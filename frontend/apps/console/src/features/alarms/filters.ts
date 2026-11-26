@@ -42,25 +42,73 @@ export function withFilter(
  * ux: the picker lists only spacecraft with alarms in the current tab, each with its count
  * ('EARENDIL-312 (3)'), by name; the selected one stays even at 0.
  */
+/**
+ * The fleet read, as the craft-name fallbacks need it (ux's ruling on #652): a craft's name comes
+ * from the fleet; "unknown" is only true once the read is in and the craft isn't in it.
+ */
+export type FleetNames =
+  | Readonly<{ state: "ready"; names: ReadonlyMap<string, string> }>
+  | Readonly<{ state: "loading" }>
+  | Readonly<{ state: "failed" }>;
+
+/**
+ * A craft named mid-sentence (U25, U20; ux on #652). Null while the fleet read loads: the line
+ * waits. Never the internal id; the SCID is the handle when there's no name.
+ */
+export function craftInSentence(id: string, scid: number | null, fleet: FleetNames): string | null {
+  if (fleet.state === "loading") return null;
+  if (fleet.state === "failed")
+    return scid === null ? "a spacecraft" : `a spacecraft (SCID ${scid})`;
+  return fleet.names.get(id) ?? "an unknown spacecraft";
+}
+
+/** The same craft standing alone (a picker option, a cell). Null while the fleet read loads. */
+export function craftStandalone(id: string, scid: number | null, fleet: FleetNames): string | null {
+  if (fleet.state === "loading") return null;
+  if (fleet.state === "failed") return scid === null ? "Spacecraft" : `SCID ${scid}`;
+  const name = fleet.names.get(id);
+  if (name !== undefined) return name;
+  return scid === null ? "Unknown spacecraft" : `Unknown spacecraft · SCID ${scid}`;
+}
+
+/** Each spacecraft's SCID as the episodes carry it (the handle when there's no name). */
+export const scidsOf = (episodes: readonly Episode[]): ReadonlyMap<string, number> =>
+  new Map(
+    episodes.flatMap((e) =>
+      e.spacecraft_id && e.spacecraft?.scid != null ? [[e.spacecraft_id, e.spacecraft.scid]] : [],
+    ),
+  );
+
+/** Picker: spacecraft with alarms, with counts; the selected one stays. Waits for the fleet read. */
 export function spacecraftOptions(
   episodes: readonly Episode[],
   selected: string | null,
-  nameOf: (id: string) => string,
+  fleet: FleetNames,
 ): { value: string; label: string }[] {
+  if (fleet.state === "loading") return [];
+  const scids = scidsOf(episodes);
   const counts = new Map<string, number>();
   for (const e of episodes)
     if (e.spacecraft_id) counts.set(e.spacecraft_id, (counts.get(e.spacecraft_id) ?? 0) + 1);
   if (selected !== null && !counts.has(selected)) counts.set(selected, 0);
   return [...counts]
-    .map(([id, n]) => ({ value: id, label: `${nameOf(id)} (${n})` }))
+    .map(([id, n]) => ({
+      value: id,
+      label: `${craftStandalone(id, scids.get(id) ?? null, fleet) ?? ""} (${n})`,
+    }))
     .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
 }
 
 /** ux (Fleet's form): 'No critical alarms on EARENDIL-312.' / 'No caution alarms.' / 'No alarms on …'. */
-export function filteredEmpty(f: EpisodeFilters, nameOf: (id: string) => string): string {
+export function filteredEmpty(
+  f: EpisodeFilters,
+  inSentence: (id: string) => string | null,
+): string | null {
   const sev = f.severities.length === 1 ? `${f.severities[0]} ` : "";
-  const on = f.spacecraftId === null ? "" : ` on ${nameOf(f.spacecraftId)}`;
-  return `No ${sev}alarms${on}.`;
+  if (f.spacecraftId === null) return `No ${sev}alarms.`;
+  // ux on #652: while the fleet read loads, the headline waits rather than guess a name.
+  const name = inSentence(f.spacecraftId);
+  return name === null ? null : `No ${sev}alarms on ${name}.`;
 }
 
 /**

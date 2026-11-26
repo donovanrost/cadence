@@ -12,6 +12,13 @@ export type Comparison = Readonly<{
   toJson: string;
 }>;
 
+/** B6: what a screen reader hears when a compare arrives. */
+export function compareSentence(c: Pick<Comparison, "from" | "to" | "changes">): string {
+  const n = c.changes.length;
+  const what = n === 0 ? "these versions are the same" : `${n} ${n === 1 ? "change" : "changes"}`;
+  return `v${c.from} to v${c.to}: ${what}.`;
+}
+
 /**
  * The Versions sheet's reads and its one write (D12, D13). Restore makes a new current version
  * from an old one (non-destructive); a 409 means someone saved first, so the list reloads.

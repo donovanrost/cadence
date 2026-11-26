@@ -22,7 +22,7 @@ defmodule CadenceWeb.CommandApprovalController do
           mission_id,
           filters
         )
-        |> Enum.map(&CommandingJSON.command_approval/1)
+        |> CommandingJSON.encode_all(&CommandingJSON.command_approval/2)
 
       json(conn, %{data: command_approvals})
     end

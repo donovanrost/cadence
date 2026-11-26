@@ -5,17 +5,18 @@ import ApStatusMark from "./ApStatusMark.vue";
  * Inline contextual sentence: wash + mark + one sentence + optional trailing action.
  * `role` (a11y B6, #243): the role follows what happened, not the tone. A caution-toned refusal or
  * failure of the person's own act passes `role="alert"`; without it, crit is alert, the rest status
- * (standing cautions keep that default).
+ * (standing cautions keep that default). `role="none"` makes it no live region at all, for words
+ * that change on their own (a countdown) and are announced elsewhere (#276).
  */
 defineProps<{
   tone: "nominal" | "caution" | "crit" | "stale" | "off" | "info";
-  role?: "alert" | "status" | undefined;
+  role?: "alert" | "status" | "none" | undefined;
 }>();
 </script>
 
 <template>
   <div
-    :role="role ?? (tone === 'crit' ? 'alert' : 'status')"
+    :role="role === 'none' ? undefined : (role ?? (tone === 'crit' ? 'alert' : 'status'))"
     class="flex items-center gap-3 px-4 py-2.5 text-base text-readout"
     :class="{
       'bg-[var(--apogee-wash-crit)]': tone === 'crit',

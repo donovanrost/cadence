@@ -6,11 +6,13 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
 
   alias Cadence.Applications.ConfigurationLock
   alias Cadence.Applications.SpacecraftConfiguration.Active, as: ConfigurationActive
+  alias Cadence.Applications.SpacecraftConfiguration.CatalogAuthority
   alias Cadence.Applications.SpacecraftConfiguration.Drafts, as: ConfigurationDrafts
   alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Catalog.SpacecraftConfigurationInput, as: ConfigurationInput
   alias Cadence.Catalog.SpacecraftModelBindings
   alias Cadence.Control.Activations, as: ControlActivations
+  alias Cadence.Reads.CatalogCompositions
   alias Cadence.Reads.Spacecraft.ConfigurationCatalogs
   alias Cadence.SourceEndpoints
   alias Cadence.SpacecraftStore
@@ -35,11 +37,15 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
       current = ConfigurationDrafts.snapshot(mission, craft)
       approval = ActivationPolicy.load(mission.organization_id, mission.mission_id)
       active_entry = active.entries[id]
+      saved_catalog = current.document["catalog_revision_id"]
+      active_catalog = active_entry && active_entry["catalog_revision_id"]
+      catalogs = ConfigurationCatalogs.list(mission, [saved_catalog, active_catalog])
 
-      catalogs =
-        ConfigurationCatalogs.list(mission, [
-          current.document["catalog_revision_id"],
-          active_entry && active_entry["catalog_revision_id"]
+      # D2 (#543): the compositions behind the saved and the active document's catalog revisions.
+      compositions =
+        CatalogCompositions.load(mission.organization_id, mission.mission_id, [
+          saved_catalog,
+          active_catalog
         ])
 
       fleet =
@@ -68,11 +74,18 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
          spacecraft_id: id,
          name: craft.display_name,
          scid: craft.scid,
+         # #595 (fe-setup, U94's Open profile): the craft's own profile, or nil.
+         profile: profile(mission, craft),
+         # #595b: DECISIONS #65's one writer, CatalogAuthority: the profile (with its overrides)
+         # when it names a catalog revision, else the spacecraft's own configuration.
+         catalog_set_by:
+           if(CatalogAuthority.effective(mission, craft), do: "profile", else: "spacecraft"),
          section: section,
          base_href: base,
          token: current.token,
          saved_version: current.row && current.row.version,
          document: current.document,
+         composition: Map.get(compositions, saved_catalog),
          external_changes: current.external_changes,
          switches: switches,
          active:
@@ -80,6 +93,7 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
              %{
                version: active_entry["configuration_version"],
                document: active_entry["document"],
+               composition: Map.get(compositions, active_catalog),
                generation: active.activation.generation
              },
          review: review(mission, id, current, active),
@@ -93,7 +107,10 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
                organization_id: mission.organization_id,
                mission_id: mission.mission_id
              }) == :ok,
-           can_review: Activations.authorize_review(scope, mission.mission_id) == :ok
+           can_review: Activations.authorize_review(scope, mission.mission_id) == :ok,
+           # #595: whether the viewer may save a draft: Drafts.save's own check, which isn't
+           # can_request's (:request_activation).
+           can_save: ConfigurationDrafts.may_save?(scope, mission.mission_id)
          },
          catalogs: catalogs,
          fleet:
@@ -156,6 +173,21 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
   end
 
   defp switch(value), do: %{value: value == true, set: is_boolean(value), revision: nil}
+
+  defp profile(_mission, %{spacecraft_type_id: nil}), do: nil
+
+  defp profile(mission, %{spacecraft_type_id: id}) when is_binary(id) do
+    case SpacecraftTypeStore.fetch_spacecraft_type(
+           mission.organization_id,
+           mission.mission_id,
+           id
+         ) do
+      {:ok, type} -> %{id: type.spacecraft_type_id, name: type.display_name}
+      {:error, _not_found} -> nil
+    end
+  end
+
+  defp profile(_mission, _craft), do: nil
 
   defp presets(mission) do
     SpacecraftTypeStore.list_spacecraft_types(mission.organization_id, mission.mission_id)

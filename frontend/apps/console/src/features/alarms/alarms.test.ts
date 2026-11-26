@@ -211,5 +211,7 @@ describe("Alarms header's last change (ux U71 A12)", () => {
       ),
     ).toBe("Last change 11-15 23:05Z: an alarm on the mission cleared.");
     expect(lastChangeLine(null, nameOf, now)).toBeNull();
+    // #652: a craft's change waits while its name can't be said yet; it never reads "on the mission".
+    expect(lastChangeLine({ at, kind: "raised", spacecraft_id: "sc-999" }, nameOf, now)).toBeNull();
   });
 });

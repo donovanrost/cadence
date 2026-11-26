@@ -2,9 +2,13 @@ defmodule CadenceWeb.Console.ActivationRequestAPITest do
   @moduledoc "§11 L10: console activation approvals (list, show, approve, reject, resume)."
   use CadenceWeb.ConnCase, async: false
 
+  import ExUnit.CaptureLog
+
   alias Cadence.ApplicationDispatch.BindingSet
-  alias Cadence.Auth.Scope
+  alias Cadence.Auth
+  alias Cadence.Auth.{Scope, ServiceIdentity}
   alias Cadence.Catalog.MissionModel.Layer
+  alias Cadence.Control.ActivationRequests
   alias Cadence.Management.Activations
   alias CadenceWeb.TestFixtures
 
@@ -111,12 +115,56 @@ defmodule CadenceWeb.Console.ActivationRequestAPITest do
              |> Map.fetch!("error")
   end
 
-  test "the requester can't approve their own request", c do
+  test "the requester can't approve their own request: the kind-prefixed code, via_service null (#275)",
+       c do
     id = request(c).activation_request_id
 
-    assert %{"code" => "self_approval_forbidden"} =
+    # #275 (U94): requester only, no details.rule; #280's via_service always sent.
+    assert %{
+             "code" => "activation_self_approval_forbidden",
+             "details" => %{"via_service" => nil} = details
+           } =
              c.requester
              |> post_conn(c.base <> "/#{id}/approve", %{"reason" => "Mine"})
+             |> json_response(403)
+             |> Map.fetch!("error")
+
+    refute Map.has_key?(details, "rule")
+  end
+
+  # api-ops on #608: #280's service path, pinned at the console too (the domain pins it in
+  # activation_vertical_slice_test): a request made by a service the approver issued.
+  test "a request by a service the approver is accountable for: the same code, naming the service",
+       c do
+    issuer = %{c.scope | user: c.approver}
+
+    {:ok, %{service_identity: service}} =
+      Auth.issue_service_identity(
+        ServiceIdentity.new(%{
+          organization_id: c.org.organization_id,
+          mission_id: c.mission.mission_id,
+          display_name: "Rollout bot",
+          capabilities: [:mission_admin]
+        }),
+        issuer
+      )
+
+    service_scope =
+      Scope.new(%{
+        organization_id: c.org.organization_id,
+        organization: c.org,
+        service_identity: service
+      })
+
+    id = request(%{c | scope: service_scope}).activation_request_id
+    service_id = service.service_identity_id
+
+    assert %{
+             "code" => "activation_self_approval_forbidden",
+             "details" => %{"via_service" => %{"id" => ^service_id, "name" => "Rollout bot"}}
+           } =
+             c.approver
+             |> post_conn(c.base <> "/#{id}/approve", %{"reason" => "Through my bot"})
              |> json_response(403)
              |> Map.fetch!("error")
   end
@@ -201,6 +249,34 @@ defmodule CadenceWeb.Console.ActivationRequestAPITest do
 
   defp get_conn(user, path), do: user |> TestFixtures.member_conn() |> get(path)
   defp post_conn(user, path, body), do: user |> TestFixtures.member_conn() |> post(path, body)
+
+  # #263 (ca-security, api-ops): an apply that exits after the approval commits (a pool or
+  # GenServer timeout) reads needs_review, never a 500 for a recorded approval; the cause is logged.
+  test "an apply that exits after the approval is recorded reads needs_review", c do
+    id = applicable_request(c).activation_request_id
+    approver = %{c.scope | user: c.approver}
+
+    log =
+      capture_log(fn ->
+        assert {:ok, %{outcome: "needs_review"}} =
+                 ActivationRequests.approve(
+                   approver,
+                   c.mission.mission_id,
+                   id,
+                   %{"reason" => "Reviewed exact basis"},
+                   execute: fn _approved ->
+                     exit({:timeout, {GenServer, :call, [:pool, %{token: "secret-arg"}, 5_000]}})
+                   end
+                 )
+      end)
+
+    assert log =~
+             "activation request #{id}: approved, but its apply didn't finish: " <>
+               "exit: :timeout in GenServer.call"
+
+    refute log =~ "secret-arg"
+    assert {:ok, %{state: :approved}} = Activations.fetch(approver, id)
+  end
 
   defp applicable_request(c) do
     binding =

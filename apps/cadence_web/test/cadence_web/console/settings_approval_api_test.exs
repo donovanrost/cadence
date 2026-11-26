@@ -115,6 +115,42 @@ defmodule CadenceWeb.Console.SettingsApprovalAPITest do
              save(c.admin, c.mission_base, "direct") |> json_response(409)
   end
 
+  # #430: an organization save lists the missions it moved, named, in ux's words. Turning
+  # overrides off moves a 'direct' pin to the default; turning them on applies it again (the save
+  # that can loosen). Only organization admins read the organization audit (ca-security).
+  test "an organization save names the missions it moved; only organization admins read it", c do
+    id = c.mission.mission_id
+    assert save(c.admin, c.mission_base, "direct") |> json_response(201)
+    assert save(c.admin, c.org_base, "independent", false) |> json_response(201)
+    assert save(c.admin, c.org_base, "independent", true) |> json_response(201)
+
+    assert [on, off | _] = audit(c, c.admin)
+
+    assert %{
+             "action" =>
+               "Missions may now set their own approval setting. " <>
+                 "Changed on 1 mission to Applies without approval: EARENDIL.",
+             "change" => %{
+               "missions" => [
+                 %{
+                   "id" => ^id,
+                   "name" => "EARENDIL",
+                   "before" => "independent",
+                   "after" => "direct"
+                 }
+               ]
+             }
+           } = on
+
+    assert off["action"] =~ "Changed on 1 mission to Needs a second person's approval: EARENDIL."
+    assert [%{"before" => "direct", "after" => "independent"}] = off["change"]["missions"]
+
+    assert c.member
+           |> TestFixtures.member_conn()
+           |> get(String.replace(c.org_base, "/settings", "/audit"))
+           |> json_response(403)
+  end
+
   defp read(user, path),
     do:
       user |> TestFixtures.member_conn() |> get(path) |> json_response(200) |> Map.fetch!("data")

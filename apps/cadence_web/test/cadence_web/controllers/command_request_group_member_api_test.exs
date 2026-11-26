@@ -36,7 +36,12 @@ defmodule CadenceWeb.CommandRequestGroupMemberApiTest do
           organization_id: c.org,
           display_name: "P0 test service",
           capabilities: [:organization_admin]
-        })
+        }),
+        %Cadence.Auth.Scope{
+          actor_kind: :user,
+          organization_id: c.org,
+          user: %Cadence.Accounts.User{user_id: "user-service-issuer"}
+        }
       )
 
     Map.merge(c, %{

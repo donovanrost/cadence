@@ -3,3 +3,6 @@ dist/
 e2e/.auth/
 test-results/
 playwright-report/
+# console-e2e shard 1 keeps the main run's output beside the serial run's (#655).
+test-results-main/
+playwright-report-main/

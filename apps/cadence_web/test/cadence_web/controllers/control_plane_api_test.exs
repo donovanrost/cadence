@@ -419,29 +419,12 @@ defmodule CadenceWeb.ControlPlaneApiTest do
            } = json_response(active_conn, 200)
   end
 
-  test "org-scoped control-plane token can manage missions and mission resources", %{conn: conn} do
+  test "org-scoped control-plane token reaches a mission's resources", %{conn: conn} do
     %{conn: conn, api_token: api_token, organization_id: organization_id} = bootstrap(conn)
 
-    mission_create_conn =
-      conn
-      |> authorize(api_token)
-      |> post("/api/organizations/#{organization_id}/missions", %{
-        "mission" => %{
-          "mission_id" => "mission-bravo",
-          "slug" => "mission-bravo",
-          "display_name" => "Mission Bravo"
-        }
-      })
-
-    assert %{
-             "data" => %{
-               "mission_id" => "mission-bravo",
-               "organization_id" => ^organization_id,
-               "slug" => "mission-bravo"
-             }
-           } = json_response(mission_create_conn, 201)
-
+    # The REST mission create is retired (#384); the mission is made through the domain.
     mission_id = "mission-bravo"
+    persist_mission!(organization_id, mission_id)
 
     persist_api_spacecraft!(organization_id, mission_id, %{
       spacecraft_id: "spacecraft-001",

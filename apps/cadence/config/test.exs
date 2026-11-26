@@ -1,5 +1,9 @@
 import Config
 
+# #242: the console e2e personas' password set (Cadence.Accounts.FixturePasswords, compiled only
+# for dev and test) is inert unless this is true. Never in prod.exs or runtime.exs.
+config :cadence, :fixture_passwords, true
+
 config :cadence, :opportunity_capability_secret, "cadence-test-opportunity-capability-secret-2026"
 
 # No disksup under test: the host's own disk would raise the journal-disk item and start early

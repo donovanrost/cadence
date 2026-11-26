@@ -147,6 +147,8 @@ defmodule Cadence.Reads.PassesTest do
         }
       }
 
+      # #468: PassEnders.load names a #53 resolution's actor (ActorRef) under
+      # {:resolution, id}; the builder reads it from there, never the stored name.
       passes =
         Passes.build(%{
           from: ~U[2026-11-08 00:00:00Z],
@@ -161,7 +163,10 @@ defmodule Cadence.Reads.PassesTest do
               metadata: %{"provider_display_name" => "Earendil Demo Ground Network"}
             )
           ],
-          enders: %{"ours" => user},
+          enders: %{
+            "ours" => user,
+            {:resolution, "resolved"} => %{kind: "user", id: "u2", name: "Ops Admin"}
+          },
           stations: [],
           filters: %{}
         }).passes

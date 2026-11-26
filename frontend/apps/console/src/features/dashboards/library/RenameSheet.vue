@@ -62,7 +62,7 @@ defineExpose({ open });
   <ApSheet ref="sheet" title="Rename library widget" initial-focus="input">
     <ApField v-model="name" label="Name" required />
     <ApTextarea v-model="description" label="Description" :rows="3" />
-    <ApCallout v-if="error" tone="caution">{{ error }}</ApCallout>
+    <ApCallout v-if="error" tone="caution" role="alert">{{ error }}</ApCallout>
     <template #footer>
       <ApButton variant="ghost" @click="sheet?.close()">Cancel</ApButton>
       <!-- An empty name disables Rename and says why (ux a11y A6: one pattern per form). -->

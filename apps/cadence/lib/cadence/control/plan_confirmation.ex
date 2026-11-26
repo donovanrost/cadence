@@ -6,10 +6,13 @@ defmodule Cadence.Control.PlanConfirmation do
   say which passes wait on which provider instead of guessing from reservation states.
   """
 
-  alias Cadence.Accounts
+  alias Cadence.Control.ActorRef
   alias Cadence.Control.Contacts, as: ControlContacts
   alias Cadence.GroundNetworks.MissionProviders
   alias Cadence.Management.Contacts, as: ManagementContacts
+
+  # No resolvers looked up: everyone reads unnamed (ActorRef.names/2's shape).
+  @no_names %{users: %{}, user_ids: MapSet.new(), services: %{}, service_ids: MapSet.new()}
 
   @type pass :: %{
           snapshot_id: binary(),
@@ -47,7 +50,7 @@ defmodule Cadence.Control.PlanConfirmation do
         %{
           unconfirmed: unconfirmed_of(organization_id, mission_id, items, opts),
           execution: execution(items),
-          bookings: bookings(items, resolver_names(items))
+          bookings: bookings(items, resolver_names(organization_id, items))
         }
 
       _not_approved ->
@@ -100,10 +103,13 @@ defmodule Cadence.Control.PlanConfirmation do
   a short code from the last error (`nil` when there is none). `at` is when it last changed.
   `detail`, `retryable` and `retry_after_seconds` are the provider's, when its error said
   (ux ScheduleFlow f05d68e9). `resolved` is `%{by, at}` for an operator's resolution (U29), from
-  `resolved_by` / `resolved_at` on the error document; `names` maps actor ids to display names.
+  `resolved_by` / `resolved_at` on the error document, the resolver named through `ActorRef`
+  (`names`, from `ActorRef.names/2` over the plan's organization, #468): an active member by
+  their display name (or nil), the organization's own service by its name (api on #503), anyone
+  else with id and name nil, never an email.
   """
-  @spec bookings([struct()], %{binary() => binary()}) :: %{binary() => map()}
-  def bookings(items, names \\ %{}),
+  @spec bookings([struct()], ActorRef.names()) :: %{binary() => map()}
+  def bookings(items, names \\ @no_names),
     do: Map.new(items, &{&1.contact_opportunity_snapshot_id, booking(&1, names)})
 
   defp booking(item, names) do
@@ -131,28 +137,24 @@ defmodule Cadence.Control.PlanConfirmation do
   defp provider_error(%{"reason" => %{"category" => _} = provider}), do: provider
   defp provider_error(_error), do: %{}
 
-  defp resolved(%{"resolved_by" => %{"id" => id} = by, "resolved_at" => at}, names)
-       when is_binary(id) do
-    %{by: %{kind: by["kind"], id: id, name: Map.get(names, id)}, at: at}
+  # Who and when, both or neither (U29): a resolver ActorRef can't read gives no `resolved`.
+  defp resolved(%{"resolved_by" => %{} = by, "resolved_at" => at}, names) do
+    case ActorRef.document(by, names) do
+      nil -> nil
+      named -> %{by: named, at: at}
+    end
   end
 
   defp resolved(_error, _names), do: nil
 
-  defp resolver_names(items) do
-    for item <- items,
-        %{"resolved_by" => %{"kind" => "user", "id" => id}} <- [item.last_error_document],
-        is_binary(id),
-        uniq: true,
-        into: %{} do
-      {id, user_name(id)}
-    end
-  end
+  # #146 (#468): one batched lookup over every resolver; never by a stored name or an email.
+  defp resolver_names(organization_id, items) do
+    docs =
+      for item <- items,
+          %{"resolved_by" => %{} = by} <- [item.last_error_document],
+          do: by
 
-  defp user_name(id) do
-    case Accounts.fetch_user(id) do
-      {:ok, user} -> user.display_name || user.email
-      _missing -> nil
-    end
+    ActorRef.names(organization_id, docs)
   end
 
   defp text(value) when is_binary(value) and value != "", do: value

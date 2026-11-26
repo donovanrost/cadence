@@ -11,6 +11,12 @@ export type Conflict = Readonly<{
   savedBy: string | null;
   savedAt: string | null;
 }>;
+/**
+ * The conflict as the editor shows it. `refused`: the person's own Save or edit was refused with
+ * it (an alert); otherwise it arrived on the live channel while they edited, read politely, since
+ * an alert would interrupt them mid-edit and their next Save meets the alert anyway (ux #276).
+ */
+export type ShownConflict = Conflict & Readonly<{ refused: boolean }>;
 export type Notice =
   | { kind: "rejected"; message: string }
   | { kind: "skipped"; events: readonly SkippedEvent[] }
@@ -52,7 +58,7 @@ export function useEditSession(
     staged.value && stagedFor.value === draft.value ? staged.value.changes : null,
   );
   /** Someone saved over the version this draft is based on (ux's callout). */
-  const conflict = computed<Conflict | null>(() => {
+  const conflict = computed<ShownConflict | null>(() => {
     const d = draft.value;
     if (!d || !dirty.value) return null;
     // Who saved: a refused save's 409, else the push, when it is newer than this draft's base.
@@ -66,7 +72,12 @@ export function useEditSession(
       by?.currentVersion ?? 0,
     );
     if (current <= d.baseVersion) return null;
-    return { currentVersion: current, savedBy: by?.savedBy ?? null, savedAt: by?.savedAt ?? null };
+    return {
+      currentVersion: current,
+      savedBy: by?.savedBy ?? null,
+      savedAt: by?.savedAt ?? null,
+      refused: conflictBy.value !== null,
+    };
   });
 
   function persist(next: Draft) {

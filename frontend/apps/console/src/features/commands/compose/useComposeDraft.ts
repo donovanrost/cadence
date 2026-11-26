@@ -33,7 +33,11 @@ export type DraftStatus =
   /** `reason`: the server's words when it gave any; `lastSaved`: null if nothing ever saved. */
   | { kind: "failed"; reason: string | null; lastSaved: string | null };
 
-export type DraftNotice = Readonly<{ tone: "info" | "caution"; text: string }>;
+/**
+ * `onLoad`: the screen's own read when it opened, read politely; every other notice follows the
+ * person's Resume, Load or Discard, so its caution is an alert (a11y B6, #276, ux).
+ */
+export type DraftNotice = Readonly<{ tone: "info" | "caution"; text: string; onLoad?: true }>;
 
 /** The server's reason for a refused save, or null when it gave none (network, 5xx page). */
 function serverReason(e: ApiError): string | null {
@@ -112,6 +116,7 @@ export function useComposeDraft(
       notice.value = {
         tone: "caution",
         text: `Couldn't read your saved draft: ${describeApiError(r.error)}`,
+        onLoad: true,
       };
     } else if (r.value !== null && resume) {
       await adopt(r.value);

@@ -20,15 +20,32 @@ defmodule Cadence.Reads.ModelApplyRefusals do
   def numbers(_organization_id, _mission_id, revision_ids),
     do: Map.new(revision_ids, &{&1, nil})
 
+  @typedoc """
+  A refusal as data (api-ops, ca-ux on #556), so callers word it per act without parsing a
+  sentence: `why` is the reason clause (no opener, no period), and `subject` is what an approver
+  waits on: one named catalog revision, one whose number isn't known, or several.
+  """
+  @type refusal :: %{
+          required(:why) => binary(),
+          optional(:subject) => {:one, binary()} | :unknown | :many
+        }
+
+  @spec refusal(atom(), [integer() | nil]) :: refusal()
+  def refusal(:mission_model_revision_not_approved, [nil]),
+    do: %{why: "#{rev(nil)} isn't approved yet", subject: :unknown}
+
+  def refusal(:mission_model_revision_not_approved, [number]),
+    do: %{why: "#{rev(number)} isn't approved yet", subject: {:one, rev(number)}}
+
+  def refusal(:mission_model_revision_not_approved, numbers),
+    do: %{why: "#{revs(numbers)} aren't approved yet", subject: :many}
+
+  def refusal(:mission_model_comparison_failed, [number]),
+    do: %{why: "#{rev(number)}'s comparison didn't pass"}
+
+  @doc "The apply refusal's sentence: \"Not applied: \" and the reason."
   @spec sentence(atom(), [integer() | nil]) :: binary()
-  def sentence(:mission_model_revision_not_approved, [number]),
-    do: "Not applied: #{rev(number)} isn't approved yet."
-
-  def sentence(:mission_model_revision_not_approved, numbers),
-    do: "Not applied: #{revs(numbers)} aren't approved yet."
-
-  def sentence(:mission_model_comparison_failed, [number]),
-    do: "Not applied: #{rev(number)}'s comparison didn't pass."
+  def sentence(tag, numbers), do: "Not applied: " <> refusal(tag, numbers).why <> "."
 
   defp rev(nil), do: "a catalog revision"
   defp rev(number), do: "catalog rev #{number}"

@@ -7,6 +7,7 @@ import ApprovalActions from "./ApprovalActions.vue";
 import ApprovalFacts from "./ApprovalFacts.vue";
 import ComparisonReport from "./ComparisonReport.vue";
 import RejectSheet from "./RejectSheet.vue";
+import WithdrawControl from "./WithdrawControl.vue";
 import { useApproval } from "./useApproval.ts";
 import {
   cannotApproveLine,
@@ -16,7 +17,10 @@ import {
   noEarlierLine,
   REPLAY_NOT_RUN,
   unwordedBlockCode,
+  revisionWord,
 } from "./words.ts";
+import { compositionInSentence, isComposed } from "../composition.ts";
+import { useSession } from "@/shell";
 
 /**
  * ux U65 Approval · catalog rev N: the comparison against the revision it would replace, who
@@ -26,9 +30,14 @@ const props = defineProps<{ revision: ModelRevision; modelKey: ModelKey }>();
 const emit = defineEmits<{ changed: [] }>();
 const rev = computed(() => props.revision.catalog_revision?.number ?? null);
 const report = computed(() => props.revision.comparison);
-const revWord = computed(() => (rev.value === null ? "this revision" : `rev ${rev.value}`));
+// U109: a composed base is "composition 3"; one catalog reads exactly as before.
+const revWord = computed(() => revisionWord(props.revision));
 const title = computed(() =>
-  rev.value === null ? "Approval" : `Approval · catalog rev ${rev.value}`,
+  isComposed(props.revision.composition)
+    ? `Approval · ${compositionInSentence(props.revision.composition)}`
+    : rev.value === null
+      ? "Approval"
+      : `Approval · catalog rev ${rev.value}`,
 );
 const meta = computed(() => {
   const r = report.value;
@@ -52,6 +61,12 @@ const act = useApproval(
   computed(() => props.modelKey),
   () => rev.value,
   () => emit("changed"),
+  useSession().user.id,
+  // U109: a composed base's refusal names "composition 3".
+  () =>
+    isComposed(props.revision.composition)
+      ? compositionInSentence(props.revision.composition)
+      : null,
 );
 const panelFailure = computed(() =>
   act.failure.value && act.failure.value.from !== "reject" ? act.failure.value : null,
@@ -97,6 +112,8 @@ function runAgain() {
         </ApButton>
       </p>
       <ComparisonReport v-if="report && showReport" id="approval-report" :report="report" />
+      <!-- E2 (#546): an approved revision's approval can be withdrawn (U109 in #615). -->
+      <WithdrawControl :revision="revision" :model-key="modelKey" @changed="emit('changed')" />
     </div>
     <div v-else class="flex flex-col gap-3">
       <ApCallout v-if="report?.replay.status === 'not_run'" tone="caution">{{

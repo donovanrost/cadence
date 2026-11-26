@@ -152,18 +152,30 @@ defmodule Cadence.Management.Commanding do
         approved_by,
         opts \\ []
       ) do
-    with {:ok, %{command_request: request, approval: approval} = result} <-
-           RequestStore.decide_request(
-             organization_id,
-             mission_id,
-             command_request_id,
-             :approved,
-             approved_by,
-             opts
-           ),
-         {:ok, %ApprovedCommand{} = approved_command} <- ApprovedCommand.new(request, approval) do
-      {:ok, Map.put(result, :approved_command, approved_command)}
+    # #263 (api-ops): the approved command is built from the request and its approval BEFORE the
+    # decision commits, so a failure refuses with nothing recorded; once the decision commits the
+    # answer is that it was recorded. Enqueue re-derives and re-checks it. `:approved_command` is
+    # a test seam (default `ApprovedCommand.new/2`).
+    {build, opts} = Keyword.pop(opts, :approved_command, &ApprovedCommand.new/2)
+
+    check = fn %{command_request: request, approval: approval} ->
+      case build.(request, approval) do
+        {:ok, %ApprovedCommand{} = approved_command} ->
+          {:ok, %{approved_command: approved_command}}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
     end
+
+    RequestStore.decide_request(
+      organization_id,
+      mission_id,
+      command_request_id,
+      :approved,
+      approved_by,
+      Keyword.put(opts, :before_commit, check)
+    )
   end
 
   @spec fetch_approved_command(binary(), binary(), binary()) ::

@@ -2,7 +2,7 @@ import type { MissionId } from "@/api/index.ts";
 import {
   DecodeError,
   decoders,
-  pathGet,
+  getAt,
   request,
   type ApiResult,
   type Decoded,
@@ -96,7 +96,7 @@ export function fromDocument(
 ): FormValues {
   const values: FormValues = {};
   for (const f of schema.fields) {
-    const v = pathGet(doc, f.path.split("."));
+    const v = getAt(doc, f.path);
     values[f.path] = v === null || v === undefined ? "" : displayValue(f, v);
   }
   return values;

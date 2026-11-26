@@ -781,17 +781,23 @@ defmodule Cadence.IngressJournal.FileSystemTest do
     assert RawEvidence.receipt_time_at(archived, 30) == DateTime.add(t0, 2, :second)
   end
 
-  defp assert_eventually(assertion, attempts \\ 20)
+  # Every caller waits on async work: a durable cursor moves only when the async checkpoint write
+  # completes. A fixed 20 x 10 ms (~200 ms) was outlasted by a slow write on a loaded CI runner
+  # (#467), so poll every 10 ms up to a 5 s deadline instead; a passing check returns at once.
+  defp assert_eventually(assertion),
+    do: assert_eventually(assertion, System.monotonic_time(:millisecond) + 5_000)
 
-  defp assert_eventually(assertion, attempts) when attempts > 1 do
+  defp assert_eventually(assertion, deadline) do
     assertion.()
   rescue
-    ExUnit.AssertionError ->
-      Process.sleep(10)
-      assert_eventually(assertion, attempts - 1)
+    error in ExUnit.AssertionError ->
+      if System.monotonic_time(:millisecond) < deadline do
+        Process.sleep(10)
+        assert_eventually(assertion, deadline)
+      else
+        reraise error, __STACKTRACE__
+      end
   end
-
-  defp assert_eventually(assertion, 1), do: assertion.()
 
   defp write_checkpoint(stream_path, cursors, next_offset, next_sequence) do
     contents =

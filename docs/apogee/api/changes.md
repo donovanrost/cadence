@@ -15,7 +15,7 @@ Base: `/api/console/v1/missions/:mission_id/config`. Write calls need `x-csrf-to
 | `POST /change-sets/:id/preview` | `preview/3` | | preview |
 | `POST /change-sets/:id/discard` | `discard/4` | `{expected_version}` | discard result |
 | `POST /change-sets/:id/submit` | `submit/4` | `{reason, expected_version, acknowledged_holds?}` | `{state: applied \| in_review, …}` |
-| `POST /change-sets/:id/review` | `review/5` | `{decision: approve \| send_back, comment, expected_version}` | `{state: applied \| open, …}` |
+| `POST /change-sets/:id/review` | `review/5` | `{decision: approve \| send_back, comment, expected_version}`. `comment` is required to send back and optional to approve (#521, ux K9): blank or absent is recorded as `null`, never `""`; over 2,000 bytes is `422 invalid_params {comment}` either way | `{state: applied \| open, …}` |
 | `POST /changes/:change_id/withdraw` | `withdraw/3` | | `{change_set_id, version, state}` |
 | `POST /ops/:op_id/rebase` | `rebase/4` | `{choice: keep_mine \| take_live}` | `{change_set_id, version, state}` |
 
@@ -26,6 +26,21 @@ nothing about runtime health (a mission whose runtime isn't admitted, U91, reads
 `false`, applying saves the changes and starts nothing: a mission's first generation comes from
 each spacecraft's configuration. Don't infer it from `runtime: not_applicable`, which also covers
 changes the runtime doesn't use. On a result it is read right after the apply commits.
+
+`outcome` (#522, K3; additive, readers first, optional): what applying the set would leave behind, on
+the explicit previews only (`POST /preview`, `POST /change-sets/:id/preview`). It's never on a submit
+or review result: the preview those run as their gate doesn't compute it (api-ops).
+`{spacecraft: {now, after}, routes: {now, after, added, removed}, readiness: {now, after} | null} | null`.
+- `spacecraft`: active (not archived) spacecraft. K3's Spacecraft tile is `after` (ux U102, #579).
+- `routes`: usable routes (active and enabled routing rows, one per spacecraft) of active spacecraft,
+  counted by id, so a set that swaps routes has both `added` and `removed`. K3's Routes tile is the
+  signed difference ("+300", "−50"), or both when both are nonzero (ca-ux).
+- `readiness`: Readiness' verdict counts, `{blocker, caution, stale, not_set_up}`, before and after.
+  It's `null` when the set touches none of spacecraft, profiles, overrides, routes, transports or
+  stations (domain). One evaluation at 500 spacecraft takes about 85 ms.
+- Read in the preview's own rolled-back transaction, before and after the staged ops. `outcome` is
+  `null` when the pipeline didn't fully check the set (a halt, a validation error or a conflict) or
+  when a read failed. A failed read never changes `verdict` or `checks`.
 | `GET /revisions?limit=&before=` | `list_revisions/3` | | `{revisions: [revision_summary]}` (newest first; `limit` 1–100) |
 | `GET /revisions/:n` | `get_revision/3` | | revision_summary + `entries` |
 | `GET /revisions?entity_kind=&entity_id=&limit=` | `entity_revisions/5` | | `{revisions: [revision_summary + entries]}`: only the revisions touching that entity, newest first, each with just that entity's entries, labelled as `GET /revisions/:n`'s (Profile History; `422 details.entity_kind` for an unknown kind) |
@@ -38,14 +53,34 @@ top-level keys are ignored; documents, values and options pass through as JSON.
 Wire encoding: the facade shapes with string keys. Atoms become lowercase strings, times are
 ISO-8601, revision numbers are integers (render them as `rN`), and actors are `{kind, id, name}`.
 
+## Who is named (#471)
+
+Every actor in these reads (`opened_by`, `submitted_by`, change `author`, review `actor`,
+`applied_by`, approvals, `changed_by`) is `{kind, id, name}`. The `name` follows #146's rule:
+- a person is named only while they hold an active membership in the mission's organization,
+  checked at read time, and never by email;
+- a service is named only when it belongs to the organization;
+- Cadence keeps its system name.
+
+An actor outside the organization reads `{kind, id: null, name: null}`: a person who isn't an
+active member (a platform admin acting as support, someone who has left) or another
+organization's service. `kind` stays, but the id isn't sent either. An active member with no
+display name, or the organization's own unnamed service, keeps its `id` with `name: null`, so the
+console still knows its own changes.
+
+Records written before #471 stored `display_name || email`. That stored name is never sent: an
+old record by someone who has left reads `id: null, name: null`, and one by an active member
+with no display name reads their `id` with `name: null`.
+
 ## Errors
 
 `code` is the facade's tag, so switch on it.
 
 | Status | Codes |
 | --- | --- |
-| 409 | `holds_blocking` (details = the preview; at submit, and at approve when a blocking item appeared after the submit (#262)), `catalog_command_in_flight` (details = `{command_request_ids}`), `frozen_in_review`, `change_set_changed`, `path_already_staged` (details = `{change_id, author, kind, entity_id, path, value}`), `reviewer_is_author`, `activation_policy_changed`, `entity_gone`, `in_use` (details = `{entity, uses}`: an archive of a transport or station still in use, at stage, submit or review; [setup.md](setup.md)), `conversion_in_progress` (details = `{change_set_id, batch \| null}`: a legacy route conversion batch is staged, so nothing else can be staged until it's applied or discarded; TEMPORARY, [setup.md](setup.md)), `conversion_already_staged`, `open_change_set_not_empty` (the conversion's own) |
-| 422 | `invalid_op` (details = `{index, errors: [{path, message}]}`), `reason_required`, `comment_required`, `nothing_staged`, `not_in_review`, `checks_failed` and `holds_not_acknowledged` (details = the preview), `invalid_range`, `invalid_params` (malformed body; details keyed by field), `nothing_to_convert` (the conversion's) |
+| 409 | `holds_blocking` (details = the preview; at submit, and at approve when a blocking item appeared after the submit (#262)), `catalog_command_in_flight` (details = `{command_request_ids}`), `frozen_in_review`, `change_set_changed`, `path_already_staged` (details = `{change_id, author, kind, entity_id, path, value}`), `reviewer_is_author` (#280: also when a service identity you're accountable for authored a change), `activation_policy_changed`, `entity_gone`, `in_use` (details = `{entity, uses}`: an archive of a transport or station still in use, at stage, submit or review; [setup.md](setup.md)), `conversion_in_progress` (details = `{change_set_id, batch \| null}`: a legacy route conversion batch is staged, so nothing else can be staged until it's applied or discarded; TEMPORARY, [setup.md](setup.md)), `conversion_already_staged`, `open_change_set_not_empty` (the conversion's own) |
+| 403 | `change_set_approver_authors_unknown` (#280; details = `{service: {id, name} \| null}`): a service identity with nobody recorded as accountable authored a change, so nobody can review the set until an org admin records who is. No console route lets a service stage today; the domain allows it, so the check holds anyway |
+| 422 | `invalid_op` (details = `{index, errors: [{path, message}]}`), `reason_required`, `comment_required` (send back only, #521), `nothing_staged`, `not_in_review`, `checks_failed` and `holds_not_acknowledged` (details = the preview), `invalid_range`, `invalid_params` (malformed body; details keyed by field), `nothing_to_convert` (the conversion's) |
 | 403 | `forbidden` |
 | 404 | `change_set_not_found`, `revision_not_found`, `change_not_found`, `op_not_found`, `mission_not_found` |
 | 503 | `apply_interrupted` (submit/approve: nothing changed; safe to retry), `preview_failed` (submit/approve: Cadence couldn't run the checks, a database or connection error; nothing changed, the set keeps its state, safe to retry; details null, the cause is only in the server log; #262: was a 500 at approve and the generic `422 unprocessable` at submit) |
@@ -63,9 +98,13 @@ ISO-8601, revision numbers are integers (render them as `rN`), and actors are `{
 - Once the apply has committed, submit and approve never fail the response (qa #19). If notifying
   or converging the runtime crashes afterwards (a DB pool timeout under load, say), the response
   is still `200 {state: "applied", revision, …}` with `runtime: "degraded"`, and the mission
-  reconciler keeps retrying. If the connection drops during the apply itself, the server checks
-  whether it landed: if it did, the normal applied result with `runtime: "degraded"`; if not,
-  `503 apply_interrupted` ("did not take effect"), which is safe to retry. Any other 5xx on
+  reconciler keeps retrying. If the connection drops during the apply itself (or during a submit
+  or review), the server checks whether THIS request landed, never just the set's state (#261):
+  its own review row or revision (by the id it chose before its transaction), or for a submit to
+  review everything that submit records (submitter, version, reason, policy). If it did, the
+  normal result (an apply with `runtime: "degraded"`). If not, including when another person's
+  decision is what landed, `503 apply_interrupted` ("did not take effect"): refetch the set
+  before retrying. Any other 5xx on
   submit means "unclear": refetch the change set and head before telling the operator it failed.
 
 ## Permissions

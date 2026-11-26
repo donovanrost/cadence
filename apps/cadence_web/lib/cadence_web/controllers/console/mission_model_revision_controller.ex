@@ -39,19 +39,33 @@ defmodule CadenceWeb.Console.MissionModelRevisionController do
     end
   end
 
+  # #260: `operation_id` is optional (the #257 form: 1-120 characters); with it, a retry of this
+  # approval answers its original 200 with `replayed: true`.
   def approve(conn, %{"id" => id} = params) do
-    case params["comparison_report_id"] do
-      report_id when is_binary(report_id) and report_id != "" ->
-        decide(conn, id, fn ->
-          MissionModelApprovals.approve(scope(conn), mission_id(conn), id, report_id)
-        end)
-
-      _missing ->
-        Problem.respond(conn, :invalid_params, %{
-          comparison_report_id: "Run the comparison first."
-        })
+    with {:ok, report_id} <- report_id(params["comparison_report_id"]),
+         {:ok, operation_id} <- operation_id(params["operation_id"]) do
+      case MissionModelApprovals.approve(
+             scope(conn),
+             mission_id(conn),
+             id,
+             report_id,
+             operation_id
+           ) do
+        {:ok, {:replayed, _revision}} -> read(conn, id, true)
+        {:ok, _revision} -> read(conn, id, false)
+        {:error, reason} -> error(conn, reason)
+      end
+    else
+      {:error, details} -> Problem.respond(conn, :invalid_params, details)
     end
   end
+
+  defp report_id(id) when is_binary(id) and id != "", do: {:ok, id}
+  defp report_id(_id), do: {:error, %{comparison_report_id: "Run the comparison first."}}
+
+  defp operation_id(nil), do: {:ok, nil}
+  defp operation_id(id) when is_binary(id) and byte_size(id) in 1..120, do: {:ok, id}
+  defp operation_id(_id), do: {:error, %{operation_id: "must be 1-120 characters"}}
 
   def reject(conn, %{"id" => id} = params) do
     case params["reason"] do
@@ -74,6 +88,14 @@ defmodule CadenceWeb.Console.MissionModelRevisionController do
     end
   end
 
+  # A decision answers the read; an approve also says whether it was a replay (#260).
+  defp read(conn, id, replayed) do
+    case MissionModelApprovals.read(scope(conn), mission_id(conn), id) do
+      {:ok, data} -> json(conn, %{data: Map.put(data, :replayed, replayed)})
+      {:error, reason} -> error(conn, reason)
+    end
+  end
+
   defp reply(conn, {:ok, data}), do: json(conn, %{data: data})
   defp reply(conn, {:error, reason}), do: error(conn, reason)
 
@@ -84,7 +106,19 @@ defmodule CadenceWeb.Console.MissionModelRevisionController do
             mission_model_decision_reason_required mission_model_decision_reason_too_long
             mission_model_no_active_binding_set mission_model_revision_not_in_catalog)a
 
+  # #280 (U100): the self-approval refusal always says whether it came through a service.
+  defp error(conn, :mission_model_self_approval_forbidden),
+    do: Problem.respond(conn, :mission_model_self_approval_forbidden, %{via_service: nil})
+
   defp error(conn, reason) when reason in @codes, do: Problem.respond(conn, reason)
+
+  defp error(conn, {reason, details})
+       when reason in [
+              :mission_model_self_approval_forbidden,
+              :mission_model_approver_authors_unknown,
+              :mission_model_revision_already_approved
+            ],
+       do: Problem.respond(conn, reason, details)
 
   defp error(conn, {:invalid_params, details}),
     do: Problem.respond(conn, :invalid_params, details)

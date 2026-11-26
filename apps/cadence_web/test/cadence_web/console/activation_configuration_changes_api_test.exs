@@ -95,6 +95,22 @@ defmodule CadenceWeb.Console.ActivationConfigurationChangesAPITest do
     assert {rev_a, rev_b} == {c.rev_a.catalog_revision_id, c.rev_b.catalog_revision_id}
     assert {number_a, number_b} == {1, 2}
 
+    # D2 (#543): each catalog revision the row names carries its composition. Rev A's one layer
+    # names rev A (the first import); rev B may reuse it, so only its id is checked.
+    [%{"before" => %{"composition" => before}, "after" => %{"composition" => later}}] =
+      moved["rows"]
+
+    assert %{
+             "composition_id" => before_id,
+             "number" => before_number,
+             "imported_layers" => [%{"mount" => "/", "catalog_revision" => %{"id" => layer_rev}}]
+           } = before
+
+    assert is_binary(before_id) and is_integer(before_number)
+    assert layer_rev == rev_a
+    assert %{"composition_id" => later_id} = later
+    assert is_binary(later_id)
+
     # From nothing: every set field is a row with before null; the switches never are.
     assert %{"count" => 1, "first_start" => true, "spacecraft" => [%{"name" => "Third"}]} =
              started

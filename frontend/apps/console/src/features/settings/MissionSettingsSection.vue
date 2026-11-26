@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { useConsoleScope } from "@/shell";
 import { ApCallout } from "@/ui";
 import MissionSettingsField from "./MissionSettingsField.vue";
+import SuspendGrantsCallout from "./SuspendGrantsCallout.vue";
 import {
   confirmsReset,
   resetLine,
@@ -22,7 +23,7 @@ const where = useConsoleScope();
 const missionName = computed(() =>
   where.value.kind === "mission" ? where.value.mission.name : "this mission",
 );
-const { busy, note, save } = useSectionSave(
+const { busy, note, pending, save, confirmSuspension, cancelSuspension } = useSectionSave(
   () => props.scope,
   () => props.section,
   () => emit("saved"),
@@ -61,5 +62,12 @@ function unchanged() {
       @unchanged="unchanged"
     />
   </div>
-  <ApCallout v-if="note" :tone="note.tone">{{ note.text }}</ApCallout>
+  <SuspendGrantsCallout
+    v-if="pending"
+    :pending="pending"
+    :busy="busy"
+    @confirm="confirmSuspension"
+    @cancel="cancelSuspension"
+  />
+  <ApCallout v-else-if="note" :tone="note.tone">{{ note.text }}</ApCallout>
 </template>

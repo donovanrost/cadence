@@ -119,6 +119,7 @@ function toggle(id: string) {
           :can-withdraw="changeSet.state === 'open' && mayRemove(change)"
           :open="open.has(change.id)"
           :busy="busy"
+          :next-revision="config.head.revision + 1"
           @withdraw="withdraw(change)"
           @toggle="toggle(change.id)"
         />

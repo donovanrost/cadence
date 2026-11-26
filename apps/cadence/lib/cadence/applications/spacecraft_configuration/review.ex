@@ -246,6 +246,12 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
   """
   @spec catalog_inputs(map(), binary()) :: {:ok, map()} | {:error, term()}
   def catalog_inputs(mission, catalog_id) do
+    with {:ok, inputs, _acc} <- catalog_inputs(mission, catalog_id, %{}), do: {:ok, inputs}
+  end
+
+  # #534: the telemetry's packet definition versions are resolved by content, with `acc` carrying
+  # the generation's resolutions across its catalogs (amendment 1).
+  defp catalog_inputs(mission, catalog_id, acc) do
     with {:ok, catalog} <-
            Catalog.fetch_revision(mission.organization_id, mission.mission_id, catalog_id),
          :ok <- has_mission_model(catalog),
@@ -261,8 +267,15 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
              mission.mission_id,
              model.revision_id
            ),
-         {:ok, telemetry} <- TelemetryProjection.build(catalog, model, plans) do
-      {:ok, %{model: MissionModels.manifest(model, plans), telemetry: telemetry}}
+         {:ok, telemetry} <- TelemetryProjection.build(catalog, model, plans),
+         {:ok, telemetry, acc} <-
+           TelemetryProjection.resolve_versions(
+             telemetry,
+             mission.organization_id,
+             mission.mission_id,
+             acc
+           ) do
+      {:ok, %{model: MissionModels.manifest(model, plans), telemetry: telemetry}, acc}
     end
   end
 
@@ -272,7 +285,14 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
 
   defp has_mission_model(_catalog), do: {:error, :catalog_revision_missing_mission_model}
 
-  @doc "Inputs for `catalog_id` from `cache`, loading them on the first use: `{:ok, inputs, cache}`."
+  # The generation's packet definition versions (#534, amendment 1), beside the per-catalog inputs.
+  @versions {__MODULE__, :packet_definition_versions}
+
+  @doc """
+  Inputs for `catalog_id` from `cache`, loading them on the first use: `{:ok, inputs, cache}`. The
+  cache also carries the generation's resolved packet definition versions, so its catalogs give
+  distinct contents distinct versions (#534).
+  """
   @spec cached_inputs(map(), map(), binary()) :: {:ok, map(), map()} | {:error, term()}
   def cached_inputs(cache, mission, catalog_id) do
     case Map.fetch(cache, catalog_id) do
@@ -280,8 +300,10 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
         {:ok, inputs, cache}
 
       :error ->
-        with {:ok, inputs} <- catalog_inputs(mission, catalog_id),
-             do: {:ok, inputs, Map.put(cache, catalog_id, inputs)}
+        acc = Map.get(cache, @versions, %{})
+
+        with {:ok, inputs, acc} <- catalog_inputs(mission, catalog_id, acc),
+             do: {:ok, inputs, cache |> Map.put(catalog_id, inputs) |> Map.put(@versions, acc)}
     end
   end
 end

@@ -58,6 +58,13 @@ and the two-person rule, use these Reflect Orbital users (password `apogee-qa-pa
 | `qa-org-admin@example.com` | `organization_admin` (no platform admin) |
 | `qa-org-admin-2@example.com` | `organization_admin` (second admin: approves what the first authored) |
 
+The password is the public local default unless `E2E_PERSONA_PASSWORD` is set when the script runs
+(#242: at least 12 characters, not the default, never printed). CI sets its own random one: it
+comes only from the environment or a CI secret, never a committed file.
+`E2E_RESET_PERSONA_PASSWORDS=1` also resets the existing personas to it through the app's
+credential path (every session signed out); it refuses without `E2E_PERSONA_PASSWORD`. The
+password-set exists only in dev and test builds.
+
 ## Start everything from scratch
 
 From the repo root of this worktree, each long-running command in its own pane:

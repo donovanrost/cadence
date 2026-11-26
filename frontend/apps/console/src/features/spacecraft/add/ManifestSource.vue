@@ -62,7 +62,7 @@ function remap(field: ManifestField, value: string) {
     <a :href="templateHref" download="manifest-template.csv" class="text-sm text-text-3"
       >Download manifest template (.csv)</a
     >
-    <ApCallout v-if="readError" tone="caution">{{ readError }}</ApCallout>
+    <ApCallout v-if="readError" tone="caution" role="alert">{{ readError }}</ApCallout>
     <template v-if="draft.manifest">
       <p class="m-0 text-md text-text-3">
         <span class="font-mono text-readout">{{ draft.manifest.fileName }}</span> ·

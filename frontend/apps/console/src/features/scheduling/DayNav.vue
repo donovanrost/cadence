@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { markPlanAct } from "./plan-acts.ts";
 import { ApButton, ApTimePicker } from "@/ui";
 import { dayLabel } from "./names.ts";
 import DayStrip from "./DayStrip.vue";
@@ -18,6 +19,7 @@ const iso = (t: number) => new Date(t).toISOString().slice(0, 10);
 
 function go(t: number | null) {
   if (t === null) return;
+  markPlanAct();
   void router
     .replace({ query: { ...route.query, day: iso(t), run: undefined } })
     .catch(() => undefined);

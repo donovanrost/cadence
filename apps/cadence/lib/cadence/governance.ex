@@ -25,7 +25,8 @@ defmodule Cadence.Governance do
     CapabilityInstanceRow,
     DerivedDefinitions,
     GovernedPacketDefinitionRow,
-    PacketDefinitionFieldRow
+    PacketDefinitionFieldRow,
+    PacketDefinitionVersions
   }
 
   alias Cadence.Governance.Persistence, as: GovernancePersistence
@@ -114,6 +115,21 @@ defmodule Cadence.Governance do
       {:ok, scoped_packet_definition}
     end
   end
+
+  @doc """
+  Each plan packet definition with its version resolved by content (#534): a stored version with
+  the same content is reused, otherwise the next one. `acc` carries one generation's resolutions
+  across catalogs (`%{}` for a single catalog). Read-only; see `PacketDefinitionVersions`.
+  """
+  @spec resolve_packet_definition_versions(
+          binary() | nil,
+          binary(),
+          [PacketDefinition.t()],
+          map()
+        ) ::
+          {:ok, [PacketDefinition.t()], map()}
+  def resolve_packet_definition_versions(organization_id, mission_id, definitions, acc \\ %{}),
+    do: PacketDefinitionVersions.resolve(organization_id, mission_id, definitions, acc)
 
   @spec list_packet_definitions(binary()) :: [PacketDefinition.t()]
   def list_packet_definitions(mission_id) when is_binary(mission_id) do

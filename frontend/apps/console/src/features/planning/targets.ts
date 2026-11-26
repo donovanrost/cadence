@@ -1,4 +1,4 @@
-import { recordOf } from "@/api";
+import { recordOf, type JsonObject } from "@/api";
 import type { Target } from "./templates.ts";
 
 /** Target form state, kept as text until saved. */
@@ -55,6 +55,6 @@ export function targetFromDraft(
 }
 
 /** A JSON object document (or empty), for prefilling forms from `unknown` documents. */
-export function asRecord(value: unknown): Readonly<Record<string, unknown>> {
+export function asRecord(value: unknown): JsonObject {
   return recordOf(value) ?? {};
 }

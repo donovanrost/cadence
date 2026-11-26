@@ -16,6 +16,7 @@ const tone = {
 <template>
   <div
     class="max-h-[60vh] overflow-auto border border-hairline bg-vacuum font-mono text-xs"
+    role="region"
     tabindex="0"
     aria-label="JSON changes"
   >

@@ -1,6 +1,7 @@
 defmodule Cadence.Governance.ActivationPolicy do
   @moduledoc "Organization approval requirements, mission overrides, and exact policy evidence."
   alias Cadence.Auth.{Policy, SettingsAccess}
+  alias Cadence.Governance.ApprovalTightening
   alias Cadence.Missions
   alias Cadence.Platform.ScopedSettings
 
@@ -55,20 +56,86 @@ defmodule Cadence.Governance.ActivationPolicy do
   Every change records who, when, and the effective setting before and after (`audit`); a refused
   change records nothing.
   """
-  def save(scope, mission_id, token, input) do
+  def save(scope, mission_id, token, input, opts \\ []) do
     with :ok <- SettingsAccess.authorize(scope, :manage_settings, mission_id),
          {:ok, document} <- decode(mission_id, input) do
+      org = scope.organization_id
+      acknowledged = Keyword.get(opts, :acknowledged_suspensions)
+      tightening_opts = Keyword.take(opts, [:now])
+
       ScopedSettings.save(
-        scope.organization_id,
+        org,
         mission_id,
         @section,
         default(),
         token,
         document,
         SettingsAccess.actor(scope),
-        check: &may_change(scope, mission_id, &1, document),
-        audit: &audit(mission_id, &1, document)
+        check: fn current ->
+          with :ok <- may_change(scope, mission_id, current, document),
+               do:
+                 preview(
+                   org,
+                   tightened(org, mission_id, current, document),
+                   acknowledged,
+                   tightening_opts
+                 )
+        end,
+        audit: &audit(org, mission_id, &1, document),
+        after_write: fn current, revision ->
+          tightened = tightened(org, mission_id, current, document)
+          suspend(scope, tightened, revision, mission_id, tightening_opts)
+        end
       )
+    end
+  end
+
+  # #499: the missions this save tightens ('direct' to 'independent', by ScopedSettings' one
+  # rule): the mission itself on a mission save; on an organization save, each mission #430's
+  # list moved that way. Read under the save's lock, so the preview and the suspension agree.
+  defp tightened(org, nil = _mission, current, document) do
+    for %{"before" => "direct", "after" => "independent", "mission_id" => id} <-
+          moved_missions(org, current, document),
+        do: id
+  end
+
+  defp tightened(_org, mission_id, current, document) do
+    before = requirement(current.effective)
+    after_value = requirement(after_effective(current, document))
+    if before == "direct" and after_value == "independent", do: [mission_id], else: []
+  end
+
+  defp preview(_org, [], _acknowledged, _opts), do: :ok
+
+  # ca-security: with nothing registered a tightening is refused, never let through unchecked
+  # (fail closed: a missing config line must not switch the control off).
+  defp preview(org, mission_ids, acknowledged, opts) do
+    case ApprovalTightening.implementation() do
+      nil -> {:error, :approval_tightening_unavailable}
+      tightening -> tightening.preview(org, mission_ids, acknowledged, opts)
+    end
+  end
+
+  defp suspend(_scope, [], _revision, _mission_id, _opts), do: :ok
+
+  defp suspend(scope, mission_ids, revision, mission_id, opts) do
+    level = if mission_id, do: "mission", else: "organization"
+
+    case ApprovalTightening.implementation() do
+      nil ->
+        {:error, :approval_tightening_unavailable}
+
+      tightening ->
+        with {:ok, _suspended} <-
+               tightening.apply(
+                 scope,
+                 scope.organization_id,
+                 mission_ids,
+                 revision.revision_id,
+                 level,
+                 opts
+               ),
+             do: :ok
     end
   end
 
@@ -111,25 +178,30 @@ defmodule Cadence.Governance.ActivationPolicy do
 
   defp requirement(effective), do: (effective || %{})["approval_requirement"]
 
-  # A mission's effective setting after the save: the organization's value with the new override
-  # merged in (a nil override hands it back to the organization), as ScopedSettings.load reads it.
-  defp after_effective(current, %{"value" => nil}), do: current.organization_default
+  # A mission's effective setting after the save, by ScopedSettings' one rule (#430): the
+  # organization's value with the new override merged in, or the organization's when the override
+  # is nil (a mission save only runs while overrides are allowed).
+  defp after_effective(current, document),
+    do:
+      ScopedSettings.effective_for(
+        current.organization_default,
+        current.allow_override,
+        document["value"]
+      )
 
-  defp after_effective(current, %{"value" => value}),
-    do: Map.merge(current.organization_default || %{}, value)
-
-  defp audit(nil, current, document) do
+  defp audit(organization_id, nil, current, document) do
     %{
       "scope" => "organization",
       "before" => %{
         "value" => current.organization_default,
         "allow_override" => current.allow_override
       },
-      "after" => %{"value" => document["value"], "allow_override" => document["allow_override"]}
+      "after" => %{"value" => document["value"], "allow_override" => document["allow_override"]},
+      "missions" => moved_missions(organization_id, current, document)
     }
   end
 
-  defp audit(_mission_id, current, document) do
+  defp audit(_organization_id, _mission_id, current, document) do
     %{
       "scope" => "mission",
       "before" => %{"effective" => current.effective, "override" => current.saved},
@@ -138,6 +210,34 @@ defmodule Cadence.Governance.ActivationPolicy do
         "override" => document["value"]
       }
     }
+  end
+
+  # #430: every mission of the organization whose effective requirement this organization save
+  # changes (turning overrides off or on, or a default change reaching inheriting missions), each
+  # with its raw requirement before and after. Read under the save's own section lock, which
+  # mission saves also take, so it is exactly what the save changed. Missions have no archived
+  # state: every mission row of the organization is read, unpaged.
+  defp moved_missions(organization_id, current, document) do
+    ids = organization_id |> Missions.list_missions() |> Enum.map(& &1.mission_id)
+    snapshots = ScopedSettings.load_many(organization_id, ids, @section, default())
+
+    Enum.flat_map(ids, fn id ->
+      saved = Map.fetch!(snapshots, id).saved
+
+      before =
+        current.organization_default
+        |> ScopedSettings.effective_for(current.allow_override, saved)
+        |> requirement()
+
+      after_value =
+        document["value"]
+        |> ScopedSettings.effective_for(document["allow_override"], saved)
+        |> requirement()
+
+      if before == after_value,
+        do: [],
+        else: [%{"mission_id" => id, "before" => before, "after" => after_value}]
+    end)
   end
 
   def evidence(organization_id, mission_id) do

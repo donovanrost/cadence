@@ -92,8 +92,9 @@ Edit mode turns each line into controls: station multi-select chips (station `co
 `+ station`), a direction + role select per leg (`+ leg`), name template field with token chips (`{station}`,
 `{spacecraft}`, `{scid}`) and live preview. **Generates**: three sample route names (mono chips) +
 `+ 2,997` (`text-3`). (The canvas's "Protocol behavior" line is dropped: a retired concept.)
-A disabled rule renders dimmed with `DISABLED`. Multiple rules on one profile stack as
-separate rule blocks, each with its route count.
+A disabled rule carries a `DISABLED` tag (off, mark + word) and the line "This rule is disabled; it generates no
+routes." It isn't dimmed: its query, route and name keep full contrast (#460). Multiple rules on one profile stack
+as separate rule blocks, each with its route count.
 - **Data:** `rules: [{id, stations: [{id, code, name, transport_id}], legs: [{direction, role}],
   name_template, route_count, samples: [string], enabled}]` (profile-routing §5).
 - A disabled rule's `DISABLED` tag (off, mark + word) keeps the built sentence "This rule is disabled; it generates

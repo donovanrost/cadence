@@ -52,9 +52,8 @@ defmodule Cadence.Reads.CommandMonitor.Query do
         THEN r.requested_by_document->'value' ELSE r.requested_by_document END AS doc
     ) actor
     CROSS JOIN LATERAL (
+      -- #466/#470: never an email or an id as a name (as Reads.Commands' label).
       SELECT coalesce(nullif(nullif(actor.doc->'display_name', 'false'::jsonb), 'null'::jsonb),
-                      nullif(nullif(actor.doc->'email', 'false'::jsonb), 'null'::jsonb),
-                      nullif(nullif(actor.doc->'user_id', 'false'::jsonb), 'null'::jsonb),
                       '"Unknown"'::jsonb) AS value
     ) label
     LEFT JOIN command_queue_entries q ON q.organization_id = $1 AND q.mission_id = $2

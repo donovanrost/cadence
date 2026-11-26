@@ -6,6 +6,7 @@ defmodule Cadence.Management.ProviderAccountHistory do
   """
 
   alias Cadence.Accounts
+  alias Cadence.Accounts.MemberNames
   alias Cadence.Auth.Scope
   alias Cadence.GroundNetworks.ProviderAccounts
 
@@ -31,6 +32,8 @@ defmodule Cadence.Management.ProviderAccountHistory do
           &version(scope.organization_id, provider_account_id, &1)
         )
 
+      people = MemberNames.members(scope.organization_id, Enum.map(versions, & &1.created_by))
+
       {:ok,
        %{
          id: account.provider_account_id,
@@ -39,7 +42,7 @@ defmodule Cadence.Management.ProviderAccountHistory do
          versions:
            [nil | versions]
            |> Enum.zip(versions)
-           |> Enum.map(fn {before, version} -> entry(before, version) end)
+           |> Enum.map(fn {before, version} -> entry(before, version, people) end)
            |> Enum.reverse()
        }}
     end
@@ -52,11 +55,11 @@ defmodule Cadence.Management.ProviderAccountHistory do
     end
   end
 
-  defp entry(before, version) do
+  defp entry(before, version, people) do
     %{
       version: version.version,
       created_at: version.created_at,
-      actor: actor(version.created_by),
+      actor: actor(version.created_by, people),
       changes: if(before, do: changes(before, version), else: [])
     }
   end
@@ -72,12 +75,23 @@ defmodule Cadence.Management.ProviderAccountHistory do
         }
   end
 
-  defp actor(id) when is_binary(id) and id != "" do
-    case Accounts.fetch_user(id) do
-      {:ok, user} -> %{kind: "user", id: id, name: user.display_name || user.email}
-      _not_a_user -> %{kind: "system", id: id, name: nil}
+  # #146 (#468): a person is named, and keeps their id, only while an active member of the
+  # account's organization (one batched lookup per read), never by email. A person who isn't
+  # (a platform admin, someone who has left) reads id and name nil; a non-person stays system.
+  defp actor(id, people) when is_binary(id) and id != "" do
+    case Map.fetch(people, id) do
+      {:ok, name} -> %{kind: "user", id: id, name: name}
+      :error -> outsider(id)
     end
   end
 
-  defp actor(_none), do: nil
+  defp actor(_none, _people), do: nil
+
+  # Only for ids that aren't members: whether the id is a person at all (its kind).
+  defp outsider(id) do
+    case Accounts.fetch_user(id) do
+      {:ok, _person} -> %{kind: "user", id: nil, name: nil}
+      _not_a_user -> %{kind: "system", id: id, name: nil}
+    end
+  end
 end

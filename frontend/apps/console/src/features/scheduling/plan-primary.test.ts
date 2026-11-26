@@ -148,7 +148,8 @@ describe("planPrimary", () => {
     ).toEqual({
       kind: "blocked",
       label: "Approve and book 12 passes",
-      reason: "You drafted this version of the plan, so another org admin approves it.",
+      reason:
+        "You drafted a version of this plan since it was last approved, so another org admin approves it.",
     });
   });
 

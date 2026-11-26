@@ -15,6 +15,14 @@ defmodule CadenceWeb.Console.CommandGroupProblems do
     do: Problem.respond(conn, :invalid_params, details)
 
   def respond(conn, {:error, reason}) when reason in @plain, do: Problem.respond(conn, reason)
+
+  # #622 (#280, U100): through a service the decider is accountable for, or a service nobody is.
+  def respond(conn, {:error, {:command_group_self_approval_not_allowed, %{} = details}}),
+    do: Problem.respond(conn, :command_group_self_approval_not_allowed, details)
+
+  def respond(conn, {:error, {:command_group_approver_authors_unknown, %{} = details}}),
+    do: Problem.respond(conn, :command_group_approver_authors_unknown, details)
+
   def respond(conn, {:error, :unavailable}), do: Problem.respond(conn, :forbidden)
 
   def respond(conn, {:error, {:duplicate_operation, id}}),

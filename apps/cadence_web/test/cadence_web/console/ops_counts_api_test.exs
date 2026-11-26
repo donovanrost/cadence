@@ -108,6 +108,39 @@ defmodule CadenceWeb.Console.OpsCountsAPITest do
     assert posture["total"] == 1
   end
 
+  # #481: retiring every limit definition turns "limits configured" off everywhere it's shown;
+  # retired definitions keep their versions, so the plain latest-version list kept counting them.
+  test "limits aren't configured once every definition is retired", c do
+    ControlPlaneApiFixtures.seed_mission_read_models(c.org.organization_id, c.mission.mission_id)
+    assert configured(c) == {true, true, true}
+
+    for definition <-
+          Cadence.Limits.active_limit_definitions(c.org.organization_id, c.mission.mission_id) do
+      assert {:ok, _} =
+               Cadence.Limits.retire_limit_definition(
+                 c.org.organization_id,
+                 c.mission.mission_id,
+                 definition
+               )
+    end
+
+    assert configured(c) == {false, false, false}
+  end
+
+  # {counts' alarms, counts' posture, GET /fleet}
+  defp configured(c) do
+    data = c |> counts() |> json_response(200) |> Map.fetch!("data")
+
+    fleet =
+      c.user
+      |> TestFixtures.member_conn()
+      |> get("/api/console/v1/missions/#{c.mission.mission_id}/fleet")
+      |> json_response(200)
+
+    {data["alarms"]["limits_configured"], data["posture"]["limits_configured"],
+     fleet["data"]["limits"]["configured"]}
+  end
+
   test "another organization's mission is not found", c do
     stranger = TestFixtures.persist_org!() |> TestFixtures.persist_mission!()
 

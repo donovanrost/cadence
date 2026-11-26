@@ -49,7 +49,15 @@ defmodule CadenceWeb.ControlPlaneApiFixtures do
         capabilities: [:organization_admin]
       })
 
-    assert {:ok, %{api_token: api_token}} = Cadence.Auth.issue_service_identity(service_identity)
+    assert {:ok, %{api_token: api_token}} =
+             Cadence.Auth.issue_service_identity(
+               service_identity,
+               %Cadence.Auth.Scope{
+                 actor_kind: :user,
+                 organization_id: organization.organization_id,
+                 user: %Cadence.Accounts.User{user_id: "user-service-issuer"}
+               }
+             )
 
     %{
       conn: conn,
@@ -57,6 +65,21 @@ defmodule CadenceWeb.ControlPlaneApiFixtures do
       organization_id: organization.organization_id,
       mission_id: mission.mission_id
     }
+  end
+
+  @doc "A mission in the organization, made through the domain (the REST create is retired, #384)."
+  def persist_mission!(organization_id, mission_id) do
+    assert {:ok, mission} =
+             Cadence.Missions.persist_mission(
+               Mission.new(%{
+                 mission_id: mission_id,
+                 organization_id: organization_id,
+                 slug: mission_id,
+                 display_name: mission_id
+               })
+             )
+
+    mission
   end
 
   @doc """
