@@ -43,7 +43,8 @@ own lines; Platform (backend) or Console (frontend) reviews.
 
 ### Headcount
 
-- Total live agents across both machines: **14**, including the CTO. Per machine: **7**.
+- Total live agents across both machines: **15**, including the CTO. Per machine: **7** on laptop 1 (it
+  swaps under load, so it takes no more), **8** on laptop 2.
 - Each Head may hire **one** agent without asking; a second needs the CTO's OK (message the CTO with why).
 - **Codex** may be hired for backend, infra, CI, data and scale work. **Never for frontend or UX.**
 - Pick model and effort for the job: Heads and design/security work on Claude Opus, high effort. Well-scoped
@@ -150,6 +151,7 @@ Laptop 1 worktrees live in `~/.herdr/worktrees/cadence/<handle>`. The new agent 
 | commanding-eng | Engineer, Commanding & Approvals (head: commanding) | laptop 2 | `donovans-macbook-pro-1/commanding-eng` | Claude Sonnet 5.5, high | 2026-11-26 |
 | platform-eng | Engineer, Platform (head: platform) | laptop 1 | `platform-eng` | Codex, high | 2026-11-25 |
 | platform-sim | Engineer, Platform (head: platform) | laptop 2 | `donovans-macbook-pro-1/platform-sim` | Codex, high | 2026-11-26 |
+| ground-eng | Engineer, Ground & Comms (head: ground) | laptop 2 | `donovans-macbook-pro-1/ground-eng` | Codex, high | 2026-11-26 |
 
 Codex (0.172.0) is installed and signed in on both laptops, under the node version `mise.toml` pins; a Codex
 hire can go on either machine. If that pin moves, install Codex for the new node version too.
