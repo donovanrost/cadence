@@ -350,11 +350,11 @@ defmodule PassSearch do
   end
 end
 
+# Missing trailing arguments take their defaults.
 [n, days, step_s, conc] =
-  case System.argv() do
-    [] -> [500, 7, 60, System.schedulers_online()]
-    a -> Enum.map(a, &String.to_integer/1)
-  end
+  System.argv()
+  |> Enum.map(&String.to_integer/1)
+  |> Enum.concat([500, 7, 60, System.schedulers_online()] |> Enum.drop(length(System.argv())))
 
 deg = :math.pi() / 180.0
 epoch_jd = 2_461_370.5
