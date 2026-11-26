@@ -207,6 +207,13 @@ Each spacecraft emits all ten packet families from the assigned demo YAML every
 second: 100 packets/second across the ten vehicles. The other 490 spacecraft
 remain configured and selectable, with no simulated live feed.
 
+Use `mise run earendil-live -- --craft 500 --shape peak` for all 500
+configured spacecraft, or `--shape average --per-site 8` (or `16`) for up to
+that many spacecraft per site. The fleet size must match spacecraft already
+configured and activated on the target Cadence node. Additional rehearsal
+paths use dedicated listeners at port `43000 + SCID`. For the simulator's
+standalone 1,000-path benchmark, see [Measure simulator contact load](measure-simulator-load.md).
+
 The simulator sends CCSDS TM frames over the ten local TCP ingress paths. Cadence
 performs normal frame processing, database-driven decoding, current-value updates,
 monitoring, and history persistence. Values are synthetic generic spacecraft data,

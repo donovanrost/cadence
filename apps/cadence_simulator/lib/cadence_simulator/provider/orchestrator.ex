@@ -1,6 +1,6 @@
 defmodule CadenceSimulator.Provider.Orchestrator do
   @moduledoc """
-  Advances legacy reservations and Provider Contract v1 Contact lifecycles.
+  Advances reservation and Provider Contract v1 Contact lifecycles.
 
   Reconciliation is deliberately idempotent so restart recovery and manual
   test clocks exercise the same path as the periodic runtime tick.
@@ -16,14 +16,15 @@ defmodule CadenceSimulator.Provider.Orchestrator do
     ContactLifecycle,
     ContactResults,
     Contacts,
+    Schedule,
     SpacecraftFrames,
+    Store,
     UplinkSessions
   }
 
   alias CadenceSimulator.Providers.DatabaseDynamics
 
   @tick_ms 100
-  @acquisition_lead_seconds 2
 
   def start_link(opts) when is_list(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -54,6 +55,7 @@ defmodule CadenceSimulator.Provider.Orchestrator do
     {:ok,
      %{
        tick_ms: tick_ms,
+       schedule: %Schedule{},
        streams: %{},
        uplinks: %{},
        provider_defaults: Keyword.get(opts, :provider_defaults, [])
@@ -62,7 +64,7 @@ defmodule CadenceSimulator.Provider.Orchestrator do
 
   @impl true
   def handle_call({:reconcile, now}, _from, state) do
-    {:reply, :ok, reconcile_all(state, now)}
+    {:reply, :ok, reconcile_due(state, now, true)}
   end
 
   def handle_call({:uplink_session, contact_id}, _from, state) do
@@ -75,8 +77,9 @@ defmodule CadenceSimulator.Provider.Orchestrator do
 
   @impl true
   def handle_info(:tick, state) do
+    state = reconcile_due(state, DateTime.utc_now(), false)
     schedule_tick(state.tick_ms)
-    {:noreply, reconcile_all(state, DateTime.utc_now())}
+    {:noreply, state}
   end
 
   def handle_info({:EXIT, _pid, _reason}, state), do: {:noreply, state}
@@ -105,54 +108,60 @@ defmodule CadenceSimulator.Provider.Orchestrator do
     end
   end
 
-  defp reconcile_all(state, now) do
-    state
-    |> reconcile_reservations(now)
-    |> reconcile_contacts(now)
-    |> stop_orphaned_streams()
-  end
+  defp reconcile_due(state, now, manual?) do
+    {schedule, reset?, changed_resources} = Schedule.refresh(state.schedule)
+    state = %{state | schedule: schedule}
+    state = if manual? or reset?, do: stop_orphaned_streams(state), else: state
+    state = Enum.reduce(changed_resources, state, &stop_inactive_stream(&2, &1))
+    {due, schedule} = Schedule.take_due(state.schedule, now)
 
-  defp reconcile_reservations(state, now) do
-    guarded(state, "reservations", fn ->
-      Enum.reduce(Provider.list_reservations(), state, &reconcile_reservation_step(&2, &1, now))
-    end)
-  end
-
-  defp reconcile_reservation_step(state, reservation, now) do
-    guarded(state, "reservation #{reservation["id"]}", fn ->
-      reconcile_reservation_for_run(state, reservation, now)
-    end)
-  end
-
-  defp reconcile_contacts(state, now) do
-    guarded(state, "contacts", fn ->
-      Enum.reduce(Contacts.list_internal(), state, &reconcile_contact_step(&2, &1, now))
-    end)
-  end
-
-  defp reconcile_contact_step(state, contact, now) do
-    guarded(state, "contact #{contact["id"]}", fn ->
-      reconcile_contact_for_run(state, contact, now)
-    end)
-  end
-
-  # qa #46: the tick must outlive a failing call. A crash here restarts the Orchestrator
-  # with empty state, which orphans its streams and the uplink peers linked to it (the #38
-  # attestation_peer_mismatch). A step that exits (a call timeout) or raises (the Store's
-  # tables gone while it restarts) is skipped and retried on the next tick; the state from
-  # before the step is kept. Store reads and writes no longer go through a process, so
-  # they don't time out.
-  defp guarded(state, step, fun) do
-    fun.()
+    Enum.reduce(due, %{state | schedule: schedule}, &reconcile_step(&2, &1, now))
   rescue
     error in ArgumentError ->
-      skipped(step, Exception.message(error))
-      state
-  catch
-    :exit, reason ->
-      skipped(step, Exception.format_exit(reason))
-      state
+      skipped("schedule", Exception.message(error))
+      %{state | schedule: %Schedule{}}
   end
+
+  defp stop_inactive_stream(state, {kind, id}) do
+    if Map.has_key?(state.streams, id) or Map.has_key?(state.uplinks, id) do
+      case Store.fetch(kind, id) do
+        {:ok, %{"status" => "active"}} -> state
+        _other -> stop_stream(state, id)
+      end
+    else
+      state
+    end
+  end
+
+  defp reconcile_step(state, {kind, id} = key, now) do
+    try do
+      state =
+        case Store.fetch(kind, id) do
+          {:ok, resource} -> reconcile_resource(state, kind, resource, now)
+          {:error, :not_found} -> stop_stream(state, id)
+        end
+
+      %{state | schedule: Schedule.update(state.schedule, key)}
+    rescue
+      error in ArgumentError ->
+        retry_step(state, key, Exception.message(error))
+    catch
+      :exit, reason ->
+        retry_step(state, key, Exception.format_exit(reason))
+    end
+  end
+
+  defp retry_step(state, key, reason) do
+    skipped(inspect(key), reason)
+    stop_untracked(state)
+    %{state | schedule: Schedule.update(state.schedule, key)}
+  end
+
+  defp reconcile_resource(state, :contact, contact, now),
+    do: reconcile_contact_for_run(state, contact, now)
+
+  defp reconcile_resource(state, :reservation, reservation, now),
+    do: reconcile_reservation_for_run(state, reservation, now)
 
   defp skipped(step, reason),
     do: Logger.warning("provider orchestrator skipped #{step} this tick: #{reason}")
@@ -229,7 +238,7 @@ defmodule CadenceSimulator.Provider.Orchestrator do
   end
 
   defp reconcile_confirmed_contact(state, contact, run, starts_at, current) do
-    prepass_at = DateTime.add(starts_at, -@acquisition_lead_seconds)
+    prepass_at = Schedule.prepass_at(starts_at)
 
     cond do
       contact["pass_phase"] == "scheduled" and DateTime.compare(current, prepass_at) != :lt ->
@@ -249,7 +258,7 @@ defmodule CadenceSimulator.Provider.Orchestrator do
   end
 
   defp acquisition_delivery(run, contact) do
-    if fault?(run, contact, "acquisition_failure_rate", :acquisition) do
+    if Schedule.fault?(run, contact, "acquisition_failure_rate", :acquisition) do
       contact["delivery"]
       |> Map.put("status", "failed")
       |> Map.put("reason", "simulated_acquisition_failure")
@@ -269,8 +278,8 @@ defmodule CadenceSimulator.Provider.Orchestrator do
   end
 
   defp reconcile_active_contact(state, contact, run, starts_at, ends_at, current) do
-    midpoint = DateTime.add(starts_at, div(DateTime.diff(ends_at, starts_at), 2))
-    postpass_at = DateTime.add(ends_at, -1)
+    midpoint = Schedule.midpoint(starts_at, ends_at)
+    postpass_at = Schedule.postpass_at(ends_at)
 
     cond do
       run["state"] != "running" ->
@@ -307,7 +316,7 @@ defmodule CadenceSimulator.Provider.Orchestrator do
   defp early_termination?(run, contact, current, midpoint) do
     DateTime.compare(current, midpoint) != :lt and
       get_in(contact, ["delivery", "status"]) not in ["failed", "ended"] and
-      fault?(run, contact, "early_termination_rate", :early_termination)
+      Schedule.fault?(run, contact, "early_termination_rate", :early_termination)
   end
 
   defp fail_active_delivery(state, contact) do
@@ -425,9 +434,9 @@ defmodule CadenceSimulator.Provider.Orchestrator do
          {:ok, starts_at} <- parse_time(reservation["starts_at"]),
          effective_now = effective_now(run, now),
          true <-
-           DateTime.compare(effective_now, DateTime.add(starts_at, -@acquisition_lead_seconds)) !=
+           DateTime.compare(effective_now, Schedule.prepass_at(starts_at)) !=
              :lt do
-      if fault?(run, reservation, "acquisition_failure_rate", :acquisition) do
+      if Schedule.fault?(run, reservation, "acquisition_failure_rate", :acquisition) do
         {:ok, _updated} =
           Provider.update_reservation_status(
             reservation,
@@ -474,7 +483,7 @@ defmodule CadenceSimulator.Provider.Orchestrator do
     {:ok, starts_at} = parse_time(reservation["starts_at"])
     {:ok, ends_at} = parse_time(reservation["ends_at"])
     now = effective_now(run, now)
-    midpoint = DateTime.add(starts_at, div(DateTime.diff(ends_at, starts_at), 2))
+    midpoint = Schedule.midpoint(starts_at, ends_at)
 
     cond do
       run["state"] != "running" ->
@@ -486,7 +495,7 @@ defmodule CadenceSimulator.Provider.Orchestrator do
         state
 
       DateTime.compare(now, midpoint) != :lt and
-          fault?(run, reservation, "early_termination_rate", :early_termination) ->
+          Schedule.fault?(run, reservation, "early_termination_rate", :early_termination) ->
         state = stop_stream(state, reservation["id"])
 
         {:ok, _updated} =
@@ -639,14 +648,15 @@ defmodule CadenceSimulator.Provider.Orchestrator do
     :exit, _reason -> %{}
   end
 
-  # When the active set can't be read, skip the sweep: an empty set would stop every stream.
   defp stop_orphaned_streams(state) do
     stop_untracked(state)
 
-    case active_ids() do
-      {:ok, active_ids} -> stop_streams_except(state, active_ids)
-      :unavailable -> state
-    end
+    state =
+      Enum.reduce(state.streams, state, fn {id, stream}, acc ->
+        stop_inactive_stream(acc, {stream.resource_type, id})
+      end)
+
+    Enum.reduce(Map.keys(state.uplinks), state, &stop_inactive_stream(&2, {:contact, &1}))
   end
 
   # Every stream and uplink peer this process starts is linked to it. One it no longer tracks
@@ -669,36 +679,6 @@ defmodule CadenceSimulator.Provider.Orchestrator do
     end
 
     :ok
-  end
-
-  defp active_ids do
-    active_reservation_ids =
-      Provider.list_reservations(%{"status" => "active"})
-      |> Enum.map(& &1["id"])
-
-    active_contact_ids =
-      Contacts.list_internal(%{"status" => "active"})
-      |> Enum.map(& &1["id"])
-
-    {:ok, MapSet.new(active_reservation_ids ++ active_contact_ids)}
-  rescue
-    error in ArgumentError ->
-      skipped("orphaned stream sweep", Exception.message(error))
-      :unavailable
-  catch
-    :exit, reason ->
-      skipped("orphaned stream sweep", Exception.format_exit(reason))
-      :unavailable
-  end
-
-  defp stop_streams_except(state, active_ids) do
-    state = %{state | uplinks: UplinkSessions.stop_except(state.uplinks, active_ids)}
-
-    Enum.reduce(Map.keys(state.streams), state, fn reservation_id, acc ->
-      if MapSet.member?(active_ids, reservation_id),
-        do: acc,
-        else: stop_stream(acc, reservation_id)
-    end)
   end
 
   defp maybe_fail_active_reservation(reservation_id, reason) do
@@ -727,12 +707,6 @@ defmodule CadenceSimulator.Provider.Orchestrator do
       _other ->
         :ok
     end
-  end
-
-  defp fault?(run, reservation, key, kind) do
-    rate = run["scenario_snapshot"]["fault_profile"][key]
-    roll = :erlang.phash2({run["seed"], reservation["id"], kind}, 1_000_000) / 1_000_000
-    rate > 0 and roll < rate
   end
 
   defp parse_time(value) do

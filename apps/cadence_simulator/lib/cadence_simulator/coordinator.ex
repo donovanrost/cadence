@@ -26,6 +26,7 @@ defmodule CadenceSimulator.Coordinator do
 
   alias CadenceSimulator.{
     GeneratorWorker,
+    CatalogCache,
     PacketEncoder,
     SendBuffer,
     SequenceAllocator,
@@ -128,8 +129,8 @@ defmodule CadenceSimulator.Coordinator do
 
     generator_count = Configuration.normalize_generator_count(opts[:generator_count])
 
-    with {:ok, provider_state} <- provider_module.init(provider_config),
-         {:ok, encoder} <- Configuration.require_encoder(opts),
+    with {:ok, {encoder, catalog}} <- CatalogCache.fetch(opts, provider_module),
+         {:ok, provider_state} <- provider_module.init(with_catalog(provider_config, catalog)),
          {:ok, frame_state} <- Configuration.init_frame_state(frame) do
       parallel_mode =
         Configuration.normalize_parallel_mode(
@@ -202,6 +203,9 @@ defmodule CadenceSimulator.Coordinator do
         {:stop, reason}
     end
   end
+
+  defp with_catalog(config, nil), do: config
+  defp with_catalog(config, catalog), do: Map.put(config, :catalog, catalog)
 
   @impl true
   def handle_info(:generate, %{parallel_mode: :parallel} = state) do

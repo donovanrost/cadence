@@ -3,7 +3,6 @@ defmodule CadenceSimulator.Coordinator.Configuration do
 
   require Logger
 
-  alias CadenceSimulator.PacketEncoder
   alias CadenceSimulator.Providers.{BasicDynamics, DatabaseDynamics, ScenarioProvider}
   alias CCSDS.SDLP.TM.Segmentation
 
@@ -26,19 +25,6 @@ defmodule CadenceSimulator.Coordinator.Configuration do
 
       true ->
         {BasicDynamics, Keyword.get(opts, :provider_config, %{})}
-    end
-  end
-
-  def require_encoder(opts) do
-    cond do
-      definitions_content = Keyword.get(opts, :definitions_content) ->
-        PacketEncoder.load_string(definitions_content)
-
-      definitions_path = Keyword.get(opts, :definitions_path) ->
-        PacketEncoder.load(definitions_path)
-
-      true ->
-        {:error, :missing_definitions}
     end
   end
 
@@ -170,11 +156,7 @@ defmodule CadenceSimulator.Coordinator.Configuration do
   end
 
   defp provider_config(DatabaseDynamics, opts) do
-    %{
-      definitions_path: Keyword.get(opts, :definitions_path),
-      definitions_content: Keyword.get(opts, :definitions_content),
-      noise_amplitude: Keyword.get(opts, :noise_amplitude, 1.0)
-    }
+    %{noise_amplitude: Keyword.get(opts, :noise_amplitude, 1.0)}
   end
 
   defp provider_config(ScenarioProvider, opts) do

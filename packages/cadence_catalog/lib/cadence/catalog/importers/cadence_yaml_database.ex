@@ -34,9 +34,14 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase do
   def validate(%Source{} = source), do: Validation.validate(source)
 
   @impl true
-  def import(%Source{} = source, %{import_run_id: import_run_id}) when is_binary(import_run_id) do
-    with :ok <- validate(source),
-         {:ok, parsed} <- Validation.parse(source) do
+  def import(%Source{} = source, context) do
+    with {:ok, result, _document} <- import_with_document(source, context), do: {:ok, result}
+  end
+
+  @doc "Imports a YAML source and returns the validated document used to generate declarations."
+  def import_with_document(%Source{} = source, %{import_run_id: import_run_id})
+      when is_binary(import_run_id) do
+    with {:ok, parsed} <- Validation.parse(source) do
       {declarations, diagnostics} = translate(parsed, source, import_run_id)
 
       layer =
@@ -64,7 +69,7 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase do
            length(Map.get(parsed, "packets", [])) + length(Map.get(parsed, "commands", [])),
          diagnostics: diagnostics,
          metadata: %{"import_run_id" => import_run_id}
-       })}
+       }), parsed}
     end
   end
 

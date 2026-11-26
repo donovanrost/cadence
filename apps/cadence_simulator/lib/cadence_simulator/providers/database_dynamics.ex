@@ -9,8 +9,6 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics do
 
   @behaviour CadenceSimulator.DynamicsProvider
 
-  require Logger
-
   alias Cadence.Catalog.Command.Compiler.RuntimeDefinition
   alias Cadence.Catalog.Command.StateEffect
   alias Cadence.Catalog.MissionModel.Declaration
@@ -36,34 +34,40 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics do
 
   @impl true
   def init(config) do
-    with {:ok, definitions_content, source_attrs} <- load_definitions(config),
-         {:ok, catalog_database} <-
-           CatalogDatabase.load_yaml(definitions_content, source_attrs),
-         [_ | _] <- catalog_database.packet_definitions do
-      {packets, item_count} = extract_definitions(catalog_database)
-      items_by_qualified_name = index_items(packets)
-      command_state_table = init_command_state()
-
-      Logger.info("""
-      DatabaseDynamics initialized:
-        packets: #{length(packets)}
-        items: #{item_count}
-        commands: #{command_count(catalog_database)}
-      """)
-
+    with {:ok, prepared} <- prepared_catalog(config) do
       {:ok,
-       %__MODULE__{
-         catalog_database: catalog_database,
-         command_state_table: command_state_table,
-         items_by_qualified_name: items_by_qualified_name,
-         packets: packets,
-         packet_count: length(packets),
-         item_count: item_count,
-         noise_amplitude: Map.get(config, :noise_amplitude, @default_noise_amplitude)
+       %{
+         prepared
+         | command_state_table: init_command_state(),
+           noise_amplitude: Map.get(config, :noise_amplitude, @default_noise_amplitude)
        }}
     else
-      nil -> {:error, {:failed_to_load_definitions, :telemetry_catalog_not_found}}
       {:error, reason} -> {:error, {:failed_to_load_definitions, reason}}
+    end
+  end
+
+  @doc false
+  def prepare_catalog(%CatalogDatabase{packet_definitions: [_ | _]} = database) do
+    {packets, item_count} = extract_definitions(database)
+
+    {:ok,
+     %__MODULE__{
+       catalog_database: database,
+       items_by_qualified_name: index_items(packets),
+       packets: packets,
+       packet_count: length(packets),
+       item_count: item_count
+     }}
+  end
+
+  def prepare_catalog(%CatalogDatabase{}), do: {:error, :telemetry_catalog_not_found}
+
+  defp prepared_catalog(%{catalog: %__MODULE__{} = catalog}), do: {:ok, catalog}
+
+  defp prepared_catalog(config) do
+    with {:ok, definitions_content, source_attrs} <- load_definitions(config),
+         {:ok, database} <- CatalogDatabase.load_yaml(definitions_content, source_attrs) do
+      prepare_catalog(database)
     end
   end
 
@@ -532,8 +536,6 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics do
     |> Enum.flat_map(fn item -> [{item.qualified_name, item}, {item.parameter_id, item}] end)
     |> Map.new()
   end
-
-  defp command_count(%CatalogDatabase{} = database), do: length(database.command_definitions)
 
   defp state_values(%Declaration{} = type) do
     type.definition

@@ -17,6 +17,7 @@ defmodule CadenceSimulator.Application do
   @spec children(Configuration.t()) :: [Supervisor.child_spec() | {module(), term()}]
   def children(%Configuration{} = configuration) do
     [
+      CadenceSimulator.CatalogCache,
       {DynamicSupervisor, strategy: :one_for_one, name: CadenceSimulator.RuntimeSupervisor},
       {Store, configuration.store},
       {Orchestrator, Configuration.orchestrator_options(configuration)}

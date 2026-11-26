@@ -5,31 +5,22 @@ defmodule CadenceSimulator.Provider.Store do
   The store intentionally uses DETS so the simulator remains an external peer
   and does not acquire a runtime dependency on Cadence's database.
 
-  Reads go to an ETS mirror in the calling process, never through this process (qa #46).
-  The Orchestrator reads on every 100 ms tick. When each list scanned the DETS file
-  inside this one process, a load spike queued calls past their 5 s timeout and crashed
-  the Orchestrator mid-pass, which orphans uplink peers.
+  Writes are visible in ETS immediately. Dirty keys are copied to DETS and
+  synced in batches. A clean shutdown and `flush/0` persist pending changes.
+  An abrupt exit can lose writes since the last batch.
 
-  * A write lands in ETS at once, so every reader sees it. The caller then waits, at
-    most `@persist_timeout_ms`, for this process to copy the key's current ETS value to
-    DETS and sync. It copies the value, not the message, so DETS converges on ETS
-    whatever order writers race in.
-  * Durability: a write that returned normally is on disk. One whose wait timed out
-    (logged) is still queued here and persists when this process catches up; a crash
-    before then loses it. A clean stop flushes the whole mirror.
-  * Sequence numbers and fault counters are atomic ETS counters.
+  Sequence numbers and fault counters are atomic ETS counters.
   """
 
   use GenServer
-
-  require Logger
 
   @table :cadence_simulator_provider_store
   @mirror :cadence_simulator_provider_store_mirror
 
   @resource_kinds [:scenario, :run, :reservation, :delivery_profile, :opportunity, :contact]
   @sequence_key {:metadata, :event_sequence}
-  @persist_timeout_ms 1_000
+  @flush_interval_ms 25
+  @scheduled_kinds [:run, :reservation, :contact]
 
   @type resource_kind ::
           :scenario | :run | :reservation | :delivery_profile | :opportunity | :contact
@@ -40,8 +31,13 @@ defmodule CadenceSimulator.Provider.Store do
 
   @spec put(resource_kind(), map()) :: {:ok, map()}
   def put(kind, %{"id" => id} = resource) when kind in @resource_kinds do
-    true = :ets.insert(@mirror, {{kind, id}, resource})
-    persist([{kind, id}])
+    key = {kind, id}
+    objects = [{key, resource}, {{:dirty, key}, true}]
+
+    objects =
+      if kind in @scheduled_kinds, do: [{{:schedule_change, key}, true} | objects], else: objects
+
+    true = :ets.insert(@mirror, objects)
     {:ok, resource}
   end
 
@@ -70,8 +66,15 @@ defmodule CadenceSimulator.Provider.Store do
       |> Map.put("sequence", sequence)
       |> Map.put_new("occurred_at", DateTime.utc_now() |> DateTime.to_iso8601())
 
-    true = :ets.insert(@mirror, {{:event, sequence}, stored_event})
-    persist([{:event, sequence}, @sequence_key])
+    key = {:event, sequence}
+
+    true =
+      :ets.insert(@mirror, [
+        {key, stored_event},
+        {{:dirty, key}, true},
+        {{:dirty, @sequence_key}, true}
+      ])
+
     {:ok, stored_event}
   end
 
@@ -120,12 +123,20 @@ defmodule CadenceSimulator.Provider.Store do
       :ets.update_counter(@mirror, key, [{2, 0}, {2, 1, limit, limit}], {key, 0})
 
     if consumed < limit do
-      persist([key])
+      true = :ets.insert(@mirror, {{:dirty, key}, true})
       true
     else
       false
     end
   end
+
+  @doc false
+  def schedule_generation do
+    :ets.lookup_element(@mirror, {:schedule, :generation}, 2)
+  end
+
+  @doc false
+  def take_schedule_changes, do: take_marked(:schedule_change)
 
   @doc false
   def clear do
@@ -156,7 +167,9 @@ defmodule CadenceSimulator.Provider.Store do
           ])
 
         @mirror = :dets.to_ets(@table, mirror)
-        {:ok, %{table: @table, path: path}}
+        reset_schedule_generation()
+        schedule_flush()
+        {:ok, @table}
 
       {:error, reason} ->
         {:stop, {:provider_store_open_failed, path, reason}}
@@ -164,49 +177,64 @@ defmodule CadenceSimulator.Provider.Store do
   end
 
   @impl true
-  def handle_call({:persist, keys}, _from, state) do
-    Enum.each(keys, &persist_key(state.table, &1))
-    :ok = :dets.sync(state.table)
-    {:reply, :ok, state}
-  end
-
-  def handle_call(:clear, _from, state) do
+  def handle_call(:clear, _from, table) do
     true = :ets.delete_all_objects(@mirror)
-    :ok = :dets.delete_all_objects(state.table)
-    :ok = :dets.sync(state.table)
-    {:reply, :ok, state}
+    reset_schedule_generation()
+    :ok = :dets.delete_all_objects(table)
+    :ok = :dets.sync(table)
+    {:reply, :ok, table}
   end
 
-  # Persists queued before this call are already handled, in order.
-  def handle_call(:flush, _from, state) do
-    :ok = :dets.sync(state.table)
-    {:reply, :ok, state}
+  def handle_call(:flush, _from, table) do
+    :ok = persist_batch(table)
+    {:reply, :ok, table}
   end
 
   @impl true
-  def terminate(_reason, state) do
-    # Persist whatever is still queued: the mirror holds every write.
-    @table = :ets.to_dets(@mirror, state.table)
-    :dets.close(state.table)
+  def handle_info(:flush, table) do
+    :ok = persist_batch(table)
+    schedule_flush()
+    {:noreply, table}
   end
 
-  # The write is already visible in ETS. If this process is too slow to answer, the
-  # request stays queued and persists later; the caller isn't held up or crashed.
-  defp persist(keys) do
-    GenServer.call(__MODULE__, {:persist, keys}, @persist_timeout_ms)
-  catch
-    :exit, {:timeout, _call} ->
-      Logger.warning(
-        "provider store: persisting #{inspect(keys)} is queued past #{@persist_timeout_ms} ms"
-      )
+  @impl true
+  def terminate(_reason, table) do
+    :ok = persist_batch(table)
+    :dets.close(table)
   end
 
-  defp persist_key(table, key) do
-    case :ets.lookup(@mirror, key) do
-      [object] -> :ok = :dets.insert(table, object)
-      [] -> :ok = :dets.delete(table, key)
+  defp reset_schedule_generation do
+    true = :ets.insert(@mirror, {{:schedule, :generation}, make_ref()})
+  end
+
+  defp schedule_flush, do: Process.send_after(self(), :flush, @flush_interval_ms)
+
+  defp persist_batch(table) do
+    objects = Enum.flat_map(take_marked(:dirty), &:ets.lookup(@mirror, &1))
+
+    case objects do
+      [] ->
+        :ok
+
+      [_ | _] ->
+        :ok = :dets.insert(table, objects)
+        :dets.sync(table)
     end
   end
+
+  defp take_marked(marker), do: take_marked(marker, :ets.next(@mirror, {marker, 0}), [])
+
+  defp take_marked(marker, {marker, key} = tagged, keys) do
+    keys =
+      case :ets.take(@mirror, tagged) do
+        [_] -> [key | keys]
+        [] -> keys
+      end
+
+    take_marked(marker, :ets.next(@mirror, tagged), keys)
+  end
+
+  defp take_marked(_marker, _next, keys), do: keys
 
   # Events after `cursor`, in sequence order, read lazily in chunks.
   defp events_after(cursor) do
