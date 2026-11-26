@@ -14,13 +14,14 @@ defmodule Cadence.Reads.OrganizationAudit do
   is empty; it stays so the console can say when a source is absent.
   """
 
-  alias Cadence.{Accounts, Missions}
-  alias Cadence.Accounts.MembershipAdministration
+  alias Cadence.Accounts.{MemberNames, MembershipAdministration}
   alias Cadence.Administration.PlatformAudit
   alias Cadence.Alarms.Queries, as: Alarms
+  alias Cadence.Auth
   alias Cadence.Configuration.Status
   alias Cadence.Dashboards.ConfigAudit
   alias Cadence.Management.{Contacts, DataSources}
+  alias Cadence.Missions
 
   alias Cadence.Reads.OrganizationAudit.{
     AccountEvents,
@@ -62,7 +63,12 @@ defmodule Cadence.Reads.OrganizationAudit do
       |> Enum.filter(&keep?(&1, opts))
       |> Enum.sort_by(& &1.at, {:desc, DateTime})
 
-    page = events |> Enum.drop(opts.offset) |> Enum.take(opts.limit) |> with_actor_names()
+    page =
+      events
+      |> Enum.drop(opts.offset)
+      |> Enum.take(opts.limit)
+      |> named(organization_id)
+
     next = opts.offset + length(page)
 
     %{
@@ -185,7 +191,11 @@ defmodule Cadence.Reads.OrganizationAudit do
     %{invitations: invitations, memberships: memberships} =
       MembershipAdministration.access_history(organization_id)
 
-    people = people(memberships)
+    people =
+      organization_id
+      |> MemberNames.ever_members(Enum.map(memberships, & &1.user_id))
+      |> Map.new(fn {id, {name, _state, _membership}} -> {id, name} end)
+
     accepted = for i <- invitations, i.accepted_by, into: MapSet.new(), do: i.accepted_by
 
     Enum.flat_map(invitations, &invitation_events/1) ++
@@ -200,7 +210,7 @@ defmodule Cadence.Reads.OrganizationAudit do
         "access",
         invitation.sent_at,
         user(invitation.invited_by),
-        "Invited #{invitation.email} as #{role(invitation.role)}",
+        "Invited #{invitation.email}#{as(invitation.role)}",
         target: target
       ),
       invitation.accepted_at &&
@@ -208,7 +218,7 @@ defmodule Cadence.Reads.OrganizationAudit do
           "access",
           invitation.accepted_at,
           user(invitation.accepted_by),
-          "Accepted the invitation and joined as #{role(invitation.role)}",
+          "Accepted the invitation and joined#{as(invitation.role)}",
           target: %{kind: "member", id: invitation.accepted_by, label: invitation.email}
         ),
       invitation.revoked_at &&
@@ -235,7 +245,7 @@ defmodule Cadence.Reads.OrganizationAudit do
             "access",
             membership.began_at,
             %{kind: "user", id: membership.user_id, name: label},
-            "Joined as #{role(membership.role)}",
+            "Joined#{as(membership.role)}",
             target: target
           )
         ]
@@ -248,22 +258,20 @@ defmodule Cadence.Reads.OrganizationAudit do
             )
   end
 
-  defp administration(%{"action" => "role_changed", "from" => from, "to" => to}, label),
-    do: "Changed #{label || "a member"}'s role from #{role(from)} to #{role(to)}"
+  defp administration(%{"action" => "role_changed", "from" => from, "to" => to}, label) do
+    case {role(from), role(to)} do
+      {from, to} when is_binary(from) and is_binary(to) ->
+        "Changed #{label || "a member"}'s role from #{from} to #{to}"
+
+      _unknown ->
+        "Changed #{label || "a member"}'s role"
+    end
+  end
 
   defp administration(%{"action" => "removed"}, label),
     do: "Removed #{label || "a member"} from the organization"
 
   defp administration(%{"action" => action}, _label), do: to_string(action)
-
-  defp people(memberships) do
-    Map.new(memberships, fn %{user_id: id} ->
-      case Accounts.fetch_user(id) do
-        {:ok, user} -> {id, user.display_name || user.email}
-        _missing -> {id, nil}
-      end
-    end)
-  end
 
   defp user(id) when is_binary(id), do: %{kind: "user", id: id, name: nil}
   defp user(_none), do: nil
@@ -302,30 +310,80 @@ defmodule Cadence.Reads.OrganizationAudit do
   defp actor(%{kind: _} = actor), do: actor
   defp actor(_none), do: nil
 
-  # Actor documents often carry only an id: name the people once per page.
-  defp with_actor_names(events) do
-    names =
-      events
-      |> Enum.flat_map(fn
-        %{actor: %{id: id, name: nil}} when is_binary(id) -> [id]
-        _named -> []
-      end)
-      |> Enum.uniq()
-      |> Map.new(fn id ->
-        case Accounts.fetch_user(id) do
-          {:ok, user} -> {id, user.display_name || user.email}
-          _system -> {id, nil}
-        end
-      end)
+  # #470: every actor on the page is named here, once, by the organization's own Audit rule
+  # (setup.md C1 and its exception, OK'd by ca-security, ux and lead): a current member by their
+  # display name (nil without one) with their id; a former member by their display name, with
+  # no id; anyone else, a platform admin included, as {user, nil, nil}. A service by its live row in this
+  # organization; another's as {service, nil, nil}. A name stored in an actor document is never
+  # used for a person or a service (it can be an email from before #466/#471). Other kinds
+  # (Cadence's own) keep theirs.
+  @doc false
+  def named(events, organization_id) do
+    actors = Enum.map(events, & &1.actor)
+    members = for %{target: %{kind: "member", id: id}} when is_binary(id) <- events, do: id
+    users = MemberNames.ever_members(organization_id, actor_ids(actors, "user") ++ members)
+    services = Auth.organization_service_identities(organization_id, actor_ids(actors, "service"))
 
-    Enum.map(events, fn
-      %{actor: %{id: id, name: nil} = actor} = event when is_binary(id) ->
-        %{event | actor: %{actor | name: Map.get(names, id)}}
-
-      event ->
-        event
+    Enum.map(events, fn event ->
+      %{event | actor: name(event.actor, users, services)}
+      |> without_former_id(users, organization_id)
     end)
   end
+
+  # A former member's id isn't sent anywhere in the Audit (ca-security, #523): not as an actor,
+  # not as a membership row's target, and not inside the event's id, which gets an opaque key.
+  defp without_former_id(%{target: %{kind: "member", id: id} = target} = event, users, org)
+       when is_binary(id) do
+    case Map.get(users, id) do
+      {_name, :active, _membership} ->
+        event
+
+      former_or_unknown ->
+        key = opaque(org, former_or_unknown)
+
+        %{
+          event
+          | target: %{target | id: nil},
+            id: String.replace(event.id, ":member:#{id}:", ":member:#{key}:")
+        }
+    end
+  end
+
+  defp without_former_id(event, _users, _org), do: event
+
+  # Keyed by the organization and the membership row's own id, never the user id, so no id held
+  # elsewhere matches it; unique per membership by construction (api-ops, ca-security).
+  defp opaque(org, {_name, _state, membership_id}),
+    do:
+      :crypto.hash(:sha256, "audit-member:#{org}:#{membership_id}")
+      |> Base.url_encode64(padding: false)
+      |> binary_part(0, 16)
+
+  defp opaque(_org, nil), do: "unknown"
+
+  defp actor_ids(actors, kind),
+    do: for(%{kind: ^kind, id: id} when is_binary(id) <- actors, uniq: true, do: id)
+
+  defp name(%{kind: "user", id: id} = actor, users, _services) when is_binary(id) do
+    case Map.fetch(users, id) do
+      {:ok, {name, :active, _membership}} -> %{actor | name: name}
+      # A former member is named, without their id (ca-security, #523).
+      {:ok, {name, :former, _membership}} -> %{actor | id: nil, name: name}
+      :error -> %{actor | id: nil, name: nil}
+    end
+  end
+
+  defp name(%{kind: "service", id: id} = actor, _users, services) when is_binary(id) do
+    case Map.fetch(services, id) do
+      {:ok, name} -> %{actor | name: name}
+      :error -> %{actor | id: nil, name: nil}
+    end
+  end
+
+  defp name(%{kind: kind} = actor, _users, _services) when kind in ["user", "service"],
+    do: %{actor | id: nil, name: nil}
+
+  defp name(actor, _users, _services), do: actor
 
   defp verb(:approved), do: "Approved"
   defp verb(:rejected), do: "Rejected"
@@ -334,9 +392,18 @@ defmodule Cadence.Reads.OrganizationAudit do
   defp changes(1), do: "1 change"
   defp changes(n), do: "#{n || 0} changes"
 
-  defp role("organization_admin"), do: "organization admin"
-  defp role(:organization_admin), do: "organization admin"
-  defp role(other), do: to_string(other)
+  # The console's words for a role ("org admin", ca-ux: U104/U105). A role it doesn't know drops
+  # its words ("Joined", "Changed Mira K.'s role"), never the raw value (ca-ux, U20).
+  defp role(role) when role in ["organization_admin", :organization_admin], do: "org admin"
+  defp role(role) when role in ["member", :member], do: "member"
+  defp role(_unknown), do: nil
+
+  defp as(role) do
+    case role(role) do
+      nil -> ""
+      words -> " as #{words}"
+    end
+  end
 
   defp to_utc(%DateTime{} = at), do: at
   defp to_utc(%NaiveDateTime{} = at), do: DateTime.from_naive!(at, "Etc/UTC")

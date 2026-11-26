@@ -152,7 +152,7 @@ defmodule CadenceWeb.Console.PeopleWritesAPITest do
 
     assert "Invited late@example.com as member" in actions
     assert "Revoked the invitation for late@example.com" in actions
-    assert "Changed Mira K.'s role from member to organization admin" in actions
+    assert "Changed Mira K.'s role from member to org admin" in actions
     assert "Removed Mira K. from the organization" in actions
   end
 

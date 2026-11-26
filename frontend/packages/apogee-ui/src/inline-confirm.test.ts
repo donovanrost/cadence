@@ -108,11 +108,12 @@ describe("ApInlineConfirm (design-language §7)", () => {
     await flushPromises();
     expect(active()?.tagName).toBe("H1");
   });
-  it("reads a refusal politely under the sentence, keeping focus and staying open", async () => {
+  it("announces a refusal as an alert under the sentence, keeping focus and staying open (#463)", async () => {
     const w = host();
     await trigger(w).trigger("click");
     await flushPromises();
-    const live = () => w.get('[aria-live="polite"]');
+    const live = () => w.get('[role="alert"]');
+    expect(live().attributes("aria-live")).toBeUndefined();
     expect(live().text()).toBe("");
     await w.setProps({ refusal: "The provider refused: missions still book with it." });
     expect(live().text()).toBe("The provider refused: missions still book with it.");

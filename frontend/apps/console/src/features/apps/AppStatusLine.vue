@@ -8,10 +8,23 @@ import { saveMode } from "./saveOutcome.ts";
  * The frame's status (ux AppSurfaces.md + #77): tag and version, `SAVES IMMEDIATELY` for apps whose
  * saves apply at once, and the open activation request for apps that wait for approval.
  */
-const props = defineProps<{ appKey: string; status: AppStatus | null }>();
+const props = defineProps<{
+  appKey: string;
+  status: AppStatus | null;
+  /**
+   * A3 (#313): this page's own save just requested activation. The status isn't re-read after a
+   * save, so the line shows at once and stays plain: a status read before the save may name an
+   * earlier, superseded request's requester and time (ca-ux, #460).
+   */
+  requested?: boolean;
+}>();
 const mode = computed(() => saveMode(props.appKey));
 const pending = computed(() =>
-  props.status ? pendingLine(props.status, (iso) => formatShort(new Date(iso)).slice(6)) : null,
+  props.requested
+    ? "Waiting for activation approval"
+    : props.status
+      ? pendingLine(props.status, (iso) => formatShort(new Date(iso)).slice(6))
+      : null,
 );
 </script>
 
@@ -26,6 +39,8 @@ const pending = computed(() =>
         >Saves immediately</span
       >
     </div>
-    <span v-if="pending" class="text-sm text-caution-text">{{ pending }}</span>
+    <!-- A3 (#313; a11y B6): always mounted, so the request's "Waiting for activation approval…" is
+      announced when it appears. -->
+    <span role="status" class="text-sm text-caution-text empty:hidden">{{ pending ?? "" }}</span>
   </div>
 </template>

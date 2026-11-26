@@ -14,7 +14,7 @@ import type { ReviewAct } from "./review-run.ts";
 import { approveRefusal, submitRefusalText, type Refusal } from "./review-words.ts";
 import { dayLabel, expiredLine, lifecycleRefusal, planOfDayRoute } from "./lifecycle.ts";
 import { contactsShortText, coverage, gapGroups } from "./coverage.ts";
-import type { SpacecraftName } from "./names.ts";
+import { craftLabel, type SpacecraftName } from "./names.ts";
 
 /**
  * Accept-gaps sheet (ScheduleFlow K1, DECISIONS #28, U23 amended): one row per uncovered
@@ -64,6 +64,10 @@ const keyOf = (id: string | null) => id ?? "—";
 const reasons = ref<Record<string, string>>({});
 const overrides = ref<Record<string, string>>({});
 const split = ref<Record<string, boolean>>({});
+/** A <details> toggle, read through a guard rather than a cast (fe-ops on #588). */
+function onSplitToggle(key: string, event: Event) {
+  if (event.target instanceof HTMLDetailsElement) split.value[key] = event.target.open;
+}
 /** "Same reason for all" (qa #27): one shared reason replaces every per-spacecraft box. */
 const sameForAll = ref(false);
 const shared = ref("");
@@ -216,7 +220,7 @@ const atRisk = computed(() => {
     .filter((p) => ids.has(p.snapshot_id))
     .map((p) => ({
       id: p.snapshot_id,
-      text: `${props.nameOf(p.spacecraft_id)?.name ?? p.spacecraft_id ?? "?"} · ${stationCode(p.station)} · ${p.starts_at.slice(11, 16)}–${p.ends_at.slice(11, 16)}Z`,
+      text: `${craftLabel(props.nameOf(p.spacecraft_id))} · ${stationCode(p.station)} · ${p.starts_at.slice(11, 16)}–${p.ends_at.slice(11, 16)}Z`,
     }));
 });
 defineExpose({ open, close });
@@ -246,6 +250,7 @@ defineExpose({ open, close });
         v-model="shared"
         :label="`Reason for accepting all ${plural(groups.length, 'gap')}`"
         :rows="2"
+        required
         :maxlength="REASON_MAX"
         :hint="`At least ${REASON_MIN} characters. Recorded for each of the ${plural(requirementCount, 'requirement')}.`"
       />
@@ -256,9 +261,9 @@ defineExpose({ open, close });
       >
         <p class="m-0 font-mono text-sm font-semibold text-readout">
           {{
-            nameOf(group.spacecraftId)?.name ??
-            group.spacecraftId ??
-            "Requirements without a spacecraft"
+            group.spacecraftId === null
+              ? "Requirements without a spacecraft"
+              : craftLabel(nameOf(group.spacecraftId))
           }}
         </p>
         <ul class="m-0 list-none p-0 font-mono text-xs text-text-3">
@@ -272,6 +277,7 @@ defineExpose({ open, close });
           :model-value="reasons[keyOf(group.spacecraftId)] ?? ''"
           :label="`Reason for accepting this gap`"
           :rows="2"
+          required
           :maxlength="REASON_MAX"
           :hint="`At least ${REASON_MIN} characters. Recorded for each of its ${plural(group.unmet.length, 'requirement')}.`"
           @update:model-value="reasons[keyOf(group.spacecraftId)] = $event"
@@ -279,7 +285,7 @@ defineExpose({ open, close });
         <details
           v-if="!sameForAll && group.unmet.length > 1"
           :open="split[keyOf(group.spacecraftId)]"
-          @toggle="split[keyOf(group.spacecraftId)] = ($event.target as HTMLDetailsElement).open"
+          @toggle="onSplitToggle(keyOf(group.spacecraftId), $event)"
         >
           <summary class="max-md:hit-44 cursor-pointer text-sm text-text-3">
             Different reason per requirement
@@ -317,7 +323,7 @@ defineExpose({ open, close });
         }}</span>
       </span>
     </ApCallout>
-    <ApCallout v-if="refusal" tone="caution">
+    <ApCallout v-if="refusal" tone="caution" role="alert">
       <span class="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span>{{ refusal.text }}</span>
         <details v-if="refusal.code" class="mt-1 basis-full text-xs text-text-3">

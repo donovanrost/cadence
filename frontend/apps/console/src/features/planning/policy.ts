@@ -4,12 +4,16 @@ import {
   childRecord,
   decoders,
   jsonObject,
+  outcomeUnknown,
   recordOf,
   request,
+  type ApiError,
   type ApiResult,
   type Reader,
+  type JsonObject,
 } from "@/api";
 import {
+  failureOutcome,
   fromDocument,
   schemaFieldReader,
   toValue,
@@ -21,7 +25,7 @@ import {
 /** Contract: docs/apogee/api/scheduling.md "Contact planning setup" (CP2). */
 const { array, boolean, integer, nullable, object, string, timestamp, token } = decoders;
 
-const doc: Reader<Readonly<Record<string, unknown>>> = jsonObject;
+const doc: Reader<JsonObject> = jsonObject;
 /** What a policy save or decision answers (Control.PlanningPolicy). */
 export const policyVersionStates = ["pending_approval", "active", "rejected"] as const;
 const fieldMeta = object({ path: string, group: token, advanced: boolean });
@@ -146,6 +150,8 @@ export function buildDocument(
   const errors: Record<string, string> = {};
   const stored = policy.document ?? policy.defaults ?? {};
   for (const f of policy.schema) {
+    // Not the shared getAt/setAt (#192): the policy document is two levels, `group` then the rest of
+    // the path as one key ("a.b.c" writes {a: {"b.c": …}}), which a nested write would change.
     const [group, ...rest] = f.path.split(".");
     if (!group || rest.length === 0) continue;
     const put = (v: unknown) => {
@@ -207,3 +213,27 @@ export function pendingLine(
   // The reason is the saver's own sentence: don't double its full stop.
   return `${line}: ${pending.reason}${/[.!?]$/.test(pending.reason) ? "" : "."}`;
 }
+
+/**
+ * U20 (ux on #653): a policy save whose outcome is unclear. A policy isn't a change set, so it never
+ * points at Staged changes; the person reloads the policy's versions. Anything else: failureOutcome.
+ */
+export function policySaveFailure(error: ApiError): string {
+  const cause =
+    error.kind === "malformed"
+      ? "The server's reply wasn't understood"
+      : error.kind === "unavailable" && error.status === 0
+        ? "The connection dropped"
+        : error.kind === "unavailable" && outcomeUnknown(error)
+          ? "The server failed while answering"
+          : null;
+  return cause
+    ? `${cause}, so it isn't clear whether this version was saved. Reload to see the policy's versions before trying again.`
+    : failureOutcome(error, "changed").sentence;
+}
+
+/** U95 (ux on #653): the version's author can't decide it; nothing was recorded. */
+export const authorDecisionRefusal = (decision: "approve" | "reject"): string =>
+  decision === "approve"
+    ? "Not approved: you saved this version, so another org admin approves it. Your approval wasn't recorded."
+    : "Not rejected: you saved this version, so another org admin decides it. Nothing changed.";

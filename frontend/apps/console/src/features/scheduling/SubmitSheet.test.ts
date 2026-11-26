@@ -62,6 +62,9 @@ describe("SubmitSheet", () => {
       attachTo: document.body,
     });
     expect(wrapper.text()).toContain("2 gaps still need a reason");
+    // #237 (U25): a craft the fleet can't name is "Unknown spacecraft", never its id.
+    expect(wrapper.text()).toContain("Unknown spacecraft");
+    expect(wrapper.text()).not.toContain("sc-r1");
     expect(wrapper.text()).toContain("Accept 2 gaps ·"); // gaps title the sheet, not the act
     expect(wrapper.text()).not.toContain("Approve and book the plan");
     const [first] = wrapper.findAll("textarea");
@@ -208,6 +211,7 @@ describe("SubmitSheet at-risk passes (ux #13)", () => {
           locked: false,
           expires_at: null,
           booking: null,
+          listener_overlap: undefined,
         },
       ],
       at_risk: [
@@ -457,5 +461,63 @@ describe("SubmitSheet booking windows closed (#273, #340)", () => {
       "2999-01-01",
     );
     expect(later.text()).toContain("Draft a new plan for 01-01…");
+  });
+});
+
+describe("SubmitSheet's gap reasons are required (#244, A6)", () => {
+  it("marks the shared and per-gap reasons required, and the per-requirement overrides not", async () => {
+    const w = mount(SubmitSheet, {
+      props: {
+        plan,
+        nameOf: () => null,
+        commitLabel: "Accept 2 gaps and submit",
+        userId: "u1",
+        title: "Approve and book the plan",
+        confirm: "",
+        busy: false,
+      },
+      attachTo: document.body,
+    });
+    try {
+      const reasons = w.findAll("textarea").filter((t) => t.attributes("required") !== undefined);
+      expect(reasons.length).toBeGreaterThan(0);
+      await w.get("input[type=checkbox]").setValue(true);
+      const shared = w.findAll("textarea").find((t) => t.attributes("required") !== undefined);
+      expect(shared).toBeTruthy();
+    } finally {
+      w.unmount();
+    }
+  });
+});
+
+describe("SubmitSheet's per-requirement overrides stay optional (fe-ops on #588)", () => {
+  it("never marks an override required", async () => {
+    // Two gaps on one craft, so its group offers per-requirement overrides.
+    const two = {
+      ...plan,
+      unmet: [
+        { ...gap("r1"), spacecraft_id: "sc-a" },
+        { ...gap("r2"), spacecraft_id: "sc-a" },
+      ],
+    };
+    const w = mount(SubmitSheet, {
+      props: {
+        plan: two,
+        nameOf: () => null,
+        commitLabel: "Accept 2 gaps and submit",
+        userId: "u1",
+        title: "Approve and book the plan",
+        confirm: "",
+        busy: false,
+      },
+      attachTo: document.body,
+    });
+    try {
+      const overrides = w.findAll("details textarea");
+      expect(overrides).toHaveLength(2);
+      expect(overrides.filter((t) => t.attributes("required") !== undefined)).toHaveLength(0);
+    } finally {
+      w.unmount();
+    }
   });
 });

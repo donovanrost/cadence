@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { retryAfterOf, useRetryAfter } from "@/features/auth/index.ts";
-import { ApButton, ApCallout, ApField, ApPanel } from "@/ui";
+import { RetryAfterNotice, retryAfterOf, useRetryAfter } from "@/features/auth/index.ts";
+import { ApButton, ApField, ApPanel, OutcomeCallout } from "@/ui";
 import { changePassword, passwordFailure, passwordProblems, PASSWORD_MIN } from "./api.ts";
 
 /** People.md Account · password change (current + new + confirm). Other sessions sign out. */
@@ -67,8 +67,8 @@ async function save() {
         autocomplete="new-password"
         :error="errors['confirm'] ?? null"
       />
-      <ApCallout v-if="retry.text.value" tone="caution">{{ retry.text.value }}</ApCallout>
-      <ApCallout v-else-if="note" :tone="note.tone">{{ note.text }}</ApCallout>
+      <RetryAfterNotice :retry="retry" />
+      <OutcomeCallout v-if="!retry.text.value && note" :outcome="note" />
       <div>
         <ApButton
           type="submit"

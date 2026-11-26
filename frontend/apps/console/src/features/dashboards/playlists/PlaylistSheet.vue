@@ -1,7 +1,15 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
-import { computed, ref } from "vue";
-import { ApButton, ApCallout, ApField, ApNumberField, ApSheet, ApTextarea } from "@/ui";
+import { computed, nextTick, ref } from "vue";
+import {
+  ApButton,
+  ApCallout,
+  ApField,
+  ApNumberField,
+  ApSheet,
+  ApTextarea,
+  refocusFirst,
+} from "@/ui";
 import {
   DWELL,
   changedPlaylist,
@@ -101,15 +109,25 @@ async function save() {
   }
   error.value = r.error.kind === "unauthenticated" ? "Signed out." : r.error.message;
 }
-/** Someone saved meanwhile: take their playlist, or keep mine over it. */
+/**
+ * Someone saved meanwhile: take their playlist, or keep mine over it. Either button leaves with
+ * the conflict, so focus goes to Name, the top of the form now holding the playlist (A5).
+ */
+const form = ref<HTMLElement | null>(null);
+async function refocusName() {
+  await nextTick();
+  refocusFirst(form.value?.querySelector<HTMLElement>("input"));
+}
 function useTheirs(current: Playlist) {
   fill(current);
   dashboards.value = current.dashboards;
   conflict.value = null;
+  void refocusName();
 }
 function keepMine(current: Playlist) {
   expectedUpdatedAt.value = current.updated_at;
   conflict.value = null;
+  void refocusName();
   void save();
 }
 defineExpose({ open });
@@ -122,7 +140,7 @@ defineExpose({ open });
     width="wide"
     initial-focus="input"
   >
-    <div class="flex flex-col gap-3">
+    <div ref="form" class="flex flex-col gap-3">
       <ApField v-model="name" label="Name" required />
       <ApTextarea v-model="description" label="Description (optional)" :rows="2" :maxlength="500" />
       <div class="flex items-end gap-4">

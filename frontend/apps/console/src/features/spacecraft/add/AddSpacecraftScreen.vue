@@ -34,8 +34,12 @@ watch(draft, (value) => saveDraft(missionId, value), { deep: true });
 
 const directory = computed(() => (state.value.status === "ready" ? state.value.value : null));
 watch(directory, (value) => {
-  if (value && draft.scidStart === "") draft.scidStart = String(nextFreeScid(value.spacecraft));
+  if (!value || draft.scidStart !== "") return;
+  const next = nextFreeScid(value.spacecraft, value.scids);
+  if (next !== null) draft.scidStart = String(next);
 });
+// S9 (#313): the SCIDs in use are read when the screen opens, not refetched live: a failed
+// background read would replace the wizard mid-edit. The server's stage-time check is the guard.
 
 // One profile: preselect it so step 01 isn't a formality (still visible and changeable).
 watch(profiles, (list) => {
@@ -43,7 +47,7 @@ watch(profiles, (list) => {
   if (only && draft.profileId === "") draft.profileId = only.id;
 });
 
-const empty: SpacecraftDirectory = { spacecraft: [], telemetry: "ok" };
+const empty: SpacecraftDirectory = { spacecraft: [], telemetry: "ok", scids: null };
 const proposal = computed(() => propose(draft, directory.value ?? empty, profiles.value));
 provideDraft({
   draft,

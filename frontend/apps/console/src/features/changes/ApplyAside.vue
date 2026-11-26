@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
 import { computed, ref, watch } from "vue";
-import type { RemoteState } from "@/api";
-import { ApButton, ApCallout, ApField, ApPanel, ApStatTile } from "@/ui";
+import { isError, type RemoteState } from "@/api";
+import { useMissionScope } from "@/shell";
+import { ApButton, ApCallout, ApField, ApPanel } from "@/ui";
+import ApplyTiles from "./ApplyTiles.vue";
+import { cannotApplyLine, noGoReason } from "./apply-reasons.ts";
 import { NOTHING_RUNNING } from "./nothingRunning.ts";
 import FailureOutcomeCallout from "./FailureOutcomeCallout.vue";
 import { submitChangeSet, type Preview, type SubmitResult } from "./actions.ts";
+import { applyRefusal } from "./apply-refusals.ts";
 import { checksRefusal } from "./checkRefusals.ts";
 import { blockingReason } from "./itemLines.ts";
 import { inUseMark, refusalOutcome, type InUseMark, type RefusalOutcome } from "./refusals.ts";
@@ -21,6 +25,8 @@ const props = defineProps<{
   preview: RemoteState<Preview>;
   /** ux B4: the previous checks while the current set's re-run (or failed). */
   held: HeldChecks | null;
+  /** K9: the Authors line reads the viewer as "you". */
+  viewerId?: string | null | undefined;
 }>();
 const emit = defineEmits<{
   result: [result: SubmitResult];
@@ -29,7 +35,10 @@ const emit = defineEmits<{
   inUse: [mark: InUseMark | null];
 }>();
 
+const scope = useMissionScope();
 const why = ref("");
+const whyError = ref<string | null>(null);
+watch(why, () => (whyError.value = null));
 const acknowledged = ref(false);
 // ux B4: re-run checks clear the holds acknowledgement only if what they hold changed.
 let ackedHolds: string | null = null;
@@ -68,12 +77,13 @@ const blocked = computed((): string | null => {
   if (props.changeSet.state === "in_review")
     return `r${next.value} is in review; staging is paused.`;
   if (!props.config.permissions.has("config.apply"))
-    return "You can stage changes but not apply them.";
+    return cannotApplyLine(scope.value.mission.name);
   if (verdict.value === null) {
     if (props.held === null) return "Waiting for checks.";
     return props.preview.status === "failed" ? NOT_RUN_REASON : RECHECKING_REASON;
   }
-  if (verdict.value === "no_go") return "A NO-GO check blocks apply. Fix it first.";
+  if (verdict.value === "no_go" && props.preview.status === "ready")
+    return noGoReason(props.preview.value, needsReview.value ? "request_review" : "apply");
   if (blocking.value) return blocking.value;
   if (verdict.value === "hold" && !acknowledged.value) return "Acknowledge the holds first.";
   if (why.value.trim().length < 10) return "Say why (10 characters or more).";
@@ -94,9 +104,18 @@ async function apply() {
     if (result.ok) emit("result", result.value);
     else {
       // #376: submit's 503 preview_failed is opened by the act the button named (#374).
-      failure.value =
-        checksRefusal(result.error, needsReview.value ? "request_review" : "apply") ??
-        refusalOutcome(result.error, "applied");
+      // #310 (ca-ux, U79): an apply refusal opens "Not applied:", per code; a missing reason is
+      // the Why field's own message, not a callout.
+      if (isError(result.error, "reason_required")) {
+        whyError.value = "Say why (10 characters or more).";
+        failure.value = null;
+      } else {
+        const act = needsReview.value ? "request_review" : "apply";
+        failure.value =
+          checksRefusal(result.error, act) ??
+          applyRefusal(result.error, act) ??
+          refusalOutcome(result.error, "applied");
+      }
       emit("inUse", inUseMark(failure.value));
       emit("changed");
     }
@@ -109,11 +128,13 @@ async function apply() {
 <template>
   <ApPanel index="K3" title="Apply">
     <div class="flex flex-col gap-4">
-      <div class="grid grid-cols-2 gap-px border border-hairline bg-hairline">
-        <ApStatTile label="Changes" :value="changeSet.staged_count" />
-        <ApStatTile label="Authors" :value="changeSet.authors.length" />
-      </div>
-      <ApField v-model="why" label="Why" :placeholder="placeholder" required />
+      <ApplyTiles
+        :staged="changeSet.staged_count"
+        :outcome="preview.status === 'ready' ? preview.value.outcome : undefined"
+        :authors="changeSet.authors"
+        :viewer-id="viewerId ?? null"
+      />
+      <ApField v-model="why" label="Why" :placeholder="placeholder" required :error="whyError" />
       <label
         v-if="verdict === 'hold' && !blocking"
         class="flex items-center gap-2 text-md text-readout"

@@ -27,7 +27,20 @@ describe("profilesReader", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value[0]?.spacecraftOnOlderVersions).toBe(3);
-    if (result.value[0]) expect(protocolLine(result.value[0])).toBe("CCSDS TM ↓ · CCSDS TC ↑");
+    if (result.value[0]) expect(protocolLine(result.value[0])).toBe("CCSDS TM / TC");
+  });
+
+  it("says the protocols without arrows; both labels in full without a shared family (P7)", () => {
+    const result = decode(profilesReader, {
+      profiles: [
+        profile({
+          downlink_protocol: { value: "tm", label: "CCSDS TM" },
+          uplink_protocol: { value: "raw", label: "Raw" },
+        }),
+      ],
+    });
+    if (!result.ok || !result.value[0]) throw new Error("not decoded");
+    expect(protocolLine(result.value[0])).toBe("CCSDS TM / Raw");
   });
 
   it("rejects more spacecraft on older versions than in total", () => {

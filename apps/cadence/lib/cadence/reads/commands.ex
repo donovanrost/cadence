@@ -309,9 +309,10 @@ defmodule Cadence.Reads.Commands do
   defp latest_datetime([]), do: nil
   defp latest_datetime(datetimes), do: Enum.max_by(datetimes, &DateTime.to_unix(&1, :microsecond))
 
+  # #466/#470: never an email or an id as a name; a requester with no name reads "Unknown".
+  # The SQL copy in CommandMonitor.Query says the same, so search and paging agree.
   defp requested_by_label(requested_by) when is_map(requested_by) do
-    requested_by[:display_name] || requested_by["display_name"] || requested_by[:email] ||
-      requested_by["email"] || requested_by[:user_id] || requested_by["user_id"] || "Unknown"
+    requested_by[:display_name] || requested_by["display_name"] || "Unknown"
   end
 
   defp requested_by_label(_requested_by), do: "Unknown"

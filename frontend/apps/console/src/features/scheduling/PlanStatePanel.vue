@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { linkByName, type ParamlessRouteName } from "@/shell";
-import { computed } from "vue";
+import { computed, onBeforeUnmount, watch } from "vue";
 import { describeApiError, isKeyOf } from "@/api";
 import { ApCallout, ApPanel, ApStatusMark, formatCount, formatRelative, useNow } from "@/ui";
 import { runPhases, runPhaseText } from "./api.ts";
+import { planActRole, settlePlanAct } from "./plan-acts.ts";
 import type { PlanView } from "./plan-state.ts";
 
 /**
@@ -11,6 +12,20 @@ import type { PlanView } from "./plan-state.ts";
  * so its ticking elapsed is aria-hidden (a11y B4); the current phase is aria-current and underlined (B2).
  */
 const props = defineProps<{ view: Exclude<PlanView, { kind: "plan" }> }>();
+/**
+ * a11y B6 (#276, ux): a failure after the person's own act (Draft, Resume, Propose, a day change:
+ * plan-acts.ts) is an alert; on first load or a background refetch it's read politely.
+ */
+const failureRole = planActRole;
+const UNSETTLED: readonly string[] = ["loading", "drafting", "failed", "draft_failed"];
+watch(
+  () => props.view.kind,
+  (kind) => {
+    if (!UNSETTLED.includes(kind)) settlePlanAct();
+  },
+  { immediate: true },
+);
+onBeforeUnmount(settlePlanAct);
 const now = useNow();
 const PHASES = runPhases;
 /** Setup gaps the console words (rule A); another gap reads as its key in words. */
@@ -128,10 +143,10 @@ const elapsed = computed(() =>
         >. Nothing was submitted.</template
       >
     </ApCallout>
-    <ApCallout v-else-if="view.kind === 'draft_failed'" tone="caution">{{
+    <ApCallout v-else-if="view.kind === 'draft_failed'" tone="caution" :role="failureRole">{{
       view.message
     }}</ApCallout>
-    <ApCallout v-else-if="view.kind === 'failed'" tone="caution">{{
+    <ApCallout v-else-if="view.kind === 'failed'" tone="caution" :role="failureRole">{{
       describeApiError(view.error)
     }}</ApCallout>
     <p v-else role="status" class="m-0 font-mono text-sm text-text-4">Loading the plan…</p>

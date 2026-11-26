@@ -8,6 +8,7 @@ defmodule Cadence.Reads.OrganizationAudit.SettingsEvents do
   (`actor` nil), with no target, at its last write.
   """
 
+  alias Cadence.Missions
   alias Cadence.Platform.ScopedSettings
   alias Cadence.Reads.OrganizationAudit.ApprovalSettingLines
 
@@ -30,13 +31,26 @@ defmodule Cadence.Reads.OrganizationAudit.SettingsEvents do
     {migrated, changed} = Enum.split_with(entries, &is_map(&1.migration))
     where = if mission_id, do: "", else: " (organization default)"
 
-    Enum.map(changed, &changed(&1, where, mission)) ++ migrated(migrated, mission_id, mission)
+    names = names(organization_id, mission_id, changed)
+
+    Enum.map(changed, &changed(&1, where, mission, names)) ++
+      migrated(migrated, mission_id, mission)
   end
 
+  # #430: an organization approval-setting change lists the missions it moved, named under this
+  # organization (read only when an entry has any).
+  defp names(organization_id, nil, entries) do
+    if Enum.any?(entries, &match?(%{audit: %{"missions" => [_ | _]}}, &1)),
+      do: Map.new(Missions.list_missions(organization_id), &{&1.mission_id, &1.display_name}),
+      else: %{}
+  end
+
+  defp names(_organization_id, _mission_id, _entries), do: %{}
+
   # #233: an approval setting change says which way it went, with the raw before and after.
-  defp changed(%{section: "cadence.governance", audit: audit} = entry, where, mission)
+  defp changed(%{section: "cadence.governance", audit: audit} = entry, where, mission, names)
        when is_map(audit) do
-    case ApprovalSettingLines.line(audit, mission) do
+    case ApprovalSettingLines.line(audit, mission, names) do
       {action, change} ->
         entry |> changed_entry(where, mission) |> Map.merge(%{action: action, change: change})
 
@@ -45,13 +59,14 @@ defmodule Cadence.Reads.OrganizationAudit.SettingsEvents do
     end
   end
 
-  defp changed(entry, where, mission), do: changed_entry(entry, where, mission)
+  defp changed(entry, where, mission, _names), do: changed_entry(entry, where, mission)
 
   defp changed_entry(entry, where, mission) do
     %{
       id: "config:settings:#{entry.section}:#{DateTime.to_unix(entry.at, :microsecond)}",
       at: entry.at,
-      actor: %{kind: "user", id: nil, name: entry.actor},
+      # Named by the organization's own Audit rule (OrganizationAudit, #470), from the id.
+      actor: %{kind: "user", id: entry.actor_id, name: nil},
       kind: "config",
       action: "Changed #{entry.title} settings#{where}",
       target: %{kind: "settings", id: entry.section, label: entry.title},

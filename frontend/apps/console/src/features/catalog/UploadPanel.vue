@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
-import { computed, ref } from "vue";
+import { computed, ref, useId } from "vue";
 import { useRouter } from "vue-router";
 import { failureOutcome } from "@/features/changes/index.ts";
 import { ApButton, ApCallout, ApChip, ApField, ApPanel, ApSelect } from "@/ui";
@@ -23,6 +23,10 @@ const databases = computed(() => [
   { value: "new", label: "New catalog database…" },
 ]);
 const fileProblem = computed(() => (file.value ? precheck(file.value, props.importers) : null));
+/** #244 (A6): the file's type/size problem is the file input's description while it stands. */
+const problemId = useId();
+/** The problem callout shows only when no failure does (mms-ux on #569): never a dangling id. */
+const problemShown = computed(() => fileProblem.value !== null && failure.value === null);
 const blocked = computed(() => {
   if (!file.value) return "Choose a file.";
   if (fileProblem.value) return fileProblem.value;
@@ -76,6 +80,8 @@ async function upload() {
         <input
           type="file"
           class="sr-only"
+          :aria-describedby="problemShown ? problemId : undefined"
+          :aria-invalid="fileProblem ? 'true' : undefined"
           :accept="importers.importers.flatMap((i) => i.extensions).join(',')"
           @change="choose"
         />
@@ -91,8 +97,9 @@ async function upload() {
         <ApField v-model="label" label="Revision label" placeholder="e.g. FSW 3.2.0" />
         <ApField v-model="notes" label="Notes" />
       </div>
-      <ApCallout v-if="fileProblem || failure" :tone="failure ? 'crit' : 'caution'">{{
-        failure ?? fileProblem
+      <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>
+      <ApCallout v-else-if="problemShown" :id="problemId" tone="caution" role="alert">{{
+        fileProblem
       }}</ApCallout>
       <ApButton
         type="submit"

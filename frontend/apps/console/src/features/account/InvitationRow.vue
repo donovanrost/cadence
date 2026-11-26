@@ -12,7 +12,8 @@ import {
 
 /** One pending invitation: Accept opens the org; Decline confirms first (People.md Account). */
 const props = defineProps<{ invitation: MyInvitation }>();
-const emit = defineEmits<{ changed: [note: string | null] }>();
+/** `failed`: the act was refused or failed, so the parent says it as an alert (B6, ux #276). */
+const emit = defineEmits<{ changed: [note: string | null, failed: boolean] }>();
 const confirming = ref(false);
 const busy = ref(false);
 
@@ -25,7 +26,11 @@ async function accept() {
       return void window.location.assign(
         `/console/${encodeURIComponent(r.value.organization.slug)}`,
       );
-    emit("changed", invitationFailure(r.error) ?? failureOutcome(r.error, "changed").sentence);
+    emit(
+      "changed",
+      invitationFailure(r.error) ?? failureOutcome(r.error, "changed").sentence,
+      true,
+    );
   } finally {
     busy.value = false;
   }
@@ -40,6 +45,7 @@ async function decline() {
       r.ok
         ? `Declined the invitation to ${props.invitation.organization.name}.`
         : (invitationFailure(r.error) ?? failureOutcome(r.error, "changed").sentence),
+      !r.ok,
     );
   } finally {
     busy.value = false;

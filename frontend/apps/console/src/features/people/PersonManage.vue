@@ -2,7 +2,7 @@
 import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { isKnown } from "@/api";
-import { ApButton, ApCallout, ApField, ApPanel, ApSelect } from "@/ui";
+import { ApButton, ApField, ApPanel, ApSelect, OutcomeCallout } from "@/ui";
 import { adminErrorText, removeMember, setRole } from "./admin.ts";
 import { roleLabel, roles, type Member, type Role } from "./api.ts";
 
@@ -71,7 +71,7 @@ async function remove() {
           >Save</ApButton
         >
       </div>
-      <ApCallout v-if="note" :tone="note.tone">{{ note.text }}</ApCallout>
+      <OutcomeCallout v-if="note" :outcome="note" />
       <div class="flex flex-col gap-2 border-t border-hairline pt-4">
         <p class="m-0 text-md text-text-2">
           Removing {{ name }} ends their access now. Their history stays, and inviting them again
@@ -90,7 +90,7 @@ async function remove() {
           <ApButton
             variant="danger"
             :disabled="busy || confirm.trim() !== member.email"
-            disabled-reason="Type their email to confirm"
+            :disabled-reason="busy ? 'Removing…' : 'Type their email to confirm'"
             @click="remove"
             >Remove from organization</ApButton
           >

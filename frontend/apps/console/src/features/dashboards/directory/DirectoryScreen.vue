@@ -86,6 +86,7 @@ async function onAction(
       <ApEmptyState
         v-if="value.dashboards.length === 0"
         :headline="filtered ? 'No dashboards match.' : 'No dashboards yet.'"
+        :announce="filtered"
         :sentence="
           filtered
             ? 'Clear the search or filters to see them all.'

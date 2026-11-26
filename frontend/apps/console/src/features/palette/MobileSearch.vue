@@ -14,6 +14,7 @@ import MobileSearchResults from "./MobileSearchResults.vue";
 import { MOBILE_GROUPS } from "./mobile.ts";
 import { recentItems, rememberOpened } from "./recent.ts";
 import { grouped, type Group, type PaletteItem } from "./results.ts";
+import { useTabTrap } from "./trapTab.ts";
 import { useMobileSearch } from "./useMobileSearch.ts";
 
 /**
@@ -60,15 +61,18 @@ onMounted(() => {
   void nextTick(() => input.value?.focus());
 });
 onBeforeUnmount(() => returnFocus?.focus());
+/** a11y A3 (#243): an aria-modal div, so Tab is kept inside it by hand (a native <dialog> isn't). */
+const root = useTemplateRef<HTMLElement>("root");
+useTabTrap(root, () => emit("close"));
 </script>
 
 <template>
   <div
+    ref="root"
     role="dialog"
     aria-modal="true"
     aria-label="Search"
     class="fixed inset-0 z-50 flex flex-col bg-panel"
-    @keydown.esc="emit('close')"
   >
     <div class="flex flex-none items-center gap-2 border-b border-hairline bg-chrome pl-4">
       <label for="phone-search" class="sr-only">Search</label>
@@ -99,7 +103,9 @@ onBeforeUnmount(() => returnFocus?.focus());
       :query="query.trim()"
       :sources="empty ? {} : search.sources.value"
       @open="open"
+      :expanded="expanded"
       @expand="(g) => (expanded = new Set([...expanded, g]))"
+      @collapse="(g) => (expanded = new Set([...expanded].filter((x) => x !== g)))"
       @retry="(g) => search.retry[g]?.()"
     />
   </div>

@@ -28,6 +28,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
       <span class="ml-auto flex items-center [&_div]:px-0 [&_div]:text-xs"><CockpitStatus /></span>
       <button
         type="button"
+        data-exit-kiosk
         class="cursor-pointer border-0 bg-transparent p-0 font-display text-xs uppercase tracking-btn text-text-3 hover:text-readout max-md:hit-44"
         @click="emit('exit')"
       >

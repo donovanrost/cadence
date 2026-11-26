@@ -1,6 +1,8 @@
 defmodule Cadence.ContactPlanning.FleetAutomationTest do
   use Cadence.DataCase, async: false
 
+  import Ecto.Query
+
   alias Cadence.Comms.TransportStore
 
   alias Cadence.Accounts.{OrganizationMembership, User}
@@ -18,9 +20,12 @@ defmodule Cadence.ContactPlanning.FleetAutomationTest do
   }
 
   alias Cadence.Contacts.{ProviderReservation, ProviderReservations}
+  alias Cadence.Governance.ActivationPolicy
   alias Cadence.GroundNetworks
   alias Cadence.GroundNetworks.MissionProvider
+  alias Cadence.Management.Contacts.Store.ContactPlanApprovalRow
   alias Cadence.PolicyReviewer
+  alias Cadence.Repo
   alias Cadence.Spacecraft
 
   @organization_id "org-fleet-automation"
@@ -83,6 +88,11 @@ defmodule Cadence.ContactPlanning.FleetAutomationTest do
     admin_scope = scope(organization, :organization_admin)
     member_scope = scope(organization, :member)
 
+    # #280: under 'independent' a service can't approve a plan it authored itself (its accountable
+    # people are on both sides). These tests exercise the grant's own bounds, so the mission runs
+    # under 'direct', where self-approval stands; the 'independent' refusal has its own test below.
+    put_approval_requirement(admin_scope, "direct")
+
     assert {:ok, policy, policy_version} =
              FleetPlanningPolicies.create(admin_scope, @mission_id, policy_attrs())
 
@@ -106,7 +116,12 @@ defmodule Cadence.ContactPlanning.FleetAutomationTest do
         capabilities: [:mission_admin]
       })
 
-    assert {:ok, issued} = Auth.issue_service_identity(service_identity)
+    assert {:ok, issued} =
+             Auth.issue_service_identity(
+               service_identity,
+               Cadence.ServiceIdentityFixtures.issuer_scope(@organization_id)
+             )
+
     assert {:ok, service_scope} = Auth.authenticate_api_token(issued.api_token)
 
     assert {:ok, grant} =
@@ -270,6 +285,46 @@ defmodule Cadence.ContactPlanning.FleetAutomationTest do
 
     assert persisted_plan_action.lifecycle_state == :succeeded
     assert persisted_plan_action.result_document == plan_action.result_document
+  end
+
+  test "under independent approval a grant can't approve the plan its own service made (#280)",
+       context do
+    put_approval_requirement(context.admin_scope, "independent")
+
+    route = route(context.transport)
+
+    opts = [
+      now: @now,
+      materialize_templates: false,
+      list_routes: fn _, _, _ -> {:ok, %{routes: [route], findings: []}} end,
+      search_opportunities: fn _, _, _, _, _ -> {:ok, %{opportunities: [opportunity()]}} end,
+      resolve_route: fn _, _, _, _ -> {:ok, route} end,
+      reserve: fn _, _, _, _, _ -> flunk("nothing is reserved when approval is refused") end
+    ]
+
+    service = context.service_scope.service_identity
+
+    # The service's issuer is on both sides: it authored the plan and approves under the grant.
+    assert {:error,
+            {:contact_plan_self_approval_forbidden,
+             %{via_service: %{id: id, name: "Stage 5 fleet automation"}}}} =
+             FleetAutomation.plan(
+               context.service_scope,
+               @mission_id,
+               run_attrs(),
+               context.grant.automation_grant_id,
+               opts
+             )
+
+    assert id == service.service_identity_id
+
+    # Refused before anything was recorded: no approval exists in the mission.
+    assert Repo.aggregate(
+             from(row in ContactPlanApprovalRow,
+               where: row.organization_id == ^@organization_id and row.mission_id == ^@mission_id
+             ),
+             :count
+           ) == 0
   end
 
   test "a non-contiguous grant stops at the last permitted boundary", context do
@@ -477,5 +532,14 @@ defmodule Cadence.ContactPlanning.FleetAutomationTest do
       organization: organization,
       organization_membership: membership
     })
+  end
+
+  defp put_approval_requirement(scope, requirement) do
+    policy = ActivationPolicy.load(@organization_id, @mission_id)
+
+    assert {:ok, _} =
+             ActivationPolicy.save(scope, @mission_id, policy.token, %{
+               "value" => %{"approval_requirement" => requirement}
+             })
   end
 end

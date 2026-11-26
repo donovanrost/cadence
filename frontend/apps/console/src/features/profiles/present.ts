@@ -1,9 +1,16 @@
 import { formatShort, plural } from "@/ui";
+import {
+  compositionInSentence,
+  isComposed,
+  type Composition,
+} from "@/features/catalog/composition.ts";
 import { catalogRevText, type CatalogRevision } from "./api.ts";
 import type { ProfileDetail } from "./detail.ts";
 
 /** U65: an unnumbered revision (not among the mission's, #246) reads "a catalog revision". */
-function catalogPart(r: CatalogRevision | null): string {
+function catalogPart(r: CatalogRevision | null, c?: Composition | null): string {
+  // U109: a composed profile's summary says "composition 3" where it says "catalog rev 4".
+  if (isComposed(c)) return compositionInSentence(c);
   if (!r) return "catalog set per spacecraft";
   const rev = catalogRevText(r);
   return rev ? `catalog ${rev}` : "a catalog revision";
@@ -17,7 +24,7 @@ export function profileSubline(detail: ProfileDetail): string {
     detail.routing_model === "profile" || detail.override_count > 0
       ? plural(detail.override_count, "override")
       : null,
-    catalogPart(detail.profile.catalog_revision),
+    catalogPart(detail.profile.catalog_revision, detail.profile.composition),
   ];
   const last = detail.profile.last_change;
   if (last) {

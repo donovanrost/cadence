@@ -132,11 +132,12 @@ defmodule Cadence.Contacts.ProviderChangeApprovals do
     error in ArgumentError -> {:error, {:invalid_provider_change_approval, error.message}}
   end
 
+  # #146 (#468): never an email in a stored actor (the decision record and the provider audit
+  # entry); reads name people through ActorRef, by id and current membership.
   defp actor_document(scope) do
     %{
       "kind" => "user",
       "id" => scope.user.user_id,
-      "email" => scope.user.email,
       "display_name" => scope.user.display_name
     }
   end

@@ -1,7 +1,9 @@
 defmodule Cadence.Reads.Catalog.Requesters do
   @moduledoc """
   `requested_by` on catalog import runs (#146, ux U103; mms-security 11-19): who started each run,
-  as `null | %{kind: "user" | "service" | "system", name: binary() | nil}`. The console words
+  as `null | %{kind: "user" | "service" | "system", name: binary() | nil, run_by}`. `run_by` (#513)
+  is `%{name}` for a system run that names the person who ran it ("by Cadence, run by Mira K.")
+  and null otherwise. The console words
   decide what to show ("by Mira K.", "by Cadence", or the time alone).
 
   - A person keeps `kind: "user"`, named only while they're an active member of the mission's
@@ -17,13 +19,19 @@ defmodule Cadence.Reads.Catalog.Requesters do
   alias Cadence.Accounts.MemberNames
   alias Cadence.Auth
 
-  @type requester :: %{kind: binary(), name: binary() | nil} | nil
+  @type requester ::
+          %{kind: binary(), name: binary() | nil, run_by: %{name: binary() | nil} | nil} | nil
 
   @doc "A `requested_by` resolver for these runs' actors: call `requested_by/2` with its result."
   @spec names(binary(), [map()]) :: %{users: map(), services: map()}
   def names(organization_id, actors) do
     %{
-      users: MemberNames.display_names(organization_id, ids(actors, "user_id")),
+      # People: a person who started a run, and a seed's runner (#513's run_by).
+      users:
+        MemberNames.display_names(
+          organization_id,
+          ids(actors, "user_id") ++ ids(actors, "run_by")
+        ),
       services: Auth.service_identity_names(organization_id, ids(actors, "service_identity_id"))
     }
   end
@@ -32,10 +40,21 @@ defmodule Cadence.Reads.Catalog.Requesters do
   @spec requested_by(map() | nil, %{users: map(), services: map()}) :: requester()
   def requested_by(actor, names) do
     case kind(actor) do
-      "user" -> %{kind: "user", name: Map.get(names.users, actor["user_id"])}
-      "service" -> %{kind: "service", name: Map.get(names.services, actor["service_identity_id"])}
-      "system" -> %{kind: "system", name: present(actor["name"])}
-      nil -> nil
+      "user" ->
+        %{kind: "user", name: Map.get(names.users, actor["user_id"]), run_by: nil}
+
+      "service" ->
+        %{
+          kind: "service",
+          name: Map.get(names.services, actor["service_identity_id"]),
+          run_by: nil
+        }
+
+      "system" ->
+        %{kind: "system", name: present(actor["name"]), run_by: runner(actor, names)}
+
+      nil ->
+        nil
     end
   end
 
@@ -46,6 +65,13 @@ defmodule Cadence.Reads.Catalog.Requesters do
   defp kind(%{"user_id" => id}) when is_binary(id) and id != "", do: "user"
   defp kind(%{"service_identity_id" => id}) when is_binary(id) and id != "", do: "service"
   defp kind(_not_recorded), do: nil
+
+  # #513 (ux on #516): the person who ran a seed or task, named by the same rule (an active member,
+  # never by email or id): `%{name}`, with a null name when it can't be read; nil with no runner.
+  defp runner(%{"run_by" => id}, names) when is_binary(id) and id != "",
+    do: %{name: Map.get(names.users, id)}
+
+  defp runner(_actor, _names), do: nil
 
   defp ids(actors, key) do
     for %{} = actor <- actors, id = actor[key], is_binary(id) and id != "", uniq: true, do: id

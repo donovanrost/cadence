@@ -31,6 +31,7 @@ defmodule Cadence.Architecture.ContextBoundary do
   @file_context_overrides %{
     "lib/cadence/management/settings.ex" => :composition,
     "lib/cadence/management/console_settings.ex" => :composition,
+    "lib/cadence/management/settings_history.ex" => :composition,
     "lib/cadence/management/approval_setting_access.ex" => :composition,
     "lib/cadence/management/settings_override_migration.ex" => :composition,
     "lib/cadence/management/provider_account_directory.ex" => :composition,
@@ -60,6 +61,7 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/control/planning_policy.ex" => :composition,
     "lib/cadence/control/planning_templates.ex" => :composition,
     "lib/cadence/control/planning_grants.ex" => :composition,
+    "lib/cadence/control/planning_grant_decisions.ex" => :composition,
     "lib/cadence/control/activation_requests.ex" => :composition,
     "lib/cadence/control/activation_requests/configuration_changes.ex" => :composition,
     "lib/cadence/control/activation_requests/refusals.ex" => :composition,

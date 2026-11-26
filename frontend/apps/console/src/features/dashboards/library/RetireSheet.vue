@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
-import { ref } from "vue";
+import { nextTick, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { describeApiError, isError } from "@/api";
-import { ApButton, ApCallout, ApSheet } from "@/ui";
+import { ApButton, ApCallout, ApSheet, refocusFirst } from "@/ui";
 import { retireItem, usedByOf, usedInWords, type UsedBy } from "./api.ts";
 
 /**
@@ -21,6 +21,8 @@ const target = ref<{
   updatedAt: string | null;
 } | null>(null);
 const usedBy = ref<UsedBy["dashboards"]>([]);
+/** B6: the server refused this Delete as in use (an alert), not known before asking (standing). */
+const refused = ref(false);
 const error = ref<string | null>(null);
 const busy = ref(false);
 
@@ -36,6 +38,7 @@ function open(
     updatedAt: item.updated_at,
   };
   usedBy.value = known;
+  refused.value = false;
   error.value = null;
   sheet.value?.open();
 }
@@ -52,8 +55,13 @@ async function retire() {
     return;
   }
   const used = usedByOf(r.error);
-  if (used) usedBy.value = used;
-  else
+  if (used) {
+    // A5: the refusal takes Delete away; focus goes to the line that says why.
+    usedBy.value = used;
+    refused.value = true;
+    await nextTick();
+    refocusFirst(document.querySelector<HTMLElement>("[data-retire-used]"));
+  } else
     error.value =
       r.error.kind === "forbidden"
         ? "Dashboard editors manage the library."
@@ -67,7 +75,7 @@ defineExpose({ open });
 <template>
   <ApSheet ref="sheet" :title="`Delete ${target?.name ?? 'library widget'}?`">
     <template v-if="usedBy.length">
-      <ApCallout tone="caution">
+      <ApCallout tone="caution" :role="refused ? 'alert' : undefined" data-retire-used>
         {{ usedInWords(usedBy) }} Replace or detach it there first; detaching copies it into that
         dashboard.
       </ApCallout>

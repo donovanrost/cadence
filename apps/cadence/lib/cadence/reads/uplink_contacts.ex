@@ -27,11 +27,17 @@ defmodule Cadence.Reads.UplinkContacts do
     open = OpenContacts.list(org, mission)
     refs = for {ref, id} <- owners, MapSet.member?(wanted, id), do: ref
 
+    by_scheduled =
+      for(%{scheduled_contact_id: id} = c <- open, is_binary(id), into: %{}, do: {id, c})
+
+    hand = hand_started(open, owners)
+
     %{
       names: names(org, mission, spacecraft_ids),
-      by_scheduled:
-        for(%{scheduled_contact_id: id} = c <- open, is_binary(id), into: %{}, do: {id, c}),
-      hand: hand_started(open, owners),
+      by_scheduled: by_scheduled,
+      hand: hand,
+      # Who started each contact, named only as members (#468): one lookup for the whole read.
+      people: ContactStart.people(org, Map.values(by_scheduled) ++ Map.values(hand)),
       armed:
         org
         |> Waiting.armed_on(mission, refs)
@@ -56,7 +62,7 @@ defmodule Cadence.Reads.UplinkContacts do
       Map.merge(base, %{
         spacecraft: %{id: spacecraft_id, name: Map.get(ctx.names, spacecraft_id, spacecraft_id)},
         pass: base.pass && booked(base.pass, ctx, armed),
-        contact: contact && hand(contact, stations, armed)
+        contact: contact && hand(contact, stations, armed, ctx.people)
       })
     end
   end
@@ -67,13 +73,13 @@ defmodule Cadence.Reads.UplinkContacts do
     Map.merge(pass, %{
       realized_contact_id: realized && realized.realized_contact_id,
       booked: true,
-      started_by: realized && started_by(realized),
+      started_by: realized && ContactStart.started_by(realized, ctx.people),
       started_at: realized && started_at(realized),
       armed_group_ids: armed
     })
   end
 
-  defp hand(%RealizedContact{} = contact, stations, armed) do
+  defp hand(%RealizedContact{} = contact, stations, armed, people) do
     started_at = started_at(contact)
 
     %{
@@ -84,7 +90,7 @@ defmodule Cadence.Reads.UplinkContacts do
       station: StationRefs.resolve(contact.metadata["ground_station_ref"], stations),
       starts_at: started_at || contact.realized_at,
       ends_at: nil,
-      started_by: started_by(contact),
+      started_by: ContactStart.started_by(contact, people),
       started_at: started_at,
       armed_group_ids: armed
     }
@@ -109,8 +115,6 @@ defmodule Cadence.Reads.UplinkContacts do
     do: {DateTime.to_unix(at, :microsecond), c.realized_contact_id}
 
   defp realized_order(%RealizedContact{} = c), do: {0, c.realized_contact_id}
-
-  defp started_by(contact), do: ContactStart.started_by(contact)
 
   # Only while it's live (Uplink's block); History's rows use ContactStart directly.
   defp started_at(%RealizedContact{lifecycle_state: :active} = contact),

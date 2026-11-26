@@ -1,10 +1,10 @@
 defmodule Cadence.Applications.OpsConsole.Actions.DataSourcesTest do
   use Cadence.DataCase, async: false
 
-  alias Cadence.Accounts.User
+  alias Cadence.Accounts.{OrganizationMembership, User}
   alias Cadence.Applications.{ActionRequest, HostContext}
   alias Cadence.Applications.OpsConsole.Actions.DataSources, as: DataSourcesAction
-  alias Cadence.Auth.{Scope, ServiceIdentity}
+  alias Cadence.Auth.Scope
   alias Cadence.DataSources.{DataBinding, DataSource}
   alias Cadence.Management.DataSources
 
@@ -496,21 +496,20 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSourcesTest do
     }
   end
 
+  # A person: the ops console's actions run in the app host, a browser session, never as a
+  # service. Since #384 an organization-level action refuses a service (#282).
   defp scope do
-    identity = %ServiceIdentity{
-      service_identity_id: "service-ops-data-sources",
-      organization_id: @organization_id,
-      mission_id: @mission_id,
-      display_name: "Ops data sources test service",
-      capabilities: [:organization_admin],
-      lifecycle_state: :active
-    }
-
     %Scope{
-      actor_kind: :service,
+      actor_kind: :user,
       organization_id: @organization_id,
       mission_id: @mission_id,
-      service_identity: identity,
+      organization_membership: %OrganizationMembership{
+        organization_id: @organization_id,
+        user_id: "user-ops-data-sources",
+        role: :organization_admin,
+        lifecycle_state: :active
+      },
+      user: %User{user_id: "user-ops-data-sources", display_name: "Ops data sources tester"},
       capabilities: MapSet.new([:organization_admin])
     }
   end

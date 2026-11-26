@@ -14,8 +14,7 @@ defmodule CadenceWeb.Console.DashboardActivity do
   source that has more, and the opaque cursor holds both sources' positions.
   """
 
-  alias Cadence.Accounts
-  alias Cadence.Reads.Dashboards.Activity
+  alias Cadence.Reads.Dashboards.{Activity, Authors}
 
   @page 25
   @shown %{"archived" => "archived", "restored" => "unarchived"}
@@ -25,7 +24,7 @@ defmodule CadenceWeb.Console.DashboardActivity do
   def load(scope, mission, dashboard, cursor) do
     with {:ok, position} <- decode(cursor),
          {:ok, history} <- Activity.load(scope, mission, dashboard, params(position)) do
-      {:ok, page(history, names(history))}
+      {:ok, page(history, names(scope.organization_id, history))}
     end
   end
 
@@ -178,19 +177,15 @@ defmodule CadenceWeb.Console.DashboardActivity do
 
   defp decode(_cursor), do: {:error, :invalid_cursor}
 
-  defp names(history) do
-    (Enum.map(history.versions, & &1.actor_id) ++ Enum.map(history.events, & &1.actor_id))
-    |> Enum.filter(&is_binary/1)
-    |> Enum.uniq()
-    |> Map.new(fn id ->
-      case Accounts.fetch_user(id) do
-        {:ok, user} -> {id, user.display_name || user.email}
-        _not_a_user -> {id, nil}
-      end
-    end)
-  end
+  # #469: named only as members of the organization, checked now (Authors).
+  defp names(organization_id, history),
+    do:
+      Authors.members(
+        organization_id,
+        Enum.map(history.versions, & &1.actor_id) ++ Enum.map(history.events, & &1.actor_id)
+      )
 
-  defp actor(id, names) when is_binary(id), do: %{id: id, name: Map.get(names, id)}
+  defp actor(id, members) when is_binary(id), do: Authors.person(members, id)
   defp actor(_none, _names), do: nil
 
   defp blank(""), do: nil

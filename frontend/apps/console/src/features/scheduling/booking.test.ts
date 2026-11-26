@@ -11,6 +11,7 @@ const pass = (id: string, start: string, locked = false) => ({
   locked,
   expires_at: null,
   booking: null,
+  listener_overlap: undefined,
 });
 const plan = {
   id: "plan_1",

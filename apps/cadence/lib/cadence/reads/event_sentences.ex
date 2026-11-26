@@ -15,6 +15,7 @@ defmodule Cadence.Reads.EventSentences do
   """
 
   alias Cadence.Comms.StationRefs
+  alias Cadence.Control.ActorRef
   alias Cadence.MissionEvents.Entry
 
   alias Cadence.Reads.{
@@ -253,10 +254,39 @@ defmodule Cadence.Reads.EventSentences do
     end
   end
 
+  # Who acted (#488, ca-ux; #472's rule for people). Names come from `ctx.actors`
+  # (Control.ActorRef.names/2 over the page, Reads.EventLog.Context), never from a name stored in
+  # the actor document:
+  # - Cadence itself: " by Cadence";
+  # - a service identity of the organization: " by Nightly planner (a service identity)" (U70);
+  #   one that can't be named: " by a service identity", never its id (U25);
+  # - a person named under the membership rule: " by Mira K."; with no name the clause drops.
   defp by(%Entry{actor: actor}, ctx) do
-    case actor_id(actor) do
-      nil -> ""
-      id -> " by #{Map.get(ctx.users, id) || id}"
+    case actor_ref(unwrap(actor), ctx) do
+      %{kind: "system"} -> " by Cadence"
+      %{kind: "service", name: name} when is_binary(name) -> " by #{name} (a service identity)"
+      %{kind: "service"} -> " by a service identity"
+      %{kind: "user", name: name} when is_binary(name) -> " by #{name}"
+      _nobody -> ""
+    end
+  end
+
+  defp actor_ref(document, %{actors: names}), do: ActorRef.document(document, names)
+
+  # A context without the batched names (only people's names, by id): people as before, and the
+  # kinds that need no name.
+  defp actor_ref(document, ctx) do
+    case actor_id(document) do
+      id when is_binary(id) ->
+        %{kind: "user", id: id, name: Map.get(Map.get(ctx, :users, %{}), id)}
+
+      nil ->
+        ActorRef.document(document, %{
+          users: %{},
+          user_ids: MapSet.new(),
+          services: %{},
+          service_ids: MapSet.new()
+        })
     end
   end
 

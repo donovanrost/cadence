@@ -27,6 +27,22 @@ export function inDialog(event: KeyboardEvent): boolean {
   return event.target instanceof Element && event.target.closest("dialog") !== null;
 }
 
+const PRESSED_BY_SPACE =
+  'button, a[href], summary, input, select, textarea, [contenteditable="true"], [contenteditable=""], [role="button"], [role="checkbox"], [role="radio"], [role="switch"], [role="tab"], [role="menuitem"], [role="option"]';
+const MOVED_BY_ARROWS =
+  'input, select, textarea, [contenteditable="true"], [contenteditable=""], [role="radio"], [role="tab"], [role="slider"], [role="menuitem"], [role="option"], [role="listbox"], [role="grid"], [role="tree"]';
+
+/**
+ * ux B8: a screen-wide key never overrides a focused control that uses it. Space presses a button
+ * or ticks a box; the arrow keys move in a field, a radio group, tabs or a menu.
+ */
+export function focusedControlOwns(event: KeyboardEvent): boolean {
+  if (!(event.target instanceof Element)) return false;
+  const uses =
+    event.key === " " ? PRESSED_BY_SPACE : event.key.startsWith("Arrow") ? MOVED_BY_ARROWS : null;
+  return uses !== null && event.target.closest(uses) !== null;
+}
+
 /**
  * A row can leave a list with its action (archive, restore, delete, unstar under Starred), taking
  * the focused ⋯ with it. Returns a refetch that, once the list has re-read, moves focus that was

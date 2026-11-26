@@ -1,5 +1,6 @@
 import { expectAccessible } from "./support/accessibility.ts";
 import { missionPath, openConsole } from "./support/console.ts";
+import { expectSaid, WORDS } from "./support/outcomes.ts";
 import { allow, expect, test } from "./support/fixtures.ts";
 import { bumpTemplate, liveDraftDays, plansForDay, utcDay } from "./support/planning.ts";
 
@@ -74,6 +75,8 @@ test.describe("K1 submit loses a race with a contact-rule change", () => {
 
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(page.getByText(/Nothing was submitted\.$/)).toBeVisible();
+    // #654 (B6): the refusal of the person's own Submit is an alert, not read politely.
+    await expectSaid(page, WORDS.nothingSubmitted, { alert: true });
     await expect(
       page.getByRole("button", { name: "Draft again with the current rules" }),
     ).toBeVisible();

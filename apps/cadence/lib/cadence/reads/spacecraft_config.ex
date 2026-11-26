@@ -5,8 +5,10 @@ defmodule Cadence.Reads.SpacecraftConfig do
 
     * `spacecraft`, `profile`, `routing_rules`: as the Setup detail (`Reads.SpacecraftDetail`),
       plus `archived` and each rule's transport station.
-    * `catalog`: the revision its active configuration runs vs the one its profile sets (#65).
-    * `overrides`: this spacecraft's overrides of its profile, labelled from the profile schema.
+    * `catalog`: the revision its active configuration runs vs the one its profile sets (#65),
+      each with its `composition` (D2, #543; `Reads.CatalogCompositions`).
+    * `overrides`: this spacecraft's overrides of its profile, labelled from the profile schema;
+      a catalog override carries its catalog revision's `composition` (else nil).
     * `pending`: the mission's open or in-review change set, when it touches this spacecraft.
     * `recent_revisions`: the last 5 applied revisions with an entry for it.
 
@@ -16,7 +18,7 @@ defmodule Cadence.Reads.SpacecraftConfig do
   alias Cadence.Applications.SpacecraftConfiguration.{CatalogAuthority, Drafts}
   alias Cadence.Comms.{StationRefs, TransportStore}
   alias Cadence.Configuration.{ChangeSetStore, Status}
-  alias Cadence.Reads.{ConfigLabels, ProfileRouting, SpacecraftDetail}
+  alias Cadence.Reads.{CatalogCompositions, ConfigLabels, ProfileRouting, SpacecraftDetail}
   alias Cadence.SpacecraftStore
   alias Cadence.SpacecraftType.Schema
 
@@ -29,13 +31,17 @@ defmodule Cadence.Reads.SpacecraftConfig do
          {:ok, craft} <- SpacecraftStore.fetch_spacecraft(org, mission, spacecraft_id) do
       scope = %{organization_id: org, mission_id: mission}
       {:ok, profile} = SpacecraftStore.fetch_pinned_profile(scope, craft)
+      overrides = own_overrides(org, mission, spacecraft_id, profile)
+      catalog = catalog_ids(scope, craft)
+      ids = Map.values(catalog) ++ CatalogCompositions.override_ids(overrides)
+      lookups = catalog_lookups(scope, ids)
 
       {:ok,
        %{
          spacecraft: Map.put(detail.spacecraft, :archived, archived(craft)),
          profile: profile_facts(detail.profile, profile),
-         catalog: catalog(scope, craft),
-         overrides: overrides(org, mission, spacecraft_id, profile),
+         catalog: Map.new(catalog, fn {key, id} -> {key, catalog_ref(id, lookups)} end),
+         overrides: override_rows(overrides, lookups.compositions),
          routing_rules: routing_rules(org, mission, detail.routing_rules),
          pending: pending(mission, spacecraft_id, craft.spacecraft_type_id),
          recent_revisions: recent_revisions(org, mission, spacecraft_id)
@@ -76,50 +82,70 @@ defmodule Cadence.Reads.SpacecraftConfig do
   defp text(value), do: to_string(value)
 
   # The catalog its active configuration runs, and the one its profile (with overrides) sets.
-  defp catalog(scope, craft) do
-    numbers =
-      Map.new(
-        Cadence.Catalog.list_revisions(scope.organization_id, scope.mission_id),
-        &{&1.catalog_revision_id, &1.revision_number}
-      )
-
+  defp catalog_ids(scope, craft) do
     running =
       scope.organization_id
       |> Drafts.catalog_usage_entries(scope.mission_id)
       |> Enum.find_value(&(&1.spacecraft_id == craft.spacecraft_id && &1.catalog_revision_id))
 
+    %{running: running, profile: CatalogAuthority.effective(scope, craft)}
+  end
+
+  # Catalog revision numbers, and (D2, #543) the compositions behind every catalog revision this
+  # read shows (running, profile and each catalog override's), in one lookup.
+  defp catalog_lookups(scope, ids) do
+    revisions = Cadence.Catalog.list_revisions(scope.organization_id, scope.mission_id)
+
     %{
-      running: catalog_ref(running, numbers),
-      profile: catalog_ref(CatalogAuthority.effective(scope, craft), numbers)
+      numbers: Map.new(revisions, &{&1.catalog_revision_id, &1.revision_number}),
+      compositions:
+        CatalogCompositions.by_catalog_revision(
+          scope.organization_id,
+          scope.mission_id,
+          revisions,
+          ids
+        )
     }
   end
 
-  defp catalog_ref(nil, _numbers), do: nil
-  defp catalog_ref(id, numbers), do: %{id: id, revision_number: Map.get(numbers, id)}
+  defp catalog_ref(nil, _lookups), do: nil
 
-  defp overrides(_org, _mission, _spacecraft_id, nil), do: []
+  defp catalog_ref(id, lookups),
+    do: %{
+      id: id,
+      revision_number: Map.get(lookups.numbers, id),
+      composition: Map.get(lookups.compositions, id)
+    }
 
-  defp overrides(org, mission, spacecraft_id, profile) do
-    fields = schema_fields()
+  defp own_overrides(_org, _mission, _spacecraft_id, nil), do: []
 
+  defp own_overrides(org, mission, spacecraft_id, profile) do
     org
     |> ProfileRouting.overrides(mission, profile)
     |> Enum.filter(&(&1.spacecraft.id == spacecraft_id))
-    |> Enum.map(fn override ->
-      {section, field} = Map.get(fields, override.path, {section_label(override.path), nil})
+  end
 
-      %{
-        section: section,
-        path: override.path,
-        label: field && field.label,
-        unit: field && Map.get(field, :unit),
-        profile_value_json: json(override.profile_value),
-        spacecraft_value_json: json(override.spacecraft_value),
-        reason: override.reason,
-        set_at: override.set_at,
-        actor: actor(override.actor)
-      }
-    end)
+  defp override_rows(overrides, compositions) do
+    fields = schema_fields()
+    Enum.map(overrides, &override_row(&1, fields, compositions))
+  end
+
+  defp override_row(override, fields, compositions) do
+    {section, field} = Map.get(fields, override.path, {section_label(override.path), nil})
+
+    %{
+      section: section,
+      path: override.path,
+      label: field && field.label,
+      unit: field && Map.get(field, :unit),
+      profile_value_json: json(override.profile_value),
+      spacecraft_value_json: json(override.spacecraft_value),
+      reason: override.reason,
+      set_at: override.set_at,
+      actor: actor(override.actor),
+      # D2 (#543): a catalog override's composition (of the catalog revision it sets), else nil.
+      composition: CatalogCompositions.for_override(override, compositions)
+    }
   end
 
   # JSON text; nil (not set) stays null.

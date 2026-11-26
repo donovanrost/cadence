@@ -8,7 +8,7 @@ defmodule Cadence.Management.Activations do
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Governance
-  alias Cadence.Governance.ActivationPolicy
+  alias Cadence.Governance.{Accountability, ActivationPolicy}
 
   alias Cadence.Management.Activations.{
     ActivationDecision,
@@ -524,8 +524,7 @@ defmodule Cadence.Management.Activations do
      %{
        "kind" => "user",
        "id" => user.user_id,
-       "display_name" => user.display_name,
-       "email" => user.email
+       "display_name" => user.display_name
      }}
   end
 
@@ -546,13 +545,17 @@ defmodule Cadence.Management.Activations do
   defp human_approver(%Scope{actor_kind: :service}),
     do: {:error, :human_activation_approver_required}
 
+  # #280: a service requester counts as the people accountable for it (its issuer and rotators); an
+  # unknown set refuses. Activations refuse self-approval in every mode, so this does too.
   defp distinct_approver(request_row, approver_actor) do
-    if request_row.requester_actor_kind == :user and
-         request_row.requester_actor_id == approver_actor["id"] do
-      {:error, :activation_self_approval_forbidden}
-    else
-      :ok
-    end
+    requester = {request_row.requester_actor_kind, request_row.requester_actor_id}
+
+    request_row.organization_id
+    |> Accountability.separate({:user, approver_actor["id"]}, [requester])
+    |> Accountability.refusal(
+      :activation_self_approval_forbidden,
+      :activation_approver_authors_unknown
+    )
   end
 
   defp valid_change_class(change_class) when change_class in @change_classes, do: :ok

@@ -45,7 +45,7 @@ defineExpose({ open, close });
       :maxlength="REASON_MAX"
       required
     />
-    <ApCallout v-if="error" tone="caution">{{ planErrorText(error) }}</ApCallout>
+    <ApCallout v-if="error" tone="caution" role="alert">{{ planErrorText(error) }}</ApCallout>
     <template #footer>
       <ApButton variant="ghost" @click="close">Cancel</ApButton>
       <ApButton

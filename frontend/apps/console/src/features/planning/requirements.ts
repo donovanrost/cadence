@@ -5,6 +5,7 @@ import {
   detailsOf,
   isError,
   isRecord,
+  getAt,
   jsonObject,
   orNull,
   request,
@@ -13,16 +14,17 @@ import {
   type ApiResult,
   type Decoded,
   type Reader,
+  type JsonObject,
 } from "@/api";
 import { displayValue } from "@/features/changes/index.ts";
 import { planStates } from "@/features/scheduling/index.ts";
 import { formatCount, formatShort } from "@/ui";
 import { templateStates } from "./api.ts";
-import { readPath, templateSchemaReader, type TemplateSchema } from "./templates.ts";
+import { templateSchemaReader, type TemplateSchema } from "./templates.ts";
 
 /** Contract: docs/apogee/api/scheduling.md "Requirements (one-off; BACKLOG §8 8g)", api fb7510be. */
 const { array, integer, nullable, object, optional, string, timestamp, token } = decoders;
-const doc: Reader<Readonly<Record<string, unknown>>> = jsonObject;
+const doc: Reader<JsonObject> = jsonObject;
 
 /** The shared entity (typing §12 A5). */
 const actor = orNull(sharedActor);
@@ -198,7 +200,7 @@ export function planningButton(
 }
 
 /** A template occurrence's day, `11-15` (UTC, from its window's start); null when it has none. */
-export function occurrenceDay(content: Readonly<Record<string, unknown>>): string | null {
+export function occurrenceDay(content: JsonObject): string | null {
   const v = content["earliest_start"];
   if (typeof v !== "string") return null;
   const d = new Date(v);
@@ -225,7 +227,7 @@ export function occurrenceScope(
 }
 
 /** `11-14 00:00Z → 11-15 00:00Z` (ContactPlanning.md P4, §4). */
-export function windowText(content: Readonly<Record<string, unknown>>): string {
+export function windowText(content: JsonObject): string {
   const at = (v: unknown) => (typeof v === "string" ? formatShort(new Date(v)) : "—");
   return `${at(content["earliest_start"])} → ${at(content["latest_end"])}`;
 }
@@ -305,7 +307,7 @@ export function requirementFacts(
   ];
   for (const f of s.fields) {
     if (["spacecraft_id", "earliest_start", "latest_end"].includes(f.path)) continue;
-    const v = readPath(r.content, f.path);
+    const v = getAt(r.content, f.path);
     const label = f.enum?.find((o) => JSON.stringify(o.value) === JSON.stringify(v))?.label;
     const value =
       v === null || v === undefined
@@ -373,9 +375,7 @@ export function templateCountLine(
  * qa (P4): a constraints document left untouched in Advanced is `{allowed: null, excluded: null}`,
  * which older servers refuse (422 constraints). Untouched means no constraint, so it's left out.
  */
-export function withoutBlankConstraints(
-  document: Readonly<Record<string, unknown>>,
-): Record<string, unknown> {
+export function withoutBlankConstraints(document: JsonObject): Record<string, unknown> {
   const blank = (v: unknown) =>
     isRecord(v) &&
     Object.keys(v).every((k) => k === "allowed" || k === "excluded") &&

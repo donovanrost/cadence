@@ -239,3 +239,17 @@ export async function decideProviderChange(
     text: `It's unclear whether it was recorded (${describeApiError(e)}).`,
   };
 }
+
+/**
+ * The decided line after the signed-in person's own decision (U44): "Approved by Mira K. at 06:52:
+ * <reason>." Never their email (U25): with no display name, "by you" (only the decider sees it; ux).
+ */
+export function decidedLine(
+  word: string,
+  name: string | null | undefined,
+  at: string,
+  why: string,
+): string {
+  const shown = name?.trim();
+  return `${word} by ${shown || "you"} at ${at}: ${why.replace(/[.!?]+$/, "")}.`;
+}

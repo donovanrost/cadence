@@ -1,4 +1,5 @@
 import type { MissionId } from "@/api/index.ts";
+import { markPlanAct } from "@/features/scheduling/plan-acts.ts";
 import { computed, ref, type Ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { decoders as d, useRemoteQuery, type ApiError } from "@/api";
@@ -58,6 +59,7 @@ export function useReplan(missionId: Readonly<Ref<MissionId>>) {
 
   async function propose(window?: Readonly<{ from: string; to: string }>) {
     if (!planId.value) return;
+    markPlanAct();
     busy.value = true;
     actionError.value = null;
     try {

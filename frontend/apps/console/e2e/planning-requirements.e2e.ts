@@ -9,6 +9,10 @@ const screen = missionPath("setup/contact-planning");
 const quiet = allow(/\/contact-planning -> 404/, /status of 404/);
 
 test.describe("Contact planning requirements, organization admin", () => {
+  test.skip(
+    !!process.env["CI"],
+    "#638: console-e2e's CI seed leaves contact planning not set up (no policy or templates)",
+  );
   test.use({ allowedDiagnostics: quiet });
 
   test("states coverage honestly and lists the seeded templates", async ({ page }) => {

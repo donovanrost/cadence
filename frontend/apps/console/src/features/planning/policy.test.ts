@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api";
-import { buildDocument, groups, initialValues, pendingLine, policyReader } from "./policy.ts";
+import {
+  authorDecisionRefusal,
+  buildDocument,
+  groups,
+  initialValues,
+  pendingLine,
+  policyReader,
+  policySaveFailure,
+} from "./policy.ts";
 
 const field = (path: string, group: string, advanced: boolean, type = "integer") => ({
   path,
@@ -103,6 +111,25 @@ describe("pending policy line (ux U20)", () => {
   it("leaves out who when the saver isn't known", () => {
     expect(pendingLine({ ...pending, requested_by: null }, "11-14 02:10Z")).toBe(
       "Policy v4 was proposed at 11-14 02:10Z.",
+    );
+  });
+});
+
+// ux on #653: a policy isn't a change set, so an unclear save never points at Staged changes; the
+// version's author's refusal takes U95's form.
+describe("policy save and decision words (ux on #653)", () => {
+  it("an unclear save reloads the policy's versions; a refusal keeps failureOutcome's line", () => {
+    expect(policySaveFailure({ kind: "unavailable", status: 500, message: "boom" })).toBe(
+      "The server failed while answering, so it isn't clear whether this version was saved. Reload to see the policy's versions before trying again.",
+    );
+  });
+
+  it("the author's own approve or reject is refused in U95's form", () => {
+    expect(authorDecisionRefusal("approve")).toBe(
+      "Not approved: you saved this version, so another org admin approves it. Your approval wasn't recorded.",
+    );
+    expect(authorDecisionRefusal("reject")).toBe(
+      "Not rejected: you saved this version, so another org admin decides it. Nothing changed.",
     );
   });
 });

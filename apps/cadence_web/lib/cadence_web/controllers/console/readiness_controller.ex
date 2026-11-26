@@ -3,7 +3,6 @@ defmodule CadenceWeb.Console.ReadinessController do
 
   use CadenceWeb, :controller
 
-  alias Cadence.Accounts
   alias Cadence.Control.Configuration
   alias Cadence.Reads.Readiness
   alias CadenceWeb.Console.Problem
@@ -48,15 +47,10 @@ defmodule CadenceWeb.Console.ReadinessController do
       actor: actor(revision.applied_by)
     }
 
+  # #471: Configuration.list_revisions names applied_by already (Configuration.ActorNames: a person
+  # only while an active member, never by email). An unnamed person or service reads as the time
+  # alone; there's no second lookup that could fall back to an email.
   defp actor(%{name: name}) when is_binary(name), do: %{name: name}
-
-  defp actor(%{kind: "user", id: id}) when is_binary(id) do
-    case Accounts.fetch_user(id) do
-      {:ok, user} -> %{name: user.display_name || user.email}
-      _missing -> nil
-    end
-  end
-
   defp actor(%{kind: "system"}), do: %{name: "Cadence"}
-  defp actor(_none), do: nil
+  defp actor(_unnamed), do: nil
 end

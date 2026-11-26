@@ -33,9 +33,22 @@ describe("approve refusals (U97)", () => {
       code: null,
     });
     expect(approveRefusal(self("edited"), who)).toMatchObject({
-      text: "Not approved: you drafted this version of the plan, so another org admin approves it. Your approval wasn't recorded and nothing was booked.",
+      text: "Not approved: you drafted a version of this plan since it was last approved, so another org admin approves it. Your approval wasn't recorded and nothing was booked.",
       because: "edited",
     });
+    // #277 (U97, #592): a service identity made a version and no one is accountable for it.
+    const authors = (service: unknown) =>
+      approveRefusal(forbidden("contact_plan_approver_authors_unknown", { service }), who);
+    expect(authors({ id: "svc_1", name: "Nightly planner" }).text).toBe(
+      "Not approved: Nightly planner made one of this plan's versions since it was last approved and has no one recorded as accountable for it, so this can't be approved yet. An org admin records who's accountable in People › Service identities. Your approval wasn't recorded. You can also draft the day again so a new plan replaces this one.",
+    );
+    expect(authors({ id: "svc_1", name: null }).text).toBe(
+      "Not approved: a service identity that made one of this plan's versions since it was last approved has no one recorded as accountable for it, so this can't be approved yet. An org admin records who's accountable in People › Service identities. Your approval wasn't recorded. You can also draft the day again so a new plan replaces this one.",
+    );
+    expect(authors(null).text).toBe(
+      "Not approved: Cadence can't tell who made one of this plan's versions since it was last approved, so it can't check that you weren't one of them. Your approval wasn't recorded. Draft the day again so a new plan replaces this one; if it keeps happening, tell the team that runs Cadence for you.",
+    );
+    expect(authors(null).because).toBeNull();
     // A because this console doesn't know: the plain refusal with the code, never a guess.
     expect(approveRefusal(self("delegated"), who)).toMatchObject({
       text: "Not approved: Cadence refused this approval. Your approval wasn't recorded.",
@@ -381,7 +394,9 @@ describe("runReview (#257)", () => {
     approve.mockResolvedValue({ ok: false, error: self("edited") });
     const own = await runReview(ctx(), "approve", plan, []);
     expect(own).toMatchObject({ kind: "after", tone: "crit", because: "edited" });
-    expect(own.kind === "after" && own.text).toMatch(/^Not approved: you drafted this version/);
+    expect(own.kind === "after" && own.text).toMatch(
+      /^Not approved: you drafted a version of this plan/,
+    );
     approve.mockResolvedValue({ ok: false, error: conflict("plan_changed") });
     expect(await runReview(ctx(), "approve", plan, [])).toMatchObject({ kind: "refused" });
   });

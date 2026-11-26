@@ -1,4 +1,5 @@
 <script setup lang="ts" generic="T">
+import { ref, watch } from "vue";
 import { describeApiError } from "./http.ts";
 import type { RemoteState } from "./remote-state.ts";
 import { ApButton, ApCallout, ApEmptyState } from "@cadence/apogee-ui";
@@ -7,13 +8,30 @@ import { ApButton, ApCallout, ApEmptyState } from "@cadence/apogee-ui";
  * Renders a RemoteState: loading line, failure callout with retry, or the default slot with the
  * value. Use inside a panel body so each region fails on its own.
  */
-defineProps<{
+const props = defineProps<{
   state: RemoteState<T>;
   loadingLabel?: string;
   /** The 403 state's headline, e.g. "Org admins see this." (qa §6). */
   forbiddenText?: string;
+  /**
+   * a11y B6 (#276, ux): the load follows the person's own act (a typed search, a filter or day
+   * change), so a failure is an alert. Without it, only a failure after this Retry is.
+   */
+  acted?: boolean | undefined;
 }>();
-defineEmits<{ retry: [] }>();
+const emit = defineEmits<{ retry: [] }>();
+/** The person pressed Retry: a failure from here on is an alert, until a load succeeds. */
+const retried = ref(false);
+function retry() {
+  retried.value = true;
+  emit("retry");
+}
+watch(
+  () => props.state.status,
+  (status) => {
+    if (status === "ready") retried.value = false;
+  },
+);
 defineSlots<{ default: (props: { value: T; receivedAt: Date }) => unknown }>();
 </script>
 
@@ -31,9 +49,14 @@ defineSlots<{ default: (props: { value: T; receivedAt: Date }) => unknown }>();
     state="off"
     :headline="forbiddenText ?? 'You don\'t have access to this.'"
   />
-  <ApCallout v-else-if="state.status === 'failed'" tone="caution">
+  <!-- B6 (#276, ux): a first load's failure is read politely; after the person acted, an alert. -->
+  <ApCallout
+    v-else-if="state.status === 'failed'"
+    tone="caution"
+    :role="retried || acted ? 'alert' : 'status'"
+  >
     {{ describeApiError(state.error) }}
-    <template #action><ApButton size="compact" @click="$emit('retry')">Retry</ApButton></template>
+    <template #action><ApButton size="compact" @click="retry">Retry</ApButton></template>
   </ApCallout>
   <slot v-else :value="state.value" :received-at="state.receivedAt" />
 </template>

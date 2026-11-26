@@ -1259,6 +1259,10 @@ defmodule CadenceWeb.Router do
       get("/contact-planning/grants", ContactGrantController, :index)
       post("/contact-planning/grants", ContactGrantController, :create)
       post("/contact-planning/grants/:grant_id/revoke", ContactGrantController, :revoke)
+      post("/contact-planning/grants/:grant_id/approve", ContactGrantController, :approve)
+      post("/contact-planning/grants/:grant_id/reject", ContactGrantController, :reject)
+      post("/contact-planning/grants/:grant_id/narrow", ContactGrantController, :narrow)
+      post("/contact-planning/grants/:grant_id/resume", ContactGrantController, :resume)
 
       post("/contact-plans/:plan_id/execute", ContactPlanController, :execute)
 
@@ -1308,6 +1312,13 @@ defmodule CadenceWeb.Router do
       get("/service-identities", PeopleController, :service_identities)
       post("/service-identities", ServiceIdentityController, :create)
       post("/service-identities/:service_identity_id/rotate", ServiceIdentityController, :rotate)
+
+      post(
+        "/service-identities/:service_identity_id/accountable",
+        ServiceIdentityController,
+        :accountable
+      )
+
       delete("/service-identities/:service_identity_id", ServiceIdentityController, :revoke)
       get("/missions", OrganizationController, :missions)
       # L4 console mission create (owner: api).
@@ -1399,14 +1410,12 @@ defmodule CadenceWeb.Router do
     get("/current_scope", CurrentScopeController, :show)
 
     scope "/organizations/:organization_id" do
-      get("/", OrganizationController, :show)
-
-      get("/missions", MissionController, :index)
-      post("/missions", MissionController, :create)
+      # No organization read and no mission list or create here (#384, director 11-19): a REST
+      # bearer is always a service identity, and organization-level acts are a person's (#282).
       get("/missions/:mission_id", MissionController, :show)
 
-      get("/service_identities", ServiceIdentityController, :index)
-      post("/service_identities", ServiceIdentityController, :create)
+      # No service_identities here (#281): a REST bearer is always a service identity, and
+      # services never manage service identities. People issue them in the console.
 
       scope "/missions/:mission_id" do
         get("/mission_health", MissionHealthController, :show)

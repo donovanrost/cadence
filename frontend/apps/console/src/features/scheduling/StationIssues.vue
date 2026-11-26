@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import { ApButton, ApStatusMark, plural } from "@/ui";
 import { stationCode, type PlanDetail } from "./api.ts";
-import type { SpacecraftName } from "./names.ts";
+import { craftLabel, type SpacecraftName } from "./names.ts";
 import type { StationHits, UnavailablePass } from "./unavailable.ts";
 
 /**
@@ -35,6 +35,11 @@ const groups = computed<Group[]>(() => {
 });
 const passOf = (id: string) => props.plan.passes.find((p) => p.snapshot_id === id) ?? null;
 const hhmm = (t: string | null) => (t ? `${t.slice(11, 16)}Z` : "open-ended");
+/** B7 (ux on #588; U107's commas): a row's buttons are named by their pass: "Remove, EARENDIL-12, 17:00Z". */
+const rowName = (id: string) => {
+  const p = passOf(id);
+  return `${craftLabel(props.nameOf(p?.spacecraft_id ?? null))}, ${hhmm(p?.starts_at ?? null)}`;
+};
 function headline(g: Group): string {
   const first = g.hits[0];
   if (!first) return "";
@@ -80,23 +85,25 @@ const reportedAfter = (g: Group) => {
           class="flex flex-wrap items-center gap-2 font-mono text-sm"
         >
           <span class="flex-1 text-text-2">
-            {{
-              nameOf(passOf(h.snapshotId)?.spacecraft_id ?? null)?.name ??
-              passOf(h.snapshotId)?.spacecraft_id ??
-              "?"
-            }}
+            {{ craftLabel(nameOf(passOf(h.snapshotId)?.spacecraft_id ?? null)) }}
             {{ hhmm(passOf(h.snapshotId)?.starts_at ?? null) }}
           </span>
           <template v-if="editable && g.blocking">
             <ApButton
               size="compact"
               :disabled="busy"
+              disabled-reason="Working…"
+              :aria-label="`Other windows, ${rowName(h.snapshotId)}`"
               @click="$emit('focus', passOf(h.snapshotId)?.spacecraft_id ?? '')"
               >Other windows</ApButton
             >
+            <!-- A7 (#244): a locked pass (a repair keeps it booked) offers no Remove, as SelectedPanel. -->
             <ApButton
+              v-if="passOf(h.snapshotId)?.locked !== true"
               size="compact"
-              :disabled="busy || passOf(h.snapshotId)?.locked === true"
+              :disabled="busy"
+              disabled-reason="Working…"
+              :aria-label="`Remove, ${rowName(h.snapshotId)}`"
               @click="$emit('remove', h.snapshotId)"
               >Remove</ApButton
             >

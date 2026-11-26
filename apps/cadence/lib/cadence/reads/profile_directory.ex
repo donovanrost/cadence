@@ -6,7 +6,7 @@ defmodule Cadence.Reads.ProfileDirectory do
   `last_change` (as the detail's). Callers authorize first.
   """
 
-  alias Cadence.Reads.CatalogRollout
+  alias Cadence.Reads.{CatalogCompositions, CatalogRollout}
   alias Cadence.SpacecraftStore
   alias Cadence.SpacecraftStore.Overrides
   alias Cadence.SpacecraftType
@@ -34,29 +34,37 @@ defmodule Cadence.Reads.ProfileDirectory do
   @spec load(binary(), binary()) :: [map()]
   def load(organization_id, mission_id) do
     profiles = SpacecraftTypeStore.list_spacecraft_types(organization_id, mission_id)
+    revisions = Cadence.Catalog.list_revisions(organization_id, mission_id)
 
     build(
       profiles,
       SpacecraftStore.fleet_summary(organization_id, mission_id).profile_version_counts,
-      organization_id
-      |> Cadence.Catalog.list_revisions(mission_id)
-      |> Map.new(&{&1.catalog_revision_id, &1.revision_number}),
+      Map.new(revisions, &{&1.catalog_revision_id, &1.revision_number}),
       %{
         override_counts: override_counts(organization_id, mission_id),
-        version_times: version_times(organization_id, mission_id, profiles)
+        version_times: version_times(organization_id, mission_id, profiles),
+        compositions:
+          CatalogCompositions.by_catalog_revision(
+            organization_id,
+            mission_id,
+            revisions,
+            Enum.map(profiles, & &1.catalog_revision_id)
+          )
       }
     )
   end
 
   @doc """
   Pure builder over latest profile versions, per-(profile, version) spacecraft counts, catalog
-  revision numbers (id => number) and `extras`: `override_counts` (profile id => count) and
-  `version_times` (`{profile id, version}` => when that version was made).
+  revision numbers (id => number) and `extras`: `override_counts` (profile id => count),
+  `version_times` (`{profile id, version}` => when that version was made) and `compositions`
+  (catalog revision id => its composition, D2 #543).
   """
   @spec build([SpacecraftType.t()], [map()], %{binary() => pos_integer()}, map()) :: [map()]
   def build(profiles, version_counts, revision_numbers \\ %{}, extras \\ %{}) do
     override_counts = Map.get(extras, :override_counts, %{})
     version_times = Map.get(extras, :version_times, %{})
+    compositions = Map.get(extras, :compositions, %{})
     counts = Enum.group_by(version_counts, & &1.spacecraft_type_id)
 
     Enum.map(profiles, fn %SpacecraftType{} = profile ->
@@ -70,6 +78,7 @@ defmodule Cadence.Reads.ProfileDirectory do
         uplink_protocol: enum(profile.uplink_protocol),
         packet_protocol: enum(profile.packet_protocol),
         catalog_revision: CatalogRollout.ref(profile.catalog_revision_id, revision_numbers),
+        composition: Map.get(compositions, profile.catalog_revision_id),
         spacecraft_count: pinned |> Enum.map(& &1.count) |> Enum.sum(),
         spacecraft_on_older_versions:
           pinned

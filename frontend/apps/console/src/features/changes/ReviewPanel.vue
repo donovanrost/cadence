@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
-import { computed, ref, watch } from "vue";
+import { computed, ref, useId, watch } from "vue";
 import { isError, type RemoteState } from "@/api";
 import { ApButton, ApField, ApPanel } from "@/ui";
 import { reviewChangeSet, type Preview, type SubmitResult } from "./actions.ts";
@@ -36,8 +36,13 @@ const failure = ref<RefusalOutcome | null>(null);
 const NEEDS_COMMENT = "Add a comment first. It's recorded with your decision.";
 /** #320 (U97): the server says this viewer can't review; both decisions say why before the click. */
 const blocked = computed(() => reviewBlocked(props.changeSet, props.viewerId));
+/**
+ * #313 (mms-ux, after #320): when blocked, the reason is said once, in the muted line, and the
+ * Comment field and both buttons point at it (A6), in place of each button's own reason text.
+ */
+const blockedId = useId();
 const reasonFor = (needsComment: string) =>
-  busy.value ? "Working…" : (blocked.value?.line ?? needsComment);
+  blocked.value ? undefined : busy.value ? "Working…" : needsComment;
 
 /**
  * #376 (U79): a blocking hold stops Approve, never Send back. Up front from the checks; after a
@@ -60,9 +65,13 @@ watch(
 );
 const holdStands = computed(() => holdInChecks.value || refusedForHoldAt.value !== null);
 const approveReason = computed(() =>
-  busy.value
-    ? "Working…"
-    : (blocked.value?.line ?? (holdStands.value ? HOLD_STANDS : NEEDS_COMMENT)),
+  blocked.value
+    ? undefined
+    : busy.value
+      ? "Working…"
+      : holdStands.value
+        ? HOLD_STANDS
+        : NEEDS_COMMENT,
 );
 
 async function decide(decision: "approve" | "send_back") {
@@ -98,18 +107,23 @@ async function decide(decision: "approve" | "send_back") {
       <p class="m-0 text-md text-text-3">
         Submitted by {{ changeSet.submitted_by?.name ?? "—" }}: “{{ changeSet.reason ?? "" }}”
       </p>
-      <p v-if="blocked" data-review-blocked class="m-0 text-md text-text-3">{{ blocked.line }}</p>
+      <p v-if="blocked" :id="blockedId" data-review-blocked class="m-0 text-md text-text-3">
+        {{ blocked.line }}
+      </p>
       <details v-if="blocked?.code" class="text-sm">
         <summary class="ap-label cursor-pointer">Technical details</summary>
         <p class="m-0 mt-1 font-mono text-xs text-text-3">
           review_blocked_reason: {{ blocked.code }}
         </p>
       </details>
+      <!-- Blocked: the text typed so far is kept, read-only (never disabled), described by the line. -->
       <ApField
         v-model="comment"
         label="Comment"
         required
         hint="Recorded with your decision, whether you approve or send it back."
+        :readonly="blocked !== null"
+        :described-by="blocked ? blockedId : undefined"
       />
       <FailureOutcomeCallout v-if="failure" :outcome="failure" />
       <ApButton
@@ -117,6 +131,7 @@ async function decide(decision: "approve" | "send_back") {
         size="commit"
         :disabled="busy || blocked !== null || holdStands || comment.trim() === ''"
         :disabled-reason="approveReason"
+        :aria-describedby="blocked ? blockedId : undefined"
         @click="decide('approve')"
       >
         Approve &amp; apply as
@@ -128,6 +143,7 @@ async function decide(decision: "approve" | "send_back") {
       <ApButton
         :disabled="busy || blocked !== null || comment.trim() === ''"
         :disabled-reason="reasonFor('Add a comment for the author.')"
+        :aria-describedby="blocked ? blockedId : undefined"
         @click="decide('send_back')"
         >Send back</ApButton
       >

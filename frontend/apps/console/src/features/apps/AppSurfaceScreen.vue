@@ -154,7 +154,11 @@ const crumbs = computed((): readonly ApCrumb[] =>
   <div class="mx-auto flex w-full max-w-[1400px] flex-col gap-4">
     <ApBreadcrumb :crumbs="crumbs" />
     <ApPageHeader :label="`${scope.mission.name} · apps · ${name}`" :title="title" size="reading">
-      <AppStatusLine :app-key="appKey" :status="status" />
+      <AppStatusLine
+        :app-key="appKey"
+        :status="status"
+        :requested="outcome?.kind === 'activation_requested'"
+      />
     </ApPageHeader>
     <ApTabLinks
       v-if="links.length > 1"

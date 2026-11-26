@@ -283,3 +283,25 @@ describe("#235 what a spacecraft configuration request changes", () => {
     );
   });
 });
+
+describe("U109: a composed side of the catalog row (#538)", () => {
+  it("reads 'composition 3' where a catalog revision reads 'catalog rev 14'", () => {
+    const composed = {
+      id: "cr_x",
+      number: null,
+      composition: {
+        composition_id: "mission_model_composition:abc",
+        number: 3,
+        imported_layers: [
+          { layer_id: "a", mount: "/", catalog_revision: null },
+          { layer_id: "b", mount: "/payload", catalog_revision: null },
+        ],
+        created_by: null,
+        created_at: "2026-11-20T09:12:00Z",
+      },
+    };
+    const row = rowOf({ ...catalogRow, after: composed });
+    expect(valueWord(row, "before")).toBe("catalog rev 13");
+    expect(valueWord(row, "after")).toBe("composition 3");
+  });
+});

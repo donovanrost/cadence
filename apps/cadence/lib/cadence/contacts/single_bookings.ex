@@ -58,7 +58,8 @@ defmodule Cadence.Contacts.SingleBookings do
   def cancel_target(_input), do: nil
 
   @doc "Search one spacecraft's offers (`SingleBookings.Search.run/3`)."
-  def search(%Scope{} = scope, mission, params), do: Search.run(scope, mission, params)
+  def search(%Scope{} = scope, mission, params, opts \\ []),
+    do: Search.run(scope, mission, params, opts)
 
   @doc "A16b: the routes Book a pass can search for a spacecraft, with the search limits."
   @spec routes(Scope.t(), binary(), binary() | nil) :: {:ok, map()} | {:error, term()}

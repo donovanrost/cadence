@@ -725,6 +725,8 @@ fields (B), what's gone by design (C), and four bugs (D). Its gaps go to lead be
    The console doesn't import it; the federated bundles the console loads use only `@cadence/plugin-sdk`.
    Deleting it whole needs L16 and L20 decided, every row done, and those four moved off it.
 2. **The bearer `POST /api/organizations/:id/missions`: keep it** (lead; the director has been asked).
+   **Closed (director 2026-11-19): retired by #384**, along with `GET /api/organizations/:id` and
+   `GET …/missions` (no external client; organization-level acts are a person's, #282).
 3. **`ApplicationHostController.admin_federated`** (R:213-215, :219-221) serves only `organization_admin`'s six
    `scope: :admin` surfaces. `organization_admin.ex:288` is the only `:admin` installable scope, and nothing links
    to those URLs. **It goes with L7**, along with the bridge's `scope=admin` branches, `OrganizationAdminQuery`

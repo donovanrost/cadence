@@ -8,11 +8,26 @@ defmodule Cadence.Accounts.PlatformDirectory do
   import Ecto.Query
 
   alias Cadence.Accounts.{OrganizationInvitationRow, OrganizationMembershipRow, UserRow}
-  alias Cadence.Auth.ServiceIdentityRow
+  alias Cadence.Auth.{ServiceAccountableRow, ServiceIdentityRow}
   alias Cadence.Missions.MissionRow
   alias Cadence.Organizations.OrganizationRow
-  alias Cadence.Persistence.JsonDocument
   alias Cadence.Repo
+
+  @doc """
+  `%{user_id => display_name | nil}` for any of `user_ids`, in any organization: display name
+  only, never the email (#470). Platform-admin reads only, through
+  `Administration.PlatformNames`, which checks `Administration.Access` first.
+  """
+  @spec display_names([binary()]) :: %{binary() => binary() | nil}
+  def display_names([]), do: %{}
+
+  def display_names(user_ids) when is_list(user_ids) do
+    UserRow
+    |> where([u], u.user_id in ^Enum.uniq(user_ids))
+    |> select([u], {u.user_id, u.display_name})
+    |> Repo.all()
+    |> Map.new(fn {id, name} -> {id, if(is_binary(name) and name != "", do: name)} end)
+  end
 
   @doc "Organizations by slug after `after_id`, optionally matching `q` in name or slug."
   def organizations(q, after_id, limit) do
@@ -82,7 +97,8 @@ defmodule Cadence.Accounts.PlatformDirectory do
       id: i.organization_invitation_id,
       email: i.email,
       role: i.membership_role,
-      inviter: coalesce(u.display_name, u.email),
+      # #470: the inviter's display name only, never the email (nil without one).
+      inviter: fragment("NULLIF(?, '')", u.display_name),
       invited_at: i.inserted_at,
       expires_at: i.expires_at
     })
@@ -140,11 +156,19 @@ defmodule Cadence.Accounts.PlatformDirectory do
     |> for_organization(organization_id)
     |> join(:inner, [s], o in OrganizationRow, on: o.organization_id == s.organization_id)
     |> join(:left, [s], m in MissionRow, on: m.mission_id == s.mission_id)
+    # The issuer the server recorded (#280), never the client-writable metadata.
+    |> join(:left, [s], a in ServiceAccountableRow,
+      on:
+        a.organization_id == s.organization_id and
+          a.service_identity_id == s.service_identity_id and a.event == "issued" and
+          a.actor_kind == "user"
+    )
     |> order_by([s], desc: s.inserted_at, desc: s.service_identity_id)
-    |> select([s, o, m], %{
+    |> select([s, o, m, a], %{
       row: s,
       organization: %{id: o.organization_id, name: o.display_name},
-      mission: %{id: m.mission_id, name: m.display_name}
+      mission: %{id: m.mission_id, name: m.display_name},
+      issued_by: a.user_id
     })
   end
 
@@ -156,15 +180,8 @@ defmodule Cadence.Accounts.PlatformDirectory do
       capabilities: s.capabilities,
       mission: found.mission.id && found.mission,
       created_at: s.inserted_at,
-      created_by_id: creator_id(s)
+      created_by_id: found.issued_by
     }
-
-  defp creator_id(s) do
-    case JsonDocument.unwrap_value(s.metadata) || %{} do
-      %{"created_by" => %{"id" => id}} when is_binary(id) -> id
-      _unknown -> nil
-    end
-  end
 
   defp organization_view(row),
     do: %{

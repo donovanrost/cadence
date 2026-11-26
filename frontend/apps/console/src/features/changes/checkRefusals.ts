@@ -1,4 +1,4 @@
-import { isError, type ApiError } from "@/api";
+import { decoders as d, detailsOf, isError, type ApiError } from "@/api";
 import type { RefusalOutcome } from "./refusals.ts";
 
 /**
@@ -29,10 +29,39 @@ const HOLDS_BLOCKING_APPROVE =
   "Not approved: a blocking hold stands, so nothing was applied and the change set stays in " +
   "review. Your approval wasn't recorded. Approve it once the hold clears; the checks show it.";
 
+/**
+ * #534 (mms-ux; mms-engineer #548/#549): 409 `packet_definition_version_taken`, another change
+ * saved a packet definition at the same moment. Nothing was written and doing it again resolves
+ * it, so it says try again. The apply line is the server's (mms-ux); its details go only in
+ * Technical details.
+ */
+const VERSION_TAKEN_CAUSE = "another change saved a packet definition at the same moment";
+const VERSION_TAKEN = {
+  approve:
+    `Not approved: ${VERSION_TAKEN_CAUSE}, so nothing was applied and the change set stays in ` +
+    "review. Your approval wasn't recorded. Try again.",
+  apply: `Not applied: ${VERSION_TAKEN_CAUSE}, so nothing changed. Try again.`,
+  request_review: `Not sent for review: ${VERSION_TAKEN_CAUSE}, so nothing changed. Try again.`,
+} as const satisfies Record<ChecksAct, string>;
+const versionTakenDetails = d.object({ packet_definition_id: d.token, version: d.integer });
+
+function versionTakenTechnical(error: ApiError): string {
+  const details = detailsOf(error, versionTakenDetails);
+  return details
+    ? `packet_definition_version_taken: ${details.packet_definition_id} v${details.version}`
+    : "packet_definition_version_taken";
+}
+
 /** The refusal's words when the checks refused it, or null for any other refusal. */
 export function checksRefusal(error: ApiError, act: ChecksAct): RefusalOutcome | null {
   if (isError(error, "preview_failed"))
     return { changed: false, sentence: PREVIEW_FAILED[act], technical: "preview_failed" };
+  if (isError(error, "packet_definition_version_taken"))
+    return {
+      changed: false,
+      sentence: VERSION_TAKEN[act],
+      technical: versionTakenTechnical(error),
+    };
   if (act === "approve" && isError(error, "holds_blocking"))
     return { changed: false, sentence: HOLDS_BLOCKING_APPROVE };
   return null;

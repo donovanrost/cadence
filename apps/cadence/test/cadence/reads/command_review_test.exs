@@ -193,6 +193,40 @@ defmodule Cadence.Reads.CommandReviewTest do
     assert RequestStore.list_approvals(c.org, c.mission, []) == []
   end
 
+  # #263 (api-ops): the approved command is built from the request and its approval BEFORE the
+  # decision commits. A failure refuses with nothing recorded, so "The decision was not saved"
+  # is then true; once a decision commits, the answer is that it was recorded.
+  test "an approved command that can't be built refuses with nothing recorded", c do
+    assert {:ok, data} = CommandReview.load(c.scope, c.mission, c.request.command_request_id)
+    test_pid = self()
+
+    failing = fn request, approval ->
+      send(test_pid, {:built, request.lifecycle_state, approval.decision})
+      {:error, :approved_command_identity_mismatch}
+    end
+
+    assert {:rejected, "The decision was not saved. Reload before reviewing."} =
+             RequestReview.decide(
+               c.scope,
+               c.mission,
+               c.request.command_request_id,
+               input(data),
+               approved_command: failing
+             )
+
+    # It ran on the decided request and its approval, inside the transaction that then rolled back.
+    assert_received {:built, :approved, :approved}
+    assert RequestStore.list_approvals(c.org, c.mission, []) == []
+
+    assert {:ok, %{lifecycle_state: :approval_pending}} =
+             RequestStore.fetch_request(c.org, c.mission, c.request.command_request_id)
+
+    assert {:ok, %{"decision" => "approved"}} =
+             RequestReview.decide(c.scope, c.mission, c.request.command_request_id, input(data))
+
+    assert [_approval] = RequestStore.list_approvals(c.org, c.mission, [])
+  end
+
   defp input(data),
     do: %{
       "decision" => "approved",

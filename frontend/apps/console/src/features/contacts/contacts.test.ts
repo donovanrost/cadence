@@ -76,6 +76,7 @@ const pass = (id: string, overrides: Partial<Pass> = {}): Pass => ({
   incomplete_at_end: undefined,
   scid_mismatch: undefined,
   window_moves: undefined,
+  listener_overlap: undefined,
   telemetry_stored: undefined,
   ...overrides,
 });
@@ -193,6 +194,7 @@ describe("attention block words (U32)", () => {
     attempts: undefined,
     next_attempt_at: undefined,
     last_attempt_at: undefined,
+    withdrawal: undefined,
     activation_request_id: undefined,
     error_code: undefined,
     error: undefined,

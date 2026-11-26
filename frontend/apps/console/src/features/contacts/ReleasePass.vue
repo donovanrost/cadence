@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
-import { ApButton, ApCallout, ApSheet } from "@/ui";
+import { ApButton, ApCallout, ApSheet, OutcomeCallout } from "@/ui";
 import { fetchQueuedGroups, type Pass, type QueuedGroups } from "./api.ts";
 import { releasePass, whoMayRelease, type ReleaseOutcome } from "./release.ts";
 import { stationLabel } from "./gantt.ts";
@@ -84,7 +84,7 @@ async function release() {
     >
       {{ whoMayRelease(pass.off_plan?.booked_by?.name ?? null) }}
     </p>
-    <ApCallout v-if="outcome" :tone="outcome.tone">{{ outcome.text }}</ApCallout>
+    <OutcomeCallout v-if="outcome" :outcome="outcome" />
     <ApSheet
       ref="sheet"
       :title="`Release ${spacecraft} · ${stationLabel(pass)} · ${short(pass.starts_at)}?`"

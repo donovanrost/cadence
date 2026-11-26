@@ -142,7 +142,7 @@ defmodule Cadence.Reads.CommandRequestHistoryTest do
     }
 
     assert %{kind: "resolved", code: "not_sent", by: %{kind: "user", id: id, name: name}, at: at} =
-             CommandRequestHistory.resolved_by(%{kind: "resolved", code: "not_sent"}, log)
+             CommandRequestHistory.resolved_by(%{kind: "resolved", code: "not_sent"}, log, @org)
 
     assert id == c.scope.user.user_id and is_binary(name)
     assert at == ~U[2026-11-14 07:25:05Z]
@@ -153,7 +153,8 @@ defmodule Cadence.Reads.CommandRequestHistoryTest do
       ]
     }
 
-    assert %{by: %{kind: "service_identity", id: "svc-unknown", name: nil}} =
+    # #470: a service that isn't this organization's has no id and no name.
+    assert %{by: %{kind: "service_identity", id: nil, name: nil}} =
              CommandRequestHistory.resolved_by(
                %{kind: "resolved", code: "rejected"},
                service,

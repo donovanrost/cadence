@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, useId } from "vue";
 import { ApButton, ApCallout, ApTag } from "@/ui";
 import {
+  NAMES_LISTED,
   firstStartLine,
   groupHeading,
   namesLine,
@@ -27,6 +28,20 @@ const unchanged = computed(
 const all = ref<readonly CraftRef[] | null>(null);
 const loading = ref(false);
 const failed = ref(false);
+/**
+ * #244 (B3, A5): Show all is a disclosure. It stays mounted with aria-expanded (it used to unmount
+ * on success, dropping focus), reads "Show first 3" while open (ux: Show all N ↔ Show first N), and
+ * keeps the names once loaded.
+ */
+const expanded = ref(false);
+const namesId = useId();
+const shown = computed(() => (expanded.value ? all.value : null));
+async function toggleAll() {
+  if (expanded.value) return void (expanded.value = false);
+  if (all.value) return void (expanded.value = true);
+  await showAll();
+  if (all.value) expanded.value = true;
+}
 async function showAll() {
   loading.value = true;
   failed.value = false;
@@ -52,27 +67,34 @@ async function showAll() {
 <template>
   <section class="flex flex-col gap-2 border-t border-line pt-3 first:border-t-0 first:pt-0">
     <p v-if="unchanged" class="m-0 text-md text-text-2">
-      {{ all ? `No changes on ${all.length} spacecraft:` : noChangesLine(group, fleet) }}
+      {{ shown ? `No changes on ${shown.length} spacecraft:` : noChangesLine(group, fleet) }}
     </p>
     <div v-else class="flex flex-wrap items-center gap-2">
       <h3 v-if="fleet" class="m-0 text-md text-bright">{{ groupHeading(group) }}</h3>
       <ApTag v-if="!group.telemetry_enabled" state="off" label="Telemetry off" />
     </div>
-    <p v-if="!unchanged && fleet && group.count > 1 && !all" class="m-0 text-sm text-text-2">
+    <p v-if="!unchanged && fleet && group.count > 1 && !shown" class="m-0 text-sm text-text-2">
       {{ namesLine(group) }}
     </p>
-    <p v-if="all" class="m-0 text-sm text-text-2">{{ all.map(craftName).join(", ") }}</p>
-    <div v-if="showAllLabel(group) && !all">
+    <p v-if="shown" :id="namesId" class="m-0 text-sm text-text-2">
+      {{ shown.map(craftName).join(", ") }}
+    </p>
+    <div v-if="showAllLabel(group)">
       <ApButton
         size="compact"
         variant="ghost"
+        :aria-expanded="expanded"
+        :aria-controls="shown ? namesId : undefined"
         :disabled="loading"
         disabled-reason="Loading…"
-        @click="showAll"
-        >{{ showAllLabel(group) }}</ApButton
+        @click="toggleAll"
+        >{{ expanded ? `Show first ${NAMES_LISTED}` : showAllLabel(group) }}</ApButton
       >
     </div>
-    <ApCallout v-if="failed" tone="caution"> The names couldn't be loaded. Try again. </ApCallout>
+    <!-- B6: it answers the person's own click. -->
+    <ApCallout v-if="failed" tone="caution" role="alert">
+      The names couldn't be loaded. Try again.
+    </ApCallout>
     <p v-if="group.first_start" class="m-0 text-md text-text-2">{{ firstStartLine(group) }}</p>
     <ul v-if="!unchanged" class="m-0 flex list-none flex-col gap-1 p-0">
       <li v-for="row in group.rows.items" :key="row.field" class="text-md">

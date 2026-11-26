@@ -19,10 +19,16 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceJSON do
       spacecraft_id: s.spacecraft_id,
       name: s.name,
       scid: s.scid,
+      # #595: the craft's own profile {id, name}, or nil.
+      profile: s.profile,
+      # #595b: who sets the catalog revision: its profile (DECISIONS #65) or the spacecraft.
+      catalog_set_by: s.catalog_set_by,
       section: s.section,
       token: s.token,
       saved_version: s.saved_version,
       document: document(s.document),
+      # D2 (#543): the composition behind the document's catalog revision, or nil.
+      composition: s.composition,
       external_changes: s.external_changes,
       switches: s.switches,
       active: active(s.active),
@@ -64,7 +70,8 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceJSON do
     do: %{
       version: active.version,
       generation: active.generation,
-      document: document(active.document)
+      document: document(active.document),
+      composition: active.composition
     }
 
   # The decision record's fields (subject, separated_from, admin_mode, applied_by) join `review`
@@ -78,10 +85,22 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceJSON do
       policy_token: a.token,
       source: a.source,
       can_request: a.can_request,
-      can_review: a.can_review
+      can_review: a.can_review,
+      # #595: gates editing (Drafts.save's check); can_request gates Request activation.
+      can_save: a.can_save
     }
   end
 
   defp catalog(c),
-    do: Map.take(c, [:id, :name, :label, :number, :declarations, :packets, :commands])
+    do:
+      Map.take(c, [
+        :id,
+        :name,
+        :label,
+        :number,
+        :approval_status,
+        :declarations,
+        :packets,
+        :commands
+      ])
 end

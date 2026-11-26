@@ -486,6 +486,8 @@ defmodule Cadence.Architecture.PlaneBoundary do
                               # U65 (domain 11-15): the model gate's default baseline for the console.
                               "lib/cadence/control/model_approval_gate.ex",
                               "lib/cadence/control/alarms.ex",
+                              # #472 (lead 11-20): the shared #146 actor-naming helper, read-only.
+                              "lib/cadence/control/actor_ref.ex",
                               "lib/cadence/control/activations/activation_execution.ex",
                               "lib/cadence/applications/telemetry_decom.ex",
                               "lib/cadence/management/activations/approved_activation.ex",

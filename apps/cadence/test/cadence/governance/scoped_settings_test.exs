@@ -110,7 +110,7 @@ defmodule Cadence.Governance.ScopedSettingsTest do
     assert ActivationPolicy.load(c.org, c.mission) == governance
     assert WorkspaceSettings.load(c.org, c.mission).effective == %{"shelf" => "minimized"}
 
-    assert [%{id: id, actor: "maya", version: 1}] =
+    assert [%{id: id, actor_id: "maya", version: 1}] =
              ScopedSettings.history(c.org, c.mission, "commanding.defaults")
 
     assert id == revision.revision_id

@@ -14,8 +14,6 @@ defmodule Cadence.Dashboards.StatelessAuthoring do
   message}]}}`.
   """
 
-  alias Cadence.Accounts
-
   alias Cadence.Dashboards.{
     Authoring,
     AuthoringChanges,
@@ -31,6 +29,8 @@ defmodule Cadence.Dashboards.StatelessAuthoring do
     Version,
     VersionDiff
   }
+
+  alias Cadence.Reads.Dashboards.Authors
 
   @max_commands 256
 
@@ -129,7 +129,7 @@ defmodule Cadence.Dashboards.StatelessAuthoring do
     with {:ok, current} <- open(scope, mission, dashboard) do
       rows = DocumentStore.list_versions(scope.organization_id, mission, dashboard)
       first = rows |> Enum.map(& &1.version) |> Enum.min(fn -> nil end)
-      names = names(rows)
+      names = Authors.members(scope.organization_id, Enum.map(rows, & &1.created_by))
       reverted = reverted(scope.organization_id, mission, dashboard)
       current_version = Document.version(current)
 
@@ -366,7 +366,7 @@ defmodule Cadence.Dashboards.StatelessAuthoring do
       version: row.version,
       kind: kind(row, first, reverted),
       based_on_version: row.based_on_version,
-      created_by: row.created_by && %{id: row.created_by, name: Map.get(names, row.created_by)},
+      created_by: Authors.person(names, row.created_by),
       created_at: row.inserted_at,
       change_summary: row.change_summary,
       current: row.version == current
@@ -390,18 +390,5 @@ defmodule Cadence.Dashboards.StatelessAuthoring do
         is_integer(version),
         into: MapSet.new(),
         do: version
-  end
-
-  defp names(rows) do
-    rows
-    |> Enum.map(& &1.created_by)
-    |> Enum.reject(&is_nil/1)
-    |> Enum.uniq()
-    |> Map.new(fn id ->
-      case Accounts.fetch_user(id) do
-        {:ok, user} -> {id, user.display_name || user.email}
-        _not_a_user -> {id, nil}
-      end
-    end)
   end
 end

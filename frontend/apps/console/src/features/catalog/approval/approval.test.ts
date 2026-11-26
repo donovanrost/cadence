@@ -1,9 +1,15 @@
 import { mount } from "@vue/test-utils";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { decode, missionId, type ApiError } from "@/api/index.ts";
 import { modelRevisionReader } from "./api.ts";
 import ApprovalPanel from "./ApprovalPanel.vue";
 import { approvalTag, decisionFailure, kindWord, sectionLine } from "./words.ts";
+
+// #260: the panel names the signed-in person for the already-approved line.
+vi.mock("@/shell", async (original) => ({
+  ...(await original<typeof import("@/shell")>()),
+  useSession: () => ({ user: { id: "u-viewer" } }),
+}));
 
 /** ux U65 · catalog revision approval (api's wire 11-15). */
 const comparison = {

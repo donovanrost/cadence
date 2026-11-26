@@ -7,17 +7,27 @@ defmodule Cadence.Auth.ServiceIdentityKeys do
 
   import Ecto.Query
 
-  alias Cadence.Auth.ServiceIdentityRow
+  alias Cadence.Auth.{Scope, ServiceAccountability, ServiceIdentityRow}
   alias Cadence.Repo
 
-  @doc "Issues a new API token for an active identity; the old one stops authenticating."
-  @spec rotate(binary(), binary()) ::
+  @doc """
+  Issues a new API token for an active identity; the old one stops authenticating. Whoever rotates
+  it (`rotated_by`) becomes accountable for it, in the same transaction (#280).
+  """
+  @spec rotate(binary(), binary(), Scope.t()) ::
           {:ok, map()} | {:error, :service_identity_not_found | term()}
-  def rotate(organization_id, service_identity_id) do
+  def rotate(organization_id, service_identity_id, %Scope{} = rotated_by) do
     api_token = 32 |> :crypto.strong_rand_bytes() |> Base.url_encode64(padding: false)
 
     change_active(organization_id, service_identity_id, fn row ->
-      with {:ok, row} <- Repo.update(ServiceIdentityRow.rotate_changeset(row, api_token)) do
+      with {:ok, row} <- Repo.update(ServiceIdentityRow.rotate_changeset(row, api_token)),
+           :ok <-
+             ServiceAccountability.record(
+               organization_id,
+               service_identity_id,
+               :rotated,
+               rotated_by
+             ) do
         {:ok, %{service_identity: ServiceIdentityRow.to_domain(row), api_token: api_token}}
       end
     end)

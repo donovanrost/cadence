@@ -10,7 +10,7 @@ defmodule Cadence.Control.PlanningPolicy do
   (`Cadence.ContactPlanning.FleetPlanningPolicySchema.groups/0`).
   """
 
-  alias Cadence.Accounts
+  alias Cadence.Accounts.MemberNames
   alias Cadence.Auth.{Policy, Scope}
 
   alias Cadence.ContactPlanning.{
@@ -165,7 +165,11 @@ defmodule Cadence.Control.PlanningPolicy do
     if policy.active_version != current.version and not decided?,
       do: %{
         version: current.version,
-        requested_by: actor(current.created_by),
+        requested_by:
+          actor(
+            current.created_by,
+            MemberNames.members(organization_id, [current.created_by])
+          ),
         requested_at: current.created_at,
         document: document(current),
         reason: current.reason
@@ -188,14 +192,14 @@ defmodule Cadence.Control.PlanningPolicy do
     end
   end
 
-  defp actor(user_id) do
-    name =
-      case Accounts.fetch_user(user_id) do
-        {:ok, user} -> user.display_name || user.email
-        _missing -> nil
-      end
-
-    %{kind: "user", id: user_id, name: name}
+  # #146 (#468): a person is named, and keeps their id, only while an active member of the
+  # mission's organization (one batched lookup per read); anyone else reads id and name nil,
+  # never an email.
+  defp actor(user_id, people) do
+    case Map.fetch(people, user_id) do
+      {:ok, name} -> %{kind: "user", id: user_id, name: name}
+      :error -> %{kind: "user", id: nil, name: nil}
+    end
   end
 
   defp document(version) do

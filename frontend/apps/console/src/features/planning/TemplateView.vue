@@ -7,6 +7,7 @@ import { ruleText, type TemplateDetail } from "./api.ts";
 import { stateChangedLine } from "./lifecycle.ts";
 import TemplateLifecycle from "./TemplateLifecycle.vue";
 import { fetchTemplateSchema, maxGapFact } from "./templates.ts";
+import VersionByCell from "./VersionByCell.vue";
 
 /** CP3 read view: the rule, its last lifecycle move, Pause/Resume/Close (L2), and versions. */
 const props = defineProps<{ missionId: MissionId; template: TemplateDetail; canEdit: boolean }>();
@@ -63,7 +64,7 @@ const columns: readonly ApColumn[] = [
     >
       <template #cell-version="{ row }">v{{ row.version }}</template>
       <template #cell-at="{ row }">{{ formatAbsolute(new Date(row.created_at)) }}</template>
-      <template #cell-by="{ row }">{{ row.actor?.name ?? "Not recorded" }}</template>
+      <template #cell-by="{ row }"><VersionByCell :actor="row.actor" /></template>
     </ApTable>
   </ApPanel>
   <p v-if="!canEdit" class="m-0 text-sm text-text-3">Org admins change contact planning.</p>
