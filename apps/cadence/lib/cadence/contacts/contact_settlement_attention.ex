@@ -45,12 +45,31 @@ defmodule Cadence.Contacts.ContactSettlementAttention do
 
   @doc """
   The open item for one pass's booking (`provider_reservation_id`), or nil: what the Contacts
-  drawer shows for that pass (U37). Reads only the mission's open unsettled contacts, not the
+  drawer shows for that pass (U37), the same map `items/2` builds for it. Two keyed reads, the
+  booking and its open unsettled contact (`limit 1`), not the mission's open items nor the
   action queue (#847).
   """
   @spec for_reservation(binary(), binary(), binary()) :: map() | nil
   def for_reservation(org, mission, reservation_id) do
-    org |> items(mission) |> Enum.find(&(&1.provider_reservation_id == reservation_id))
+    with %ProviderReservationRow{scheduled_contact_id: contact_id} = booking
+         when is_binary(contact_id) <-
+           Repo.one(
+             from(row in ProviderReservationRow,
+               where:
+                 row.organization_id == ^org and row.mission_id == ^mission and
+                   row.provider_reservation_id == ^reservation_id
+             )
+           ),
+         %RealizedContactRow{} = contact <-
+           org
+           |> open_query(mission)
+           |> where([row], row.scheduled_contact_id == ^contact_id)
+           |> limit(1)
+           |> Repo.one() do
+      item(RealizedContactRow.to_domain(contact), ProviderReservationRow.to_domain(booking))
+    else
+      _none -> nil
+    end
   end
 
   @spec resolved_since(binary(), binary(), DateTime.t()) :: [map()]
