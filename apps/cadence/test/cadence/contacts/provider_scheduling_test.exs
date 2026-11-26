@@ -313,6 +313,41 @@ defmodule Cadence.Contacts.ProviderSchedulingTest do
     assert backup["delivery_profile_ref"] == "backup-delivery"
   end
 
+  test "only providers declaring a multi-spacecraft limit share a request", context do
+    {:ok, %{routes: [first]}} =
+      ProviderScheduling.list_ready_downlink_routes(
+        context.organization_id,
+        context.mission_id,
+        context.spacecraft.spacecraft_id
+      )
+
+    second = %{first | route_key: "second", provider_spacecraft_ref: "SIM-002"}
+    from = DateTime.utc_now() |> DateTime.add(120) |> DateTime.truncate(:second)
+    windows = %{{from, DateTime.add(from, 3_600)} => [first, second]}
+    test_pid = self()
+
+    opts = [
+      client: FakeProviderClient,
+      on_search: fn params -> send(test_pid, {:provider_search, params["spacecraft_refs"]}) end,
+      search_response: {:ok, %{data: [], next_cursor: nil, truncated: false}}
+    ]
+
+    provider = context.provider
+    key = {provider.provider_id, provider.version}
+
+    FleetOpportunitySearch.search(windows, %{key => provider}, 2, opts)
+
+    assert_received {:provider_search, ["SIM-001"]}
+    assert_received {:provider_search, ["SIM-002"]}
+    refute_received {:provider_search, _}
+
+    provider = %{provider | capabilities_document: search_capabilities()}
+    FleetOpportunitySearch.search(windows, %{key => provider}, 2, opts)
+
+    assert_received {:provider_search, ["SIM-001", "SIM-002"]}
+    refute_received {:provider_search, _}
+  end
+
   defp search_capabilities do
     %{
       "contract_version" => "1.0",

@@ -68,7 +68,6 @@ defmodule Cadence.Control.Providers do
          {:ok, client} <- resolve_client(context, opts) do
       {:ok,
        %{
-         client: client,
          capabilities: context.capabilities,
          request: &client.search_opportunities(context, &1, call_opts)
        }}
