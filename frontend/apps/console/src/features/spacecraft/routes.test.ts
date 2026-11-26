@@ -43,27 +43,13 @@ function rules(rows: Record<string, unknown>[]): readonly RoutingRule[] {
 const inu = { id: "gs-1", code: "INU", name: "Inuvik" };
 
 describe("U79 route tags", () => {
-  it("tags by origin: profile, the spacecraft's own, and legacy with its note and reason", () => {
-    const [profile, own, legacy] = rules([
+  it("tags by origin: profile, and the spacecraft's own", () => {
+    const [profile, own] = rules([
       { id: "a", origin: "profile", route_id: null, station: inu },
       { id: "b", origin: "spacecraft", route_id: "spacecraft_route_1", station: inu },
-      { id: "c", origin: "legacy", route_id: null, station: null },
     ]);
-    expect(profile && routeTag(profile)).toEqual({
-      label: "From profile",
-      note: null,
-      reason: null,
-    });
-    expect(own && routeTag(own)).toEqual({
-      label: "This spacecraft only",
-      note: null,
-      reason: null,
-    });
-    expect(legacy && routeTag(legacy)).toEqual({
-      label: "This spacecraft only",
-      note: "Set up on the old routing page.",
-      reason: "Older routes can't be edited here until they're converted.",
-    });
+    expect(profile && routeTag(profile)).toEqual({ label: "From profile" });
+    expect(own && routeTag(own)).toEqual({ label: "This spacecraft only" });
   });
 
   it("reads an older server (no origin) and a new origin without failing, untagged", () => {
@@ -74,12 +60,11 @@ describe("U79 route tags", () => {
 });
 
 describe("U79 Edit / Remove… rows", () => {
-  it("puts one pair of actions on each extra route's first leg, never on profile or legacy rows", () => {
+  it("puts one pair of actions on each extra route's first leg, never on profile rows", () => {
     const rows = rules([
       { id: "leg-down", origin: "spacecraft", route_id: "route-1", direction: "inbound" },
       { id: "leg-up", origin: "spacecraft", route_id: "route-1", direction: "outbound" },
       { id: "prof", origin: "profile", route_id: null },
-      { id: "old", origin: "legacy", route_id: null },
       { id: "other", origin: "spacecraft", route_id: "route-2" },
     ]);
     expect([...actionRows(rows)]).toEqual([

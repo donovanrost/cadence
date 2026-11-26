@@ -76,14 +76,6 @@ export function retiredSurfaceHome(
   surface: string,
   spacecraftId: string | null,
 ): RouteLocationRaw | null {
-  // Comms batch 1 (lead 11-16): the app's create forms left; the console's add forms took over.
-  if (appKey === "comms") {
-    if (surface === "transport_new")
-      return { name: "setup.comms.transports", params: { transportId: "new" } };
-    if (surface === "ground_station_new")
-      return { name: "setup.stations", params: { stationId: "new" } };
-    return null;
-  }
   if (appKey !== "spacecraft") return null;
   if (surface === "new") return { name: "setup.spacecraft.new" };
   if (surface === "profile_new") return { name: "setup.profile.new" };
@@ -94,41 +86,3 @@ export function retiredSurfaceHome(
   }
   return null;
 }
-
-/**
- * App surfaces that show or edit one record, with the console screen that owns that record (lead,
- * qa 11-16). Opened from a tab they'd have no record id: the host binds a surface's route params and
- * callers can't supply them. So they leave the tab bar, and a direct open (an old link or bookmark)
- * goes to the console screen, carrying the id when the link has one. The list is explicit because a
- * surface's purpose can't tell Edit from New (both are `configuration`).
- */
-export function subjectSurfaceHome(
-  appKey: string,
-  surface: string,
-  query: Readonly<Record<string, unknown>>,
-): RouteLocationRaw | null {
-  if (appKey !== "comms") return null;
-  const id = (key: string) => {
-    const value = query[key];
-    return typeof value === "string" && value !== "" ? value : null;
-  };
-  if (surface === "ground_station" || surface === "ground_station_edit") {
-    const stationId = id("ground_station_id");
-    return stationId
-      ? { name: "setup.stations", params: { stationId } }
-      : { name: "setup.stations" };
-  }
-  if (surface === "transport") {
-    const transportId = id("transport_id");
-    return transportId
-      ? { name: "setup.comms.transports", params: { transportId } }
-      : { name: "setup.comms.transports" };
-  }
-  // The console has no single routing-rule screen; its rules list lives on Setup › Comms.
-  if (surface === "routing_detail") return { name: "setup.comms" };
-  return null;
-}
-
-/** Whether a surface needs a record and so stays out of the tab bar (subjectSurfaceHome). */
-export const isSubjectSurface = (appKey: string, surface: string) =>
-  subjectSurfaceHome(appKey, surface, {}) !== null;

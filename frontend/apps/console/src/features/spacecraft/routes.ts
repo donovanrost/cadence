@@ -15,26 +15,13 @@ import type { RoutingRule } from "./detail.ts";
  * U79: a spacecraft's extra route (domain's `spacecraft_route` kind), on Setup › Spacecraft › one
  * › Routing. Tags come from the read's `origin`; Edit and Remove… key on `route_id`.
  */
-export type RouteTag = Readonly<{
-  label: "From profile" | "This spacecraft only";
-  /** A quiet second line on the row (ux: legacy rules). */
-  note: string | null;
-  /** Why the row has no Edit / Remove… (ux A6: said, not a disabled button). */
-  reason: string | null;
-}>;
+export type RouteTag = Readonly<{ label: "From profile" | "This spacecraft only" }>;
 
 /** The tag for a rule; null when the server doesn't say (older server, or a new origin). */
 export function routeTag(rule: RoutingRule): RouteTag | null {
   const origin = rule.origin;
   if (origin === undefined || !isKnown(origin)) return null;
-  if (origin === "profile") return { label: "From profile", note: null, reason: null };
-  if (origin === "spacecraft") return { label: "This spacecraft only", note: null, reason: null };
-  // ux (U79, lead's ruling): a legacy rule is this spacecraft's only, set up before extra routes.
-  return {
-    label: "This spacecraft only",
-    note: "Set up on the old routing page.",
-    reason: "Older routes can't be edited here until they're converted.",
-  };
+  return origin === "profile" ? { label: "From profile" } : { label: "This spacecraft only" };
 }
 
 /** The extra route a row belongs to, when it can be edited and removed here. */

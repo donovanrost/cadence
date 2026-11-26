@@ -8,7 +8,7 @@ import type { RefusalOutcome } from "./refusals.ts";
  * applied: <why>, so nothing changed. <what to do>." or "Not sent for review: …" (#553, #554). U20:
  * say nothing changed. Codes other
  * paths word already pass through (null): the checks refusals, the U82 in-use outcome, the
- * server-worded U63/U65 lines, the conversion refusal, and reason_required (the Why field's own
+ * server-worded U63/U65 lines, and reason_required (the Why field's own
  * message). Errors with no code (dropped, unreadable, a 500) keep failureOutcome's unclear words.
  */
 /** Per code, by the act the button named (#554): Apply "Not applied:", Request review "Not sent for review:". */
@@ -66,7 +66,6 @@ const OPENER = {
 
 const passThrough = [
   "in_use",
-  "conversion_in_progress",
   "telemetry_app_not_installed",
   "telemetry_packet_inputs_required",
   "mission_model_revision_not_approved",

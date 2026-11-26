@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { decode, missionId } from "@/api/index.ts";
 import { detailReader } from "./detail.ts";
-import { configWith } from "./older-route.fixtures.ts";
+import { configWith } from "./config.fixtures.ts";
 import OperationPanel from "./OperationPanel.vue";
 
 // useConfigState listens for config changes live.
