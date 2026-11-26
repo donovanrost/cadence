@@ -1,4 +1,4 @@
-import { request, type WebSocket } from "@playwright/test";
+import { request, type Page, type WebSocket } from "@playwright/test";
 import { expectAccessible } from "./support/accessibility.ts";
 import { missionPath, openConsole } from "./support/console.ts";
 import { BASE_URL, DEMO, PERSONAS, storageStateFor } from "./support/env.ts";
@@ -85,6 +85,15 @@ test.describe("console shell, signed out", () => {
   });
 });
 
+/** The console's live sockets a tab opens (`/socket/websocket`), in order. */
+function liveSockets(tab: Page): WebSocket[] {
+  const seen: WebSocket[] = [];
+  tab.on("websocket", (ws) => {
+    if (ws.url().includes("/socket/websocket")) seen.push(ws);
+  });
+  return seen;
+}
+
 // #664: sign-out goes through DELETE /api/v1/session. Its own session (signed in here, through the
 // API), so revoking it leaves the shared persona sessions alone.
 test.describe("console shell, sign-out", () => {
@@ -102,15 +111,8 @@ test.describe("console shell, sign-out", () => {
     page,
     context,
   }) => {
-    const sockets = (tab: typeof page) => {
-      const seen: WebSocket[] = [];
-      tab.on("websocket", (ws) => {
-        if (ws.url().includes("/socket/websocket")) seen.push(ws);
-      });
-      return seen;
-    };
     const other = await context.newPage();
-    const otherSockets = sockets(other);
+    const otherSockets = liveSockets(other);
     await openConsole(other, missionPath("now"));
     await expect.poll(() => otherSockets.length).toBeGreaterThan(0);
     await openConsole(page, missionPath("now"));
@@ -129,5 +131,47 @@ test.describe("console shell, sign-out", () => {
     const old = await request.newContext({ baseURL: BASE_URL, storageState: before });
     expect((await old.get("/api/v1/session")).status()).toBe(401);
     await old.dispose();
+  });
+
+  // #876: Account's "Sign out other sessions" disconnects those sessions' live sockets too. It ends
+  // EVERY other session of the person, so it runs as `second`, whom no other spec signs in as.
+  test.describe("as a person no other spec uses", () => {
+    test.use({
+      storageState: async ({ baseURL }, use, testInfo) => {
+        const path = testInfo.outputPath("second-session.json");
+        await signInByApi(baseURL ?? BASE_URL, PERSONAS.second, path);
+        await use(path);
+      },
+    });
+
+    test("signing out other sessions closes their live sockets and keeps this one", async ({
+      page,
+      browser,
+      baseURL,
+    }, testInfo) => {
+      const elsewhere = testInfo.outputPath("other-session.json");
+      await signInByApi(baseURL ?? BASE_URL, PERSONAS.second, elsewhere);
+      const otherContext = await browser.newContext({ storageState: elsewhere });
+      const other = await otherContext.newPage();
+      const otherSockets = liveSockets(other);
+      const mySockets = liveSockets(page);
+      await openConsole(other, missionPath("now"));
+      await expect.poll(() => otherSockets.filter((ws) => !ws.isClosed()).length).toBe(1);
+      const theirs = otherSockets.find((ws) => !ws.isClosed());
+
+      await openConsole(page, "/console/account");
+      await expect.poll(() => mySockets.filter((ws) => !ws.isClosed()).length).toBe(1);
+      const mine = mySockets.find((ws) => !ws.isClosed());
+      await page.getByRole("button", { name: "Sign out other sessions" }).click();
+      await expect(page.getByText(/Signed out \d+ other sessions?\./)).toBeVisible();
+
+      await expect.poll(() => theirs?.isClosed(), { timeout: 2_000 }).toBe(true);
+      expect(other.url()).toContain(missionPath("now"));
+      expect((await otherContext.request.get("/api/v1/session")).status()).toBe(401);
+      // This session stays signed in, socket and all.
+      expect(mine?.isClosed()).toBe(false);
+      expect((await page.request.get("/api/v1/session")).status()).toBe(200);
+      await otherContext.close();
+    });
   });
 });
