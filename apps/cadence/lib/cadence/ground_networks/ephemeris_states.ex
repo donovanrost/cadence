@@ -99,17 +99,104 @@ defmodule Cadence.GroundNetworks.EphemerisStates do
     Enum.uniq(claimed)
   end
 
-  @doc "Counts by status per provider for the mission: `%{provider_id => %{status => n}}`."
-  @spec counts(binary(), binary()) :: %{optional(binary()) => %{optional(binary()) => integer()}}
-  def counts(organization_id, mission_id) do
-    from(row in Row,
-      where: row.organization_id == ^organization_id and row.mission_id == ^mission_id,
-      group_by: [row.provider_id, row.status],
-      select: {row.provider_id, row.status, count()}
+  # Each spacecraft's current element set (the newest epoch), and the providers its active,
+  # enabled downlink routing rules bind it to through a provider-managed transport. A provider's
+  # orbit source is its latest version's declared one; NULL (undeclared) behaves as lookup.
+  # `$1`/`$2` narrow to one mission when the caller passes `scoped: true`.
+  defp bound_sql(scoped?) do
+    mission = fn alias ->
+      if scoped?, do: "#{alias}.organization_id = $1 AND #{alias}.mission_id = $2", else: "TRUE"
+    end
+
+    """
+    WITH current_sets AS (
+      SELECT DISTINCT ON (organization_id, mission_id, spacecraft_id)
+        organization_id, mission_id, spacecraft_id, element_set_id, norad_id
+      FROM orbit_element_sets e
+      WHERE #{mission.("e")}
+      ORDER BY organization_id, mission_id, spacecraft_id, epoch DESC, element_set_id DESC
+    ),
+    sources AS (
+      SELECT DISTINCT ON (organization_id, mission_id, provider_id)
+        organization_id, mission_id, provider_id,
+        capabilities_document -> 'orbit' ->> 'source' AS source
+      FROM mission_providers p
+      WHERE #{mission.("p")} AND p.lifecycle_state <> 'archived'
+      ORDER BY organization_id, mission_id, provider_id, version DESC
+    ),
+    bound AS (
+      SELECT DISTINCT r.organization_id, r.mission_id, r.spacecraft_id,
+        t.mission_provider_id AS provider_id
+      FROM comms_routing_rules r
+      JOIN comms_transports t
+        ON t.organization_id = r.organization_id AND t.mission_id = r.mission_id
+       AND t.transport_id = r.transport_id AND t.version = r.transport_version
+      WHERE #{mission.("r")} AND r.lifecycle_state = 'active' AND r.enabled
+        AND r.direction IN ('inbound', 'bidirectional') AND t.origin = 'provider_managed'
+    ),
+    pairs AS (
+      SELECT b.organization_id, b.mission_id, b.provider_id, b.spacecraft_id,
+        CASE
+          WHEN src.source = 'accepts_ephemeris_upload' THEN
+            CASE
+              WHEN s.status = 'uploaded' AND s.element_set_id = c.element_set_id THEN 'uploaded'
+              WHEN s.status = 'failed' THEN 'failed'
+              ELSE 'pending'
+            END
+          WHEN c.norad_id IS NULL THEN 'norad_id_missing'
+          ELSE 'lookup'
+        END AS bucket
+      FROM bound b
+      JOIN current_sets c
+        ON c.organization_id = b.organization_id AND c.mission_id = b.mission_id
+       AND c.spacecraft_id = b.spacecraft_id
+      JOIN sources src
+        ON src.organization_id = b.organization_id AND src.mission_id = b.mission_id
+       AND src.provider_id = b.provider_id
+      LEFT JOIN provider_ephemeris_states s
+        ON s.mission_id = b.mission_id AND s.provider_id = b.provider_id
+       AND s.spacecraft_id = b.spacecraft_id
     )
-    |> Repo.all()
-    |> Enum.reduce(%{}, fn {provider_id, status, n}, acc ->
-      Map.update(acc, provider_id, %{status => n}, &Map.put(&1, status, n))
+    """
+  end
+
+  @doc """
+  Per provider, its bound spacecraft that have a current element set, by bucket (one grouped
+  query): `%{provider_id => %{"uploaded" | "failed" | "pending" | "lookup" | "norad_id_missing"
+  => n}}`. A spacecraft without a current element set is in no bucket. For an upload provider a
+  spacecraft is `uploaded` (it holds the current set), `failed`, or `pending` (never tried, or a
+  newer set not yet sent); for any other provider, undeclared included, `lookup` or
+  `norad_id_missing` by whether the current set carries a NORAD id.
+  """
+  @spec buckets(binary(), binary()) :: %{optional(binary()) => %{optional(binary()) => integer()}}
+  def buckets(organization_id, mission_id) do
+    sql = bound_sql(true) <> "SELECT provider_id, bucket, count(*) FROM pairs GROUP BY 1, 2"
+
+    sql
+    |> Repo.query!([organization_id, mission_id])
+    |> Map.fetch!(:rows)
+    |> Enum.reduce(%{}, fn [provider_id, bucket, n], acc ->
+      Map.update(acc, provider_id, %{bucket => n}, &Map.put(&1, bucket, n))
     end)
+  end
+
+  @doc """
+  Upload pairs across every mission whose provider doesn't hold the current element set yet and
+  that aren't failed (the retry sweep owns those): `pending`, as `{organization_id, mission_id,
+  spacecraft_id}`, at most `limit` (one query).
+  """
+  @spec pending(pos_integer()) :: [{binary(), binary(), binary()}]
+  def pending(limit) do
+    sql =
+      bound_sql(false) <>
+        """
+        SELECT DISTINCT organization_id, mission_id, spacecraft_id
+        FROM pairs WHERE bucket = 'pending' LIMIT $1
+        """
+
+    sql
+    |> Repo.query!([limit])
+    |> Map.fetch!(:rows)
+    |> Enum.map(&List.to_tuple/1)
   end
 end

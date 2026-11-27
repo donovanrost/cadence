@@ -23,8 +23,7 @@ defmodule Cadence.Reads.CommsDirectory do
   alias Cadence.GroundNetworks.{
     EphemerisStates,
     ProviderAccountGrants,
-    ProviderAccounts,
-    ProviderCapabilities
+    ProviderAccounts
   }
 
   alias Cadence.Reads.Comms.ProviderHealth
@@ -87,7 +86,7 @@ defmodule Cadence.Reads.CommsDirectory do
       |> Enum.frequencies_by(& &1.provider)
 
     grants = grant_states(organization_id, mission_id)
-    ephemeris = EphemerisStates.counts(organization_id, mission_id)
+    ephemeris = EphemerisStates.buckets(organization_id, mission_id)
 
     organization_id
     |> Cadence.GroundNetworks.list_providers(mission_id)
@@ -107,7 +106,7 @@ defmodule Cadence.Reads.CommsDirectory do
       provider,
       station_counts,
       grant_states(scope.organization_id, provider.mission_id),
-      EphemerisStates.counts(scope.organization_id, provider.mission_id)
+      EphemerisStates.buckets(scope.organization_id, provider.mission_id)
     )
   end
 
@@ -144,21 +143,21 @@ defmodule Cadence.Reads.CommsDirectory do
     }
   end
 
-  # How the provider gets orbits (#968) and, across its spacecraft, how many it holds, how many
-  # failed, and how many it can't look up for want of a NORAD id. Counts, never rows (500 floor).
-  defp ephemeris(provider, counts) do
-    source =
-      case ProviderCapabilities.from_external(provider.capabilities_document || %{}) do
-        {:ok, capabilities} -> ProviderCapabilities.orbit_source(capabilities)
-        {:error, _unsynced} -> nil
-      end
+  # How the provider gets orbits (#968) and its bound spacecraft with a current element set, by
+  # bucket (`EphemerisStates.buckets/2`). Counts, never rows (500 floor). `orbit_source` is what
+  # the provider declared: nil when it declared nothing, though it then behaves as lookup.
+  @orbit_sources ~w(accepts_ephemeris_upload looks_up_by_norad_id)
+
+  defp ephemeris(provider, buckets) do
+    declared = get_in(provider.capabilities_document || %{}, ["orbit", "source"])
 
     %{
-      orbit_source: source,
-      uploaded: Map.get(counts, "uploaded", 0),
-      failed: Map.get(counts, "failed", 0),
-      lookup: Map.get(counts, "lookup", 0),
-      norad_id_missing: Map.get(counts, "norad_id_missing", 0)
+      orbit_source: if(declared in @orbit_sources, do: declared),
+      uploaded: Map.get(buckets, "uploaded", 0),
+      failed: Map.get(buckets, "failed", 0),
+      pending: Map.get(buckets, "pending", 0),
+      lookup: Map.get(buckets, "lookup", 0),
+      norad_id_missing: Map.get(buckets, "norad_id_missing", 0)
     }
   end
 

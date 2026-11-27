@@ -1502,17 +1502,29 @@ permissions}` for the Stations · Providers tab, sorted by name.
   provider's own record of its last validate and sync. `null` means never checked. `error` is a
   sentence for a person, not provider evidence.
 - `station_count` counts active stations whose `provider` is this provider's name.
-- `ephemeris` (#968) is `{orbit_source, uploaded, failed, lookup, norad_id_missing}`: how the
-  provider gets orbits and, across the spacecraft it serves, the count in each state. Counts,
-  never rows.
-  - `orbit_source` is `"accepts_ephemeris_upload"` or `"looks_up_by_norad_id"` from the
-    provider's last synced capabilities, or `null` before a sync.
+- `ephemeris` (#968) is `{orbit_source, uploaded, failed, pending, lookup, norad_id_missing}`.
+  It says how the provider gets orbits and counts its bound spacecraft by state: counts from one
+  grouped query, never rows.
+  - **Who is counted.** Every spacecraft that has a current element set and is bound to this
+    provider, through an active, enabled downlink routing rule on one of its provider-managed
+    transports. The buckets add up to exactly that number. A spacecraft with no current element
+    set is in no bucket.
+  - **`orbit_source`** is what the provider's latest version declared:
+    `"accepts_ephemeris_upload"`, `"looks_up_by_norad_id"`, or `null` when it declared nothing
+    (or hasn't synced). A provider with `null` behaves as `looks_up_by_norad_id`, so a current
+    set without a NORAD id is still counted as `norad_id_missing`, never left silent.
   - `uploaded`: the provider holds the spacecraft's current element set.
   - `failed`: the last upload failed. It is retried with backoff (1, 5, 15, 60 and 360 minutes,
     then every 6 h).
+  - `pending`: not sent yet. Either it was never tried (a provider newly bound or ready), or a
+    newer element set hasn't been uploaded. The upload job, or within 10 minutes the reconcile
+    sweep, sends it.
   - `lookup`: the provider looks the orbit up by NORAD id, and the current set carries one.
   - `norad_id_missing`: the provider looks orbits up by NORAD id, but the current set has none,
     so it can't find the spacecraft.
+  - **Always 0 by source:**
+    - upload providers: `lookup` and `norad_id_missing`;
+    - lookup providers, and undeclared (`null`) ones: `uploaded`, `failed` and `pending`.
 - `permissions`: `["providers.manage"]` for mission admins (`:manage_mission`), else `[]`.
 
 ## Mission providers (L12): `/api/v1/missions/:mission_id/providers` (owner: api-ops)

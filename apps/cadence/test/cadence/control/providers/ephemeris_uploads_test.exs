@@ -101,7 +101,7 @@ defmodule Cadence.Control.Providers.EphemerisUploadsTest do
     assert %{attempts: 2, next_retry_at: second} = state(c)
     assert DateTime.compare(second, EphemerisUploads.next_retry_at(@now, 2)) == :eq
 
-    Repo.delete_all(from(job in "background_jobs", where: job.mission_id == ^c.mission))
+    clear_jobs!(c)
     assert EphemerisUploads.retry_due(DateTime.add(@now, -60)) == 0
     assert EphemerisUploads.retry_due(DateTime.add(second, 1)) == 1
 
@@ -126,7 +126,60 @@ defmodule Cadence.Control.Providers.EphemerisUploadsTest do
     assert {:ok, %{"lookup" => 1}} = run(c)
 
     assert %{c.provider.provider_id => %{"lookup" => 1}} ==
-             EphemerisStates.counts(c.org, c.mission)
+             EphemerisStates.buckets(c.org, c.mission)
+  end
+
+  test "a provider newly able to take uploads gets the unchanged current set from the reconcile",
+       c do
+    # The set went current while the provider only looked orbits up; nothing was uploaded.
+    {:ok, [{:created, set}]} = submit(c, norad: 25_544)
+    clear_jobs!(c)
+
+    assert %{c.provider.provider_id => %{"lookup" => 1}} ==
+             EphemerisStates.buckets(c.org, c.mission)
+
+    # Now it accepts uploads (as a newly bound upload provider would): the pair is pending.
+    upload_provider!(c)
+
+    assert %{c.provider.provider_id => %{"pending" => 1}} ==
+             EphemerisStates.buckets(c.org, c.mission)
+
+    assert EphemerisUploads.reconcile() == 1
+
+    assert [%{payload: %{"spacecraft_ids" => [sc]}}] =
+             Jobs.list_open_jobs(:ephemeris_upload, c.mission)
+
+    assert sc == c.sc
+
+    # While that job is open, the reconcile stages nothing more for the mission.
+    assert EphemerisUploads.reconcile() == 0
+
+    assert {:ok, %{"uploaded" => 1}} = run(c)
+    assert_received {:uploaded, "SIM-001", %{"content_sha256" => sha}}
+    assert sha == set.content_sha256
+    clear_jobs!(c)
+
+    # Uploaded: the next reconcile doesn't stage it again.
+    assert %{c.provider.provider_id => %{"uploaded" => 1}} ==
+             EphemerisStates.buckets(c.org, c.mission)
+
+    assert EphemerisUploads.reconcile() == 0
+    assert Jobs.list_open_jobs(:ephemeris_upload, c.mission) == []
+  end
+
+  test "the buckets: failed stays failed, a newer set is pending until sent", c do
+    upload_provider!(c)
+    {:ok, _results} = submit(c, norad: 25_544)
+    {:ok, _summary} = run(c, upload_result: {:error, :econnrefused})
+
+    assert %{c.provider.provider_id => %{"failed" => 1}} ==
+             EphemerisStates.buckets(c.org, c.mission)
+
+    {:ok, _summary} = run(c)
+    {:ok, _results} = submit(c, norad: 25_544, hours_ago: 0)
+
+    assert %{c.provider.provider_id => %{"pending" => 1}} ==
+             EphemerisStates.buckets(c.org, c.mission)
   end
 
   test "a spacecraft with no element set is left alone", c do
@@ -142,6 +195,9 @@ defmodule Cadence.Control.Providers.EphemerisUploadsTest do
         [c.sc],
         [now: @now, client: UploadClient, test_pid: self()] ++ extra
       )
+
+  defp clear_jobs!(c),
+    do: Repo.delete_all(from(job in "background_jobs", where: job.mission_id == ^c.mission))
 
   defp state(c),
     do:

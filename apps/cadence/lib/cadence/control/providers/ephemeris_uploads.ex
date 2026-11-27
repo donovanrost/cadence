@@ -29,6 +29,7 @@ defmodule Cadence.Control.Providers.EphemerisUploads do
   @job_type :ephemeris_upload
   @backoff_minutes [1, 5, 15, 60, 360]
   @retry_lease_minutes 10
+  @reconcile_limit 5_000
 
   @type summary :: %{optional(binary()) => non_neg_integer()}
 
@@ -88,6 +89,27 @@ defmodule Cadence.Control.Providers.EphemerisUploads do
   def retry_due(now \\ DateTime.utc_now()) do
     now
     |> EphemerisStates.claim_due(DateTime.add(now, @retry_lease_minutes * 60))
+    |> Enum.group_by(fn {org, mission, _id} -> {org, mission} end, &elem(&1, 2))
+    |> Enum.count(fn {{organization_id, mission_id}, spacecraft_ids} ->
+      {:ok, _job} =
+        EphemerisUploadJobs.stage_spacecraft(organization_id, mission_id, spacecraft_ids)
+    end)
+  end
+
+  @doc """
+  The safety net for pairs no new element set will reach (#968): a provider newly bound, or
+  newly ready, holds nothing although the spacecraft's set is unchanged. Finds every upload pair
+  across all missions that is `pending` (no upload of the current set, not `failed`) in one query,
+  skips missions whose upload job is already open (one query), and stages one run per remaining
+  mission for its pending spacecraft. At most `limit` pairs per sweep. Answers how many jobs.
+  """
+  @spec reconcile(pos_integer()) :: non_neg_integer()
+  def reconcile(limit \\ @reconcile_limit) do
+    pending = EphemerisStates.pending(limit)
+    open = if pending == [], do: MapSet.new(), else: Jobs.missions_with_open_jobs(@job_type)
+
+    pending
+    |> Enum.reject(fn {_org, mission, _id} -> MapSet.member?(open, mission) end)
     |> Enum.group_by(fn {org, mission, _id} -> {org, mission} end, &elem(&1, 2))
     |> Enum.count(fn {{organization_id, mission_id}, spacecraft_ids} ->
       {:ok, _job} =

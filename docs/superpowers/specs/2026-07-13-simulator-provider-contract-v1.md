@@ -308,9 +308,10 @@ Minimum shape:
 - `looks_up_by_norad_id`: the provider fetches public element sets by catalog number itself, so
   the customer's element set must carry a NORAD id.
 
-`orbit` is optional. A provider that omits it is read as `looks_up_by_norad_id`: Cadence never
+`orbit` is optional. A provider that omits it behaves as `looks_up_by_norad_id`. Cadence never
 calls an operation the provider didn't declare, and a spacecraft without a NORAD id is still
-reported (`norad_id_missing`), not dropped.
+reported as `norad_id_missing`, not dropped. Cadence's providers read shows such a provider's
+`orbit_source` as `null` (not declared), while counting it as a lookup provider.
 
 The simulator can exercise these reservation modes:
 

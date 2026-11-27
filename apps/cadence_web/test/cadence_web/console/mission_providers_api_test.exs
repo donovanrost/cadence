@@ -120,6 +120,7 @@ defmodule CadenceWeb.Console.MissionProvidersAPITest do
                "orbit_source" => nil,
                "uploaded" => 0,
                "failed" => 0,
+               "pending" => 0,
                "lookup" => 0,
                "norad_id_missing" => 0
              }
