@@ -5,7 +5,8 @@ defmodule CadenceSimulator.Provider.OpportunityGenerator do
     * `"uploaded"` (#893): real passes. Each spacecraft's opportunities are the passes of the
       element set Cadence uploaded (`Ephemeris`) over the scenario's located stations, computed
       with `packages/sgp4` (`PassOpportunities`). The window is the pass, AOS to LOS, clipped to
-      the search's end, and carries the pass's maximum elevation and TCA.
+      the search's end, and carries the pass's maximum elevation and TCA when the window reaches
+      the TCA (a window clipped before it carries neither).
     * `"synthetic"` (the default, kept for tests and fault injection): the deterministic hash
       model `deterministic_pass_v1`, a pass every `cadence_seconds` per spacecraft at a hashed
       offset and station.
@@ -64,7 +65,7 @@ defmodule CadenceSimulator.Provider.OpportunityGenerator do
   defp restorable(run, spacecraft_id, station_number, start_unix, end_unix) do
     if PassOpportunities.uploaded?(run) do
       case PassOpportunities.pass_at(run, spacecraft_id, station_number, start_unix) do
-        %{los_unix: los} = pass when end_unix <= los -> {:ok, pass_fields(pass)}
+        %{los_unix: los} = pass when end_unix <= los -> {:ok, pass_fields(pass, end_unix)}
         _none -> :error
       end
     else
@@ -97,19 +98,25 @@ defmodule CadenceSimulator.Provider.OpportunityGenerator do
           DateTime.from_unix!(pass.aos_unix),
           DateTime.from_unix!(window_end)
         )
-        |> Map.merge(pass_fields(pass))
+        |> Map.merge(pass_fields(pass, window_end))
 
       if station_numbers?, do: Map.put(offer, "station_number", pass.station_number), else: offer
     end
     |> Enum.sort_by(&{&1["starts_at"], &1["spacecraft_id"], &1["ground_station_id"]})
   end
 
-  defp pass_fields(pass) do
-    %{
-      "model" => "sgp4_pass_v1",
-      "max_elevation_deg" => pass.max_elevation_deg,
-      "tca" => DateTime.to_iso8601(pass.tca)
-    }
+  # The geometry describes the offered window: an offer clipped before the pass's TCA never
+  # reaches its peak, so it carries no TCA or maximum elevation rather than the full pass's.
+  defp pass_fields(pass, window_end) do
+    if DateTime.to_unix(pass.tca) <= window_end do
+      %{
+        "model" => "sgp4_pass_v1",
+        "max_elevation_deg" => pass.max_elevation_deg,
+        "tca" => DateTime.to_iso8601(pass.tca)
+      }
+    else
+      %{"model" => "sgp4_pass_v1", "max_elevation_deg" => nil, "tca" => nil}
+    end
   end
 
   defp synthetic(run, spacecraft, stations, starts_at, ends_at, station_numbers?) do

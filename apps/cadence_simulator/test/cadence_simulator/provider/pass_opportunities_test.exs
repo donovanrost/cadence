@@ -131,6 +131,63 @@ defmodule CadenceSimulator.Provider.PassOpportunitiesTest do
     refute Enum.map(second, & &1["starts_at"]) == Enum.map(first, & &1["starts_at"])
   end
 
+  test "a station's own elevation mask decides its passes, and a bad one is refused" do
+    :ok = Store.clear()
+    {lat, lon} = @boulder
+
+    station = %{
+      "id" => "station-boulder",
+      "antenna_count" => 1,
+      "location" => %{"latitude_deg" => lat, "longitude_deg" => lon},
+      "elevation_mask_deg" => 40.0
+    }
+
+    {:ok, scenario} =
+      Provider.create_scenario(%{
+        "spacecraft_count" => 1,
+        "spacecraft_prefix" => "EARENDIL",
+        "ground_stations" => [station],
+        "orbit_readiness" => %{"source_kind" => "uploaded"}
+      })
+
+    assert [%{"elevation_mask_deg" => 40.0}] = scenario["ground_stations"]
+    {:ok, run} = Provider.create_run(scenario["id"], %{"seed" => 7})
+    {:ok, _stored, _status} = Ephemeris.put(run, "EARENDIL-001", upload())
+
+    expected = expected_passes(40.0)
+    assert length(expected) < length(expected_passes())
+
+    assert Enum.map(search(run, ["EARENDIL-001"]), &unix(&1["starts_at"])) ==
+             Enum.map(expected, &DateTime.to_unix(&1.aos))
+
+    for bad <- [90, -1, "high"] do
+      assert {:error, {:invalid, "ground_stations.elevation_mask_deg"}} =
+               Provider.create_scenario(%{
+                 "spacecraft_count" => 1,
+                 "ground_stations" => [Map.put(station, "elevation_mask_deg", bad)],
+                 "orbit_readiness" => %{"source_kind" => "uploaded"}
+               })
+    end
+  end
+
+  test "an offer clipped before the TCA carries no TCA or peak elevation", c do
+    [pass | _rest] = expected_passes()
+    ends_at = DateTime.add(pass.aos, 1)
+
+    {:ok, %{"data" => [offer]}} =
+      Provider.search_opportunities(%{
+        "run_id" => c.run["id"],
+        "spacecraft_ids" => ["EARENDIL-001"],
+        "starts_at" => DateTime.to_iso8601(@from),
+        "ends_at" => DateTime.to_iso8601(ends_at),
+        "limit" => 500
+      })
+
+    assert unix(offer["ends_at"]) == DateTime.to_unix(ends_at)
+    assert offer["tca"] == nil
+    assert offer["max_elevation_deg"] == nil
+  end
+
   test "a synthetic scenario keeps the hash model" do
     {:ok, scenario} =
       Provider.create_scenario(%{"spacecraft_count" => 1, "spacecraft_prefix" => "SYN"})
@@ -167,7 +224,7 @@ defmodule CadenceSimulator.Provider.PassOpportunitiesTest do
   end
 
   # The same passes straight from packages/sgp4: AOS in the window, over the one located station.
-  defp expected_passes do
+  defp expected_passes(mask \\ 5.0) do
     {:ok, sat} =
       Sgp4.init(%{
         epoch: @epoch,
@@ -181,7 +238,7 @@ defmodule CadenceSimulator.Provider.PassOpportunitiesTest do
       })
 
     {lat, lon} = @boulder
-    {:ok, station} = Sgp4.Station.new(0, lat, lon, 0.0, 5.0)
+    {:ok, station} = Sgp4.Station.new(0, lat, lon, 0.0, mask)
     {:ok, %{passes: passes}} = Sgp4.Passes.search(sat, [station], @from, @to)
 
     Enum.filter(passes, fn pass ->

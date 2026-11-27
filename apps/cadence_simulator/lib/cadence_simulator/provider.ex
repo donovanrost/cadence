@@ -380,12 +380,18 @@ defmodule CadenceSimulator.Provider do
           "synthetic" => true
         }
         |> put_location(Map.get(station, "location"))
+        |> put_mask(Map.get(station, "elevation_mask_deg"))
       end)
 
-    if Enum.all?(normalized, &(&1["antenna_count"] > 0)) do
-      {:ok, normalized}
-    else
-      {:error, {:invalid, "antenna_count"}}
+    cond do
+      not Enum.all?(normalized, &(&1["antenna_count"] > 0)) ->
+        {:error, {:invalid, "antenna_count"}}
+
+      Enum.any?(normalized, &(&1["elevation_mask_deg"] == :invalid)) ->
+        {:error, {:invalid, "ground_stations.elevation_mask_deg"}}
+
+      true ->
+        {:ok, normalized}
     end
   rescue
     KeyError -> {:error, {:invalid, "ground_stations.id"}}
@@ -410,6 +416,15 @@ defmodule CadenceSimulator.Provider do
   end
 
   defp put_location(station, _location), do: station
+
+  # A station's elevation mask, 0 to 89.9° as Cadence's stations allow; absent means the 5°
+  # default. Anything else refuses the scenario.
+  defp put_mask(station, nil), do: station
+
+  defp put_mask(station, mask) when is_number(mask) and mask >= 0 and mask <= 89.9,
+    do: Map.put(station, "elevation_mask_deg", mask)
+
+  defp put_mask(station, _mask), do: Map.put(station, "elevation_mask_deg", :invalid)
 
   defp initial_reservation_status(run, attrs, starts_at, ends_at) do
     fault_profile = run["scenario_snapshot"]["fault_profile"]
