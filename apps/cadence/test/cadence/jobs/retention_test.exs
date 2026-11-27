@@ -19,6 +19,10 @@ defmodule Cadence.Jobs.RetentionTest do
     old_queued = job!(mission, "queued", old, nil)
     old_running = job!(mission, "running", old, nil)
     old_unknown = job!(mission, "outcome_unknown", old, old)
+
+    old_workflow =
+      job!(mission, "completed", old, old, :telemetry_historical_data_workflow)
+
     recent_completed = job!(mission, "completed", old, recent)
     recent_failed = job!(mission, "failed", old, recent)
 
@@ -29,13 +33,20 @@ defmodule Cadence.Jobs.RetentionTest do
       assert {:error, :job_not_found} = Jobs.fetch_job(job.job_id)
     end
 
-    for job <- [old_queued, old_running, old_unknown, recent_completed, recent_failed] do
+    for job <- [
+          old_queued,
+          old_running,
+          old_unknown,
+          old_workflow,
+          recent_completed,
+          recent_failed
+        ] do
       assert {:ok, _} = Jobs.fetch_job(job.job_id)
     end
   end
 
-  defp job!(mission, status, inserted_at, completed_at) do
-    {:ok, job} = Jobs.enqueue(:mission_event_rebuild, mission, Ecto.UUID.generate(), %{})
+  defp job!(mission, status, inserted_at, completed_at, type \\ :mission_event_rebuild) do
+    {:ok, job} = Jobs.enqueue(type, mission, Ecto.UUID.generate(), %{})
 
     {1, _rows} =
       Repo.update_all(

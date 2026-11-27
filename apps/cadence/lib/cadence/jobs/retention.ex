@@ -2,7 +2,8 @@ defmodule Cadence.Jobs.Retention do
   @moduledoc """
   Retention for terminal `background_jobs` (#973). Completed and failed jobs remain for
   `Cadence.Persistence.Retention.background_job_days/1` after completion; queued and running
-  jobs, and unknown outcomes awaiting an operator decision, are never swept.
+  jobs, and unknown outcomes awaiting an operator decision, are never swept. Historical telemetry
+  workflow jobs also remain: corrections of old lifecycle events still require their source job.
 
   Each chunk takes the oldest expired rows through the partial completion-time index, locks
   only those rows, and deletes them in the sweeper's short transaction.
@@ -12,6 +13,11 @@ defmodule Cadence.Jobs.Retention do
 
   alias Cadence.Persistence.Retention
   alias Cadence.Repo
+
+  # #976: historical workflow corrections still read the source job after completion. Remove
+  # this exemption once the workflow lifecycle records carry that evidence themselves.
+  @retained_job_types ["telemetry_historical_data_workflow"]
+  @retained_job_types_sql Enum.map_join(@retained_job_types, ", ", &"'#{&1}'")
 
   @impl true
   def name, do: :background_jobs
@@ -34,7 +40,9 @@ defmodule Cadence.Jobs.Retention do
         """
         WITH doomed AS (
           SELECT job_id FROM background_jobs
-          WHERE status IN ('completed', 'failed') AND completed_at < $1
+          WHERE status IN ('completed', 'failed')
+            AND job_type NOT IN (#{@retained_job_types_sql})
+            AND completed_at < $1
           ORDER BY completed_at, job_id
           LIMIT $2
           FOR UPDATE SKIP LOCKED
