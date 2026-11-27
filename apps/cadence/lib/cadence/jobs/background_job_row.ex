@@ -105,6 +105,7 @@ defmodule Cadence.Jobs.BackgroundJobRow do
   defp job_type("managed_questdb_provisioning"), do: :managed_questdb_provisioning
   defp job_type("tsdb_backend_lifecycle"), do: :tsdb_backend_lifecycle
   defp job_type("pass_prediction"), do: :pass_prediction
+  defp job_type("ephemeris_upload"), do: :ephemeris_upload
 
   defp status("queued"), do: :queued
   defp status("running"), do: :running

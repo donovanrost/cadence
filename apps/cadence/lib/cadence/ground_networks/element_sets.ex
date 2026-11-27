@@ -19,6 +19,7 @@ defmodule Cadence.GroundNetworks.ElementSets do
   alias Cadence.GroundNetworks.ElementSets.{Elements, ElementSetRow, HistoryCursor, Omm, Tle}
   alias Cadence.Ids
   alias Cadence.Persistence.BulkInsert
+  alias Cadence.Platform.EphemerisUploadJobs
   alias Cadence.Repo
   alias Cadence.SpacecraftStore
 
@@ -80,9 +81,9 @@ defmodule Cadence.GroundNetworks.ElementSets do
       end
     end)
     |> case do
-      {:ok, {results, job}} ->
-        # The dispatcher must see the committed job; it never joins this transaction.
-        if job, do: PredictedPasses.publish_staged(job)
+      {:ok, {results, jobs}} ->
+        # The dispatcher must see the committed jobs; it never joins this transaction.
+        Enum.each(jobs, &PredictedPasses.publish_staged/1)
         {:ok, results}
 
       {:error, _reason} = error ->
@@ -91,7 +92,8 @@ defmodule Cadence.GroundNetworks.ElementSets do
   end
 
   # A stored set that is now its spacecraft's current one (no stored set has a later epoch)
-  # recomputes that spacecraft's passes: one job for the whole batch (#891).
+  # recomputes that spacecraft's passes (#891) and is uploaded to its providers that accept
+  # uploads (#968): one job of each for the whole batch.
   defp stage_recompute(organization_id, mission_id, results) do
     created = for {:created, set} <- results, do: set
 
@@ -106,11 +108,16 @@ defmodule Cadence.GroundNetworks.ElementSets do
 
     case current do
       [] ->
-        nil
+        []
 
       spacecraft_ids ->
-        {:ok, job} = PredictedPasses.stage_spacecraft(organization_id, mission_id, spacecraft_ids)
-        job
+        {:ok, recompute} =
+          PredictedPasses.stage_spacecraft(organization_id, mission_id, spacecraft_ids)
+
+        {:ok, upload} =
+          EphemerisUploadJobs.stage_spacecraft(organization_id, mission_id, spacecraft_ids)
+
+        [recompute, upload]
     end
   end
 

@@ -1487,8 +1487,8 @@ Edits go through change sets (`ground_station` and `transport` kinds; see change
 
 `{providers: [{id, name, provider_type, version, policy_mode, account: {id, name} | null, grant: {id,
 version, state: "active" | "revoked"} | null, status: {lifecycle_state, last_validated_at,
-last_synced_at}, health: {validate: <health>, sync: <health>}, station_count}], permissions}` for
-the Stations · Providers tab, sorted by name.
+last_synced_at}, health: {validate: <health>, sync: <health>}, station_count, ephemeris}],
+permissions}` for the Stations · Providers tab, sorted by name.
 
 - `account` is `null` exactly when `grant` is (older, direct bindings with no account).
   `account.name` is `null` for members (only organization admins can read accounts).
@@ -1502,6 +1502,17 @@ the Stations · Providers tab, sorted by name.
   provider's own record of its last validate and sync. `null` means never checked. `error` is a
   sentence for a person, not provider evidence.
 - `station_count` counts active stations whose `provider` is this provider's name.
+- `ephemeris` (#968) is `{orbit_source, uploaded, failed, lookup, norad_id_missing}`: how the
+  provider gets orbits and, across the spacecraft it serves, the count in each state. Counts,
+  never rows.
+  - `orbit_source` is `"accepts_ephemeris_upload"` or `"looks_up_by_norad_id"` from the
+    provider's last synced capabilities, or `null` before a sync.
+  - `uploaded`: the provider holds the spacecraft's current element set.
+  - `failed`: the last upload failed. It is retried with backoff (1, 5, 15, 60 and 360 minutes,
+    then every 6 h).
+  - `lookup`: the provider looks the orbit up by NORAD id, and the current set carries one.
+  - `norad_id_missing`: the provider looks orbits up by NORAD id, but the current set has none,
+    so it can't find the spacecraft.
 - `permissions`: `["providers.manage"]` for mission admins (`:manage_mission`), else `[]`.
 
 ## Mission providers (L12): `/api/v1/missions/:mission_id/providers` (owner: api-ops)

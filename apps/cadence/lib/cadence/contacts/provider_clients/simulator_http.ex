@@ -73,6 +73,18 @@ defmodule Cadence.Contacts.ProviderClients.SimulatorHTTP do
   end
 
   @impl true
+  def upload_ephemeris(%ProviderContext{} = context, spacecraft_ref, ephemeris, opts \\ [])
+      when is_binary(spacecraft_ref) and is_map(ephemeris) do
+    path = "/provider/v1/spacecraft/#{URI.encode_www_form(spacecraft_ref)}/ephemeris"
+
+    with {:ok, capabilities} <- effective_capabilities(context, opts) do
+      if ProviderCapabilities.orbit_source(capabilities) == :accepts_ephemeris_upload,
+        do: request_data(context, :put, path, Keyword.put(opts, :json, ephemeris)),
+        else: {:error, unsupported(:ephemeris_upload)}
+    end
+  end
+
+  @impl true
   def search_opportunities(%ProviderContext{} = context, params, opts \\ []) do
     with {:ok, body} <-
            request_envelope(

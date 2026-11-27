@@ -156,6 +156,8 @@ The customer-facing provider API is rooted at `/provider/v1`.
 | `GET` | `/provider/v1/account` | Validate credentials and selected environment |
 | `GET` | `/provider/v1/capabilities` | Read behavior, operation, and delivery capabilities |
 | `GET` | `/provider/v1/spacecraft` | Discover provider spacecraft inventory |
+| `PUT` | `/provider/v1/spacecraft/:ref/ephemeris` | Upload a spacecraft's current orbit (#968), when `orbit.source` is `accepts_ephemeris_upload` |
+| `GET` | `/provider/v1/spacecraft/:ref/ephemeris` | Read the orbit the provider holds for a spacecraft |
 | `GET` | `/provider/v1/ground-stations` | Discover stations and service pools |
 | `GET` | `/provider/v1/service-profiles` | Discover provisioned provider services |
 | `GET` | `/provider/v1/delivery-profiles` | Discover delivery destinations |
@@ -288,6 +290,9 @@ Minimum shape:
     "station_batch_limit": 30,
     "page_size_limit": 100
   },
+  "orbit": {
+    "source": "accepts_ephemeris_upload"
+  },
   "delivery": {
     "kinds": ["realtime_stream"],
     "protocols": ["tcp"],
@@ -295,6 +300,17 @@ Minimum shape:
   }
 }
 ```
+
+`orbit.source` (#968) says how the provider gets each spacecraft's orbit:
+
+- `accepts_ephemeris_upload`: the customer uploads it (see Ephemeris Upload). The simulator
+  declares this.
+- `looks_up_by_norad_id`: the provider fetches public element sets by catalog number itself, so
+  the customer's element set must carry a NORAD id.
+
+`orbit` is optional. A provider that omits it is read as `looks_up_by_norad_id`: Cadence never
+calls an operation the provider didn't declare, and a spacecraft without a NORAD id is still
+reported (`norad_id_missing`), not dropped.
 
 The simulator can exercise these reservation modes:
 
@@ -307,6 +323,52 @@ The simulator can exercise these reservation modes:
 Cadence always creates a durable internal idempotency key. The adapter decides
 whether the provider supports sending it, translating it into a client
 reference, or retaining it only as local evidence.
+
+## Ephemeris Upload
+
+`PUT /provider/v1/spacecraft/:ref/ephemeris` gives an `accepts_ephemeris_upload` provider the
+customer's current orbit for one spacecraft, as the provider knows it (`:ref`, the spacecraft's
+provider-side reference). Cadence sends it whenever an element set becomes the spacecraft's
+current one, and retries a failed upload with backoff. The request carries no credentials beyond
+the adapter's own.
+
+```json
+{
+  "omm": {
+    "OBJECT_NAME": "EARENDIL 1",
+    "NORAD_CAT_ID": 90001,
+    "CENTER_NAME": "EARTH",
+    "REF_FRAME": "TEME",
+    "TIME_SYSTEM": "UTC",
+    "MEAN_ELEMENT_THEORY": "SGP4",
+    "EPOCH": "2026-11-27T00:00:00.000000",
+    "MEAN_MOTION": 15.2,
+    "ECCENTRICITY": 0.0005,
+    "INCLINATION": 53.0,
+    "RA_OF_ASC_NODE": 10.0,
+    "ARG_OF_PERICENTER": 20.0,
+    "MEAN_ANOMALY": 30.0,
+    "BSTAR": 0.00002,
+    "MEAN_MOTION_DOT": 0.0,
+    "MEAN_MOTION_DDOT": 0.0
+  },
+  "epoch": "2026-11-27T00:00:00.000000Z",
+  "content_sha256": "<64 lowercase hex digits>"
+}
+```
+
+- `omm` uses the CCSDS OMM keys CelesTrak publishes. `EPOCH`, `MEAN_MOTION`, `ECCENTRICITY`,
+  `INCLINATION`, `RA_OF_ASC_NODE`, `ARG_OF_PERICENTER` and `MEAN_ANOMALY` are required.
+- The upload is idempotent per `content_sha256`. The same hash again answers `200` with the
+  stored upload, a new one answers `201` and replaces it, an unknown spacecraft answers `404`,
+  and a malformed body answers `422 invalid_request`.
+- A provider declaring `looks_up_by_norad_id` doesn't implement this operation; Cadence never
+  calls it there.
+- The simulator keeps one upload per run and spacecraft. A scenario whose
+  `orbit_readiness.source_kind` is `"uploaded"` reads its readiness from the uploads: every
+  searched spacecraft needs one whose epoch is at most 14 days old at the search start, else
+  `orbit_not_ready` with status `missing` or `expired`. `"synthetic"`, the default, keeps the
+  configured status.
 
 ## Inventory
 

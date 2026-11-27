@@ -24,5 +24,6 @@ config :cadence, :job_handlers, %{
     {Cadence.Control.DataSources.ManagedQuestDBProvisioningJobs, :execute_enqueued_run},
   tsdb_backend_lifecycle:
     {Cadence.Control.DataSources.TSDBBackendLifecycleJobs, :execute_enqueued_run},
-  pass_prediction: {Cadence.GroundNetworks.PredictedPasses, :execute_enqueued_run}
+  pass_prediction: {Cadence.GroundNetworks.PredictedPasses, :execute_enqueued_run},
+  ephemeris_upload: {Cadence.Control.Providers.EphemerisUploads, :execute_enqueued_run}
 }

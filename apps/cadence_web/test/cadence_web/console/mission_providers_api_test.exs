@@ -114,7 +114,15 @@ defmodule CadenceWeb.Console.MissionProvidersAPITest do
              "version" => 1,
              "policy_mode" => "approval_required",
              "grant" => %{"state" => "active", "version" => 1},
-             "health" => %{"validate" => %{"status" => nil}, "sync" => %{"status" => nil}}
+             "health" => %{"validate" => %{"status" => nil}, "sync" => %{"status" => nil}},
+             # #968: no sync yet, so no declared orbit source, and nothing uploaded.
+             "ephemeris" => %{
+               "orbit_source" => nil,
+               "uploaded" => 0,
+               "failed" => 0,
+               "lookup" => 0,
+               "norad_id_missing" => 0
+             }
            } = provider
 
     assert %{"providers" => [%{"id" => id}], "permissions" => ["providers.manage"]} =
