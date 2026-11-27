@@ -1,7 +1,7 @@
 # Inbound telemetry: tie a connection to an authenticated delivery before routing (#130)
 
-Status: proposal for the CTO. It informs #129 (the server side of the listener choice) and
-#202 (the console form, blocked).
+Status: agreed (CTO, 2026-11-27), recorded as DECISIONS #115. It informs #129 (the server side
+of the listener choice) and #202 (the console form, blocked).
 
 ## Problem
 
@@ -141,3 +141,19 @@ Adopt (d):
 
 Data is disposable in dev, so none of this needs a compatibility path: existing profiles are
 re-materialized from their transports.
+
+## Decided (CTO, 2026-11-27)
+
+1. **Requirement.** Authenticated provider binding before any routing; mutual TLS with a client
+   identity per provider binding is the target, declared in the provider contract and implemented
+   by the simulator. Routing is binding-scoped: frames are attributed only to spacecraft of the
+   binding's mission, and the SCID is checked within that, never used to find the mission.
+2. **Shared listener waits.** It doesn't ship on the interim, only after mutual TLS.
+3. **No fallback.** `fallback_single_registration` is removed now, with no replacement.
+4. **Refuse everywhere.** A listen endpoint with neither a source allowlist nor mutual TLS can't
+   be created, in dev too. Dev uses a loopback allowlist or the simulator's mutual TLS.
+5. **Rebuild #129** on today's transport kind; the old cut is not re-landed.
+
+Frame-level replay by an authenticated provider is out of scope here (noted on #130). Order:
+slice 1 (allowlist, binding-scoped routing, fallback removal, save-time refusal) as the HIGH fix,
+then slice 3 (mutual TLS) with slice 4, then slice 2 (the shared listener).
