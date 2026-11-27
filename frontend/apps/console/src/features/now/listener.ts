@@ -40,7 +40,6 @@ export function listenerMeta(a: Attention, now: Date = new Date()): string | nul
 
 function reasonSentence(a: Attention): string {
   const r = a.last_refusal;
-  const provider = a.provider?.name ?? null;
   const scid = r?.scid;
   const reason = r && isKnown(r.reason) ? r.reason : "unknown";
   switch (reason) {
@@ -52,8 +51,6 @@ function reasonSentence(a: Attention): string {
       return scid != null
         ? `The last one sent frames for SCID ${scid}, which more than one pass on this listener expects.`
         : "The last one sent frames for a spacecraft more than one pass on this listener expects.";
-    case "unexpected_peer":
-      return `The last one came from an address ${provider ? `${provider}'s` : "the listen"} profile doesn't expect.`;
     case "unidentified":
       return "Cadence couldn't tell from its first frames which spacecraft the last one was for.";
     case "read_failed":
@@ -65,8 +62,33 @@ function reasonSentence(a: Attention): string {
     case "no_registered_contact":
       return "No pass was registered on this listener when the last one arrived.";
     case "peer_not_allowed":
-      return `The last one came from an address outside ${provider ? `${provider}'s` : "the transport's"} allowed source addresses, so Cadence refused it before reading anything.`;
+      return "The last one came from an address outside this listener's allowed source addresses, so Cadence refused it before reading anything.";
   }
+}
+
+const ALLOWED = "allowed source addresses";
+
+/**
+ * #993: peer_not_allowed's fix names who owns the allowlist. A provider's comes from its delivery
+ * profile's egress (only the provider changes it); a Cadence transport's is edited in Setup, the
+ * words linked to it. Unknown owner: a sentence true for both.
+ */
+export function peerFix(a: Attention): Readonly<{ text: string; to: RouteLocationRaw | null }> {
+  const provider = a.provider?.name ?? null;
+  const owner = a.allowlist_source && isKnown(a.allowlist_source) ? a.allowlist_source : null;
+  if (owner === "provider")
+    return {
+      text: `Ask ${provider ?? "the provider"} to check the source addresses it connects from; Cadence can't change them.`,
+      to: null,
+    };
+  if (owner === "transport")
+    return {
+      text: `Edit the transport's ${ALLOWED} in Setup.`,
+      to: a.transport_id
+        ? { name: "setup.comms.transports", params: { transportId: a.transport_id } }
+        : null,
+    };
+  return { text: `Check who sets this listener's ${ALLOWED}.`, to: null };
 }
 
 /** Context, the last refusal's reason, then this pass's state (U50). */
@@ -89,10 +111,10 @@ export function listenerEvidence(
     return `${context} ${reasonSentence(a)} This pass has its own connection.`;
   const reason = a.last_refusal?.reason;
   const setup =
-    reason === "unregistered_scid" || reason === "unexpected_peer"
+    reason === "unregistered_scid"
       ? ` Check ${spacecraft ? `${spacecraft}'s` : "the spacecraft's"} SCID and ${provider ? `${provider}'s` : "the provider's"} profile in Setup.`
       : reason === "peer_not_allowed"
-        ? ` Check the allowed source addresses on ${provider ? `${provider}'s` : "the"} transport in Setup.`
+        ? ` ${peerFix(a).text}`
         : "";
   return `${context} ${reasonSentence(a)} This pass isn't connected yet. If a refused connection was meant for it, its telemetry isn't arriving.${setup}`;
 }
@@ -125,12 +147,25 @@ export function listenerRow(
   const to: RouteLocationRaw = pass
     ? { name: "ops.contacts", query: { contact: pass } }
     : { name: "ops.contacts" };
+  const sentence = listenerEvidence(a, spacecraftName, now);
+  // #993: a Cadence transport's allowlist is edited in Setup; those words link there.
+  const fix = a.last_refusal?.reason === "peer_not_allowed" ? peerFix(a) : null;
+  const at = fix?.to ? sentence.lastIndexOf(ALLOWED) : -1;
   return {
     ...base,
     key,
     title: listenerTitle(a, spacecraftName, now),
     titleTo: to,
-    sentence: listenerEvidence(a, spacecraftName, now),
+    sentence,
+    ...(fix?.to && at >= 0
+      ? {
+          sentenceParts: [
+            sentence.slice(0, at),
+            { text: ALLOWED, to: fix.to },
+            sentence.slice(at + ALLOWED.length),
+          ],
+        }
+      : {}),
     meta: listenerMeta(a, now),
     // U50: no server actions, so Open pass takes the free slot.
     action: { label: "Open pass", to },

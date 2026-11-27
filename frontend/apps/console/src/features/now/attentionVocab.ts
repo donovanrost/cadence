@@ -76,7 +76,6 @@ export const attentionConflicts = [
 export const listenerRefusals = [
   "unregistered_scid",
   "ambiguous_scid",
-  "unexpected_peer",
   "unidentified",
   "read_failed",
   "unknown",

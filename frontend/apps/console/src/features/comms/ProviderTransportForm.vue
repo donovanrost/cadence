@@ -10,7 +10,15 @@ import {
   type FailureOutcome,
 } from "@/features/changes/index.ts";
 import { ApButton, ApCallout, ApField, ApSelect } from "@/ui";
-import { fetchProviderOptions, type ProviderErrorPath } from "./provider-options.ts";
+import {
+  EGRESS_NOT_READY,
+  egressReady,
+  errorWords,
+  fetchProviderOptions,
+  stageEgressRefusal,
+  type DeliveryChoice,
+  type ProviderErrorPath,
+} from "./provider-options.ts";
 import ProviderTransportPreview from "./ProviderTransportPreview.vue";
 import { blockedReason, formFromDocument, providerOp } from "./provider-transport.ts";
 
@@ -48,10 +56,18 @@ const ready = computed(() =>
 );
 const asOptions = (list: readonly { id: string; name: string }[] | undefined) =>
   (list ?? []).map((c) => ({ value: c.id, label: c.name }));
-/** derive's refusal on a field, or null. */
-const fieldError = (path: ProviderErrorPath) =>
-  ready.value?.errors.find((e) => e.path !== null && isKnown(e.path) && e.path === path)?.message ??
-  null;
+/** #993: a delivery without usable egress addresses stays listed, disabled, saying why. */
+const deliveryOptions = (list: readonly DeliveryChoice[] | undefined) =>
+  (list ?? []).map((c) =>
+    egressReady(c)
+      ? { value: c.id, label: c.name }
+      : { value: c.id, label: `${c.name} (${EGRESS_NOT_READY})`, disabled: true },
+  );
+/** derive's refusal on a field (a coded one in the console's words), or null. */
+const fieldError = (path: ProviderErrorPath) => {
+  const e = ready.value?.errors.find((x) => x.path !== null && isKnown(x.path) && x.path === path);
+  return e ? errorWords(e) : null;
+};
 const general = computed(() => ready.value?.errors.filter((e) => e.path === null) ?? []);
 const form = computed(() => ({
   name: name.value,
@@ -84,8 +100,9 @@ async function stage() {
       ops: [op],
     });
     if (!result.ok) {
+      const egress = stageEgressRefusal(result.error);
       const outcome = failureOutcome(result.error, "staged");
-      failure.value = outcome.sentence;
+      failure.value = egress ? `Nothing was staged. ${egress}` : outcome.sentence;
       failureLink.value = outcome.link ?? null;
       return;
     }
@@ -123,7 +140,7 @@ async function stage() {
       placeholder="Choose…"
       required
       :disabled="!serviceId"
-      :options="asOptions(ready?.deliveries)"
+      :options="deliveryOptions(ready?.deliveries)"
       :error="fieldError('delivery_profile_ref')"
     />
     <ApCallout v-for="(e, i) in general" :key="i" tone="caution">{{ e.message }}</ApCallout>
