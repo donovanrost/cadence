@@ -24,6 +24,7 @@ import {
   confirmLine,
   emptyWords,
   expiryWords,
+  offerKeys,
   offerBlocked,
   outcomeWords,
   providerWords,
@@ -36,6 +37,9 @@ import {
   type Search,
 } from "./singleBookings.ts";
 import ListenerOverlapNote from "./ListenerOverlapNote.vue";
+import NoPredictedPassNote from "@/features/scheduling/NoPredictedPassNote.vue";
+import { geometryLine } from "@/features/scheduling/geometry.ts";
+import { useMissionInvalidation } from "@/live/index.ts";
 
 /**
  * Book a pass (ux Contacts.md, §11 L15): search the spacecraft's ready routes, pick an offer before
@@ -113,23 +117,47 @@ const blocked = computed(
       scName.value,
     ),
 );
+type Query = Parameters<typeof searchOffers>[1];
+/** The query the offers shown answer, so a live change re-asks the same one. */
+let shownQuery: Query | null = null;
 async function runSearch() {
   if (blocked.value || searching.value) return;
   searching.value = true;
   searchError.value = null;
   chosen.value = null;
   result.value = null;
-  const r = await searchOffers(props.missionId, {
+  const query: Query = {
     spacecraftId: spacecraftId.value,
     from: new Date(range.value.from),
     to: new Date(range.value.to),
     direction: direction.value,
     routeKeys: routeKeys.value,
-  });
+  };
+  const r = await searchOffers(props.missionId, query);
   searching.value = false;
-  if (r.ok) search.value = r.value;
-  else searchError.value = describeApiError(r.error);
+  if (r.ok) {
+    search.value = r.value;
+    shownQuery = query;
+  } else searchError.value = describeApiError(r.error);
 }
+/**
+ * #895: a finished pass-prediction run changes the offers' geometry, so the same search is asked
+ * again quietly while offers are shown. Not once one is chosen: the person is booking it, and a
+ * re-search signs new tokens (one window can come back once per route). A failed refresh keeps the
+ * offers shown; they're still bookable by token until they expire.
+ */
+async function refreshOffers() {
+  const query = shownQuery;
+  if (!query || !search.value || searching.value || chosen.value || result.value) return;
+  const r = await searchOffers(props.missionId, query);
+  if (r.ok && shownQuery === query && !searching.value && !chosen.value && !result.value)
+    search.value = r.value;
+}
+useMissionInvalidation(
+  computed(() => props.missionId),
+  ["predicted_passes"],
+  () => void refreshOffers(),
+);
 async function book() {
   const o = chosen.value;
   if (!o || booking.value) return;
@@ -177,7 +205,9 @@ const searchSaid = computed(() => {
 });
 /** a11y A7 (#243): a blocked offer stays focusable and is described by its reason. */
 const reasonPrefix = useId();
-const reasonId = (token: string) => `${reasonPrefix}-${token}`;
+const reasonId = (index: number) => `${reasonPrefix}-${index}`;
+/** Stable row keys, so a quiet re-search patches the rows and focus stays put (#970 review). */
+const keys = computed(() => (search.value ? offerKeys(search.value.offers) : []));
 </script>
 
 <template>
@@ -230,14 +260,15 @@ const reasonId = (token: string) => `${reasonPrefix}-${token}`;
         {{ emptyWords(search, viaWords(routeData?.routes ?? [], routeKeys)) }}
       </p>
       <ul v-else class="m-0 flex list-none flex-col p-0" aria-label="Offers">
-        <!-- By token: the same opportunity can come back once per ready route (qa 11-13). -->
-        <li v-for="o in search.offers" :key="o.token" class="border-t border-hairline py-2">
+        <!-- Keyed by offerKeys (station, provider, window, route ordinal; one opportunity can come
+          back once per ready route, qa 11-13), so a quiet re-search patches the rows (#970). -->
+        <li v-for="(o, i) in search.offers" :key="keys[i]" class="border-t border-hairline py-2">
           <button
             type="button"
             class="flex w-full cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 border-0 bg-transparent p-0 text-left disabled:cursor-not-allowed disabled:opacity-60 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
             :disabled="result !== null"
             :aria-disabled="offerBlocked(o, now) !== null ? 'true' : undefined"
-            :aria-describedby="offerBlocked(o, now) !== null ? reasonId(o.token) : undefined"
+            :aria-describedby="offerBlocked(o, now) !== null ? reasonId(i) : undefined"
             :aria-pressed="chosen?.token === o.token"
             @click="offerBlocked(o, now) === null && (chosen = o)"
           >
@@ -247,6 +278,7 @@ const reasonId = (token: string) => `${reasonPrefix}-${token}`;
             <span class="font-mono text-text-3">{{
               formatDuration((Date.parse(o.ends_at) - Date.parse(o.starts_at)) / 1000)
             }}</span>
+            <span v-if="geometryLine(o)" class="font-mono text-text-3">{{ geometryLine(o) }}</span>
             <ApTag v-if="o.uplink_capable" state="neutral" label="Up" />
             <!-- ux U69 A16a: the plan's tag; 'limited' says so, 'available' says nothing. -->
             <ApTag v-if="o.synthetic" state="stale" label="Synthetic" />
@@ -259,15 +291,13 @@ const reasonId = (token: string) => `${reasonPrefix}-${token}`;
               >{{ expiryWords(o, now).text }}</span
             >
           </button>
-          <p
-            v-if="offerBlocked(o, now)"
-            :id="reasonId(o.token)"
-            class="m-0 pt-1 text-sm text-text-3"
-          >
+          <p v-if="offerBlocked(o, now)" :id="reasonId(i)" class="m-0 pt-1 text-sm text-text-3">
             {{ offerBlocked(o, now) }}
           </p>
           <!-- U58 (b), #361: said before booking; booking stays allowed. -->
           <ListenerOverlapNote :overlap="o.listener_overlap" class="pt-1" />
+          <!-- #895: a caution, said before booking; booking stays allowed. -->
+          <NoPredictedPassNote :geometry="o" class="pt-1" />
           <div v-if="chosen?.token === o.token && !result" class="flex flex-col gap-2 pt-2">
             <p class="m-0 text-readout">{{ confirmLine(scName, o, direction) }}</p>
             <ApTextarea v-model="note" label="Why" :rows="2" placeholder="Optional" />

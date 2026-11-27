@@ -23,6 +23,11 @@ describe("distinctWindows (ux K1 #5)", () => {
       starts_at: "2026-11-11T12:09:00Z",
       ends_at: "2026-11-11T12:17:00Z",
       synthetic: true,
+      max_elevation_deg: null,
+      elevation_source: null,
+      predicted_pass_id: null,
+      tca: null,
+      no_predicted_pass: null,
       effect: {
         rule_met_after: false,
         contacts_after: { have: 5, need: 8 },

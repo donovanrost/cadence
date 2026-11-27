@@ -7,6 +7,7 @@ import {
   confirmLine,
   expiryWords,
   offerBlocked,
+  offerKeys,
   offPlanLine,
   outcomeWords,
   stationWords,
@@ -15,6 +16,15 @@ import {
   type Offer,
   type Reserve,
 } from "./singleBookings.ts";
+
+/** #895: the sheet's predicted_passes handler, run by hand. */
+const live = vi.hoisted(() => ({ handlers: [] as Array<() => void> }));
+vi.mock("@/live/index.ts", async (original) => ({
+  ...(await original<typeof import("@/live/index.ts")>()),
+  useMissionInvalidation: (_m: unknown, _r: unknown, refetch: () => void) => {
+    live.handlers.push(refetch);
+  },
+}));
 
 /** Fixtures in plans/single-bookings.md's shapes (cd842bb2, agreed by api). */
 const offer = (id: string, over: Partial<Offer> = {}): Offer => ({
@@ -31,6 +41,11 @@ const offer = (id: string, over: Partial<Offer> = {}): Offer => ({
   synthetic: false,
   cost: null,
   overlaps: null,
+  max_elevation_deg: null,
+  elevation_source: null,
+  predicted_pass_id: null,
+  tca: null,
+  no_predicted_pass: null,
   listener_overlap: undefined,
   ...over,
 });
@@ -146,7 +161,16 @@ describe("BookPassSheet", () => {
       reply({
         spacecraft: { id: "sc-1", name: "EARENDIL-001", scid: 1 },
         window: { from: "2026-11-13T03:00:00Z", to: "2026-11-14T03:00:00Z" },
-        offers: [offer("a"), offer("b", { availability: "unavailable" })],
+        offers: [
+          // #895: prediction covers the window and no pass backs it; still bookable.
+          offer("a", {
+            max_elevation_deg: 41.73,
+            elevation_source: "predicted",
+            tca: "2026-11-13T03:14:30Z",
+            no_predicted_pass: true,
+          }),
+          offer("b", { availability: "unavailable" }),
+        ],
         hidden: { no_uplink_route: 2 },
         not_ready: [],
         truncated: false,
@@ -167,6 +191,9 @@ describe("BookPassSheet", () => {
       ?.trigger("click");
     await flushPromises();
     expect(w.text()).toContain("2 stations hidden: no uplink route to EARENDIL-001.");
+    const first = w.findAll('ul[aria-label="Offers"] > li').at(0);
+    expect(first?.text()).toContain("Max el 41.7° predicted · TCA 03:14Z");
+    expect(first?.text()).toContain("No predicted pass backs this window");
     // a11y B6 (#243): the search's result is said from a line that's always there.
     expect(w.get('p.sr-only[role="status"]').text()).toBe("2 offers");
     // a11y A7 (#243): a blocked offer stays focusable and is described by its reason.
@@ -198,6 +225,92 @@ describe("BookPassSheet", () => {
   });
 });
 
+describe("offerKeys (#970 review)", () => {
+  it("names an offer by its window, not its token, with an ordinal for a window on two routes", () => {
+    const keys = offerKeys([
+      offer("a"),
+      offer("b"),
+      offer("c", { starts_at: "2026-11-13T04:00:00Z" }),
+    ]);
+    expect(keys[0]).toBe("sva|nl|2026-11-13T03:10:00Z|2026-11-13T03:19:12Z|0");
+    expect(keys[1]).toBe("sva|nl|2026-11-13T03:10:00Z|2026-11-13T03:19:12Z|1");
+    expect(offerKeys([offer("a", { token: "other" })])[0]).toBe(keys[0]);
+    expect(new Set(keys).size).toBe(3);
+  });
+});
+
+describe("BookPassSheet on a finished prediction run (#895)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    live.handlers.length = 0;
+  });
+  const reply = (body: unknown) =>
+    new Response(JSON.stringify({ data: body }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  const routes = {
+    spacecraft: { id: "sc-1", name: "EARENDIL-001" },
+    routes: [],
+    not_ready: [],
+    limits: { max_window_s: 604_800, max_reach_s: 1_209_600, reach_until: "2026-11-27T03:00:00Z" },
+  };
+  const found = (o: Offer) => ({
+    spacecraft: { id: "sc-1", name: "EARENDIL-001", scid: 1 },
+    window: { from: "2026-11-13T03:00:00Z", to: "2026-11-14T03:00:00Z" },
+    offers: [o],
+    hidden: { no_uplink_route: 0 },
+    not_ready: [],
+    truncated: false,
+  });
+
+  it("asks the same search again while offers are shown, keeps focus, not once one is chosen", async () => {
+    vi.useFakeTimers({ now, toFake: ["Date"] });
+    const fetch = vi.fn();
+    fetch.mockResolvedValueOnce(reply(routes));
+    fetch.mockResolvedValueOnce(reply(found(offer("a"))));
+    fetch.mockResolvedValueOnce(
+      // A re-search signs a new token for the same window.
+      reply(
+        found(
+          offer("a", { token: "tok-a2", max_elevation_deg: 12.04, elevation_source: "predicted" }),
+        ),
+      ),
+    );
+    vi.stubGlobal("fetch", fetch);
+    const w = mount(BookPassSheet, {
+      props: { missionId: missionIdReader("m"), fleet: [spacecraftRow(1)] },
+      attachTo: document.body,
+    });
+    // oxlint-disable-next-line typescript/no-unsafe-call, typescript/no-unsafe-member-access -- vue-tsc checks the exposed open(); the lint type service can't resolve SFC instances.
+    w.vm.open({ spacecraftId: spacecraftRow(1).id });
+    await flushPromises();
+    await w
+      .findAll("button")
+      .find((b) => b.text() === "Search")
+      ?.trigger("click");
+    await flushPromises();
+    expect(w.text()).not.toContain("Max el");
+    // a11y A5 (#970 review): focus on an offer survives the re-search; the row is patched.
+    const control = w.get('ul[aria-label="Offers"] button').element as HTMLElement;
+    control.focus();
+    for (const run of live.handlers) run();
+    await flushPromises();
+    expect(document.activeElement).toBe(control);
+    expect(control.isConnected).toBe(true);
+    const bodies = fetch.mock.calls.slice(1).map((c) => (c[1] as RequestInit | undefined)?.body);
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1]).toBe(bodies[0]);
+    expect(w.text()).toContain("Max el 12.0° predicted");
+    await w.get('ul[aria-label="Offers"] button').trigger("click");
+    for (const run of live.handlers) run();
+    await flushPromises();
+    expect(fetch).toHaveBeenCalledTimes(3);
+    w.unmount();
+    vi.useRealTimers();
+  });
+});
+
 describe("L15 replies as api 1ef9e85ef sends them", () => {
   it("reads an offer with a provider cost object, no antenna label and availability unavailable", () => {
     const raw = {
@@ -218,6 +331,11 @@ describe("L15 replies as api 1ef9e85ef sends them", () => {
           synthetic: false,
           cost: { amount: 12, currency: "EUR" },
           overlaps: null,
+          max_elevation_deg: null,
+          elevation_source: null,
+          predicted_pass_id: null,
+          tca: null,
+          no_predicted_pass: null,
         },
       ],
       hidden: { no_uplink_route: 0 },

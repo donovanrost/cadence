@@ -32,6 +32,8 @@ const single = (starts_at: string) => {
         uplink_capable: null,
         source: { provider: "p", provider_name: "Simulator", synthetic: true },
         max_elevation_deg: null,
+        elevation_source: null,
+        predicted_pass_id: null,
         plan: null,
       },
     ],

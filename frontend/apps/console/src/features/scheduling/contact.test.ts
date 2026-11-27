@@ -15,6 +15,8 @@ const row = {
   uplink_capable: null,
   source: { provider: "provider_1", provider_name: "Simulator", synthetic: true },
   max_elevation_deg: null,
+  elevation_source: null,
+  predicted_pass_id: null,
   cost: null,
   plan: { id: "contact_plan_1", version: 42 },
   reservation_id: "provider_reservation_1",
