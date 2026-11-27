@@ -107,14 +107,25 @@ defmodule Cadence.GroundNetworks.PredictedPasses.Basis do
     Map.put(basis, "spacecraft", spacecraft)
   end
 
-  @doc "The prune deleted every pass that ended before `bound`."
+  @doc """
+  The prune deleted every pass that ended before `bound`. The bound only moves forward: a
+  repeated or backdated prune (a clock rollback) never claims rows it already deleted are back.
+  """
   @spec pruned(t(), DateTime.t()) :: t()
-  def pruned(basis, bound), do: Map.put(basis || %{}, "pruned_before", iso(bound))
+  def pruned(basis, bound) do
+    basis = basis || %{}
+    Map.put(basis, "pruned_before", latest(basis["pruned_before"], iso(bound)))
+  end
 
-  @doc "Whether the search covers this pair and window (see the moduledoc)."
-  @spec covered?(t(), map(), map(), map(), map()) :: boolean()
-  def covered?(basis, not_bracketed, current_sets, current_prints, window) do
-    with %{"element_set_id" => set, "from" => sc_from, "to" => sc_to} <-
+  @doc """
+  Whether the search covers this pair and window (see the moduledoc). A spacecraft a run could
+  not propagate (`unpropagated`, by spacecraft) is never covered, whatever its earlier basis says:
+  a station run may have failed for it while leaving its spacecraft entry in place.
+  """
+  @spec covered?(t(), map(), map(), map(), map(), map()) :: boolean()
+  def covered?(basis, not_bracketed, unpropagated, current_sets, current_prints, window) do
+    with false <- Map.has_key?(unpropagated || %{}, window.spacecraft_id),
+         %{"element_set_id" => set, "from" => sc_from, "to" => sc_to} <-
            get_in(basis, ["spacecraft", window.spacecraft_id]),
          ^set <- Map.get(current_sets, window.spacecraft_id),
          %{"fingerprint" => print, "from" => st_from} <-

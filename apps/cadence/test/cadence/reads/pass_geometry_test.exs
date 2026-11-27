@@ -177,6 +177,20 @@ defmodule Cadence.Reads.PassGeometryTest do
       assert [%{no_predicted_pass: nil}] = flag(c, c.a, c.located, {700, 710})
     end
 
+    test "a spacecraft a station run couldn't propagate is not flagged, despite its old basis",
+         c do
+      # The spacecraft's earlier basis still matches its current element set; a later station run
+      # recorded it as unpropagated (and so stored no passes for it).
+      put_state!(c.org, c.mission, c.basis, unpropagated: %{c.a => "decayed"})
+      assert [%{no_predicted_pass: nil}] = flag(c, c.a, c.located, {700, 710})
+    end
+
+    test "the prune bound never moves backward" do
+      later = Basis.pruned(%{}, at(800))
+      assert Basis.pruned(later, at(100)) == later
+      assert Basis.pruned(later, at(900))["pruned_before"] == DateTime.to_iso8601(at(900))
+    end
+
     test "beyond the searched window, an unlocated station or no element set: not flagged", c do
       assert [%{no_predicted_pass: nil}] =
                flag(c, c.a, c.located, {8 * 24 * 60, 8 * 24 * 60 + 10})

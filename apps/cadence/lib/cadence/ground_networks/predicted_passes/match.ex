@@ -77,7 +77,7 @@ defmodule Cadence.GroundNetworks.PredictedPasses.Match do
       prints = fingerprints(organization_id, mission_id)
 
       for window <- windows,
-          Basis.covered?(basis, state.not_bracketed, sets, prints, window),
+          Basis.covered?(basis, state.not_bracketed, state.unpropagated, sets, prints, window),
           into: MapSet.new(),
           do: window.key
     else
