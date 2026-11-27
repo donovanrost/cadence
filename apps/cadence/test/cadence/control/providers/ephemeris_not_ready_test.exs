@@ -16,6 +16,7 @@ defmodule Cadence.Control.Providers.EphemerisNotReadyTest do
   alias Cadence.GroundNetworks.MissionProviders.ProviderRow, as: MissionProviderRow
   alias Cadence.Jobs
   alias Cadence.Management.Transports
+  alias Cadence.Reads.CommsDirectory
   alias Cadence.Repo
 
   setup do
@@ -183,6 +184,29 @@ defmodule Cadence.Control.Providers.EphemerisNotReadyTest do
 
     assert EphemerisUploads.refusal({:error, :spacecraft_not_found}, ["rule-a"]) ==
              "spacecraft_not_found"
+  end
+
+  test "the providers read carries not_ready, and exactly the documented ephemeris keys", c do
+    upload_provider!(c)
+    validated!(c, c.provider.version, nil)
+    {:ok, _results} = submit(c, norad: 25_544)
+    clear_jobs!(c)
+    assert {:ok, %{"not_ready" => 1}} = run(c)
+
+    [row] = CommsDirectory.providers(c.scope, c.mission)
+
+    assert row.ephemeris |> Map.keys() |> Enum.sort() ==
+             Enum.sort([
+               :orbit_source,
+               :uploaded,
+               :failed,
+               :pending,
+               :not_ready,
+               :lookup,
+               :norad_id_missing
+             ])
+
+    assert %{not_ready: 1, uploaded: 0, failed: 0, pending: 0} = row.ephemeris
   end
 
   test "the buckets add up with not_ready among them", c do

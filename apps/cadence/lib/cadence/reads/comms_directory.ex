@@ -156,6 +156,7 @@ defmodule Cadence.Reads.CommsDirectory do
       uploaded: Map.get(buckets, "uploaded", 0),
       failed: Map.get(buckets, "failed", 0),
       pending: Map.get(buckets, "pending", 0),
+      not_ready: Map.get(buckets, "not_ready", 0),
       lookup: Map.get(buckets, "lookup", 0),
       norad_id_missing: Map.get(buckets, "norad_id_missing", 0)
     }
