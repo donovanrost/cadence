@@ -42,7 +42,7 @@ defmodule Cadence.GroundNetworks.PredictedPasses.MaintenanceTest do
       end)
 
     assert log =~ "connection not available"
-    assert log =~ ":timeout"
+    assert log =~ "exited: :timeout"
   end
 
   test "the first check is scheduled, not run during init" do
@@ -52,7 +52,10 @@ defmodule Cadence.GroundNetworks.PredictedPasses.MaintenanceTest do
       start_supervised(
         {Maintenance,
          name: :"maintenance_#{System.unique_integer([:positive])}",
-         check: fn -> send(test, :checked) && :ok end,
+         check: fn ->
+           send(test, :checked)
+           :ok
+         end,
          first_check_ms: 200,
          interval_ms: 60_000}
       )
