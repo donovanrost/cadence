@@ -41,7 +41,9 @@ const when = (at: string | null) => (at ? formatShort(new Date(at)) : "never");
         }}</span
       ></template
     >
-    <template #cell-orbits="{ row }"><EphemerisCounts :ephemeris="row.ephemeris" /></template>
+    <template #cell-orbits="{ row }"
+      ><EphemerisCounts :ephemeris="row.ephemeris" :provider-id="row.id"
+    /></template>
     <template #cell-synced="{ row }">{{ when(row.status.last_synced_at) }}</template>
   </ApTable>
 </template>
