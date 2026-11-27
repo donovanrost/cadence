@@ -168,6 +168,7 @@ defmodule CadenceSimulator.Provider.DeliveryProfiles do
         "port" => request["target"]["port"],
         "framing_family" => request["framing"]["family"],
         "frame_bytes" => request["framing"]["frame_bytes"],
+        "source_addresses" => source_addresses(),
         "endpoint_health" => "healthy"
       },
       "target" => request["target"],
@@ -178,6 +179,16 @@ defmodule CadenceSimulator.Provider.DeliveryProfiles do
       "updated_at" => now
     }
   end
+
+  # (#990, DECISIONS #115) The addresses the simulator connects to Cadence from, which Cadence
+  # allows on its listening endpoint. It runs next to Cadence, so loopback by default; a deployment
+  # where it connects from elsewhere sets `:delivery_source_addresses`.
+  defp source_addresses,
+    do:
+      Application.get_env(:cadence_simulator, :delivery_source_addresses, [
+        "127.0.0.1/32",
+        "::1/128"
+      ])
 
   defp existing_by_client_reference(run_id, client_reference) do
     Enum.find(Store.list(:delivery_profile), fn profile ->

@@ -5,19 +5,22 @@ defmodule Cadence.Runtime.ProfileAcceptor do
   with `:eaddrinuse` until the first ended.
 
   The acceptor owns only the listening socket. A listen-mode `tcp_socket` adapter REGISTERS with it
-  (its contact, spacecraft and SCID, direction, the expected peer address if the profile knows it)
-  instead of listening. Each accepted peer is identified, then handed to its adapter by
-  `controlling_process` with the bytes read to identify it; from there the adapter runs its
-  connected-session path unchanged. Nothing is persisted.
+  (its contact, provider binding, spacecraft and SCID) instead of listening. Each accepted peer is
+  checked, identified, then handed to its adapter by `controlling_process` with the bytes read to
+  identify it; from there the adapter runs its connected-session path unchanged. Nothing is
+  persisted.
 
-  Identification is routing among our own registered contacts, not attestation; the trust
-  boundary for a provider connection is unchanged:
+  An acceptor belongs to one mission and one provider binding (its name), so a connection is
+  attributed to that binding before anything is read (#990, DECISIONS #115):
 
-  - downlink: the first frame's TM SCID must match exactly one registered contact's spacecraft
-    (the same truth the #38 release guard uses), and the peer's address its expected address
-    when the profile knows one;
-  - fallback (opt-in per profile, off by default): with exactly ONE registration and framing that
-    can't be read, that registration takes the peer; with two or more, the peer is refused.
+  - the peer's address must be in the binding's source allowlist (`allowed_peers`), checked on
+    accept, before any frame is read; a peer outside it is refused `peer_not_allowed`;
+  - then the first frame's TM SCID must match exactly one contact registered through THIS
+    binding (the same truth the #38 release guard uses). The SCID only picks a contact within the
+    binding's mission; it never picks the mission. Mutual TLS (#991) will replace the address as
+    the binding's proof.
+
+  There is no fallback: a peer whose first frame can't be read is refused.
 
   Anything else is refused: closed, counted, and reported to EVERY registered adapter, so each
   contact on the profile counts the profile's refusals (ux U50 words it as the shared listener's,
@@ -35,6 +38,7 @@ defmodule Cadence.Runtime.ProfileAcceptor do
 
   require Logger
 
+  alias Cadence.Comms.PeerAddresses
   alias Cadence.Runtime.ProcessNamespace
 
   @identify_timeout_ms 10_000
@@ -46,7 +50,7 @@ defmodule Cadence.Runtime.ProfileAcceptor do
           required(:realized_contact_id) => binary(),
           required(:path_id) => binary(),
           required(:scid) => non_neg_integer() | nil,
-          optional(:expected_peer_address) => binary() | nil,
+          optional(:provider_binding_id) => binary(),
           optional(:frame_size) => pos_integer() | nil
         }
 
@@ -162,7 +166,7 @@ defmodule Cadence.Runtime.ProfileAcceptor do
           mission_id: Keyword.fetch!(opts, :mission_id),
           listener: listener,
           port: actual_port(listener, listen.port),
-          fallback?: Map.get(listen, :fallback_single_registration?, false),
+          allowed_peers: Map.get(listen, :allowed_peers, []),
           linger_ms: Map.get(listen, :linger_ms, @default_linger_ms),
           registrations: %{},
           accept_ref: nil,
@@ -184,10 +188,16 @@ defmodule Cadence.Runtime.ProfileAcceptor do
     {:reply, {:ok, state.port, self()}, put_in(state.registrations[ref], registration)}
   end
 
-  def handle_call(:routing, _from, state),
-    do:
-      {:reply, %{registrations: Map.values(state.registrations), fallback?: state.fallback?},
-       state}
+  def handle_call(:routing, _from, state) do
+    # Only this binding's contacts: the acceptor is the binding's (its name), so a registration
+    # from any other binding would be a fault, never a candidate.
+    registrations =
+      state.registrations
+      |> Map.values()
+      |> Enum.filter(&(Map.get(&1, :provider_binding_id, state.profile_id) == state.profile_id))
+
+    {:reply, %{registrations: registrations, allowed_peers: state.allowed_peers}, state}
+  end
 
   def handle_call(:snapshot, _from, state) do
     {:reply,
@@ -259,22 +269,27 @@ defmodule Cadence.Runtime.ProfileAcceptor do
   # In the accept task (it owns the socket): identify the peer within a bound, then hand it over
   # with the bytes read to identify it, or refuse it.
   defp route(socket, %{registrations: registrations} = routing, parent, profile_id) do
-    peer = peer_address(socket)
+    {ip, peer} = peer_address(socket)
 
-    case identify(socket, peer, registrations, routing.fallback?) do
+    result =
+      if PeerAddresses.allowed?(routing.allowed_peers, ip),
+        do: identify(socket, registrations),
+        else: {:refused, :peer_not_allowed}
+
+    case result do
       {:ok, registration, prefix} -> hand_over(socket, registration, prefix, peer, profile_id)
       {:refused, reason} -> refuse(socket, peer, reason, registrations, parent)
     end
   end
 
-  defp identify(_socket, _peer, [], _fallback?), do: {:refused, :no_registered_contact}
+  defp identify(_socket, []), do: {:refused, :no_registered_contact}
 
-  defp identify(socket, peer, registrations, fallback?) do
+  defp identify(socket, registrations) do
     frame_size = registrations |> Enum.map(&Map.get(&1, :frame_size)) |> Enum.find(&is_integer/1)
 
     case read_first_frame(socket, frame_size) do
-      {:ok, frame} -> match_scid(frame, peer, registrations)
-      :unreadable -> fallback(registrations, peer, fallback?)
+      {:ok, frame} -> match_scid(frame, registrations)
+      :unreadable -> {:refused, :unidentified}
       {:error, reason} -> {:refused, {:read_failed, reason}}
     end
   end
@@ -290,30 +305,13 @@ defmodule Cadence.Runtime.ProfileAcceptor do
   end
 
   # TM transfer frame primary header: version (2 bits), spacecraft id (10 bits).
-  defp match_scid(
-         {<<_version::2, scid::10, _rest::bitstring>> = frame, read_at},
-         peer,
-         registrations
-       ) do
-    case Enum.filter(registrations, &(&1.scid == scid and peer_allowed?(&1, peer))) do
+  defp match_scid({<<_version::2, scid::10, _rest::bitstring>> = frame, read_at}, registrations) do
+    case Enum.filter(registrations, &(&1.scid == scid)) do
       [registration] -> {:ok, registration, {frame, read_at}}
       [] -> {:refused, {:unregistered_scid, scid}}
       _several -> {:refused, {:ambiguous_scid, scid}}
     end
   end
-
-  defp fallback([registration], peer, true) do
-    if peer_allowed?(registration, peer),
-      do: {:ok, registration, {<<>>, DateTime.utc_now()}},
-      else: {:refused, :unexpected_peer}
-  end
-
-  defp fallback(_registrations, _peer, _fallback?), do: {:refused, :unidentified}
-
-  defp peer_allowed?(%{expected_peer_address: expected}, peer) when is_binary(expected),
-    do: normalize_address(expected) == peer
-
-  defp peer_allowed?(_registration, _peer), do: true
 
   defp hand_over(socket, %{adapter: adapter} = registration, {prefix, read_at}, peer, profile_id) do
     case :gen_tcp.controlling_process(socket, adapter) do
@@ -346,19 +344,12 @@ defmodule Cadence.Runtime.ProfileAcceptor do
 
   defp cancel_linger(state), do: %{state | linger_ref: nil}
 
-  # An IPv4-mapped IPv6 address (::ffff:a.b.c.d) reads as its IPv4 address, on both sides of the
-  # expected-address compare (api-ops review).
+  # The peer's address as a tuple (for the allowlist) and as text (for refusals); an IPv4-mapped
+  # IPv6 address (::ffff:a.b.c.d) reads as its IPv4 address (api-ops review).
   defp peer_address(socket) do
     case :inet.peername(socket) do
-      {:ok, {address, _port}} -> format_address(address)
-      _unknown -> "unknown"
-    end
-  end
-
-  defp normalize_address(text) do
-    case :inet.parse_address(String.to_charlist(text)) do
-      {:ok, address} -> format_address(address)
-      {:error, _not_an_address} -> text
+      {:ok, {address, _port}} -> {address, format_address(address)}
+      _unknown -> {nil, "unknown"}
     end
   end
 

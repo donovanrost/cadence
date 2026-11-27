@@ -450,11 +450,19 @@ Minimum read shape:
   "diagnostics": {
     "protocol": "tcp",
     "framing_family": "ccsds_tm",
+    "source_addresses": ["203.0.113.10/32", "198.51.100.0/24"],
     "endpoint_health": "healthy"
   },
   "extensions": {}
 }
 ```
+
+`diagnostics.source_addresses` lists the IP addresses or CIDR ranges the provider connects
+from (#990, DECISIONS #115). A `provider_connects` delivery without it can't become a Cadence
+listen transport: Cadence refuses any peer outside the list before reading a frame, and a
+listening endpoint with no allowlist (and, until mutual TLS lands, no other check) can't be
+created. The simulator reports loopback (`127.0.0.1/32`, `::1/128`) unless configured with
+`:delivery_source_addresses`.
 
 Provisioning a TCP destination is a setup operation, not a reservation field:
 

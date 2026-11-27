@@ -292,6 +292,7 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
         adapter_key: :tcp_socket,
         configuration: %{
           "mode" => "listen",
+          "expected_peer_addresses" => ["127.0.0.1/32", "::1/128"],
           "direction_capability" => "inbound",
           "host" => @secret_sentinel,
           "port" => "5000",
@@ -524,6 +525,7 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
         adapter_key: :tcp_socket,
         configuration: %{
           "mode" => "listen",
+          "expected_peer_addresses" => ["127.0.0.1/32", "::1/128"],
           "direction_capability" => "inbound",
           "host" => "127.0.0.1",
           "port" => "5000",
@@ -781,6 +783,7 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
         adapter_key: :tcp_socket,
         configuration: %{
           "mode" => "listen",
+          "expected_peer_addresses" => ["127.0.0.1/32", "::1/128"],
           "direction_capability" => "inbound",
           "host" => @secret_sentinel,
           "port" => "5000",

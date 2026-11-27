@@ -383,6 +383,7 @@ defmodule Cadence.GroundNetworks.ProviderEventProcessorTest do
       "direction" => "downlink",
       "delivery_kind" => "realtime_stream",
       "mode" => "provider_connects",
+      "source_addresses" => ["127.0.0.1/32", "::1/128"],
       "protocol" => "tcp",
       "endpoint_ref" => "unapproved-endpoint",
       "framing" => %{"family" => "ccsds_tm", "mode" => "fixed_size", "frame_bytes" => 1115},
@@ -645,6 +646,7 @@ defmodule Cadence.GroundNetworks.ProviderEventProcessorTest do
             "diagnostics" => %{
               "protocol" => "tcp",
               "mode" => "provider_connects",
+              "source_addresses" => ["127.0.0.1/32", "::1/128"],
               "host" => "127.0.0.1",
               "port" => 5100,
               "framing_family" => "ccsds_tm",

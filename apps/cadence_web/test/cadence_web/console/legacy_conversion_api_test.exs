@@ -45,6 +45,7 @@ defmodule CadenceWeb.Console.LegacyConversionAPITest do
           ground_station_id: station.ground_station_id,
           configuration: %{
             "mode" => "listen",
+            "expected_peer_addresses" => ["127.0.0.1/32", "::1/128"],
             "direction_capability" => "inbound",
             "host" => "127.0.0.1",
             "port" => Integer.to_string(40_000 + rem(System.unique_integer([:positive]), 20_000)),

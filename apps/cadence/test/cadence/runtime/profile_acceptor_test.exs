@@ -1,15 +1,19 @@
 defmodule Cadence.Runtime.ProfileAcceptorTest do
   @moduledoc """
   DECISIONS #87 (A): one listener per listen-mode provider profile. Overlapping contacts on one
-  profile each get their own peer, identified by the first frame's SCID (routing, not
-  attestation); anything unidentified is refused.
+  profile each get their own peer, identified by the first frame's SCID; anything unidentified is
+  refused. DECISIONS #115 (#990): the acceptor is one provider binding's, a peer outside its source
+  allowlist is refused before any frame is read, the SCID only picks among that binding's
+  contacts, and there is no fallback.
   """
   use ExUnit.Case, async: false
 
+  alias Cadence.Comms.PeerAddresses
   alias Cadence.ProviderAdapters.TCPSocket
   alias Cadence.Runtime.{ProcessNamespace, ProfileAcceptor}
 
   @frame_size 14
+  @loopback PeerAddresses.ranges(["127.0.0.1/32", "::1/128"])
 
   setup do
     %{
@@ -66,28 +70,81 @@ defmodule Cadence.Runtime.ProfileAcceptorTest do
     refute_received {^a, {:peer_accepted, _, _, _, _}}
   end
 
-  test "the single-registration fallback, opt-in, refuses once two are registered", c do
-    listen = %{port: 0, host: "127.0.0.1", fallback_single_registration?: true}
-    {a, port} = register!(c, "contact-a", nil, listen: listen, frame_size: nil)
-    _peer = connect!(port, "")
-    assert_receive {^a, {:peer_accepted, _socket, <<>>, _peer, _read_at}}, 2_000
-
-    {b, ^port} = register!(c, "contact-b", nil, listen: listen, frame_size: nil)
-    _peer2 = connect!(port, "")
+  test "no fallback: with one registration, a peer whose first frame can't be read is refused",
+       c do
+    {a, port} = register!(c, "contact-a", nil, frame_size: nil)
+    peer = connect!(port, "")
     assert_receive {^a, {:peer_refused, _, :unidentified}}, 2_000
-    assert_receive {^b, {:peer_refused, _, :unidentified}}, 2_000
+    assert {:error, :closed} = :gen_tcp.recv(peer, 0, 2_000)
+    refute_received {^a, {:peer_accepted, _, _, _, _}}
   end
 
-  test "an IPv4-mapped expected address matches its IPv4 peer", c do
-    {a, port} = register!(c, "contact-a", 1, expected_peer_address: "::ffff:127.0.0.1")
+  test "an IPv4-mapped allowlist entry allows its IPv4 peer", c do
+    listen = %{
+      port: 0,
+      host: "127.0.0.1",
+      allowed_peers: PeerAddresses.ranges(["::ffff:127.0.0.1"])
+    }
+
+    {a, port} = register!(c, "contact-a", 1, listen: listen)
     _peer = connect!(port, frame(1))
     assert_receive {^a, {:peer_accepted, _socket, _prefix, "127.0.0.1", _read_at}}, 2_000
   end
 
-  test "a peer from an address the profile doesn't expect is refused", c do
-    {a, port} = register!(c, "contact-a", 1, expected_peer_address: "10.9.9.9")
+  test "a peer outside the allowlist is refused before any frame is read", c do
+    listen = %{port: 0, host: "127.0.0.1", allowed_peers: PeerAddresses.ranges(["10.9.9.0/24"])}
+    {a, port} = register!(c, "contact-a", 1, listen: listen)
+
+    # The peer sends nothing: a refusal well inside the identify timeout (10 s) proves the
+    # acceptor never waited to read a frame.
+    {:ok, peer} = :gen_tcp.connect(~c"127.0.0.1", port, [:binary, active: false])
+    assert_receive {^a, {:peer_refused, "127.0.0.1", :peer_not_allowed}}, 1_000
+    assert {:error, :closed} = :gen_tcp.recv(peer, 0, 2_000)
+  end
+
+  test "an empty allowlist refuses every peer", c do
+    listen = %{port: 0, host: "127.0.0.1", allowed_peers: []}
+    {a, port} = register!(c, "contact-a", 1, listen: listen)
     _peer = connect!(port, frame(1))
-    assert_receive {^a, {:peer_refused, "127.0.0.1", {:unregistered_scid, 1}}}, 2_000
+    assert_receive {^a, {:peer_refused, "127.0.0.1", :peer_not_allowed}}, 1_000
+  end
+
+  # The #130 case: mission A's provider stream is misdirected to mission B's port (another
+  # organization), and B has a contact with the same SCID. B's binding allows only B's provider
+  # (here 10.0.0.0/8); A's stream arrives from elsewhere, so it is refused on accept and never
+  # handed to B's contact. (One provider serving both missions shares an egress range, which the
+  # allowlist can't tell apart; mutual TLS, #991, closes that.)
+  test "a misdirected stream with a colliding SCID is refused, never stored as the other mission's",
+       c do
+    mission_b = %{c | mission: c.mission <> "-org-b", profile: c.profile <> "-binding-b"}
+    listen_b = %{port: 0, host: "127.0.0.1", allowed_peers: PeerAddresses.ranges(["10.0.0.0/8"])}
+    {b, port_b} = register!(mission_b, "contact-b", 7, listen: listen_b)
+
+    misdirected = connect!(port_b, frame(7))
+    assert_receive {^b, {:peer_refused, "127.0.0.1", :peer_not_allowed}}, 1_000
+    assert {:error, :closed} = :gen_tcp.recv(misdirected, 0, 2_000)
+    refute_received {^b, {:peer_accepted, _, _, _, _}}
+  end
+
+  test "two bindings never cross: a SCID only picks a contact of the binding it reached", c do
+    other = %{c | profile: c.profile <> "-other"}
+    {a, port_a} = register!(c, "contact-a", 1)
+    {b, port_b} = register!(other, "contact-b", 2)
+    assert port_a != port_b
+
+    # SCID 1 is binding A's contact; sent to binding B's listener it matches nothing there.
+    _peer = connect!(port_b, frame(1))
+    assert_receive {^b, {:peer_refused, _, {:unregistered_scid, 1}}}, 2_000
+    refute_receive {^a, _any}, 200
+  end
+
+  test "a registration from another binding is never a candidate on this binding's acceptor", c do
+    {a, port} = register!(c, "contact-a", 1, provider_binding_id: "some-other-binding")
+    peer = connect!(port, frame(1))
+
+    # The peer is closed unrouted: the foreign registration is neither handed it nor told.
+    assert {:error, :closed} = :gen_tcp.recv(peer, 0, 2_000)
+    refute_receive {^a, {:peer_accepted, _, _, _, _}}, 200
   end
 
   # api-ops review: an adapter monitors the acceptor only after register returns. Register names
@@ -100,11 +157,10 @@ defmodule Cadence.Runtime.ProfileAcceptorTest do
       realized_contact_id: "contact-a",
       path_id: "downlink",
       scid: 1,
-      expected_peer_address: nil,
       frame_size: @frame_size
     }
 
-    listen = %{port: 0, host: "127.0.0.1"}
+    listen = %{port: 0, host: "127.0.0.1", allowed_peers: @loopback}
 
     assert {:ok, _port, acceptor} =
              ProfileAcceptor.register(c.namespace, c.mission, c.profile, listen, registration)
@@ -124,7 +180,7 @@ defmodule Cadence.Runtime.ProfileAcceptorTest do
   # acceptor has its linger message queued ahead of the register call, so it ends first.
   test "an acceptor whose linger fires as the next contact registers is replaced; it registers",
        c do
-    listen = %{port: 0, host: "127.0.0.1", linger_ms: 50}
+    listen = %{port: 0, host: "127.0.0.1", linger_ms: 50, allowed_peers: @loopback}
     {a, _port} = register!(c, "contact-a", 1, listen: listen)
     dying = ProfileAcceptor.whereis(c.namespace, c.mission, c.profile)
     stop_adapter(a)
@@ -138,7 +194,6 @@ defmodule Cadence.Runtime.ProfileAcceptorTest do
       realized_contact_id: "contact-b",
       path_id: "downlink",
       scid: 2,
-      expected_peer_address: nil,
       frame_size: @frame_size
     }
 
@@ -172,6 +227,7 @@ defmodule Cadence.Runtime.ProfileAcceptorTest do
         ingress_executor_name: :unused,
         configuration: %{
           mode: :listen,
+          expected_peer_addresses: ["127.0.0.1/32", "::1/128"],
           listener: "shared",
           port: 0,
           frame_size: @frame_size,
@@ -215,7 +271,7 @@ defmodule Cadence.Runtime.ProfileAcceptorTest do
   end
 
   test "the listener closes after the last contact leaves (linger) and frees its port", c do
-    listen = %{port: 0, host: "127.0.0.1", linger_ms: 50}
+    listen = %{port: 0, host: "127.0.0.1", linger_ms: 50, allowed_peers: @loopback}
     {a, port} = register!(c, "contact-a", 1, listen: listen)
     stop_adapter(a)
 
@@ -227,7 +283,7 @@ defmodule Cadence.Runtime.ProfileAcceptorTest do
   # A stand-in adapter: registers, then forwards what the acceptor sends it to the test.
   defp register!(c, contact, scid, opts \\ []) do
     test = self()
-    listen = Keyword.get(opts, :listen, %{port: 0, host: "127.0.0.1"})
+    listen = Keyword.get(opts, :listen, %{port: 0, host: "127.0.0.1", allowed_peers: @loopback})
 
     adapter =
       spawn(fn ->
@@ -238,7 +294,7 @@ defmodule Cadence.Runtime.ProfileAcceptorTest do
               realized_contact_id: contact,
               path_id: "downlink",
               scid: scid,
-              expected_peer_address: Keyword.get(opts, :expected_peer_address),
+              provider_binding_id: Keyword.get(opts, :provider_binding_id, c.profile),
               frame_size: Keyword.get(opts, :frame_size, @frame_size)
             }
 

@@ -16,7 +16,16 @@ defmodule Cadence.Contacts.ListenerOverlapTest do
     do: %{direction: direction, provider_bindings: [%{configuration: configuration}]}
 
   defp listen(port, extra \\ %{}),
-    do: Map.merge(%{"mode" => "listen", "host" => "0.0.0.0", "port" => port}, extra)
+    do:
+      Map.merge(
+        %{
+          "mode" => "listen",
+          "expected_peer_addresses" => ["127.0.0.1/32", "::1/128"],
+          "host" => "0.0.0.0",
+          "port" => port
+        },
+        extra
+      )
 
   defp pass(id, from, to, paths),
     do: %{

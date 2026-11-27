@@ -225,6 +225,7 @@ defmodule Cadence.ContactsTest do
                  adapter_key: :tcp_socket,
                  configuration: %{
                    "mode" => "listen",
+                   "expected_peer_addresses" => ["127.0.0.1/32", "::1/128"],
                    "port" => 0,
                    "ingress_protocol_family" => "tm",
                    "frame_size" => 1115
@@ -346,6 +347,7 @@ defmodule Cadence.ContactsTest do
                  adapter_key: :tcp_socket,
                  configuration: %{
                    "mode" => "listen",
+                   "expected_peer_addresses" => ["127.0.0.1/32", "::1/128"],
                    "port" => 0,
                    "ingress_protocol_family" => "tm",
                    "frame_size" => 1115
@@ -421,6 +423,7 @@ defmodule Cadence.ContactsTest do
                %{
                  configuration: %{
                    "mode" => "listen",
+                   "expected_peer_addresses" => ["127.0.0.1/32", "::1/128"],
                    "port" => 4100,
                    "ingress_protocol_family" => "tm",
                    "frame_size" => 256

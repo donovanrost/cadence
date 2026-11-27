@@ -2,12 +2,15 @@ defmodule Cadence.ProviderAdapters.TCPSocketPeersTest do
   @moduledoc """
   DECISIONS #67: a listening provider never refuses a second peer silently, and drops a peer
   that qualification couldn't verify so the attested one can connect (qa #38 positive test).
+  DECISIONS #115 (#990): a peer outside the source allowlist is refused before any byte is read,
+  and a listening provider without an allowlist doesn't start.
   """
   use Cadence.DataCase, async: false
 
   import ExUnit.CaptureLog
   import Cadence.DataCase, only: [persist_mission_scope: 2]
 
+  alias Cadence.Comms.PeerAddresses
   alias Cadence.ProviderAdapters.TCPSocket
 
   alias Cadence.Runtime.{
@@ -67,6 +70,7 @@ defmodule Cadence.ProviderAdapters.TCPSocketPeersTest do
          ingress_executor_name: executor,
          configuration: %{
            mode: :listen,
+           expected_peer_addresses: ["127.0.0.1/32", "::1/128"],
            host: "127.0.0.1",
            port: 0,
            uplink_resource_id: "peers-vc"
@@ -132,6 +136,43 @@ defmodule Cadence.ProviderAdapters.TCPSocketPeersTest do
       end)
 
     assert length(Regex.scan(~r/refused a second connection/, log)) == 1
+  end
+
+  test "a peer outside the allowlist is refused before any byte is read, and counted", c do
+    :sys.replace_state(c.provider, &%{&1 | allowed_peers: PeerAddresses.ranges(["10.0.0.0/8"])})
+
+    log =
+      capture_log(fn ->
+        outsider = connect!(c.port)
+        # Nothing is sent: the refusal comes on accept, not after a read.
+        assert {:error, :closed} = :gen_tcp.recv(outsider, 0, 2_000)
+      end)
+
+    assert log =~ "not an allowed source address"
+    state = :sys.get_state(c.provider)
+    assert state.session_peer == nil
+    assert state.socket == nil
+    assert %{count: 1, last: %{reason: "peer_not_allowed"}} = state.refusals
+
+    # The listener keeps accepting: an allowed peer still connects afterwards.
+    :sys.replace_state(c.provider, &%{&1 | allowed_peers: PeerAddresses.ranges(["127.0.0.1"])})
+    allowed = connect!(c.port)
+    allowed_address = local_address(allowed)
+    assert eventually(fn -> :sys.get_state(c.provider).session_peer == allowed_address end)
+  end
+
+  test "a listening provider without an allowlist doesn't start" do
+    assert {:error,
+            {:tcp_provider_invalid_configuration, "no-allowlist", :expected_peer_addresses}} =
+             GenServer.start(TCPSocket,
+               mission_id: "peers-mission",
+               realized_contact_id: "peers-contact",
+               path_id: "path",
+               provider_binding_id: "no-allowlist",
+               direction: :downlink,
+               ingress_executor_name: :unused,
+               configuration: %{mode: :listen, host: "127.0.0.1", port: 0}
+             )
   end
 
   defp connect!(port) do

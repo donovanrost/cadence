@@ -9,6 +9,8 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
 
   @behaviour Cadence.Comms.TransportKind
 
+  import Cadence.Comms.TransportKinds.TCPSocket.Fields
+
   alias Cadence.Comms.Transport
   alias Cadence.Comms.TransportKind.Definition
   alias Cadence.Contacts.ProviderProfile
@@ -19,17 +21,13 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
     SectionDefinition
   }
 
-  @modes ["listen", "connect"]
-  @direction_capabilities ["inbound", "outbound", "bidirectional"]
-  @framing_modes ["raw", "fixed_size", "line_delimited"]
-  @reconnect_policies ["none", "always", "on_disconnect"]
-  @ingress_protocol_families ["tm", "tm_transfer_frame", "space_packet", "cop1_clcw"]
   @config_atom_keys %{
     "direction" => :direction,
     "direction_capability" => :direction_capability,
     "delivery_kind" => :delivery_kind,
     "diagnostics" => :diagnostics,
     "enabled" => :enabled,
+    "expected_peer_addresses" => :expected_peer_addresses,
     "frame_bytes" => :frame_bytes,
     "fixed_message_bytes" => :fixed_message_bytes,
     "frame_size" => :frame_size,
@@ -43,6 +41,7 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
     "policy" => :policy,
     "port" => :port,
     "protocol" => :protocol,
+    "source_addresses" => :source_addresses,
     "reconnect" => :reconnect,
     "reconnect_policy" => :reconnect_policy,
     "state" => :state,
@@ -108,6 +107,18 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
                 required: true,
                 min: 1,
                 max: 65_535
+              },
+              # #990 (DECISIONS #115): a listening endpoint only accepts these peers.
+              %FieldDefinition{
+                field: :expected_peer_addresses,
+                label: "Allowed source addresses",
+                type: :text,
+                required: true,
+                placeholder: "203.0.113.10, 198.51.100.0/24",
+                help:
+                  "The IP addresses or CIDR ranges the provider connects from, separated by " <>
+                    "commas. Any other peer is refused before Cadence reads from it.",
+                visible_when: %{field: :tcp_mode, equals: "listen"}
               }
             ]
           },
@@ -178,6 +189,7 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
            direction_capability(value(config, "direction_capability", value(config, "direction"))),
          {:ok, host} <- required_text(value(config, "host"), "Host is required."),
          {:ok, port} <- port(value(config, "port")),
+         {:ok, allowlist} <- allowlist(value(config, "expected_peer_addresses"), mode),
          {:ok, framing_mode} <- framing_mode(value(config, "framing_mode", framing_value(config))),
          {:ok, frame_size} <-
            frame_size(
@@ -203,6 +215,7 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
          "reconnect" => reconnect_configuration(mode, reconnect_policy)
        }
        |> maybe_put_uplink_resource(resource_id)
+       |> maybe_put_allowlist(allowlist)
        |> maybe_put_fixed_message_bytes(frame_size)
        |> maybe_put_ingress_protocol_family(ingress_protocol_family)
        |> maybe_put_ingress_metadata(ingress_metadata)}
@@ -261,6 +274,7 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
         "framing_mode" => "fixed_size",
         "frame_size" => frame_bytes,
         "reconnect_policy" => "on_disconnect",
+        "expected_peer_addresses" => value(diagnostics, "source_addresses"),
         "tls_enabled" => false,
         "ingress_protocol_family" => "tm",
         "ingress_metadata" => %{"frame_size" => frame_bytes, "ocf_length" => 0}
@@ -295,6 +309,7 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
         "framing_mode" => "fixed_size",
         "fixed_message_bytes" => 4,
         "reconnect_policy" => "on_disconnect",
+        "expected_peer_addresses" => value(diagnostics, "source_addresses"),
         "tls_enabled" => false,
         "ingress_protocol_family" => "cop1_clcw",
         "uplink_resource_id" => "uplink:#{host}:#{port}"
@@ -350,126 +365,4 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
   defp framing_value(config), do: config |> value("framing", %{}) |> value("mode", "raw")
   defp reconnect_value(config), do: config |> value("reconnect", %{}) |> value("policy", "none")
   defp tls_value(config), do: config |> value("tls", %{}) |> value("enabled", false)
-
-  defp tcp_mode(value) when value in @modes, do: {:ok, value}
-  defp tcp_mode(value) when is_atom(value), do: tcp_mode(Atom.to_string(value))
-  defp tcp_mode(_value), do: {:error, "TCP mode is invalid."}
-
-  defp direction_capability("downlink"), do: {:ok, "inbound"}
-  defp direction_capability("uplink"), do: {:ok, "outbound"}
-  defp direction_capability(value) when value in @direction_capabilities, do: {:ok, value}
-
-  defp direction_capability(value) when is_atom(value),
-    do: direction_capability(Atom.to_string(value))
-
-  defp direction_capability(_value), do: {:error, "Direction capability is invalid."}
-
-  defp required_text(value, message) do
-    case normalize_text(value) do
-      nil -> {:error, message}
-      text -> {:ok, text}
-    end
-  end
-
-  defp port(value) do
-    case parse_integer(value) do
-      {:ok, port} when port >= 1 and port <= 65_535 -> {:ok, port}
-      _other -> {:error, "Port must be an integer from 1 to 65535."}
-    end
-  end
-
-  defp framing_mode(value) when value in @framing_modes, do: {:ok, value}
-  defp framing_mode(value) when is_atom(value), do: framing_mode(Atom.to_string(value))
-  defp framing_mode(_value), do: {:error, "Framing mode is invalid."}
-
-  defp frame_size(value, "fixed_size") do
-    case parse_integer(value) do
-      {:ok, frame_size} when frame_size > 0 -> {:ok, frame_size}
-      _other -> {:error, "Fixed frame size must be a positive integer."}
-    end
-  end
-
-  defp frame_size(_value, _framing_mode), do: {:ok, nil}
-
-  defp reconnect_policy(value, "connect") do
-    case normalize_text(value) || "always" do
-      policy when policy in @reconnect_policies -> {:ok, policy}
-      _other -> {:error, "Reconnect policy is invalid."}
-    end
-  end
-
-  defp reconnect_policy(_value, "listen"), do: {:ok, "on_disconnect"}
-
-  defp boolean("true"), do: {:ok, true}
-  defp boolean("false"), do: {:ok, false}
-  defp boolean(true), do: {:ok, true}
-  defp boolean(false), do: {:ok, false}
-  defp boolean(_value), do: {:error, "TLS setting is invalid."}
-
-  defp ingress_protocol_family(nil), do: {:ok, nil}
-
-  defp ingress_protocol_family(value) when value in @ingress_protocol_families,
-    do: {:ok, value}
-
-  defp ingress_protocol_family(_value),
-    do: {:error, "Ingress protocol family is invalid."}
-
-  defp ingress_metadata(value) when is_map(value), do: {:ok, value}
-  defp ingress_metadata(_value), do: {:error, "Ingress metadata is invalid."}
-
-  defp reconnect_configuration("connect", policy), do: %{"policy" => policy}
-  defp reconnect_configuration("listen", _policy), do: %{"policy" => "on_disconnect"}
-
-  defp uplink_resource_id(nil), do: {:ok, nil}
-
-  defp uplink_resource_id(value) when is_binary(value) and byte_size(value) in 1..255 do
-    required_text(value, "Uplink resource identity must be nonempty.")
-  end
-
-  defp uplink_resource_id(_),
-    do: {:error, "Uplink resource identity must be a string of at most 255 bytes."}
-
-  defp maybe_put_uplink_resource(config, nil), do: config
-  defp maybe_put_uplink_resource(config, value), do: Map.put(config, "uplink_resource_id", value)
-
-  defp maybe_put_fixed_message_bytes(configuration, nil), do: configuration
-
-  defp maybe_put_fixed_message_bytes(configuration, frame_size) do
-    Map.put(configuration, "fixed_message_bytes", frame_size)
-  end
-
-  defp maybe_put_ingress_protocol_family(configuration, nil), do: configuration
-
-  defp maybe_put_ingress_protocol_family(configuration, protocol_family) do
-    Map.put(configuration, "ingress_protocol_family", protocol_family)
-  end
-
-  defp maybe_put_ingress_metadata(configuration, metadata) when metadata == %{},
-    do: configuration
-
-  defp maybe_put_ingress_metadata(configuration, metadata) do
-    Map.put(configuration, "ingress_metadata", metadata)
-  end
-
-  defp compact(map), do: Map.reject(map, fn {_key, value} -> is_nil(value) end)
-
-  defp parse_integer(value) when is_binary(value) do
-    case Integer.parse(String.trim(value)) do
-      {integer, ""} -> {:ok, integer}
-      _other -> :error
-    end
-  end
-
-  defp parse_integer(value) when is_integer(value), do: {:ok, value}
-  defp parse_integer(_value), do: :error
-
-  defp normalize_text(value) when is_binary(value) do
-    case String.trim(value) do
-      "" -> nil
-      trimmed -> trimmed
-    end
-  end
-
-  defp normalize_text(value) when is_atom(value), do: Atom.to_string(value)
-  defp normalize_text(_value), do: nil
 end

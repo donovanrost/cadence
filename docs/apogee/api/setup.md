@@ -1662,8 +1662,21 @@ for generating change-set edit forms. `kind` is `ground_station`, `transport`,
   on the **stored document's paths** (today `tcp_socket`: `configuration.mode`,
   `configuration.direction_capability`, `configuration.host`, `configuration.port`,
   `configuration.framing.mode`, `configuration.framing.fixed_message_bytes`,
-  `configuration.reconnect.policy`, `configuration.tls.enabled` (boolean)). They match the transport
-  detail `document`, so stage edits to exactly these paths.
+  `configuration.reconnect.policy`, `configuration.tls.enabled` (boolean),
+  `configuration.expected_peer_addresses`). They match the transport detail `document`, so stage
+  edits to exactly these paths.
+  - `configuration.expected_peer_addresses` (#990, DECISIONS #115) is the listening endpoint's
+    source allowlist: the IP addresses or CIDR ranges the provider connects from. It shows only
+    when `configuration.mode` is `listen` and is required there: a listening transport without it
+    is refused at stage with "A listening transport needs its allowed source addresses: the IP
+    addresses or CIDR ranges the provider connects from." A bad entry is refused naming it ("Allowed
+    source addresses: \"x\" is not an IP address or CIDR range."). Stage it as text (comma or
+    space separated) or a list; the stored document holds a sorted, de-duplicated list in
+    `address/prefix` form (`["10.0.0.0/8", "198.51.100.7/32"]`). Client mode keeps none.
+  - On a running listener, a peer outside the list is refused before Cadence reads from it and
+    counted on the contact's listener refusals with reason `peer_not_allowed`. A provider-managed
+    transport takes the list from its delivery profile's `diagnostics.source_addresses`; a
+    delivery profile without one can't become a listening transport.
 - `spacecraft_profile` (8f, New profile): `display_name` (required), then the profile detail's
   section fields on the kind's document paths: `downlink_protocol`, `uplink_protocol` (both
   required), `packet_protocol`, `frame_parameters.{frame_size, secondary_header_length,

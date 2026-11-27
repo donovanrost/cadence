@@ -211,6 +211,7 @@ defmodule Cadence.ProviderChangeFixtures do
                 "diagnostics" => %{
                   "protocol" => "tcp",
                   "mode" => "provider_connects",
+                  "source_addresses" => ["127.0.0.1/32", "::1/128"],
                   "host" => "127.0.0.1",
                   # One mission's listen port (ListenClaims): each fixture mission gets its own,
                   # near the old fixed 5100 and clear of live dev listeners (42100-42209).

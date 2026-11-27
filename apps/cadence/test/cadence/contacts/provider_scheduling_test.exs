@@ -158,6 +158,7 @@ defmodule Cadence.Contacts.ProviderSchedulingTest do
           origin: :direct,
           configuration: %{
             "mode" => "listen",
+            "expected_peer_addresses" => ["127.0.0.1/32", "::1/128"],
             "direction_capability" => "inbound",
             "host" => "0.0.0.0",
             "port" => 5200,
@@ -505,6 +506,7 @@ defmodule Cadence.Contacts.ProviderSchedulingTest do
             "diagnostics" => %{
               "protocol" => "tcp",
               "mode" => "provider_connects",
+              "source_addresses" => ["127.0.0.1/32", "::1/128"],
               "host" => "127.0.0.1",
               "port" => 5100,
               "framing_family" => "ccsds_tm",
