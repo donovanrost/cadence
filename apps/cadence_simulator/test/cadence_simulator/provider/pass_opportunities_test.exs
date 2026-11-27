@@ -98,6 +98,39 @@ defmodule CadenceSimulator.Provider.PassOpportunitiesTest do
     assert PassCache.computed() == computed
   end
 
+  test "a run recreated under the same id with other stations doesn't read stale passes", c do
+    first = search(c.run, ["EARENDIL-001"])
+    assert first != []
+
+    # A run recreated under the same id (the Earendil seed's fixed id, after Store.clear); only
+    # its station moved.
+    :ok = Store.clear()
+
+    {:ok, scenario} =
+      Provider.create_scenario(%{
+        "spacecraft_count" => 2,
+        "spacecraft_prefix" => "EARENDIL",
+        "ground_stations" => [
+          %{
+            "id" => "station-boulder",
+            "antenna_count" => 1,
+            "location" => %{"latitude_deg" => -33.0, "longitude_deg" => 151.0}
+          },
+          %{"id" => "station-nowhere", "antenna_count" => 1}
+        ],
+        "orbit_readiness" => %{"source_kind" => "uploaded"}
+      })
+
+    {:ok, run} = Provider.create_run(scenario["id"], %{"seed" => 7, "id" => c.run["id"]})
+    assert run["id"] == c.run["id"]
+    {:ok, _stored, _status} = Ephemeris.put(run, "EARENDIL-001", upload())
+
+    computed = PassCache.computed()
+    second = search(run, ["EARENDIL-001"])
+    assert PassCache.computed() > computed
+    refute Enum.map(second, & &1["starts_at"]) == Enum.map(first, & &1["starts_at"])
+  end
+
   test "a synthetic scenario keeps the hash model" do
     {:ok, scenario} =
       Provider.create_scenario(%{"spacecraft_count" => 1, "spacecraft_prefix" => "SYN"})

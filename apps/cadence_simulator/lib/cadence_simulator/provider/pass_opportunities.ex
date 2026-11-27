@@ -74,15 +74,24 @@ defmodule CadenceSimulator.Provider.PassOpportunities do
     first |> Stream.iterate(&(&1 + @day)) |> Enum.take_while(&(&1 < to))
   end
 
+  # The key includes a fingerprint of the run's station geometry: a run id is reused when a run is
+  # recreated (Store.clear, the Earendil seed's fixed id), possibly with other stations.
   defp day_passes(run, spacecraft_id, upload, day) do
-    PassCache.fetch({run["id"], spacecraft_id, upload["content_sha256"], day}, fn ->
-      compute(run, upload, day)
-    end)
+    stations = stations(run)
+    key = {run["id"], spacecraft_id, upload["content_sha256"], fingerprint(stations), day}
+    PassCache.fetch(key, fn -> compute(stations, upload, day) end)
   end
 
-  defp compute(run, upload, day) do
+  defp fingerprint(stations) do
+    stations
+    |> Enum.map(&{&1.id, &1.latitude_deg, &1.longitude_deg, &1.height_m, &1.mask_deg})
+    |> :erlang.term_to_binary()
+    |> then(&:crypto.hash(:sha256, &1))
+  end
+
+  defp compute(stations, upload, day) do
     with {:ok, sat} <- satellite(upload),
-         [_ | _] = stations <- stations(run),
+         [_ | _] <- stations,
          {:ok, %{passes: passes}} <-
            Sgp4.Passes.search(
              sat,
