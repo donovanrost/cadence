@@ -152,7 +152,7 @@ field, and `details.message` says why.
 
 | Code | When |
 | --- | --- |
-| `element_set_unparseable` | The text isn't a TLE or an OMM, a line has the wrong length or line number, a field isn't a number (or is a JSON integer beyond 10^18), a required OMM key is missing, or the epoch isn't a time |
+| `element_set_unparseable` | The text isn't a TLE or an OMM, a line has the wrong length or line number, a field isn't a number (or is a JSON integer beyond 10^15), a required OMM key is missing, or the epoch isn't a time |
 | `element_set_bad_checksum` | A TLE line's column 69 isn't the mod-10 sum of its digits (`details.expected`) |
 | `element_set_catalog_number_mismatch` | The two TLE lines name different catalog numbers |
 | `element_set_non_physical` | Eccentricity outside [0, 1), mean motion ≤ 0, inclination outside [0, 180]°, or RAAN, argument of perigee or mean anomaly outside [0, 360]° |
