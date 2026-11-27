@@ -1509,11 +1509,13 @@ permissions}` for the Stations · Providers tab, sorted by name.
     provider, through an active, enabled downlink routing rule on one of its provider-managed
     transports. The buckets add up to exactly that number. A spacecraft with no current element
     set is in no bucket.
-  - **`orbit_source`** is what the provider's latest version declared (each spacecraft's
-    bucket follows the version its route's transport pins, the highest when two differ):
+  - **`orbit_source`** is what the provider's latest version declared:
     `"accepts_ephemeris_upload"`, `"looks_up_by_norad_id"`, or `null` when it declared nothing
-    (or hasn't synced). A provider with `null` behaves as `looks_up_by_norad_id`, so a current
+    (or hasn't synced). A version with `null` behaves as `looks_up_by_norad_id`, so a current
     set without a NORAD id is still counted as `norad_id_missing`, never left silent.
+  - **Each spacecraft is bucketed by the version its route's transport pins** (the highest when
+    two differ), not by the latest. While some routes still pin an older version with another
+    source, one provider can have counts in both the upload buckets and the lookup buckets.
   - `uploaded`: the provider holds the spacecraft's current element set, sent to the pinned
     provider version and the spacecraft's current provider-side ref.
   - `failed`: the last upload of the current set, to that same version and ref, failed. It is
@@ -1525,9 +1527,7 @@ permissions}` for the Stations · Providers tab, sorted by name.
   - `lookup`: the provider looks the orbit up by NORAD id, and the current set carries one.
   - `norad_id_missing`: the provider looks orbits up by NORAD id, but the current set has none,
     so it can't find the spacecraft.
-  - **Always 0 by source:**
-    - upload providers: `lookup` and `norad_id_missing`;
-    - lookup providers, and undeclared (`null`) ones: `uploaded`, `failed` and `pending`.
+  - Show every non-zero bucket: none is guaranteed to be 0 for a given `orbit_source`.
 - `permissions`: `["providers.manage"]` for mission admins (`:manage_mission`), else `[]`.
 
 ## Mission providers (L12): `/api/v1/missions/:mission_id/providers` (owner: api-ops)
