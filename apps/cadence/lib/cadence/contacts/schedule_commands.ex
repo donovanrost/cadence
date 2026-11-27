@@ -9,6 +9,7 @@ defmodule Cadence.Contacts.ScheduleCommands do
     ProviderReservations,
     ProviderScheduling,
     ScheduleCancellations,
+    SearchOutputBound,
     SingleBookings,
     UplinkLegs
   }
@@ -315,38 +316,15 @@ defmodule Cadence.Contacts.ScheduleCommands do
             "synthetic" => o["synthetic"],
             "station" => o["ground_station_ref"],
             "antenna" => o["antenna_or_service_pool_ref"],
-            "cost" => cost(get_in(o, ["extensions", "cost"])),
+            "cost" => number(get_in(o, ["extensions", "cost"])),
+            # The provider's own pass geometry when it reports one (#893), shown as its elevation.
+            "max_elevation_deg" => number(get_in(o, ["extensions", "max_elevation_deg"])),
             "token" => OpportunityCapability.sign(opportunity_payload(o, route, org, mission))
           }
         end)
     }
 
-    bounded_search_result(result)
-  end
-
-  defp bounded_search_result(result) do
-    base = Map.put(result, "opportunities", [])
-
-    bounded =
-      Enum.reduce_while(result["opportunities"], base, fn opportunity, acc ->
-        candidate = Map.update!(acc, "opportunities", &(&1 ++ [opportunity]))
-
-        if bounded_search_output?(candidate),
-          do: {:cont, candidate},
-          else: {:halt, Map.put(acc, "truncated", true)}
-      end)
-
-    case JSONBoundary.safe_trusted_output(bounded) do
-      {:ok, safe} -> {:ok, safe}
-      {:error, _} -> {:error, :opportunity_response_unavailable}
-    end
-  end
-
-  defp bounded_search_output?(candidate) do
-    case JSONBoundary.safe_trusted_output(candidate) do
-      {:ok, safe} -> byte_size(Jason.encode!(safe)) <= 60_000
-      {:error, _} -> false
-    end
+    SearchOutputBound.bound(result)
   end
 
   defp capability_expiry(opportunity) do
@@ -362,8 +340,8 @@ defmodule Cadence.Contacts.ScheduleCommands do
       else: DateTime.to_iso8601(capability_expiry)
   end
 
-  defp cost(v) when is_number(v), do: v
-  defp cost(_), do: nil
+  defp number(v) when is_number(v), do: v
+  defp number(_), do: nil
 
   defp opportunity_payload(opportunity, route, org, mission),
     do: %{

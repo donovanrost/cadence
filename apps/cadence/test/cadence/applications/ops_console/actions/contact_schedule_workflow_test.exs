@@ -39,7 +39,11 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactScheduleWorkflowTest do
 
     opportunity =
       Fixtures.opportunity(c.route, start)
-      |> Map.put("extensions", %{"cost" => 25, "private" => "never-public"})
+      |> Map.put("extensions", %{
+        "cost" => 25,
+        "max_elevation_deg" => 42.5,
+        "private" => "never-public"
+      })
 
     test_pid = self()
 
@@ -75,6 +79,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactScheduleWorkflowTest do
     assert ActionDispatcher.result("ops_console", found) == found
     assert [o] = found["opportunities"]
     assert o["cost"] == 25
+    # The provider's own pass geometry passes through (#893).
+    assert o["max_elevation_deg"] == 42.5
     {:ok, expires, _} = DateTime.from_iso8601(o["expires_at"])
     assert DateTime.diff(expires, DateTime.utc_now()) in 0..900
     refute Jason.encode!(found) =~ "never-public"

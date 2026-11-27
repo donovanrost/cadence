@@ -70,6 +70,36 @@ defmodule CadenceSimulator.Provider.EphemerisIntegrationTest do
              page.provider_evidence["orbit_readiness"]
   end
 
+  test "after the upload, Cadence's search returns the orbit's real passes with geometry (#893)",
+       c do
+    epoch = DateTime.utc_now() |> DateTime.add(-3_600) |> DateTime.truncate(:microsecond)
+    set = element_set(epoch)
+
+    ephemeris = %{
+      "omm" => OmmDocument.from_element_set(set),
+      "epoch" => DateTime.to_iso8601(epoch),
+      "content_sha256" => set.content_sha256
+    }
+
+    assert {:ok, _stored} = SimulatorHTTP.upload_ephemeris(c.context, "SC-001", ephemeris, opts())
+
+    day = search_params(["SC-001"], 86_400) |> Map.put("page_size", 50)
+
+    assert {:ok, %{data: [_ | _] = offers}} =
+             SimulatorHTTP.search_opportunities(c.context, day, opts())
+
+    for offer <- offers do
+      assert %{"model" => "sgp4_pass_v1", "max_elevation_deg" => elevation, "tca" => tca} =
+               offer.extensions
+
+      assert elevation >= 5.0 and elevation <= 90.0
+      {:ok, tca, 0} = DateTime.from_iso8601(tca)
+
+      assert DateTime.after?(tca, at(offer.starts_at)) and
+               DateTime.before?(tca, at(offer.ends_at))
+    end
+  end
+
   defp element_set(epoch) do
     %ElementSet{
       element_set_id: "elset-integration",
@@ -92,7 +122,7 @@ defmodule CadenceSimulator.Provider.EphemerisIntegrationTest do
     }
   end
 
-  defp search_params(refs) do
+  defp search_params(refs, seconds \\ 180) do
     starts_at = DateTime.utc_now() |> DateTime.add(30) |> DateTime.truncate(:second)
 
     %{
@@ -100,10 +130,17 @@ defmodule CadenceSimulator.Provider.EphemerisIntegrationTest do
       "ground_station_refs" => [],
       "service_profile_ref" => "service-realtime-ttc-downlink",
       "starts_at" => DateTime.to_iso8601(starts_at),
-      "ends_at" => starts_at |> DateTime.add(180) |> DateTime.to_iso8601(),
+      "ends_at" => starts_at |> DateTime.add(seconds) |> DateTime.to_iso8601(),
       "page_size" => 10,
       "cursor" => nil
     }
+  end
+
+  defp at(%DateTime{} = at), do: at
+
+  defp at(iso) when is_binary(iso) do
+    {:ok, at, _offset} = DateTime.from_iso8601(iso)
+    at
   end
 
   defp opts, do: [credential_resolver: &resolve_credential/1]
