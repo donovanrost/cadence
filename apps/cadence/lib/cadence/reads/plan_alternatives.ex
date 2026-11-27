@@ -12,12 +12,15 @@ defmodule Cadence.Reads.PlanAlternatives do
   clashing passes stay in: the limited requirement's gap when one has a limit, else
   the plan-day measure). The top-level `longest_gap` is the
   spacecraft's today.
+
+  Each alternative also carries its predicted geometry and `no_predicted_pass`
+  (`Cadence.Reads.PassGeometry.opportunities/4`, #892).
   """
 
   alias Cadence.Comms.StationRefs
   alias Cadence.ContactPlanning.{ContactOpportunitySnapshot, Planner, RequirementEvaluator}
   alias Cadence.Management.Contacts
-  alias Cadence.Reads.PlanMeasures
+  alias Cadence.Reads.{PassGeometry, PlanMeasures}
 
   @spec load(binary(), binary(), binary(), binary()) :: {:ok, map()} | {:error, :plan_not_found}
   def load(organization_id, mission_id, plan_id, spacecraft_id) do
@@ -58,7 +61,8 @@ defmodule Cadence.Reads.PlanAlternatives do
       contacts: contacts(requirements, mine),
       longest_gap: PlanMeasures.spacecraft_gap(requirements, mine, day),
       alternatives:
-        Enum.map(candidates, fn candidate ->
+        candidates
+        |> Enum.map(fn candidate ->
           after_selection = [candidate | mine]
 
           %{
@@ -80,6 +84,7 @@ defmodule Cadence.Reads.PlanAlternatives do
             }
           }
         end)
+        |> then(&PassGeometry.opportunities(organization_id, mission_id, spacecraft_id, &1))
     }
   end
 
