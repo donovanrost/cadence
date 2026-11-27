@@ -11,7 +11,8 @@ defmodule Sgp4.Passes do
     window start is traced back to its AOS, one still open at the end is traced on to its LOS.
     Both directions are bounded by the spacecraft's synodic period, 2π / (n − ω⊕), which no pass
     can outlast at any near-earth period or mask. A pass with no crossing inside the bound is
-    answered as `{:error, :pass_not_bracketed, ...}`, never with a clipped time.
+    listed in the result's `unbracketed` as `{:error, :pass_not_bracketed, ...}`, never given a
+    clipped time.
   - **Short passes.** A pass shorter than the grid step can fall between two grid points and be
     missed; at 60 s that is a grazing pass shorter than any schedulable contact.
 

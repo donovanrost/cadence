@@ -36,6 +36,8 @@ defmodule CadenceSimulator.MixProject do
       {:bandit, "~> 1.5"},
       {:cadence_catalog, path: "../../packages/cadence_catalog", env: Mix.env()},
       {:ccsds, path: "../../packages/ccsds"},
+      # The pass search; the simulator will generate opportunities with it (#732 slice 5).
+      {:sgp4, path: "../../packages/sgp4"},
       {:cadence, path: "../cadence", env: Mix.env(), only: :test},
       {:jason, "~> 1.4"},
       {:plug, "~> 1.18"},

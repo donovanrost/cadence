@@ -25,7 +25,9 @@ slice 2 of #732; the design is `docs/pass-prediction-design.md` (DECISIONS #114)
 - **Passes:** a 60 s coarse grid shared by all stations; AOS and LOS by bisection, TCA by golden
   section, each to 1 s; maximum elevation and azimuth at AOS and LOS. A pass that overlaps the
   window is found whole, with the search past each end bounded by the synodic period. A pass with
-  no crossing inside that bound is answered as `{:error, :pass_not_bracketed, ...}`.
+  no crossing inside that bound is never given a clipped time: `search/5` still returns
+  `{:ok, %{passes: [...], unbracketed: [...], propagations: n}}`, and each such pass appears in
+  `unbracketed` as `{:error, :pass_not_bracketed, %{station_id: id, near: datetime}}`.
 
 ## Accuracy
 
