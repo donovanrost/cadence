@@ -49,21 +49,23 @@ defmodule Cadence.GroundNetworks.PredictedPasses.Maintenance do
 
   def handle_info(_message, state), do: {:noreply, state}
 
+  @event "predicted_passes.daily_check_failed"
+
   defp check(fun) do
     case fun.() do
       :ok -> :ok
-      other -> Logger.warning("Predicted-pass daily check returned #{inspect(other)}; retrying")
+      other -> warn("returned #{inspect(other)}", "result")
     end
   rescue
-    error ->
-      Logger.warning(
-        "Predicted-pass daily check failed; retrying at the next interval: " <>
-          Exception.message(error)
-      )
+    error -> warn(Exception.message(error), inspect(error.__struct__))
   catch
-    :exit, reason ->
-      Logger.warning(
-        "Predicted-pass daily check exited; retrying at the next interval: #{inspect(reason)}"
-      )
+    :exit, reason -> warn("exited: #{inspect(reason)}", "exit")
+  end
+
+  defp warn(detail, error_class) do
+    Logger.warning("Predicted-pass daily check failed, retrying at the next interval: " <> detail,
+      cadence_event: @event,
+      error_class: error_class
+    )
   end
 end
