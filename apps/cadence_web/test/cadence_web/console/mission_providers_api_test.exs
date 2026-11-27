@@ -123,10 +123,15 @@ defmodule CadenceWeb.Console.MissionProvidersAPITest do
                "uploaded" => 0,
                "failed" => 0,
                "pending" => 0,
+               "not_ready" => 0,
                "lookup" => 0,
                "norad_id_missing" => 0
              }
            } = provider
+
+    # The read sends exactly the documented ephemeris keys (setup.md), not_ready included.
+    assert provider["ephemeris"] |> Map.keys() |> Enum.sort() ==
+             ~w(failed lookup norad_id_missing not_ready orbit_source pending uploaded)
 
     assert %{"providers" => [%{"id" => id}], "permissions" => ["providers.manage"]} =
              c |> admin() |> get(c.base) |> json_response(200) |> Map.fetch!("data")
