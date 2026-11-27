@@ -155,6 +155,7 @@ describe("EphemerisCounts links (#972 member list)", () => {
           norad_id_missing: 1,
         }),
         providerId: "prov_1",
+        linked: true,
       },
       global: { stubs: { RouterLink: RouterLinkStub } },
     });

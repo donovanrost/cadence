@@ -81,7 +81,7 @@ const facts = (p: MissionProvider) => [
         }}</span>
       </template>
       <template #value-orbits
-        ><EphemerisCounts :ephemeris="provider.ephemeris" :provider-id="provider.id"
+        ><EphemerisCounts :ephemeris="provider.ephemeris" :provider-id="provider.id" linked
       /></template>
     </ApKeyValue>
     <ApCallout v-if="provider.grant?.state === 'revoked'" tone="crit">{{

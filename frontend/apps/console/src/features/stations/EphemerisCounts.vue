@@ -5,11 +5,17 @@ import { ephemerisSummary, membersLink, type Ephemeris } from "./ephemeris.ts";
 
 /**
  * #975: how a provider gets orbits and its spacecraft's orbit counts, every non-zero one. A
- * caution is mark, color and word; zero counts never show. A caution's count links to its
- * spacecraft (#972's member list).
+ * caution is mark, color and word; zero counts never show. With `linked` (the provider's detail),
+ * a caution's count links to its spacecraft (#972's member list). Never in the Providers table:
+ * its row's only link is the Name cell (rule 9).
  */
-const props = defineProps<{ ephemeris: Ephemeris; providerId: string }>();
+const props = withDefaults(
+  defineProps<{ ephemeris: Ephemeris; providerId: string; linked?: boolean }>(),
+  { linked: false },
+);
 const summary = computed(() => ephemerisSummary(props.ephemeris));
+const linkOf = (key: (typeof summary.value.lines)[number]["key"]) =>
+  props.linked ? membersLink(props.providerId, key) : null;
 </script>
 
 <template>
@@ -26,8 +32,8 @@ const summary = computed(() => ephemerisSummary(props.ephemeris));
       >
         <ApStatusMark v-if="line.caution" state="caution" /><span
           ><RouterLink
-            v-if="membersLink(providerId, line.key)"
-            :to="membersLink(providerId, line.key)!"
+            v-if="linkOf(line.key)"
+            :to="linkOf(line.key)!"
             class="text-caution-text underline hover:text-bright max-md:hit-44"
             >{{ line.text }}</RouterLink
           ><template v-else>{{ line.text }}</template
