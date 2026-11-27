@@ -12,6 +12,7 @@ Owner: **api**. Every contract the console SPA uses is documented in this folder
 | [domain.md](domain.md) | domain's facade contracts (owner: domain) |
 | [commanding.md](commanding.md) | Command catalog, requests, preflight (api-ops) |
 | [alarms-console.md](alarms-console.md) | Alarm episodes: list, show, ack/assign/hand-off/notes (api-ops) |
+| [element-sets.md](element-sets.md) | Spacecraft orbits as TLE/OMM element sets: store, bulk, history, current (ground) |
 | [inventory.md](inventory.md) | What existed before the console API, and the gaps |
 
 ## Base and auth

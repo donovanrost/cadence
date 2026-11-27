@@ -20,6 +20,15 @@ defmodule CadenceWeb.Console.Problem do
     organization_not_found: {404, "Organization not found."},
     spacecraft_not_found: {404, "Spacecraft not found."},
     source_endpoint_not_found: {404, "Source endpoint not found."},
+    # #889: element-set refusals; `details` names the field and why.
+    element_set_unparseable: {422, "This element set can't be read."},
+    element_set_bad_checksum: {422, "A TLE line's checksum doesn't match its digits."},
+    element_set_catalog_number_mismatch:
+      {422, "The two TLE lines name different catalog numbers."},
+    element_set_non_physical: {422, "An element is outside its physical range."},
+    element_set_epoch_in_future: {422, "The epoch is more than a day in the future."},
+    element_set_unsupported_mean_element_theory: {422, "Only SGP4 mean elements can be stored."},
+    element_set_batch_too_large: {422, "Send at most 1,000 element sets at a time."},
     spacecraft_route_not_found: {404, "Extra route not found."},
     profile_not_found: {404, "Profile not found."},
     catalog_revision_not_found: {404, "Catalog revision not found."},
