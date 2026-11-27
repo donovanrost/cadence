@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ApStatusMark, ApTable, formatShort, type ApColumn } from "@/ui";
 import type { MissionProvider } from "./api.ts";
+import EphemerisCounts from "./EphemerisCounts.vue";
 import { grantLine, healthLine } from "./providers.ts";
 
 /** The mission's providers; the name opens the provider (L12 Validate / Sync / Archive). */
@@ -10,6 +11,7 @@ const columns: readonly ApColumn[] = [
   { key: "account", label: "Account" },
   { key: "stations", label: "Stations", mono: true, align: "end" },
   { key: "health", label: "Health" },
+  { key: "orbits", label: "Orbits" },
   { key: "synced", label: "Last synced", mono: true },
 ];
 const when = (at: string | null) => (at ? formatShort(new Date(at)) : "never");
@@ -39,6 +41,7 @@ const when = (at: string | null) => (at ? formatShort(new Date(at)) : "never");
         }}</span
       ></template
     >
+    <template #cell-orbits="{ row }"><EphemerisCounts :ephemeris="row.ephemeris" /></template>
     <template #cell-synced="{ row }">{{ when(row.status.last_synced_at) }}</template>
   </ApTable>
 </template>
