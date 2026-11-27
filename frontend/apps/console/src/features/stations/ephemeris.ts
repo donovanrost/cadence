@@ -13,8 +13,7 @@ export const ephemerisReader = d.object({
   orbit_source: d.nullable(d.known(orbitSources)),
   uploaded: d.integer,
   failed: d.integer,
-  /** #981 (#974): absent until it merges, then required. */
-  not_ready: d.optional(d.integer),
+  not_ready: d.integer,
   pending: d.integer,
   lookup: d.integer,
   norad_id_missing: d.integer,
@@ -85,7 +84,7 @@ export function ephemerisSummary(e: Ephemeris): EphemerisSummary {
   const own = ownKind(e.orbit_source);
   const kinds: readonly Kind[] =
     own === "lookup" ? ["lookup", "upload", "neutral"] : ["upload", "lookup", "neutral"];
-  const count = (b: Bucket) => (b === "not_ready" ? (e.not_ready ?? 0) : e[b]);
+  const count = (b: Bucket) => e[b];
   const note = (kind: Kind) => {
     if (own === null || kind === "neutral") return null;
     if (kind !== own) return "older pinned version";

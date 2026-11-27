@@ -22,12 +22,11 @@ const lines = (e: Ephemeris) =>
   ephemerisSummary(e).lines.map((l) => [l.key, l.text, l.caution, l.note]);
 
 describe("ephemeris decoding", () => {
-  it("tolerates an unknown source and a row from before not_ready (#981)", () => {
+  it("tolerates an unknown source; every bucket is a required integer", () => {
     expect(ephemeris({ orbit_source: "relay" }).orbit_source).toBe("unrecognized");
     expect(ephemeris({ orbit_source: null }).orbit_source).toBeNull();
     const { not_ready: _, ...older } = zero;
-    const r = decode(ephemerisReader, { orbit_source: null, ...older });
-    expect(r.ok && r.value.not_ready).toBeUndefined();
+    expect(decode(ephemerisReader, { orbit_source: null, ...older }).ok).toBe(false);
     expect(decode(ephemerisReader, { orbit_source: null, ...zero, failed: null }).ok).toBe(false);
   });
 });
@@ -112,9 +111,7 @@ describe("ephemeris words (#975: every non-zero bucket)", () => {
     const s = ephemerisSummary(ephemeris({}));
     expect(s.total).toBe("No bound spacecraft has an orbit yet");
     expect(s.lines).toEqual([]);
-    expect(ephemerisSummary(ephemeris({ not_ready: undefined, pending: 1 })).total).toBe(
-      "1 spacecraft with an orbit",
-    );
+    expect(ephemerisSummary(ephemeris({ pending: 1 })).total).toBe("1 spacecraft with an orbit");
   });
 });
 
