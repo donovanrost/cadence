@@ -163,10 +163,10 @@ defmodule Cadence.Comms.ConfigKinds.GroundStation do
     end
   end
 
-  defp mask_errors(mask) when is_number(mask) and mask >= 0 and mask < 90, do: []
+  defp mask_errors(mask) when is_number(mask) and mask >= 0 and mask <= 89.9, do: []
 
   defp mask_errors(mask) when is_number(mask),
-    do: [F.error("elevation_mask_deg", "Elevation mask must be 0 to under 90°")]
+    do: [F.error("elevation_mask_deg", "Elevation mask must be 0 to 89.9°")]
 
   defp mask_errors(_mask), do: [F.error("elevation_mask_deg", "Elevation mask must be a number")]
 

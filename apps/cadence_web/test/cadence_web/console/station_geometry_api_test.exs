@@ -90,7 +90,13 @@ defmodule CadenceWeb.Console.StationGeometryAPITest do
     report = [%{"id" => id, "location" => %{"latitude_deg" => 19.0, "longitude_deg" => -155.7}}]
 
     {:ok, %{recorded: 1}} =
-      StationLocations.record_provider_reports(c.organization_id, c.mission_id, "sim", report)
+      StationLocations.record_provider_reports(
+        c.organization_id,
+        c.mission_id,
+        "sim",
+        report,
+        DateTime.utc_now()
+      )
 
     assert [
              %{

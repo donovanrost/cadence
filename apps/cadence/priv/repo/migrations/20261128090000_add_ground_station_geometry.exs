@@ -42,7 +42,7 @@ defmodule Cadence.Repo.Migrations.AddGroundStationGeometry do
 
     create(
       constraint(:comms_ground_stations, :comms_ground_stations_elevation_mask_range,
-        check: "elevation_mask_deg >= 0 AND elevation_mask_deg < 90"
+        check: "elevation_mask_deg >= 0 AND elevation_mask_deg <= 89.9"
       )
     )
   end

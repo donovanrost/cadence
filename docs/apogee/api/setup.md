@@ -1451,7 +1451,9 @@ Edits go through change sets (`ground_station` and `transport` kinds; see change
     wins; `null` means neither has one, so no passes can be predicted there.
   - `provider_location`: `{latitude_deg, longitude_deg, height_m, reported_at}` or `null`. It
     is what the provider's inventory last reported, shown even when the mission's location is
-    in use, so a difference can be seen.
+    in use, so a difference can be seen. `reported_at` is the time of the last sync that
+    reported it. A sync that lists the station without a location, or no longer lists it,
+    clears it to `null`.
   - `elevation_mask_deg`: a number, 5 unless the mission set it. Passes are predicted above it.
 
   The mission sets the location and mask in the `ground_station` change-set document, using
@@ -1459,7 +1461,7 @@ Edits go through change sets (`ground_station` and `transport` kinds; see change
   lists them with units and ranges).
   - Latitude must be −90 to 90 and longitude −180 to 180, and the two come together.
   - Height is −1,000 to 10,000 m, and 0 when left empty.
-  - The mask is 0 to under 90.
+  - The mask is 0 to 89.9.
   - Clearing all three location fields removes the mission's location. Pass prediction then
     falls back to the provider's.
 

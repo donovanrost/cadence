@@ -173,7 +173,8 @@ defmodule Cadence.GroundNetworks do
              provider.organization_id,
              provider.mission_id,
              provider.provider_id,
-             ground_stations
+             ground_stations,
+             synced_at
            ) do
       sync_document =
         build_sync_document(
