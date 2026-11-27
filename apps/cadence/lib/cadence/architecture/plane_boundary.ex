@@ -444,6 +444,7 @@ defmodule Cadence.Architecture.PlaneBoundary do
       "lib/cadence/contacts/provider_reservation_reconciler.ex",
       "lib/cadence/contacts/provider_reservations.ex",
       "lib/cadence/contacts/provider_scheduling.ex",
+      "lib/cadence/contacts/provider_scheduling/route_pins.ex",
       "lib/cadence/ground_networks/provider_event",
       "lib/cadence/ground_networks/provider_evidence"
     ],

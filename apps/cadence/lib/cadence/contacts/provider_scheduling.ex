@@ -8,23 +8,18 @@ defmodule Cadence.Contacts.ProviderScheduling do
   a later reservation must snapshot before mutating provider state.
   """
 
-  alias Cadence.Comms.{RoutingRule, RoutingRuleStore, Transport, TransportStore}
+  alias Cadence.Comms.{RoutingRule, RoutingRuleStore, Transport}
 
   alias Cadence.Contacts.{
     LinkAssignment,
-    LinkAssignmentStore,
-    PathTemplateStore,
-    ProfileStore,
-    ProviderClients.Registry
+    ProviderClients.Registry,
+    ProviderScheduling.RoutePins
   }
 
   alias Cadence.Control.Providers, as: ProviderControl
 
   alias Cadence.GroundNetworks.{
-    MissionProvider,
-    MissionProviders,
     Opportunity,
-    ProviderAccountGrants,
     ProviderContext,
     Validation
   }
@@ -103,7 +98,7 @@ defmodule Cadence.Contacts.ProviderScheduling do
         end)
         |> Map.new(fn {id, rules} -> {id, Enum.filter(rules, &downlink_rule?/1)} end)
 
-      pins = load_route_pins(organization_id, mission_id, rules |> Map.values() |> List.flatten())
+      pins = RoutePins.load(organization_id, mission_id, rules |> Map.values() |> List.flatten())
 
       routes =
         Map.new(spacecraft, fn {id, item} ->
@@ -120,59 +115,6 @@ defmodule Cadence.Contacts.ProviderScheduling do
 
       {:ok, routes, pins.providers}
     end
-  end
-
-  defp load_route_pins(organization_id, mission_id, rules) do
-    assignments =
-      LinkAssignmentStore.fetch_many(
-        organization_id,
-        mission_id,
-        Enum.flat_map(rules, &materialized_assignment_ids/1)
-      )
-
-    templates =
-      PathTemplateStore.fetch_versions(
-        organization_id,
-        mission_id,
-        Enum.map(assignments, fn {_id, row} ->
-          {row.path_template_id, row.path_template_version}
-        end)
-      )
-
-    transports =
-      TransportStore.fetch_transport_versions(
-        organization_id,
-        mission_id,
-        Enum.map(rules, &{&1.transport_id, &1.transport_version})
-      )
-
-    managed = transports |> Map.values() |> Enum.filter(&(&1.origin == :provider_managed))
-
-    providers =
-      MissionProviders.fetch_provider_versions(
-        organization_id,
-        mission_id,
-        Enum.map(managed, &{&1.mission_provider_id, &1.mission_provider_version})
-      )
-
-    profiles =
-      ProfileStore.fetch_provider_profiles(
-        organization_id,
-        mission_id,
-        managed |> Enum.map(& &1.materialized_provider_profile_id) |> Enum.reject(&is_nil/1)
-      )
-
-    %{
-      assignments: assignments,
-      templates: templates,
-      transports: transports,
-      providers: providers,
-      provider_readiness:
-        Map.new(providers, fn {key, provider} ->
-          {key, with(:ok <- provider_ready(provider), do: provider_grant_ready(provider))}
-        end),
-      profiles: profiles
-    }
   end
 
   @spec resolve_ready_downlink_route(binary(), binary(), binary(), binary()) ::
@@ -414,7 +356,7 @@ defmodule Cadence.Contacts.ProviderScheduling do
 
   defp downlink_assignment(rule, assignments) do
     rule
-    |> materialized_assignment_ids()
+    |> RoutePins.materialized_assignment_ids()
     |> Enum.reduce_while({:error, :contact_link_assignment_not_found}, fn assignment_id, _acc ->
       case Map.get(assignments, assignment_id) do
         %LinkAssignment{direction: :downlink} = assignment ->
@@ -424,14 +366,6 @@ defmodule Cadence.Contacts.ProviderScheduling do
           {:cont, {:error, :contact_link_assignment_not_found}}
       end
     end)
-  end
-
-  defp materialized_assignment_ids(rule) do
-    ids = Map.get(rule.metadata, "materialized_link_assignment_ids", [])
-
-    if ids == [] and is_binary(rule.materialized_link_assignment_id),
-      do: [rule.materialized_link_assignment_id],
-      else: ids
   end
 
   defp fetch_pin(pins, key, reason) do
@@ -472,40 +406,6 @@ defmodule Cadence.Contacts.ProviderScheduling do
 
   defp externally_schedulable_transport(%Transport{}) do
     {:error, :transport_not_active, "Selected Transport version is not active."}
-  end
-
-  defp provider_ready(%MissionProvider{} = provider) do
-    cond do
-      provider.lifecycle_state != :active ->
-        {:error, :mission_provider_not_active, "Mission Provider version is not active."}
-
-      not match?(%DateTime{}, provider.last_validated_at) or
-          get_in(provider.metadata, ["control_plane", "status"]) != "healthy" ->
-        {:error, :mission_provider_not_validated, "Mission Provider must validate successfully."}
-
-      not match?(%DateTime{}, provider.last_synced_at) ->
-        {:error, :mission_provider_profiles_not_synced,
-         "Mission Provider profiles are not synchronized."}
-
-      true ->
-        :ok
-    end
-  end
-
-  defp provider_grant_ready(%MissionProvider{provider_account_grant_id: nil}), do: :ok
-
-  defp provider_grant_ready(%MissionProvider{} = provider) do
-    case ProviderAccountGrants.validate_binding(
-           provider.organization_id,
-           provider.mission_id,
-           provider.provider_account_id,
-           provider.provider_account_version,
-           provider.provider_account_grant_id,
-           provider.provider_account_grant_version
-         ) do
-      {:ok, _grant} -> :ok
-      {:error, reason} -> {:error, reason}
-    end
   end
 
   defp exact_profile(provider, collection, reference) do

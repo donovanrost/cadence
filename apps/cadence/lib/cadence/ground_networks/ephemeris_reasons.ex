@@ -54,6 +54,7 @@ defmodule Cadence.GroundNetworks.EphemerisReasons do
   @not_ready %{
     "mission_provider_not_validated" => "The provider version hasn't validated.",
     "mission_provider_not_active" => "The provider version isn't active.",
+    "mission_provider_archived" => "The provider is archived.",
     "mission_provider_not_found" => "The provider version this route pins is gone.",
     "mission_provider_profiles_not_synced" => "The provider's profiles haven't synced.",
     "provider_service_profile_not_active" => "The route's service profile isn't active.",
