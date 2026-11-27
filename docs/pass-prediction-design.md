@@ -198,11 +198,13 @@ Writes use `Cadence.Persistence.BulkInsert` (#872): typed arrays and one stateme
 - **The simulator (slices 5a and 5b, #968 and #893)** declares `accepts_ephemeris_upload` and
   stores each upload. A scenario whose `orbit_readiness.source_kind` is `uploaded` is ready only
   for spacecraft with an upload at most 14 days old, and offers their real passes: the uploaded
-  element set propagated with the same package over the scenario's located stations (5° mask by
-  default). Each offer is a pass, AOS to LOS clipped to the search's end, with its maximum
-  elevation and TCA under `extensions` (model `sgp4_pass_v1`), which Cadence shows as the
-  provider's elevation. Passes are computed per UTC day and cached per run, spacecraft, upload
-  hash and day, so an offer restores from its id with the same whole-second window. `synthetic`,
+  element set propagated with the same package over the scenario's located stations (each
+  station's own elevation mask, 5° by default). Each offer is a pass, AOS to LOS clipped to the
+  search's end, with its maximum elevation and TCA under `extensions` (model `sgp4_pass_v1`),
+  which Cadence shows as the provider's elevation. An offer clipped before its TCA carries
+  neither (it never reaches that peak), and Cadence then shows its own predicted elevation,
+  marked predicted. Passes are computed per UTC day and cached per run, spacecraft, upload hash,
+  station geometry and day, so an offer restores from its id with the same whole-second window. `synthetic`,
   the default, keeps the hash model (`deterministic_pass_v1`) for tests and fault injection.
   The Earendil scenarios switch with `EARENDIL_ORBIT_SOURCE=uploaded`; they default to synthetic
   until the fleet's orbits are applied and uploaded (#745) and the e2e seeds send orbits.
