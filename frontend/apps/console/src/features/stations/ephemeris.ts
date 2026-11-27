@@ -1,5 +1,7 @@
 import { decoders as d, type Decoded } from "@/api";
+import type { RouteLocationRaw } from "vue-router";
 import { formatCount, plural } from "@/ui";
+import { ephemerisCauses } from "./ephemerisReasons.ts";
 
 /**
  * A provider row's `ephemeris` (#968, #974, #975; setup.md "Mission providers"): how the provider
@@ -66,6 +68,17 @@ export type EphemerisLine = Readonly<{
   /** Why a count's kind differs from the lead: assumed, or an older pinned version's. */
   note: string | null;
 }>;
+
+/**
+ * #972: a failed, not ready or without-NORAD-id line opens the provider's member list on that
+ * cause (every reason code); the other buckets have no list.
+ */
+export function membersLink(providerId: string, key: Bucket): RouteLocationRaw | null {
+  const cause = ephemerisCauses.find((c) => c === key);
+  return cause
+    ? { name: "setup.stations.providers", params: { providerId }, query: { cause } }
+    : null;
+}
 
 export type EphemerisSummary = Readonly<{
   lead: string;

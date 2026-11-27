@@ -1,4 +1,4 @@
-import { mount } from "@vue/test-utils";
+import { mount, RouterLinkStub } from "@vue/test-utils";
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api";
 import EphemerisCounts from "./EphemerisCounts.vue";
@@ -118,7 +118,8 @@ describe("ephemeris words (#975: every non-zero bucket)", () => {
 describe("EphemerisCounts", () => {
   it("shows a caution as mark, color and word, and no zero counts", () => {
     const w = mount(EphemerisCounts, {
-      props: { ephemeris: ephemeris({ uploaded: 3, failed: 1 }) },
+      props: { ephemeris: ephemeris({ uploaded: 3, failed: 1 }), providerId: "prov_1" },
+      global: { stubs: { RouterLink: RouterLinkStub } },
     });
     expect(w.findAll("[data-bucket]").map((li) => li.attributes("data-bucket"))).toEqual([
       "uploaded",
@@ -130,9 +131,49 @@ describe("EphemerisCounts", () => {
     expect(failed.text()).toBe("1 upload failed, retrying");
     expect(w.find('[data-bucket="uploaded"] .ap-mark--caution').exists()).toBe(false);
     w.unmount();
-    const empty = mount(EphemerisCounts, { props: { ephemeris: ephemeris({}) } });
+    const empty = mount(EphemerisCounts, {
+      props: { ephemeris: ephemeris({}), providerId: "prov_1" },
+      global: { stubs: { RouterLink: RouterLinkStub } },
+    });
     expect(empty.text()).toBe("Cadence uploads orbitsNo bound spacecraft has an orbit yet");
     expect(empty.find("ul").exists()).toBe(false);
     empty.unmount();
+  });
+});
+
+describe("EphemerisCounts links (#972 member list)", () => {
+  it("links each non-zero failed, not ready and without-NORAD-id line by its cause, and nothing else", () => {
+    const w = mount(EphemerisCounts, {
+      props: {
+        ephemeris: ephemeris({
+          orbit_source: "accepts_ephemeris_upload",
+          uploaded: 4,
+          failed: 1,
+          not_ready: 2,
+          pending: 1,
+          lookup: 3,
+          norad_id_missing: 1,
+        }),
+        providerId: "prov_1",
+      },
+      global: { stubs: { RouterLink: RouterLinkStub } },
+    });
+    const to = (cause: string) => ({
+      name: "setup.stations.providers",
+      params: { providerId: "prov_1" },
+      query: { cause },
+    });
+    // The links, in the order shown (own kind first), and the lines that hold one.
+    expect(w.findAllComponents(RouterLinkStub).map((l) => [l.props("to"), l.text()])).toEqual([
+      [to("failed"), "1 upload failed, retrying"],
+      [to("norad_id_missing"), "1 without a NORAD id, the provider can't find them"],
+      [to("not_ready"), "2 not ready, no route to this provider is ready"],
+    ]);
+    const linked = w
+      .findAll("li")
+      .filter((li) => li.find("a").exists())
+      .map((li) => li.attributes("data-bucket"));
+    expect(linked).toEqual(["failed", "norad_id_missing", "not_ready"]);
+    w.unmount();
   });
 });
