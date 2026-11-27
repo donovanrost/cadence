@@ -8,6 +8,7 @@ defmodule CadenceWeb.Console.MissionProvidersAPITest do
   alias Cadence.Control.Providers, as: ControlProviders
   alias Cadence.GroundNetworks.{ProviderAccountGrants, ProviderAccounts, ProviderCredentials}
   alias Cadence.GroundNetworks.ProviderError
+  alias Cadence.Platform.ScopedReadUpdates
   alias Cadence.TestSupport.FakeProviderClient
   alias CadenceWeb.TestFixtures
 
@@ -62,6 +63,7 @@ defmodule CadenceWeb.Console.MissionProvidersAPITest do
       member: member,
       scope: scope,
       grant: grant,
+      mission_id: mission.mission_id,
       base: "/api/v1/missions/#{mission.mission_id}/providers"
     }
   end
@@ -260,5 +262,26 @@ defmodule CadenceWeb.Console.MissionProvidersAPITest do
 
     assert %{"providers" => []} =
              c |> admin() |> get(c.base) |> json_response(200) |> Map.fetch!("data")
+  end
+
+  test "create, validate, sync and archive each publish the providers live update (#972)", c do
+    ScopedReadUpdates.subscribe(:providers_changed, c.scope.organization_id, c.mission_id)
+    path = c.base <> "/" <> create!(c)["id"]
+    assert_receive {:providers_changed, _org, _mission}
+
+    for action <- ["/validate", "/sync"] do
+      c |> admin() |> post(path <> action) |> json_response(200)
+      assert_receive {:providers_changed, _org, _mission}
+    end
+
+    set_call_opts(validate_response: {:error, ProviderError.unavailable(:econnrefused)})
+    c |> admin() |> post(path <> "/validate") |> json_response(200)
+    assert_receive {:providers_changed, _org, _mission}
+
+    c |> admin() |> post(path <> "/archive", %{"reason" => "Done"}) |> json_response(200)
+    assert_receive {:providers_changed, _org, _mission}
+
+    c |> admin() |> post(path <> "/archive", %{}) |> json_response(422)
+    refute_receive {:providers_changed, _org, _mission}, 50
   end
 end

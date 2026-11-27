@@ -429,6 +429,30 @@ Every item has every field; fields that don't apply to its `kind` are `null` (or
     - The state is in the node's memory (`Cadence.Runtime.IngressBackpressureMonitor`, sampled every
       5 s): a node restart clears it, along with the backlog itself. Opening and clearing
       publish `invalidate` with `attention`.
+  - **`provider_ephemeris`** (#972, pass prediction #732): a provider that can't use some
+    spacecraft's current orbit, grouped by cause. One item per group, never per spacecraft.
+    - `attention.conflict` is the cause:
+      - `norad_id_missing`: a lookup provider, whose current element set has no NORAD id.
+      - `failed`: an upload provider, whose latest upload is failing and being retried.
+      - `not_ready`: a routing rule binds the spacecraft to the provider, but no route to it is
+        ready. These are grouped per refusal `reason`, a scheduling code such as
+        `mission_provider_not_validated`, or `no_ready_route`.
+    - `id`: `attention:provider_ephemeris:<provider_id>:<conflict>`, and for `not_ready`
+      `attention:provider_ephemeris:<provider_id>:not_ready:<reason>`.
+    - **P2** (`caution`), `due_at` null, `since` the earliest time a member's outcome was
+      recorded, `count` 1.
+    - `spacecraft`: a sample of up to 10 members, by id.
+    - `attention.provider` names the provider. `attention` adds:
+      - `spacecraft_count`, the whole group;
+      - `reason`, `not_ready` only, else `null`;
+      - `next_retry_at`, the earliest retry or re-check, `null` for `norad_id_missing`.
+    - The whole list, with each spacecraft's own reason and retry, is
+      `GET /providers/:provider_id/ephemeris/spacecraft?cause=<conflict>[&reason=]` (setup.md).
+    - Derived on every read, from the same recorded outcomes as the providers read's
+      `ephemeris` buckets. There's nothing to acknowledge, and an item leaves when its group is
+      empty, so it never appears in `resolved`.
+    - Refetch on `invalidate` with `attention`: an ephemeris upload run publishes it, with
+      `providers`, when any outcome changed.
 - **`missed_pass` and `station` items** (§8; U11 amended by U35).
   - `missed_pass`: one row per spacecraft with a pass result `missed` or `failed` (S9) whose
     planned AOS falls within `failure_lookback_s`.

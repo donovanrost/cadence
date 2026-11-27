@@ -123,6 +123,10 @@ defmodule Cadence.GroundNetworks.EphemerisStates do
   # its first run records an outcome.
   # `scope`: `:all` missions, `:mission` (`$1`/`$2`), or `:spacecraft` (`$1`/`$2` and the ids in
   # `$3`).
+  @doc false
+  # The bound-pairs CTE (`pairs`) for `EphemerisFindings`, scoped `:mission` ($1, $2).
+  def pairs_sql(:mission), do: bound_sql(:mission)
+
   defp bound_sql(scope) do
     mission = fn alias ->
       case scope do
@@ -155,7 +159,8 @@ defmodule Cadence.GroundNetworks.EphemerisStates do
     pairs AS (
       SELECT b.organization_id, b.mission_id, b.provider_id, b.spacecraft_id,
         b.provider_version, ref.source_ref AS provider_spacecraft_ref,
-        c.element_set_id,
+        c.element_set_id, s.reason AS state_reason, s.next_retry_at AS state_next_retry_at,
+        s.attempts AS state_attempts, s.updated_at AS state_updated_at,
         CASE
           WHEN s.status IS NOT NULL AND s.element_set_id = c.element_set_id
            AND s.bound_provider_version = b.provider_version

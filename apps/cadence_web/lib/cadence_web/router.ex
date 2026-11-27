@@ -535,6 +535,13 @@ defmodule CadenceWeb.Router do
       post("/providers/:provider_id/validate", MissionProviderController, :validate)
       post("/providers/:provider_id/sync", MissionProviderController, :sync)
       post("/providers/:provider_id/archive", MissionProviderController, :archive)
+
+      get(
+        "/providers/:provider_id/ephemeris/spacecraft",
+        ProviderEphemerisController,
+        :spacecraft
+      )
+
       get("/transports", CommsController, :transports)
       get("/transports/:transport_id", CommsController, :transport)
       get("/routing-rules", CommsController, :routing_rules)

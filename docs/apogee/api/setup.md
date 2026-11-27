@@ -1526,9 +1526,10 @@ permissions}` for the Stations · Providers tab, sorted by name.
     retried with backoff (1, 5, 15, 60 and 360 minutes, then every 6 h).
   - `not_ready`: a routing rule binds the spacecraft to the provider, but no route to it is ready
     (for example the provider version isn't validated, or its profiles aren't synced), so nothing
-    was sent. The reason is the scheduling refusal. It is re-checked every hour, and it clears
-    when a route becomes ready (then `uploaded`) or when the element set, the pinned version or
-    the ref changes (then `pending`).
+    was sent. The reason is the scheduling refusal on that provider's own routing rules (else
+    `no_ready_route`). It is re-checked every hour. It clears when a route becomes ready: an
+    upload provider's pair then reads `uploaded` (or `failed`), a lookup provider's `lookup` or
+    `norad_id_missing`. A change of element set, pinned version or ref makes it `pending`.
   - `pending`: no run has recorded an outcome for the current set, pinned version and ref yet,
     for any orbit source. Either the pair is new (a provider newly bound or ready), a newer
     element set arrived, or the target changed since the last outcome (a new provider-side ref,
@@ -1541,6 +1542,35 @@ permissions}` for the Stations · Providers tab, sorted by name.
     set has none, so it can't find the spacecraft.
   - Show every non-zero bucket: none is guaranteed to be 0 for a given `orbit_source`.
 - `permissions`: `["providers.manage"]` for mission admins (`:manage_mission`), else `[]`.
+- Spacecraft in a `norad_id_missing`, `failed` or `not_ready` bucket also raise a grouped Now
+  item, `provider_ephemeris` (ops.md), whose spacecraft list is paged by the read below.
+- Live: refetch on `invalidate` with `providers` (#972), and with `stations` for
+  `station_count`. `providers` is published once per ephemeris upload run that changed any
+  spacecraft's recorded outcome (not for a refreshed retry time alone), after a provider is
+  created or archived, and after every validate or sync, failed or not, including the scheduled
+  ones.
+
+## `GET /api/v1/missions/:mission_id/providers/:provider_id/ephemeris/spacecraft`
+
+The spacecraft of one `provider_ephemeris` group (#972), paged by spacecraft id. Mission members
+can read it, like the providers read.
+
+- Query: `cause` (required): `norad_id_missing`, `failed` or `not_ready`. `reason`: the group's
+  refusal reason, for `not_ready` only (the item's `reason`; ignored otherwise). `cursor`: the
+  previous page's `meta.next_cursor`. `limit`: 1 to 200, default 50.
+- `200 {data: [{spacecraft: {id, name, scid}, reason, attempts, next_retry_at, since}], meta:
+  {next_cursor}}`, where `next_cursor` is `null` on the last page.
+  - `reason` is the recorded outcome's: the upload failure for `failed` (a sentence, never
+    provider evidence), the refusal code for `not_ready`, `null` for `norad_id_missing`.
+  - `attempts` is the failed upload attempts so far (0 otherwise).
+  - `next_retry_at` is when it is retried or re-checked (`null` for `norad_id_missing`).
+  - `since` is when this outcome was last recorded.
+- A spacecraft is listed only while its outcome still holds for its current element set,
+  pinned provider version and ref, the same rule as the `ephemeris` buckets. A group with no
+  spacecraft left answers an empty page.
+- Errors: `422 invalid_params` with `details.field` `cause` or `limit`; `404 provider_not_found`
+  for an unknown or archived provider.
+- Live: refetch on `invalidate` with `providers`.
 
 ## Mission providers (L12): `/api/v1/missions/:mission_id/providers` (owner: api-ops)
 

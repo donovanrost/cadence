@@ -33,7 +33,7 @@ defmodule Cadence.Control.Providers.EphemerisUploads do
   alias Cadence.GroundNetworks.ElementSets.OmmDocument
   alias Cadence.Jobs
   alias Cadence.Jobs.OpenMissions
-  alias Cadence.Platform.EphemerisUploadJobs
+  alias Cadence.Platform.{EphemerisUploadJobs, ScopedReadUpdates}
 
   @job_type :ephemeris_upload
   @backoff_minutes [1, 5, 15, 60, 360]
@@ -84,7 +84,8 @@ defmodule Cadence.Control.Providers.EphemerisUploads do
         EphemerisStates.fetch_many(
           organization_id,
           mission_id,
-          Enum.map(bindings, &{&1.provider_id, &1.spacecraft_id})
+          Enum.map(bindings, &{&1.provider_id, &1.spacecraft_id}) ++
+            Enum.map(not_ready, &elem(&1, 0))
         )
 
       states =
@@ -98,6 +99,7 @@ defmodule Cadence.Control.Providers.EphemerisUploads do
           end)
 
       :ok = EphemerisStates.put_all(organization_id, mission_id, states, now)
+      if Enum.any?(states, &changed?(&1, previous)), do: published(organization_id, mission_id)
       {:ok, Enum.frequencies_by(states, & &1.status)}
     end
   end
@@ -161,6 +163,31 @@ defmodule Cadence.Control.Providers.EphemerisUploads do
   def next_retry_at(now, attempts) do
     minutes = Enum.at(@backoff_minutes, attempts - 1, List.last(@backoff_minutes))
     DateTime.add(now, minutes * 60)
+  end
+
+  # What the providers read and the provider_ephemeris findings show of a state; a run that
+  # changes none of it for any pair publishes nothing (a refreshed retry time alone is no change).
+  @shown [
+    :status,
+    :element_set_id,
+    :provider_version,
+    :bound_provider_version,
+    :provider_spacecraft_ref,
+    :reason
+  ]
+
+  defp changed?(state, previous) do
+    case Map.get(previous, {state.provider_id, state.spacecraft_id}) do
+      nil -> true
+      prior -> Map.take(prior, @shown) != Map.new(@shown, &{&1, Map.get(state, &1)})
+    end
+  end
+
+  # After the states are stored (outside any transaction): the providers read's `ephemeris` and
+  # the `provider_ephemeris` attention items both derive from them (#972).
+  defp published(organization_id, mission_id) do
+    ScopedReadUpdates.publish(:providers_changed, organization_id, mission_id)
+    ScopedReadUpdates.publish(:attention_changed, organization_id, mission_id)
   end
 
   # The bound pairs (as the reconcile reads them) with no ready route, among the ones asked for.

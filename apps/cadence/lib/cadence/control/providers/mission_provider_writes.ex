@@ -18,6 +18,7 @@ defmodule Cadence.Control.Providers.MissionProviderWrites do
   alias Cadence.GroundNetworks.{MissionProviderRegistration, ProviderError}
   alias Cadence.GroundNetworks.{ProviderAccountGrants, ProviderAccounts}
   alias Cadence.Management.Providers
+  alias Cadence.Platform.ScopedReadUpdates
 
   @deadline_ms 25_000
   @refusals [
@@ -66,6 +67,9 @@ defmodule Cadence.Control.Providers.MissionProviderWrites do
          {:ok, grant} <- grant(scope.organization_id, mission_id, params),
          {:ok, form} <- form(params, grant) do
       case MissionProviderRegistration.create(scope, mission_id, form) do
+        {:ok, _provider} = created ->
+          providers_changed(created, scope, mission_id)
+
         {:error, :invalid_delivery_policy} ->
           invalid(:bounded, "Check the shift limits.")
 
@@ -102,8 +106,13 @@ defmodule Cadence.Control.Providers.MissionProviderWrites do
   @spec archive(Scope.t(), binary(), binary(), map()) :: {:ok, struct()} | {:error, term()}
   def archive(%Scope{} = scope, mission_id, provider_id, params) do
     case text(params["reason"], 500) do
-      nil -> invalid(:reason, "Say why.")
-      reason -> Providers.archive_provider(scope, mission_id, provider_id, reason)
+      nil ->
+        invalid(:reason, "Say why.")
+
+      reason ->
+        scope
+        |> Providers.archive_provider(mission_id, provider_id, reason)
+        |> providers_changed(scope, mission_id)
     end
   end
 
@@ -140,6 +149,15 @@ defmodule Cadence.Control.Providers.MissionProviderWrites do
   end
 
   defp call_opts(opts), do: Keyword.drop(opts, [:deadline_ms])
+
+  # A created or archived provider changes the providers read: its `providers` live update
+  # (#972). Validate and sync publish from `GroundNetworks`, where their outcome is recorded.
+  defp providers_changed({:ok, _provider} = result, scope, mission_id) do
+    ScopedReadUpdates.publish(:providers_changed, scope.organization_id, mission_id)
+    result
+  end
+
+  defp providers_changed(result, _scope, _mission_id), do: result
 
   defp authorize(scope, mission_id),
     do:
