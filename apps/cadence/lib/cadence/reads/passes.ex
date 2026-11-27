@@ -7,9 +7,9 @@ defmodule Cadence.Reads.Passes do
 
   Station and antenna come from the reservation's newest snapshot (Cadence
   accepted, then provider confirmed, then requested). The station is matched to
-  a Cadence ground station by id or code when possible. Nothing is derived:
-  elevation, cost and uplink capability are `nil` unless the provider supplied
-  them, because there is no orbit propagation (DECISIONS #4).
+  a Cadence ground station by id or code when possible. Cost and uplink are `nil`
+  unless the provider supplied them; elevation is the provider's, else the matched
+  predicted pass's (`Cadence.Reads.PassGeometry`, #892, one query per page).
 
   Provider opportunities (windows not yet booked) are not listed here; they
   need a live provider search per spacecraft.
@@ -19,6 +19,7 @@ defmodule Cadence.Reads.Passes do
   alias Cadence.Contacts.{PassWindows, ProviderReservation, RealizedContact}
   alias Cadence.Control.Contacts
   alias Cadence.Reads.{HandStartedPasses, PassEnders, PassListenerOverlap, WindowCursor}
+  alias Cadence.Reads.PassGeometry
 
   @default_limit 500
   @hand_only_states ~w(defined stopped)
@@ -122,6 +123,7 @@ defmodule Cadence.Reads.Passes do
       truncated: truncated?
     })
     |> with_hand_started(organization_id, mission_id, filters, limit, order)
+    |> Map.update!(:passes, &PassGeometry.contacts(organization_id, mission_id, &1))
   end
 
   # U78: hand-started contacts join only on request (`include=hand_started`), merged in the same
@@ -223,7 +225,7 @@ defmodule Cadence.Reads.Passes do
   defp by_realized(org, mission, id) do
     case Contacts.fetch_realized_contact(org, mission, id) do
       {:ok, %RealizedContact{scheduled_contact_id: nil} = contact} ->
-        {:ok, HandStartedPasses.row(org, mission, contact)}
+        {:ok, geometry(org, mission, HandStartedPasses.row(org, mission, contact))}
 
       {:ok, %RealizedContact{scheduled_contact_id: scheduled_id}} ->
         case booking(org, mission, scheduled_id) do
@@ -248,8 +250,10 @@ defmodule Cadence.Reads.Passes do
     %{passes: [pass]} =
       load_rows(org, mission, [reservation], %{from: nil, to: nil, truncated: false, filters: %{}})
 
-    pass
+    geometry(org, mission, pass)
   end
+
+  defp geometry(org, mission, row), do: hd(PassGeometry.contacts(org, mission, [row]))
 
   defp load_rows(organization_id, mission_id, reservations, window) do
     ids = for r <- reservations, is_binary(r.spacecraft_id), do: r.spacecraft_id

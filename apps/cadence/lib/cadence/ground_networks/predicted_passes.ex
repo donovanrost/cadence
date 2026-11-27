@@ -20,7 +20,7 @@ defmodule Cadence.GroundNetworks.PredictedPasses do
   publishes the `:predicted_passes_changed` read update once (a prune only when it deleted rows).
   """
 
-  alias Cadence.GroundNetworks.PredictedPasses.{Read, Recompute, Settings, Store}
+  alias Cadence.GroundNetworks.PredictedPasses.{Match, Read, Recompute, Settings, Store}
   alias Cadence.Jobs
   alias Cadence.Jobs.Available
   alias Cadence.Platform.{PassPredictionJobs, ScopedReadUpdates}
@@ -197,4 +197,13 @@ defmodule Cadence.GroundNetworks.PredictedPasses do
 
   @doc "The longest horizon a mission may set, in days."
   defdelegate max_horizon_days, to: Settings
+
+  @doc """
+  The predicted pass each window matches (#892): same spacecraft and station, overlapping, the
+  longest overlap winning. One query for all the windows. See `Match`.
+  """
+  defdelegate match(organization_id, mission_id, windows), to: Match
+
+  @doc "The keys of the windows prediction covers, where no match means no predicted pass."
+  defdelegate predictable(organization_id, mission_id, windows), to: Match
 end

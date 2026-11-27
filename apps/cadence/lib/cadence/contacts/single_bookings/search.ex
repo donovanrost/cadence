@@ -246,6 +246,9 @@ defmodule Cadence.Contacts.SingleBookings.Search do
         uplink_capable: Map.get(uplink, {offer["station"], route.provider_id}, false),
         synthetic: offer["synthetic"] == true,
         cost: offer["cost"],
+        # The provider's, when it reports one; predicted geometry is added by the read (#892).
+        max_elevation_deg:
+          if(is_number(offer["max_elevation_deg"]), do: offer["max_elevation_deg"]),
         listener_overlap: Map.get(listener, offer["id"]),
         overlaps:
           SingleBookings.overlap(occupancy, %{
