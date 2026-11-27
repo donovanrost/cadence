@@ -13,5 +13,6 @@ defmodule Cadence.GroundNetworks.PredictedPasses.PredictionStateRow do
     field(:computed_at, :utc_datetime_usec)
     field(:unpropagated, :map, default: %{})
     field(:not_bracketed, :map, default: %{})
+    field(:search_basis, :map, default: %{})
   end
 end

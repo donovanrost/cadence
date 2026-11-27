@@ -25,7 +25,7 @@ defmodule Cadence.GroundNetworks.PredictedPasses.Recompute do
 
   alias Cadence.Comms.GroundStationStore
   alias Cadence.GroundNetworks.ElementSets
-  alias Cadence.GroundNetworks.PredictedPasses.{Compute, Settings, Store}
+  alias Cadence.GroundNetworks.PredictedPasses.{Basis, Compute, Settings, Store}
   alias Cadence.Repo
   alias Cadence.SpacecraftStore
 
@@ -52,25 +52,37 @@ defmodule Cadence.GroundNetworks.PredictedPasses.Recompute do
     )
   end
 
-  defp do_run(:prune, {org, mission}, _state, now) do
-    deleted = Store.prune!(org, mission, DateTime.add(now, -@prune_after_days * 86_400))
+  defp do_run(:prune, {org, mission}, state, now) do
+    bound = DateTime.add(now, -@prune_after_days * 86_400)
+    deleted = Store.prune!(org, mission, bound)
+
+    if state,
+      do:
+        :ok =
+          Store.put_state!(
+            org,
+            mission,
+            state_attrs(state, Basis.pruned(state.search_basis, bound))
+          )
+
     summary(:prune, deleted, 0, %{unpropagated: %{}, not_bracketed: %{}})
   end
 
-  defp do_run(:full, scope, _state, now), do: full(scope, now)
+  defp do_run(:full, scope, state, now), do: full(scope, state, now)
 
-  defp do_run(_kind, scope, nil, now), do: full(scope, now)
+  defp do_run(_kind, scope, nil, now), do: full(scope, nil, now)
 
   defp do_run(kind, scope, state, now) do
     if DateTime.compare(state.horizon_end, now) == :gt,
       do: incremental(kind, scope, state, now),
-      else: full(scope, now)
+      else: full(scope, state, now)
   end
 
-  defp full({org, mission}, now) do
+  defp full({org, mission}, state, now) do
     to = horizon_end(org, mission, now)
-    stations = Compute.stations(GroundStationStore.list_ground_stations(org, mission))
-    result = Compute.run(active_sets(org, mission), stations, now, to)
+    all = GroundStationStore.list_ground_stations(org, mission)
+    sets = active_sets(org, mission)
+    result = Compute.run(sets, Compute.stations(all), now, to)
     deleted = Store.delete_after!(org, mission, now, :mission)
     inserted = Store.insert!(org, mission, now, result.rows)
 
@@ -79,7 +91,9 @@ defmodule Cadence.GroundNetworks.PredictedPasses.Recompute do
         horizon_end: to,
         computed_at: now,
         unpropagated: result.unpropagated,
-        not_bracketed: result.not_bracketed
+        not_bracketed: result.not_bracketed,
+        search_basis:
+          Basis.full(state && state.search_basis, searched(sets, result), all, now, to)
       })
 
     summary(:full, deleted, inserted, result)
@@ -92,12 +106,16 @@ defmodule Cadence.GroundNetworks.PredictedPasses.Recompute do
     deleted = Store.delete_after!(org, mission, now, {:spacecraft, ids})
     inserted = Store.insert!(org, mission, now, result.rows)
 
+    basis =
+      Basis.spacecraft(state.search_basis, ids, searched(sets, result), now, state.horizon_end)
+
     :ok =
       Store.put_state!(org, mission, %{
         horizon_end: state.horizon_end,
         computed_at: now,
         unpropagated: state.unpropagated |> Map.drop(ids) |> Map.merge(result.unpropagated),
-        not_bracketed: replace_pairs(state.not_bracketed, result.not_bracketed, 0, ids)
+        not_bracketed: replace_pairs(state.not_bracketed, result.not_bracketed, 0, ids),
+        search_basis: basis
       })
 
     summary(:spacecraft, deleted, inserted, result)
@@ -119,7 +137,8 @@ defmodule Cadence.GroundNetworks.PredictedPasses.Recompute do
         horizon_end: state.horizon_end,
         computed_at: now,
         unpropagated: Map.merge(state.unpropagated, result.unpropagated),
-        not_bracketed: replace_pairs(state.not_bracketed, result.not_bracketed, 1, ids)
+        not_bracketed: replace_pairs(state.not_bracketed, result.not_bracketed, 1, ids),
+        search_basis: Basis.stations(state.search_basis, ids, chosen, now)
       })
 
     summary(:stations, deleted, inserted, result)
@@ -130,9 +149,9 @@ defmodule Cadence.GroundNetworks.PredictedPasses.Recompute do
     new_end = horizon_end(org, mission, now)
 
     if DateTime.compare(new_end, old_end) == :gt do
-      stations = Compute.stations(GroundStationStore.list_ground_stations(org, mission))
+      all = GroundStationStore.list_ground_stations(org, mission)
       sets = active_sets(org, mission)
-      result = Compute.run(sets, stations, old_end, new_end)
+      result = Compute.run(sets, Compute.stations(all), old_end, new_end)
       deleted = Store.delete_after!(org, mission, old_end, :mission)
       inserted = Store.insert!(org, mission, now, result.rows)
 
@@ -142,7 +161,8 @@ defmodule Cadence.GroundNetworks.PredictedPasses.Recompute do
           computed_at: now,
           unpropagated: Map.merge(state.unpropagated, result.unpropagated),
           not_bracketed:
-            Map.merge(state.not_bracketed, result.not_bracketed, fn _, a, b -> a + b end)
+            Map.merge(state.not_bracketed, result.not_bracketed, fn _, a, b -> a + b end),
+          search_basis: Basis.extend(state.search_basis, searched(sets, result), all, new_end)
         })
 
       summary(:extend, deleted, inserted, result)
@@ -152,10 +172,9 @@ defmodule Cadence.GroundNetworks.PredictedPasses.Recompute do
 
       :ok =
         Store.put_state!(org, mission, %{
-          horizon_end: new_end,
-          computed_at: now,
-          unpropagated: state.unpropagated,
-          not_bracketed: state.not_bracketed
+          state_attrs(state, Basis.shrink(state.search_basis, new_end))
+          | horizon_end: new_end,
+            computed_at: now
         })
 
       summary(:extend, deleted, 0, %{unpropagated: %{}, not_bracketed: %{}})
@@ -173,6 +192,16 @@ defmodule Cadence.GroundNetworks.PredictedPasses.Recompute do
         else: ElementSets.current_for_mission(org, mission)
 
     Enum.filter(sets, &MapSet.member?(active, &1.spacecraft_id))
+  end
+
+  # The sets the run actually propagated (a deep-space or decayed one is in `unpropagated`).
+  defp searched(sets, result),
+    do: Enum.reject(sets, &Map.has_key?(result.unpropagated, &1.spacecraft_id))
+
+  defp state_attrs(state, basis) do
+    state
+    |> Map.take([:horizon_end, :computed_at, :unpropagated, :not_bracketed])
+    |> Map.put(:search_basis, basis)
   end
 
   defp horizon_end(org, mission, now),

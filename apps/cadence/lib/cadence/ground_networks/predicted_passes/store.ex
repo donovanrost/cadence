@@ -36,7 +36,8 @@ defmodule Cadence.GroundNetworks.PredictedPasses.Store do
       )
 
     Repo.insert!(row,
-      on_conflict: {:replace, [:horizon_end, :computed_at, :unpropagated, :not_bracketed]},
+      on_conflict:
+        {:replace, [:horizon_end, :computed_at, :unpropagated, :not_bracketed, :search_basis]},
       conflict_target: :mission_id
     )
 

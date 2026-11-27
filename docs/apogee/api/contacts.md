@@ -768,9 +768,16 @@ never count them toward a requirement.
   above; `tca` is the matched predicted pass's, or `null`. `no_predicted_pass` is `true` when
   prediction covers the window and no predicted pass backs it (a stale element set, a wrong
   station location or a provider error; the offer is still shown and bookable), `false` when one
-  matches, and `null` when prediction can't say: the spacecraft has no element set, it couldn't be
-  propagated (deep space, decayed) or its set is newer than the last prediction run, the station
-  has no location, or the window ends after the predicted horizon.
+  matches, and `null` when prediction can't say. "Covers" needs per-pair evidence the
+  recompute runs record (`search_basis`):
+  - the spacecraft's current element set is the one it was last searched with;
+  - the station's current location and mask are the ones it was last searched with;
+  - the window lies wholly inside what both searched, and after the prune bound;
+  - the pair had no unbracketed search result.
+
+  Anything uncertain answers `null`: no element set, deep space or decayed, a new set or a
+  station change whose recompute hasn't run yet, no location, a window before the search or after
+  the horizon. A stale `null` is conservative; a `true` is never a guess.
   `listener_overlap` as on a pass above (#361), against the mission's booked passes (offers are
   alternatives, never checked against each other); booking it is still allowed. The server fans out
   over the spacecraft's ready routes; route keys and evidence ride inside the signed `token`.

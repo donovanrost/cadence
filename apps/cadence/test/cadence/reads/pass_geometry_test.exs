@@ -6,9 +6,11 @@ defmodule Cadence.Reads.PassGeometryTest do
   """
   use Cadence.DataCase, async: true
 
-  alias Cadence.Comms.{GroundStation, GroundStationStore}
+  import Ecto.Query
+
+  alias Cadence.Comms.{GroundStation, GroundStationRow, GroundStationStore}
   alias Cadence.GroundNetworks.ElementSets
-  alias Cadence.GroundNetworks.PredictedPasses.{PredictedPassRow, Store}
+  alias Cadence.GroundNetworks.PredictedPasses.{Basis, PredictedPassRow, Store}
   alias Cadence.Reads.PassGeometry
   alias Cadence.Repo
   alias Cadence.SpacecraftStore.SpacecraftRow
@@ -33,18 +35,27 @@ defmodule Cadence.Reads.PassGeometryTest do
         now: @t0
       )
 
-    Store.put_state!(org, mission, %{
-      horizon_end: at(7 * 24 * 60),
-      computed_at: at(1),
-      unpropagated: %{},
-      not_bracketed: %{}
-    })
+    [set] = ElementSets.current_for(org, mission, [a])
+    {:ok, station} = GroundStationStore.fetch_ground_station(org, mission, located)
+
+    # The evidence a full run at minute 0 over seven days would leave: `a` searched with its
+    # set, `located` with its geometry, nothing unbracketed.
+    basis = Basis.full(%{}, [set], [station], at(0), at(7 * 24 * 60))
+    put_state!(org, mission, basis)
 
     # Two passes of `a` over `located`: 10:00–10:10 (peak 40°) and 10:20–10:30 (peak 70°).
     pass!(org, mission, a, located, "pass-early", {600, 610}, 40.0)
     pass!(org, mission, a, located, "pass-late", {620, 630}, 70.0)
 
-    %{org: org, mission: mission, a: a, b: b, located: located, unlocated: unlocated}
+    %{
+      org: org,
+      mission: mission,
+      a: a,
+      b: b,
+      located: located,
+      unlocated: unlocated,
+      basis: basis
+    }
   end
 
   describe "contacts" do
@@ -106,62 +117,111 @@ defmodule Cadence.Reads.PassGeometryTest do
   end
 
   describe "opportunities" do
-    test "flags a covered window no predicted pass backs, and only that", c do
-      opportunities = [
-        contact(c.a, c.located, {600, 610}),
-        # Covered (element set, located station, inside the horizon) but no pass: flagged.
-        contact(c.a, c.located, {700, 710}),
-        # The station has no location: prediction can't say.
-        contact(c.a, c.unlocated, {700, 710}),
-        # Beyond the predicted horizon: prediction can't say.
-        contact(c.a, c.located, {8 * 24 * 60, 8 * 24 * 60 + 10})
-      ]
-
-      assert [matched, flagged, unlocated, beyond] =
-               PassGeometry.opportunities(c.org, c.mission, c.a, opportunities)
+    test "(e) all the evidence holds and nothing matches: flagged; (f) a match: false", c do
+      assert [matched, flagged] =
+               PassGeometry.opportunities(c.org, c.mission, c.a, [
+                 contact(c.a, c.located, {600, 610}),
+                 contact(c.a, c.located, {700, 710})
+               ])
 
       assert %{no_predicted_pass: false, predicted_pass_id: "pass-early"} = matched
       assert matched.tca == at(605)
       assert %{no_predicted_pass: true, predicted_pass_id: nil, tca: nil} = flagged
-      assert %{no_predicted_pass: nil} = unlocated
-      assert %{no_predicted_pass: nil} = beyond
     end
 
-    test "a spacecraft with no element set is never flagged", c do
-      assert [%{no_predicted_pass: nil}] =
-               PassGeometry.opportunities(c.org, c.mission, c.b, [
-                 contact(c.b, c.located, {700, 710})
-               ])
+    test "(a) a station newly located whose job hasn't run is not flagged", c do
+      fresh = station!(c.org, c.mission, "fresh", {19.01, -155.66})
+      assert [%{no_predicted_pass: nil}] = flag(c, c.a, fresh, {700, 710})
     end
 
-    test "an element set newer than the last run is not flagged until the run catches up", c do
-      Store.put_state!(c.org, c.mission, %{
-        horizon_end: at(7 * 24 * 60),
-        computed_at: DateTime.add(@t0, -60),
-        unpropagated: %{},
-        not_bracketed: %{}
-      })
+    test "a station whose geometry changed since its search is not flagged", c do
+      {1, _} =
+        GroundStationRow
+        |> where([row], row.mission_id == ^c.mission and row.ground_station_id == ^c.located)
+        |> Repo.update_all(set: [elevation_mask_deg: 10.0])
 
-      assert [%{no_predicted_pass: nil}] =
-               PassGeometry.opportunities(c.org, c.mission, c.a, [
-                 contact(c.a, c.located, {700, 710})
-               ])
+      assert [%{no_predicted_pass: nil}] = flag(c, c.a, c.located, {700, 710})
     end
 
-    test "a deep-space or decayed spacecraft the last run could not propagate is not flagged",
+    test "(b) a new current element set still pending is not flagged, however recent the last run",
          c do
-      Store.put_state!(c.org, c.mission, %{
-        horizon_end: at(7 * 24 * 60),
-        computed_at: at(1),
-        unpropagated: %{c.a => "deep_space_not_supported"},
-        not_bracketed: %{}
-      })
+      {:ok, _} =
+        ElementSets.submit(
+          c.org,
+          c.mission,
+          [%{spacecraft_id: c.a, input: {:omm, %{omm() | "EPOCH" => "2026-11-27T18:00:00"}}}],
+          actor: @actor,
+          source: "manual",
+          now: @t0
+        )
 
-      assert [%{no_predicted_pass: nil}] =
-               PassGeometry.opportunities(c.org, c.mission, c.a, [
-                 contact(c.a, c.located, {700, 710})
-               ])
+      # An unrelated station run advanced the mission's timestamp past the new set.
+      put_state!(c.org, c.mission, c.basis, computed_at: at(60))
+
+      assert [%{no_predicted_pass: nil}] = flag(c, c.a, c.located, {700, 710})
     end
+
+    test "(c) a window before what was searched (a historical alternative) is not flagged", c do
+      basis = Basis.stations(c.basis, [c.located], [station(c, c.located)], at(650))
+      put_state!(c.org, c.mission, basis)
+
+      assert [%{no_predicted_pass: nil}] = flag(c, c.a, c.located, {640, 645})
+      assert [%{no_predicted_pass: true}] = flag(c, c.a, c.located, {700, 710})
+
+      put_state!(c.org, c.mission, Basis.pruned(c.basis, at(800)))
+      assert [%{no_predicted_pass: nil}] = flag(c, c.a, c.located, {700, 710})
+    end
+
+    test "(d) a pair the search couldn't bracket is not flagged", c do
+      put_state!(c.org, c.mission, c.basis, not_bracketed: %{"#{c.a}|#{c.located}" => 1})
+      assert [%{no_predicted_pass: nil}] = flag(c, c.a, c.located, {700, 710})
+    end
+
+    test "beyond the searched window, an unlocated station or no element set: not flagged", c do
+      assert [%{no_predicted_pass: nil}] =
+               flag(c, c.a, c.located, {8 * 24 * 60, 8 * 24 * 60 + 10})
+
+      assert [%{no_predicted_pass: nil}] = flag(c, c.a, c.unlocated, {700, 710})
+      assert [%{no_predicted_pass: nil}] = flag(c, c.b, c.located, {700, 710})
+    end
+
+    test "a page of opportunities costs the match query plus three for the evidence", c do
+      offers = for i <- 1..100, do: contact(c.a, c.located, {700 + i, 701 + i})
+
+      {queries, annotated} =
+        count_queries(fn -> PassGeometry.opportunities(c.org, c.mission, c.a, offers) end)
+
+      assert queries == 4
+      assert Enum.all?(annotated, &(&1.no_predicted_pass == true))
+    end
+  end
+
+  defp flag(c, spacecraft_id, station_id, window),
+    do:
+      PassGeometry.opportunities(c.org, c.mission, spacecraft_id, [
+        contact(spacecraft_id, station_id, window)
+      ])
+
+  defp station(c, id) do
+    {:ok, station} = GroundStationStore.fetch_ground_station(c.org, c.mission, id)
+    station
+  end
+
+  defp put_state!(org, mission, basis, overrides \\ []) do
+    Store.put_state!(
+      org,
+      mission,
+      Map.merge(
+        %{
+          horizon_end: at(7 * 24 * 60),
+          computed_at: at(1),
+          unpropagated: %{},
+          not_bracketed: %{},
+          search_basis: basis
+        },
+        Map.new(overrides)
+      )
+    )
   end
 
   defp contact(spacecraft_id, station_id, {from_min, to_min}) do

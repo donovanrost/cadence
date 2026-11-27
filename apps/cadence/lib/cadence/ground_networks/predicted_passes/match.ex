@@ -7,16 +7,19 @@ defmodule Cadence.GroundNetworks.PredictedPasses.Match do
   then the earliest AOS, then the lowest id. `match/3` answers a whole page in ONE query (a
   lateral join over the page's windows), never one per row.
 
-  `predictable/3` says, per window, whether prediction covers it, so a missing match means
-  something: the spacecraft has a current element set that was propagated (not deep space or
-  decayed) and was stored before the mission's last prediction run, the station is active and
-  located, and the window lies inside what has been predicted (it ends by the horizon end). A
-  window outside that is neither matched nor "no predicted pass": prediction can't say.
+  `predictable/3` says, per window, whether the search provably covered it, so a missing match
+  means something. It needs per-pair evidence from the runs (`Basis.covered?/5`): the
+  spacecraft's current element set is the one it was searched with, the station's current
+  geometry (location and mask) is the one it was searched with, the window lies wholly inside
+  what both searched (above the prune bound), and the pair has no unbracketed search result.
+  Anything uncertain (a job still pending, a historical window, an unbracketed pair) is not
+  covered: neither matched nor "no predicted pass", prediction can't say. Three queries per page
+  (the prediction state, the current element sets, the stations), never one per row.
   """
 
-  alias Cadence.Comms.{GroundStation, GroundStationStore}
+  alias Cadence.Comms.GroundStationStore
   alias Cadence.GroundNetworks.ElementSets
-  alias Cadence.GroundNetworks.PredictedPasses.Store
+  alias Cadence.GroundNetworks.PredictedPasses.{Basis, Store}
   alias Cadence.Repo
 
   @type window :: %{
@@ -61,23 +64,20 @@ defmodule Cadence.GroundNetworks.PredictedPasses.Match do
   end
 
   @doc """
-  The keys of the windows prediction covers (see the moduledoc): only for those does a missing
-  match mean the provider offers a window no predicted pass backs.
+  The keys of the windows the search provably covered (see the moduledoc): only for those does a
+  missing match mean the provider offers a window no predicted pass backs.
   """
   @spec predictable(binary(), binary(), [window()]) :: MapSet.t()
   def predictable(organization_id, mission_id, windows) do
     windows = Enum.filter(windows, &complete?/1)
 
     with [_ | _] <- windows,
-         %{horizon_end: %DateTime{} = horizon_end, computed_at: %DateTime{} = computed_at} =
-           state <- Store.state(organization_id, mission_id) do
-      spacecraft = propagated(organization_id, mission_id, windows, state, computed_at)
-      stations = located(organization_id, mission_id)
+         %{search_basis: %{} = basis} = state <- Store.state(organization_id, mission_id) do
+      sets = current_sets(organization_id, mission_id, windows)
+      prints = fingerprints(organization_id, mission_id)
 
       for window <- windows,
-          MapSet.member?(spacecraft, window.spacecraft_id),
-          MapSet.member?(stations, window.ground_station_id),
-          DateTime.compare(window.ends_at, horizon_end) != :gt,
+          Basis.covered?(basis, state.not_bracketed, sets, prints, window),
           into: MapSet.new(),
           do: window.key
     else
@@ -104,24 +104,19 @@ defmodule Cadence.GroundNetworks.PredictedPasses.Match do
     end)
   end
 
-  # Spacecraft whose current element set the last run could propagate: stored before that run,
-  # and not recorded as unpropagated (deep space, decayed).
-  defp propagated(organization_id, mission_id, windows, state, computed_at) do
+  defp current_sets(organization_id, mission_id, windows) do
     ids = windows |> Enum.map(& &1.spacecraft_id) |> Enum.uniq()
 
-    for set <- ElementSets.current_for(organization_id, mission_id, ids),
-        DateTime.compare(set.received_at, computed_at) != :gt,
-        not Map.has_key?(state.unpropagated || %{}, set.spacecraft_id),
-        into: MapSet.new(),
-        do: set.spacecraft_id
+    organization_id
+    |> ElementSets.current_for(mission_id, ids)
+    |> Map.new(&{&1.spacecraft_id, &1.element_set_id})
   end
 
-  defp located(organization_id, mission_id) do
+  defp fingerprints(organization_id, mission_id) do
     for station <- GroundStationStore.list_ground_stations(organization_id, mission_id),
         station.lifecycle_state == :active,
-        GroundStation.effective_location(station) != nil,
-        into: MapSet.new(),
-        do: station.ground_station_id
+        into: %{},
+        do: {station.ground_station_id, Basis.fingerprint(station)}
   end
 
   defp complete?(window) do
