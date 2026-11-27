@@ -13,12 +13,16 @@ defmodule Cadence.Runtime.ProfileAcceptor do
   An acceptor belongs to one mission and one provider binding (its name), so a connection is
   attributed to that binding before anything is read (#990, DECISIONS #115):
 
-  - the peer's address must be in the binding's source allowlist (`allowed_peers`), checked on
-    accept, before any frame is read; a peer outside it is refused `peer_not_allowed`;
+  - each registration carries its own source allowlist (`allowed_peers`, from its contact's
+    profile version). On accept, before any frame is read, the peer must be in the union of the
+    lists registered NOW; a peer outside every one is refused `peer_not_allowed`;
   - then the first frame's TM SCID must match exactly one contact registered through THIS
     binding (the same truth the #38 release guard uses). The SCID only picks a contact within the
-    binding's mission; it never picks the mission. Mutual TLS (#991) will replace the address as
-    the binding's proof.
+    binding's mission; it never picks the mission;
+  - and the peer must be in THAT registration's own list. Two profile versions can overlap on one
+    acceptor; an address only an older version allows never reaches a newer contact (or the
+    reverse). Otherwise the connection is refused `peer_not_allowed` and nothing is handed over,
+    so nothing is stored. Mutual TLS (#991) will replace the address as the binding's proof.
 
   There is no fallback: a peer whose first frame can't be read is refused.
 
@@ -51,6 +55,7 @@ defmodule Cadence.Runtime.ProfileAcceptor do
           required(:path_id) => binary(),
           required(:scid) => non_neg_integer() | nil,
           optional(:provider_binding_id) => binary(),
+          optional(:allowed_peers) => [Cadence.Comms.PeerAddresses.range()],
           optional(:frame_size) => pos_integer() | nil
         }
 
@@ -166,7 +171,6 @@ defmodule Cadence.Runtime.ProfileAcceptor do
           mission_id: Keyword.fetch!(opts, :mission_id),
           listener: listener,
           port: actual_port(listener, listen.port),
-          allowed_peers: Map.get(listen, :allowed_peers, []),
           linger_ms: Map.get(listen, :linger_ms, @default_linger_ms),
           registrations: %{},
           accept_ref: nil,
@@ -196,7 +200,7 @@ defmodule Cadence.Runtime.ProfileAcceptor do
       |> Map.values()
       |> Enum.filter(&(Map.get(&1, :provider_binding_id, state.profile_id) == state.profile_id))
 
-    {:reply, %{registrations: registrations, allowed_peers: state.allowed_peers}, state}
+    {:reply, %{registrations: registrations}, state}
   end
 
   def handle_call(:snapshot, _from, state) do
@@ -268,21 +272,32 @@ defmodule Cadence.Runtime.ProfileAcceptor do
 
   # In the accept task (it owns the socket): identify the peer within a bound, then hand it over
   # with the bytes read to identify it, or refuse it.
-  defp route(socket, %{registrations: registrations} = routing, parent, profile_id) do
+  defp route(socket, %{registrations: registrations}, parent, profile_id) do
     {ip, peer} = peer_address(socket)
 
-    result =
-      if PeerAddresses.allowed?(routing.allowed_peers, ip),
-        do: identify(socket, registrations),
-        else: {:refused, :peer_not_allowed}
-
-    case result do
+    case admit(socket, ip, registrations) do
       {:ok, registration, prefix} -> hand_over(socket, registration, prefix, peer, profile_id)
       {:refused, reason} -> refuse(socket, peer, reason, registrations, parent)
     end
   end
 
-  defp identify(_socket, []), do: {:refused, :no_registered_contact}
+  # The union of the lists registered now, checked before reading; then the matched
+  # registration's own list, checked before anything is handed over.
+  defp admit(_socket, _ip, []), do: {:refused, :no_registered_contact}
+
+  defp admit(socket, ip, registrations) do
+    if Enum.any?(registrations, &peer_allowed?(&1, ip)),
+      do: socket |> identify(registrations) |> own_list(ip),
+      else: {:refused, :peer_not_allowed}
+  end
+
+  defp own_list({:ok, registration, _prefix} = identified, ip),
+    do: if(peer_allowed?(registration, ip), do: identified, else: {:refused, :peer_not_allowed})
+
+  defp own_list(refused, _ip), do: refused
+
+  defp peer_allowed?(registration, ip),
+    do: PeerAddresses.allowed?(Map.get(registration, :allowed_peers, []), ip)
 
   defp identify(socket, registrations) do
     frame_size = registrations |> Enum.map(&Map.get(&1, :frame_size)) |> Enum.find(&is_integer/1)

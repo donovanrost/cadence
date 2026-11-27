@@ -90,6 +90,9 @@ defmodule Cadence.Reads.ActionQueue.SourceKeys do
       :ends_at,
       :provider_profile_id,
       :provider_profile_name,
+      # #990: who sets the listener's source allowlist ("provider" | "transport") and its transport.
+      :allowlist_source,
+      :transport_id,
       :last_refused_at,
       :refused_count,
       :last_refusal,

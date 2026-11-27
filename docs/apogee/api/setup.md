@@ -1670,13 +1670,22 @@ for generating change-set edit forms. `kind` is `ground_station`, `transport`,
     when `configuration.mode` is `listen` and is required there: a listening transport without it
     is refused at stage with "A listening transport needs its allowed source addresses: the IP
     addresses or CIDR ranges the provider connects from." A bad entry is refused naming it ("Allowed
-    source addresses: \"x\" is not an IP address or CIDR range."). Stage it as text (comma or
-    space separated) or a list; the stored document holds a sorted, de-duplicated list in
-    `address/prefix` form (`["10.0.0.0/8", "198.51.100.7/32"]`). Client mode keeps none.
+    source addresses: \"x\" is not an IP address or CIDR range."), and so is an entry that
+    allows every address (`0.0.0.0/0`, `::/0`, `::ffff:0:0/96` or any spelling of them): "Allowed
+    source addresses: \"0.0.0.0/0\" allows every address." Stage it as text (comma or space
+    separated) or a list; the stored document holds a sorted, de-duplicated list in
+    `address/prefix` form (`["10.0.0.0/8", "198.51.100.7/32"]`), which the form shows joined with
+    commas. Client mode keeps none.
   - On a running listener, a peer outside the list is refused before Cadence reads from it and
-    counted on the contact's listener refusals with reason `peer_not_allowed`. A provider-managed
-    transport takes the list from its delivery profile's `diagnostics.source_addresses`; a
-    delivery profile without one can't become a listening transport.
+    counted on the contact's listener refusals with reason `peer_not_allowed`.
+  - A provider-managed transport takes the list from its delivery profile's
+    `egress.source_addresses` (the provider's half of the connection). A delivery profile that
+    can't supply one refuses on `delivery_profile_ref` with a named `code`:
+    `provider_egress_addresses_missing` (none, or an empty list),
+    `provider_egress_addresses_too_broad` (an entry allows every address) or
+    `provider_egress_addresses_invalid` (an entry isn't an address or range). The transport
+    provider-options read lists such a delivery with `egress_addresses_ready: false` (every other
+    delivery has `true`), so the form can say why before it's chosen.
 - `spacecraft_profile` (8f, New profile): `display_name` (required), then the profile detail's
   section fields on the kind's document paths: `downlink_protocol`, `uplink_protocol` (both
   required), `packet_protocol`, `frame_parameters.{frame_size, secondary_header_length,

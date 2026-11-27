@@ -440,11 +440,25 @@ no actions, so acknowledge, resolve and retry answer `404 attention_item_not_fou
   (domain's `p1`); else **P2**. Due at LOS (`ends_at`).
 - Keys besides the shared ones (`contact_id`, `reservation_id`, `station`, `provider`,
   `starts_at`, `raised_at` = the first refusal): `realized_contact_id`, `path_id`, `spacecraft_id`,
-  `ends_at`, `provider_profile_id`, `provider_profile_name`, `last_refused_at`, `refused_count`,
-  `last_refusal {reason, scid, peer, at}` (`reason` `unregistered_scid | ambiguous_scid |
-  unexpected_peer | unidentified | read_failed | second_connection | unknown`, read as known text;
-  `peer` for Technical details only), `own_quiet_since` (or null), `connected`, `shared_with`
-  (the other open passes' realized contact ids), `second_connections_refused`.
+  `ends_at`, `provider_profile_id`, `provider_profile_name`, `allowlist_source`, `transport_id`,
+  `last_refused_at`, `refused_count`, `last_refusal {reason, scid, peer, at}` (`peer` for
+  Technical details only), `own_quiet_since` (or null), `connected`, `shared_with` (the other open
+  passes' realized contact ids), `second_connections_refused`.
+- `last_refusal.reason`, read as known text:
+  - `peer_not_allowed`: the peer isn't in the listener's allowed source addresses (#990), refused
+    before Cadence read from it;
+  - `no_registered_contact`: no pass was registered on the listener when the peer connected;
+  - `unregistered_scid`: the first frame's SCID matches no pass registered through this binding;
+  - `ambiguous_scid`: it matches more than one;
+  - `unidentified`: the first frame couldn't be read as a TM frame (there's no fallback);
+  - `read_failed`: reading the first frame failed;
+  - `second_connection`: the pass already had its connection;
+  - `unknown`: anything else.
+- `allowlist_source` (#990) says who sets the listener's allowed source addresses, so the fix
+  line can name who acts: `"provider"` for a provider-managed transport (its delivery profile's
+  `egress.source_addresses`; ask the provider) or `"transport"` for a transport configured in
+  Cadence (edit its allowed source addresses). `null` when the listen profile isn't found.
+  `transport_id` is the transport the profile was materialized from, or `null`.
 - Resolved: `action` `accepted` (the pass's own connection came) or `ended` (LOS), by the system.
 - `GET /passes/:id` carries `second_connections_refused: integer | null`: connections refused
   while the pass's own was up (live, else as recorded at LOS), null without a realized contact.

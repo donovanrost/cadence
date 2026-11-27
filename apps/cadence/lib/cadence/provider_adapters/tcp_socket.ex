@@ -231,11 +231,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
          %{direction: :downlink} = base_state,
          provider_binding_id
        ) do
-    listen = %{
-      host: configuration.host,
-      port: configuration.port,
-      allowed_peers: configuration.allowed_peers
-    }
+    listen = %{host: configuration.host, port: configuration.port}
 
     registration = %{
       adapter: self(),
@@ -243,6 +239,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       path_id: base_state.path_id,
       provider_binding_id: provider_binding_id,
       scid: base_state.source_endpoint_spacecraft_scid,
+      allowed_peers: configuration.allowed_peers,
       frame_size: configuration.fixed_message_bytes
     }
 

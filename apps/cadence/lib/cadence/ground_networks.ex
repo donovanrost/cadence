@@ -328,7 +328,8 @@ defmodule Cadence.GroundNetworks do
       "supported_service_profile_refs" => profile.supported_service_profile_refs,
       "state" => Atom.to_string(profile.state),
       "operator_summary" => profile.operator_summary,
-      "diagnostics" => profile.diagnostics
+      "diagnostics" => profile.diagnostics,
+      "egress" => profile.egress
     }
   end
 

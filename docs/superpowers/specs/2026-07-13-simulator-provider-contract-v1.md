@@ -450,18 +450,24 @@ Minimum read shape:
   "diagnostics": {
     "protocol": "tcp",
     "framing_family": "ccsds_tm",
-    "source_addresses": ["203.0.113.10/32", "198.51.100.0/24"],
     "endpoint_health": "healthy"
+  },
+  "egress": {
+    "source_addresses": ["203.0.113.10/32", "198.51.100.0/24"]
   },
   "extensions": {}
 }
 ```
 
-`diagnostics.source_addresses` lists the IP addresses or CIDR ranges the provider connects
-from (#990, DECISIONS #115). A `provider_connects` delivery without it can't become a Cadence
-listen transport: Cadence refuses any peer outside the list before reading a frame, and a
-listening endpoint with no allowlist (and, until mutual TLS lands, no other check) can't be
-created. The simulator reports loopback (`127.0.0.1/32`, `::1/128`) unless configured with
+`egress` is the provider's half of the connection (#990, DECISIONS #115), apart from `target`
+(where Cadence listens); mutual TLS will add the provider's client identity here. Its
+`source_addresses` is required when the delivery's target mode is `provider_connects`: a
+non-empty list of the IP addresses or CIDR ranges the provider connects from. An entry that
+allows every address (`0.0.0.0/0`, `::/0`, `::ffff:0:0/96` or any spelling of them) is refused.
+A delivery without a usable list can't become a Cadence listen transport (named refusals
+`provider_egress_addresses_missing`, `provider_egress_addresses_too_broad`,
+`provider_egress_addresses_invalid`). Cadence refuses any peer outside the list before reading a
+frame. The simulator reports loopback (`127.0.0.1/32`, `::1/128`) unless configured with
 `:delivery_source_addresses`.
 
 Provisioning a TCP destination is a setup operation, not a reservation field:

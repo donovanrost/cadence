@@ -306,7 +306,6 @@ defmodule Cadence.Contacts.LostReservationContactTest do
       "direction" => "downlink",
       "delivery_kind" => "realtime_stream",
       "mode" => "provider_connects",
-      "source_addresses" => ["127.0.0.1/32", "::1/128"],
       "protocol" => "tcp",
       "endpoint_ref" => reservation.delivery_profile_ref["id"],
       "framing" => %{"family" => "ccsds_tm", "frame_bytes" => 1115},

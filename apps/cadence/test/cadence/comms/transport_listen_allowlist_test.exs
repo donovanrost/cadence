@@ -3,7 +3,8 @@ defmodule Cadence.Comms.TransportListenAllowlistTest do
   #990 (DECISIONS #115): a listening TCP transport names the source addresses it accepts. One
   without them can't be created, in any environment; entries are IP addresses or CIDR ranges; the
   list reaches the materialized provider profile; and a provider's delivery profile supplies it as
-  `diagnostics.source_addresses`. Client mode (Cadence connects) needs none.
+  `egress.source_addresses`. Client mode (Cadence connects) needs none. An entry that allows every
+  address (a whole-family prefix) is refused everywhere.
   """
   use ExUnit.Case, async: true
 
@@ -75,33 +76,74 @@ defmodule Cadence.Comms.TransportListenAllowlistTest do
     assert profile.configuration["mode"] == "listen"
   end
 
-  test "a provider's delivery profile supplies the list; one that names none can't be derived" do
-    delivery = fn diagnostics ->
-      %{
-        "direction" => "downlink",
-        "state" => "ready",
-        "delivery_kind" => "realtime_stream",
-        "diagnostics" =>
-          Map.merge(
-            %{
-              "protocol" => "tcp",
-              "mode" => "provider_connects",
-              "host" => "127.0.0.1",
-              "port" => 4100,
-              "framing_family" => "ccsds_tm",
-              "frame_bytes" => 1115
-            },
-            diagnostics
-          )
-      }
-    end
-
+  test "a provider's delivery profile supplies the list from its egress; one without can't be derived" do
     assert {:ok, %{"expected_peer_addresses" => ["127.0.0.1/32", "::1/128"]}} =
              TCPSocket.from_delivery_profile(
-               delivery.(%{"source_addresses" => ["127.0.0.1/32", "::1/128"]})
+               delivery(%{"source_addresses" => ["127.0.0.1/32", "::1/128"]})
              )
 
-    assert {:error, "A listening transport needs its allowed source addresses" <> _} =
-             TCPSocket.from_delivery_profile(delivery.(%{}))
+    for egress <- [nil, %{}, %{"source_addresses" => []}] do
+      profile = delivery(egress)
+
+      assert {:error, "A listening transport needs its allowed source addresses" <> _} =
+               TCPSocket.from_delivery_profile(profile)
+
+      assert TCPSocket.egress_refusal(profile) == :provider_egress_addresses_missing
+    end
+
+    # The provider's addresses live in egress, not diagnostics.
+    in_diagnostics =
+      delivery(nil)
+      |> put_in(["diagnostics", "source_addresses"], ["127.0.0.1/32"])
+
+    assert TCPSocket.egress_refusal(in_diagnostics) == :provider_egress_addresses_missing
+
+    assert TCPSocket.egress_refusal(delivery(%{"source_addresses" => ["nope"]})) ==
+             :provider_egress_addresses_invalid
+  end
+
+  @everyone ["0.0.0.0/0", "::/0", "::ffff:0:0/96", "0::0/0", "::ffff:0.0.0.0/96"]
+
+  test "a whole-family prefix is refused at stage, naming the entry" do
+    for entry <- @everyone do
+      assert {:error, message} =
+               TCPSocket.normalize_config(
+                 Map.put(@listen, "expected_peer_addresses", ["10.0.0.0/8", entry])
+               )
+
+      assert message == "Allowed source addresses: #{inspect(entry)} allows every address."
+    end
+
+    # Narrower mapped and IPv6 ranges are fine.
+    assert {:ok, %{"expected_peer_addresses" => ["10.0.0.0/8"]}} =
+             TCPSocket.normalize_config(
+               Map.put(@listen, "expected_peer_addresses", ["::ffff:10.0.0.0/104"])
+             )
+  end
+
+  test "a delivery profile whose egress allows every address can't become a listening transport" do
+    for entry <- @everyone do
+      profile = delivery(%{"source_addresses" => [entry]})
+      assert {:error, _message} = TCPSocket.from_delivery_profile(profile)
+      assert TCPSocket.egress_refusal(profile) == :provider_egress_addresses_too_broad
+    end
+  end
+
+  defp delivery(egress) do
+    profile = %{
+      "direction" => "downlink",
+      "state" => "ready",
+      "delivery_kind" => "realtime_stream",
+      "diagnostics" => %{
+        "protocol" => "tcp",
+        "mode" => "provider_connects",
+        "host" => "127.0.0.1",
+        "port" => 4100,
+        "framing_family" => "ccsds_tm",
+        "frame_bytes" => 1115
+      }
+    }
+
+    if egress, do: Map.put(profile, "egress", egress), else: profile
   end
 end

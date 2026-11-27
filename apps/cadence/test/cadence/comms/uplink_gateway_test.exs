@@ -157,10 +157,10 @@ defmodule Cadence.Comms.UplinkGatewayTest do
               "delivery_kind" => "realtime_stream",
               "supported_service_profile_refs" => ["service-uplink", "service-downlink"],
               "state" => "ready",
+              "egress" => %{"source_addresses" => ["127.0.0.1/32", "::1/128"]},
               "diagnostics" => %{
                 "protocol" => "tcp",
                 "mode" => "provider_connects",
-                "source_addresses" => ["127.0.0.1/32", "::1/128"],
                 "host" => "127.0.0.1",
                 "port" => 5200,
                 "framing_family" => "ccsds_tc",

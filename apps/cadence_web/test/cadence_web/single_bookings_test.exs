@@ -213,7 +213,6 @@ defmodule CadenceWeb.SingleBookingsTest do
           "direction" => "downlink",
           "delivery_kind" => "realtime_stream",
           "mode" => "provider_connects",
-          "source_addresses" => ["127.0.0.1/32", "::1/128"],
           "protocol" => "tcp",
           "endpoint_ref" => "delivery-cadence",
           "framing" => %{"family" => "ccsds_tm", "mode" => "fixed_size", "frame_bytes" => 1115},

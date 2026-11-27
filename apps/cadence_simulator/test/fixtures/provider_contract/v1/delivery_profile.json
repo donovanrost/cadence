@@ -10,8 +10,10 @@
   "diagnostics": {
     "protocol": "tcp",
     "framing_family": "ccsds_tm",
-    "source_addresses": ["127.0.0.1/32", "::1/128"],
     "endpoint_health": "healthy"
+  },
+  "egress": {
+    "source_addresses": ["127.0.0.1/32", "::1/128"]
   },
   "extensions": {}
 }

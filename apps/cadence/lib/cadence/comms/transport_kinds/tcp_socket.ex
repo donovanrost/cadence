@@ -11,7 +11,7 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
 
   import Cadence.Comms.TransportKinds.TCPSocket.Fields
 
-  alias Cadence.Comms.Transport
+  alias Cadence.Comms.{PeerAddresses, Transport}
   alias Cadence.Comms.TransportKind.Definition
   alias Cadence.Contacts.ProviderProfile
 
@@ -26,6 +26,7 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
     "direction_capability" => :direction_capability,
     "delivery_kind" => :delivery_kind,
     "diagnostics" => :diagnostics,
+    "egress" => :egress,
     "enabled" => :enabled,
     "expected_peer_addresses" => :expected_peer_addresses,
     "frame_bytes" => :frame_bytes,
@@ -274,7 +275,7 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
         "framing_mode" => "fixed_size",
         "frame_size" => frame_bytes,
         "reconnect_policy" => "on_disconnect",
-        "expected_peer_addresses" => value(diagnostics, "source_addresses"),
+        "expected_peer_addresses" => profile |> value("egress", %{}) |> value("source_addresses"),
         "tls_enabled" => false,
         "ingress_protocol_family" => "tm",
         "ingress_metadata" => %{"frame_size" => frame_bytes, "ocf_length" => 0}
@@ -309,7 +310,7 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
         "framing_mode" => "fixed_size",
         "fixed_message_bytes" => 4,
         "reconnect_policy" => "on_disconnect",
-        "expected_peer_addresses" => value(diagnostics, "source_addresses"),
+        "expected_peer_addresses" => profile |> value("egress", %{}) |> value("source_addresses"),
         "tls_enabled" => false,
         "ingress_protocol_family" => "cop1_clcw",
         "uplink_resource_id" => "uplink:#{host}:#{port}"
@@ -325,6 +326,26 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
     do:
       {:error,
        "Delivery profile is not a ready provider-connects TCP downlink with fixed-size CCSDS TM framing."}
+
+  @doc """
+  Why a provider's delivery profile can't give a listening transport its source allowlist (#990,
+  DECISIONS #115), as a stable code: `nil` when its `egress.source_addresses` is usable, else
+  `:provider_egress_addresses_missing` (absent or empty), `:provider_egress_addresses_too_broad`
+  (an entry allows every address) or `:provider_egress_addresses_invalid` (an entry isn't an
+  address or range).
+  """
+  @spec egress_refusal(map()) :: atom() | nil
+  def egress_refusal(profile) when is_map(profile) do
+    case profile |> value("egress", %{}) |> egress_addresses() |> PeerAddresses.classify() do
+      :ok -> nil
+      :empty -> :provider_egress_addresses_missing
+      :too_broad -> :provider_egress_addresses_too_broad
+      :invalid -> :provider_egress_addresses_invalid
+    end
+  end
+
+  defp egress_addresses(egress) when is_map(egress), do: value(egress, "source_addresses")
+  defp egress_addresses(_egress), do: nil
 
   @impl true
   def materialize_provider_profile(%Transport{transport_kind: :tcp_socket} = transport) do

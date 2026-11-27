@@ -50,7 +50,12 @@ defmodule CadenceWeb.Console.TransportProviderOptionsAPITest do
 
     assert %{
              "deliveries" => [
-               %{"id" => "delivery-cadence", "version" => 7, "name" => "Cadence primary ingress"}
+               %{
+                 "id" => "delivery-cadence",
+                 "version" => 7,
+                 "name" => "Cadence primary ingress",
+                 "egress_addresses_ready" => true
+               }
              ],
              "preview" => nil
            } =
@@ -58,6 +63,42 @@ defmodule CadenceWeb.Console.TransportProviderOptionsAPITest do
                "provider_id" => c.provider.provider_id,
                "service_profile_id" => "service-downlink"
              })
+  end
+
+  # #990: a delivery whose egress addresses can't serve a listening transport is listed, flagged,
+  # and choosing it lands a coded error on its field.
+  test "a delivery with unusable egress addresses is flagged, and choosing it is a coded error",
+       c do
+    too_broad =
+      update_in(
+        c.provider.inventory_sync_document,
+        ["delivery_profiles", "items"],
+        fn [delivery] -> [put_in(delivery, ["egress", "source_addresses"], ["0.0.0.0/0"])] end
+      )
+
+    {:ok, provider} =
+      Cadence.GroundNetworks.persist_provider(
+        c.provider.organization_id,
+        %{c.provider | version: c.provider.version + 1, inventory_sync_document: too_broad}
+      )
+
+    query = %{"provider_id" => provider.provider_id, "service_profile_id" => "service-downlink"}
+
+    assert %{"deliveries" => [%{"id" => "delivery-cadence", "egress_addresses_ready" => false}]} =
+             choices(c, query)
+
+    assert %{
+             "preview" => nil,
+             "errors" => [
+               %{
+                 "path" => "delivery_profile_ref",
+                 "code" => "provider_egress_addresses_too_broad",
+                 "message" => message
+               }
+             ]
+           } = choices(c, Map.put(query, "delivery_profile_id", "delivery-cadence"))
+
+    assert message =~ "allow every address"
   end
 
   test "all three chosen: derive/3's preview, as rows", c do
