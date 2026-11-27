@@ -130,6 +130,10 @@ export function whatToDo(a: Attention): Readonly<{ text: string; plan: boolean }
     case "quarantined":
     case "listener_refusal":
     case "outcome_unknown":
+    // provider_ephemeris (#972) words its own row.
+    case "norad_id_missing":
+    case "failed":
+    case "not_ready":
     case null:
     default:
       return { text: `Check the booking with ${provider}, then record what you did.`, plan: false };

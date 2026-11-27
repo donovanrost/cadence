@@ -196,6 +196,7 @@ describe("attention block words (U32)", () => {
     activated_at: undefined,
     attempts: undefined,
     next_attempt_at: undefined,
+    next_retry_at: undefined,
     last_attempt_at: undefined,
     withdrawal: undefined,
     activation_request_id: undefined,
