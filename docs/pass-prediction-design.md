@@ -40,8 +40,16 @@ latitudes from 78°N to 72°S, a 5° mask, a 60 s coarse step, and refinement to
 
 These are laptop 1 numbers: M1, 8 cores, OTP 29. The evaluation count includes every SGP4
 propagation: one per spacecraft per grid point (time zero included), plus refinement and the
-search past each end of the window. Passes that cross either end of the window are counted. Following the #217
-measurement rule, the recorded pair will be re-run on laptop 2 and posted on #177.
+search past each end of the window. Passes that cross either end of the window are counted.
+Following the #217 measurement rule, the recorded pair will be re-run on laptop 2 and posted on
+#177.
+
+Since slice 2 the script runs `packages/sgp4` (`Sgp4.Passes.search/5`) instead of the
+prototype, with stations on the WGS84 ellipsoid rather than a sphere. Each pass costs three more
+propagations, for the elevation at TCA and the azimuth at AOS and LOS. On the same laptop it
+finds 275,361 passes for 500 spacecraft in 5.42 s (13.9 M evaluations), and 550,815 for 1,000
+in 11.12 s (27.8 M). The ellipsoid moves the stations, which accounts for the 1.4% more
+passes.
 
 - **CPU cost.** About 80 ms of CPU per spacecraft-week across 15 stations, so re-predicting one
   spacecraft after a new element set takes well under a second.

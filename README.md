@@ -12,6 +12,7 @@ configuration boundary.
 - `packages/cadence_catalog` - catalog and Mission Model compiler package
 - `packages/ccsds` - standalone-ready CCSDS protocol package
 - `packages/xtce` - standalone XTCE 1.3 parsing and schema-validation package
+- `packages/sgp4` - dependency-free near-earth SGP4 and station pass search
 
 ## Documentation
 

@@ -764,6 +764,10 @@ jobs:
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         working-directory: packages/xtce
         run: mix test
+      - name: sgp4
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        working-directory: packages/sgp4
+        run: mix test
       - name: cadence_catalog
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         working-directory: packages/cadence_catalog
