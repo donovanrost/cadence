@@ -74,7 +74,8 @@ defmodule Cadence.Control.Providers.EphemerisUploadsTest do
 
     assert {:ok, %{"failed" => 1}} = run(c, upload_result: failure)
 
-    assert %{status: "failed", attempts: 1, reason: "econnrefused", next_retry_at: first} =
+    # A failure that isn't a ProviderError stores the closed code `other` (#972).
+    assert %{status: "failed", attempts: 1, reason: "other", next_retry_at: first} =
              state(c)
 
     assert first == EphemerisUploads.next_retry_at(@now, 1)

@@ -71,6 +71,7 @@ defmodule Cadence.GroundNetworks.EphemerisStates do
           attempts: Map.get(state, :attempts, 0),
           reason: Map.get(state, :reason),
           next_retry_at: Map.get(state, :next_retry_at),
+          outcome_since: Map.get(state, :outcome_since, now),
           updated_at: now
         }
       end)
@@ -84,6 +85,75 @@ defmodule Cadence.GroundNetworks.EphemerisStates do
         conflict_target: [:mission_id, :provider_id, :spacecraft_id]
       )
     end)
+  end
+
+  @doc """
+  Deletes the run's spacecraft's states whose (provider, spacecraft) pair is no longer bound
+  (#983): a disabled rule, a removed transport, or a write that raced an archive. Such a row is
+  never overwritten by a run, so without this `claim_due/2` would re-lease it forever. `bound`
+  is the run's `bound_pairs/3` map; `only` restricts it to a retry run's pairs (nil: all of
+  `spacecraft_ids`). Answers how many rows went.
+  """
+  @spec delete_unbound(binary(), binary(), [binary()], map(), [{binary(), binary()}] | nil) ::
+          non_neg_integer()
+  def delete_unbound(_organization_id, _mission_id, [], _bound, _only), do: 0
+
+  def delete_unbound(organization_id, mission_id, spacecraft_ids, bound, only) do
+    wanted =
+      only &&
+        MapSet.new(only, fn {spacecraft_id, provider_id} -> {provider_id, spacecraft_id} end)
+
+    stale =
+      from(row in Row,
+        where:
+          row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+            row.spacecraft_id in ^spacecraft_ids,
+        select: {row.provider_id, row.spacecraft_id}
+      )
+      |> Repo.all()
+      |> Enum.reject(&Map.has_key?(bound, &1))
+      |> Enum.filter(&(wanted == nil or MapSet.member?(wanted, &1)))
+
+    case stale do
+      [] ->
+        0
+
+      keys ->
+        {providers, spacecraft} = Enum.unzip(keys)
+
+        {count, _rows} =
+          from(row in Row,
+            where:
+              row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+                fragment(
+                  "(?, ?) IN (SELECT * FROM unnest(?::text[], ?::text[]))",
+                  row.provider_id,
+                  row.spacecraft_id,
+                  ^providers,
+                  ^spacecraft
+                )
+          )
+          |> Repo.delete_all()
+
+        count
+    end
+  end
+
+  @doc """
+  Deletes a provider's ephemeris states (#983): called in the archive transaction, so an
+  archived provider leaves no due retry for `claim_due/2` to stage and no finding behind.
+  """
+  @spec delete_for_provider(binary(), binary(), binary()) :: non_neg_integer()
+  def delete_for_provider(organization_id, mission_id, provider_id) do
+    {count, _rows} =
+      from(row in Row,
+        where:
+          row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+            row.provider_id == ^provider_id
+      )
+      |> Repo.delete_all()
+
+    count
   end
 
   @doc """
@@ -123,6 +193,10 @@ defmodule Cadence.GroundNetworks.EphemerisStates do
   # its first run records an outcome.
   # `scope`: `:all` missions, `:mission` (`$1`/`$2`), or `:spacecraft` (`$1`/`$2` and the ids in
   # `$3`).
+  @doc false
+  # The bound-pairs CTE (`pairs`) for `EphemerisFindings`, scoped `:mission` ($1, $2).
+  def pairs_sql(:mission), do: bound_sql(:mission)
+
   defp bound_sql(scope) do
     mission = fn alias ->
       case scope do
@@ -155,7 +229,9 @@ defmodule Cadence.GroundNetworks.EphemerisStates do
     pairs AS (
       SELECT b.organization_id, b.mission_id, b.provider_id, b.spacecraft_id,
         b.provider_version, ref.source_ref AS provider_spacecraft_ref,
-        c.element_set_id,
+        c.element_set_id, s.reason AS state_reason, s.next_retry_at AS state_next_retry_at,
+        s.attempts AS state_attempts, s.updated_at AS state_updated_at,
+        s.outcome_since AS state_outcome_since,
         CASE
           WHEN s.status IS NOT NULL AND s.element_set_id = c.element_set_id
            AND s.bound_provider_version = b.provider_version
@@ -167,6 +243,15 @@ defmodule Cadence.GroundNetworks.EphemerisStates do
         ON p.organization_id = b.organization_id AND p.mission_id = b.mission_id
        AND p.provider_id = b.provider_id AND p.version = b.provider_version
        AND p.lifecycle_state <> 'archived'
+       -- Archiving adds a newer, archived version while the pinned one stays active: such a
+       -- provider is gone for the providers read and the member endpoint, so it is bound to
+       -- nothing here either (#972).
+       AND NOT EXISTS (
+         SELECT 1 FROM mission_providers a
+         WHERE a.organization_id = b.organization_id AND a.mission_id = b.mission_id
+           AND a.provider_id = b.provider_id AND a.lifecycle_state = 'archived'
+           AND a.version > b.provider_version
+       )
       CROSS JOIN LATERAL (
         SELECT se.source_ref
         FROM mission_source_endpoints se

@@ -164,14 +164,19 @@ defmodule Cadence.Control.Providers.EphemerisNotReadyTest do
   test "a not_ready reason names this provider's refusal, never another provider's" do
     findings = [
       %{code: :mission_provider_not_validated, resource_id: "rule-a"},
-      %{code: :delivery_profile_missing, resource_id: "rule-b"}
+      %{code: :provider_delivery_profile_not_ready, resource_id: "rule-b"},
+      %{code: :something_new, resource_id: "rule-d"}
     ]
 
     assert EphemerisUploads.refusal({:ok, %{findings: findings}}, ["rule-a"]) ==
              "mission_provider_not_validated"
 
     assert EphemerisUploads.refusal({:ok, %{findings: findings}}, ["rule-b"]) ==
-             "delivery_profile_missing"
+             "provider_delivery_profile_not_ready"
+
+    # A code outside the closed vocabulary (#972) reads as the generic reason.
+    assert EphemerisUploads.refusal({:ok, %{findings: findings}}, ["rule-d"]) ==
+             "no_ready_route"
 
     assert EphemerisUploads.refusal({:ok, %{findings: findings}}, ["rule-c"]) ==
              "no_ready_route"
