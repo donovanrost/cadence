@@ -783,7 +783,9 @@ never count them toward a requirement.
   over the spacecraft's ready routes; route keys and evidence ride inside the signed `token`.
   `station.id`, `code` and `name` are `null` when the provider's station matches no Cadence
   station (`ref` is always set). `overlaps` covers every live booking, plan or not. No ready route
-  is `offers: []` with `not_ready` saying why, not an error. Errors: `422 invalid_params` on the
+  is `offers: []` with `not_ready` saying why, not an error. An archived provider's routes are
+  refused with `mission_provider_archived` even while a transport still pins its older active
+  version (#985). Errors: `422 invalid_params` on the
   field (window in the past, over 7 days, end before start), `404 spacecraft_not_found`, `503
   search_unavailable` (every route's provider search failed).
 - `POST /single-bookings` `{token, note?}` (note ≤ 500) → `{outcome: confirmed | requested |

@@ -1590,7 +1590,8 @@ can read it, like the providers read.
 - **`not_ready` codes**, the scheduling refusals on a routing rule that binds the spacecraft to
   this provider:
   - `mission_provider_not_validated`, `mission_provider_not_active`,
-    `mission_provider_not_found`, `mission_provider_profiles_not_synced`;
+    `mission_provider_archived` (listed for completeness: an archived provider leaves these reads,
+    #985), `mission_provider_not_found`, `mission_provider_profiles_not_synced`;
   - `provider_service_profile_not_active`, `provider_delivery_profile_not_ready`,
     `provider_profile_version_not_available`, `provider_profile_direction_not_supported`,
     `provider_profiles_not_compatible`, `provider_route_not_ready`,
