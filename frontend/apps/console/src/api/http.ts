@@ -197,6 +197,30 @@ export async function requestPage<T>(
   };
 }
 
+/**
+ * A cursor-paged read whose `meta` carries more than the cursor (a coverage note every page
+ * repeats, say): `meta` is decoded with `readMeta` as well as for `next_cursor`.
+ */
+export async function requestPageMeta<T, M>(
+  path: string,
+  read: Reader<T>,
+  readMeta: Reader<M>,
+  options: RequestOptions = {},
+): Promise<ApiResult<{ value: T; nextCursor: string | null; meta: M }>> {
+  const sent = await send(path, options);
+  if (!sent.ok) return sent;
+  const cursor = object({ next_cursor: nullable(string) });
+  const meta: Reader<{ next: string | null; rest: M }> = (value, at = "") => ({
+    next: cursor(value, at).next_cursor,
+    rest: readMeta(value, at),
+  });
+  const envelope = decode(object({ data: read, meta }), sent.body);
+  if (!envelope.ok)
+    return { ok: false, error: { kind: "malformed", message: envelope.error.message } };
+  const { data, meta: m } = envelope.value;
+  return { ok: true, value: { value: data, nextCursor: m.next, meta: m.rest } };
+}
+
 /** Human sentence for an ApiError, for callouts and empty states. */
 export function describeApiError(error: ApiError): string {
   switch (error.kind) {

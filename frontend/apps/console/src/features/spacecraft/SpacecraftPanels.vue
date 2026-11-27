@@ -3,10 +3,11 @@ import type { MissionId } from "@/api/index.ts";
 import { ApButton, ApEmptyState, ApKeyValue, ApPanel, useNow } from "@/ui";
 import ChecksPanel from "./ChecksPanel.vue";
 import OperationPanel from "./OperationPanel.vue";
+import OrbitSection from "./orbit/OrbitSection.vue";
 import RoutingRulesPanel from "./RoutingRulesPanel.vue";
 import { identityFacts, type SpacecraftDetail } from "./detail.ts";
 
-/** Readiness, identity, pinned profile, routing and operation switches for one spacecraft. */
+/** Readiness, identity, pinned profile, routing, operation switches and orbit for one spacecraft. */
 defineProps<{ missionId: MissionId; detail: SpacecraftDetail; canStage: boolean }>();
 const now = useNow();
 </script>
@@ -58,6 +59,11 @@ const now = useNow();
       :mission-id="missionId"
       :detail="detail"
       :can-stage="canStage"
+      class="xl:col-span-2"
+    />
+    <OrbitSection
+      :mission-id="missionId"
+      :spacecraft-id="detail.spacecraft.id"
       class="xl:col-span-2"
     />
   </div>
