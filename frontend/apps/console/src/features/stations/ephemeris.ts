@@ -21,10 +21,13 @@ export const ephemerisReader = d.object({
 });
 export type Ephemeris = Decoded<typeof ephemerisReader>;
 
-const uploadBuckets = ["uploaded", "failed", "not_ready"] as const;
+const uploadBuckets = ["uploaded", "failed"] as const;
 const lookupBuckets = ["lookup", "norad_id_missing"] as const;
-/** #981: source-neutral, no run has recorded an outcome for the current set yet, either kind. */
-const neutralBuckets = ["pending"] as const;
+/**
+ * #981: source-neutral, recorded for any bound spacecraft whatever the source. not_ready: no route
+ * to the provider is ready. pending: no run has acted on the current set, version and ref yet.
+ */
+const neutralBuckets = ["not_ready", "pending"] as const;
 type Kind = "upload" | "lookup" | "neutral";
 const bucketsOf = { upload: uploadBuckets, lookup: lookupBuckets, neutral: neutralBuckets };
 type Bucket = (typeof bucketsOf)[Kind][number];
@@ -34,10 +37,10 @@ const bucketWords: Readonly<Record<Bucket, { words: string; caution: boolean }>>
   uploaded: { words: "uploaded", caution: false },
   failed: { words: "upload failed, retrying", caution: true },
   not_ready: {
-    words: "not ready, no route to this provider is ready, nothing sent",
+    words: "not ready, no route to this provider is ready",
     caution: true,
   },
-  pending: { words: "waiting for first check", caution: false },
+  pending: { words: "waiting for a check", caution: false },
   lookup: { words: "looked up by NORAD id", caution: false },
   norad_id_missing: { words: "without a NORAD id, the provider can't find them", caution: true },
 };
@@ -75,7 +78,7 @@ export type EphemerisSummary = Readonly<{
 /**
  * Every non-zero bucket: each spacecraft is bucketed by the provider version its transport pins,
  * so one row can carry both kinds. The kind `orbit_source` names comes first; the other kind's
- * counts belong to an older pinned version and say so. Pending is neither kind and comes last.
+ * counts belong to an older pinned version and say so. Not ready and pending are neither kind and come last.
  */
 export function ephemerisSummary(e: Ephemeris): EphemerisSummary {
   const own = ownKind(e.orbit_source);

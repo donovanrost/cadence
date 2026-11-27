@@ -41,8 +41,8 @@ describe("ephemeris words (#975: every non-zero bucket)", () => {
     expect(lines(e)).toEqual([
       ["uploaded", "1,200 uploaded", false, null],
       ["failed", "2 upload failed, retrying", true, null],
-      ["not_ready", "3 not ready, no route to this provider is ready, nothing sent", true, null],
-      ["pending", "1 waiting for first check", false, null],
+      ["not_ready", "3 not ready, no route to this provider is ready", true, null],
+      ["pending", "1 waiting for a check", false, null],
     ]);
   });
 
@@ -74,7 +74,7 @@ describe("ephemeris words (#975: every non-zero bucket)", () => {
     ]);
   });
 
-  it("pending is neither kind (#981): last, never an older version's or assumed", () => {
+  it("not ready and pending are neither kind (#981): last, never older or assumed", () => {
     const e = ephemeris({
       orbit_source: "looks_up_by_norad_id",
       pending: 2,
@@ -84,10 +84,18 @@ describe("ephemeris words (#975: every non-zero bucket)", () => {
     expect(lines(e)).toEqual([
       ["lookup", "3 looked up by NORAD id", false, null],
       ["uploaded", "1 uploaded", false, "older pinned version"],
-      ["pending", "2 waiting for first check", false, null],
+      ["pending", "2 waiting for a check", false, null],
     ]);
     expect(lines(ephemeris({ orbit_source: null, pending: 1 }))).toEqual([
-      ["pending", "1 waiting for first check", false, null],
+      ["pending", "1 waiting for a check", false, null],
+    ]);
+    const notReady = ["not_ready", "2 not ready, no route to this provider is ready", true, null];
+    expect(lines(ephemeris({ orbit_source: "looks_up_by_norad_id", not_ready: 2 }))).toEqual([
+      notReady,
+    ]);
+    expect(lines(ephemeris({ orbit_source: null, lookup: 1, not_ready: 2 }))).toEqual([
+      ["lookup", "1 looked up by NORAD id", false, "assumed"],
+      notReady,
     ]);
   });
 
