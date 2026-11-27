@@ -32,6 +32,13 @@ defmodule Cadence.Persistence.RetentionTest do
     assert Retention.protocol_archive_days() == 45
   end
 
+  test "completed jobs keep fourteen days unless configured otherwise" do
+    assert Retention.background_job_days() == 14
+
+    Application.put_env(:cadence, :retention, background_job_days: 21)
+    assert Retention.background_job_days() == 21
+  end
+
   test "the replay horizon is the longest window a stream can be replayed from, plus the margin" do
     Application.put_env(:cadence, :telemetry_observation_retention, retention_days: 30)
     Application.put_env(:cadence, :ingress_journal, completed_stream_retention_ms: 72 * 3_600_000)
@@ -65,7 +72,12 @@ defmodule Cadence.Persistence.RetentionTest do
   end
 
   test "no sweepers run when retention is off, and each enabled rule gets one" do
-    rules = [Cadence.Runtime.PartitionStreamKeys.Retention, Cadence.IngressArchive.Retention]
+    rules = [
+      Cadence.Jobs.Retention,
+      Cadence.Runtime.PartitionStreamKeys.Retention,
+      Cadence.IngressArchive.Retention
+    ]
+
     assert Retention.children(rules, enabled?: false) == []
 
     # The ingress archive rule needs a configured filesystem archive; the stream-key rule does not.
@@ -75,5 +87,7 @@ defmodule Cadence.Persistence.RetentionTest do
     assert Cadence.Runtime.PartitionStreamKeys.Retention in Enum.map(children, fn {_m, opts} ->
              opts[:rule]
            end)
+
+    assert Cadence.Jobs.Retention in Enum.map(children, fn {_m, opts} -> opts[:rule] end)
   end
 end

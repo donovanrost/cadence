@@ -1,0 +1,48 @@
+defmodule Cadence.Jobs.RetentionTest do
+  use Cadence.DataCase, async: false
+
+  alias Cadence.Jobs
+  alias Cadence.Jobs.{BackgroundJobRow, Retention}
+  alias Cadence.Persistence.Retention.Sweeper
+
+  @now ~U[2026-11-28 12:00:00Z]
+
+  test "sweeps old terminal jobs by completion time and keeps live, unknown and recent jobs" do
+    mission = "mission-retention-#{Ecto.UUID.generate()}"
+    persist_mission_scope("org-retention-#{Ecto.UUID.generate()}", mission)
+
+    old = DateTime.add(@now, -15 * 86_400)
+    recent = DateTime.add(@now, -13 * 86_400)
+
+    old_completed = job!(mission, "completed", old, old)
+    old_failed = job!(mission, "failed", old, old)
+    old_queued = job!(mission, "queued", old, nil)
+    old_running = job!(mission, "running", old, nil)
+    old_unknown = job!(mission, "outcome_unknown", old, old)
+    recent_completed = job!(mission, "completed", old, recent)
+    recent_failed = job!(mission, "failed", old, recent)
+
+    assert %{rows: 2, stopped: :done} =
+             Sweeper.sweep(Retention, nil, now: @now, chunk_rows: 1, pause_ms: 0)
+
+    for job <- [old_completed, old_failed] do
+      assert {:error, :job_not_found} = Jobs.fetch_job(job.job_id)
+    end
+
+    for job <- [old_queued, old_running, old_unknown, recent_completed, recent_failed] do
+      assert {:ok, _} = Jobs.fetch_job(job.job_id)
+    end
+  end
+
+  defp job!(mission, status, inserted_at, completed_at) do
+    {:ok, job} = Jobs.enqueue(:mission_event_rebuild, mission, Ecto.UUID.generate(), %{})
+
+    {1, _rows} =
+      Repo.update_all(
+        from(row in BackgroundJobRow, where: row.job_id == ^job.job_id),
+        set: [status: status, inserted_at: inserted_at, completed_at: completed_at]
+      )
+
+    job
+  end
+end
