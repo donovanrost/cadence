@@ -31,6 +31,10 @@ defmodule CadenceWeb.Console.Problem do
     element_set_unsupported_reference:
       {422, "SGP4 elements must be Earth-centred, in TEME, with a UTC epoch."},
     element_set_batch_too_large: {422, "Send at most 1,000 element sets at a time."},
+    # #891: a predicted-pass window that ends before it starts or is too long; `details.max_days`
+    # is 14, or 1 for a mission-wide window with no station or spacecraft filter.
+    predicted_pass_window_too_long:
+      {422, "Choose a window that ends after it starts and is short enough."},
     spacecraft_route_not_found: {404, "Extra route not found."},
     profile_not_found: {404, "Profile not found."},
     catalog_revision_not_found: {404, "Catalog revision not found."},

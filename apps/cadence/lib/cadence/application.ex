@@ -49,6 +49,7 @@ defmodule Cadence.Application do
         background_job_children(root_composition) ++
         retention_children() ++
         questdb_retention_children() ++
+        pass_prediction_children() ++
         [{Drain, callback: fn -> drain_runtime(root_composition) end}]
 
     opts = [strategy: :one_for_one, name: Cadence.Supervisor]
@@ -101,6 +102,17 @@ defmodule Cadence.Application do
     end
 
     :ok
+  end
+
+  # The daily predicted-pass extension and prune (#891); jobs do the work.
+  defp pass_prediction_children do
+    config = Application.get_env(:cadence, :pass_prediction_maintenance, [])
+
+    if Keyword.get(config, :enabled?, true),
+      do: [
+        {Cadence.GroundNetworks.PredictedPasses.Maintenance, Keyword.delete(config, :enabled?)}
+      ],
+      else: []
   end
 
   # Retention for the tables nothing else cleans (#694): one chunked sweeper per rule.

@@ -6,10 +6,13 @@ defmodule Cadence.Configuration.StationGeometryTest do
   """
   use Cadence.DataCase, async: false
 
+  import Ecto.Query
+
   import Cadence.ConfigurationFixtures
 
   alias Cadence.Comms.{GroundStation, GroundStationStore, StationLocations}
   alias Cadence.Control.Configuration
+  alias Cadence.Jobs.BackgroundJobRow
   alias Cadence.Reads.{CommsDirectory, ConfigKindSchema}
 
   @synced_at ~U[2026-11-27 12:00:00.000000Z]
@@ -21,6 +24,22 @@ defmodule Cadence.Configuration.StationGeometryTest do
   end
 
   describe "the mission's location through the change-set kind" do
+    test "a geometry change or an archive asks for that station's pass recompute (#891)", ctx do
+      [id] =
+        apply_ops(ctx, "Svalbard", [
+          create(%{"display_name" => "Svalbard", "latitude_deg" => 78.23, "longitude_deg" => 15})
+        ])
+
+      assert station_jobs(ctx.mission) == [[id]]
+
+      apply_ops(ctx, "Rename", [edit(id, [{"display_name", "SvalSat"}])])
+      assert station_jobs(ctx.mission) == [[id]]
+
+      apply_ops(ctx, "Mask", [edit(id, [{"elevation_mask_deg", 10}])])
+      apply_ops(ctx, "Archive", [delete(id)])
+      assert station_jobs(ctx.mission) == [[id], [id], [id]]
+    end
+
     test "is stored with its mask; a missing height is 0 m and the mask defaults to 5°", ctx do
       [id] =
         apply_ops(ctx, "Svalbard", [
@@ -297,6 +316,17 @@ defmodule Cadence.Configuration.StationGeometryTest do
   defp station(id, location), do: %{"id" => id, "name" => id, "location" => location}
 
   defp create(document), do: %{kind: "ground_station", action: :create, document: document}
+
+  defp delete(id), do: %{kind: "ground_station", action: :delete, entity_id: id}
+
+  defp station_jobs(mission) do
+    BackgroundJobRow
+    |> where([j], j.mission_id == ^mission and j.job_type == "pass_prediction")
+    |> Repo.all()
+    |> Enum.map(&BackgroundJobRow.to_domain/1)
+    |> Enum.filter(&(&1.payload["kind"] == "station"))
+    |> Enum.map(& &1.payload["ground_station_ids"])
+  end
 
   defp edit(id, changes),
     do: %{

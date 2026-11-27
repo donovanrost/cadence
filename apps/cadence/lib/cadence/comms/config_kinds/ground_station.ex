@@ -17,7 +17,7 @@ defmodule Cadence.Comms.ConfigKinds.GroundStation do
 
   import Ecto.Query
 
-  alias Cadence.Comms.{GroundStation, GroundStationRow, GroundStationStore}
+  alias Cadence.Comms.{GroundStation, GroundStationRow, GroundStationStore, StationGeometry}
   alias Cadence.Platform.ConfigFields, as: F
   alias Cadence.Repo
 
@@ -260,10 +260,16 @@ defmodule Cadence.Comms.ConfigKinds.GroundStation do
         elevation_mask_deg: proposed["elevation_mask_deg"]
       })
 
+    if station.location,
+      do: :ok = StationGeometry.stage_recompute(organization_id, mission_id, [id])
+
     stored(GroundStationStore.persist_ground_station(organization_id, station))
   end
 
-  def write(organization_id, mission_id, :update, id, _previous, proposed, _options) do
+  def write(organization_id, mission_id, :update, id, previous, proposed, _options) do
+    if StationGeometry.changed?(previous, proposed),
+      do: :ok = StationGeometry.stage_recompute(organization_id, mission_id, [id])
+
     attrs = %{
       display_name: proposed["display_name"],
       code: proposed["code"],
@@ -279,8 +285,13 @@ defmodule Cadence.Comms.ConfigKinds.GroundStation do
 
   def write(organization_id, mission_id, :delete, id, _previous, nil, _options) do
     case GroundStationStore.archive_ground_station(organization_id, mission_id, id) do
-      {:ok, _station} -> {:ok, nil, []}
-      {:error, reason} -> {:error, reason}
+      {:ok, _station} ->
+        # Its passes go: the station run finds it archived.
+        :ok = StationGeometry.stage_recompute(organization_id, mission_id, [id])
+        {:ok, nil, []}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

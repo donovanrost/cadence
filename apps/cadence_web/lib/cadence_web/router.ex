@@ -451,6 +451,10 @@ defmodule CadenceWeb.Router do
       get("/spacecraft/:spacecraft_id/element-sets", ElementSetController, :index)
       post("/spacecraft/:spacecraft_id/element-sets", ElementSetController, :create)
       get("/spacecraft/:spacecraft_id/element-sets/current", ElementSetController, :current)
+      # #891 (slice 3 of #732): predicted passes. Contract: docs/apogee/api/predicted-passes.md
+      get("/predicted-passes", PredictedPassController, :index)
+      post("/predicted-passes/recompute", PredictedPassController, :recompute)
+      get("/spacecraft/:spacecraft_id/predicted-passes", PredictedPassController, :spacecraft)
       get("/spacecraft/:spacecraft_id/source-endpoints", SourceEndpointController, :index)
       post("/spacecraft/:spacecraft_id/source-endpoints", SourceEndpointController, :create)
       get("/source-endpoints", SourceEndpointController, :index)
