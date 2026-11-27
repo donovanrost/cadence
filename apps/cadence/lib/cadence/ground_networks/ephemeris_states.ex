@@ -99,8 +99,10 @@ defmodule Cadence.GroundNetworks.EphemerisStates do
     Enum.uniq(claimed)
   end
 
-  # Each spacecraft's current element set (the newest epoch), and the providers its active,
-  # enabled downlink routing rules bind it to through a provider-managed transport. A provider's
+  # The providers each spacecraft's active, enabled downlink routing rules bind it to through a
+  # provider-managed transport, and per bound pair its current element set (the newest epoch):
+  # one LIMIT 1 probe of orbit_element_sets_history_idx per pair, so the work scales with bound
+  # pairs, never with the element-set history. A provider's
   # orbit source is its latest version's declared one; NULL (undeclared) behaves as lookup.
   # `$1`/`$2` narrow to one mission when the caller passes `scoped: true`.
   defp bound_sql(scoped?) do
@@ -109,14 +111,7 @@ defmodule Cadence.GroundNetworks.EphemerisStates do
     end
 
     """
-    WITH current_sets AS (
-      SELECT DISTINCT ON (organization_id, mission_id, spacecraft_id)
-        organization_id, mission_id, spacecraft_id, element_set_id, norad_id
-      FROM orbit_element_sets e
-      WHERE #{mission.("e")}
-      ORDER BY organization_id, mission_id, spacecraft_id, epoch DESC, element_set_id DESC
-    ),
-    sources AS (
+    WITH sources AS (
       SELECT DISTINCT ON (organization_id, mission_id, provider_id)
         organization_id, mission_id, provider_id,
         capabilities_document -> 'orbit' ->> 'source' AS source
@@ -147,9 +142,14 @@ defmodule Cadence.GroundNetworks.EphemerisStates do
           ELSE 'lookup'
         END AS bucket
       FROM bound b
-      JOIN current_sets c
-        ON c.organization_id = b.organization_id AND c.mission_id = b.mission_id
-       AND c.spacecraft_id = b.spacecraft_id
+      CROSS JOIN LATERAL (
+        SELECT e.element_set_id, e.norad_id
+        FROM orbit_element_sets e
+        WHERE e.mission_id = b.mission_id AND e.spacecraft_id = b.spacecraft_id
+          AND e.organization_id = b.organization_id
+        ORDER BY e.epoch DESC, e.element_set_id DESC
+        LIMIT 1
+      ) c
       JOIN sources src
         ON src.organization_id = b.organization_id AND src.mission_id = b.mission_id
        AND src.provider_id = b.provider_id
