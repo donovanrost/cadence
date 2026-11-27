@@ -22,7 +22,7 @@ defmodule Cadence.Comms.StationLocations do
 
   import Ecto.Query
 
-  alias Cadence.Comms.{GroundStation, GroundStationRow, GroundStationStore}
+  alias Cadence.Comms.{GroundStation, GroundStationRow, GroundStationStore, StationGeometry}
   alias Cadence.Platform.ScopedReadUpdates
   alias Cadence.Repo
 
@@ -46,11 +46,15 @@ defmodule Cadence.Comms.StationLocations do
           into: %{},
           do: {station_id, location}
 
+    # Every report refreshes reported_at; `changed` is where the geometry itself moved.
+    Enum.each(reported, fn {station_id, location} ->
+      record(organization_id, mission_id, station_id, location, provider_id, synced_at)
+    end)
+
     changed =
-      Enum.count(reported, fn {station_id, location} ->
-        record(organization_id, mission_id, station_id, location, provider_id, synced_at)
-        changed?(Map.fetch!(current, station_id), location, provider_id)
-      end)
+      for {station_id, location} <- reported,
+          changed?(Map.fetch!(current, station_id), location, provider_id),
+          do: station_id
 
     stale =
       for {station_id, %GroundStation{provider_location: %{provider_id: ^provider_id}}} <- current,
@@ -59,10 +63,18 @@ defmodule Cadence.Comms.StationLocations do
 
     cleared = clear_reports(organization_id, mission_id, provider_id, stale)
 
-    if changed + cleared > 0,
+    if changed != [] or cleared > 0,
       do: ScopedReadUpdates.publish(:stations_changed, organization_id, mission_id)
 
-    {:ok, %{recorded: changed, cleared: cleared}}
+    # Pass prediction reads the provider's location only where the mission set none (#891).
+    :ok =
+      StationGeometry.stage_recompute(
+        organization_id,
+        mission_id,
+        for(id <- changed ++ stale, Map.fetch!(current, id).location == nil, do: id)
+      )
+
+    {:ok, %{recorded: length(changed), cleared: cleared}}
   end
 
   @doc "A reported location, validated: `{:ok, %{latitude_deg, longitude_deg, height_m}}`."

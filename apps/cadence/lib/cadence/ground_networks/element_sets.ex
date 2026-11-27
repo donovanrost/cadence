@@ -15,7 +15,7 @@ defmodule Cadence.GroundNetworks.ElementSets do
 
   import Ecto.Query
 
-  alias Cadence.GroundNetworks.ElementSet
+  alias Cadence.GroundNetworks.{ElementSet, PredictedPasses}
   alias Cadence.GroundNetworks.ElementSets.{Elements, ElementSetRow, HistoryCursor, Omm, Tle}
   alias Cadence.Ids
   alias Cadence.Persistence.BulkInsert
@@ -71,10 +71,115 @@ defmodule Cadence.GroundNetworks.ElementSets do
 
     Repo.transaction(fn ->
       case known_spacecraft(organization_id, mission_id, parsed) do
-        {:ok, known} -> parsed |> Enum.map(&check_spacecraft(&1, known)) |> store(context)
-        {:error, reason} -> Repo.rollback(reason)
+        {:ok, known} ->
+          results = parsed |> Enum.map(&check_spacecraft(&1, known)) |> store(context)
+          {results, stage_recompute(organization_id, mission_id, results)}
+
+        {:error, reason} ->
+          Repo.rollback(reason)
       end
     end)
+    |> case do
+      {:ok, {results, job}} ->
+        # The dispatcher must see the committed job; it never joins this transaction.
+        if job, do: PredictedPasses.publish_staged(job)
+        {:ok, results}
+
+      {:error, _reason} = error ->
+        error
+    end
+  end
+
+  # A stored set that is now its spacecraft's current one (no stored set has a later epoch)
+  # recomputes that spacecraft's passes: one job for the whole batch (#891).
+  defp stage_recompute(organization_id, mission_id, results) do
+    created = for {:created, set} <- results, do: set
+
+    newest =
+      newest_epochs(organization_id, mission_id, Enum.map(created, & &1.spacecraft_id))
+
+    current =
+      for set <- created,
+          newest?(newest[set.spacecraft_id], set.epoch),
+          uniq: true,
+          do: set.spacecraft_id
+
+    case current do
+      [] ->
+        nil
+
+      spacecraft_ids ->
+        {:ok, job} = PredictedPasses.stage_spacecraft(organization_id, mission_id, spacecraft_ids)
+        job
+    end
+  end
+
+  defp newest?(%DateTime{} = newest, epoch), do: DateTime.compare(epoch, newest) != :lt
+  defp newest?(nil, _epoch), do: false
+
+  defp newest_epochs(_organization_id, _mission_id, []), do: %{}
+
+  defp newest_epochs(organization_id, mission_id, spacecraft_ids) do
+    from(row in ElementSetRow,
+      where:
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.spacecraft_id in ^Enum.uniq(spacecraft_ids),
+      group_by: row.spacecraft_id,
+      select: {row.spacecraft_id, max(row.epoch)}
+    )
+    |> Repo.all()
+    |> Map.new()
+  end
+
+  @doc "Every spacecraft's current element set in the mission (one query)."
+  @spec current_for_mission(binary(), binary()) :: [ElementSet.t()]
+  def current_for_mission(organization_id, mission_id),
+    do:
+      current_query(organization_id, mission_id)
+      |> Repo.all()
+      |> Enum.map(&ElementSetRow.to_domain/1)
+
+  @doc "The current element sets of these spacecraft (one query; a spacecraft with none is absent)."
+  @spec current_for(binary(), binary(), [binary()]) :: [ElementSet.t()]
+  def current_for(organization_id, mission_id, spacecraft_ids) do
+    organization_id
+    |> current_query(mission_id)
+    |> where([row], row.spacecraft_id in ^spacecraft_ids)
+    |> Repo.all()
+    |> Enum.map(&ElementSetRow.to_domain/1)
+  end
+
+  @doc "How many of these spacecraft have at least one element set (one query)."
+  @spec count_with_sets(binary(), binary(), [binary()]) :: non_neg_integer()
+  def count_with_sets(organization_id, mission_id, spacecraft_ids) do
+    from(row in ElementSetRow,
+      where:
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.spacecraft_id in ^spacecraft_ids,
+      select: count(row.spacecraft_id, :distinct)
+    )
+    |> Repo.one()
+  end
+
+  @doc "The epochs of these element sets, by id (one query)."
+  @spec epochs(binary(), binary(), [binary()]) :: %{optional(binary()) => DateTime.t()}
+  def epochs(organization_id, mission_id, element_set_ids) do
+    from(row in ElementSetRow,
+      where:
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.element_set_id in ^element_set_ids,
+      select: {row.element_set_id, row.epoch}
+    )
+    |> Repo.all()
+    |> Map.new()
+  end
+
+  defp current_query(organization_id, mission_id) do
+    from(row in ElementSetRow,
+      where: row.organization_id == ^organization_id and row.mission_id == ^mission_id,
+      distinct: [asc: row.spacecraft_id],
+      order_by: [asc: row.spacecraft_id, desc: row.epoch, desc: row.element_set_id]
+    )
   end
 
   @doc "The spacecraft's current element set (the newest epoch), or nil when it has none."

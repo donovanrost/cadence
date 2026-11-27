@@ -86,9 +86,10 @@ defmodule Cadence.GroundNetworks.ElementSetsTest do
 
     assert length(results) == 1_000
     assert Enum.all?(results, &match?({:created, _}, &1))
-    # Spacecraft in batches of 100, stored keys in one query, inserts in batches of 500, and the
-    # transaction's begin and commit.
-    assert queries <= 15, "#{queries} queries"
+    # Spacecraft in batches of 100, stored keys in one query, inserts in batches of 500, the
+    # newest-epoch lookup and the one staged recompute job (#891), and the transaction's begin and
+    # commit.
+    assert queries <= 18, "#{queries} queries"
 
     {queries, {:ok, again}} = count_queries(fn -> submit(c, items) end)
     assert Enum.all?(again, &match?({:unchanged, _}, &1))
