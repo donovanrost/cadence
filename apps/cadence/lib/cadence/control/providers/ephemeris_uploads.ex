@@ -110,7 +110,11 @@ defmodule Cadence.Control.Providers.EphemerisUploads do
       states = Enum.map(states, &Outcomes.since(&1, previous, now))
       :ok = EphemerisStates.put_all(organization_id, mission_id, states, now)
 
-      if Enum.any?(states, &Outcomes.changed?(&1, previous)),
+      # A pair that stopped being bound is never written again; drop its row (#983).
+      removed =
+        EphemerisStates.delete_unbound(organization_id, mission_id, Map.keys(sets), bound, pairs)
+
+      if removed > 0 or Enum.any?(states, &Outcomes.changed?(&1, previous)),
         do: published(organization_id, mission_id)
 
       {:ok, Enum.frequencies_by(states, & &1.status)}

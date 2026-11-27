@@ -88,6 +88,58 @@ defmodule Cadence.GroundNetworks.EphemerisStates do
   end
 
   @doc """
+  Deletes the run's spacecraft's states whose (provider, spacecraft) pair is no longer bound
+  (#983): a disabled rule, a removed transport, or a write that raced an archive. Such a row is
+  never overwritten by a run, so without this `claim_due/2` would re-lease it forever. `bound`
+  is the run's `bound_pairs/3` map; `only` restricts it to a retry run's pairs (nil: all of
+  `spacecraft_ids`). Answers how many rows went.
+  """
+  @spec delete_unbound(binary(), binary(), [binary()], map(), [{binary(), binary()}] | nil) ::
+          non_neg_integer()
+  def delete_unbound(_organization_id, _mission_id, [], _bound, _only), do: 0
+
+  def delete_unbound(organization_id, mission_id, spacecraft_ids, bound, only) do
+    wanted =
+      only &&
+        MapSet.new(only, fn {spacecraft_id, provider_id} -> {provider_id, spacecraft_id} end)
+
+    stale =
+      from(row in Row,
+        where:
+          row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+            row.spacecraft_id in ^spacecraft_ids,
+        select: {row.provider_id, row.spacecraft_id}
+      )
+      |> Repo.all()
+      |> Enum.reject(&Map.has_key?(bound, &1))
+      |> Enum.filter(&(wanted == nil or MapSet.member?(wanted, &1)))
+
+    case stale do
+      [] ->
+        0
+
+      keys ->
+        {providers, spacecraft} = Enum.unzip(keys)
+
+        {count, _rows} =
+          from(row in Row,
+            where:
+              row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+                fragment(
+                  "(?, ?) IN (SELECT * FROM unnest(?::text[], ?::text[]))",
+                  row.provider_id,
+                  row.spacecraft_id,
+                  ^providers,
+                  ^spacecraft
+                )
+          )
+          |> Repo.delete_all()
+
+        count
+    end
+  end
+
+  @doc """
   Deletes a provider's ephemeris states (#983): called in the archive transaction, so an
   archived provider leaves no due retry for `claim_due/2` to stage and no finding behind.
   """

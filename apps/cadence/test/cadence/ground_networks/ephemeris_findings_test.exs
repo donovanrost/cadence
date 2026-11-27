@@ -250,6 +250,33 @@ defmodule Cadence.GroundNetworks.EphemerisFindingsTest do
     assert state(c) == nil
   end
 
+  test "a failed pair whose rule is disabled is dropped by the next run, not re-leased", c do
+    upload_provider!(c)
+    {:ok, _results} = submit(c, norad: 25_544)
+    clear_jobs!(c)
+    failure = {:error, %ProviderError{category: :provider_unavailable, detail: "down"}}
+    {:ok, %{"failed" => 1}} = run_for(c, [c.sc], upload_result: failure)
+    assert_received {:uploaded, "SIM-001", _ephemeris}
+    assert %{status: "failed"} = state(c)
+
+    # The rule binding the pair is disabled: no run will ever write this pair again.
+    {_n, _rows} =
+      from(rule in "comms_routing_rules",
+        where: rule.mission_id == ^c.mission and rule.spacecraft_id == ^c.sc
+      )
+      |> Repo.update_all(set: [enabled: false])
+
+    later = DateTime.add(now(), 7 * 86_400)
+    assert EphemerisUploads.retry_due(later) == 1
+    clear_jobs!(c)
+
+    ScopedReadUpdates.subscribe(:providers_changed, c.org, c.mission)
+    assert {:ok, _summary} = run_for(c, [c.sc], pairs: [{c.sc, c.provider.provider_id}])
+    assert state(c) == nil
+    assert_receive {:providers_changed, _org, _mission}
+    assert EphemerisUploads.retry_due(DateTime.add(later, 7 * 86_400)) == 0
+  end
+
   defp run_for(c, spacecraft_ids, opts \\ []) do
     opts = Keyword.merge([now: now(), client: UploadClient, test_pid: self()], opts)
     EphemerisUploads.run(c.org, c.mission, spacecraft_ids, opts)
