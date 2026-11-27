@@ -260,7 +260,8 @@ const keys = computed(() => (search.value ? offerKeys(search.value.offers) : [])
         {{ emptyWords(search, viaWords(routeData?.routes ?? [], routeKeys)) }}
       </p>
       <ul v-else class="m-0 flex list-none flex-col p-0" aria-label="Offers">
-        <!-- By token: the same opportunity can come back once per ready route (qa 11-13). -->
+        <!-- Keyed by offerKeys (station, provider, window, route ordinal; one opportunity can come
+          back once per ready route, qa 11-13), so a quiet re-search patches the rows (#970). -->
         <li v-for="(o, i) in search.offers" :key="keys[i]" class="border-t border-hairline py-2">
           <button
             type="button"
