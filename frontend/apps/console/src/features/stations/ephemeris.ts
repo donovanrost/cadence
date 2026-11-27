@@ -78,7 +78,8 @@ export type EphemerisSummary = Readonly<{
 /**
  * Every non-zero bucket: each spacecraft is bucketed by the provider version its transport pins,
  * so one row can carry both kinds. The kind `orbit_source` names comes first; the other kind's
- * counts belong to an older pinned version and say so. Not ready and pending are neither kind and come last.
+ * counts belong to an older pinned version and say so. Not ready and pending are neither kind
+ * and come last.
  */
 export function ephemerisSummary(e: Ephemeris): EphemerisSummary {
   const own = ownKind(e.orbit_source);
