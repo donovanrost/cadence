@@ -80,12 +80,16 @@ defmodule CadenceSimulator.Provider.Opportunities do
     with {:ok, {^binding, spacecraft, station, service, from, to}} <- decode_offer(id),
          %{"state" => "active"} = profile <- Enum.at(ServiceProfiles.for_run(run), service),
          {:ok, raw} <- Provider.restore_opportunity(run, spacecraft, station, from, to),
-         {:ok, readiness} <- OrbitReadiness.for_search(run, raw) do
+         {:ok, readiness} <- OrbitReadiness.for_search(run, readiness_params(raw)) do
       {:ok, normalize(raw, id, run, profile, readiness)}
     else
       _invalid -> {:error, :not_found}
     end
   end
+
+  # Readiness for one restored offer: its spacecraft at its start, as a search for it would ask.
+  defp readiness_params(raw),
+    do: %{"spacecraft_refs" => [raw["spacecraft_id"]], "starts_at" => raw["starts_at"]}
 
   defp offer_page(page, run, profile, service, readiness) do
     prefix_size = byte_size(run["scenario_snapshot"]["spacecraft_prefix"]) + 1
@@ -218,11 +222,16 @@ defmodule CadenceSimulator.Provider.Opportunities do
       "expires_at" => expires_at,
       "availability" => availability(run, opportunity),
       "synthetic" => true,
-      "extensions" => %{
-        "model" => opportunity["model"],
-        "orbit_readiness" => orbit_readiness,
-        "route_profile_ref" => route_profile && route_profile["id"]
-      }
+      "extensions" =>
+        Map.merge(
+          %{
+            "model" => opportunity["model"],
+            "orbit_readiness" => orbit_readiness,
+            "route_profile_ref" => route_profile && route_profile["id"]
+          },
+          # A pass-backed offer (#893) reports its geometry; a synthetic one has none.
+          Map.take(opportunity, ["max_elevation_deg", "tca"])
+        )
     }
   end
 

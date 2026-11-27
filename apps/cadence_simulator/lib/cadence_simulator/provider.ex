@@ -14,6 +14,7 @@ defmodule CadenceSimulator.Provider do
     DeliveryProfiles,
     FaultProfile,
     Ids,
+    OpportunityGenerator,
     OrbitReadiness,
     RouteProfiles,
     ServiceProfiles,
@@ -229,7 +230,7 @@ defmodule CadenceSimulator.Provider do
         |> maybe_filter_by_ids(requested_spacecraft_ids)
 
       opportunities =
-        generate_opportunities(
+        OpportunityGenerator.generate(
           run,
           spacecraft,
           stations,
@@ -250,24 +251,10 @@ defmodule CadenceSimulator.Provider do
     end
   end
 
-  @doc "Rebuilds a synthetic offer from its exact spacecraft, station and possibly clipped window."
-  def restore_opportunity(run, spacecraft_number, station_number, start_unix, end_unix) do
-    scenario = run["scenario_snapshot"]
-    {cadence, duration, jitter} = pass_parameters(run)
-
-    with true <- spacecraft_number in 1..scenario["spacecraft_count"],
-         %{} = station <- Enum.at(scenario["ground_stations"], station_number),
-         true <- end_unix > start_unix and end_unix - start_unix <= duration,
-         spacecraft_id = configured_spacecraft_id(scenario, spacecraft_number),
-         offset = pass_offset(run, spacecraft_id, cadence, jitter),
-         true <- rem(start_unix - offset, cadence) == 0,
-         {:ok, starts_at} <- DateTime.from_unix(start_unix),
-         {:ok, ends_at} <- DateTime.from_unix(end_unix) do
-      {:ok, opportunity(run, spacecraft_id, station, start_unix, starts_at, ends_at)}
-    else
-      _invalid -> {:error, :not_found}
-    end
-  end
+  @doc "Rebuilds an offer from its exact spacecraft, station and possibly clipped window."
+  defdelegate restore_opportunity(run, spacecraft_number, station_number, start_unix, end_unix),
+    to: OpportunityGenerator,
+    as: :restore
 
   @spec reserve_contact(map(), binary() | nil) :: {:ok, map()} | {:error, term()}
   def reserve_contact(attrs, idempotency_key \\ nil) when is_map(attrs) do
@@ -360,77 +347,6 @@ defmodule CadenceSimulator.Provider do
 
   def terminal_reservation_status?(status), do: status in @terminal_reservation_states
 
-  defp generate_opportunities(run, spacecraft, stations, starts_at, ends_at, station_numbers?) do
-    {cadence, duration, jitter} = pass_parameters(run)
-    start_unix = DateTime.to_unix(starts_at)
-    end_unix = DateTime.to_unix(ends_at)
-
-    for craft <- spacecraft,
-        stations != [],
-        window_start <- opportunity_starts(run, craft, start_unix, end_unix, cadence, jitter),
-        {station, number} =
-          Enum.at(stations, rem(:erlang.phash2({craft["id"], window_start}), length(stations))),
-        window_end = min(window_start + duration, end_unix) do
-      offer =
-        opportunity(
-          run,
-          craft["id"],
-          station,
-          window_start,
-          DateTime.from_unix!(window_start),
-          DateTime.from_unix!(window_end)
-        )
-
-      if station_numbers?, do: Map.put(offer, "station_number", number), else: offer
-    end
-    |> Enum.sort_by(& &1["starts_at"])
-  end
-
-  defp opportunity(run, spacecraft_id, station, start_unix, starts_at, ends_at) do
-    antenna_index = rem(:erlang.phash2({start_unix, spacecraft_id}), station["antenna_count"])
-
-    %{
-      "id" =>
-        Ids.stable("opportunity", [
-          run["id"],
-          spacecraft_id,
-          station["id"],
-          Integer.to_string(start_unix)
-        ]),
-      "run_id" => run["id"],
-      "spacecraft_id" => spacecraft_id,
-      "ground_station_id" => station["id"],
-      "antenna_id" => "#{station["id"]}-antenna-#{antenna_index + 1}",
-      "starts_at" => DateTime.to_iso8601(starts_at),
-      "ends_at" => DateTime.to_iso8601(ends_at),
-      "synthetic" => true,
-      "model" => "deterministic_pass_v1"
-    }
-  end
-
-  defp pass_parameters(run) do
-    pass_model = run["scenario_snapshot"]["pass_model"]
-    speed = run["speed"]
-
-    {max(10, round(pass_model["cadence_seconds"] / speed)),
-     max(5, round(pass_model["duration_seconds"] / speed)),
-     max(0, round(pass_model["jitter_seconds"] / speed))}
-  end
-
-  defp opportunity_starts(run, craft, start_unix, end_unix, cadence, jitter) do
-    offset = pass_offset(run, craft["id"], cadence, jitter)
-    first = start_unix + rem(cadence - rem(start_unix - offset, cadence), cadence)
-
-    Stream.iterate(first, &(&1 + cadence))
-    |> Enum.take_while(&(&1 < end_unix))
-  end
-
-  defp pass_offset(run, spacecraft_id, cadence, jitter) do
-    base = rem(:erlang.phash2({run["seed"], spacecraft_id}), cadence)
-    variation = rem(:erlang.phash2({spacecraft_id, run["seed"], :jitter}), jitter * 2 + 1)
-    max(0, base + variation - jitter)
-  end
-
   defp spacecraft_inventory(scenario) do
     count = scenario["spacecraft_count"]
     prefix = scenario["spacecraft_prefix"] <> "-"
@@ -442,7 +358,8 @@ defmodule CadenceSimulator.Provider do
     end)
   end
 
-  defp configured_spacecraft_id(scenario, index) do
+  @doc false
+  def configured_spacecraft_id(scenario, index) do
     prefix = scenario["spacecraft_prefix"] <> "-"
     spacecraft_id(prefix, index, spacecraft_number_width(scenario["spacecraft_count"]))
   end
@@ -463,12 +380,18 @@ defmodule CadenceSimulator.Provider do
           "synthetic" => true
         }
         |> put_location(Map.get(station, "location"))
+        |> put_mask(Map.get(station, "elevation_mask_deg"))
       end)
 
-    if Enum.all?(normalized, &(&1["antenna_count"] > 0)) do
-      {:ok, normalized}
-    else
-      {:error, {:invalid, "antenna_count"}}
+    cond do
+      not Enum.all?(normalized, &(&1["antenna_count"] > 0)) ->
+        {:error, {:invalid, "antenna_count"}}
+
+      Enum.any?(normalized, &(&1["elevation_mask_deg"] == :invalid)) ->
+        {:error, {:invalid, "ground_stations.elevation_mask_deg"}}
+
+      true ->
+        {:ok, normalized}
     end
   rescue
     KeyError -> {:error, {:invalid, "ground_stations.id"}}
@@ -493,6 +416,15 @@ defmodule CadenceSimulator.Provider do
   end
 
   defp put_location(station, _location), do: station
+
+  # A station's elevation mask, 0 to 89.9° as Cadence's stations allow; absent means the 5°
+  # default. Anything else refuses the scenario.
+  defp put_mask(station, nil), do: station
+
+  defp put_mask(station, mask) when is_number(mask) and mask >= 0 and mask <= 89.9,
+    do: Map.put(station, "elevation_mask_deg", mask)
+
+  defp put_mask(station, _mask), do: Map.put(station, "elevation_mask_deg", :invalid)
 
   defp initial_reservation_status(run, attrs, starts_at, ends_at) do
     fault_profile = run["scenario_snapshot"]["fault_profile"]

@@ -526,7 +526,11 @@ Opportunity IDs are stable within an immutable run. An opportunity is still a
 proposal: successful search never guarantees successful reservation.
 
 The provider, not Cadence, owns ephemeris, station geometry, propagation, and
-visibility generation. Current readiness is repeated under each opportunity's
+visibility generation. An opportunity may report its pass geometry under `extensions`:
+`max_elevation_deg` (degrees) and `tca` (UTC time of closest approach). Cadence shows that as
+the provider's elevation. The simulator reports both for its pass-backed offers
+(`orbit_readiness.source_kind: "uploaded"`, model `sgp4_pass_v1`), and neither for synthetic
+ones. Current readiness is repeated under each opportunity's
 `extensions.orbit_readiness` and retained at page level for empty availability.
 Missing, expired, or processing orbit state returns `422 orbit_not_ready` with
 bounded readiness evidence. Cadence must distinguish that result from a

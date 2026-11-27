@@ -18,6 +18,7 @@ defmodule CadenceSimulator.Application do
   def children(%Configuration{} = configuration) do
     [
       CadenceSimulator.CatalogCache,
+      CadenceSimulator.Provider.PassCache,
       {DynamicSupervisor, strategy: :one_for_one, name: CadenceSimulator.RuntimeSupervisor},
       {Store, configuration.store},
       {Orchestrator, Configuration.orchestrator_options(configuration)}
