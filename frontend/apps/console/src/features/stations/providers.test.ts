@@ -26,6 +26,15 @@ const row = {
     validate: { status: "healthy", checked_at: "2026-11-13T02:10:00Z", error: null },
     sync: { status: null, checked_at: null, error: null },
   },
+  ephemeris: {
+    orbit_source: "accepts_ephemeris_upload" as const,
+    uploaded: 3,
+    failed: 0,
+    not_ready: 0,
+    pending: 1,
+    lookup: 0,
+    norad_id_missing: 0,
+  },
 };
 
 async function decoded(body: unknown) {

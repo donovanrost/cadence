@@ -4,6 +4,8 @@ import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
 import { ApButton, ApCallout, ApEmptyState, ApKeyValue, OutcomeCallout } from "@/ui";
 import type { MissionProvider } from "./api.ts";
+import EphemerisCounts from "./EphemerisCounts.vue";
+import { ephemerisSummary } from "./ephemeris.ts";
 import { membersQuery } from "./ephemerisMembers.ts";
 import EphemerisMembers from "./EphemerisMembers.vue";
 import ProviderArchive from "./ProviderArchive.vue";
@@ -59,6 +61,7 @@ const facts = (p: MissionProvider) => [
   { key: "validate", label: "Validated", value: healthLine(p.health.validate).text },
   { key: "sync", label: "Synced", value: healthLine(p.health.sync).text },
   { key: "grant", label: "Account grant", value: grantLine(p.grant).text },
+  { key: "orbits", label: "Orbits", value: ephemerisSummary(p.ephemeris).lead },
 ];
 </script>
 
@@ -77,6 +80,7 @@ const facts = (p: MissionProvider) => [
           grantLine(provider.grant).text
         }}</span>
       </template>
+      <template #value-orbits><EphemerisCounts :ephemeris="provider.ephemeris" /></template>
     </ApKeyValue>
     <ApCallout v-if="provider.grant?.state === 'revoked'" tone="crit">{{
       revokedSentence(provider.account?.name ?? null)

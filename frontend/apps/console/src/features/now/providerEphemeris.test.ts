@@ -149,5 +149,13 @@ describe("provider_ephemeris on Now (#972)", () => {
       expect(ephemerisReasonWords("failed", r)).not.toMatch(/not recognized/);
     for (const r of notReadyReasons)
       expect(ephemerisReasonWords("not_ready", r)).not.toMatch(/not recognized/);
+    // setup.md's closed lists, with #983's missing_downlink_path and #986's mission_provider_archived.
+    expect([failedReasons.length, notReadyReasons.length]).toEqual([16, 25]);
+    expect(ephemerisReasonWords("not_ready", "missing_downlink_path")).toBe(
+      "The route has no downlink path set up.",
+    );
+    expect(ephemerisReasonWords("not_ready", "mission_provider_archived")).toBe(
+      "The provider is archived.",
+    );
   });
 });
