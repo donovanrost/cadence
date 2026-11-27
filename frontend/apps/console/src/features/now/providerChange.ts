@@ -96,6 +96,10 @@ export function changeTitle(a: Attention, now: Date): string {
     case "listener_refusal":
     case "outcome_unknown":
     case "replay_id_conflict":
+    // provider_ephemeris (#972) words its own row.
+    case "norad_id_missing":
+    case "failed":
+    case "not_ready":
     case null:
     default:
       return `${provider} wants to change ${pass}`;

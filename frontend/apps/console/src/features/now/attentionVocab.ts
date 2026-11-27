@@ -33,6 +33,8 @@ export const attentionSources = [
   "replay_conflict",
   // U109 (E2, #546): a craft on a composition that's no longer approved.
   "model_approval_withdrawn",
+  // #972: a provider that can't use some spacecraft's current orbit, one item per cause.
+  "provider_ephemeris",
 ] as const;
 /** pass_resolution conflicts (ops.md §attention). */
 export const attentionConflicts = [
@@ -65,6 +67,10 @@ export const attentionConflicts = [
   "outcome_unknown",
   // replay_conflict (U84): one item per stuck unit.
   "replay_id_conflict",
+  // provider_ephemeris (#972): no NORAD id · upload failing · no ready route.
+  "norad_id_missing",
+  "failed",
+  "not_ready",
 ] as const;
 /** U50 listener_refusal: why the shared listener refused the last connection. */
 export const listenerRefusals = [
