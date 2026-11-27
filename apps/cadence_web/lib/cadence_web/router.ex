@@ -445,6 +445,12 @@ defmodule CadenceWeb.Router do
       # #847: before :spacecraft_id, so "names" isn't read as an id.
       get("/spacecraft/names", SpacecraftController, :names)
       get("/spacecraft/:spacecraft_id", SpacecraftDetailController, :show)
+
+      # #889 (slice 1 of #732): orbits as SGP4 element sets. Contract: docs/apogee/api/element-sets.md
+      post("/element-sets", ElementSetController, :bulk)
+      get("/spacecraft/:spacecraft_id/element-sets", ElementSetController, :index)
+      post("/spacecraft/:spacecraft_id/element-sets", ElementSetController, :create)
+      get("/spacecraft/:spacecraft_id/element-sets/current", ElementSetController, :current)
       get("/spacecraft/:spacecraft_id/source-endpoints", SourceEndpointController, :index)
       post("/spacecraft/:spacecraft_id/source-endpoints", SourceEndpointController, :create)
       get("/source-endpoints", SourceEndpointController, :index)
