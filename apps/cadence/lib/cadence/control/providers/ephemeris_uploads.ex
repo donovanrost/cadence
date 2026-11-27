@@ -195,17 +195,20 @@ defmodule Cadence.Control.Providers.EphemerisUploads do
   defp refusal({:error, reason}) when is_atom(reason), do: Atom.to_string(reason)
   defp refusal(_none), do: "no_ready_route"
 
-  # Records the version the routing rules bind alongside the one used, and re-checks a pair
-  # uploaded through a lower version than they bind.
+  # Records the version the routing rules bind alongside the one used, and re-checks any outcome
+  # reached through a lower version than they bind (uploaded, lookup or norad_id_missing alike),
+  # so the pair moves to the bound version once its route is ready. A failed or not_ready state
+  # keeps its own retry time.
   defp bound_to(state, nil, _now),
     do: Map.put(state, :bound_provider_version, state.provider_version)
 
   defp bound_to(state, basis, now) do
     state = Map.put(state, :bound_provider_version, basis.provider_version)
 
-    if state.status == "uploaded" and state.provider_version < basis.provider_version,
-      do: Map.put(state, :next_retry_at, DateTime.add(now, @recheck_minutes * 60)),
-      else: state
+    if state.provider_version < basis.provider_version and
+         Map.get(state, :next_retry_at) == nil,
+       do: Map.put(state, :next_retry_at, DateTime.add(now, @recheck_minutes * 60)),
+       else: state
   end
 
   # One binding per (provider, spacecraft): every ready route a spacecraft has to a provider

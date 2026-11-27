@@ -6,8 +6,9 @@ defmodule Cadence.Repo.Migrations.EphemerisStatesNotReady do
   # reconcile, and is re-checked from `next_retry_at`. `bound_provider_version` is the version the
   # routing rules pin (what the reconcile query reads), kept apart from `provider_version`, the
   # version the run actually used (a lower one whose route is ready, when the highest isn't).
-  # Any status may now carry a re-check time except the two lookup ones, so the due index covers
-  # every row that has one.
+  # Any status may now carry a re-check time; the two lookup ones only when they were reached
+  # through a lower version than the rules bind (re-checked until the bound version is ready).
+  # The due index covers every row that has one.
   def up do
     alter table(:provider_ephemeris_states) do
       add(:bound_provider_version, :integer)
@@ -34,7 +35,8 @@ defmodule Cadence.Repo.Migrations.EphemerisStatesNotReady do
       constraint(:provider_ephemeris_states, :provider_ephemeris_states_retry,
         check: """
         (status NOT IN ('failed', 'not_ready') OR next_retry_at IS NOT NULL) AND
-        (status NOT IN ('lookup', 'norad_id_missing') OR next_retry_at IS NULL)
+        (status NOT IN ('lookup', 'norad_id_missing') OR next_retry_at IS NULL
+          OR provider_version < bound_provider_version)
         """
       )
     )

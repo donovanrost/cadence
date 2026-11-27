@@ -116,6 +116,37 @@ defmodule Cadence.Control.Providers.EphemerisNotReadyTest do
     assert %{provider_version: ^v2, bound_provider_version: ^v2, next_retry_at: nil} = state(c)
   end
 
+  test "lookup through a ready v1 while v2 uploads but isn't ready: re-checked, then uploaded",
+       c do
+    # v1 looks orbits up (the fixture's default capabilities); v2 accepts uploads.
+    v2 = c.provider.version + 1
+    new_version!(c, Map.put(capabilities(), "orbit", %{"source" => "accepts_ephemeris_upload"}))
+    pin_second_transport!(c, v2)
+    validated!(c, v2, nil)
+
+    {:ok, _results} = submit(c, norad: 25_544)
+    clear_jobs!(c)
+
+    assert {:ok, %{"lookup" => 1}} = run(c)
+    refute_received {:uploaded, _ref, _ephemeris}
+
+    assert %{
+             status: "lookup",
+             provider_version: v1,
+             bound_provider_version: ^v2,
+             next_retry_at: %DateTime{}
+           } = state(c)
+
+    assert v1 == c.provider.version
+    assert EphemerisUploads.reconcile() == 0
+
+    validated!(c, v2, now())
+    assert EphemerisUploads.retry_due(DateTime.add(now(), 3_600)) == 1
+    assert {:ok, %{"uploaded" => 1}} = run(c, pairs: [{c.sc, c.provider.provider_id}])
+    assert_received {:uploaded, "SIM-001", _ephemeris}
+    assert %{status: "uploaded", provider_version: ^v2, next_retry_at: nil} = state(c)
+  end
+
   test "the buckets add up with not_ready among them", c do
     upload_provider!(c)
     second = second_bound_spacecraft!(c)
