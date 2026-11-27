@@ -15,8 +15,11 @@ defmodule Cadence.GroundNetworks.EphemerisStateRow do
     field(:provider_version, :integer)
     field(:bound_provider_version, :integer)
     field(:attempts, :integer, default: 0)
+    # A closed code only (`EphemerisReasons`), never a provider's own text (#972).
     field(:reason, :string)
     field(:next_retry_at, :utc_datetime_usec)
+    # When the pair entered its current outcome (#972).
+    field(:outcome_since, :utc_datetime_usec)
     field(:updated_at, :utc_datetime_usec)
   end
 end

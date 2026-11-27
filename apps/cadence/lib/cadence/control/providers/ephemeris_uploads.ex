@@ -29,7 +29,8 @@ defmodule Cadence.Control.Providers.EphemerisUploads do
 
   alias Cadence.Contacts.ProviderScheduling
   alias Cadence.Control.Providers
-  alias Cadence.GroundNetworks.{ElementSets, EphemerisStates, ProviderError}
+  alias Cadence.Control.Providers.EphemerisUploads.Outcomes
+  alias Cadence.GroundNetworks.{ElementSets, EphemerisReasons, EphemerisStates}
   alias Cadence.GroundNetworks.ElementSets.OmmDocument
   alias Cadence.Jobs
   alias Cadence.Jobs.OpenMissions
@@ -98,8 +99,12 @@ defmodule Cadence.Control.Providers.EphemerisUploads do
             not_ready_state(provider_id, Map.fetch!(sets, spacecraft_id), basis, routes, now)
           end)
 
+      states = Enum.map(states, &Outcomes.since(&1, previous, now))
       :ok = EphemerisStates.put_all(organization_id, mission_id, states, now)
-      if Enum.any?(states, &changed?(&1, previous)), do: published(organization_id, mission_id)
+
+      if Enum.any?(states, &Outcomes.changed?(&1, previous)),
+        do: published(organization_id, mission_id)
+
       {:ok, Enum.frequencies_by(states, & &1.status)}
     end
   end
@@ -165,24 +170,6 @@ defmodule Cadence.Control.Providers.EphemerisUploads do
     DateTime.add(now, minutes * 60)
   end
 
-  # What the providers read and the provider_ephemeris findings show of a state; a run that
-  # changes none of it for any pair publishes nothing (a refreshed retry time alone is no change).
-  @shown [
-    :status,
-    :element_set_id,
-    :provider_version,
-    :bound_provider_version,
-    :provider_spacecraft_ref,
-    :reason
-  ]
-
-  defp changed?(state, previous) do
-    case Map.get(previous, {state.provider_id, state.spacecraft_id}) do
-      nil -> true
-      prior -> Map.take(prior, @shown) != Map.new(@shown, &{&1, Map.get(state, &1)})
-    end
-  end
-
   # After the states are stored (outside any transaction): the providers read's `ephemeris` and
   # the `provider_ephemeris` attention items both derive from them (#972).
   defp published(organization_id, mission_id) do
@@ -226,11 +213,13 @@ defmodule Cadence.Control.Providers.EphemerisUploads do
 
     findings
     |> Enum.filter(&MapSet.member?(rules, &1[:resource_id]))
-    |> Enum.map(&to_string(&1.code))
+    |> Enum.map(&EphemerisReasons.not_ready_code(&1.code))
     |> Enum.min(fn -> "no_ready_route" end)
   end
 
-  def refusal({:error, reason}, _rule_ids) when is_atom(reason), do: Atom.to_string(reason)
+  def refusal({:error, reason}, _rule_ids) when is_atom(reason),
+    do: EphemerisReasons.not_ready_code(reason)
+
   def refusal(_none, _rule_ids), do: "no_ready_route"
 
   # Records the version the routing rules bind alongside the one used, and re-checks any outcome
@@ -347,27 +336,19 @@ defmodule Cadence.Control.Providers.EphemerisUploads do
           1
       end
 
+    code = EphemerisReasons.failed_code(reason)
+
     Logger.warning("Ephemeris upload failed; retrying",
       cadence_event: "ephemeris_upload.failed",
-      error_class: reason_class(reason)
+      error_class: code
     )
 
+    # Only the closed code is stored: a provider's own text can carry evidence (#972).
     Map.merge(base, %{
       status: "failed",
       attempts: attempts,
-      reason: reason_text(reason),
+      reason: code,
       next_retry_at: next_retry_at(now, attempts)
     })
   end
-
-  defp reason_class(%ProviderError{category: category}), do: "provider_#{category}"
-  defp reason_class(reason) when is_atom(reason), do: Atom.to_string(reason)
-  defp reason_class(_reason), do: "other"
-
-  # What an operator reads: never the provider's raw evidence.
-  defp reason_text(%ProviderError{category: category, detail: detail}),
-    do: "#{category}: #{detail}"
-
-  defp reason_text(reason) when is_atom(reason), do: Atom.to_string(reason)
-  defp reason_text(_reason), do: "upload_failed"
 end

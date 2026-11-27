@@ -113,6 +113,7 @@ defmodule Cadence.Control.Providers.MissionProviderWrites do
         scope
         |> Providers.archive_provider(mission_id, provider_id, reason)
         |> providers_changed(scope, mission_id)
+        |> attention_changed(scope, mission_id)
     end
   end
 
@@ -158,6 +159,14 @@ defmodule Cadence.Control.Providers.MissionProviderWrites do
   end
 
   defp providers_changed(result, _scope, _mission_id), do: result
+
+  # An archived provider leaves the ephemeris findings (`provider_ephemeris`), so Now refetches.
+  defp attention_changed({:ok, _provider} = result, scope, mission_id) do
+    ScopedReadUpdates.publish(:attention_changed, scope.organization_id, mission_id)
+    result
+  end
+
+  defp attention_changed(result, _scope, _mission_id), do: result
 
   defp authorize(scope, mission_id),
     do:

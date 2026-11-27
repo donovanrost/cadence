@@ -7,7 +7,7 @@ defmodule CadenceWeb.Console.ProviderEphemerisController do
 
   use CadenceWeb, :controller
 
-  alias Cadence.GroundNetworks.{EphemerisFindings, MissionProviders}
+  alias Cadence.GroundNetworks.{EphemerisFindings, EphemerisReasons, MissionProviders}
   alias Cadence.SpacecraftStore
   alias CadenceWeb.Console.Problem
 
@@ -17,7 +17,7 @@ defmodule CadenceWeb.Console.ProviderEphemerisController do
          {:ok, limit} <- limit(params["limit"]),
          {:ok, _provider} <-
            MissionProviders.fetch_provider(org(conn), mission(conn), provider_id),
-         group = %{provider_id: provider_id, cause: cause, reason: params["reason"]},
+         group = %{provider_id: provider_id, cause: cause, reason: blank(params["reason"])},
          {:ok, page} <-
            EphemerisFindings.members(org(conn), mission(conn), group,
              after: params["cursor"],
@@ -30,7 +30,7 @@ defmodule CadenceWeb.Console.ProviderEphemerisController do
              Enum.map(page.members, & &1.spacecraft_id)
            ) do
       json(conn, %{
-        data: Enum.map(page.members, &member(&1, craft)),
+        data: Enum.map(page.members, &member(&1, cause, craft)),
         meta: %{next_cursor: page.next_cursor}
       })
     else
@@ -60,7 +60,11 @@ defmodule CadenceWeb.Console.ProviderEphemerisController do
     end
   end
 
-  defp member(member, craft) do
+  defp blank(value) when value in [nil, ""], do: nil
+  defp blank(value), do: value
+
+  # `detail` is the fixed sentence for the closed code (`EphemerisReasons`), never provider text.
+  defp member(member, cause, craft) do
     spacecraft = Map.get(craft, member.spacecraft_id)
 
     %{
@@ -70,6 +74,7 @@ defmodule CadenceWeb.Console.ProviderEphemerisController do
         scid: spacecraft && spacecraft.scid
       },
       reason: member.reason,
+      detail: EphemerisReasons.detail(cause, member.reason),
       attempts: member.attempts,
       next_retry_at: member.next_retry_at,
       since: member.since

@@ -12,7 +12,16 @@ defmodule Cadence.GroundNetworks.EphemerisFindingsTest do
 
   alias Cadence.Control.Providers.EphemerisUploads
   alias Cadence.EphemerisUploadFixtures.UploadClient
-  alias Cadence.GroundNetworks.{ElementSets, EphemerisFindings}
+  alias Cadence.GroundNetworks
+
+  alias Cadence.GroundNetworks.{
+    ElementSets,
+    EphemerisFindings,
+    EphemerisStateRow,
+    EphemerisStates,
+    ProviderError
+  }
+
   alias Cadence.GroundNetworks.MissionProviders.ProviderRow, as: MissionProviderRow
   alias Cadence.Platform.ScopedReadUpdates
   alias Cadence.Reads.ProviderEphemerisAttention
@@ -55,25 +64,73 @@ defmodule Cadence.GroundNetworks.EphemerisFindingsTest do
     assert EphemerisFindings.groups(c.org, c.mission) == []
   end
 
-  test "a failing upload is one group per provider with its retry; members carry the reason",
-       c do
+  test "failed groups by closed code, filters by it, and never stores the provider's text", c do
     upload_provider!(c)
+    second = second_bound_spacecraft!(c)
     {:ok, _results} = submit(c, norad: 25_544)
+    submit_for!(c, second)
     clear_jobs!(c)
-    {:ok, %{"failed" => 1}} = run(c, upload_result: {:error, :econnrefused})
 
-    assert [%{cause: "failed", spacecraft_count: 1, next_retry_at: %DateTime{} = retry}] =
-             EphemerisFindings.groups(c.org, c.mission)
+    unreachable = %ProviderError{category: :provider_unavailable, detail: "secret-evidence-123"}
+    refused = %ProviderError{category: :invalid_request, detail: "secret-evidence-456"}
+    {:ok, %{"failed" => 1}} = run(c, upload_result: {:error, unreachable})
+    {:ok, %{"failed" => 1}} = run_for(c, [second], upload_result: {:error, refused})
 
-    group = %{provider_id: c.provider.provider_id, cause: "failed"}
+    assert [
+             %{cause: "failed", reason: "provider_invalid_request", spacecraft_ids: [^second]},
+             %{cause: "failed", reason: "provider_unavailable", next_retry_at: %DateTime{}}
+           ] = EphemerisFindings.groups(c.org, c.mission)
 
-    assert {:ok, %{members: [member], next_cursor: nil}} =
+    provider = c.provider.provider_id
+
+    assert [
+             "#{provider}:failed:provider_invalid_request",
+             "#{provider}:failed:provider_unavailable"
+           ] ==
+             c.org |> ProviderEphemerisAttention.items(c.mission) |> Enum.map(& &1.id)
+
+    group = %{provider_id: provider, cause: "failed", reason: "provider_unavailable"}
+
+    assert {:ok, %{members: [%{spacecraft_id: sc, reason: "provider_unavailable", attempts: 1}]}} =
              EphemerisFindings.members(c.org, c.mission, group, [])
 
-    assert %{reason: "econnrefused", attempts: 1, next_retry_at: ^retry} = member
+    assert sc == c.sc
+
+    # Without a reason: every failed member, across codes, by spacecraft id.
+    assert {:ok, %{members: all}} =
+             EphemerisFindings.members(c.org, c.mission, %{group | reason: nil}, [])
+
+    assert Enum.map(all, & &1.spacecraft_id) == Enum.sort([c.sc, second])
+
+    # The provider's own text is never stored, so no read can return it.
+    stored = Repo.all(from(row in EphemerisStateRow, select: row.reason))
+    assert Enum.sort(stored) == ["provider_invalid_request", "provider_unavailable"]
+    refute inspect(ProviderEphemerisAttention.items(c.org, c.mission)) =~ "secret-evidence"
 
     {:ok, %{"uploaded" => 1}} = run(c)
-    assert EphemerisFindings.groups(c.org, c.mission) == []
+    assert [%{reason: "provider_invalid_request"}] = EphemerisFindings.groups(c.org, c.mission)
+  end
+
+  test "since is when the pair entered its outcome: kept by a re-check, reset by a change", c do
+    unvalidated!(c)
+    {:ok, _results} = submit(c, norad: 25_544)
+    clear_jobs!(c)
+
+    t0 = now()
+    {:ok, %{"not_ready" => 1}} = run_for(c, [c.sc], now: t0)
+    assert [%{since: ^t0}] = EphemerisFindings.groups(c.org, c.mission)
+
+    # The hourly re-check records the same outcome: since stays, though updated_at moves.
+    later = DateTime.add(t0, 3_600)
+    {:ok, %{"not_ready" => 1}} = run_for(c, [c.sc], now: later)
+    assert [%{since: ^t0}] = EphemerisFindings.groups(c.org, c.mission)
+    assert %{outcome_since: ^t0, updated_at: ^later} = state(c)
+
+    # The route becomes ready: a new outcome, a new since.
+    validated!(c)
+    ready_at = DateTime.add(t0, 7_200)
+    {:ok, %{"lookup" => 1}} = run_for(c, [c.sc], now: ready_at)
+    assert %{status: "lookup", outcome_since: ^ready_at} = state(c)
   end
 
   test "not_ready groups by refusal reason and pages its spacecraft", c do
@@ -83,12 +140,7 @@ defmodule Cadence.GroundNetworks.EphemerisFindingsTest do
     submit_for!(c, second)
     clear_jobs!(c)
 
-    {:ok, %{"not_ready" => 2}} =
-      EphemerisUploads.run(c.org, c.mission, [c.sc, second],
-        now: now(),
-        client: UploadClient,
-        test_pid: self()
-      )
+    {:ok, %{"not_ready" => 2}} = run_for(c, [c.sc, second])
 
     assert [%{cause: "not_ready", reason: reason, spacecraft_count: 2, spacecraft_ids: ids}] =
              EphemerisFindings.groups(c.org, c.mission)
@@ -131,14 +183,61 @@ defmodule Cadence.GroundNetworks.EphemerisFindingsTest do
     refute_receive {:attention_changed, _org, _mission}, 50
   end
 
-  defp unvalidated!(c) do
+  test "two failed runs in a row both publish: attempts and the retry time are shown", c do
+    ScopedReadUpdates.subscribe(:providers_changed, c.org, c.mission)
+    ScopedReadUpdates.subscribe(:attention_changed, c.org, c.mission)
+    upload_provider!(c)
+    {:ok, _results} = submit(c, norad: 25_544)
+    clear_jobs!(c)
+    failure = {:error, %ProviderError{category: :provider_unavailable, detail: "down"}}
+
+    {:ok, %{"failed" => 1}} = run_for(c, [c.sc], upload_result: failure)
+    assert %{attempts: 1, next_retry_at: first} = state(c)
+    assert_receive {:providers_changed, _org, _mission}
+    assert_receive {:attention_changed, _org, _mission}
+
+    {:ok, %{"failed" => 1}} = run_for(c, [c.sc], upload_result: failure)
+    assert %{attempts: 2, next_retry_at: second} = state(c)
+    assert DateTime.after?(second, first)
+    assert_receive {:providers_changed, _org, _mission}
+    assert_receive {:attention_changed, _org, _mission}
+  end
+
+  test "an archived provider leaves the findings, the counts and the reconcile", c do
+    {:ok, _results} = submit(c, [])
+    clear_jobs!(c)
+    {:ok, %{"norad_id_missing" => 1}} = run(c)
+    assert [_group] = EphemerisFindings.groups(c.org, c.mission)
+
+    # A newer set makes the pair pending again, which the reconcile would stage.
+    {:ok, _results} = submit(c, hours_ago: 0)
+    clear_jobs!(c)
+    assert Enum.any?(EphemerisStates.pending(5_000), &(elem(&1, 1) == c.mission))
+
+    # Archiving adds a newer, archived version; the transport still pins the active one.
+    {:ok, _archived} = GroundNetworks.archive_provider(c.org, c.mission, c.provider.provider_id)
+
+    assert EphemerisFindings.groups(c.org, c.mission) == []
+    assert EphemerisStates.buckets(c.org, c.mission) == %{}
+    refute Enum.any?(EphemerisStates.pending(5_000), &(elem(&1, 1) == c.mission))
+  end
+
+  defp run_for(c, spacecraft_ids, opts \\ []) do
+    opts = Keyword.merge([now: now(), client: UploadClient, test_pid: self()], opts)
+    EphemerisUploads.run(c.org, c.mission, spacecraft_ids, opts)
+  end
+
+  defp validated!(c), do: set_validated!(c, now())
+  defp unvalidated!(c), do: set_validated!(c, nil)
+
+  defp set_validated!(c, at) do
     {1, _rows} =
       from(row in MissionProviderRow,
         where:
           row.organization_id == ^c.org and row.mission_id == ^c.mission and
             row.provider_id == ^c.provider.provider_id and row.version == ^c.provider.version
       )
-      |> Repo.update_all(set: [last_validated_at: nil])
+      |> Repo.update_all(set: [last_validated_at: at])
   end
 
   defp submit_for!(c, spacecraft_id) do

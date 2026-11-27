@@ -7,9 +7,12 @@ defmodule Cadence.GroundNetworks.EphemerisFindings do
     * `norad_id_missing`: a lookup provider can't find the spacecraft, because its current element
       set carries no NORAD id. One group per provider.
     * `failed`: the latest upload of the current set failed and is retried with backoff. One
-      group per provider; each spacecraft's own reason is on its member row.
+      group per provider and failure code.
     * `not_ready`: a routing rule binds the spacecraft to the provider, but no route is ready. One
-      group per provider and refusal reason (a `ProviderScheduling` code).
+      group per provider and refusal code.
+
+  Reasons are closed codes (`EphemerisReasons`), never a provider's own text. `since` is when
+  the pair entered its current outcome (`outcome_since`), not its last re-check.
 
   `groups/2` is one grouped query per mission; `members/4` pages a group's spacecraft by id. A
   group clears by itself once no pair is in it.
@@ -19,6 +22,7 @@ defmodule Cadence.GroundNetworks.EphemerisFindings do
   alias Cadence.Repo
 
   @causes ~w(norad_id_missing failed not_ready)
+  @coded ~w(failed not_ready)
   @sample 10
   @max_limit 200
 
@@ -39,7 +43,7 @@ defmodule Cadence.GroundNetworks.EphemerisFindings do
   @doc """
   The mission's groups (one query), ordered by provider, cause and reason. `spacecraft_ids` is a
   sample of at most #{@sample}, by id; `spacecraft_count` is the whole group. `since` is the
-  earliest time a member's outcome was recorded, and `next_retry_at` the earliest retry
+  earliest time a member entered this outcome, and `next_retry_at` the earliest retry
   (`failed` and `not_ready` only).
   """
   @spec groups(binary(), binary()) :: [group()]
@@ -49,7 +53,7 @@ defmodule Cadence.GroundNetworks.EphemerisFindings do
         """
         SELECT provider_id, bucket, #{reason_sql()} AS reason, count(*),
           (array_agg(spacecraft_id ORDER BY spacecraft_id))[1:#{@sample}],
-          min(state_updated_at), min(state_next_retry_at)
+          min(state_outcome_since), min(state_next_retry_at)
         FROM pairs
         WHERE bucket = ANY($3::text[])
         GROUP BY 1, 2, 3
@@ -73,10 +77,12 @@ defmodule Cadence.GroundNetworks.EphemerisFindings do
   end
 
   @doc """
-  One page of a group's spacecraft, by id: `{:ok, %{members, next_cursor}}`. `group` is
-  `%{provider_id, cause, reason}` (`reason` only for `not_ready`); `opts`: `:after` (the last id of
-  the page before) and `:limit` (1 to #{@max_limit}, default 50). Each member is `%{spacecraft_id,
-  reason, attempts, next_retry_at, since}` as its recorded outcome holds them.
+  One page of a cause's spacecraft, by id: `{:ok, %{members, next_cursor}}`. `group` is
+  `%{provider_id, cause, reason}`: `reason` narrows `failed` or `not_ready` to one code, and nil
+  lists every member of the cause across codes. `opts`: `:after` (the last id of the page
+  before) and `:limit` (1 to #{@max_limit}, default 50). Each member is `%{spacecraft_id, reason,
+  attempts, next_retry_at, since}` as its recorded outcome holds them: `reason` a closed code,
+  `since` when it entered this outcome.
   """
   @spec members(binary(), binary(), map(), keyword()) ::
           {:ok, %{members: [map()], next_cursor: binary() | nil}} | {:error, :unknown_cause}
@@ -92,9 +98,10 @@ defmodule Cadence.GroundNetworks.EphemerisFindings do
     sql =
       EphemerisStates.pairs_sql(:mission) <>
         """
-        SELECT spacecraft_id, state_reason, state_attempts, state_next_retry_at, state_updated_at
+        SELECT spacecraft_id, #{reason_sql()}, state_attempts, state_next_retry_at,
+          state_outcome_since
         FROM pairs
-        WHERE provider_id = $3 AND bucket = $4 AND #{reason_sql()} = $5
+        WHERE provider_id = $3 AND bucket = $4 AND ($5::text IS NULL OR #{reason_sql()} = $5)
           AND spacecraft_id > $6
         ORDER BY spacecraft_id
         LIMIT $7
@@ -105,7 +112,7 @@ defmodule Cadence.GroundNetworks.EphemerisFindings do
       mission_id,
       provider_id,
       cause,
-      if(cause == "not_ready", do: Map.get(group, :reason) || "", else: ""),
+      if(cause in @coded, do: Map.get(group, :reason)),
       Keyword.get(opts, :after) || "",
       limit + 1
     ]
@@ -117,7 +124,7 @@ defmodule Cadence.GroundNetworks.EphemerisFindings do
       Enum.map(page, fn [spacecraft_id, reason, attempts, retry, since] ->
         %{
           spacecraft_id: spacecraft_id,
-          reason: reason,
+          reason: blank_to_nil(reason),
           attempts: attempts,
           next_retry_at: utc(retry),
           since: utc(since)
@@ -130,9 +137,9 @@ defmodule Cadence.GroundNetworks.EphemerisFindings do
 
   def members(_organization_id, _mission_id, _group, _opts), do: {:error, :unknown_cause}
 
-  # A not_ready group is per refusal reason; failed and norad_id_missing groups are per provider.
+  # failed and not_ready groups are per closed reason code; norad_id_missing is per provider.
   defp reason_sql,
-    do: "CASE WHEN bucket = 'not_ready' THEN coalesce(state_reason, '') ELSE '' END"
+    do: "CASE WHEN bucket IN ('failed', 'not_ready') THEN coalesce(state_reason, '') ELSE '' END"
 
   defp blank_to_nil(""), do: nil
   defp blank_to_nil(reason), do: reason

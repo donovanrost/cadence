@@ -8,6 +8,9 @@ defmodule CadenceWeb.Console.ProviderEphemerisAPITest do
 
   import Cadence.EphemerisUploadFixtures
 
+  alias Cadence.GroundNetworks
+  alias Cadence.GroundNetworks.ProviderError
+  alias Cadence.Reads.ProviderEphemerisAttention
   alias CadenceWeb.Console.MissionChannel
   alias CadenceWeb.TestFixtures
 
@@ -33,6 +36,7 @@ defmodule CadenceWeb.Console.ProviderEphemerisAPITest do
     assert %{
              "spacecraft" => %{"id" => id, "name" => name, "scid" => scid},
              "reason" => nil,
+             "detail" => nil,
              "attempts" => 0,
              "next_retry_at" => nil,
              "since" => since
@@ -44,6 +48,46 @@ defmodule CadenceWeb.Console.ProviderEphemerisAPITest do
 
     assert %{"data" => []} =
              c |> get_page(%{"cause" => "failed"}) |> json_response(200)
+  end
+
+  test "a failure reads as its closed code and fixed sentence; provider text never appears", c do
+    upload_provider!(c)
+    {:ok, _results} = submit(c, norad: 25_544)
+    clear_jobs!(c)
+    marker = "secret-evidence-123"
+    error = %ProviderError{category: :provider_unavailable, detail: marker, evidence: marker}
+    {:ok, %{"failed" => 1}} = run(c, upload_result: {:error, error})
+
+    page = get_page(c, %{"cause" => "failed", "reason" => "provider_unavailable"})
+
+    assert %{
+             "data" => [
+               %{
+                 "reason" => "provider_unavailable",
+                 "detail" => "The provider couldn't be reached.",
+                 "attempts" => 1
+               }
+             ]
+           } = json_response(page, 200)
+
+    refute page.resp_body =~ marker
+
+    assert %{"data" => [_member]} =
+             c |> get_page(%{"cause" => "failed"}) |> json_response(200)
+
+    assert %{"data" => []} =
+             c
+             |> get_page(%{"cause" => "failed", "reason" => "provider_timeout"})
+             |> json_response(200)
+
+    providers =
+      c.user
+      |> TestFixtures.member_conn()
+      |> get("/api/v1/missions/#{c.mission}/providers")
+
+    assert json_response(providers, 200)
+    refute providers.resp_body =~ marker
+    refute inspect(ProviderEphemerisAttention.items(c.org, c.mission)) =~ marker
   end
 
   test "an unknown cause or limit is refused by name; an unknown provider is 404", c do
@@ -60,6 +104,21 @@ defmodule CadenceWeb.Console.ProviderEphemerisAPITest do
                "cause" => "failed"
              })
              |> json_response(404)
+  end
+
+  test "an archived provider's group is gone and its member list is 404", c do
+    {:ok, _results} = submit(c, [])
+    clear_jobs!(c)
+    {:ok, %{"norad_id_missing" => 1}} = run(c)
+    assert [_item] = ProviderEphemerisAttention.items(c.org, c.mission)
+
+    {:ok, _archived} =
+      GroundNetworks.archive_provider(c.org, c.mission, c.provider.provider_id)
+
+    assert ProviderEphemerisAttention.items(c.org, c.mission) == []
+
+    assert %{"error" => %{"code" => "provider_not_found"}} =
+             c |> get_page(%{"cause" => "norad_id_missing"}) |> json_response(404)
   end
 
   test "the mission channel carries a providers read-update resource" do

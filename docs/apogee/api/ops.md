@@ -432,27 +432,33 @@ Every item has every field; fields that don't apply to its `kind` are `null` (or
   - **`provider_ephemeris`** (#972, pass prediction #732): a provider that can't use some
     spacecraft's current orbit, grouped by cause. One item per group, never per spacecraft.
     - `attention.conflict` is the cause:
-      - `norad_id_missing`: a lookup provider, whose current element set has no NORAD id.
-      - `failed`: an upload provider, whose latest upload is failing and being retried.
+      - `norad_id_missing`: a lookup provider, whose current element set has no NORAD id. One
+        group per provider.
+      - `failed`: an upload provider, whose latest upload is failing and being retried. One
+        group per provider and failure `reason` code.
       - `not_ready`: a routing rule binds the spacecraft to the provider, but no route to it is
-        ready. These are grouped per refusal `reason`, a scheduling code such as
-        `mission_provider_not_validated`, or `no_ready_route`.
-    - `id`: `attention:provider_ephemeris:<provider_id>:<conflict>`, and for `not_ready`
+        ready. One group per provider and refusal `reason` code.
+      - The `reason` codes are closed lists in setup.md (provider ephemeris spacecraft). A
+        provider's own text is never stored or shown.
+    - `id`: `attention:provider_ephemeris:<provider_id>:norad_id_missing`,
+      `attention:provider_ephemeris:<provider_id>:failed:<reason>` or
       `attention:provider_ephemeris:<provider_id>:not_ready:<reason>`.
-    - **P2** (`caution`), `due_at` null, `since` the earliest time a member's outcome was
-      recorded, `count` 1.
+    - **P2** (`caution`), `due_at` null, `count` 1.
+    - `since` is when the group's earliest member **entered** this outcome. A re-check or retry
+      that finds the same outcome keeps it, so a provider stuck for three days reads three days.
     - `spacecraft`: a sample of up to 10 members, by id.
     - `attention.provider` names the provider. `attention` adds:
       - `spacecraft_count`, the whole group;
-      - `reason`, `not_ready` only, else `null`;
+      - `reason`, the closed code for `failed` and `not_ready`, else `null`;
       - `next_retry_at`, the earliest retry or re-check, `null` for `norad_id_missing`.
-    - The whole list, with each spacecraft's own reason and retry, is
+    - The whole list, with each spacecraft's code, fixed sentence and retry, is
       `GET /providers/:provider_id/ephemeris/spacecraft?cause=<conflict>[&reason=]` (setup.md).
     - Derived on every read, from the same recorded outcomes as the providers read's
       `ephemeris` buckets. There's nothing to acknowledge, and an item leaves when its group is
-      empty, so it never appears in `resolved`.
-    - Refetch on `invalidate` with `attention`: an ephemeris upload run publishes it, with
-      `providers`, when any outcome changed.
+      empty, so it never appears in `resolved`. An archived provider raises none.
+    - Refetch on `invalidate` with `attention`. An ephemeris upload run publishes it, with
+      `providers`, when anything these items show changed (retries included). Archiving a
+      provider publishes both too.
 - **`missed_pass` and `station` items** (§8; U11 amended by U35).
   - `missed_pass`: one row per spacecraft with a pass result `missed` or `failed` (S9) whose
     planned AOS falls within `failure_lookback_s`.

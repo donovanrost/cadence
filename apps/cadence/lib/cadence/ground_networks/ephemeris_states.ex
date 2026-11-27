@@ -71,6 +71,7 @@ defmodule Cadence.GroundNetworks.EphemerisStates do
           attempts: Map.get(state, :attempts, 0),
           reason: Map.get(state, :reason),
           next_retry_at: Map.get(state, :next_retry_at),
+          outcome_since: Map.get(state, :outcome_since, now),
           updated_at: now
         }
       end)
@@ -161,6 +162,7 @@ defmodule Cadence.GroundNetworks.EphemerisStates do
         b.provider_version, ref.source_ref AS provider_spacecraft_ref,
         c.element_set_id, s.reason AS state_reason, s.next_retry_at AS state_next_retry_at,
         s.attempts AS state_attempts, s.updated_at AS state_updated_at,
+        s.outcome_since AS state_outcome_since,
         CASE
           WHEN s.status IS NOT NULL AND s.element_set_id = c.element_set_id
            AND s.bound_provider_version = b.provider_version
@@ -172,6 +174,15 @@ defmodule Cadence.GroundNetworks.EphemerisStates do
         ON p.organization_id = b.organization_id AND p.mission_id = b.mission_id
        AND p.provider_id = b.provider_id AND p.version = b.provider_version
        AND p.lifecycle_state <> 'archived'
+       -- Archiving adds a newer, archived version while the pinned one stays active: such a
+       -- provider is gone for the providers read and the member endpoint, so it is bound to
+       -- nothing here either (#972).
+       AND NOT EXISTS (
+         SELECT 1 FROM mission_providers a
+         WHERE a.organization_id = b.organization_id AND a.mission_id = b.mission_id
+           AND a.provider_id = b.provider_id AND a.lifecycle_state = 'archived'
+           AND a.version > b.provider_version
+       )
       CROSS JOIN LATERAL (
         SELECT se.source_ref
         FROM mission_source_endpoints se

@@ -264,7 +264,7 @@ defmodule CadenceWeb.Console.MissionProvidersAPITest do
              c |> admin() |> get(c.base) |> json_response(200) |> Map.fetch!("data")
   end
 
-  test "create, validate, sync and archive each publish the providers live update (#972)", c do
+  test "create, validate, sync and archive publish providers; archive publishes attention", c do
     ScopedReadUpdates.subscribe(:providers_changed, c.scope.organization_id, c.mission_id)
     path = c.base <> "/" <> create!(c)["id"]
     assert_receive {:providers_changed, _org, _mission}
@@ -278,8 +278,11 @@ defmodule CadenceWeb.Console.MissionProvidersAPITest do
     c |> admin() |> post(path <> "/validate") |> json_response(200)
     assert_receive {:providers_changed, _org, _mission}
 
+    ScopedReadUpdates.subscribe(:attention_changed, c.scope.organization_id, c.mission_id)
     c |> admin() |> post(path <> "/archive", %{"reason" => "Done"}) |> json_response(200)
     assert_receive {:providers_changed, _org, _mission}
+    # The archived provider leaves the provider_ephemeris findings too.
+    assert_receive {:attention_changed, _org, _mission}
 
     c |> admin() |> post(path <> "/archive", %{}) |> json_response(422)
     refute_receive {:providers_changed, _org, _mission}, 50
