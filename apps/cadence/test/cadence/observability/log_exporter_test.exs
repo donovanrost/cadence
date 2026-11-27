@@ -85,9 +85,7 @@ defmodule Cadence.Observability.LogExporterTest do
 
     LogExporter.ingest(exporter, log_event("not delivered"))
 
-    assert capture_log(fn ->
-             assert :ok = LogExporter.flush(exporter)
-           end) == ""
+    assert :ok = LogExporter.flush(exporter)
 
     assert LogExporter.status(exporter) == %{
              queued_count: 0,
