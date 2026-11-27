@@ -19,6 +19,8 @@ export const missionResources = [
   "events",
   "limits",
   "pass_results",
+  // #891: a finished pass-prediction recompute (predicted-passes.md, Live updates).
+  "predicted_passes",
   "settings",
   "spacecraft",
   "stations",
