@@ -62,6 +62,10 @@ function reasonSentence(a: Attention): string {
       return "Cadence couldn't match the last one to a pass.";
     case "second_connection":
       return "The last one was a second connection for this pass, and Cadence keeps the first.";
+    case "no_registered_contact":
+      return "No pass was registered on this listener when the last one arrived.";
+    case "peer_not_allowed":
+      return `The last one came from an address outside ${provider ? `${provider}'s` : "the transport's"} allowed source addresses, so Cadence refused it before reading anything.`;
   }
 }
 
@@ -87,7 +91,9 @@ export function listenerEvidence(
   const setup =
     reason === "unregistered_scid" || reason === "unexpected_peer"
       ? ` Check ${spacecraft ? `${spacecraft}'s` : "the spacecraft's"} SCID and ${provider ? `${provider}'s` : "the provider's"} profile in Setup.`
-      : "";
+      : reason === "peer_not_allowed"
+        ? ` Check the allowed source addresses on ${provider ? `${provider}'s` : "the"} transport in Setup.`
+        : "";
   return `${context} ${reasonSentence(a)} This pass isn't connected yet. If a refused connection was meant for it, its telemetry isn't arriving.${setup}`;
 }
 

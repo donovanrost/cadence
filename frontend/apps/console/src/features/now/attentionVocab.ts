@@ -82,6 +82,11 @@ export const listenerRefusals = [
   "unknown",
   // U50: a second connection while this pass's own was up (counted; opens only if it's quiet).
   "second_connection",
+  // ProfileAcceptor: no contact was registered on the listener when the connection came.
+  "no_registered_contact",
+  // #993 (DECISIONS #115): a peer outside the transport's allowed source addresses, refused on
+  // accept, before any frame is read.
+  "peer_not_allowed",
 ] as const;
 /** U38 mission_runtime reason keys (domain 292c8e6b, final). */
 export const runtimeReasons = [

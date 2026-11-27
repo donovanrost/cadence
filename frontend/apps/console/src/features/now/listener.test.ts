@@ -125,6 +125,16 @@ describe("listener_refusal on Now (ux U50)", () => {
     expect(row?.meta).toBe("FIRST 03:12Z · STILL REFUSING");
   });
 
+  it("peer_not_allowed (#993): not connected, points at the transport's allowed addresses", () => {
+    const row = rowOf({
+      last_refusal: { peer: "203.0.113.9:4000", reason: "peer_not_allowed", scid: null },
+    });
+    expect(row?.sentence).toBe(
+      `${CONTEXT} The last one came from an address outside Northlight's allowed source addresses, so Cadence refused it before reading anything. ${NOT_CONNECTED} Check the allowed source addresses on Northlight's transport in Setup.`,
+    );
+    expect(row?.sentence).not.toContain("203.0.113.9");
+  });
+
   it("words every reason; unknown keys read as unknown", () => {
     const said = (reason: string, scid: number | null = null) =>
       rowOf({ connected: true, last_refusal: { peer: null, reason, scid } })?.sentence;
@@ -138,6 +148,12 @@ describe("listener_refusal on Now (ux U50)", () => {
       "Cadence couldn't tell from its first frames which spacecraft the last one was for.",
     );
     expect(said("read_failed")).toContain("Cadence couldn't read the last one's first frames.");
+    expect(said("no_registered_contact")).toContain(
+      "No pass was registered on this listener when the last one arrived.",
+    );
+    expect(said("peer_not_allowed")).toContain(
+      "The last one came from an address outside Northlight's allowed source addresses, so Cadence refused it before reading anything.",
+    );
     expect(said("something_new")).toContain("Cadence couldn't match the last one to a pass.");
   });
 
