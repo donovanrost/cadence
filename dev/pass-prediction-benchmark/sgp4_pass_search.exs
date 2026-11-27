@@ -266,28 +266,25 @@ defmodule PassSearch do
     {c * x + s * y, -s * x + c * y, z}
   end
 
-  # The longest near-earth pass above a 5° mask is well under this; it bounds the search past
-  # each end of the window for a pass that crosses it.
-  @max_pass_min 30.0
-
   # A pass that overlaps the window is found whole: one above the mask at the start is traced
-  # back to its AOS, one still above it at the end is traced on to its LOS. Every SGP4
-  # propagation is counted once; all stations are evaluated from the same position.
+  # back to its AOS, one still above it at the end is traced on to its LOS. The search is bounded
+  # by the spacecraft's synodic period 2π / (n − ω⊕), the time for it to come round again
+  # relative to the rotating earth even when it co-rotates (prograde, equatorial). No pass is
+  # longer, at any near-earth period (under 225 min, so at most about 267 min) or mask; if no
+  # crossing is found within the bound the pass is counted as unbracketed, never given a
+  # clipped AOS or LOS. Every SGP4 propagation is counted once; all stations are evaluated from
+  # the same position. Returns {passes, calls, unbracketed}.
   def run(sat, gst0, stations, span_min, step_min) do
     n = trunc(span_min / step_min)
+    bound = synodic_min(sat)
     pos0 = ecef(sat, gst0, 0.0)
 
-    {init, calls} =
-      Enum.map_reduce(stations, 1, fn st, c ->
-        v = elevation(pos0, st)
-
-        if v >= 0 do
-          {aos, k} = lead_in({sat, gst0, st}, step_min)
-          {{st, aos, v}, c + k}
-        else
-          {{st, nil, v}, c}
-        end
-      end)
+    {init, {calls, open}} =
+      Enum.map_reduce(
+        stations,
+        {1, 0},
+        &start_station(&1, &2, {sat, gst0}, pos0, step_min, bound)
+      )
 
     {sts, passes, calls} =
       Enum.reduce(1..n, {init, 0, calls}, fn i, {sts, passes, calls} ->
@@ -298,15 +295,54 @@ defmodule PassSearch do
         {Enum.reverse(acc), p, c}
       end)
 
-    Enum.reduce(sts, {passes, calls}, fn
+    # A pass still open at the end; one whose start was unbracketed is already counted.
+    Enum.reduce(sts, {passes, calls, open}, fn
       {_st, nil, _v}, acc ->
         acc
 
-      {st, aos, _v}, {p, c} ->
-        {_los, k} = lead_out({sat, gst0, st}, aos, n * step_min, step_min)
-        {p + 1, c + k}
+      {st, aos, _v}, {p, c, u} ->
+        case lead_out({sat, gst0, st}, aos, n * step_min, step_min, bound) do
+          {:ok, _los, k} when aos == :unbracketed -> {p, c + k, u}
+          {:ok, _los, k} -> {p + 1, c + k, u}
+          {:unbracketed, k} when aos == :unbracketed -> {p, c + k, u}
+          {:unbracketed, k} -> {p, c + k, u + 1}
+        end
     end)
   end
+
+  # A station's state at t = 0: below the mask, or in a pass traced back to its AOS.
+  defp start_station(st, {c, u}, {sat, gst0}, pos0, step_min, bound) do
+    v = elevation(pos0, st)
+
+    if v < 0,
+      do: {{st, nil, v}, {c, u}},
+      else: traced_start(st, v, {c, u}, {sat, gst0}, step_min, bound)
+  end
+
+  defp traced_start(st, v, {c, u}, {sat, gst0}, step_min, bound) do
+    case lead_in({sat, gst0, st}, step_min, bound) do
+      {:ok, aos, k} -> {{st, aos, v}, {c + k, u}}
+      {:unbracketed, k} -> {{st, :unbracketed, v}, {c + k, u + 1}}
+    end
+  end
+
+  @doc false
+  # The whole pass around t = 0 for a spacecraft above the mask then: {:ok, aos, los} or
+  # :unbracketed.
+  def pass_around_zero(sat, gst0, st, step_min) do
+    ctx = {sat, gst0, st}
+    bound = synodic_min(sat)
+
+    with {:ok, aos, _} <- lead_in(ctx, step_min, bound),
+         {:ok, los, _} <- lead_out(ctx, aos, 0.0, step_min, bound) do
+      {:ok, aos, los}
+    else
+      {:unbracketed, _k} -> :unbracketed
+    end
+  end
+
+  # Minutes for the spacecraft to come round again relative to a co-rotating station.
+  defp synodic_min(sat), do: 2 * :math.pi() / (elem(sat, 1) - @omega_earth_rad_min)
 
   defp elevation({x, y, z}, {{sx, sy, sz}, {ux, uy, uz}, smask}) do
     dx = x - sx
@@ -315,41 +351,39 @@ defmodule PassSearch do
     (dx * ux + dy * uy + dz * uz) / :math.sqrt(dx * dx + dy * dy + dz * dz) - smask
   end
 
-  # Above the mask at the window start: step back until below it, then bisect to the AOS.
-  defp lead_in(ctx, step_min), do: lead_in(ctx, -step_min, step_min, 0)
+  # Above the mask at t = 0: step back until below it, then bisect to the AOS.
+  defp lead_in(ctx, step_min, bound), do: lead_in(ctx, -step_min, step_min, bound, 0)
 
-  defp lead_in(ctx, t, step_min, k) do
+  defp lead_in(ctx, t, step_min, bound, k) do
     cond do
       g(ctx, t) < 0 ->
         {aos, k2} = bisect(ctx, t, t + step_min)
-        {aos, k + 1 + k2}
+        {:ok, aos, k + 1 + k2}
 
-      t <= -@max_pass_min ->
-        {t, k + 1}
+      t <= -bound ->
+        {:unbracketed, k + 1}
 
       true ->
-        lead_in(ctx, t - step_min, step_min, k + 1)
+        lead_in(ctx, t - step_min, step_min, bound, k + 1)
     end
   end
 
-  # Still above the mask at the window end: step on until below it, bisect to the LOS, then
-  # find the TCA.
-  defp lead_out(ctx, aos, t_end, step_min),
-    do: lead_out(ctx, aos, t_end, t_end + step_min, step_min, 0)
+  # Still above the mask at t_end: step on until below it, bisect to the LOS, then find the TCA.
+  defp lead_out(ctx, aos, t_end, step_min, bound),
+    do: lead_out(ctx, aos, t_end, t_end + step_min, step_min, bound, 0)
 
-  defp lead_out(ctx, aos, t_end, t, step_min, k) do
+  defp lead_out(ctx, aos, t_end, t, step_min, bound, k) do
     cond do
       g(ctx, t) < 0 ->
         {los, k2} = bisect(ctx, t - step_min, t)
-        {_tca, k3} = golden(ctx, aos, los)
-        {los, k + 1 + k2 + k3}
+        k3 = if aos == :unbracketed, do: 0, else: elem(golden(ctx, aos, los), 1)
+        {:ok, los, k + 1 + k2 + k3}
 
-      t >= t_end + @max_pass_min ->
-        {_tca, k3} = golden(ctx, aos, t)
-        {t, k + 1 + k3}
+      t >= t_end + bound ->
+        {:unbracketed, k + 1}
 
       true ->
-        lead_out(ctx, aos, t_end, t + step_min, step_min, k + 1)
+        lead_out(ctx, aos, t_end, t + step_min, step_min, bound, k + 1)
     end
   end
 
@@ -361,6 +395,10 @@ defmodule PassSearch do
       prev < 0 and v >= 0 ->
         {a, k} = bisect(ctx, t - step_min, t)
         {[{st, a, v} | acc], p, c + k}
+
+      prev >= 0 and v < 0 and aos == :unbracketed ->
+        {_los, k} = bisect(ctx, t - step_min, t)
+        {[{st, nil, v} | acc], p, c + k}
 
       prev >= 0 and v < 0 ->
         {los, k} = bisect(ctx, t - step_min, t)
@@ -485,6 +523,39 @@ end
 
 IO.puts("Vallado 00005 verification: within 1 m at 0, 360, 720 and 1080 min")
 
+# Edge gate: a 220-minute, nearly circular equatorial orbit (near-earth, but its passes outlast
+# an hour) straight above an equatorial station at t = 0. The whole pass must be found, with
+# AOS and LOS at real crossings of the mask, not at a search bound.
+long_pass =
+  SGP4.init(%{
+    no_kozai: 2 * :math.pi() / 220.0,
+    ecco: 0.0001,
+    inclo: 0.0,
+    nodeo: 0.0,
+    argpo: 0.0,
+    mo: 0.0,
+    bstar: 0.0
+  })
+
+below = PassSearch.station(0.0, -gst0 / deg, 0.1, 5.0)
+{:ok, aos, los} = PassSearch.pass_around_zero(long_pass, gst0, below, 1.0)
+one_s = 1.0 / 60.0
+
+crossing? =
+  PassSearch.f(long_pass, gst0, below, aos - one_s) < 0 and
+    PassSearch.f(long_pass, gst0, below, aos) >= 0 and
+    PassSearch.f(long_pass, gst0, below, los - one_s) >= 0 and
+    PassSearch.f(long_pass, gst0, below, los) < 0
+
+if not crossing? or aos > -30.0 or los < 30.0,
+  do: raise("long-pass edge gate failed: aos=#{aos} los=#{los}")
+
+{1, _calls, 0} = PassSearch.run(long_pass, gst0, [below], 1.0, 1.0)
+
+IO.puts(
+  "Long-pass edge gate: 220 min orbit, AOS #{Float.round(aos, 2)} min, LOS #{Float.round(los, 2)} min"
+)
+
 span = days * 1440.0
 step = step_s / 60.0
 
@@ -502,6 +573,8 @@ step = step_s / 60.0
 
 passes = results |> Enum.map(&elem(&1, 0)) |> Enum.sum()
 calls = results |> Enum.map(&elem(&1, 1)) |> Enum.sum()
+unbracketed = results |> Enum.map(&elem(&1, 2)) |> Enum.sum()
+if unbracketed > 0, do: raise("#{unbracketed} passes found no horizon crossing within the bound")
 coarse = n * (trunc(span / step) + 1)
 
 IO.puts(

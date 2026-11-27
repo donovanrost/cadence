@@ -35,8 +35,8 @@ latitudes from 78°N to 72°S, a 5° mask, a 60 s coarse step, and refinement to
 
 | Fleet × 15 stations × 7 days | Wall time | Passes | SGP4 evaluations |
 | --- | --- | --- | --- |
-| 500 spacecraft | 5.05 s | 271,563 | 13.0 M |
-| 1,000 spacecraft | 9.96 s | 543,120 | 26.0 M |
+| 500 spacecraft | 5.08 s | 271,563 | 13.0 M |
+| 1,000 spacecraft | 11.35 s | 543,120 | 26.0 M |
 
 These are laptop 1 numbers: M1, 8 cores, OTP 29. The evaluation count includes every SGP4
 propagation: one per spacecraft per grid point (time zero included), plus refinement and the
@@ -111,10 +111,16 @@ For each spacecraft and its current element set, `Sgp4.init/1` runs once. Then:
 - **Passes at the window's ends.** A pass that overlaps the window is found whole. If the
   spacecraft is above the mask at the window start, the search steps back until it is below,
   then bisects to the real AOS. If a pass is still open at the window end, the search steps on
-  until LOS. Both are bounded at 30 minutes, longer than any near-earth pass above the mask. In
-  the store (slice 3), the daily horizon extension starts its search at the AOS of the last
-  stored pass on each spacecraft and station pair and replaces passes from there, so a pass that
-  crosses the old horizon is replaced, not stored twice.
+  until LOS. Both directions are bounded by the spacecraft's synodic period, 2π / (n − ω⊕): the
+  time for it to come round again relative to the rotating earth, even when it co-rotates. No
+  pass is longer at any near-earth period or mask. That is about 100 minutes in LEO, and at most
+  about 267 minutes just under the 225-minute deep-space limit, where a single pass can last
+  well over an hour. If no crossing is found within the bound, the search fails explicitly for
+  that pass (`pass_not_bracketed`). It never stores the bound as an AOS or LOS. The benchmark
+  gates on a 220-minute equatorial orbit straight above a station, whose pass runs from about
+  −38 to +38 minutes. In the store (slice 3), the daily horizon extension starts its search at
+  the AOS of the last stored pass on each spacecraft and station pair and replaces passes from
+  there, so a pass that crosses the old horizon is replaced, not stored twice.
 - **Short passes.** A pass shorter than the coarse step can fall between two grid points and be
   missed. That is acceptable because such a pass is shorter than any schedulable contact. The
   bound is documented and tested.
