@@ -1517,9 +1517,9 @@ permissions}` for the Stations · Providers tab, sorted by name.
   - **Each spacecraft is bucketed by the version its route's transport pins** (the highest when
     two differ), not by the latest. While some routes still pin an older version with another
     source, one provider can have counts in both the upload buckets and the lookup buckets.
-    When the highest pinned version's route isn't ready but a lower one's is, the orbit is sent
-    through the lower version and still counts as `uploaded`; it moves to the higher version
-    within an hour of that route becoming ready.
+    When the highest pinned version's route isn't ready but a lower one's is, the run uses the
+    lower version, and its outcome (`uploaded`, `lookup` or `norad_id_missing`) counts as
+    usual; the pair moves to the higher version within an hour of that route becoming ready.
   - `uploaded`: the provider holds the spacecraft's current element set, sent to the pinned
     provider version and the spacecraft's current provider-side ref.
   - `failed`: the last upload of the current set, to that same version and ref, failed. It is
@@ -1529,13 +1529,16 @@ permissions}` for the Stations · Providers tab, sorted by name.
     was sent. The reason is the scheduling refusal. It is re-checked every hour, and it clears
     when a route becomes ready (then `uploaded`) or when the element set, the pinned version or
     the ref changes (then `pending`).
-  - `pending`: not sent yet. Either it was never tried (a provider newly bound or ready), a
-    newer element set hasn't been uploaded, or the target changed since the last upload or
-    failure (a new provider-side ref, or the transport now pins another provider version). The
-    upload job, or within 10 minutes the reconcile sweep, sends it.
-  - `lookup`: the provider looks the orbit up by NORAD id, and the current set carries one.
-  - `norad_id_missing`: the provider looks orbits up by NORAD id, but the current set has none,
-    so it can't find the spacecraft.
+  - `pending`: no run has recorded an outcome for the current set, pinned version and ref yet,
+    for any orbit source. Either the pair is new (a provider newly bound or ready), a newer
+    element set arrived, or the target changed since the last outcome (a new provider-side ref,
+    or the transport now pins another provider version). The upload job, or within 10 minutes
+    the reconcile sweep, runs it: an upload provider is sent the set, and a lookup provider is
+    recorded as `lookup` or `norad_id_missing`.
+  - `lookup`: the run found the provider looks the orbit up by NORAD id, and the current set
+    carries one.
+  - `norad_id_missing`: the run found the provider looks orbits up by NORAD id, but the current
+    set has none, so it can't find the spacecraft.
   - Show every non-zero bucket: none is guaranteed to be 0 for a given `orbit_source`.
 - `permissions`: `["providers.manage"]` for mission admins (`:manage_mission`), else `[]`.
 

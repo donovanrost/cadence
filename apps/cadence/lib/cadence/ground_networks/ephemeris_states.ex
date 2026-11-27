@@ -116,9 +116,11 @@ defmodule Cadence.GroundNetworks.EphemerisStates do
   # `failed`, `not_ready`, `lookup`, `norad_id_missing`) decides the bucket only while its basis
   # still holds: the same current set, the same bound (pinned) version and the same ref. The run
   # knows readiness, so its outcome wins over this query's view of the orbit source (a lower
-  # ready version may differ from the highest pinned one, #974). Without a matching outcome, an
-  # upload pair is `pending`, and any other is `lookup` or `norad_id_missing`; so a new set, a new
-  # ref or a newly pinned version is sent now instead of waiting out an old backoff or re-check.
+  # ready version may differ from the highest pinned one, #974). Without a matching outcome every
+  # pair is `pending`, whatever its orbit source: the run decides (upload, lookup,
+  # norad_id_missing or not_ready), so a new set, a new ref or a newly pinned version is acted on
+  # now instead of waiting out an old backoff or re-check, and a lookup pair is pending only until
+  # its first run records an outcome.
   # `scope`: `:all` missions, `:mission` (`$1`/`$2`), or `:spacecraft` (`$1`/`$2` and the ids in
   # `$3`).
   defp bound_sql(scope) do
@@ -158,10 +160,7 @@ defmodule Cadence.GroundNetworks.EphemerisStates do
           WHEN s.status IS NOT NULL AND s.element_set_id = c.element_set_id
            AND s.bound_provider_version = b.provider_version
            AND s.provider_spacecraft_ref = ref.source_ref THEN s.status
-          WHEN p.capabilities_document -> 'orbit' ->> 'source' = 'accepts_ephemeris_upload'
-            THEN 'pending'
-          WHEN c.norad_id IS NULL THEN 'norad_id_missing'
-          ELSE 'lookup'
+          ELSE 'pending'
         END AS bucket
       FROM bound b
       JOIN mission_providers p
@@ -251,17 +250,34 @@ defmodule Cadence.GroundNetworks.EphemerisStates do
     sql =
       bound_sql(:spacecraft) <>
         """
-        SELECT provider_id, spacecraft_id, provider_version, provider_spacecraft_ref,
-          element_set_id
+        SELECT pairs.provider_id, pairs.spacecraft_id, pairs.provider_version,
+          pairs.provider_spacecraft_ref, pairs.element_set_id,
+          ARRAY(
+            SELECT r.routing_rule_id
+            FROM comms_routing_rules r
+            JOIN comms_transports t
+              ON t.organization_id = r.organization_id AND t.mission_id = r.mission_id
+             AND t.transport_id = r.transport_id AND t.version = r.transport_version
+            WHERE r.organization_id = pairs.organization_id AND r.mission_id = pairs.mission_id
+              AND r.spacecraft_id = pairs.spacecraft_id
+              AND t.mission_provider_id = pairs.provider_id
+              AND r.lifecycle_state = 'active' AND r.enabled
+              AND r.direction IN ('inbound', 'bidirectional') AND t.origin = 'provider_managed'
+          ) AS rule_ids
         FROM pairs
         """
 
     sql
     |> Repo.query!([organization_id, mission_id, spacecraft_ids])
     |> Map.fetch!(:rows)
-    |> Map.new(fn [provider_id, spacecraft_id, version, ref, set] ->
+    |> Map.new(fn [provider_id, spacecraft_id, version, ref, set, rule_ids] ->
       {{provider_id, spacecraft_id},
-       %{provider_version: version, provider_spacecraft_ref: ref, element_set_id: set}}
+       %{
+         provider_version: version,
+         provider_spacecraft_ref: ref,
+         element_set_id: set,
+         rule_ids: rule_ids
+       }}
     end)
   end
 end

@@ -147,6 +147,39 @@ defmodule Cadence.Control.Providers.EphemerisNotReadyTest do
     assert %{status: "uploaded", provider_version: ^v2, next_retry_at: nil} = state(c)
   end
 
+  test "an unready lookup pair with a new set is pending, not lookup, until the run decides", c do
+    # The fixture's provider looks orbits up; its version isn't validated, so no route is ready.
+    validated!(c, c.provider.version, nil)
+    {:ok, _results} = submit(c, norad: 25_544)
+    clear_jobs!(c)
+    assert {:ok, _summary} = run(c)
+    assert %{status: "not_ready"} = state(c)
+
+    {:ok, _results} = submit(c, norad: 25_544, hours_ago: 0)
+
+    assert %{c.provider.provider_id => %{"pending" => 1}} ==
+             EphemerisStates.buckets(c.org, c.mission)
+  end
+
+  test "a not_ready reason names this provider's refusal, never another provider's" do
+    findings = [
+      %{code: :mission_provider_not_validated, resource_id: "rule-a"},
+      %{code: :delivery_profile_missing, resource_id: "rule-b"}
+    ]
+
+    assert EphemerisUploads.refusal({:ok, %{findings: findings}}, ["rule-a"]) ==
+             "mission_provider_not_validated"
+
+    assert EphemerisUploads.refusal({:ok, %{findings: findings}}, ["rule-b"]) ==
+             "delivery_profile_missing"
+
+    assert EphemerisUploads.refusal({:ok, %{findings: findings}}, ["rule-c"]) ==
+             "no_ready_route"
+
+    assert EphemerisUploads.refusal({:error, :spacecraft_not_found}, ["rule-a"]) ==
+             "spacecraft_not_found"
+  end
+
   test "the buckets add up with not_ready among them", c do
     upload_provider!(c)
     second = second_bound_spacecraft!(c)

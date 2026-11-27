@@ -20,14 +20,15 @@ defmodule Cadence.Control.Providers.EphemerisReconcileTest do
 
   test "a provider newly able to take uploads gets the unchanged current set from the reconcile",
        c do
-    # The set went current while the provider only looked orbits up; nothing was uploaded.
+    # The set went current while the provider only looked orbits up, and no run has recorded an
+    # outcome yet: without one, every pair is pending (the run decides, #974).
     {:ok, [{:created, set}]} = submit(c, norad: 25_544)
     clear_jobs!(c)
 
-    assert %{c.provider.provider_id => %{"lookup" => 1}} ==
+    assert %{c.provider.provider_id => %{"pending" => 1}} ==
              EphemerisStates.buckets(c.org, c.mission)
 
-    # Now it accepts uploads (as a newly bound upload provider would): the pair is pending.
+    # Now it accepts uploads (as a newly bound upload provider would): still pending.
     upload_provider!(c)
 
     assert %{c.provider.provider_id => %{"pending" => 1}} ==
@@ -72,17 +73,22 @@ defmodule Cadence.Control.Providers.EphemerisReconcileTest do
   end
 
   describe "the version the transport pins decides, not the provider's latest" do
-    test "v1 lookup pinned, v2 upload: lookup, and the reconcile stages nothing", c do
+    test "v1 lookup pinned, v2 upload: v1's lookup is recorded, then nothing is staged", c do
       {:ok, _results} = submit(c, norad: 25_544)
       clear_jobs!(c)
       new_version!(c, Map.put(capabilities(), "orbit", %{"source" => "accepts_ephemeris_upload"}))
+
+      # No outcome yet: pending, and the run decides by the pinned v1 (lookup), never uploading.
+      assert %{c.provider.provider_id => %{"pending" => 1}} ==
+               EphemerisStates.buckets(c.org, c.mission)
+
+      assert {:ok, %{"lookup" => 1}} = run(c)
+      refute_received {:uploaded, _ref, _ephemeris}
 
       assert %{c.provider.provider_id => %{"lookup" => 1}} ==
                EphemerisStates.buckets(c.org, c.mission)
 
       assert EphemerisUploads.reconcile() == 0
-      assert {:ok, %{"lookup" => 1}} = run(c)
-      refute_received {:uploaded, _ref, _ephemeris}
     end
 
     test "v1 upload pinned, v2 lookup: uploaded, and the reconcile stages nothing", c do

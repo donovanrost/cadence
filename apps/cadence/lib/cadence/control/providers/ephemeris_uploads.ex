@@ -183,17 +183,28 @@ defmodule Cadence.Control.Providers.EphemerisUploads do
       provider_spacecraft_ref: basis.provider_spacecraft_ref,
       provider_version: basis.provider_version,
       bound_provider_version: basis.provider_version,
-      reason: refusal(Map.get(routes, set.spacecraft_id)),
+      reason: refusal(Map.get(routes, set.spacecraft_id), basis.rule_ids),
       next_retry_at: DateTime.add(now, @recheck_minutes * 60)
     }
   end
 
-  # Why the spacecraft's route isn't ready, as `ProviderScheduling` reports it.
-  defp refusal({:ok, %{findings: [_ | _] = findings}}),
-    do: findings |> Enum.map(&to_string(&1.code)) |> Enum.min()
+  @doc false
+  # Why this provider's route isn't ready: the `ProviderScheduling` findings on the routing rules
+  # that bind the spacecraft to THIS provider (a finding's `resource_id` is its rule). A finding
+  # on another provider's rule never names this pair's cause; when none matches, the reason is
+  # the generic `no_ready_route`. A spacecraft-wide scheduling error applies to every provider.
+  @spec refusal(term(), [binary()]) :: binary()
+  def refusal({:ok, %{findings: findings}}, rule_ids) when is_list(findings) do
+    rules = MapSet.new(rule_ids || [])
 
-  defp refusal({:error, reason}) when is_atom(reason), do: Atom.to_string(reason)
-  defp refusal(_none), do: "no_ready_route"
+    findings
+    |> Enum.filter(&MapSet.member?(rules, &1[:resource_id]))
+    |> Enum.map(&to_string(&1.code))
+    |> Enum.min(fn -> "no_ready_route" end)
+  end
+
+  def refusal({:error, reason}, _rule_ids) when is_atom(reason), do: Atom.to_string(reason)
+  def refusal(_none, _rule_ids), do: "no_ready_route"
 
   # Records the version the routing rules bind alongside the one used, and re-checks any outcome
   # reached through a lower version than they bind (uploaded, lookup or norad_id_missing alike),
