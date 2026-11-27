@@ -56,10 +56,10 @@ defmodule EarendilOrbits do
     {client, body} =
       request_envelope!(client, :get, "/missions/#{mission_id}/spacecraft/names?#{query}")
 
-    acc = acc ++ Enum.filter(body["data"]["names"], &is_integer(&1["scid"]))
+    acc = [Enum.filter(body["data"]["names"], &is_integer(&1["scid"])) | acc]
 
     case body["meta"]["next_cursor"] do
-      nil -> {client, acc}
+      nil -> {client, acc |> Enum.reverse() |> Enum.concat()}
       next -> spacecraft(client, mission_id, next, acc)
     end
   end

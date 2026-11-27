@@ -152,12 +152,13 @@ field, and `details.message` says why.
 
 | Code | When |
 | --- | --- |
-| `element_set_unparseable` | The text isn't a TLE or an OMM, a line has the wrong length or line number, a field isn't a number, a required OMM key is missing, or the epoch isn't a time |
+| `element_set_unparseable` | The text isn't a TLE or an OMM, a line has the wrong length or line number, a field isn't a number (or is a JSON integer beyond 10^18), a required OMM key is missing, or the epoch isn't a time |
 | `element_set_bad_checksum` | A TLE line's column 69 isn't the mod-10 sum of its digits (`details.expected`) |
 | `element_set_catalog_number_mismatch` | The two TLE lines name different catalog numbers |
 | `element_set_non_physical` | Eccentricity outside [0, 1), mean motion ≤ 0, inclination outside [0, 180]°, or RAAN, argument of perigee or mean anomaly outside [0, 360]° |
 | `element_set_epoch_in_future` | The epoch is more than a day after the server's clock |
 | `element_set_unsupported_mean_element_theory` | An OMM's `MEAN_ELEMENT_THEORY` isn't SGP4 |
+| `element_set_unsupported_reference` | An OMM supplies `CENTER_NAME` other than `EARTH`, `REF_FRAME` other than `TEME` or `TIME_SYSTEM` other than `UTC` (`details.field`, `details.expected`); each key is optional |
 | `element_set_batch_too_large` | A bulk request carries more than 1,000 items |
 
 Deep-space sets (a period of 225 min or more) are stored. Prediction refuses them with

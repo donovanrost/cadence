@@ -57,5 +57,6 @@ defmodule CadenceWeb.Console.ElementSetJSON do
   def problem(:non_physical), do: :element_set_non_physical
   def problem(:epoch_in_future), do: :element_set_epoch_in_future
   def problem(:unsupported_mean_element_theory), do: :element_set_unsupported_mean_element_theory
+  def problem(:unsupported_reference), do: :element_set_unsupported_reference
   def problem(reason) when reason in [:spacecraft_not_found, :invalid_params], do: reason
 end

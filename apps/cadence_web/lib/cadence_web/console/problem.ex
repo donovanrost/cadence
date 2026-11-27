@@ -28,6 +28,8 @@ defmodule CadenceWeb.Console.Problem do
     element_set_non_physical: {422, "An element is outside its physical range."},
     element_set_epoch_in_future: {422, "The epoch is more than a day in the future."},
     element_set_unsupported_mean_element_theory: {422, "Only SGP4 mean elements can be stored."},
+    element_set_unsupported_reference:
+      {422, "SGP4 elements must be Earth-centred, in TEME, with a UTC epoch."},
     element_set_batch_too_large: {422, "Send at most 1,000 element sets at a time."},
     spacecraft_route_not_found: {404, "Extra route not found."},
     profile_not_found: {404, "Profile not found."},

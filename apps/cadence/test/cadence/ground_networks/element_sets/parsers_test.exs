@@ -161,6 +161,38 @@ defmodule Cadence.GroundNetworks.ElementSets.ParsersTest do
 
       assert {:error, {:unparseable, %{field: "omm"}}} = Omm.parse("not kvn")
     end
+
+    test "accepts Earth, TEME and UTC when supplied and refuses any other reference" do
+      earth =
+        Map.merge(@omm, %{"CENTER_NAME" => "earth", "REF_FRAME" => "TEME", "TIME_SYSTEM" => "UTC"})
+
+      assert {:ok, _} = Omm.parse(earth)
+
+      for {key, value, expected} <- [
+            {"TIME_SYSTEM", "TAI", "UTC"},
+            {"REF_FRAME", "EME2000", "TEME"},
+            {"CENTER_NAME", "MARS", "EARTH"}
+          ] do
+        assert {:error, {:unsupported_reference, %{field: ^key, expected: ^expected}}} =
+                 Omm.parse(Map.put(earth, key, value))
+
+        kvn = String.replace(@kvn, ~r/^#{key} = .*$/m, "#{key} = #{value}")
+        assert {:error, {:unsupported_reference, %{field: ^key}}} = Omm.parse(kvn)
+      end
+    end
+
+    test "refuses a JSON integer too large to be an element instead of raising" do
+      huge = String.to_integer(String.duplicate("9", 400))
+
+      assert {:error, {:unparseable, %{field: "MEAN_MOTION", message: "is out of range"}}} =
+               Omm.parse(%{@omm | "MEAN_MOTION" => huge})
+
+      assert {:error, {:unparseable, %{field: "NORAD_CAT_ID"}}} =
+               Omm.parse(%{@omm | "NORAD_CAT_ID" => huge})
+
+      assert {:error, {:unparseable, %{field: "ELEMENT_SET_NO"}}} =
+               Omm.parse(Map.put(@omm, "ELEMENT_SET_NO", "10000000000"))
+    end
   end
 
   describe "validation" do
@@ -185,6 +217,13 @@ defmodule Cadence.GroundNetworks.ElementSets.ParsersTest do
 
       assert {:error, {:epoch_in_future, %{epoch: "2008-09-20T12:25:40.104192Z"}}} =
                ElementSets.parse({:tle, @tle}, ~U[2008-09-19 12:25:39Z])
+    end
+
+    test "holds the one-day limit to the microsecond" do
+      assert {:ok, _} = ElementSets.parse({:tle, @tle}, ~U[2008-09-19 12:25:40.104192Z])
+
+      assert {:error, {:epoch_in_future, _}} =
+               ElementSets.parse({:tle, @tle}, ~U[2008-09-19 12:25:40.104191Z])
     end
   end
 

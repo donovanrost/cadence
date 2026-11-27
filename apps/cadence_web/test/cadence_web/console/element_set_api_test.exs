@@ -193,6 +193,38 @@ defmodule CadenceWeb.Console.ElementSetAPITest do
              |> json_response(422)
   end
 
+  test "bulk refuses an OMM with a huge integer on its own and stores the rest", c do
+    omm = %{
+      "EPOCH" => "2008-09-20T12:25:40.104192",
+      "MEAN_MOTION" => 15.72125391,
+      "ECCENTRICITY" => 0.0006703,
+      "INCLINATION" => 51.6416,
+      "RA_OF_ASC_NODE" => 247.4627,
+      "ARG_OF_PERICENTER" => 130.536,
+      "MEAN_ANOMALY" => 325.0288,
+      "BSTAR" => -1.1606e-5
+    }
+
+    huge = String.to_integer(String.duplicate("9", 400))
+
+    items = [
+      %{spacecraft_id: c.craft, omm: %{omm | "MEAN_MOTION" => huge}},
+      %{spacecraft_id: c.craft, omm: omm}
+    ]
+
+    assert %{"data" => %{"results" => results, "counts" => counts}} =
+             c.admin
+             |> post(c.path <> "/element-sets", %{element_sets: items})
+             |> json_response(200)
+
+    assert counts == %{"created" => 1, "unchanged" => 0, "refused" => 1}
+
+    assert [
+             %{"index" => 0, "error" => %{"code" => "element_set_unparseable"}},
+             %{"index" => 1, "result" => "created"}
+           ] = results
+  end
+
   defp session_conn(session),
     do: Plug.Test.init_test_session(build_conn(), %{user_session_token: session})
 

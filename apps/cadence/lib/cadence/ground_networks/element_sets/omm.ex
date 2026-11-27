@@ -28,6 +28,16 @@ defmodule Cadence.GroundNetworks.ElementSets.Omm do
   @optional_rates [{"MEAN_MOTION_DOT", :mean_motion_dot}, {"MEAN_MOTION_DDOT", :mean_motion_ddot}]
   @sgp4_theories ["SGP4", "SGP/SGP4"]
 
+  # SGP4 mean elements are Earth-centred, in the TEME frame, with UTC epochs. Each key is optional;
+  # a supplied value must match.
+  @sgp4_reference [{"CENTER_NAME", "EARTH"}, {"REF_FRAME", "TEME"}, {"TIME_SYSTEM", "UTC"}]
+
+  # A JSON integer beyond this can't be an element and would overflow the float conversion.
+  @max_json_integer 1_000_000_000_000_000
+
+  # NORAD_CAT_ID and ELEMENT_SET_NO are at most nine digits (the stored columns are int4).
+  @max_identifier 999_999_999
+
   @spec parse(map() | binary()) :: {:ok, Elements.t()} | Elements.refusal()
   def parse(%{} = object) when not is_struct(object) do
     with {:ok, fields} <- string_fields(object), do: build(fields, json_raw(object))
@@ -88,6 +98,7 @@ defmodule Cadence.GroundNetworks.ElementSets.Omm do
 
   defp build(fields, raw) do
     with :ok <- theory(fields["MEAN_ELEMENT_THEORY"]),
+         :ok <- reference(fields),
          {:ok, required} <- required(fields),
          {:ok, rates} <- rates(fields),
          {:ok, norad} <- optional_integer(fields, "NORAD_CAT_ID"),
@@ -115,6 +126,16 @@ defmodule Cadence.GroundNetworks.ElementSets.Omm do
       else: {:error, {:unsupported_mean_element_theory, %{field: "MEAN_ELEMENT_THEORY"}}}
   end
 
+  defp reference(fields) do
+    Enum.find_value(@sgp4_reference, :ok, fn {key, expected} ->
+      value = fields[key]
+
+      if is_nil(value) or String.upcase(String.trim(to_string(value))) == expected,
+        do: nil,
+        else: {:error, {:unsupported_reference, %{field: key, expected: expected}}}
+    end)
+  end
+
   defp required(fields) do
     Enum.reduce_while(@required, {:ok, %{}}, fn {key, field}, {:ok, acc} ->
       parsed = if field == :epoch, do: epoch(fields[key]), else: number(fields[key], key)
@@ -139,7 +160,12 @@ defmodule Cadence.GroundNetworks.ElementSets.Omm do
   defp rate(value, key), do: number(value, key)
 
   defp number(nil, key), do: unparseable(key, "is required")
-  defp number(value, _key) when is_number(value), do: {:ok, value * 1.0}
+  defp number(value, _key) when is_float(value), do: {:ok, value}
+
+  defp number(value, _key) when is_integer(value) and abs(value) <= @max_json_integer,
+    do: {:ok, value * 1.0}
+
+  defp number(value, key) when is_integer(value), do: unparseable(key, "is out of range")
 
   defp number(value, key) when is_binary(value) do
     case Float.parse(String.trim(value)) do
@@ -151,7 +177,7 @@ defmodule Cadence.GroundNetworks.ElementSets.Omm do
   defp optional_integer(fields, key) do
     case fields[key] do
       nil -> {:ok, nil}
-      value when is_integer(value) and value >= 0 -> {:ok, value}
+      value when is_integer(value) and value in 0..@max_identifier -> {:ok, value}
       value when is_binary(value) -> parse_integer(String.trim(value), key)
       _other -> unparseable(key, "must be a whole number")
     end
@@ -159,7 +185,7 @@ defmodule Cadence.GroundNetworks.ElementSets.Omm do
 
   defp parse_integer(text, key) do
     case Integer.parse(text) do
-      {value, ""} when value >= 0 -> {:ok, value}
+      {value, ""} when value in 0..@max_identifier -> {:ok, value}
       _other -> unparseable(key, "must be a whole number")
     end
   end

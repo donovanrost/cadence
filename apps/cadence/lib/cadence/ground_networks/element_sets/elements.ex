@@ -102,7 +102,7 @@ defmodule Cadence.GroundNetworks.ElementSets.Elements do
     do: {:error, {:non_physical, %{field: field, message: message}}}
 
   defp epoch(epoch, now) do
-    if DateTime.diff(epoch, now, :second) > @future_limit_seconds,
+    if DateTime.diff(epoch, now, :microsecond) > @future_limit_seconds * 1_000_000,
       do: {:error, {:epoch_in_future, %{epoch: DateTime.to_iso8601(epoch)}}},
       else: :ok
   end
