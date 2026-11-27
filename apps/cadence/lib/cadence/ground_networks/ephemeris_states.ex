@@ -88,6 +88,23 @@ defmodule Cadence.GroundNetworks.EphemerisStates do
   end
 
   @doc """
+  Deletes a provider's ephemeris states (#983): called in the archive transaction, so an
+  archived provider leaves no due retry for `claim_due/2` to stage and no finding behind.
+  """
+  @spec delete_for_provider(binary(), binary(), binary()) :: non_neg_integer()
+  def delete_for_provider(organization_id, mission_id, provider_id) do
+    {count, _rows} =
+      from(row in Row,
+        where:
+          row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+            row.provider_id == ^provider_id
+      )
+      |> Repo.delete_all()
+
+    count
+  end
+
+  @doc """
   Claims the pairs due at `now` for another try: a failed upload, a `not_ready` pair to re-check,
   or one uploaded through a lower pinned version than its routing rules bind (to move to the
   higher once its route is ready). Moves their `next_retry_at` to `lease_until` and answers them

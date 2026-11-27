@@ -73,6 +73,7 @@ defmodule Cadence.GroundNetworks.EphemerisReasons do
     "transport_runtime_profile_not_materialized" => "The route's transport isn't set up yet.",
     "direct_transport_not_provider_schedulable" =>
       "The route uses a direct transport, which the provider can't schedule.",
+    "missing_downlink_path" => "The route has no downlink path set up.",
     "contact_link_assignment_not_found" => "The route has no link assignment.",
     "contact_path_template_not_found" => "The route's path template is gone.",
     "source_endpoint_not_found" => "The route's source endpoint is gone.",

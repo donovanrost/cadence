@@ -10,9 +10,8 @@ defmodule Cadence.GroundNetworks.EphemerisFindingsTest do
   import Cadence.EphemerisUploadFixtures
   import Ecto.Query
 
-  alias Cadence.Control.Providers.EphemerisUploads
+  alias Cadence.Control.Providers.{EphemerisUploads, MissionProviderWrites}
   alias Cadence.EphemerisUploadFixtures.UploadClient
-  alias Cadence.GroundNetworks
 
   alias Cadence.GroundNetworks.{
     ElementSets,
@@ -215,11 +214,40 @@ defmodule Cadence.GroundNetworks.EphemerisFindingsTest do
     assert Enum.any?(EphemerisStates.pending(5_000), &(elem(&1, 1) == c.mission))
 
     # Archiving adds a newer, archived version; the transport still pins the active one.
-    {:ok, _archived} = GroundNetworks.archive_provider(c.org, c.mission, c.provider.provider_id)
+    {:ok, _archived} =
+      MissionProviderWrites.archive(c.scope, c.mission, c.provider.provider_id, %{
+        "reason" => "Retired"
+      })
 
     assert EphemerisFindings.groups(c.org, c.mission) == []
     assert EphemerisStates.buckets(c.org, c.mission) == %{}
     refute Enum.any?(EphemerisStates.pending(5_000), &(elem(&1, 1) == c.mission))
+  end
+
+  test "archiving removes a failed pair's due retry, and a run sends nothing to it", c do
+    upload_provider!(c)
+    {:ok, _results} = submit(c, norad: 25_544)
+    clear_jobs!(c)
+    failure = {:error, %ProviderError{category: :provider_unavailable, detail: "down"}}
+    {:ok, %{"failed" => 1}} = run_for(c, [c.sc], upload_result: failure)
+    assert %{status: "failed"} = state(c)
+    # The test client reports the attempt even when it answers with a failure.
+    assert_received {:uploaded, "SIM-001", _ephemeris}
+
+    # The transport still pins the older, active version, which ProviderScheduling still
+    # schedules; the archive must stop both the retry sweep and a direct run.
+    {:ok, _archived} =
+      MissionProviderWrites.archive(c.scope, c.mission, c.provider.provider_id, %{
+        "reason" => "Retired"
+      })
+
+    assert state(c) == nil
+    assert EphemerisUploads.retry_due(DateTime.add(now(), 7 * 86_400)) == 0
+
+    assert {:ok, summary} = run_for(c, [c.sc])
+    refute_received {:uploaded, _ref, _ephemeris}
+    assert Map.values(summary) |> Enum.sum() == 0
+    assert state(c) == nil
   end
 
   defp run_for(c, spacecraft_ids, opts \\ []) do

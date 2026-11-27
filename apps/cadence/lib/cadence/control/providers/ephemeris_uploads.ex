@@ -77,7 +77,15 @@ defmodule Cadence.Control.Providers.EphemerisUploads do
            ) do
       pairs = Keyword.get(opts, :pairs)
       bound = EphemerisStates.bound_pairs(organization_id, mission_id, Map.keys(sets))
-      bindings = routes |> bindings() |> only(pairs)
+      # Only bindings the reconcile's own query binds: a provider with a newer archived version is
+      # dropped there (#983) even while a transport still pins its older active version, which
+      # ProviderScheduling still schedules; nothing is uploaded or recorded for it.
+      bindings =
+        routes
+        |> bindings()
+        |> only(pairs)
+        |> Enum.filter(&Map.has_key?(bound, {&1.provider_id, &1.spacecraft_id}))
+
       not_ready = not_ready(bound, bindings, pairs)
       prepared = prepare(bindings, providers, opts)
 

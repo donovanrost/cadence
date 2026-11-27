@@ -1598,8 +1598,9 @@ can read it, like the providers read.
   - `transport_not_found`, `transport_not_active`, `transport_provider_snapshot_mismatch`,
     `transport_runtime_profile_mismatch`, `transport_runtime_profile_not_materialized`,
     `direct_transport_not_provider_schedulable`;
-  - `contact_link_assignment_not_found`, `contact_path_template_not_found`,
-    `source_endpoint_not_found`, `missing_provider_spacecraft_reference`;
+  - `missing_downlink_path`, `contact_link_assignment_not_found`,
+    `contact_path_template_not_found`, `source_endpoint_not_found`,
+    `missing_provider_spacecraft_reference`;
   - plus `spacecraft_not_found` (a spacecraft-wide refusal), and `no_ready_route` when no
     refusal names this provider's rule or a refusal's code isn't one of these.
 - An archived provider has no members: archiving takes it out of the findings and counts, even

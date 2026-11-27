@@ -15,10 +15,11 @@ defmodule Cadence.Control.Providers.MissionProviderWrites do
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Control.Providers, as: ControlProviders
   alias Cadence.GroundNetworks
-  alias Cadence.GroundNetworks.{MissionProviderRegistration, ProviderError}
+  alias Cadence.GroundNetworks.{EphemerisStates, MissionProviderRegistration, ProviderError}
   alias Cadence.GroundNetworks.{ProviderAccountGrants, ProviderAccounts}
   alias Cadence.Management.Providers
   alias Cadence.Platform.ScopedReadUpdates
+  alias Cadence.Repo
 
   @deadline_ms 25_000
   @refusals [
@@ -111,11 +112,29 @@ defmodule Cadence.Control.Providers.MissionProviderWrites do
 
       reason ->
         scope
-        |> Providers.archive_provider(mission_id, provider_id, reason)
+        |> archive_with_ephemeris(mission_id, provider_id, reason)
         |> providers_changed(scope, mission_id)
         |> attention_changed(scope, mission_id)
     end
   end
+
+  # The archive and the removal of the provider's ephemeris states commit together (#983), so an
+  # archived provider leaves no due retry and no finding; the live updates follow the commit.
+  defp archive_with_ephemeris(scope, mission_id, provider_id, reason) do
+    Repo.transaction(fn ->
+      scope
+      |> Providers.archive_provider(mission_id, provider_id, reason)
+      |> then(&with_ephemeris_removed(&1, scope.organization_id, mission_id, provider_id))
+    end)
+  end
+
+  defp with_ephemeris_removed({:ok, archived}, organization_id, mission_id, provider_id) do
+    EphemerisStates.delete_for_provider(organization_id, mission_id, provider_id)
+    archived
+  end
+
+  defp with_ephemeris_removed({:error, reason}, _org, _mission, _provider),
+    do: Repo.rollback(reason)
 
   defp observe(scope, mission_id, provider_id, observation, opts, call) do
     task = Task.async(call)
