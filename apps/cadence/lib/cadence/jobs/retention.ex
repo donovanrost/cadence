@@ -19,6 +19,9 @@ defmodule Cadence.Jobs.Retention do
   @retained_job_types ["telemetry_historical_data_workflow"]
   @retained_job_types_sql Enum.map_join(@retained_job_types, ", ", &"'#{&1}'")
 
+  @doc false
+  def retained_job_types, do: @retained_job_types
+
   @impl true
   def name, do: :background_jobs
 

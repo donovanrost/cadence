@@ -7,6 +7,24 @@ defmodule Cadence.Jobs.RetentionTest do
 
   @now ~U[2026-11-28 12:00:00Z]
 
+  test "retention index excludes exactly the job types held for durable reads" do
+    %{rows: [[definition]]} =
+      Repo.query!(
+        "SELECT pg_get_indexdef('background_jobs_terminal_completed_at_idx'::regclass)",
+        []
+      )
+
+    excluded_types =
+      definition
+      |> String.split(" WHERE ", parts: 2)
+      |> List.last()
+      |> then(&Regex.scan(~r/'([^']+)'/, &1, capture: :all_but_first))
+      |> List.flatten()
+      |> Enum.reject(&(&1 in ["completed", "failed"]))
+
+    assert Enum.sort(excluded_types) == Enum.sort(Retention.retained_job_types())
+  end
+
   test "sweeps old terminal jobs by completion time and keeps live, unknown and recent jobs" do
     mission = "mission-retention-#{Ecto.UUID.generate()}"
     persist_mission_scope("org-retention-#{Ecto.UUID.generate()}", mission)
