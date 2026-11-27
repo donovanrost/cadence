@@ -50,6 +50,7 @@ defmodule Cadence.Application do
         retention_children() ++
         questdb_retention_children() ++
         pass_prediction_children() ++
+        ephemeris_upload_children() ++
         [{Drain, callback: fn -> drain_runtime(root_composition) end}]
 
     opts = [strategy: :one_for_one, name: Cadence.Supervisor]
@@ -111,6 +112,17 @@ defmodule Cadence.Application do
     if Keyword.get(config, :enabled?, true),
       do: [
         {Cadence.GroundNetworks.PredictedPasses.Maintenance, Keyword.delete(config, :enabled?)}
+      ],
+      else: []
+  end
+
+  # The retry sweep for failed ephemeris uploads (#968); jobs do the work.
+  defp ephemeris_upload_children do
+    config = Application.get_env(:cadence, :ephemeris_upload_retries, [])
+
+    if Keyword.get(config, :enabled?, true),
+      do: [
+        {Cadence.Control.Providers.EphemerisUploads.Retrier, Keyword.delete(config, :enabled?)}
       ],
       else: []
   end

@@ -178,9 +178,28 @@ Writes use `Cadence.Persistence.BulkInsert` (#872): typed arrays and one stateme
   matched to the predicted pass with the same spacecraft and station and an overlapping window.
   An opportunity that matches no predicted pass is flagged `no_predicted_pass`. That points to a
   stale element set, a wrong station location, or a provider error.
-- **The simulator** generates its opportunities from predicted passes computed by the same
-  package, from the element sets it reads through the API. Dev and tests then run on real
-  geometry. This replaces `generate_opportunities/5`'s hash.
+- **Providers get the orbit from Cadence (slice 5a, #968).** A real ground network doesn't log
+  in to its customer's ops system for ephemeris. The customer hands it over, or the network
+  looks the spacecraft up by NORAD id. Cadence does the same (option C, agreed with platform and
+  the CTO on 2026-11-27):
+  - **Capability.** Each provider's capabilities declare `orbit.source`, either
+    `accepts_ephemeris_upload` or `looks_up_by_norad_id`. A provider that declares nothing is
+    read as lookup.
+  - **Push.** When an element set becomes a spacecraft's current one, a durable job, staged with
+    the pass-prediction job, uploads it as an OMM to each bound upload provider. It goes through
+    the provider contract (`PUT /provider/v1/spacecraft/:ref/ephemeris`), idempotent per content
+    hash. A failed upload is retried with backoff. The push is the re-sync: there is one source
+    of truth, and a failed or stale push is exactly what `no_predicted_pass` catches.
+  - **Lookup providers.** Nothing is sent to them. A current element set without a NORAD id is
+    recorded as `norad_id_missing` for that binding and counted on the providers read, never
+    skipped silently.
+  - **State.** Each (provider, spacecraft) pair is recorded as `uploaded`, `failed`, `lookup` or
+    `norad_id_missing`.
+- **The simulator (slice 5b, #893)** generates its opportunities from predicted passes computed
+  by the same package, from the element sets uploaded to it. Dev and tests then run on real
+  geometry. This replaces `generate_opportunities/5`'s hash. Since 5a, the simulator declares
+  `accepts_ephemeris_upload` and stores each upload. A scenario whose `orbit_readiness.source_kind`
+  is `uploaded` is ready only for spacecraft with an upload at most 14 days old.
 
 ### Console (slice 6, a console issue)
 
@@ -204,7 +223,9 @@ Each slice becomes a sub-issue of #732 under #211 once this note is agreed.
    on laptop 2 and recorded on #177.
 4. **Planning and Book a pass integration**, with the opportunity ↔ predicted-pass match and the
    flag.
-5. **Simulator** opportunities from predicted passes.
+5. **Simulator.** (5a, #968) Cadence uploads each spacecraft's current element set to its upload
+   providers. Lookup providers are checked for a NORAD id. (5b, #893) The simulator's
+   opportunities come from predicted passes over the uploaded sets.
 6. **Console** Orbit section and elevation. This is a console issue (frontend, not a Codex agent);
    ground supplies the API contract.
 7. **SDP4** (deep space).

@@ -89,7 +89,9 @@ defmodule Cadence.GroundNetworks.ElementSetsTest do
     # Spacecraft in batches of 100, stored keys in one query, inserts in batches of 500, the
     # newest-epoch lookup and the one staged recompute job (#891), and the transaction's begin and
     # commit.
-    assert queries <= 18, "#{queries} queries"
+    # Constant in fleet size: lookups, inserts, and one staged recompute job and one staged
+    # ephemeris-upload job (#968) for the whole batch.
+    assert queries <= 19, "#{queries} queries"
 
     {queries, {:ok, again}} = count_queries(fn -> submit(c, items) end)
     assert Enum.all?(again, &match?({:unchanged, _}, &1))

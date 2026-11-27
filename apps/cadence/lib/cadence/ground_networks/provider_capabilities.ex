@@ -1,5 +1,14 @@
 defmodule Cadence.GroundNetworks.ProviderCapabilities do
-  @moduledoc "Validated provider capability document."
+  @moduledoc """
+  Validated provider capability document.
+
+  `orbit.source` (#968) says how the provider gets each spacecraft's orbit:
+  `"accepts_ephemeris_upload"` (Cadence uploads the current element set) or
+  `"looks_up_by_norad_id"` (the provider fetches it by catalog number). A provider that doesn't
+  declare it is read as a lookup provider: Cadence then never calls an operation it didn't
+  declare, and a spacecraft without a NORAD id is still surfaced (`norad_id_missing`), never
+  dropped silently.
+  """
 
   alias Cadence.GroundNetworks.Validation
 
@@ -7,6 +16,11 @@ defmodule Cadence.GroundNetworks.ProviderCapabilities do
   @idempotency %{"native" => :native, "client_reference" => :client_reference, "none" => :none}
   @recovery %{"client_reference" => :client_reference, "none" => :none}
   @event_semantics %{"at_least_once" => :at_least_once, "best_effort" => :best_effort}
+  @orbit_sources %{
+    "accepts_ephemeris_upload" => :accepts_ephemeris_upload,
+    "looks_up_by_norad_id" => :looks_up_by_norad_id
+  }
+  @default_orbit %{"source" => "looks_up_by_norad_id"}
 
   @type t :: %__MODULE__{
           contract_version: binary(),
@@ -16,6 +30,7 @@ defmodule Cadence.GroundNetworks.ProviderCapabilities do
           events: map(),
           search: map(),
           delivery: map(),
+          orbit: %{source: :accepts_ephemeris_upload | :looks_up_by_norad_id},
           evidence: map()
         }
 
@@ -27,6 +42,7 @@ defmodule Cadence.GroundNetworks.ProviderCapabilities do
     events: %{},
     search: %{},
     delivery: %{},
+    orbit: %{source: :looks_up_by_norad_id},
     evidence: %{}
   ]
 
@@ -41,6 +57,8 @@ defmodule Cadence.GroundNetworks.ProviderCapabilities do
          {:ok, events} <- Validation.object(document, "events"),
          {:ok, search} <- Validation.object(document, "search"),
          {:ok, delivery} <- Validation.object(document, "delivery"),
+         {:ok, orbit} <- Validation.object(document, "orbit", @default_orbit),
+         {:ok, orbit_source} <- Validation.member(orbit, "source", @orbit_sources),
          {:ok, normalized_operations} <- normalize_operations(operations),
          {:ok, normalized_reservation} <- normalize_reservation(reservation),
          {:ok, normalized_events} <- normalize_events(events),
@@ -55,12 +73,18 @@ defmodule Cadence.GroundNetworks.ProviderCapabilities do
          events: normalized_events,
          search: normalized_search,
          delivery: normalized_delivery,
+         orbit: %{source: orbit_source},
          evidence: document
        }}
     end
   end
 
   def from_external(_document), do: Validation.malformed(:capabilities)
+
+  @doc "How the provider gets orbits; an undeclared or missing document reads as lookup."
+  @spec orbit_source(t() | nil) :: :accepts_ephemeris_upload | :looks_up_by_norad_id
+  def orbit_source(%__MODULE__{orbit: %{source: source}}), do: source
+  def orbit_source(_capabilities), do: :looks_up_by_norad_id
 
   @spec supports?(t(), atom()) :: boolean()
   def supports?(%__MODULE__{} = capabilities, operation),

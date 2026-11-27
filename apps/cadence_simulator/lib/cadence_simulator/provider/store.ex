@@ -15,14 +15,14 @@ defmodule CadenceSimulator.Provider.Store do
   @mirror :cadence_simulator_provider_store_mirror
   @metadata :cadence_simulator_provider_store_metadata
   @search_faults :cadence_simulator_provider_search_faults
-  @resource_kinds [:scenario, :run, :reservation, :delivery_profile, :contact]
+  @resource_kinds [:scenario, :run, :reservation, :delivery_profile, :contact, :ephemeris]
   @scheduled_kinds [:run, :reservation, :contact]
   @sequence_key {:metadata, :event_sequence}
   @dirty_key {:snapshot, :dirty}
   @snapshot_interval_ms 1_000
 
   @type resource_kind ::
-          :scenario | :run | :reservation | :delivery_profile | :contact
+          :scenario | :run | :reservation | :delivery_profile | :contact | :ephemeris
 
   def start_link(opts) when is_list(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)

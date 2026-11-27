@@ -28,6 +28,9 @@
     "station_batch_limit": 30,
     "page_size_limit": 100
   },
+  "orbit": {
+    "source": "accepts_ephemeris_upload"
+  },
   "delivery": {
     "kinds": ["realtime_stream"],
     "protocols": ["tcp"],

@@ -13,6 +13,7 @@ defmodule CadenceSimulator.Provider.ApiRouter do
     Contract,
     DeliveryProfiles,
     Environment,
+    Ephemeris,
     EventDelivery,
     Opportunities,
     ServiceProfiles,
@@ -49,6 +50,21 @@ defmodule CadenceSimulator.Provider.ApiRouter do
         {:error, :not_found} -> environment_not_found(conn)
       end
     end)
+  end
+
+  # Ephemeris upload (#968): the customer's current element set for one spacecraft.
+  put "/v1/spacecraft/:ref/ephemeris" do
+    with_environment(conn, fn conn, run ->
+      case Ephemeris.put(run, ref, conn.body_params) do
+        {:ok, upload, :created} -> Contract.success(conn, 201, upload)
+        {:ok, upload, :unchanged} -> Contract.success(conn, 200, upload)
+        error -> respond(conn, error)
+      end
+    end)
+  end
+
+  get "/v1/spacecraft/:ref/ephemeris" do
+    with_environment(conn, fn conn, run -> respond(conn, Ephemeris.fetch(run, ref)) end)
   end
 
   get "/v1/ground-stations" do

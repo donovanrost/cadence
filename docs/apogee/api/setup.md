@@ -1487,8 +1487,8 @@ Edits go through change sets (`ground_station` and `transport` kinds; see change
 
 `{providers: [{id, name, provider_type, version, policy_mode, account: {id, name} | null, grant: {id,
 version, state: "active" | "revoked"} | null, status: {lifecycle_state, last_validated_at,
-last_synced_at}, health: {validate: <health>, sync: <health>}, station_count}], permissions}` for
-the Stations · Providers tab, sorted by name.
+last_synced_at}, health: {validate: <health>, sync: <health>}, station_count, ephemeris}],
+permissions}` for the Stations · Providers tab, sorted by name.
 
 - `account` is `null` exactly when `grant` is (older, direct bindings with no account).
   `account.name` is `null` for members (only organization admins can read accounts).
@@ -1502,6 +1502,32 @@ the Stations · Providers tab, sorted by name.
   provider's own record of its last validate and sync. `null` means never checked. `error` is a
   sentence for a person, not provider evidence.
 - `station_count` counts active stations whose `provider` is this provider's name.
+- `ephemeris` (#968) is `{orbit_source, uploaded, failed, pending, lookup, norad_id_missing}`.
+  It says how the provider gets orbits and counts its bound spacecraft by state: counts from one
+  grouped query, never rows.
+  - **Who is counted.** Every spacecraft that has a current element set and is bound to this
+    provider, through an active, enabled downlink routing rule on one of its provider-managed
+    transports. The buckets add up to exactly that number. A spacecraft with no current element
+    set is in no bucket.
+  - **`orbit_source`** is what the provider's latest version declared:
+    `"accepts_ephemeris_upload"`, `"looks_up_by_norad_id"`, or `null` when it declared nothing
+    (or hasn't synced). A version with `null` behaves as `looks_up_by_norad_id`, so a current
+    set without a NORAD id is still counted as `norad_id_missing`, never left silent.
+  - **Each spacecraft is bucketed by the version its route's transport pins** (the highest when
+    two differ), not by the latest. While some routes still pin an older version with another
+    source, one provider can have counts in both the upload buckets and the lookup buckets.
+  - `uploaded`: the provider holds the spacecraft's current element set, sent to the pinned
+    provider version and the spacecraft's current provider-side ref.
+  - `failed`: the last upload of the current set, to that same version and ref, failed. It is
+    retried with backoff (1, 5, 15, 60 and 360 minutes, then every 6 h).
+  - `pending`: not sent yet. Either it was never tried (a provider newly bound or ready), a
+    newer element set hasn't been uploaded, or the target changed since the last upload or
+    failure (a new provider-side ref, or the transport now pins another provider version). The
+    upload job, or within 10 minutes the reconcile sweep, sends it.
+  - `lookup`: the provider looks the orbit up by NORAD id, and the current set carries one.
+  - `norad_id_missing`: the provider looks orbits up by NORAD id, but the current set has none,
+    so it can't find the spacecraft.
+  - Show every non-zero bucket: none is guaranteed to be 0 for a given `orbit_source`.
 - `permissions`: `["providers.manage"]` for mission admins (`:manage_mission`), else `[]`.
 
 ## Mission providers (L12): `/api/v1/missions/:mission_id/providers` (owner: api-ops)

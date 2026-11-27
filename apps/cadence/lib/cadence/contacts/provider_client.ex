@@ -63,10 +63,20 @@ defmodule Cadence.Contacts.ProviderClient do
   @callback fetch_contact_result(ProviderContext.t(), binary(), keyword()) ::
               provider_result(map())
 
+  @doc """
+  Uploads a spacecraft's current element set to a provider whose capabilities declare
+  `orbit.source: "accepts_ephemeris_upload"` (#968). `spacecraft_ref` is the spacecraft as the
+  provider knows it; `ephemeris` is `%{"omm" => map, "epoch" => iso8601, "content_sha256" =>
+  hex}`. Idempotent per content hash.
+  """
+  @callback upload_ephemeris(ProviderContext.t(), binary(), map(), keyword()) ::
+              provider_result(map())
+
   @optional_callbacks attest_uplink_session: 4,
                       fetch_contact_result: 3,
                       provision_delivery_profile: 3,
                       modify_contact: 4,
                       find_contact_by_client_reference: 3,
-                      events: 3
+                      events: 3,
+                      upload_ephemeris: 4
 end
