@@ -130,6 +130,7 @@ defmodule Cadence.Application do
   # Retention for the tables nothing else cleans (#694): one chunked sweeper per rule.
   defp retention_children do
     Cadence.Persistence.Retention.children([
+      Cadence.Jobs.Retention,
       Cadence.Runtime.PartitionStreamKeys.Retention,
       Cadence.IngressArchive.Retention,
       Cadence.Telemetry.Storage.ObservationIdentityStates.Retention,
