@@ -1,6 +1,8 @@
 defmodule Cadence.Observability.Metrics.ReporterTest do
   use Cadence.UnitCase, async: false
 
+  import ExUnit.CaptureLog
+
   alias Cadence.Observability.Metrics.{Catalog, Definition, Reporter}
 
   @protobuf_module :opentelemetry_exporter_metrics_service_pb
@@ -263,7 +265,12 @@ defmodule Cadence.Observability.Metrics.ReporterTest do
 
     :telemetry.execute(@event, %{count: 1, duration: 0.2}, %{outcome: :ok})
 
-    assert :ok = Reporter.flush(reporter)
+    log = capture_log([metadata: [:pid]], fn -> assert :ok = Reporter.flush(reporter) end)
+    reporter_pid = List.to_string(:erlang.pid_to_list(reporter))
+
+    refute Enum.any?(String.split(log, "\n"), fn line ->
+             String.contains?(line, "pid=#{reporter_pid}") and String.contains?(line, "retry:")
+           end)
 
     assert %{
              series_count: 2,

@@ -85,7 +85,12 @@ defmodule Cadence.Observability.LogExporterTest do
 
     LogExporter.ingest(exporter, log_event("not delivered"))
 
-    assert :ok = LogExporter.flush(exporter)
+    log = capture_log([metadata: [:pid]], fn -> assert :ok = LogExporter.flush(exporter) end)
+    exporter_pid = List.to_string(:erlang.pid_to_list(exporter))
+
+    refute Enum.any?(String.split(log, "\n"), fn line ->
+             String.contains?(line, "pid=#{exporter_pid}") and String.contains?(line, "retry:")
+           end)
 
     assert LogExporter.status(exporter) == %{
              queued_count: 0,
