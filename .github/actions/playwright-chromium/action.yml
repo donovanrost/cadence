@@ -19,7 +19,8 @@ runs:
     # update fails before any test runs (#920, #964). Drop that source first.
     - shell: bash
       run: |
-        grep -l -r 'packages\.microsoft\.com' /etc/apt/sources.list.d 2>/dev/null \
+        # Actions runs bash with -eo pipefail: no match (grep exits 1) must not fail the step.
+        { grep -l -r 'packages\.microsoft\.com' /etc/apt/sources.list.d 2>/dev/null || true; } \
           | xargs -r sudo rm -f -v
     # --with-deps installs the system libraries every run; the browser download is skipped on a hit.
     - shell: bash
