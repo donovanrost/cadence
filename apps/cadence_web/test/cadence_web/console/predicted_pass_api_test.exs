@@ -129,14 +129,15 @@ defmodule CadenceWeb.Console.PredictedPassAPITest do
           {%{from: @from, to: @to, limit: 501}, "limit"},
           {%{from: @from, to: @to, cursor: "nope"}, "cursor"},
           {%{from: @from, to: @to, station_id: "station-missing"}, "station_id"},
-          {%{from: @from, to: @to, spacecraft_id: "craft-missing"}, "spacecraft_id"}
+          {%{from: @from, to: @to, spacecraft_id: "craft-missing"}, "spacecraft_id"},
+          {%{from: @to, to: @from}, "to"},
+          {%{from: @from, to: @from}, "to"}
         ] do
       assert %{"error" => %{"code" => "invalid_params", "details" => %{"field" => ^field}}} =
                c.member |> get(c.path, params) |> json_response(422)
     end
 
     for {params, max_days} <- [
-          {%{from: @to, to: @from}, 1},
           {%{from: @from, to: "2026-11-28T00:00:01Z"}, 1},
           {%{from: @from, to: "2026-12-12T00:00:00Z", spacecraft_id: craft}, 14}
         ] do
@@ -153,7 +154,11 @@ defmodule CadenceWeb.Console.PredictedPassAPITest do
     assert %{"error" => %{"code" => "forbidden"}} =
              c.member |> post(c.path <> "/recompute", %{}) |> json_response(403)
 
-    assert %{"data" => %{"run_id" => "pass_prediction_run_" <> _}} =
+    assert %{"data" => %{"run_id" => "pass_prediction_run_" <> _ = run_id, "status" => "queued"}} =
+             c.admin |> post(c.path <> "/recompute", %{}) |> json_response(202)
+
+    # A repeat while that run is open answers the same run.
+    assert %{"data" => %{"run_id" => ^run_id}} =
              c.admin |> post(c.path <> "/recompute", %{}) |> json_response(202)
 
     for {method, path} <- [{:get, c.path}, {:post, c.path <> "/recompute"}] do

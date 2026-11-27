@@ -11,13 +11,15 @@ by background jobs, never in a request:
 | --- | --- |
 | A stored element set becomes a spacecraft's current one | That spacecraft, every station, from now to the horizon end |
 | A station's location, mask or lifecycle changes (the mission's edit, or a provider report where the mission set no location) | That station, every spacecraft, from now to the horizon end. An archived station loses its passes |
+| A spacecraft is archived | That spacecraft: its passes from now on are deleted |
 | `POST .../predicted-passes/recompute` | Everything, from now to now + horizon |
 | Daily | The horizon moves on a day; passes that ended more than 7 days ago are deleted |
 
 The horizon is 7 days by default and at most 14, per mission (settings section
 `cadence.pass_prediction`, key `horizon_days`). A recompute replaces the passes that end after
 "now", a pass in progress included; passes that already ended stay, for planning history, until
-the prune. The first element sets a mission stores start a full run.
+the prune. Only active spacecraft and active stations are predicted. The first element sets a
+mission stores start a full run.
 
 Predicted passes are geometry, not bookings. They don't feed the fleet row's next AOS or a
 contact's next pass, which come from bookings.
@@ -41,8 +43,9 @@ GET /api/v1/missions/:mission_id/spacecraft/:spacecraft_id/predicted-passes
 - **Window.** `from` and `to` are ISO 8601 times, both required. A page holds the passes that
   **overlap** `[from, to)`: `los > from` and `aos < to`, so a pass already in view at `from` is
   included.
-- **Length.** `to` must be after `from`. A window filtered by `station_id` or `spacecraft_id` (or
-  on the spacecraft path) spans at most 14 days. An unfiltered mission window spans at most 1 day
+- **Length.** `to` must be after `from` (else `invalid_params` with `details.field: "to"`). A
+  window filtered by `station_id` or `spacecraft_id` (or on the spacecraft path) spans at most 14
+  days. An unfiltered mission window spans at most 1 day
   (24 hours): a whole fleet's passes over two weeks is a few hundred thousand rows.
 - **Order and paging.** AOS, then id. `limit` is 1–500 (default 200). `meta.next_cursor` is
   opaque; pass it back as `cursor` with the same other parameters. `null` means the last page.
@@ -111,8 +114,8 @@ without a per-spacecraft read.
 
 | Status | Code | When |
 | --- | --- | --- |
-| 422 | `invalid_params` | `details.field` is `from`, `to`, `cursor`, `limit`, `station_id` or `spacecraft_id`: missing, not a time, out of range, or not this mission's |
-| 422 | `predicted_pass_window_too_long` | `to` isn't after `from`, or the window is too long. `details.max_days` is 14, or 1 for an unfiltered mission window |
+| 422 | `invalid_params` | `details.field` is `from`, `to`, `cursor`, `limit`, `station_id` or `spacecraft_id`: missing, not a time, out of range, or not this mission's. `to` at or before `from` is `field: "to"`, `reason: "must be after from"` |
+| 422 | `predicted_pass_window_too_long` | The window is longer than its maximum. `details.max_days` is 14, or 1 for an unfiltered mission window |
 | 404 | `spacecraft_not_found` | The spacecraft path names a spacecraft the mission doesn't have |
 
 ## Recompute
@@ -121,10 +124,24 @@ without a per-spacecraft read.
 POST /api/v1/missions/:mission_id/predicted-passes/recompute
 ```
 
-Enqueues a full recompute and answers `202 {"data": {"run_id": "pass_prediction_run_…"}}`. Seeds
-don't need it: the first element sets a mission stores start one.
+Enqueues a full recompute and answers `202`:
+
+```json
+{"data": {"run_id": "pass_prediction_run_…", "status": "queued"}}
+```
+
+`status` is `queued` or `running`. A repeat request while the mission's full run is still queued
+or running stages nothing and answers that same run (its `run_id` and current `status`), so
+pressing Recompute twice runs once. The run's end is the `predicted_passes` live update (below).
+Seeds don't need this endpoint: the first element sets a mission stores start a full run.
 
 ## Live updates
 
-Each finished recompute that changed rows publishes `predicted_passes` once on the mission channel
-(`invalidate` with `resources: ["predicted_passes"]`), never once per pass.
+Every finished recompute (full, spacecraft, station, extension, an archived spacecraft's)
+publishes `predicted_passes` once on the mission channel (`invalidate` with
+`resources: ["predicted_passes"]`), whether or not rows changed, so a client waiting on a run sees
+it end; then `coverage.computed_at` is that run's time. The daily prune publishes only when it
+deleted passes. Never once per pass.
+
+A failed run isn't reported in this read yet: it fails as a background job and `computed_at`
+stays at the last run that finished.

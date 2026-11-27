@@ -9,20 +9,21 @@ defmodule Cadence.GroundNetworks.PredictedPasses do
 
   | `"kind"` | Payload | Enqueued by |
   | --- | --- | --- |
-  | `"spacecraft"` | `"spacecraft_ids"` | `ElementSets.submit/4`, when a stored set becomes a spacecraft's current one |
+  | `"spacecraft"` | `"spacecraft_ids"` | `ElementSets.submit/4`, when a stored set becomes a spacecraft's current one; `SpacecraftStore.archive_spacecraft/4` |
   | `"station"` | `"ground_station_ids"` | `Cadence.Comms.StationGeometry`, when a station's location, mask or lifecycle changes |
+
+  Other contexts stage these through `Cadence.Platform.PassPredictionJobs`.
   | `"full"` | | `enqueue_full/2` (seeds, admins) |
   | `"extend"`, `"prune"` | | `daily/1` (the maintenance process) |
 
   What each run does is `Cadence.GroundNetworks.PredictedPasses.Recompute`. Each finished run
-  that changed rows publishes the `:predicted_passes_changed` read update once.
+  publishes the `:predicted_passes_changed` read update once (a prune only when it deleted rows).
   """
 
   alias Cadence.GroundNetworks.PredictedPasses.{Read, Recompute, Settings, Store}
-  alias Cadence.Ids
   alias Cadence.Jobs
   alias Cadence.Jobs.Available
-  alias Cadence.Platform.ScopedReadUpdates
+  alias Cadence.Platform.{PassPredictionJobs, ScopedReadUpdates}
   alias Cadence.Repo
 
   @job_type :pass_prediction
@@ -32,26 +33,44 @@ defmodule Cadence.GroundNetworks.PredictedPasses do
   @max_limit 500
 
   @doc "Stages (in a transaction) or enqueues a recompute of these spacecraft."
-  @spec stage_spacecraft(binary(), binary(), [binary()]) :: {:ok, Jobs.Job.t()} | {:error, term()}
-  def stage_spacecraft(organization_id, mission_id, spacecraft_ids),
-    do:
-      stage(organization_id, mission_id, %{
-        "kind" => "spacecraft",
-        "spacecraft_ids" => spacecraft_ids
-      })
+  @spec stage_spacecraft(binary(), binary(), [binary()]) ::
+          {:ok, Jobs.Job.t() | nil} | {:error, term()}
+  defdelegate stage_spacecraft(organization_id, mission_id, spacecraft_ids),
+    to: PassPredictionJobs
 
-  @doc "Enqueues a full recompute of the mission."
+  @doc """
+  Enqueues a full recompute of the mission, unless one is already queued or running: then it
+  answers that job, so a repeat request never stages a second run.
+  """
   @spec enqueue_full(binary(), binary()) :: {:ok, Jobs.Job.t()} | {:error, term()}
-  def enqueue_full(organization_id, mission_id),
-    do: stage(organization_id, mission_id, %{"kind" => "full"})
+  def enqueue_full(organization_id, mission_id) do
+    Repo.transaction(fn ->
+      # Two requests at once must not both find no open run.
+      Repo.query!("SELECT pg_advisory_xact_lock(hashtext($1))", [
+        "predicted_passes_full:" <> mission_id
+      ])
 
-  defp stage(organization_id, mission_id, payload) do
-    payload = Map.put(payload, "organization_id", organization_id)
-    run_id = Ids.new("pass_prediction_run")
+      case Enum.find(Jobs.list_open_jobs(@job_type, mission_id), &(&1.payload["kind"] == "full")) do
+        nil -> {:staged, stage!(organization_id, mission_id)}
+        open -> {:open, open}
+      end
+    end)
+    |> case do
+      {:ok, {:staged, job}} ->
+        publish_staged(job)
+        {:ok, job}
 
-    if Repo.in_transaction?(),
-      do: Jobs.enqueue_in_transaction(@job_type, mission_id, run_id, payload),
-      else: Jobs.enqueue(@job_type, mission_id, run_id, payload)
+      {:ok, {:open, job}} ->
+        {:ok, job}
+
+      {:error, _reason} = error ->
+        error
+    end
+  end
+
+  defp stage!(organization_id, mission_id) do
+    {:ok, job} = PassPredictionJobs.stage(organization_id, mission_id, %{"kind" => "full"})
+    job
   end
 
   @doc "Wakes the dispatcher for a job staged in a transaction that has now committed."
@@ -74,12 +93,15 @@ defmodule Cadence.GroundNetworks.PredictedPasses do
   def rerun_safe?(@job_type), do: true
   def rerun_safe?(_job_type), do: false
 
-  @doc "Runs one recompute now and publishes the read update when it changed rows."
+  @doc """
+  Runs one recompute now. Every finished recompute publishes the read update once, rows changed
+  or not, so a client waiting on one sees it end; a prune publishes only when it deleted rows.
+  """
   @spec run(binary(), binary(), Recompute.kind(), DateTime.t()) ::
           {:ok, Recompute.summary()} | {:error, term()}
   def run(organization_id, mission_id, kind, now \\ DateTime.utc_now()) do
     with {:ok, summary} <- Recompute.run(organization_id, mission_id, kind, now) do
-      if summary.deleted + summary.inserted > 0,
+      if summary.run != :prune or summary.deleted > 0,
         do: ScopedReadUpdates.publish(:predicted_passes_changed, organization_id, mission_id)
 
       {:ok, summary}
@@ -123,8 +145,8 @@ defmodule Cadence.GroundNetworks.PredictedPasses do
   @doc """
   A page of the mission's predicted passes overlapping `[from, to)`, with its coverage.
   `params`: `from`, `to` (`DateTime`, required), `station_id`, `spacecraft_id`, `cursor`
-  (opaque) and `limit` (1–500, default 200). A window must end after it starts and span at most
-  14 days, or 1 day without a station or spacecraft filter.
+  (opaque) and `limit` (1–500, default 200). `to` must be after `from` (else an invalid `to`),
+  and the window spans at most 14 days, or 1 day without a station or spacecraft filter.
   """
   @spec page(binary(), binary(), map()) ::
           {:ok, map()}
@@ -164,11 +186,13 @@ defmodule Cadence.GroundNetworks.PredictedPasses do
         do: @max_window_days,
         else: @max_unfiltered_window_days
 
-    span = DateTime.diff(to, from, :second)
+    span = DateTime.diff(to, from, :microsecond)
 
-    if span > 0 and span <= max_days * 86_400,
-      do: :ok,
-      else: {:error, {:window_too_long, max_days}}
+    cond do
+      span <= 0 -> {:error, {:invalid_param, %{field: "to", reason: "must be after from"}}}
+      span > max_days * 86_400_000_000 -> {:error, {:window_too_long, max_days}}
+      true -> :ok
+    end
   end
 
   @doc "The longest horizon a mission may set, in days."

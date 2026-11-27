@@ -11,7 +11,9 @@ defmodule Cadence.GroundNetworks.PredictedPassesTest do
   alias Cadence.GroundNetworks.{ElementSets, PredictedPasses}
   alias Cadence.GroundNetworks.PredictedPasses.{PredictedPassRow, Store}
   alias Cadence.Jobs.BackgroundJobRow
+  alias Cadence.Platform.ScopedReadUpdates
   alias Cadence.Repo
+  alias Cadence.SpacecraftStore
   alias Cadence.SpacecraftStore.SpacecraftRow
 
   @now ~U[2026-11-27 00:00:00.000000Z]
@@ -201,6 +203,60 @@ defmodule Cadence.GroundNetworks.PredictedPassesTest do
 
     for pass <- passes(c),
         do: assert(DateTime.compare(pass.los, DateTime.add(a_week_on, -7 * @day)) != :lt)
+  end
+
+  test "archiving a spacecraft removes its future passes and leaves the others'", c do
+    {:ok, _} = run(c, :full, @now)
+    others = ids(c, c.b)
+    later = DateTime.add(@now, 3600 * 6)
+    ended = c |> passes(c.a) |> Enum.filter(&(DateTime.compare(&1.los, later) != :gt))
+
+    {:ok, _} = SpacecraftStore.archive_spacecraft(c.org, c.mission, c.a, @actor)
+
+    assert Enum.any?(
+             jobs(c),
+             &(&1.payload["kind"] == "spacecraft" and &1.payload["spacecraft_ids"] == [c.a])
+           )
+
+    :ok = ScopedReadUpdates.subscribe(:predicted_passes_changed, c.org, c.mission)
+    assert {:ok, %{run: :spacecraft, inserted: 0}} = run(c, {:spacecraft, [c.a]}, later)
+    assert_receive {:predicted_passes_changed, _, _}
+
+    assert ids(c, c.b) == others
+    # Passes that already ended stay for history until the prune.
+    assert Enum.map(passes(c, c.a), & &1.predicted_pass_id) ==
+             Enum.map(ended, & &1.predicted_pass_id)
+
+    refute Map.has_key?(Store.state(c.org, c.mission).unpropagated, c.a)
+  end
+
+  test "full runs and horizon extensions skip an archived spacecraft", c do
+    {:ok, _} = SpacecraftStore.archive_spacecraft(c.org, c.mission, c.a, @actor)
+    {:ok, _} = run(c, :full, @now)
+    assert passes(c, c.a) == [] and passes(c, c.b) != []
+
+    {:ok, _} = run(c, :extend, DateTime.add(@now, @day))
+    assert passes(c, c.a) == []
+  end
+
+  test "every finished run publishes the read update, even one that changed nothing", c do
+    {:ok, _} = run(c, :full, @now)
+    :ok = ScopedReadUpdates.subscribe(:predicted_passes_changed, c.org, c.mission)
+
+    assert {:ok, %{deleted: 0, inserted: 0}} =
+             run(c, {:stations, ["ground_station_missing"]}, @now)
+
+    assert_receive {:predicted_passes_changed, _, _}
+
+    assert {:ok, %{run: :prune, deleted: 0}} = run(c, :prune, @now)
+    refute_receive {:predicted_passes_changed, _, _}
+  end
+
+  test "a repeat full recompute while one is open answers that run", c do
+    {:ok, first} = PredictedPasses.enqueue_full(c.org, c.mission)
+    {:ok, again} = PredictedPasses.enqueue_full(c.org, c.mission)
+    assert again.run_id == first.run_id
+    assert Enum.count(jobs(c), &(&1.payload["kind"] == "full")) == 1
   end
 
   test "a spacecraft run on a mission with no state runs in full", c do

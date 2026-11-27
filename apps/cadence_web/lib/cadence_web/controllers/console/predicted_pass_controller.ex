@@ -6,7 +6,8 @@ defmodule CadenceWeb.Console.PredictedPassController do
       station or spacecraft optionally, in AOS-then-id order, cursor-paged, with coverage.
     * `GET .../spacecraft/:spacecraft_id/predicted-passes`: the same for one spacecraft.
     * `POST /missions/:mission_id/predicted-passes/recompute`: enqueues a full recompute
-      (`:manage_mission`); 202.
+      (`:manage_mission`); 202 with its `run_id` and `status`. A repeat while one is queued or
+      running answers that same run.
 
   Reads are open to the mission's members. A service identity reaches none of these (they aren't
   listed in `CadenceWeb.Console.ServiceAccess`).
@@ -48,7 +49,9 @@ defmodule CadenceWeb.Console.PredictedPassController do
              mission_id: mission(conn)
            }),
          {:ok, job} <- PredictedPasses.enqueue_full(org(conn), mission(conn)) do
-      conn |> put_status(:accepted) |> json(%{data: %{run_id: job.run_id}})
+      conn
+      |> put_status(:accepted)
+      |> json(%{data: %{run_id: job.run_id, status: Atom.to_string(job.status)}})
     else
       error -> failure(conn, error)
     end

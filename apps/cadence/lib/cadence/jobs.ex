@@ -47,6 +47,20 @@ defmodule Cadence.Jobs do
     end
   end
 
+  @doc "A mission's jobs of one type that are queued or running, oldest first."
+  @spec list_open_jobs(Job.job_type(), binary()) :: [Job.t()]
+  def list_open_jobs(job_type, mission_id) when is_atom(job_type) and is_binary(mission_id) do
+    BackgroundJobRow
+    |> where(
+      [row],
+      row.job_type == ^Atom.to_string(job_type) and row.mission_id == ^mission_id and
+        row.status in ["queued", "running"]
+    )
+    |> order_by([row], asc: row.inserted_at, asc: row.job_id)
+    |> Repo.all()
+    |> Enum.map(&BackgroundJobRow.to_domain/1)
+  end
+
   @spec fetch_job(binary()) :: {:ok, Job.t()} | {:error, term()}
   def fetch_job(job_id) when is_binary(job_id) do
     case Repo.get(BackgroundJobRow, job_id) do

@@ -16,6 +16,9 @@ defmodule Cadence.GroundNetworks.PredictedPasses.Recompute do
   | `:extend` | `[old horizon end, now + horizon)`: passes ending after the old end are deleted and found again whole, so a pass that crosses it is replaced, not stored twice |
   | `:prune` | deletes passes that ended more than 7 days ago |
 
+  Only active spacecraft are predicted: archiving one stages its spacecraft run, which then only
+  deletes its passes from now on.
+
   A spacecraft, station or extension run on a mission with no stored state, or whose horizon end
   has already passed, runs `:full` instead.
   """
@@ -24,6 +27,7 @@ defmodule Cadence.GroundNetworks.PredictedPasses.Recompute do
   alias Cadence.GroundNetworks.ElementSets
   alias Cadence.GroundNetworks.PredictedPasses.{Compute, Settings, Store}
   alias Cadence.Repo
+  alias Cadence.SpacecraftStore
 
   @prune_after_days 7
 
@@ -66,7 +70,7 @@ defmodule Cadence.GroundNetworks.PredictedPasses.Recompute do
   defp full({org, mission}, now) do
     to = horizon_end(org, mission, now)
     stations = Compute.stations(GroundStationStore.list_ground_stations(org, mission))
-    result = Compute.run(ElementSets.current_for_mission(org, mission), stations, now, to)
+    result = Compute.run(active_sets(org, mission), stations, now, to)
     deleted = Store.delete_after!(org, mission, now, :mission)
     inserted = Store.insert!(org, mission, now, result.rows)
 
@@ -83,7 +87,7 @@ defmodule Cadence.GroundNetworks.PredictedPasses.Recompute do
 
   defp incremental({:spacecraft, ids}, {org, mission}, state, now) do
     stations = Compute.stations(GroundStationStore.list_ground_stations(org, mission))
-    sets = ElementSets.current_for(org, mission, ids)
+    sets = active_sets(org, mission, ids)
     result = Compute.run(sets, stations, now, state.horizon_end)
     deleted = Store.delete_after!(org, mission, now, {:spacecraft, ids})
     inserted = Store.insert!(org, mission, now, result.rows)
@@ -105,7 +109,7 @@ defmodule Cadence.GroundNetworks.PredictedPasses.Recompute do
       |> GroundStationStore.list_ground_stations(mission)
       |> Enum.filter(&(&1.ground_station_id in ids))
 
-    sets = ElementSets.current_for_mission(org, mission)
+    sets = active_sets(org, mission)
     result = Compute.run(sets, Compute.stations(chosen), now, state.horizon_end)
     deleted = Store.delete_after!(org, mission, now, {:stations, ids})
     inserted = Store.insert!(org, mission, now, result.rows)
@@ -127,7 +131,7 @@ defmodule Cadence.GroundNetworks.PredictedPasses.Recompute do
 
     if DateTime.compare(new_end, old_end) == :gt do
       stations = Compute.stations(GroundStationStore.list_ground_stations(org, mission))
-      sets = ElementSets.current_for_mission(org, mission)
+      sets = active_sets(org, mission)
       result = Compute.run(sets, stations, old_end, new_end)
       deleted = Store.delete_after!(org, mission, old_end, :mission)
       inserted = Store.insert!(org, mission, now, result.rows)
@@ -156,6 +160,19 @@ defmodule Cadence.GroundNetworks.PredictedPasses.Recompute do
 
       summary(:extend, deleted, 0, %{unpropagated: %{}, not_bracketed: %{}})
     end
+  end
+
+  # Only active spacecraft are predicted: an archived one keeps its element sets (history) but
+  # gets no passes, and its run only deletes them.
+  defp active_sets(org, mission, ids \\ nil) do
+    active = org |> SpacecraftStore.active_identities(mission) |> MapSet.new(& &1.id)
+
+    sets =
+      if ids,
+        do: ElementSets.current_for(org, mission, ids),
+        else: ElementSets.current_for_mission(org, mission)
+
+    Enum.filter(sets, &MapSet.member?(active, &1.spacecraft_id))
   end
 
   defp horizon_end(org, mission, now),
