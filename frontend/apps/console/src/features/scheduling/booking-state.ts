@@ -58,6 +58,8 @@ const REASONS = {
   contact_plan_execution_route_changed: ["its route changed after the plan was drafted", REPLAN],
   contact_plan_execution_route_not_ready: ["its route isn't ready yet", null],
   mission_provider_not_found: ["this mission has no provider set up for that station", SETUP],
+  // ground #986: a scheduling refusal once the mission's provider is archived.
+  mission_provider_archived: ["this mission's provider for that station is archived", SETUP],
   provider_account_version_not_found: ["the provider account's settings are missing", SETUP],
   provider_account_grant_not_found: ["this mission isn't granted the provider account", SETUP],
   provider_account_grant_revoked: [

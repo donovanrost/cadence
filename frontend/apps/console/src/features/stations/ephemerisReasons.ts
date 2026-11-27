@@ -34,6 +34,8 @@ export const notReadyReasons = [
   "mission_provider_not_validated",
   "mission_provider_not_active",
   "mission_provider_not_found",
+  // ground #986.
+  "mission_provider_archived",
   "mission_provider_profiles_not_synced",
   "provider_service_profile_not_active",
   "provider_delivery_profile_not_ready",
@@ -82,6 +84,7 @@ const notReadyWords: Readonly<Record<NotReadyReason, string>> = {
   mission_provider_not_validated: "The provider version hasn't validated.",
   mission_provider_not_active: "The provider version isn't active.",
   mission_provider_not_found: "The provider version these routes pin is gone.",
+  mission_provider_archived: "The provider is archived.",
   mission_provider_profiles_not_synced: "The provider's profiles haven't synced.",
   provider_service_profile_not_active: "The route's service profile isn't active.",
   provider_delivery_profile_not_ready: "The route's delivery profile isn't ready.",
