@@ -1,5 +1,6 @@
 Mix.install([:req, :jason])
 Code.require_file("earendil_dashboard_import.exs", __DIR__)
+Code.require_file("earendil_orbits.exs", __DIR__)
 
 defmodule EarendilSeed do
   @moduledoc false
@@ -57,11 +58,11 @@ defmodule EarendilSeed do
 
     client = phase("dashboard source probe", fn -> probe_dashboard_source(client, mission_id) end)
     seed_fleet(client, mission_id, count, site_rows)
+    client = phase("orbits", fn -> EarendilOrbits.seed(client, mission_id) end)
     phase("dashboard import", fn -> seed_dashboards(client, organization_id, mission_id) end)
 
     IO.puts("Earendil: organization #{organization_id}, mission #{mission_id}")
 
-    IO.puts("  orbit elements wait on #732")
     IO.puts("  #{sites} station and profile changes await the fleet's independent review")
     IO.puts("  second-person invitations and approval wait on #745")
 

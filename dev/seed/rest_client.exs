@@ -24,6 +24,10 @@ defmodule EarendilRestClient do
     {%{client | csrf: session["csrf_token"]}, session}
   end
 
+  @doc "Like `request!/5`, but answers the whole body (`data` and `meta`), for cursor-paged reads."
+  def request_envelope!(client, method, path),
+    do: request!(client, method, path, nil, envelope?: true)
+
   def request!(client, method, path, body \\ nil, opts \\ []) do
     url = client.base <> if(Keyword.get(opts, :api?, true), do: @api_base, else: "") <> path
     accept = if Keyword.get(opts, :api?, true), do: "application/json", else: "text/html"
@@ -44,8 +48,11 @@ defmodule EarendilRestClient do
         else: options
 
     case Req.request(options) do
-      {:ok, response} -> response!(client, method, path, response)
-      {:error, error} -> raise("#{method} #{path}: #{Exception.message(error)}")
+      {:ok, response} ->
+        response!(client, method, path, response, Keyword.get(opts, :envelope?, false))
+
+      {:error, error} ->
+        raise("#{method} #{path}: #{Exception.message(error)}")
     end
   end
 
@@ -61,7 +68,7 @@ defmodule EarendilRestClient do
     end
   end
 
-  defp response!(client, method, path, response) do
+  defp response!(client, method, path, response, envelope?) do
     unless response.status in 200..299,
       do: raise("#{method} #{path} (HTTP #{response.status}): #{inspect(response.body)}")
 
@@ -69,7 +76,7 @@ defmodule EarendilRestClient do
       Enum.reduce(Req.Response.get_header(response, "set-cookie"), client.cookies, &cookie/2)
 
     data =
-      if is_map(response.body),
+      if is_map(response.body) and not envelope?,
         do: Map.get(response.body, "data", response.body),
         else: response.body
 
