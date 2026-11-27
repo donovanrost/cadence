@@ -6,30 +6,32 @@ defmodule EarendilSimulator do
   model until the fleet's orbits are applied and uploaded (#745) and the e2e seeds send orbits.
   """
 
-  @sim_admin_token "earendil-local-admin"
   @run_id "run-earendil-demo-v1"
   @scenario_id "scenario-earendil-demo-v1"
 
-  @doc "Resumes the Earendil simulator run, or creates its scenario and run."
-  def ensure(count, site_rows) do
-    case sim_request(:get, "/admin/v1/runs/#{@run_id}") do
+  @doc """
+  Resumes the Earendil simulator run, or creates its scenario and run. `admin_token` is the
+  simulator's local admin token, which the seed owns.
+  """
+  def ensure(count, site_rows, admin_token) do
+    case sim_request(admin_token, :get, "/admin/v1/runs/#{@run_id}") do
       {200, %{"state" => "running"}} ->
         :ok
 
       {200, %{"state" => "paused"}} ->
-        {200, _run} = sim_request(:post, "/admin/v1/runs/#{@run_id}/resume", %{})
+        {200, _run} = sim_request(admin_token, :post, "/admin/v1/runs/#{@run_id}/resume", %{})
         :ok
 
       {404, _missing} ->
-        create_simulator_run(count, site_rows)
+        create_simulator_run(count, site_rows, admin_token)
 
       other ->
         fail!("simulator run", other)
     end
   end
 
-  defp create_simulator_run(count, site_rows) do
-    case sim_request(:get, "/admin/v1/scenarios/#{@scenario_id}") do
+  defp create_simulator_run(count, site_rows, admin_token) do
+    case sim_request(admin_token, :get, "/admin/v1/scenarios/#{@scenario_id}") do
       {200, _scenario} ->
         :ok
 
@@ -49,11 +51,11 @@ defmodule EarendilSimulator do
           }
         }
 
-        {201, _scenario} = sim_request(:post, "/admin/v1/scenarios", scenario)
+        {201, _scenario} = sim_request(admin_token, :post, "/admin/v1/scenarios", scenario)
     end
 
     {201, _run} =
-      sim_request(:post, "/admin/v1/scenarios/#{@scenario_id}/runs", %{
+      sim_request(admin_token, :post, "/admin/v1/scenarios/#{@scenario_id}/runs", %{
         id: @run_id,
         seed: 20_261_019,
         speed: 1.0
@@ -92,9 +94,9 @@ defmodule EarendilSimulator do
     end)
   end
 
-  defp sim_request(method, path, body \\ nil) do
+  defp sim_request(admin_token, method, path, body \\ nil) do
     base = System.fetch_env!("EARENDIL_PROVIDER_URL")
-    headers = [{"authorization", "Bearer #{@sim_admin_token}"}]
+    headers = [{"authorization", "Bearer #{admin_token}"}]
     options = [method: method, url: base <> path, headers: headers, retry: false]
     options = if body, do: Keyword.put(options, :json, body), else: options
 

@@ -10,6 +10,8 @@ defmodule EarendilSeed do
 
   @batch_size 100
   @run_id "run-earendil-demo-v1"
+  # The simulator's loopback admin token (a public local fixture, allowlisted in .gitleaks.toml).
+  @sim_admin_token "earendil-local-admin"
   @provider_name "Earendil Demo Ground Network"
   @account_name "Earendil Demo Ground Network"
   @site_rows [
@@ -48,7 +50,7 @@ defmodule EarendilSeed do
     # second person (#745); until then the profile carries no catalog pin.
     {client, _revision_id} = phase("catalog import", fn -> seed_catalog(client, mission_id) end)
     site_rows = Enum.take(@site_rows, sites)
-    phase("simulator run", fn -> EarendilSimulator.ensure(count, site_rows) end)
+    phase("simulator run", fn -> EarendilSimulator.ensure(count, site_rows, @sim_admin_token) end)
 
     {client, _provider_id} =
       phase("provider account and mission provider", fn ->
