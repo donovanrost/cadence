@@ -3,11 +3,20 @@ defmodule CadenceWeb.Console.PredictedPassJSON do
 
   alias Cadence.GroundNetworks.PredictedPass
 
+  # A row whose spacecraft or element set no longer resolves belongs to a spacecraft deleted
+  # between the page query and the lookups; its passes are being deleted by the cascade, so the
+  # row is dropped rather than sent with a null name, SCID or epoch. The cursor still advances
+  # from the page as read.
   def page(page) do
     %{
-      data: Enum.map(page.passes, &pass(&1, page)),
+      data: page.passes |> Enum.filter(&resolved?(&1, page)) |> Enum.map(&pass(&1, page)),
       meta: %{next_cursor: page.next_cursor, coverage: coverage(page.coverage)}
     }
+  end
+
+  defp resolved?(%PredictedPass{} = pass, page) do
+    Map.has_key?(page.spacecraft, pass.spacecraft_id) and
+      Map.has_key?(page.element_set_epochs, pass.element_set_id)
   end
 
   defp pass(%PredictedPass{} = pass, page) do
@@ -24,8 +33,8 @@ defmodule CadenceWeb.Console.PredictedPassJSON do
       los_azimuth_deg: pass.los_azimuth_deg,
       spacecraft: %{
         id: pass.spacecraft_id,
-        name: spacecraft && spacecraft.display_name,
-        scid: spacecraft && spacecraft.scid
+        name: spacecraft.display_name,
+        scid: spacecraft.scid
       },
       station: %{
         id: pass.ground_station_id,
