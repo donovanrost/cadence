@@ -34,7 +34,7 @@ const item = (conflict: string, o: Record<string, unknown> = {}) => ({
   state: "caution",
   source: "provider_ephemeris",
   acknowledged: null,
-  since: "2026-11-27T09:30:00Z",
+  since: "2026-11-25T09:30:00Z",
   due_at: null,
   count: 1,
   spacecraft: [member(1), member(2)],
@@ -56,7 +56,8 @@ const item = (conflict: string, o: Record<string, unknown> = {}) => ({
     station: null,
     provider: { id: "prov_1", name: "Northlight" },
     starts_at: null,
-    raised_at: "2026-11-25T09:30:00Z",
+    // ops.md names the item's since; raised_at differs here so the test shows which is read.
+    raised_at: "2026-11-27T11:00:00Z",
     provider_message: null,
     resolution: null,
     uplink: null,

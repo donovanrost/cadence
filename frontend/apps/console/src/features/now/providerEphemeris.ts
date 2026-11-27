@@ -37,6 +37,8 @@ export function ephemerisRow(
   base: Pick<QueueItem, "priority" | "state" | "spacecraftIds">,
   key: string,
   a: Attention,
+  /** The queue item's `since` (ops.md): when the group's earliest member entered this outcome. */
+  since: string | null,
   now: Date = new Date(),
 ): QueueItem {
   const cause = causeOf(a);
@@ -55,7 +57,7 @@ export function ephemerisRow(
     sentence: cause
       ? ephemerisReasonWords(cause, a.reason ?? null)
       : `Cause not recognized (${a.conflict === null ? "none" : serverKey(a.conflict)}).`,
-    meta: `Since ${short(a.raised_at, now)}`.toUpperCase(),
+    meta: since ? `Since ${short(since, now)}`.toUpperCase() : null,
     ...(retry ? { due: { label: cause === "failed" ? "Retry" : "Re-check", at: retry } } : {}),
     action: { label: "Review", to },
   };
