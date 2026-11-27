@@ -227,11 +227,19 @@ defmodule Cadence.Control.Providers.EphemerisUploads do
   end
 
   # Attempts count up while the same element set keeps failing, and start over for a new one.
+  defp same_target?(prior, base) do
+    prior.element_set_id == base.element_set_id and
+      prior.provider_spacecraft_ref == base.provider_spacecraft_ref and
+      prior.provider_version == base.provider_version
+  end
+
+  # Attempts count up only while the same set keeps failing to the same pinned version and ref; a
+  # new set or a new target starts over.
   defp failed(base, prior, reason, now) do
     attempts =
       case prior do
-        %{status: "failed", element_set_id: id, attempts: n} when id == base.element_set_id ->
-          n + 1
+        %{status: "failed", attempts: n} = prior when is_integer(n) ->
+          if same_target?(prior, base), do: n + 1, else: 1
 
         _other ->
           1

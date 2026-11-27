@@ -108,7 +108,10 @@ defmodule Cadence.GroundNetworks.EphemerisStates do
   # newest epoch. The ref and the set are each one LIMIT 1 index probe per bound pair, so the
   # work scales with bound pairs, never with element-set history. The orbit source is the pinned
   # version's declared one; NULL (undeclared) behaves as lookup. An upload pair is `uploaded`
-  # only when the stored row holds the current set for the same pinned version and ref.
+  # only when the stored row holds the current set for the same pinned version and ref, and
+  # `failed` only when its failure was for that same set, version and ref; a failure for an older
+  # set or another target is `pending`, so the reconcile sends to the current target now instead
+  # of waiting out the old backoff.
   # `$1`/`$2` narrow to one mission when the caller passes `scoped: true`.
   defp bound_sql(scoped?) do
     mission = fn alias ->
@@ -138,7 +141,9 @@ defmodule Cadence.GroundNetworks.EphemerisStates do
               WHEN s.status = 'uploaded' AND s.element_set_id = c.element_set_id
                AND s.provider_version = b.provider_version
                AND s.provider_spacecraft_ref = ref.source_ref THEN 'uploaded'
-              WHEN s.status = 'failed' THEN 'failed'
+              WHEN s.status = 'failed' AND s.element_set_id = c.element_set_id
+               AND s.provider_version = b.provider_version
+               AND s.provider_spacecraft_ref = ref.source_ref THEN 'failed'
               ELSE 'pending'
             END
           WHEN c.norad_id IS NULL THEN 'norad_id_missing'

@@ -124,6 +124,34 @@ defmodule Cadence.Control.Providers.EphemerisReconcileTest do
     assert %{status: "uploaded", provider_spacecraft_ref: "SIM-777"} = state(c)
   end
 
+  test "a failure to an old ref doesn't hold a new ref back, and its attempts start over", c do
+    upload_provider!(c)
+    {:ok, _results} = submit(c, norad: 25_544)
+    clear_jobs!(c)
+    {:ok, _summary} = run(c, upload_result: {:error, :econnrefused})
+    {:ok, _summary} = run(c, upload_result: {:error, :econnrefused})
+    assert %{status: "failed", attempts: 2, provider_spacecraft_ref: "SIM-001"} = state(c)
+
+    {1, _rows} =
+      from(row in "mission_source_endpoints",
+        where:
+          row.mission_id == ^c.mission and row.spacecraft_id == ^c.sc and
+            row.source_ref == "SIM-001"
+      )
+      |> Repo.update_all(set: [source_ref: "SIM-777"])
+
+    # The failure was for SIM-001: the new ref is pending now, not waiting out the old backoff.
+    assert %{c.provider.provider_id => %{"pending" => 1}} ==
+             EphemerisStates.buckets(c.org, c.mission)
+
+    assert EphemerisUploads.reconcile() == 1
+    {:ok, _summary} = run(c, upload_result: {:error, :econnrefused})
+    assert %{status: "failed", attempts: 1, provider_spacecraft_ref: "SIM-777"} = state(c)
+
+    assert %{c.provider.provider_id => %{"failed" => 1}} ==
+             EphemerisStates.buckets(c.org, c.mission)
+  end
+
   test "the reconcile's limit bounds pairs, and the job carries exactly those pairs", c do
     second = second_bound_spacecraft!(c)
     upload_provider!(c)
