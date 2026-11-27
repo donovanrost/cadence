@@ -22,6 +22,15 @@ defmodule Cadence.Comms.GroundStationRow do
     field(:provider, :string)
     field(:region, :string)
     field(:metadata, :map, default: %{})
+    field(:latitude_deg, :float)
+    field(:longitude_deg, :float)
+    field(:height_m, :float)
+    field(:elevation_mask_deg, :float, default: 5.0)
+    field(:provider_latitude_deg, :float)
+    field(:provider_longitude_deg, :float)
+    field(:provider_height_m, :float)
+    field(:provider_location_provider_id, :string)
+    field(:provider_location_reported_at, :utc_datetime_usec)
 
     timestamps()
   end
@@ -47,6 +56,9 @@ defmodule Cadence.Comms.GroundStationRow do
     |> unique_constraint([:mission_id, :ground_station_id],
       name: :comms_ground_stations_scope_idx
     )
+    |> check_constraint(:latitude_deg, name: :comms_ground_stations_location_range)
+    |> check_constraint(:latitude_deg, name: :comms_ground_stations_location_complete)
+    |> check_constraint(:elevation_mask_deg, name: :comms_ground_stations_elevation_mask_range)
   end
 
   @spec to_domain(struct()) :: GroundStation.t()
@@ -60,8 +72,42 @@ defmodule Cadence.Comms.GroundStationRow do
       code: row.code,
       provider: row.provider,
       region: row.region,
-      metadata: JsonDocument.unwrap_value(row.metadata)
+      metadata: JsonDocument.unwrap_value(row.metadata),
+      location: location(row.latitude_deg, row.longitude_deg, row.height_m),
+      elevation_mask_deg: row.elevation_mask_deg,
+      provider_location: provider_location(row)
     })
+  end
+
+  defp location(lat, lon, height) when is_float(lat) and is_float(lon) and is_float(height),
+    do: %{latitude_deg: lat, longitude_deg: lon, height_m: height}
+
+  defp location(_lat, _lon, _height), do: nil
+
+  defp provider_location(row) do
+    case location(row.provider_latitude_deg, row.provider_longitude_deg, row.provider_height_m) do
+      nil ->
+        nil
+
+      location ->
+        Map.merge(location, %{
+          provider_id: row.provider_location_provider_id,
+          reported_at: row.provider_location_reported_at
+        })
+    end
+  end
+
+  @doc "The mission-owned geometry columns of `station`, as a changeset or update sets them."
+  @spec geometry_columns(GroundStation.t()) :: keyword()
+  def geometry_columns(%GroundStation{location: location, elevation_mask_deg: mask}) do
+    location = location || %{}
+
+    [
+      latitude_deg: Map.get(location, :latitude_deg),
+      longitude_deg: Map.get(location, :longitude_deg),
+      height_m: Map.get(location, :height_m),
+      elevation_mask_deg: mask
+    ]
   end
 
   defp domain_attrs(%GroundStation{} = ground_station) do
@@ -76,6 +122,7 @@ defmodule Cadence.Comms.GroundStationRow do
       region: ground_station.region,
       metadata: JsonDocument.wrap_value(ground_station.metadata)
     }
+    |> Map.merge(Map.new(geometry_columns(ground_station)))
   end
 
   defp all_fields do
@@ -88,7 +135,11 @@ defmodule Cadence.Comms.GroundStationRow do
       :code,
       :provider,
       :region,
-      :metadata
+      :metadata,
+      :latitude_deg,
+      :longitude_deg,
+      :height_m,
+      :elevation_mask_deg
     ]
   end
 end

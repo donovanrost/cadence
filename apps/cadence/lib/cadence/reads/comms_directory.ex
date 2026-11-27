@@ -49,10 +49,20 @@ defmodule Cadence.Reads.CommsDirectory do
         lifecycle_state: station.lifecycle_state,
         transport_count: nil,
         routing_rule_count: nil,
-        health: nil
+        health: nil,
+        # #890: the location pass prediction uses (the mission's, else the provider's), the
+        # provider's own report, and the elevation mask.
+        location: GroundStation.effective_location(station),
+        provider_location: provider_location(station.provider_location),
+        elevation_mask_deg: station.elevation_mask_deg
       }
     end)
   end
+
+  defp provider_location(nil), do: nil
+
+  defp provider_location(location),
+    do: Map.take(location, [:latitude_deg, :longitude_deg, :height_m, :reported_at])
 
   @doc """
   The mission's ground-network providers with their account and station count.

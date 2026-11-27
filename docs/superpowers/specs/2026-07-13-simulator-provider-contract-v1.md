@@ -331,9 +331,13 @@ display_name
 region
 service_pool_refs
 antenna_count, when meaningful
+location, when known: {latitude_deg, longitude_deg, height_m} (WGS84 geodetic, #890)
 state
 extensions
 ```
+
+Cadence stores a reported `location` apart from the mission's own station location and uses it
+only while the mission has set none (`docs/apogee/api/setup.md`, ground stations).
 
 Cadence maps these references explicitly to mission spacecraft and configured
 provider use. It does not treat SCID as durable provider identity.
