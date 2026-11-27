@@ -12,6 +12,7 @@ import { formatHourMinute, formatShort } from "@/ui";
 import { reasonWords } from "@/features/scheduling/booking-state.ts";
 import { passReader } from "./api.ts";
 import { listenerOverlapKey } from "./listenerOverlap.ts";
+import { offerGeometry } from "@/features/scheduling/geometry.ts";
 
 /**
  * §11 L15 single bookings outside a plan (proposal plans/single-bookings.md; ux Contacts.md § Book a
@@ -42,6 +43,8 @@ const offerReader = d.object({
   cost: costReader,
   /** U58 (b), #361: booking it would overlap another pass on a one-connection listener (allowed). */
   listener_overlap: listenerOverlapKey,
+  /** #892: predicted elevation and TCA, and whether no predicted pass backs the window. */
+  ...offerGeometry,
   overlaps: d.nullable(
     d.object({
       reservation_id: d.token,

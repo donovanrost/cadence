@@ -36,6 +36,9 @@ import {
   type Search,
 } from "./singleBookings.ts";
 import ListenerOverlapNote from "./ListenerOverlapNote.vue";
+import NoPredictedPassNote from "@/features/scheduling/NoPredictedPassNote.vue";
+import { geometryLine } from "@/features/scheduling/geometry.ts";
+import { useMissionInvalidation } from "@/live/index.ts";
 
 /**
  * Book a pass (ux Contacts.md, §11 L15): search the spacecraft's ready routes, pick an offer before
@@ -113,23 +116,46 @@ const blocked = computed(
       scName.value,
     ),
 );
+type Query = Parameters<typeof searchOffers>[1];
+/** The query the offers shown answer, so a live change re-asks the same one. */
+let shownQuery: Query | null = null;
 async function runSearch() {
   if (blocked.value || searching.value) return;
   searching.value = true;
   searchError.value = null;
   chosen.value = null;
   result.value = null;
-  const r = await searchOffers(props.missionId, {
+  const query: Query = {
     spacecraftId: spacecraftId.value,
     from: new Date(range.value.from),
     to: new Date(range.value.to),
     direction: direction.value,
     routeKeys: routeKeys.value,
-  });
+  };
+  const r = await searchOffers(props.missionId, query);
   searching.value = false;
-  if (r.ok) search.value = r.value;
-  else searchError.value = describeApiError(r.error);
+  if (r.ok) {
+    search.value = r.value;
+    shownQuery = query;
+  } else searchError.value = describeApiError(r.error);
 }
+/**
+ * #895: a finished pass-prediction run changes the offers' geometry, so the same search is asked
+ * again quietly while offers are shown. Not once one is chosen: the person is booking it, and a
+ * re-search signs new tokens (one window can come back once per route). A failed refresh keeps the
+ * offers shown; they're still bookable by token until they expire.
+ */
+async function refreshOffers() {
+  const query = shownQuery;
+  if (!query || !search.value || searching.value || chosen.value || result.value) return;
+  const r = await searchOffers(props.missionId, query);
+  if (r.ok && shownQuery === query && !chosen.value && !result.value) search.value = r.value;
+}
+useMissionInvalidation(
+  computed(() => props.missionId),
+  ["predicted_passes"],
+  () => void refreshOffers(),
+);
 async function book() {
   const o = chosen.value;
   if (!o || booking.value) return;
@@ -247,6 +273,7 @@ const reasonId = (token: string) => `${reasonPrefix}-${token}`;
             <span class="font-mono text-text-3">{{
               formatDuration((Date.parse(o.ends_at) - Date.parse(o.starts_at)) / 1000)
             }}</span>
+            <span v-if="geometryLine(o)" class="font-mono text-text-3">{{ geometryLine(o) }}</span>
             <ApTag v-if="o.uplink_capable" state="neutral" label="Up" />
             <!-- ux U69 A16a: the plan's tag; 'limited' says so, 'available' says nothing. -->
             <ApTag v-if="o.synthetic" state="stale" label="Synthetic" />
@@ -268,6 +295,8 @@ const reasonId = (token: string) => `${reasonPrefix}-${token}`;
           </p>
           <!-- U58 (b), #361: said before booking; booking stays allowed. -->
           <ListenerOverlapNote :overlap="o.listener_overlap" class="pt-1" />
+          <!-- #895: a caution, said before booking; booking stays allowed. -->
+          <NoPredictedPassNote :geometry="o" class="pt-1" />
           <div v-if="chosen?.token === o.token && !result" class="flex flex-col gap-2 pt-2">
             <p class="m-0 text-readout">{{ confirmLine(scName, o, direction) }}</p>
             <ApTextarea v-model="note" label="Why" :rows="2" placeholder="Optional" />

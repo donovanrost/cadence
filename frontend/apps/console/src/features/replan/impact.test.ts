@@ -18,6 +18,8 @@ const pass = (id: string, state: string, planId: string | null, sc: string, stat
   uplink_capable: null,
   source: { provider: "p1", provider_name: "Simulator", synthetic: true },
   max_elevation_deg: null,
+  elevation_source: null,
+  predicted_pass_id: null,
   cost: null,
   plan: planId ? { id: planId, version: 41 } : null,
   reservation_id: id,

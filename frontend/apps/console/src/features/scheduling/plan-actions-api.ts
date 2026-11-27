@@ -1,4 +1,5 @@
 import { decoders as d, request, type ApiResult, type Decoded, type MissionId } from "@/api";
+import { offerGeometry } from "./geometry.ts";
 import { expiredReader } from "./lifecycle.ts";
 import { base, type PlanState, planState, stationReader, stationKey } from "./plans-api.ts";
 import { longestGapReader, planDetailReader, type PlanDetail } from "./plan-detail-api.ts";
@@ -136,6 +137,8 @@ export const alternativesReader = d.object({
       starts_at: d.timestamp,
       ends_at: d.timestamp,
       synthetic: d.boolean,
+      /** #892: predicted geometry, as on a Book a pass offer (scheduling.md S4). */
+      ...offerGeometry,
       effect: d.object({
         rule_met_after: d.boolean,
         contacts_after: d.object({ have: d.integer, need: d.nullable(d.integer) }),

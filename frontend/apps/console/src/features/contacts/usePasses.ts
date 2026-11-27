@@ -19,7 +19,7 @@ export function usePasses(missionId: Ref<MissionId>, back: number, ahead: number
     const t = Date.now();
     return fetchPasses(k.m, { from: new Date(t - back), to: new Date(t + k.ms) }, signal);
   });
-  useMissionInvalidation(missionId, ["contacts"], query.refetch);
+  useMissionInvalidation(missionId, ["contacts", "predicted_passes"], query.refetch);
   const slide = setInterval(query.refetch, WINDOW_SLIDE_MS);
   onScopeDispose(() => clearInterval(slide));
   return query;

@@ -36,7 +36,7 @@ export function useSelectedPass(
     return all.value.some((p) => p.id === id) ? null : { m: missionId.value, id };
   });
   const outside = useRemoteQuery(outsideKey, (k, signal) => fetchPassOrContact(k.m, k.id, signal));
-  useMissionInvalidation(missionId, ["contacts", "attention"], outside.refetch);
+  useMissionInvalidation(missionId, ["contacts", "attention", "predicted_passes"], outside.refetch);
   const outsideRow = computed(() =>
     outside.state.value.status === "ready" ? outside.state.value.value : null,
   );
