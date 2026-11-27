@@ -1502,7 +1502,8 @@ permissions}` for the Stations · Providers tab, sorted by name.
   provider's own record of its last validate and sync. `null` means never checked. `error` is a
   sentence for a person, not provider evidence.
 - `station_count` counts active stations whose `provider` is this provider's name.
-- `ephemeris` (#968) is `{orbit_source, uploaded, failed, pending, lookup, norad_id_missing}`.
+- `ephemeris` (#968, #974) is `{orbit_source, uploaded, failed, not_ready, pending, lookup,
+  norad_id_missing}`.
   It says how the provider gets orbits and counts its bound spacecraft by state: counts from one
   grouped query, never rows.
   - **Who is counted.** Every spacecraft that has a current element set and is bound to this
@@ -1516,10 +1517,18 @@ permissions}` for the Stations · Providers tab, sorted by name.
   - **Each spacecraft is bucketed by the version its route's transport pins** (the highest when
     two differ), not by the latest. While some routes still pin an older version with another
     source, one provider can have counts in both the upload buckets and the lookup buckets.
+    When the highest pinned version's route isn't ready but a lower one's is, the orbit is sent
+    through the lower version and still counts as `uploaded`; it moves to the higher version
+    within an hour of that route becoming ready.
   - `uploaded`: the provider holds the spacecraft's current element set, sent to the pinned
     provider version and the spacecraft's current provider-side ref.
   - `failed`: the last upload of the current set, to that same version and ref, failed. It is
     retried with backoff (1, 5, 15, 60 and 360 minutes, then every 6 h).
+  - `not_ready`: a routing rule binds the spacecraft to the provider, but no route to it is ready
+    (for example the provider version isn't validated, or its profiles aren't synced), so nothing
+    was sent. The reason is the scheduling refusal. It is re-checked every hour, and it clears
+    when a route becomes ready (then `uploaded`) or when the element set, the pinned version or
+    the ref changes (then `pending`).
   - `pending`: not sent yet. Either it was never tried (a provider newly bound or ready), a
     newer element set hasn't been uploaded, or the target changed since the last upload or
     failure (a new provider-side ref, or the transport now pins another provider version). The

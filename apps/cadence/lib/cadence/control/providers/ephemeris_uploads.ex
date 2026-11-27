@@ -13,6 +13,14 @@ defmodule Cadence.Control.Providers.EphemerisUploads do
   - `looks_up_by_norad_id`: nothing to send; `lookup` when the set carries a NORAD id,
     `norad_id_missing` when it doesn't, so a provider that can't find the spacecraft is visible.
 
+  A pair the routing rules bind but with no ready route to the provider is `not_ready` (#974),
+  with the scheduling refusal as its reason. Nothing is sent, the reconcile doesn't stage it again
+  while its set, pinned version and ref are unchanged, and the retry sweep re-checks it every
+  60 minutes so a route that becomes ready is picked up. When two transports pin versions of one
+  provider, the run uses the highest whose route is READY; a pair uploaded through a lower
+  version than the rules bind is re-checked on the same cadence so it moves up once that route
+  is ready.
+
   The outcome of every pair is stored in `Cadence.GroundNetworks.EphemerisStates`, in bulk. Runs
   are staged by `Cadence.Platform.EphemerisUploadJobs` and never run in a request.
   """
@@ -30,6 +38,7 @@ defmodule Cadence.Control.Providers.EphemerisUploads do
   @job_type :ephemeris_upload
   @backoff_minutes [1, 5, 15, 60, 360]
   @retry_lease_minutes 10
+  @recheck_minutes 60
   @reconcile_limit 5_000
 
   @type summary :: %{optional(binary()) => non_neg_integer()}
@@ -65,7 +74,10 @@ defmodule Cadence.Control.Providers.EphemerisUploads do
              mission_id,
              Map.keys(sets)
            ) do
-      bindings = routes |> bindings() |> only(Keyword.get(opts, :pairs))
+      pairs = Keyword.get(opts, :pairs)
+      bound = EphemerisStates.bound_pairs(organization_id, mission_id, Map.keys(sets))
+      bindings = routes |> bindings() |> only(pairs)
+      not_ready = not_ready(bound, bindings, pairs)
       prepared = prepare(bindings, providers, opts)
 
       previous =
@@ -77,8 +89,13 @@ defmodule Cadence.Control.Providers.EphemerisUploads do
 
       states =
         Enum.map(bindings, fn binding ->
-          attempt(binding, Map.fetch!(sets, binding.spacecraft_id), prepared, previous, now)
-        end)
+          binding
+          |> attempt(Map.fetch!(sets, binding.spacecraft_id), prepared, previous, now)
+          |> bound_to(Map.get(bound, {binding.provider_id, binding.spacecraft_id}), now)
+        end) ++
+          Enum.map(not_ready, fn {{provider_id, spacecraft_id}, basis} ->
+            not_ready_state(provider_id, Map.fetch!(sets, spacecraft_id), basis, routes, now)
+          end)
 
       :ok = EphemerisStates.put_all(organization_id, mission_id, states, now)
       {:ok, Enum.frequencies_by(states, & &1.status)}
@@ -146,6 +163,51 @@ defmodule Cadence.Control.Providers.EphemerisUploads do
     DateTime.add(now, minutes * 60)
   end
 
+  # The bound pairs (as the reconcile reads them) with no ready route, among the ones asked for.
+  defp not_ready(bound, bindings, pairs) do
+    ready = MapSet.new(bindings, &{&1.provider_id, &1.spacecraft_id})
+    wanted = if pairs, do: MapSet.new(pairs, fn {sc, provider} -> {provider, sc} end)
+
+    Enum.reject(bound, fn {key, _basis} ->
+      MapSet.member?(ready, key) or (wanted != nil and not MapSet.member?(wanted, key))
+    end)
+  end
+
+  defp not_ready_state(provider_id, set, basis, routes, now) do
+    %{
+      provider_id: provider_id,
+      spacecraft_id: set.spacecraft_id,
+      status: "not_ready",
+      element_set_id: set.element_set_id,
+      content_sha256: set.content_sha256,
+      provider_spacecraft_ref: basis.provider_spacecraft_ref,
+      provider_version: basis.provider_version,
+      bound_provider_version: basis.provider_version,
+      reason: refusal(Map.get(routes, set.spacecraft_id)),
+      next_retry_at: DateTime.add(now, @recheck_minutes * 60)
+    }
+  end
+
+  # Why the spacecraft's route isn't ready, as `ProviderScheduling` reports it.
+  defp refusal({:ok, %{findings: [_ | _] = findings}}),
+    do: findings |> Enum.map(&to_string(&1.code)) |> Enum.min()
+
+  defp refusal({:error, reason}) when is_atom(reason), do: Atom.to_string(reason)
+  defp refusal(_none), do: "no_ready_route"
+
+  # Records the version the routing rules bind alongside the one used, and re-checks a pair
+  # uploaded through a lower version than they bind.
+  defp bound_to(state, nil, _now),
+    do: Map.put(state, :bound_provider_version, state.provider_version)
+
+  defp bound_to(state, basis, now) do
+    state = Map.put(state, :bound_provider_version, basis.provider_version)
+
+    if state.status == "uploaded" and state.provider_version < basis.provider_version,
+      do: Map.put(state, :next_retry_at, DateTime.add(now, @recheck_minutes * 60)),
+      else: state
+  end
+
   # One binding per (provider, spacecraft): every ready route a spacecraft has to a provider
   # names the same provider-side spacecraft (its first mapped source endpoint).
   defp bindings(routes) do
@@ -159,8 +221,7 @@ defmodule Cadence.Control.Providers.EphemerisUploads do
         provider_spacecraft_ref: route.provider_spacecraft_ref
       }
     end
-    # Two transports may pin different versions of one provider: the highest, as the reconcile
-    # query reads it.
+    # Two transports may pin different versions of one provider: the highest READY one (#974).
     |> Enum.sort_by(& &1.provider_version, :desc)
     |> Enum.uniq_by(&{&1.provider_id, &1.spacecraft_id})
   end

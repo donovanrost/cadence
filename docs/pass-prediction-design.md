@@ -193,8 +193,11 @@ Writes use `Cadence.Persistence.BulkInsert` (#872): typed arrays and one stateme
   - **Lookup providers.** Nothing is sent to them. A current element set without a NORAD id is
     recorded as `norad_id_missing` for that binding and counted on the providers read, never
     skipped silently.
-  - **State.** Each (provider, spacecraft) pair is recorded as `uploaded`, `failed`, `lookup` or
-    `norad_id_missing`.
+  - **State.** Each (provider, spacecraft) pair is recorded as `uploaded`, `failed`,
+    `not_ready`, `lookup` or `norad_id_missing`. `not_ready` (#974) means a routing rule binds
+    the pair but no route is ready; it carries the scheduling refusal, isn't staged again while
+    its set, pinned version and ref are unchanged, and is re-checked hourly. The run uses the
+    highest pinned provider version whose route is ready.
 - **The simulator (slices 5a and 5b, #968 and #893)** declares `accepts_ephemeris_upload` and
   stores each upload. A scenario whose `orbit_readiness.source_kind` is `uploaded` is ready only
   for spacecraft with an upload at most 14 days old, and offers their real passes: the uploaded

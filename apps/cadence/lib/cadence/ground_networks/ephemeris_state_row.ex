@@ -13,6 +13,7 @@ defmodule Cadence.GroundNetworks.EphemerisStateRow do
     field(:content_sha256, :string)
     field(:provider_spacecraft_ref, :string)
     field(:provider_version, :integer)
+    field(:bound_provider_version, :integer)
     field(:attempts, :integer, default: 0)
     field(:reason, :string)
     field(:next_retry_at, :utc_datetime_usec)
