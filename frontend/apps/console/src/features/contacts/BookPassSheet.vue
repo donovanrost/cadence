@@ -24,6 +24,7 @@ import {
   confirmLine,
   emptyWords,
   expiryWords,
+  offerKeys,
   offerBlocked,
   outcomeWords,
   providerWords,
@@ -149,7 +150,8 @@ async function refreshOffers() {
   const query = shownQuery;
   if (!query || !search.value || searching.value || chosen.value || result.value) return;
   const r = await searchOffers(props.missionId, query);
-  if (r.ok && shownQuery === query && !chosen.value && !result.value) search.value = r.value;
+  if (r.ok && shownQuery === query && !searching.value && !chosen.value && !result.value)
+    search.value = r.value;
 }
 useMissionInvalidation(
   computed(() => props.missionId),
@@ -203,7 +205,9 @@ const searchSaid = computed(() => {
 });
 /** a11y A7 (#243): a blocked offer stays focusable and is described by its reason. */
 const reasonPrefix = useId();
-const reasonId = (token: string) => `${reasonPrefix}-${token}`;
+const reasonId = (index: number) => `${reasonPrefix}-${index}`;
+/** Stable row keys, so a quiet re-search patches the rows and focus stays put (#970 review). */
+const keys = computed(() => (search.value ? offerKeys(search.value.offers) : []));
 </script>
 
 <template>
@@ -257,13 +261,13 @@ const reasonId = (token: string) => `${reasonPrefix}-${token}`;
       </p>
       <ul v-else class="m-0 flex list-none flex-col p-0" aria-label="Offers">
         <!-- By token: the same opportunity can come back once per ready route (qa 11-13). -->
-        <li v-for="o in search.offers" :key="o.token" class="border-t border-hairline py-2">
+        <li v-for="(o, i) in search.offers" :key="keys[i]" class="border-t border-hairline py-2">
           <button
             type="button"
             class="flex w-full cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 border-0 bg-transparent p-0 text-left disabled:cursor-not-allowed disabled:opacity-60 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
             :disabled="result !== null"
             :aria-disabled="offerBlocked(o, now) !== null ? 'true' : undefined"
-            :aria-describedby="offerBlocked(o, now) !== null ? reasonId(o.token) : undefined"
+            :aria-describedby="offerBlocked(o, now) !== null ? reasonId(i) : undefined"
             :aria-pressed="chosen?.token === o.token"
             @click="offerBlocked(o, now) === null && (chosen = o)"
           >
@@ -286,11 +290,7 @@ const reasonId = (token: string) => `${reasonPrefix}-${token}`;
               >{{ expiryWords(o, now).text }}</span
             >
           </button>
-          <p
-            v-if="offerBlocked(o, now)"
-            :id="reasonId(o.token)"
-            class="m-0 pt-1 text-sm text-text-3"
-          >
+          <p v-if="offerBlocked(o, now)" :id="reasonId(i)" class="m-0 pt-1 text-sm text-text-3">
             {{ offerBlocked(o, now) }}
           </p>
           <!-- U58 (b), #361: said before booking; booking stays allowed. -->

@@ -58,6 +58,21 @@ const offerReader = d.object({
 });
 export type Offer = Decoded<typeof offerReader>;
 
+/**
+ * A key per offer that survives a re-search (#970 review, a11y A5): tokens are signed afresh each
+ * search, so rows keyed by them remount and focus drops to <body>. The window's station, provider,
+ * start and end name it, with an ordinal for the same window offered on more than one route.
+ */
+export function offerKeys(offers: readonly Offer[]): readonly string[] {
+  const seen = new Map<string, number>();
+  return offers.map((o) => {
+    const window = [o.station.ref, o.provider.id, o.starts_at, o.ends_at].join("|");
+    const n = seen.get(window) ?? 0;
+    seen.set(window, n + 1);
+    return `${window}|${n}`;
+  });
+}
+
 export const searchReader = d.object({
   spacecraft: spacecraftRef,
   window: d.object({ from: d.timestamp, to: d.timestamp }),

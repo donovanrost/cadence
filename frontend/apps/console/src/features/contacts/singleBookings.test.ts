@@ -7,6 +7,7 @@ import {
   confirmLine,
   expiryWords,
   offerBlocked,
+  offerKeys,
   offPlanLine,
   outcomeWords,
   stationWords,
@@ -224,6 +225,20 @@ describe("BookPassSheet", () => {
   });
 });
 
+describe("offerKeys (#970 review)", () => {
+  it("names an offer by its window, not its token, with an ordinal for a window on two routes", () => {
+    const keys = offerKeys([
+      offer("a"),
+      offer("b"),
+      offer("c", { starts_at: "2026-11-13T04:00:00Z" }),
+    ]);
+    expect(keys[0]).toBe("sva|nl|2026-11-13T03:10:00Z|2026-11-13T03:19:12Z|0");
+    expect(keys[1]).toBe("sva|nl|2026-11-13T03:10:00Z|2026-11-13T03:19:12Z|1");
+    expect(offerKeys([offer("a", { token: "other" })])[0]).toBe(keys[0]);
+    expect(new Set(keys).size).toBe(3);
+  });
+});
+
 describe("BookPassSheet on a finished prediction run (#895)", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -249,13 +264,18 @@ describe("BookPassSheet on a finished prediction run (#895)", () => {
     truncated: false,
   });
 
-  it("asks the same search again while offers are shown, not once one is chosen", async () => {
+  it("asks the same search again while offers are shown, keeps focus, not once one is chosen", async () => {
     vi.useFakeTimers({ now, toFake: ["Date"] });
     const fetch = vi.fn();
     fetch.mockResolvedValueOnce(reply(routes));
     fetch.mockResolvedValueOnce(reply(found(offer("a"))));
     fetch.mockResolvedValueOnce(
-      reply(found(offer("a", { max_elevation_deg: 12.04, elevation_source: "predicted" }))),
+      // A re-search signs a new token for the same window.
+      reply(
+        found(
+          offer("a", { token: "tok-a2", max_elevation_deg: 12.04, elevation_source: "predicted" }),
+        ),
+      ),
     );
     vi.stubGlobal("fetch", fetch);
     const w = mount(BookPassSheet, {
@@ -271,8 +291,13 @@ describe("BookPassSheet on a finished prediction run (#895)", () => {
       ?.trigger("click");
     await flushPromises();
     expect(w.text()).not.toContain("Max el");
+    // a11y A5 (#970 review): focus on an offer survives the re-search; the row is patched.
+    const control = w.get('ul[aria-label="Offers"] button').element as HTMLElement;
+    control.focus();
     for (const run of live.handlers) run();
     await flushPromises();
+    expect(document.activeElement).toBe(control);
+    expect(control.isConnected).toBe(true);
     const bodies = fetch.mock.calls.slice(1).map((c) => (c[1] as RequestInit | undefined)?.body);
     expect(bodies).toHaveLength(2);
     expect(bodies[1]).toBe(bodies[0]);
