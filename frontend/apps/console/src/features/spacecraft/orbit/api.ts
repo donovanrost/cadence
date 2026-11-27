@@ -103,10 +103,15 @@ export const coverageReader = d.object({
 });
 export type Coverage = Decoded<typeof coverageReader>["coverage"];
 
-/** The window a list reads: now to now + 7 days, fixed per key so later pages read the same one. */
+/**
+ * The window a list reads, fixed per key so later pages read the same one: from now to now + 14
+ * days, the most a spacecraft's window may span. The server holds passes only up to its horizon
+ * (7 days by default), so the list ends there on its own: it is everything predicted, never
+ * partial (#964 review).
+ */
 export type PassesKey = OrbitKey & Readonly<{ from: string; to: string }>;
 
-export const PASS_WINDOW_MS = 7 * 86_400_000;
+export const PASS_WINDOW_MS = 14 * 86_400_000;
 
 export function passesKey(key: OrbitKey, now: Date): PassesKey {
   return {

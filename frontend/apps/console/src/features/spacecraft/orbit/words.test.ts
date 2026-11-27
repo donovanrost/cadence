@@ -2,7 +2,14 @@ import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api";
 import { coverageReader, elementSetReader, predictedPassReader } from "./api.ts";
 import { coverageWire, elementSetWire, passWire } from "./fixtures.ts";
-import { coverageLines, currentFacts, elevation, sourceLine, stationLine } from "./words.ts";
+import {
+  coverageLines,
+  currentFacts,
+  elevation,
+  horizonWords,
+  sourceLine,
+  stationLine,
+} from "./words.ts";
 
 /** #895: the Orbit section's words, from the wire. */
 const set = (over: Record<string, unknown> = {}) => {
@@ -21,7 +28,6 @@ const coverage = (over: Record<string, unknown> = {}, u: Record<string, number> 
   return r.value.coverage;
 };
 const now = new Date("2026-11-27T15:28:39Z");
-const to = "2026-12-04T00:00:00.000Z";
 
 describe("element set decoding", () => {
   it("reads format and source as closed vocabularies that tolerate a new value", () => {
@@ -76,31 +82,30 @@ describe("pass words", () => {
 });
 
 describe("coverageLines (predicted-passes.md §Coverage)", () => {
-  it("says nothing when the whole window is computed and nothing is unpredicted", () => {
-    expect(coverageLines(coverage(), to)).toEqual([]);
+  it("says nothing when nothing is unpredicted", () => {
+    expect(coverageLines(coverage())).toEqual([]);
   });
 
-  it("shows the partial line when the horizon ends before the window does", () => {
-    const lines = coverageLines(coverage({ horizon_end: "2026-12-01T00:00:00Z" }), to);
-    expect(lines.map((l) => l.text)).toEqual([
-      "Passes are predicted up to 12-01 00:00Z. Later passes aren't computed yet, so none are shown after it.",
-    ]);
+  it("never calls the list partial: it reads everything predicted, and the meta names the horizon", () => {
+    const early = coverage({ horizon_end: "2026-12-01T00:00:00Z" });
+    expect(coverageLines(early)).toEqual([]);
+    expect(horizonWords(early)).toBe("12-01 00:00Z");
+    expect(horizonWords(coverage({ horizon_end: null }))).toBeNull();
   });
 
   it("says a deep-space orbit isn't predicted yet, in plain words", () => {
-    const lines = coverageLines(coverage({}, { spacecraft_deep_space: 1 }), to);
+    const lines = coverageLines(coverage({}, { spacecraft_deep_space: 1 }));
     expect(lines[0]?.text).toBe(
       "This spacecraft's orbit is deep space (a period of 225 minutes or more). Cadence doesn't predict passes for deep-space orbits yet.",
     );
   });
 
   it("says before the first run, stations without a location, and passes that couldn't be timed", () => {
-    expect(coverageLines(coverage({ horizon_end: null }), to)[0]?.text).toBe(
+    expect(coverageLines(coverage({ horizon_end: null }))[0]?.text).toBe(
       "Passes haven't been predicted for this mission yet.",
     );
     const lines = coverageLines(
       coverage({}, { stations_without_location: 2, passes_not_bracketed: 1 }),
-      to,
     );
     expect(lines.map((l) => [l.tone, l.text])).toEqual([
       ["caution", "2 stations have no location, so their passes aren't predicted."],
@@ -109,7 +114,7 @@ describe("coverageLines (predicted-passes.md §Coverage)", () => {
         "1 pass couldn't be timed, so it wasn't stored. The element set may be wrong; check its epoch.",
       ],
     ]);
-    expect(coverageLines(coverage({}, { stations_without_location: 1 }), to)[0]?.text).toBe(
+    expect(coverageLines(coverage({}, { stations_without_location: 1 }))[0]?.text).toBe(
       "1 station has no location, so its passes aren't predicted.",
     );
   });

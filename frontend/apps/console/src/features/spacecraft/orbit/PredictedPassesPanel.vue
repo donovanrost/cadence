@@ -3,23 +3,15 @@ import { computed, shallowRef } from "vue";
 import { RouterLink } from "vue-router";
 import { usePagedQuery, type MissionId, type SpacecraftId } from "@/api";
 import { useMissionInvalidation } from "@/live";
-import {
-  ApCallout,
-  ApEmptyState,
-  ApPanel,
-  ApRemote,
-  ApTable,
-  formatShort,
-  type ApColumn,
-} from "@/ui";
+import { ApCallout, ApEmptyState, ApPanel, ApRemote, ApTable, type ApColumn } from "@/ui";
 import OrbitPagedFooter from "./OrbitPagedFooter.vue";
 import { fetchPredictedPassPage, passesKey } from "./api.ts";
-import { coverageLines, elevation, passTime, stationLine } from "./words.ts";
+import { coverageLines, elevation, horizonWords, passTime, stationLine } from "./words.ts";
 
 /**
- * D8 Predicted passes (#895): the spacecraft's passes over every station from now to now + 7 days,
- * AOS first, as the server predicted them (geometry, not bookings). The coverage every page
- * carries says why the week is empty or partial.
+ * D8 Predicted passes (#895): the spacecraft's passes over every station, AOS first, from now to
+ * the server's horizon (geometry, not bookings). The meta names the horizon; the coverage every page
+ * carries says why the list is empty or short.
  */
 const props = defineProps<{ missionId: MissionId; spacecraftId: SpacecraftId }>();
 /** The window's start. A live change moves it to now, so passes that ended drop off. */
@@ -43,16 +35,18 @@ const columns: readonly ApColumn[] = [
   { key: "los", label: "LOS", mono: true },
   { key: "elevation", label: "Max elevation", mono: true, align: "end" },
 ];
-const window = computed(
-  () => `${formatShort(new Date(key.value.from))} – ${formatShort(new Date(key.value.to))}`,
+const coverage = computed(() =>
+  passes.state.value.status === "ready" ? passes.state.value.value.meta : null,
 );
+const horizon = computed(() => (coverage.value ? horizonWords(coverage.value) : null));
+const lines = computed(() => (coverage.value ? coverageLines(coverage.value) : []));
 </script>
 
 <template>
-  <ApPanel index="D8" title="Predicted passes · next 7 days" flush>
+  <ApPanel index="D8" title="Predicted passes" flush>
     <template #meta>
-      <span>{{ window }}</span>
-      <span v-if="passes.pending.value" role="status"> · Updating…</span>
+      <span v-if="horizon">Predicted to {{ horizon }}</span>
+      <span role="status">{{ passes.pending.value ? " · Updating…" : "" }}</span>
     </template>
     <ApRemote
       :state="passes.state.value"
@@ -61,28 +55,22 @@ const window = computed(
     >
       <template #default="{ value: page }">
         <div class="flex flex-col">
-          <div
-            v-if="coverageLines(page.meta, key.to).length > 0"
-            class="flex flex-col gap-2 px-4 py-3"
-          >
-            <ApCallout
-              v-for="line in coverageLines(page.meta, key.to)"
-              :key="line.key"
-              :tone="line.tone"
-              >{{ line.text }}</ApCallout
-            >
+          <div v-if="lines.length > 0" class="flex flex-col gap-2 px-4 py-3">
+            <ApCallout v-for="line in lines" :key="line.key" :tone="line.tone">{{
+              line.text
+            }}</ApCallout>
           </div>
           <ApEmptyState
             v-if="page.items.length === 0"
             state="off"
-            headline="No predicted passes in the next 7 days"
+            :headline="horizon ? `No predicted passes before ${horizon}` : 'No predicted passes'"
           />
           <ApTable
             v-else
             :columns="columns"
             :rows="page.items"
             :row-key="(p) => p.id"
-            caption="Predicted passes, next 7 days, AOS first"
+            caption="Predicted passes, AOS first"
           >
             <template #cell-station="{ row }">
               <RouterLink
@@ -101,7 +89,7 @@ const window = computed(
                 :has-more="page.next !== null"
                 :loading="passes.moreBusy.value || passes.pending.value"
                 :error="passes.moreError.value"
-                no-more="No later passes in the window"
+                no-more="No later predicted passes"
                 @more="passes.more"
               />
             </template>

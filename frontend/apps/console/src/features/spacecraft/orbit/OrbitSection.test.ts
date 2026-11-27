@@ -96,7 +96,8 @@ describe("OrbitSection (#895)", () => {
     expect(station.text()).toBe("Svalbard · SVA");
     expect(text).toContain("11-27 00:41:12Z");
     expect(text).toContain("38.2°");
-    expect(text).toContain("Passes are predicted up to 11-30 00:00Z.");
+    expect(text).toContain("Predicted to 11-30 00:00Z");
+    expect(text).not.toContain("aren't computed yet");
     expect(text).toContain("1 station has no location, so its passes aren't predicted.");
     w.unmount();
   });
@@ -105,11 +106,11 @@ describe("OrbitSection (#895)", () => {
     server({ current: elementSetWire(), coverage: coverageWire({}, { spacecraft_deep_space: 1 }) });
     const w = await mountSection();
     expect(w.text()).toContain("Cadence doesn't predict passes for deep-space orbits yet.");
-    expect(w.text()).toContain("No predicted passes in the next 7 days");
+    expect(w.text()).toContain("No predicted passes before 12-04 00:00Z");
     w.unmount();
   });
 
-  it("asks the spacecraft's predicted passes for now to now + 7 days", async () => {
+  it("asks for now to now + 14 days, the most a spacecraft window spans (#964)", async () => {
     server({ current: null });
     const stubbed = vi.mocked(globalThis.fetch);
     const w = await mountSection();
@@ -119,7 +120,7 @@ describe("OrbitSection (#895)", () => {
     const from = Date.parse(passes?.searchParams.get("from") ?? "");
     const to = Date.parse(passes?.searchParams.get("to") ?? "");
     expect(passes?.pathname).toContain("/missions/m-1/spacecraft/sc-312/predicted-passes");
-    expect(to - from).toBe(7 * 86_400_000);
+    expect(to - from).toBe(14 * 86_400_000);
     w.unmount();
   });
 

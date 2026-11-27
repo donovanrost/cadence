@@ -64,11 +64,12 @@ export const passTime = (iso: string) => formatDayTime(new Date(iso));
 export type CoverageLine = Readonly<{ key: string; tone: "info" | "caution"; text: string }>;
 
 /**
- * Why the week shows fewer passes than the geometry has (predicted-passes.md §Coverage), in plain
- * words, from the spacecraft's own coverage. A spacecraft without an element set is said by the
- * current set's empty state, so it isn't repeated here.
+ * Why the list shows fewer passes than the geometry has (predicted-passes.md §Coverage), in plain
+ * words, from the spacecraft's own coverage. The list reads everything predicted, up to the
+ * horizon the panel names, so `horizon_end < to` isn't a partial state here. A spacecraft without
+ * an element set is said by the current set's empty state, so it isn't repeated.
  */
-export function coverageLines(c: Coverage, to: string): readonly CoverageLine[] {
+export function coverageLines(c: Coverage): readonly CoverageLine[] {
   const lines: CoverageLine[] = [];
   const u = c.unpredicted;
   if (u.spacecraft_deep_space > 0)
@@ -82,12 +83,6 @@ export function coverageLines(c: Coverage, to: string): readonly CoverageLine[] 
       key: "not-run",
       tone: "info",
       text: "Passes haven't been predicted for this mission yet.",
-    });
-  else if (Date.parse(c.horizon_end) < Date.parse(to))
-    lines.push({
-      key: "partial",
-      tone: "info",
-      text: `Passes are predicted up to ${formatShort(new Date(c.horizon_end))}. Later passes aren't computed yet, so none are shown after it.`,
     });
   if (u.stations_without_location > 0) {
     const n = u.stations_without_location;
@@ -107,3 +102,7 @@ export function coverageLines(c: Coverage, to: string): readonly CoverageLine[] 
   }
   return lines;
 }
+
+/** The panel's meta and empty state name the horizon: `Predicted to 12-04 10:12Z`. */
+export const horizonWords = (c: Coverage): string | null =>
+  c.horizon_end === null ? null : formatShort(new Date(c.horizon_end));

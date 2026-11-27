@@ -197,7 +197,6 @@ export async function requestPage<T>(
   };
 }
 
-/** Human sentence for an ApiError, for callouts and empty states. */
 /**
  * A cursor-paged read whose `meta` carries more than the cursor (a coverage note every page
  * repeats, say): `meta` is decoded with `readMeta` as well as for `next_cursor`.
@@ -222,6 +221,7 @@ export async function requestPageMeta<T, M>(
   return { ok: true, value: { value: data, nextCursor: m.next, meta: m.rest } };
 }
 
+/** Human sentence for an ApiError, for callouts and empty states. */
 export function describeApiError(error: ApiError): string {
   switch (error.kind) {
     case "unauthenticated":
