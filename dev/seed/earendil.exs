@@ -233,8 +233,7 @@ defmodule EarendilSeed do
         id: "earendil-#{slug}",
         name: "#{name} (Demo)",
         region: region,
-        latitude_deg: latitude,
-        longitude_deg: longitude,
+        location: %{latitude_deg: latitude, longitude_deg: longitude},
         antenna_count: antennas,
         ingress_port: ingress + index,
         uplink_port: uplink + index,
@@ -458,10 +457,12 @@ defmodule EarendilSeed do
         code: code,
         provider: @provider_name,
         region: region,
+        # The mission's own location (#957): pass prediction uses it, and it wins over the
+        # simulator's report, whose station ids differ from these.
+        latitude_deg: latitude,
+        longitude_deg: longitude,
         metadata: %{
           "provider_ground_station_ref" => "earendil-#{slug}",
-          "latitude_deg" => latitude,
-          "longitude_deg" => longitude,
           "antenna_count" => antennas,
           "synthetic" => true
         }

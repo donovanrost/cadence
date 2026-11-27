@@ -162,8 +162,8 @@ defmodule Cadence.Dev.ReflectOrbital.Fixture do
         "id" => "earendil-#{id}",
         "name" => "#{name} (Demo)",
         "region" => region,
-        "latitude_deg" => latitude,
-        "longitude_deg" => longitude,
+        # Reported in the provider inventory as the station's location (#957).
+        "location" => %{"latitude_deg" => latitude, "longitude_deg" => longitude},
         "antenna_count" => antennas,
         "ingress_port" =>
           String.to_integer(System.get_env("EARENDIL_INGRESS_BASE_PORT", "42100")) + index,
