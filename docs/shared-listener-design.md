@@ -72,7 +72,7 @@ operators command from. That's a safety and integrity problem, not only a confid
 | (a) Own listener per booking, ports from a pool, the target sent per contact | Closes case 1 if every booking's port is unique and short-lived. Cases 2 and 3 stay open: still unauthenticated. | Needs a per-contact delivery target. Today's contract provisions targets before reservation (`delivery: {}`), so it is a contract change. *Assumption:* many real providers fix the destination per dataflow or delivery configuration, not per pass. | One port per concurrent pass; tens on average, low hundreds at peak. Firewall rules must open a range. | Medium: port pool, contract, simulator. |
 | (b) Shared or own listener with mutual TLS: a client certificate per mission provider binding, checked before any frame is read | Closes 1 and 2: the connection is bound to an authenticated provider binding (mission and provider) before routing, and routing then considers only contacts booked through that binding. 3 narrows to a compromised provider. | *Assumption:* TLS to a customer endpoint is common for TCP stream delivery and client certificates are widely supported, but that varies by provider and must be confirmed per provider. The simulator can do it easily. | One port per mission and provider; certificates and a TLS handshake per connection. | Medium-large: TLS listener, certificate issue and rotation through the existing credential references, contract capability, simulator. |
 | (b′) A per-contact token in a preamble before the first frame | Closes 1 to 3 for providers that send it. | Non-standard. *Assumption:* no real provider sends a Cadence-specific preamble; it's useful for the simulator and Cadence-aware gateways only. | Negligible. | Small. |
-| (c) A source-address allowlist per provider binding (`expected_peer_address`, today only in provider profile configuration) | Weak alone: addresses are shared behind NAT or cloud egress and can be spoofed on some networks. It does narrow cases 1 and 2. | Works with any provider that publishes egress ranges (*assumption:* most do). | Negligible. | Small: the field exists in the acceptor. |
+| (c) A source-address allowlist per provider binding (`expected_peer_address`, today only in provider profile configuration) | Weak alone: addresses are shared behind NAT or cloud egress and can be spoofed on some networks. It narrows case 2 and case 1 across different providers, but **not case 1 when one provider serves both missions**: both bindings allow the same egress range, so A's misdirected stream passes B's allowlist. | Works with any provider that publishes egress ranges (*assumption:* most do). | Negligible. | Small: the field exists in the acceptor. |
 | (d) Combine (c) now with (b), plus binding-scoped routing | Defence in depth. The interim step doesn't depend on provider TLS. | As (b) and (c). | As (b). | Staged. |
 
 **Binding-scoped routing** is a cheap step in every option. Each registration already carries its
@@ -91,6 +91,10 @@ Adopt (d):
    - The unidentified-peer fallback is removed, which is fine with no legacy to keep.
    - A peer outside the allowlist is refused before any frame is read, and counted as a refusal
      on the shared listener (U50).
+   - **What this step does not close:** a misdirected delivery from a provider that serves both
+     missions (case 1 with one provider). The allowlist can't tell that provider's two bindings
+     apart, so only step 2 closes it, or per-booking ports. Until then, case 1 stays possible
+     whenever one provider account serves two missions that can share a SCID.
 2. **Then, mutual TLS as a contract capability**, `delivery_auth: "mtls"`.
    - Cadence issues a client identity per mission provider binding, held behind the existing
      credential references, and verifies it in the TLS handshake before routing.
@@ -107,7 +111,8 @@ Adopt (d):
 1. Is "a connection is bound to an authenticated mission provider binding before any frame is
    routed" the requirement for listen-mode downlink, with mutual TLS as the target mechanism?
 2. Until mutual TLS lands, may the shared listener ship (#129, #202) with a mandatory source
-   allowlist and binding-scoped routing, or should it stay off until mutual TLS?
+   allowlist and binding-scoped routing, or should it stay off until mutual TLS? The interim
+   doesn't close a misdirected delivery from one provider serving two missions (see step 1).
 3. Remove the opt-in single-registration fallback (`fallback_single_registration`) now?
 4. Should a provider-managed listen endpoint with neither an allowlist nor mutual TLS be refused
    at save outside dev, or only flagged?
