@@ -256,13 +256,7 @@ defmodule PassSearch do
   end
 
   # sin(elevation) - sin(mask) for one station at time t (min)
-  def f(sat, gst0, {{sx, sy, sz}, {ux, uy, uz}, smask}, t) do
-    {x, y, z} = ecef(sat, gst0, t)
-    dx = x - sx
-    dy = y - sy
-    dz = z - sz
-    (dx * ux + dy * uy + dz * uz) / :math.sqrt(dx * dx + dy * dy + dz * dz) - smask
-  end
+  def f(sat, gst0, st, t), do: elevation(ecef(sat, gst0, t), st)
 
   def ecef(sat, gst0, t) do
     {x, y, z} = SGP4.position(sat, t)
@@ -272,12 +266,31 @@ defmodule PassSearch do
     {c * x + s * y, -s * x + c * y, z}
   end
 
+  # The longest near-earth pass above a 5° mask is well under this; it bounds the search past
+  # each end of the window for a pass that crosses it.
+  @max_pass_min 30.0
+
+  # A pass that overlaps the window is found whole: one above the mask at the start is traced
+  # back to its AOS, one still above it at the end is traced on to its LOS. Every SGP4
+  # propagation is counted once; all stations are evaluated from the same position.
   def run(sat, gst0, stations, span_min, step_min) do
     n = trunc(span_min / step_min)
-    init = Enum.map(stations, fn st -> {st, nil, f(sat, gst0, st, 0.0)} end)
+    pos0 = ecef(sat, gst0, 0.0)
 
-    {_, passes, calls} =
-      Enum.reduce(1..n, {init, 0, 0}, fn i, {sts, passes, calls} ->
+    {init, calls} =
+      Enum.map_reduce(stations, 1, fn st, c ->
+        v = elevation(pos0, st)
+
+        if v >= 0 do
+          {aos, k} = lead_in({sat, gst0, st}, step_min)
+          {{st, aos, v}, c + k}
+        else
+          {{st, nil, v}, c}
+        end
+      end)
+
+    {sts, passes, calls} =
+      Enum.reduce(1..n, {init, 0, calls}, fn i, {sts, passes, calls} ->
         t = i * step_min
         pos = ecef(sat, gst0, t)
         step = &step_station(&1, &2, {sat, gst0}, pos, t, step_min)
@@ -285,15 +298,63 @@ defmodule PassSearch do
         {Enum.reverse(acc), p, c}
       end)
 
-    {passes, calls}
+    Enum.reduce(sts, {passes, calls}, fn
+      {_st, nil, _v}, acc ->
+        acc
+
+      {st, aos, _v}, {p, c} ->
+        {_los, k} = lead_out({sat, gst0, st}, aos, n * step_min, step_min)
+        {p + 1, c + k}
+    end)
   end
 
-  defp step_station({st, aos, prev}, {acc, p, c}, {sat, gst0}, {x, y, z}, t, step_min) do
-    {{sx, sy, sz}, {ux, uy, uz}, smask} = st
+  defp elevation({x, y, z}, {{sx, sy, sz}, {ux, uy, uz}, smask}) do
     dx = x - sx
     dy = y - sy
     dz = z - sz
-    v = (dx * ux + dy * uy + dz * uz) / :math.sqrt(dx * dx + dy * dy + dz * dz) - smask
+    (dx * ux + dy * uy + dz * uz) / :math.sqrt(dx * dx + dy * dy + dz * dz) - smask
+  end
+
+  # Above the mask at the window start: step back until below it, then bisect to the AOS.
+  defp lead_in(ctx, step_min), do: lead_in(ctx, -step_min, step_min, 0)
+
+  defp lead_in(ctx, t, step_min, k) do
+    cond do
+      g(ctx, t) < 0 ->
+        {aos, k2} = bisect(ctx, t, t + step_min)
+        {aos, k + 1 + k2}
+
+      t <= -@max_pass_min ->
+        {t, k + 1}
+
+      true ->
+        lead_in(ctx, t - step_min, step_min, k + 1)
+    end
+  end
+
+  # Still above the mask at the window end: step on until below it, bisect to the LOS, then
+  # find the TCA.
+  defp lead_out(ctx, aos, t_end, step_min),
+    do: lead_out(ctx, aos, t_end, t_end + step_min, step_min, 0)
+
+  defp lead_out(ctx, aos, t_end, t, step_min, k) do
+    cond do
+      g(ctx, t) < 0 ->
+        {los, k2} = bisect(ctx, t - step_min, t)
+        {_tca, k3} = golden(ctx, aos, los)
+        {los, k + 1 + k2 + k3}
+
+      t >= t_end + @max_pass_min ->
+        {_tca, k3} = golden(ctx, aos, t)
+        {t, k + 1 + k3}
+
+      true ->
+        lead_out(ctx, aos, t_end, t + step_min, step_min, k + 1)
+    end
+  end
+
+  defp step_station({st, aos, prev}, {acc, p, c}, {sat, gst0}, pos, t, step_min) do
+    v = elevation(pos, st)
     ctx = {sat, gst0, st}
 
     cond do
@@ -301,7 +362,7 @@ defmodule PassSearch do
         {a, k} = bisect(ctx, t - step_min, t)
         {[{st, a, v} | acc], p, c + k}
 
-      prev >= 0 and v < 0 and aos != nil ->
+      prev >= 0 and v < 0 ->
         {los, k} = bisect(ctx, t - step_min, t)
         {_tca, k2} = golden(ctx, aos, los)
         {[{st, nil, v} | acc], p + 1, c + k + k2}
@@ -441,7 +502,7 @@ step = step_s / 60.0
 
 passes = results |> Enum.map(&elem(&1, 0)) |> Enum.sum()
 calls = results |> Enum.map(&elem(&1, 1)) |> Enum.sum()
-coarse = n * trunc(span / step)
+coarse = n * (trunc(span / step) + 1)
 
 IO.puts(
   "elixir n=#{n} days=#{days} step=#{step_s}s conc=#{conc} stations=15: #{Float.round(us / 1.0e6, 2)} s, passes=#{passes}, sgp4 calls=#{calls} (coarse #{coarse}, refine #{calls - coarse}), otp=#{System.otp_release()}"

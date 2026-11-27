@@ -35,10 +35,12 @@ latitudes from 78°N to 72°S, a 5° mask, a 60 s coarse step, and refinement to
 
 | Fleet × 15 stations × 7 days | Wall time | Passes | SGP4 evaluations |
 | --- | --- | --- | --- |
-| 500 spacecraft | 4.97 s | 271,131 | 13.0 M |
-| 1,000 spacecraft | 11.48 s | 542,273 | 25.9 M |
+| 500 spacecraft | 5.05 s | 271,563 | 13.0 M |
+| 1,000 spacecraft | 9.96 s | 543,120 | 26.0 M |
 
-These are laptop 1 numbers: M1, 8 cores, OTP 29, under memory pressure. Following the #217
+These are laptop 1 numbers: M1, 8 cores, OTP 29. The evaluation count includes every SGP4
+propagation: one per spacecraft per grid point (time zero included), plus refinement and the
+search past each end of the window. Passes that cross either end of the window are counted. Following the #217
 measurement rule, the recorded pair will be re-run on laptop 2 and posted on #177.
 
 - **CPU cost.** About 80 ms of CPU per spacecraft-week across 15 stations, so re-predicting one
@@ -106,6 +108,13 @@ For each spacecraft and its current element set, `Sgp4.init/1` runs once. Then:
 - **Refinement.** For each station, a sign change of `sin(el) − sin(mask)` brackets an AOS or a
   LOS. Each bracket is refined by bisection to 1 s, and TCA is found by golden section to 1 s.
 - **Output per pass:** AOS, TCA, LOS, maximum elevation, and azimuth at AOS and at LOS.
+- **Passes at the window's ends.** A pass that overlaps the window is found whole. If the
+  spacecraft is above the mask at the window start, the search steps back until it is below,
+  then bisects to the real AOS. If a pass is still open at the window end, the search steps on
+  until LOS. Both are bounded at 30 minutes, longer than any near-earth pass above the mask. In
+  the store (slice 3), the daily horizon extension starts its search at the AOS of the last
+  stored pass on each spacecraft and station pair and replaces passes from there, so a pass that
+  crosses the old horizon is replaced, not stored twice.
 - **Short passes.** A pass shorter than the coarse step can fall between two grid points and be
   missed. That is acceptable because such a pass is shorter than any schedulable contact. The
   bound is documented and tested.
