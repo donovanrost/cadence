@@ -1,6 +1,7 @@
 defmodule Cadence.GroundNetworks.MissionProvidersTest do
   use Cadence.ConfigCase, async: false
 
+  alias Cadence.Comms.{GroundStation, GroundStationStore}
   alias Cadence.GroundNetworks
   alias Cadence.GroundNetworks.{CredentialResolver, MissionProvider, ProviderError}
   alias Cadence.TestSupport.FakeProviderClient
@@ -124,6 +125,50 @@ defmodule Cadence.GroundNetworks.MissionProvidersTest do
   end
 
   describe "validation and inventory synchronization" do
+    test "a synced station's reported location lands beside the mission's, never over it (#890)",
+         %{organization: organization, mission: mission} do
+      provider = persist_provider!(organization.organization_id, mission.mission_id)
+
+      {:ok, _station} =
+        GroundStationStore.persist_ground_station(
+          organization.organization_id,
+          GroundStation.new(%{
+            ground_station_id: "station-alpha",
+            mission_id: mission.mission_id,
+            display_name: "Station Alpha"
+          })
+        )
+
+      location = %{"latitude_deg" => 64.8, "longitude_deg" => -147.7, "height_m" => 200}
+
+      assert {:ok, _synced} =
+               GroundNetworks.sync_provider(
+                 organization.organization_id,
+                 mission.mission_id,
+                 provider.provider_id,
+                 client: FakeProviderClient,
+                 credential_resolver: &test_credential_resolver/1,
+                 spacecraft_response: {:ok, []},
+                 ground_stations_response:
+                   {:ok, [%{"id" => "station-alpha", "location" => location}]},
+                 now: ~U[2026-07-14 12:00:00.000000Z]
+               )
+
+      assert {:ok, station} =
+               GroundStationStore.fetch_ground_station(
+                 organization.organization_id,
+                 mission.mission_id,
+                 "station-alpha"
+               )
+
+      assert station.location == nil
+
+      assert %{latitude_deg: 64.8, longitude_deg: -147.7, height_m: 200.0} =
+               station.provider_location
+
+      assert station.provider_location.provider_id == provider.provider_id
+    end
+
     test "validates capabilities and stores bounded provider-owned inventory without creating spacecraft",
          %{organization: organization, mission: mission} do
       provider = persist_provider!(organization.organization_id, mission.mission_id)

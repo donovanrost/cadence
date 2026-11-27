@@ -2,9 +2,15 @@ defmodule Cadence.Comms.ConfigKinds.GroundStation do
   @moduledoc """
   Change-set kind for mission ground stations.
 
-  Document: `%{"display_name", "provider", "region", "metadata"}`. Delete archives the station.
-  Ground stations are setup context only (not yet linked to routing), so applying a change has
-  no runtime effect.
+  Document: `%{"display_name", "code", "provider", "region", "metadata", "latitude_deg",
+  "longitude_deg", "height_m", "elevation_mask_deg"}`. Delete archives the station. Ground
+  stations are setup context only (not yet linked to routing), so applying a change has no
+  runtime effect.
+
+  The location (#890) is the mission's own, WGS84 geodetic: latitude and longitude come together
+  or not at all, and height defaults to 0 m when they are given. The elevation mask defaults to
+  5°. A provider's reported location is kept apart (`Cadence.Comms.StationLocations`) and is
+  never part of this document.
   """
 
   @behaviour Cadence.Platform.ConfigKind
@@ -15,7 +21,9 @@ defmodule Cadence.Comms.ConfigKinds.GroundStation do
   alias Cadence.Platform.ConfigFields, as: F
   alias Cadence.Repo
 
-  @fields ~w(display_name code provider region metadata)
+  @fields ~w(display_name code provider region metadata latitude_deg longitude_deg height_m
+             elevation_mask_deg)
+  @default_mask_deg 5.0
 
   @impl true
   def kind, do: "ground_station"
@@ -42,7 +50,11 @@ defmodule Cadence.Comms.ConfigKinds.GroundStation do
   def normalize(:delete, _id, nil), do: {:ok, nil}
 
   def normalize(_action, _id, %{} = document) do
-    document = document |> Map.put_new("metadata", %{}) |> blank_code()
+    document =
+      document
+      |> Map.put_new("metadata", %{})
+      |> blank_code()
+      |> geometry_defaults()
 
     errors =
       F.only(document, @fields) ++
@@ -50,9 +62,10 @@ defmodule Cadence.Comms.ConfigKinds.GroundStation do
         code_errors(document) ++
         F.text(document, "provider", 1..200, label: "Provider") ++
         F.text(document, "region", 1..200, label: "Region") ++
-        F.map(document, "metadata")
+        F.map(document, "metadata") ++
+        geometry_errors(document)
 
-    F.result(document, errors)
+    F.result(document |> floats(), errors)
   end
 
   def normalize(_action, _id, _document), do: {:error, [F.error("", "Enter the station details")]}
@@ -113,6 +126,69 @@ defmodule Cadence.Comms.ConfigKinds.GroundStation do
   end
 
   defp code_free(_organization_id, _mission_id, _entity_id, _proposed), do: :ok
+
+  # Height and mask defaults; geometry numbers are stored as floats.
+  defp geometry_defaults(document) do
+    document =
+      Map.update(document, "elevation_mask_deg", @default_mask_deg, &(&1 || @default_mask_deg))
+
+    if is_nil(document["height_m"]) and not is_nil(document["latitude_deg"]),
+      do: Map.put(document, "height_m", 0.0),
+      else: Map.put_new(document, "height_m", nil)
+  end
+
+  defp floats(document) do
+    Enum.reduce(~w(latitude_deg longitude_deg height_m elevation_mask_deg), document, fn key,
+                                                                                         doc ->
+      case doc[key] do
+        value when is_integer(value) -> Map.put(doc, key, value * 1.0)
+        _other -> Map.put_new(doc, key, nil)
+      end
+    end)
+  end
+
+  defp geometry_errors(document) do
+    number(document, "latitude_deg", -90, 90, "Latitude", "−90 to 90°") ++
+      number(document, "longitude_deg", -180, 180, "Longitude", "−180 to 180°") ++
+      number(document, "height_m", -1000, 10_000, "Height", "−1,000 to 10,000 m") ++
+      mask_errors(document["elevation_mask_deg"]) ++ paired(document)
+  end
+
+  defp number(document, key, min, max, label, range) do
+    case document[key] do
+      nil -> []
+      value when is_number(value) and value >= min and value <= max -> []
+      value when is_number(value) -> [F.error(key, "#{label} must be #{range}")]
+      _other -> [F.error(key, "#{label} must be a number")]
+    end
+  end
+
+  defp mask_errors(mask) when is_number(mask) and mask >= 0 and mask <= 89.9, do: []
+
+  defp mask_errors(mask) when is_number(mask),
+    do: [F.error("elevation_mask_deg", "Elevation mask must be 0 to 89.9°")]
+
+  defp mask_errors(_mask), do: [F.error("elevation_mask_deg", "Elevation mask must be a number")]
+
+  # Latitude and longitude come together; a height needs both.
+  defp paired(document) do
+    lat = document["latitude_deg"]
+    lon = document["longitude_deg"]
+
+    cond do
+      is_nil(lat) and not is_nil(lon) ->
+        [F.error("latitude_deg", "Enter the latitude too")]
+
+      is_nil(lon) and not is_nil(lat) ->
+        [F.error("longitude_deg", "Enter the longitude too")]
+
+      is_nil(lat) and not is_nil(document["height_m"]) ->
+        [F.error("height_m", "Enter the latitude and longitude too")]
+
+      true ->
+        []
+    end
+  end
 
   # A cleared field (empty or blank) means no code.
   defp blank_code(%{"code" => code} = document) when is_binary(code) do
@@ -179,7 +255,9 @@ defmodule Cadence.Comms.ConfigKinds.GroundStation do
         code: proposed["code"],
         provider: proposed["provider"],
         region: proposed["region"],
-        metadata: proposed["metadata"]
+        metadata: proposed["metadata"],
+        location: location(proposed),
+        elevation_mask_deg: proposed["elevation_mask_deg"]
       })
 
     stored(GroundStationStore.persist_ground_station(organization_id, station))
@@ -191,7 +269,9 @@ defmodule Cadence.Comms.ConfigKinds.GroundStation do
       code: proposed["code"],
       provider: proposed["provider"],
       region: proposed["region"],
-      metadata: proposed["metadata"]
+      metadata: proposed["metadata"],
+      location: location(proposed),
+      elevation_mask_deg: proposed["elevation_mask_deg"] || @default_mask_deg
     }
 
     stored(GroundStationStore.update_ground_station(organization_id, mission_id, id, attrs))
@@ -216,12 +296,24 @@ defmodule Cadence.Comms.ConfigKinds.GroundStation do
   defp stored({:error, reason}), do: {:error, reason}
 
   defp document(%GroundStation{} = station) do
+    location = station.location || %{}
+
     %{
       "display_name" => station.display_name,
       "code" => station.code,
       "provider" => station.provider,
       "region" => station.region,
-      "metadata" => station.metadata || %{}
+      "metadata" => station.metadata || %{},
+      "latitude_deg" => Map.get(location, :latitude_deg),
+      "longitude_deg" => Map.get(location, :longitude_deg),
+      "height_m" => Map.get(location, :height_m),
+      "elevation_mask_deg" => station.elevation_mask_deg
     }
   end
+
+  defp location(%{"latitude_deg" => lat, "longitude_deg" => lon, "height_m" => height})
+       when is_number(lat) and is_number(lon) and is_number(height),
+       do: %{latitude_deg: lat * 1.0, longitude_deg: lon * 1.0, height_m: height * 1.0}
+
+  defp location(_document), do: nil
 end

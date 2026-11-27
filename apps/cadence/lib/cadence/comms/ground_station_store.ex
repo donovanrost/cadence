@@ -132,7 +132,10 @@ defmodule Cadence.Comms.GroundStationStore do
           code: Map.get(attrs, :code, current_ground_station.code),
           provider: Map.get(attrs, :provider, current_ground_station.provider),
           region: Map.get(attrs, :region, current_ground_station.region),
-          metadata: Map.get(attrs, :metadata, current_ground_station.metadata)
+          metadata: Map.get(attrs, :metadata, current_ground_station.metadata),
+          location: Map.get(attrs, :location, current_ground_station.location),
+          elevation_mask_deg:
+            Map.get(attrs, :elevation_mask_deg, current_ground_station.elevation_mask_deg)
       }
 
       update_ground_station_row(updated)
@@ -177,15 +180,16 @@ defmodule Cadence.Comms.GroundStationStore do
             row.ground_station_id == ^ground_station.ground_station_id
         )
         |> Repo.update_all(
-          set: [
-            lifecycle_state: Atom.to_string(ground_station.lifecycle_state),
-            display_name: ground_station.display_name,
-            code: ground_station.code,
-            provider: ground_station.provider,
-            region: ground_station.region,
-            metadata: JsonDocument.wrap_value(ground_station.metadata),
-            updated_at: DateTime.utc_now()
-          ]
+          set:
+            [
+              lifecycle_state: Atom.to_string(ground_station.lifecycle_state),
+              display_name: ground_station.display_name,
+              code: ground_station.code,
+              provider: ground_station.provider,
+              region: ground_station.region,
+              metadata: JsonDocument.wrap_value(ground_station.metadata),
+              updated_at: DateTime.utc_now()
+            ] ++ GroundStationRow.geometry_columns(ground_station)
         )
 
       case count do

@@ -24,15 +24,34 @@ defmodule CadenceSimulator.Provider do
 
   @terminal_run_states ["completed", "failed"]
   @terminal_reservation_states ["rejected", "canceled", "completed", "failed", "terminated_early"]
+  # Each default station reports a WGS84 location (#890) near the real site of its name:
+  # SvalSat on Platåberget, TrollSat in Queen Maud Land and South Point on Hawaiʻi.
   @default_stations [
     %{
       "id" => "station-svalbard",
       "name" => "Svalbard",
       "region" => "arctic",
-      "antenna_count" => 10
+      "antenna_count" => 10,
+      "location" => %{"latitude_deg" => 78.2297, "longitude_deg" => 15.4078, "height_m" => 500.0}
     },
-    %{"id" => "station-troll", "name" => "Troll", "region" => "antarctic", "antenna_count" => 10},
-    %{"id" => "station-hawaii", "name" => "Hawaii", "region" => "pacific", "antenna_count" => 10}
+    %{
+      "id" => "station-troll",
+      "name" => "Troll",
+      "region" => "antarctic",
+      "antenna_count" => 10,
+      "location" => %{"latitude_deg" => -72.0117, "longitude_deg" => 2.5350, "height_m" => 1270.0}
+    },
+    %{
+      "id" => "station-hawaii",
+      "name" => "Hawaii",
+      "region" => "pacific",
+      "antenna_count" => 10,
+      "location" => %{
+        "latitude_deg" => 19.0136,
+        "longitude_deg" => -155.6630,
+        "height_m" => 370.0
+      }
+    }
   ]
 
   @spec create_scenario(map()) :: {:ok, map()} | {:error, term()}
@@ -443,6 +462,7 @@ defmodule CadenceSimulator.Provider do
           "antenna_count" => integer(station, "antenna_count", 1),
           "synthetic" => true
         }
+        |> put_location(Map.get(station, "location"))
       end)
 
     if Enum.all?(normalized, &(&1["antenna_count"] > 0)) do
@@ -455,6 +475,24 @@ defmodule CadenceSimulator.Provider do
   end
 
   defp normalize_stations(_stations), do: {:error, {:invalid, "ground_stations"}}
+
+  # A scenario station may carry a location; one that isn't two numbers (and an optional height)
+  # is left out rather than reported wrong.
+  defp put_location(station, %{"latitude_deg" => lat, "longitude_deg" => lon} = location)
+       when is_number(lat) and is_number(lon) do
+    height = Map.get(location, "height_m", 0.0)
+
+    if is_number(height),
+      do:
+        Map.put(station, "location", %{
+          "latitude_deg" => lat,
+          "longitude_deg" => lon,
+          "height_m" => height
+        }),
+      else: station
+  end
+
+  defp put_location(station, _location), do: station
 
   defp initial_reservation_status(run, attrs, starts_at, ends_at) do
     fault_profile = run["scenario_snapshot"]["fault_profile"]

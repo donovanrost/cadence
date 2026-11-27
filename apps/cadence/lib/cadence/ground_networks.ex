@@ -3,6 +3,7 @@ defmodule Cadence.GroundNetworks do
 
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Comms.StationAvailability.ProviderReports
+  alias Cadence.Comms.StationLocations
   alias Cadence.Contacts.ProviderClients.Registry
   alias Cadence.Ids
 
@@ -166,6 +167,14 @@ defmodule Cadence.GroundNetworks do
              provider.mission_id,
              provider.provider_id,
              ground_stations
+           ),
+         {:ok, _locations} <-
+           StationLocations.record_provider_reports(
+             provider.organization_id,
+             provider.mission_id,
+             provider.provider_id,
+             ground_stations,
+             synced_at
            ) do
       sync_document =
         build_sync_document(

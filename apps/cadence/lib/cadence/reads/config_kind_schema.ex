@@ -5,7 +5,7 @@ defmodule Cadence.Reads.ConfigKindSchema do
   default, required, help, visible_when`), so console edit forms are generated.
 
   `ground_station` mirrors the kind's validation (name, code, provider,
-  region), with provider options from the mission's ground-network providers, plus `metadata`
+  region, and the #890 location and elevation mask as numbers), with provider options from the mission's ground-network providers, plus `metadata`
   (`type: :json`, an object, default `{}`; comms parity 4).
   `transport` adds the transport kind's own configuration fields (today
   `tcp_socket`) under `configuration.*`, addressing the stored, normalized
@@ -82,6 +82,28 @@ defmodule Cadence.Reads.ConfigKindSchema do
          else: field("provider", "Provider", :enum, enum: providers)
        ),
        field("region", "Region", :string, range: %{max: 200}),
+       # #890: the mission's own location and mask for pass prediction (WGS84 geodetic).
+       field("latitude_deg", "Latitude", :number,
+         unit: "°",
+         range: %{min: -90, max: 90},
+         help: "North is positive. Leave empty to use the location the provider reports."
+       ),
+       field("longitude_deg", "Longitude", :number,
+         unit: "°",
+         range: %{min: -180, max: 180},
+         help: "East is positive."
+       ),
+       field("height_m", "Height", :number,
+         unit: "m",
+         range: %{min: -1000, max: 10_000},
+         help: "Above the WGS84 ellipsoid. 0 m when left empty."
+       ),
+       field("elevation_mask_deg", "Elevation mask", :number,
+         unit: "°",
+         range: %{min: 0, max: 89.9},
+         default: 5.0,
+         help: "Passes are predicted above this elevation."
+       ),
        # Comms parity (4): legacy comms could edit station metadata. `:json` is an object only,
        # default {} (the console reads it as of 5040bd149; the kind already checks it's a map).
        field("metadata", "Metadata", :json, default: %{})
