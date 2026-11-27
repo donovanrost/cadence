@@ -14,7 +14,7 @@ defmodule Cadence.Repo.Migrations.AddGroundStationGeometry do
       add(:provider_latitude_deg, :float)
       add(:provider_longitude_deg, :float)
       add(:provider_height_m, :float)
-      add(:provider_location_provider_id, :string, collation: "C")
+      add(:provider_location_provider_id, :text, collation: "C")
       add(:provider_location_reported_at, :utc_datetime_usec)
     end
 
@@ -28,17 +28,29 @@ defmodule Cadence.Repo.Migrations.AddGroundStationGeometry do
           """
         )
       )
-
-      # A location is all three numbers or none.
-      create(
-        constraint(:comms_ground_stations, :"comms_ground_stations_#{prefix}location_complete",
-          check: """
-          (#{prefix}latitude_deg IS NULL) = (#{prefix}longitude_deg IS NULL) AND
-          (#{prefix}latitude_deg IS NULL) = (#{prefix}height_m IS NULL)
-          """
-        )
-      )
     end
+
+    # A location is all three numbers or none.
+    create(
+      constraint(:comms_ground_stations, :comms_ground_stations_location_complete,
+        check: """
+        (latitude_deg IS NULL) = (longitude_deg IS NULL) AND
+        (latitude_deg IS NULL) = (height_m IS NULL)
+        """
+      )
+    )
+
+    # A provider report is the three numbers with the provider that sent it and when, or nothing.
+    create(
+      constraint(:comms_ground_stations, :comms_ground_stations_provider_location_complete,
+        check: """
+        (provider_latitude_deg IS NULL) = (provider_longitude_deg IS NULL) AND
+        (provider_latitude_deg IS NULL) = (provider_height_m IS NULL) AND
+        (provider_latitude_deg IS NULL) = (provider_location_provider_id IS NULL) AND
+        (provider_latitude_deg IS NULL) = (provider_location_reported_at IS NULL)
+        """
+      )
+    )
 
     create(
       constraint(:comms_ground_stations, :comms_ground_stations_elevation_mask_range,
