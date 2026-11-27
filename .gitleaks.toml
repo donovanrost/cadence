@@ -142,7 +142,7 @@ secretGroup = 1
     condition = "AND"
     regexTarget = "secret"
     # The seed's simulator setup lives in earendil_simulator.exs since #978.
-    paths = [ '''(?:^|/)dev/seed/earendil(?:_simulator)?\.exs$''' ]
+    paths = [ '''^dev/seed/earendil(?:_simulator)?\.exs$''' ]
     regexes = [ '''^earendil-local-admin$''' ]
 
 # An environment lookup with a literal fallback is still a committed value.
