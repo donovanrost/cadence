@@ -73,6 +73,51 @@ defmodule CadenceSimulator.Provider.EphemerisTest do
     assert no_upload.status == 404
   end
 
+  test "refuses non-physical or non-numeric elements, and readiness stays missing", c do
+    for {key, value} <- [
+          {"MEAN_MOTION", nil},
+          {"MEAN_MOTION", "15.2"},
+          {"MEAN_MOTION", 0},
+          {"ECCENTRICITY", 1.0},
+          {"INCLINATION", 181.0},
+          {"MEAN_ANOMALY", -1.0}
+        ] do
+      bad = put_in(upload("a"), ["omm", key], value)
+      refused = request(:put, "/provider/v1/spacecraft/EARENDIL-001/ephemeris", c.env, bad)
+      assert refused.status == 422
+      assert %{"error" => %{"detail" => detail}} = decode(refused)
+      assert detail =~ key
+    end
+
+    params = %{"spacecraft_refs" => ["EARENDIL-001"], "starts_at" => iso(DateTime.utc_now())}
+
+    assert {:error, {:orbit_not_ready, %{"status" => "missing"}}} =
+             OrbitReadiness.for_search(c.run, params)
+  end
+
+  test "refuses an OMM whose EPOCH isn't the upload's epoch", c do
+    shifted = put_in(upload("a"), ["omm", "EPOCH"], "2026-11-27T00:00:00.000001")
+    refused = request(:put, "/provider/v1/spacecraft/EARENDIL-001/ephemeris", c.env, shifted)
+    assert refused.status == 422
+
+    assert %{"error" => %{"detail" => "ephemeris.omm.EPOCH must equal ephemeris.epoch"}} =
+             decode(refused)
+
+    # The same instant, written without the Z and with microseconds, is accepted.
+    same = put_in(upload("a"), ["omm", "EPOCH"], "2026-11-27T00:00:00.000000")
+
+    assert request(:put, "/provider/v1/spacecraft/EARENDIL-001/ephemeris", c.env, same).status ==
+             201
+  end
+
+  test "refuses an orbit readiness source_kind other than synthetic or uploaded" do
+    assert {:error, {:invalid, "orbit_readiness.source_kind must be synthetic or uploaded"}} =
+             Provider.create_scenario(%{
+               "spacecraft_count" => 1,
+               "orbit_readiness" => %{"source_kind" => "uplaoded"}
+             })
+  end
+
   test "uploaded orbit readiness: missing, current, then expired", c do
     starts_at = DateTime.utc_now()
     params = %{"spacecraft_refs" => ["EARENDIL-001"], "starts_at" => iso(starts_at)}

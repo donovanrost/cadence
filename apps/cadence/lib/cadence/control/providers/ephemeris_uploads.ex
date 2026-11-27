@@ -24,6 +24,7 @@ defmodule Cadence.Control.Providers.EphemerisUploads do
   alias Cadence.GroundNetworks.{ElementSets, EphemerisStates, ProviderError}
   alias Cadence.GroundNetworks.ElementSets.OmmDocument
   alias Cadence.Jobs
+  alias Cadence.Jobs.OpenMissions
   alias Cadence.Platform.EphemerisUploadJobs
 
   @job_type :ephemeris_upload
@@ -37,13 +38,17 @@ defmodule Cadence.Control.Providers.EphemerisUploads do
   @spec execute_enqueued_run(binary()) :: {:ok, summary()} | {:error, term()}
   def execute_enqueued_run(run_id) do
     with {:ok, job} <- Jobs.fetch_job_for_run(@job_type, run_id) do
-      run(job.payload["organization_id"], job.mission_id, job.payload["spacecraft_ids"] || [])
+      run(job.payload["organization_id"], job.mission_id, job.payload["spacecraft_ids"] || [],
+        pairs: payload_pairs(job.payload["pairs"])
+      )
     end
   end
 
   @doc """
-  Uploads (or checks) these spacecraft's current orbits for every bound provider. `opts`:
-  `:now`, `:client` (a provider client, for tests). Answers counts by stored status.
+  Uploads (or checks) these spacecraft's current orbits for their bound providers. `opts`:
+  `:now`; `:pairs`, a list of `{spacecraft_id, provider_id}` to attempt only those (the retry
+  and reconcile sweeps; nil, the default, attempts every bound provider); `:client` (a provider
+  client, for tests). Answers counts by stored status.
   """
   @spec run(binary(), binary(), [binary()], keyword()) :: {:ok, summary()} | {:error, term()}
   def run(organization_id, mission_id, spacecraft_ids, opts \\ []) do
@@ -60,7 +65,7 @@ defmodule Cadence.Control.Providers.EphemerisUploads do
              mission_id,
              Map.keys(sets)
            ) do
-      bindings = bindings(routes)
+      bindings = routes |> bindings() |> only(Keyword.get(opts, :pairs))
       prepared = prepare(bindings, providers, opts)
 
       previous =
@@ -81,40 +86,57 @@ defmodule Cadence.Control.Providers.EphemerisUploads do
   end
 
   @doc """
-  Stages a run for every spacecraft with a failed upload due at `now`, one job per mission, and
-  leases those rows for #{@retry_lease_minutes} minutes so the next sweep doesn't stage them
-  again before the run records its outcome. Answers how many jobs were staged.
+  Stages a run for every (spacecraft, provider) pair with a failed upload due at `now`, one job
+  per mission attempting exactly those pairs, and leases those rows for #{@retry_lease_minutes}
+  minutes so the next sweep doesn't stage them again before the run records its outcome.
+  Answers how many jobs were staged.
   """
   @spec retry_due(DateTime.t()) :: non_neg_integer()
   def retry_due(now \\ DateTime.utc_now()) do
     now
     |> EphemerisStates.claim_due(DateTime.add(now, @retry_lease_minutes * 60))
-    |> Enum.group_by(fn {org, mission, _id} -> {org, mission} end, &elem(&1, 2))
-    |> Enum.count(fn {{organization_id, mission_id}, spacecraft_ids} ->
-      {:ok, _job} =
-        EphemerisUploadJobs.stage_spacecraft(organization_id, mission_id, spacecraft_ids)
-    end)
+    |> stage_pairs()
   end
 
   @doc """
-  The safety net for pairs no new element set will reach (#968): a provider newly bound, or
-  newly ready, holds nothing although the spacecraft's set is unchanged. Finds every upload pair
-  across all missions that is `pending` (no upload of the current set, not `failed`) in one query,
-  skips missions whose upload job is already open (one query), and stages one run per remaining
-  mission for its pending spacecraft. At most `limit` pairs per sweep. Answers how many jobs.
+  The safety net for pairs no new element set will reach (#968): a provider newly bound or
+  ready, a changed provider-side ref, or a newly pinned provider version holds nothing for the
+  unchanged set. Finds at most `limit` PAIRS across all missions that are `pending` (one query,
+  `EphemerisStates.pending/1`), skips missions whose upload job is already open (one query), and
+  stages one run per remaining mission that attempts exactly those pairs. Answers how many jobs.
   """
   @spec reconcile(pos_integer()) :: non_neg_integer()
   def reconcile(limit \\ @reconcile_limit) do
     pending = EphemerisStates.pending(limit)
-    open = if pending == [], do: MapSet.new(), else: Jobs.missions_with_open_jobs(@job_type)
+    open = if pending == [], do: MapSet.new(), else: OpenMissions.of_type(@job_type)
 
     pending
-    |> Enum.reject(fn {_org, mission, _id} -> MapSet.member?(open, mission) end)
-    |> Enum.group_by(fn {org, mission, _id} -> {org, mission} end, &elem(&1, 2))
-    |> Enum.count(fn {{organization_id, mission_id}, spacecraft_ids} ->
-      {:ok, _job} =
-        EphemerisUploadJobs.stage_spacecraft(organization_id, mission_id, spacecraft_ids)
+    |> Enum.reject(fn {_org, mission, _sc, _provider} -> MapSet.member?(open, mission) end)
+    |> stage_pairs()
+  end
+
+  # One job per mission for these `{org, mission, spacecraft_id, provider_id}` pairs.
+  defp stage_pairs(pairs) do
+    pairs
+    |> Enum.group_by(fn {org, mission, _sc, _provider} -> {org, mission} end, fn {_o, _m, sc,
+                                                                                  provider} ->
+      {sc, provider}
     end)
+    |> Enum.count(fn {{organization_id, mission_id}, pairs} ->
+      {:ok, _job} = EphemerisUploadJobs.stage_pairs(organization_id, mission_id, pairs)
+    end)
+  end
+
+  defp payload_pairs(nil), do: nil
+
+  defp payload_pairs(pairs) when is_list(pairs),
+    do: Enum.map(pairs, fn [sc, provider] -> {sc, provider} end)
+
+  defp only(bindings, nil), do: bindings
+
+  defp only(bindings, pairs) do
+    wanted = MapSet.new(pairs)
+    Enum.filter(bindings, &MapSet.member?(wanted, {&1.spacecraft_id, &1.provider_id}))
   end
 
   @doc "When a pair that has failed `attempts` times is tried again."
@@ -125,7 +147,7 @@ defmodule Cadence.Control.Providers.EphemerisUploads do
   end
 
   # One binding per (provider, spacecraft): every ready route a spacecraft has to a provider
-  # names the same provider-side spacecraft.
+  # names the same provider-side spacecraft (its first mapped source endpoint).
   defp bindings(routes) do
     for {_spacecraft_id, {:ok, %{routes: ready}}} <- routes,
         route <- ready,
@@ -137,6 +159,9 @@ defmodule Cadence.Control.Providers.EphemerisUploads do
         provider_spacecraft_ref: route.provider_spacecraft_ref
       }
     end
+    # Two transports may pin different versions of one provider: the highest, as the reconcile
+    # query reads it.
+    |> Enum.sort_by(& &1.provider_version, :desc)
     |> Enum.uniq_by(&{&1.provider_id, &1.spacecraft_id})
   end
 
@@ -161,6 +186,7 @@ defmodule Cadence.Control.Providers.EphemerisUploads do
       provider_id: binding.provider_id,
       spacecraft_id: binding.spacecraft_id,
       provider_spacecraft_ref: binding.provider_spacecraft_ref,
+      provider_version: binding.provider_version,
       element_set_id: set.element_set_id,
       content_sha256: set.content_sha256
     }
@@ -179,9 +205,12 @@ defmodule Cadence.Control.Providers.EphemerisUploads do
     end
   end
 
-  # The provider already holds this content: nothing to send.
-  defp upload(base, _set, %{status: "uploaded", content_sha256: sha}, _request, _now)
-       when sha == base.content_sha256,
+  # The provider already holds this content at this ref, for this pinned version: nothing to
+  # send. A changed ref or version sends again.
+  defp upload(base, _set, %{status: "uploaded"} = prior, _request, _now)
+       when prior.content_sha256 == base.content_sha256 and
+              prior.provider_spacecraft_ref == base.provider_spacecraft_ref and
+              prior.provider_version == base.provider_version,
        do: Map.put(base, :status, "uploaded")
 
   defp upload(base, set, prior, request, now) do

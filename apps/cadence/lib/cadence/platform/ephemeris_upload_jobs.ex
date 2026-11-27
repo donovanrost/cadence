@@ -15,16 +15,33 @@ defmodule Cadence.Platform.EphemerisUploadJobs do
 
   @job_type :ephemeris_upload
 
+  @doc """
+  Stages a run that attempts only these `{spacecraft_id, provider_id}` pairs (the retry and
+  reconcile sweeps), so a sweep's pair bound is the work it stages.
+  """
+  @spec stage_pairs(binary(), binary(), [{binary(), binary()}]) ::
+          {:ok, Jobs.Job.t() | nil} | {:error, term()}
+  def stage_pairs(_organization_id, _mission_id, []), do: {:ok, nil}
+
+  def stage_pairs(organization_id, mission_id, pairs) do
+    pairs = Enum.uniq(pairs)
+
+    stage(organization_id, mission_id, %{
+      "spacecraft_ids" => pairs |> Enum.map(&elem(&1, 0)) |> Enum.uniq(),
+      "pairs" =>
+        Enum.map(pairs, fn {spacecraft_id, provider_id} -> [spacecraft_id, provider_id] end)
+    })
+  end
+
   @spec stage_spacecraft(binary(), binary(), [binary()]) ::
           {:ok, Jobs.Job.t() | nil} | {:error, term()}
   def stage_spacecraft(_organization_id, _mission_id, []), do: {:ok, nil}
 
-  def stage_spacecraft(organization_id, mission_id, spacecraft_ids) do
-    payload = %{
-      "organization_id" => organization_id,
-      "spacecraft_ids" => Enum.uniq(spacecraft_ids)
-    }
+  def stage_spacecraft(organization_id, mission_id, spacecraft_ids),
+    do: stage(organization_id, mission_id, %{"spacecraft_ids" => Enum.uniq(spacecraft_ids)})
 
+  defp stage(organization_id, mission_id, payload) do
+    payload = Map.put(payload, "organization_id", organization_id)
     run_id = Ids.new("ephemeris_upload_run")
 
     if Repo.in_transaction?(),

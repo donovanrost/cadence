@@ -47,20 +47,6 @@ defmodule Cadence.Jobs do
     end
   end
 
-  @doc "The missions with a job of this type queued or running (one query)."
-  @spec missions_with_open_jobs(Job.job_type()) :: MapSet.t(binary())
-  def missions_with_open_jobs(job_type) when is_atom(job_type) do
-    BackgroundJobRow
-    |> where(
-      [row],
-      row.job_type == ^Atom.to_string(job_type) and row.status in ["queued", "running"]
-    )
-    |> select([row], row.mission_id)
-    |> distinct(true)
-    |> Repo.all()
-    |> MapSet.new()
-  end
-
   @doc "A mission's jobs of one type that are queued or running, oldest first."
   @spec list_open_jobs(Job.job_type(), binary()) :: [Job.t()]
   def list_open_jobs(job_type, mission_id) when is_atom(job_type) and is_binary(mission_id) do

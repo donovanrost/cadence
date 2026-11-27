@@ -15,6 +15,15 @@ defmodule CadenceSimulator.Provider.Ephemeris do
   @max_age_seconds 14 * 24 * 60 * 60
   @required_omm ~w(EPOCH MEAN_MOTION ECCENTRICITY INCLINATION RA_OF_ASC_NODE ARG_OF_PERICENTER
                    MEAN_ANOMALY)
+  # The mean elements' physical ranges, as Cadence's element-set parser checks them.
+  @ranges [
+    {"MEAN_MOTION", :positive},
+    {"ECCENTRICITY", {0.0, 1.0, :open}},
+    {"INCLINATION", {0.0, 180.0, :closed}},
+    {"RA_OF_ASC_NODE", {0.0, 360.0, :closed}},
+    {"ARG_OF_PERICENTER", {0.0, 360.0, :closed}},
+    {"MEAN_ANOMALY", {0.0, 360.0, :closed}}
+  ]
 
   @spec max_age_seconds() :: pos_integer()
   def max_age_seconds, do: @max_age_seconds
@@ -31,6 +40,7 @@ defmodule CadenceSimulator.Provider.Ephemeris do
     with true <- spacecraft_ref?(run, ref) || {:error, :not_found},
          {:ok, omm} <- omm(attrs["omm"]),
          {:ok, epoch} <- epoch(attrs["epoch"]),
+         :ok <- same_epoch(omm["EPOCH"], epoch),
          {:ok, sha} <- sha(attrs["content_sha256"]) do
       case fetch(run, ref) do
         {:ok, %{"content_sha256" => ^sha} = stored} ->
@@ -87,12 +97,41 @@ defmodule CadenceSimulator.Provider.Ephemeris do
 
   defp omm(omm) when is_map(omm) do
     case Enum.reject(@required_omm, &Map.has_key?(omm, &1)) do
-      [] -> {:ok, omm}
+      [] -> elements(omm)
       missing -> {:error, {:invalid, "ephemeris.omm is missing " <> Enum.join(missing, ", ")}}
     end
   end
 
   defp omm(_omm), do: {:error, {:invalid, "ephemeris.omm must be an OMM object"}}
+
+  defp elements(omm) do
+    case Enum.find(@ranges, fn {key, range} -> not within?(omm[key], range) end) do
+      nil -> {:ok, omm}
+      {key, _range} -> {:error, {:invalid, "ephemeris.omm.#{key} is not a physical value"}}
+    end
+  end
+
+  defp within?(value, :positive) when is_number(value), do: value > 0
+  defp within?(value, {low, high, :open}) when is_number(value), do: value >= low and value < high
+
+  defp within?(value, {low, high, :closed}) when is_number(value),
+    do: value >= low and value <= high
+
+  defp within?(_value, _range), do: false
+
+  # The OMM's own EPOCH (UTC, with or without a trailing Z) is the outer epoch, to the
+  # microsecond: an upload whose two epochs disagree can't say which orbit it carries.
+  defp same_epoch(value, epoch) when is_binary(value) do
+    with {:ok, naive} <- value |> String.trim_trailing("Z") |> NaiveDateTime.from_iso8601(),
+         :eq <- NaiveDateTime.compare(naive, DateTime.to_naive(epoch)) do
+      :ok
+    else
+      _mismatch -> {:error, {:invalid, "ephemeris.omm.EPOCH must equal ephemeris.epoch"}}
+    end
+  end
+
+  defp same_epoch(_value, _epoch),
+    do: {:error, {:invalid, "ephemeris.omm.EPOCH must equal ephemeris.epoch"}}
 
   defp epoch(value) when is_binary(value) do
     case DateTime.from_iso8601(value) do

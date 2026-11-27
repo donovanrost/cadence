@@ -17,6 +17,8 @@ defmodule Cadence.Repo.Migrations.CreateProviderEphemerisStates do
       add(:element_set_id, :text, collation: "C")
       add(:content_sha256, :text, collation: "C")
       add(:provider_spacecraft_ref, :text, collation: "C")
+      # The mission provider version the pair was acted on with (the one the transport pins).
+      add(:provider_version, :integer)
       add(:attempts, :integer, null: false, default: 0)
       add(:reason, :text)
       add(:next_retry_at, :utc_datetime_usec)

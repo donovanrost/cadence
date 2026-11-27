@@ -12,6 +12,7 @@ defmodule CadenceSimulator.Provider.OrbitReadiness do
   alias CadenceSimulator.Provider.{Contract, Ephemeris}
 
   @statuses ~w(current missing expired processing)
+  @source_kinds ~w(synthetic uploaded)
   @default_validity_seconds 7 * 24 * 60 * 60
   @maximum_validity_seconds 365 * 24 * 60 * 60
 
@@ -20,10 +21,14 @@ defmodule CadenceSimulator.Provider.OrbitReadiness do
     attrs = Contract.sanitize(attrs)
     status = Map.get(attrs, "status", "current")
     validity_seconds = Map.get(attrs, "validity_seconds", @default_validity_seconds)
+    source_kind = Map.get(attrs, "source_kind", "synthetic")
 
     cond do
       status not in @statuses ->
         {:error, {:invalid, "orbit_readiness.status is invalid"}}
+
+      source_kind not in @source_kinds ->
+        {:error, {:invalid, "orbit_readiness.source_kind must be synthetic or uploaded"}}
 
       not is_integer(validity_seconds) or validity_seconds <= 0 or
           validity_seconds > @maximum_validity_seconds ->
@@ -33,7 +38,7 @@ defmodule CadenceSimulator.Provider.OrbitReadiness do
         {:ok,
          %{
            "status" => status,
-           "source_kind" => Map.get(attrs, "source_kind", "synthetic"),
+           "source_kind" => source_kind,
            "ephemeris_ref" => Map.get(attrs, "ephemeris_ref", "synthetic-ephemeris-v1"),
            "version" => Map.get(attrs, "version", 1),
            "validity_seconds" => validity_seconds
