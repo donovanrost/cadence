@@ -57,7 +57,7 @@ defmodule Cadence.Comms.StationLocations do
           not Map.has_key?(reported, station_id),
           do: station_id
 
-    cleared = clear(organization_id, mission_id, stale)
+    cleared = clear_reports(organization_id, mission_id, provider_id, stale)
 
     if changed + cleared > 0,
       do: ScopedReadUpdates.publish(:stations_changed, organization_id, mission_id)
@@ -100,12 +100,18 @@ defmodule Cadence.Comms.StationLocations do
     )
   end
 
-  defp clear(_organization_id, _mission_id, []), do: 0
+  @doc false
+  # Clears `provider_id`'s report on these stations; public so the race below is testable.
+  @spec clear_reports(String.t(), String.t(), String.t(), [String.t()]) :: non_neg_integer()
+  def clear_reports(_organization_id, _mission_id, _provider_id, []), do: 0
 
-  defp clear(organization_id, mission_id, station_ids) do
+  # Only rows that still carry this provider's report: another provider may have reported the
+  # station since the snapshot above, and its report is not this sync's to clear.
+  def clear_reports(organization_id, mission_id, provider_id, station_ids) do
     {count, _rows} =
       organization_id
       |> station_query(mission_id, station_ids)
+      |> where([row], row.provider_location_provider_id == ^provider_id)
       |> Repo.update_all(
         set: [
           provider_latitude_deg: nil,

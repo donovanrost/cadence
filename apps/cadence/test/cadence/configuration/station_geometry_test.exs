@@ -254,6 +254,27 @@ defmodule Cadence.Configuration.StationGeometryTest do
       assert %{provider_id: "sim", latitude_deg: 19.0} = plain.provider_location
     end
 
+    test "a clear only removes the clearing provider's report, even after a snapshot", ctx do
+      # Provider A's sync read its snapshot when the station still carried A's report; provider
+      # B reported it before A's clear ran. The clear must leave B's report.
+      a = [station(ctx.plain, %{"latitude_deg" => 1.0, "longitude_deg" => 2.0})]
+
+      {:ok, _} =
+        StationLocations.record_provider_reports(ctx.org, ctx.mission, "a", a, @synced_at)
+
+      b = [station(ctx.plain, %{"latitude_deg" => 19.0, "longitude_deg" => -155.0})]
+
+      {:ok, _} =
+        StationLocations.record_provider_reports(ctx.org, ctx.mission, "b", b, @synced_at)
+
+      assert StationLocations.clear_reports(ctx.org, ctx.mission, "a", [ctx.plain]) == 0
+
+      {:ok, plain} = GroundStationStore.fetch_ground_station(ctx.org, ctx.mission, ctx.plain)
+      assert %{provider_id: "b", latitude_deg: 19.0} = plain.provider_location
+
+      assert StationLocations.clear_reports(ctx.org, ctx.mission, "b", [ctx.plain]) == 1
+    end
+
     test "the station read shows the location in use, its source, the report and the mask", ctx do
       report = [station(ctx.plain, %{"latitude_deg" => 19.0, "longitude_deg" => -155.0})]
 
