@@ -42,7 +42,7 @@ describe("ephemeris words (#975: every non-zero bucket)", () => {
       ["uploaded", "1,200 uploaded", false, null],
       ["failed", "2 upload failed, retrying", true, null],
       ["not_ready", "3 not ready, no route to this provider is ready, nothing sent", true, null],
-      ["pending", "1 waiting to upload", false, null],
+      ["pending", "1 waiting for first check", false, null],
     ]);
   });
 
@@ -71,6 +71,23 @@ describe("ephemeris words (#975: every non-zero bucket)", () => {
     expect(lines(undeclared).map((l) => [l[0], l[3]])).toEqual([
       ["lookup", "assumed"],
       ["failed", "older pinned version"],
+    ]);
+  });
+
+  it("pending is neither kind (#981): last, never an older version's or assumed", () => {
+    const e = ephemeris({
+      orbit_source: "looks_up_by_norad_id",
+      pending: 2,
+      uploaded: 1,
+      lookup: 3,
+    });
+    expect(lines(e)).toEqual([
+      ["lookup", "3 looked up by NORAD id", false, null],
+      ["uploaded", "1 uploaded", false, "older pinned version"],
+      ["pending", "2 waiting for first check", false, null],
+    ]);
+    expect(lines(ephemeris({ orbit_source: null, pending: 1 }))).toEqual([
+      ["pending", "1 waiting for first check", false, null],
     ]);
   });
 

@@ -21,10 +21,13 @@ export const ephemerisReader = d.object({
 });
 export type Ephemeris = Decoded<typeof ephemerisReader>;
 
-const uploadBuckets = ["uploaded", "failed", "not_ready", "pending"] as const;
+const uploadBuckets = ["uploaded", "failed", "not_ready"] as const;
 const lookupBuckets = ["lookup", "norad_id_missing"] as const;
-type Bucket = (typeof uploadBuckets)[number] | (typeof lookupBuckets)[number];
-type Kind = "upload" | "lookup";
+/** #981: source-neutral, no run has recorded an outcome for the current set yet, either kind. */
+const neutralBuckets = ["pending"] as const;
+type Kind = "upload" | "lookup" | "neutral";
+const bucketsOf = { upload: uploadBuckets, lookup: lookupBuckets, neutral: neutralBuckets };
+type Bucket = (typeof bucketsOf)[Kind][number];
 
 /** Each bucket's words after its count, and whether a non-zero count is a caution. */
 const bucketWords: Readonly<Record<Bucket, { words: string; caution: boolean }>> = {
@@ -34,7 +37,7 @@ const bucketWords: Readonly<Record<Bucket, { words: string; caution: boolean }>>
     words: "not ready, no route to this provider is ready, nothing sent",
     caution: true,
   },
-  pending: { words: "waiting to upload", caution: false },
+  pending: { words: "waiting for first check", caution: false },
   lookup: { words: "looked up by NORAD id", caution: false },
   norad_id_missing: { words: "without a NORAD id, the provider can't find them", caution: true },
 };
@@ -48,7 +51,7 @@ const leadWords: Readonly<Record<NonNullable<Source>, string>> = {
 };
 
 /** The kind the source names; null (declared nothing) behaves as lookup, so it is assumed. */
-function ownKind(source: Source): Kind | null {
+function ownKind(source: Source): "upload" | "lookup" | null {
   if (source === "accepts_ephemeris_upload") return "upload";
   if (source === "looks_up_by_norad_id" || source === null) return "lookup";
   return null;
@@ -72,19 +75,20 @@ export type EphemerisSummary = Readonly<{
 /**
  * Every non-zero bucket: each spacecraft is bucketed by the provider version its transport pins,
  * so one row can carry both kinds. The kind `orbit_source` names comes first; the other kind's
- * counts belong to an older pinned version and say so.
+ * counts belong to an older pinned version and say so. Pending is neither kind and comes last.
  */
 export function ephemerisSummary(e: Ephemeris): EphemerisSummary {
   const own = ownKind(e.orbit_source);
-  const kinds: readonly Kind[] = own === "lookup" ? ["lookup", "upload"] : ["upload", "lookup"];
+  const kinds: readonly Kind[] =
+    own === "lookup" ? ["lookup", "upload", "neutral"] : ["upload", "lookup", "neutral"];
   const count = (b: Bucket) => (b === "not_ready" ? (e.not_ready ?? 0) : e[b]);
   const note = (kind: Kind) => {
-    if (own === null) return null;
+    if (own === null || kind === "neutral") return null;
     if (kind !== own) return "older pinned version";
     return e.orbit_source === null ? "assumed" : null;
   };
   const lines = kinds.flatMap((kind) =>
-    (kind === "upload" ? uploadBuckets : lookupBuckets)
+    bucketsOf[kind]
       .filter((b) => count(b) > 0)
       .map((b) => ({
         key: b,
@@ -93,7 +97,10 @@ export function ephemerisSummary(e: Ephemeris): EphemerisSummary {
         note: note(kind),
       })),
   );
-  const sum = [...uploadBuckets, ...lookupBuckets].reduce((n, b) => n + count(b), 0);
+  const sum = [...uploadBuckets, ...lookupBuckets, ...neutralBuckets].reduce(
+    (n, b) => n + count(b),
+    0,
+  );
   return {
     lead: e.orbit_source === null ? "Orbit source not declared" : leadWords[e.orbit_source],
     total:
