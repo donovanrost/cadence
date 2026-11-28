@@ -6,6 +6,7 @@ defmodule Cadence.Limits.Store.LatestStateRow do
   import Ecto.Changeset
 
   alias Cadence.Limits.Event
+  alias Cadence.Limits.StateText
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Persistence.OrganizationScope
 
@@ -79,8 +80,8 @@ defmodule Cadence.Limits.Store.LatestStateRow do
       limit_definition_version: latest_state_row.limit_definition_version,
       limit_set_name: latest_state_row.limit_set_name,
       evaluated_value: JsonDocument.unwrap_value(latest_state_row.evaluated_value),
-      limit_state: String.to_existing_atom(latest_state_row.limit_state),
-      normalized_state: String.to_existing_atom(latest_state_row.normalized_state),
+      limit_state: StateText.limit_state(latest_state_row.limit_state),
+      normalized_state: StateText.normalized_state(latest_state_row.normalized_state),
       violation: latest_state_row.violation,
       generation_time: latest_state_row.generation_time,
       receipt_time: latest_state_row.receipt_time,
