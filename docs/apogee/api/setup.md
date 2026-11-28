@@ -50,12 +50,13 @@ row's sort key, so a craft added or renamed between pages neither repeats nor sk
  "meta": {"next_cursor": "W1siRUFSRU5ESUwtMzEyIiwic3BhY2VjcmFmdC1lYXJlbmRpbC0zMTIiXQ"}}
 ```
 
-- `summary`: the whole mission's counts, counted in the database over every active spacecraft
+- `summary` (**first page only**, the request with no `cursor`; later pages leave it out, #933):
+  the whole mission's counts, counted in the database over every active spacecraft
   whatever the page or `q` (the subtitle's numbers): `total`; `profiles` (distinct profiles bound);
   `without_profile`; `without_scid`; `without_routing_rule` (no active, enabled rule);
   `awaiting_first_aos` (no telemetry receipt, from the same cached receipts as `last_received_at`,
-  so it carries the `telemetry` caveat below). `scids_in_use`, `next_free_scid` and `telemetry` are
-  on every page and cover the whole mission.
+  so it carries the `telemetry` caveat below). `scids_in_use` and `next_free_scid` are also first
+  page only and cover the whole mission; `telemetry` is on every page.
 
 - `scids_in_use` (S9, #313; ux U20): every SCID a new spacecraft can't take, as integers, sorted
   ascending and deduplicated. That's the live spacecraft's, **archived ones included** (they keep

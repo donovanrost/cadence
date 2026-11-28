@@ -124,6 +124,23 @@ defmodule Cadence.Reads.SpacecraftDirectoryPageTest do
     assert {:error, :invalid_cursor} = SpacecraftDirectory.page(c.org, c.mission, cursor: "x")
   end
 
+  test "the summary and SCIDs come with the first page only; later pages carry just their rows (#933)",
+       c do
+    for {name, scid} <- [{"alpha", 1}, {"bravo", nil}, {"charlie", nil}],
+        do: craft!(c, name, scid: scid)
+
+    {:ok, first} = SpacecraftDirectory.page(c.org, c.mission, limit: 2)
+    assert %{total: 3} = first.summary
+    assert %{scids_in_use: [1], next_free_scid: 2} = first
+
+    {:ok, later} = SpacecraftDirectory.page(c.org, c.mission, limit: 2, cursor: first.next_cursor)
+    assert Enum.map(later.spacecraft, & &1.name) == ["charlie"]
+    refute Map.has_key?(later, :summary)
+    refute Map.has_key?(later, :scids_in_use)
+    refute Map.has_key?(later, :next_free_scid)
+    assert later.telemetry in [:ok, :degraded]
+  end
+
   test "q matches name, profile name or a SCID prefix; the summary stays whole-mission", c do
     bus = profile!(c, "Cube Bus")
     craft!(c, "Earendil-1", scid: 101, profile_id: bus.spacecraft_type_id)

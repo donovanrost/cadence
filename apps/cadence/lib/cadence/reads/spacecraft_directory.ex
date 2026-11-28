@@ -27,12 +27,13 @@ defmodule Cadence.Reads.SpacecraftDirectory do
   @doc """
   One page of the directory, by name then id after an opaque `cursor`, `limit` 1..#{@max_limit}
   (default #{@default_limit}), optionally narrowed by `q` (name or profile name contains it, or the
-  SCID starts with it). The `summary` counts the whole mission whatever the page or filter.
+  SCID starts with it).
 
-  Returns the rows plus `next_cursor` (nil on the last page), `telemetry: :ok | :degraded`
+  Returns the rows plus `next_cursor` (nil on the last page) and `telemetry: :ok | :degraded`
   (degraded when the durable history store didn't answer in time, so `last_received_at` comes from
   live values only, api-ops 17deb3c1, and may be missing for spacecraft not heard since the last
-  restart) and the SCID fields.
+  restart). The **first page** (no cursor) also carries the mission's `summary` (counted over the
+  whole mission whatever the filter) and the SCID fields; later pages leave them out (#933).
   """
   @spec page(binary(), binary(), keyword()) :: {:ok, map()} | {:error, :invalid_cursor}
   def page(organization_id, mission_id, opts \\ []) do
@@ -74,13 +75,24 @@ defmodule Cadence.Reads.SpacecraftDirectory do
                  Enum.map(craft, & &1.spacecraft_id)
                )
            }),
-         summary: summary(organization_id, mission_id, last_received),
          next_cursor: if(more != [], do: craft |> List.last() |> cursor_key()),
          telemetry: telemetry
        }
-       |> Map.merge(scids(organization_id, mission_id))}
+       |> Map.merge(first_page_only(after_key, organization_id, mission_id, last_received))}
     end
   end
+
+  # The whole mission's counts and SCIDs are read once, with the first page (no cursor): a Load
+  # more costs the page's own queries, not the mission's counts again (#933).
+  defp first_page_only(nil, organization_id, mission_id, last_received),
+    do:
+      Map.put(
+        scids(organization_id, mission_id),
+        :summary,
+        summary(organization_id, mission_id, last_received)
+      )
+
+  defp first_page_only(_after_key, _organization_id, _mission_id, _last_received), do: %{}
 
   defp page_size(limit) when is_integer(limit) and limit in 1..@max_limit, do: limit
   defp page_size(_limit), do: @default_limit

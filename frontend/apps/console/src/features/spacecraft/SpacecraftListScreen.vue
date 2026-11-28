@@ -40,9 +40,10 @@ const subtitle = (s: DirectorySummary) =>
   ]
     .filter((part): part is string => part !== null)
     .join(" · ");
-const summary = computed(() =>
-  state.value.status === "ready" ? subtitle(state.value.value.meta.summary) : null,
+const counts = computed(() =>
+  state.value.status === "ready" ? state.value.value.meta.summary : null,
 );
+const summary = computed(() => (counts.value ? subtitle(counts.value) : null));
 const filtering = computed(() => directory.settledQuery.value !== "");
 
 // The filter box outlives every reload its own typing causes: a settled keystroke starts the
@@ -53,7 +54,7 @@ watch(
   [state, missionId],
   ([s], [, before]) => {
     if (missionId.value !== before) missionHasCraft.value = false;
-    if (s.status === "ready") missionHasCraft.value = s.value.meta.summary.total > 0;
+    if (s.status === "ready") missionHasCraft.value = (s.value.meta.summary?.total ?? 0) > 0;
   },
   { immediate: true },
 );
@@ -102,7 +103,9 @@ async function loadMore() {
             ? state.value.next !== null
               ? " shown, more match"
               : " match"
-            : ` of ${formatCount(state.value.meta.summary.total)}`
+            : counts
+              ? ` of ${formatCount(counts.total)}`
+              : ""
         }}</template
       >
       <div ref="panel">
