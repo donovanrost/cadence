@@ -591,7 +591,7 @@ defmodule Cadence.Dashboards.RuntimeCacheKeyTest do
       realm: :flight,
       logical_source: :limits,
       data_source_id: "managed_limits_projection",
-      dataset: "telemetry_latest_limit_states"
+      dataset: "semantic_latest_alarm_states"
     }
   end
 

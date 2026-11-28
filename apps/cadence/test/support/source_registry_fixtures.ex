@@ -159,7 +159,7 @@ defmodule Cadence.Dashboards.SourceRegistryFixtures do
         sampling_mode: :latest_state,
         binding_id: "default_flight_limits",
         data_source_id: "managed_limits_projection",
-        dataset: "telemetry_latest_limit_states",
+        dataset: "semantic_latest_alarm_states",
         adapter_supported_products: [
           :latest_state,
           :event_history,

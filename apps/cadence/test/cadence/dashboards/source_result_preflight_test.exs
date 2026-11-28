@@ -370,7 +370,7 @@ defmodule Cadence.Dashboards.SourceResultPreflightTest do
   end
 
   defp dataset(:telemetry), do: "flight"
-  defp dataset(:limits), do: "telemetry_latest_limit_states"
+  defp dataset(:limits), do: "semantic_latest_alarm_states"
   defp dataset(:events), do: "mission_events"
   defp dataset(:operational_observables), do: "operational_observables"
 

@@ -42,6 +42,7 @@ defmodule Cadence.Application do
         Cadence.Reads.DurableReceiptCache,
         # The reads' per-revision summary of the active monitoring plan (what is monitored).
         Cadence.Reads.MonitoredParameters,
+        Cadence.Reads.PointParameters,
         # Before the runtime: journal consumers subscribe to partitions' snapshot notices.
         Cadence.Runtime.SemanticSnapshotNotifier,
         Cadence.Management.Supervisor,

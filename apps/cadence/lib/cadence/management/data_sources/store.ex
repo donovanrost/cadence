@@ -157,7 +157,7 @@ defmodule Cadence.Management.DataSources.Store do
       realm: :flight,
       logical_source: :limits,
       data_source_id: @default_limits_data_source_id,
-      dataset: "telemetry_latest_limit_states",
+      dataset: "semantic_latest_alarm_states",
       priority: 0,
       metadata: %{bootstrap_default?: true}
     }

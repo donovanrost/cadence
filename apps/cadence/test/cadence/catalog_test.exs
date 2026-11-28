@@ -662,7 +662,7 @@ defmodule Cadence.CatalogTest do
   defp dashboard_data_source_id(:limits), do: "managed_limits_projection"
 
   defp dashboard_dataset(:telemetry), do: "flight"
-  defp dashboard_dataset(:limits), do: "telemetry_latest_limit_states"
+  defp dashboard_dataset(:limits), do: "semantic_latest_alarm_states"
 
   defp dashboard_source_kind(:limits), do: :projection
   defp dashboard_source_kind(_logical_source), do: :managed_tsdb
