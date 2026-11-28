@@ -96,6 +96,15 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
   def execute(_scope, _host_context, _surface_id, _request),
     do: {:error, :unsupported_application_action}
 
+  @doc """
+  Whether `scope` may make a data-source write in the mission: the very check `execute/4` makes
+  before it dispatches (#1160). What the console advertises as `data_sources.manage` is this, so
+  it is shown only to someone whose write will pass.
+  """
+  @spec may_manage?(Scope.t(), binary(), binary()) :: boolean()
+  def may_manage?(%Scope{} = scope, organization_id, mission_id),
+    do: authorize(scope, organization_id, mission_id) == :ok
+
   @spec result(term()) :: term()
   def result(%DataSource{} = source) do
     %{
