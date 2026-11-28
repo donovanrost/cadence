@@ -22,17 +22,29 @@ defmodule Cadence.Contacts.ProfileStore.ListenAllowlist do
       when adapter in [:tcp_socket, "tcp_socket"] do
     config = profile.configuration || %{}
 
-    if Map.get(config, "mode", Map.get(config, :mode)) in ["listen", :listen] do
-      config
-      |> Map.get("expected_peer_addresses", Map.get(config, :expected_peer_addresses))
-      |> PeerAddresses.classify()
-      |> allowlist_result()
+    mode = Map.get(config, "mode", Map.get(config, :mode))
+    auth = Map.get(config, "delivery_auth", Map.get(config, :delivery_auth))
+
+    if mode in ["listen", :listen] do
+      check_listener(config, auth)
     else
       :ok
     end
   end
 
   def check(%ProviderProfile{}), do: :ok
+
+  defp check_listener(config, auth) when auth in [nil, "plaintext", :plaintext] do
+    config
+    |> Map.get("expected_peer_addresses", Map.get(config, :expected_peer_addresses))
+    |> PeerAddresses.classify()
+    |> allowlist_result()
+  end
+
+  defp check_listener(_config, auth) when auth in ["mtls", :mtls],
+    do: {:error, :provider_delivery_mtls_unavailable}
+
+  defp check_listener(_config, _auth), do: {:error, :provider_delivery_auth_unsupported}
 
   defp allowlist_result(:ok), do: :ok
   defp allowlist_result(:empty), do: {:error, :peer_addresses_missing}

@@ -104,6 +104,8 @@ defmodule CadenceWeb.Console.Problem do
     credential_changed: {409, "The credential changed since you loaded it."},
     credential_already_revoked: {409, "This credential was already revoked."},
     provider_not_found: {404, "Provider not found."},
+    delivery_credential_not_found: {404, "Delivery credential not found."},
+    delivery_issuer_unavailable: {503, "Delivery certificate issuance is unavailable."},
     grant_revoked: {409, "That grant was revoked. Ask an organization admin for a new one."},
     already_retired: {409, "This account was already removed."},
     approval_policy_change_requires_organization_admin:

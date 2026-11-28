@@ -9,6 +9,7 @@ defmodule Cadence.Comms.TransportStore do
 
   alias Cadence.Comms.{
     ListenClaims,
+    PeerAddresses,
     ProviderTransportBasis,
     Transport,
     TransportKind,
@@ -29,7 +30,8 @@ defmodule Cadence.Comms.TransportStore do
           {:ok, Transport.t()} | {:error, term()}
   def persist_transport(organization_id, %Transport{} = transport, opts \\ [])
       when is_binary(organization_id) and is_list(opts) do
-    with {:ok, scoped_transport} <- put_organization_scope(transport, organization_id),
+    with :ok <- allow_delivery_auth(transport),
+         {:ok, scoped_transport} <- put_organization_scope(transport, organization_id),
          {:ok, _mission} <-
            Missions.fetch_mission(scoped_transport.organization_id, scoped_transport.mission_id),
          {:ok, normalized_transport} <- normalize_transport(scoped_transport, opts) do
@@ -37,13 +39,85 @@ defmodule Cadence.Comms.TransportStore do
       ListenClaims.guard(
         normalized_transport.mission_id,
         claimed_configuration(normalized_transport),
-        fn -> insert_transport(normalized_transport) end
+        fn -> store_version(normalized_transport, opts) end
       )
     else
       {:error, %Changeset{} = changeset} -> {:error, changeset}
       {:error, reason} -> {:error, reason}
     end
   end
+
+  defp store_version(%Transport{version: 1} = transport, _opts), do: insert_transport(transport)
+
+  defp store_version(transport, opts) do
+    Repo.transact(fn ->
+      Repo.query!("SELECT pg_advisory_xact_lock(hashtext($1))", [
+        "transport_version:#{transport.mission_id}:#{transport.transport_id}"
+      ])
+
+      with :ok <- authorize_delivery_transition(transport, opts) do
+        insert_transport(transport)
+      end
+    end)
+  end
+
+  # TLS delivery is provisionable only after the inbound TLS gate lands. In particular, a raw
+  # transport carrying the new mode must never be materialized as a plaintext listener.
+  defp allow_delivery_auth(%Transport{
+         origin: :direct,
+         lifecycle_state: :active,
+         configuration: config
+       })
+       when is_map(config) do
+    case Map.get(config, "delivery_auth", Map.get(config, :delivery_auth)) do
+      mode when mode in [nil, "plaintext", :plaintext] -> :ok
+      mode when mode in ["mtls", :mtls] -> {:error, :provider_delivery_mtls_unavailable}
+      _unknown -> {:error, :provider_delivery_auth_unsupported}
+    end
+  end
+
+  defp allow_delivery_auth(_transport), do: :ok
+
+  defp authorize_delivery_transition(%Transport{lifecycle_state: :archived}, _opts), do: :ok
+
+  defp authorize_delivery_transition(next, opts) do
+    case latest_versioned_row(next.organization_id, next.mission_id, next.transport_id) do
+      %TransportRow{} = row ->
+        current = TransportRow.to_domain(row)
+
+        if current.configuration["delivery_auth"] == "mtls" do
+          approve_plaintext_transition(
+            current,
+            next,
+            Keyword.get(opts, :authorize_delivery_downgrade)
+          )
+        else
+          :ok
+        end
+
+      _other ->
+        :ok
+    end
+  end
+
+  defp approve_plaintext_transition(
+         _current,
+         %Transport{configuration: %{"delivery_auth" => "mtls"}},
+         _authorize
+       ),
+       do: :ok
+
+  defp approve_plaintext_transition(current, next, authorize) when is_function(authorize, 2) do
+    peer_addresses = next.configuration["expected_peer_addresses"]
+
+    if next.configuration["mode"] == "listen" and
+         PeerAddresses.classify(peer_addresses) == :ok,
+       do: authorize.(current, next),
+       else: {:error, :delivery_auth_downgrade_required}
+  end
+
+  defp approve_plaintext_transition(_current, _next, _authorize),
+    do: {:error, :delivery_auth_downgrade_required}
 
   defp insert_transport(normalized_transport) do
     with {:ok, transport_with_provider} <- materialize_provider_profile(normalized_transport),
@@ -388,6 +462,7 @@ defmodule Cadence.Comms.TransportStore do
          {:ok, delivery_profile} <-
            find_profile(provider, "delivery_profiles", transport.delivery_profile_ref),
          :ok <- require_profile_compatibility(service_profile, delivery_profile),
+         :ok <- require_delivery_auth(provider, delivery_profile),
          {:ok, configuration} <- delivery_configuration(delivery_profile) do
       {:ok,
        %Transport{
@@ -487,6 +562,20 @@ defmodule Cadence.Comms.TransportStore do
        do: {:ok, provider_id, provider_version}
 
   defp provider_reference(_transport), do: {:error, :mission_provider_reference_required}
+
+  defp require_delivery_auth(%ProviderTransportBasis{delivery_auth: :mtls}, %{
+         "delivery_auth" => "mtls",
+         "direction" => "downlink",
+         "egress" => %{"delivery_credential_ref" => "delivery_credential_" <> id}
+       })
+       when byte_size(id) in 1..255, do: {:error, :provider_delivery_mtls_unavailable}
+
+  defp require_delivery_auth(_provider, profile) do
+    case profile["delivery_auth"] do
+      auth when auth in [nil, "plaintext"] -> :ok
+      _other -> {:error, :provider_delivery_auth_unsupported}
+    end
+  end
 
   defp delivery_configuration(delivery_profile) do
     case TCPSocket.from_delivery_profile(delivery_profile) do

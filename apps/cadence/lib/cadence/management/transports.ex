@@ -11,7 +11,9 @@ defmodule Cadence.Management.Transports do
   with it, so a preview shows what an apply stores (comms parity 2).
   """
 
+  alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Comms.{ProviderTransportBasis, Transport, TransportKind, TransportStore}
+  alias Cadence.GroundNetworks.{MissionProviders, ProviderAudit, ProviderAuditEntry}
   alias Cadence.Management.Providers
 
   @type field_error :: %{path: String.t(), message: String.t()}
@@ -49,19 +51,113 @@ defmodule Cadence.Management.Transports do
   @doc "The next version of a transport, with the provider basis when it's provider-managed."
   @spec version_transport(binary(), binary(), binary(), map()) ::
           {:ok, Transport.t()} | {:error, term()}
-  def version_transport(organization_id, mission_id, transport_id, %{} = attrs) do
+  def version_transport(organization_id, mission_id, transport_id, %{} = attrs),
+    do: version_transport(organization_id, mission_id, transport_id, attrs, [])
+
+  defp version_transport(organization_id, mission_id, transport_id, attrs, opts) do
     case attrs do
       %{origin: :provider_managed, mission_provider_id: provider_id}
       when is_binary(provider_id) and provider_id != "" ->
         with {:ok, basis} <- basis(organization_id, mission_id, provider_id) do
-          TransportStore.version_transport(organization_id, mission_id, transport_id, attrs,
-            provider_transport_basis: basis
+          TransportStore.version_transport(
+            organization_id,
+            mission_id,
+            transport_id,
+            attrs,
+            Keyword.put(opts, :provider_transport_basis, basis)
           )
         end
 
       _direct ->
-        TransportStore.version_transport(organization_id, mission_id, transport_id, attrs)
+        TransportStore.version_transport(organization_id, mission_id, transport_id, attrs, opts)
     end
+  end
+
+  @doc "Explicit, audited change from mTLS to a pinned plaintext delivery profile."
+  def downgrade_delivery_auth(%Scope{} = scope, mission_id, provider_id, binding_id, params) do
+    org = scope.organization_id
+
+    with :ok <-
+           Policy.authorize(scope, :"provider_delivery_credential.downgrade", %{
+             organization_id: org,
+             mission_id: mission_id
+           }),
+         {:ok, expected, reason, profile_ref} <- downgrade_params(params),
+         {:ok, current} <- TransportStore.fetch_transport(org, mission_id, binding_id),
+         :ok <- check_downgrade_scope(current, provider_id, expected),
+         {:ok, provider} <- MissionProviders.fetch_provider(org, mission_id, provider_id) do
+      version_transport(
+        org,
+        mission_id,
+        binding_id,
+        %{
+          origin: :provider_managed,
+          mission_provider_id: provider_id,
+          mission_provider_version: provider.version,
+          delivery_profile_ref: profile_ref
+        },
+        authorize_delivery_downgrade: fn current, next ->
+          with :ok <- check_downgrade_scope(current, provider_id, expected),
+               :ok <- check_downgrade_scope(next, provider_id, expected + 1, "plaintext"),
+               {:ok, _entry} <- audit_downgrade(scope, current, next, reason) do
+            :ok
+          end
+        end
+      )
+    end
+  end
+
+  defp downgrade_params(%{
+         "expected_version" => version,
+         "reason" => reason,
+         "delivery_profile_ref" => %{"id" => id, "version" => profile_version}
+       })
+       when is_integer(version) and version > 0 and is_binary(id) and id != "" and
+              is_integer(profile_version) and profile_version > 0 and
+              reason in ["provider_compatibility", "operator_requested"] do
+    {:ok, version, reason, %{"id" => id, "version" => profile_version}}
+  end
+
+  defp downgrade_params(_params), do: {:error, :invalid_delivery_downgrade}
+
+  defp check_downgrade_scope(transport, provider_id, version, mode \\ "mtls") do
+    cond do
+      transport.mission_provider_id != provider_id ->
+        {:error, :transport_not_found}
+
+      transport.version != version ->
+        {:error, :version_conflict}
+
+      Map.get(transport.configuration, "delivery_auth", "plaintext") != mode ->
+        {:error, :invalid_delivery_downgrade}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp audit_downgrade(scope, current, next, reason) do
+    ProviderAudit.append(
+      ProviderAuditEntry.new(%{
+        organization_id: current.organization_id,
+        mission_id: current.mission_id,
+        provider_id: current.mission_provider_id,
+        action: "provider_delivery_credential.downgrade",
+        outcome: "succeeded",
+        actor_document: Scope.audit_actor(scope),
+        decision_document: %{provider_binding_id: current.transport_id, reason: reason},
+        previous_document: %{
+          version: current.version,
+          delivery_auth: "mtls",
+          delivery_profile_ref: current.delivery_profile_ref
+        },
+        current_document: %{
+          version: next.version,
+          delivery_auth: "plaintext",
+          delivery_profile_ref: next.delivery_profile_ref
+        }
+      })
+    )
   end
 
   @doc """
@@ -129,6 +225,22 @@ defmodule Cadence.Management.Transports do
       error(
         "mission_provider_version",
         "The provider changed since you chose it. Choose it again."
+      )
+
+  defp field_error(:provider_delivery_mtls_unavailable),
+    do:
+      coded(
+        "delivery_profile_ref",
+        :provider_delivery_mtls_unavailable,
+        "This delivery requires the inbound mutual TLS listener."
+      )
+
+  defp field_error(:provider_delivery_auth_unsupported),
+    do:
+      coded(
+        "delivery_profile_ref",
+        :provider_delivery_auth_unsupported,
+        "The provider has not declared a supported delivery identity for this profile."
       )
 
   defp field_error(:mission_provider_not_active),
@@ -212,7 +324,11 @@ defmodule Cadence.Management.Transports do
       last_validated_at: provider.last_validated_at,
       last_synced_at: provider.last_synced_at,
       control_status: get_in(provider.metadata, ["control_plane", "status"]),
-      inventory_sync_document: provider.inventory_sync_document
+      inventory_sync_document: provider.inventory_sync_document,
+      delivery_auth:
+        if(get_in(provider.capabilities_document, ["delivery", "delivery_auth"]) == "mtls",
+          do: :mtls
+        )
     }
   end
 end

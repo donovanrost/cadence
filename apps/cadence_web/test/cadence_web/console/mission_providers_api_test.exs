@@ -4,10 +4,11 @@ defmodule CadenceWeb.Console.MissionProvidersAPITest do
 
   @moduletag :capture_log
 
-  alias Cadence.Auth.Scope
+  alias Cadence.Auth.{Scope, ServiceIdentity}
   alias Cadence.Control.Providers, as: ControlProviders
+  alias Cadence.DeliveryCredentialFixtures
   alias Cadence.GroundNetworks.{ProviderAccountGrants, ProviderAccounts, ProviderCredentials}
-  alias Cadence.GroundNetworks.ProviderError
+  alias Cadence.GroundNetworks.{ProviderAudit, ProviderError}
   alias Cadence.Platform.ScopedReadUpdates
   alias Cadence.TestSupport.FakeProviderClient
   alias CadenceWeb.TestFixtures
@@ -101,6 +102,167 @@ defmodule CadenceWeb.Console.MissionProvidersAPITest do
     })
     |> json_response(201)
     |> get_in(["data", "provider"])
+  end
+
+  test "issues, rotates and terminally revokes a fingerprint under the same binding reference",
+       c do
+    provider = create!(c)["id"]
+    delivery_issuer!()
+    path = c.base <> "/#{provider}/delivery-credentials/downlink"
+    issue = %{"reason" => "initial_enrollment", "csr_pem" => DeliveryCredentialFixtures.csr()}
+
+    assert %{
+             "data" => %{
+               "certificate_pem" => "-----BEGIN CERTIFICATE-----" <> _,
+               "credential" => credential
+             }
+           } =
+             c |> admin() |> post(path <> "/issue", issue) |> json_response(201)
+
+    ref = credential["credential_ref"]
+
+    assert [%{"state" => "current", "generation" => 1, "fingerprint" => first}] =
+             credential["generations"]
+
+    rotate = %{
+      "reason" => "scheduled_rotation",
+      "csr_pem" => DeliveryCredentialFixtures.csr(),
+      "expected_generation" => 1
+    }
+
+    assert %{
+             "data" => %{
+               "credential" => %{"credential_ref" => ^ref, "generations" => generations}
+             }
+           } =
+             c |> admin() |> post(path <> "/rotate", rotate) |> json_response(200)
+
+    assert [
+             %{"state" => "current", "generation" => 2, "fingerprint" => current},
+             %{
+               "state" => "previous",
+               "generation" => 1,
+               "fingerprint" => ^first,
+               "overlap_ends_at" => overlap
+             }
+           ] = generations
+
+    assert is_binary(overlap)
+    assert c |> admin() |> post(path <> "/rotate", rotate) |> json_response(409)
+
+    revoke = %{"reason" => "suspected_compromise", "fingerprint" => current}
+
+    assert %{"data" => %{"generations" => revoked}} =
+             c |> admin() |> post(path <> "/revoke", revoke) |> json_response(200)
+
+    assert Enum.all?(revoked, &(&1["state"] == "revoked"))
+    assert List.first(revoked)["fingerprint"] == current
+
+    assert c |> admin() |> post(path <> "/issue", issue) |> json_response(422)
+
+    assert %{
+             "data" => %{
+               "credential" => %{
+                 "credential_ref" => ^ref,
+                 "generations" => [%{"state" => "current", "generation" => 3} | _]
+               }
+             }
+           } =
+             c
+             |> admin()
+             |> post(
+               path <> "/issue",
+               Map.put(issue, "csr_pem", DeliveryCredentialFixtures.csr())
+             )
+             |> json_response(201)
+
+    assert %{"data" => %{"retired_at" => retired}} =
+             c
+             |> admin()
+             |> post(path <> "/revoke", %{
+               "reason" => "retired_binding",
+               "target" => "binding"
+             })
+             |> json_response(200)
+
+    assert is_binary(retired)
+    assert c |> admin() |> post(path <> "/issue", issue) |> json_response(409)
+
+    entries =
+      ProviderAudit.list_entries(c.scope.organization_id,
+        mission_id: c.mission_id,
+        actions: [
+          "provider_delivery_credential.issue",
+          "provider_delivery_credential.rotate",
+          "provider_delivery_credential.revoke"
+        ]
+      )
+
+    assert length(entries) == 5
+
+    assert Enum.all?(
+             entries,
+             &(&1.actor_document["id"] == c.admin.user_id and &1.credential_ref == ref)
+           )
+
+    refute inspect(entries) =~ "BEGIN CERTIFICATE"
+  end
+
+  test "delivery credential actions are scoped and person-session only", c do
+    provider = create!(c)["id"]
+    delivery_issuer!()
+    path = c.base <> "/#{provider}/delivery-credentials/downlink/issue"
+    params = %{"reason" => "initial_enrollment", "csr_pem" => DeliveryCredentialFixtures.csr()}
+
+    assert %{"error" => %{"code" => "invalid_csrf"}} =
+             c
+             |> admin()
+             |> put_private(:plug_skip_csrf_protection, false)
+             |> post(path, params)
+             |> json_response(403)
+
+    assert c.member |> TestFixtures.member_conn() |> post(path, params) |> json_response(403)
+
+    assert {:ok, %{api_token: token}} =
+             Cadence.Auth.issue_service_identity(
+               ServiceIdentity.new(%{
+                 organization_id: c.scope.organization_id,
+                 mission_id: c.mission_id,
+                 display_name: "Provider automation",
+                 capabilities: [:mission_admin]
+               }),
+               c.scope
+             )
+
+    assert %{"error" => %{"code" => "service_not_allowed"}} =
+             build_conn()
+             |> put_req_header("authorization", "Bearer " <> token)
+             |> post(path, params)
+             |> json_response(403)
+
+    other = TestFixtures.persist_org!()
+    outsider = TestFixtures.persist_user!()
+    TestFixtures.grant_membership!(outsider, other, role: :organization_admin)
+
+    assert outsider |> TestFixtures.member_conn() |> post(path, params) |> json_response(404)
+  end
+
+  defp delivery_issuer! do
+    previous = Application.get_env(:cadence, :provider_delivery_issuer)
+
+    Application.put_env(
+      :cadence,
+      :provider_delivery_issuer,
+      DeliveryCredentialFixtures.issuer_options()
+    )
+
+    on_exit(fn ->
+      if previous do
+        Application.put_env(:cadence, :provider_delivery_issuer, previous)
+      else
+        Application.delete_env(:cadence, :provider_delivery_issuer)
+      end
+    end)
   end
 
   test "options list the mission's grants; create binds one; the list has health and grant", c do

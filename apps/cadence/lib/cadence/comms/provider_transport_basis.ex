@@ -18,7 +18,8 @@ defmodule Cadence.Comms.ProviderTransportBasis do
           last_validated_at: DateTime.t() | nil,
           last_synced_at: DateTime.t() | nil,
           control_status: binary() | nil,
-          inventory_sync_document: map()
+          inventory_sync_document: map(),
+          delivery_auth: :mtls | nil
         }
 
   @enforce_keys [
@@ -35,5 +36,5 @@ defmodule Cadence.Comms.ProviderTransportBasis do
     :control_status,
     :inventory_sync_document
   ]
-  defstruct @enforce_keys
+  defstruct @enforce_keys ++ [delivery_auth: nil]
 end

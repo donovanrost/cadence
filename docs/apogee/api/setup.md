@@ -1695,6 +1695,48 @@ forbidden`. Each answers with the provider's row as the list shows it.
   - `422 invalid_params {reason: "Say why."}`.
 - `404 provider_not_found` for an unknown or archived provider.
 
+#### Provider delivery credentials (#991)
+
+Use `/api/v1/missions/:mission_id/providers/:provider_id/delivery-credentials/:binding_id`.
+The binding ID is the stable transport ID, shared across versions of that transport. The
+credential reference belongs to this mission provider, account grant and binding. These routes
+use the console mission pipeline and require a human administrator's session. Mutations also
+require the session's CSRF token.
+
+| Method and suffix | Request and response |
+| --- | --- |
+| `GET` | Returns `200 {data: credential}`. |
+| `POST /issue` | Send `csr_pem` and `reason`. Returns `201 {data: {credential, certificate_pem, issuer_certificate_pem}}`. |
+| `POST /rotate` | Send a CSR for a fresh key, the current `expected_generation` and `reason`. Returns `200` with the same fields as issue. |
+| `POST /revoke` | Send `reason` with either a `fingerprint` or `target: "binding"`. Returns `200 {data: credential}`. |
+| `POST /downgrade` | Send the transport's `expected_version`, a plaintext `delivery_profile_ref: {id, version}` and `reason`. Returns `200 {data: {version, delivery_auth: "plaintext"}}`. The replacement must supply a valid source allowlist. |
+
+The credential contains `credential_ref`, `provider_binding_id`, nullable `retired_at` and
+`generations`. Each generation has `generation`, the SHA-256 certificate `fingerprint`
+(lowercase hexadecimal), `state` (`current`, `previous` or `revoked`), `expires_at` and
+nullable `overlap_ends_at` and `revoked_at`. The read returns the current and previous
+records when present and the most recent revoked record, newest generation first. Dates use
+ISO 8601 UTC. A stale expected generation or transport version returns `409 version_conflict`.
+
+Use a reason from `initial_enrollment`, `scheduled_rotation`, `suspected_compromise`,
+`retired_binding`, `end_overlap` or `operator_requested`. Downgrade accepts
+`provider_compatibility` or `operator_requested`. Reasons and actor identity are recorded in
+the provider audit trail. Revoking the current generation ends any overlap unless the operator
+explicitly sends `keep_previous: true`. Revoking a binding retires that binding permanently.
+
+The provider generates and retains the private key. Cadence verifies proof of possession,
+assigns the certificate subject and extensions, and returns the signed client certificate and
+issuer certificate for installation at the provider. Supported CSR keys are P-256, P-384,
+P-521 and RSA of at least 3072 bits, with SHA-256 or stronger signatures. The leaf expires
+within 30 days. Rotation retains the previous fingerprint for up to 24 hours, bounded by
+its certificate expiry. To enable issuance, set the application configuration
+`:cadence, :provider_delivery_issuer` with `issuer_reference` and a `secret_backend` that
+resolves purpose `provider_delivery_issuer` to `certificate_pem` and `private_key_pem`.
+Provision a dedicated deployment client CA in that backend.
+
+Mutual TLS listener activation is gated until the inbound TLS work in #991 lands. The
+credential endpoints can provision and manage certificates ahead of that activation.
+
 ## `GET /api/v1/missions/:mission_id/config/kinds/:kind/schema`
 
 `{kind, fields: [{path, label, type, unit, enum, range, default, required, help, visible_when}]}`

@@ -88,6 +88,35 @@ defmodule Cadence.GroundNetworks.ProviderContractTypesTest do
              |> Opportunity.from_external()
   end
 
+  test "mutual TLS is opt-in and requires a downlink credential reference" do
+    capabilities = put_in(capabilities_document(), ["delivery", "delivery_auth"], "mtls")
+
+    assert {:ok, %{delivery: %{delivery_auth: :mtls}}} =
+             ProviderCapabilities.from_external(capabilities)
+
+    assert {:ok, %DeliveryProfile{delivery_auth: :plaintext}} =
+             DeliveryProfile.from_external(delivery_profile_document())
+
+    profile =
+      delivery_profile_document()
+      |> Map.put("delivery_auth", "mtls")
+      |> Map.put("egress", %{
+        "source_addresses" => ["127.0.0.1/32"],
+        "delivery_credential_ref" => "delivery_credential_test"
+      })
+
+    assert {:ok, %DeliveryProfile{delivery_auth: :mtls}} = DeliveryProfile.from_external(profile)
+
+    for invalid_profile <- [
+          update_in(profile["egress"], &Map.delete(&1, "delivery_credential_ref")),
+          put_in(profile, ["egress", "delivery_credential_ref"], "config://other-purpose"),
+          Map.put(profile, "direction", "uplink")
+        ] do
+      assert {:error, {:malformed_provider_response, "delivery_auth"}} =
+               DeliveryProfile.from_external(invalid_profile)
+    end
+  end
+
   test "contacts retain independent contact, pass, and delivery state" do
     assert {:ok,
             %ProviderContact{
