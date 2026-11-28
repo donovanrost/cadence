@@ -24,8 +24,10 @@ defmodule Cadence.Governance.BindingSetStorageTest do
   @mission "mission-binding-storage"
   @apids [42, 43, 44]
 
-  # Read back through develop 7a539c784's rows path (before #447), for the 6-craft fixture.
-  @golden_sha256 "819c9fe7abe59b6058d04db604500c47ee854f99e8f2de845649c13e51c31baa"
+  # The 6-craft fixture read back through the rows path (before #447), under develop's hash scheme
+  # (#952: ContentBasis, prefixed "binding_set:v1:"). It was 819c9fe7… under the scheme before #952;
+  # the rows path and the membership form give the same value under each.
+  @golden_sha256 "binding_set:v1:754c4af8866151507545a98b1d05cdc89853b6d32d2f7dda9e7b93e0bb244fd1"
 
   setup do
     persist_mission_scope(@org, @mission)
