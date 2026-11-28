@@ -1,11 +1,7 @@
 defmodule Cadence.Applications.ApplicationInstallationsTest do
   use Cadence.DataCase, async: false
 
-  alias Cadence.Applications.{
-    ApplicationInstallations,
-    HostContext,
-    OpsDock
-  }
+  alias Cadence.Applications.{ApplicationInstallations, HostContext}
 
   alias Cadence.Auth.Scope
   alias Cadence.Spacecraft
@@ -287,6 +283,5 @@ defmodule Cadence.Applications.ApplicationInstallationsTest do
              )
 
     assert Enum.map(installations, & &1.application_key) == ["telemetry_decom"]
-    assert {:ok, []} = OpsDock.list(context.scope, @mission_id)
   end
 end

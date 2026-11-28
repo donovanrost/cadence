@@ -173,7 +173,6 @@ defmodule Cadence.Architecture.PlaneBoundary do
     "lib/cadence/runtime/mission_model_plan_decoder.ex" => :shared,
     # #990: the listen allowlist, parsed alike at save (comms) and on accept (the runtime).
     "lib/cadence/comms/peer_addresses.ex" => :shared,
-    "lib/cadence/applications/ops_dock.ex" => :projections,
     "lib/cadence/extensions/registry.ex" => :composition,
     "lib/cadence/applications/ops_console.ex" => :composition,
     "lib/cadence/control/process_namespace.ex" => :composition,
