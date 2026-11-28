@@ -72,20 +72,17 @@ federated application surfaces that the old host SPA (`frontend/apps/host`) rend
 - `GET .../catalog` (mission, spacecraft, or org/user/admin by `scope`) returns the admitted applications/surfaces and `sessionId`.
   With `scope=organization` it answers `404 no_organization_applications` ("No applications are installed at the organization level."): since §11c A + L13 no application has an organization-scope surface (the route stays until a later #80 shrink).
 - `POST .../query` body: `applicationKey, applicationVersion, surfaceId, surfaceVersion, queryId, queryVersion, params`.
-  `Applications.HostQueryRegistry` handles comms-overview compatibility first. Everything else is `ApplicationSurfaces.load`
+  `Applications.HostQueryRegistry` answers the registered compatibility host queries first. Everything else is `ApplicationSurfaces.load`
   returning `{host, declarative_surface, application_surface_rows, ...}` or `{host, navigation, trusted_surface}`. These are
   presentation documents (labels, hrefs, tones), not domain DTOs.
 - `POST .../actions` body: the same identity fields plus `actionId, actionVersion, params`, with header `idempotency-key`. Returns `{receiptId, completedAt, result}`.
-- Query ids follow `cadence.<app>.<surface>` (`L/reads/application_surfaces/provider_registry.ex`). For example: `cadence.spacecraft.{list,new,profiles,
-  profile.new,profile.show,show,edit,readiness,routing,commanding,applications}`, `cadence.mission_catalog.{mission_list,
-  mission_new,mission_overview,mission_applications,catalog_index,catalog_database_new,catalog_database_show,
-  catalog_revision_show,catalog_artifact_show,catalog_import_run_show}`, `cadence.comms.{overview,validation,transports,
-  transport,routing,routing_detail,ground_stations,ground_station,provider_list,provider_new,provider_show,...}`,
-  `cadence.limits.{manage,activity}`, `cadence.derived_telemetry.manage`, `cadence.telemetry_decom.manage`,
-  `cadence.packet_bindings.manage`, `cadence.ops.<surface>` (`workspace`, `alarms`, `timeline`, `commands`, `data_sources`,
-  `contact_schedule`, `dashboard_*`, `fleet_planning*`, ...) and org-admin queries. Actions are per surface (for example comms
-  `create_provider`, `validate_provider`, `sync_provider`, `archive_provider`, `validate`, `save`; ops requirement templates
-  `validate-template`, `create-template`, ...).
+- Query ids follow `cadence.<app>.<surface>` (`L/reads/application_surfaces/provider_registry.ex`). The remaining federated
+  apps declare `cadence.limits.{manage,activity,status}`, `cadence.derived_telemetry.{manage,status}`,
+  `cadence.telemetry_decom.{manage,status,activation_preflight}`, `cadence.packet_bindings.manage` and
+  `cadence.ops.<surface>` (`workspace`, `alarms`, `timeline`, `commands`, `telemetry_explore`, `data_sources`,
+  `data_source_registration`, `data_source_settings`). The spacecraft, mission catalog, comms and organization-admin
+  apps are deleted (#917, #1010, #1015), and so are the ops contacts and planning surfaces (#1006). Actions are per
+  surface.
 - **Reuse:** don't call it from the console. Its value is the per-surface read functions behind it (`Reads.Spacecraft.Pages`,
   `Reads.Catalog.Pages`, `Reads.Comms.Pages`, ...) and the action providers (for example `Spacecraft.Identity.action/5`).
 

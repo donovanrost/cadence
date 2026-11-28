@@ -166,6 +166,7 @@ defmodule Cadence.Architecture.PlaneBoundary do
     "lib/cadence/semantic_runtime/monitoring_plan.ex" => :shared,
     "lib/cadence/semantic_runtime/monitoring_result.ex" => :shared,
     "lib/cadence/semantic_runtime/plan_decoder.ex" => :shared,
+    "lib/cadence/semantic_runtime/plan_index.ex" => :shared,
     "lib/cadence/semantic_runtime/registered_implementation.ex" => :shared,
     "lib/cadence/semantic_runtime/registered_registry.ex" => :shared,
     "lib/cadence/semantic_runtime/result.ex" => :shared,
