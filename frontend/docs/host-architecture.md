@@ -129,12 +129,9 @@ that remote content appears in the host and releases on failure.
   and the HTTP/application-host contracts.
 - `frontend/tools/phoenix/*.mjs` are genuine Node tools: publication locking, browser launch,
   process cleanup, and production federation smoke orchestration. Their Node tests remain `.mjs`.
-- `mix test.browser`, `mix test.browser.full`, and `mix test.browser.federation` run the
-  production federation browser gate, including publication build and signed release fixtures.
-  The browser test VM enables `CADENCE_BROWSER_PROPS_DIFF=true` to exercise production-style
-  incremental LiveVue props. Server contract tests use full projections for inspection.
-  The gate checks mission entry even when that remote surface is unavailable, so sidebar
-  context changes cannot depend on successful remote loading.
+- The federation browser gate (`mix test.browser*` and its CI job) was removed in #1075 once the
+  legacy LiveView pages were gone. The `tools/phoenix` node contract tests run in `test:transport`;
+  the publication build and signed release fixtures are exercised by `test-web-publication`.
 
 The old `cadence_web/assets/test` SFC compiler and historical extraction/source-snapshot
 scripts are retired. Mounted assertions now compile real SFCs through Vite using workspace
@@ -144,9 +141,7 @@ are retired. This is not a claim that the current federation smoke gate reproduc
 historical dashboard scenario. Add ongoing feature regressions to the owning domain frontend
 package and production browser journey, rather than resurrecting migration snapshots.
 
-Run `corepack pnpm test` from `frontend`, `mix precommit` from the repository root, and
-`MIX_ENV=test mix test.browser.federation` from `apps/cadence_web` for the separate production
-browser gate. A successful build or ExUnit run does not substitute for that browser gate.
+Run `corepack pnpm test` from `frontend` and `mix precommit` from the repository root.
 
 ## Organization and mission settings
 
