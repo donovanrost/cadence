@@ -55,6 +55,8 @@ config :cadence,
     Cadence.Governance.DerivedTelemetryKind,
     # ... and limit definitions (DECISIONS #77, stage 2).
     Cadence.Control.LimitDefinitionKind,
+    # The monitoring lane (ADR-020 P3, #451): a mission's limits and alarm rules.
+    Cadence.Control.MonitoringPolicyKind,
     # A spacecraft's own extra routes (DECISIONS #3 per-spacecraft overrides; profile-routing.md §2.2).
     Cadence.Comms.ConfigKinds.SpacecraftRoute,
     # Derived: re-materializes profile routes after the ops above (finalize/3).

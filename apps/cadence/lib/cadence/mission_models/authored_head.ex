@@ -112,6 +112,10 @@ defmodule Cadence.MissionModels.AuthoredHead do
     |> Ecto.Changeset.unique_constraint(:change_set_id,
       name: :mission_model_authored_versions_change_set_id_index
     )
+    # Deferred to commit in an apply; immediate when a caller has set constraints immediate.
+    |> Ecto.Changeset.check_constraint(:state,
+      name: :mission_model_authored_versions_applied
+    )
     |> Repo.insert()
     |> case do
       {:ok, row} -> {:ok, view(row)}
@@ -133,9 +137,11 @@ defmodule Cadence.MissionModels.AuthoredHead do
   end
 
   defp refusal(errors) do
-    if Keyword.has_key?(errors, :revision_number),
-      do: :authored_version_revision_unknown,
-      else: :authored_version_already_recorded
+    cond do
+      Keyword.has_key?(errors, :revision_number) -> :authored_version_revision_unknown
+      Keyword.has_key?(errors, :state) -> :authored_version_not_applied
+      true -> :authored_version_already_recorded
+    end
   end
 
   defp scoped(organization_id, mission_id),
