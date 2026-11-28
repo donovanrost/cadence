@@ -57,6 +57,20 @@ defmodule Cadence.MissionModels do
     to: Cadence.MissionModels.DeclarationProjection,
     as: :load
 
+  @doc "Returns the effective model revision for a spacecraft at the given time, or nil."
+  @spec revision_at(binary(), binary(), binary(), DateTime.t()) :: binary() | nil
+  defdelegate revision_at(organization_id, mission_id, spacecraft_id, at),
+    to: Cadence.Reads.MissionModels.ActiveBasis
+
+  @doc """
+  Groups a mission's spacecraft by the effective model revision at the given time.
+
+  A generation is effective from its runtime receipt's completion time, inclusive.
+  """
+  @spec revisions_at(binary(), binary(), DateTime.t()) :: %{binary() => [binary()]}
+  defdelegate revisions_at(organization_id, mission_id, at),
+    to: Cadence.Reads.MissionModels.ActiveBasis
+
   @spec compile_layers([Layer.t()], keyword()) ::
           {:ok, CompilerResult.t()} | {:error, term()}
   def compile_layers(layers, opts \\ []) when is_list(layers) and is_list(opts) do

@@ -7,6 +7,8 @@ defmodule Cadence.Reads.MissionModels.ActiveBasis do
   This adapter exposes no activation mutation or runtime process operation.
   """
 
+  import Ecto.Query
+
   alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Control.SpacecraftModelBindings
 
@@ -14,6 +16,7 @@ defmodule Cadence.Reads.MissionModels.ActiveBasis do
   alias Cadence.Activations.GenerationReceipts
   alias Cadence.Commanding.AuthoringIdentity
   alias Cadence.Control.MissionModelPromotion
+  alias Cadence.Repo
   alias Cadence.Runtime.MissionModelPlanDecoder
 
   @doc "Reads the immutable active generation for saved-versus-active configuration comparison."
@@ -28,6 +31,38 @@ defmodule Cadence.Reads.MissionModels.ActiveBasis do
     else
       _no_applied_fleet -> nil
     end
+  end
+
+  def revision_at(org, mission, spacecraft_id, at) do
+    org
+    |> revision_assignments_at(mission, at)
+    |> where([assignment], assignment.spacecraft_id == ^spacecraft_id)
+    |> select([assignment], assignment.revision_id)
+    |> Repo.one()
+  end
+
+  def revisions_at(org, mission, at) do
+    org
+    |> revision_assignments_at(mission, at)
+    |> where([assignment], not is_nil(assignment.revision_id))
+    |> group_by([assignment], assignment.revision_id)
+    |> select([assignment], {
+      assignment.revision_id,
+      fragment(
+        "array_agg(? ORDER BY ? COLLATE \"C\")",
+        assignment.spacecraft_id,
+        assignment.spacecraft_id
+      )
+    })
+    |> Repo.all()
+    |> Map.new()
+  end
+
+  defp revision_assignments_at(org, mission, at) do
+    org
+    |> GenerationReceipts.fleet_at_query(mission, at)
+    |> FleetSnapshot.revision_assignments_query()
+    |> subquery()
   end
 
   def with_command_catalog(organization_id, mission_id, operation) do
