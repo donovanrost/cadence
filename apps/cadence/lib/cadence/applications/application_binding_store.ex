@@ -24,6 +24,88 @@ defmodule Cadence.Applications.ApplicationBindingStore do
     end)
   end
 
+  @doc "Projects bindings in batches under the caller's configuration lock."
+  def project_many(org, mission, key, documents, project, versioning \\ :configuration)
+
+  def project_many(_org, _mission, _app, documents, _project, _versioning)
+      when map_size(documents) == 0,
+      do: :ok
+
+  def project_many(organization_id, mission_id, application_key, documents, project, versioning) do
+    ids = Map.keys(documents)
+
+    rows =
+      from(row in BindingRow,
+        where:
+          row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+            row.application_key == ^application_key and row.spacecraft_id in ^ids
+      )
+      |> Repo.all()
+      |> Map.new(&{&1.spacecraft_id, &1})
+
+    now = DateTime.utc_now()
+
+    with {:ok, changes} <- projection_changes(documents, rows, project, now, versioning) do
+      update_fields =
+        BindingRow.__schema__(:fields) --
+          [
+            :application_binding_id,
+            :organization_id,
+            :mission_id,
+            :application_key,
+            :spacecraft_id,
+            :inserted_at
+          ]
+
+      changes
+      |> Enum.chunk_every(4_000)
+      |> Enum.each(fn batch ->
+        Repo.insert_all(BindingRow, batch,
+          conflict_target: [:organization_id, :mission_id, :spacecraft_id, :application_key],
+          on_conflict: {:replace, update_fields}
+        )
+      end)
+
+      :ok
+    end
+  end
+
+  defp projection_changes(documents, rows, project, now, versioning) do
+    Enum.reduce_while(documents, {:ok, []}, fn {id, document}, {:ok, changes} ->
+      row = rows[id]
+      existing = row && BindingRow.to_domain(row)
+
+      with {:ok, value} <- project.(id, document, existing),
+           {:ok, change} <- projected_row(row, value, now, versioning) do
+        {:cont, {:ok, if(change, do: [change | changes], else: changes)}}
+      else
+        {:error, reason} -> {:halt, {:error, {reason, id}}}
+      end
+    end)
+  end
+
+  defp projected_row(_row, nil, _now, _versioning), do: {:ok, nil}
+
+  defp projected_row(row, binding, now, versioning) do
+    version = next_configuration_version(row, binding, versioning)
+    data = row || %BindingRow{organization_id: binding.organization_id}
+    changeset = BindingRow.changeset(data, binding, version)
+
+    case Ecto.Changeset.apply_action(changeset, :insert) do
+      {:ok, _projected} when not is_nil(row) and map_size(changeset.changes) == 0 ->
+        {:ok, nil}
+
+      {:ok, projected} ->
+        {:ok,
+         projected
+         |> Map.take(BindingRow.__schema__(:fields))
+         |> Map.merge(%{inserted_at: projected.inserted_at || now, updated_at: now})}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   @spec fetch(binary(), binary(), binary(), app_key()) ::
           {:ok, ApplicationBinding.t()} | {:error, :application_binding_not_configured}
   def fetch(organization_id, mission_id, spacecraft_id, application_key)

@@ -69,7 +69,7 @@ defmodule Cadence.Control.Activations.Approval do
   # current by the preflight.
   #
   # #280 (api-ops' cross-PR item): authors are compared through Governance.Accountability, not by
-  # user id alone. A version's `created_by` can be a service identity's id (Drafts.derive writes a
+  # user id alone. A version's `created_by` can be a service identity's id (a generation assignment records a
   # change set's applier), which counts as its accountable people; a service nobody is on record
   # for refuses everyone, with `details.service` (#434's spacecraft-list form stays for a review
   # it can't read).

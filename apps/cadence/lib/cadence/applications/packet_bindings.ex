@@ -86,24 +86,156 @@ defmodule Cadence.Applications.PacketBindings do
   end
 
   @doc """
-  Re-points an existing packet input at its spacecraft's newly applied configuration (catalog,
-  APIDs, endpoint or switch) inside a change-set apply, from that catalog's telemetry projection
-  the apply already loaded (`Review.cached_inputs/3`): a Save does this through `replace/4`; the
-  apply didn't (11-15). The apply was authorized where it was submitted and holds the
-  configuration lock, so there is no caller scope here.
+  Re-points existing packet inputs inside an authorized change-set apply. The caller loaded
+  the inputs under the mission configuration lock and supplies the new catalog projections.
+  Inputs of applications that are no longer installed are inert.
   """
-  @spec resync(binary(), HostContext.t(), PacketBindingConfiguration.t(), map(), map()) ::
-          {:ok, PacketBindingConfiguration.t()} | {:error, term()}
-  def resync(organization_id, %HostContext{} = host_context, input, attrs, telemetry) do
-    with {:ok, installation} <-
-           ApplicationInstallations.fetch_installed_by_id(
-             organization_id,
-             input.application_installation_id
-           ),
-         {:ok, %{configuration: desired}} <-
-           preview_installation(organization_id, host_context, installation, attrs, telemetry) do
-      {:ok, locked_replace(desired, attrs)}
+  def resync_many(_org, _mission, []), do: :ok
+
+  def resync_many(org, mission, replacements) do
+    installation_ids =
+      Enum.map(replacements, fn {input, _, _} -> input.application_installation_id end)
+
+    installations = ApplicationInstallations.installed_by_ids(org, mission, installation_ids)
+
+    source_ids = for {_, %{source_endpoint_ref: id}, _} <- replacements, is_binary(id), do: id
+    endpoints = SourceEndpoints.fetch_source_endpoints_by_ids(org, mission, Enum.uniq(source_ids))
+
+    with {:ok, rows} <- resync_rows(mission, replacements, installations, endpoints) do
+      persist_resync_rows(rows)
     end
+  end
+
+  defp resync_rows(mission, replacements, installations, endpoints) do
+    replacements
+    |> Enum.filter(fn {input, _, _} ->
+      Map.has_key?(installations, input.application_installation_id)
+    end)
+    |> Enum.reduce_while({:ok, []}, fn {input, attrs, telemetry}, {:ok, rows} ->
+      installation = Map.fetch!(installations, input.application_installation_id)
+      host = HostContext.spacecraft(mission, input.spacecraft_id)
+
+      with {:ok, desired} <-
+             resync_configuration(host, installation, input, attrs, telemetry, endpoints),
+           {:ok, updated} <- resync_configuration_rows(input, desired) do
+        {:cont, {:ok, if(updated, do: [updated | rows], else: rows)}}
+      else
+        {:error, reason} -> {:halt, {:error, {reason, input.spacecraft_id}}}
+      end
+    end)
+  end
+
+  defp resync_configuration(_host, _installation, _input, _attrs, nil, _endpoints),
+    do: {:error, :spacecraft_configuration_catalog_not_loaded}
+
+  defp resync_configuration(host, installation, input, attrs, telemetry, endpoints) do
+    with {:ok, definition} <- resolve_input_definition(installation, attrs),
+         :ok <- validate_expected_version(input, attrs),
+         {:ok, source} <- resync_endpoint(host, attrs.source_endpoint_ref, endpoints),
+         {:ok, bindings} <-
+           selected_bindings(telemetry.catalog_revision, telemetry, definition, attrs, source),
+         :ok <- validate_cardinality(definition, bindings) do
+      {:ok, build_configuration(installation, definition, input, bindings, attrs)}
+    end
+  end
+
+  defp resync_endpoint(_host, nil, _endpoints),
+    do: {:error, :packet_binding_source_endpoint_required}
+
+  defp resync_endpoint(host, id, endpoints) do
+    with {:ok, endpoint} <- Map.fetch(endpoints, id),
+         :ok <- endpoint_matches_host(endpoint, host) do
+      {:ok, endpoint.source_endpoint_id}
+    else
+      :error -> {:error, :source_endpoint_not_found}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp resync_configuration_rows(input, desired) do
+    if input.configuration_version == desired.configuration_version do
+      {:ok, nil}
+    else
+      with {:ok, configuration} <-
+             changeset_row(
+               ConfigurationRow,
+               ConfigurationRow.changeset(%ConfigurationRow{}, desired)
+             ),
+           {:ok, bindings} <- resync_binding_rows(desired) do
+        {:ok, {configuration, bindings}}
+      end
+    end
+  end
+
+  defp resync_binding_rows(desired) do
+    Enum.reduce_while(desired.bindings, {:ok, []}, fn binding, {:ok, rows} ->
+      with {:ok, row} <-
+             changeset_row(
+               BindingRow,
+               BindingRow.changeset(
+                 %BindingRow{},
+                 desired.packet_binding_configuration_id,
+                 binding
+               )
+             ),
+           {:ok, resources} <- resync_resource_rows(binding) do
+        {:cont, {:ok, [{row, resources} | rows]}}
+      else
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  defp resync_resource_rows(binding) do
+    Enum.reduce_while(binding.resources, {:ok, []}, fn resource, {:ok, rows} ->
+      case changeset_row(
+             ResourceRow,
+             ResourceRow.changeset(%ResourceRow{}, binding.packet_binding_id, resource)
+           ) do
+        {:ok, row} -> {:cont, {:ok, [row | rows]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  defp changeset_row(schema, changeset) do
+    with {:ok, row} <- Ecto.Changeset.apply_action(changeset, :insert) do
+      {:ok, Map.take(row, schema.__schema__(:fields))}
+    end
+  end
+
+  defp persist_resync_rows([]), do: :ok
+
+  defp persist_resync_rows(rows) do
+    {configurations, bindings} = Enum.unzip(rows)
+    {bindings, resources} = bindings |> Enum.concat() |> Enum.unzip()
+    ids = Enum.map(configurations, & &1.packet_binding_configuration_id)
+    now = DateTime.utc_now()
+    key = :packet_binding_configuration_id
+
+    fields = ConfigurationRow.__schema__(:fields) -- [key, :inserted_at]
+
+    insert_resync_rows(ConfigurationRow, configurations, now,
+      on_conflict: {:replace, fields},
+      conflict_target: [key]
+    )
+
+    Repo.delete_all(from(row in BindingRow, where: row.packet_binding_configuration_id in ^ids))
+    insert_resync_rows(BindingRow, bindings, now, [])
+    insert_resync_rows(ResourceRow, Enum.concat(resources), now, [])
+    :ok
+  end
+
+  defp insert_resync_rows(schema, rows, now, opts) do
+    rows
+    |> Enum.chunk_every(3_500)
+    |> Enum.each(fn batch ->
+      Repo.insert_all(
+        schema,
+        Enum.map(batch, &Map.merge(&1, %{inserted_at: now, updated_at: now})),
+        opts
+      )
+    end)
   end
 
   defp preview_installation(organization_id, host_context, installation, attrs, telemetry) do
@@ -213,8 +345,7 @@ defmodule Cadence.Applications.PacketBindings do
       organization_id
       |> applied_rows_query(mission_id, application_key)
       |> filter_stamp_spacecraft(Keyword.get(opts, :spacecraft_ids))
-      |> stamp_applied_transaction(binding_set_id, binding_set_version, now)
-      |> normalize_stamp_transaction()
+      |> stamp_applied_rows(binding_set_id, binding_set_version, now)
     end)
   end
 
@@ -230,42 +361,38 @@ defmodule Cadence.Applications.PacketBindings do
       row.organization_id == ^organization_id and row.mission_id == ^mission_id
     )
     |> maybe_filter_application(application_key)
-    |> lock("FOR UPDATE")
   end
 
-  defp stamp_applied_row(row, binding_set_id, binding_set_version, now) do
-    changes = applied_stamp_changes(row, binding_set_id, binding_set_version, now)
+  defp stamp_applied_rows(query, binding_set_id, version, now) do
+    query
+    |> where([row], row.enabled == true)
+    |> Repo.update_all(
+      set: [
+        applied_binding_set_id: binding_set_id,
+        applied_binding_set_version: version,
+        applied_at: now,
+        updated_at: now
+      ]
+    )
 
-    case row |> Ecto.Changeset.change(changes) |> Repo.update() do
-      {:ok, _updated} -> :ok
-      {:error, reason} -> Repo.rollback(reason)
-    end
+    query
+    |> where([row], row.enabled == false)
+    |> where(
+      [row],
+      not is_nil(row.applied_binding_set_id) or
+        not is_nil(row.applied_binding_set_version) or not is_nil(row.applied_at)
+    )
+    |> Repo.update_all(
+      set: [
+        applied_binding_set_id: nil,
+        applied_binding_set_version: nil,
+        applied_at: nil,
+        updated_at: now
+      ]
+    )
+
+    :ok
   end
-
-  defp stamp_applied_transaction(query, binding_set_id, binding_set_version, now) do
-    Repo.transaction(fn ->
-      query
-      |> Repo.all()
-      |> Enum.each(&stamp_applied_row(&1, binding_set_id, binding_set_version, now))
-
-      :ok
-    end)
-  end
-
-  defp applied_stamp_changes(%ConfigurationRow{enabled: true}, binding_set_id, version, now) do
-    %{
-      applied_binding_set_id: binding_set_id,
-      applied_binding_set_version: version,
-      applied_at: now
-    }
-  end
-
-  defp applied_stamp_changes(%ConfigurationRow{}, _binding_set_id, _version, _now) do
-    %{applied_binding_set_id: nil, applied_binding_set_version: nil, applied_at: nil}
-  end
-
-  defp normalize_stamp_transaction({:ok, :ok}), do: :ok
-  defp normalize_stamp_transaction({:error, reason}), do: {:error, reason}
 
   defp disable_installation_bindings_transaction(installation),
     do: Repo.transaction(fn -> disable_installation_bindings(installation) end)
@@ -355,16 +482,15 @@ defmodule Cadence.Applications.PacketBindings do
              mission_id,
              host_context,
              value(attrs, :source_endpoint_ref)
-           ),
-         {:ok, packet_ids} <- selected_packet_ids(attrs),
+           ) do
+      selected_bindings(revision, telemetry, input_definition, attrs, source_endpoint_ref)
+    end
+  end
+
+  defp selected_bindings(revision, telemetry, definition, attrs, source) do
+    with {:ok, packet_ids} <- selected_packet_ids(attrs),
          {:ok, packets} <- select_packets(telemetry.packet_definitions, packet_ids) do
-      build_packet_bindings(
-        telemetry,
-        revision,
-        packets,
-        source_endpoint_ref,
-        input_definition
-      )
+      build_packet_bindings(telemetry, revision, packets, source, definition)
     end
   end
 

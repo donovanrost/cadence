@@ -31,6 +31,7 @@ defmodule Cadence.Reads.FleetStatus do
   alias Cadence.Reads.SpacecraftMetadata
   alias Cadence.Reads.Telemetry, as: TelemetryReads
   alias Cadence.SemanticObservations.FleetAlarms
+  alias Cadence.SemanticRuntime.AlarmLevel
   alias Cadence.Spacecraft
   alias Cadence.SpacecraftType
   alias Cadence.Telemetry.{Sample, SpacecraftReceipts}
@@ -420,8 +421,8 @@ defmodule Cadence.Reads.FleetStatus do
     }
   end
 
-  defp alarm_severity(state) when state in ~w(distress critical severe), do: :critical
-  defp alarm_severity(_watch_or_warning), do: :caution
+  defp alarm_severity(state),
+    do: if(AlarmLevel.level(state) == :critical, do: :critical, else: :caution)
 
   defp latest_receipts(samples, limit_states, durable) do
     sample_times = Enum.map(samples, fn %Sample{} = s -> {s.spacecraft_id, s.receipt_time} end)

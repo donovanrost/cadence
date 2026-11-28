@@ -161,13 +161,31 @@ defmodule Cadence.SourceEndpoints do
   end
 
   @doc "Mission endpoints for the requested spacecraft, grouped by spacecraft in endpoint order."
+  def list_source_endpoints_for_spacecrafts(_org, _mission, []), do: %{}
+
   def list_source_endpoints_for_spacecrafts(organization_id, mission_id, spacecraft_ids) do
-    SourceEndpointRow
-    |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
-    |> order_by([row], asc: row.source_endpoint_id)
-    |> BulkLookup.by_id(:spacecraft_id, spacecraft_ids)
+    from(row in SourceEndpointRow,
+      where:
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.spacecraft_id in ^spacecraft_ids,
+      order_by: [asc: row.source_endpoint_id]
+    )
+    |> Repo.all()
     |> Enum.map(&SourceEndpointRow.to_domain/1)
     |> Enum.group_by(& &1.spacecraft_id)
+  end
+
+  @doc "Exact endpoints in a mission, keyed by source endpoint ID."
+  def fetch_source_endpoints_by_ids(_org, _mission, []), do: %{}
+
+  def fetch_source_endpoints_by_ids(organization_id, mission_id, ids) do
+    from(row in SourceEndpointRow,
+      where:
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.source_endpoint_id in ^ids
+    )
+    |> Repo.all()
+    |> Map.new(&{&1.source_endpoint_id, SourceEndpointRow.to_domain(&1)})
   end
 
   @doc "Curated command target page; no endpoint metadata is returned."

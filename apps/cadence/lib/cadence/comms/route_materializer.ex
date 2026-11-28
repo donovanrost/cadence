@@ -31,9 +31,10 @@ defmodule Cadence.Comms.RouteMaterializer do
 
     spacecraft_ids
     |> Enum.uniq()
-    |> Enum.chunk_every(100)
+    |> Enum.chunk_every(1_000)
     |> Enum.flat_map(fn ids ->
-      {:ok, found} = SpacecraftStore.fetch_spacecrafts(organization_id, mission_id, ids)
+      {:ok, found} =
+        SpacecraftStore.fetch_spacecrafts_in_batches(organization_id, mission_id, ids)
 
       rules =
         RoutingRuleStore.list_routing_rules_for_spacecrafts(organization_id, mission_id, ids)

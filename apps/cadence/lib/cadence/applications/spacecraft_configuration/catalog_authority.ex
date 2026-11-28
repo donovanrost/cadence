@@ -43,14 +43,12 @@ defmodule Cadence.Applications.SpacecraftConfiguration.CatalogAuthority do
   def effective_many(mission, spacecraft) when is_map(spacecraft) do
     overrides = Overrides.list(mission.organization_id, mission.mission_id, Map.keys(spacecraft))
 
-    Map.new(spacecraft, fn {id, sc} ->
-      case SpacecraftStore.fetch_pinned_profile(mission, sc) do
-        {:ok, %SpacecraftType{} = profile} ->
-          {id, Effective.resolve(profile, Map.get(overrides, id, %{}))["catalog_revision_id"]}
+    profiles = profiles(mission.organization_id, mission.mission_id, Map.values(spacecraft))
 
-        _no_profile ->
-          {id, nil}
-      end
+    Map.new(spacecraft, fn {id, sc} ->
+      profile = profiles[{sc.spacecraft_type_id, sc.spacecraft_type_version}]
+      effective = profile && Effective.resolve(profile, Map.get(overrides, id, %{}))
+      {id, effective && effective["catalog_revision_id"]}
     end)
   end
 
@@ -61,12 +59,13 @@ defmodule Cadence.Applications.SpacecraftConfiguration.CatalogAuthority do
   @spec check(map(), struct(), binary() | nil) ::
           :ok | {:error, :spacecraft_catalog_set_by_profile}
   def check(mission, spacecraft, catalog_revision_id) do
-    case effective(mission, spacecraft) do
-      nil -> :ok
-      ^catalog_revision_id -> :ok
-      _other -> {:error, :spacecraft_catalog_set_by_profile}
-    end
+    check_effective(effective(mission, spacecraft), catalog_revision_id)
   end
+
+  @doc false
+  def check_effective(nil, _catalog), do: :ok
+  def check_effective(catalog, catalog), do: :ok
+  def check_effective(_effective, _catalog), do: {:error, :spacecraft_catalog_set_by_profile}
 
   @doc """
   `:ok` when the spacecraft's own configuration may carry these commanding and telemetry
@@ -128,16 +127,16 @@ defmodule Cadence.Applications.SpacecraftConfiguration.CatalogAuthority do
     end
   end
 
-  defp profiles(org, mission_id, spacecraft) do
-    spacecraft
-    |> Enum.map(&{&1.spacecraft_type_id, &1.spacecraft_type_version})
-    |> Enum.uniq()
-    |> Enum.reject(fn {type_id, _version} -> is_nil(type_id) end)
-    |> Map.new(fn {type_id, version} = key ->
-      case SpacecraftTypeStore.fetch_spacecraft_type_version(org, mission_id, type_id, version) do
-        {:ok, profile} -> {key, profile}
-        _missing -> {key, nil}
-      end
-    end)
+  @doc false
+  def profiles(org, mission, spacecraft) do
+    pins =
+      for sc <- spacecraft,
+          is_binary(sc.spacecraft_type_id) and is_integer(sc.spacecraft_type_version),
+          do: {sc.spacecraft_type_id, sc.spacecraft_type_version}
+
+    {:ok, profiles} =
+      SpacecraftTypeStore.fetch_spacecraft_type_versions_in_batches(org, mission, pins)
+
+    profiles
   end
 end

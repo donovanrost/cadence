@@ -8,6 +8,7 @@ defmodule Cadence.Runtime.BindingSetIndex do
   Selection expands only the instances and ordered rules needed by a partition.
   """
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
+  alias Cadence.ApplicationDispatch.BindingSetMembership, as: Membership
   alias Cadence.Runtime.PartitionKey
 
   @enforce_keys [:template, :rules, :instances, :configurations]
@@ -21,6 +22,8 @@ defmodule Cadence.Runtime.BindingSetIndex do
         }
 
   def new(%__MODULE__{} = index), do: index
+  # A membership set is already the compact form (#450): its templates are the interned values.
+  def new(%Membership{} = index), do: index
 
   def new(%BindingSet{} = bindings) do
     {rules, pool} = Enum.map_reduce(bindings.rules, {%{}, %{}}, &index_rule/2)
@@ -37,9 +40,34 @@ defmodule Cadence.Runtime.BindingSetIndex do
   end
 
   def materialize(%BindingSet{} = bindings), do: bindings
+  def materialize(%Membership{expand_all: expand} = index), do: expand.(index)
 
   def materialize(%__MODULE__{} = index) do
     expand(index, index.rules, index.instances)
+  end
+
+  # Only the partition's endpoint (and the mission-scoped slice) is expanded, in the order a full
+  # set's selection has: instances by id, rules by priority then id, bytewise.
+  def select(%Membership{} = index, %PartitionKey{} = partition) do
+    mission = index.expand_member.(index, nil)
+
+    endpoint =
+      if partition.affinity == :source_endpoint,
+        do: index.expand_member.(index, partition.value),
+        else: index.shell
+
+    rules =
+      if partition.affinity == :source_endpoint, do: mission.rules ++ endpoint.rules, else: []
+
+    %{
+      index.shell
+      | capability_instances:
+          Enum.sort_by(
+            mission.capability_instances ++ endpoint.capability_instances,
+            & &1.capability_instance_id
+          ),
+        rules: Enum.sort_by(rules, &{&1.priority, &1.binding_rule_id})
+    }
   end
 
   def select(bindings, %PartitionKey{} = partition) do
