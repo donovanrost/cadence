@@ -10,7 +10,15 @@ defmodule Cadence.Contacts.ListenerRefusalAttentionTest do
   import Cadence.SharedListenerFixtures
 
   alias Cadence.Contacts
-  alias Cadence.Contacts.{ContactSettlement, ContactStore, ListenerRefusalAttention}
+
+  alias Cadence.Contacts.{
+    ContactSettlement,
+    ContactStore,
+    ListenerRefusalAttention,
+    ProfileStore,
+    ProviderProfile
+  }
+
   alias Cadence.Control.Contacts, as: ControlContacts
 
   setup do
@@ -48,6 +56,34 @@ defmodule Cadence.Contacts.ListenerRefusalAttentionTest do
     end)
 
     Map.merge(ctx, %{alpha: alpha, bravo: bravo, port: port, since: DateTime.add(now, -1)})
+  end
+
+  # #990: the item says who sets the listener's allowlist, so the fix line can name who acts.
+  test "an item names the allowlist's source and transport", ctx do
+    for {origin, source} <- [{"provider_managed", "provider"}, {"direct", "transport"}] do
+      {:ok, _profile} =
+        ProfileStore.persist_provider_profile(
+          ctx.organization_id,
+          ProviderProfile.new(%{
+            provider_profile_id: ctx.profile_id,
+            mission_id: ctx.mission_id,
+            adapter_key: :tcp_socket,
+            version: System.unique_integer([:positive]),
+            configuration: %{"mode" => "listen", "expected_peer_addresses" => ["127.0.0.1/32"]},
+            metadata: %{
+              "display_name" => "Shared downlink",
+              "transport_origin" => origin,
+              "materialized_from_transport_id" => "transport-#{origin}"
+            }
+          })
+        )
+
+      _stranger = connect!(ctx.port, frame(9))
+      [item | _rest] = eventually_items(ctx, 2)
+
+      assert %{allowlist_source: ^source, provider_profile_name: "Shared downlink"} = item
+      assert item.transport_id == "transport-#{origin}"
+    end
   end
 
   test "a refused connection raises an item for every open pass on the listener", ctx do

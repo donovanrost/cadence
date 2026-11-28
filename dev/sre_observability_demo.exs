@@ -330,6 +330,7 @@ defmodule Cadence.Dev.SreObservabilityDemo do
                 adapter_key: :tcp_socket,
                 configuration: %{
                   mode: :listen,
+                  expected_peer_addresses: ["127.0.0.1/32", "::1/128"],
                   host: "127.0.0.1",
                   port: 0,
                   ingress_protocol_family: :tm,

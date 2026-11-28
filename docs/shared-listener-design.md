@@ -1,6 +1,6 @@
 # Inbound telemetry: tie a connection to an authenticated delivery before routing (#130)
 
-Status: agreed (CTO, 2026-11-27), recorded as DECISIONS #115. It informs #129 (the server side
+Status: agreed (CTO, 2026-11-27), recorded as DECISIONS #115. Slice 1 is #990; mutual TLS is #991. It informs #129 (the server side
 of the listener choice) and #202 (the console form, blocked).
 
 ## Problem

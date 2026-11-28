@@ -8,7 +8,14 @@ defmodule Cadence.Contacts.ProfileStore do
   alias Ecto.Changeset
 
   alias Cadence.Comms.ListenClaims
-  alias Cadence.Contacts.ProfileStore.{ProviderProfileRow, TransportProfileRow}
+
+  alias Cadence.Contacts.ProfileStore.{
+    ListenAllowlist,
+    ProviderProfileRow,
+    TransportProfileRow,
+    Versions
+  }
+
   alias Cadence.Contacts.{ProviderProfile, TransportProfile}
   alias Cadence.Listing
   alias Cadence.Missions
@@ -21,10 +28,17 @@ defmodule Cadence.Contacts.ProfileStore do
           {:ok, ProviderProfile.t()} | {:error, term()}
   def persist_provider_profile(organization_id, %ProviderProfile{} = provider_profile)
       when is_binary(organization_id) do
-    # SAFETY: a listen host:port is one mission's (ListenClaims); fail closed at save.
-    ListenClaims.guard(provider_profile.mission_id, claimed_configuration(provider_profile), fn ->
-      persist_scoped_provider_profile(organization_id, provider_profile)
-    end)
+    # SAFETY: a listen host:port is one mission's (ListenClaims), and a listening profile names
+    # the peers it accepts (#990, DECISIONS #115); both fail closed at save.
+    with :ok <- listen_allowlist(provider_profile) do
+      ListenClaims.guard(
+        provider_profile.mission_id,
+        claimed_configuration(provider_profile),
+        fn ->
+          persist_scoped_provider_profile(organization_id, provider_profile)
+        end
+      )
+    end
   end
 
   defp persist_scoped_provider_profile(organization_id, provider_profile) do
@@ -55,10 +69,19 @@ defmodule Cadence.Contacts.ProfileStore do
   @spec persist_provider_profile(ProviderProfile.t()) ::
           {:ok, ProviderProfile.t()} | {:error, term()}
   def persist_provider_profile(%ProviderProfile{} = provider_profile) do
-    ListenClaims.guard(provider_profile.mission_id, claimed_configuration(provider_profile), fn ->
-      insert_provider_profile(provider_profile)
-    end)
+    with :ok <- listen_allowlist(provider_profile) do
+      ListenClaims.guard(
+        provider_profile.mission_id,
+        claimed_configuration(provider_profile),
+        fn ->
+          insert_provider_profile(provider_profile)
+        end
+      )
+    end
   end
+
+  @doc "Whether an active listen-mode TCP provider profile names a usable allowlist (#990)."
+  defdelegate listen_allowlist(profile), to: ListenAllowlist, as: :check
 
   # Only an active profile claims its listen endpoint; a tombstone releases it.
   defp claimed_configuration(%ProviderProfile{lifecycle_state: :active, configuration: config}),
@@ -242,7 +265,7 @@ defmodule Cadence.Contacts.ProfileStore do
     with {:ok, %ProviderProfile{} = current_provider_profile} <-
            fetch_provider_profile(organization_id, mission_id, provider_profile_id),
          {:ok, %ProviderProfile{} = next_provider_profile} <-
-           build_next_provider_profile_version(current_provider_profile, attrs) do
+           Versions.next_provider_profile(current_provider_profile, attrs) do
       persist_provider_profile(organization_id, next_provider_profile)
     end
   end
@@ -455,7 +478,7 @@ defmodule Cadence.Contacts.ProfileStore do
     with {:ok, %TransportProfile{} = current_transport_profile} <-
            fetch_transport_profile(organization_id, mission_id, transport_profile_id),
          {:ok, %TransportProfile{} = next_transport_profile} <-
-           build_next_transport_profile_version(current_transport_profile, attrs) do
+           Versions.next_transport_profile(current_transport_profile, attrs) do
       persist_transport_profile(organization_id, next_transport_profile)
     end
   end
@@ -582,31 +605,6 @@ defmodule Cadence.Contacts.ProfileStore do
       Map.put_new(acc, definition_id, definition_row)
     end)
     |> Map.values()
-  end
-
-  defp build_next_provider_profile_version(%ProviderProfile{} = provider_profile, attrs) do
-    {:ok,
-     %ProviderProfile{
-       provider_profile
-       | version: provider_profile.version + 1,
-         lifecycle_state: :active,
-         adapter_key: Map.get(attrs, :adapter_key, provider_profile.adapter_key),
-         configuration: Map.get(attrs, :configuration, provider_profile.configuration),
-         metadata: Map.merge(provider_profile.metadata, Map.get(attrs, :metadata, %{}))
-     }}
-  end
-
-  defp build_next_transport_profile_version(%TransportProfile{} = transport_profile, attrs) do
-    {:ok,
-     %TransportProfile{
-       transport_profile
-       | version: transport_profile.version + 1,
-         lifecycle_state: :active,
-         family_key: Map.get(attrs, :family_key, transport_profile.family_key),
-         target_scope: Map.get(attrs, :target_scope, transport_profile.target_scope),
-         configuration: Map.get(attrs, :configuration, transport_profile.configuration),
-         metadata: Map.merge(transport_profile.metadata, Map.get(attrs, :metadata, %{}))
-     }}
   end
 
   defp put_organization_scope(%module{} = profile, organization_id)

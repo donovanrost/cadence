@@ -134,7 +134,6 @@ defmodule Cadence.Contacts.ListenerRefusalAttention do
       contact_id: scheduled_contact_id(context, contact),
       path_id: adapter.path_id,
       provider_profile_id: adapter.provider_binding_id,
-      provider_profile_name: profile_name(context, adapter.provider_binding_id),
       raised_at: window.first_at,
       last_refused_at: window.last_at,
       refused_count: window.count,
@@ -147,6 +146,7 @@ defmodule Cadence.Contacts.ListenerRefusalAttention do
       resolution: nil,
       p1: not adapter.connected? or not is_nil(quiet_since)
     }
+    |> Map.merge(profile_fields(context, adapter.provider_binding_id))
     |> Map.merge(pass)
   end
 
@@ -241,12 +241,27 @@ defmodule Cadence.Contacts.ListenerRefusalAttention do
     end
   end
 
-  defp profile_name(context, profile_id) do
-    case ProfileStore.fetch_provider_profile(context.org, context.mission, profile_id) do
-      {:ok, profile} -> (profile.metadata || %{})["display_name"]
-      _missing -> nil
-    end
+  # The listen profile's name, the transport it was materialized from, and who sets its source
+  # allowlist (#990): `"provider"` for a provider-managed transport (the delivery profile's
+  # egress.source_addresses, which only the provider can change) or `"transport"` for a transport
+  # configured in Cadence (its allowed source addresses, editable there). nil when unknown.
+  defp profile_fields(context, profile_id) do
+    metadata =
+      case ProfileStore.fetch_provider_profile(context.org, context.mission, profile_id) do
+        {:ok, profile} -> profile.metadata || %{}
+        _missing -> %{}
+      end
+
+    %{
+      provider_profile_name: metadata["display_name"],
+      transport_id: metadata["materialized_from_transport_id"],
+      allowlist_source: allowlist_source(metadata["transport_origin"])
+    }
   end
+
+  defp allowlist_source("provider_managed"), do: "provider"
+  defp allowlist_source(origin) when is_binary(origin), do: "transport"
+  defp allowlist_source(_unknown), do: nil
 
   defp reservation_id(_org, _mission, nil), do: nil
 

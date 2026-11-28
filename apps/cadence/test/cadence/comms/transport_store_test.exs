@@ -47,6 +47,7 @@ defmodule Cadence.Comms.TransportStoreTest do
       assert {:error, "Port must be an integer from 1 to 65535."} =
                TCPSocket.normalize_config(%{
                  "mode" => "listen",
+                 "expected_peer_addresses" => ["127.0.0.1/32", "::1/128"],
                  "direction_capability" => "inbound",
                  "host" => "0.0.0.0",
                  "port" => "70000",
@@ -101,6 +102,7 @@ defmodule Cadence.Comms.TransportStoreTest do
           adapter_key: :tcp_socket,
           configuration: %{
             "mode" => "listen",
+            "expected_peer_addresses" => ["127.0.0.1/32", "::1/128"],
             "direction_capability" => "inbound",
             "host" => "0.0.0.0",
             "port" => "5000",

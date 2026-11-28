@@ -268,7 +268,13 @@ defmodule Cadence.Comms.ListenClaimsTest do
     end
   end
 
-  defp listen(host, port), do: %{"mode" => "listen", "host" => host, "port" => port}
+  defp listen(host, port),
+    do: %{
+      "mode" => "listen",
+      "expected_peer_addresses" => ["127.0.0.1/32", "::1/128"],
+      "host" => host,
+      "port" => port
+    }
 
   defp persist_profile(scope, id, configuration) do
     ProfileStore.persist_provider_profile(
@@ -285,6 +291,7 @@ defmodule Cadence.Comms.ListenClaimsTest do
   defp tcp_config(port) do
     %{
       "mode" => "listen",
+      "expected_peer_addresses" => ["127.0.0.1/32", "::1/128"],
       "direction_capability" => "inbound",
       "host" => "127.0.0.1",
       "port" => Integer.to_string(port),

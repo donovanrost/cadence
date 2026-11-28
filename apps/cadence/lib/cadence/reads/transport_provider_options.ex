@@ -8,11 +8,13 @@ defmodule Cadence.Reads.TransportProviderOptions do
     * `services`: the chosen provider's active downlink service profiles, `[{id, version, name}]`
       (`[]` until a provider is chosen);
     * `deliveries`: its ready downlink delivery profiles that support the chosen service and that
-      the transport kind can use, `[{id, version, name}]` (`[]` until a service is chosen);
+      the transport kind can use, `[{id, version, name, egress_addresses_ready}]` (`[]` until a
+      service is chosen). One the kind could use but for its egress addresses (#990) is listed
+      with `egress_addresses_ready: false`; choosing it answers a coded field error;
     * `preview`: `Management.Transports.derive/3`'s result (the caller passes it in) once provider, service and delivery
       are all chosen, rendered as `{configuration: [{label, value}], direction_capability,
       provider_version, summary: [{label, value}]}`, else `nil`;
-    * `errors`: derive's field errors `[{path, message}]` (`path` one of `mission_provider_id`,
+    * `errors`: derive's field errors `[{path, message}]`, plus `code` where one applies (`path` one of `mission_provider_id`,
       `mission_provider_version`, `service_profile_ref`, `delivery_profile_ref`, or `nil`).
 
   The preview is the same derivation the change set's apply uses, so preview and stored
@@ -42,7 +44,7 @@ defmodule Cadence.Reads.TransportProviderOptions do
     %{
       providers: Enum.map(providers, &provider_choice/1),
       services: Enum.map(services, &profile_choice/1),
-      deliveries: Enum.map(deliveries, &profile_choice/1),
+      deliveries: Enum.map(deliveries, &delivery_choice/1),
       preview: preview,
       errors: unknown_choices(selection, provider, service, delivery) ++ errors
     }
@@ -117,6 +119,9 @@ defmodule Cadence.Reads.TransportProviderOptions do
   defp text(nil), do: ""
   defp text(value), do: to_string(value)
 
+  defp error(%{path: path, message: message, code: code}),
+    do: %{path: path, message: message, code: code}
+
   defp error(%{path: path, message: message}), do: %{path: path, message: message}
   defp error(other), do: %{path: nil, message: inspect(other)}
 
@@ -129,6 +134,16 @@ defmodule Cadence.Reads.TransportProviderOptions do
       version: profile["version"],
       name: profile["display_name"] || profile["id"]
     }
+
+  # A delivery choice says whether the provider named usable egress addresses (#990), so an
+  # unusable one shows why instead of being missing from the list.
+  defp delivery_choice(delivery),
+    do:
+      Map.put(
+        profile_choice(delivery),
+        :egress_addresses_ready,
+        Map.get(delivery, "egress_addresses_ready", true)
+      )
 
   defp services(provider) do
     provider
@@ -144,12 +159,27 @@ defmodule Cadence.Reads.TransportProviderOptions do
         |> Enum.filter(fn delivery ->
           delivery["state"] == "ready" and delivery["direction"] == "downlink" and
             service["id"] in (delivery["supported_service_profile_refs"] || []) and
-            match?({:ok, _}, entry.module.from_delivery_profile(delivery))
+            usable?(entry.module, delivery)
         end)
+        |> Enum.map(
+          &Map.put(&1, "egress_addresses_ready", egress_refusal(entry.module, &1) == nil)
+        )
 
       _unknown ->
         []
     end
+  end
+
+  # Usable, or unusable only for its egress addresses (#990): those are listed flagged
+  # (`egress_addresses_ready: false`) so the operator sees why, and choosing one gets the coded
+  # field error.
+  defp usable?(module, delivery),
+    do:
+      match?({:ok, _}, module.from_delivery_profile(delivery)) or
+        egress_refusal(module, delivery) != nil
+
+  defp egress_refusal(module, delivery) do
+    if function_exported?(module, :egress_refusal, 1), do: module.egress_refusal(delivery)
   end
 
   defp profile_items(provider, key) do

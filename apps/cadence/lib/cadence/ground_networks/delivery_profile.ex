@@ -16,6 +16,7 @@ defmodule Cadence.GroundNetworks.DeliveryProfile do
           state: atom(),
           operator_summary: binary(),
           diagnostics: map(),
+          egress: map(),
           extensions: map(),
           evidence: map()
         }
@@ -30,6 +31,7 @@ defmodule Cadence.GroundNetworks.DeliveryProfile do
     :operator_summary,
     supported_service_profile_refs: [],
     diagnostics: %{},
+    egress: %{},
     extensions: %{},
     evidence: %{}
   ]
@@ -48,6 +50,8 @@ defmodule Cadence.GroundNetworks.DeliveryProfile do
          {:ok, state} <- Validation.member(profile, "state", @states),
          {:ok, operator_summary} <- Validation.required_string(profile, "operator_summary"),
          {:ok, diagnostics} <- Validation.object(profile, "diagnostics"),
+         # #990: the provider's half of the connection (egress.source_addresses).
+         {:ok, egress} <- Validation.object(profile, "egress"),
          {:ok, extensions} <- Validation.object(profile, "extensions") do
       {:ok,
        %__MODULE__{
@@ -60,6 +64,7 @@ defmodule Cadence.GroundNetworks.DeliveryProfile do
          state: state,
          operator_summary: operator_summary,
          diagnostics: diagnostics,
+         egress: egress,
          extensions: extensions,
          evidence: profile
        }}
