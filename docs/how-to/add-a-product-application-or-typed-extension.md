@@ -141,9 +141,9 @@ identity.
 
 `ApplicationDefinition.installation_policy` separates platform modules
 (`:platform`) from optional product capabilities (`:optional`, the default).
-Platform modules, such as the Ops Console at mission scope, are always installed
-at their declared scopes and need no installation records. Telemetry Decom is an
-optional installation at spacecraft scope.
+Platform modules are always installed at their declared scopes and need no
+installation records; no compiled application is one today. Telemetry Decom is
+an optional installation at spacecraft scope.
 
 Use the registry's canonical policy (`Registry.platform?/2`) for admission; do
 not keep separate installation-exemption lists. Platform availability does not

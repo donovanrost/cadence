@@ -102,17 +102,17 @@ defmodule Cadence.Reads.Readiness.RulesTest do
             available_count: 2,
             missing: [
               %{key: "comms", name: "Comms", description: nil},
-              %{key: "ops_console", name: "Ops Console", description: "Mission operations"}
+              %{key: "cfdp", name: "CFDP", description: "Transfer files"}
             ]
           }
         })
       )
 
-    assert area(result, :apps).detail == "Comms and Ops Console aren't installed"
+    assert area(result, :apps).detail == "Comms and CFDP aren't installed"
 
     assert Enum.map(result.findings, &{&1.cause, &1.severity, &1.body}) == [
              {:"app_not_installed:comms", :optional, "Install it to enable its features."},
-             {:"app_not_installed:ops_console", :optional, "Mission operations"}
+             {:"app_not_installed:cfdp", :optional, "Transfer files"}
            ]
   end
 

@@ -123,7 +123,6 @@ defmodule Cadence.Architecture.PlaneBoundary do
   @public_composition_values MapSet.new([
                                "lib/cadence/applications/settings_provider.ex",
                                "lib/cadence/applications/settings_section_definition.ex",
-                               "lib/cadence/applications/ops_console.ex",
                                "lib/cadence/applications/registry.ex",
                                "lib/cadence/extension_catalog.ex",
                                "lib/cadence/control/process_namespace.ex",
@@ -168,7 +167,6 @@ defmodule Cadence.Architecture.PlaneBoundary do
     "lib/cadence/comms/peer_addresses.ex" => :shared,
     "lib/cadence/comms/listen_endpoint.ex" => :shared,
     "lib/cadence/extensions/registry.ex" => :composition,
-    "lib/cadence/applications/ops_console.ex" => :composition,
     "lib/cadence/control/process_namespace.ex" => :composition,
     "lib/cadence/runtime/process_namespace.ex" => :composition,
     "lib/cadence/applications/mission_binding_contribution.ex" => :shared,

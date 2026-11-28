@@ -1356,7 +1356,10 @@ bindings can be written. A platform-shared one needs a platform admin in admin m
 spacecraft_count, permissions: ["apps.install"]}`. These are the
 applications installable on a mission, platform ones first, then by name.
 
-- `platform: true` apps are always on and can't be changed.
+- No application installs on the whole mission today (Telemetry Decom works per spacecraft, CFDP
+  is on the roadmap), so `apps` is `[]` and the console shows an empty state.
+- `platform: true` apps are always on and can't be changed. No compiled application is a platform
+  one since the Ops Console was retired (#1176).
 - `version` is the installed version, an integer (application versions are integers), or `null`
   when the app isn't installed.
 - `available_version` is the version this deployment ships (an integer), set on every row.

@@ -14,10 +14,6 @@ defmodule Cadence.Applications.RegistryTest do
     refute Registry.platform?("telemetry_decom", :spacecraft)
     refute Registry.platform?("unknown", :mission)
 
-    for key <- ["ops_console"] do
-      assert Registry.platform?(key, :mission)
-    end
-
     assert {:error, :invalid_application_definition} =
              ApplicationDefinition.validate(%{optional | installation_policy: :automatic})
   end
@@ -63,14 +59,8 @@ defmodule Cadence.Applications.RegistryTest do
              "telemetry_decom"
            ]
 
-    assert Enum.map(Registry.available_for_scope(:mission), & &1.application_key) == [
-             "ops_console"
-           ]
+    assert Registry.available_for_scope(:mission) == []
 
-    assert Enum.sort(Registry.known_keys()) == [
-             "cfdp",
-             "ops_console",
-             "telemetry_decom"
-           ]
+    assert Enum.sort(Registry.known_keys()) == ["cfdp", "telemetry_decom"]
   end
 end

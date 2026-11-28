@@ -701,7 +701,7 @@ defmodule Cadence.ContactPlanning.ContactPlans do
     end
   end
 
-  # U27, under the plan lock, for every caller (console, ops console, automation): a draft that
+  # U27, under the plan lock, for every caller (console, automation): a draft that
   # newer requirement or template versions overtook can't be submitted.
   defp not_superseded(row) do
     plan = ContactPlanRow.to_domain(row)

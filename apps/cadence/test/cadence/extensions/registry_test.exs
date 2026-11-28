@@ -47,14 +47,6 @@ defmodule Cadence.Extensions.RegistryTest do
              ExtensionCatalog.fetch("cadence.cfdp", 2)
 
     assert {:error, :unknown_extension_package} = ExtensionCatalog.fetch("mission-uploaded")
-
-    assert {:ok, package} = ExtensionCatalog.fetch("cadence.ops_console")
-    assert package.trust == :first_party
-    assert package.version == 1
-
-    assert package.contributions == [
-             %ApplicationContribution{application_key: "ops_console", application_version: 1}
-           ]
   end
 
   test "every typed contribution resolves through its owning domain registry" do
@@ -248,9 +240,9 @@ defmodule Cadence.Extensions.RegistryTest do
     assert :ok = ExtensionCatalog.validate()
 
     assert ExtensionCatalog.inventory() == %{
-             packages: 9,
-             applications: 3,
-             available_applications: 2,
+             packages: 8,
+             applications: 2,
+             available_applications: 1,
              capabilities: 5,
              transport_kinds: 1,
              provider_connectors: 1,
@@ -263,15 +255,12 @@ defmodule Cadence.Extensions.RegistryTest do
              ["telemetry_decom"]
 
     assert Enum.map(ExtensionCatalog.applications_for_scope(:mission), & &1.application_key) ==
-             ["ops_console", "cfdp"]
+             ["cfdp"]
 
-    assert Enum.map(
-             ExtensionCatalog.available_applications_for_scope(:mission),
-             & &1.application_key
-           ) == ["ops_console"]
+    assert ExtensionCatalog.available_applications_for_scope(:mission) == []
 
-    assert {:ok, %{application_key: "ops_console", version: 1}} =
-             ExtensionCatalog.fetch_available_application("ops_console", 1)
+    assert {:ok, %{application_key: "telemetry_decom", version: 1}} =
+             ExtensionCatalog.fetch_available_application("telemetry_decom", 1)
 
     assert {:ok, %{application_key: "cfdp", availability: :roadmap}} =
              ExtensionCatalog.fetch_application("cfdp")
@@ -280,7 +269,7 @@ defmodule Cadence.Extensions.RegistryTest do
              ExtensionCatalog.fetch_available_application("cfdp")
 
     assert {:error, :unsupported_application_contribution_version} =
-             ExtensionCatalog.fetch_application("ops_console", 99)
+             ExtensionCatalog.fetch_application("telemetry_decom", 99)
 
     assert {:error, :unknown_application_contribution} =
              ExtensionCatalog.fetch_application("not_registered")
@@ -337,7 +326,7 @@ defmodule Cadence.Extensions.RegistryTest do
       compatibility: %{cadence_application_contract: 1},
       contributions: [
         %ApplicationContribution{
-          application_key: "ops_console",
+          application_key: "telemetry_decom",
           application_version: 99
         }
       ]

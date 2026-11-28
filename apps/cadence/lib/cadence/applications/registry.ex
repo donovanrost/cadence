@@ -9,11 +9,7 @@ defmodule Cadence.Applications.Registry do
   alias Cadence.Applications.{
     ApplicationDefinition,
     ResourceClaimDefinition,
-    ResourceContract
-  }
-
-  alias Cadence.Applications.{
-    OpsConsole,
+    ResourceContract,
     TelemetryDecom
   }
 
@@ -23,7 +19,7 @@ defmodule Cadence.Applications.Registry do
           | :invalid_application_definition
 
   @spec all() :: [ApplicationDefinition.t()]
-  def all, do: [TelemetryDecom.definition(), OpsConsole.definition(), cfdp()]
+  def all, do: [TelemetryDecom.definition(), cfdp()]
 
   @spec available() :: [ApplicationDefinition.t()]
   def available do

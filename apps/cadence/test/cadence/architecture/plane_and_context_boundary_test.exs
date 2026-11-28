@@ -143,11 +143,7 @@ defmodule Cadence.Architecture.PlaneAndContextBoundaryTest do
   end
 
   test "compiled contribution catalogs expose metadata without exposing arbitrary composition" do
-    for catalog <- [
-          "lib/cadence/extension_catalog.ex",
-          "lib/cadence/applications/registry.ex",
-          "lib/cadence/applications/ops_console.ex"
-        ] do
+    for catalog <- ["lib/cadence/extension_catalog.ex", "lib/cadence/applications/registry.ex"] do
       assert PlaneBoundary.classify(catalog) == :composition
       assert ContextBoundary.classify(catalog) == :composition
 

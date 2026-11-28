@@ -14,8 +14,7 @@ defmodule Cadence.Governance.DerivedTelemetryKind do
   changed to stop reading it in the same change set.
 
   Each evaluation run reads the live definitions when it starts, so applying needs no runtime
-  notification (`runtime_impact` none). The ops-console direct save stays until the user decides
-  (#77 decisions 1 and 2); both write the same versions.
+  notification (`runtime_impact` none).
   """
 
   @behaviour Cadence.Platform.ConfigKind
