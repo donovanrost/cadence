@@ -143,13 +143,7 @@ defmodule Cadence.Reads.VerifierSeries do
   end
 
   defp catalog_plans(org, mission, member) do
-    case RequestValidation.resolve_basis(
-           org,
-           mission,
-           member.mission_model_revision_id,
-           member.command_id,
-           member.source_endpoint_ref
-         ) do
+    case RequestValidation.resolve_basis_of(org, mission, member) do
       {:ok, %{verifier_plans: plans}} when is_list(plans) -> plans
       _not_active -> []
     end

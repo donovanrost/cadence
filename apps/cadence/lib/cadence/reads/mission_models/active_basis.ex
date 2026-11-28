@@ -71,10 +71,7 @@ defmodule Cadence.Reads.MissionModels.ActiveBasis do
     if FleetSnapshot.fleet?(metadata) do
       with {:ok, digest} <- FleetSnapshot.command_digest(metadata), do: {:ok, {:fleet, digest}}
     else
-      %{plan_id: id, content_sha256: sha, target_contract_version: version} =
-        basis.runtime_plans.command
-
-      {:ok, {:single, {id, sha, version}}}
+      {:ok, {:single, basis.runtime_plans.command.plan_id}}
     end
   end
 

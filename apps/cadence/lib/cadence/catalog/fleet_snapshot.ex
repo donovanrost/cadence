@@ -81,8 +81,8 @@ defmodule Cadence.Catalog.FleetSnapshot do
   @doc """
   What commands resolve against in the fleet, as one digest (#1107): per craft, in id order, whether
   commanding is on, its configuration revision and version, its catalog revision, its source
-  endpoints and its **command** runtime plan's identity. Nothing about its other plans or its model
-  revision's id, so a generation that only moves craft to a new revision with the same command plan
+  endpoints and its **command** runtime plan's id (content-derived). Nothing about its other plans or
+  its model revision's id, so a generation that only moves craft to a new revision with the same command plan
   (a monitoring apply) leaves it equal. Computed in the database: one read, no entries decoded
   here, for a fleet of any size. `{:error, :invalid_spacecraft_model_bindings}` when `metadata`
   isn't a v2 fleet.
@@ -105,7 +105,7 @@ defmodule Cadence.Catalog.FleetSnapshot do
               """
               md5(coalesce(string_agg(? || ':' || jsonb_build_array(
                 ?->'commanding_enabled', ?->'configuration_revision_id', ?->'configuration_version',
-                ?->'catalog_revision_id', ?->'source_endpoint_ids', ?->'mission_model'->'plans'->'command'
+                ?->'catalog_revision_id', ?->'source_endpoint_ids', ?->'mission_model'->'plans'->'command'->'plan_id'
               )::text, '|' ORDER BY ?), ''))
               """,
               m.spacecraft_id,

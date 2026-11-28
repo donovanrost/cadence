@@ -257,29 +257,65 @@ defmodule Cadence.Commanding.RequestValidation do
         mission_id,
         mission_model_revision_id,
         command_id,
-        source_endpoint_id
+        source_endpoint_id,
+        pinned_plan_id \\ nil
       ) do
     organization_id
-    |> resolve_bases(mission_id, mission_model_revision_id, [command_id], source_endpoint_id)
+    |> resolve_bases(
+      mission_id,
+      mission_model_revision_id,
+      [command_id],
+      source_endpoint_id,
+      pinned_plan_id
+    )
     |> Map.fetch!(command_id)
   end
+
+  @doc """
+  `resolve_basis/6` for a stored request (its row or domain value): the revision, command and
+  source endpoint it was validated on, and the command plan it pinned (#1107).
+  """
+  def resolve_basis_of(organization_id, mission_id, request) do
+    resolve_basis(
+      organization_id,
+      mission_id,
+      request.mission_model_revision_id,
+      request.command_id,
+      request.source_endpoint_ref,
+      pinned_plan_id(request)
+    )
+  end
+
+  @doc "The command plan id a request pinned when it was validated (`nil` for one that didn't)."
+  def pinned_plan_id(%{metadata: %{"validation_basis" => %{"runtime_plan_id" => id}}}), do: id
+
+  def pinned_plan_id(%{metadata_document: document}) when is_map(document),
+    do: pinned_plan_id(%{metadata: Cadence.Persistence.JsonDocument.unwrap_value(document)})
+
+  def pinned_plan_id(_request), do: nil
 
   @doc """
   `resolve_basis/5` for several commands of one revision and endpoint: the active basis (the
   activation, the revision and its plans) is read once, and each command is decoded from it.
   `%{command_id => result}`, each result what `resolve_basis/5` returns for that command.
   """
-  @spec resolve_bases(binary(), binary(), binary(), [binary()], binary() | nil) :: %{
-          binary() => {:ok, map()} | {:error, term()}
-        }
-  def resolve_bases(organization_id, mission_id, revision_id, command_ids, source_endpoint_id) do
+  @spec resolve_bases(binary(), binary(), binary(), [binary()], binary() | nil, binary() | nil) ::
+          %{binary() => {:ok, map()} | {:error, term()}}
+  def resolve_bases(
+        organization_id,
+        mission_id,
+        revision_id,
+        command_ids,
+        source_endpoint_id,
+        pinned_plan_id \\ nil
+      ) do
     with {:ok, %{runtime_plans: plans} = runtime_basis} <-
            ActiveBasis.fetch_command_runtime_basis(
              organization_id,
              mission_id,
              source_endpoint_id
            ),
-         :ok <- exact_revision(runtime_basis, revision_id, organization_id, mission_id) do
+         :ok <- exact_revision(runtime_basis, revision_id, pinned_plan_id) do
       Map.new(command_ids, fn command_id ->
         {command_id, command_resolved(plans, command_id, runtime_basis)}
       end)
@@ -307,51 +343,40 @@ defmodule Cadence.Commanding.RequestValidation do
   def resolve_keyed(organization_id, mission_id, requests) do
     requests
     |> Enum.uniq_by(&{&1.mission_model_revision_id, &1.command_id})
-    |> Enum.group_by(&{&1.mission_model_revision_id, &1.source_endpoint_ref})
-    |> Enum.reduce(%{}, fn {{revision, endpoint}, same}, acc ->
+    |> Enum.group_by(&{&1.mission_model_revision_id, &1.source_endpoint_ref, pinned_plan_id(&1)})
+    |> Enum.reduce(%{}, fn {{revision, endpoint, pinned}, same}, acc ->
       commands = Enum.map(same, & &1.command_id)
 
       organization_id
-      |> resolve_bases(mission_id, revision, commands, endpoint)
+      |> resolve_bases(mission_id, revision, commands, endpoint, pinned)
       |> Enum.reduce(acc, fn {command, result}, acc ->
         Map.put(acc, {revision, command}, result)
       end)
     end)
   end
 
-  # The revision a request was validated on is still the one its craft runs, or (#1107) another
-  # revision with the very same command plan: a monitoring apply moves craft to a new head
-  # revision, and what a command encodes and verifies against, its command plan, is unchanged, so a
-  # request already queued can still release.
-  defp exact_revision(%{mission_model_revision_id: revision_id}, revision_id, _org, _mission),
-    do: :ok
+  # The revision a request was validated on is still the one its craft runs, or (#1107) its craft
+  # runs another revision whose command plan is exactly the one the request pinned: a monitoring
+  # apply moves craft to a new head revision, and a head reuses its base's command plan unchanged
+  # (same plan id), so what a command encodes and verifies against is the same, and a request
+  # already queued can still release. Never "the same base": only an equal command plan id.
+  defp exact_revision(%{mission_model_revision_id: revision_id}, revision_id, _pinned), do: :ok
 
   defp exact_revision(
-         %{mission_model_revision_id: active} = runtime_basis,
+         %{mission_model_revision_id: active, runtime_plans: %{command: %{plan_id: plan_id}}},
          requested,
-         org,
-         mission
+         pinned
        ) do
-    if same_command_plan?(runtime_basis, org, mission, requested),
+    if is_binary(pinned) and pinned == plan_id,
       do: :ok,
       else: {:error, {:mission_model_revision_mismatch, requested, active}}
   end
 
-  defp exact_revision(%{}, requested, _org, _mission),
+  defp exact_revision(%{mission_model_revision_id: active}, requested, _pinned),
+    do: {:error, {:mission_model_revision_mismatch, requested, active}}
+
+  defp exact_revision(%{}, requested, _pinned),
     do: {:error, {:mission_model_revision_not_active, requested}}
-
-  defp same_command_plan?(%{runtime_plans: %{command: active}}, org, mission, requested) do
-    case MissionModels.fetch_plan(org, mission, requested, :command) do
-      {:ok, plan} ->
-        {plan.plan_id, plan.content_sha256, plan.target_contract_version} ==
-          {active.plan_id, active.content_sha256, active.target_contract_version}
-
-      {:error, _reason} ->
-        false
-    end
-  end
-
-  defp same_command_plan?(_runtime_basis, _org, _mission, _requested), do: false
 
   defp validation_basis(request_basis) do
     %{

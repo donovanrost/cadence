@@ -25,12 +25,17 @@ defmodule Cadence.Commanding.CommandTokenTest do
   end
 
   defp token(c) do
-    {:ok, snapshot} = ActiveBasis.command_catalog_snapshot(c.org, c.mission)
-    snapshot.token
+    {:ok, token} =
+      Repo.transaction(fn ->
+        {:ok, snapshot} = ActiveBasis.command_catalog_snapshot(c.org, c.mission)
+        snapshot.token
+      end)
+
+    token
   end
 
   # A new generation: the fleet re-pinned, and the generation counter moved on.
-  defp new_generation!(c, manifests, edit \\ & &1) do
+  defp new_generation!(c, manifests, edit \\ fn _id, entry -> entry end) do
     pin_fleet!(c, manifests)
     row = Repo.get!(ActiveBindingSetRow, c.mission)
     metadata = JsonDocument.unwrap_value(row.metadata)
