@@ -1,5 +1,6 @@
 defmodule Cadence.Protocol.RecordArchive.WriterTest do
   use Cadence.ProcessDataCase, async: false
+  @moduletag :tmp_dir
 
   alias Cadence.Ingress.RawEvidence
 
@@ -8,9 +9,8 @@ defmodule Cadence.Protocol.RecordArchive.WriterTest do
   alias Cadence.Protocol.RecordArchive.FileSystem.{IdentityRow, SegmentRow}
   alias Cadence.Repo
 
-  setup do
+  setup %{tmp_dir: base_path} do
     unique = System.unique_integer([:positive])
-    base_path = Path.join(System.tmp_dir!(), "cadence_record_writer_#{unique}")
 
     policy =
       RecordArchive.policy(
@@ -24,7 +24,6 @@ defmodule Cadence.Protocol.RecordArchive.WriterTest do
       )
 
     start_supervised!(RecordArchive.child_spec(policy))
-    on_exit(fn -> File.rm_rf!(base_path) end)
     %{policy: policy, unique: unique}
   end
 

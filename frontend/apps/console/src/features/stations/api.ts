@@ -1,5 +1,6 @@
 import type { MissionId } from "@/api/index.ts";
 import { decoders, request, stationId, type ApiResult, type Decoded } from "@/api";
+import { ephemerisReader } from "./ephemeris.ts";
 
 /** Requested shape: docs/apogee/plans/setup-shapes.md §G1 (final contract in api/setup.md). */
 const { array, integer, known, nullable, object, oneOf, string, token } = decoders;
@@ -67,6 +68,8 @@ const provider = object({
     object({ id: token, version: integer, state: known(["active", "revoked"] as const) }),
   ),
   health: object({ validate: check, sync: check }),
+  /** #968, #975: how it gets orbits and its spacecraft counted by orbit state. */
+  ephemeris: ephemerisReader,
 });
 export type MissionProvider = Decoded<typeof provider>;
 export const providerReader = provider;

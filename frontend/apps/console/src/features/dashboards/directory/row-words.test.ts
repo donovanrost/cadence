@@ -1,9 +1,10 @@
+import { dashboardId as dashIdReader } from "@/api/index.ts";
 import { describe, expect, it } from "vite-plus/test";
 import type { DirectoryRow } from "./api.ts";
 import { spacecraftText, spacecraftWord, updatedText, updatedWord } from "./row-words.ts";
 
 const row = (over: Partial<DirectoryRow>): DirectoryRow => ({
-  id: "dash-1",
+  id: dashIdReader("dash-1"),
   name: "Thermal",
   description: null,
   tags: [],

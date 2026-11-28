@@ -81,6 +81,7 @@ defmodule Cadence.Persistence.BulkInsert do
     case schema.__schema__(:type, field) do
       :string -> "text"
       :integer -> "bigint"
+      :float -> "double precision"
       :boolean -> "boolean"
       :map -> "jsonb"
       :utc_datetime_usec -> "timestamp"

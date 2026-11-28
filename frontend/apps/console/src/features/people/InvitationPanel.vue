@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { OrganizationId } from "@/api/index.ts";
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { ApButton, ApInlineConfirm, ApPanel, formatShort, OutcomeCallout } from "@/ui";
@@ -9,7 +10,7 @@ import { roleLabel, type Invitation } from "./api.ts";
  * Invitation details with Resend (moves to the new id; old link dead) and Revoke, confirmed in
  * place with the kit's ApInlineConfirm (O5, design-language §7).
  */
-const props = defineProps<{ orgId: string; invitation: Invitation; canManage: boolean }>();
+const props = defineProps<{ orgId: OrganizationId; invitation: Invitation; canManage: boolean }>();
 const emit = defineEmits<{ changed: []; moving: [to: string] }>();
 const router = useRouter();
 const busy = ref(false);

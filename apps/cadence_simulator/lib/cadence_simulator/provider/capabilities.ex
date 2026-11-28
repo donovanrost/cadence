@@ -73,6 +73,9 @@ defmodule CadenceSimulator.Provider.Capabilities do
         "station_batch_limit" => behavior["station_batch_limit"],
         "page_size_limit" => behavior["page_size_limit"]
       },
+      # How the provider gets each spacecraft's orbit (#968): the simulator accepts the element
+      # set Cadence uploads (PUT /v1/spacecraft/:ref/ephemeris) rather than looking it up by NORAD id.
+      "orbit" => %{"source" => "accepts_ephemeris_upload"},
       "delivery" => %{
         "kinds" => ["realtime_stream"],
         "protocols" => ["tcp"],

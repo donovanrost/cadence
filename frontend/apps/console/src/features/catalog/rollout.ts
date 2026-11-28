@@ -87,7 +87,7 @@ const catalogItems = (p: Preview, reason: HoldReason) =>
 export const rolloutMoves = (p: Preview, revisionId: string): number =>
   catalogItems(p, "catalog_change")
     .filter((i) => i.to === revisionId)
-    .reduce((n, i) => n + (i.spacecraft_ids?.length ?? 0), 0);
+    .reduce((n, i) => n + (i.spacecraft_count ?? 0), 0);
 
 /** Queued commands the apply cancels (the catalog_cancels_commands hold, acknowledged on Changes). */
 export const rolloutCancels = (p: Preview): number =>

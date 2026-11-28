@@ -1,4 +1,5 @@
 import type { MissionId } from "@/api/index.ts";
+import { passGeometry } from "@/features/scheduling/geometry.ts";
 import {
   stationId as stationIdReader,
   spacecraftId as spacecraftIdReader,
@@ -142,7 +143,8 @@ const pass = withPassAttentions(
       provider_name: d.nullable(d.string),
       synthetic: d.nullable(d.boolean),
     }),
-    max_elevation_deg: d.nullable(d.number),
+    /** #892: elevation, its source and the matched predicted pass (contacts.md § Elevation). */
+    ...passGeometry,
     /** The contact plan revision that booked it; null for direct bookings. `day` (U74): its UTC day. */
     plan: d.nullable(
       d.object({

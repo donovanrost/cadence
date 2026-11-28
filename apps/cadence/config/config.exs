@@ -87,6 +87,8 @@ config :cadence,
   catalog_apids: Cadence.MissionModels.CatalogApids,
   # D3's composition pin rules (#544) for the profile and override kinds, configured likewise.
   composition_pins: Cadence.MissionModels.CompositionPin,
+  # The withdrawal behind a :withdrawn pin, named by C1 (E2, #546), configured likewise.
+  withdrawn_decisions: Cadence.Control.WithdrawnPins,
   # Builds runtime activations for profile-framed change-set applies (DECISIONS #36).
   configuration_generation: Cadence.Control.ConfigurationGeneration,
   ecto_repos: [Cadence.Repo],

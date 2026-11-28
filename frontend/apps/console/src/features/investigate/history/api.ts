@@ -7,6 +7,7 @@ import {
   vocabularyText,
   type ApiResult,
   type Decoded,
+  pointId as pointIdReader,
 } from "@/api/index.ts";
 import {
   conditionWords,
@@ -35,7 +36,7 @@ export const occurrenceReader = d.object({
   condition: d.nullable(d.knownText(sourceStates)),
   /** low | high for ground limits (the PEAK side); null for catalog alarms (no PEAK). */
   direction: d.nullable(d.oneOf(["low", "high"] as const)),
-  point: d.object({ id: d.token, name: d.string, unit: d.nullable(d.string) }),
+  point: d.object({ id: pointIdReader, name: d.string, unit: d.nullable(d.string) }),
   opened_at: d.timestamp,
   cleared_at: d.nullable(d.timestamp),
   duration_s: d.nullable(d.integer),

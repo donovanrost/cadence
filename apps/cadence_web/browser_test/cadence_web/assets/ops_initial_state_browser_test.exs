@@ -21,6 +21,7 @@ defmodule CadenceWeb.Assets.OpsInitialStateBrowserTest do
   end
 
   @tag :browser_smoke
+  @tag :tmp_dir
   @tag timeout: 600_000
   test "initial Ops routes render content or actionable prerequisites", c do
     org = TestFixtures.persist_org!()
@@ -30,10 +31,7 @@ defmodule CadenceWeb.Assets.OpsInitialStateBrowserTest do
 
     output_dir =
       System.get_env("CADENCE_INITIAL_STATE_ARTIFACTS") ||
-        Path.join(
-          System.tmp_dir!(),
-          "cadence-ops-initial-state-#{System.unique_integer([:positive])}"
-        )
+        c.tmp_dir
 
     File.mkdir_p!(output_dir)
 

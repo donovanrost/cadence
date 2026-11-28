@@ -67,15 +67,18 @@ const preview = decode(previewReader, {
         {
           kind: "spacecraft",
           reason: "catalog_change",
-          spacecraft_ids: ["sc_1", "sc_2"],
+          spacecraft_count: 2,
+          spacecraft_sample: [
+            { id: "sc_1", name: "E-1" },
+            { id: "sc_2", name: "E-2" },
+          ],
           from: "cat_14",
           to: "cat_15",
         },
-        { kind: "spacecraft", reason: "catalog_change", spacecraft_ids: ["sc_9"], to: "cat_13" },
+        { kind: "spacecraft", reason: "catalog_change", spacecraft_count: 1, to: "cat_13" },
         {
           kind: "spacecraft",
           reason: "catalog_cancels_commands",
-          spacecraft_ids: [],
           requests: [{ command_request_id: "r1" }, { command_request_id: "r2" }],
         },
       ],

@@ -13,7 +13,11 @@ import { catalogCaution, jsonWords, protocolLine, routingWords } from "./configu
 import { filterCounts, pointMark, pointsFrom, toCsv, visiblePoints } from "./telemetry/model.ts";
 import { pointLimits } from "@/features/telemetry/index.ts";
 import { describe, expect, it } from "vite-plus/test";
-import { spacecraftId as spacecraftIdReader, decode } from "@/api/index.ts";
+import {
+  spacecraftId as spacecraftIdReader,
+  decode,
+  pointId as pointIdReader,
+} from "@/api/index.ts";
 import { formatLimitLike, formatValue, type Alarm } from "@/features/alarms/index.ts";
 import { spacecraftRow, type FleetSpacecraft } from "@/features/fleet/index.ts";
 import { aosShort, ringDots, sparkPoints } from "./sisters.ts";
@@ -38,7 +42,13 @@ function alarmRow(id: string, spacecraftId: string, overrides: Partial<Alarm> = 
   return {
     id,
     spacecraft_id: spacecraftIdReader(spacecraftId),
-    point: { id: "EPS.VBAT", name: "VBAT", subsystem: "EPS", unit: "V", description: null },
+    point: {
+      id: pointIdReader("EPS.VBAT"),
+      name: "VBAT",
+      subsystem: "EPS",
+      unit: "V",
+      description: null,
+    },
     severity: "critical",
     active: true,
     condition: "red_low",
@@ -74,7 +84,7 @@ describe("limitSegments", () => {
       thresholds: { red_low: redLow, yellow_low: null, yellow_high: null, red_high: null },
     });
     const intervals: LimitIntervals = {
-      point_id: "EPS.VBAT",
+      point_id: pointIdReader("EPS.VBAT"),
       spacecraft_id: null,
       from: iso(0),
       to: iso(6 * hour),
@@ -90,7 +100,7 @@ describe("limitSegments", () => {
 
 describe("history decoding", () => {
   const body = (buckets: unknown[]) => ({
-    point_id: "EPS.VBAT",
+    point_id: pointIdReader("EPS.VBAT"),
     unit: "V",
     description: null,
     spacecraft_id: "sc",
@@ -200,11 +210,19 @@ describe("investigate model", () => {
       alarmRow("a", me.id),
       alarmRow("b", "spacecraft-earendil-002"),
       alarmRow("c", "spacecraft-earendil-003", {
-        point: { id: "EPS.OTHER", name: "X", subsystem: null, unit: "V", description: null },
+        point: {
+          id: pointIdReader("EPS.OTHER"),
+          name: "X",
+          subsystem: null,
+          unit: "V",
+          description: null,
+        },
       }),
       alarmRow("d", "spacecraft-earendil-026"),
     ];
-    expect(sisters(alarms, fleet, me, "EPS.VBAT").map((s) => s.sc.scid)).toEqual([2]);
+    expect(sisters(alarms, fleet, me, pointIdReader("EPS.VBAT")).map((s) => s.sc.scid)).toEqual([
+      2,
+    ]);
   });
 
   it("formats values without inventing precision", () => {
@@ -252,7 +270,7 @@ describe("event log lines (B2)", () => {
     spacecraft: null,
     refs: {
       alarm_id: null,
-      point_id: "EPS.VBAT",
+      point_id: pointIdReader("EPS.VBAT"),
       command_request_id: null,
       contact_id: null,
       subject: null,
@@ -277,7 +295,7 @@ describe("event log lines (B2)", () => {
   };
 
   const epi = (events: LogEpisode["events"]): LogEpisode => ({
-    pointId: "EPS.VBAT",
+    pointId: pointIdReader("EPS.VBAT"),
     openedAt: "2026-11-08T02:00:00Z",
     clearedAt: null,
     events,
@@ -297,7 +315,7 @@ describe("event log lines (B2)", () => {
 
 describe("M8 live tail", () => {
   const s = (t: string, v: string | null, p = "p1") => ({
-    point_id: p,
+    point_id: pointIdReader(p),
     value_json: v,
     generation_time: t,
     received_at: null,
@@ -334,7 +352,7 @@ describe("History tab (Investigate.md §History, api's episode reads)", () => {
     peak_severity: "critical",
     condition: "red_low",
     direction: "low",
-    point: { id: "EPS.VBAT", name: "VBAT", unit: "V" },
+    point: { id: pointIdReader("EPS.VBAT"), name: "VBAT", unit: "V" },
     opened_at: "2026-11-09T03:00:00Z",
     cleared_at: "2026-11-09T04:00:00Z",
     duration_s: 3600,
@@ -503,7 +521,7 @@ describe("Telemetry tab (Investigate.md §Telemetry)", () => {
     subsystem = "EPS",
     hasLimits?: boolean,
   ) => ({
-    id,
+    id: pointIdReader(id),
     name: id.toLowerCase(),
     description: null,
     unit: null,
@@ -548,7 +566,7 @@ describe("Telemetry tab (Investigate.md §Telemetry)", () => {
     expect(pointMark(pt("L", "nominal", "EPS", true))).toBe("nominal");
     expect(filterCounts([none, unchecked, pt("B", "critical")])).toEqual({ out: 1, stale: 0 });
     expect(filterCounts([pt("O", "no_data")])).toEqual({ out: 0, stale: 1 });
-    expect(toCsv("P", [{ t: 0, min: 1, mean: 2, max: 3 }])).toBe(
+    expect(toCsv(pointIdReader("P"), [{ t: 0, min: 1, mean: 2, max: 3 }])).toBe(
       "time,point,min,mean,max\n1970-01-01T00:00:00.000Z,P,1,2,3",
     );
   });
@@ -635,7 +653,7 @@ describe("B2 escalation lines (ux U71 A7)", () => {
     spacecraft: null,
     refs: {
       alarm_id: null,
-      point_id: "EPS.VBAT",
+      point_id: pointIdReader("EPS.VBAT"),
       command_request_id: null,
       contact_id: null,
       subject: undefined,
@@ -654,7 +672,7 @@ describe("B2 escalation lines (ux U71 A7)", () => {
     const lines = logLines(
       [limitAt("in", "2026-11-08T02:31:41Z"), limitAt("before", "2026-11-08T01:00:00Z")],
       {
-        pointId: "EPS.VBAT",
+        pointId: pointIdReader("EPS.VBAT"),
         openedAt: "2026-11-08T02:00:00Z",
         clearedAt: null,
         events: [escalated],

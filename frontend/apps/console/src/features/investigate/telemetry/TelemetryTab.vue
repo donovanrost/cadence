@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from "vue";
 import { RouterLink, useRoute, useRouter, type RouteLocationRaw } from "vue-router";
-import { useRemoteQuery } from "@/api/index.ts";
+import { useRemoteQuery, pointIdParam, type PointId } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
 import {
@@ -77,7 +77,7 @@ function replace(q2: Record<string, string | undefined>) {
     .replace({ query: { ...route.query, ...q2 } })
     .catch((e: unknown) => console.error("Navigation failed", e));
 }
-function toggle(id: string) {
+function toggle(id: PointId) {
   const set = pinned.value.includes(id)
     ? pinned.value.filter((p) => p !== id)
     : [...pinned.value, id].slice(0, MAX_PLOTTED);
@@ -89,8 +89,8 @@ const plotted = computed(() =>
     return p ? [p] : [];
   }),
 );
-const focusId = computed(() => {
-  const f = typeof route.query.focus === "string" ? route.query.focus : null;
+const focusId = computed((): PointId | null => {
+  const f = typeof route.query.focus === "string" ? pointIdParam(route.query.focus) : null;
   return f && pinned.value.includes(f) ? f : (pinned.value[0] ?? null);
 });
 const focused = computed(() => plotted.value.find((p) => p.id === focusId.value) ?? null);
@@ -166,12 +166,12 @@ const tail = useSpacecraftTail(
 
 /** T3: the focused point's buckets in the range, newest first, and its CSV. */
 const values = useRemoteQuery(
-  computed(() => (focused.value ? `${focused.value.id}|${range.value}` : null)),
-  (_k, signal) => {
-    const w = rangeWindow(range.value, new Date());
+  computed(() => (focused.value ? { p: focused.value.id, r: range.value } : null)),
+  (k, signal) => {
+    const w = rangeWindow(k.r, new Date());
     return fetchHistory(
       missionId.value,
-      focused.value?.id ?? "",
+      k.p,
       props.sc.id,
       { from: new Date(w.from), to: new Date(w.to) },
       signal,

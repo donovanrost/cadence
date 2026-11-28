@@ -1444,6 +1444,30 @@ Edits go through change sets (`ground_station` and `transport` kinds; see change
   `lifecycle_state: "archived"`). Pickers use the default. `code` is the station's short code (2–8 capitals/digits, unique per mission).
   `transport_count` and `routing_rule_count` are **`null`** because the model has no
   station↔transport link yet. `health` is `null` (not tracked; show "not reported").
+  Each station also carries its geometry for pass prediction (#890):
+  - `location`: `{latitude_deg, longitude_deg, height_m, source}` or `null`. These are WGS84
+    geodetic degrees and metres above the ellipsoid. `source` is `"mission"` when the mission
+    set it, or `"provider"` when it is the provider's report. The mission's location always
+    wins; `null` means neither has one, so no passes can be predicted there.
+  - `provider_location`: `{latitude_deg, longitude_deg, height_m, reported_at}` or `null`. It
+    is what the provider's inventory last reported, shown even when the mission's location is
+    in use, so a difference can be seen. `reported_at` is the time of the last sync that
+    reported it. A sync that lists the station without a location, or no longer lists it,
+    clears it to `null`.
+  - `elevation_mask_deg`: a number, 5 unless the mission set it. Passes are predicted above it.
+
+  The mission sets the location and mask in the `ground_station` change-set document, using
+  `latitude_deg`, `longitude_deg`, `height_m` and `elevation_mask_deg` (numbers; the kind schema
+  lists them with units and ranges).
+  - Latitude must be −90 to 90 and longitude −180 to 180, and the two come together.
+  - Height is −1,000 to 10,000 m, and 0 when left empty.
+  - The mask is 0 to 89.9.
+  - Clearing all three location fields removes the mission's location. Pass prediction then
+    falls back to the provider's.
+
+  A provider's report never changes the document. It arrives with the provider's inventory
+  sync, as an optional `location` on each listed station (the simulator reports one for each of
+  its stations).
 - `GET .../transports` → `{transports: [{id, display_name, version, origin, transport_kind,
   direction_capability, lifecycle_state, station: null, routing_rule_count}]}`.
   `routing_rule_count` counts active rules using the transport; `station` is `null` for the same
@@ -1463,8 +1487,8 @@ Edits go through change sets (`ground_station` and `transport` kinds; see change
 
 `{providers: [{id, name, provider_type, version, policy_mode, account: {id, name} | null, grant: {id,
 version, state: "active" | "revoked"} | null, status: {lifecycle_state, last_validated_at,
-last_synced_at}, health: {validate: <health>, sync: <health>}, station_count}], permissions}` for
-the Stations · Providers tab, sorted by name.
+last_synced_at}, health: {validate: <health>, sync: <health>}, station_count, ephemeris}],
+permissions}` for the Stations · Providers tab, sorted by name.
 
 - `account` is `null` exactly when `grant` is (older, direct bindings with no account).
   `account.name` is `null` for members (only organization admins can read accounts).
@@ -1478,7 +1502,113 @@ the Stations · Providers tab, sorted by name.
   provider's own record of its last validate and sync. `null` means never checked. `error` is a
   sentence for a person, not provider evidence.
 - `station_count` counts active stations whose `provider` is this provider's name.
+- `ephemeris` (#968, #974) is `{orbit_source, uploaded, failed, not_ready, pending, lookup,
+  norad_id_missing}`.
+  It says how the provider gets orbits and counts its bound spacecraft by state: counts from one
+  grouped query, never rows.
+  - **Who is counted.** Every spacecraft that has a current element set and is bound to this
+    provider, through an active, enabled downlink routing rule on one of its provider-managed
+    transports. The buckets add up to exactly that number. A spacecraft with no current element
+    set is in no bucket.
+  - **`orbit_source`** is what the provider's latest version declared:
+    `"accepts_ephemeris_upload"`, `"looks_up_by_norad_id"`, or `null` when it declared nothing
+    (or hasn't synced). A version with `null` behaves as `looks_up_by_norad_id`, so a current
+    set without a NORAD id is still counted as `norad_id_missing`, never left silent.
+  - **Each spacecraft is bucketed by the version its route's transport pins** (the highest when
+    two differ), not by the latest. While some routes still pin an older version with another
+    source, one provider can have counts in both the upload buckets and the lookup buckets.
+    When the highest pinned version's route isn't ready but a lower one's is, the run uses the
+    lower version, and its outcome (`uploaded`, `lookup` or `norad_id_missing`) counts as
+    usual; the pair moves to the higher version within an hour of that route becoming ready.
+  - `uploaded`: the provider holds the spacecraft's current element set, sent to the pinned
+    provider version and the spacecraft's current provider-side ref.
+  - `failed`: the last upload of the current set, to that same version and ref, failed. It is
+    retried with backoff (1, 5, 15, 60 and 360 minutes, then every 6 h). Its reason is a closed
+    code (the list under the endpoint below); a provider's own text is never stored or shown.
+  - `not_ready`: a routing rule binds the spacecraft to the provider, but no route to it is ready
+    (for example the provider version isn't validated, or its profiles aren't synced), so nothing
+    was sent. Its reason is a closed code, the scheduling refusal on that provider's own routing
+    rules (the list under the endpoint below). It is re-checked every hour. It clears when a route becomes ready: an
+    upload provider's pair then reads `uploaded` (or `failed`), a lookup provider's `lookup` or
+    `norad_id_missing`. A change of element set, pinned version or ref makes it `pending`.
+  - `pending`: no run has recorded an outcome for the current set, pinned version and ref yet,
+    for any orbit source. Either the pair is new (a provider newly bound or ready), a newer
+    element set arrived, or the target changed since the last outcome (a new provider-side ref,
+    or the transport now pins another provider version). The upload job, or within 10 minutes
+    the reconcile sweep, runs it: an upload provider is sent the set, and a lookup provider is
+    recorded as `lookup` or `norad_id_missing`.
+  - `lookup`: the run found the provider looks the orbit up by NORAD id, and the current set
+    carries one.
+  - `norad_id_missing`: the run found the provider looks orbits up by NORAD id, but the current
+    set has none, so it can't find the spacecraft.
+  - Show every non-zero bucket: none is guaranteed to be 0 for a given `orbit_source`.
+  - An archived provider counts nothing, even while a route still pins an older active
+    version: archiving takes it out of the counts, the findings and the uploads together.
 - `permissions`: `["providers.manage"]` for mission admins (`:manage_mission`), else `[]`.
+- Spacecraft in a `norad_id_missing`, `failed` or `not_ready` bucket also raise a grouped Now
+  item, `provider_ephemeris` (ops.md), whose spacecraft list is paged by the read below.
+- Live: refetch on `invalidate` with `providers` (#972), and with `stations` for
+  `station_count`. `providers` is published once per ephemeris upload run that changed anything
+  these reads show for any spacecraft (its state, reason code, element set, versions, ref,
+  attempts, next retry or since), after a provider is created or archived (archiving publishes
+  `attention` too), and after every validate or sync, failed or not, including the scheduled
+  ones.
+
+## `GET /api/v1/missions/:mission_id/providers/:provider_id/ephemeris/spacecraft`
+
+The spacecraft of one `provider_ephemeris` cause (#972), paged by spacecraft id. Mission members
+can read it, like the providers read.
+
+- Query:
+  - `cause` (required): `norad_id_missing`, `failed` or `not_ready`.
+  - `reason`: one closed code from the lists below, for `failed` or `not_ready` (the item's
+    `reason`); ignored for `norad_id_missing`. **Without `reason`**, a `failed` or `not_ready`
+    page lists every member of that cause across all codes, still ordered by spacecraft id, each
+    row with its own `reason`.
+  - `cursor`: the previous page's `meta.next_cursor`. `limit`: 1 to 200, default 50.
+- `200 {data: [{spacecraft: {id, name, scid}, reason, detail, attempts, next_retry_at, since}],
+  meta: {next_cursor}}`, ordered by spacecraft id; `next_cursor` is `null` on the last page.
+  - `reason` is the outcome's closed code (below), `null` for `norad_id_missing`.
+  - `detail` is a fixed sentence for that code, written by the server from the code alone, so it
+    never carries a provider's own words or evidence (Cadence doesn't store those). `null` for
+    `norad_id_missing`.
+  - `attempts` is the failed upload attempts so far for this set and target (0 otherwise).
+  - `next_retry_at` is when it is retried or re-checked (`null` for `norad_id_missing`).
+  - `since` is when the spacecraft **entered** this outcome. A re-check or a retry that finds
+    the same outcome (same status and code, for the same element set, pinned provider version
+    and ref) keeps it; any change resets it. So a pair stuck for three days reads three days.
+- A spacecraft is listed only while its outcome still holds for its current element set,
+  pinned provider version and ref, the same rule as the `ephemeris` buckets. A cause with no
+  spacecraft left answers an empty page.
+- **`failed` codes**, one per `ProviderError` category, plus two of Cadence's own:
+  `provider_invalid_request`, `provider_authentication_failed`,
+  `provider_authorization_failed`, `provider_unsupported_capability`, `provider_not_found`,
+  `provider_conflict`, `provider_no_capacity`, `provider_not_ready`, `provider_rate_limited`,
+  `provider_unavailable`, `provider_timeout`, `provider_ambiguous_outcome`,
+  `provider_malformed_response`, `provider_error`, `provider_version_not_found` (the pinned
+  provider version is gone) and `other` (any other failure).
+- **`not_ready` codes**, the scheduling refusals on a routing rule that binds the spacecraft to
+  this provider:
+  - `mission_provider_not_validated`, `mission_provider_not_active`,
+    `mission_provider_archived` (listed for completeness: an archived provider leaves these reads,
+    #985), `mission_provider_not_found`, `mission_provider_profiles_not_synced`;
+  - `provider_service_profile_not_active`, `provider_delivery_profile_not_ready`,
+    `provider_profile_version_not_available`, `provider_profile_direction_not_supported`,
+    `provider_profiles_not_compatible`, `provider_route_not_ready`,
+    `invalid_provider_profile_reference`;
+  - `transport_not_found`, `transport_not_active`, `transport_provider_snapshot_mismatch`,
+    `transport_runtime_profile_mismatch`, `transport_runtime_profile_not_materialized`,
+    `direct_transport_not_provider_schedulable`;
+  - `missing_downlink_path`, `contact_link_assignment_not_found`,
+    `contact_path_template_not_found`, `source_endpoint_not_found`,
+    `missing_provider_spacecraft_reference`;
+  - plus `spacecraft_not_found` (a spacecraft-wide refusal), and `no_ready_route` when no
+    refusal names this provider's rule or a refusal's code isn't one of these.
+- An archived provider has no members: archiving takes it out of the findings and counts, even
+  while a route still pins an older active version.
+- Errors: `422 invalid_params` with `details.field` `cause` or `limit`; `404 provider_not_found`
+  for an unknown or archived provider.
+- Live: refetch on `invalidate` with `providers`.
 
 ## Mission providers (L12): `/api/v1/missions/:mission_id/providers` (owner: api-ops)
 

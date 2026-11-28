@@ -1,3 +1,4 @@
+import type { OrganizationId } from "@/api/index.ts";
 import type { RouteRecordInfo } from "vue-router";
 import type { Raw, RawOpt, Plain, InOrg, InMission } from "./route-types.ts";
 
@@ -20,7 +21,7 @@ export interface OrgRoutes {
     "admin.organization",
     "/admin/organizations/:orgId",
     { orgId: Raw },
-    { orgId: string }
+    { orgId: OrganizationId }
   >;
   "admin.service-identities": Plain<"admin.service-identities", "/admin/service-identities">;
   "admin.runtime": Plain<"admin.runtime", "/admin/runtime">;

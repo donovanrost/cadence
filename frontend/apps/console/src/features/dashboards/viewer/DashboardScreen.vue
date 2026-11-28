@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { dashboardIdSegment } from "@/api/index.ts";
 import { computed, nextTick, ref, watch } from "vue";
 import { useRoute, useRouter, type LocationQueryValue } from "vue-router";
 import { TakeoverHeader, useMissionScope, useSmallScreen } from "@/shell";
@@ -44,7 +45,7 @@ const scope = useMissionScope();
 const one = (v: LocationQueryValue | LocationQueryValue[] | undefined) =>
   typeof v === "string" ? v : "";
 const missionId = computed(() => scope.value.mission.id);
-const dashboardId = computed(() => route.params.dashboardId);
+const dashboardId = computed(() => dashboardIdSegment(route.params.dashboardId));
 const selection = computed(() => selectionFromQuery(one(route.query.from), one(route.query.to)));
 const runtime = computed<Runtime>(() => {
   const params = selectionParams(selection.value);

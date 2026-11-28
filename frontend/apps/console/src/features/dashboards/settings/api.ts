@@ -1,3 +1,4 @@
+import type { DashboardId } from "@/api/index.ts";
 import type { MissionId } from "@/api/index.ts";
 import {
   actor as sharedActor,
@@ -14,7 +15,7 @@ import {
  * Dashboard settings (slice 5, L8): D14–D19, api's contract docs/apogee/api/dashboards.md (D14–D16
  * f4ef739b9). Base `/missions/:m/dashboards/:id`.
  */
-const base = (missionId: MissionId, dashboardId: string) =>
+const base = (missionId: MissionId, dashboardId: DashboardId) =>
   `/missions/${encodeURIComponent(missionId)}/dashboards/${encodeURIComponent(dashboardId)}`;
 
 /** Who did it: the shared entity (typing §12 A5); the name is null when the user is gone. */
@@ -91,7 +92,7 @@ export const settingsReader = d.object({
 });
 export type DashboardSettings = Decoded<typeof settingsReader>;
 
-export type SettingsKey = Readonly<{ missionId: MissionId; dashboardId: string }>;
+export type SettingsKey = Readonly<{ missionId: MissionId; dashboardId: DashboardId }>;
 
 export function fetchSettings(
   k: SettingsKey,
@@ -147,7 +148,7 @@ export function revokeShare(k: SettingsKey, shareId: string) {
  */
 export function postSnapshot(
   missionId: MissionId,
-  dashboardId: string,
+  dashboardId: DashboardId,
   body: Readonly<{
     data_visibility: DataVisibility;
     runtime: Readonly<{ from: string; to: string; spacecraft_id: string | null }>;

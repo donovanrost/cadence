@@ -20,6 +20,8 @@ const passWithMoves = (moves: unknown[], after: [string, string]) =>
     uplink_capable: true,
     source: { provider: "p-1", provider_name: "Northlight", synthetic: false },
     max_elevation_deg: null,
+    elevation_source: null,
+    predicted_pass_id: null,
     plan: null,
     ended_by: null,
     replaced_by: null,

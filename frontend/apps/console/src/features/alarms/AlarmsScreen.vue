@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { pointIdParam } from "@/api/index.ts";
+import type { PointId } from "@/api/index.ts";
 import { computed, nextTick, ref } from "vue";
 import { RouterLink, useRoute, useRouter, type RouteLocationRaw } from "vue-router";
 import { useFleetPosture, useMissionScope } from "@/shell/index.ts";
@@ -73,8 +75,10 @@ const cleared = useClearedEpisodes(
 );
 const shown = computed(() => (tab.value === "cleared" ? cleared.state.value : active.state.value));
 
-const point = computed(() => (typeof route.query.point === "string" ? route.query.point : null));
-function selectPoint(pointId: string | null) {
+const point = computed(() =>
+  typeof route.query.point === "string" ? pointIdParam(route.query.point) : null,
+);
+function selectPoint(pointId: PointId | null) {
   const { point: _drop, ...rest } = route.query;
   router
     .replace({ query: pointId === null ? rest : { ...rest, point: pointId } })

@@ -240,6 +240,8 @@ export function usePlanDay(
     (_k, signal) =>
       fetchAlternatives(missionId.value, currentPlanId.value ?? "", focused.value ?? "", signal),
   );
+  // #895: a finished pass-prediction run changes the alternatives' geometry.
+  useMissionInvalidation(missionId, ["predicted_passes"], alternatives.refetch);
 
   /** Send back (admin, pending_approval): the plan returns to draft with the reason. */
   async function sendBack(plan: PlanDetail, reason: string) {

@@ -3,6 +3,7 @@ import {
   missionId as missionIdReader,
   spacecraftId as spacecraftIdReader,
   decode,
+  pointId as pointIdReader,
 } from "@/api/index.ts";
 import { episodeFor, episodesReader, runEpisodeCommand, type EpisodeDetail } from "./episodes.ts";
 import { episodeFixture } from "./fixtures.ts";
@@ -24,11 +25,15 @@ describe("alarm episodes", () => {
       episodeFor(
         [episode(), episode({ id: "x", status: "cleared" })],
         spacecraftIdReader("sc-312"),
-        "EPS.VBAT",
+        pointIdReader("EPS.VBAT"),
       )?.id,
     ).toBe("alarm_episode_1");
     expect(
-      episodeFor([episode({ status: "cleared" })], spacecraftIdReader("sc-312"), "EPS.VBAT"),
+      episodeFor(
+        [episode({ status: "cleared" })],
+        spacecraftIdReader("sc-312"),
+        pointIdReader("EPS.VBAT"),
+      ),
     ).toBeNull();
   });
 

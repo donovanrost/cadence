@@ -66,7 +66,9 @@ S4 edits/alternatives and S8 re-plan (K2 v1: after provider changes) are also in
   [snapshot_id]}` → the new version + totals + per-spacecraft effect.
   `GET /contact-plans/:plan_id/alternatives?spacecraft_id=` → unselected opportunities of the
   plan's runs for that spacecraft, each with `effect: {rule_met_after, contacts_after,
-  clashes_with: [snapshot_id]}`.
+  clashes_with: [snapshot_id]}` and its predicted geometry (#892): `max_elevation_deg`,
+  `elevation_source`, `predicted_pass_id`, `tca` and `no_predicted_pass`, as on a Book a pass
+  offer (contacts.md).
 - **S5** `POST /contact-plans/:plan_id/submit {expected_version, reason, operation_id}` → as in
   §2.3; when executing, `202 {state: executing}` and the per-item state arrives via S1/S10.
 - **S8** `POST /contact-plans/:plan_id/repairs {from, to, operation_id}` → `202 {run_id}`;

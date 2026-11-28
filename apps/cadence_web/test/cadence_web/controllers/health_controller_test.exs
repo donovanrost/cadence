@@ -1,13 +1,13 @@
 defmodule CadenceWeb.HealthControllerTest do
   use CadenceWeb.ConnCase, async: false
+  @moduletag :tmp_dir
 
-  setup do
-    path = Path.join(System.tmp_dir!(), "cadence-drain-#{System.unique_integer([:positive])}")
+  setup %{tmp_dir: tmp_dir} do
+    path = Path.join(tmp_dir, "drain")
     previous = Application.get_env(:cadence_web, :drain_file)
     Application.put_env(:cadence_web, :drain_file, path)
 
     on_exit(fn ->
-      File.rm(path)
       Application.put_env(:cadence_web, :drain_file, previous)
     end)
 

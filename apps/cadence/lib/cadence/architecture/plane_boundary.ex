@@ -444,6 +444,7 @@ defmodule Cadence.Architecture.PlaneBoundary do
       "lib/cadence/contacts/provider_reservation_reconciler.ex",
       "lib/cadence/contacts/provider_reservations.ex",
       "lib/cadence/contacts/provider_scheduling.ex",
+      "lib/cadence/contacts/provider_scheduling/route_pins.ex",
       "lib/cadence/ground_networks/provider_event",
       "lib/cadence/ground_networks/provider_evidence"
     ],
@@ -486,6 +487,10 @@ defmodule Cadence.Architecture.PlaneBoundary do
                               # U65 (domain 11-15): the model gate's default baseline for the console.
                               "lib/cadence/control/model_approval_gate.ex",
                               "lib/cadence/control/alarms.ex",
+                              # E2 (#546): one read of craft on a withdrawn approval, shared by the
+                              # craft's state line, the attention item and commanding's HOLD, so the
+                              # three never disagree.
+                              "lib/cadence/control/withdrawn_pins.ex",
                               # #472 (lead 11-20): the shared #146 actor-naming helper, read-only.
                               "lib/cadence/control/actor_ref.ex",
                               # #273 (api 11-19): one description of a plan's skipped passes

@@ -5,6 +5,7 @@ import {
   diffEdits,
   formatSeconds,
   fromDocument,
+  inputModeFor,
   kindSchemaReader,
   parseDuration,
   ratioSlip,
@@ -186,6 +187,41 @@ describe("number fields (ST1 pass review)", () => {
     expect(fromDocument({ kind: "s", fields: [ratio] }, { realization_target: 0.95 })).toEqual({
       realization_target: "95%",
     });
+  });
+
+  it("reads a minus typed as U+2212 or as a hyphen (#958)", () => {
+    const latitude = { ...base, label: "Latitude", range: { min: -90, max: 90 } };
+    expect(toValue(latitude, "\u221233.86")).toEqual({ ok: true, value: -33.86 });
+    expect(toValue(latitude, "-33.86")).toEqual({ ok: true, value: -33.86 });
+    expect(toValue(latitude, "\u221291")).toEqual({
+      ok: false,
+      message: "Latitude is at least -90.",
+    });
+    const height: SchemaField = {
+      ...latitude,
+      type: "integer",
+      label: "Height",
+      range: { min: -1000, max: 10_000 },
+    };
+    expect(toValue(height, "\u2212120")).toEqual({ ok: true, value: -120 });
+    expect(toValue(height, "-120")).toEqual({ ok: true, value: -120 });
+    expect(toValue(height, "12\u22120").ok).toBe(false);
+  });
+
+  it("keeps the full keyboard where a number may be negative: phone keypads have no minus (#958)", () => {
+    expect(inputModeFor(base)).toBe("decimal");
+    expect(inputModeFor({ ...base, type: "integer" })).toBe("numeric");
+    expect(inputModeFor({ ...base, range: { min: -90, max: 90 } })).toBeUndefined();
+    expect(
+      inputModeFor({ ...base, type: "integer", range: { min: -1000, max: 10_000 } }),
+    ).toBeUndefined();
+    expect(inputModeFor({ ...base, range: null })).toBeUndefined();
+    expect(inputModeFor({ ...base, range: { min: null, max: 10 } })).toBeUndefined();
+    expect(inputModeFor({ ...base, type: "integer", unit: "micros", range: null })).toBe("decimal");
+    expect(
+      inputModeFor({ ...base, type: "integer", unit: "s", range: { min: 0, max: null } }),
+    ).toBeUndefined();
+    expect(inputModeFor({ ...base, type: "string" })).toBeUndefined();
   });
 
   it("reads the derived_telemetry schema's text type and create_only key (api fa7e9e463)", () => {

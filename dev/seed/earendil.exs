@@ -1,5 +1,7 @@
 Mix.install([:req, :jason])
 Code.require_file("earendil_dashboard_import.exs", __DIR__)
+Code.require_file("earendil_orbits.exs", __DIR__)
+Code.require_file("earendil_simulator.exs", __DIR__)
 
 defmodule EarendilSeed do
   @moduledoc false
@@ -7,9 +9,9 @@ defmodule EarendilSeed do
   import EarendilRestClient, only: [request!: 3, request!: 4, request!: 5, sign_in: 3]
 
   @batch_size 100
-  @sim_admin_token "earendil-local-admin"
   @run_id "run-earendil-demo-v1"
-  @scenario_id "scenario-earendil-demo-v1"
+  # The simulator's loopback admin token (a public local fixture, allowlisted in .gitleaks.toml).
+  @sim_admin_token "earendil-local-admin"
   @provider_name "Earendil Demo Ground Network"
   @account_name "Earendil Demo Ground Network"
   @site_rows [
@@ -48,7 +50,7 @@ defmodule EarendilSeed do
     # second person (#745); until then the profile carries no catalog pin.
     {client, _revision_id} = phase("catalog import", fn -> seed_catalog(client, mission_id) end)
     site_rows = Enum.take(@site_rows, sites)
-    phase("simulator run", fn -> ensure_simulator(count, site_rows) end)
+    phase("simulator run", fn -> EarendilSimulator.ensure(count, site_rows, @sim_admin_token) end)
 
     {client, _provider_id} =
       phase("provider account and mission provider", fn ->
@@ -57,11 +59,11 @@ defmodule EarendilSeed do
 
     client = phase("dashboard source probe", fn -> probe_dashboard_source(client, mission_id) end)
     seed_fleet(client, mission_id, count, site_rows)
+    client = phase("orbits", fn -> EarendilOrbits.seed(client, mission_id) end)
     phase("dashboard import", fn -> seed_dashboards(client, organization_id, mission_id) end)
 
     IO.puts("Earendil: organization #{organization_id}, mission #{mission_id}")
 
-    IO.puts("  orbit elements wait on #732")
     IO.puts("  #{sites} station and profile changes await the fleet's independent review")
     IO.puts("  second-person invitations and approval wait on #745")
 
@@ -168,96 +170,6 @@ defmodule EarendilSeed do
       suffix = if name == "SET_MODE", do: @verifiers <> @mode_verifier, else: @verifiers
       String.replace(acc, line, line <> suffix, global: false)
     end)
-  end
-
-  defp ensure_simulator(count, site_rows) do
-    case sim_request(:get, "/admin/v1/runs/#{@run_id}") do
-      {200, %{"state" => "running"}} ->
-        :ok
-
-      {200, %{"state" => "paused"}} ->
-        {200, _run} = sim_request(:post, "/admin/v1/runs/#{@run_id}/resume", %{})
-        :ok
-
-      {404, _missing} ->
-        create_simulator_run(count, site_rows)
-
-      other ->
-        fail!("simulator run", other)
-    end
-  end
-
-  defp create_simulator_run(count, site_rows) do
-    case sim_request(:get, "/admin/v1/scenarios/#{@scenario_id}") do
-      {200, _scenario} ->
-        :ok
-
-      {404, _missing} ->
-        scenario = %{
-          id: @scenario_id,
-          name: "Earendil synthetic rehearsal",
-          spacecraft_count: count,
-          spacecraft_prefix: "EARENDIL",
-          ground_stations: site_maps(site_rows),
-          orbit_readiness: %{
-            status: "current",
-            source_kind: "synthetic",
-            ephemeris_ref: "earendil-demo-orbits-v1",
-            version: 1,
-            validity_seconds: 604_800
-          }
-        }
-
-        {201, _scenario} = sim_request(:post, "/admin/v1/scenarios", scenario)
-    end
-
-    {201, _run} =
-      sim_request(:post, "/admin/v1/scenarios/#{@scenario_id}/runs", %{
-        id: @run_id,
-        seed: 20_261_019,
-        speed: 1.0
-      })
-
-    :ok
-  end
-
-  defp site_maps(rows) do
-    ingress = System.fetch_env!("EARENDIL_INGRESS_BASE_PORT") |> String.to_integer()
-    uplink = System.fetch_env!("EARENDIL_UPLINK_BASE_PORT") |> String.to_integer()
-
-    rows
-    |> Enum.with_index()
-    |> Enum.map(fn {{slug, name, region, _code, latitude, longitude, antennas}, index} ->
-      %{
-        id: "earendil-#{slug}",
-        name: "#{name} (Demo)",
-        region: region,
-        latitude_deg: latitude,
-        longitude_deg: longitude,
-        antenna_count: antennas,
-        ingress_port: ingress + index,
-        uplink_port: uplink + index,
-        synthetic: true
-      }
-    end)
-  end
-
-  defp sim_request(method, path, body \\ nil) do
-    base = System.fetch_env!("EARENDIL_PROVIDER_URL")
-    headers = [{"authorization", "Bearer #{@sim_admin_token}"}]
-    options = [method: method, url: base <> path, headers: headers, retry: false]
-    options = if body, do: Keyword.put(options, :json, body), else: options
-
-    case Req.request(options) do
-      {:ok, response} when response.status in [200, 201, 404] ->
-        {response.status, Map.get(response.body, "data", response.body)}
-
-      {:ok, response} ->
-        fail!("simulator #{method} #{path}", {response.status, response.body})
-
-      {:error, reason} ->
-        fail!("simulator #{method} #{path}", Exception.message(reason))
-    end
   end
 
   defp ensure_provider(client, organization_id, mission_id) do
@@ -457,10 +369,12 @@ defmodule EarendilSeed do
         code: code,
         provider: @provider_name,
         region: region,
+        # The mission's own location (#957): pass prediction uses it, and it wins over the
+        # simulator's report, whose station ids differ from these.
+        latitude_deg: latitude,
+        longitude_deg: longitude,
         metadata: %{
           "provider_ground_station_ref" => "earendil-#{slug}",
-          "latitude_deg" => latitude,
-          "longitude_deg" => longitude,
           "antenna_count" => antennas,
           "synthetic" => true
         }

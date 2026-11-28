@@ -1,3 +1,4 @@
+import type { PointId } from "@/api/index.ts";
 import type { RouteLocationRaw } from "vue-router";
 import { formatClock, type OpState } from "@/ui";
 import { eventState, eventText, type EpisodeEvent } from "@/features/alarms/index.ts";
@@ -25,7 +26,7 @@ const LIFECYCLE = new Set<EpisodeEvent["kind"]>([
 
 /** The shown alarm's episode, for its own escalation lines (ux U71 A7). */
 export type LogEpisode = Readonly<{
-  pointId: string;
+  pointId: PointId;
   openedAt: string;
   clearedAt: string | null;
   events: readonly EpisodeEvent[];

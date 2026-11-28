@@ -1,5 +1,6 @@
 defmodule Cadence.IngressArchive.RetentionTest do
   use Cadence.DataCase, async: false
+  @moduletag :tmp_dir
 
   alias Cadence.IngressArchive.Retention, as: Rule
   alias Cadence.Persistence.Retention.Sweeper
@@ -7,15 +8,7 @@ defmodule Cadence.IngressArchive.RetentionTest do
 
   @now ~U[2026-11-26 12:00:00Z]
 
-  setup do
-    base =
-      Path.join(
-        System.tmp_dir!(),
-        "cadence_ingress_retention_#{System.unique_integer([:positive])}"
-      )
-
-    File.mkdir_p!(base)
-
+  setup %{tmp_dir: base} do
     saved =
       {Application.get_env(:cadence, :ingress_archive), Application.get_env(:cadence, :retention)}
 
@@ -23,7 +16,6 @@ defmodule Cadence.IngressArchive.RetentionTest do
     Application.put_env(:cadence, :retention, ingress_archive_days: 30)
 
     on_exit(fn ->
-      File.rm_rf!(base)
       {archive, retention} = saved
 
       if archive,

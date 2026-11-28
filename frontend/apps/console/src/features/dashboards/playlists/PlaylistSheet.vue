@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { DashboardId } from "@/api/index.ts";
 import type { MissionId } from "@/api/index.ts";
 import { computed, nextTick, ref } from "vue";
 import {
@@ -32,7 +33,7 @@ const name = ref("");
 const description = ref("");
 const dwell = ref("30");
 const wallboard = ref(false);
-const dashboards = ref<readonly { id: string; name: string; archived: boolean }[]>([]);
+const dashboards = ref<readonly { id: DashboardId; name: string; archived: boolean }[]>([]);
 /** The row's `updated_at` as read: a stale one is 409 version_conflict (§D24). */
 const expectedUpdatedAt = ref<string | null>(null);
 const conflict = ref<Playlist | null>(null);

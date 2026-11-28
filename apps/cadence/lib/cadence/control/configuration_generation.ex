@@ -38,13 +38,15 @@ defmodule Cadence.Control.ConfigurationGeneration do
   alias Cadence.Catalog
   alias Cadence.Catalog.ChangeSetSpacecraft
   alias Cadence.Catalog.FleetSnapshot
+  alias Cadence.Catalog.ModelRevisions
   alias Cadence.Commanding.{Cancellation, RequestActivity}
 
   alias Cadence.Control.{
     ConfigurationApids,
     ConfigurationSelections,
     ConfigurationSwitches,
-    ModelApprovalGate
+    ModelApprovalGate,
+    WithdrawnPins
   }
 
   alias Cadence.Governance
@@ -332,6 +334,32 @@ defmodule Cadence.Control.ConfigurationGeneration do
     else
       _no_active_activation -> %{}
     end
+  end
+
+  @doc """
+  E2 (#546; U109): the craft among `ids` whose active generation runs a revision whose approval
+  was withdrawn, by revision: `[%{revision_id, composition_id, catalog_revision_number,
+  spacecraft_ids, decision}]`. A change set touching them is refused at apply by the gate, so the
+  preview holds it, blocking (`CatalogCompatibility`).
+  """
+  @spec withdrawn_impact(String.t(), String.t(), [String.t()]) :: [map()]
+  def withdrawn_impact(organization_id, mission_id, ids) do
+    pins = WithdrawnPins.for_spacecraft(organization_id, mission_id, ids)
+    revisions = pins |> Map.values() |> Enum.map(& &1.revision_id) |> Enum.uniq()
+    catalogs = ModelRevisions.for_models(organization_id, mission_id, revisions)
+
+    pins
+    |> Enum.group_by(fn {_id, pin} -> pin.revision_id end)
+    |> Enum.map(fn {revision_id, [{_id, pin} | _] = rows} ->
+      %{
+        revision_id: revision_id,
+        composition_id: pin.composition_id,
+        catalog_revision_number: get_in(catalogs, [revision_id, :number]),
+        spacecraft_ids: rows |> Enum.map(&elem(&1, 0)) |> Enum.sort(),
+        decision: pin.decision
+      }
+    end)
+    |> Enum.sort_by(& &1.revision_id)
   end
 
   @doc """

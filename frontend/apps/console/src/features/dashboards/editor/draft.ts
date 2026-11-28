@@ -1,3 +1,4 @@
+import type { DashboardId } from "@/api/index.ts";
 import { decode, decoders as d } from "@/api";
 import { commandReader, type Command, type LayoutEdit } from "./contracts.ts";
 
@@ -61,13 +62,13 @@ const stored = d.object({
   saved_at: d.timestamp,
 });
 
-const key = (missionId: string, dashboardId: string) =>
+const key = (missionId: string, dashboardId: DashboardId) =>
   `cadence.console.dashboard-draft.${missionId}.${dashboardId}`;
 
 /** A stored draft, or null when there's none, it's unreadable, or storage is unavailable. */
 export function loadDraft(
   missionId: string,
-  dashboardId: string,
+  dashboardId: DashboardId,
 ): (Draft & { savedAt: string }) | null {
   try {
     const raw = localStorage.getItem(key(missionId, dashboardId));
@@ -84,7 +85,7 @@ export function loadDraft(
   }
 }
 
-export function storeDraft(missionId: string, dashboardId: string, draft: Draft): void {
+export function storeDraft(missionId: string, dashboardId: DashboardId, draft: Draft): void {
   try {
     if (draft.commands.length === 0) {
       localStorage.removeItem(key(missionId, dashboardId));
@@ -102,6 +103,6 @@ export function storeDraft(missionId: string, dashboardId: string, draft: Draft)
   }
 }
 
-export function clearDraft(missionId: string, dashboardId: string): void {
+export function clearDraft(missionId: string, dashboardId: DashboardId): void {
   storeDraft(missionId, dashboardId, { baseVersion: 0, commands: [] });
 }

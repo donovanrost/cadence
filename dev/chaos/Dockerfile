@@ -27,6 +27,7 @@ RUN case "$(uname -m)" in aarch64) target=arm64 ;; x86_64) target=x64 ;; *) exit
 # Invoke Vite directly: phoenix_vite.npm loads runtime.exs, which correctly
 # requires deployment secrets that must never be supplied to an image build.
 RUN mix tailwind cadence_web --minify && npm run build && node ../../frontend/tools/build-first-party-publication.mjs
+RUN corepack pnpm@11.22.0 --dir ../../frontend --filter @cadence/console run build
 
 FROM publication-build AS server-build
 RUN node ../../frontend/tools/production-publication-output-check.mjs && mix phx.digest && mix release --path /release
@@ -42,6 +43,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 WORKDIR /app
 COPY --from=server-build --chown=cadence:cadence /release ./
 COPY --chown=cadence:cadence dev/reflect_orbital /lab/reflect_orbital
+COPY --chown=cadence:cadence dev/seed/rest_client.exs dev/seed/route_changes.exs /lab/seed/
 COPY --chown=cadence:cadence dev/chaos/scripts /lab/scripts
 COPY --chown=cadence:cadence dev/catalogs/demo_spacecraft.yaml /lab/demo_spacecraft.yaml
 RUN for runtime in /app/releases/*/runtime.exs; do test -f "$runtime" && cat /lab/scripts/runtime.exs >> "$runtime"; done

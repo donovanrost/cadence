@@ -19,9 +19,10 @@ defmodule Cadence.Runtime.PathJournalInstanceIsolationTest do
   @alpha_archive_writer __MODULE__.AlphaArchiveWriter
   @bravo_archive_writer __MODULE__.BravoArchiveWriter
 
-  test "same-contact journals have distinct incarnations and remain isolated after one runtime stops" do
+  @tag :tmp_dir
+  test "same-contact journals have distinct incarnations and remain isolated after one runtime stops",
+       %{tmp_dir: test_root} do
     unique = System.unique_integer([:positive])
-    test_root = Path.join(System.tmp_dir!(), "cadence_path_journal_instances_#{unique}")
     mission_id = "shared-journal-mission-#{unique}"
     organization_id = "shared-journal-org-#{unique}"
     realized_contact_id = "shared-journal-contact"
@@ -50,7 +51,6 @@ defmodule Cadence.Runtime.PathJournalInstanceIsolationTest do
         provider_binding_id
       )
 
-    on_exit(fn -> File.rm_rf!(test_root) end)
     Cadence.DataCase.persist_mission_scope(organization_id, mission_id)
 
     alpha_root = start_runtime_root(alpha, organization_id)

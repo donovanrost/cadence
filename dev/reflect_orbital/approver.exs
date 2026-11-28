@@ -1,8 +1,8 @@
 defmodule Cadence.Dev.ReflectOrbital.Approver do
   @moduledoc """
-  A second, synthetic Reflect Orbital organization admin. It approves the seeded mission-model
-  revisions through the console's path (`MissionModelApprovals.compare/3`, then `approve/5`), so
-  authorization, the separation check and the replay rule all run.
+  A second, synthetic Reflect Orbital organization admin. It approves seeded mission-model
+  revisions and route change sets through the same functions as the Console, including
+  authorization and separation of duties.
 
   User decision 11-25 (#250, #727): dev seeds may approve, execute and activate, through public
   domain functions as seeded dev accounts. No bypass flags, no system actors, no row inserts.
@@ -11,6 +11,7 @@ defmodule Cadence.Dev.ReflectOrbital.Approver do
   """
 
   alias Cadence.Auth.Scope
+  alias Cadence.Control.Configuration
   alias Cadence.Dev.ReflectOrbital.Fixture, as: F
   alias Cadence.Reads.MissionModelApprovals
 
@@ -43,6 +44,23 @@ defmodule Cadence.Dev.ReflectOrbital.Approver do
 
       id
     end)
+  end
+
+  def approve_route_changes(:applied, %Scope{}, _mission_id), do: :applied
+
+  def approve_route_changes({:in_review, id, version}, %Scope{} = scope, mission_id) do
+    # TODO(#745, #752): review through a second admin's REST session from the dev invitation.
+    case Configuration.review(scope, mission_id, id, :approve, %{
+           comment: "Approve the seeded extra routes",
+           expected_version: version
+         }) do
+      {:ok, %{state: :applied}} ->
+        IO.puts("Mission #{mission_id}: the seeded second admin approved route change set #{id}.")
+        :applied
+
+      result ->
+        raise "Could not approve route change set #{id} for mission #{mission_id}: #{inspect(result)}"
+    end
   end
 
   defp ensure_member(inviter) do

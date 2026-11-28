@@ -99,6 +99,8 @@ export function schedulePasses(
         uplink_capable: true,
         source: { provider: "scale", provider_name: "Scale network", synthetic: false },
         max_elevation_deg: 10 + ((i + k) % 70),
+        elevation_source: "provider",
+        predicted_pass_id: null,
         plan: null,
         attention: null,
       });

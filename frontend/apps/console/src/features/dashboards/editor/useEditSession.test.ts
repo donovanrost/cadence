@@ -1,3 +1,4 @@
+import { dashboardId as dashIdReader } from "@/api/index.ts";
 import { effectScope, ref } from "vue";
 import { missionId as missionIdReader } from "@/api/index.ts";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
@@ -38,7 +39,7 @@ const settle = () => new Promise((r) => setTimeout(r, 0));
 
 function session() {
   const scope = effectScope();
-  const dashboardId = ref("dash-1");
+  const dashboardId = ref(dashIdReader("dash-1"));
   const s = scope.run(() =>
     useEditSession(
       ref(missionIdReader("m-1")),
@@ -114,7 +115,7 @@ describe("edit session previews", () => {
     const { s, dashboardId, stop } = session();
     s.enter();
     s.stage(removeSection(1));
-    dashboardId.value = "dash-2";
+    dashboardId.value = dashIdReader("dash-2");
     await settle();
     expect(s.editing.value).toBe(false);
     expect(s.staged.value).toBeNull();

@@ -24,7 +24,10 @@ defmodule Cadence.Persistence.Retention do
       (`Cadence.Protocol.RecordArchive.Quarantine.Retention`);
     * `stream_key_margin_days` (7): added to the replay horizon below;
     * `identity_state_settlement_allowance_hours` (24) and `identity_state_interval_ms` (1 h): the
-      identity-state rule (`Cadence.Telemetry.Storage.ObservationIdentityStates.Retention`).
+      identity-state rule (`Cadence.Telemetry.Storage.ObservationIdentityStates.Retention`);
+    * `background_job_days` (14): how long completed and failed background jobs remain after
+      completion (`Cadence.Jobs.Retention`); historical telemetry workflow jobs remain until
+      their corrections no longer read source jobs (#976).
 
   The observation retention is `:telemetry_observation_retention`'s `retention_days` (30), the
   same setting QuestDB's day-partition retention uses.
@@ -47,6 +50,7 @@ defmodule Cadence.Persistence.Retention do
     stream_key_margin_days: 7,
     quarantine_review_days: 7,
     quarantine_resolution_days: 30,
+    background_job_days: 14,
     identity_state_settlement_allowance_hours: 24,
     identity_state_interval_ms: 3_600_000
   ]
@@ -89,6 +93,11 @@ defmodule Cadence.Persistence.Retention do
   @spec quarantine_resolution_days(keyword()) :: pos_integer()
   def quarantine_resolution_days(settings \\ settings()),
     do: Keyword.fetch!(settings, :quarantine_resolution_days)
+
+  @doc "How long eligible completed and failed background jobs remain after completion."
+  @spec background_job_days(keyword()) :: pos_integer()
+  def background_job_days(settings \\ settings()),
+    do: Keyword.fetch!(settings, :background_job_days)
 
   @doc "How long the watermark event history is kept."
   @spec watermark_event_days(keyword()) :: pos_integer()

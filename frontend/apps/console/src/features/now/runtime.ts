@@ -1,5 +1,5 @@
 import type { RouteLocationRaw } from "vue-router";
-import { short, type Attention } from "./attention.ts";
+import { runtimeReasons, serverKey, short, type Attention } from "./attention.ts";
 import type { QueueItem } from "./queue.ts";
 import { NO_TELEMETRY, nextPassLine } from "./runtimePass.ts";
 
@@ -25,7 +25,9 @@ export function reasonWords(
   message: string | null | undefined,
 ): Readonly<{ text: string | null }> {
   const why = message ? `: ${noStop(message)}` : "";
-  switch (reason) {
+  // The field is shared (contact_start, provider_ephemeris word theirs): only U38's keys here.
+  const key = reason ? serverKey(reason) : null;
+  switch (runtimeReasons.find((r) => r === key) ?? null) {
     case "spec_mismatch":
       return { text: TELL_TEAM };
     case "reconcile_crashed":
@@ -34,20 +36,7 @@ export function reasonWords(
       return { text: `The runtime isn't running. ${KEEPS_TRYING}` };
     case "apply_failed":
       return { text: `Applying it failed${why}. ${KEEPS_TRYING}` };
-    // contact_start's reasons (U45) share the field; its own row words them.
-    case "listener_in_use":
-    // U81 §3: another mission listens on the port; contactStart.ts words it (claimedWords).
-    case "listen_endpoint_claimed":
-    case "transport_archived":
-    case "listener_unavailable":
-    case "connect_failed":
-    case "ingress_pipeline_failed":
-    case "uplink_session_failed":
-    case "no_runtime_spec":
-    case "unknown":
     case null:
-    case undefined:
-    default:
       return { text: null };
   }
 }

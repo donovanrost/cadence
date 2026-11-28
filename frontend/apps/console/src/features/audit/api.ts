@@ -1,3 +1,4 @@
+import type { OrganizationId } from "@/api/index.ts";
 import type { RouteLocationRaw } from "vue-router";
 import {
   actor,
@@ -107,7 +108,7 @@ export const auditReader: Reader<AuditPage> = (value, path = "") => {
 export type AuditEvent = Decoded<typeof event>;
 
 export type AuditQuery = Readonly<{
-  organizationId: string;
+  organizationId: OrganizationId;
   days: number;
   /** Known kinds and any source the server adds later (filter chips come from both). */
   kinds: readonly string[];

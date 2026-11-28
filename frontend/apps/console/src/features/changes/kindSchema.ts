@@ -177,6 +177,23 @@ export function visible(f: SchemaField, values: FormValues): boolean {
   );
 }
 
+/**
+ * The phone keypad for a typed field (#958): the decimal and numeric keypads have no minus key, so
+ * a field that may be negative (a min below 0, or none) keeps the full keyboard. An amount (integer
+ * micros) is never negative; a duration (integer seconds) is written with units ("48h").
+ */
+export function inputModeFor(f: SchemaField): "decimal" | "numeric" | undefined {
+  if (f.type !== "number" && f.type !== "integer") return undefined;
+  if (f.type === "integer" && formattedUnit(f) === "s") return undefined;
+  if (f.type === "integer" && formattedUnit(f) === "micros") return "decimal";
+  const min = f.range?.min;
+  if (min == null || min < 0) return undefined;
+  return f.type === "number" ? "decimal" : "numeric";
+}
+
+/** A minus typed or pasted as U+2212 (as the console shows it) reads like the hyphen-minus. */
+const asciiMinus = (t: string) => t.replace(/^\u2212/, "-");
+
 export type FieldCheck = Readonly<{ ok: true; value: unknown } | { ok: false; message: string }>;
 
 /** Text → typed value, with the schema's own required/range rules (the server re-validates). */
@@ -200,8 +217,10 @@ export function toValue(f: SchemaField, text: string): FieldCheck {
           return { ok: false, message: `${f.label}: write an amount like 1250.00.` };
         n = Math.round(Number(t) * 1_000_000);
       } else {
-        if (!/^-?\d+$/.test(t)) return { ok: false, message: `${f.label} must be a whole number.` };
-        n = Number(t);
+        const whole = asciiMinus(t);
+        if (!/^-?\d+$/.test(whole))
+          return { ok: false, message: `${f.label} must be a whole number.` };
+        n = Number(whole);
       }
       const bound = (b: number) =>
         formattedUnit(f) === "s"
@@ -295,7 +314,7 @@ export function diffEdits(schema: KindSchema, before: FormValues, after: FormVal
 /** Decimal fields; `ratio` is written as a percent ("95%" or "95") and stored as 0.95. */
 function toNumber(f: SchemaField, t: string): FieldCheck {
   const ratio = formattedUnit(f) === "ratio";
-  const text = ratio ? t.replace(/%$/, "").trim() : t;
+  const text = asciiMinus(ratio ? t.replace(/%$/, "").trim() : t);
   if (!/^-?\d+(\.\d+)?$/.test(text))
     return { ok: false, message: `${f.label}: write a number${ratio ? " like 95%" : ""}.` };
   const n = ratio ? Number(text) / 100 : Number(text);

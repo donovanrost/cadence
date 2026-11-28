@@ -1,5 +1,6 @@
 defmodule CadenceSimulator.CLITest do
   use ExUnit.Case, async: true
+  @moduletag :tmp_dir
 
   alias CadenceSimulator.CLI
   alias CadenceSimulator.Providers.{DatabaseDynamics, ScenarioProvider}
@@ -112,9 +113,9 @@ defmodule CadenceSimulator.CLITest do
     refute opts[:farm_retransmission_allowed]
   end
 
-  test "parse_args loads telemetry runtime options from yaml config" do
+  test "parse_args loads telemetry runtime options from yaml config", %{tmp_dir: tmp_dir} do
     config_path =
-      write_config!("""
+      write_config!(tmp_dir, """
       simulator:
         runtime_mode: telemetry
         target: SIM-CONFIG
@@ -174,9 +175,9 @@ defmodule CadenceSimulator.CLITest do
     assert message =~ "--tm-worker-fast-path"
   end
 
-  test "parse_args rejects removed tm worker fast path config key" do
+  test "parse_args rejects removed tm worker fast path config key", %{tmp_dir: tmp_dir} do
     config_path =
-      write_config!("""
+      write_config!(tmp_dir, """
       simulator:
         runtime_mode: telemetry
         definitions: priv/databases/demo_spacecraft.yaml
@@ -187,9 +188,9 @@ defmodule CadenceSimulator.CLITest do
     assert message =~ "tm_worker_fast_path is no longer supported"
   end
 
-  test "parse_args loads cop1_loopback runtime options from yaml config" do
+  test "parse_args loads cop1_loopback runtime options from yaml config", %{tmp_dir: tmp_dir} do
     config_path =
-      write_config!("""
+      write_config!(tmp_dir, """
       mode: cop1_loopback
       segment_header_flag: 1
       fecf: true
@@ -245,9 +246,9 @@ defmodule CadenceSimulator.CLITest do
            ]
   end
 
-  test "parse_args lets cli values override telemetry yaml config" do
+  test "parse_args lets cli values override telemetry yaml config", %{tmp_dir: tmp_dir} do
     config_path =
-      write_config!("""
+      write_config!(tmp_dir, """
       runtime_mode: telemetry
       definitions: priv/databases/demo_spacecraft.yaml
       rate: 5.0
@@ -388,15 +389,9 @@ defmodule CadenceSimulator.CLITest do
              ~s|{:ccsds, path: "../../packages/ccsds"}|
   end
 
-  defp write_config!(yaml_content) do
-    path =
-      Path.join(
-        System.tmp_dir!(),
-        "cadence_simulator_cli_#{System.unique_integer([:positive])}.yaml"
-      )
-
+  defp write_config!(tmp_dir, yaml_content) do
+    path = Path.join(tmp_dir, "config.yaml")
     File.write!(path, yaml_content)
-    ExUnit.Callbacks.on_exit(fn -> File.rm(path) end)
     path
   end
 end

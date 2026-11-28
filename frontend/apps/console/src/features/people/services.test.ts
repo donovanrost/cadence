@@ -1,3 +1,4 @@
+import { organizationId as orgIdReader } from "@/api/index.ts";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createServiceIdentity, serviceFailure } from "./services.ts";
 
@@ -25,8 +26,12 @@ describe("createServiceIdentity (O6)", () => {
         ),
       );
     });
-    await createServiceIdentity("org", { name: "ingest", scope: "mission_admin", missionId: "m1" });
-    await createServiceIdentity("org", {
+    await createServiceIdentity(orgIdReader("org"), {
+      name: "ingest",
+      scope: "mission_admin",
+      missionId: "m1",
+    });
+    await createServiceIdentity(orgIdReader("org"), {
       name: "all",
       scope: "organization_admin",
       missionId: "m1",

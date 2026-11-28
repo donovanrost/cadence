@@ -8,6 +8,7 @@ defmodule CadenceWeb.Console.ConfigJSON do
 
   import Plug.Conn
 
+  alias Cadence.Reads.ConfigLabels
   alias Cadence.Reads.ModelApplyRefusals
   alias Cadence.Reads.TelemetryApplyRefusals
   alias CadenceWeb.Console.{Problem, RestageWords}
@@ -238,9 +239,18 @@ defmodule CadenceWeb.Console.ConfigJSON do
   # #262 (ux U79, amended in #374): an approve refused by a blocking hold that appeared after the
   # submit, in approve's own words; the preview stays the details, so the checks show the hold.
   def error(conn, {:holds_blocking, preview}) when is_map(preview) do
+    # Labelled like every preview, so a fleet item says its count and a few names, not every id.
+    scope = conn.assigns[:current_scope]
+    mission = conn.assigns[:current_mission]
+
+    shown =
+      if scope && mission,
+        do: ConfigLabels.preview(scope.organization_id, mission.mission_id, preview),
+        else: preview
+
     if approving?(conn),
-      do: respond_raw(conn, 409, "holds_blocking", @approve_holds_blocking, encode(preview)),
-      else: respond(conn, :holds_blocking, encode(preview))
+      do: respond_raw(conn, 409, "holds_blocking", @approve_holds_blocking, encode(shown)),
+      else: respond(conn, :holds_blocking, encode(shown))
   end
 
   # #262: never the cause (a database error's text) on the wire; Submission logs it.

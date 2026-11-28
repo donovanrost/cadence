@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import type { OrganizationId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { failureOutcome } from "@/features/changes/index.ts";
 import { ApButton, ApCallout, ApField, ApSelect, ApSheet } from "@/ui";
 import { inviteInto } from "./api.ts";
 
 /** `Invite into Acme Space` (Admin.md): the cross-org invite; the org's People sees it too. */
-const props = defineProps<{ orgId: string; orgName: string }>();
+const props = defineProps<{ orgId: OrganizationId; orgName: string }>();
 const emit = defineEmits<{ changed: [note: { tone: "nominal" | "caution"; text: string }] }>();
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
 const email = ref("");

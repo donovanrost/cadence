@@ -162,6 +162,35 @@ defmodule Cadence.Runtime.PreparedSendReconciliationTest do
     assert {:ok, _} = resolve(c, evidence(c, "unknown"))
   end
 
+  test "review basis orders text identities bytewise on a linguistic database", c do
+    base = Ids.new("send")
+    ids = [base <> "A", base <> "_a"]
+    Enum.each(ids, &insert_send(c, &1))
+
+    if System.get_env("CI") in ["1", "true"] do
+      [[collation]] =
+        Repo.query!("SELECT datcollate FROM pg_database WHERE datname = current_database()").rows
+
+      assert collation == "en_US.utf8"
+
+      locale_order =
+        Repo.query!(
+          "SELECT value FROM (VALUES ($1::text), ($2::text)) AS sample(value) ORDER BY value",
+          ids
+        ).rows
+        |> List.flatten()
+
+      refute locale_order == Enum.sort(ids)
+    end
+
+    assert {:ok, review} =
+             Commanding.review_prepared_send(c.scope, c.mission, c.row.action_request_id)
+
+    basis_ids = Enum.map(review.basis["sends"], & &1["id"])
+    assert basis_ids == Enum.sort(basis_ids)
+    assert review.basis_sha256 == ContentHash.term_sha256(review.basis)
+  end
+
   test "scoped evidence-store references verify their content hash", c do
     {:ok, stored} =
       ProviderEvidenceStore.persist(c.org, "account", %{document: %{"receipt" => "sanitized"}})
@@ -261,9 +290,9 @@ defmodule Cadence.Runtime.PreparedSendReconciliationTest do
     }
   end
 
-  defp insert_send(c) do
+  defp insert_send(c, id \\ nil) do
     record = %TransportActionRequest{
-      action_request_id: Ids.new("send"),
+      action_request_id: id || Ids.new("send"),
       mission_id: c.mission,
       realized_contact_id: "contact",
       path_id: "path",

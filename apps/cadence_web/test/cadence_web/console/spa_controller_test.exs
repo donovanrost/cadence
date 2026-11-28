@@ -1,6 +1,7 @@
 defmodule CadenceWeb.Console.SPAControllerTest do
   # Mutates the :console application env, so it cannot run concurrently.
   use CadenceWeb.ConnCase, async: false
+  @moduletag :tmp_dir
 
   alias CadenceWeb.Console.Shell
   alias CadenceWeb.TestFixtures
@@ -11,17 +12,13 @@ defmodule CadenceWeb.Console.SPAControllerTest do
   <body><div id="app"></div></body></html>
   """
 
-  setup do
+  setup %{tmp_dir: dir} do
     previous = Application.get_env(:cadence_web, :console)
-    dir = Path.join(System.tmp_dir!(), "console-shell-#{System.unique_integer([:positive])}")
-    File.mkdir_p!(dir)
     index_path = Path.join(dir, "index.html")
     File.write!(index_path, @index)
     Application.put_env(:cadence_web, :console, index_path: index_path)
 
     on_exit(fn ->
-      File.rm_rf!(dir)
-
       if previous,
         do: Application.put_env(:cadence_web, :console, previous),
         else: Application.delete_env(:cadence_web, :console)

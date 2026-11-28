@@ -3,6 +3,8 @@ import type { RemoteState } from "@/api";
 import { ApButton, ApEmptyState, ApRemote, plural } from "@/ui";
 import { distinctWindows, stationCode, type Alternative, type Alternatives } from "./api.ts";
 import { gapEffect } from "./focus-day.ts";
+import { geometryLine } from "./geometry.ts";
+import NoPredictedPassNote from "./NoPredictedPassNote.vue";
 
 /**
  * Other windows for the focused spacecraft (S4) with their effect from the server's evaluator.
@@ -38,6 +40,10 @@ const when = (a: Alternative) => `${a.starts_at.slice(11, 16)}–${a.ends_at.sli
               <span class="block font-mono text-sm text-readout"
                 >{{ when(alt) }} · {{ stationCode(alt.station) }}</span
               >
+              <span v-if="geometryLine(alt)" class="block font-mono text-sm text-text-3">{{
+                geometryLine(alt)
+              }}</span>
+              <NoPredictedPassNote :geometry="alt" />
               <span
                 v-if="gapEffect(value.longest_gap?.seconds, alt.effect.longest_gap_after_seconds)"
                 class="block font-mono text-sm text-text-2"

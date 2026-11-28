@@ -58,11 +58,12 @@ import { contactTrail } from "./trail.ts";
 import { offPlanLine } from "./singleBookings.ts";
 import { useCommandAccess } from "@/features/commands/index.ts";
 import { stationLabel } from "./gantt.ts";
+import { elevationFact } from "@/features/scheduling/geometry.ts";
 
 /**
  * D2 · Selected pass (Contacts.md): spacecraft + state, station and countdown, window, duration,
- * source, the contact's state trail and the requests queued on it. Max elevation, sky plot and
- * downlink estimates are omitted (no propagation, DECISIONS #4); Swap station is out (#68).
+ * source, the contact's state trail and the requests queued on it. Max elevation is the server's
+ * (#892); sky plot and downlink estimates aren't built; Swap station is out (#68).
  */
 const props = defineProps<{
   missionId: MissionId;
@@ -161,9 +162,7 @@ const facts = computed(() => {
       value: formatDuration((to.getTime() - from.getTime()) / 1000),
       mono: true,
     },
-    ...(p.max_elevation_deg === null
-      ? []
-      : [{ key: "el", label: "Max el", value: `${p.max_elevation_deg}°`, mono: true }]),
+    ...elevationFact(p),
     ...(p.uplink_capable === null
       ? []
       : [

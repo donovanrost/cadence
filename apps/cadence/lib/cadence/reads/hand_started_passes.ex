@@ -110,6 +110,8 @@ defmodule Cadence.Reads.HandStartedPasses do
       uplink_capable: nil,
       source: nil,
       max_elevation_deg: nil,
+      elevation_source: nil,
+      predicted_pass_id: nil,
       cost: nil,
       plan: nil,
       requirement: nil,

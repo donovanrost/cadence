@@ -12,6 +12,7 @@ import { formatHourMinute, formatShort } from "@/ui";
 import { reasonWords } from "@/features/scheduling/booking-state.ts";
 import { passReader } from "./api.ts";
 import { listenerOverlapKey } from "./listenerOverlap.ts";
+import { offerGeometry } from "@/features/scheduling/geometry.ts";
 
 /**
  * §11 L15 single bookings outside a plan (proposal plans/single-bookings.md; ux Contacts.md § Book a
@@ -42,6 +43,8 @@ const offerReader = d.object({
   cost: costReader,
   /** U58 (b), #361: booking it would overlap another pass on a one-connection listener (allowed). */
   listener_overlap: listenerOverlapKey,
+  /** #892: predicted elevation and TCA, and whether no predicted pass backs the window. */
+  ...offerGeometry,
   overlaps: d.nullable(
     d.object({
       reservation_id: d.token,
@@ -54,6 +57,21 @@ const offerReader = d.object({
   ),
 });
 export type Offer = Decoded<typeof offerReader>;
+
+/**
+ * A key per offer that survives a re-search (#970 review, a11y A5): tokens are signed afresh each
+ * search, so rows keyed by them remount and focus drops to <body>. The window's station, provider,
+ * start and end name it, with an ordinal for the same window offered on more than one route.
+ */
+export function offerKeys(offers: readonly Offer[]): readonly string[] {
+  const seen = new Map<string, number>();
+  return offers.map((o) => {
+    const window = [o.station.ref, o.provider.id, o.starts_at, o.ends_at].join("|");
+    const n = seen.get(window) ?? 0;
+    seen.set(window, n + 1);
+    return `${window}|${n}`;
+  });
+}
 
 export const searchReader = d.object({
   spacecraft: spacecraftRef,

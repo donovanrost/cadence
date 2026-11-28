@@ -6,6 +6,7 @@ export {
   outcomeUnknown,
   request,
   requestPage,
+  requestPageMeta,
   setCsrfToken,
   type ApiError,
   type ApiResult,
@@ -82,7 +83,13 @@ export {
 } from "./decision-record.ts";
 /** Branded resource ids (typing §12C): minted only by these decoders and param readers. */
 export {
+  dashboardId,
+  dashboardIdParam,
+  dashboardIdSegment,
   missionId,
+  organizationId,
+  pointId,
+  pointIdParam,
   scid,
   scidParam,
   scidText,
@@ -90,7 +97,10 @@ export {
   spacecraftIdParam,
   stationId,
   stationIdParam,
+  type DashboardId,
   type MissionId,
+  type OrganizationId,
+  type PointId,
   type Scid,
   type SpacecraftId,
   type StationId,

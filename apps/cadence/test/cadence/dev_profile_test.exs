@@ -24,9 +24,12 @@ defmodule Cadence.DevProfileTest do
     assert profiler.mission_id == "mission-alpha"
   end
 
-  test "loads an explicit profile path and falls back to simulator cadence values" do
+  @tag :tmp_dir
+  test "loads an explicit profile path and falls back to simulator cadence values", %{
+    tmp_dir: tmp_dir
+  } do
     path =
-      write_profile!("""
+      write_profile!(tmp_dir, """
       simulator:
         cadence:
           url: http://127.0.0.1:4101
@@ -59,13 +62,8 @@ defmodule Cadence.DevProfileTest do
     assert message =~ "dev/profiles/definitely_missing_profile.yaml"
   end
 
-  defp write_profile!(content) do
-    path =
-      Path.join(
-        System.tmp_dir!(),
-        "cadence-dev-profile-#{System.unique_integer([:positive])}.yaml"
-      )
-
+  defp write_profile!(tmp_dir, content) do
+    path = Path.join(tmp_dir, "profile.yaml")
     File.write!(path, content)
     path
   end

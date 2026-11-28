@@ -1,5 +1,6 @@
 defmodule Cadence.IngressArchive.FileSystemTest do
   use Cadence.ProcessDataCase, async: false
+  @moduletag :tmp_dir
 
   alias Cadence.Ingress.RawEvidence
   alias Cadence.IngressArchive
@@ -9,13 +10,7 @@ defmodule Cadence.IngressArchive.FileSystemTest do
   alias Cadence.Replay.Scope
   alias Cadence.Repo
 
-  setup do
-    base_path =
-      Path.join(
-        System.tmp_dir!(),
-        "cadence_ingress_archive_#{System.unique_integer([:positive])}"
-      )
-
+  setup %{tmp_dir: base_path} do
     archive_policy =
       IngressArchive.policy(
         module: FileSystem,
@@ -25,8 +20,6 @@ defmodule Cadence.IngressArchive.FileSystemTest do
       )
 
     start_supervised!(IngressArchive.child_spec(archive_policy))
-
-    on_exit(fn -> File.rm_rf!(base_path) end)
 
     organization_id = "org-archive-" <> Integer.to_string(System.unique_integer([:positive]))
     mission_id = "mission-archive-" <> Integer.to_string(System.unique_integer([:positive]))

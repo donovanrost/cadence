@@ -1,9 +1,10 @@
+import { organizationId as orgIdReader } from "@/api/index.ts";
 import { describe, expect, it } from "vite-plus/test";
 import type { RuntimeRow } from "./api.ts";
 import { createdText, runtimeText, slugOf, worstFirst } from "./present.ts";
 
 const row = (name: string, runtime: RuntimeRow["runtime"]): RuntimeRow => ({
-  organization: { id: "o", name: "Acme", slug: "acme" },
+  organization: { id: orgIdReader("o"), name: "Acme", slug: "acme" },
   mission: { id: name, name, slug: name },
   runtime,
   telemetry_last_received_at: null,

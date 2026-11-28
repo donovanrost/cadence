@@ -54,7 +54,19 @@ defmodule CadenceWeb.Console.SingleBookingAPITest do
     found = json_response(post_json(c, "/single-bookings/search", search), 200)["data"]
 
     assert %{
-             "offers" => [%{"token" => token, "station" => %{"ref" => _}, "overlaps" => nil}],
+             "offers" => [
+               %{
+                 "token" => token,
+                 "station" => %{"ref" => _},
+                 "overlaps" => nil,
+                 # #892: no prediction has run for this mission, so prediction can't say.
+                 "max_elevation_deg" => nil,
+                 "elevation_source" => nil,
+                 "predicted_pass_id" => nil,
+                 "tca" => nil,
+                 "no_predicted_pass" => nil
+               }
+             ],
              "not_ready" => _
            } =
              found

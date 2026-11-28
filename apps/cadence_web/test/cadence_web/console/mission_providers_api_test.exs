@@ -8,6 +8,7 @@ defmodule CadenceWeb.Console.MissionProvidersAPITest do
   alias Cadence.Control.Providers, as: ControlProviders
   alias Cadence.GroundNetworks.{ProviderAccountGrants, ProviderAccounts, ProviderCredentials}
   alias Cadence.GroundNetworks.ProviderError
+  alias Cadence.Platform.ScopedReadUpdates
   alias Cadence.TestSupport.FakeProviderClient
   alias CadenceWeb.TestFixtures
 
@@ -62,6 +63,7 @@ defmodule CadenceWeb.Console.MissionProvidersAPITest do
       member: member,
       scope: scope,
       grant: grant,
+      mission_id: mission.mission_id,
       base: "/api/v1/missions/#{mission.mission_id}/providers"
     }
   end
@@ -114,8 +116,22 @@ defmodule CadenceWeb.Console.MissionProvidersAPITest do
              "version" => 1,
              "policy_mode" => "approval_required",
              "grant" => %{"state" => "active", "version" => 1},
-             "health" => %{"validate" => %{"status" => nil}, "sync" => %{"status" => nil}}
+             "health" => %{"validate" => %{"status" => nil}, "sync" => %{"status" => nil}},
+             # #968: no sync yet, so no declared orbit source, and nothing uploaded.
+             "ephemeris" => %{
+               "orbit_source" => nil,
+               "uploaded" => 0,
+               "failed" => 0,
+               "pending" => 0,
+               "not_ready" => 0,
+               "lookup" => 0,
+               "norad_id_missing" => 0
+             }
            } = provider
+
+    # The read sends exactly the documented ephemeris keys (setup.md), not_ready included.
+    assert provider["ephemeris"] |> Map.keys() |> Enum.sort() ==
+             ~w(failed lookup norad_id_missing not_ready orbit_source pending uploaded)
 
     assert %{"providers" => [%{"id" => id}], "permissions" => ["providers.manage"]} =
              c |> admin() |> get(c.base) |> json_response(200) |> Map.fetch!("data")
@@ -251,5 +267,29 @@ defmodule CadenceWeb.Console.MissionProvidersAPITest do
 
     assert %{"providers" => []} =
              c |> admin() |> get(c.base) |> json_response(200) |> Map.fetch!("data")
+  end
+
+  test "create, validate, sync and archive publish providers; archive publishes attention", c do
+    ScopedReadUpdates.subscribe(:providers_changed, c.scope.organization_id, c.mission_id)
+    path = c.base <> "/" <> create!(c)["id"]
+    assert_receive {:providers_changed, _org, _mission}
+
+    for action <- ["/validate", "/sync"] do
+      c |> admin() |> post(path <> action) |> json_response(200)
+      assert_receive {:providers_changed, _org, _mission}
+    end
+
+    set_call_opts(validate_response: {:error, ProviderError.unavailable(:econnrefused)})
+    c |> admin() |> post(path <> "/validate") |> json_response(200)
+    assert_receive {:providers_changed, _org, _mission}
+
+    ScopedReadUpdates.subscribe(:attention_changed, c.scope.organization_id, c.mission_id)
+    c |> admin() |> post(path <> "/archive", %{"reason" => "Done"}) |> json_response(200)
+    assert_receive {:providers_changed, _org, _mission}
+    # The archived provider leaves the provider_ephemeris findings too.
+    assert_receive {:attention_changed, _org, _mission}
+
+    c |> admin() |> post(path <> "/archive", %{}) |> json_response(422)
+    refute_receive {:providers_changed, _org, _mission}, 50
   end
 end

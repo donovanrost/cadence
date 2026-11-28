@@ -1,7 +1,7 @@
+import { missionId as missionIdOf } from "@/api/index.ts";
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api";
-import type { MissionId } from "@/api/index.ts";
 import { reviewBlocked } from "./review-block.ts";
 import ReviewPanel from "./ReviewPanel.vue";
 import { changeSet, type ConfigState } from "./shapes.ts";
@@ -67,7 +67,7 @@ describe("#320: the review panel", () => {
   const panel = (extra: Record<string, unknown>) =>
     mount(ReviewPanel, {
       props: {
-        missionId: "m1" as MissionId,
+        missionId: missionIdOf("m1"),
         config,
         changeSet: set(extra),
         preview: { status: "loading" } as const,

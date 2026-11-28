@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { computed, nextTick, ref, watch } from "vue";
 import { floorTo } from "./coarseClock.ts";
-import { decode } from "@/api/index.ts";
+import { decode, pointId as pointIdReader } from "@/api/index.ts";
 import { fleetReader } from "./api.ts";
 import { fleetOf, spacecraftRow } from "./fixtures.ts";
 import { fitCell, fitMatrix, layoutMatrix, splitRows } from "./matrix.ts";
@@ -46,7 +46,7 @@ describe("fleetReader", () => {
 
   it("keeps text values as text", () => {
     const point = {
-      point_id: "HK.mode",
+      point_id: pointIdReader("HK.mode"),
       point_name: "MODE",
       value: "SAFE",
       limit_state: "critical",

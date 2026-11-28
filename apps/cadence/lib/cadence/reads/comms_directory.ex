@@ -19,7 +19,13 @@ defmodule Cadence.Reads.CommsDirectory do
 
   alias Cadence.Auth.Scope
   alias Cadence.Configuration.Kinds
-  alias Cadence.GroundNetworks.{ProviderAccountGrants, ProviderAccounts}
+
+  alias Cadence.GroundNetworks.{
+    EphemerisStates,
+    ProviderAccountGrants,
+    ProviderAccounts
+  }
+
   alias Cadence.Reads.Comms.ProviderHealth
   alias Cadence.Reads.OperationalState
 
@@ -49,10 +55,20 @@ defmodule Cadence.Reads.CommsDirectory do
         lifecycle_state: station.lifecycle_state,
         transport_count: nil,
         routing_rule_count: nil,
-        health: nil
+        health: nil,
+        # #890: the location pass prediction uses (the mission's, else the provider's), the
+        # provider's own report, and the elevation mask.
+        location: GroundStation.effective_location(station),
+        provider_location: provider_location(station.provider_location),
+        elevation_mask_deg: station.elevation_mask_deg
       }
     end)
   end
+
+  defp provider_location(nil), do: nil
+
+  defp provider_location(location),
+    do: Map.take(location, [:latitude_deg, :longitude_deg, :height_m, :reported_at])
 
   @doc """
   The mission's ground-network providers with their account and station count.
@@ -70,10 +86,11 @@ defmodule Cadence.Reads.CommsDirectory do
       |> Enum.frequencies_by(& &1.provider)
 
     grants = grant_states(organization_id, mission_id)
+    ephemeris = EphemerisStates.buckets(organization_id, mission_id)
 
     organization_id
     |> Cadence.GroundNetworks.list_providers(mission_id)
-    |> Enum.map(&provider_row(scope, &1, station_counts, grants))
+    |> Enum.map(&provider_row(scope, &1, station_counts, grants, ephemeris))
   end
 
   @doc "One provider's row, as `providers/2` lists it (L12 writes answer with it)."
@@ -88,11 +105,12 @@ defmodule Cadence.Reads.CommsDirectory do
       scope,
       provider,
       station_counts,
-      grant_states(scope.organization_id, provider.mission_id)
+      grant_states(scope.organization_id, provider.mission_id),
+      EphemerisStates.buckets(scope.organization_id, provider.mission_id)
     )
   end
 
-  defp provider_row(scope, provider, station_counts, grants) do
+  defp provider_row(scope, provider, station_counts, grants, ephemeris) do
     %{
       id: provider.provider_id,
       name: provider.display_name,
@@ -120,7 +138,27 @@ defmodule Cadence.Reads.CommsDirectory do
         last_synced_at: provider.last_synced_at
       },
       health: ProviderHealth.of(provider),
-      station_count: Map.get(station_counts, provider.display_name, 0)
+      station_count: Map.get(station_counts, provider.display_name, 0),
+      ephemeris: ephemeris(provider, Map.get(ephemeris, provider.provider_id, %{}))
+    }
+  end
+
+  # How the provider gets orbits (#968) and its bound spacecraft with a current element set, by
+  # bucket (`EphemerisStates.buckets/2`). Counts, never rows (500 floor). `orbit_source` is what
+  # the provider declared: nil when it declared nothing, though it then behaves as lookup.
+  @orbit_sources ~w(accepts_ephemeris_upload looks_up_by_norad_id)
+
+  defp ephemeris(provider, buckets) do
+    declared = get_in(provider.capabilities_document || %{}, ["orbit", "source"])
+
+    %{
+      orbit_source: if(declared in @orbit_sources, do: declared),
+      uploaded: Map.get(buckets, "uploaded", 0),
+      failed: Map.get(buckets, "failed", 0),
+      pending: Map.get(buckets, "pending", 0),
+      not_ready: Map.get(buckets, "not_ready", 0),
+      lookup: Map.get(buckets, "lookup", 0),
+      norad_id_missing: Map.get(buckets, "norad_id_missing", 0)
     }
   end
 

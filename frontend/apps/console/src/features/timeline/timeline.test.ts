@@ -1,7 +1,7 @@
+import { missionId as missionIdOf } from "@/api/index.ts";
 import { effectScope, nextTick, ref } from "vue";
 import { useHeldNewest } from "./useHeldNewest.ts";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import type { MissionId } from "@/api/index.ts";
 import { scid as scidReader, spacecraftId, decode } from "@/api/index.ts";
 import { eventsReader, fetchEventPage, type MissionEvent } from "./api.ts";
 import {
@@ -291,7 +291,7 @@ describe("a full events read is never cut silently (parity D2, now A9d pages)", 
     );
     vi.stubGlobal("fetch", fetch);
     const query = { from: new Date("2026-11-15T00:00:00Z"), to: new Date("2026-11-16T00:00:00Z") };
-    const r = await fetchEventPage("m1" as MissionId, query, "c1");
+    const r = await fetchEventPage(missionIdOf("m1"), query, "c1");
     const input = fetch.mock.calls[0]?.[0];
     const url = input instanceof Request ? input.url : (input?.toString() ?? "");
     expect(url).toContain("cursor=c1");

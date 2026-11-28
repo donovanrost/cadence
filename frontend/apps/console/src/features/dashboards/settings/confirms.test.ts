@@ -1,3 +1,4 @@
+import { dashboardId as dashIdReader } from "@/api/index.ts";
 import { flushPromises, mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { missionId } from "@/api";
@@ -19,7 +20,7 @@ vi.mock("vue-router", async (original) => ({
 afterEach(() => {
   document.body.innerHTML = "";
 });
-const key = { missionId: missionId("m1"), dashboardId: "d1" };
+const key = { missionId: missionId("m1"), dashboardId: dashIdReader("d1") };
 const button = (name: string) =>
   Array.from(document.querySelectorAll("button")).find((b) => b.textContent?.trim() === name);
 

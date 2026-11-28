@@ -9,7 +9,8 @@ defmodule Cadence.Control.Providers do
   alias Cadence.GroundNetworks.{
     CredentialResolver,
     MissionProvider,
-    ProviderAccountGrants
+    ProviderAccountGrants,
+    ProviderCapabilities
   }
 
   alias Cadence.Management.Providers
@@ -70,6 +71,23 @@ defmodule Cadence.Control.Providers do
        %{
          capabilities: context.capabilities,
          request: &client.search_opportunities(context, &1, call_opts)
+       }}
+    end
+  end
+
+  @doc """
+  How this provider version gets orbits (#968), and a request that uploads one spacecraft's
+  ephemeris to it: `request.(provider_spacecraft_ref, ephemeris)`.
+  """
+  @spec prepare_ephemeris_upload(MissionProvider.t(), keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def prepare_ephemeris_upload(%MissionProvider{} = provider, opts) do
+    with {:ok, context, call_opts} <- provider_context(provider, opts),
+         {:ok, client} <- resolve_client(context, opts) do
+      {:ok,
+       %{
+         orbit_source: ProviderCapabilities.orbit_source(context.capabilities),
+         request: &client.upload_ephemeris(context, &1, &2, call_opts)
        }}
     end
   end

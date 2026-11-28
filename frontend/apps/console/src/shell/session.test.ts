@@ -1,9 +1,10 @@
+import { organizationId as orgIdReader } from "@/api/index.ts";
 import { describe, expect, it } from "vite-plus/test";
 import type { Session, SessionOrganization } from "@/api/session.ts";
 import { canAdministerOrganization } from "./session.ts";
 
 const org = (id: string, capabilities: string[]): SessionOrganization => ({
-  id,
+  id: orgIdReader(id),
   slug: id,
   name: id,
   role: "member",
@@ -13,7 +14,7 @@ const org = (id: string, capabilities: string[]): SessionOrganization => ({
 
 const session = (current: readonly string[]): Session => ({
   user: { id: "u", email: "u@example.com", display_name: null },
-  current_organization_id: "a",
+  current_organization_id: orgIdReader("a"),
   admin_mode: false,
   platform_admin_eligible: false,
   admin_mode_expires_at: null,

@@ -10,8 +10,9 @@ defmodule CadenceSimulator.IngressBenchmark.CLITest do
   39 25 0:35 / /tmp rw - tmpfs tmpfs rw,size=16m
   """
 
-  test "preflight command emits a machine-readable passing report" do
-    manifest_path = write_manifest!()
+  @tag :tmp_dir
+  test "preflight command emits a machine-readable passing report", %{tmp_dir: tmp_dir} do
+    manifest_path = write_manifest!(tmp_dir)
 
     assert {:ok, output} =
              CLI.run(
@@ -52,15 +53,9 @@ defmodule CadenceSimulator.IngressBenchmark.CLITest do
     assert opts[:send_timeout_ms] == 5_000
   end
 
-  defp write_manifest! do
-    path =
-      Path.join(
-        System.tmp_dir!(),
-        "cadence_ingress_manifest_#{System.unique_integer([:positive])}.yaml"
-      )
-
+  defp write_manifest!(tmp_dir) do
+    path = Path.join(tmp_dir, "manifest.yaml")
     File.write!(path, manifest_yaml())
-    on_exit(fn -> File.rm(path) end)
     path
   end
 
