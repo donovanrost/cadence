@@ -24,6 +24,8 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
   @config_atom_keys %{
     "direction" => :direction,
     "direction_capability" => :direction_capability,
+    "delivery_auth" => :delivery_auth,
+    "delivery_credential_ref" => :delivery_credential_ref,
     "delivery_kind" => :delivery_kind,
     "diagnostics" => :diagnostics,
     "egress" => :egress,
@@ -38,6 +40,7 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
     "host" => :host,
     "ingress_metadata" => :ingress_metadata,
     "ingress_protocol_family" => :ingress_protocol_family,
+    "listener" => :listener,
     "mode" => :mode,
     "policy" => :policy,
     "port" => :port,
@@ -190,7 +193,7 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
            direction_capability(value(config, "direction_capability", value(config, "direction"))),
          {:ok, host} <- required_text(value(config, "host"), "Host is required."),
          {:ok, port} <- port(value(config, "port")),
-         {:ok, allowlist} <- allowlist(value(config, "expected_peer_addresses"), mode),
+         {:ok, allowlist} <- listener_allowlist(config, mode),
          {:ok, framing_mode} <- framing_mode(value(config, "framing_mode", framing_value(config))),
          {:ok, frame_size} <-
            frame_size(
@@ -219,7 +222,25 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
        |> maybe_put_allowlist(allowlist)
        |> maybe_put_fixed_message_bytes(frame_size)
        |> maybe_put_ingress_protocol_family(ingress_protocol_family)
-       |> maybe_put_ingress_metadata(ingress_metadata)}
+       |> maybe_put_ingress_metadata(ingress_metadata)
+       |> put_listener_options(config)}
+    end
+  end
+
+  defp listener_allowlist(config, mode) do
+    peers = value(config, "expected_peer_addresses")
+
+    if value(config, "delivery_auth") in [:mtls, "mtls"] and peers in [nil, []],
+      do: {:ok, nil},
+      else: allowlist(peers, mode)
+  end
+
+  defp put_listener_options(normalized, input) do
+    for key <- ["delivery_auth", "delivery_credential_ref", "listener"],
+        option = value(input, key),
+        not is_nil(option),
+        reduce: normalized do
+      config -> Map.put(config, key, option)
     end
   end
 
@@ -276,6 +297,10 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
         "frame_size" => frame_bytes,
         "reconnect_policy" => "on_disconnect",
         "expected_peer_addresses" => profile |> value("egress", %{}) |> value("source_addresses"),
+        "delivery_auth" => value(profile, "delivery_auth"),
+        "delivery_credential_ref" =>
+          profile |> value("egress", %{}) |> value("delivery_credential_ref"),
+        "listener" => value(diagnostics, "listener"),
         "tls_enabled" => false,
         "ingress_protocol_family" => "tm",
         "ingress_metadata" => %{"frame_size" => frame_bytes, "ocf_length" => 0}
@@ -336,11 +361,22 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
   """
   @spec egress_refusal(map()) :: atom() | nil
   def egress_refusal(profile) when is_map(profile) do
-    case profile |> value("egress", %{}) |> egress_addresses() |> PeerAddresses.classify() do
-      :ok -> nil
-      :empty -> :provider_egress_addresses_missing
-      :too_broad -> :provider_egress_addresses_too_broad
-      :invalid -> :provider_egress_addresses_invalid
+    peers = profile |> value("egress", %{}) |> egress_addresses()
+
+    case PeerAddresses.classify(peers) do
+      :ok ->
+        nil
+
+      :empty ->
+        if value(profile, "delivery_auth") == "mtls",
+          do: nil,
+          else: :provider_egress_addresses_missing
+
+      :too_broad ->
+        :provider_egress_addresses_too_broad
+
+      :invalid ->
+        :provider_egress_addresses_invalid
     end
   end
 

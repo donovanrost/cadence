@@ -6,7 +6,7 @@ defmodule Cadence.Contacts.ReservationWindowTruthTest do
   transaction (003's 12:10:57Z pass ran on the pre-shift window). A proposal moves nothing until
   it's decided.
   """
-  use Cadence.DataCase, async: false
+  use Cadence.RuntimeCase, async: false
 
   alias Cadence.Commanding.CommandWindow
   alias Cadence.Contacts
