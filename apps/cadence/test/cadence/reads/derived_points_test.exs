@@ -108,6 +108,14 @@ defmodule Cadence.Reads.DerivedPointsTest do
     assert DerivedPoints.list(@org, c.mission, nil) == []
   end
 
+  test "a revision whose plan isn't visible yet answers none and isn't kept", c do
+    revision = "revision-not-stored-#{System.unique_integer([:positive])}"
+
+    assert DerivedPoints.list(@org, c.mission, revision) == []
+    :sys.get_state(DerivedPoints)
+    assert :ets.lookup(DerivedPoints, {@org, c.mission, revision}) == []
+  end
+
   test "a catalog and PointInfo read run the same queries at 5 and at 50 spacecraft" do
     counts =
       for fleet <- [5, 50] do

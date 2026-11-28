@@ -80,12 +80,21 @@ defmodule Cadence.Reads.DerivedPoints do
             Enum.map(outputs, & &1.parameter_id)
           )
 
-        outputs
-        |> Enum.map(&point(&1, declarations))
-        |> Enum.sort_by(&{&1.qualified_name, &1.point_id})
+        points =
+          outputs
+          |> Enum.map(&point(&1, declarations))
+          |> Enum.sort_by(&{&1.qualified_name, &1.point_id})
 
-      _no_plan ->
-        []
+        {:cache, points}
+
+      # A stored plan that isn't ready has no outputs, and a revision's plans never change.
+      {:ok, %RuntimePlan{}} ->
+        {:cache, []}
+
+      # No plan visible yet (not stored, or not readable): answer none for now, but don't keep it,
+      # or a plan stored a moment later would read as having no derived points until evicted.
+      _not_found ->
+        {:skip, []}
     end
   end
 
@@ -131,7 +140,7 @@ defmodule Cadence.Reads.DerivedPoints do
   defp cached(key, build) do
     case :ets.whereis(@table) do
       :undefined ->
-        build.()
+        build |> apply([]) |> elem(1)
 
       _table ->
         case :ets.lookup(@table, key) do
@@ -139,9 +148,14 @@ defmodule Cadence.Reads.DerivedPoints do
             points
 
           [] ->
-            points = build.()
-            GenServer.cast(__MODULE__, {:put, key, points})
-            points
+            case build.() do
+              {:cache, points} ->
+                GenServer.cast(__MODULE__, {:put, key, points})
+                points
+
+              {:skip, points} ->
+                points
+            end
         end
     end
   end
