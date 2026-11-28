@@ -40,6 +40,9 @@ defmodule Cadence.Control.MissionModelPromotion do
     end
   end
 
+  # Fixture-only until #1147: production activations are always fleets (only the per-spacecraft
+  # review creates one); a mission-wide activation exists in test fixtures alone. #1147 refuses
+  # it here and deletes this branch with the fixtures.
   defp validate_model_metadata(organization_id, mission_id, binding_set, metadata) do
     case value(metadata, :mission_model) do
       nil ->
@@ -124,6 +127,9 @@ defmodule Cadence.Control.MissionModelPromotion do
       else: model_runtime_basis(activation)
   end
 
+  # Fixture-only until #1147: production activations are always fleets (only the per-spacecraft
+  # review creates one); a mission-wide activation exists in test fixtures alone. #1147 refuses
+  # it here and deletes this branch with the fixtures.
   defp model_runtime_basis(%BindingSetActivation{} = activation) do
     case value(activation.metadata, :mission_model) do
       nil ->
@@ -182,6 +188,9 @@ defmodule Cadence.Control.MissionModelPromotion do
       else: model_command_authoring_basis(activation)
   end
 
+  # Fixture-only until #1147: production activations are always fleets (only the per-spacecraft
+  # review creates one); a mission-wide activation exists in test fixtures alone. #1147 refuses
+  # it here and deletes this branch with the fixtures.
   defp model_command_authoring_basis(%BindingSetActivation{} = activation) do
     MissionModels.command_authoring_basis(
       activation.organization_id,
