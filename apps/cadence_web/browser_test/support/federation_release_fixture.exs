@@ -98,14 +98,6 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
           Path.join(temp_root, "release-build-ops-console")
         )
 
-      organization_admin_build =
-        build_release!(
-          node,
-          "@cadence/organization-admin-plugin",
-          Path.join(app_root, "priv/static/assets/application-host/organization-admin"),
-          Path.join(temp_root, "release-build-organization-admin")
-        )
-
       spacecraft_build =
         build_release!(
           node,
@@ -152,13 +144,6 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
             ),
             package!(
               node,
-              "organization-admin-n-minus-1",
-              organization_admin_build,
-              organization_admin_metadata(:n_minus_1),
-              temp_root
-            ),
-            package!(
-              node,
               "spacecraft-n-minus-1",
               spacecraft_build,
               spacecraft_metadata(:n_minus_1),
@@ -187,13 +172,6 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
               "ops-console-n",
               ops_console_build,
               ops_console_metadata(:n, ops_surface),
-              temp_root
-            ),
-            package!(
-              node,
-              "organization-admin-n",
-              organization_admin_build,
-              organization_admin_metadata(:n),
               temp_root
             ),
             package!(node, "spacecraft-n", spacecraft_build, spacecraft_metadata(:n), temp_root)
@@ -677,21 +655,6 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
       [],
       "cadence_ops_console",
       "federation-browser-ops-console-#{slot_name(slot)}",
-      released_at(slot)
-    )
-  end
-
-  # §11c removed organization_home; organization_admin keeps only the user-scoped
-  # notifications_bell, which is the release's surface (no page of it is visited).
-  defp organization_admin_metadata(slot) do
-    metadata(
-      "organization_admin",
-      "cadence.organization-admin",
-      "notifications_bell",
-      "cadence.organization.notifications_bell",
-      ["mark_notification_read"],
-      "cadence_organization_admin",
-      "federation-browser-organization-admin-#{slot_name(slot)}",
       released_at(slot)
     )
   end

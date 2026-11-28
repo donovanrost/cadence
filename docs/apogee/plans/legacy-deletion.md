@@ -623,8 +623,9 @@ Keep `SpacecraftInstallations`.
 `frontend/apps/organization-admin/src/NotificationsPage.vue`. Also delete `Cadence.Notifications.Actions` after
 trimming `organization_admin_action.ex:235, :249`.
 
-**Keep:** `live/notifications_bell.ex` (every auth on_mount attaches it) and `Accounts.accept_invitation_as_user`,
-which the console uses.
+**Keep:** `Accounts.accept_invitation_as_user`, which the console uses. (#709 then deleted the bell,
+`live/notifications_bell.ex`, and the whole `organization_admin` application; the console's Account
+lists notices.)
 
 **Tests:**
 - Delete `live/notifications_live_test.exs`, `notifications_page_test.exs` and `reads/notifications/inbox_test.exs`.

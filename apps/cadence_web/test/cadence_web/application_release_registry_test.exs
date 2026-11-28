@@ -171,7 +171,9 @@ defmodule CadenceWeb.ApplicationReleaseRegistryTest do
 
     accepted = ApplicationReleaseRegistry.snapshot(now: fixture.now)
     assert {:ok, %{source: :database, entries: entries}} = accepted
-    assert length(entries) == 6
+    # comms, telemetry_decom, mission_catalog, ops_console and spacecraft: #709 removed
+    # organization_admin (its only surface was the notifications bell).
+    assert length(entries) == 5
 
     accepted_control =
       Repo.query!("""

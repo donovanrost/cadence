@@ -274,11 +274,7 @@ defmodule Cadence.Reads.CommandPreflight do
       composed: Enum.any?(held, &composed?(&1.composition))
     }
 
-    basis =
-      held
-      |> Enum.map(&{&1.spacecraft_id, Map.fetch!(pins, &1.spacecraft_id).hold_basis})
-      |> Enum.sort()
-      |> then(&hold_basis(:model_approval_withdrawn, &1, %{}))
+    basis = WithdrawnPins.basis(Map.take(pins, Enum.map(held, & &1.spacecraft_id)))
 
     check(
       :model_approval_withdrawn,

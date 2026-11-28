@@ -26,7 +26,6 @@ defmodule Cadence.Applications.ReleaseRegistry do
     OpsConsole,
     DerivedTelemetry
   ]
-  @additional_contributors [Cadence.Applications.OrganizationAdmin]
 
   @spec all() :: [ReleaseContribution.t()]
   def all, do: all(contributors())
@@ -66,7 +65,7 @@ defmodule Cadence.Applications.ReleaseRegistry do
 
   defp contributors do
     @contributors ++
-      @additional_contributors ++ FixtureContributors.exporting(:release_contributions, 0)
+      FixtureContributors.exporting(:release_contributions, 0)
   end
 
   @spec fetch(binary(), pos_integer(), binary(), pos_integer()) ::

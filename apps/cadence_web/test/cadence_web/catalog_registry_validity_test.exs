@@ -18,7 +18,6 @@ defmodule CadenceWeb.CatalogRegistryValidityTest do
     Limits,
     MissionCatalog,
     OpsConsole,
-    OrganizationAdmin,
     Spacecraft,
     TelemetryDecomCatalogContribution
   }
@@ -31,8 +30,7 @@ defmodule CadenceWeb.CatalogRegistryValidityTest do
     Spacecraft,
     TelemetryDecomCatalogContribution,
     OpsConsole,
-    DerivedTelemetry,
-    OrganizationAdmin
+    DerivedTelemetry
   ]
 
   test "every contributed application definition is valid on its own" do
@@ -48,13 +46,13 @@ defmodule CadenceWeb.CatalogRegistryValidityTest do
     end
   end
 
-  test "the registry validates and lists every contributor, organization_admin included" do
+  test "the registry validates and lists every contributor" do
     assert CatalogRegistry.validate() == :ok
 
     keys = Enum.map(CatalogRegistry.all(), & &1.definition.application_key)
 
     assert keys != []
-    assert "organization_admin" in keys
-    assert {:ok, _contribution} = CatalogRegistry.fetch("organization_admin")
+    # #709: organization_admin carried only the notifications bell; notices are the console's now.
+    refute "organization_admin" in keys
   end
 end

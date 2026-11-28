@@ -41,6 +41,17 @@ defmodule Cadence.Reads.CommandGroups do
   end
 
   @doc """
+  The armed groups with a member still waiting for its contact on a craft that runs `revision_id`
+  (a withdrawn model approval's reach; E2, #546): `%{groups, total}`, newest GO first, `limit`
+  50 by default (at most 200). See `CommandGroups.GoUnreleased`.
+  """
+  @spec go_unreleased(binary(), binary(), binary(), keyword()) ::
+          %{groups: [map()], total: non_neg_integer()}
+  defdelegate go_unreleased(org, mission, revision_id, opts \\ []),
+    to: Cadence.Reads.CommandGroups.GoUnreleased,
+    as: :read
+
+  @doc """
   U69 A5: the Commands list, searched and paged (`CommandGroups.Search`): `{:ok, %{groups,
   next_cursor}}` or `{:error, :invalid_cursor}`.
   """
@@ -297,6 +308,8 @@ defmodule Cadence.Reads.CommandGroups do
     case request.metadata["cancellation"]["reason"] do
       "aborted: " <> _ -> :aborted
       "release_basis_changed" -> :release_basis_changed
+      # E2 (#546): a lane draining itself found a withdrawal its GO hadn't seen.
+      "model_approval_withdrawn_after_go" -> :model_approval_withdrawn_after_go
       "earlier_command_failed" <> _ -> :earlier_command_failed
       "expired" -> :expired
       # DECISIONS #65: a catalog change set canceled it before release.

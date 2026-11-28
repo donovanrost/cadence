@@ -239,6 +239,9 @@ defmodule CadenceWeb.Router do
     get("/account/invitations", AccountInvitationController, :index)
     post("/account/invitations/:invitation_id/accept", AccountInvitationController, :accept)
     post("/account/invitations/:invitation_id/decline", AccountInvitationController, :decline)
+    # #709: my notices (the legacy bell's), and Mark read.
+    get("/account/notices", AccountNoticeController, :index)
+    post("/account/notices/:notice_id/read", AccountNoticeController, :read)
 
     scope "/missions/:mission_id" do
       pipe_through(:console_mission)

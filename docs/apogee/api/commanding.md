@@ -194,6 +194,14 @@ No side effects. Returns:
   the same revision, or a later withdrawal. Acknowledged like any HOLD (DECISIONS #60/#61): the
   group event `hold_acknowledged` records its evidence. Review re-runs it, so an approver
   acknowledges a withdrawal that is new since submit.
+  **What a GO records.** A group is armed by a GO, or by its submit when no second GO is needed.
+  That arming checks (under its lock) that the acknowledgement it carries covers exactly the
+  withdrawals now (a withdrawal since the preflight is `409 preflight_stale` at submit,
+  `409 command_group_review_stale` at GO) and records, in each armed member's own approval row
+  (append-only, same transaction), the basis of its craft's withdrawal it knew of, or none. An
+  unattended release (a lane draining itself) refuses a craft whose current withdrawal isn't the
+  recorded one, and a member whose row lacks the record fails closed (end_reason
+  `model_approval_withdrawn_after_go`, below).
 - `two_person` is **not a HOLD** (DECISIONS #61): it never blocks submit. Its `result` is
   `second_go` ("needs a second GO") while a second GO is required and not yet given, else `go`.
   `evidence.reasons` and top-level `second_go_required` say why the group goes to approval.
@@ -261,7 +269,11 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
   `awaiting_me=true` (Approve queue: pending, not mine, and I'm the named approver or none was
   named), `mine=true`, `operation_id=` (returns 0 or 1 groups).
   U69 A5 (parity ops (C)): `q` (≤100 chars, case-insensitive substring of the title, log entry,
-  group id, operation id, or a stacked command's id or name), `target=<spacecraft_id>` (groups with
+  group id, operation id, or a stacked command's id or name), `withdrawn_revision=<revision_id>` (E2, #546: groups with a target that runs that mission-model
+  revision, resolved on the server for the authorized mission, so another mission's revision, or
+  one no craft runs, is an empty page; with `state=queued&stage=queued_for_contact` it is the
+  withdraw sheet's "the rest"; `422 invalid_params` with `target`; no id list ever goes in the URL),
+  `target=<spacecraft_id>` (groups with
   it among their targets), `stage=` (comma list of `release_failed | verify_failed | indeterminate
   | in_flight | queued_for_contact`: groups where ANY target is at one; `in_flight` = `radiating`
   or `executed`; queued groups only; decided by the same progress the row shows, so the filter
@@ -335,10 +347,14 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
 - Member `stage`: `awaiting_go | queued_for_contact | radiating | executed | verified | no_verifier
   | verify_failed | release_failed | indeterminate | canceled | rejected | excluded`. A target's stage
   is its first unfinished member's. `end_reason`: `aborted | release_basis_changed |
-  earlier_command_failed | expired | catalog_changed | spacecraft_archived | excluded_at_review |
-  canceled | rejected` (or null). `catalog_changed` (DECISIONS #65): a catalog change set canceled
+  earlier_command_failed | expired | catalog_changed | spacecraft_archived |
+  model_approval_withdrawn_after_go | excluded_at_review | canceled | rejected` (or null). `catalog_changed` (DECISIONS #65): a catalog change set canceled
   it before release. `spacecraft_archived` (L22): its spacecraft was archived before it released,
-  so it never went out.
+  so it never went out. `model_approval_withdrawn_after_go` (E2, #546): the lane was about to send
+  it unattended, and its craft's model approval had been withdrawn after the GO (a withdrawal the
+  GO hadn't acknowledged): the member failed closed, and the group needs a new GO (resubmit; the
+  new preflight carries the `model_approval_withdrawn` HOLD). A person naming the contact
+  (`POST …/release`) is the decision, so that path is not refused.
 - `…/preflight` re-runs preflight on the submitted inputs for Approve (A2) and adds
   `changed_since_submit` (`hold` when the result no longer matches what was submitted). Its
   `conflicts` check leaves out the group's own members, so only other work on the lanes counts.

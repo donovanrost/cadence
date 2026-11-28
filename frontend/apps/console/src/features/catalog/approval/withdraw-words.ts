@@ -51,10 +51,6 @@ export function withdrawFailure(
     };
   if (isError(e, "mission_model_revision_not_withdrawable"))
     return notWithdrawableLine(e, what, viewerId);
-  if (isError(e, "human_mission_model_approver_required"))
-    return {
-      text: "Not withdrawn: only a person can withdraw an approval, not a service identity. Nothing changed.",
-    };
   if (e.kind === "forbidden")
     return { text: "Not withdrawn: only an org admin can withdraw an approval. Nothing changed." };
   const code = codeOf(e);

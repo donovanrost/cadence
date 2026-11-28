@@ -3,11 +3,7 @@ defmodule Cadence.Reads.CommandPreflightTest do
 
   import Cadence.CommandGroupFixtures
 
-  alias Cadence.Activations.ActiveBindingSetRow
-  alias Cadence.Catalog.{FleetSnapshot, SpacecraftConfigurationInput}
   alias Cadence.Control.Commanding.GroupSubmission
-  alias Cadence.Control.ModelWithdrawal
-  alias Cadence.Persistence.JsonDocument
   alias Cadence.Reads.CommandPreflight
 
   setup do
@@ -149,47 +145,9 @@ defmodule Cadence.Reads.CommandPreflightTest do
 
   # E2c (#546): a craft whose active generation runs a revision whose approval was withdrawn.
   describe "model_approval_withdrawn (the withdrawn-approval HOLD)" do
-    # Every craft runs the revision the mission's active generation was imported with.
     setup c do
-      row = Repo.get!(ActiveBindingSetRow, c.mission)
-      metadata = JsonDocument.unwrap_value(row.metadata)
-
-      entries =
-        Map.new(c.spacecraft, fn id ->
-          {id,
-           %{
-             "configuration_revision_id" => "rev-#{id}",
-             "configuration_version" => 1,
-             "catalog_revision_id" => "cat-1",
-             "commanding_enabled" => true,
-             "document" =>
-               Map.merge(SpacecraftConfigurationInput.empty(), %{
-                 "catalog_revision_id" => "cat-1",
-                 "commanding_enabled" => true
-               }),
-             "mission_model" => metadata["mission_model"],
-             "source_endpoint_ids" => [
-               Cadence.SourceEndpoints.managed_source_endpoint_id(id)
-             ],
-             "telemetry_capability_ids" => []
-           }}
-        end)
-
-      {:ok, fleet} = FleetSnapshot.store(c.mission, entries)
-
-      Repo.update!(
-        Ecto.Changeset.change(row,
-          metadata:
-            JsonDocument.wrap_value(Map.merge(metadata, FleetSnapshot.metadata(fleet, nil)))
-        )
-      )
-
+      pin_fleet!(c)
       :ok
-    end
-
-    defp withdraw!(c) do
-      assert {:ok, _} =
-               ModelWithdrawal.withdraw(c.scope, c.mission, c.revision_id, "Limits were wrong")
     end
 
     defp routine(c), do: draft(c.spacecraft, [command(c, "SET_SIGNED", %{"counter" => 1})])
@@ -204,7 +162,7 @@ defmodule Cadence.Reads.CommandPreflightTest do
     end
 
     test "a craft on a withdrawn revision is an ackable HOLD naming the decision", c do
-      withdraw!(c)
+      withdraw_approval!(c)
       {:ok, preflight} = run(c, routine(c))
 
       assert %{
@@ -244,7 +202,7 @@ defmodule Cadence.Reads.CommandPreflightTest do
     end
 
     test "only the craft on the withdrawn revision are held", c do
-      withdraw!(c)
+      withdraw_approval!(c)
       [first | _] = c.spacecraft
 
       {:ok, preflight} = run(c, draft([first], [command(c, "SET_SIGNED", %{"counter" => 1})]))
@@ -252,7 +210,7 @@ defmodule Cadence.Reads.CommandPreflightTest do
     end
 
     test "an acknowledgement covers exactly those craft on exactly that decision", c do
-      withdraw!(c)
+      withdraw_approval!(c)
       [first, second] = c.spacecraft
 
       {:ok, both} = run(c, routine(c))
@@ -275,7 +233,7 @@ defmodule Cadence.Reads.CommandPreflightTest do
     end
 
     test "without the acknowledgement a submit is refused, with it the group is submitted", c do
-      withdraw!(c)
+      withdraw_approval!(c)
       # A booked, confirmed contact per craft, so this is the only HOLD left.
       for id <- c.spacecraft, do: commandable_pass!(c.org, c.mission, id)
       draft = routine(c)

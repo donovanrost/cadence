@@ -28,8 +28,7 @@ defmodule CadenceWeb.HostPageAuthorization do
         ops_context_active?: operational?
       )
 
-    hooks =
-      [base | guards] ++ [{UserAuth, :attach_notifications_bell}, {UserAuth, :attach_user_menu}]
+    hooks = [base | guards] ++ [{UserAuth, :attach_user_menu}]
 
     Enum.reduce_while(hooks, {:cont, socket}, fn {module, action}, {:cont, socket} ->
       case module.on_mount(action, params, session, socket) do

@@ -11,10 +11,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.ProviderRegistry do
   }
 
   @max_contributions 128
-  @additional_contributors [Cadence.Applications.OrganizationAdmin]
-
-  @compile {:no_warn_undefined,
-            {Cadence.Applications.OrganizationAdmin, :surface_query_contributions, 0}}
 
   @type provider_key :: {binary(), binary()}
 
@@ -140,7 +136,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.ProviderRegistry do
   end
 
   defp additional_contributors do
-    @additional_contributors ++ FixtureContributors.exporting(:surface_query_contributions, 0)
+    FixtureContributors.exporting(:surface_query_contributions, 0)
   end
 
   defp valid_entries(contributions) do
