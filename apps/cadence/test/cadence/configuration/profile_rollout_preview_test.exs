@@ -6,7 +6,7 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
   use Cadence.RuntimeCase, async: false
 
   alias Cadence.Activations.GenerationReceipts
-  alias Cadence.Applications.SpacecraftConfiguration.{Drafts, Review}
+  alias Cadence.Applications.SpacecraftConfiguration.{Active, Drafts, Review}
   alias Cadence.Applications.TelemetryDecom
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Catalog.CompositionPins
@@ -16,6 +16,8 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
   alias Cadence.Control.Configuration
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Activations
+  alias Cadence.MissionModels
+  alias Cadence.Missions
   alias Cadence.Repo
   alias Cadence.SpacecraftStore
 
@@ -86,6 +88,67 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
 
     assert small.projection_queries == large.projection_queries,
            "100 craft: #{small.projection_queries}, 1,000 craft: #{large.projection_queries}"
+  end
+
+  # ADR-020 P3 M2 (#451): a monitoring apply over the whole fleet (every craft moves to its
+  # composition's head revision) is one compile per composition and no per-craft statement.
+  @tag timeout: 240_000
+  test "a monitoring apply over the fleet uses a constant number of statements from 100 to 1,000" do
+    small = count_monitoring(100)
+    large = count_monitoring(1_000)
+
+    assert small.queries == large.queries,
+           "100 craft: #{small.queries}, 1,000 craft: #{large.queries}; #{top(large.by_query)}"
+  end
+
+  defp count_monitoring(size) do
+    c = setup_mission("monitoring-#{size}", [], [42])
+    ops = fleet_move!(c, size, enable_telemetry: true)
+    {:ok, staged} = Configuration.stage(c.scope, c.mission.mission_id, %{summary: "Move"}, ops)
+
+    {:ok, %{state: :applied}} =
+      Configuration.submit(c.scope, c.mission.mission_id, staged.change_set_id, %{
+        reason: "Move the whole fleet to rev 2",
+        expected_version: staged.version,
+        acknowledged_holds: true
+      })
+
+    {:ok, monitoring} =
+      Configuration.stage(c.scope, c.mission.mission_id, %{summary: "Limits"}, [
+        %{
+          kind: "monitoring_policy",
+          action: "create",
+          document: %{
+            "name" => "Fleet limit",
+            "parameter_id" => parameter_id!(c),
+            "policy_kind" => "limit",
+            "default_rules" => [%{"kind" => "range", "upper" => 40, "severity" => "warning"}]
+          }
+        }
+      ])
+
+    {result, _ms, queries, by_query, _receipts} =
+      measure(c.mission.mission_id, fn ->
+        Configuration.submit(c.scope, c.mission.mission_id, monitoring.change_set_id, %{
+          reason: "A fleet-wide temperature limit",
+          expected_version: monitoring.version
+        })
+      end)
+
+    assert {:ok, %{state: :applied}} = result
+    %{queries: queries, by_query: by_query}
+  end
+
+  defp parameter_id!(c) do
+    {:ok, mission} = Missions.fetch_mission(c.org, c.mission.mission_id)
+    {:ok, %{entries: entries}} = Active.load(mission)
+    revision = entries |> Map.values() |> hd() |> get_in(["mission_model", "revision_id"])
+    {:ok, model} = MissionModels.fetch_revision(c.org, c.mission.mission_id, revision)
+
+    model.declarations
+    |> Map.values()
+    |> Enum.find(&(&1.kind == :parameter))
+    |> Map.fetch!(:semantic_id)
   end
 
   defp count_apply(size) do
