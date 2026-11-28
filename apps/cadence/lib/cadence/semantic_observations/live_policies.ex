@@ -7,6 +7,12 @@ defmodule Cadence.SemanticObservations.LivePolicies do
 
   A craft in no group runs nothing, so nothing is live on it; a mission-wide alarm (no spacecraft)
   is live when any group keeps its policy.
+
+  "A craft in no group retires everything" is safe only because the groups come from
+  `MissionModels.revisions_at/3` AT the generation's `applied_at`, and a craft's runtime receipt
+  cannot come after its generation's `applied_at`: a craft that is running this generation is
+  already in a group. Keep the groups tied to that instant; read at an earlier time they would
+  retire the alarms of craft whose receipt had not been recorded yet.
   """
 
   @type group :: %{policies: [binary()], spacecraft: [binary()] | :all}

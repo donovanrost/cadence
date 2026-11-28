@@ -216,6 +216,8 @@ defmodule Cadence.SemanticObservations do
         where(base, [row], row.spacecraft_id in ^crafts and row.policy_id not in ^policies)
       end)
 
+    # A craft in no group runs nothing, so everything on it retires: safe only because the groups
+    # were read at the generation's `applied_at` (see `LivePolicies`).
     unassigned =
       if whole == [] do
         all_crafts = Enum.flat_map(assigned, & &1.spacecraft)
