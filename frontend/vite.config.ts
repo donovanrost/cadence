@@ -22,7 +22,7 @@ export default defineConfig({
       {
         // Typing plan §12 A1/A6: no narrowing assertions in the Apogee console and kit. Tests are
         // exempt: they feed deliberately invalid or partial values to runtime guards. Legacy
-        // apps (host, ops-console) are out of scope until they're deleted.
+        // apps (ops-console) are out of scope until they're deleted.
         files: ["apps/console/src/**/*.{ts,vue}", "packages/apogee-ui/src/**/*.{ts,vue}"],
         excludeFiles: ["**/*.test.ts"],
         rules: {

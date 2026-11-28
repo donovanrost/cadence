@@ -13,25 +13,23 @@ import {
 import { readPageHeader } from "./page-header-validation";
 import { href } from "./routes";
 
-// No Ops route is left in the catalog since #708, so the header type rules are exercised on the
-// management routes; the Ops layer's limits are still admitted at runtime (readPageHeader below).
-const settings = "/missions/:mission_id/settings" as const;
+// The catalog holds only the application-surface route (a management resource page), so the header
+// type rules are exercised on it; the Ops and collection policies are still admitted at runtime
+// (readPageHeader below).
 const surface = "/missions/:mission_id/applications/:application_key/:surface_id" as const;
-const link = href(settings, { mission_id: "m" });
+const link = href(surface, { mission_id: "m", application_key: "ops_console", surface_id: "s" });
 const ops = { kind: "collection", layer: "ops" } as const;
 
 test("header rules are type errors", () => {
   const a: PageAction = { id: "a", label: "A", href: link };
   const typed = () => {
-    // @ts-expect-error -- collection pages take their title from the route
-    useManagementHeader(settings, { title: "Mission settings" });
     // @ts-expect-error -- resource pages must name their resource
     useManagementHeader(surface, { description: "Settings" });
     useManagementHeader(surface, {
       title: "Pass Overview",
       status: { tone: "warning", label: "Off" },
     });
-    useManagementHeader(settings, { actions: [a, a], more: [a] });
+    useManagementHeader(surface, { title: "Pass Overview", actions: [a, a], more: [a] });
   };
   // @ts-expect-error -- icons come from the vendored set
   const typo: PageAction = { id: "x", label: "X", icon: "hero-chevon-down", href: link };
@@ -46,25 +44,20 @@ test("each layer has its own contract and only its own routes", () => {
   const a: PageAction = { id: "a", label: "A", href: link };
   const typed = () => {
     // @ts-expect-error -- a management route is not an Ops page
-    useOpsHeader(settings, {});
-    useManagementHeader(settings, { facts: ["3 configured"], primary: a });
+    useOpsHeader(surface, {});
+    useManagementHeader(surface, { title: "Pass Overview", facts: ["3 configured"], primary: a });
     // @ts-expect-error -- records reload with the browser; there is no refresh
-    useManagementHeader(settings, { refresh: { run: () => {} } });
+    useManagementHeader(surface, { title: "Pass Overview", refresh: { run: () => {} } });
     // @ts-expect-error -- management headers hold two quiet buttons
-    useManagementHeader(settings, { actions: [a, a, a] });
+    useManagementHeader(surface, { title: "Pass Overview", actions: [a, a, a] });
     useManagementHeader(surface, { title: "Packet bindings", identifier: "packet_bindings" });
-    // @ts-expect-error -- collection pages have no record identifier
-    useManagementHeader(settings, { identifier: "packet_bindings" });
   };
   expect(typed).toBeTypeOf("function");
 });
 
 test("a component serving several routes types each header by its route", () => {
   const typed = () => {
-    useManagementHeaders({
-      [settings]: { description: "Settings" },
-      [surface]: () => ({ title: "Pass Overview" }),
-    });
+    useManagementHeaders({ [surface]: () => ({ title: "Pass Overview" }) });
     // @ts-expect-error -- the application surface route is a resource page and must be named
     useManagementHeaders({ [surface]: { description: "Settings" } });
   };
@@ -102,10 +95,13 @@ test("a page claims the header, keeps it current and releases it on unmount", as
   const claim = vi.fn(),
     update = vi.fn(),
     release = vi.fn();
-  const host: PageHeaderHost = { route: () => settings, claim, update, release };
+  const host: PageHeaderHost = { route: () => surface, claim, update, release };
   const count = ref(1);
   const Page = defineComponent(() => {
-    useManagementHeader(settings, () => ({ facts: [`${count.value} active`] }));
+    useManagementHeader(surface, () => ({
+      title: "Pass Overview",
+      facts: [`${count.value} active`],
+    }));
     return () => h("div");
   });
   const wrapper = mount(
@@ -114,11 +110,17 @@ test("a page claims the header, keeps it current and releases it on unmount", as
       return () => h(Page);
     }),
   );
-  expect(claim).toHaveBeenCalledWith(expect.any(Symbol), [settings]);
-  expect(update).toHaveBeenLastCalledWith(expect.any(Symbol), { facts: ["1 active"] });
+  expect(claim).toHaveBeenCalledWith(expect.any(Symbol), [surface]);
+  expect(update).toHaveBeenLastCalledWith(expect.any(Symbol), {
+    title: "Pass Overview",
+    facts: ["1 active"],
+  });
   count.value = 2;
   await nextTick();
-  expect(update).toHaveBeenLastCalledWith(expect.any(Symbol), { facts: ["2 active"] });
+  expect(update).toHaveBeenLastCalledWith(expect.any(Symbol), {
+    title: "Pass Overview",
+    facts: ["2 active"],
+  });
   wrapper.unmount();
   expect(release).toHaveBeenCalledOnce();
 });

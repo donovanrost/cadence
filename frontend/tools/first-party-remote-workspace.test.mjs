@@ -14,7 +14,7 @@ async function workspaceFixture() {
   await mkdir(apps, { recursive: true });
   /** @type {[string, string, string, string][]} */
   const packages = [
-    ["host", "@cadence/plugin-host", "cadence_host", "host"],
+    ["other-remote", "@cadence/other-remote", "cadence_other_remote", "other-remote"],
     ["sample-remote", "@cadence/sample-remote", "cadence_sample_remote", "sample-remote"],
   ];
   for (const [directoryName, packageName, remoteName, bundle] of packages) {
@@ -33,7 +33,6 @@ void test("discovers every Phoenix-buildable first-party remote with strict iden
   const root = await workspaceFixture();
   try {
     const result = await discoverFirstPartyRemotes(root);
-    assert.equal(result.host.packageName, "@cadence/plugin-host");
     assert.deepEqual(
       result.remotes.map(({ packageName, bundle, remoteName }) => ({
         packageName,
@@ -41,6 +40,11 @@ void test("discovers every Phoenix-buildable first-party remote with strict iden
         remoteName,
       })),
       [
+        {
+          packageName: "@cadence/other-remote",
+          bundle: "other-remote",
+          remoteName: "cadence_other_remote",
+        },
         {
           packageName: "@cadence/sample-remote",
           bundle: "sample-remote",
@@ -113,7 +117,7 @@ void test("publication metadata rejects missing, extra, malformed, and duplicate
     await writeFile(path, JSON.stringify(descriptor));
     await assert.rejects(discoverFirstPartyRemotes(root), /valid remoteName and bundle/);
   }
-  await writeFile(path, JSON.stringify({ remoteName: "cadence_host", bundle: "sample" }));
+  await writeFile(path, JSON.stringify({ remoteName: "cadence_other_remote", bundle: "sample" }));
   await assert.rejects(
     discoverFirstPartyRemotes(root),
     /Duplicate first-party publication identity/,

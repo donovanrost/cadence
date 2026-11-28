@@ -35,11 +35,6 @@ export async function discoverFirstPartyRemotes(
     remotes.push(readPublication(directory));
   }
 
-  const host = remotes.find(({ packageName }) => packageName === "@cadence/plugin-host");
-  if (!host)
-    throw new Error("The first-party frontend workspace must provide @cadence/plugin-host.");
-
-  const remoteEntries = remotes.filter(({ packageName }) => packageName !== "@cadence/plugin-host");
   const identities = new Set();
   for (const remote of remotes) {
     for (const identity of [remote.packageName, remote.bundle, remote.remoteName]) {
@@ -49,7 +44,7 @@ export async function discoverFirstPartyRemotes(
     }
   }
 
-  const result = { host, remotes: remoteEntries };
+  const result = { remotes };
   if (requireApproved) assertApprovedFirstPartyRemoteCoverage(result);
   return result;
 }

@@ -14,30 +14,4 @@ export const routeCatalog = {
       description: null,
     },
   },
-  "/missions/:mission_id/settings": {
-    kind: "settings",
-    layer: "management",
-    scope: "mission",
-    title: "Mission settings",
-    queryKeys: [],
-    header: {
-      kind: "collection",
-      breadcrumbs: true,
-      eyebrow: false,
-      description: null,
-    },
-  },
-  "/missions/:mission_id/settings/:section_id": {
-    kind: "settings",
-    layer: "management",
-    scope: "mission",
-    title: "Mission settings",
-    queryKeys: [],
-    header: {
-      kind: "collection",
-      breadcrumbs: true,
-      eyebrow: false,
-      description: null,
-    },
-  },
 } as const;

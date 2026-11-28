@@ -9,7 +9,7 @@ defmodule Cadence.Reads.OpsWorkspace.LandingTest do
   @org "org-workspace-landing"
   @mission "mission-workspace-landing"
   @probe Path.expand(
-           "../../../../../../frontend/apps/host/src/ops-workspace/features/landing/producer-consumer-probe.mjs",
+           "../../../../../../frontend/apps/ops-console/workspace-landing-probe.mjs",
            __DIR__
          )
 

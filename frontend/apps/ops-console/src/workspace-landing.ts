@@ -31,3 +31,33 @@ export function readWorkspaceLanding(
     throw Error("The mission operations navigation is unavailable.");
   return value as WorkspaceLandingModel;
 }
+
+export type WorkspaceDestination = { key: string; label: string; icon: string; href: string };
+export type WorkspaceGroup = { key: string; label: string; items: WorkspaceDestination[] };
+
+export function workspaceGroups(href: (path: string) => string): WorkspaceGroup[] {
+  const item = (key: string, label: string, icon: string, path = key.replaceAll("_", "-")) => ({
+    key,
+    label,
+    icon,
+    href: href(path),
+  });
+  return [
+    {
+      key: "observe",
+      label: "Observe",
+      items: [item("dashboards", "Dashboards", "hero-squares-2x2")],
+    },
+    {
+      key: "system",
+      label: "System",
+      items: [item("data_sources", "Data Sources", "hero-circle-stack")],
+    },
+  ];
+}
+
+export const navigateAttrs = (href: string) => ({
+  href,
+  "data-phx-link": "redirect",
+  "data-phx-link-state": "push",
+});

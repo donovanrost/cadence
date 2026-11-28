@@ -1,9 +1,8 @@
-import { jsonFixture, fixtureRecord } from "../../../../../../test-support/json-fixture";
+import { jsonFixture, fixtureRecord } from "../../../test-support/json-fixture";
 import { mount } from "@vue/test-utils";
 import { expect, test } from "vite-plus/test";
-import WorkspaceLanding from "./WorkspaceLanding.vue";
-import { readWorkspaceLanding } from "./contracts";
-import { opsNavigation } from "../frame/navigation";
+import WorkspaceLanding from "./OpsConsoleLanding.vue";
+import { readWorkspaceLanding } from "./workspace-landing";
 
 const fixture = () => ({
   version: 1,
@@ -17,25 +16,22 @@ const props = (model: unknown = fixture()) => ({
   missionId: "mission-1",
 });
 
-test("mission landing and Ops rail expose approvals to operators regardless of built-in role", async () => {
+test("the mission landing links the same destinations whatever the operator's role", async () => {
   const model = fixture();
   const wrapper = mount(WorkspaceLanding, {
     props: props(model),
   });
-  const rail = (admin: boolean) =>
-    opsNavigation({
-      mission: { mission_id: "mission-1" },
-      capabilities: admin ? ["organization_admin"] : [],
-    }).groups.flatMap((group: { items: { href: string }[] }) =>
-      group.items.map((item) => item.href),
-    );
-  expect(wrapper.findAll("nav a").map((link) => link.attributes("href"))).toEqual(rail(false));
+  const destinations = [
+    "/missions/mission-1/ops/dashboards",
+    "/missions/mission-1/ops/data-sources",
+  ];
+  expect(wrapper.findAll("nav a").map((link) => link.attributes("href"))).toEqual(destinations);
   expect(wrapper.find("#ops-entry-activations").exists()).toBe(false);
   expect(wrapper.get("#ops-entry-dashboards").attributes("data-phx-link")).toBe("redirect");
   expect(wrapper.text()).not.toContain("components available");
   expect(wrapper.text()).not.toContain("Server authority connected");
   await wrapper.setProps(props({ ...model, can_administer: true }));
-  expect(wrapper.findAll("nav a").map((link) => link.attributes("href"))).toEqual(rail(true));
+  expect(wrapper.findAll("nav a").map((link) => link.attributes("href"))).toEqual(destinations);
   wrapper.unmount();
 });
 
