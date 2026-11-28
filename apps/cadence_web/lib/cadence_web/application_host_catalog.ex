@@ -30,7 +30,7 @@ defmodule CadenceWeb.ApplicationHostCatalog do
   @application_host_contract "cadence.application-host.v1"
   @catalog_page_size 100
   @max_catalog_applications 100
-  @compatibility_only_application_keys ["comms_overview", "organization_admin"]
+  @compatibility_only_application_keys ["comms_overview"]
   @type route_context :: %{
           host_context: HostContext.t(),
           mission: Mission.t() | nil,

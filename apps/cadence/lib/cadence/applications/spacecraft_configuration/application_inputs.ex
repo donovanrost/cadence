@@ -6,18 +6,78 @@ defmodule Cadence.Applications.SpacecraftConfiguration.ApplicationInputs do
   alias Cadence.Applications.ApplicationBindingStore
   alias Cadence.Applications.ApplicationInstallations
   alias Cadence.Applications.HostContext
+
+  alias Cadence.Applications.{
+    ApplicationBinding,
+    PacketBinding,
+    PacketBindingConfiguration,
+    PacketBindingResource
+  }
+
   alias Cadence.Applications.PacketBindings
   alias Cadence.Applications.TelemetryDecom
 
-  alias Cadence.Platform.ContentHash
+  alias Cadence.Platform.ContentBasis
 
-  @bookkeeping [
-    :applied_binding_set_id,
-    :applied_binding_set_version,
-    :applied_at,
-    :inserted_at,
-    :updated_at
-  ]
+  @basis_version 1
+  @basis_fields %{
+    ApplicationBinding => [
+      :application_binding_id,
+      :application_key,
+      :catalog_revision_id,
+      :configuration_version,
+      :enabled,
+      :handled_apids,
+      :metadata,
+      :mission_id,
+      :organization_id,
+      :source_endpoint_id,
+      :spacecraft_id
+    ],
+    PacketBindingConfiguration => [
+      :application_installation_id,
+      :application_key,
+      :application_version,
+      :bindings,
+      :capability_family_key,
+      :configuration_version,
+      :enabled,
+      :input_id,
+      :input_version,
+      :metadata,
+      :mission_id,
+      :organization_id,
+      :packet_binding_configuration_id,
+      :spacecraft_id
+    ],
+    PacketBinding => [
+      :apid,
+      :catalog_revision_id,
+      :metadata,
+      :mission_model_revision_id,
+      :packet_binding_id,
+      :packet_id,
+      :packet_model_content_sha256,
+      :packet_name,
+      :resources,
+      :selector,
+      :source_endpoint_ref
+    ],
+    PacketBindingResource => [
+      :data_type,
+      :metadata,
+      :offset_bits,
+      :packet_binding_resource_id,
+      :path,
+      :resource_id,
+      :resource_kind,
+      :role,
+      :size_bits
+    ]
+  }
+
+  @doc false
+  def basis_struct_fields, do: @basis_fields
 
   def basis(mission, spacecraft_id),
     do: mission |> bases([spacecraft_id]) |> Map.fetch!(spacecraft_id)
@@ -68,20 +128,32 @@ defmodule Cadence.Applications.SpacecraftConfiguration.ApplicationInputs do
   defp basis_hash(bindings, packets, installations) do
     bindings =
       bindings
-      |> Enum.map(&Map.drop(&1, @bookkeeping))
       |> Enum.sort_by(& &1.application_binding_id)
+      |> Enum.map(&basis_value/1)
 
     packets =
       packets
       |> Enum.map(&canonical_packet_input/1)
       |> Enum.sort_by(& &1.packet_binding_configuration_id)
+      |> Enum.map(&basis_value/1)
 
     # Sorted here, not by the query: a database's text collation mustn't move the hash (#56).
-    ContentHash.term_sha256({1, bindings, packets, Enum.sort(installations)})
+    installations =
+      installations
+      |> Enum.sort()
+      |> Enum.map(fn {id, version, lifecycle_state} ->
+        %{installation_id: id, version: version, lifecycle_state: lifecycle_state}
+      end)
+
+    ContentBasis.digest("configuration_inputs", @basis_version,
+      bindings: bindings,
+      packets: packets,
+      installations: installations
+    )
   end
 
   defp canonical_packet_input(input) do
-    input |> Map.drop(@bookkeeping) |> Map.update!(:bindings, &canonical_bindings/1)
+    %{input | bindings: canonical_bindings(input.bindings)}
   end
 
   defp canonical_bindings(bindings) do
@@ -91,6 +163,17 @@ defmodule Cadence.Applications.SpacecraftConfiguration.ApplicationInputs do
     end)
     |> Enum.sort_by(& &1.packet_binding_id)
   end
+
+  defp basis_value(%module{} = value) do
+    fields = Map.fetch!(@basis_fields, module)
+    value |> ContentBasis.project(fields) |> basis_value()
+  end
+
+  defp basis_value(map) when is_map(map),
+    do: Map.new(map, fn {key, value} -> {key, basis_value(value)} end)
+
+  defp basis_value(list) when is_list(list), do: Enum.map(list, &basis_value/1)
+  defp basis_value(other), do: other
 
   def persist(scope, mission, spacecraft, %{"catalog_revision_id" => nil} = document) do
     with :ok <- disable_existing(scope, mission, spacecraft) do

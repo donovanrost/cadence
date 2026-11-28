@@ -2,6 +2,38 @@ defmodule Cadence.Catalog.MissionModel.Declaration do
   @moduledoc "Typed declaration contributed by a Mission Model layer."
 
   alias Cadence.Catalog.MissionModel.{Canonical, Path, Provenance, Reference}
+  alias Cadence.Platform.ContentBasis
+
+  @basis_version 1
+  @basis_fields %{
+    __MODULE__ => [
+      :semantic_id,
+      :kind,
+      :qualified_name,
+      :aliases,
+      :definition,
+      :references,
+      :extensions
+    ],
+    Reference => [
+      :expected_kind,
+      :source_ref,
+      :role,
+      :resolved_id,
+      :resolved_qualified_name,
+      :required,
+      :provenance
+    ],
+    Provenance => [
+      :artifact_id,
+      :importer_key,
+      :importer_version,
+      :source_path,
+      :source_location,
+      :transformations,
+      :metadata
+    ]
+  }
 
   @kinds [
     :space_system,
@@ -79,16 +111,25 @@ defmodule Cadence.Catalog.MissionModel.Declaration do
 
   @spec fingerprint(t()) :: binary()
   def fingerprint(%__MODULE__{} = declaration) do
-    Canonical.sha256(%{
-      semantic_id: declaration.semantic_id,
-      kind: declaration.kind,
-      qualified_name: declaration.qualified_name,
-      aliases: declaration.aliases,
-      definition: declaration.definition,
-      references: declaration.references,
-      extensions: declaration.extensions
-    })
+    declaration
+    |> basis_value()
+    |> Map.to_list()
+    |> then(&ContentBasis.digest("override_fingerprint", @basis_version, &1))
   end
+
+  @doc false
+  def basis_struct_fields, do: @basis_fields
+
+  defp basis_value(%module{} = value) do
+    fields = Map.fetch!(@basis_fields, module)
+    value |> ContentBasis.project(fields) |> basis_value()
+  end
+
+  defp basis_value(map) when is_map(map),
+    do: Map.new(map, fn {key, value} -> {key, basis_value(value)} end)
+
+  defp basis_value(list) when is_list(list), do: Enum.map(list, &basis_value/1)
+  defp basis_value(other), do: other
 
   @spec kinds() :: [kind()]
   def kinds, do: @kinds

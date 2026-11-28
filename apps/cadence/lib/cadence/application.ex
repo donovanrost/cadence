@@ -39,6 +39,8 @@ defmodule Cadence.Application do
         {Cadence.Platform.Supervisor, root_composition: root_composition},
         # Node-wide, and after the repo: it writes pending watermarks when it stops (#690).
         Cadence.Telemetry.Storage.WatermarkCoalescer,
+        # The reads' cache of the history store's receipts (Fleet, a spacecraft's points).
+        Cadence.Reads.DurableReceiptCache,
         # Before the runtime: journal consumers subscribe to partitions' snapshot notices.
         Cadence.Runtime.SemanticSnapshotNotifier,
         Cadence.Management.Supervisor,

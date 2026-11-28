@@ -18,10 +18,6 @@ defmodule CadenceWeb.UserAuth do
     end
   end
 
-  def on_mount(:attach_notifications_bell, _params, _session, socket) do
-    {:cont, CadenceWeb.NotificationsBell.attach(socket)}
-  end
-
   def on_mount(:attach_user_menu, _params, _session, socket) do
     {:cont,
      socket

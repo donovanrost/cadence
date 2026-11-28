@@ -45,7 +45,8 @@ The bootstrap payload.
     ],
     "csrf_token": "…",
     "socket": {"path": "/socket"},
-    "pending_invitations_count": 1
+    "pending_invitations_count": 1,
+    "unread_notices_count": 2
   }
 }
 ```
@@ -53,6 +54,9 @@ The bootstrap payload.
 - `pending_invitations_count` (L21): how many pending, unexpired invitations are addressed to the
   user's current email (the org switcher footer's "1 invitation", `/no-organization`). Details
   come from `GET /account/invitations`.
+
+- `unread_notices_count` (#709): how many of my notices are unread, counted over exactly the rows
+  `GET /account/notices` lists (the account menu's "2 unread notices"). An integer, never null.
 
 - `organizations`: the user's active memberships, sorted by name. A platform admin in admin mode
   also sees the current organization even without a membership (`role` is then `null`).
@@ -143,6 +147,32 @@ emailed link (`/invitations/:token`, server-rendered; api-ops' L5 token path).
 - Errors: `404 invitation_not_found` for an unknown id **or** one addressed to someone else (the
   same answer, so ids don't leak); `409 invitation_not_pending` with `details.status` `accepted |
   revoked | declined | expired` when it was already answered or has lapsed.
+
+## Account: notices (#709)
+
+The signed-in person's own notices, which the legacy host's bell showed. The server lists only the
+kinds the console words: today `organization_access_granted` ("You were added to Acme as a
+member"). Invitation notices aren't listed, since `GET /account/invitations` already lists them.
+
+- `GET /api/v1/account/notices?limit=&cursor=` → `{data: {notices: [{id, kind, organization {id,
+  name}, role, created_at, read_at}]}, meta: {next_cursor}}`, newest first (`created_at`, then
+  `id`), one query. `limit` 1..50, default 50; `cursor` is opaque, and a malformed one is `422 invalid_params`
+  with `details.cursor`. It isn't bound to the person and needn't be: every page is filtered to
+  the signed-in person's own notices.
+  - `kind`: `organization_access_granted` (closed; a reader should still treat an unknown value
+    as unrecognized).
+  - `organization`: the id, and `name` as it was when the person was added (null if not
+    recorded). The console takes the current name and the slug from the session's
+    `organizations` when the person is still a member there.
+  - `role`: `organization_admin` or `member` (the session's `role` vocabulary).
+  - `read_at`: null while unread.
+  - No stored title or body is sent; the console words a notice from these fields.
+- `POST /api/v1/account/notices/:id/read` → the notice, with `read_at` set. Idempotent: a read one
+  keeps its `read_at`.
+- Errors: `404 notice_not_found` for an unknown id, someone else's, or a kind that isn't listed
+  (the same answer, so ids don't leak).
+- No live push (there's no user socket topic). The console re-reads `unread_notices_count` from
+  `GET /session` after Mark read.
 
 ## Account: password and sessions (backlog)
 
