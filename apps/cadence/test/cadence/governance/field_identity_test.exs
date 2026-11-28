@@ -12,7 +12,6 @@ defmodule Cadence.Governance.FieldIdentityTest do
   alias Cadence.Governance
   alias Cadence.Governance.PacketDefinitionFieldRow
   alias Cadence.Ops.PointCatalog
-  alias Cadence.Platform.ContentHash
   alias Cadence.Telemetry.PacketDefinition
 
   @org "org-field-identity"
@@ -37,11 +36,11 @@ defmodule Cadence.Governance.FieldIdentityTest do
     refute BindingSet.content_sha256(resized) == BindingSet.content_sha256(read_back)
   end
 
-  test "a generation stored before the columns existed still verifies once its rows fill in" do
+  test "the named binding basis stays stable when stored field identity is backfilled" do
     binding_set = binding_set("hk-v1", 1, identity("ctrl.mode", "HK.sc_mode"))
     assert {:ok, _} = Governance.persist_binding_set(@org, binding_set)
 
-    # Rows as written before #73: no identity. Its stored hash was the read-back's term hash.
+    # Rows as written before #73: no identity. The named basis leaves identity out.
     # #534's trigger allows only filling the identity, never clearing it; this test lifts it in its
     # own sandbox to make the rows a pre-#73 write left behind.
     Repo.query!("ALTER TABLE governed_packet_definition_fields DISABLE TRIGGER USER")
@@ -49,7 +48,7 @@ defmodule Cadence.Governance.FieldIdentityTest do
     Repo.query!("ALTER TABLE governed_packet_definition_fields ENABLE TRIGGER USER")
     {:ok, before} = Governance.fetch_binding_set(@org, @mission, "hk-v1", 1)
     assert [%{parameter_id: nil}] = fields(before)
-    stored_hash = ContentHash.term_sha256(before)
+    stored_hash = BindingSet.content_sha256(before)
 
     # A later binding set re-persists the same packet definition: the rows fill in, once.
     later = binding_set("hk-v2", 1, identity("ctrl.mode", "HK.sc_mode"))
