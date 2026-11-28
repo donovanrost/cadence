@@ -8,15 +8,10 @@ defmodule CadenceWeb.ObservabilityTest do
            )
   end
 
-  test "attaches Phoenix routing and LiveView tracing" do
+  test "attaches Phoenix routing tracing" do
     assert handler_attached?(
              [:phoenix, :router_dispatch, :start],
              &OpentelemetryPhoenix.handle_router_dispatch_start/4
-           )
-
-    assert handler_attached?(
-             [:phoenix, :live_view, :mount, :start],
-             &OpentelemetryPhoenix.handle_liveview_event/4
            )
   end
 

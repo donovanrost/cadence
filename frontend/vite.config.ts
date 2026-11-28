@@ -4,8 +4,6 @@ export default defineConfig({
   fmt: {},
   lint: {
     plugins: ["typescript", "unicorn", "oxc", "vue"],
-    // Upstream distributions are reviewed and updated as vendored dependencies.
-    ignorePatterns: ["apps/ops-console/src/vendor/**"],
     jsPlugins: [{ name: "vite-plus", specifier: "vite-plus/oxlint-plugin" }],
     rules: {
       "vite-plus/prefer-vite-plus-imports": "error",
@@ -21,8 +19,7 @@ export default defineConfig({
     overrides: [
       {
         // Typing plan §12 A1/A6: no narrowing assertions in the Apogee console and kit. Tests are
-        // exempt: they feed deliberately invalid or partial values to runtime guards. Legacy
-        // apps (ops-console) are out of scope until they're deleted.
+        // exempt: they feed deliberately invalid or partial values to runtime guards.
         files: ["apps/console/src/**/*.{ts,vue}", "packages/apogee-ui/src/**/*.{ts,vue}"],
         excludeFiles: ["**/*.test.ts"],
         rules: {

@@ -1,7 +1,7 @@
 defmodule CadenceWeb do
   @moduledoc false
 
-  def static_paths, do: ~w(assets favicon.ico robots.txt)
+  def static_paths, do: ~w(favicon.ico robots.txt)
 
   def controller do
     quote do

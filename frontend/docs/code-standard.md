@@ -94,9 +94,9 @@ when multiple supported transports need it. Give transport differences explicit 
 keep a caller inventory before retiring compatibility code. Extract responsibilities at useful
 boundaries; moving an entire controller into a composable does not improve its ownership.
 
-Follow the existing [host architecture](host-architecture.md) and
-[design-system architecture](design-system/architecture.md) for page composition, shared UI,
-and server authority.
+Follow the [console architecture](../apps/console/ARCHITECTURE.md) and the
+[design system](../packages/apogee-ui/README.md) for page composition, shared UI, and server
+authority.
 
 ## Keep type escapes small and visible
 
@@ -186,36 +186,32 @@ corepack pnpm verify
 For documentation-only changes, check formatting and links. Keep Elixir tests out of
 frontend-only validation. Run `mix precommit` from the repository root when backend or server
 integration changes require it. CI must run the frontend gates for frontend changes,
-independently of whether backend checks are selected. Production builds and federation browser
-checks remain required evidence for changes that affect those boundaries; unit or Storybook
-tests do not establish production federation behavior.
+independently of whether backend checks are selected.
 
 ## Adoption status
 
 All authored Vue, TypeScript, and JavaScript sources, tests, and tools belong to referenced
 strict compiler projects, including checked indexed access and exact optional properties.
 Native Node probes use checked JavaScript. The coverage gate rejects missing files, unchecked
-JavaScript, unreferenced projects, and weakened compiler options. The first-party Heroicons
-Tailwind adapter is checked with the shared UI package; upstream distributions remain excluded.
+JavaScript, unreferenced projects, and weakened compiler options.
 
 Typed lint rejects explicit `any`, unsafe assignments/calls/returns/member access, non-null
 assertions, and incomplete switches across the workspace. Vue rules, warning rejection, and
-unused-suppression reporting are enabled. Ast-grep rejects double assertions, JavaScript Vue
-scripts, and retired captured-workflow dispatch; no migration exclusions remain.
+unused-suppression reporting are enabled. Ast-grep rejects double assertions and JavaScript Vue
+scripts; no migration exclusions remain.
 
 Imported SFC constructors have narrow, explained lint exceptions where the lint type service
 cannot resolve them; `vue-tsc` checks those registrations and their templates. The compiler and
 lint cannot establish semantic evidence validation, lifetime ownership, or all public-import
 boundaries. Those still require feature/architecture tests and code review. Interop assertions
-remain isolated and explained, including the consumed LiveVue hook, uPlot cursor publication,
-Tailwind's CommonJS export, and generic test mocks.
+remain isolated and explained, including uPlot cursor publication, Tailwind's CommonJS export,
+and generic test mocks.
 
 `corepack pnpm verify` runs formatting/lint, compiler coverage and Vue checking, structural
-rules, package tests, root tools, and transport tests. Each shared test suite has
-one aggregate owner. [CI](../../.github/workflows/frontend.yml) runs this command independently
-of the real Phoenix producer and federation browser job. The ordinary suite skips
-producer-dependent tests; their Phoenix producer tests run them with the fixture. `mix precommit` does not run the complete frontend gates,
-and Elixir tests remain outside frontend-only acceptance.
+rules, package tests and root tools. Each shared test suite has one aggregate owner.
+[CI](../../.github/workflows/ci.yml)'s Frontend quality job runs this command. `mix precommit`
+does not run the complete frontend gates, and Elixir tests remain outside frontend-only
+acceptance.
 
 The cleanup plan records verification and completion for its findings 6–12. The
 [Vue quality follow-up](vue-quality-followup.md) implements the deferred behavior findings and

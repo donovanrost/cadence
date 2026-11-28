@@ -1,9 +1,7 @@
 defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
   @moduledoc """
-  Exact host actions for the federated Ops data-sources surface.
-
-  The surface id is deliberately separate from the typed action request so the
-  final host composer can bind this adapter without changing ActionRequest.
+  The data-source writes the console's Data Sources screens make
+  (`CadenceWeb.Console.DataSourceWritesController`), as exact typed action requests.
   """
 
   alias Cadence.Applications.{ActionRequest, HostContext, JSONBoundary}
@@ -62,13 +60,6 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
     "http_endpoint_env",
     "storage"
   ]
-
-  @spec bindings() :: [{binary(), binary()}]
-  def bindings,
-    do:
-      Enum.map(@legacy_action_ids, &{"data_sources", &1}) ++
-        [{"data_source_registration", "register-source"}] ++
-        Enum.map(@settings_action_ids, &{"data_source_settings", &1})
 
   @spec execute(Scope.t(), HostContext.t(), binary(), ActionRequest.t()) ::
           {:ok, term()} | {:error, term()}

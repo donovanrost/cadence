@@ -2,9 +2,7 @@ defmodule Cadence.Applications.RegistryTest do
   use ExUnit.Case, async: true
 
   alias Cadence.Applications.{
-    ActionDefinition,
     ApplicationDefinition,
-    LifecycleContract,
     Registry,
     ResourceClaimDefinition,
     ResourceContract
@@ -24,18 +22,13 @@ defmodule Cadence.Applications.RegistryTest do
              ApplicationDefinition.validate(%{optional | installation_policy: :automatic})
   end
 
-  test "resolves the latest registered application, headless and action-free at the spacecraft (#669)" do
+  test "resolves the latest registered application at the spacecraft" do
     assert {:ok, %ApplicationDefinition{} = definition} =
              Registry.fetch("telemetry_decom")
 
     assert definition.version == 1
     assert definition.installable_scopes == [:spacecraft]
     assert definition.status_query_id == "cadence.telemetry_decom.status"
-
-    # No actions either: spacecraft configuration drives it, and the console installs, disables
-    # and uninstalls it through ApplicationInstallations.
-    assert definition.actions == []
-    assert definition.lifecycle_contract == %LifecycleContract{actions: []}
 
     assert %ResourceContract{
              claims: [
@@ -46,11 +39,6 @@ defmodule Cadence.Applications.RegistryTest do
                }
              ]
            } = definition.resource_contract
-
-    assert ApplicationDefinition.headless?(definition)
-    assert {:error, :unknown_surface} = Registry.fetch_default_surface(definition, :spacecraft)
-    assert {:error, :unknown_surface} = Registry.fetch_surface(definition, :spacecraft, "manage")
-    assert Registry.workspace_surfaces(definition, :spacecraft) == []
   end
 
   test "distinguishes unknown applications, unsupported versions, and unavailable definitions" do
@@ -70,14 +58,6 @@ defmodule Cadence.Applications.RegistryTest do
 
   test "available definitions are safe choices for a spacecraft profile" do
     assert Enum.all?(Registry.all(), &(ApplicationDefinition.validate(&1) == :ok))
-
-    assert Enum.all?(Registry.all(), fn definition ->
-             LifecycleContract.validate(definition.lifecycle_contract) == :ok
-           end)
-
-    assert Enum.all?(Registry.all(), fn definition ->
-             Enum.all?(definition.actions, &(ActionDefinition.validate(&1) == :ok))
-           end)
 
     assert Enum.map(Registry.available_for_scope(:spacecraft), & &1.application_key) == [
              "telemetry_decom"

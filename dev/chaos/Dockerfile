@@ -9,7 +9,7 @@ ENV MIX_ENV=prod
 WORKDIR /workspace
 RUN mix local.hex --force && mix local.rebar --force
 
-FROM source AS publication-build
+FROM source AS server-build
 COPY apps/cadence /workspace/apps/cadence
 COPY apps/cadence_web /workspace/apps/cadence_web
 COPY packages /workspace/packages
@@ -17,11 +17,8 @@ COPY frontend /workspace/frontend
 WORKDIR /workspace/apps/cadence_web
 RUN mix deps.get --only prod && ln -s /workspace/apps/cadence_web/deps /workspace/deps && mix compile
 RUN corepack pnpm@11.22.0 --dir ../../frontend install --frozen-lockfile
-RUN node ../../frontend/tools/build-first-party-publication.mjs
 RUN corepack pnpm@11.22.0 --dir ../../frontend --filter @cadence/console run build
-
-FROM publication-build AS server-build
-RUN node ../../frontend/tools/production-publication-output-check.mjs && mix phx.digest && mix release --path /release
+RUN mix release --path /release
 
 FROM source AS simulator-build
 COPY apps/cadence_simulator /workspace/apps/cadence_simulator

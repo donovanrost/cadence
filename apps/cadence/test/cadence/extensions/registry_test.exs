@@ -1,7 +1,6 @@
 defmodule Cadence.Extensions.RegistryTest do
   use Cadence.UnitCase, async: true
 
-  alias Cadence.Applications.ActionDispatcher
   alias Cadence.Applications.Registry, as: ApplicationRegistry
   alias Cadence.Capabilities.{DefinitionRegistry, Descriptor}
   alias Cadence.Catalog.Registry, as: CatalogImporterRegistry
@@ -11,8 +10,6 @@ defmodule Cadence.Extensions.RegistryTest do
   alias Cadence.DataSources.AdapterRegistry
   alias Cadence.ExtensionCatalog
   alias Cadence.Reads.Applications, as: ApplicationReads
-  alias Cadence.Reads.ApplicationSurfaces
-  alias Cadence.Reads.ApplicationSurfaces.ReferenceResolver
 
   alias Cadence.Extensions.{
     ApplicationContribution,
@@ -325,39 +322,19 @@ defmodule Cadence.Extensions.RegistryTest do
              ExtensionCatalog.validate_packages(packages ++ [invalid_package])
   end
 
-  test "every declared host contract has one valid plane-owned provider binding" do
-    definitions = ApplicationRegistry.all()
-
-    assert :ok = ActionDispatcher.validate_providers()
+  test "every declared status query has one valid provider binding" do
     assert :ok = ApplicationReads.validate_providers()
-    assert :ok = ApplicationSurfaces.validate_providers()
-    assert :ok = ReferenceResolver.validate_providers()
-
-    assert {:error, :invalid_application_action_provider_registry} =
-             ActionDispatcher.validate_providers(definitions, %{})
 
     assert {:error, :invalid_application_status_provider_registry} =
-             ApplicationReads.validate_providers(definitions, %{})
-
-    assert {:error, :invalid_application_surface_provider_registry} =
-             ApplicationSurfaces.validate_providers(definitions, %{})
-
-    # No surface declares a reference (#669), so a registered provider is one nothing uses.
-    assert {:error, :invalid_application_reference_provider_registry} =
-             ReferenceResolver.validate_providers(definitions, %{
-               "cadence.unreferenced" => %{1 => ReferenceResolver}
-             })
+             ApplicationReads.validate_providers(ApplicationRegistry.all(), %{})
   end
 
-  test "rejects unresolved contribution versions, kinds, and surface contracts" do
+  test "rejects unresolved contribution versions and kinds" do
     invalid_application_version = %ExtensionPackage{
       package_id: "cadence.invalid-application-version",
       version: 1,
       trust: :first_party,
-      compatibility: %{
-        cadence_application_contract: 1,
-        cadence_surface_contract: 1
-      },
+      compatibility: %{cadence_application_contract: 1},
       contributions: [
         %ApplicationContribution{
           application_key: "ops_console",
@@ -370,23 +347,6 @@ defmodule Cadence.Extensions.RegistryTest do
 
     assert {:error, :invalid_extension_package} =
              ExtensionCatalog.validate_package(invalid_application_version)
-
-    missing_surface_contract = %ExtensionPackage{
-      invalid_application_version
-      | package_id: "cadence.missing-surface-contract",
-        compatibility: %{cadence_application_contract: 1},
-        contributions: [
-          %ApplicationContribution{
-            application_key: "ops_console",
-            application_version: 1
-          }
-        ]
-    }
-
-    assert :ok = ExtensionPackage.validate(missing_surface_contract)
-
-    assert {:error, :invalid_extension_package} =
-             ExtensionCatalog.validate_package(missing_surface_contract)
 
     invalid_capability = %ExtensionPackage{
       package_id: "cadence.invalid-capability",

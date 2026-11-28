@@ -6,6 +6,6 @@ defmodule CadenceWeb.Observability do
   @spec setup_web_tracing() :: :ok
   def setup_web_tracing do
     :ok = OpentelemetryBandit.setup()
-    OpentelemetryPhoenix.setup(adapter: :bandit)
+    OpentelemetryPhoenix.setup(adapter: :bandit, liveview: false)
   end
 end

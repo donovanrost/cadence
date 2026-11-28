@@ -1,7 +1,7 @@
 defmodule Cadence.Reads.AppStatus do
   @moduledoc """
-  One application's status at one host scope, for the console Apps list (A1) and the surface
-  host (§11 L9): `%{state, label, version}`.
+  One application's status at one host scope, for the console Apps list (A1):
+  `%{state, label, version}`.
 
   - `active`: a platform app, or installed and its status loads.
   - `not_installed`: no installation row, or uninstalled. `disabled`: installed then disabled.

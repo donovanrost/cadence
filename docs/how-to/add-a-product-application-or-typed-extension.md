@@ -1,9 +1,9 @@
 ---
 title: Add a Product Application or Typed Extension
-tags: [how-to, developer, applications, extensions, packages, liveview]
+tags: [how-to, developer, applications, extensions, packages]
 status: active
 created: 2026-07-26
-updated: 2026-07-26
+updated: 2026-11-28
 ---
 
 # Add a Product Application or Typed Extension
@@ -13,7 +13,7 @@ of an existing Cadence extension point.
 
 The first decision is whether the feature is a product application, a typed
 extension, a runtime capability, or core platform behavior. Do not start by
-adding a LiveView or a package.
+adding a screen or a package.
 
 The governing design is
 [ADR-016](../decisions/016-typed-extension-packages-and-product-applications.md).
@@ -55,23 +55,13 @@ For a product application, add or reuse:
 - domain services for reads and writes;
 - an `ApplicationDefinition` in
   [`Cadence.Applications.Registry`](../../apps/cadence/lib/cadence/applications/registry.ex);
-- typed action definitions and an `ActionProvider` for durable mutations;
-- a versioned surface-query provider for declarative surfaces; and
+- a status provider registered in `Cadence.Reads.Applications` when the
+  definition declares a `status_query_id`; and
 - resource claims when the application owns scarce runtime resources.
 
-Application provider registries remain separated by authority plane:
-
-| Contract | Registry boundary |
-| --- | --- |
-| Actions | `Cadence.Applications.ActionDispatcher` in management |
-| Status | `Cadence.Reads.Applications` in projections |
-| Declarative surface queries | `Cadence.Reads.ApplicationSurfaces` in projections |
-| Surface references | `Cadence.Reads.ApplicationSurfaces.ReferenceResolver` in projections |
-
-Do not combine those provider modules into `ApplicationDefinition` or one
-universal callback manifest. The definition declares stable contract
-identifiers; each plane registers the provider that it is authorized to own.
-The integrity task cross-validates the separate registries as one host contract.
+Every application is headless: it declares no screens of its own and no actions
+([DECISIONS #116](../apogee/DECISIONS.md)). The console's own screens install it, show its status and edit
+its settings, and its configuration is written through its owning domain paths.
 
 For a typed extension, add a versioned definition to its owning registry. The
 definition owns the extension-specific contract. The shared package envelope
@@ -114,83 +104,18 @@ domain registry.
 Do not add a generic callback map, arbitrary module hook, or atom derived from
 operator input.
 
-## 4. Use the host before writing UI
+## 4. Build its screens in the console
 
-Product applications use the existing application host routes:
+An application's screens are console screens (`frontend/apps/console`), built
+like every other console screen and calling `/api/v1` endpoints that call the
+owning domain. A package does not add routes, pipelines, authentication, or
+frontend code of its own. The console's Apps lists
+(`Cadence.Reads.MissionApps`, at mission and spacecraft scope) install, disable
+and uninstall it through `ApplicationInstallations` and show its status.
 
-- mission applications run in the authenticated `:mission` LiveView session;
-- spacecraft applications run in the authenticated `:spacecraft_show`
-  LiveView session.
-
-Those sessions already establish the browser pipeline, authenticated scope,
-organization, mission, user navigation, and—at spacecraft scope—the selected
-spacecraft. A package does not add routes, pipelines, `live_session` blocks, or
-authentication callbacks.
-
-Do not add an application-specific `live_action` to the generic host. If an
-older product URL must remain compatible, add an authenticated permanent
-redirect to the generic route and keep that historical mapping in a legacy
-redirect controller. Applications without a previously shipped URL need no
-route change at all.
-
-An application with no surfaces is headless (`ApplicationDefinition.headless?/1`): it needs no
-workspace surface and no frontend release, and the console's own screens drive it. Telemetry
-Decom is one (#669). An application that declares any surface gives every installable scope an
-`:application_workspace` surface.
-
-Describe each application surface with a `SurfaceDefinition`. Prefer the
-declarative renderer and a `SurfaceDocument` assembled by a host-registered
-query provider. Current host primitives cover:
-
-- summary statistics;
-- generated forms;
-- bounded paginated tables;
-- bounded diagnostics;
-- streamed activity;
-- text, textarea, numeric, select, and query-backed reference inputs; and
-- inline action outcomes and field failures.
-
-The document contains presentation data, not HEEx, CSS, JavaScript, Ecto
-queries, or effect callbacks. The host owns rendering, form events, table
-navigation, action dispatch, and feedback.
-
-Use a trusted renderer only when the workflow cannot be expressed without
-losing essential behavior, and keep all mutations behind the same typed action
-dispatcher.
-
-Do not broaden the surface grammar for a hypothetical future workflow. Add a
-primitive only with a real application consumer and bounded validation.
-
-If the application's standard status is materially part of an existing
-cross-application workflow, declare a bounded `StatusPlacement` instead of
-teaching that host about application-owned states or persistence. The initial
-placement is spacecraft-scoped `:comms_validation`. It is appropriate only when
-the application's readiness genuinely affects Comms setup. Set `required?: true`
-when a declared but absent installation must block that host workflow.
-
-A status placement does not carry labels, finding copy, route fragments,
-renderer identities, or callbacks. The registered status provider owns the
-typed status; the receiving host owns grouping, severity policy, presentation,
-and navigation. Do not infer placement from a resource claim and do not opt
-unrelated applications into Comms merely to gain visibility.
-
-## 5. Keep actions and effects host-owned
-
-An application action declares stable intent, scope, input and result contract,
-required permission, execution mode, and concurrency semantics.
-
-The host must:
-
-1. re-resolve the exact installed application version;
-2. verify the action belongs to the current surface or lifecycle contract;
-3. authorize the current scope;
-4. validate input;
-5. dispatch through the registered domain provider; and
-6. render a bounded result or `ActionFailure`.
-
-Application renderers must not write persistence directly or perform arbitrary
-external effects. Runtime and control-plane effects continue through governed
-Cadence services and platform-owned executors.
+Writes go through the owning domain's services, which authorize the current
+scope and validate input themselves. Runtime and control-plane effects continue
+through governed Cadence services and platform-owned executors.
 
 ## 6. Pin versions in durable records
 
@@ -212,60 +137,22 @@ allows them. Being configured or loadable does not make a module a compiled
 package, grant it product visibility, or let it replace a first-party packaged
 identity.
 
-## 7. Wire discovery into an existing host surface
-
-### Platform availability is not application installation
+## 7. Platform availability is not application installation
 
 `ApplicationDefinition.installation_policy` separates platform modules
 (`:platform`) from optional product capabilities (`:optional`, the default).
-Mission/Catalog, Spacecraft, Comms, Ops, and administration are platform modules
-at their declared scopes. They do not require installation records. Telemetry
-Decom remains an optional installation.
+Platform modules, such as the Ops Console at mission scope, are always installed
+at their declared scopes and need no installation records. Telemetry Decom is an
+optional installation at spacecraft scope.
 
-Only a platform module declares actions. An optional application declares no
-domain or lifecycle actions (`ApplicationDefinition.validate/1` refuses one that
-does): the console installs, disables and uninstalls it through
-`ApplicationInstallations`, and its configuration is written through its own
-domain paths, never through the action dispatcher.
+Use the registry's canonical policy (`Registry.platform?/2`) for admission; do
+not keep separate installation-exemption lists. Platform availability does not
+bypass authentication or scope permissions. Platform installation mutations are
+rejected.
 
-Use the registry's canonical policy for host admission; do not maintain separate
-installation-exemption lists in navigation, query, or action code. Platform
-availability does not bypass authentication, scope permissions, declared
-surface/action contracts, or approved frontend-release admission. Vue federation
-is a delivery choice, not a product installation or operational activation.
-
-Inventory lists and profile choices expose optional capabilities only. Platform
-installation mutations are rejected. Legacy platform installation rows are
-preserved but do not control platform availability; disabled optional rows stay
-disabled. No installation backfill is needed for existing or new missions.
-
-Mission and spacecraft application-management routes use host-bundled Vue
-components and the shared `ApplicationInventoryLifecycle` boundary. They remain
-usable when a federated manifest or approved release is unavailable. Spacecraft
-install eligibility still comes from the pinned profile or a retained
-installation. Disabling or uninstalling a workspace does not implicitly stop
-active domain runtime state.
-
-The UI asks `Cadence.ExtensionCatalog` what compiled contributions are
+The console asks `Cadence.ExtensionCatalog` what compiled contributions are
 available. It does not duplicate module lists, labels, configuration fields, or
-capability maps in a LiveView.
-
-Application inventory reads go through
-`Cadence.Reads.Applications.Inventory.declared_with_installations/6`, which
-composes the declared applications with their durable installation lifecycle and
-registered status provider (the console's apps lists read `Cadence.Reads.MissionApps`).
-
-Inventory route shells reuse the existing inventory Vue components and
-`CadenceWeb.ApplicationInventoryLifecycle` for install, enable, disable, and
-uninstall events. Do not copy those cards or event handlers into a new host
-scope. `CadenceWeb.ApplicationManagement` supplies the scope-specific inventory
-source, install-eligibility decision, and host context to that shared behavior.
-
-Do not load an application-owned configuration module directly from a mission
-or spacecraft overview, readiness page, navigation surface, or application
-inventory. Those are cross-application host surfaces: render the shared
-inventory item and aggregate status. Application-owned reads remain appropriate
-inside that application's registered workspace renderer or surface provider.
+capability maps.
 
 The owning context still validates and executes the selected definition. This
 keeps composition discovery separate from domain authority.
@@ -282,13 +169,8 @@ At minimum, prove:
 - the package contribution resolves its exact definition and version;
 - malformed definitions and unsupported versions fail closed;
 - the composition catalog remains globally valid;
-- durable records retain the selected version;
-- the existing host UI discovers the contribution without a new route; and
+- durable records retain the selected version; and
 - the domain execution path still authorizes and validates independently.
-
-For declarative applications, test key DOM ids through `Phoenix.LiveViewTest`
-and assert outcomes rather than raw HTML. For trusted renderers, also prove that
-mutations pass through the typed action boundary.
 
 ## 9. Run the extension integrity gate
 
@@ -301,9 +183,8 @@ mix cadence.extensions.check
 The command validates every compiled package, dependency, compatibility
 declaration, typed contribution, exact owning-registry resolution, package-id
 ownership, and contribution ownership. It also proves that every declared
-application action, status query, declarative surface query, and reference
-identity has a valid plane-owned provider, with no orphaned provider entries. It
-then prints the composed inventory.
+application status query has a valid provider, with no orphaned provider
+entries. It then prints the composed inventory.
 
 Finish with:
 
@@ -322,12 +203,10 @@ and the full default test suite.
 - stable identity and version are explicit
 - exact typed contribution added to one compiled package
 - compatibility contract declared
-- declarative host surface used when the bounded grammar fits
-- cross-application status placement declared only for a concrete host workflow
+- screens built in the console against `/api/v1`, none in the package
 - no package-owned route, authentication, query, persistence, or side effect
 - durable consumers pin the definition version
-- host discovery uses `Cadence.ExtensionCatalog`
-- cross-application host surfaces use `CadenceWeb.ApplicationInventory`
+- discovery uses `Cadence.ExtensionCatalog`
 - owning domain revalidates before execution
 - contract and real product-path tests added
 - `mix cadence.extensions.check` passes
