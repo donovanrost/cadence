@@ -115,9 +115,12 @@ defmodule Mix.Tasks.Cadence.Scale.Run do
     cores = summary.meta.host.logical_cpus
     load = pre_run.load_one || "unavailable"
     utilization = get_in(summary, [:metrics, "beam.scheduler_utilization", :p99])
+    settle_seconds = Float.round(pre_run.settle_ms / 1_000, 2)
 
     [
+      "- Pre-run settle time #{settle_seconds} s\n",
       "- Pre-run 1-minute load #{load} (#{cores} logical cores), swap #{formatted_percent(pre_run.swap_percent)}\n",
+      if(pre_run.settled?, do: [], else: "- Ceiling reason Pre-run quiet check timed out.\n"),
       cpu_finding(capacity, spacecraft, cores, utilization)
     ]
   end

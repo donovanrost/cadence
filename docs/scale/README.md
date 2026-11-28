@@ -25,10 +25,11 @@ Each job summary contains the scorecard. The artifact includes the Markdown
 under `docs/scale/` and its JSONL series and JSON summary under `var/scale/`.
 The page records the runner type and tested commit. The workflow passes
 `--dedicated-runner` to declare that the fresh runner is reserved for the stack
-and harness. The sampler checks 1-minute load and swap before the simulator
-starts sending traffic. A baseline requires load at or below the logical core
-count and swap use under 50% at that check. A busy host or missing pre-run
-reading yields a ceiling check.
+and harness. After setup and before the simulator starts sending traffic, the
+runner checks 1-minute load and swap every 10 seconds for up to 300 seconds.
+A baseline requires load at or below the logical core count and swap use under
+50% at that check. The page records how long the runner settled and the final
+readings. An expired wait yields a ceiling check with the timeout reason.
 
 During-run load and swap peaks are reported as observations. A baseline that
 exceeds the core count during the run reports a CPU-bound finding with p99 BEAM

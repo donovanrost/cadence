@@ -10,6 +10,15 @@ defmodule Cadence.Observability.ScaleSampler.Host do
 
   @type load_average :: %{one: float(), five: float(), fifteen: float()}
   @type swap :: %{swap_used_mb: float(), swap_total_mb: float()}
+  @type pre_run :: %{
+          load_one: number() | nil,
+          swap_percent: number() | nil,
+          settle_ms: non_neg_integer(),
+          settled?: boolean()
+        }
+
+  @settle_interval_ms 10_000
+  @settle_timeout_ms 300_000
 
   @doc "This second's host load, swap usage and agent processes."
   @spec sample() :: %{
@@ -19,8 +28,39 @@ defmodule Cadence.Observability.ScaleSampler.Host do
           agents: integer() | nil
         }
   def sample do
+    Map.put(load_and_swap(), :agents, agents())
+  end
+
+  @doc "Waits for a dedicated runner's pre-run load and swap to settle."
+  @spec settle(keyword()) :: pre_run()
+  def settle(opts \\ []) do
+    read_host = Keyword.get(opts, :read_host, &load_and_swap/0)
+    logical_cpus = Keyword.get_lazy(opts, :logical_cpus, &logical_cpus/0)
+    timeout_ms = Keyword.get(opts, :timeout_ms, @settle_timeout_ms)
+    settle(read_host, logical_cpus, System.monotonic_time(:millisecond), timeout_ms)
+  end
+
+  defp settle(read_host, logical_cpus, started, timeout_ms) do
+    capacity = capacity_for([read_host.()], logical_cpus)
+    elapsed_ms = System.monotonic_time(:millisecond) - started
+    settled? = capacity.classification == :baseline
+
+    if settled? or elapsed_ms >= timeout_ms do
+      %{
+        load_one: capacity.max_load_one,
+        swap_percent: capacity.max_swap_percent,
+        settle_ms: elapsed_ms,
+        settled?: settled?
+      }
+    else
+      Process.sleep(min(@settle_interval_ms, timeout_ms - elapsed_ms))
+      settle(read_host, logical_cpus, started, timeout_ms)
+    end
+  end
+
+  defp load_and_swap do
     swap = swap() || %{swap_used_mb: nil, swap_total_mb: nil}
-    Map.merge(swap, %{load: load(), agents: agents()})
+    Map.put(swap, :load, load())
   end
 
   @doc """
@@ -28,8 +68,8 @@ defmodule Cadence.Observability.ScaleSampler.Host do
   determine capacity. A dedicated runner uses its host sample from before the
   workload and reports during-run pressure separately.
   """
-  @spec capacity([map()], pos_integer() | :unknown, :local | map()) :: %{
-          optional(:pre_run) => %{load_one: number() | nil, swap_percent: number() | nil},
+  @spec capacity([map()], pos_integer() | :unknown, :local | pre_run()) :: %{
+          optional(:pre_run) => pre_run(),
           classification: :baseline | :ceiling_check,
           max_load_one: number() | nil,
           max_swap_percent: number() | nil
@@ -38,13 +78,12 @@ defmodule Cadence.Observability.ScaleSampler.Host do
 
   def capacity(samples, logical_cpus, :local), do: capacity_for(samples, logical_cpus)
 
-  def capacity(samples, logical_cpus, pre_run) when is_map(pre_run) do
+  def capacity(samples, logical_cpus, %{settled?: settled?} = pre_run) do
     during = capacity_for(samples, logical_cpus)
-    before = capacity_for([pre_run], logical_cpus)
 
     Map.merge(during, %{
-      classification: before.classification,
-      pre_run: %{load_one: before.max_load_one, swap_percent: before.max_swap_percent}
+      classification: if(settled?, do: :baseline, else: :ceiling_check),
+      pre_run: pre_run
     })
   end
 

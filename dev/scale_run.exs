@@ -85,18 +85,20 @@ defmodule Cadence.Dev.ScaleRun do
           @contact_setup_timeout
         )
 
+      sampler_opts =
+        if opts[:dedicated_runner] do
+          Mix.shell().info("Waiting for the dedicated runner's pre-run load and swap to settle")
+          pre_run = :erpc.call(node, Host, :settle, [], to_timeout(minute: 6))
+          Keyword.put(sampler_opts, :pre_run_host, pre_run)
+        else
+          sampler_opts
+        end
+
       expires_in =
         Enum.min_by(contacts, & &1.ends_at, DateTime).ends_at |> DateTime.diff(DateTime.utc_now())
 
       if expires_in < duration + 120,
         do: Mix.raise("TCP contact windows will expire before the run finishes")
-
-      sampler_opts =
-        if opts[:dedicated_runner] do
-          Keyword.put(sampler_opts, :pre_run_host, :erpc.call(node, Host, :sample, []))
-        else
-          sampler_opts
-        end
 
       target = %{
         ports: Map.new(contacts, &{&1.scid, &1.port}),

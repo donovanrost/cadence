@@ -41,7 +41,7 @@ defmodule Cadence.Observability.ScaleSampler do
   `:questdb_tables` (`Storage` defaults), `:postgres` (true; false where there's no database to
   ask), `:questdb_exec` (a `sql -> result` function for QuestDB; no QuestDB probes without it),
   `:owner` (a pid; the sampler stops when it goes down), `:max_ms` (required: a hard stop),
-  and `:pre_run_host` (a host sample taken before the workload on a dedicated runner).
+  and `:pre_run_host` (the dedicated runner's settle result from before the workload).
   """
   @spec start(keyword()) :: GenServer.on_start()
   def start(opts), do: GenServer.start(__MODULE__, opts, name: __MODULE__)
