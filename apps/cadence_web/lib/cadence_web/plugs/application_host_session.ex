@@ -1,15 +1,13 @@
 defmodule CadenceWeb.Plugs.ApplicationHostSession do
   @moduledoc """
   The bridge's host session check. Every bridge call must carry (`x-cadence-poc-session`) the
-  host session id this browser session was given by the console's surface host; the plug
-  assigns the call's origin (`:application_host_origin`, always `:console`).
+  host session id this browser session was given by the console's surface host.
   """
 
   import Plug.Conn
 
   alias CadenceWeb.ApplicationHostSessionState
 
-  @origin_key :application_host_origin
   @session_header "x-cadence-poc-session"
   @problem_schema "cadence.application-host-problem.v1"
 
@@ -18,7 +16,7 @@ defmodule CadenceWeb.Plugs.ApplicationHostSession do
   def call(conn, _opts) do
     with [header_id] <- get_req_header(conn, @session_header),
          true <- ApplicationHostSessionState.console_session?(conn, header_id) do
-      assign(conn, @origin_key, :console)
+      conn
     else
       _other -> invalid_session(conn)
     end

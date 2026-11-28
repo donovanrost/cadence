@@ -312,7 +312,7 @@ defmodule CadenceWeb.ApplicationActionIdempotency do
 
   defp terminal_update(%__MODULE__{} = row, state, response, opts)
        when state in [:completed, :failed, :indeterminate] do
-    with {:ok, response_attrs} <- response_attrs(response, response_limit(row.application_key)),
+    with {:ok, response_attrs} <- response_attrs(response, @max_response_bytes),
          now <- now(opts),
          {1, _} <-
            Repo.update_all(
@@ -440,7 +440,7 @@ defmodule CadenceWeb.ApplicationActionIdempotency do
   defp replay_response(%__MODULE__{} = row) do
     with {:ok, status} <- response_status(row.response_status),
          {:ok, content_type} <- response_content_type(row.response_content_type),
-         {:ok, body} <- response_body(row.response_body, response_limit(row.application_key)) do
+         {:ok, body} <- response_body(row.response_body, @max_response_bytes) do
       {:ok, {:replay, %{status: status, content_type: content_type, body: body}}}
     else
       _invalid -> {:error, {:idempotency_persistence_failure, :stored_response_invalid}}
@@ -459,10 +459,6 @@ defmodule CadenceWeb.ApplicationActionIdempotency do
     do: {:ok, body}
 
   defp response_body(_body, _limit), do: :error
-
-  # The definition receipt includes an 8 KB expression, including JSON escaping.
-  defp response_limit("derived_telemetry"), do: 65_536
-  defp response_limit(_application_key), do: @max_response_bytes
 
   defp insert_changeset(attrs) do
     %__MODULE__{}

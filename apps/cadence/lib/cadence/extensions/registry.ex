@@ -23,7 +23,6 @@ defmodule Cadence.Extensions.Registry do
   def all,
     do: [
       telemetry_package(),
-      mission_assurance_package(),
       ops_console_package(),
       runtime_foundations_package(),
       cfdp_package(),
@@ -74,10 +73,6 @@ defmodule Cadence.Extensions.Registry do
           application_key: "telemetry_decom",
           application_version: 1
         },
-        %ApplicationContribution{
-          application_key: "derived_telemetry",
-          application_version: 1
-        },
         %CapabilityContribution{
           family_key: :definition_bound_telemetry,
           family_version: 1,
@@ -108,21 +103,6 @@ defmodule Cadence.Extensions.Registry do
           family_key: :uplink_gateway,
           family_version: 1,
           kind: :transport_extension
-        }
-      ]
-    }
-  end
-
-  defp mission_assurance_package do
-    %ExtensionPackage{
-      package_id: "cadence.mission-assurance",
-      version: 1,
-      trust: :first_party,
-      compatibility: %{cadence_application_contract: 1, cadence_surface_contract: 1},
-      contributions: [
-        %ApplicationContribution{
-          application_key: "limits",
-          application_version: 1
         }
       ]
     }

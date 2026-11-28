@@ -55,24 +55,38 @@ defmodule Cadence.Reads.Applications.InventoryTest do
         metadata: %{}
       })
 
-    assert {:ok, _} =
-             ApplicationInstallations.install(context.scope, context.mission_host, "limits")
-
-    assert {:ok, _} =
-             ApplicationInstallations.disable(context.scope, context.mission_host, "limits")
-
-    definitions = ExtensionCatalog.available_applications_for_scope(:mission)
-
-    assert {:ok, [limits]} =
+    assert {:ok, []} =
              declared(
                context.scope,
                context.mission_host,
-               %{"ops_console" => %{}, "limits" => %{}},
-               definitions
+               %{"ops_console" => %{}},
+               ExtensionCatalog.available_applications_for_scope(:mission)
              )
 
-    assert limits.application_key == "limits"
-    assert limits.lifecycle_state == :disabled
+    assert {:ok, _} =
+             ApplicationInstallations.install(
+               context.scope,
+               context.spacecraft_host,
+               "telemetry_decom"
+             )
+
+    assert {:ok, _} =
+             ApplicationInstallations.disable(
+               context.scope,
+               context.spacecraft_host,
+               "telemetry_decom"
+             )
+
+    assert {:ok, [decom]} =
+             declared(
+               context.scope,
+               context.spacecraft_host,
+               %{"telemetry_decom" => %{}},
+               ExtensionCatalog.available_applications_for_scope(:spacecraft)
+             )
+
+    assert decom.application_key == "telemetry_decom"
+    assert decom.lifecycle_state == :disabled
     assert Repo.get!(InstallationRow, row.application_installation_id) == row
   end
 
