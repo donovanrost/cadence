@@ -11,13 +11,6 @@ defmodule Cadence.ContactPlanning.FleetRunActions do
     end
   end
 
-  def validate(action, params) do
-    case admit(action, params) do
-      {:ok, _, _, _} -> :ok
-      {:error, _} = error -> error
-    end
-  end
-
   defp admit(action, params) when is_map(params) and action in [:continue, :repair] do
     p = Map.delete(params, "mission_id")
 

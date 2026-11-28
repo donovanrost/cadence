@@ -39,132 +39,6 @@ defmodule CadenceWeb.HostPageLive do
 
   def handle_event(
         "host:ops-page:read",
-        %{"path" => path, "id" => id} = params,
-        socket
-      )
-      when id in [
-             "planning.contact-schedule",
-             "planning.contact-record",
-             "planning.reservation-review"
-           ] do
-    with true <- CadenceWeb.OpsContactSchedulingPage.matches_read?(socket, params),
-         {:ok, info} <- resolve_path(path),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- CadenceWeb.OpsContactSchedulingPage.matches_read?(socket, params) do
-      {page, socket} = CadenceWeb.OpsContactSchedulingPage.read(socket)
-      {:reply, %{ok: true, snapshot: page}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event(
-        "host:ops-page",
-        %{
-          "path" => path,
-          "id" => id,
-          "event" => event,
-          "input" => input
-        } =
-          params,
-        socket
-      )
-      when id in [
-             "planning.contact-schedule",
-             "planning.contact-record",
-             "planning.reservation-review"
-           ] do
-    with true <- CadenceWeb.OpsContactSchedulingPage.matches_action?(socket, params),
-         {:ok, info} <- resolve_path(path),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- CadenceWeb.OpsContactSchedulingPage.matches_action?(socket, params) do
-      {result, socket} = CadenceWeb.OpsContactSchedulingPage.action(socket, event, input)
-      {:reply, %{ok: true, snapshot: result}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event(
-        "host:ops-page:read",
-        %{"path" => path, "id" => "planning.plan-review"} = params,
-        socket
-      ) do
-    with true <- CadenceWeb.OpsPlanReviewPage.matches_read?(socket, params),
-         {:ok, info} <- resolve_path(path),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- CadenceWeb.OpsPlanReviewPage.matches_read?(socket, params) do
-      {page, socket} = CadenceWeb.OpsPlanReviewPage.read(socket)
-      {:reply, %{ok: true, snapshot: page}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event(
-        "host:ops-page",
-        %{
-          "path" => path,
-          "id" => "planning.plan-review",
-          "event" => event,
-          "input" => input
-        } =
-          params,
-        socket
-      ) do
-    with true <- CadenceWeb.OpsPlanReviewPage.matches_action?(socket, params),
-         {:ok, info} <- resolve_path(path),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- CadenceWeb.OpsPlanReviewPage.matches_action?(socket, params) do
-      {result, socket} = CadenceWeb.OpsPlanReviewPage.action(socket, event, input)
-      {:reply, %{ok: true, snapshot: result}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event(
-        "host:ops-page:read",
-        %{"path" => path, "id" => id} = params,
-        socket
-      )
-      when id in ["planning.fleet-start", "planning.fleet-run"] do
-    with true <- CadenceWeb.OpsFleetWorkflowPage.matches_read?(socket, params),
-         {:ok, info} <- resolve_path(path),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- CadenceWeb.OpsFleetWorkflowPage.matches_read?(socket, params) do
-      {page, socket} = CadenceWeb.OpsFleetWorkflowPage.read(socket)
-      {:reply, %{ok: true, snapshot: page}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event(
-        "host:ops-page",
-        %{"path" => path, "id" => id, "event" => event, "input" => input} = params,
-        socket
-      )
-      when id in ["planning.fleet-start", "planning.fleet-run"] do
-    with true <- CadenceWeb.OpsFleetWorkflowPage.matches_action?(socket, params),
-         {:ok, info} <- resolve_path(path),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- CadenceWeb.OpsFleetWorkflowPage.matches_action?(socket, params) do
-      {result, socket} = CadenceWeb.OpsFleetWorkflowPage.action(socket, event, input)
-      {:reply, %{ok: true, snapshot: result}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event(
-        "host:ops-page:read",
         %{"path" => path, "id" => "limits.alarm-conditions"} = params,
         socket
       ) do
@@ -173,22 +47,6 @@ defmodule CadenceWeb.HostPageLive do
          {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
          true <- CadenceWeb.OpsAlarmConditionsPage.matches?(socket, params) do
       {:reply, %{ok: true, snapshot: CadenceWeb.OpsAlarmConditionsPage.read(socket)}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event(
-        "host:ops-page:read",
-        %{"path" => path, "id" => "planning.fleet-directory"} = params,
-        socket
-      ) do
-    with true <- CadenceWeb.OpsFleetDirectoryPage.matches?(socket, params),
-         {:ok, info} <- resolve_path(path),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- CadenceWeb.OpsFleetDirectoryPage.matches?(socket, params) do
-      {:reply, %{ok: true, snapshot: CadenceWeb.OpsFleetDirectoryPage.read(socket)}, socket}
     else
       {:halt, socket} -> {:noreply, socket}
       _ -> {:reply, %{ok: false}, socket}
@@ -216,10 +74,6 @@ defmodule CadenceWeb.HostPageLive do
         |> CadenceWeb.OpsCommandPage.prepare(info, path)
         |> CadenceWeb.OpsCommandHistoryPage.prepare(info, path)
         |> CadenceWeb.OpsAlarmConditionsPage.prepare(info, path)
-        |> CadenceWeb.OpsFleetDirectoryPage.prepare(info, path)
-        |> CadenceWeb.OpsFleetWorkflowPage.prepare(info, path)
-        |> CadenceWeb.OpsPlanReviewPage.prepare(info, path)
-        |> CadenceWeb.OpsContactSchedulingPage.prepare(info, path)
 
       socket =
         if socket.assigns[:ops_context_active?] do

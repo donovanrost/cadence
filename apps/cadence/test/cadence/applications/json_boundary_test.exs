@@ -62,33 +62,6 @@ defmodule Cadence.Applications.JSONBoundaryTest do
     assert {:error, :document_bytes} = JSONBoundary.safe_workflow_output(oversized)
   end
 
-  test "native planning input declares exact text wrappers and retains strict evidence bounds" do
-    alias Cadence.Applications.OpsConsole.Actions.NativePlanningInput
-    token = String.duplicate("t", 8_192)
-    assert {:ok, %{"token" => ^token}} = NativePlanningInput.admit(%{"token" => token})
-    assert {:error, _} = NativePlanningInput.admit(%{"token" => token <> "t"})
-    assert {:error, _} = NativePlanningInput.admit(%{"token" => token, "extra" => true})
-    reason = String.duplicate("界", 1_365)
-
-    input = %{
-      "contact_plan_id" => "plan",
-      "plan_evidence" => %{"id" => "review"},
-      "decision" => %{"reason" => reason}
-    }
-
-    assert {:ok, ^input} = NativePlanningInput.admit(input)
-
-    assert {:error, _} =
-             NativePlanningInput.admit(put_in(input, ["decision", "reason"], reason <> "界"))
-
-    assert {:error, _} =
-             NativePlanningInput.admit(
-               put_in(input, ["plan_evidence", "id"], String.duplicate("x", 241))
-             )
-
-    assert {:error, _} = NativePlanningInput.admit(%{"untyped" => reason})
-  end
-
   defp nested_map(0), do: %{}
   defp nested_map(depth), do: %{"next" => nested_map(depth - 1)}
 end

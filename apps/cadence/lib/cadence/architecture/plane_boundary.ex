@@ -120,17 +120,10 @@ defmodule Cadence.Architecture.PlaneBoundary do
                         "lib/cadence/applications/host_query_registry.ex",
                         "lib/cadence/applications/telemetry_decom/action_provider.ex",
                         "lib/cadence/applications/ops_console/action_provider.ex",
-                        "lib/cadence/applications/ops_console/actions/contact_planning.ex",
-                        "lib/cadence/applications/ops_console/actions/contact_workflow.ex",
                         "lib/cadence/applications/ops_console/actions/dashboard_deep_actions.ex",
                         "lib/cadence/applications/ops_console/actions/dashboard_workflows.ex",
                         "lib/cadence/applications/ops_console/actions/data_sources.ex",
                         "lib/cadence/applications/ops_console/actions/platform_bindings.ex",
-                        "lib/cadence/applications/ops_console/actions/fleet_planning.ex",
-                        "lib/cadence/applications/ops_console/actions/plan_decisions.ex",
-                        "lib/cadence/applications/ops_console/actions/plan_review_workflow.ex",
-                        "lib/cadence/applications/ops_console/actions/provider_change_decisions.ex",
-                        "lib/cadence/applications/ops_console/actions/schedule_cancellations.ex",
                         "lib/cadence/applications/ops_console/actions/telemetry_explore.ex",
                         "lib/cadence/applications/ops_console/actions/ui_interactions.ex"
                       ])

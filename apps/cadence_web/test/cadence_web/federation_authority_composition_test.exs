@@ -68,7 +68,7 @@ defmodule CadenceWeb.FederationAuthorityCompositionTest do
              "telemetry_decom" => 2,
              "derived_telemetry" => 1,
              "limits" => 2,
-             "ops_console" => 15
+             "ops_console" => 8
            }
   end
 

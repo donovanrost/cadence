@@ -34,67 +34,6 @@ defmodule Cadence.Applications.OpsConsole do
       actions: []
     },
     %{
-      id: "contact_schedule",
-      purpose: :operations,
-      label: "Contact Schedule",
-      path: "/missions/:mission_id/ops/contacts",
-      actions: ["validate", "search", "reserve", "cancel"]
-    },
-    %{
-      id: "contact_plan_show",
-      purpose: :subject_detail,
-      label: "Contact Plan",
-      path: "/missions/:mission_id/ops/plans/:contact_plan_id",
-      actions: ["submit-plan", "approve-plan", "reject-plan", "execute-plan"]
-    },
-    %{
-      id: "contact_detail",
-      purpose: :subject_detail,
-      label: "Contact Detail",
-      path: "/missions/:mission_id/ops/contacts/:provider_reservation_id",
-      actions: [
-        "approve-provider-change",
-        "reject-provider-change",
-        "acknowledge-provider-change"
-      ]
-    },
-    %{
-      id: "contact_record",
-      purpose: :subject_detail,
-      label: "Contact Record",
-      path: "/missions/:mission_id/ops/contacts/records/:contact_id",
-      actions: []
-    },
-    %{
-      id: "fleet_planning",
-      purpose: :operations,
-      label: "Fleet Planning",
-      path: "/missions/:mission_id/ops/planning",
-      query_params: ["page", "state"],
-      actions: ["refresh-planning"]
-    },
-    %{
-      id: "fleet_planning_new",
-      purpose: :configuration,
-      label: "New Fleet Run",
-      path: "/missions/:mission_id/ops/planning/new",
-      actions: ["validate-fleet-run", "create-fleet-run"]
-    },
-    %{
-      id: "fleet_planning_run",
-      purpose: :subject_detail,
-      label: "Fleet Planning Run",
-      path: "/missions/:mission_id/ops/planning/runs/:fleet_planning_run_id",
-      query_params: [
-        "requirements_page",
-        "decisions_page",
-        "resources_page",
-        "automation_page",
-        "commitments_page"
-      ],
-      actions: ["refresh-fleet-run", "repair-fleet-run"]
-    },
-    %{
       id: "commands",
       purpose: :operations,
       label: "Commands",
@@ -177,13 +116,6 @@ defmodule Cadence.Applications.OpsConsole do
   # intentional: every declared surface participates in the partition.
   @residual_action_ledger %{
     "workspace" => [],
-    "contact_schedule" => [],
-    "contact_plan_show" => [],
-    "contact_detail" => [],
-    "contact_record" => [],
-    "fleet_planning" => [],
-    "fleet_planning_new" => [],
-    "fleet_planning_run" => [],
     "commands" => [],
     "telemetry_explore" => [],
     "data_sources" => [],
