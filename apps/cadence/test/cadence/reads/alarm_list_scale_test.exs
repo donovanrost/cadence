@@ -16,6 +16,7 @@ defmodule Cadence.Reads.AlarmListScaleTest do
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Reads.AlarmList
   alias Cadence.SemanticObservations.{AlarmPage, LatestAlarmStateRow}
+  alias Cadence.SemanticRuntime.AlarmLevel
 
   @org "org-alarm-scale"
   @mission "mission-alarm-scale"
@@ -88,8 +89,8 @@ defmodule Cadence.Reads.AlarmListScaleTest do
 
   # The cursor of the row `offset` rows into the list for `filters`: the sort key of that row.
   defp cursor_at(filters, offset) do
-    critical = Cadence.SemanticRuntime.AlarmLevel.states_of(:critical)
-    caution = Cadence.SemanticRuntime.AlarmLevel.states_of(:caution)
+    critical = AlarmLevel.states_of(:critical)
+    caution = AlarmLevel.states_of(:caution)
     import Ecto.Query
 
     row =
@@ -119,7 +120,7 @@ defmodule Cadence.Reads.AlarmListScaleTest do
 
   defp state_clause("active") do
     import Ecto.Query
-    dynamic([r], r.effective_state in ^Cadence.SemanticRuntime.AlarmLevel.alarm_states_text())
+    dynamic([r], r.effective_state in ^AlarmLevel.alarm_states_text())
   end
 
   defp state_clause(_all), do: true
