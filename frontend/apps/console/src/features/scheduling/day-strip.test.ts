@@ -62,7 +62,7 @@ describe("K1 day strip (DECISIONS #100)", () => {
     expect(stripCell(pending, now)).toMatchObject({
       word: "Awaiting approval",
       mark: { glyph: "▲", state: "caution" },
-      name: "Tue 17 Nov: awaiting approval, first window 00:00Z",
+      name: "Tue 17 Awaiting approval, Tue 17 Nov, first window 00:00Z",
     });
     const approved = day({ plan: plan("approved"), first_window_at: "2026-11-17T00:00:00Z" });
     expect(stripCell(approved, now).mark).toEqual({ glyph: "▲", state: "caution" });
