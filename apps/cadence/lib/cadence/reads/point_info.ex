@@ -2,11 +2,14 @@ defmodule Cadence.Reads.PointInfo do
   @moduledoc """
   Display facts for telemetry points (unit, description), keyed by point id.
 
-  Units come from the engineering unit of the decoded packet field in the
-  mission's active binding set (`Cadence.Ops.PointCatalog`), falling back to
-  the active revision's catalog declarations (`parameter -> type -> unit`)
-  when the lowered field has none. Descriptions are not carried through
-  catalog import yet, so `description` is always `nil`.
+  The points are the operator point catalog's (`Cadence.Ops.PointCatalog`): the
+  active binding set's packet fields and the active revision's derived points
+  (algorithm outputs, keyed by the output parameter's semantic id, #451 T4b).
+  A packet point's unit is its decoded field's engineering unit, falling back to
+  the active revision's catalog declarations (`parameter -> type -> unit`) when
+  the lowered field has none; a derived point's unit already comes from those
+  declarations. Descriptions are not carried through catalog import yet, so
+  `description` is always `nil`.
   """
 
   alias Cadence.Ops.PointCatalog
@@ -14,15 +17,16 @@ defmodule Cadence.Reads.PointInfo do
 
   @type info :: %{unit: binary() | nil, description: binary() | nil}
 
-  @doc "Unit and description for every point in the mission's active binding set."
+  @doc "Unit and description for every point of the mission's operator point catalog."
   @spec by_id(binary(), binary()) :: %{binary() => info()}
   def by_id(organization_id, mission_id) do
     points = PointCatalog.list_points(organization_id, mission_id)
 
+    # A derived point's unit already comes from its declaration; only packet fields fall back.
     missing =
-      points
-      |> Enum.filter(&(blank_to_nil(&1.unit) == nil and is_binary(&1.parameter_id)))
-      |> Enum.map(& &1.parameter_id)
+      for %{source: :packet, parameter_id: parameter_id} = point <- points,
+          is_binary(parameter_id) and blank_to_nil(point.unit) == nil,
+          do: parameter_id
 
     declarations =
       if missing == [],

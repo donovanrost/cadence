@@ -917,9 +917,10 @@ must be a mission spacecraft), and `limit` 1–200 (default 50).
 }]}}
 ```
 
-- The points are the mission's canonical set: fields of the active binding set's packet
-  definitions (`subsystem` is the packet name) plus governed derived telemetry (`subsystem:
-  "Derived"`). It's the same set the LiveView point picker offers, sorted by id.
+- The points are the mission's operator point catalog, sorted by id: fields of the active binding
+  set's packet definitions (`subsystem` is the packet name) plus the active revision's derived
+  parameters, the outputs of its algorithms (#451 T4b; `subsystem: "Derived"`, `id` is the output
+  parameter's semantic id, `name` its qualified name, `unit` and `type` from its declaration).
 - `type`: `numeric | enum | text`, from the field's data type.
 - `latest` appears only with `spacecraft_id`. `source` is `live | history`:
   - `live`: from the current-value store. On :4011 that store is in memory, and every server
