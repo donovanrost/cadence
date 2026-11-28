@@ -2,6 +2,7 @@ defmodule CadenceWeb.Console.OpsCountsAPITest do
   use CadenceWeb.ConnCase, async: false
 
   alias Cadence.Control.MissionRuntimeStatus
+  alias Cadence.MonitoringPlanFixtures
   alias CadenceWeb.MissionReadModelFixtures
   alias CadenceWeb.TestFixtures
 
@@ -84,6 +85,7 @@ defmodule CadenceWeb.Console.OpsCountsAPITest do
 
   test "counts an active alarm episode and the fleet", c do
     MissionReadModelFixtures.seed_mission_read_models(c.org.organization_id, c.mission.mission_id)
+    activate_monitoring(c, above: 10)
     data = c |> counts() |> json_response(200) |> Map.fetch!("data")
 
     assert %{"active" => 1, "caution" => 1, "unacknowledged" => 1, "limits_configured" => true} =
@@ -108,23 +110,26 @@ defmodule CadenceWeb.Console.OpsCountsAPITest do
     assert posture["total"] == 1
   end
 
-  # #481: retiring every limit definition turns "limits configured" off everywhere it's shown;
-  # retired definitions keep their versions, so the plain latest-version list kept counting them.
-  test "limits aren't configured once every definition is retired", c do
+  # #481, now from the plan (#451 T3a): "limits configured" follows the ACTIVE monitoring plan, so a
+  # generation whose plan evaluates nothing turns it off everywhere it's shown.
+  test "limits aren't configured once the active plan evaluates nothing", c do
     MissionReadModelFixtures.seed_mission_read_models(c.org.organization_id, c.mission.mission_id)
+    assert configured(c) == {false, false, false}
+
+    activate_monitoring(c, above: 10)
     assert configured(c) == {true, true, true}
 
-    for definition <-
-          Cadence.Limits.active_limit_definitions(c.org.organization_id, c.mission.mission_id) do
-      assert {:ok, _} =
-               Cadence.Limits.retire_limit_definition(
-                 c.org.organization_id,
-                 c.mission.mission_id,
-                 definition
-               )
-    end
-
+    activate_monitoring(c, above: 10, disabled: true)
     assert configured(c) == {false, false, false}
+  end
+
+  defp activate_monitoring(c, opts) do
+    MonitoringPlanFixtures.activate!(
+      c.org.organization_id,
+      c.mission.mission_id,
+      {"read-models", 1},
+      [{"counter", "/parameters/counter", opts}]
+    )
   end
 
   # {counts' alarms, counts' posture, GET /fleet}

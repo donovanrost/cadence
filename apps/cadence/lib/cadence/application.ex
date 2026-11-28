@@ -40,6 +40,8 @@ defmodule Cadence.Application do
         Cadence.Telemetry.Storage.WatermarkCoalescer,
         # The reads' cache of the history store's receipts (Fleet, a spacecraft's points).
         Cadence.Reads.DurableReceiptCache,
+        # The reads' per-revision summary of the active monitoring plan (what is monitored).
+        Cadence.Reads.MonitoredParameters,
         # Before the runtime: journal consumers subscribe to partitions' snapshot notices.
         Cadence.Runtime.SemanticSnapshotNotifier,
         Cadence.Management.Supervisor,
