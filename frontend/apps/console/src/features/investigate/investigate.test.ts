@@ -372,7 +372,7 @@ describe("History tab (Investigate.md §History, api's episode reads)", () => {
     expect(howItEnded(occ({ ended: null, cleared_at: null }))).toBe("Still open");
     // #451 T3b: a monitoring change set retired the alarm's policy while it was open.
     expect(howItEnded(occ({ ended: "rule_retired" }))).toBe("Its rule was retired");
-    expect(howItEnded(occ({ ended: "unrecognized" }))).toBe("Cleared");
+    expect(howItEnded(occ({ ended: "unrecognized" }))).toBe("Ended");
     // The wire value decodes; a way of ending this console doesn't know never fails the read.
     const ended = (v: string) => {
       const r = decode(occurrenceReader, { ...occ(), ended: v });

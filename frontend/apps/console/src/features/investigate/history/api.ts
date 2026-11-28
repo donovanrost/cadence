@@ -26,6 +26,14 @@ import {
 const actor = sharedActor;
 const sources = ["catalog_monitoring", "ground_limit"] as const;
 
+/** How an occurrence can end (alarms-console.md); a way this console doesn't know reads "Ended". */
+const endings = ["back_in_limits", "source_stopped", "rule_retired"] as const;
+const ENDED: Readonly<Record<(typeof endings)[number], string>> = {
+  back_in_limits: "Back in limits",
+  source_stopped: "Source stopped reporting it",
+  rule_retired: "Its rule was retired",
+};
+
 export const occurrenceReader = d.object({
   id: d.token,
   source: d.knownText(sources),
@@ -41,10 +49,10 @@ export const occurrenceReader = d.object({
   cleared_at: d.nullable(d.timestamp),
   duration_s: d.nullable(d.integer),
   /**
-   * null while still open; an unknown way of ending reads "Cleared". `rule_retired` (#451 T3b): a
+   * null while still open; an unknown way of ending reads "Ended". `rule_retired` (#451 T3b): a
    * monitoring change set retired the catalog alarm's policy while it was open, which closed it.
    */
-  ended: d.nullable(d.known(["back_in_limits", "source_stopped", "rule_retired"] as const)),
+  ended: d.nullable(d.known(endings)),
   cleared_unacknowledged: d.boolean,
   acknowledged_by: d.nullable(actor),
   first_value: d.nullable(engineeringValue),
@@ -144,9 +152,8 @@ export const durationWords = (o: Occurrence) =>
 
 /** How it ended (ux 7631176e). Acknowledgement is its own column. */
 export function howItEnded(o: Occurrence): string {
-  if (o.ended === "back_in_limits") return "Back in limits";
-  if (o.ended === "source_stopped") return "Source stopped reporting it";
-  if (o.ended === "rule_retired") return "Its rule was retired";
+  if (o.ended === "unrecognized") return "Ended"; // U20: plainly, never a guess
+  if (o.ended !== null) return ENDED[o.ended];
   return o.cleared_at === null ? "Still open" : "Cleared";
 }
 
