@@ -2,6 +2,7 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
   @moduledoc "Catalog-path generations (DECISIONS #36/#65)."
   use Cadence.RuntimeCase, async: false
 
+  alias Cadence.Activations.GenerationReceipts
   alias Cadence.Applications.{ApplicationInstallations, HostContext, PacketBindings}
 
   alias Cadence.Applications.SpacecraftConfiguration.{
@@ -93,6 +94,16 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
              )
 
     assert active.binding_set_content_sha256 == MissionRuntimeSpec.content_sha256(persisted)
+
+    assert {^active, %DateTime{} = applied_at} =
+             GenerationReceipts.latest(c.org, c.mission.mission_id)
+
+    assert :ok = GenerationReceipts.record(active, DateTime.add(applied_at, 1, :second))
+    assert {^active, ^applied_at} = GenerationReceipts.latest(c.org, c.mission.mission_id)
+
+    assert {:error, :spacecraft_configuration_review_stale} =
+             GenerationReceipts.record(before, DateTime.utc_now())
+
     assert_readmitted(c)
 
     latest = Drafts.latest(c.org, c.mission.mission_id, c.craft.spacecraft_id)
@@ -151,6 +162,11 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
     assert {:ok, entry} = FleetSnapshot.entry(running.metadata, c.craft.spacecraft_id)
     assert entry["configuration_revision_id"] == active.configuration_revision_id
     assert entry["document"]["telemetry_source_endpoint_id"] == c.endpoint.source_endpoint_id
+
+    assert {:ok, %{source_endpoint_id: source, applied_generation: nil, applied_at: nil}} =
+             TelemetryDecom.fetch_config(c.org, c.mission.mission_id, c.craft.spacecraft_id)
+
+    assert source == endpoint.source_endpoint_id
 
     assert {:error, :spacecraft_configuration_not_found} =
              Drafts.fetch(
@@ -216,22 +232,12 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
     profile = profile!(c, c.rev1)
     apply!(c, [update("spacecraft_profile", profile, "composition_id", pin!(c, c.rev2))])
 
-    # Something else changes the spacecraft's application basis (the decom surface's own write).
-    {:ok, config} =
-      TelemetryDecom.fetch_config(c.org, c.mission.mission_id, c.craft.spacecraft_id)
+    host = HostContext.spacecraft(c.mission.mission_id, c.craft.spacecraft_id)
+    assert {:ok, _} = ApplicationInstallations.disable(c.scope, host, "telemetry_decom")
 
-    :ok =
-      TelemetryDecom.project_configuration(c.org, c.mission.mission_id, c.craft.spacecraft_id, %{
-        "catalog_revision_id" => config.catalog_revision_id,
-        "telemetry_enabled" => true,
-        "handled_apids" => [42, 43],
-        "telemetry_source_endpoint_id" => config.source_endpoint_id
-      })
-
-    # The snapshot overlays the stored config; its catalog must be the one the move applied.
     snapshot = Drafts.snapshot(c.mission, c.craft)
     assert snapshot.external_changes
-    assert snapshot.document["handled_apids"] == [42, 43]
+    assert snapshot.document["handled_apids"] == [42]
     assert snapshot.document["catalog_revision_id"] == c.rev2
   end
 

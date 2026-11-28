@@ -2,11 +2,8 @@ defmodule Cadence.Applications.TelemetryDecom.Config do
   @moduledoc """
   Per-spacecraft Telemetry Decom configuration.
 
-  Tracks which catalog revision and APIDs a spacecraft's Telemetry Decom
-  application handles, along with the version of the mission binding set last
-  materialized from this configuration. The binding set / activation
-  bookkeeping is not exposed as a user-facing concept — it is recorded here so
-  the UI can show whether the current configuration matches what is live.
+  Projects the saved configuration and the completed generation that applied it,
+  when the spacecraft's assignment is in that generation's fleet.
   """
 
   @type t :: %__MODULE__{
@@ -16,10 +13,11 @@ defmodule Cadence.Applications.TelemetryDecom.Config do
           configuration_version: pos_integer(),
           catalog_revision_id: binary(),
           handled_apids: [non_neg_integer()],
-          source_endpoint_id: binary(),
+          source_endpoint_id: binary() | nil,
           enabled: boolean(),
           applied_binding_set_id: binary() | nil,
           applied_binding_set_version: pos_integer() | nil,
+          applied_generation: pos_integer() | nil,
           applied_at: DateTime.t() | nil,
           updated_at: DateTime.t() | nil,
           metadata: map()
@@ -34,6 +32,7 @@ defmodule Cadence.Applications.TelemetryDecom.Config do
     :source_endpoint_id,
     :applied_binding_set_id,
     :applied_binding_set_version,
+    :applied_generation,
     :applied_at,
     :updated_at,
     enabled: true,
@@ -54,6 +53,7 @@ defmodule Cadence.Applications.TelemetryDecom.Config do
       enabled: Map.get(attrs, :enabled, true),
       applied_binding_set_id: Map.get(attrs, :applied_binding_set_id),
       applied_binding_set_version: Map.get(attrs, :applied_binding_set_version),
+      applied_generation: Map.get(attrs, :applied_generation),
       applied_at: Map.get(attrs, :applied_at),
       updated_at: Map.get(attrs, :updated_at),
       metadata: Map.get(attrs, :metadata, %{})

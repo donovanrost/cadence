@@ -9,6 +9,7 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
   require Logger
 
   alias Cadence.Activations.BindingSetActivation
+  alias Cadence.Activations.GenerationReceipts
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Control.Activations
   alias Cadence.Control.MissionModelPromotion
@@ -297,7 +298,8 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
     with :ok <- matching_mission(state.mission_id, activation.mission_id),
          {:ok, %MissionRuntimeSpec{} = runtime_spec} <- runtime_spec(activation, binding_set),
          {:ok, %GenerationApplied{} = observation} <-
-           RuntimeMissions.apply(state.runtime_process_namespace, runtime_spec) do
+           RuntimeMissions.apply(state.runtime_process_namespace, runtime_spec),
+         :ok <- record_receipt(state.applied_basis, activation, observation.applied_at) do
       {{:ok, observation},
        %{
          state
@@ -306,7 +308,7 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
            last_observation: observation,
            last_error: nil,
            failing_since: nil,
-           applied_at: DateTime.utc_now(),
+           applied_at: observation.applied_at,
            applied_basis: %{
              durable: BindingSetActivation.identity(activation),
              runtime: MissionRuntimeSpec.reconciliation_guard(runtime_spec)
@@ -323,6 +325,15 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
          })}
     end
   end
+
+  defp record_receipt(%{durable: identity}, activation, applied_at) do
+    if identity == BindingSetActivation.identity(activation),
+      do: :ok,
+      else: GenerationReceipts.record(activation, applied_at)
+  end
+
+  defp record_receipt(nil, activation, applied_at),
+    do: GenerationReceipts.record(activation, applied_at)
 
   defp fetch_binding_set(%BindingSetActivation{organization_id: nil} = activation) do
     Governance.fetch_binding_set(

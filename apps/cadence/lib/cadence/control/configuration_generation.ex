@@ -26,7 +26,6 @@ defmodule Cadence.Control.ConfigurationGeneration do
 
   alias Cadence.Activations
   alias Cadence.ApplicationDispatch.BindingSet
-  alias Cadence.Applications.TelemetryDecom
 
   alias Cadence.Applications.SpacecraftConfiguration.{
     Active,
@@ -505,7 +504,6 @@ defmodule Cadence.Control.ConfigurationGeneration do
              {latest, historical, sources},
              input
            ),
-         :ok <- TelemetryDecom.project_configurations(mission, rows),
          :ok <- ApplicationInputs.resync_packet_inputs(mission, rows, inputs_by_catalog(cache)) do
       bases = ApplicationInputs.bases(mission, ids)
 
