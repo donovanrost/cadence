@@ -5,7 +5,7 @@ defmodule Cadence.Reads.CatalogRevisionSpacecraftTest do
   """
   use Cadence.RuntimeCase, async: false
 
-  alias Cadence.Applications.SpacecraftConfiguration.{Drafts, Review}
+  alias Cadence.Applications.SpacecraftConfiguration.{Assignments, Drafts, Review}
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Catalog.SpacecraftConfigurationInput
   alias Cadence.Control.Activations, as: ControlActivations
@@ -41,7 +41,7 @@ defmodule Cadence.Reads.CatalogRevisionSpacecraftTest do
   test "a craft saved on another revision is 'active' here and 'saved' there", c do
     configure!(c)
     other = insert_catalog_revision!(c)
-    insert_saved!(c, c.craft.spacecraft_id, other, 99)
+    Assignments.append([assignment(c, c.craft.spacecraft_id, other, 99)])
 
     {:ok, %{spacecraft: [here]}} =
       CatalogRevisionSpacecraft.page(c.org, c.mid, c.catalog, nil, nil)
@@ -62,8 +62,6 @@ defmodule Cadence.Reads.CatalogRevisionSpacecraftTest do
   end
 
   test "1,000 saved craft page by name in a fixed number of queries", c do
-    now = DateTime.utc_now()
-
     ids =
       for n <- 1..1_000 do
         id = "sc-rev-#{String.pad_leading(Integer.to_string(n), 4, "0")}"
@@ -80,9 +78,10 @@ defmodule Cadence.Reads.CatalogRevisionSpacecraftTest do
           }
         ])
 
-        insert_saved!(c, id, c.catalog, 1, now)
         id
       end
+
+    ids |> Enum.map(&assignment(c, &1, c.catalog, 1)) |> Assignments.append()
 
     {first, queries} =
       count_queries(fn -> CatalogRevisionSpacecraft.page(c.org, c.mid, c.catalog, nil, 500) end)
@@ -141,22 +140,11 @@ defmodule Cadence.Reads.CatalogRevisionSpacecraftTest do
     revision.catalog_revision_id
   end
 
-  defp insert_saved!(c, spacecraft_id, catalog, version, now \\ DateTime.utc_now()) do
-    Repo.insert_all("spacecraft_configuration_revisions", [
-      %{
-        configuration_revision_id: "cfg-#{System.unique_integer([:positive])}",
-        organization_id: c.org,
-        mission_id: c.mid,
-        spacecraft_id: spacecraft_id,
-        version: version,
-        catalog_revision_id: catalog,
-        document: %{},
-        content_sha256: String.duplicate("a", 64),
-        application_basis: "basis",
-        created_by: "test",
-        inserted_at: now
-      }
-    ])
+  defp assignment(c, spacecraft_id, catalog, version) do
+    mission = %{organization_id: c.org, mission_id: c.mid}
+    document = Map.put(SpacecraftConfigurationInput.empty(), "catalog_revision_id", catalog)
+    row = Assignments.new(mission, spacecraft_id, version, document, "test", %{})
+    %{row | application_basis: "basis"}
   end
 
   # An active generation for the fixture's craft on its catalog (as the withdrawal test does).

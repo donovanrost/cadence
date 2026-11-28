@@ -64,6 +64,42 @@ defmodule Cadence.Control.MissionRuntimeReconcilerTest do
     assert length(applied.capability_instances) == 9
   end
 
+  # #450: the runtime admits a membership version only if its members are the version's. A member
+  # added after the fact is not applied; the generation reads not_applied with the reason.
+  test "a membership version with a member added after it was written is not admitted (#450)" do
+    %{mission: mission, bindings: bindings} = fixture(populated: 3)
+
+    row =
+      Repo.one!(
+        from(row in "governed_binding_sets",
+          where: row.mission_id == ^mission,
+          select: %{id: row.id, organization_id: row.organization_id}
+        )
+      )
+
+    %{rows: [[sha]]} =
+      Repo.query!("SELECT artifact_sha256 FROM governed_binding_set_members LIMIT 1")
+
+    Repo.insert_all("governed_binding_set_members", [
+      %{
+        binding_set_row_id: row.id,
+        organization_id: row.organization_id,
+        mission_id: mission,
+        artifact_sha256: sha,
+        source_endpoint_ref: "spacecraft_runtime:sc-extra",
+        inserted_at: DateTime.utc_now()
+      }
+    ])
+
+    assert {:error, :binding_set_members_mismatch} = MissionRuntimeReconciler.reconcile(mission)
+
+    assert %{last_error: :binding_set_members_mismatch} =
+             MissionRuntimeReconciler.snapshot(mission)
+
+    refute match?({:ok, _}, Missions.applied_spec(mission))
+    assert bindings.mission_id == mission
+  end
+
   test "a missing runtime is rebuilt even when the durable generation is unchanged" do
     %{mission: mission, reconciler: reconciler} = fixture()
     assert {:ok, before} = MissionRuntimeReconciler.reconcile(mission)

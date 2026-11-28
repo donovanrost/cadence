@@ -9,6 +9,7 @@ import { useFleet } from "@/features/fleet/index.ts";
 import InvestigateTab from "./InvestigateTab.vue";
 import NotBuiltTab from "./NotBuiltTab.vue";
 import HistoryTab from "./history/HistoryTab.vue";
+import PointsTab from "./points/PointsTab.vue";
 import UplinkTab from "./uplink/UplinkTab.vue";
 import PassesTab from "./passes/PassesTab.vue";
 import ConfigurationTab from "./configuration/ConfigurationTab.vue";
@@ -90,6 +91,7 @@ const lookup = computed(() => {
           <PassesTab v-else-if="tab === 'passes'" :key="`p-${lookup.sc.id}`" :sc="lookup.sc" />
           <UplinkTab v-else-if="tab === 'uplink'" :key="`u-${lookup.sc.id}`" :sc="lookup.sc" />
           <HistoryTab v-else-if="tab === 'history'" :key="`h-${lookup.sc.id}`" :sc="lookup.sc" />
+          <PointsTab v-else-if="tab === 'points'" :key="`pt-${lookup.sc.id}`" :sc="lookup.sc" />
           <NotBuiltTab v-else :tab="tab" :sc="lookup.sc" />
         </template>
         <ApPanel v-else index="A1" title="Spacecraft" flush>

@@ -43,7 +43,13 @@ defmodule CadenceWeb.Console.MissionModelWithdrawAPITest do
       |> Map.fetch!("data")
 
   test "an admin sees Withdraw on an approved revision; a member doesn't", c do
-    assert %{"status" => "approved", "viewer_can_withdraw" => true} = read(c.admin, c)
+    assert %{
+             "status" => "approved",
+             "viewer_can_withdraw" => true,
+             "affected_groups" => nil,
+             "affected_groups_count" => nil
+           } = read(c.admin, c)
+
     assert %{"viewer_can_withdraw" => false} = read(c.member, c)
   end
 
@@ -61,7 +67,10 @@ defmodule CadenceWeb.Console.MissionModelWithdrawAPITest do
                "at" => at,
                "report_id" => nil,
                "reason" => "Limits were wrong"
-             }
+             },
+             # No group was GO'd on this fixture's craft (the groups themselves: core's test).
+             "affected_groups" => [],
+             "affected_groups_count" => 0
            } = data
 
     assert admin_id == c.admin.user_id

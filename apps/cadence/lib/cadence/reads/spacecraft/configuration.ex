@@ -116,30 +116,7 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
            can_save: ConfigurationDrafts.may_save?(scope, mission.mission_id)
          },
          catalogs: catalogs,
-         fleet:
-           Enum.map(fleet_items, fn item ->
-             row =
-               ConfigurationDrafts.latest(
-                 mission.organization_id,
-                 mission.mission_id,
-                 item.spacecraft_id
-               )
-
-             entry = active.entries[item.spacecraft_id]
-
-             %{
-               id: item.spacecraft_id,
-               name: item.display_name,
-               scid: item.scid,
-               active_catalog_id: entry && entry["catalog_revision_id"],
-               has_changes:
-                 row != nil and
-                   (entry == nil or
-                      row.configuration_revision_id != entry["configuration_revision_id"]),
-               href:
-                 "/missions/#{mission.mission_id}/spacecraft/#{item.spacecraft_id}?section=#{section}"
-             }
-           end),
+         fleet: fleet_navigation(mission, fleet_items, active.entries, section),
          fleet_total: fleet.total_count,
          sources: Enum.map(sources.items, &%{id: &1.source_endpoint_id, name: &1.display_name}),
          presets: presets(mission),
@@ -153,6 +130,31 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
          }
        }}
     end
+  end
+
+  defp fleet_navigation(mission, craft, active, section) do
+    heads =
+      ConfigurationDrafts.latest_references(
+        mission.organization_id,
+        mission.mission_id,
+        Enum.map(craft, & &1.spacecraft_id)
+      )
+
+    Enum.map(craft, fn item ->
+      id = item.spacecraft_id
+      running = active[id]
+      head = heads[id]
+
+      %{
+        id: id,
+        name: item.display_name,
+        scid: item.scid,
+        active_catalog_id: running && running["catalog_revision_id"],
+        has_changes:
+          not is_nil(head) and head != get_in(active, [id, "configuration_revision_id"]),
+        href: "/missions/#{mission.mission_id}/spacecraft/#{id}?section=#{section}"
+      }
+    end)
   end
 
   # DECISIONS #109: change sets are the only writer of both switches; read off the spacecraft row

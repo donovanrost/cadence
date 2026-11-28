@@ -5,7 +5,8 @@ defmodule CadenceWeb.Console.CatalogRevisionSpacecraftAPITest do
   """
   use CadenceWeb.ConnCase, async: false
 
-  alias Cadence.Repo
+  alias Cadence.Applications.SpacecraftConfiguration.Assignments
+  alias Cadence.Catalog.SpacecraftConfigurationInput
   alias CadenceWeb.TestFixtures
 
   setup do
@@ -23,21 +24,15 @@ defmodule CadenceWeb.Console.CatalogRevisionSpacecraftAPITest do
     revision = TestFixtures.fetch_catalog_revision_for_run!(run)
     craft = TestFixtures.persist_spacecraft!(mission, display_name: "EARENDIL-001", scid: 7)
 
-    Repo.insert_all("spacecraft_configuration_revisions", [
-      %{
-        configuration_revision_id: "cfg-#{System.unique_integer([:positive])}",
-        organization_id: org.organization_id,
-        mission_id: mission.mission_id,
-        spacecraft_id: craft.spacecraft_id,
-        version: 3,
-        catalog_revision_id: revision.catalog_revision_id,
-        document: %{},
-        content_sha256: String.duplicate("a", 64),
-        application_basis: "basis",
-        created_by: "test",
-        inserted_at: DateTime.utc_now()
-      }
-    ])
+    document =
+      Map.put(
+        SpacecraftConfigurationInput.empty(),
+        "catalog_revision_id",
+        revision.catalog_revision_id
+      )
+
+    assignment = Assignments.new(mission, craft.spacecraft_id, 3, document, "test", %{})
+    Assignments.append([%{assignment | application_basis: "basis"}])
 
     %{
       user: user,

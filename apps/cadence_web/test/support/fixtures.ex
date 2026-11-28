@@ -102,6 +102,28 @@ defmodule CadenceWeb.TestFixtures do
     Phoenix.ConnTest.build_conn() |> Plug.Test.init_test_session(%{user_session_token: token})
   end
 
+  @doc "Counts the calling test process's SQL statements during a synchronous request."
+  def count_statements(request) do
+    handler = {__MODULE__, make_ref()}
+    counter = :counters.new(1, [])
+
+    :telemetry.attach(
+      handler,
+      [:cadence, :repo, :query],
+      fn _event, _measurements, _metadata, {owner, count} ->
+        if self() == owner, do: :counters.add(count, 1, 1)
+      end,
+      {self(), counter}
+    )
+
+    try do
+      result = request.()
+      {result, :counters.get(counter, 1)}
+    after
+      :telemetry.detach(handler)
+    end
+  end
+
   @spec persist_mission!(Cadence.Organizations.Organization.t(), keyword()) :: Mission.t()
   def persist_mission!(org, opts \\ []) do
     slug = Keyword.get(opts, :slug, "mission-#{System.unique_integer([:positive])}")
