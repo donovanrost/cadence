@@ -5,7 +5,9 @@ import { createMemoryHistory, createRouter } from "vue-router";
 import { missionId } from "@/api/index.ts";
 import { groupOf, showBody } from "../groups/fixtures.ts";
 import type { GroupPush } from "../groups/show.ts";
+import NamelessTargets from "./NamelessTargets.vue";
 import NeedsYouPanel from "./NeedsYouPanel.vue";
+import { namelessLine } from "./yourGo.ts";
 import TargetsPanel from "./TargetsPanel.vue";
 import { listsMoved } from "./useRequest.ts";
 
@@ -38,7 +40,7 @@ const group = (revision = 1, progress: Record<string, number> = { queued_for_con
     member_count: TOTAL,
     progress,
     targets: Array.from({ length: 100 }, (_, i) => target(i)),
-    targets_page: { total: TOTAL, revision, next_cursor: "100" },
+    targets_page: { total: TOTAL, unnamed: 0, revision, next_cursor: "100" },
   });
 
 function server(serve: (url: URL) => unknown) {
@@ -88,6 +90,49 @@ describe("U1 Targets for a group of 1,500 (#795)", () => {
     await w.setProps({ group: group(2) });
     await flushPromises();
     expect(asked).toHaveLength(2);
+  });
+
+  it("tags a paged target whose model approval was withdrawn after GO (E2c, #546)", async () => {
+    const flag = {
+      revision_id: "mm-4",
+      decision: { kind: "withdrawn", by: null, at: "2026-11-27T10:02:00Z", reason: null },
+    };
+    server((url) =>
+      pageOf(url, (i) => ({ ...target(i), withdrawn_after_go: i === 1 ? flag : null }), TOTAL),
+    );
+    const w = mount(TargetsPanel, { props: { group: group(), missionId: missionId("m-1") } });
+    await flushPromises();
+    const tagged = w.findAll("li").map((li) => li.text().includes("Approval withdrawn after GO"));
+    expect(tagged.slice(0, 3)).toEqual([false, true, false]);
+    expect(tagged.filter(Boolean)).toHaveLength(1);
+  });
+});
+
+describe("the GO check's targets with no name (#1064)", () => {
+  it("counts and lists the only one, past the first page", async () => {
+    // Every target on the first page has a name; the one without is at index 1,234.
+    const g = groupOf({
+      state: "approval_pending",
+      target_count: TOTAL,
+      member_count: TOTAL,
+      targets: Array.from({ length: 100 }, (_, i) => target(i)),
+      targets_page: { total: TOTAL, unnamed: 1, revision: 1, next_cursor: "100" },
+    });
+    expect(namelessLine(g)).toBe(
+      "This console can't show the name of 1 target spacecraft. Check its id in Technical details before you give GO.",
+    );
+    const asked = server((url) =>
+      pageOf(
+        url,
+        () => ({ ...target(1_234), name: null }),
+        url.searchParams.has("unnamed") ? 1 : 0,
+      ),
+    );
+    const w = mount(NamelessTargets, { props: { group: g, missionId: missionId("m-1") } });
+    await flushPromises();
+    expect(asked.map((u) => u.searchParams.get("unnamed"))).toEqual(["true"]);
+    expect(w.findAll("li").map((li) => li.text())).toEqual(["sc-1234"]);
+    expect(w.text()).not.toContain("Load more");
   });
 });
 

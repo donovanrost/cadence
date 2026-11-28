@@ -48,6 +48,7 @@ defmodule Cadence.Commanding.VerifierStore do
     |> maybe_filter_equals(:source_endpoint_ref, Keyword.get(opts, :source_endpoint_ref))
     |> maybe_filter_equals(:phase, normalized_filter(opts, :phase))
     |> maybe_filter_equals(:lifecycle_state, normalized_filter(opts, :lifecycle_state))
+    |> maybe_filter_in(:command_request_id, Keyword.get(opts, :command_request_ids))
     |> order_by([row], asc: row.inserted_at, asc: row.command_verifier_instance_id)
     |> Repo.all()
     |> Enum.map(&CommandVerifierInstanceRow.to_domain/1)
@@ -357,6 +358,14 @@ defmodule Cadence.Commanding.VerifierStore do
       value when is_atom(value) -> Atom.to_string(value)
       value when is_binary(value) -> value
     end
+  end
+
+  # `field IN (...)` for a list filter (one parameter, whatever its length); nil is no filter.
+  defp maybe_filter_in(query, _field, nil), do: query
+
+  defp maybe_filter_in(query, field, values) when is_list(values) do
+    values = Enum.map(values, &if(is_atom(&1), do: Atom.to_string(&1), else: &1))
+    where(query, [row], field(row, ^field) in ^values)
   end
 
   defp maybe_filter_equals(query, _field, nil), do: query

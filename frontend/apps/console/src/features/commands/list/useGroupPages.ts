@@ -19,6 +19,7 @@ export function fetchGroupPage(
   if (f.q) p.set("q", f.q);
   if (f.target) p.set("target", f.target);
   if (f.stages.length) p.set("stage", f.stages.join(","));
+  if (f.withdrawnRevision) p.set("withdrawn_revision", f.withdrawnRevision);
   if (cursor) p.set("cursor", cursor);
   return requestPage(
     `${groupsBase(missionId)}?${p.toString()}`,

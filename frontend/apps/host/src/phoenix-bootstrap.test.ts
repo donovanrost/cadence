@@ -23,21 +23,21 @@ beforeEach(() => {
 describe("Phoenix federation entry", () => {
   it("reads explicit application, surface, context, catalog, and fallback attributes", () => {
     const root = document.createElement("div");
-    root.dataset.applicationKey = "comms_overview";
-    root.dataset.surfaceId = "overview";
+    root.dataset.applicationKey = "spacecraft";
+    root.dataset.surfaceId = "list";
     root.dataset.hostScope = "mission";
     root.dataset.missionId = "mission-firebird";
     root.dataset.queryParams = JSON.stringify({ mission_id: "mission-firebird" });
     root.dataset.catalogUrl = "/api/cadence/application-host/v1/catalog";
-    root.dataset.fallbackHref = "/missions/mission-firebird/comms";
+    root.dataset.fallbackHref = "/missions/mission-firebird/spacecraft";
 
     expect(readPhoenixHostConfig(root)).toEqual({
-      applicationKey: "comms_overview",
-      surfaceId: "overview",
+      applicationKey: "spacecraft",
+      surfaceId: "list",
       hostScope: "mission",
       missionId: "mission-firebird",
       catalogUrl: "/api/cadence/application-host/v1/catalog",
-      fallbackHref: "/missions/mission-firebird/comms",
+      fallbackHref: "/missions/mission-firebird/spacecraft",
       queryParams: { mission_id: "mission-firebird" },
     });
   });
@@ -90,7 +90,7 @@ describe("Phoenix federation entry", () => {
   ] as const)("reads the %s root without a mission id", (_label, attributes) => {
     const root = document.createElement("div");
     root.dataset.applicationKey = "organization_admin";
-    root.dataset.surfaceId = "overview";
+    root.dataset.surfaceId = "list";
     root.dataset.hostScope = attributes.hostScope;
     if ("organizationId" in attributes) root.dataset.organizationId = attributes.organizationId;
     if ("userId" in attributes) root.dataset.userId = attributes.userId;
@@ -103,7 +103,7 @@ describe("Phoenix federation entry", () => {
   it("rejects identifiers from a different host scope", () => {
     const root = document.createElement("div");
     root.dataset.applicationKey = "organization_admin";
-    root.dataset.surfaceId = "overview";
+    root.dataset.surfaceId = "list";
     root.dataset.hostScope = "organization";
     root.dataset.organizationId = "org-1";
     root.dataset.missionId = "mission-1";

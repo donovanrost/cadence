@@ -51,7 +51,7 @@ describe("a group of 1,500 targets (#795)", () => {
       target_count: TOTAL,
       member_count: TOTAL,
       targets: first,
-      targets_page: { total: TOTAL, revision: 42, next_cursor: "100" },
+      targets_page: { total: TOTAL, unnamed: 0, revision: 42, next_cursor: "100" },
     });
     expect([g.targets.length, g.targets_page.total, g.targets[99]?.index]).toEqual([
       100,

@@ -4,9 +4,7 @@ defmodule Cadence.Applications.ReleaseRegistry do
   alias Cadence.Applications.FixtureContributors
 
   alias Cadence.Applications.{
-    Comms,
     DerivedTelemetry,
-    LegacyCommsOverview,
     Limits,
     OpsConsole,
     ReleaseContribution,
@@ -15,8 +13,6 @@ defmodule Cadence.Applications.ReleaseRegistry do
 
   @max_contributions 128
   @contributors [
-    Comms,
-    LegacyCommsOverview,
     Limits,
     TelemetryDecomCatalogContribution,
     OpsConsole,

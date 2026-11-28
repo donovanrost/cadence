@@ -198,31 +198,6 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
     |> Enum.map(&FleetPlanningRunRow.to_domain/1)
   end
 
-  @doc "A bounded, mission-scoped run directory with one row of next-page evidence."
-  def list_page(organization_id, mission_id, page, state \\ nil)
-
-  def list_page(organization_id, mission_id, page, state)
-      when is_integer(page) and page in 1..1_000_000 and
-             state in [nil, "queued", "running", "completed", "partial", "failed", "canceled"] do
-    rows =
-      FleetPlanningRunRow
-      |> where([run], run.organization_id == ^organization_id and run.mission_id == ^mission_id)
-      |> maybe_filter_state(state)
-      |> order_by([run], desc: run.inserted_at, desc: run.fleet_planning_run_id)
-      |> offset(^((page - 1) * 25))
-      |> limit(26)
-      |> Repo.all()
-
-    {:ok,
-     %{
-       page: page,
-       more: length(rows) > 25,
-       entries: rows |> Enum.take(25) |> Enum.map(&FleetPlanningRunRow.to_domain/1)
-     }}
-  end
-
-  def list_page(_, _, _, _), do: {:error, :invalid_fleet_planning_page}
-
   @spec list_requirement_refs(binary(), binary(), binary()) ::
           [FleetPlanningRunRequirementRef.t()]
   def list_requirement_refs(organization_id, mission_id, run_id) do
@@ -328,33 +303,6 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
       {"locked", id}, {selected, locked} -> {selected, [id | locked]}
     end)
     |> then(fn {selected, locked} -> {Enum.reverse(selected), Enum.reverse(locked)} end)
-  end
-
-  @doc "Bounded optimizer decisions in rank, score and snapshot identity order."
-  def decisions_page(org, mission, run_id, page) when is_integer(page) and page in 1..1_000_000 do
-    query = visible_decisions(org, mission, run_id) |> with_score_evidence()
-
-    rows =
-      query
-      |> order_by([d],
-        asc_nulls_last: d.rank,
-        desc: d.score,
-        asc: d.contact_opportunity_snapshot_id
-      )
-      |> offset(^((page - 1) * 10))
-      |> limit(11)
-      |> Repo.all()
-
-    %{
-      page: page,
-      more: length(rows) > 10,
-      entries:
-        rows
-        |> Enum.take(10)
-        |> Enum.map(fn {decision, evidence} ->
-          FleetPlanningDecisionRow.to_domain(decision, evidence)
-        end)
-    }
   end
 
   defp with_score_evidence(query) do

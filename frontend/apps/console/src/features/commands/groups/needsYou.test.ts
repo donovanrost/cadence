@@ -18,6 +18,7 @@ const target = (id: string, stage: string, extra: Record<string, unknown> = {}) 
   scid: 7,
   last_event_at: null,
   blocked: null,
+  withdrawn_after_go: null,
   spacecraft_id: id,
   name: id.toUpperCase(),
   stage,

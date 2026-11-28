@@ -28,6 +28,25 @@ defmodule Cadence.Activations do
   alias Cadence.Platform.EventBus
   alias Cadence.Repo
 
+  @doc """
+  The content hash recorded when a binding-set version was activated (its latest activation), or
+  nil if it never was. What a replay of a historic version holds the stored set to, instead of the
+  hash computed from the set it just read (CB-9, #512).
+  """
+  @spec recorded_content_sha256(binary(), binary(), pos_integer()) :: binary() | nil
+  def recorded_content_sha256(mission_id, binding_set_id, version)
+      when is_binary(mission_id) and is_binary(binding_set_id) and is_integer(version) do
+    from(row in BindingSetActivationRow,
+      where:
+        row.mission_id == ^mission_id and row.binding_set_id == ^binding_set_id and
+          row.binding_set_version == ^version and not is_nil(row.binding_set_content_sha256),
+      order_by: [desc: row.generation],
+      limit: 1,
+      select: row.binding_set_content_sha256
+    )
+    |> Repo.one()
+  end
+
   @doc false
   @spec record_binding_set_activation(binary(), binary(), binary(), pos_integer(), keyword()) ::
           {:ok, BindingSetActivation.t()} | {:error, term()}

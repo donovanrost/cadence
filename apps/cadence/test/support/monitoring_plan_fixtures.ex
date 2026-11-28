@@ -1,47 +1,131 @@
 defmodule Cadence.MonitoringPlanFixtures do
   @moduledoc """
-  A STAND-IN for the compiled monitoring plan of ADR-020 P3 (#451, PR #1081's `MonitoringLowering`
-  output), for the evaluation tests. Test support only: once #1081 is on develop a fixture that
-  compiles a revision through the real compiler replaces these builders, and nothing in `lib/`
-  changes.
+  A mission's monitoring plan through the real compiler (ADR-020 P3, #451, `MonitoringLowering`):
+  an imported layer with the parameters and their catalog policies, an authored layer with
+  per-craft overrides, replaces and craft-only policies, compiled by `MissionModels.compile_layers/2`
+  and read back by `MissionModels.fetch_runtime_plans/3`, as the runtime reads it. For the
+  evaluation tests (a DataCase).
 
-  An entry is one policy for one parameter at one scope, string-keyed as the compiler stores it:
-  the policy's own definition (`default_rules`, `contexts`, persistence counts, `disabled`) and
-  `policy_id`, `rule_id` (`"policy:" <> semantic id`, fixed across edits), `rule_digest`
-  (`"monitoring_rule:v1:" <> sha256` of what is evaluated), `origin`, `declaration_id`, `scope`
-  (`"mission"` or `"spacecraft"`) and `spacecraft_id`. A per-craft override takes the overridden
-  policy's `policy_id` and `rule_id` and keeps its own `declaration_id`, so the craft's state and
-  episode continue across it.
+  A policy's rules are the evaluator's comparison (`above:` a threshold, `severity:` as declared),
+  so the compiled entries evaluate.
   """
 
-  alias Cadence.Catalog.MissionModel.{Canonical, RuntimePlan}
-
-  @identity ~w(rule_id rule_digest origin declaration_id scope spacecraft_id policy_id)
-
-  @doc "A mission-scoped policy entry (`above:` is its comparison threshold)."
-  @spec entry(binary(), keyword()) :: map()
-  def entry(semantic_id, opts \\ []) do
-    build(semantic_id, semantic_id, "mission", nil, opts)
-  end
+  alias Cadence.Catalog.MissionModel.{Declaration, Layer}
+  alias Cadence.MissionModels
 
   @doc """
-  A spacecraft-scoped override of the policy `target_id` for `spacecraft_id`: the target's
-  `policy_id` and `rule_id`, its own `declaration_id`.
+  The runtime plans of a revision compiled from `catalog` (the imported policies) and `authored`
+  (the mission's edits), as `%{monitoring: RuntimePlan}`.
+
+  `catalog` is `[{name, parameter, opts}]`; `authored` is a list of `{:replace, name, opts}`,
+  `{:override, target_name, name, craft_ids, opts}` or `{:craft_only, name, parameter, craft_ids, opts}`.
+  `opts`: `above:`, `severity:`, `violations:`, `conformance:`, `disabled:`.
   """
-  @spec override(binary(), binary(), binary(), keyword()) :: map()
-  def override(target_id, declaration_id, spacecraft_id, opts \\ []) do
-    build(target_id, declaration_id, "spacecraft", spacecraft_id, opts)
+  @spec compile!(binary(), binary(), [tuple()], [tuple()]) :: %{monitoring: struct()}
+  def compile!(organization_id, mission_id, catalog, authored \\ []) do
+    imported = imported_layer(organization_id, mission_id, catalog)
+
+    layers = [
+      imported | authored_layers(organization_id, mission_id, imported, catalog, authored)
+    ]
+
+    {:ok, result} = MissionModels.compile_layers(layers)
+
+    {:ok, %{monitoring: monitoring}} =
+      MissionModels.fetch_runtime_plans(organization_id, mission_id, result.revision.revision_id)
+
+    %{monitoring: monitoring}
   end
 
-  @doc "A policy authored for one spacecraft only (no mission entry has its `rule_id`)."
-  @spec craft_only(binary(), binary(), keyword()) :: map()
-  def craft_only(semantic_id, spacecraft_id, opts \\ []),
-    do: build(semantic_id, semantic_id, "spacecraft", spacecraft_id, opts)
+  defp imported_layer(organization_id, mission_id, catalog) do
+    parameters =
+      catalog
+      |> Enum.map(&elem(&1, 1))
+      |> Enum.uniq()
+      |> Enum.map(&%{kind: :parameter, qualified_name: &1})
 
-  defp build(policy_id, declaration_id, scope, spacecraft_id, opts) do
-    entry = %{
-      "policy_id" => policy_id,
-      "parameter_id" => Keyword.get(opts, :parameter_id, "p"),
+    policies =
+      for {name, parameter, opts} <- catalog do
+        %{
+          kind: :monitoring_policy,
+          qualified_name: policy_name(name),
+          references: [parameter_ref(parameter)],
+          definition: definition(opts)
+        }
+      end
+
+    Layer.new(%{
+      organization_id: organization_id,
+      mission_id: mission_id,
+      name: "bus",
+      declarations: [%{kind: :space_system, qualified_name: "/"} | parameters ++ policies]
+    })
+  end
+
+  defp authored_layers(_org, _mission, _imported, _catalog, []), do: []
+
+  defp authored_layers(organization_id, mission_id, imported, catalog, authored) do
+    by_name = Map.new(imported.declarations, &{&1.qualified_name, &1})
+    parameters = Map.new(catalog, fn {name, parameter, _opts} -> {name, parameter} end)
+
+    declarations =
+      Enum.map(authored, fn
+        {:replace, name, opts} ->
+          catalog_declaration = Map.fetch!(by_name, policy_name(name))
+
+          %{
+            kind: :monitoring_policy,
+            qualified_name: policy_name(name),
+            operation: :replace,
+            expected_fingerprint: Declaration.fingerprint(catalog_declaration),
+            references: [parameter_ref(Map.fetch!(parameters, name))],
+            definition: definition(opts)
+          }
+
+        {:override, target, name, craft_ids, opts} ->
+          %{
+            kind: :monitoring_policy,
+            qualified_name: policy_name(name),
+            references: [
+              parameter_ref(Map.fetch!(parameters, target)),
+              %{
+                expected_kind: :monitoring_policy,
+                source_ref: policy_name(target),
+                role: :overrides
+              }
+            ],
+            definition: Map.put(definition(opts), "spacecraft_ids", craft_ids)
+          }
+
+        {:craft_only, name, parameter, craft_ids, opts} ->
+          %{
+            kind: :monitoring_policy,
+            qualified_name: policy_name(name),
+            references: [parameter_ref(parameter)],
+            definition: Map.put(definition(opts), "spacecraft_ids", craft_ids)
+          }
+      end)
+
+    [
+      Layer.new(%{
+        organization_id: organization_id,
+        mission_id: mission_id,
+        layer_kind: :authored,
+        name: "mission limits",
+        declarations: declarations
+      })
+    ]
+  end
+
+  @doc "The qualified name of the monitoring policy called `name`."
+  @spec policy_name(binary()) :: binary()
+  def policy_name(name), do: "/monitoring/" <> name
+
+  defp parameter_ref(parameter),
+    do: %{expected_kind: :parameter, source_ref: parameter, role: :parameter}
+
+  defp definition(opts) do
+    %{
       "default_rules" => [
         %{
           "kind" => "comparison",
@@ -52,40 +136,7 @@ defmodule Cadence.MonitoringPlanFixtures do
       ],
       "minimum_violations" => Keyword.get(opts, :violations, 1),
       "minimum_conformance" => Keyword.get(opts, :conformance, 1),
-      "disabled" => Keyword.get(opts, :disabled, false),
-      "declaration_id" => declaration_id,
-      "origin" => Keyword.get(opts, :origin, "catalog"),
-      "rule_id" => "policy:" <> policy_id,
-      "scope" => scope,
-      "spacecraft_id" => spacecraft_id
-    }
-
-    Map.put(entry, "rule_digest", digest(entry))
-  end
-
-  @doc "The digest of what the evaluator reads from an entry, as the compiler computes it."
-  @spec digest(map()) :: binary()
-  def digest(entry),
-    do: "monitoring_rule:v1:" <> Canonical.sha256({1, Map.drop(entry, @identity)})
-
-  @doc "The runtime plans of a revision holding `entries`."
-  @spec plans([map()], binary() | nil) :: %{monitoring: RuntimePlan.t()}
-  def plans(entries, plan_id \\ nil) do
-    id = plan_id || "monitoring-" <> Canonical.sha256(entries)
-
-    %{
-      monitoring: %RuntimePlan{
-        plan_id: id,
-        target: :monitoring,
-        target_contract_version: "2",
-        mission_model_revision_id: "rev-" <> id,
-        mission_model_content_sha256: "sha",
-        layer_ids: [],
-        compiler_version: "test-stub",
-        status: :ready,
-        content_sha256: "content-" <> id,
-        plan: %{"policies" => entries}
-      }
+      "disabled" => Keyword.get(opts, :disabled, false)
     }
   end
 end

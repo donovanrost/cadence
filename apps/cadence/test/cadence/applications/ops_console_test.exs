@@ -13,15 +13,13 @@ defmodule Cadence.Applications.OpsConsoleTest do
            |> Enum.map(&{&1.surface_id, &1.placement, &1.data_contract}) == [
              {"workspace", :application_workspace,
               %{query_id: "cadence.ops.workspace", version: 1}},
-             {"contact_schedule", :ops_workspace,
-              %{query_id: "cadence.ops.contact_schedule", version: 1}}
+             {"telemetry_explore", :ops_workspace,
+              %{query_id: "cadence.ops.telemetry_explore", version: 1}}
            ]
 
-    assert Enum.at(definition.surfaces, 1).actions == ["validate", "search", "reserve", "cancel"]
-
-    assert length(definition.surfaces) == 15
-    assert length(definition.actions) == 33
-    assert Enum.count(definition.surfaces, &(&1.placement == :ops_workspace)) == 14
+    assert length(definition.surfaces) == 7
+    assert length(definition.actions) == 17
+    assert Enum.count(definition.surfaces, &(&1.placement == :ops_workspace)) == 6
 
     assert Enum.uniq(Enum.map(definition.surfaces, & &1.surface_id)) ==
              Enum.map(definition.surfaces, & &1.surface_id)
@@ -32,7 +30,7 @@ defmodule Cadence.Applications.OpsConsoleTest do
   test "contributes exact release identity for each surface" do
     contributions = OpsConsole.release_contributions()
 
-    assert length(contributions) == 15
+    assert length(contributions) == 7
 
     assert Enum.take(contributions, 1) |> Enum.map(&ReleaseContribution.key/1) == [
              {"ops_console", 1, "workspace", 1}
@@ -60,11 +58,11 @@ defmodule Cadence.Applications.OpsConsoleTest do
              Cadence.Applications.Registry.fetch_surface(
                definition,
                :mission,
-               "commands"
+               "telemetry_explore"
              )
 
     assert surface.placement == :ops_workspace
-    assert surface.surface_id == "commands"
+    assert surface.surface_id == "telemetry_explore"
   end
 
   test "keeps query contributions and the action seam domain-owned" do
@@ -75,22 +73,6 @@ defmodule Cadence.Applications.OpsConsoleTest do
   end
 
   test "declares exact deep-route query identity and fail-closed interaction ledgers" do
-    assert OpsConsole.surface_query_contract("fleet_planning") ==
-             {:ok, %{subject_param: nil, query_params: ["page", "state"]}}
-
-    assert OpsConsole.surface_query_contract("fleet_planning_run") ==
-             {:ok,
-              %{
-                subject_param: nil,
-                query_params: [
-                  "requirements_page",
-                  "decisions_page",
-                  "resources_page",
-                  "automation_page",
-                  "commitments_page"
-                ]
-              }}
-
     assert OpsConsole.surface_query_contract("data_source_registration") ==
              {:ok, %{subject_param: nil, query_params: []}}
 
@@ -138,23 +120,6 @@ defmodule Cadence.Applications.OpsConsoleTest do
            end) == [
              {"workspace", :overview, :mission, :application_workspace, "cadence.ops.workspace",
               []},
-             {"contact_schedule", :operations, :mission, :ops_workspace,
-              "cadence.ops.contact_schedule", ["validate", "search", "reserve", "cancel"]},
-             {"contact_plan_show", :subject_detail, :mission, :ops_workspace,
-              "cadence.ops.contact_plan_show",
-              ["submit-plan", "approve-plan", "reject-plan", "execute-plan"]},
-             {"contact_detail", :subject_detail, :mission, :ops_workspace,
-              "cadence.ops.contact_detail",
-              ["approve-provider-change", "reject-provider-change", "acknowledge-provider-change"]},
-             {"contact_record", :subject_detail, :mission, :ops_workspace,
-              "cadence.ops.contact_record", []},
-             {"fleet_planning", :operations, :mission, :ops_workspace,
-              "cadence.ops.fleet_planning", ["refresh-planning"]},
-             {"fleet_planning_new", :configuration, :mission, :ops_workspace,
-              "cadence.ops.fleet_planning_new", ["validate-fleet-run", "create-fleet-run"]},
-             {"fleet_planning_run", :subject_detail, :mission, :ops_workspace,
-              "cadence.ops.fleet_planning_run", ["refresh-fleet-run", "repair-fleet-run"]},
-             {"commands", :operations, :mission, :ops_workspace, "cadence.ops.commands", []},
              {"telemetry_explore", :operations, :mission, :ops_workspace,
               "cadence.ops.telemetry_explore", ["apply_filters", "apply_question"]},
              {"data_sources", :configuration, :mission, :ops_workspace,

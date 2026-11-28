@@ -82,6 +82,8 @@ describe("revisionBreaking (#195's revision read, U102)", () => {
       catalog_revision: { id: "cr-4", number: 4, label: null, database_id: "db-1", ...extra },
       decision: null,
       viewer_can_decide: true,
+      affected_groups: null,
+      affected_groups_count: null,
       viewer_is_importer: false,
       cannot_decide_because: null,
       plans_ready: true,

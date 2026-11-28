@@ -41,7 +41,6 @@ defmodule Cadence.Applications.TelemetryDecom do
     PacketBindings,
     ResourceClaimDefinition,
     ResourceContract,
-    StatusPlacement,
     SurfaceDefinition,
     SurfaceQueryContribution
   }
@@ -107,13 +106,6 @@ defmodule Cadence.Applications.TelemetryDecom do
         actions: ["save_configuration", "request_activation", "disable"]
       },
       status_query_id: "cadence.telemetry_decom.status",
-      status_placements: [
-        %StatusPlacement{
-          placement: :comms_validation,
-          scope: :spacecraft,
-          required?: true
-        }
-      ],
       preflight_query_id: "cadence.telemetry_decom.activation_preflight",
       actions: [
         %ActionDefinition{

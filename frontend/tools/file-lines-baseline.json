@@ -3,10 +3,6 @@
     "lines": 1806,
     "owner": "legacy (#80): frozen, leaves with its row"
   },
-  "modules/communications/src/features/transports/CommsTransportNew.vue": {
-    "lines": 749,
-    "owner": "legacy (#80): frozen, leaves with its row"
-  },
   "modules/telemetry-decom/src/features/configuration/ConfigurationPanel.vue": {
     "lines": 694,
     "owner": "legacy (#80): frozen, leaves with its row"

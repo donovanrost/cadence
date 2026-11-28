@@ -78,13 +78,13 @@ defmodule Cadence.Commanding.Groups.GroupStore do
 
   @doc """
   Reserves the next queue sequences for each lane under the existing per-lane
-  advisory lock (`QueueLaneLock`), returning `%{lane => first_free_sequence}`.
-  Lanes are locked in sorted order so concurrent submits can't deadlock.
+  advisory lock (`QueueLaneLock`, all the lanes in one statement, in key order so concurrent
+  submits can't deadlock), returning `%{lane => first_free_sequence}`.
   """
   @spec reserve_lanes(binary(), binary(), [binary()]) :: %{binary() => pos_integer()}
   def reserve_lanes(org, mission, lanes) do
     lanes = lanes |> Enum.uniq() |> Enum.sort()
-    Enum.each(lanes, &(:ok = QueueLaneLock.acquire(org, mission, &1)))
+    :ok = QueueLaneLock.acquire_all(org, mission, lanes)
 
     taken =
       CommandQueueEntryRow

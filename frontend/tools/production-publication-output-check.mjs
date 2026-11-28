@@ -54,6 +54,9 @@ const authoritativeHostJavascriptDigests = new Set([
   // tokenizer finds the same 2 federation-loader templates and nothing new; two identical
   // build:publication runs.
   "4b0d27189f70101494408e662a1cf1bbf97adc401c9875b0616aa6e7b58c55bd",
+  // Legacy Communications removal (#128) after the catalog and spacecraft removals (#671).
+  // Two pinned builds produced the same bundle with only the two existing federation loader templates.
+  "d3e1fc7ef14078a949f77569cf21909da8196219675c8f29a8bf1c63f97b91cc",
 ]);
 
 /** @param {string} message @returns {never} */

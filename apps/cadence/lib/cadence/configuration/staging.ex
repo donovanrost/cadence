@@ -32,10 +32,11 @@ defmodule Cadence.Configuration.Staging do
   def stage(organization_id, mission_id, head_revision, actor, attrs, ops)
       when is_list(ops) and length(ops) in 1..@max_ops do
     with {:ok, summary} <- summary(attrs),
-         {:ok, prepared} <- prepare_all(organization_id, mission_id, ops) do
+         {:ok, lane} <- lane(ops),
+         {:ok, prepared} <- prepare_all(organization_id, mission_id, ops, lane) do
       Repo.transaction(fn ->
         organization_id
-        |> ChangeSetStore.lock_or_open(mission_id, head_revision, actor)
+        |> ChangeSetStore.lock_or_open(mission_id, head_revision, actor, lane)
         |> stage_locked(actor, summary, Map.get(attrs, :source, %{}), prepared)
       end)
     end
@@ -67,50 +68,42 @@ defmodule Cadence.Configuration.Staging do
 
   # A rollback is its set's only change (DECISIONS #49 review 3/4), decided under the set lock: it
   # stages only into an empty set, and nothing else joins a set that holds one.
-  # A rollback, and a batch of the legacy route conversion (director 11-16), each stand ALONE in
-  # their change set: staged only into an empty set, and nothing else stages beside them, so
-  # their preview and review show only them.
   defp rollback_alone(set, source) do
     staged = ChangeSetStore.changes(set.change_set_id)
 
     cond do
       rollback?(source) and staged != [] -> {:error, :change_set_open}
       Enum.any?(staged, &rollback?(&1.source)) -> {:error, :rollback_in_progress}
-      true -> conversion_alone(set, staged, conversion?(source))
-    end
-  end
-
-  defp conversion_alone(set, staged, staging_conversion?) do
-    batch = Enum.find(staged, &conversion?(&1.source))
-
-    cond do
-      staging_conversion? and batch != nil -> {:error, :conversion_already_staged}
-      staging_conversion? and staged != [] -> {:error, :open_change_set_not_empty}
-      batch != nil -> {:error, {:conversion_in_progress, in_progress(set, batch)}}
       true -> :ok
     end
   end
 
-  # ux U79: which batch holds the set, for "Batch 3 of the route conversion is staged, …".
-  defp in_progress(set, change),
-    do: %{
-      change_set_id: set.change_set_id,
-      batch: get_in(change.source, ["legacy_route_conversion", "batch"])
-    }
+  @doc """
+  The lane one staging request's ops go to (ADR-020 P3, #451): every kind is in exactly one lane,
+  and one request stages into one set, so ops of two lanes are refused (`:mixed_lanes`). An
+  unknown kind is left for its op's own refusal.
+  """
+  @spec lane([op_input()]) :: {:ok, String.t()} | {:error, :mixed_lanes}
+  def lane(ops) do
+    lanes =
+      for op <- ops, {:ok, kind} <- [kind(op)], uniq: true, do: Kinds.lane(kind)
+
+    case lanes do
+      [] -> {:ok, "configuration"}
+      [lane] -> {:ok, lane}
+      _several -> {:error, :mixed_lanes}
+    end
+  end
 
   defp rollback?(%{"rollback" => %{}}), do: true
   defp rollback?(_source), do: false
-
-  @doc "Whether a change's source marks it a legacy route conversion batch."
-  @spec conversion?(map() | nil) :: boolean()
-  def conversion?(%{"legacy_route_conversion" => %{}}), do: true
-  def conversion?(_source), do: false
 
   @doc "Prepares unstaged ops for a preview, in pipeline form."
   @spec prepare_ops(String.t(), String.t(), [op_input()]) :: {:ok, [map()]} | {:error, term()}
   def prepare_ops(organization_id, mission_id, ops)
       when is_list(ops) and length(ops) in 1..@max_ops do
-    with {:ok, prepared} <- prepare_all(organization_id, mission_id, ops) do
+    with {:ok, lane} <- lane(ops),
+         {:ok, prepared} <- prepare_all(organization_id, mission_id, ops, lane) do
       {:ok,
        prepared
        |> Enum.with_index()
@@ -134,8 +127,8 @@ defmodule Cadence.Configuration.Staging do
   defp summary(_attrs),
     do: {:error, {:invalid_op, 0, [%{path: "summary", message: "Enter a short summary"}]}}
 
-  defp prepare_all(organization_id, mission_id, ops) do
-    deleting = deleting(mission_id, ops)
+  defp prepare_all(organization_id, mission_id, ops, lane) do
+    deleting = deleting(mission_id, ops, lane)
     documents = prefetch_documents(organization_id, mission_id, ops)
 
     ops
@@ -301,9 +294,9 @@ defmodule Cadence.Configuration.Staging do
   # What's being deleted beside an op: this stage's deletes and those already staged in the open
   # set, as {kind, entity_id}. A delete whose only users are going too isn't refused at stage
   # (e.g. a station with its transports); apply checks again against live state, op by op.
-  defp deleting(mission_id, ops) do
+  defp deleting(mission_id, ops, lane) do
     staged =
-      case ChangeSetStore.active(mission_id) do
+      case ChangeSetStore.active(mission_id, lane) do
         nil -> []
         set -> ChangeSetStore.staged_ops(set.change_set_id)
       end

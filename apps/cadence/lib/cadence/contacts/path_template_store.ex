@@ -10,7 +10,7 @@ defmodule Cadence.Contacts.PathTemplateStore do
   alias Cadence.Comms.ConfigurationValidation
   alias Cadence.Contacts.Path
   alias Cadence.Contacts.PathTemplate
-  alias Cadence.Contacts.PathTemplateStore.{ArchivedProfile, PathTemplateRow}
+  alias Cadence.Contacts.PathTemplateStore.{ArchivedProfile, PathTemplateRow, VersionedReferences}
   alias Cadence.Contacts.ProfileStore
   alias Cadence.Contacts.ProviderBinding
   alias Cadence.Contacts.ProviderProfile
@@ -270,22 +270,58 @@ defmodule Cadence.Contacts.PathTemplateStore do
           {:ok, PathTemplate.t()} | {:error, term()}
   def fetch_ref(organization_id, mission_id, ref)
       when is_binary(mission_id) and is_map(ref) do
-    fetch_versioned_ref_for_scope(
-      organization_id,
-      mission_id,
-      ref,
-      "path_template_id",
-      :contact_path_template_not_found,
-      &fetch_for_scope/3,
-      &fetch_version/4,
-      &fetch_version/3
-    )
+    organization_id
+    |> load_refs(mission_id, [ref])
+    |> fetch_loaded_ref(ref)
+  end
+
+  @doc false
+  def load_refs(org, mission, refs) do
+    keys = Enum.map(refs, &VersionedReferences.key(&1, "path_template_id"))
+    latest = for {id, nil} <- keys, do: id
+
+    PathTemplateRow
+    |> VersionedReferences.in_scope(org, mission)
+    |> VersionedReferences.load(:path_template_id, keys, latest, &PathTemplateRow.to_domain/1)
+  end
+
+  @doc false
+  def fetch_loaded_ref(templates, ref) do
+    key = VersionedReferences.key(ref, "path_template_id")
+    VersionedReferences.fetch(templates, key, :contact_path_template_not_found)
   end
 
   @spec resolve(PathTemplate.t()) :: {:ok, Path.t()} | {:error, term()}
   def resolve(%PathTemplate{} = path_template) do
-    with {:ok, provider_bindings} <- resolve_provider_bindings(path_template),
-         {:ok, transport_bindings} <- resolve_transport_bindings(path_template) do
+    [path_template]
+    |> resolve_many()
+    |> Map.fetch!(path_template)
+  end
+
+  @doc false
+  def resolve_many(templates) do
+    templates
+    |> Enum.uniq()
+    |> Enum.group_by(&{&1.organization_id, &1.mission_id})
+    |> Enum.flat_map(fn {{org, mission}, templates} ->
+      provider_profiles =
+        ProfileStore.load_provider_refs(org, mission, Enum.flat_map(templates, &provider_refs/1))
+
+      transport_profiles =
+        ProfileStore.load_transport_refs(
+          org,
+          mission,
+          Enum.flat_map(templates, &transport_refs/1)
+        )
+
+      Enum.map(templates, &{&1, resolve(&1, provider_profiles, transport_profiles)})
+    end)
+    |> Map.new()
+  end
+
+  defp resolve(path_template, providers, transports) do
+    with {:ok, provider_bindings} <- resolve_provider_bindings(path_template, providers),
+         {:ok, transport_bindings} <- resolve_transport_bindings(path_template, transports) do
       provider_bindings = link_clcw_ingress(provider_bindings, transport_bindings)
 
       metadata =
@@ -399,20 +435,25 @@ defmodule Cadence.Contacts.PathTemplateStore do
     end
   end
 
-  defp resolve_provider_bindings(%PathTemplate{} = path_template) do
-    refs =
-      if path_template.provider_profile_refs == [] do
-        refs_from_ids(path_template.provider_profile_ids, "provider_profile_id")
-      else
-        path_template.provider_profile_refs
-      end
+  defp provider_refs(template) do
+    VersionedReferences.refs(
+      template.provider_profile_ids,
+      template.provider_profile_refs,
+      "provider_profile_id"
+    )
+  end
 
-    Enum.reduce_while(refs, {:ok, []}, fn ref, {:ok, acc} ->
-      case fetch_provider_profile_ref(
-             path_template.organization_id,
-             path_template.mission_id,
-             ref
-           ) do
+  defp transport_refs(template) do
+    VersionedReferences.refs(
+      template.transport_profile_ids,
+      template.transport_profile_refs,
+      "transport_profile_id"
+    )
+  end
+
+  defp resolve_provider_bindings(%PathTemplate{} = path_template, profiles) do
+    Enum.reduce_while(provider_refs(path_template), {:ok, []}, fn ref, {:ok, acc} ->
+      case provider_profile(profiles, ref) do
         {:ok, %ProviderProfile{} = provider_profile} ->
           provider_binding =
             ProviderBinding.new(%{
@@ -433,20 +474,9 @@ defmodule Cadence.Contacts.PathTemplateStore do
     end)
   end
 
-  defp resolve_transport_bindings(%PathTemplate{} = path_template) do
-    refs =
-      if path_template.transport_profile_refs == [] do
-        refs_from_ids(path_template.transport_profile_ids, "transport_profile_id")
-      else
-        path_template.transport_profile_refs
-      end
-
-    Enum.reduce_while(refs, {:ok, []}, fn ref, {:ok, acc} ->
-      case fetch_transport_profile_ref(
-             path_template.organization_id,
-             path_template.mission_id,
-             ref
-           ) do
+  defp resolve_transport_bindings(%PathTemplate{} = path_template, profiles) do
+    Enum.reduce_while(transport_refs(path_template), {:ok, []}, fn ref, {:ok, acc} ->
+      case transport_profile(profiles, ref) do
         {:ok, %TransportProfile{} = transport_profile} ->
           transport_binding =
             TransportBinding.new(%{
@@ -468,93 +498,40 @@ defmodule Cadence.Contacts.PathTemplateStore do
     end)
   end
 
-  defp fetch_provider_profile_ref(organization_id, mission_id, ref) do
-    fetch_versioned_ref_for_scope(
-      organization_id,
-      mission_id,
-      ref,
-      "provider_profile_id",
-      :contact_provider_profile_not_found,
-      &fetch_provider_profile_for_scope/3,
-      &live_provider_profile_version/4,
-      &live_provider_profile_version/3
-    )
+  defp fetch_provider_profile_ref(org, mission, ref) do
+    org |> ProfileStore.load_provider_refs(mission, [ref]) |> provider_profile(ref)
   end
 
-  # A pinned profile version resolves only while the profile itself is live: once its latest
-  # version is deleted (e.g. its transport was archived, lead 11-16), no new path is built on it,
-  # and the refusal names that transport (ArchivedProfile, ux U45 transport_archived).
-  defp live_provider_profile_version(organization_id, mission_id, provider_profile_id, version) do
-    with {:ok, profile} <-
-           ProfileStore.fetch_provider_profile_version(
-             organization_id,
-             mission_id,
-             provider_profile_id,
-             version
-           ),
-         :ok <-
-           ArchivedProfile.live(
-             ProfileStore.fetch_provider_profile(
-               organization_id,
-               mission_id,
-               provider_profile_id
-             ),
-             profile
-           ) do
-      {:ok, profile}
+  defp provider_profile(profiles, ref) do
+    {id, version} = key = VersionedReferences.key(ref, "provider_profile_id")
+    not_found = :contact_provider_profile_not_found
+
+    # A pinned provider version is only usable while its latest version is live. The pinned
+    # metadata identifies an archived transport in the refusal.
+    with %ProviderProfile{} = pinned <- Map.get(profiles, key),
+         :ok <- provider_version_live(profiles, id, version, pinned) do
+      VersionedReferences.fetch(profiles, key, not_found)
+    else
+      nil -> {:error, not_found}
+      {:error, _reason} = error -> error
     end
   end
 
-  defp live_provider_profile_version(mission_id, provider_profile_id, version) do
-    with {:ok, profile} <-
-           ProfileStore.fetch_provider_profile_version(mission_id, provider_profile_id, version),
-         :ok <-
-           ArchivedProfile.live(
-             ProfileStore.fetch_provider_profile(mission_id, provider_profile_id),
-             profile
-           ) do
-      {:ok, profile}
-    end
+  defp provider_version_live(_profiles, _id, nil, _profile), do: :ok
+
+  defp provider_version_live(profiles, id, _version, profile) do
+    profiles
+    |> VersionedReferences.fetch({id, nil}, :contact_provider_profile_not_found)
+    |> ArchivedProfile.live(profile)
   end
 
-  defp fetch_provider_profile_for_scope(organization_id, mission_id, provider_profile_id)
-       when is_binary(organization_id) and organization_id != "" do
-    ProfileStore.fetch_provider_profile(organization_id, mission_id, provider_profile_id)
+  defp fetch_transport_profile_ref(org, mission, ref) do
+    org |> ProfileStore.load_transport_refs(mission, [ref]) |> transport_profile(ref)
   end
 
-  defp fetch_provider_profile_for_scope(_organization_id, mission_id, provider_profile_id) do
-    ProfileStore.fetch_provider_profile(mission_id, provider_profile_id)
-  end
-
-  defp fetch_transport_profile_ref(organization_id, mission_id, ref) do
-    fetch_versioned_ref_for_scope(
-      organization_id,
-      mission_id,
-      ref,
-      "transport_profile_id",
-      :contact_transport_profile_not_found,
-      &fetch_transport_profile_for_scope/3,
-      &ProfileStore.fetch_transport_profile_version/4,
-      &ProfileStore.fetch_transport_profile_version/3
-    )
-  end
-
-  defp fetch_transport_profile_for_scope(organization_id, mission_id, transport_profile_id)
-       when is_binary(organization_id) and organization_id != "" do
-    ProfileStore.fetch_transport_profile(organization_id, mission_id, transport_profile_id)
-  end
-
-  defp fetch_transport_profile_for_scope(_organization_id, mission_id, transport_profile_id) do
-    ProfileStore.fetch_transport_profile(mission_id, transport_profile_id)
-  end
-
-  defp fetch_for_scope(organization_id, mission_id, path_template_id)
-       when is_binary(organization_id) and organization_id != "" do
-    fetch(organization_id, mission_id, path_template_id)
-  end
-
-  defp fetch_for_scope(_organization_id, mission_id, path_template_id) do
-    fetch(mission_id, path_template_id)
+  defp transport_profile(profiles, ref) do
+    key = VersionedReferences.key(ref, "transport_profile_id")
+    VersionedReferences.fetch(profiles, key, :contact_transport_profile_not_found)
   end
 
   defp normalize_versioned_refs([], [], _id_key, _fetch_ref), do: {:ok, []}
@@ -614,58 +591,6 @@ defmodule Cadence.Contacts.PathTemplateStore do
       end
     end)
   end
-
-  defp fetch_versioned_ref_for_scope(
-         organization_id,
-         mission_id,
-         ref,
-         id_key,
-         not_found_reason,
-         fetch_scope,
-         fetch_version_with_org,
-         fetch_version_without_org
-       ) do
-    resource_id = Map.get(ref, id_key)
-    version = Map.get(ref, "version")
-
-    resource_result =
-      if is_integer(version) and version > 0 do
-        fetch_versioned_resource(
-          organization_id,
-          mission_id,
-          resource_id,
-          version,
-          fetch_version_with_org,
-          fetch_version_without_org
-        )
-      else
-        fetch_scope.(organization_id, mission_id, resource_id)
-      end
-
-    normalize_versioned_ref_result(resource_result, not_found_reason)
-  end
-
-  defp fetch_versioned_resource(
-         organization_id,
-         mission_id,
-         resource_id,
-         version,
-         fetch_version_with_org,
-         fetch_version_without_org
-       ) do
-    if is_binary(organization_id) and organization_id != "" do
-      fetch_version_with_org.(organization_id, mission_id, resource_id, version)
-    else
-      fetch_version_without_org.(mission_id, resource_id, version)
-    end
-  end
-
-  defp normalize_versioned_ref_result({:ok, %{lifecycle_state: :deleted}}, not_found_reason) do
-    {:error, not_found_reason}
-  end
-
-  defp normalize_versioned_ref_result({:ok, resource}, _not_found_reason), do: {:ok, resource}
-  defp normalize_versioned_ref_result({:error, reason}, _not_found_reason), do: {:error, reason}
 
   defp versioned_ref_from_resource(resource, id_key) do
     %{id_key => versioned_ref_resource_id(resource, id_key), "version" => resource.version}

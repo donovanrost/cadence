@@ -411,6 +411,18 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
              |> get(base(c) <> "/command-groups/#{id}/targets?needs_you=maybe")
              |> json_response(422)
 
+    # #1064: the targets with no name, and the whole-group count on show (every fixture craft is named).
+    assert %{"data" => %{"targets" => []}, "meta" => %{"total" => 0}} = page.("?unnamed=true")
+    assert %{"meta" => %{"total" => 2}} = page.("?unnamed=false")
+
+    assert %{"error" => %{"code" => "invalid_params", "details" => %{"unnamed" => _}}} =
+             as(c.requester)
+             |> get(base(c) <> "/command-groups/#{id}/targets?unnamed=1")
+             |> json_response(422)
+
+    assert %{"data" => %{"targets_page" => %{"total" => 2, "unnamed" => 0}}} =
+             as(c.requester) |> get(base(c) <> "/command-groups/#{id}") |> json_response(200)
+
     assert %{"data" => %{"events" => []}, "meta" => %{"total" => 0}} =
              as(c.requester)
              |> get(base(c) <> "/command-groups/#{id}/events?kind=hold_acknowledged")

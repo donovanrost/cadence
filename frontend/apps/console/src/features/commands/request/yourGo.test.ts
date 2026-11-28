@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { missionId as missionIdReader, decode } from "@/api/index.ts";
 import { preflightReader, type Preflight } from "../groups/api.ts";
 import { groupOf, showBody } from "../groups/fixtures.ts";
-import { namelessTargets, phoneGoBlocked, requestFor, yourGoWords } from "./yourGo.ts";
+import { namelessLine, phoneGoBlocked, requestFor, yourGoWords } from "./yourGo.ts";
 
 const review = (checks: unknown[]): Preflight => {
   const r = decode(preflightReader, {
@@ -91,28 +91,29 @@ describe("Mobile 'Your GO is requested' (Mobile.md §3)", () => {
 
   it("cautions about targets with no name without blocking GO, ids kept for Technical details (#237)", () => {
     const g = groupOf({});
-    expect(namelessTargets(g)).toBeNull();
+    expect(namelessLine(g)).toBeNull();
     const target = showBody.targets[0];
     if (!target) throw new Error("fixture");
     const one = groupOf({ targets: [{ ...target, name: null }] });
-    expect(namelessTargets(one)).toEqual({
-      line: "This console can't show the name of 1 target spacecraft. Check its id in Technical details before you give GO.",
-      ids: [target.spacecraft_id],
-    });
+    expect(namelessLine(one)).toBe(
+      "This console can't show the name of 1 target spacecraft. Check its id in Technical details before you give GO.",
+    );
     const two = groupOf({
       targets: [
         { ...target, name: null },
         { ...target, spacecraft_id: "sc-9", name: null },
       ],
     });
-    expect(namelessTargets(two)?.line).toMatch(/of 2 target spacecraft\. Check their ids/);
+    expect(namelessLine(two)).toMatch(/of 2 target spacecraft\. Check their ids/);
     expect(phoneGoBlocked(one, review([]), [], "user-9", true, names)).toBeNull();
-    // #795: past the first page it says the count covers the targets read, not the request.
+    // #1064: the count is the whole group's (targets_page.unnamed), whatever the first page holds.
     const paged = groupOf({
-      targets: [{ ...target, name: null }],
+      targets: [{ ...target }],
       target_count: 1_500,
-      targets_page: { total: 1_500, revision: 1, next_cursor: "c1" },
+      targets_page: { total: 1_500, unnamed: 1_200, revision: 1, next_cursor: "c1" },
     });
-    expect(namelessTargets(paged)?.line).toMatch(/1 target spacecraft among the first 1\./);
+    expect(namelessLine(paged)).toBe(
+      "This console can't show the name of 1,200 target spacecraft. Check their ids in Technical details before you give GO.",
+    );
   });
 });

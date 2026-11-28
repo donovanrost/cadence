@@ -21,6 +21,8 @@ defmodule CadenceWeb.Console.ConfigJSON do
     activation_policy_changed: 409,
     entity_gone: 409,
     invalid_op: 422,
+    invalid_lane: 422,
+    mixed_lanes: 422,
     reason_required: 422,
     comment_required: 422,
     nothing_staged: 422,
@@ -50,16 +52,14 @@ defmodule CadenceWeb.Console.ConfigJSON do
     change_set_open: 409,
     rollback_in_progress: 409,
     # U82: an archive refused because the transport or station is still used (stage, submit, review).
-    in_use: 409,
-    # ux U79 legacy route conversion. TEMPORARY: removed with 9ac6dc8ee.
-    conversion_in_progress: 409,
-    conversion_already_staged: 409,
-    open_change_set_not_empty: 409,
-    nothing_to_convert: 422
+    in_use: 409
   }
 
   @messages %{
     frozen_in_review: "The change set is in review; staging is paused until it is decided.",
+    invalid_lane: "Choose the configuration or monitoring lane.",
+    mixed_lanes:
+      "Configuration and monitoring changes stage separately. Stage them one lane at a time.",
     change_set_changed: "The change set changed since you loaded it. Reload and try again.",
     path_already_staged: "Someone else already staged a change to this field.",
     reviewer_is_author: "You can't review a change set you submitted or contributed to.",
@@ -97,13 +97,7 @@ defmodule CadenceWeb.Console.ConfigJSON do
     change_set_open: "Finish or discard the open change set first.",
     rollback_in_progress:
       "A rollback is staged; apply or discard it before staging other changes.",
-    in_use: "It's still in use, so it can't be archived.",
-    conversion_in_progress:
-      "A route conversion batch is staged, so other changes can't be staged until it's applied or discarded.",
-    conversion_already_staged: "A conversion batch is already staged.",
-    open_change_set_not_empty:
-      "The open change set has other changes; apply or discard them first.",
-    nothing_to_convert: "There are no older routes left to convert."
+    in_use: "It's still in use, so it can't be archived."
   }
 
   @approve_holds_blocking "Not approved: a blocking hold stands, so nothing was applied and the " <>
@@ -231,10 +225,6 @@ defmodule CadenceWeb.Console.ConfigJSON do
       }
     )
   end
-
-  # The conversion's 'alone in its set' refusal names the open set (domain gives its id).
-  def error(conn, {:open_change_set_not_empty, change_set_id}) when is_binary(change_set_id),
-    do: respond(conn, :open_change_set_not_empty, %{change_set_id: change_set_id})
 
   # #262 (ux U79, amended in #374): an approve refused by a blocking hold that appeared after the
   # submit, in approve's own words; the preview stays the details, so the checks show the hold.

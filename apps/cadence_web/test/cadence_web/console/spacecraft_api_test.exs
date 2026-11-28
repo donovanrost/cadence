@@ -352,7 +352,7 @@ defmodule CadenceWeb.Console.SpacecraftAPITest do
   end
 
   defp readiness_legs(index) when index <= 400,
-    do: [{"inbound", "legacy", true, "active"}, {"inbound", "profile", false, "archived"}]
+    do: [{"inbound", "profile", false, "archived"}]
 
   defp readiness_legs(_index), do: [{"bidirectional", "spacecraft", true, "active"}]
 

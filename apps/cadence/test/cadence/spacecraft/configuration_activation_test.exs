@@ -89,6 +89,7 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
           generation: activation.generation,
           binding_set_id: active.binding_set.binding_set_id,
           binding_set_version: active.binding_set.version,
+          binding_set_content_sha256: MissionRuntimeSpec.content_sha256(active.binding_set),
           binding_set: active.binding_set,
           activated_at: activation.activated_at
         })

@@ -13,15 +13,17 @@ defmodule CadenceWeb.Console.ConfigController do
     Activations,
     Configuration,
     ConfigurationRollback,
-    LegacyRouteConversion,
     SpacecraftOps
   }
 
   alias Cadence.Reads.{ChangeSetOutcome, ChangeSetViewer, ConfigKindSchema, ConfigLabels}
   alias CadenceWeb.Console.{ConfigJSON, ConfigParams, Problem}
 
-  def show(conn, _params) do
-    with {:ok, current} <- Configuration.current(scope(conn), mission_id(conn)),
+  # `?lane=` picks the staged bar (ADR-020 P3, #451): configuration by default, so today's
+  # screens are unchanged; monitoring adds a bounded summary of its sets in review.
+  def show(conn, params) do
+    with {:ok, lane} <- lane(params),
+         {:ok, current} <- Configuration.current(scope(conn), mission_id(conn), lane),
          {:ok, permissions} <- Configuration.permissions(scope(conn), mission_id(conn)) do
       current = Map.update!(current, :change_set, &annotate(conn, &1))
 
@@ -29,6 +31,10 @@ defmodule CadenceWeb.Console.ConfigController do
     end
     |> reply(conn)
   end
+
+  defp lane(%{"lane" => lane}) when lane in ["configuration", "monitoring"], do: {:ok, lane}
+  defp lane(%{"lane" => _other}), do: {:error, :invalid_lane}
+  defp lane(_params), do: {:ok, "configuration"}
 
   def change_set(conn, %{"change_set_id" => id}) do
     case Configuration.change_set(scope(conn), mission_id(conn), id) do
@@ -100,8 +106,7 @@ defmodule CadenceWeb.Console.ConfigController do
 
   # mms-ux (for ca-ux): a submit's refusals name its act. Under 'needs a second person's approval'
   # the button is Request review, so the server-worded refusals open "Not sent for review:". The
-  # act is the submit's own decision, a legacy route conversion's forced approval included
-  # (fe-setup on #555), not a second read of the mission's setting.
+  # act is decided by the submit policy for this change set.
   defp submit_act(conn, change_set_id) do
     if Configuration.needs_approval?(scope(conn), mission_id(conn), change_set_id),
       do: :request_review,
@@ -241,15 +246,7 @@ defmodule CadenceWeb.Console.ConfigController do
     )
   end
 
-  # ux U79: who may review it, and (TEMPORARY, removed with 9ac6dc8ee) whether it holds a legacy
-  # route conversion batch.
-  defp annotate(_conn, nil), do: nil
-
-  defp annotate(conn, %{id: id} = set) do
-    scope(conn)
-    |> ChangeSetViewer.annotate(mission_id(conn), set)
-    |> Map.put(:legacy_conversion, LegacyRouteConversion.change_set_batch(mission_id(conn), id))
-  end
+  defp annotate(conn, set), do: ChangeSetViewer.annotate(scope(conn), mission_id(conn), set)
 
   defp ok(conn, data), do: {:sent, json(conn, %{data: ConfigJSON.encode(data)})}
 

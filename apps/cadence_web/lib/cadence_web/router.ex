@@ -133,50 +133,11 @@ defmodule CadenceWeb.Router do
     live_session :application,
       on_mount: [{CadenceWeb.UserAuth, :require_user_scope}],
       layout: {CadenceWeb.Layouts, :host} do
-      live("/missions/:mission_id/ops/planning", HostPageLive, :index,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/planning/new", HostPageLive, :new,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/planning/runs/:fleet_planning_run_id", HostPageLive, :show,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/plans/:contact_plan_id", HostPageLive, :show,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/contacts", HostPageLive, :index,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/contacts/records/:contact_id", HostPageLive, :show,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/contacts/:provider_reservation_id", HostPageLive, :show,
-        metadata: %{host_policy: :ops}
-      )
-
       live("/missions/:mission_id/ops/alarms", HostPageLive, :index,
         metadata: %{host_policy: :ops}
       )
 
       live("/missions/:mission_id/ops/timeline", HostPageLive, :index,
-        metadata: %{host_policy: :ops}
-      )
-
-      live(
-        "/missions/:mission_id/ops/commands/requests/:command_request_id/history",
-        HostPageLive,
-        :show,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/commands", HostPageLive, :index,
         metadata: %{host_policy: :ops}
       )
 
@@ -467,9 +428,6 @@ defmodule CadenceWeb.Router do
       post("/source-endpoints", SourceEndpointController, :create)
       get("/source-endpoints/:source_endpoint_id", SourceEndpointController, :show)
       get("/spacecraft/:spacecraft_id/routes/:route_id", SpacecraftDetailController, :route)
-      # TEMPORARY (removed with 9ac6dc8ee): the legacy route conversion (ux U79).
-      get("/routes/legacy-conversion", LegacyConversionController, :show)
-      post("/routes/legacy-conversion", LegacyConversionController, :stage)
       get("/spacecraft/:spacecraft_id/uplink", SpacecraftUplinkController, :show)
       get("/spacecraft/:spacecraft_id/configuration", SpacecraftConfigController, :show)
 
