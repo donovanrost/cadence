@@ -5067,22 +5067,26 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     },
     {
       argName: "--ops-url",
-      expectedPath: `/missions/${encodeURIComponent(missionId)}/applications/ops_console/commands/federated`,
+      // OpsConsole's workspace surface (its required application workspace) outlives the ops pages.
+      expectedPath: `/missions/${encodeURIComponent(missionId)}/applications/ops_console/workspace/federated`,
       applicationKey: "ops_console",
-      surfaceId: "commands",
+      surfaceId: "workspace",
       expectedScope: "mission",
       readyExpression: `(() => {
-        const link = document.querySelector('#commands-open-workspace');
-        if (!(link instanceof HTMLAnchorElement)) return false;
-        const destination = new URL(link.href);
-        return Boolean(document.querySelector('#ops-console-application[data-ops-console-surface="commands"]') &&
-          destination.origin === location.origin &&
-          destination.pathname === ${JSON.stringify(`/missions/${encodeURIComponent(missionId)}/ops/commands`)} &&
+        const links = [...document.querySelectorAll('#ops-workspace-landing a')];
+        if (links.length === 0 || !links.every((link) => link instanceof HTMLAnchorElement)) return false;
+        const prefix = ${JSON.stringify(`/missions/${encodeURIComponent(missionId)}/ops/`)};
+        return Boolean(document.querySelector('#ops-console-application[data-ops-console-surface="workspace"]') &&
+          links.every((link) => {
+            const destination = new URL(link.href);
+            return destination.origin === location.origin && destination.pathname.startsWith(prefix);
+          }) &&
+          !document.querySelector('#ops-workspace-landing-unavailable') &&
           !document.querySelector('#ops-console-error') && !document.querySelector('#remote-error'));
       })()`,
       catalogPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/catalog`,
       queryPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/query`,
-      queryId: "cadence.ops.commands",
+      queryId: "cadence.ops.workspace",
       expectedReleaseId: releases.nMinus1.ops_console,
     },
     {

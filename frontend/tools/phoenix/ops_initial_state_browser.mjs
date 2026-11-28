@@ -46,7 +46,6 @@ const prefix = base + "/missions/" + mission;
 const routes = [
   // L8a/L8b: every legacy dashboards page redirects to the console; L11 the data-sources pages;
   // L1-L3 the planning policy and contact requirement pages (DECISIONS #79).
-  "/ops/commands",
   "/ops/explore",
   "/ops/alarms",
   "/ops/timeline",

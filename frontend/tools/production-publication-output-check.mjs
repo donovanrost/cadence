@@ -47,6 +47,9 @@ const authoritativeHostJavascriptDigests = new Set([
   // Reviewed the legacy command pages leaving the host (#708): the checker's tokenizer finds the same
   // federation-loader templates as before and nothing new; identical digest from two pinned builds.
   "9abee26081b155ff81513ba8a75a7b6bd305b50bc256aecfda9fe4281fe98cac",
+  // Deleted the legacy /ops landing route and its BrowserHost branch (#668): the checker's tokenizer
+  // finds the same 2 federation-loader templates and nothing new; two identical build:publication runs.
+  "a23d806ee0689c9e2008835f8665c00a4ba15b8cb1fedd199b1cbe0e9f0b9fd4",
 ]);
 
 /** @param {string} message @returns {never} */
