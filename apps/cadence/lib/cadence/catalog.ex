@@ -172,6 +172,7 @@ defmodule Cadence.Catalog do
       when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
     catalog_family = Keyword.get(opts, :catalog_family)
     catalog_database_id = Keyword.get(opts, :catalog_database_id)
+    artifact_ids = Keyword.get(opts, :artifact_ids)
 
     ArtifactRow
     |> where(
@@ -180,6 +181,7 @@ defmodule Cadence.Catalog do
     )
     |> maybe_filter_catalog_family(catalog_family)
     |> maybe_filter_catalog_database_id(catalog_database_id)
+    |> maybe_filter_artifact_ids(artifact_ids)
     |> order_by([row], desc: row.uploaded_at, desc: row.artifact_id)
     |> Repo.all()
     |> Enum.map(&ArtifactRow.to_domain/1)
@@ -923,6 +925,11 @@ defmodule Cadence.Catalog do
 
   defp maybe_filter_catalog_database_id(query, catalog_database_id),
     do: where(query, [row], row.catalog_database_id == ^catalog_database_id)
+
+  defp maybe_filter_artifact_ids(query, nil), do: query
+
+  defp maybe_filter_artifact_ids(query, artifact_ids) when is_list(artifact_ids),
+    do: where(query, [row], row.artifact_id in ^artifact_ids)
 
   defp maybe_filter_artifact_id(query, nil), do: query
 

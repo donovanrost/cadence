@@ -69,10 +69,12 @@ const requester = object({
 });
 export type Requester = Decoded<typeof requester>;
 
-/** One import run row (the index's; the artifact page lists the same rows, api L18). */
+/** One import run row (the index's; the artifact page lists the same rows, api L18). A run names
+ * its own source file; null only if that file is gone, so one row can't break the page. */
 export const importRunRow = object({
   id: token,
-  file_name: string,
+  file_name: nullable(string),
+  format_label: nullable(string),
   status: oneOf(importStatuses),
   diagnostic_counts: object({ error: count, warning: count, info: count }),
   revision_number: nullable(count),

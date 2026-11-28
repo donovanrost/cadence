@@ -27,7 +27,8 @@ const artifactReader = d.object({
   artifact: d.object({
     id: d.token,
     file_name: d.string,
-    format_label: d.string,
+    // Null when the file's format has no registered importer any more.
+    format_label: d.nullable(d.string),
     format_version: d.nullable(d.string),
     // free-text: an IANA media type, shown as is.
     media_type: d.nullable(d.string),
@@ -78,7 +79,10 @@ export function reimportArtifact(k: ArtifactKey) {
 
 /** "XTCE 1.2 · 2.4 MB · uploaded 11-12 14:03Z by Mira K." */
 export function artifactLine(a: ArtifactPage["artifact"]): string {
-  const format = a.format_version ? `${a.format_label} ${a.format_version}` : a.format_label;
+  const format =
+    a.format_label !== null && a.format_version
+      ? `${a.format_label} ${a.format_version}`
+      : a.format_label;
   const size = a.size_bytes === null ? null : formatBytes(a.size_bytes);
   const by = a.uploaded_by?.name ? ` by ${a.uploaded_by.name}` : "";
   return [format, size, `uploaded ${formatShort(new Date(a.uploaded_at))}${by}`]

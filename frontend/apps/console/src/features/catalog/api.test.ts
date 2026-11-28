@@ -34,6 +34,7 @@ const body = () => ({
       {
         id: "run-1",
         file_name: "fsw.xml",
+        format_label: "XTCE 1.3",
         status: "succeeded",
         diagnostic_counts: { error: 0, warning: 2, info: 0 },
         revision_number: 14,
@@ -48,6 +49,13 @@ describe("catalogIndexReader", () => {
   it("decodes the index and the null database of an empty mission", () => {
     expect(decode(catalogIndexReader, body()).ok).toBe(true);
     expect(decode(catalogIndexReader, { databases: [], database: null }).ok).toBe(true);
+  });
+
+  it("decodes a run that names no file, so one such run can't break the page", () => {
+    const b = body();
+    const run = b.database.import_runs[0];
+    if (run) Object.assign(run, { file_name: null, format_label: null, status: "failed" });
+    expect(decode(catalogIndexReader, b).ok).toBe(true);
   });
 
   it("rejects an unknown import status", () => {
