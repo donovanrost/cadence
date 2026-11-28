@@ -136,53 +136,6 @@
     }
   },
   {
-    "path": "/missions/:mission_id/ops/alarms",
-    "scope": "mission",
-    "mountId": "ops-alarms-component",
-    "queryKeys": [
-      "severity",
-      "state",
-      "spacecraft_id",
-      "query",
-      "page",
-      "spacecraft_page",
-      "spacecraft_query"
-    ],
-    "queryAliases": {},
-    "viewClass": "contents",
-    "metadata": {
-      "page_title": "Alarms",
-      "ops_nav_item": "alarms"
-    },
-    "kind": "ops_module",
-    "contribution": "limits.alarm-conditions"
-  },
-  {
-    "path": "/missions/:mission_id/ops/timeline",
-    "scope": "mission",
-    "mountId": "ops-timeline-page-component",
-    "queryKeys": [
-      "category",
-      "kind",
-      "severity",
-      "spacecraft_id",
-      "from",
-      "to",
-      "event_id",
-      "source_dashboard_id",
-      "before_at",
-      "before_id"
-    ],
-    "queryAliases": {},
-    "viewClass": "contents",
-    "metadata": {
-      "page_title": "Mission Timeline",
-      "ops_nav_item": "timeline"
-    },
-    "kind": "ops_workspace",
-    "workspacePage": "timeline"
-  },
-  {
     "path": "/missions/:mission_id/ops/commands/requests/:command_request_id/history",
     "kind": "ops_module",
     "contribution": "commanding.history",
@@ -209,44 +162,6 @@
     "metadata": {
       "page_title": "Commands",
       "ops_nav_item": "commands"
-    }
-  },
-  {
-    "path": "/missions/:mission_id/ops/explore",
-    "kind": "ops_module",
-    "contribution": "dashboards.exploration",
-    "scope": "mission",
-    "mountId": "ops-telemetry-explore-component",
-    "queryKeys": [
-      "point_id",
-      "spacecraft_id",
-      "scope_kind",
-      "scope_id",
-      "time_mode",
-      "time_axis",
-      "from",
-      "to",
-      "replay_run_id",
-      "order",
-      "limit",
-      "selection_view",
-      "validity_state",
-      "realm",
-      "logical_source",
-      "data_source_id",
-      "source_binding_id",
-      "source_dashboard_id",
-      "sample_id",
-      "selected_time",
-      "question",
-      "limit_mode",
-      "data_view"
-    ],
-    "queryAliases": {},
-    "viewClass": "contents",
-    "metadata": {
-      "page_title": "Telemetry Explore",
-      "ops_nav_item": "explore"
     }
   },
   {

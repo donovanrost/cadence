@@ -187,6 +187,7 @@ onBeforeUnmount(() => {
               {{ section.freshness_label }} · {{ section.observed_at_label }}
             </span>
             <a
+              v-if="section.destination"
               :href="section.destination"
               data-phx-link="redirect"
               data-phx-link-state="push"

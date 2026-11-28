@@ -533,7 +533,6 @@ jobs:
         working-directory: apps/cadence
         run: mix db.setup.test
       - name: Federation browser tests
-        id: federation
         run: mix test.browser.federation
         working-directory: apps/cadence_web
         env:
@@ -542,15 +541,6 @@ jobs:
           CADENCE_BROWSER_SHARD: ${{ matrix.shard }}/2
           # Screenshots and failure.png/failure.txt land here; uploaded below when a step fails.
           CADENCE_COMMAND_WORKSPACE_ARTIFACTS: ${{ runner.temp }}/browser-artifacts/command-workspace
-      # Shard 2 only (it has the lighter federation files). Runs even when the federation tests
-      # fail, so one run reports every browser failure.
-      - name: Exercise the lazy Ops pages in the production browser
-        if: ${{ !cancelled() && matrix.shard == 2 && steps.federation.conclusion != 'skipped' }}
-        run: mix test --include browser_smoke --only browser_smoke browser_test/cadence_web/assets/ops_initial_state_browser_test.exs
-        working-directory: apps/cadence_web
-        env:
-          CADENCE_BROWSER_PROPS_DIFF: "true"
-          CADENCE_INITIAL_STATE_ARTIFACTS: ${{ runner.temp }}/browser-artifacts/ops-initial-state
       - name: Upload browser screenshots and failure captures
         if: ${{ failure() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

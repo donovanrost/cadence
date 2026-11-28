@@ -1,10 +1,5 @@
 import "../module-pages.test-support";
 import { nativeElement, required } from "../../../../test-support/mounted-contract";
-import {
-  fixture as timelineFixture,
-  event as timelineEvent,
-} from "../ops-workspace/features/timeline/fixtures.test-support";
-import { queryKeys as timelineQueryKeys } from "../ops-workspace/features/timeline/contracts";
 import { directoryFixture as fleetDirectoryFixture } from "../../../../modules/planning-and-contacts/src/features/fleet-planning/fleet-directory.test-support";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
@@ -44,10 +39,6 @@ import { createHostRouter, hostRoute, shellForRoute } from "./host-navigation";
 import routes from "../routes.json";
 import { monitorFixture } from "../../../../modules/commanding/src/features/mission-commands/monitor.test-support";
 import { readMonitorQuery } from "../../../../modules/commanding/src/features/mission-commands/monitor-query";
-import {
-  fixture as explorationFixture,
-  selectedFixture as explorationSelectedFixture,
-} from "../../../../modules/dashboards-and-exploration/src/features/exploration/fixtures.test-support";
 
 function snapshot(path: string, mission: string | null = null) {
   return {
@@ -77,7 +68,7 @@ function requestedPath(index: number): string {
 let wrapper: VueWrapper | undefined;
 const view = () => required(wrapper);
 /** A mission's neutral host page: an Ops module page that has no page data yet. */
-const missionPage = (mission: string) => `/missions/${mission}/ops/alarms`;
+const missionPage = (mission: string) => `/missions/${mission}/ops/planning/new`;
 const neutralPath = missionPage("mission-1");
 const onNeutral = (root: VueWrapper = view()) => root.findComponent(OpsModulePage).exists();
 const hostPath = (root: VueWrapper = view()) =>
@@ -176,124 +167,6 @@ test("unavailable command refresh hides stale evidence and permits a read-only r
   await reply(2, { ...snapshot(path, "mission-1"), ops_page: page });
   expect(view().find('[data-command-request="request-a"]').exists()).toBe(true);
   expect(view().get("#ops-nav-rail").element).toBe(rail);
-});
-test("Explore links its origin dashboard out of the shell, to the console viewer", async () => {
-  await start();
-  const path = "/missions/mission-1/ops/explore?point_id=HK.voltage&source_dashboard_id=origin";
-  const data = { ...explorationFixture(), organization_id: "org-1", mission_id: "mission-1" };
-  data.query = Object.fromEntries(new URL(path, "https://cadence.test").searchParams);
-  const state = {
-    ...snapshot(path, "mission-1"),
-    ops_page: {
-      id: "dashboards.exploration",
-      slot: "ops.page",
-      version: 1,
-      status: "ready",
-      context: { organizationId: "org-1", missionId: "mission-1" },
-      data,
-    },
-  };
-  await click(path);
-  await reply(0, state);
-  const origin = "/missions/mission-1/ops/dashboards/origin";
-  // The dashboard viewer left the shell for the console (L8 cutover): the origin link is a plain
-  // page load, which the server redirects to the console's viewer; the shell doesn't take it.
-  expect(view().get("#exploration-open-origin").attributes("href")).toBe(origin);
-  await view().get("#exploration-open-origin").trigger("click");
-  await flushHostUpdates();
-  expect(transport.requests).toHaveLength(1);
-});
-test("compiled Explore navigates real query and sample identities through host history", async () => {
-  await start();
-  const base =
-    "/missions/mission-1/ops/explore?point_id=HK.voltage&time_mode=last_1h&source_binding_id=binding-a&source_dashboard_id=origin";
-  const stateAt = (path: string) => {
-    const data = explorationFixture();
-    Object.assign(data, { organization_id: "org-1", mission_id: "mission-1" });
-    data.query = Object.fromEntries(new URL(path, "https://cadence.test").searchParams);
-    if (data.query.sample_id) data.inspection = explorationSelectedFixture().inspection;
-    return {
-      ...snapshot(path, "mission-1"),
-      ops_page: {
-        id: "dashboards.exploration",
-        slot: "ops.page",
-        version: 1,
-        status: "ready",
-        context: { organizationId: "org-1", missionId: "mission-1" },
-        data,
-      },
-    };
-  };
-  await click(base);
-  await reply(0, stateAt(base));
-  expect(view().find("#host-route-unavailable").exists()).toBe(false);
-  expect(view().find("#ops-module-unavailable").exists()).toBe(false);
-  const rail = view().get("#ops-nav-rail").element;
-  await view().get("#exploration-results button").trigger("click");
-  await flushHostUpdates();
-  const selected = requestedPath(1);
-  const query = new URL(selected, "https://cadence.test").searchParams;
-  expect(query.get("sample_id")).toBe("sample/one");
-  expect(query.get("selected_time")).toBe("2026-09-07T11:59:59.654321Z");
-  expect(query.get("from")).toBe("2026-09-07T11:00:00.123456Z");
-  expect(query.get("source_binding_id")).toBe("binding-a");
-  expect(query.get("selected_data_source_id")).toBe("source-a");
-  expect(query.get("selected_source_binding_id")).toBe("binding-a");
-  expect(query.has("data_source_id")).toBe(false);
-  expect(query.get("source_dashboard_id")).toBe("origin");
-  await reply(1, stateAt(selected));
-  expect(view().get("#exploration-selection").text()).toContain("sample/one");
-  expect(view().get("#exploration-sample-raw_value").text()).toBe('{"adc":1234}');
-  expect(view().get("#exploration-sample-receipt").text()).toBe("2026-09-07T11:59:59.654321Z");
-  hostBrowserHistory.go(-1);
-  await flushHostUpdates();
-  expect(requestedPath(2)).toBe(base);
-  await reply(2, stateAt(base));
-  expect(view().find("#exploration-selection").exists()).toBe(false);
-  expect(view().find("#exploration-sample-details").exists()).toBe(false);
-  await view().get("#exploration-source_binding_id").setValue("binding+b");
-  await view().get("#exploration-query").trigger("submit");
-  await flushHostUpdates();
-  const changed = requestedPath(3);
-  expect(new URL(changed, "https://cadence.test").searchParams.get("source_binding_id")).toBe(
-    "binding+b",
-  );
-  const invalid = stateAt(changed);
-  invalid.ops_page.data.mission_id = "foreign";
-  await reply(3, invalid);
-  expect(view().find("#ops-module-unavailable").exists()).toBe(true);
-  expect(view().find("#exploration-results").exists()).toBe(false);
-  await view().get("#ops-module-retry").trigger("click");
-  await flushHostUpdates();
-  expect(requestedPath(4)).toBe(changed);
-  await reply(4, stateAt(changed));
-  expect(
-    view().get<HTMLInputElement | HTMLSelectElement>("#exploration-source_binding_id").element
-      .value,
-  ).toBe("binding+b");
-  expect(view().get("#ops-nav-rail").element).toBe(rail);
-  await view().get("#host-page-refresh").trigger("click");
-  await flushHostUpdates();
-  expect(transport.requests).toHaveLength(6);
-  await click("/missions/mission-1/ops/dashboards");
-  hostBrowserHistory.go(-1);
-  await flushHostUpdates();
-  expect(transport.requests).toHaveLength(6);
-  required(required(transport.requests[5]).reply)({ ok: false });
-  await flushHostUpdates();
-  expect(view().find("#exploration-refresh-failed").exists()).toBe(true);
-  expect(view().find("#exploration-results").exists()).toBe(false);
-  await view().get("#host-page-refresh").trigger("click");
-  await flushHostUpdates();
-  const revoked = stateAt(changed);
-  revoked.ops_page = { ...revoked.ops_page, status: "unavailable" };
-  // @ts-expect-error The malformed producer omits the required page payload.
-  delete revoked.ops_page.data;
-  await reply(6, revoked);
-  expect(view().find("#ops-module-unavailable").exists()).toBe(true);
-  expect(view().find("#exploration-results").exists()).toBe(false);
-  expect(view().get("#ops-nav-rail").element).toBe(rail);
-  expect(transport.requests.every((request) => request.event === "host:context")).toBe(true);
 });
 beforeEach(() => {
   transport.requests = [];
@@ -413,24 +286,22 @@ test("denied context preserves the displayed page and reports a recoverable fail
 test("Back and Forward reenter the guard without replacing the Vue shell", async () => {
   const app = await start();
   const shell = required(nativeElement(app.element));
-  const alarmsPath = "/missions/mission-a/ops/alarms";
-  await click(alarmsPath);
-  await reply(0, snapshot(alarmsPath, "mission-a"));
+  const contactsPath = "/missions/mission-a/ops/contacts";
+  await click(contactsPath);
+  await reply(0, snapshot(contactsPath, "mission-a"));
   hostBrowserHistory.go(-1);
   await flushHostUpdates();
   expect(requestedPath(1)).toBe(neutralPath);
   await reply(1, snapshot(neutralPath, "mission-1"));
   hostBrowserHistory.go(1);
   await flushHostUpdates();
-  await reply(2, snapshot(alarmsPath, "mission-a"));
+  await reply(2, snapshot(contactsPath, "mission-a"));
   expect(app.element).toBe(shell);
-  expect(app.getComponent(OpsModulePage).props("contributionId")).toBe("limits.alarm-conditions");
+  expect(app.getComponent(OpsModulePage).props("contributionId")).toBe("planning.contact-schedule");
 });
 
 // Only Ops pages are served by this router.
-const hostRoutes = routes.filter(
-  (route) => route.kind === "ops_module" || route.kind === "ops_workspace",
-);
+const hostRoutes = routes.filter((route) => route.kind === "ops_module");
 test("every catalog path selects its declared frontend route, including static/dynamic siblings", async () => {
   const router = createHostRouter(createMemoryHistory());
   for (const route of hostRoutes) {
@@ -507,67 +378,9 @@ test("fleet directory is host-composed and captured reads retain evidence across
   expect(onNeutral()).toBe(true);
 });
 
-test("core timeline filters, selected evidence and older pages restore through persistent Ops history", async () => {
-  await start();
-  const base = "/missions/mission-1/ops/timeline";
-  const stateAt = (path: string) => {
-    const data = timelineFixture();
-    const query = new URL(path, "https://cadence.test").searchParams;
-    for (const key of timelineQueryKeys) data.query[key] = query.get(key) ?? "";
-    data.selected_status = data.query.event_id ? "ready" : "none";
-    data.selected = data.query.event_id ? timelineEvent(data.query.event_id) : null;
-    data.next_cursor = data.query.before_at
-      ? null
-      : { at: "2026-09-01T00:00:00Z", id: "mission_event:newer" };
-    if (data.query.before_at) data.events = [timelineEvent("mission_event:older")];
-    return {
-      ...snapshot(path, "mission-1"),
-      timeline_page: { version: 1, page: "timeline", status: "ready", context: data.context, data },
-    };
-  };
-  await click(base);
-  await reply(0, stateAt(base));
-  const rail = view().get("#ops-nav-rail").element;
-  expect(view().find("#host-route-unavailable").exists()).toBe(false);
-  await view().get("#mission-timeline-events a").trigger("click");
-  await flushHostUpdates();
-  const selectedPath = requestedPath(1);
-  expect(new URL(selectedPath, "https://cadence.test").searchParams.get("event_id")).toBe(
-    "mission_event:newer",
-  );
-  await reply(1, stateAt(selectedPath));
-  expect(view().get("#timeline-selected-event-id").text()).toBe("mission_event:newer");
-  await view().get("#timeline_severity").setValue("warning");
-  await view().get("#timeline-filter-form").trigger("submit");
-  await flushHostUpdates();
-  const filteredPath = requestedPath(2);
-  expect(filteredPath).toBe(base + "?severity=warning");
-  await reply(2, stateAt(filteredPath));
-  await view().get("#timeline-older-events").trigger("click");
-  await flushHostUpdates();
-  const olderPath = requestedPath(3);
-  expect(new URL(olderPath, "https://cadence.test").searchParams.get("before_id")).toBe(
-    "mission_event:newer",
-  );
-  await reply(3, stateAt(olderPath));
-  expect(view().find("#timeline-newest-events").exists()).toBe(true);
-  expect(view().get("#mission-timeline-events li").attributes("data-event-id")).toBe(
-    "mission_event:older",
-  );
-  hostBrowserHistory.go(-1);
-  await flushHostUpdates();
-  expect(requestedPath(4)).toBe(filteredPath);
-  await reply(4, stateAt(filteredPath));
-  expect(view().get<HTMLInputElement | HTMLSelectElement>("#timeline_severity").element.value).toBe(
-    "warning",
-  );
-  expect(view().get("#ops-nav-rail").element).toBe(rail);
-  expect(transport.requests.every((request) => request.event === "host:context")).toBe(true);
-});
-
 const routeComponents = { ops_module: "OpsModulePage" };
 const routeStubs = Object.fromEntries(
-  [...Object.values(routeComponents), "TimelinePage"].map((name) => [
+  Object.values(routeComponents).map((name) => [
     name,
     {
       name,
@@ -581,7 +394,7 @@ test.each(hostRoutes)("the host handles $path ($kind)", async (entry) => {
   const route = required(hostRoute(new URL(path, "https://cadence.test")));
   if (route.kind === "unavailable")
     throw new Error("Catalog route must have a registered page kind");
-  const expected = route.kind === "ops_workspace" ? "TimelinePage" : routeComponents[route.kind];
+  const expected = routeComponents[route.kind];
   expect(expected).toBeDefined();
   wrapper = mount(BrowserHost, {
     props: { snapshot: snapshot(path, path.includes("/missions/") ? "mission_id-test" : null) },
@@ -593,7 +406,9 @@ test.each(hostRoutes)("the host handles $path ($kind)", async (entry) => {
 });
 
 test("an unrecognized catalog kind is contained by the host", async () => {
-  const route = required(routes.find((route) => route.path === "/missions/:mission_id/ops/alarms"));
+  const route = required(
+    routes.find((route) => route.path === "/missions/:mission_id/ops/planning/new"),
+  );
   const kind = route.kind;
   try {
     route.kind = "unsupported-test-kind";

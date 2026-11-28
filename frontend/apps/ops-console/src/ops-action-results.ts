@@ -23,66 +23,11 @@ export function reconcileOpsActionResult(
   const patch = requireRecord(envelope.props, "Phoenix returned an invalid presentation patch.");
 
   switch (`${surfaceId}:${actionId}`) {
-    case "alarms:filter":
-    case "alarms:reset_filters":
-      return reconcileAlarms(presentation, patch);
-    case "timeline:apply_timeline_filters":
-    case "timeline:clear_timeline_selection":
-      return reconcileTimeline(presentation, patch);
     case "contact_schedule:search":
       return reconcileContactSchedule(presentation, patch);
     default:
       throw new Error(`Phoenix returned an unsupported result for ${surfaceId}/${actionId}.`);
   }
-}
-
-function reconcileAlarms(
-  presentation: OpsConsolePresentation,
-  patch: JsonRecord,
-): OpsConsolePresentation {
-  const filters = requireRecord(patch.filters, "Phoenix returned invalid alarm filters.");
-  const summary = requireRecord(patch.summary, "Phoenix returned an invalid alarm summary.");
-  const alarms = requireArray(patch.alarms, "Phoenix returned invalid alarm rows.");
-  const values = requireRecord(filters.values, "Phoenix returned invalid alarm filter values.");
-
-  return withProps(presentation, {
-    filters: { ...filters, values },
-    summary,
-    alarms,
-  });
-}
-
-function reconcileTimeline(
-  presentation: OpsConsolePresentation,
-  patch: JsonRecord,
-): OpsConsolePresentation {
-  const timelinePresentation = requireRecord(
-    patch.presentation,
-    "Phoenix returned an invalid timeline presentation.",
-  );
-  const filters = requireRecord(
-    timelinePresentation.filters,
-    "Phoenix returned invalid timeline filters.",
-  );
-  const values = requireRecord(filters.values, "Phoenix returned invalid timeline filter values.");
-  const events = requireArray(patch.timeline_events, "Phoenix returned invalid timeline events.");
-  const currentPresentation = requireRecord(
-    presentation.props.presentation,
-    "The mounted timeline presentation is invalid.",
-  );
-  const currentFilters = requireRecord(
-    currentPresentation.filters,
-    "The mounted timeline filters are invalid.",
-  );
-
-  return withProps(presentation, {
-    presentation: {
-      ...currentPresentation,
-      ...timelinePresentation,
-      filters: { ...currentFilters, ...filters, values },
-    },
-    timeline_events: events,
-  });
 }
 
 function reconcileContactSchedule(

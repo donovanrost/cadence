@@ -38,131 +38,6 @@ const response = {
   },
 };
 
-const telemetrySelectField = (key: string) => ({
-  id: `explore_${key}`,
-  name: `explore[${key}]`,
-  type: "select",
-  label: key,
-  options: [{ label: "All", value: "" }],
-});
-
-const telemetryResponse = {
-  queryVersion: 1,
-  presentation: {
-    component: "OpsTelemetryExplore",
-    props: {
-      page: {
-        id: "ops-telemetry-explore-page",
-        heading: "Telemetry Explore",
-        point_label: "No point selected",
-        realm: null,
-        time_mode: "latest",
-        source_state: "none",
-        data_source_id: "",
-        source_binding_id: "",
-        logical_source: "",
-        source_realm: "",
-        selected_sample_state: "none",
-        selected_sample_id: "",
-        selected_sample_status: null,
-        samples_summary: "0 rows",
-        empty_samples_message: "No physical samples matched this context.",
-      },
-      clipboard: {
-        button_id: "telemetry-explore-copy-link",
-        text: "#",
-        class: "btn btn-ghost btn-sm",
-        icon: "hero-link",
-        icon_class: "h-4 w-4",
-        label: "Copy link",
-        copied_message: "Copied",
-        failed_message: "Copy failed",
-      },
-      investigation: {
-        id: "telemetry-investigation",
-        label: "Investigation",
-        path: "#",
-        fingerprint: "",
-      },
-      navigation: { back_to_dashboard: null },
-      questions: [],
-      question_briefing: null,
-      filter_form: {
-        id: "telemetry-explore-filter-form",
-        values: {
-          point_id: "",
-          spacecraft_id: "",
-          scope_kind: "",
-          scope_id: "",
-          time_mode: "latest",
-          time_axis: "",
-          from: "",
-          to: "",
-          replay_run_id: "",
-          order: "desc",
-          limit: "100",
-          selection_view: "",
-          validity_state: "",
-          realm: "",
-          logical_source: "",
-          data_source_id: "",
-          source_binding_id: "",
-          source_dashboard_id: "",
-          sample_id: "",
-          selected_time: "",
-          question: "",
-          limit_mode: "",
-        },
-        fields: {
-          point_id: telemetrySelectField("point_id"),
-          spacecraft_id: telemetrySelectField("spacecraft_id"),
-          time_mode: telemetrySelectField("time_mode"),
-          from: { id: "explore_from", name: "explore[from]", type: "text", label: "From" },
-          to: { id: "explore_to", name: "explore[to]", type: "text", label: "To" },
-          order: telemetrySelectField("order"),
-          limit: {
-            id: "explore_limit",
-            name: "explore[limit]",
-            type: "number",
-            label: "Limit",
-            min: "1",
-            max: "1000",
-          },
-          realm: telemetrySelectField("realm"),
-          logical_source: telemetrySelectField("logical_source"),
-          data_source_id: telemetrySelectField("data_source_id"),
-          source_binding_id: telemetrySelectField("source_binding_id"),
-          selection_view: telemetrySelectField("selection_view"),
-          validity_state: telemetrySelectField("validity_state"),
-        },
-        submit: { id: "telemetry-explore-apply-filters", label: "Load", icon: "hero-arrow-path" },
-      },
-      point: {
-        id: "telemetry-explore-point-card",
-        requested_point_id: "",
-        rows: [],
-        missing: false,
-      },
-      selected_sample: null,
-      source_context: {
-        id: "telemetry-explore-source-card",
-        state: "none",
-        data_source_id: "",
-        source_binding_id: "",
-        logical_source: "",
-        realm: "",
-        matched_data_source_id: "",
-        matched_source_binding_id: "",
-        rows: [],
-        actions: [],
-      },
-      context_rows: [],
-      diagnostics: { id: "telemetry-explore-diagnostics-card", rows: [] },
-      samples: [],
-    },
-  },
-};
-
 const expectedSurfaceTable = [
   ["workspace", "overview", "mission", "application_workspace", "cadence.ops.workspace", []],
   [
@@ -223,14 +98,6 @@ const expectedSurfaceTable = [
   ],
   ["commands", "operations", "mission", "ops_workspace", "cadence.ops.commands", []],
   [
-    "telemetry_explore",
-    "operations",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.telemetry_explore",
-    ["apply_filters", "apply_question"],
-  ],
-  [
     "data_sources",
     "configuration",
     "mission",
@@ -276,22 +143,6 @@ const expectedSurfaceTable = [
       "retry-deployment-run",
       "requeue-deployment-run",
     ],
-  ],
-  [
-    "alarms",
-    "operations",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.alarms",
-    ["filter", "reset_filters"],
-  ],
-  [
-    "timeline",
-    "activity",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.timeline",
-    ["apply_timeline_filters", "clear_timeline_selection"],
   ],
 ] as const;
 
@@ -394,53 +245,6 @@ describe("Ops Console federated application", () => {
     await flushPromises();
     expect(wrapper.find("#ops-workspace-landing-unavailable").exists()).toBe(true);
     expect(wrapper.findAll("#ops-workspace-landing a")).toHaveLength(0);
-    wrapper.unmount();
-  });
-
-  it("links the legacy telemetry contract to the canonical host page without containment", async () => {
-    const query = vi.fn<TestQuery>().mockResolvedValue({
-      ...telemetryResponse,
-      presentation: {
-        component: "OpsTelemetryExplore",
-        props: { mission_id: "mission-a", query: { point_id: "HK.temp" } },
-      },
-    });
-    const surface = required(
-      surfaceContracts.find((candidate) => candidate.surfaceId === "telemetry_explore"),
-    );
-    const baseProps = propsFor(query);
-    const wrapper = mount(OpsConsoleApplication, {
-      props: { ...baseProps, surface, application: { ...baseProps.application, surface } },
-    });
-
-    await flushPromises();
-
-    expect(wrapper.get("#exploration-open-workspace").attributes("href")).toBe(
-      "/missions/mission-a/ops/explore?point_id=HK.temp",
-    );
-    expect(wrapper.find("#telemetry-explore-filter-form").exists()).toBe(false);
-    expect(wrapper.find("#ops-console-error").exists()).toBe(false);
-    wrapper.unmount();
-  });
-
-  it("delegates the legacy timeline entry to the core owner with its event link", async () => {
-    const query = vi.fn<TestQuery>().mockResolvedValue({
-      queryVersion: 1,
-      presentation: {
-        component: "OpsTimeline",
-        props: {
-          mission_id: "mission-a",
-          query: { event_id: "mission_event:one", severity: "warning" },
-        },
-      },
-    });
-    const wrapper = mount(OpsConsoleApplication, { props: propsFor(query, vi.fn(), "timeline") });
-    await flushPromises();
-    expect(wrapper.get("#timeline-destination a").attributes("href")).toBe(
-      "/missions/mission-a/ops/timeline?severity=warning&event_id=mission_event%3Aone",
-    );
-    expect(wrapper.find("#timeline-filter-form").exists()).toBe(false);
-    expect(wrapper.find("#ops-console-error").exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -563,7 +367,6 @@ describe("Ops Console federated application", () => {
 
   it("admits native route roots and excludes obsolete widgets and inherited object names", () => {
     const required = [
-      "OpsAlarms",
       "OpsCommands",
       "OpsConsoleLanding",
       "OpsContactDetail",
@@ -576,8 +379,6 @@ describe("Ops Console federated application", () => {
       "OpsFleetPlanning",
       "OpsFleetPlanningNew",
       "OpsFleetPlanningRun",
-      "OpsTelemetryExplore",
-      "OpsTimeline",
     ];
     expect(OPS_COMPONENT_NAMES).toEqual(required);
     for (const component of [
@@ -604,17 +405,17 @@ describe("Ops Console federated application", () => {
     expect(manifest.application).toMatchObject({ applicationKey: "ops_console", version: 1 });
     expect(manifest.application.installableScopes).toEqual(["mission"]);
     expect(manifest.surfaces).toEqual(surfaceContracts);
-    expect(surfaceContracts).toHaveLength(15);
-    expect(new Set(surfaceContracts.map((surface) => surface.surfaceId)).size).toBe(15);
-    expect(surfaceContracts.flatMap((surface) => surface.actions)).toHaveLength(44);
+    expect(surfaceContracts).toHaveLength(12);
+    expect(new Set(surfaceContracts.map((surface) => surface.surfaceId)).size).toBe(12);
+    expect(surfaceContracts.flatMap((surface) => surface.actions)).toHaveLength(38);
     expect(
       new Set(
         surfaceContracts.flatMap((surface) =>
           surface.actions.map((action) => `${surface.surfaceId}:${action}`),
         ),
       ).size,
-    ).toBe(44);
-    expect(new Set(surfaceContracts.flatMap((surface) => surface.actions)).size).toBe(33);
+    ).toBe(38);
+    expect(new Set(surfaceContracts.flatMap((surface) => surface.actions)).size).toBe(27);
     expect(
       surfaceContracts.slice(2).every((surface) => {
         const componentName = `Ops${surface.surfaceId.replace(/(^|_)(\w)/g, (_: string, _prefix: string, letter: string) => letter.toUpperCase())}`;

@@ -9,10 +9,6 @@ function normalizeHostRoute(route: CatalogRoute) {
       if (route.contribution)
         return { ...route, kind: "ops_module" as const, contribution: route.contribution };
       break;
-    case "ops_workspace":
-      if (route.workspacePage === "timeline")
-        return { ...route, kind: "ops_workspace" as const, workspacePage: route.workspacePage };
-      break;
   }
   return { ...route, kind: "unavailable" as const };
 }
@@ -25,9 +21,7 @@ declare module "vue-router" {
 }
 // Only Ops pages are served by this router. The other catalog entries (application surfaces) exist
 // only so the components that still render them can type a page header.
-const hostRoutes = routes.filter(
-  (route) => route.kind === "ops_module" || route.kind === "ops_workspace",
-);
+const hostRoutes = routes.filter((route) => route.kind === "ops_module");
 const matchers = hostRoutes.map((route) => ({
   route,
   pattern: new RegExp(

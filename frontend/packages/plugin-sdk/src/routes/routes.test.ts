@@ -52,37 +52,39 @@ test("every retained route still has a live consumer that types a header by it",
 });
 
 test("links are built from routes, with encoded params and admitted query keys", () => {
-  expect(href("/missions/:mission_id/ops/alarms", { mission_id: "m 1" })).toBe(
-    "/missions/m%201/ops/alarms",
+  expect(href("/missions/:mission_id/ops/commands", { mission_id: "m 1" })).toBe(
+    "/missions/m%201/ops/commands",
   );
   expect(
     href(
-      "/missions/:mission_id/ops/alarms",
+      "/missions/:mission_id/ops/commands",
       { mission_id: "m" },
-      { severity: "warning,critical", query: "" },
+      { status: "queued,failed", query: "" },
     ),
-  ).toBe("/missions/m/ops/alarms?severity=warning%2Ccritical");
-  expect(href("/missions/:mission_id/ops/timeline", { mission_id: "m" })).toBe(
-    "/missions/m/ops/timeline",
+  ).toBe("/missions/m/ops/commands?status=queued%2Cfailed");
+  expect(href("/missions/:mission_id/ops/planning", { mission_id: "m" })).toBe(
+    "/missions/m/ops/planning",
   );
-  expect(isRouteId("/missions/:mission_id/ops/alarms")).toBe(true);
+  expect(isRouteId("/missions/:mission_id/ops/commands")).toBe(true);
   expect(isRouteId("/missions/:mission_id/ops/nowhere")).toBe(false);
 });
 
 test("route drift is a type error", () => {
   expectTypeOf(
-    href("/missions/:mission_id/ops/timeline", { mission_id: "m" }),
+    href("/missions/:mission_id/ops/planning", { mission_id: "m" }),
   ).toEqualTypeOf<Href>();
-  expectTypeOf<RouteHeaderKind<"/missions/:mission_id/ops/alarms">>().toEqualTypeOf<"collection">();
+  expectTypeOf<
+    RouteHeaderKind<"/missions/:mission_id/ops/commands">
+  >().toEqualTypeOf<"collection">();
   expectTypeOf<
     RouteHeaderKind<"/missions/:mission_id/ops/commands/requests/:command_request_id/history">
   >().toEqualTypeOf<"resource">();
   // @ts-expect-error -- routes that do not exist cannot be linked
   expect(() => href("/missions/:mission_id/ops/nowhere", { mission_id: "m" })).not.toThrow();
   // @ts-expect-error -- every path param is required
-  expect(() => href("/missions/:mission_id/ops/alarms", {})).toThrow();
+  expect(() => href("/missions/:mission_id/ops/commands", {})).toThrow();
   // @ts-expect-error -- query keys the route does not admit are rejected
-  href("/missions/:mission_id/ops/alarms", { mission_id: "m" }, { tags: "eps" });
+  href("/missions/:mission_id/ops/commands", { mission_id: "m" }, { tags: "eps" });
   // @ts-expect-error -- a plain string is not a link
   const link: Href = "/missions";
   expect(link).toBe("/missions");

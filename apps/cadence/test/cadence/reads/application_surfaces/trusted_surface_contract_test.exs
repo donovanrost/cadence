@@ -7,10 +7,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.TrustedSurfaceContractTest do
 
   @organization_id "org-trusted-surface-contract"
   @mission_id "mission-trusted-surface-contract"
-  @exploration_checker Path.expand(
-                         "../../../../../../frontend/modules/dashboards-and-exploration/src/features/exploration/producer-contract-check.mjs",
-                         __DIR__
-                       )
 
   setup do
     persist_mission_scope(@organization_id, @mission_id)
@@ -24,70 +20,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.TrustedSurfaceContractTest do
     }
 
     %{scope: scope, host_context: HostContext.mission(@mission_id)}
-  end
-
-  test "legacy Ops telemetry delegates its exact query to the canonical exploration page",
-       context do
-    query = %{
-      "point_id" => "HK.voltage+raw",
-      "source_binding_id" => "binding/a",
-      "source_dashboard_id" => "origin",
-      "selection_view" => "canonical",
-      "data_view" => "original",
-      "sample_id" => "sample+one",
-      "selected_time" => "2026-09-07T11:00:00.123456+02:00"
-    }
-
-    assert {:ok,
-            %{
-              "data" => %{
-                "presentation" => %{
-                  "component" => "OpsTelemetryExplore",
-                  "props" => props
-                }
-              }
-            }} =
-             OpsConsole.load(
-               context.scope,
-               context.host_context,
-               %{request("telemetry_explore") | params: query}
-             )
-
-    assert props == %{"mission_id" => @mission_id, "query" => query}
-    empty = surface_props(context, "telemetry_explore", "OpsTelemetryExplore")
-    assert empty == %{"mission_id" => @mission_id, "query" => %{}}
-
-    {output, status} =
-      System.cmd(
-        System.find_executable("node"),
-        ["--no-warnings", @exploration_checker, Jason.encode!([empty, props]), "legacy"],
-        stderr_to_stdout: true
-      )
-
-    assert status == 0, output
-    assert output =~ "Legacy exploration producer/consumer contract passed"
-
-    for invalid <- [
-          %{"unknown" => "selector"},
-          %{"point_id" => ["nested"]},
-          %{"point_id" => "bad\n"},
-          %{"source_binding_id" => String.duplicate("x", 257)}
-        ] do
-      assert {:error, :unsupported_application_surface_query} =
-               OpsConsole.load(
-                 context.scope,
-                 context.host_context,
-                 %{request("telemetry_explore") | params: invalid}
-               )
-    end
-  end
-
-  test "Ops route outputs satisfy their real remote mount contracts", context do
-    alarms = surface_props(context, "alarms", "OpsAlarms")
-    assert alarms == %{"mission_id" => @mission_id, "query" => %{}}
-
-    timeline = surface_props(context, "timeline", "OpsTimeline")
-    assert timeline == %{"mission_id" => @mission_id, "query" => %{}}
   end
 
   test "deep trusted configuration forms stay inside the output boundary", context do
@@ -109,24 +41,5 @@ defmodule Cadence.Reads.ApplicationSurfaces.TrustedSurfaceContractTest do
       query_version: 1,
       params: %{}
     }
-  end
-
-  defp surface_props(context, surface_id, component) do
-    assert {:ok,
-            %{
-              "data" => %{
-                "presentation" => %{
-                  "component" => ^component,
-                  "props" => props
-                }
-              }
-            }} =
-             OpsConsole.load(
-               context.scope,
-               context.host_context,
-               request(surface_id)
-             )
-
-    props
   end
 end

@@ -11,11 +11,6 @@ defmodule CadenceWeb.DashboardExplorationSampleTest do
   alias Cadence.TestSupport.PhysicalSampleFixtures
   alias CadenceWeb.TestFixtures
 
-  @checker Path.expand(
-             "../../../../frontend/modules/dashboards-and-exploration/src/features/exploration/producer-contract-check.mjs",
-             __DIR__
-           )
-
   setup do
     org = TestFixtures.persist_org!()
     user = TestFixtures.persist_user!()
@@ -201,19 +196,6 @@ defmodule CadenceWeb.DashboardExplorationSampleTest do
     refute json =~ "private-sample-marker"
     refute json =~ "resolved_bindings"
     refute json =~ "history_store_policy"
-
-    assert {output, 0} =
-             System.cmd(
-               System.find_executable("node"),
-               [
-                 "--no-warnings",
-                 @checker,
-                 Jason.encode!([model])
-               ],
-               stderr_to_stdout: true
-             )
-
-    assert output =~ "Vue renderer contract passed"
   end
 
   test "historical rows keep their source through global limiting and physical selection", c do
@@ -293,15 +275,6 @@ defmodule CadenceWeb.DashboardExplorationSampleTest do
     assert rejected.rows == model.rows
     assert rejected.inspection.status == "unavailable"
     refute_received {:physical_read, _}
-
-    assert {output, 0} =
-             System.cmd(
-               System.find_executable("node"),
-               ["--no-warnings", @checker, Jason.encode!([model, detail])],
-               stderr_to_stdout: true
-             )
-
-    assert output =~ "Vue renderer contract passed"
   end
 
   def fetch_sample(query, opts), do: Keyword.fetch!(opts, :read).(query, opts)

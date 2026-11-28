@@ -6,7 +6,6 @@ import {
   assertHttpRequestContract,
   assertImmutableArtifactResponse,
   assertImmutableReleaseCacheReuse,
-  assertLiveViewWebSocket,
   assertManifestAssetsRequested,
   assertNoPasswordArgument,
   assertReleaseArtifactUrl,
@@ -1029,54 +1028,6 @@ void test("confirmation rejects a mutated detached canonical snapshot", async ()
   );
   assert.equal(fixture.diagnostics.logErrors.length, 1);
   await fixture.diagnostics.dispose();
-});
-
-void test("LiveView websocket assertion ignores forged entries in exposed websocket evidence", async () => {
-  const diagnostics = installDiagnostics(makeDiagnosticClient(), { expectedOrigin: origin });
-  diagnostics.webSockets.set("forged-live-ws", {
-    requestId: "forged-live-ws",
-    generation: undefined,
-    observedGeneration: undefined,
-    boundToRequest: true,
-    observedSequence: 1,
-    url: `${origin.replace("http:", "ws:")}/live/websocket?vsn=2.0.0`,
-    handshakeRequest: { headers: { Origin: origin } },
-    handshake: { status: 101 },
-  });
-
-  assert.throws(
-    () => assertLiveViewWebSocket(diagnostics, origin),
-    /did not create a websocket transport/,
-  );
-  await diagnostics.dispose();
-
-  const client = makeDiagnosticClient();
-  const liveDiagnostics = installDiagnostics(client, { expectedOrigin: origin });
-  const requestId = "private-live-ws";
-  const socketUrl = `${origin.replace("http:", "ws:")}/live/websocket?vsn=2.0.0`;
-  client.emit("Network.requestWillBeSent", {
-    requestId,
-    request: { url: socketUrl, method: "GET", headers: {} },
-    type: "WebSocket",
-  });
-  client.emit("Network.webSocketCreated", { requestId, url: socketUrl });
-  client.emit("Network.webSocketWillSendHandshakeRequest", {
-    requestId,
-    request: { url: socketUrl, headers: { Origin: origin } },
-  });
-  client.emit("Network.webSocketHandshakeResponseReceived", {
-    requestId,
-    response: { url: socketUrl, status: 101 },
-  });
-  const exposedSocket = requiredFixture(liveDiagnostics.webSockets.get(requestId));
-  exposedSocket.url = "wss://evil.example/live/websocket";
-  exposedSocket.boundToRequest = false;
-  requiredFixture(exposedSocket.handshake).status = 403;
-  assert.equal(
-    fixtureRecord(assertLiveViewWebSocket(liveDiagnostics, origin)).requestId,
-    requestId,
-  );
-  await liveDiagnostics.dispose();
 });
 
 void test("exposed response mutations cannot change private diagnostic status truth", async () => {
@@ -3212,6 +3163,21 @@ void test("the Ops Console browser gate pins the scoped compatibility destinatio
   assert.equal(opsConfig.includes("commands"), false);
 });
 
+void test("the browser gate signs in at the console's Now and never needs a LiveView page", async () => {
+  const source = await readFile(new URL("./federation_browser_smoke.mjs", import.meta.url), "utf8");
+  const scenario = source.slice(source.indexOf("export async function runScenario("));
+  assert.match(scenario, /requiredArg\(args, "--org-slug"\)/);
+  assert.match(scenario, /requiredArg\(args, "--mission-slug"\)/);
+  assert.ok(
+    scenario.includes(
+      "`/console/${encodeURIComponent(orgSlug)}/${encodeURIComponent(missionSlug)}/now`",
+    ),
+  );
+  assert.ok(scenario.includes("\"Boolean(document.querySelector('main h1'))\""));
+  for (const legacy of ["liveSocket", "/live/websocket", "/ops/timeline", "#ops-nav-rail"])
+    assert.equal(source.includes(legacy), false, `the gate still depends on ${legacy}`);
+});
+
 void test("the shared host body is read on the first load and reused by later 304 checks", async () => {
   const source = await readFile(new URL("./federation_browser_smoke.mjs", import.meta.url), "utf8");
   const opsStart = source.indexOf("const ops = await assertRemoteSurface");
@@ -3359,106 +3325,6 @@ void test("favicon log errors are ignored only with the matching browser request
   assert.equal(foreignClient.listenerCount(), 0);
 });
 
-void test("LiveView requires a same-origin websocket handshake and rejects longpoll fallback", () => {
-  const connected = {
-    requestId: "live-ws-1",
-    generation: 2,
-    boundToRequest: true,
-    causalRequestId: "auth-request",
-    observedSequence: 1,
-    url: `${origin.replace("http:", "ws:")}/live/websocket?vsn=2.0.0`,
-    handshakeRequest: { headers: { Origin: origin } },
-    handshake: { status: 101 },
-    error: undefined,
-  };
-  const diagnostics = {
-    webSockets: new Map([
-      ["live-ws-old", { ...connected, requestId: "live-ws-old", generation: 1 }],
-      [connected.requestId, connected],
-    ]),
-    webSocketFailures: [],
-    requests: new Map(),
-    consoleErrors: [],
-    logErrors: [],
-  };
-  assert.equal(
-    assertLiveViewWebSocket(diagnostics, origin, {
-      beforeRequestIds: new Set(["live-ws-old"]),
-      generation: {
-        id: 2,
-        label: "detached handshake",
-        requestSequence: 0,
-        requestIds: new Set(),
-        startedAtMs: 0,
-        causalRequestId: "auth-request",
-        causalRequestSequence: 1,
-      },
-    }),
-    connected,
-  );
-  const secureConnected = {
-    ...connected,
-    requestId: "live-wss-1",
-    url: `${origin.replace("http:", "wss:")}/live/websocket?vsn=2.0.0`,
-    handshakeRequest: { headers: { Origin: origin.replace("http:", "https:") } },
-  };
-  assert.equal(
-    assertLiveViewWebSocket(
-      { ...diagnostics, webSockets: new Map([[secureConnected.requestId, secureConnected]]) },
-      origin.replace("http:", "https:"),
-      {
-        generation: {
-          id: 2,
-          label: "detached handshake",
-          requestSequence: 0,
-          requestIds: new Set(),
-          startedAtMs: 0,
-          causalRequestId: "auth-request",
-          causalRequestSequence: 1,
-        },
-      },
-    ),
-    secureConnected,
-  );
-
-  for (const invalid of /** @type {const} */ ([
-    { ...connected, url: "wss://evil.example/live/websocket?vsn=2.0.0" },
-    { ...connected, url: `${origin}/live/websocket?vsn=2.0.0` },
-    { ...connected, handshake: { status: 403 } },
-    { ...connected, handshakeRequest: { headers: { Origin: "http://127.0.0.1:4101" } } },
-    { ...connected, error: "WebSocket handshake failed" },
-    { ...connected, closed: true },
-  ])) {
-    assert.throws(
-      () =>
-        assertLiveViewWebSocket(
-          { ...diagnostics, webSockets: new Map([[invalid.requestId, invalid]]) },
-          origin,
-        ),
-      /same-origin HTTP 101 handshake|did not create a websocket transport/,
-    );
-  }
-
-  assert.throws(
-    () =>
-      assertLiveViewWebSocket(
-        {
-          ...diagnostics,
-          requests: new Map([
-            ["longpoll-1", { requestId: "longpoll-1", url: `${origin}/live/longpoll?vsn=2.0.0` }],
-          ]),
-        },
-        origin,
-      ),
-    /longpoll transport/,
-  );
-  assert.throws(
-    () =>
-      assertLiveViewWebSocket({ ...diagnostics, webSocketFailures: ["origin rejected"] }, origin),
-    /websocket transport failed/,
-  );
-});
-
 void test("delayed websocket events without a request-boundary record fail closed", async () => {
   const client = makeDiagnosticClient();
   const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
@@ -3486,10 +3352,6 @@ void test("delayed websocket events without a request-boundary record fail close
   });
 
   assert.equal(requiredFixture(diagnostics.webSockets.get(requestId)).boundToRequest, false);
-  assert.throws(
-    () => assertLiveViewWebSocket(diagnostics, origin, { generation }),
-    /did not create a websocket transport/,
-  );
 
   client.emit("Network.requestWillBeSent", {
     requestId,
@@ -3497,10 +3359,6 @@ void test("delayed websocket events without a request-boundary record fail close
     type: "WebSocket",
   });
   assert.equal(requiredFixture(diagnostics.webSockets.get(requestId)).boundToRequest, false);
-  assert.throws(
-    () => assertLiveViewWebSocket(diagnostics, origin, { generation }),
-    /did not create a websocket transport/,
-  );
   client.emit("Network.requestWillBeSent", {
     requestId: responseOnlySocketId,
     request: { url, method: "GET", headers: {} },
@@ -3548,10 +3406,6 @@ void test("delayed websocket events without a request-boundary record fail close
     response: { url, status: 101 },
   });
   assert.equal(requiredFixture(diagnostics.webSockets.get(boundRequestId)).boundToRequest, true);
-  assert.equal(
-    fixtureRecord(assertLiveViewWebSocket(diagnostics, origin, { generation })).requestId,
-    boundRequestId,
-  );
 
   const responseOnlyId = "delayed-response-without-request";
   client.emit("Network.responseReceived", {
@@ -3658,6 +3512,10 @@ void test("sign-in URL validation allows only query/hash variation and runs befo
         `${origin}/console/sign-in-extra`,
         "--login-email",
         "operator@example.test",
+        "--org-slug",
+        "org-1",
+        "--mission-slug",
+        "mission-1",
         "--mission-id",
         "mission-1",
       ],

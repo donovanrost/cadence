@@ -122,9 +122,7 @@ defmodule Cadence.Architecture.PlaneBoundary do
                         "lib/cadence/applications/ops_console/actions/dashboard_deep_actions.ex",
                         "lib/cadence/applications/ops_console/actions/dashboard_workflows.ex",
                         "lib/cadence/applications/ops_console/actions/data_sources.ex",
-                        "lib/cadence/applications/ops_console/actions/platform_bindings.ex",
-                        "lib/cadence/applications/ops_console/actions/telemetry_explore.ex",
-                        "lib/cadence/applications/ops_console/actions/ui_interactions.ex"
+                        "lib/cadence/applications/ops_console/actions/platform_bindings.ex"
                       ])
 
   @public_composition_values MapSet.new([

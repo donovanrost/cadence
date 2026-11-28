@@ -6,20 +6,14 @@ defmodule Cadence.Applications.OpsConsole.ActionProvider do
   alias Cadence.Applications.{ActionRequest, HostContext, JSONBoundary}
   alias Cadence.Auth.Scope
 
-  alias Cadence.Applications.OpsConsole.Actions.{
-    DataSources,
-    TelemetryExplore,
-    UiInteractions
-  }
+  alias Cadence.Applications.OpsConsole.Actions.DataSources
 
   @application_key "ops_console"
   @application_version 1
   @surface_version 1
 
   @cohort_adapters [
-    UiInteractions,
-    DataSources,
-    TelemetryExplore
+    DataSources
   ]
 
   @binding_list Enum.flat_map(

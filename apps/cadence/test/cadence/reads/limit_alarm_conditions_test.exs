@@ -7,10 +7,6 @@ defmodule Cadence.Reads.LimitAlarmConditionsTest do
   alias Cadence.Reads.LimitAlarmConditions
   @org "org-alarm-owner"
   @mission "mission-alarm-owner"
-  @probe Path.expand(
-           "../../../../../frontend/modules/limits-and-alarming/src/features/alarm-conditions/producer-consumer-probe.mjs",
-           __DIR__
-         )
   setup do
     persist_mission_scope(@org, @mission)
 
@@ -59,9 +55,6 @@ defmodule Cadence.Reads.LimitAlarmConditionsTest do
     assert length(doc["states"]["items"]) == 3
     assert doc["spacecraft"]["total_count"] == 27
     assert length(doc["spacecraft"]["items"]) == 2
-    {out, status} = System.cmd("node", [@probe, Jason.encode!(doc)], stderr_to_stdout: true)
-    assert status == 0, out
-    assert out =~ "CADENCE_ALARM_CONSUMER_OK"
 
     if directory = System.get_env("CADENCE_ALARM_FIXTURES") do
       File.mkdir_p!(directory)

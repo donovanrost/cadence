@@ -13,24 +13,24 @@ import {
 import { readPageHeader } from "./page-header-validation";
 import { href } from "./routes";
 
-const alarms = "/missions/:mission_id/ops/alarms" as const;
+const commands = "/missions/:mission_id/ops/commands" as const;
 const request = "/missions/:mission_id/ops/commands/requests/:command_request_id/history" as const;
 const settings = "/missions/:mission_id/settings" as const;
 const surface = "/missions/:mission_id/applications/:application_key/:surface_id" as const;
-const link = href(alarms, { mission_id: "m" });
+const link = href(commands, { mission_id: "m" });
 const ops = { kind: "collection", layer: "ops" } as const;
 
 test("header rules are type errors", () => {
   const a: PageAction = { id: "a", label: "A", href: link };
   const typed = () => {
     // @ts-expect-error -- collection pages take their title from the route
-    useOpsHeader(alarms, { title: "Alarm conditions" });
+    useOpsHeader(commands, { title: "Command requests" });
     // @ts-expect-error -- resource pages must name their resource
     useOpsHeader(request, { description: "Settings" });
     useOpsHeader(request, { title: "Pass Overview", status: { tone: "warning", label: "Off" } });
-    useOpsHeader(alarms, { actions: [a, a, a], more: [a] });
+    useOpsHeader(commands, { actions: [a, a, a], more: [a] });
     // @ts-expect-error -- a fourth button does not compile; overflow goes in `more`
-    useOpsHeader(alarms, { actions: [a, a, a, a] });
+    useOpsHeader(commands, { actions: [a, a, a, a] });
   };
   // @ts-expect-error -- icons come from the vendored set
   const typo: PageAction = { id: "x", label: "X", icon: "hero-chevon-down", href: link };
@@ -47,7 +47,7 @@ test("each layer has its own contract and only its own routes", () => {
     // @ts-expect-error -- a management route is not an Ops page
     useOpsHeader(settings, {});
     // @ts-expect-error -- an Ops route is not a management page
-    useManagementHeader(alarms, {});
+    useManagementHeader(commands, {});
     useManagementHeader(settings, { facts: ["3 configured"], primary: a });
     // @ts-expect-error -- records reload with the browser; there is no refresh
     useManagementHeader(settings, { refresh: { run: () => {} } });
@@ -63,7 +63,7 @@ test("each layer has its own contract and only its own routes", () => {
 test("a component serving several routes types each header by its route", () => {
   const typed = () => {
     useOpsHeaders({
-      [alarms]: { description: "Alarms" },
+      [commands]: { description: "Commands" },
       [request]: () => ({ title: "Pass Overview" }),
     });
     // @ts-expect-error -- the command request route is a resource page and must be named
@@ -103,10 +103,10 @@ test("a page claims the header, keeps it current and releases it on unmount", as
   const claim = vi.fn(),
     update = vi.fn(),
     release = vi.fn();
-  const host: PageHeaderHost = { route: () => alarms, claim, update, release };
+  const host: PageHeaderHost = { route: () => commands, claim, update, release };
   const count = ref(1);
   const Page = defineComponent(() => {
-    useOpsHeader(alarms, () => ({ facts: [`${count.value} active`] }));
+    useOpsHeader(commands, () => ({ facts: [`${count.value} active`] }));
     return () => h("div");
   });
   const wrapper = mount(
@@ -115,7 +115,7 @@ test("a page claims the header, keeps it current and releases it on unmount", as
       return () => h(Page);
     }),
   );
-  expect(claim).toHaveBeenCalledWith(expect.any(Symbol), [alarms]);
+  expect(claim).toHaveBeenCalledWith(expect.any(Symbol), [commands]);
   expect(update).toHaveBeenLastCalledWith(expect.any(Symbol), { facts: ["1 active"] });
   count.value = 2;
   await nextTick();

@@ -2,10 +2,6 @@ import { createPageRegistry } from "../../../shell/module-pages/lazy-pages";
 import type { OpsPageContribution } from "@cadence/plugin-sdk/ops-pages";
 import type { Component } from "vue";
 export const opsPages = createPageRegistry<OpsPageContribution<Component>>("ops.page", {
-  "limits.alarm-conditions": () =>
-    import("@cadence/limits-and-alarming/alarm-conditions").then(
-      (module) => module.alarmConditionsContribution,
-    ),
   "planning.contact-schedule": () =>
     import("@cadence/planning-and-contacts/contact-scheduling").then(
       (module) => module.contactScheduleContribution,
@@ -41,9 +37,5 @@ export const opsPages = createPageRegistry<OpsPageContribution<Component>>("ops.
   "commanding.monitor": () =>
     import("@cadence/commanding/mission-commands").then(
       (module) => module.commandMonitorContribution,
-    ),
-  "dashboards.exploration": () =>
-    import("@cadence/dashboards-and-exploration/exploration").then(
-      (module) => module.explorationContribution,
     ),
 });

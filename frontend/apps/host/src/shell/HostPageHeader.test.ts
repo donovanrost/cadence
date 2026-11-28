@@ -6,16 +6,16 @@ import { useOpsHeader, useOpsHeaders } from "@cadence/plugin-sdk/page-header";
 import { href } from "@cadence/plugin-sdk/routes";
 import HostPage from "./HostPage.vue";
 
-const alarms = "/missions/:mission_id/ops/alarms";
+const commands = "/missions/:mission_id/ops/commands";
 const request = "/missions/:mission_id/ops/commands/requests/:command_request_id/history";
-const breadcrumbs = [{ label: "Kestrel", href: "/missions/m" }, { label: "Alarms" }];
+const breadcrumbs = [{ label: "Kestrel", href: "/missions/m" }, { label: "Commands" }];
 let wrapper: ReturnType<typeof mount> | undefined;
 afterEach(() => {
   wrapper?.unmount();
   vi.restoreAllMocks();
 });
 
-function render(route: string, page: ReturnType<typeof defineComponent>, title = "Alarms") {
+function render(route: string, page: ReturnType<typeof defineComponent>, title = "Commands") {
   wrapper = mount(HostPage, {
     props: { title, route, breadcrumbs, section: "Observe" },
     slots: { default: () => h(page) },
@@ -27,25 +27,25 @@ test("the host draws a page's typed header with one primary, quiet actions and r
   const run = vi.fn(async () => {});
   const reading = ref(false);
   const page = defineComponent(() => {
-    useOpsHeader(alarms, () => ({
-      description: "Latest evaluated limit states.",
-      facts: ["3 active"],
+    useOpsHeader(commands, () => ({
+      description: "Every command request in this mission.",
+      facts: ["3 in flight"],
       actions: [
-        { id: "posture", label: "Current posture", href: href(alarms, { mission_id: "m" }) },
+        { id: "posture", label: "Current posture", href: href(commands, { mission_id: "m" }) },
       ],
       primary: { id: "ack", label: "Acknowledge", run },
       refresh: { run, pending: reading.value },
     }));
     return () => h("p", "body");
   });
-  const host = render(alarms, page);
+  const host = render(commands, page);
   await flushPromises();
   const heading = host.get("#host-page-heading");
   expect(heading.attributes("data-page-heading-source")).toBe("page");
-  expect(heading.get("h1").text()).toBe("Alarms");
-  expect(heading.text()).toContain("Latest evaluated limit states.");
-  expect(heading.text()).toContain("3 active");
-  expect(heading.get("#host-action-posture").attributes("href")).toBe("/missions/m/ops/alarms");
+  expect(heading.get("h1").text()).toBe("Commands");
+  expect(heading.text()).toContain("Every command request in this mission.");
+  expect(heading.text()).toContain("3 in flight");
+  expect(heading.get("#host-action-posture").attributes("href")).toBe("/missions/m/ops/commands");
   expect(heading.get("#host-action-ack").classes()).toContain("btn-primary");
   expect(heading.findAll(".btn-primary")).toHaveLength(1);
   await heading.get("#host-page-refresh").trigger("click");
@@ -72,13 +72,13 @@ test("resource pages name themselves and show their status", async () => {
 test("a header claimed for another route is refused and the route's own header stays", async () => {
   const error = vi.spyOn(console, "error").mockImplementation(() => {});
   const page = defineComponent(() => {
-    useOpsHeaders({ "/missions/:mission_id/ops/timeline": { description: "Wrong page" } });
+    useOpsHeaders({ "/missions/:mission_id/ops/planning": { description: "Wrong page" } });
     return () => h("p");
   });
-  const host = render(alarms, page);
+  const host = render(commands, page);
   await flushPromises();
   expect(error).toHaveBeenCalled();
-  expect(host.get("h1").text()).toBe("Alarms");
+  expect(host.get("h1").text()).toBe("Commands");
   expect(host.get("#host-page-heading").text()).not.toContain("Wrong page");
 });
 
@@ -86,7 +86,7 @@ test("pages not yet migrated keep publishing through CadencePageHeading", async 
   const page = defineComponent(
     () => () => h(CadencePageHeading, null, { title: () => "Legacy title" }),
   );
-  const host = render(alarms, page);
+  const host = render(commands, page);
   await flushPromises();
   expect(host.get("#host-page-heading").attributes("data-page-heading-source")).toBe("application");
   expect(host.get("#host-page-heading").text()).toContain("Legacy title");

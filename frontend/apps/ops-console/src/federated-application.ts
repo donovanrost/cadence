@@ -54,13 +54,6 @@ const routeSurfaces = [
   ],
   ["commands", "operations", "Commands", "cadence.ops.commands", []],
   [
-    "telemetry_explore",
-    "operations",
-    "Telemetry Explore",
-    "cadence.ops.telemetry_explore",
-    ["apply_filters", "apply_question"],
-  ],
-  [
     "data_sources",
     "configuration",
     "Data Sources",
@@ -103,14 +96,6 @@ const routeSurfaces = [
       "retry-deployment-run",
       "requeue-deployment-run",
     ],
-  ],
-  ["alarms", "operations", "Alarms", "cadence.ops.alarms", ["filter", "reset_filters"]],
-  [
-    "timeline",
-    "activity",
-    "Timeline",
-    "cadence.ops.timeline",
-    ["apply_timeline_filters", "clear_timeline_selection"],
   ],
 ] as const;
 

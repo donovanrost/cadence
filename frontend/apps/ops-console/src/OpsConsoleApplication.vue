@@ -71,15 +71,7 @@ const fleetRunPort = createFleetRunPort(
 );
 if (fleetRunPort) provide(FLEET_RUN_PORT, fleetRunPort);
 
-const draftPreservingActions = new Set([
-  "validate",
-  "validate-fleet-run",
-  "filter",
-  "reset_filters",
-  "search",
-  "apply_timeline_filters",
-  "clear_timeline_selection",
-]);
+const draftPreservingActions = new Set(["validate", "validate-fleet-run", "search"]);
 
 const actionListeners = computed(() =>
   Object.fromEntries(

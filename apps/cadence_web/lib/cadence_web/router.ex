@@ -122,26 +122,6 @@ defmodule CadenceWeb.Router do
     get("/*path", SPAController, :index)
   end
 
-  scope "/", CadenceWeb do
-    pipe_through([:browser, :require_authenticated_scope])
-
-    live_session :application,
-      on_mount: [{CadenceWeb.UserAuth, :require_user_scope}],
-      layout: {CadenceWeb.Layouts, :host} do
-      live("/missions/:mission_id/ops/alarms", HostPageLive, :index,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/timeline", HostPageLive, :index,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/explore", HostPageLive, :show,
-        metadata: %{host_policy: :ops}
-      )
-    end
-  end
-
   # L5 auth JSON (owner: api-ops). Contract: docs/apogee/api/session.md
   scope "/api/v1/auth", CadenceWeb.Console do
     pipe_through(:console_auth_api)

@@ -63,6 +63,9 @@ const authoritativeHostJavascriptDigests = new Set([
   // Deleted the telemetry-decom remote and the spacecraft application-surface route (#669b): the
   // tokenizer finds the same 2 federation-loader templates; two identical build:publication runs.
   "d519e5a2d1cc846e984f04176aa58374a554b7c3c8418e2c3e7f470c299c3bc1",
+  // Deleted the legacy timeline, explore and alarms pages (#666, #142, #143): the checker's
+  // tokenizer finds the same 2 federation-loader templates; two identical build:publication runs.
+  "b7ce844f23417117d0f7f7c6c9aa4df21b76dda6b3b0fc6b6ca4e6717befb0ef",
 ]);
 
 /** @param {string} message @returns {never} */
