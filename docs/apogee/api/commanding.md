@@ -151,7 +151,7 @@ No side effects. Returns:
     {"key": "identity", "result": "go", "per_target": [], "evidence": {}},
     {"key": "catalog", "result": "no_go", "per_target": [{"spacecraft_id": "…", "result": "no_go",
        "reason": [{"position": 0, "command_id": "…", "reason": "invalid_command_argument"}]}], "evidence": {"count": 1}},
-    {"key": "size", "result": "go", "per_target": [], "evidence": {"max_targets": 1000, "max_commands": 16, "max_members": 5000, "targets": 2, "commands": 3}},
+    {"key": "size", "result": "go", "per_target": [], "evidence": {"max_targets": 5000, "max_commands": 16, "max_members": 20000, "targets": 2, "commands": 3}},
     {"key": "conflicts", "result": "hold", "per_target": [], "evidence": {"count": 2, "command_request_ids": ["…"]}},
     {"key": "contact", "result": "hold", "per_target": [{"spacecraft_id": "…", "result": "go",
        "next_contact": {"station_code": "SVL", "aos": "…", "los": "…"}}], "evidence": {"until": "…"}},
@@ -186,6 +186,15 @@ No side effects. Returns:
 - `two_person` reason keys: `hazardous_command | critical_command | policy_hint | fleet_reach`.
 - Plan impact and umbra margin are absent (no data, DECISIONS #4).
 - Oversize drafts return only `size` (`no_go`, with the bounds) and `digest: null`.
+  **The size bounds are a guard (#795), not a product limit:** `max_targets` 5,000, `max_commands`
+  16, `max_members` (targets x commands) 20,000. Preflight and submit validate every member in one
+  transaction; measured at about 0.2 ms a member for preflight and 0.3 ms for submit (5,000 x 4 =
+  20,000 members: 3.3 s and 6 s; 500 x 16: 1.7 s and 2.7 s), so the defaults leave more than 2x
+  headroom under the 15 s transaction timeout. A deployment (never an organization, mission or
+  request) changes them with `config :cadence, :command_group_bounds`; past about 50,000 members
+  the Repo's transaction timeout needs raising too. Over a bound is always loud: `size` `no_go` in
+  preflight, `422 command_group_too_large` (the bounds and the draft's `targets` and `commands`
+  in `details`) on create.
 
 - **U51 (per-target verifiers).** Each target's commands are validated against its own pinned
   mission model (a fleet activation can pin spacecraft to different catalog revisions), so:
@@ -293,6 +302,22 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
   two never disagree), with both counts as integers (the `409 command_group_members_changed`
   details' names). In any other state all three are `null`. When it's `true` a GO answers that
   409, so disable GO up front; NO-GO, send back and abort stay allowed.
+- **Paged targets and events (#795).** Show also carries `targets_page: {total, revision,
+  next_cursor}` and `events_page: {total, next_cursor}`: how many there are, and `revision` changes
+  whenever any target's stage does (a live client refetches its pages then, or when
+  `events_page.total` moves). Each target also carries its `index`. Today show still lists every
+  target and event (`next_cursor: null`); the console moves to the paged reads below, after which
+  show carries only the first 100 targets and the latest 50 events, and the group push omits both.
+  - `GET /command-groups/:id/targets?limit=&cursor=&stage=&q=`: a page of `targets[]` in target
+    order, `{data: {targets}, meta: {total, next_cursor}}`. `limit` 1..500 (default 100). `stage`
+    is a comma list of member stages (the target's own); `q` (≤ 100 chars) a case-insensitive
+    substring of the name or spacecraft id. `meta.total` counts the filtered targets.
+  - `GET /command-groups/:id/events?limit=&cursor=`: a page of `events[]`, chronological, the latest
+    first; the cursor reads back to older ones. `limit` 1..200 (default 50).
+  - A cursor is opaque and belongs to its mission, group and list: another group's, another
+    mission's, the other list's or a malformed one is `422 invalid_params`
+    (`details.cursor`); a bad `limit`, `stage` or `q` names its own field. Same authorization as
+    show; an unknown group is `404 command_group_not_found`.
 - Member `stage`: `awaiting_go | queued_for_contact | radiating | executed | verified | no_verifier
   | verify_failed | release_failed | indeterminate | canceled | rejected | excluded`. A target's stage
   is its first unfinished member's. `end_reason`: `aborted | release_basis_changed |
@@ -379,7 +404,7 @@ nobody is recorded as accountable for requested it, so nobody can decide it; fai
 (the active catalog changed since submit, so resubmit), `409 command_group_members_changed` (GO
 only: the group's member rows no longer match what submission recorded; details
 `submitted_member_count`, `current_member_count`; send back and NO-GO stay allowed; resubmit), `422 note_required`, `422 exclusions_required`,
-`422 unknown_excluded_target`, `422 invalid_params`.
+`422 unknown_excluded_target`, `422 invalid_params` (an `excluded` list that repeats a target: `details.excluded`).
 
 `expected_review` is **required on `go` and `go_excluding`** (#117 step 4a; fail closed: a GO without it
 answers `409 command_group_review_stale`), and optional on `send_back` and `no_go`. The token covers
@@ -466,9 +491,15 @@ Also new, at release time:
 any state, including finished groups. Returns the group. Errors: `422 note_required`,
 `404 command_group_not_found`.
 
-### `GET /command-endpoints?spacecraft_ids=a,b` (Compose's endpoint picker)
+### `POST /command-endpoints` · `GET /command-endpoints?spacecraft_ids=a,b` (Compose's endpoint picker)
 
-Per spacecraft (≤ 1,000): `{spacecraft_id, resolved_source_endpoint_id, failure, routes[],
+`POST` takes `{"spacecraft_ids": ["a", "b", …]}` (#795): a fleet's ids don't fit in a URL. Each id
+counts once. More ids than the size guard's `max_targets` is `422 command_group_too_large`
+(`details.max_targets`, `details.targets`), never a silent cut; a non-list or a non-text id is
+`422 invalid_params`. Ask for the page of rows on screen, not every target at once. The `GET` with
+a comma list answers the same, with the same 422, until the console moves off it (then it goes).
+
+Per spacecraft: `{spacecraft_id, resolved_source_endpoint_id, failure, routes[],
 endpoints: [{id, name, scid, managed}]}`. `resolved_source_endpoint_id` is what preflight will use
 when you send no override; `failure` (`no_uplink_route | multiple_primary_uplink_routes`) says why
 there's none. `endpoints` are the spacecraft's source endpoints to offer as an explicit override;

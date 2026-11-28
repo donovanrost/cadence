@@ -352,6 +352,7 @@ defmodule Cadence.Reads.CommandGroups do
       own = by_target |> Map.get(target["index"], []) |> Enum.sort_by(& &1.position)
 
       %{
+        index: target["index"],
         spacecraft_id: target["spacecraft_id"],
         name: target["name"],
         scid: target["scid"],

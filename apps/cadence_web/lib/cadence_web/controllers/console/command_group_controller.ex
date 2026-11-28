@@ -10,6 +10,8 @@ defmodule CadenceWeb.Console.CommandGroupController do
   alias Cadence.Commanding.Groups.GroupStore
   alias Cadence.Control.Commanding.{GroupAbort, GroupDecision, GroupNotes, GroupSubmission}
 
+  alias Cadence.Reads.CommandGroups.Page
+
   alias Cadence.Reads.{
     CommandEndpoints,
     CommandGroups,
@@ -156,6 +158,32 @@ defmodule CadenceWeb.Console.CommandGroupController do
     end
   end
 
+  # #795: a group's targets and its events, a page at a time, under show's own authorization.
+  # `stage` and `q` filter the targets; a cursor of another group, mission or list is a 422.
+  def targets(conn, %{"command_group_id" => id} = params) do
+    with {:ok, view} <- CommandGroups.get(org(conn), mission(conn), id, viewer(conn)),
+         {:ok, page} <- Page.targets(view, params) do
+      json(conn, %{
+        data: %{targets: CommandGroupJSON.targets(page.targets)},
+        meta: %{total: page.total, next_cursor: page.next_cursor}
+      })
+    else
+      error -> CommandGroupProblems.respond(conn, error)
+    end
+  end
+
+  def events(conn, %{"command_group_id" => id} = params) do
+    with {:ok, view} <- CommandGroups.get(org(conn), mission(conn), id, viewer(conn)),
+         {:ok, page} <- Page.events(view, params) do
+      json(conn, %{
+        data: %{events: CommandGroupJSON.events(page.events)},
+        meta: %{total: page.total, next_cursor: page.next_cursor}
+      })
+    else
+      error -> CommandGroupProblems.respond(conn, error)
+    end
+  end
+
   # U33: the pass a queued, unfinished group releases on, with its live uplink readiness.
   defp with_uplink(conn, groups) do
     waiting = for %{state: :queued, finished: false, id: id} <- groups, do: id
@@ -237,15 +265,18 @@ defmodule CadenceWeb.Console.CommandGroupController do
     end
   end
 
+  # POST with `spacecraft_ids` in the body: a fleet's ids don't fit in a URL. (The GET with a
+  # comma list stays until the console moves off it.) More ids than the size guard is a 422 naming
+  # the bound, never a silent cut.
   def endpoints(conn, params) do
-    ids =
-      case params["spacecraft_ids"] do
-        value when is_binary(value) -> value |> String.split(",", trim: true) |> Enum.take(1_000)
-        _other -> []
-      end
+    case CommandGroupParams.spacecraft_ids(params) do
+      {:ok, ids} ->
+        endpoints = CommandEndpoints.for_spacecraft(org(conn), mission(conn), ids)
+        json(conn, %{data: CommandGroupJSON.endpoints(endpoints)})
 
-    endpoints = CommandEndpoints.for_spacecraft(org(conn), mission(conn), ids)
-    json(conn, %{data: CommandGroupJSON.endpoints(endpoints)})
+      error ->
+        CommandGroupProblems.respond(conn, error)
+    end
   end
 
   def policies(conn, _params) do
