@@ -156,8 +156,9 @@ member"). Invitation notices aren't listed, since `GET /account/invitations` alr
 
 - `GET /api/v1/account/notices?limit=&cursor=` → `{data: {notices: [{id, kind, organization {id,
   name}, role, created_at, read_at}]}, meta: {next_cursor}}`, newest first (`created_at`, then
-  `id`), one query. `limit` 1..50, default 50; `cursor` is opaque, and one the server didn't make
-  is `422 invalid_params` with `details.cursor`.
+  `id`), one query. `limit` 1..50, default 50; `cursor` is opaque, and a malformed one is `422 invalid_params`
+  with `details.cursor`. It isn't bound to the person and needn't be: every page is filtered to
+  the signed-in person's own notices.
   - `kind`: `organization_access_granted` (closed; a reader should still treat an unknown value
     as unrecognized).
   - `organization`: the id, and `name` as it was when the person was added (null if not

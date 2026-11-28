@@ -62,7 +62,7 @@ defmodule CadenceWeb.Console.AccountNoticeAPITest do
     assert count(c.stranger) == 0
   end
 
-  test "pages with a cursor, and refuses one it didn't make", c do
+  test "pages with a cursor, and refuses a malformed one", c do
     first = json_response(mine(c.person, "?limit=1"), 200)
     assert [_] = first["data"]["notices"]
     cursor = first["meta"]["next_cursor"]

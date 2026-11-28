@@ -121,7 +121,7 @@ defmodule Cadence.NotificationsTest do
       assert Enum.sort(seen) == Enum.sort(ids)
     end
 
-    test "refuses a cursor it didn't make", %{user: user} do
+    test "refuses a malformed cursor", %{user: user} do
       assert {:error, :invalid_cursor} = Notifications.listed_page(user.user_id, cursor: "nope")
 
       forged = Base.url_encode64(Jason.encode!(["not a time", "notif_x"]), padding: false)
