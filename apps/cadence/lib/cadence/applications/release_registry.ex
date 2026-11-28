@@ -8,10 +8,8 @@ defmodule Cadence.Applications.ReleaseRegistry do
     DerivedTelemetry,
     LegacyCommsOverview,
     Limits,
-    MissionCatalog,
     OpsConsole,
     ReleaseContribution,
-    Spacecraft,
     TelemetryDecomCatalogContribution
   }
 
@@ -20,8 +18,6 @@ defmodule Cadence.Applications.ReleaseRegistry do
     Comms,
     LegacyCommsOverview,
     Limits,
-    MissionCatalog,
-    Spacecraft,
     TelemetryDecomCatalogContribution,
     OpsConsole,
     DerivedTelemetry

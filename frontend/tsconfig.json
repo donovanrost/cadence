@@ -11,16 +11,10 @@
       "path": "./apps/host"
     },
     {
-      "path": "./apps/mission-catalog"
-    },
-    {
       "path": "./apps/ops-console"
     },
     {
       "path": "./apps/organization-admin"
-    },
-    {
-      "path": "./apps/spacecraft"
     },
     {
       "path": "./apps/surface-fixture"

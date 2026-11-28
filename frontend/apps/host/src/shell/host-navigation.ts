@@ -23,8 +23,8 @@ declare module "vue-router" {
     snapshot?: import("./host-snapshot").HostSnapshot;
   }
 }
-// Only Ops pages are served by this router. Other catalog entries (spacecraft, catalog, application
-// surfaces) exist only so the components that still render them can type a page header.
+// Only Ops pages are served by this router. The other catalog entries (application surfaces) exist
+// only so the components that still render them can type a page header.
 const hostRoutes = routes.filter(
   (route) => route.kind === "ops_module" || route.kind === "ops_workspace",
 );

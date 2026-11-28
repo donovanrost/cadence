@@ -3,7 +3,6 @@ defmodule Cadence.Reads.Applications.Inventory do
   Composes application-package definitions, host installation lifecycle, and
   status providers into one inventory projection.
 
-  Catalog inventories expose every available application at a host scope.
   Declared inventories preserve a profile's application keys, including
   extension keys whose package is not present in this Cadence deployment.
   """
@@ -11,7 +10,6 @@ defmodule Cadence.Reads.Applications.Inventory do
   alias Cadence.Applications.{
     ApplicationDefinition,
     ApplicationInstallation,
-    ApplicationInstallations,
     HostContext,
     Registry,
     Status
@@ -20,64 +18,6 @@ defmodule Cadence.Reads.Applications.Inventory do
   alias Cadence.Auth.Scope
   alias Cadence.Reads.Applications
   alias Cadence.Reads.Applications.InventoryItem
-
-  @spec catalog(Scope.t(), HostContext.t(), [ApplicationDefinition.t()]) ::
-          {:ok, [InventoryItem.t()]} | {:error, term()}
-  def catalog(%Scope{} = current_scope, %HostContext{} = host_context, definitions)
-      when is_list(definitions) do
-    with :ok <- validate_definitions(definitions, host_context),
-         {:ok, installations} <- installation_map(current_scope, host_context) do
-      definitions = Enum.filter(definitions, &(&1.installation_policy == :optional))
-
-      known_items =
-        Enum.map(definitions, fn definition ->
-          installation = Map.get(installations, definition.application_key)
-
-          definition
-          |> exact_definition(installation)
-          |> known_item(definition, installation, current_scope, host_context, false, %{})
-        end)
-
-      known_keys = MapSet.new(definitions, & &1.application_key)
-
-      orphaned_items =
-        installations
-        |> Map.values()
-        |> Enum.reject(&MapSet.member?(known_keys, &1.application_key))
-        |> Enum.sort_by(& &1.application_key)
-        |> Enum.map(&unknown_item(&1.application_key, %{}, &1, false))
-
-      {:ok, known_items ++ orphaned_items}
-    end
-  end
-
-  def catalog(%Scope{}, %HostContext{}, _definitions),
-    do: {:error, :invalid_application_inventory_definitions}
-
-  @spec declared(Scope.t(), HostContext.t(), map(), [ApplicationDefinition.t()]) ::
-          {:ok, [InventoryItem.t()]} | {:error, term()}
-  def declared(
-        %Scope{} = current_scope,
-        %HostContext{} = host_context,
-        declarations,
-        definitions
-      )
-      when is_map(declarations) and is_list(definitions) do
-    with :ok <- validate_definitions(definitions, host_context),
-         {:ok, installations} <- installation_map(current_scope, host_context) do
-      declared_from_installations(
-        current_scope,
-        host_context,
-        declarations,
-        definitions,
-        installations,
-        %{}
-      )
-    end
-  end
-
-  def declared(%Scope{}, %HostContext{}, _declarations, _definitions),
-    do: {:error, :invalid_application_declarations}
 
   @doc "Builds a declared inventory from a caller-preloaded host installation set."
   @spec declared_with_installations(
@@ -136,32 +76,6 @@ defmodule Cadence.Reads.Applications.Inventory do
         _opts
       ),
       do: {:error, :invalid_application_declarations}
-
-  @spec summary([InventoryItem.t()]) :: Status.t()
-  def summary([]) do
-    %Status{state: :none_declared, label: "None declared", tone: :info}
-  end
-
-  def summary([%InventoryItem{status: %Status{} = status}]), do: status
-
-  def summary(items) when is_list(items) do
-    ready_count = Enum.count(items, &(&1.status.tone == :ready))
-    total_count = length(items)
-
-    %Status{
-      state: aggregate_state(items, ready_count, total_count),
-      label: "#{ready_count} of #{total_count} ready",
-      tone: aggregate_tone(items, ready_count, total_count),
-      facts:
-        Enum.map(items, fn item ->
-          %{
-            id: item.application_key,
-            label: item.display_name,
-            value: item.status.label
-          }
-        end)
-    }
-  end
 
   defp declared_item(
          application_key,
@@ -419,22 +333,6 @@ defmodule Cadence.Reads.Applications.Inventory do
     ApplicationDefinition.available?(definition) and placement in definition.installable_scopes
   end
 
-  defp installation_map(current_scope, host_context) do
-    case ApplicationInstallations.list(current_scope, host_context) do
-      {:ok, installations} ->
-        installations =
-          Enum.reject(
-            installations,
-            &Registry.platform?(&1.application_key, host_context.placement)
-          )
-
-        {:ok, Map.new(installations, &{&1.application_key, &1})}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
   defp declared_from_installations(
          current_scope,
          host_context,
@@ -518,20 +416,6 @@ defmodule Cadence.Reads.Applications.Inventory do
     do: application_key
 
   defp definition_identity(_definition), do: nil
-
-  defp aggregate_state(_items, ready_count, total_count) when ready_count == total_count,
-    do: :ready
-
-  defp aggregate_state(items, _ready_count, _total_count) do
-    if Enum.any?(items, &(&1.status.tone == :blocked)), do: :blocked, else: :attention
-  end
-
-  defp aggregate_tone(_items, ready_count, total_count) when ready_count == total_count,
-    do: :ready
-
-  defp aggregate_tone(items, _ready_count, _total_count) do
-    if Enum.any?(items, &(&1.status.tone == :blocked)), do: :blocked, else: :attention
-  end
 
   defp humanize_application_key(key) do
     key

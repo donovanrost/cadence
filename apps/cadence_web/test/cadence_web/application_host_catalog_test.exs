@@ -126,48 +126,7 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
              )
 
     assert Enum.sort(Enum.map(catalog["applications"], & &1["applicationKey"])) ==
-             ["comms", "comms_overview", "mission_catalog", "ops_console", "spacecraft"]
-  end
-
-  test "platform catalog admission does not bypass an optional surface installation" do
-    {scope, route_context} = installed_telemetry_context()
-    host = route_context.host_context
-
-    assert {:ok, %{installation: nil}} =
-             ApplicationHostCatalog.admit_application(
-               scope,
-               route_context,
-               "spacecraft",
-               "telemetry_decom",
-               now: @now
-             )
-
-    assert {:ok, _} = ApplicationInstallations.disable(scope, host, "telemetry_decom")
-
-    assert {:error, :application_installation_disabled} =
-             ApplicationHostCatalog.admit_application(
-               scope,
-               route_context,
-               "spacecraft",
-               "telemetry_decom",
-               now: @now
-             )
-
-    assert {:ok, %{installation: nil}} =
-             ApplicationHostCatalog.admit_application(scope, route_context, "spacecraft", "show",
-               now: @now
-             )
-
-    assert {:ok, _} = ApplicationInstallations.uninstall(scope, host, "telemetry_decom")
-
-    assert {:error, :application_installation_uninstalled} =
-             ApplicationHostCatalog.admit_application(
-               scope,
-               route_context,
-               "spacecraft",
-               "telemetry_decom",
-               now: @now
-             )
+             ["comms", "comms_overview", "ops_console"]
   end
 
   test "rejects oversized persisted display data before returning a catalog" do
@@ -304,7 +263,7 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
              ApplicationInstallations.install(scope, host_context, "ops_console")
 
     assert {:error, :platform_application} =
-             ApplicationInstallations.install(scope, host_context, "spacecraft")
+             ApplicationInstallations.install(scope, host_context, "comms")
 
     {scope, %{host_context: host_context, mission: mission, spacecraft: nil}}
   end

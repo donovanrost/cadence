@@ -12,7 +12,7 @@ defmodule Cadence.Extensions.Registry do
     WidgetTypeContribution
   }
 
-  alias Cadence.Applications.{Comms, MissionCatalog, OpsConsole, Spacecraft}
+  alias Cadence.Applications.{Comms, OpsConsole}
 
   @type fetch_error ::
           :unknown_extension_package
@@ -25,9 +25,7 @@ defmodule Cadence.Extensions.Registry do
       telemetry_package(),
       mission_assurance_package(),
       comms_package(),
-      mission_catalog_package(),
       ops_console_package(),
-      spacecraft_package(),
       runtime_foundations_package(),
       cfdp_package(),
       tcp_transport_package(),
@@ -148,40 +146,8 @@ defmodule Cadence.Extensions.Registry do
     }
   end
 
-  defp mission_catalog_package do
-    %ExtensionPackage{
-      package_id: "cadence.mission-catalog",
-      version: 1,
-      trust: :first_party,
-      compatibility: %{cadence_application_contract: 1, cadence_surface_contract: 1},
-      contributions: [
-        %ApplicationContribution{
-          application_key: MissionCatalog.application_key(),
-          application_version: 1
-        }
-      ]
-    }
-  end
-
   defp ops_console_package do
     identity = OpsConsole.identity()
-
-    %ExtensionPackage{
-      package_id: identity.package_id,
-      version: identity.package_version,
-      trust: :first_party,
-      compatibility: %{cadence_application_contract: 1, cadence_surface_contract: 1},
-      contributions: [
-        %ApplicationContribution{
-          application_key: identity.application_key,
-          application_version: identity.application_version
-        }
-      ]
-    }
-  end
-
-  defp spacecraft_package do
-    identity = Spacecraft.identity()
 
     %ExtensionPackage{
       package_id: identity.package_id,

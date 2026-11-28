@@ -241,13 +241,7 @@ export interface GateOptions {
   clientCreationTimeout?: number;
 }
 
-export type ApplicationKey =
-  | "comms"
-  | "telemetry_decom"
-  | "mission_catalog"
-  | "ops_console"
-  | "organization_admin"
-  | "spacecraft";
+export type ApplicationKey = "comms" | "telemetry_decom" | "ops_console" | "organization_admin";
 export interface SurfaceOptions {
   client: import("./cdp-contract").CdpPort;
   diagnostics: ReturnType<typeof import("./federation_browser_smoke.mjs").installDiagnostics>;

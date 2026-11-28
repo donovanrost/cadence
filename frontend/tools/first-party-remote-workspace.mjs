@@ -12,12 +12,6 @@ export const APPROVED_FIRST_PARTY_REMOTES = Object.freeze([
     remoteName: "cadence_organization_admin",
   },
   {
-    directoryName: "mission-catalog",
-    bundle: "mission-catalog",
-    remoteName: "cadence_mission_catalog",
-  },
-  { directoryName: "spacecraft", bundle: "spacecraft", remoteName: "cadence_spacecraft" },
-  {
     directoryName: "telemetry-decom",
     bundle: "telemetry-decom",
     remoteName: "cadence_telemetry_decom",

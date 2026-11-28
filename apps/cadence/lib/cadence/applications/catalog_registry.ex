@@ -11,9 +11,7 @@ defmodule Cadence.Applications.CatalogRegistry do
     JSONBoundary,
     LegacyCommsOverview,
     Limits,
-    MissionCatalog,
     OpsConsole,
-    Spacecraft,
     TelemetryDecomCatalogContribution
   }
 
@@ -22,8 +20,6 @@ defmodule Cadence.Applications.CatalogRegistry do
     Comms,
     LegacyCommsOverview,
     Limits,
-    MissionCatalog,
-    Spacecraft,
     TelemetryDecomCatalogContribution,
     OpsConsole,
     DerivedTelemetry
@@ -65,19 +61,6 @@ defmodule Cadence.Applications.CatalogRegistry do
   end
 
   def fetch(_application_key), do: {:error, :unknown_catalog_contribution}
-
-  @spec fetch_default(ApplicationDefinition.scope()) ::
-          {:ok, CatalogContribution.t()} | {:error, :unknown_catalog_contribution}
-  def fetch_default(scope) when is_atom(scope) do
-    case Enum.find(all(), fn %CatalogContribution{definition: definition} ->
-           scope in definition.installable_scopes
-         end) do
-      %CatalogContribution{} = contribution -> {:ok, contribution}
-      nil -> {:error, :unknown_catalog_contribution}
-    end
-  end
-
-  def fetch_default(_scope), do: {:error, :unknown_catalog_contribution}
 
   defp contributors do
     @contributors ++

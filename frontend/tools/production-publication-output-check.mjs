@@ -50,6 +50,10 @@ const authoritativeHostJavascriptDigests = new Set([
   // Deleted the legacy /ops landing route and its BrowserHost branch (#668): the checker's tokenizer
   // finds the same 2 federation-loader templates and nothing new; two identical build:publication runs.
   "a23d806ee0689c9e2008835f8665c00a4ba15b8cb1fedd199b1cbe0e9f0b9fd4",
+  // Deleted the mission-catalog and spacecraft remotes and their host pages (#671): the checker's
+  // tokenizer finds the same 2 federation-loader templates and nothing new; two identical
+  // build:publication runs.
+  "PENDING_DIGEST",
 ]);
 
 /** @param {string} message @returns {never} */

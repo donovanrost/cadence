@@ -7,7 +7,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.TelemetryDecomConfigurationTest do
     ApplicationInstallations,
     HostContext,
     Registry,
-    Spacecraft,
     TelemetryDecom,
     TelemetryDecomFixtures
   }
@@ -188,19 +187,12 @@ defmodule Cadence.Reads.ApplicationSurfaces.TelemetryDecomConfigurationTest do
     assert applied["status"]["tone"] == "ready"
   end
 
-  test "canonical and historical surface identities resolve to the same scoped domain read", c do
+  test "the manage surface resolves to the scoped domain read", c do
     {:ok, canonical} =
       Registry.fetch_surface(
         TelemetryDecom.definition(),
         :spacecraft,
         "manage"
-      )
-
-    {:ok, legacy} =
-      Registry.fetch_surface(
-        Spacecraft.definition(),
-        :spacecraft,
-        "telemetry_decom"
       )
 
     assert {:ok, current} =
@@ -212,10 +204,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.TelemetryDecomConfigurationTest do
                canonical
              )
 
-    assert {:ok, previous} =
-             ApplicationSurfaces.load(c.scope, c.host, "spacecraft", 1, legacy)
-
-    assert previous == current
     assert current["data"]["context"]["spacecraft_id"] == c.spacecraft.spacecraft_id
 
     unauthorized =
