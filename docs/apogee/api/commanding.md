@@ -181,6 +181,12 @@ No side effects. Returns:
   `not_before` (or now) to `expires_at` (or 6 h after that start). A HOLD has per-target
   `reason: "no_commandable_contact"` and `next_contact: null`. C4 draws from it. Evidence
   `{from, until}` is the window.
+  The read is of the targets' own passes only, and all of them (paged by the keyset until it is
+  complete), so a mission with more than 500 passes in the window can't cut a target's pass off
+  (#1040). If it can't be completed (40 pages of 500, `config :cadence,
+  :command_preflight_contact_pages`), the check is a `no_go` with `evidence.reason:
+  "contact_read_truncated"` and no per-target rows: never a HOLD for "no contact" decided from a
+  truncated read.
 - `model_approval_withdrawn` (E2c, #546; label "Composition"): a target whose **active** generation
   (what a command is encoded and verified against, not the profile's pin) runs a revision whose
   approval was withdrawn. An ackable HOLD, never a NO-GO: the craft keeps its last generation and

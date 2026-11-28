@@ -84,6 +84,7 @@ defmodule Cadence.Contacts.PassWindows do
     |> where([r], r.organization_id == ^org and r.mission_id == ^mission)
     |> where([r], r.starts_at < ^to and r.ends_at > ^from)
     |> spacecraft(Keyword.get(opts, :spacecraft_id))
+    |> spacecraft_ids(Keyword.get(opts, :spacecraft_ids))
     |> states(Keyword.get(opts, :states))
     |> station(Keyword.get(opts, :station_refs), reservation_station_ref())
   end
@@ -309,6 +310,10 @@ defmodule Cadence.Contacts.PassWindows do
 
   defp spacecraft(query, nil), do: query
   defp spacecraft(query, id), do: where(query, [r], r.spacecraft_id == ^id)
+
+  # A set of craft in SQL, so a read for a group's targets doesn't page the whole fleet's passes.
+  defp spacecraft_ids(query, nil), do: query
+  defp spacecraft_ids(query, ids), do: where(query, [r], r.spacecraft_id in ^ids)
 
   defp states(query, nil), do: query
   defp states(query, states), do: where(query, [r], r.lifecycle_state in ^states)
