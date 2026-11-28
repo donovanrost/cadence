@@ -27,6 +27,7 @@ import { discardQuestion, leaveBody } from "./draft-words.ts";
 import { useConfigurationDraft } from "./useConfigurationDraft.ts";
 import { useSend } from "./useSend.ts";
 import { changesCount, readRefusal, statusTag, versionsLine } from "./words.ts";
+import WithdrawnApprovalLine from "./WithdrawnApprovalLine.vue";
 
 /**
  * (B) ux U94: Setup › Spacecraft › EARENDIL-004 › Configuration, the host's workspace in the
@@ -186,6 +187,11 @@ const craftOptions = (s: ConfigurationSnapshot) =>
             @update:model-value="switchTo"
           />
         </div>
+        <WithdrawnApprovalLine
+          :withdrawn="snap(value).active?.approval_withdrawn ?? null"
+          :composition="snap(value).active?.composition"
+          :craft="value.name"
+        />
         <ApTabLinks :links="links(snap(value))" :active="section" label="Configuration sections" />
         <ConflictPanel
           v-if="draft.conflict.value && draft.doc.value"
