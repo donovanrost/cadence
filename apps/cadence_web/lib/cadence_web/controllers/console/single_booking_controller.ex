@@ -94,7 +94,13 @@ defmodule CadenceWeb.Console.SingleBookingController do
   defp error(conn, {:invalid, details}), do: Problem.respond(conn, :invalid_params, details)
 
   defp error(conn, reason)
-       when reason in [:route_changed, :opportunity_expired, :token_invalid, :search_unavailable],
+       when reason in [
+              :route_changed,
+              :transport_archived,
+              :opportunity_expired,
+              :token_invalid,
+              :search_unavailable
+            ],
        do: Problem.respond(conn, reason)
 
   defp error(conn, :not_found), do: Problem.respond(conn, :spacecraft_not_found)

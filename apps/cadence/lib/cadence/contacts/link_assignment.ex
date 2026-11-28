@@ -6,7 +6,7 @@ defmodule Cadence.Contacts.LinkAssignment do
   alias Cadence.Contacts.KnownAtom
   alias Cadence.Ids
 
-  @type lifecycle_state :: :active | :deleted
+  @type lifecycle_state :: :active | :superseded | :deleted
 
   @type t :: %__MODULE__{
           link_assignment_id: binary(),
@@ -80,6 +80,8 @@ defmodule Cadence.Contacts.LinkAssignment do
       metadata: Map.get(attrs, :metadata, Map.get(attrs, "metadata", %{}))
     }
   end
+
+  defp normalize_lifecycle_state(state) when state in [:superseded, "superseded"], do: :superseded
 
   defp normalize_lifecycle_state(lifecycle_state),
     do: KnownAtom.versioned_resource_lifecycle_state!(lifecycle_state)

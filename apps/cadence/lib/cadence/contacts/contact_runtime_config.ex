@@ -93,10 +93,7 @@ defmodule Cadence.Contacts.ContactRuntimeConfig do
           uniq: true,
           do: id
 
-    assignments =
-      if is_binary(org) and org != "",
-        do: LinkAssignmentStore.fetch_many(org, mission, assignment_ids),
-        else: LinkAssignmentStore.fetch_many(mission, assignment_ids)
+    assignments = LinkAssignmentStore.fetch_pinned_many(org, mission, assignment_ids)
 
     template_refs =
       Enum.flat_map(contacts, &template_refs/1) ++
