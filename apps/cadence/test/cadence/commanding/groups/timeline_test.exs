@@ -13,6 +13,7 @@ defmodule Cadence.Commanding.Groups.TimelineTest do
 
   alias Cadence.Commanding.Groups.{GroupStore, Timeline}
   alias Cadence.Control.Commanding.{GroupAbort, GroupSubmission}
+  alias Cadence.Reads.CommandGroups
 
   setup do
     c = setup!(2)
@@ -98,7 +99,7 @@ defmodule Cadence.Commanding.Groups.TimelineTest do
       assert %{payload: %{"reason" => ^reason}} = event(c, group, :member_failed)
 
       {:ok, view} =
-        Cadence.Reads.CommandGroups.get(c.org, c.mission, group.command_group_id, nil)
+        CommandGroups.get(c.org, c.mission, group.command_group_id, nil)
 
       assert [%{stage: :verify_failed, members: [%{failure_reason: failure}]} | _] = view.targets
       assert Atom.to_string(failure) == reason
