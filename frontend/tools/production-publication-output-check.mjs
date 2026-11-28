@@ -53,7 +53,7 @@ const authoritativeHostJavascriptDigests = new Set([
   // Deleted the mission-catalog and spacecraft remotes and their host pages (#671): the checker's
   // tokenizer finds the same 2 federation-loader templates and nothing new; two identical
   // build:publication runs.
-  "PENDING_DIGEST",
+  "4b0d27189f70101494408e662a1cf1bbf97adc401c9875b0616aa6e7b58c55bd",
 ]);
 
 /** @param {string} message @returns {never} */
