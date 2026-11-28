@@ -269,11 +269,19 @@ defmodule Cadence.Reads.CommandGroups do
       stage: stage,
       end_reason: end_reason(request, stage),
       caused_by: caused_by(request),
+      failure_reason: failure_reason(request, stage),
       occurred_at: row && row.occurred_at
     }
     # verify_by, and (U69 A4a) verified_at, timed_out_at, failed_at.
     |> Map.merge(VerifyTimes.fields(row))
   end
+
+  # #795: why a member failed, from the same facts the `member_failed` event states it from (so a
+  # card needn't search a paged log for it): a refused release, or how its verification ended.
+  defp failure_reason(_request, :release_failed), do: :release_failed
+  defp failure_reason(%{verification_state: :timed_out}, :verify_failed), do: :verify_timed_out
+  defp failure_reason(_request, :verify_failed), do: :verify_failed
+  defp failure_reason(_request, _stage), do: nil
 
   defp stage(%{lifecycle_state: :approval_pending}, _row, _excluded), do: :awaiting_go
   defp stage(%{lifecycle_state: :rejected}, _row, true), do: :excluded

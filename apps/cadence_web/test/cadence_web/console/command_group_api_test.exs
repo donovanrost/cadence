@@ -392,6 +392,24 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
 
     assert %{"data" => %{"targets" => []}, "meta" => %{"total" => 0}} = page.("?stage=verified")
 
+    # "Needs you": nothing has failed or is held in a fresh group.
+    assert %{"data" => %{"targets" => []}, "meta" => %{"total" => 0}} = page.("?needs_you=true")
+
+    assert %{"error" => %{"code" => "invalid_params", "details" => %{"needs_you" => _}}} =
+             as(c.requester)
+             |> get(base(c) <> "/command-groups/#{id}/targets?needs_you=maybe")
+             |> json_response(422)
+
+    assert %{"data" => %{"events" => []}, "meta" => %{"total" => 0}} =
+             as(c.requester)
+             |> get(base(c) <> "/command-groups/#{id}/events?kind=hold_acknowledged")
+             |> json_response(200)
+
+    assert %{"error" => %{"code" => "invalid_params", "details" => %{"kind" => _}}} =
+             as(c.requester)
+             |> get(base(c) <> "/command-groups/#{id}/events?kind=nope")
+             |> json_response(422)
+
     assert %{"data" => %{"events" => [%{"kind" => "submitted"}]}, "meta" => %{"total" => 1}} =
              as(c.requester)
              |> get(base(c) <> "/command-groups/#{id}/events?limit=1")

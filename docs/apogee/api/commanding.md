@@ -303,11 +303,13 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
   boolean on show), `events[] {id, kind, actor, at, payload}` (see Timeline events below),
   and `targets[]`:
   `{spacecraft_id, name, scid, stage, members: [{position, request_id, command_id, command_name, stage,
-  end_reason, caused_by, verify_by, verified_at, timed_out_at, failed_at, occurred_at,
-  release_refusal}], last_event_at, blocked: null}`. U69 A4a: `verified_at` = once every verifier
+  end_reason, caused_by, failure_reason, verify_by, verified_at, timed_out_at, failed_at,
+  occurred_at, release_refusal}], last_event_at, blocked: null}`. U69 A4a: `verified_at` = once every verifier
   instance is satisfied, the latest match; `timed_out_at` = the earliest deadline among instances
   that timed out; `failed_at` = the earliest match among instances whose failure criteria
   matched; each `null` when it doesn't apply (`verify_by` = the latest deadline, as before).
+  `failure_reason` (#795): `null`, or why a failed member failed, from the same fact its
+  `member_failed` event states: `release_failed`, `verify_failed` or `verify_timed_out`.
   U75: list rows and the group read carry `expiry: {expires_at, expired, sent, total} | null` (null
   unless a member ended `expired`): `expired` = members with `end_reason: expired`, `sent` =
   members that went out (radiating, executed, indeterminate, verified, no_verifier, verify_failed),
@@ -337,9 +339,15 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
   - `GET /command-groups/:id/targets?limit=&cursor=&stage=&q=`: a page of `targets[]` in target
     order, `{data: {targets}, meta: {total, next_cursor}}`. `limit` 1..500 (default 100). `stage`
     is a comma list of member stages (the target's own); `q` (≤ 100 chars) a case-insensitive
-    substring of the name or spacecraft id. `meta.total` counts the filtered targets.
-  - `GET /command-groups/:id/events?limit=&cursor=`: a page of `events[]`, chronological, the latest
-    first; the cursor reads back to older ones. `limit` 1..200 (default 50).
+    substring of the name or spacecraft id; `needs_you=true` keeps the targets "Needs you" lists: a
+    target at `verify_failed`, `release_failed` or `indeterminate`, or one with `blocked` set (a
+    lane held by a release of unknown outcome, which sits on a waiting target of any stage).
+    Filters combine. `meta.total` counts the filtered targets.
+  - `GET /command-groups/:id/events?limit=&cursor=&kind=`: a page of `events[]`, chronological, the
+    latest first; the cursor reads back to older ones. `limit` 1..200 (default 50). `kind` is a comma
+    list of event kinds (the vocabulary under Timeline events); `meta.total` and the cursor count
+    only those, so a screen that wants one kind (`hold_acknowledged`, written at submit, so the
+    oldest) asks for exactly it.
   - A cursor is opaque and belongs to its mission, group and list: another group's, another
     mission's, the other list's or a malformed one is `422 invalid_params`
     (`details.cursor`); a bad `limit`, `stage` or `q` names its own field. Same authorization as
