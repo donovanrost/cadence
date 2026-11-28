@@ -65,7 +65,9 @@ defmodule Cadence.SemanticRuntime.MonitoringPlan do
   The entries of a parameter as `spacecraft_id` runs them (#451 T2): per `rule_id`, that craft's
   spacecraft entry when there is one, else the mission entry; another craft's entries are dropped;
   a spacecraft entry with a `rule_id` no mission entry has (a policy for one craft only) is that
-  craft's own; an entry with no `rule_id` (a plan compiled before P3) is always kept. A policy
+  craft's own. An entry with no `rule_id` and no scope (a plan compiled before P3) is kept for every
+  craft; a spacecraft-scoped entry with no `rule_id` is dropped (P3's compiler never produces one,
+  and without a `rule_id` there is nothing for it to replace or be added under). A policy
   turned off for a craft is its entry with `disabled: true`, which the evaluator reports as
   `disabled`. Order is the plan's, with an override in the place of the entry it replaces.
   """
