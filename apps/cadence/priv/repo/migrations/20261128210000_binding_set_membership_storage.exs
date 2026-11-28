@@ -12,18 +12,25 @@ defmodule Cadence.Repo.Migrations.BindingSetMembershipStorage do
   # - a member resolves its artifact by (organization, mission, sha), never across tenants, and its
   #   own organization and mission are its binding set's;
   # - one member per endpoint per version, the mission-scoped (null endpoint) one included;
-  # - a version's storage_form and stored content_sha256 are written with it and never change.
+  # - a version's storage_form, stored content_sha256, member_count and members_sha256 are written
+  #   with it and never change.
   def up do
     alter table(:governed_binding_sets) do
       add(:storage_form, :string, null: false, default: "rows")
       add(:content_sha256, :string)
+      # Commanding (#450): what admission recomputes from the members it reads, so a member added
+      # after the version was written (or an artifact swapped under one) is refused closed.
+      add(:member_count, :integer)
+      add(:members_sha256, :string, collation: "C")
     end
 
     create(
       constraint(:governed_binding_sets, :governed_binding_sets_storage_form,
         check:
-          "(storage_form = 'rows' AND content_sha256 IS NULL) OR " <>
+          "(storage_form = 'rows' AND content_sha256 IS NULL AND member_count IS NULL " <>
+            "AND members_sha256 IS NULL) OR " <>
             "(storage_form = 'membership' AND content_sha256 IS NOT NULL " <>
+            "AND member_count IS NOT NULL AND members_sha256 IS NOT NULL " <>
             "AND organization_id IS NOT NULL)"
       )
     )
@@ -100,8 +107,10 @@ defmodule Cadence.Repo.Migrations.BindingSetMembershipStorage do
     CREATE FUNCTION governed_binding_set_storage_immutable() RETURNS trigger AS $$
     BEGIN
       IF NEW.storage_form IS DISTINCT FROM OLD.storage_form
-         OR NEW.content_sha256 IS DISTINCT FROM OLD.content_sha256 THEN
-        RAISE EXCEPTION 'a binding set version''s storage_form and content_sha256 are immutable (#447)';
+         OR NEW.content_sha256 IS DISTINCT FROM OLD.content_sha256
+         OR NEW.member_count IS DISTINCT FROM OLD.member_count
+         OR NEW.members_sha256 IS DISTINCT FROM OLD.members_sha256 THEN
+        RAISE EXCEPTION 'a binding set version''s storage_form, content_sha256, member_count and members_sha256 are immutable (#447)';
       END IF;
       RETURN NEW;
     END;
@@ -131,6 +140,8 @@ defmodule Cadence.Repo.Migrations.BindingSetMembershipStorage do
     drop(constraint(:governed_binding_sets, :governed_binding_sets_storage_form))
 
     alter table(:governed_binding_sets) do
+      remove(:members_sha256)
+      remove(:member_count)
       remove(:content_sha256)
       remove(:storage_form)
     end

@@ -20,6 +20,11 @@ defmodule Cadence.Governance.BindingSetRow do
     # Not on the BindingSet struct (#108).
     field(:storage_form, :string, default: "rows")
     field(:content_sha256, :string)
+    # A membership version's member count and the hash of its sorted endpoint/artifact pairs,
+    # written with it (a trigger refuses changes): admission recomputes both from the members it
+    # reads (#450, commanding). Null for the rows form.
+    field(:member_count, :integer)
+    field(:members_sha256, :string)
 
     timestamps()
   end
@@ -50,6 +55,15 @@ defmodule Cadence.Governance.BindingSetRow do
   end
 
   defp all_fields do
-    [:organization_id, :mission_id, :binding_set_id, :version, :storage_form, :content_sha256]
+    [
+      :organization_id,
+      :mission_id,
+      :binding_set_id,
+      :version,
+      :storage_form,
+      :content_sha256,
+      :member_count,
+      :members_sha256
+    ]
   end
 end

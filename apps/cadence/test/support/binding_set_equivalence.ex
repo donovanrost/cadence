@@ -13,38 +13,56 @@ defmodule Cadence.TestSupport.BindingSetEquivalence do
 
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Governance
+  alias Cadence.Persistence.OrganizationScope
 
   @spec verify(BindingSet.t()) :: :ok
-  # A set persisted without an organization (a test helper path) is stored as rows, whose read is
-  # the reference itself: nothing to compare.
-  def verify(%BindingSet{organization_id: nil}), do: :ok
-
   def verify(%BindingSet{} = written) do
-    {:ok, reference} = Governance.rows_expansion(written)
+    # The stored version's organization is the set's, else the mission's (OrganizationScope), as
+    # storage resolves it: a set written without one is still membership when its mission has one.
+    organization_id =
+      written.organization_id || OrganizationScope.organization_id_for_mission(written.mission_id)
 
-    read =
-      case Governance.fetch_binding_set(
-             written.organization_id,
-             written.mission_id,
-             written.binding_set_id,
-             written.version
-           ) do
-        {:ok, read} ->
-          read
+    scoped = %{written | organization_id: organization_id}
+    {:ok, reference} = Governance.rows_expansion(scoped)
 
-        {:error, reason} ->
-          mismatch(written, "the stored version does not read back: #{inspect(reason)}")
-      end
+    # The Replay reader's read (mission only), and the readers that name the organization.
+    compare(written, reference, "fetch_binding_set/3", fn ->
+      Governance.fetch_binding_set(written.mission_id, written.binding_set_id, written.version)
+    end)
 
-    cond do
-      read != reference ->
-        mismatch(written, "the stored version expands to a different set than its rows")
+    if organization_id do
+      compare(written, reference, "fetch_binding_set/4", fn ->
+        Governance.fetch_binding_set(
+          organization_id,
+          written.mission_id,
+          written.binding_set_id,
+          written.version
+        )
+      end)
+    end
 
-      BindingSet.content_sha256(read) != BindingSet.content_sha256(reference) ->
-        mismatch(written, "the stored version hashes differently from its rows")
+    :ok
+  end
 
-      true ->
-        :ok
+  defp compare(written, reference, reader, read) do
+    case read.() do
+      {:ok, read} ->
+        cond do
+          read != reference ->
+            mismatch(
+              written,
+              "#{reader} expands the stored version to a different set than its rows"
+            )
+
+          BindingSet.content_sha256(read) != BindingSet.content_sha256(reference) ->
+            mismatch(written, "#{reader} hashes the stored version differently from its rows")
+
+          true ->
+            :ok
+        end
+
+      {:error, reason} ->
+        mismatch(written, "#{reader} does not read the stored version back: #{inspect(reason)}")
     end
   end
 

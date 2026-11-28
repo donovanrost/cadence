@@ -143,6 +143,36 @@ defmodule Cadence.Governance.BindingSetStorage do
     {:ok, length(members)}
   end
 
+  @doc """
+  The count and the hash of a version's members: the sorted `{endpoint | "", artifact_sha256}`
+  pairs. Written on the version row with it and recomputed from the members read back (#450), so a
+  member added or an artifact swapped after the version was written changes the hash.
+  """
+  @spec members_digest([%{sha: binary(), source_endpoint_ref: binary() | nil}]) :: %{
+          member_count: non_neg_integer(),
+          members_sha256: binary()
+        }
+  def members_digest(members) do
+    pairs = members |> Enum.map(&{&1.source_endpoint_ref || "", &1.sha}) |> Enum.sort()
+    %{member_count: length(pairs), members_sha256: ContentHash.term_sha256(pairs)}
+  end
+
+  @doc "`members_digest/1` of the members currently stored for a membership version (one query)."
+  @spec stored_members_digest(BindingSetRow.t()) :: %{
+          member_count: non_neg_integer(),
+          members_sha256: binary()
+        }
+  def stored_members_digest(%BindingSetRow{} = row) do
+    from(member in "governed_binding_set_members",
+      where:
+        member.binding_set_row_id == ^row.id and member.organization_id == ^row.organization_id and
+          member.mission_id == ^row.mission_id,
+      select: %{sha: member.artifact_sha256, source_endpoint_ref: member.source_endpoint_ref}
+    )
+    |> Repo.all()
+    |> members_digest()
+  end
+
   @doc "A membership version's rows, read in two queries (members, then their artifacts)."
   @spec load(BindingSetRow.t()) ::
           {:ok, {[CapabilityInstanceRow.t()], [BindingRuleRow.t()]}} | {:error, term()}

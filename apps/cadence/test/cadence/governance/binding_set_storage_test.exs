@@ -17,12 +17,11 @@ defmodule Cadence.Governance.BindingSetStorageTest do
   alias Cadence.Governance.{BindingSetRow, CapabilityInstanceRow}
   alias Cadence.Governance.Persistence, as: GovernancePersistence
   alias Cadence.Runtime.{BindingSetIndex, PartitionKey}
-  alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Telemetry.PacketDefinition
+  alias Cadence.TestSupport.{BindingFleet, BindingSetEquivalence}
 
   @org "org-binding-storage"
   @mission "mission-binding-storage"
-  @revision "mission_model_revision:storage"
   @apids [42, 43, 44]
 
   # Read back through develop 7a539c784's rows path (before #447), for the 6-craft fixture.
@@ -30,7 +29,7 @@ defmodule Cadence.Governance.BindingSetStorageTest do
 
   setup do
     persist_mission_scope(@org, @mission)
-    for n <- 1..12, do: endpoint!(n)
+    BindingFleet.persist_endpoints!(@org, @mission, 12)
     :ok
   end
 
@@ -160,8 +159,6 @@ defmodule Cadence.Governance.BindingSetStorageTest do
   end
 
   describe "the equivalence verifier (#447)" do
-    alias Cadence.TestSupport.BindingSetEquivalence
-
     test "is on for every test, and every persist is read back and compared with its rows" do
       assert Application.get_env(:cadence, :binding_set_storage_verifier) == BindingSetEquivalence
       assert Application.get_env(:cadence, :binding_set_storage_raise_on_fallback) == true
@@ -177,6 +174,119 @@ defmodule Cadence.Governance.BindingSetStorageTest do
 
       assert_raise RuntimeError, ~r/different set than its rows/, fn ->
         BindingSetEquivalence.verify(other)
+      end
+    end
+  end
+
+  describe "the reference is a real rows write (ground-scale, #1013)" do
+    test "a duplicate rule id: the rows write keeps the first, and so does membership" do
+      base = fleet("dup", 1, 3)
+      [first_rule | _] = base.rules
+      # A second rule with the same id but another priority: validation checks rules one by one,
+      # so it reaches storage; the old insert is ON CONFLICT DO NOTHING, so the first stays. (A
+      # duplicate instance id is refused earlier, `duplicate_capability_instance_id`.)
+      dup_rule = %{first_rule | priority: 7}
+      duplicated = %{base | rules: base.rules ++ [dup_rule]}
+
+      assert :ok = persist_as_rows(%{duplicated | version: 1, binding_set_id: "dup-rows"})
+      assert {:ok, _} = Governance.persist_binding_set(@org, duplicated)
+      assert storage_form("dup", 1) == "membership"
+
+      {:ok, by_rows} = Governance.fetch_binding_set(@org, @mission, "dup-rows", 1)
+      {:ok, by_membership} = Governance.fetch_binding_set(@org, @mission, "dup", 1)
+
+      # The duplicates are gone from the rows version; membership holds exactly what it holds.
+      assert length(by_rows.rules) == length(base.rules)
+      assert length(by_rows.capability_instances) == length(base.capability_instances)
+      assert length(duplicated.rules) == length(base.rules) + 1
+      assert %{by_membership | binding_set_id: "dup-rows"} == by_rows
+
+      assert BindingSet.content_sha256(%{by_membership | binding_set_id: "dup-rows"}) ==
+               BindingSet.content_sha256(by_rows)
+
+      assert Enum.find(by_membership.rules, &(&1.binding_rule_id == first_rule.binding_rule_id)).priority ==
+               first_rule.priority
+    end
+  end
+
+  describe "a set written without an organization (ground-scale, #1013)" do
+    test "storage infers it from the mission and writes membership; the verifier checks it" do
+      unscoped = fleet("inferred", 1, 3, organization?: false)
+      assert unscoped.organization_id == nil
+
+      assert {:ok, _} = Governance.persist_binding_set(unscoped)
+      assert storage_form("inferred", 1) == "membership"
+
+      # The Replay reader's read (mission only) and the organization-named one agree with the rows.
+      assert {:ok, a} = Governance.fetch_binding_set(@mission, "inferred", 1)
+      assert {:ok, b} = Governance.fetch_binding_set(@org, @mission, "inferred", 1)
+      assert a == b
+      assert :ok = BindingSetEquivalence.verify(unscoped)
+    end
+  end
+
+  describe "the member digest (#450, commanding)" do
+    alias Cadence.Governance.BindingSetStorage
+
+    test "a membership version stores its member count and members hash, a rows version neither" do
+      assert {:ok, _} = Governance.persist_binding_set(@org, fleet("fleet", 1, 6))
+      assert :ok = persist_as_rows(fleet("fleet", 2, 6))
+
+      membership = version_row("fleet", 1)
+      rows = version_row("fleet", 2)
+
+      assert membership.member_count == 7
+      assert is_binary(membership.members_sha256)
+
+      assert BindingSetStorage.stored_members_digest(membership) ==
+               %{member_count: membership.member_count, members_sha256: membership.members_sha256}
+
+      assert {rows.member_count, rows.members_sha256} == {nil, nil}
+    end
+
+    test "a member added after the version was written changes the recomputed hash and count" do
+      assert {:ok, _} = Governance.persist_binding_set(@org, fleet("fleet", 1, 6))
+      row = version_row("fleet", 1)
+      stored = %{member_count: row.member_count, members_sha256: row.members_sha256}
+      assert BindingSetStorage.stored_members_digest(row) == stored
+
+      %{rows: [[sha]]} =
+        Repo.query!("SELECT artifact_sha256 FROM governed_binding_set_members LIMIT 1")
+
+      # Insert is allowed (a trigger refuses update and delete); admission is what refuses this.
+      {1, _} =
+        Repo.insert_all("governed_binding_set_members", [
+          %{
+            binding_set_row_id: row.id,
+            organization_id: @org,
+            mission_id: @mission,
+            artifact_sha256: sha,
+            source_endpoint_ref: endpoint(11),
+            inserted_at: DateTime.utc_now()
+          }
+        ])
+
+      after_insert = BindingSetStorage.stored_members_digest(row)
+      refute after_insert.members_sha256 == stored.members_sha256
+      assert after_insert.member_count == stored.member_count + 1
+    end
+
+    test "the digest cannot be changed after the version is written" do
+      assert {:ok, _} = Governance.persist_binding_set(@org, fleet("fleet", 1, 6))
+
+      assert_raise Postgrex.Error, ~r/immutable/, fn ->
+        Repo.query!(
+          "UPDATE governed_binding_sets SET members_sha256 = 'x' WHERE binding_set_id = 'fleet'"
+        )
+      end
+    end
+
+    test "a membership version without its digest, or a rows version with one, is refused" do
+      assert_raise Postgrex.Error, ~r/governed_binding_sets_storage_form/, fn ->
+        Repo.query!("""
+        INSERT INTO governed_binding_sets (mission_id, organization_id, binding_set_id, version, storage_form, content_sha256, inserted_at)
+        VALUES ('#{@mission}', '#{@org}', 'bare', 1, 'membership', 'abc', now())
+        """)
       end
     end
   end
@@ -414,61 +524,11 @@ defmodule Cadence.Governance.BindingSetStorageTest do
 
   # A fleet generation shaped like TelemetryDecom's (telemetry_decom.ex:1020-1079): per craft, one
   # instance and rule per handled APID, scoped to the craft's endpoint, plus one mission instance.
-  defp fleet(binding_set_id, version, craft, opts \\ []) do
-    packet_id = Keyword.get(opts, :packet_id, fn _n -> nil end)
-    versions = Keyword.get(opts, :packet_version, %{})
-
-    instances =
-      for n <- 1..craft, apid <- apids(n) do
-        CapabilityInstance.new(%{
-          capability_instance_id:
-            "mission_model_telemetry:#{@revision}:#{endpoint(n)}:hk-#{apid}",
-          family_key: :definition_bound_telemetry,
-          target_scope: :source_endpoint,
-          source_endpoint_ref: endpoint(n),
-          runtime_configuration: packet(apid, packet_id.(n), Map.get(versions, apid, 1))
-        })
-      end
-
-    mission_instance =
-      CapabilityInstance.new(%{
-        capability_instance_id: "mission_model_telemetry:#{@revision}:mission:hk-99",
-        family_key: :definition_bound_telemetry,
-        target_scope: :mission,
-        runtime_configuration: packet(99, nil)
-      })
-
-    rules =
-      Enum.map(instances, fn instance ->
-        BindingRule.new(%{
-          binding_rule_id: instance.capability_instance_id <> ":rule",
-          capability_instance_id: instance.capability_instance_id,
-          selector: %{
-            scope: %{
-              target_scope: :source_endpoint,
-              source_endpoint_ref: instance.source_endpoint_ref
-            },
-            match: %{packet_kind: :space_packet, apid: instance.runtime_configuration.apid}
-          },
-          priority: 100,
-          fanout_mode: :exclusive
-        })
-      end)
-
-    BindingSet.new(%{
-      binding_set_id: binding_set_id,
-      organization_id: @org,
-      mission_id: @mission,
-      version: version,
-      capability_instances: instances ++ [mission_instance],
-      rules: rules
-    })
-  end
-
-  defp apids(1), do: Enum.drop(@apids, -1)
-  defp apids(_n), do: @apids
+  defp fleet(binding_set_id, version, craft, opts \\ []),
+    do: BindingFleet.build(@org, @mission, binding_set_id, version, craft, opts)
 
   defp packet(apid, id, version \\ 1) do
+    # Only the tests that need a bare packet (the pin tests) build one.
     PacketDefinition.new(%{
       organization_id: @org,
       mission_id: @mission,
@@ -488,32 +548,7 @@ defmodule Cadence.Governance.BindingSetStorageTest do
     })
   end
 
-  defp endpoint(n), do: "spacecraft_runtime:sc-#{n}"
-
-  defp endpoint!(n) do
-    {:ok, _} =
-      Cadence.SpacecraftStore.persist_spacecraft(
-        @org,
-        Cadence.Spacecraft.new(%{
-          spacecraft_id: "sc-#{n}",
-          organization_id: @org,
-          mission_id: @mission,
-          display_name: "SC-#{n}"
-        })
-      )
-
-    {:ok, _} =
-      Cadence.SourceEndpointFixtures.persist(
-        @org,
-        SourceEndpoint.new(%{
-          source_endpoint_id: endpoint(n),
-          organization_id: @org,
-          mission_id: @mission,
-          spacecraft_id: "sc-#{n}",
-          source_ref: "provider/sc-#{n}"
-        })
-      )
-  end
+  defp endpoint(n), do: BindingFleet.endpoint(n)
 
   # Today's write path, kept for the fallback: the same rows a version stored before #447 has.
   defp persist_as_rows(%BindingSet{} = binding_set) do
@@ -545,6 +580,14 @@ defmodule Cadence.Governance.BindingSetStorageTest do
 
     :ok
   end
+
+  defp version_row(binding_set_id, version),
+    do:
+      Repo.get_by!(BindingSetRow,
+        mission_id: @mission,
+        binding_set_id: binding_set_id,
+        version: version
+      )
 
   defp storage_form(binding_set_id, version) do
     Repo.one!(

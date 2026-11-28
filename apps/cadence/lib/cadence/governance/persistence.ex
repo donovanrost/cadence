@@ -109,13 +109,19 @@ defmodule Cadence.Governance.Persistence do
   @doc """
   The instance and rule rows `persist_capability_instances/3` and `persist_binding_rules/4` would
   insert, built by the same changesets but not inserted (#447 compresses them).
+
+  Those inserts are `ON CONFLICT DO NOTHING` on `(binding set, instance id)` and `(binding set,
+  rule id)`: a second copy of an id in the same set is dropped and the first stays. This models
+  that, in write order, so what is compressed and compared is what a rows write keeps, not the
+  duplicates the in-memory set may still hold (ground-scale, #1013).
   """
   def binding_rows(%BindingSet{} = binding_set) do
     by_id = Map.new(binding_set.capability_instances, &{&1.capability_instance_id, &1})
 
     with {:ok, instances} <- map_ok(binding_set.capability_instances, &instance_row/1),
          {:ok, rules} <- map_ok(binding_set.rules, &rule_row(&1, by_id)) do
-      {:ok, instances, rules}
+      {:ok, Enum.uniq_by(instances, & &1.capability_instance_id),
+       Enum.uniq_by(rules, & &1.binding_rule_id)}
     end
   end
 

@@ -627,8 +627,12 @@ defmodule Cadence.Governance do
     :rows
   end
 
-  defp storage_attrs({:membership, _artifacts, _members, sha}),
-    do: %{storage_form: "membership", content_sha256: sha}
+  defp storage_attrs({:membership, _artifacts, members, sha}),
+    do:
+      Map.merge(
+        %{storage_form: "membership", content_sha256: sha},
+        BindingSetStorage.members_digest(members)
+      )
 
   defp storage_attrs(:rows), do: %{storage_form: "rows"}
 
