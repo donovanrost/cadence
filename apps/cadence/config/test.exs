@@ -61,7 +61,7 @@ config :cadence,
   telemetry_current_value_store: [module: Cadence.Telemetry.CurrentValueStore.Postgres]
 
 # The fleet read asks the durable history store every time in tests (the cache is tested on its own).
-config :cadence, fleet_durable_receipts_ttl_ms: 0
+config :cadence, durable_receipts_ttl_ms: 0
 
 config :cadence,
   telemetry_storage: [
