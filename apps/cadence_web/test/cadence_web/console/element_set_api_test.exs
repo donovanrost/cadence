@@ -4,7 +4,7 @@ defmodule CadenceWeb.Console.ElementSetAPITest do
   alias Cadence.Organizations
   alias Cadence.Repo
   alias Cadence.SpacecraftStore.SpacecraftRow
-  alias CadenceWeb.{ControlPlaneApiFixtures, TestFixtures}
+  alias CadenceWeb.{MissionReadModelFixtures, TestFixtures}
 
   # ISS (ZARYA), element set 292 of 2008-09-20.
   @line1 "1 25544U 98067A   08264.51782528 -.00002182  00000-0 -11606-4 0  2927"
@@ -12,7 +12,7 @@ defmodule CadenceWeb.Console.ElementSetAPITest do
   @iss "ISS (ZARYA)\n#{@line1}\n#{@line2}"
 
   setup %{conn: conn} do
-    fixture = ControlPlaneApiFixtures.bootstrap(conn)
+    fixture = MissionReadModelFixtures.bootstrap(conn)
     {:ok, organization} = Organizations.fetch_organization(fixture.organization_id)
     admin = TestFixtures.persist_user!()
     TestFixtures.grant_membership!(admin, organization, role: :organization_admin)
@@ -20,7 +20,7 @@ defmodule CadenceWeb.Console.ElementSetAPITest do
     TestFixtures.grant_membership!(member, organization, role: :member)
 
     spacecraft =
-      ControlPlaneApiFixtures.persist_api_spacecraft!(
+      MissionReadModelFixtures.persist_api_spacecraft!(
         fixture.organization_id,
         fixture.mission_id,
         %{
@@ -139,7 +139,7 @@ defmodule CadenceWeb.Console.ElementSetAPITest do
         ] do
       assert %{"error" => %{"code" => "service_not_allowed"}} =
                build_conn()
-               |> ControlPlaneApiFixtures.authorize(c.api_token)
+               |> MissionReadModelFixtures.authorize(c.api_token)
                |> dispatch(@endpoint, method, path, %{tle: @iss})
                |> json_response(403)
     end

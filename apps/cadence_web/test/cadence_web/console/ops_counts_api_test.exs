@@ -2,7 +2,7 @@ defmodule CadenceWeb.Console.OpsCountsAPITest do
   use CadenceWeb.ConnCase, async: false
 
   alias Cadence.Control.MissionRuntimeStatus
-  alias CadenceWeb.ControlPlaneApiFixtures
+  alias CadenceWeb.MissionReadModelFixtures
   alias CadenceWeb.TestFixtures
 
   setup do
@@ -83,7 +83,7 @@ defmodule CadenceWeb.Console.OpsCountsAPITest do
   end
 
   test "counts an active alarm episode and the fleet", c do
-    ControlPlaneApiFixtures.seed_mission_read_models(c.org.organization_id, c.mission.mission_id)
+    MissionReadModelFixtures.seed_mission_read_models(c.org.organization_id, c.mission.mission_id)
     data = c |> counts() |> json_response(200) |> Map.fetch!("data")
 
     assert %{"active" => 1, "caution" => 1, "unacknowledged" => 1, "limits_configured" => true} =
@@ -111,7 +111,7 @@ defmodule CadenceWeb.Console.OpsCountsAPITest do
   # #481: retiring every limit definition turns "limits configured" off everywhere it's shown;
   # retired definitions keep their versions, so the plain latest-version list kept counting them.
   test "limits aren't configured once every definition is retired", c do
-    ControlPlaneApiFixtures.seed_mission_read_models(c.org.organization_id, c.mission.mission_id)
+    MissionReadModelFixtures.seed_mission_read_models(c.org.organization_id, c.mission.mission_id)
     assert configured(c) == {true, true, true}
 
     for definition <-

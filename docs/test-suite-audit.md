@@ -1357,7 +1357,7 @@ Three Herdr worktrees reserve the first collision-free slices:
 - `audit/remaining-slow-design`, partition `_slowdesign_w3`, owns only
   `data_sources_binding_history_test.exs` for its first implementation.
 
-Shared `ConnCase` support, `ControlPlaneApiFixtures`, router/controllers,
+Shared `ConnCase` support, `MissionReadModelFixtures`, router/controllers,
 production EventBus and root composition, `config/test.exs`, and this audit
 document remain integration-owned. The API routes remain under the existing
 `/api` scope with `[:api, :authenticated_api]`: these endpoints require service

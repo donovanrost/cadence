@@ -3,7 +3,7 @@
 Owner: **api**. Snapshot of `ui/apogee-spa` on 2026-11-08. It covers what the console can reuse or wrap, and
 what is missing. Paths: `W` = `apps/cadence_web/lib/cadence_web`, `L` = `apps/cadence/lib/cadence`.
 
-**Summary.** The SPA can't call any existing JSON API as-is. The REST API under `/api/organizations` takes
+**Summary (as of Phase 0; the REST scope below is deleted, §2).** The SPA can't call any existing JSON API as-is. The REST API under `/api/organizations` took
 **bearer service-identity tokens only**. Even if it took cookies, every mission route checks
 `:manage_mission`, which needs an admin capability, so plain members would get 403s. The two browser
 JSON APIs (application host, contact workspace) take cookies, but they're bound to the session's current
@@ -14,9 +14,9 @@ in `L/reads/`** and the domain functions the controllers call. Console endpoints
 
 | Route family | Pipeline | Authenticates with | Policy | SPA as-is? |
 | --- | --- | --- | --- | --- |
-| `/api/organizations/:org/...` | `:api` + `:authenticated_api` (`FetchCurrentScope`, `RequireCurrentScope`) | Only `authorization: Bearer <token>`, resolved by `Cadence.Auth.authenticate_api_token/1` against **active `ServiceIdentityRow`s**. No session is fetched, so cookies are ignored. No header gives 401 `{errors:[{reason:"unauthenticated"}]}` | Mission routes use `ControlPlaneAccess.authorize_mission/3`, which is `:manage_mission` (`platform_admin`, `organization_admin`, or `mission_admin` on that mission). Org routes use `:read_organization` and `:manage_missions`, both `organization_admin` (the REST service-identity routes were removed, #281) | **No.** Service identities only. Plain members also fail `:manage_mission`. `current_scope` there describes the service actor |
+| ~~`/api/organizations/:org/...`~~ | ~~`:api` + `:authenticated_api` (`FetchCurrentScope`, `RequireCurrentScope`)~~ | **Removed (#754, #922, #747):** the scope, the pipeline and both plugs are deleted. A service authenticates with its bearer on `/api/v1` (opted in through `Console.ServiceAccess`) and on the two named machine surfaces. | — | — |
 | `/api/cadence/application-host/v1/...` | `:browser` + `RequireAuthenticatedScope` + `:application_host_json` | Session cookie. CSRF via `ApplicationHostCSRF` (`x-csrf-token`, JSON 403 `invalid_csrf`). On non-GET, `x-cadence-poc-session` must match the `application_host_session_id` issued by the first GET (returned as `sessionId` by `GET .../catalog`). Actions also need `idempotency-key` | `:read_application_catalog`, which is `:operate_mission` with **the session's current org** (`current_scope.organization_id`). After that, surface admission plus each action's own policy | Technically yes, but it's the wrong shape: versioned surface envelopes and presentation output (§3) |
-| `/api/cadence/contact-workspace/v1/...` | `:browser` + `RequireAuthenticatedScope` | Session cookie, CSRF (`x-csrf-token`), plus `x-cadence-workspace-user` and `x-cadence-workspace-organization`, which must equal the session's user and current org on **every** call, GET included. A mismatch gives 409 `session_changed` | `:operate_mission` in the session's current org (active user only) | Mostly. The mission must be in the session's current org, so cross-org tabs break. Problems are `{code}` only |
+| ~~`/api/cadence/contact-workspace/v1/...`~~ | ~~`:browser` + `RequireAuthenticatedScope`~~ | **Removed:** no such route remains; the contact schedule is the console's. | — | — |
 | `/health/live`, `/health/ready` | `:api` | none | none | Yes, but it's only infra (`GET /api/health` deleted, #747) |
 | Browser GETs: `/missions/:m/catalog/artifacts/:id/download`, `/missions/:m/ops/dashboards/:id/export` | `:browser` + `RequireAuthenticatedScope` | cookie | Download only fetches within the session's current org (no named policy). Export uses `DashboardAuthorAuth.authorized?` | Usable as plain links when the session org matches |
 | `/api/cadence/frontend-release/v1/...` | `FrontendReleasePublisher` | publisher credentials | n/a | No (CI publishing) |
@@ -28,42 +28,13 @@ reduce to `:operate_mission`. `:resolve_command_release` and `:resolve_provider_
 operate and manage. Scope-taking reads use `scope.organization_id`, so console code must pass the scope
 that `Console.Plugs.MissionScope` re-homed to the mission's org (it already does this).
 
-## 2. Bearer REST endpoints (`…` = `/api/organizations/:org/missions/:m`)
+## 2. Bearer REST endpoints (removed)
 
-All are in `W/controllers/`, with `action_fallback FallbackController` (`{errors:[{reason}]}`) and `{data: ...}`
-on success. JSON views are in `W/api/*_json.ex`. Every `…` row passes `authorize_mission` (`:manage_mission`) first.
-
-| Area | Method + path | Controller | Calls | Note |
-| --- | --- | --- | --- | --- |
-| Identity | ~~`GET /api/current_scope`~~ | ~~CurrentScope~~ | — | **Removed (#754, #747):** no caller; the console's `GET /api/v1/session` is the scope read. |
-| Identity | ~~`GET /api/organizations/:org`~~ | ~~Organization~~ | — | **Removed (#384):** a bearer is always a service, and organization-level acts are a person's (#282). |
-| Identity | ~~`GET`, `POST /api/organizations/:org/missions`~~ | Mission | — | **Removed (#384):** as above. Missions are created in the console (L4). |
-| Identity | ~~`GET /api/organizations/:org/missions/:m`~~ | ~~Mission~~ | — | **Removed (#754, #747):** a service reads its mission at `GET /api/v1/missions/:m` with its bearer (opted in, `Console.ServiceAccess`). |
-| Identity | ~~`GET`, `POST /api/organizations/:org/service_identities`~~ | ServiceIdentity | — | **Removed (#281):** services never manage service identities; people issue them in the console (O6). |
-| Limits/health | ~~`GET …/mission_health`~~ | MissionHealth | — | **Removed (#780):** per-spacecraft worst limit state, violating points and the worst point are in console `GET /fleet`; active alarms in `GET /alarms`. The mission-wide `point_buckets` had no caller. |
-| Events | ~~`GET …/mission_events`~~ | MissionEvent | — | **Removed (#780):** console `GET /events` (window, cursor, kind and severity-floor filters). |
-| Catalog | `GET …/catalog/importers` | CatalogImporter | `Catalog.list_importers` | |
-| Catalog | `GET`, `POST …/catalog_artifacts`; `GET …/catalog_artifacts/:id` | CatalogArtifact | `Catalog.list_artifacts`, `persist_artifact`, `fetch_artifact` | JSON body upload, not multipart |
-| Catalog | `GET`, `POST …/catalog_import_runs`; `GET …/catalog_import_runs/:id` | CatalogImportRun | `Catalog.list_import_runs`, `start_import_run`, `fetch_import_run` | |
-| Catalog | `GET`, `POST …/packet_definitions` | PacketDefinition | `Governance.list_packet_definitions`, `persist_packet_definition` | |
-| Catalog | `POST …/binding_sets`; `GET …/binding_sets/:id/versions/:v` | BindingSet | `Governance.persist_binding_set`, `fetch_binding_set` | |
-| Spacecraft | `GET …/spacecraft`; `GET …/spacecraft/:id` (the REST `POST …/spacecraft` was retired by #328: spacecraft are created through the console's change sets) | Spacecraft | `SpacecraftStore.list_spacecraft`, `fetch_spacecraft` | full list, no paging. Plane/slot only in `metadata` |
-| Comms | provider_profiles: `GET`, `POST` collection; `GET`, `PATCH`, `DELETE /:id`; `GET /:id/versions`; `GET /:id/versions/:v` | ProviderProfile | `Contacts.{list,persist,fetch,version,delete}_provider_profile*` | legacy versioned model (pre-Transports) |
-| Comms | transport_profiles: same 7 routes | TransportProfile | `Contacts.*_transport_profile*` | legacy model. The current UI uses Transports via the bridge |
-| Comms | path_templates: same 7 routes, plus `POST /:id/link_assignments` | PathTemplate, LinkAssignment | `Contacts.*_path_template*`, `apply_link_template` | legacy "link template" model |
-| Comms | `GET`, `POST …/link_assignments`; `GET`, `DELETE …/link_assignments/:id` | LinkAssignment | `Contacts.*_link_assignment` | legacy |
-| Commanding | ~~`GET`, `POST …/command_stages`; `GET`, `PATCH /:id`~~ | ~~CommandStage~~ | — | **Removed (#708):** the stage workbench is deleted with its tables. |
-| Commanding | ~~`GET`, `POST …/command_stages/:id/items`; `GET`, `PATCH …/staged_command_items/:id`~~ | ~~StagedCommandItem~~ | — | **Removed (#708).** |
-| Commanding | ~~`GET …/command_requests`, `/:id`~~ | ~~CommandRequest~~ | — | **Removed (#754, #747):** create, approve, reject and enqueue went with #708; a request is a command group's member, read through the console's command groups (`/api/v1/missions/:m/command-groups…`). |
-| Commanding | ~~`GET …/command_approvals`, `/:id`~~ | ~~CommandApproval~~ | — | **Removed (#754, #747):** a group's decisions are read with the group. |
-| Commanding | ~~`GET …/command_queue_entries`, `/:id`; `POST /:id/release`~~ | ~~CommandQueueEntry~~ | — | **Removed (#754, #747):** release is a person's act through a group's send (`GroupRelease`), not ported. |
-| Commanding | ~~`GET …/command_release_attempts`, `/:id`~~ | ~~CommandReleaseAttempt~~ | — | **Removed (#754, #747).** |
-| Commanding | ~~`GET …/command_verifier_instances`, `/:id`~~ | ~~CommandVerifierInstance~~ | — | **Removed (#754, #747).** |
-| Contacts | `GET`, `POST …/scheduled_contacts`; `GET /:id`; `POST /:id/realize`, `/:id/cancel` | ScheduledContact | `Contacts.*_scheduled_contact` | |
-| Contacts | `GET …/realized_contacts`, `/:id`; `POST /:id/end_early` | RealizedContact | `Contacts.*_realized_contact*` | |
-| Contacts | `GET …/contact_actions` | ContactAction | `Contacts.list_contact_actions` | |
-| Activations | `POST …/activations`; `GET …/activations/active` | Activation | `MissionModels.request_promotion`, `Control.Activations.fetch_active_basis` | |
-| Activations | `GET …/activation_requests`, `/:id`; `POST /:id/approve`, `/:id/reject` | Activation | `Management.Activations.{list,fetch,approve,reject}`, `Control.Activations.execute` | services can't approve; approve answers `outcome: applied \| needs_review` once the approval is recorded (#263) |
+The whole `/api/organizations/:org/missions/:m` bearer REST scope (catalog, comms, contacts, activations,
+commanding and identity routes, behind `:authenticated_api`) is deleted: its commanding half with #708/#754,
+the rest with #922 and #747's last step. Every area has a console endpoint under `/api/v1` (see the
+other docs in this folder), and a service reaches the ones it may with its bearer through
+`Console.ServiceAccess`. The rows that stood here are in the git history.
 
 ## 3. Browser JSON bridges
 
@@ -85,14 +56,6 @@ federated application surfaces that the old host SPA (`frontend/apps/host`) rend
   surface.
 - **Reuse:** don't call it from the console. Its value is the per-surface read functions behind it (`Reads.Spacecraft.Pages`,
   `Reads.Catalog.Pages`, `Reads.Comms.Pages`, ...) and the action providers (for example `Spacecraft.Identity.action/5`).
-
-**Contact workspace** (`W/controllers/contact_workspace_controller.ex`). This backs the contact schedule SPA.
-- `GET .../missions/:m/schedule` calls `Reads.ApplicationSurfaces.Planning.ContactSchedule.load` (paged 25. The station is only in reservation metadata).
-- `GET .../missions/:m/records/:contact_id` calls `ContactRecord.load`.
-- `POST .../missions/:m/actions/:action` calls `Contacts.ScheduleOperations.request`. Actions: `search` (`{contract_version:2,payload}`),
-  `reserve` and `cancel` (`{contract_version:2, operation_id:<uuid>, payload}`, idempotent by `operation_id`;
-  `{..., observe:true}` polls the operation).
-- Envelope `{version:1, actor_id, organization_id, mission_id, data}`. Console endpoints can wrap the same three calls.
 
 ## 4. Read models to wrap (`L/reads/`)
 
