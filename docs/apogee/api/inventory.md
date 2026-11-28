@@ -19,7 +19,7 @@ in `L/reads/`** and the domain functions the controllers call. Console endpoints
 | ~~`/api/cadence/contact-workspace/v1/...`~~ | ~~`:browser` + `RequireAuthenticatedScope`~~ | **Removed:** no such route remains; the contact schedule is the console's. | — | — |
 | `/health/live`, `/health/ready` | `:api` | none | none | Yes, but it's only infra (`GET /api/health` deleted, #747) |
 | Browser GETs: `/missions/:m/catalog/artifacts/:id/download`, `/missions/:m/ops/dashboards/:id/export` | `:browser` + `RequireAuthenticatedScope` | cookie | Download only fetches within the session's current org (no named policy). Export uses `DashboardAuthorAuth.authorized?` | Usable as plain links when the session org matches |
-| `/api/cadence/frontend-release/v1/...` | `FrontendReleasePublisher` | publisher credentials | n/a | No (CI publishing) |
+| ~~`/api/cadence/frontend-release/v1/...`, `/releases/:app/:release/artifacts/*`~~ | ~~`FrontendReleasePublisher`~~ | **Removed (#672):** release publishing, artifact serving, their plugs and the stage janitor are deleted. | — | — |
 
 Policy facts that console endpoints depend on (`L/auth/policy.ex`): `:operate_mission` lets in an active member of
 the scope's org, any `platform_admin` (admin mode), or a service bound to that exact mission. Most

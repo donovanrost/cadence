@@ -133,7 +133,6 @@ secretGroup = 1
       '''^durable-password-123$''',
       '''^environment-admin-password-123$''',
       '''^existing-password-123$''',
-      '''^frontend-release-publisher-test-token$''',
       '''^provider-credential-retire$''',
     ]
 

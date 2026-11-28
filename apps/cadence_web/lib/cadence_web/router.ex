@@ -54,14 +54,6 @@ defmodule CadenceWeb.Router do
     get("/ready", HealthController, :ready)
   end
 
-  pipeline :frontend_release_publisher do
-    plug(CadenceWeb.Plugs.FrontendReleasePublisher)
-  end
-
-  pipeline :frontend_release_artifact do
-    plug(:put_secure_browser_headers)
-  end
-
   # Dev only (#745): the mail the Local adapter holds, at /dev/mailbox and /dev/mailbox/json, so a
   # seed working through the public API can read an invitation link. Compiled in only when
   # dev.exs sets :dev_routes; there is no such route in test or prod builds.
@@ -69,16 +61,6 @@ defmodule CadenceWeb.Router do
     scope "/dev" do
       forward("/mailbox", Plug.Swoosh.MailboxPreview)
     end
-  end
-
-  scope "/", CadenceWeb do
-    pipe_through(:frontend_release_artifact)
-
-    get(
-      "/releases/:application_id/:release_id/artifacts/*artifact_path",
-      FrontendReleaseArtifactController,
-      :show
-    )
   end
 
   # Console SPA document. Every client-side route returns the same shell; unauthenticated GETs
@@ -697,13 +679,5 @@ defmodule CadenceWeb.Router do
     end
 
     match(:*, "/*path", NotFoundController, :show)
-  end
-
-  scope "/api/cadence/frontend-release/v1", CadenceWeb do
-    pipe_through([:api, :frontend_release_publisher])
-
-    put("/objects/:digest", FrontendReleasePublisherController, :upload)
-    post("/releases", FrontendReleasePublisherController, :create)
-    post("/promotions", FrontendReleasePublisherController, :promote)
   end
 end

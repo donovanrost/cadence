@@ -24,18 +24,15 @@ defmodule CadenceWeb.Console.APIV1RoutingTest do
     end
   end
 
-  # The one machine surface that is not the public API: release publishing (being deleted, #672).
-  @other_api ~w(/api/cadence/frontend-release/v1/)
-
   # #708 / #747: the pre-console REST API (`/api/organizations/:id/…`: stages, requests, approvals,
   # queue entries, release attempts, verifier instances, service identities, missions) is gone, and
-  # nothing comes back under a new `/api` path. One check in place of a 404 test per old route.
-  test "every /api route is /api/v1, or the named machine surface" do
+  # so are the application-host and frontend-release machine APIs (#672). Nothing comes back under
+  # a new `/api` path. One check in place of a 404 test per old route.
+  test "every /api route is /api/v1" do
     offenders =
       for route <- CadenceWeb.Router.__routes__(),
           String.starts_with?(route.path, "/api"),
           not String.starts_with?(route.path, "/api/v1/"),
-          not Enum.any?(@other_api, &String.starts_with?(route.path, &1)),
           do: {route.verb, route.path}
 
     assert offenders == []
