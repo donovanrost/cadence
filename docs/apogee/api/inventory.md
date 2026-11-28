@@ -67,7 +67,6 @@ DTOs should drop.
 | --- | --- | --- |
 | `MissionHealth` (raw) | `summary/3` (`:spacecraft_id`) | point counts, `worst_normalized_state`, `point_buckets`, per-spacecraft `scope_summaries` |
 | `Alarms` (raw) | `snapshot/3`, `summary/3` | limit-condition rows sorted by severity/recency, `spacecraft_ids`, summary |
-| `LimitAlarmConditions` (auth) | `load(scope, mission_id, params)`, `admit_query/1` | paged conditions for one spacecraft/state (backs `/ops/alarms`) |
 | `Limits` (raw) | `latest_state`, `latest_states_for_mission`, `latest_states_for_points`, `event_history`, `definition_intervals`, `watermark_result` | `Limits.Event` latest/transitions; `DefinitionInterval` bands over time |
 | `Telemetry` (raw) | `latest_value`, `latest_values_for_mission`, `sample_history(_result)`, `decimated_sample_history(_result)`, `sample_watermark` | samples; decimated `{buckets, diagnostics}` via `HistoryStore` (backend-dependent) |
 | `DerivedTelemetry` (raw) | `latest_value(s)`, `sample_history` | derived-point samples |
@@ -114,7 +113,7 @@ From `docs/apogee/plans/ops.md` ("Missing-data ask list") and `docs/apogee/plans
 | M6 ranked action queue | `Alarms.snapshot` + approval-pending requests + `Applications.Inventory` | compose |
 | M7 passes by station, next AOS / last LOS | `ContactSchedule.load`; `OperationalState.list_scheduled_contacts` | station field and window filter **new** |
 | M8 fleet deltas, live points, uplink progress | invalidations live on `mission:<id>`; `Limits.Facts`, `Telemetry.Facts` (EventBus) | data pushes **new** |
-| M9 alarms JSON `?spacecraft_id&state` | `LimitAlarmConditions.load`, `Alarms.snapshot`, `Limits.event_history` (first-crossed) | wrap |
+| M9 alarms JSON `?spacecraft_id&state` | `Reads.AlarmList` over `SemanticObservations.AlarmPage` (#1117); a spacecraft's points: `Reads.PointConditions` | done |
 | M10 decimated history | `Reads.Telemetry.decimated_sample_history_result` | wrap (check backend support) |
 | M11 limit bands for a point | `Reads.Limits.definition_intervals` | wrap |
 | M15/M16 group request N×K, no cap of 25 | `Control.Commanding.WorkspaceSubmission` (1 command × ≤25 targets) | **new** |
