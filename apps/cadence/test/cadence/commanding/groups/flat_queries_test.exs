@@ -56,6 +56,10 @@ defmodule Cadence.Commanding.Groups.FlatQueriesTest do
       })
   end
 
+  # The fixed part (#1051): what one request reads whatever the group (the activation, the basis,
+  # the lanes' open work, the response), with headroom of a few over today's count.
+  @budget %{"preflight" => 24, "create" => 48, "create armed" => 50, "go" => 48}
+
   defp flat!(label, {few_label, run_few}, {many_label, run_many}) do
     {few, _} = count_queries(run_few)
     {many, _} = count_queries(run_many)
@@ -63,6 +67,9 @@ defmodule Cadence.Commanding.Groups.FlatQueriesTest do
 
     assert many <= few + @slack,
            "#{label} took #{few} queries for #{few_label} and #{many} for #{many_label}"
+
+    if budget = @budget[label],
+      do: assert(few <= budget, "#{label} took #{few} queries, budget #{budget}")
   end
 
   defp by_members(label, c, make_draft) do
@@ -114,6 +121,39 @@ defmodule Cadence.Commanding.Groups.FlatQueriesTest do
         "preflight (enum)",
         c,
         &routine(c, &1, "SET_ENUM", %{"counter" => 18_446_744_073_709_551_615})
+      )
+    end
+  end
+
+  describe "in the number of commands" do
+    # A group stacks up to 16 commands; what it reads for each (the basis, its units) is shared.
+    test "preflight and create, one command and three", c do
+      one = fn craft ->
+        draft(craft, [command(c, "SET_SIGNED", %{"counter" => 1})], %{log_entry: "R"})
+      end
+
+      three = fn craft ->
+        draft(
+          craft,
+          [
+            command(c, "SET_SIGNED", %{"counter" => 1}),
+            command(c, "SET_ENUM", %{"counter" => 18_446_744_073_709_551_615}),
+            command(c, "SET_COUNTER", %{"amount" => 2})
+          ],
+          %{log_entry: "R"}
+        )
+      end
+
+      flat!(
+        "preflight by commands",
+        {"1 command", fn -> preflight(c, one.(c.few)) end},
+        {"3 commands", fn -> preflight(c, three.(c.few)) end}
+      )
+
+      flat!(
+        "create by commands",
+        {"1 command", fn -> create(c, one.(c.few)) end},
+        {"3 commands", fn -> create(c, three.(c.few)) end}
       )
     end
   end

@@ -259,20 +259,64 @@ defmodule Cadence.Commanding.RequestValidation do
         command_id,
         source_endpoint_id
       ) do
+    organization_id
+    |> resolve_bases(mission_id, mission_model_revision_id, [command_id], source_endpoint_id)
+    |> Map.fetch!(command_id)
+  end
+
+  @doc """
+  `resolve_basis/5` for several commands of one revision and endpoint: the active basis (the
+  activation, the revision and its plans) is read once, and each command is decoded from it.
+  `%{command_id => result}`, each result what `resolve_basis/5` returns for that command.
+  """
+  @spec resolve_bases(binary(), binary(), binary(), [binary()], binary() | nil) :: %{
+          binary() => {:ok, map()} | {:error, term()}
+        }
+  def resolve_bases(organization_id, mission_id, revision_id, command_ids, source_endpoint_id) do
     with {:ok, %{runtime_plans: plans} = runtime_basis} <-
            ActiveBasis.fetch_command_runtime_basis(
              organization_id,
              mission_id,
              source_endpoint_id
            ),
-         :ok <- exact_revision(runtime_basis, mission_model_revision_id),
-         {:ok, basis} <- MissionModelPlanDecoder.command_basis(plans, command_id) do
+         :ok <- exact_revision(runtime_basis, revision_id) do
+      Map.new(command_ids, fn command_id ->
+        {command_id, command_resolved(plans, command_id, runtime_basis)}
+      end)
+    else
+      {:error, _reason} = error -> Map.new(command_ids, &{&1, error})
+    end
+  end
+
+  defp command_resolved(plans, command_id, runtime_basis) do
+    with {:ok, basis} <- MissionModelPlanDecoder.command_basis(plans, command_id) do
       {:ok,
        basis
        |> Map.put(:mission_model_revision_id, runtime_basis.mission_model_revision_id)
        |> Map.put(:runtime_plan_id, basis.plan_id)
        |> Map.delete(:plan_id)}
     end
+  end
+
+  @doc """
+  The basis of each distinct (pinned revision, command) among `requests`: `%{{revision, command}
+  => result}`, with one read of the active basis per distinct (revision, endpoint of the first
+  request carrying it) instead of one per command.
+  """
+  @spec resolve_keyed(binary(), binary(), [map()]) :: %{{binary(), binary()} => term()}
+  def resolve_keyed(organization_id, mission_id, requests) do
+    requests
+    |> Enum.uniq_by(&{&1.mission_model_revision_id, &1.command_id})
+    |> Enum.group_by(&{&1.mission_model_revision_id, &1.source_endpoint_ref})
+    |> Enum.reduce(%{}, fn {{revision, endpoint}, same}, acc ->
+      commands = Enum.map(same, & &1.command_id)
+
+      organization_id
+      |> resolve_bases(mission_id, revision, commands, endpoint)
+      |> Enum.reduce(acc, fn {command, result}, acc ->
+        Map.put(acc, {revision, command}, result)
+      end)
+    end)
   end
 
   defp exact_revision(%{mission_model_revision_id: revision_id}, revision_id), do: :ok

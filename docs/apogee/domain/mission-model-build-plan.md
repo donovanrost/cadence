@@ -56,6 +56,20 @@ dev. `Limits.start_evaluate` and `DerivedTelemetry.start_evaluate` have **no pro
 tests (`limits.ex:229`, `derived_telemetry.ex:31`). Retiring them removes no DB load on dev. Its
 value is correctness: one evaluator, compile-time reference checks, and ux's monitoring lane.
 
+**The compiled monitoring plan (P3's first slice, #451).** The `monitoring` target (contract 2) is
+the plan telemetry evaluates. Its entries come from `MonitoringLowering`: one entry per policy, per
+parameter, per scope.
+- Each entry carries `rule_id`, which is `policy:<semantic id>`. It stays fixed across a threshold
+  edit and across a mission replace.
+- `rule_digest` (`monitoring_rule:v1:`) is a hash of what is evaluated, so it changes on an edit and
+  on nothing else.
+- `origin` is `catalog` or `mission_layer`, with the `declaration_id` that wrote it.
+- `scope` is `mission`, with no `spacecraft_id`, or `spacecraft`, with one.
+- A per-craft override is an `:overrides` reference plus `spacecraft_ids`. It takes the overridden
+  policy's `rule_id`, one entry per craft.
+- The plan is compiled once per revision and holds every craft's entries, so there is no rules
+  table and no per-craft read. That supersedes the 11-26 storage sketch on #451.
+
 ### Outside the overhaul
 
 - **Watermark events (corrected 11-19 ~21:00Z).** The first version of this plan said these were

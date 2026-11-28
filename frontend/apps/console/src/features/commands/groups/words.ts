@@ -62,6 +62,9 @@ export function memberStageWord(
   // L22 / U40: nothing is sent to an archived spacecraft.
   if (stage === "canceled" && endReason === "spacecraft_archived")
     return `Not released: ${name ?? "the spacecraft"} is archived`;
+  // E2 (#546): the lane, sending it unattended, found the model's approval withdrawn after the GO.
+  if (stage === "canceled" && endReason === "model_approval_withdrawn_after_go")
+    return "Not released: the model's approval was withdrawn after GO";
   // Its release window passed before it went (ux: never 'Canceled', which says someone did it).
   if (stage === "canceled" && endReason === "expired")
     return expiresAt

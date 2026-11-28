@@ -4,12 +4,13 @@ defmodule Cadence.Catalog.MissionModel.Target do
   alias Cadence.Catalog.MissionModel.{
     Declaration,
     Diagnostic,
+    MonitoringLowering,
     Revision,
     RuntimePlan,
     TargetLowering
   }
 
-  @contracts %{telemetry: "2", algorithm: "1", monitoring: "1", command: "2"}
+  @contracts %{telemetry: "2", algorithm: "1", monitoring: "2", command: "2"}
 
   @target_kinds %{
     telemetry: [
@@ -46,8 +47,9 @@ defmodule Cadence.Catalog.MissionModel.Target do
     ]
   }
 
-  @spec compile(Revision.t(), atom()) :: RuntimePlan.t()
-  def compile(%Revision{} = revision, target) when is_map_key(@contracts, target) do
+  @spec compile(Revision.t(), atom(), %{optional(binary()) => atom()}) :: RuntimePlan.t()
+  def compile(%Revision{} = revision, target, origins \\ %{})
+      when is_map_key(@contracts, target) and is_map(origins) do
     declarations =
       revision.declarations
       |> Map.values()
@@ -57,7 +59,9 @@ defmodule Cadence.Catalog.MissionModel.Target do
     legalization_diagnostics =
       revision.diagnostics ++ Enum.flat_map(declarations, &legalize(&1, target))
 
-    {plan, lowering_diagnostics} = lower_plan(target, revision, declarations, revision.edges)
+    {plan, lowering_diagnostics} =
+      lower_plan(target, revision, declarations, revision.edges, origins)
+
     diagnostics = legalization_diagnostics ++ lowering_diagnostics
 
     RuntimePlan.new(revision, target, Map.fetch!(@contracts, target), plan, diagnostics)
@@ -137,7 +141,7 @@ defmodule Cadence.Catalog.MissionModel.Target do
 
   defp legalize(%Declaration{}, _target), do: []
 
-  defp lower_plan(:algorithm, _revision, declarations, edges) do
+  defp lower_plan(:algorithm, _revision, declarations, edges, _origins) do
     {%{
        "target" => "algorithm",
        "algorithms" =>
@@ -149,21 +153,23 @@ defmodule Cadence.Catalog.MissionModel.Target do
      }, []}
   end
 
-  defp lower_plan(:monitoring, _revision, declarations, edges) do
+  defp lower_plan(:monitoring, _revision, declarations, edges, origins) do
+    {policies, diagnostics} =
+      declarations
+      |> Enum.filter(&(&1.kind == :monitoring_policy))
+      |> MonitoringLowering.lower(origins)
+
     {%{
        "target" => "monitoring",
-       "policies" =>
-         declarations
-         |> Enum.filter(&(&1.kind == :monitoring_policy))
-         |> Enum.map(&lower_monitoring/1),
+       "policies" => policies,
        "edges" => own_edges(declarations, :monitoring_policy, edges)
-     }, []}
+     }, diagnostics}
   end
 
-  defp lower_plan(:telemetry, revision, declarations, _edges),
+  defp lower_plan(:telemetry, revision, declarations, _edges, _origins),
     do: TargetLowering.telemetry(revision, declarations)
 
-  defp lower_plan(:command, revision, declarations, _edges),
+  defp lower_plan(:command, revision, declarations, _edges, _origins),
     do: TargetLowering.command(revision, declarations)
 
   # The edges that leave this target's own declarations: what the plan's algorithms or policies
@@ -237,21 +243,6 @@ defmodule Cadence.Catalog.MissionModel.Target do
         next_ordered = Enum.reduce(ready, ordered, &[Map.fetch!(by_id, &1) | &2])
         topological_algorithms(next_dependencies, by_id, next_ordered)
     end
-  end
-
-  defp lower_monitoring(declaration) do
-    parameter_id =
-      declaration.references
-      |> Enum.find(&(&1.role == :parameter and is_binary(&1.resolved_id)))
-      |> case do
-        nil -> nil
-        reference -> reference.resolved_id
-      end
-
-    declaration.definition
-    |> stringify_keys()
-    |> Map.put("policy_id", declaration.semantic_id)
-    |> Map.put("parameter_id", parameter_id)
   end
 
   defp stringify_keys(map) when is_map(map) do

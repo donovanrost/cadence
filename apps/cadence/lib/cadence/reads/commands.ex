@@ -88,24 +88,34 @@ defmodule Cadence.Reads.Commands do
     snapshot(organization_id, mission_id, opts).summary
   end
 
+  # With `request_ids`, a caller that already holds the requests it wants rows for (a page of
+  # groups' members) reads only those requests' queue entries, releases and verifiers, not the
+  # mission's whole history.
   defp records(kind, organization_id, mission_id, opts) do
     case Keyword.get(opts, kind) do
-      callback when is_function(callback, 3) -> callback.(organization_id, mission_id, [])
-      _missing -> default_records(kind, organization_id, mission_id)
+      callback when is_function(callback, 3) ->
+        callback.(organization_id, mission_id, [])
+
+      _missing ->
+        default_records(kind, organization_id, mission_id, Keyword.get(opts, :request_ids))
     end
   end
 
-  defp default_records(:requests, organization_id, mission_id),
+  defp default_records(:requests, organization_id, mission_id, _request_ids),
     do: Commanding.list_command_requests(organization_id, mission_id)
 
-  defp default_records(:queue_entries, organization_id, mission_id),
-    do: Commanding.list_command_queue_entries(organization_id, mission_id)
+  defp default_records(:queue_entries, organization_id, mission_id, ids),
+    do: Commanding.list_command_queue_entries(organization_id, mission_id, request_filter(ids))
 
-  defp default_records(:release_attempts, organization_id, mission_id),
-    do: Commanding.list_command_release_attempts(organization_id, mission_id)
+  defp default_records(:release_attempts, organization_id, mission_id, ids),
+    do: Commanding.list_command_release_attempts(organization_id, mission_id, request_filter(ids))
 
-  defp default_records(:verifier_instances, organization_id, mission_id),
-    do: Commanding.list_command_verifier_instances(organization_id, mission_id)
+  defp default_records(:verifier_instances, organization_id, mission_id, ids),
+    do:
+      Commanding.list_command_verifier_instances(organization_id, mission_id, request_filter(ids))
+
+  defp request_filter(nil), do: []
+  defp request_filter(ids), do: [command_request_ids: ids]
 
   defp observed_at(opts) do
     case Keyword.get(opts, :observed_at) do
@@ -310,7 +320,6 @@ defmodule Cadence.Reads.Commands do
   defp latest_datetime(datetimes), do: Enum.max_by(datetimes, &DateTime.to_unix(&1, :microsecond))
 
   # #466/#470: never an email or an id as a name; a requester with no name reads "Unknown".
-  # The SQL copy in CommandMonitor.Query says the same, so search and paging agree.
   defp requested_by_label(requested_by) when is_map(requested_by) do
     requested_by[:display_name] || requested_by["display_name"] || "Unknown"
   end

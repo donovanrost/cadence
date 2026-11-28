@@ -56,10 +56,12 @@ defmodule Cadence.Reads.CommandPreflight.VerifierGroups do
   Compose showed), from each member's stored pinned revision: `%{position => verifier_groups}`.
   Members rejected or excluded at review are in no group.
   """
-  @spec for_group(binary(), binary(), map(), [map()]) :: %{non_neg_integer() => [map()]}
-  def for_group(org, mission, group, members) do
+  @spec for_group(binary(), binary(), map(), [map()], map() | nil) :: %{
+          non_neg_integer() => [map()]
+        }
+  def for_group(org, mission, group, members, bases \\ nil) do
     live = Enum.reject(members, &(&1.lifecycle_state == :rejected))
-    plans = plans_by_key(org, mission, live)
+    plans = plans_by_key(org, mission, live, bases)
 
     shaped =
       Enum.map(live, fn member ->
@@ -83,23 +85,16 @@ defmodule Cadence.Reads.CommandPreflight.VerifierGroups do
   defp plan_key(member), do: {member.mission_model_revision_id, member.command_id}
 
   # Once per (pinned revision, command): the same plans whatever the target.
-  defp plans_by_key(org, mission, members) do
-    members
-    |> Enum.uniq_by(&plan_key/1)
-    |> Map.new(fn member ->
+  defp plans_by_key(org, mission, members, bases) do
+    (bases || RequestValidation.resolve_keyed(org, mission, members))
+    |> Map.new(fn {key, result} ->
       plans =
-        case RequestValidation.resolve_basis(
-               org,
-               mission,
-               member.mission_model_revision_id,
-               member.command_id,
-               member.source_endpoint_ref
-             ) do
+        case result do
           {:ok, %{verifier_plans: plans}} when is_list(plans) -> plans
           _unavailable -> []
         end
 
-      {plan_key(member), plans}
+      {key, plans}
     end)
   end
 

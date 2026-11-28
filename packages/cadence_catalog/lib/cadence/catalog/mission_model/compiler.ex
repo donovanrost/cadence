@@ -56,7 +56,8 @@ defmodule Cadence.Catalog.MissionModel.Compiler do
         })
 
       targets = Keyword.get(opts, :targets, Map.keys(Target.contracts()))
-      plans = Map.new(targets, &{&1, Target.compile(revision, &1)})
+      origins = origins(mounted_layers, inherited_declarations)
+      plans = Map.new(targets, &{&1, Target.compile(revision, &1, origins)})
       {:ok, %CompilerResult{revision: revision, plans: plans}}
     end
   end
@@ -96,6 +97,18 @@ defmodule Cadence.Catalog.MissionModel.Compiler do
         })
       end)
     end)
+  end
+
+  # The kind of the layer that wrote each declaration last (P3, #451): a monitoring policy's
+  # origin is `catalog` when an imported layer did and `mission_layer` when an authored one did.
+  # A declaration a layer adds, extends or replaces is that layer's; nothing else moves it.
+  defp origins(layers, declarations) do
+    written =
+      for layer <- layers, declaration <- layer.declarations, into: %{} do
+        {declaration.semantic_id, layer.layer_kind}
+      end
+
+    Map.new(declarations, fn {id, _declaration} -> {id, Map.get(written, id, :imported)} end)
   end
 
   defp compose(layers, initial) do
