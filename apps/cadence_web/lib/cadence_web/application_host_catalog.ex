@@ -30,7 +30,6 @@ defmodule CadenceWeb.ApplicationHostCatalog do
   @application_host_contract "cadence.application-host.v1"
   @catalog_page_size 100
   @max_catalog_applications 100
-  @compatibility_only_application_keys ["comms_overview"]
   @type route_context :: %{
           host_context: HostContext.t(),
           mission: Mission.t() | nil,
@@ -172,7 +171,7 @@ defmodule CadenceWeb.ApplicationHostCatalog do
 
   defp admit_installed_application(
          current_scope,
-         %{host_context: host_context} = route_context,
+         %{host_context: host_context},
          application_key,
          surface_id,
          release_snapshot
@@ -187,37 +186,8 @@ defmodule CadenceWeb.ApplicationHostCatalog do
           release_snapshot
         )
 
-      {:error, :application_not_installed} ->
-        admit_missing_application(
-          current_scope,
-          route_context,
-          application_key,
-          surface_id,
-          release_snapshot
-        )
-
       {:error, reason} ->
         {:error, reason}
-    end
-  end
-
-  defp admit_missing_application(
-         current_scope,
-         route_context,
-         application_key,
-         surface_id,
-         release_snapshot
-       ) do
-    if compatibility_only_application?(application_key) do
-      contributed_application_admission(
-        current_scope,
-        application_key,
-        route_context,
-        surface_id,
-        release_snapshot
-      )
-    else
-      {:error, :application_not_installed}
     end
   end
 
@@ -411,10 +381,7 @@ defmodule CadenceWeb.ApplicationHostCatalog do
          host_context: %HostContext{placement: placement}
        }) do
     CatalogRegistry.all()
-    |> Enum.filter(fn contribution ->
-      not registered_application_contribution?(contribution) or
-        installation_exempt_contribution?(contribution, placement)
-    end)
+    |> Enum.filter(&installation_exempt_contribution?(&1, placement))
   end
 
   defp installation_exempt_contribution?(
@@ -788,18 +755,6 @@ defmodule CadenceWeb.ApplicationHostCatalog do
        do: true
 
   defp intentional_application_omission?(_reason), do: false
-
-  defp compatibility_only_application?(application_key) when is_binary(application_key) do
-    application_key in @compatibility_only_application_keys
-  end
-
-  defp compatibility_only_application?(_application_key), do: false
-
-  defp registered_application_contribution?(%CatalogContribution{definition: definition}) do
-    not compatibility_only_application?(definition.application_key)
-  end
-
-  defp registered_application_contribution?(_contribution), do: true
 
   defp package_contributes?(
          %ExtensionPackage{contributions: contributions},

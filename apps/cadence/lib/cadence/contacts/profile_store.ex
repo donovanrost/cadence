@@ -8,6 +8,7 @@ defmodule Cadence.Contacts.ProfileStore do
   alias Ecto.Changeset
 
   alias Cadence.Comms.ListenClaims
+  alias Cadence.Contacts.PathTemplateStore.VersionedReferences
 
   alias Cadence.Contacts.ProfileStore.{
     ListenAllowlist,
@@ -193,6 +194,35 @@ defmodule Cadence.Contacts.ProfileStore do
     |> BulkLookup.by_id(:provider_profile_id, ids)
     |> Enum.reject(&(&1.lifecycle_state == "deleted"))
     |> Map.new(&{&1.provider_profile_id, ProviderProfileRow.to_domain(&1)})
+  end
+
+  @doc false
+  def load_provider_refs(org, mission, refs) do
+    keys = Enum.map(refs, &VersionedReferences.key(&1, "provider_profile_id"))
+
+    ProviderProfileRow
+    |> VersionedReferences.in_scope(org, mission)
+    |> VersionedReferences.load(
+      :provider_profile_id,
+      keys,
+      Enum.map(keys, &elem(&1, 0)),
+      &ProviderProfileRow.to_domain/1
+    )
+  end
+
+  @doc false
+  def load_transport_refs(org, mission, refs) do
+    keys = Enum.map(refs, &VersionedReferences.key(&1, "transport_profile_id"))
+    latest = for {id, nil} <- keys, do: id
+
+    TransportProfileRow
+    |> VersionedReferences.in_scope(org, mission)
+    |> VersionedReferences.load(
+      :transport_profile_id,
+      keys,
+      latest,
+      &TransportProfileRow.to_domain/1
+    )
   end
 
   @doc "Returns one bounded page of active latest provider-profile versions."

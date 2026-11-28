@@ -253,6 +253,46 @@ defmodule Cadence.SourceEndpoints do
     end
   end
 
+  @doc """
+  `fetch_command_authoring_target/3` for many endpoints in one read (a group validates every
+  target at once): `%{endpoint_id => {:ok, target} | {:error, reason}}`, with the same targets
+  locked `FOR SHARE`, under the same 64 KB metadata guard, and the same errors per endpoint
+  (`:command_target_unavailable`, or `:command_target_transaction_required` outside a transaction).
+  The rows are locked in endpoint-id order, so concurrent callers can't deadlock.
+  """
+  @spec fetch_command_authoring_targets(binary(), binary(), [binary()]) :: %{
+          binary() => {:ok, SourceEndpoint.t()} | {:error, atom()}
+        }
+  def fetch_command_authoring_targets(organization_id, mission_id, endpoint_ids) do
+    ids = endpoint_ids |> Enum.filter(&is_binary/1) |> Enum.uniq() |> Enum.sort()
+
+    if Repo.in_transaction?() do
+      found =
+        ids
+        |> Enum.chunk_every(500)
+        |> Enum.flat_map(fn chunk ->
+          SourceEndpointRow
+          |> where(
+            [row],
+            row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+              row.source_endpoint_id in ^chunk
+          )
+          |> where([row], fragment("octet_length(?::text)", row.metadata) <= 65_536)
+          |> order_by([row], asc: row.source_endpoint_id)
+          |> lock("FOR SHARE")
+          |> Repo.all()
+        end)
+        |> Map.new(&{&1.source_endpoint_id, SourceEndpointRow.to_domain(&1)})
+
+      Map.new(ids, fn id ->
+        {id,
+         if(target = found[id], do: {:ok, target}, else: {:error, :command_target_unavailable})}
+      end)
+    else
+      Map.new(ids, &{&1, {:error, :command_target_transaction_required}})
+    end
+  end
+
   @doc "Returns only spacecraft identities for explicitly referenced, scoped endpoints."
   def spacecraft_for_source_endpoints(organization_id, mission_id, ids) when is_list(ids) do
     ids

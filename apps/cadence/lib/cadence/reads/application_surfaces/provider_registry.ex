@@ -18,7 +18,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.ProviderRegistry do
   def contributions do
     case collect_contributions(
            [
-             Cadence.Applications.Comms,
              Cadence.Applications.TelemetryDecom,
              Cadence.Applications.DerivedTelemetry,
              Cadence.Applications.Limits,

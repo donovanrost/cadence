@@ -17,10 +17,7 @@ defmodule Cadence.Applications.Registry do
     SurfaceDefinition
   }
 
-  alias Cadence.Applications.Comms, as: CommsApplication
-
   alias Cadence.Applications.{
-    LegacyCommsOverview,
     OpsConsole,
     TelemetryDecom
   }
@@ -40,8 +37,6 @@ defmodule Cadence.Applications.Registry do
         TelemetryDecom.definition(),
         derived_telemetry(),
         limits(),
-        CommsApplication.definition(),
-        LegacyCommsOverview.definition(),
         OpsConsole.definition(),
         cfdp()
       ] ++ Enum.map(FixtureContributors.exporting(:definition, 0), & &1.definition())

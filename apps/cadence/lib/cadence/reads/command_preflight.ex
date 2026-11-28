@@ -173,21 +173,17 @@ defmodule Cadence.Reads.CommandPreflight do
   defp conflicts_check(_org, _mission, [], _own), do: check(:conflicts, :go, [], %{count: 0})
 
   defp conflicts_check(org, mission, lanes, own) do
-    lane_set = MapSet.new(lanes)
-
+    # Only the open work on these lanes is read (in SQL), never the mission's whole history.
     queued =
-      org
-      |> Commanding.list_command_queue_entries(mission)
-      |> Enum.filter(
-        &(&1.lifecycle_state in @open_queue_states and MapSet.member?(lane_set, &1.queue_lane_key))
+      Commanding.list_command_queue_entries(org, mission,
+        queue_lane_keys: lanes,
+        lifecycle_states: @open_queue_states
       )
 
     pending =
-      org
-      |> Commanding.list_command_requests(mission)
-      |> Enum.filter(
-        &(&1.lifecycle_state == :approval_pending and
-            MapSet.member?(lane_set, &1.source_endpoint_ref))
+      Commanding.list_command_requests(org, mission,
+        source_endpoint_refs: lanes,
+        lifecycle_state: :approval_pending
       )
 
     ids =
@@ -208,10 +204,32 @@ defmodule Cadence.Reads.CommandPreflight do
     until = Map.get(draft, :expires_at) || DateTime.add(from, @contact_horizon_s)
     until = if DateTime.compare(until, from) == :gt, do: until, else: DateTime.add(from, 60)
 
+    # Only the targets' passes, and all of them (paged by the keyset until the read is complete):
+    # "no contact" is never decided from a truncated read (#1040).
+    # Windows and uplink facts only: not the listener-overlap decoration, which resolves the
+    # paths of every booked contact around them (#1051).
+    filters = %{
+      states: ["confirmed", "active"],
+      spacecraft_ids: Enum.map(targets, & &1.spacecraft_id),
+      overlap: false
+    }
+
+    case Passes.load_all(org, mission, from, until, filters, contact_pages()) do
+      {:ok, passes} ->
+        contact_result(passes, targets, from, until)
+
+      {:error, :truncated} ->
+        check(:contact, :no_go, [], %{from: from, until: until, reason: :contact_read_truncated})
+    end
+  end
+
+  # How many pages of 500 the contact read may take before it gives up (`config :cadence,
+  # :command_preflight_contact_pages`): past it the answer is a `contact_read_truncated` NO-GO.
+  defp contact_pages, do: Application.get_env(:cadence, :command_preflight_contact_pages, 40)
+
+  defp contact_result(passes, targets, from, until) do
     next =
-      org
-      |> Passes.load(mission, from, until, %{states: ["confirmed", "active"]})
-      |> Map.fetch!(:passes)
+      passes
       |> Enum.filter(&(&1.uplink_confirmed == true and DateTime.compare(&1.ends_at, from) == :gt))
       |> Enum.group_by(& &1.spacecraft_id)
       |> Map.new(fn {id, [first | _]} ->

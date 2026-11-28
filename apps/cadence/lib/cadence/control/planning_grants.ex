@@ -5,10 +5,9 @@ defmodule Cadence.Control.PlanningGrants do
   fleet planning policy. Reads for mission operators; issue and revoke for organization admins
   (`AutomationGrants`, Policy `:manage_automation_grants`).
 
-  The console sends back what it read instead of the legacy page's evidence maps: the active
-  `policy_version` on issue, the grant's `sha256` on revoke. The server rebuilds the exact
-  evidence. `allowed_actions` and the cost limit come from the active policy, as the legacy form
-  did (`Applications.OpsConsole.Actions.FleetPlanning.grant_attributes/2`, ported here).
+  The console sends back what it read: the active `policy_version` on issue, the grant's `sha256`
+  on revoke. The server rebuilds the exact evidence. `allowed_actions` and the cost limit come
+  from the active policy.
   """
 
   alias Cadence.Accounts.MemberNames

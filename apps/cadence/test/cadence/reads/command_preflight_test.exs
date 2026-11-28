@@ -4,7 +4,7 @@ defmodule Cadence.Reads.CommandPreflightTest do
   import Cadence.CommandGroupFixtures
 
   alias Cadence.Control.Commanding.GroupSubmission
-  alias Cadence.Reads.CommandPreflight
+  alias Cadence.Reads.{CommandPreflight, Passes}
 
   setup do
     setup!(2)
@@ -251,6 +251,63 @@ defmodule Cadence.Reads.CommandPreflightTest do
                  preflight_digest: preflight.digest,
                  hold_acks: [Map.put(ack, :preflight_digest, preflight.digest)]
                )
+    end
+  end
+
+  # #1040: the contact check read passes with the default limit of 500 and ignored `truncated`, so
+  # a target whose only pass came after the 500th was HELD as "no contact". It reads the targets'
+  # passes only, and all of them.
+  describe "the contact check past 500 passes" do
+    setup c do
+      soon = DateTime.add(DateTime.utc_now(), 60)
+
+      # 520 passes of other craft, all starting before the targets' own (which are 30 min out).
+      noise = for i <- 1..520, do: {"noise-#{i}", DateTime.add(soon, i)}
+      commandable_passes!(c.org, c.mission, noise)
+      for id <- c.spacecraft, do: commandable_pass!(c.org, c.mission, id)
+      :ok
+    end
+
+    test "a target whose only pass is past the 500th has its contact", c do
+      # The premise: the old read (every craft, one page of 500) cuts the targets' passes off.
+      from = DateTime.utc_now()
+      to = DateTime.add(from, 6 * 3_600)
+
+      old =
+        Passes.load(c.org, c.mission, from, to, %{states: ["confirmed", "active"]})
+
+      assert old.truncated
+      refute Enum.any?(old.passes, &(&1.spacecraft_id in c.spacecraft))
+
+      {:ok, preflight} =
+        run(c, draft(c.spacecraft, [command(c, "SET_SIGNED", %{"counter" => 1})]))
+
+      assert %{result: :go, per_target: per_target} = result(preflight.checks, :contact)
+      assert Enum.all?(per_target, &(&1.result == :go and is_map(&1.next_contact)))
+    end
+
+    test "a read that can't be completed is a NO-GO, never a HOLD for no contact", c do
+      # Both targets have 501 passes of their own, and the read may take one page.
+      [first, _second] = c.spacecraft
+      when_ = DateTime.add(DateTime.utc_now(), 3_600)
+      commandable_passes!(c.org, c.mission, for(i <- 1..501, do: {first, DateTime.add(when_, i)}))
+
+      previous = Application.get_env(:cadence, :command_preflight_contact_pages)
+      Application.put_env(:cadence, :command_preflight_contact_pages, 1)
+
+      on_exit(fn ->
+        if previous,
+          do: Application.put_env(:cadence, :command_preflight_contact_pages, previous),
+          else: Application.delete_env(:cadence, :command_preflight_contact_pages)
+      end)
+
+      {:ok, preflight} =
+        run(c, draft(c.spacecraft, [command(c, "SET_SIGNED", %{"counter" => 1})]))
+
+      assert %{result: :no_go, per_target: [], evidence: %{reason: :contact_read_truncated}} =
+               result(preflight.checks, :contact)
+
+      refute Enum.any?(preflight.checks, &(&1.key == :contact and &1.result == :hold))
     end
   end
 end

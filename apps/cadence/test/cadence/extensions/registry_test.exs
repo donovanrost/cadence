@@ -51,12 +51,6 @@ defmodule Cadence.Extensions.RegistryTest do
 
     assert {:error, :unknown_extension_package} = ExtensionCatalog.fetch("mission-uploaded")
 
-    assert {:ok, comms_package} = ExtensionCatalog.fetch("cadence.comms")
-
-    assert comms_package.contributions == [
-             %ApplicationContribution{application_key: "comms", application_version: 1}
-           ]
-
     assert {:ok, package} = ExtensionCatalog.fetch("cadence.ops_console")
     assert package.trust == :first_party
     assert package.version == 1
@@ -257,9 +251,9 @@ defmodule Cadence.Extensions.RegistryTest do
     assert :ok = ExtensionCatalog.validate()
 
     assert ExtensionCatalog.inventory() == %{
-             packages: 11,
-             applications: 6,
-             available_applications: 5,
+             packages: 10,
+             applications: 5,
+             available_applications: 4,
              capabilities: 5,
              transport_kinds: 1,
              provider_connectors: 1,
@@ -275,7 +269,6 @@ defmodule Cadence.Extensions.RegistryTest do
              [
                "derived_telemetry",
                "limits",
-               "comms",
                "ops_console",
                "cfdp"
              ]
@@ -286,7 +279,6 @@ defmodule Cadence.Extensions.RegistryTest do
            ) == [
              "derived_telemetry",
              "limits",
-             "comms",
              "ops_console"
            ]
 

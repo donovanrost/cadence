@@ -87,12 +87,24 @@ defmodule Cadence.Contacts.LinkAssignmentStore do
   @doc "Non-deleted mission assignments keyed by their exact IDs."
   def fetch_many(organization_id, mission_id, ids) do
     LinkAssignmentRow
+    |> where([row], row.organization_id == ^organization_id)
+    |> assignments_by_id(mission_id, Enum.uniq(ids))
+  end
+
+  @doc false
+  def fetch_many(mission_id, ids),
+    do: assignments_by_id(LinkAssignmentRow, mission_id, Enum.uniq(ids))
+
+  defp assignments_by_id(_query, _mission_id, []), do: %{}
+
+  defp assignments_by_id(query, mission_id, ids) do
+    query
     |> where(
       [row],
-      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-        row.lifecycle_state != "deleted"
+      row.mission_id == ^mission_id and row.lifecycle_state != "deleted" and
+        row.link_assignment_id in ^ids
     )
-    |> BulkLookup.by_id(:link_assignment_id, ids)
+    |> Repo.all()
     |> Map.new(&{&1.link_assignment_id, LinkAssignmentRow.to_domain(&1)})
   end
 

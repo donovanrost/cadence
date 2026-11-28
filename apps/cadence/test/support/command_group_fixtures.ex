@@ -137,6 +137,22 @@ defmodule Cadence.CommandGroupFixtures do
   def commandable_pass!(org, mission, spacecraft_id, starts_at \\ nil, opts \\ []) do
     starts_at = starts_at || DateTime.add(DateTime.utc_now(), 1_800)
     suffix = System.unique_integer([:positive])
+    insert_pass!(pass_context!(org, mission, suffix), suffix, spacecraft_id, starts_at, opts)
+  end
+
+  @doc """
+  Many confirmed, uplink-confirmed bookings on one provider and transport (`commandable_pass!/5`
+  makes a provider and a transport each): `specs` is `[{spacecraft_id, starts_at}]`.
+  """
+  def commandable_passes!(org, mission, specs) do
+    context = pass_context!(org, mission, System.unique_integer([:positive]))
+
+    for {spacecraft_id, starts_at} <- specs do
+      insert_pass!(context, System.unique_integer([:positive]), spacecraft_id, starts_at, [])
+    end
+  end
+
+  defp pass_context!(org, mission, suffix) do
     provider = ProviderChangeFixtures.persist_provider!(org, mission, suffix, %{})
 
     {:ok, transport} =
@@ -160,6 +176,13 @@ defmodule Cadence.CommandGroupFixtures do
         mission,
         transport.materialized_provider_profile_id
       )
+
+    %{org: org, mission: mission, provider: provider, transport: transport, profile: profile}
+  end
+
+  defp insert_pass!(context, suffix, spacecraft_id, starts_at, opts) do
+    %{org: org, mission: mission, provider: provider, transport: transport, profile: profile} =
+      context
 
     id = "provider-reservation-pass-#{suffix}"
 

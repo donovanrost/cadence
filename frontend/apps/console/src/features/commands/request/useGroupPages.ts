@@ -14,6 +14,7 @@ export type TargetFilter = Readonly<{
   stages?: readonly MemberStage[];
   q?: string;
   needsYou?: boolean;
+  unnamed?: boolean;
 }>;
 
 /**

@@ -12,7 +12,7 @@ defmodule Cadence.Extensions.Registry do
     WidgetTypeContribution
   }
 
-  alias Cadence.Applications.{Comms, OpsConsole}
+  alias Cadence.Applications.OpsConsole
 
   @type fetch_error ::
           :unknown_extension_package
@@ -24,7 +24,6 @@ defmodule Cadence.Extensions.Registry do
     do: [
       telemetry_package(),
       mission_assurance_package(),
-      comms_package(),
       ops_console_package(),
       runtime_foundations_package(),
       cfdp_package(),
@@ -124,23 +123,6 @@ defmodule Cadence.Extensions.Registry do
         %ApplicationContribution{
           application_key: "limits",
           application_version: 1
-        }
-      ]
-    }
-  end
-
-  defp comms_package do
-    identity = Comms.identity()
-
-    %ExtensionPackage{
-      package_id: identity.package_id,
-      version: identity.package_version,
-      trust: :first_party,
-      compatibility: %{cadence_application_contract: 1, cadence_surface_contract: 1},
-      contributions: [
-        %ApplicationContribution{
-          application_key: identity.application_key,
-          application_version: identity.application_version
         }
       ]
     }

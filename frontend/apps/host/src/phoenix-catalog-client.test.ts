@@ -8,27 +8,27 @@ import {
 } from "./phoenix-catalog-client";
 
 const missionCommsApplication = {
-  applicationKey: "comms_overview",
+  applicationKey: "spacecraft",
   applicationVersion: 1,
-  displayName: "Communications Overview",
-  description: "Mission communications overview.",
-  package: { packageId: "cadence.comms_overview", version: 1 },
+  displayName: "Spacecraft",
+  description: "Mission spacecraft.",
+  package: { packageId: "cadence.spacecraft", version: 1 },
   surface: {
-    surfaceId: "overview",
+    surfaceId: "list",
     version: 1,
     purpose: "overview",
     scope: "mission",
     placement: "application_workspace",
     navigation: { label: "Overview", order: 10 },
-    dataContract: { id: "cadence.comms.overview", version: 1 },
+    dataContract: { id: "cadence.spacecraft.list", version: 1 },
     actions: [],
     renderer: { kind: "federated-vue", exposedModule: "./LegacyApplication" },
   },
   release: {
     federation: "module_federation",
-    releaseId: "comms-overview-v1",
-    remoteName: "cadence_comms",
-    manifestUrl: "/assets/application-host/comms/mf-manifest.json",
+    releaseId: "spacecraft-v1",
+    remoteName: "cadence_spacecraft",
+    manifestUrl: "/assets/application-host/spacecraft/mf-manifest.json",
     exposedModule: "./LegacyApplication",
   },
 } satisfies CatalogApplication;
@@ -98,11 +98,11 @@ const spacecraftCatalog = {
 } satisfies FrontendApplicationCatalog;
 
 const missionConfig: PhoenixHostConfig = {
-  applicationKey: "comms_overview",
-  surfaceId: "overview",
+  applicationKey: "spacecraft",
+  surfaceId: "list",
   missionId: "mission-1",
   catalogUrl: "/api/cadence/application-host/v1/catalog",
-  fallbackHref: "/missions/mission-1/comms",
+  fallbackHref: "/missions/mission-1/spacecraft",
 };
 
 const spacecraftConfig: PhoenixHostConfig = {
@@ -220,8 +220,8 @@ describe("Phoenix application catalog bootstrap", () => {
 
     expect(() =>
       selectPhoenixApplication(missionCatalog, {
-        applicationKey: "comms_overview",
-        surfaceId: "overview",
+        applicationKey: "spacecraft",
+        surfaceId: "list",
         missionId: "mission-1",
         spacecraftId: "spacecraft-1",
       }),
@@ -232,14 +232,14 @@ describe("Phoenix application catalog bootstrap", () => {
     expect(() =>
       selectPhoenixApplication(missionCatalog, {
         applicationKey: "missing_application",
-        surfaceId: "overview",
+        surfaceId: "list",
         missionId: "mission-1",
       }),
     ).toThrow('does not provide requested application "missing_application"');
 
     expect(() =>
       selectPhoenixApplication(missionCatalog, {
-        applicationKey: "comms_overview",
+        applicationKey: "spacecraft",
         surfaceId: "missing_surface",
         missionId: "mission-1",
       }),
@@ -279,7 +279,7 @@ describe("Phoenix application catalog bootstrap", () => {
         { ...missionConfig, catalogUrl: "https://other.test/catalog" },
         {
           fetch: fetcher as typeof fetch,
-          baseUrl: "https://cadence.test/missions/mission-1/comms",
+          baseUrl: "https://cadence.test/missions/mission-1/spacecraft",
         },
       ),
     ).rejects.toThrow("same origin");
@@ -291,7 +291,7 @@ describe("Phoenix application catalog bootstrap", () => {
       phoenixCatalogUrl(
         "https://cadence.test/catalog?mode=mission&spacecraft_id=old#ignored",
         { missionId: "mission-1" },
-        "https://cadence.test/missions/mission-1/comms",
+        "https://cadence.test/missions/mission-1/spacecraft",
       ),
     ).toBe("https://cadence.test/catalog?mode=mission&mission_id=mission-1");
 

@@ -26,7 +26,7 @@ defmodule Cadence.Reads.ChangeSetOutcome do
   alias Cadence.SpacecraftStore
 
   @readiness_kinds ~w(spacecraft spacecraft_profile spacecraft_override spacecraft_route
-                      legacy_routing_rule transport ground_station)
+                      transport ground_station)
 
   # Kinds whose changes Readiness doesn't read (domain, #522): app configuration, and the derived
   # kinds the pipeline adds after the staged ops. Every registered kind is in one list or the

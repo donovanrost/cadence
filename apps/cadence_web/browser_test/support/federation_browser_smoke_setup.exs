@@ -8,7 +8,6 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
 
   alias Cadence.Applications.{ApplicationInstallations, HostContext, TelemetryDecom}
   alias Cadence.Auth.Scope
-  alias Cadence.Comms.{Transport, TransportStore}
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias CadenceWeb.TestFixtures
 
@@ -38,7 +37,6 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
     assert {:ok, _installation} =
              ApplicationInstallations.install(scope, host_context, "telemetry_decom")
 
-    persist_transport!(organization.organization_id, mission.mission_id)
     {revision, endpoint} = persist_packet_model!(mission, spacecraft, organization)
 
     assert {:ok, _configuration} =
@@ -59,28 +57,6 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
       catalog_revision_id: revision.catalog_revision_id,
       source_endpoint_id: endpoint.source_endpoint_id
     }
-  end
-
-  defp persist_transport!(organization_id, mission_id) do
-    transport =
-      Transport.new(%{
-        mission_id: mission_id,
-        display_name: "Federation Browser Transport",
-        transport_kind: :tcp_socket,
-        direction_capability: :inbound,
-        adapter_key: :tcp_socket,
-        configuration: %{
-          "mode" => "listen",
-          "expected_peer_addresses" => ["127.0.0.1/32", "::1/128"],
-          "direction_capability" => "inbound",
-          "host" => "0.0.0.0",
-          "port" => "5000",
-          "framing_mode" => "raw",
-          "tls_enabled" => "false"
-        }
-      })
-
-    assert {:ok, _persisted} = TransportStore.persist_transport(organization_id, transport)
   end
 
   defp persist_packet_model!(mission, spacecraft, organization) do

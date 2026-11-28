@@ -26,11 +26,13 @@ defmodule Cadence.Reads.Passes do
 
   @type filters :: %{
           optional(:spacecraft_id) => binary() | nil,
+          optional(:spacecraft_ids) => [binary()] | nil,
           optional(:station) => binary() | nil,
           optional(:states) => [binary()] | nil,
           optional(:limit) => pos_integer(),
           optional(:order) => :asc | :desc,
           optional(:hand_started) => boolean(),
+          optional(:overlap) => boolean(),
           optional(:cursor) => binary() | nil,
           optional(:after) => {DateTime.t(), binary(), integer()}
         }
@@ -84,6 +86,11 @@ defmodule Cadence.Reads.Passes do
     Map.merge(counts, %{hand_started: hand_started, total: counts.booked + hand_started})
   end
 
+  @doc """
+  The passes in a window. Each carries its `listener_overlap`, which resolves the paths of every
+  booked contact around the window; `overlap: false` skips that (rows carry `listener_overlap:
+  nil`) for a caller that only needs windows, stations and refs (#1051). Default `true`.
+  """
   @spec load(binary(), binary(), DateTime.t(), DateTime.t(), filters()) :: map()
   def load(organization_id, mission_id, from, to, filters \\ %{}) do
     limit = Map.get(filters, :limit, @default_limit)
@@ -113,10 +120,41 @@ defmodule Cadence.Reads.Passes do
     |> load_rows(mission_id, reservations, %{
       from: from,
       to: to,
-      truncated: truncated?
+      truncated: truncated?,
+      overlap?: Map.get(filters, :overlap, true)
     })
     |> with_hand_started(organization_id, mission_id, filters, limit, order)
     |> Map.update!(:passes, &PassGeometry.contacts(organization_id, mission_id, &1))
+  end
+
+  @default_pages 40
+
+  @doc """
+  Every pass matching `filters` in the window, paging by the keyset until the read is complete
+  (E2/#1040: a decision such as "this target has no contact" is never made from a truncated read).
+  `{:ok, passes}`, or `{:error, :truncated}` if `max_pages` pages (default #{@default_pages} of the
+  filters' `limit`, 500 by default) still aren't the whole answer. Filter by `spacecraft_ids` to
+  read only a group's targets. `overlap: false` leaves out the listener-overlap decoration (`load/5`
+  says why a caller would).
+  """
+  @spec load_all(binary(), binary(), DateTime.t(), DateTime.t(), filters(), pos_integer()) ::
+          {:ok, [map()]} | {:error, :truncated}
+  def load_all(org, mission, from, to, filters \\ %{}, max_pages \\ @default_pages),
+    do: collect(org, mission, from, to, filters, max_pages, [])
+
+  defp collect(_org, _mission, _from, _to, _filters, 0, _acc), do: {:error, :truncated}
+
+  defp collect(org, mission, from, to, filters, pages, acc) do
+    result = load(org, mission, from, to, filters)
+    acc = Enum.reverse(result.passes, acc)
+
+    if result.truncated do
+      last = List.last(result.passes)
+      after_key = {last.starts_at, last.id, kind(last)}
+      collect(org, mission, from, to, Map.put(filters, :after, after_key), pages - 1, acc)
+    else
+      {:ok, Enum.reverse(acc)}
+    end
   end
 
   # U78: hand-started contacts join only on request (`include=hand_started`), merged in the same
@@ -154,6 +192,7 @@ defmodule Cadence.Reads.Passes do
   defp reservation_opts(filters, states) do
     [
       spacecraft_id: Map.get(filters, :spacecraft_id),
+      spacecraft_ids: Map.get(filters, :spacecraft_ids),
       station_refs: Map.get(filters, :station_refs),
       states: states,
       after: Map.get(filters, :after),
@@ -249,6 +288,7 @@ defmodule Cadence.Reads.Passes do
   defp geometry(org, mission, row), do: hd(PassGeometry.contacts(org, mission, [row]))
 
   defp load_rows(organization_id, mission_id, reservations, window) do
+    {overlap?, window} = Map.pop(window, :overlap?, true)
     ids = for r <- reservations, is_binary(r.spacecraft_id), do: r.spacecraft_id
 
     {:ok, spacecraft} =
@@ -261,11 +301,18 @@ defmodule Cadence.Reads.Passes do
       enders: PassEnders.load(organization_id, mission_id, reservations),
       stations: GroundStationStore.list_ground_stations(organization_id, mission_id),
       spacecraft: Map.values(spacecraft),
-      # U58 (b), #361: a booked pass that loses its start to a one-connection listener.
-      overlaps: PassListenerOverlap.for_rows(organization_id, mission_id, reservations)
+      # U58 (b), #361: a booked pass that loses its start to a one-connection listener. Reading it
+      # resolves the paths of every booked contact around the window, so a caller that only needs
+      # windows and refs (`overlap: false`, #1051) skips it and its rows carry `listener_overlap: nil`.
+      overlaps: overlaps(overlap?, organization_id, mission_id, reservations)
     })
     |> build()
   end
+
+  defp overlaps(false, _organization_id, _mission_id, _reservations), do: %{}
+
+  defp overlaps(true, organization_id, mission_id, reservations),
+    do: PassListenerOverlap.for_rows(organization_id, mission_id, reservations)
 
   @doc "Pure builder; see `load/5`."
   @spec build(map()) :: map()

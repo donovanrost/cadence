@@ -276,7 +276,7 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
 
   defp after_commit({:ok, %{group: group, lanes: lanes}}, org, mission) do
     ScopedReadUpdates.publish(:commanding_changed, org, mission)
-    Enum.each(lanes, &Dispatcher.kick_lane(ProcessNamespace.default(), org, mission, &1))
+    Dispatcher.kick_lanes(ProcessNamespace.default(), org, mission, lanes)
     {:ok, group}
   end
 

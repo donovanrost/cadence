@@ -40,19 +40,5 @@ export function navigation(
     section("ops", "Ops", "hero-presentation-chart-line", [
       item("ops_dashboards", "Dashboards", `${root}/ops/dashboards`),
     ]),
-    section(
-      "comms",
-      "Comms",
-      "hero-signal",
-      (
-        [
-          ["overview", "Overview", ""],
-          ["transports", "Transports", "/transports"],
-          ["ground_stations", "Ground Stations", "/ground-stations"],
-          ["routing", "Routing", "/routing"],
-          ["validation", "Validation", "/validation"],
-        ] as const
-      ).map(([key, label, path]) => item(`comms_${key}`, label, `${root}/comms${path}`)),
-    ),
   ];
 }

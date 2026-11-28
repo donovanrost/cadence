@@ -5,7 +5,6 @@ defmodule CadenceWeb.FederationAuthorityCompositionTest do
   alias Cadence.Reads.ApplicationSurfaces.ProviderRegistry, as: SurfaceProviderRegistry
 
   @provider_ledger [
-    Cadence.Applications.Comms,
     Cadence.Applications.TelemetryDecom,
     Cadence.Applications.DerivedTelemetry,
     Cadence.Applications.Limits,
@@ -16,8 +15,6 @@ defmodule CadenceWeb.FederationAuthorityCompositionTest do
     telemetry_decom
     derived_telemetry
     limits
-    comms
-    comms_overview
     ops_console
   )
 
@@ -68,11 +65,10 @@ defmodule CadenceWeb.FederationAuthorityCompositionTest do
 
     assert contributions
            |> Enum.frequencies_by(& &1.application_key) == %{
-             "comms" => 9,
              "telemetry_decom" => 2,
              "derived_telemetry" => 1,
              "limits" => 2,
-             "ops_console" => 15
+             "ops_console" => 7
            }
   end
 

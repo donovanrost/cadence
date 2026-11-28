@@ -14,6 +14,7 @@ import {
   type Unrecognized,
 } from "@/api/index.ts";
 import { groupUplinkReader } from "@/features/contacts/readiness.ts";
+import { groupWithdrawnAfterGoReader, withdrawnAfterGoReader } from "./withdrawn.ts";
 import { catalogRevisionReader, significance } from "../api.ts";
 import { raw, releaseCode, releaseRefusalReader } from "./release.ts";
 import {
@@ -44,6 +45,8 @@ export const endReasons = [
   "catalog_changed",
   // L22 (api, ux U40): released never; the spacecraft was archived after preview.
   "spacecraft_archived",
+  // E2 (#546, #1019): an unattended release refused it; the model's approval was withdrawn after GO.
+  "model_approval_withdrawn_after_go",
   "excluded_at_review",
   "canceled",
   "rejected",
@@ -100,6 +103,8 @@ export const targetReader = d.object({
   stage,
   members: d.array(member, 16),
   last_event_at: d.nullable(d.timestamp),
+  /** E2 (#1042): its craft's model approval was withdrawn after the GO its waiting uplinks had. */
+  withdrawn_after_go: d.nullable(withdrawnAfterGoReader),
   /** Waiting on its contact behind a release whose outcome is unknown: "Needs you" shows it. */
   blocked: d.optional(
     d.nullable(
@@ -231,6 +236,8 @@ export type GroupEvent = Decoded<typeof eventReader>;
 /** #795: how many targets there are and a revision that moves with any target's stage. */
 const targetsPage = d.object({
   total: d.integer,
+  /** #1064: the targets with no name across the whole group, whatever the page. */
+  unnamed: d.integer,
   revision: d.integer,
   next_cursor: d.nullable(d.string),
 });
@@ -283,6 +290,8 @@ const groupShape = {
   aborted_at: d.nullable(d.timestamp),
   // free-text: the operator's own sentence
   abort_reason: d.nullable(d.string),
+  /** E2 (#1042): the targets flagged across the whole group, and the newest decision; null with none. */
+  withdrawn_after_go: groupWithdrawnAfterGoReader,
   progress,
   finished: d.optional(d.boolean),
   uplink: d.optional(d.nullable(groupUplinkReader)),
@@ -335,13 +344,27 @@ export type Decision = Readonly<{
   acknowledgedHolds?: readonly HoldAck[];
 }>;
 
+/**
+ * #1051 part 4: the decision answer is a summary of the group as decided, with the group read's
+ * own encodings for these six fields; the full read carries them too, so either decodes.
+ */
+export const decisionSummaryReader = d.object({
+  id: groupShape.id,
+  state: groupShape.state,
+  decision: groupShape.decision,
+  decided_by: groupShape.decided_by,
+  decided_at: groupShape.decided_at,
+  review_token: groupShape.review_token,
+});
+export type DecisionSummary = Decoded<typeof decisionSummaryReader>;
+
 export async function decide(
   missionId: MissionId,
   id: string,
   decision: Decision,
-): Promise<WriteOutcome<Group>> {
+): Promise<WriteOutcome<DecisionSummary>> {
   return outcomeOf(
-    await request(`${one(missionId, id)}/decision`, groupReader, {
+    await request(`${one(missionId, id)}/decision`, decisionSummaryReader, {
       method: "POST",
       body: {
         kind: decision.kind,
