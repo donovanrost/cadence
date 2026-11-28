@@ -40,6 +40,10 @@ defmodule Cadence.SemanticRuntime.AlarmLevel do
   defp known_atom("severe"), do: :severe
   defp known_atom(_other), do: nil
 
+  @doc "The severities that raise an alarm, as text, for SQL lists over the stored states."
+  @spec alarm_states_text() :: [binary()]
+  def alarm_states_text, do: Enum.map(alarm_states(), &Atom.to_string/1)
+
   @doc "The severities that raise an alarm, weakest first."
   @spec alarm_states() :: [atom()]
   def alarm_states, do: @caution ++ @critical

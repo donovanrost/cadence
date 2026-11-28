@@ -16,7 +16,7 @@ defmodule Cadence.SemanticObservations do
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Platform.ReplayId
   alias Cadence.Repo
-  alias Cadence.SemanticRuntime.Result
+  alias Cadence.SemanticRuntime.{AlarmLevel, Result}
 
   alias Cadence.SemanticObservations.{
     AlarmAcknowledgementRow,
@@ -268,6 +268,32 @@ defmodule Cadence.SemanticObservations do
         row.spacecraft_scope_id == ^spacecraft_id
     )
     |> Repo.all()
+  end
+
+  @doc """
+  The alarm level of each parameter of one spacecraft that has a state: `%{parameter_id =>
+  :critical | :caution | :nominal}`, the worst over the parameter's policies. A parameter that
+  never changed state has none (see `Reads.PointLimitState`), and a state that raises or clears
+  nothing (`disabled`, `unknown`) is left out.
+  """
+  @spec levels_for_spacecraft(binary(), binary(), binary()) :: %{
+          binary() => :critical | :caution | :nominal
+        }
+  def levels_for_spacecraft(organization_id, mission_id, spacecraft_id) do
+    organization_id
+    |> list_for_spacecraft(mission_id, spacecraft_id)
+    |> Enum.flat_map(fn row ->
+      case AlarmLevel.level(row.effective_state) do
+        :critical -> [{row.parameter_id, 0, :critical}]
+        :caution -> [{row.parameter_id, 1, :caution}]
+        :normal -> [{row.parameter_id, 2, :nominal}]
+        :ignore -> []
+      end
+    end)
+    |> Enum.group_by(&elem(&1, 0))
+    |> Map.new(fn {parameter, levels} ->
+      {parameter, levels |> Enum.min_by(&elem(&1, 1)) |> elem(2)}
+    end)
   end
 
   defp add_result(%{semantic_result: %Result{} = result} = prepared, accumulator) do

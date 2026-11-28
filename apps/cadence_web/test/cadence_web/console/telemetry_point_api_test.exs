@@ -2,6 +2,7 @@ defmodule CadenceWeb.Console.TelemetryPointAPITest do
   @moduledoc "M23 point search."
   use CadenceWeb.ConnCase, async: false
 
+  alias Cadence.MonitoringPlanFixtures
   alias Cadence.Telemetry.CurrentValueStore
   alias CadenceWeb.{MissionReadModelFixtures, TestFixtures}
 
@@ -22,6 +23,22 @@ defmodule CadenceWeb.Console.TelemetryPointAPITest do
       )
 
     %{user: user, org: org, mission: mission}
+  end
+
+  # The mission's active monitoring plan evaluates these points' parameters (the catalog points
+  # of the seeded packet carry no parameter id, so a point is its own parameter).
+  defp monitor(c, points) do
+    MonitoringPlanFixtures.activate!(
+      c.org.organization_id,
+      c.mission.mission_id,
+      {"read-models", 1},
+      for(
+        point <- points,
+        do:
+          {"limit-" <> String.replace(point, ".", "-"),
+           "/parameters/" <> String.replace(point, ".", "-"), above: 10, parameter_id: point}
+      )
+    )
   end
 
   defp get_json(c, query) do
@@ -77,12 +94,13 @@ defmodule CadenceWeb.Console.TelemetryPointAPITest do
            ] =
              stored["data"]["points"]
 
-    # The limit state still comes from the limit projection; never null.
+    # The limit state still comes from the alarm states and the plan; never null.
     assert state in ~w(critical caution nominal no_data)
   end
 
   test "each point says whether it has limits at all (ux T1 'No limits'), with or without latest",
        c do
+    monitor(c, ["HK.counter", "HK.voltage"])
     points = c |> get_json("?limit=200") |> json_response(200) |> get_in(["data", "points"])
     by_id = Map.new(points, &{&1["id"], &1})
 
@@ -90,18 +108,9 @@ defmodule CadenceWeb.Console.TelemetryPointAPITest do
     assert by_id["HK.voltage"]["has_limits"] == true
     assert by_id["HK.voltage"]["latest"] == nil
 
-    # Retire the voltage limits: the point is still listed, now with no limits defined.
-    voltage =
-      c.org.organization_id
-      |> Cadence.Limits.active_limit_definitions(c.mission.mission_id)
-      |> Enum.find(&(&1.point_id == "HK.voltage"))
-
-    assert {:ok, _} =
-             Cadence.Limits.retire_limit_definition(
-               c.org.organization_id,
-               c.mission.mission_id,
-               voltage
-             )
+    # The next generation's plan drops the voltage policy: the point is still listed, with no
+    # limits defined.
+    monitor(c, ["HK.counter"])
 
     after_retire =
       c |> get_json("?q=voltage") |> json_response(200) |> get_in(["data", "points"])

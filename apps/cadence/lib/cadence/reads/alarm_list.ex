@@ -1,18 +1,22 @@
 defmodule Cadence.Reads.AlarmList do
   @moduledoc """
-  Limit alarms for a mission, enriched for operators: the point's `unit` and `description`, the thresholds of the
-  limit definition that produced each state, and when the point first entered
-  its current state (`first_crossed_at`).
+  The mission's alarms for operators (#794): the live monitoring alarms the runtime keeps in
+  `semantic_latest_alarm_states` (#451 T3c; it read the ground limit states before), each with its
+  point's name, unit and description and when it entered its current state (`first_crossed_at`).
+  Severity uses the console vocabulary: `critical | caution | nominal`, from the alarm level
+  (`SemanticRuntime.AlarmLevel`).
 
-  Built on `Cadence.Reads.Alarms` (the latest limit-state projection).
-  Severity uses the console vocabulary: `critical | caution | nominal`.
+  What a live alarm does not carry is `null` on the wire: the sampled `value` (a state is written
+  on a transition, not the value that caused it), `condition` and `limit_set_name` (ground-limit
+  words), and `thresholds` (a rule is not a red/yellow pair).
   """
 
-  alias Cadence.Limits.Store.AlarmPage
-  alias Cadence.Reads.{Alarms, PointInfo, SpacecraftMetadata}
+  alias Cadence.Ops.PointCatalog
+  alias Cadence.Reads.{PointInfo, SpacecraftMetadata}
+  alias Cadence.SemanticObservations.AlarmPage
+  alias Cadence.SemanticRuntime.AlarmLevel
   alias Cadence.SpacecraftStore
 
-  @history_depth 200
   @default_limit 100
   @max_limit 200
 
@@ -25,66 +29,104 @@ defmodule Cadence.Reads.AlarmList do
   `:exclude_spacecraft_id`, `:limit` (1 to #{@max_limit}, default #{@default_limit}), `:cursor`
   (a previous page's `next_cursor`).
 
-  The filters, the order and the page are SQL (`Cadence.Limits.Store.AlarmPage`), so a page costs the
-  page, not the fleet. Every row of every page is enriched (unit, description, thresholds,
-  `first_crossed_at`) with a fixed number of queries however many rows the page holds. `total`
-  counts the rows matching the filters, whatever the page; `summary` counts every active alarm of
-  the mission. `first_crossed_at` looks back over the newest #{@history_depth} evaluations of the
-  point on that spacecraft.
+  The filters, the order and the page are SQL (`Cadence.SemanticObservations.AlarmPage`), so a page
+  costs the page, not the fleet; the point catalog is read once for the names. `total` counts the
+  rows matching the filters, whatever the page; `summary` counts every active alarm of the mission.
   """
   @spec load(binary(), binary(), map()) :: {:ok, map()} | {:error, :invalid_cursor}
   def load(organization_id, mission_id, filters) do
     limit = filters |> Map.get(:limit) |> page_size()
 
     with {:ok, after_key} <- decode_cursor(filters[:cursor]) do
-      sql_filters = sql_filters(organization_id, mission_id, filters)
+      points = PointCatalog.list_points(organization_id, mission_id)
+      sql_filters = sql_filters(organization_id, mission_id, filters, points)
 
-      {events, more?} =
+      {states, more?} =
         case AlarmPage.rows(organization_id, mission_id, sql_filters, after_key, limit) do
-          events when length(events) > limit -> {Enum.take(events, limit), true}
-          events -> {events, false}
+          states when length(states) > limit -> {Enum.take(states, limit), true}
+          states -> {states, false}
         end
 
-      rows = Enum.map(events, &Alarms.row/1)
-      crossed = crossed_at(mission_id, events)
-      thresholds = thresholds(organization_id, mission_id, rows)
-      points = if rows == [], do: %{}, else: PointInfo.by_id(organization_id, mission_id)
+      by_parameter = Map.new(points, &{&1.parameter_id, &1})
+      info = if states == [], do: %{}, else: PointInfo.by_id(organization_id, mission_id, points)
 
       {:ok,
        %{
          observed_at: DateTime.utc_now(),
-         summary: summary(AlarmPage.summary(organization_id, mission_id)),
+         summary: AlarmPage.summary(organization_id, mission_id),
          total: AlarmPage.count(organization_id, mission_id, sql_filters),
-         next_cursor: if(more?, do: encode_cursor(List.last(rows))),
-         alarms:
-           Enum.map(rows, fn row ->
-             row
-             |> Map.merge(Map.get(points, row.point_id, PointInfo.unknown()))
-             |> Map.put(:severity, severity(row.normalized_state))
-             |> Map.put(:thresholds, Map.get(thresholds, definition_key(row)))
-             |> Map.put(:first_crossed_at, Map.get(crossed, {row.spacecraft_id, row.point_id}))
-           end)
+         next_cursor: if(more?, do: states |> List.last() |> AlarmPage.key() |> encode_cursor()),
+         alarms: Enum.map(states, &alarm(&1, by_parameter, info))
        }}
     end
   end
 
-  defp sql_filters(organization_id, mission_id, filters) do
+  defp alarm(state, by_parameter, info) do
+    point = Map.get(by_parameter, state.parameter_id)
+    point_id = (point && point.point_id) || state.parameter_id
+
+    %{
+      id: state.transition_id || Integer.to_string(state.id),
+      spacecraft_id: state.spacecraft_id,
+      point_id: point_id,
+      point_name: (point && Map.get(point, :point_name)) || point_id,
+      subsystem: subsystem(point_id),
+      severity: severity(state.effective_state),
+      active?: AlarmLevel.alarming?(state.effective_state),
+      limit_state: nil,
+      evaluated_value: nil,
+      limit_set_name: nil,
+      thresholds: nil,
+      first_crossed_at: state.receipt_time,
+      generation_time: state.generation_time,
+      receipt_time: state.receipt_time
+    }
+    |> Map.merge(Map.get(info, point_id, PointInfo.unknown()))
+  end
+
+  defp subsystem(point_id) do
+    point_id |> String.split([".", "/", ":"], parts: 2) |> List.first()
+  end
+
+  defp severity(state) do
+    case AlarmLevel.level(state) do
+      :critical -> :critical
+      :caution -> :caution
+      _other -> :nominal
+    end
+  end
+
+  defp sql_filters(organization_id, mission_id, filters, points) do
+    by_point = Map.new(points, &{&1.point_id, &1.parameter_id})
+
     %{
       state: filters[:state] || "active",
-      severity: alarms_severity(filters[:severity]),
+      severity: filters[:severity],
       spacecraft_id: filters[:spacecraft_id],
-      point_id: filters[:point_id],
+      parameter_ids: point_parameters(by_point, filters[:point_id]),
       query: filters[:query],
+      query_parameter_ids: matching_parameters(points, filters[:query]),
       exclude_spacecraft_id: filters[:exclude_spacecraft_id],
       spacecraft_ids: plane_spacecraft(organization_id, mission_id, filters[:plane])
     }
   end
 
-  defp crossed_at(mission_id, events) do
-    AlarmPage.crossed_at(
-      mission_id,
-      Enum.map(events, &{&1.spacecraft_id, &1.point_id, Atom.to_string(&1.normalized_state)})
-    )
+  # The parameter of the point asked for (the point itself when the catalog does not map it).
+  defp point_parameters(_by_point, value) when value in [nil, "", "all"], do: nil
+  defp point_parameters(by_point, point_id), do: [Map.get(by_point, point_id) || point_id]
+
+  # The parameters whose point's id, name or subsystem contains the query.
+  defp matching_parameters(_points, value) when value in [nil, ""], do: []
+
+  defp matching_parameters(points, query) do
+    needle = String.downcase(query)
+
+    for point <- points,
+        is_binary(point.parameter_id),
+        Enum.any?([point.point_id, Map.get(point, :point_name)], fn text ->
+          is_binary(text) and String.contains?(String.downcase(text), needle)
+        end),
+        do: point.parameter_id
   end
 
   defp page_size(limit) when is_integer(limit) and limit in 1..@max_limit, do: limit
@@ -92,8 +134,8 @@ defmodule Cadence.Reads.AlarmList do
 
   # The cursor is the sort key of the page's last row: rows that appear or clear between pages
   # neither repeat nor skip a row that stays.
-  defp encode_cursor(row),
-    do: row |> Alarms.sort_key() |> :erlang.term_to_binary() |> Base.url_encode64(padding: false)
+  defp encode_cursor(key),
+    do: key |> :erlang.term_to_binary() |> Base.url_encode64(padding: false)
 
   defp decode_cursor(nil), do: {:ok, nil}
 
@@ -125,31 +167,4 @@ defmodule Cadence.Reads.AlarmList do
         SpacecraftMetadata.integer(craft.metadata || %{}, "plane") == plane,
         do: craft.spacecraft_id
   end
-
-  defp thresholds(organization_id, mission_id, rows) do
-    keys = rows |> Enum.map(&definition_key/1) |> Enum.uniq()
-
-    organization_id
-    |> Cadence.Limits.fetch_limit_definitions(mission_id, keys)
-    |> Map.new(fn {key, definition} -> {key, definition.thresholds} end)
-  end
-
-  defp definition_key(row), do: {row.limit_definition_id, row.limit_definition_version}
-
-  defp summary(summary) do
-    %{
-      active: summary.active,
-      critical: summary.critical,
-      caution: summary.warning,
-      latest_transition_at: summary.latest_transition_at
-    }
-  end
-
-  defp severity(:red), do: :critical
-  defp severity(:yellow), do: :caution
-  defp severity(_other), do: :nominal
-
-  defp alarms_severity("critical"), do: "critical"
-  defp alarms_severity("caution"), do: "warning"
-  defp alarms_severity(_other), do: nil
 end

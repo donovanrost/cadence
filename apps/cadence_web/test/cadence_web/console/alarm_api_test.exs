@@ -1,6 +1,7 @@
 defmodule CadenceWeb.Console.AlarmAPITest do
   use CadenceWeb.ConnCase, async: false
 
+  alias Cadence.MonitoringPlanFixtures
   alias CadenceWeb.MissionReadModelFixtures
   alias CadenceWeb.TestFixtures
 
@@ -19,13 +20,25 @@ defmodule CadenceWeb.Console.AlarmAPITest do
     |> get("/api/v1/missions/#{c.mission.mission_id}" <> path)
   end
 
-  describe "with limit evaluations" do
+  # The runtime's latest alarm states (#451 T3c): HK.counter in a warning, HK.voltage back in normal.
+  defp seed_alarm_states(c) do
+    org = c.org.organization_id
+    mission = c.mission.mission_id
+    MonitoringPlanFixtures.alarm_state!(org, mission, "spacecraft-001", "HK.counter", "warning")
+
+    MonitoringPlanFixtures.alarm_state!(org, mission, "spacecraft-001", "HK.voltage", "normal",
+      seconds_ago: 30
+    )
+  end
+
+  describe "with live alarm states" do
     setup c do
       MissionReadModelFixtures.seed_mission_read_models(
         c.org.organization_id,
         c.mission.mission_id
       )
 
+      seed_alarm_states(c)
       :ok
     end
 
@@ -45,7 +58,8 @@ defmodule CadenceWeb.Console.AlarmAPITest do
                data["alarms"]
     end
 
-    test "lists the active alarm with thresholds and first-crossed time", c do
+    test "lists the active alarm with its first-crossed time; what a live alarm lacks is null",
+         c do
       data = c |> get_json("/alarms") |> json_response(200) |> Map.fetch!("data")
 
       assert data["summary"]["active"] == 1
@@ -58,14 +72,11 @@ defmodule CadenceWeb.Console.AlarmAPITest do
       assert alarm["point"]["description"] == nil
       assert alarm["severity"] == "caution"
       assert alarm["active"] == true
-      assert alarm["value"] == 30
-
-      assert alarm["thresholds"] == %{
-               "red_low" => nil,
-               "yellow_low" => nil,
-               "yellow_high" => 20,
-               "red_high" => nil
-             }
+      # A state is written on a transition: no sampled value, no ground-limit words.
+      assert alarm["value"] == nil
+      assert alarm["condition"] == nil
+      assert alarm["limit_set_name"] == nil
+      assert alarm["thresholds"] == nil
 
       assert is_binary(alarm["first_crossed_at"])
       assert is_binary(alarm["received_at"])
