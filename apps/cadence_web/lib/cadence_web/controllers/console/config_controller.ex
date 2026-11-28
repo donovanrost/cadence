@@ -19,8 +19,11 @@ defmodule CadenceWeb.Console.ConfigController do
   alias Cadence.Reads.{ChangeSetOutcome, ChangeSetViewer, ConfigKindSchema, ConfigLabels}
   alias CadenceWeb.Console.{ConfigJSON, ConfigParams, Problem}
 
-  def show(conn, _params) do
-    with {:ok, current} <- Configuration.current(scope(conn), mission_id(conn)),
+  # `?lane=` picks the staged bar (ADR-020 P3, #451): configuration by default, so today's
+  # screens are unchanged; monitoring adds a bounded summary of its sets in review.
+  def show(conn, params) do
+    with {:ok, lane} <- lane(params),
+         {:ok, current} <- Configuration.current(scope(conn), mission_id(conn), lane),
          {:ok, permissions} <- Configuration.permissions(scope(conn), mission_id(conn)) do
       current = Map.update!(current, :change_set, &annotate(conn, &1))
 
@@ -28,6 +31,10 @@ defmodule CadenceWeb.Console.ConfigController do
     end
     |> reply(conn)
   end
+
+  defp lane(%{"lane" => lane}) when lane in ["configuration", "monitoring"], do: {:ok, lane}
+  defp lane(%{"lane" => _other}), do: {:error, :invalid_lane}
+  defp lane(_params), do: {:ok, "configuration"}
 
   def change_set(conn, %{"change_set_id" => id}) do
     case Configuration.change_set(scope(conn), mission_id(conn), id) do
