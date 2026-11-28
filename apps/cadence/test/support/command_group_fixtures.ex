@@ -5,16 +5,21 @@ defmodule Cadence.CommandGroupFixtures do
   alias Cadence.Activations.ActiveBindingSetRow
   alias Cadence.Auth.Scope
   alias Cadence.Catalog.{FleetSnapshot, SpacecraftConfigurationInput}
+  alias Cadence.Catalog.MissionModel.Layer
   alias Cadence.CommandAuthoringFixtures
   alias Cadence.Commanding.Groups.Validation
   alias Cadence.CommandReviewFixtures
   alias Cadence.Comms.Transport
+  alias Cadence.Configuration.{ChangeSetStore, Ledger}
   alias Cadence.Contacts.ProviderReservation
+  alias Cadence.Control.{AuthoredVersions, ModelWithdrawal}
   alias Cadence.Control.Contacts.Store.ProviderReservationRow
-  alias Cadence.Control.ModelWithdrawal
   alias Cadence.ExactCommandAuthoringFixtures
   alias Cadence.Ids
   alias Cadence.Management.Transports
+  alias Cadence.MissionModelApproval
+  alias Cadence.MissionModels
+  alias Cadence.MissionModels.Compositions
   alias Cadence.Persistence.JsonDocument
   alias Cadence.ProviderChangeFixtures
   alias Cadence.Reads.CommandPreflight
@@ -61,9 +66,10 @@ defmodule Cadence.CommandGroupFixtures do
 
   @doc """
   Every craft of `c` runs the revision the mission's active generation was imported with: a fleet
-  snapshot on the active generation (what `Control.WithdrawnPins` reads).
+  snapshot on the active generation (what `Control.WithdrawnPins` reads). `manifests` is `%{
+  spacecraft_id => model manifest}` for the craft that run another revision (`head_manifest!/1`).
   """
-  def pin_fleet!(c) do
+  def pin_fleet!(c, manifests \\ %{}) do
     row = Repo.get!(ActiveBindingSetRow, c.mission)
     metadata = JsonDocument.unwrap_value(row.metadata)
 
@@ -80,7 +86,7 @@ defmodule Cadence.CommandGroupFixtures do
                "catalog_revision_id" => "cat-1",
                "commanding_enabled" => true
              }),
-           "mission_model" => metadata["mission_model"],
+           "mission_model" => Map.get(manifests, id, metadata["mission_model"]),
            "source_endpoint_ids" => [Cadence.SourceEndpoints.managed_source_endpoint_id(id)],
            "telemetry_capability_ids" => []
          }}
@@ -115,13 +121,103 @@ defmodule Cadence.CommandGroupFixtures do
     ]
   end
 
+  @doc """
+  The model manifests of `c`'s model composed (`:base`, approved) and compiled at an authored head
+  (`:head`, ADR-020 P3): the mission's authored layer is recorded as a version by an applied
+  monitoring change set, and the composition is compiled at it. The head revision's approval is
+  its base's. Both run the same commands as `c`'s model.
+  """
+  def head_manifests!(c) do
+    # The exact-authoring model is imported as one layer; compose it, and link its base.
+    {:ok, imported} = MissionModels.fetch_revision(c.org, c.mission, c.revision_id)
+
+    {:ok, composition} =
+      Compositions.insert_or_get(
+        c.org,
+        c.mission,
+        Enum.map(imported.layer_ids, &{&1, "/"}),
+        %{"actor_kind" => "system", "system_id" => "fixture"}
+      )
+
+    {:ok, base_id} =
+      Compositions.effective_revision(
+        c.org,
+        c.mission,
+        composition.composition_id,
+        nil
+      )
+
+    MissionModelApproval.approve!(c.org, c.mission, base_id)
+
+    suffix = Integer.to_string(System.unique_integer([:positive]))
+
+    {:ok, layer} =
+      MissionModels.persist_layer(
+        Layer.new(%{
+          organization_id: c.org,
+          mission_id: c.mission,
+          layer_kind: :authored,
+          name: "mission monitoring",
+          declarations: [%{kind: :parameter, qualified_name: "/authored/" <> suffix}]
+        })
+      )
+
+    # An applied monitoring change set, as revision 1, approved the layer.
+    Ledger.ensure_head(c.org, c.mission)
+
+    {:ok, set} =
+      Repo.transaction(fn ->
+        ChangeSetStore.lock_or_open(
+          c.org,
+          c.mission,
+          1,
+          %{"kind" => "user", "id" => "u"},
+          "monitoring"
+        )
+      end)
+
+    set =
+      set
+      |> Ecto.Changeset.change(
+        state: "applied",
+        applied_revision_number: 1,
+        policy_document: %{"approval_required" => true}
+      )
+      |> Repo.update!()
+
+    {:ok, _version} =
+      AuthoredVersions.record(
+        c.org,
+        c.mission,
+        layer.layer_id,
+        set.change_set_id,
+        1
+      )
+
+    {:ok, head_revision} =
+      Compositions.effective_revision(
+        c.org,
+        c.mission,
+        composition.composition_id,
+        layer.layer_id
+      )
+
+    %{base: manifest!(c, base_id), head: manifest!(c, head_revision)}
+  end
+
+  defp manifest!(c, revision_id) do
+    {:ok, revision} = MissionModels.fetch_revision(c.org, c.mission, revision_id)
+    {:ok, plans} = MissionModels.fetch_runtime_plans(c.org, c.mission, revision_id)
+    MissionModels.manifest(revision, plans)
+  end
+
   @doc "Withdraws the approval of the revision `pin_fleet!/1`'s craft run, through the real path."
-  def withdraw_approval!(c) do
+  def withdraw_approval!(c, revision_id \\ nil) do
     {:ok, _revision} =
       ModelWithdrawal.withdraw(
         c.scope,
         c.mission,
-        c.revision_id,
+        revision_id || c.revision_id,
         "Limits were wrong"
       )
 

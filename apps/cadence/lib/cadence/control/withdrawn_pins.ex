@@ -7,11 +7,16 @@ defmodule Cadence.Control.WithdrawnPins do
   - Keyed on what the craft's **active generation runs** (its fleet entry's model revision), not
     on the profile's pin: that's the model a command is encoded and verified against, and the
     craft stays on it until a new configuration is applied (U109).
+  - A craft that runs a **head** revision (a composition compiled at the mission's authored head,
+    ADR-020 P3) has no withdrawal of its own: its approval is its base's
+    (`MissionModels.approval_bases/3`; a revision not at a head is its own base). The withdrawal
+    read, the pin and `hold_basis` are the **base's**, and `affected/2` is keyed by the base, the
+    revision whose approval was withdrawn (#1100). The pin also says which revision the craft runs.
   - A fixed number of queries for any number of craft, never one per craft: the active
     activation, the craft's fleet entries, the withdrawn revisions among them, their decision
     records and their compositions.
-  - `hold_basis` is `"<revision_id>:withdrawn:<decided_at>"`, so an acknowledgement covers exactly
-    that decision. It gains the record id additively later (#878).
+  - `hold_basis` is `"<revision_id>:withdrawn:<decided_at>"` (the withdrawn revision, the base for a
+    craft on a head), so an acknowledgement covers exactly that decision. It gains the record id additively later (#878).
   """
 
   import Ecto.Query
@@ -20,6 +25,7 @@ defmodule Cadence.Control.WithdrawnPins do
   alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Catalog.ModelRevisions
   alias Cadence.Control.ActorRef
+  alias Cadence.MissionModels
 
   alias Cadence.MissionModels.{
     CompositionViews,
@@ -34,6 +40,7 @@ defmodule Cadence.Control.WithdrawnPins do
   @type pin :: %{
           composition_id: binary() | nil,
           revision_id: binary(),
+          running_revision_id: binary(),
           decision: map(),
           hold_basis: binary(),
           earlier_approved: %{revision_id: binary(), catalog_revision: map() | nil} | nil
@@ -48,7 +55,8 @@ defmodule Cadence.Control.WithdrawnPins do
   def for_spacecraft(organization_id, mission_id, spacecraft_ids, activation)
       when is_binary(organization_id) and is_binary(mission_id) and is_list(spacecraft_ids) do
     running = running(organization_id, mission_id, Enum.uniq(spacecraft_ids), activation)
-    withdrawn = withdrawn(organization_id, mission_id, running |> Map.values() |> Enum.uniq())
+    bases = bases(organization_id, mission_id, running)
+    withdrawn = withdrawn(organization_id, mission_id, bases |> Map.values() |> Enum.uniq())
 
     if withdrawn == %{} do
       %{}
@@ -59,11 +67,13 @@ defmodule Cadence.Control.WithdrawnPins do
       names = ActorRef.names(organization_id, withdrawn |> Map.values() |> Enum.map(& &1.actor))
 
       pins =
-        for {spacecraft_id, revision_id} <- running,
-            %DecisionRow{} = record <- [Map.get(withdrawn, revision_id)],
+        for {spacecraft_id, running_revision} <- running,
+            base = Map.fetch!(bases, running_revision),
+            %DecisionRow{} = record <- [Map.get(withdrawn, base)],
             into: %{},
             do:
-              {spacecraft_id, pin(revision_id, record, Map.get(compositions, revision_id), names)}
+              {spacecraft_id,
+               pin(base, running_revision, record, Map.get(compositions, base), names)}
 
       with_earlier(organization_id, mission_id, pins)
     end
@@ -88,17 +98,23 @@ defmodule Cadence.Control.WithdrawnPins do
     |> binary_part(0, 32)
   end
 
-  @doc "Every withdrawn revision any craft of the mission runs, with its craft: `%{revision_id => [spacecraft_id]}`."
+  @doc """
+  Every withdrawn revision any craft of the mission runs, with its craft: `%{revision_id =>
+  [spacecraft_id]}`. A craft on a head revision is listed under its base, the revision whose
+  approval was withdrawn.
+  """
   @spec affected(binary(), binary()) :: %{binary() => [binary()]}
   def affected(organization_id, mission_id) do
     with {:ok, activation} <- Activations.fetch_active_activation(organization_id, mission_id),
          {:ok, entries} <- FleetSnapshot.entries(activation.metadata) do
       running = Map.new(entries, fn {id, entry} -> {id, revision(entry)} end)
-      withdrawn = withdrawn(organization_id, mission_id, running |> Map.values() |> Enum.uniq())
+      bases = bases(organization_id, mission_id, running)
+      withdrawn = withdrawn(organization_id, mission_id, bases |> Map.values() |> Enum.uniq())
 
       running
-      |> Enum.filter(fn {_id, revision} -> Map.has_key?(withdrawn, revision) end)
-      |> Enum.group_by(fn {_id, revision} -> revision end, fn {id, _revision} -> id end)
+      |> Enum.map(fn {id, revision} -> {id, Map.get(bases, revision)} end)
+      |> Enum.filter(fn {_id, base} -> Map.has_key?(withdrawn, base) end)
+      |> Enum.group_by(fn {_id, base} -> base end, fn {id, _base} -> id end)
     else
       _none -> %{}
     end
@@ -122,6 +138,13 @@ defmodule Cadence.Control.WithdrawnPins do
     do: Activations.fetch_active_activation(organization_id, mission_id)
 
   defp held_or_active(activation, _organization_id, _mission_id), do: {:ok, activation}
+
+  # `%{running_revision => approval base}` for the revisions the craft run (`nil` for a craft with
+  # no model): one read for any number of revisions.
+  defp bases(organization_id, mission_id, running) do
+    revisions = running |> Map.values() |> Enum.filter(&is_binary/1) |> Enum.uniq()
+    MissionModels.approval_bases(organization_id, mission_id, revisions)
+  end
 
   # A fleet entry's model revision (fleet snapshot v2; #764 deleted the v1 path).
   defp revision(%{"mission_model" => %{"revision_id" => id}}) when is_binary(id), do: id
@@ -169,10 +192,11 @@ defmodule Cadence.Control.WithdrawnPins do
     end)
   end
 
-  defp pin(revision_id, record, composition_id, names) do
+  defp pin(revision_id, running_revision_id, record, composition_id, names) do
     %{
       composition_id: composition_id,
       revision_id: revision_id,
+      running_revision_id: running_revision_id,
       decision: decision(record, names),
       hold_basis: "#{revision_id}:withdrawn:#{DateTime.to_iso8601(record.decided_at)}"
     }
