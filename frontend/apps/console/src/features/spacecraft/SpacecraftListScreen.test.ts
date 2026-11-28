@@ -48,14 +48,18 @@ function server(total: number, size: number) {
       const body = {
         data: {
           spacecraft: all.slice(from, to).map(row),
-          summary: {
-            total,
-            profiles: 0,
-            without_profile: total,
-            without_scid: 0,
-            without_routing_rule: total,
-            awaiting_first_aos: total,
-          },
+          ...(cursor === null
+            ? {
+                summary: {
+                  total,
+                  profiles: 0,
+                  without_profile: total,
+                  without_scid: 0,
+                  without_routing_rule: total,
+                  awaiting_first_aos: total,
+                },
+              }
+            : {}),
           telemetry: "ok",
         },
         meta: { next_cursor: to < all.length ? String(to) : null },
@@ -128,6 +132,9 @@ describe("Setup › Spacecraft directory (#796)", () => {
     await flushPromises();
     expect(w.findAll("tbody tr")).toHaveLength(400);
     expect((document.activeElement as HTMLElement).textContent).toBe("Craft 201");
+    // The later page sent no counts: the subtitle and the shown-of-total keep the first page's.
+    expect(w.text()).toContain("450 spacecraft");
+    expect(w.text()).toContain("400 of 450");
     w.unmount();
   });
 
