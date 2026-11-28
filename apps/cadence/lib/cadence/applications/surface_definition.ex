@@ -7,7 +7,6 @@ defmodule Cadence.Applications.SurfaceDefinition do
   """
 
   alias Cadence.Applications.ActionDefinition
-  alias Cadence.Applications.ApplicationDependency
   alias Cadence.Extensions.Presentation.ReferenceDefinition
 
   @type purpose ::
@@ -44,8 +43,7 @@ defmodule Cadence.Applications.SurfaceDefinition do
           references: %{optional(binary()) => ReferenceDefinition.t()},
           actions: [binary()],
           refresh: refresh(),
-          renderer: renderer(),
-          required_application: ApplicationDependency.t() | nil
+          renderer: renderer()
         }
 
   @enforce_keys [
@@ -66,7 +64,6 @@ defmodule Cadence.Applications.SurfaceDefinition do
     :placement,
     :subject_contract,
     :renderer,
-    :required_application,
     navigation: %{},
     data_contract: %{},
     references: %{},
@@ -102,27 +99,13 @@ defmodule Cadence.Applications.SurfaceDefinition do
          true <- valid_actions?(surface.actions),
          true <- valid_refresh?(surface.refresh),
          true <- valid_renderer?(surface.renderer) do
-      validate_required_application(surface.required_application)
+      :ok
     else
       _invalid -> {:error, :invalid_application_surface_definition}
     end
   end
 
   def validate(_surface), do: {:error, :invalid_application_surface_definition}
-
-  defp validate_required_application(nil), do: :ok
-
-  defp validate_required_application(
-         %ApplicationDependency{scope: :same_host, required: true} = dependency
-       ) do
-    case ApplicationDependency.validate(dependency) do
-      :ok -> :ok
-      _invalid -> {:error, :invalid_application_surface_definition}
-    end
-  end
-
-  defp validate_required_application(_dependency),
-    do: {:error, :invalid_application_surface_definition}
 
   defp valid_subject_contract?(nil), do: true
 

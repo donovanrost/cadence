@@ -99,13 +99,9 @@ test("each core host route resolves to its registered owner", () => {
       ]);
       continue;
     }
-    if (
-      route.kind === "application_surface" ||
-      route.kind === "spacecraft" ||
-      route.kind === "catalog"
-    ) {
-      // Not served by this host: catalogued only so the components that still render these pages
-      // (federated apps, trusted application surfaces) can type their header by the path.
+    if (route.kind === "application_surface") {
+      // Not served by this host: catalogued only so the trusted application surfaces that still
+      // render these pages can type their header by the path.
       expect(hostRoute(new URL(route.path, "https://cadence.test"))).toBeUndefined();
       expect(route).not.toHaveProperty("application");
       continue;

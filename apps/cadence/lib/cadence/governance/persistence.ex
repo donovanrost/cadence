@@ -86,8 +86,8 @@ defmodule Cadence.Governance.Persistence do
     end
   end
 
-  def persist_binding_set(repo, %BindingSet{} = binding_set) do
-    changeset = BindingSetRow.changeset(binding_set)
+  def persist_binding_set(repo, %BindingSet{} = binding_set, storage \\ %{}) do
+    changeset = BindingSetRow.changeset(binding_set, storage)
 
     case repo.insert(changeset,
            on_conflict: :nothing,
@@ -103,6 +103,55 @@ defmodule Cadence.Governance.Persistence do
 
       {:error, %Changeset{} = changeset} ->
         {:error, changeset}
+    end
+  end
+
+  @doc """
+  The instance and rule rows `persist_capability_instances/3` and `persist_binding_rules/4` would
+  insert, built by the same changesets but not inserted (#447 compresses them).
+
+  Those inserts are `ON CONFLICT DO NOTHING` on `(binding set, instance id)` and `(binding set,
+  rule id)`: a second copy of an id in the same set is dropped and the first stays. This models
+  that, in write order, so what is compressed and compared is what a rows write keeps, not the
+  duplicates the in-memory set may still hold (ground-scale, #1013).
+  """
+  def binding_rows(%BindingSet{} = binding_set) do
+    by_id = Map.new(binding_set.capability_instances, &{&1.capability_instance_id, &1})
+
+    with {:ok, instances} <- map_ok(binding_set.capability_instances, &instance_row/1),
+         {:ok, rules} <- map_ok(binding_set.rules, &rule_row(&1, by_id)) do
+      {:ok, Enum.uniq_by(instances, & &1.capability_instance_id),
+       Enum.uniq_by(rules, & &1.binding_rule_id)}
+    end
+  end
+
+  defp instance_row(%CapabilityInstance{} = capability_instance) do
+    with {:ok, attrs} <- capability_instance_config_attrs(capability_instance) do
+      0 |> CapabilityInstanceRow.changeset(capability_instance, attrs) |> applied()
+    end
+  end
+
+  defp rule_row(%BindingRule{} = rule, by_id) do
+    with {:ok, attrs} <- binding_rule_persistence_attrs(rule, by_id) do
+      0 |> BindingRuleRow.changeset(rule, attrs) |> applied()
+    end
+  end
+
+  defp applied(%Changeset{valid?: true} = changeset),
+    do: {:ok, Changeset.apply_changes(changeset)}
+
+  defp applied(%Changeset{} = changeset), do: {:error, changeset}
+
+  defp map_ok(items, fun) do
+    Enum.reduce_while(items, {:ok, []}, fn item, {:ok, acc} ->
+      case fun.(item) do
+        {:ok, value} -> {:cont, {:ok, [value | acc]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, values} -> {:ok, Enum.reverse(values)}
+      error -> error
     end
   end
 

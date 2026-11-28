@@ -44,12 +44,6 @@ defmodule Cadence.Contacts do
     LinkAssignmentStore.fetch(mission_id, link_assignment_id)
   end
 
-  @spec list_link_assignments(binary(), binary()) :: [LinkAssignment.t()]
-  def list_link_assignments(organization_id, mission_id)
-      when is_binary(organization_id) and is_binary(mission_id) do
-    LinkAssignmentStore.list(organization_id, mission_id)
-  end
-
   @spec persist_provider_profile(ProviderProfile.t()) ::
           {:ok, ProviderProfile.t()} | {:error, term()}
   def persist_provider_profile(%ProviderProfile{} = provider_profile) do
@@ -175,17 +169,6 @@ defmodule Cadence.Contacts do
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(path_template_id) and is_integer(version) and version > 0 do
     PathTemplateStore.fetch_version(organization_id, mission_id, path_template_id, version)
-  end
-
-  @spec list_path_templates(binary()) :: [PathTemplate.t()]
-  def list_path_templates(mission_id) when is_binary(mission_id) do
-    PathTemplateStore.list(mission_id)
-  end
-
-  @spec list_path_templates(binary(), binary()) :: [PathTemplate.t()]
-  def list_path_templates(organization_id, mission_id)
-      when is_binary(organization_id) and is_binary(mission_id) do
-    PathTemplateStore.list(organization_id, mission_id)
   end
 
   @spec version_path_template(binary(), binary(), binary(), map()) ::

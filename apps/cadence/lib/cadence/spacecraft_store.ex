@@ -11,6 +11,7 @@ defmodule Cadence.SpacecraftStore do
 
   alias Cadence.Listing
   alias Cadence.Missions
+  alias Cadence.Persistence.JsonDocument
   alias Cadence.Platform.PassPredictionJobs
   alias Cadence.Repo
   alias Cadence.Spacecraft
@@ -185,6 +186,75 @@ defmodule Cadence.SpacecraftStore do
       organization_id,
       mission_id
     )
+  end
+
+  @doc """
+  Locks the given mission spacecraft in one statement, in id order (`FOR UPDATE`, so a single-row
+  locker taking the same rows in the same order can't deadlock with it), and returns them by id.
+  `{:error, :spacecraft_not_found}` if any is missing. Call it inside a transaction: the locks last
+  until it ends (admission, #1020).
+  """
+  @spec lock_spacecraft(binary(), binary(), [binary()]) ::
+          {:ok, %{binary() => Spacecraft.t()}} | {:error, :spacecraft_not_found}
+  def lock_spacecraft(organization_id, mission_id, spacecraft_ids)
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(spacecraft_ids) do
+    ids = Enum.uniq(spacecraft_ids)
+
+    rows =
+      from(row in SpacecraftRow,
+        where:
+          row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+            row.spacecraft_id in ^ids,
+        order_by: [asc: row.spacecraft_id],
+        lock: "FOR UPDATE"
+      )
+      |> Repo.all()
+
+    if length(rows) == length(ids),
+      do: {:ok, Map.new(rows, &{&1.spacecraft_id, SpacecraftRow.to_domain(&1)})},
+      else: {:error, :spacecraft_not_found}
+  end
+
+  @doc """
+  Sets many spacecraft's profile pin and metadata in one statement: `updates` is `[%{spacecraft_id,
+  spacecraft_type_id, spacecraft_type_version, metadata}]`. What admitting a review does to each
+  spacecraft, once for the whole review (#1020). Announces the configuration change once.
+  """
+  @spec put_pins(binary(), binary(), [map()]) :: :ok
+  def put_pins(_organization_id, _mission_id, []), do: :ok
+
+  def put_pins(organization_id, mission_id, updates)
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(updates) do
+    ids = Enum.map(updates, & &1.spacecraft_id)
+    types = Enum.map(updates, & &1.spacecraft_type_id)
+    versions = Enum.map(updates, & &1.spacecraft_type_version)
+
+    metadata =
+      Enum.map(updates, &(&1.metadata |> JsonDocument.wrap_value() |> Jason.encode!()))
+
+    from(row in SpacecraftRow,
+      join:
+        pin in fragment(
+          "SELECT * FROM unnest(?::text[], ?::text[], ?::int[], ?::text[]) AS t(spacecraft_id, type_id, type_version, metadata)",
+          type(^ids, {:array, :string}),
+          type(^types, {:array, :string}),
+          type(^versions, {:array, :integer}),
+          type(^metadata, {:array, :string})
+        ),
+      on: pin.spacecraft_id == row.spacecraft_id,
+      where: row.organization_id == ^organization_id and row.mission_id == ^mission_id,
+      update: [
+        set: [
+          spacecraft_type_id: pin.type_id,
+          spacecraft_type_version: pin.type_version,
+          metadata: fragment("?::jsonb", pin.metadata)
+        ]
+      ]
+    )
+    |> Repo.update_all([])
+
+    ScopedReadUpdates.publish(:spacecraft_configuration_changed, organization_id, mission_id)
+    :ok
   end
 
   @spec fetch_spacecraft(binary(), binary(), binary()) ::

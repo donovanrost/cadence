@@ -3,18 +3,15 @@ import { readFileSync, readdirSync } from "node:fs";
 import { dirname, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vite-plus/test";
-import { OpsCommands, SpacecraftCommanding } from "./index";
+import { OpsCommands } from "./index";
 import LegacyCommands from "../../../apps/ops-console/src/OpsCommands.vue";
-import LegacySpacecraftCommanding from "../../../apps/spacecraft/src/SpacecraftCommanding.vue";
 
 const directory = dirname(fileURLToPath(import.meta.url));
 
 test("legacy entries delegate to the exact public feature implementations", () => {
   expect(LegacyCommands).toBe(OpsCommands);
-  expect(LegacySpacecraftCommanding).toBe(SpacecraftCommanding);
   for (const [path, entry] of [
     ["../../../apps/ops-console/src/OpsCommands.vue", "mission-commands"],
-    ["../../../apps/spacecraft/src/SpacecraftCommanding.vue", "spacecraft-commanding"],
   ]) {
     const source = readFileSync(resolve(directory, required(path)), "utf8");
     expect(source).toContain(`@cadence/commanding/${entry}`);
@@ -39,7 +36,7 @@ test("features own their contracts and cannot depend on delivery or sibling inte
       }
     }
   }
-  for (const feature of ["mission-commands", "spacecraft-commanding"]) {
+  for (const feature of ["mission-commands"]) {
     expect(readFileSync(resolve(directory, "features", feature, "contracts.ts"), "utf8")).toContain(
       "export type",
     );

@@ -16,9 +16,7 @@ defmodule CadenceWeb.CatalogRegistryValidityTest do
     DerivedTelemetry,
     LegacyCommsOverview,
     Limits,
-    MissionCatalog,
     OpsConsole,
-    Spacecraft,
     TelemetryDecomCatalogContribution
   }
 
@@ -26,8 +24,6 @@ defmodule CadenceWeb.CatalogRegistryValidityTest do
     Comms,
     LegacyCommsOverview,
     Limits,
-    MissionCatalog,
-    Spacecraft,
     TelemetryDecomCatalogContribution,
     OpsConsole,
     DerivedTelemetry

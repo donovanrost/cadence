@@ -8,7 +8,6 @@ defmodule CadenceWeb.ApplicationHostBridgeTest do
     ApplicationInstallations,
     HostContext,
     JSONBoundary,
-    Spacecraft,
     SurfaceDefinition
   }
 
@@ -140,41 +139,6 @@ defmodule CadenceWeb.ApplicationHostBridgeTest do
     refute ApplicationHostBridge.action_scope_compatible?(
              third_party,
              organization_surface,
-             mission_action
-           )
-
-    refute ApplicationHostBridge.action_scope_compatible?(
-             %ApplicationDefinition{third_party | application_key: "mission_catalog"},
-             organization_surface,
-             %ActionDefinition{mission_action | action_id: "save"}
-           )
-  end
-
-  # Host-action sweep row 2: the Spacecraft form surfaces (new, profile_new, edit) and their
-  # validate/save actions are gone; the console's change sets edit spacecraft.
-  test "Spacecraft declares no form surface and no mission-scope action" do
-    definition = Spacecraft.definition()
-    surface_ids = Enum.map(definition.surfaces, & &1.surface_id)
-
-    for form <- ~w(new profile_new edit), do: refute(form in surface_ids)
-
-    for action_id <- ~w(validate save),
-        do: assert({:error, _} = ApplicationDefinition.fetch_action(definition, action_id))
-
-    refute Enum.any?(definition.actions, &(&1.scope == :mission))
-  end
-
-  test "rejects a mission action on a different Spacecraft surface" do
-    definition = Spacecraft.definition()
-    show_surface = Enum.find(definition.surfaces, &(&1.surface_id == "show"))
-    {:ok, install} = ApplicationDefinition.fetch_action(definition, "install")
-    mission_action = %ActionDefinition{install | action_id: "probe", scope: :mission}
-
-    assert %SurfaceDefinition{surface_id: "show", scope: :spacecraft} = show_surface
-
-    refute ApplicationHostBridge.action_scope_compatible?(
-             definition,
-             show_surface,
              mission_action
            )
   end

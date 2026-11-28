@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { useRoute } from "vue-router";
 import { useRemoteQuery, type SpacecraftId } from "@/api";
 import { paramText, useMissionScope } from "@/shell";
 import {
@@ -17,7 +17,7 @@ import { fetchSpacecraftDetail } from "@/features/spacecraft/index.ts";
 import { fetchScopedApps } from "./api.ts";
 import { fetchSurfaceHost } from "./host.ts";
 import type { SaveOutcome } from "./saveOutcome.ts";
-import { hostRefusal, retiredSurfaceHome, setupSurfaces } from "./surfaces.ts";
+import { hostRefusal, setupSurfaces } from "./surfaces.ts";
 import SurfaceMount from "./SurfaceMount.vue";
 
 /**
@@ -28,7 +28,6 @@ import SurfaceMount from "./SurfaceMount.vue";
 const props = defineProps<{ spacecraftId?: SpacecraftId | null }>();
 const route = useRoute();
 const spacecraftId = computed(() => props.spacecraftId ?? null);
-const router = useRouter();
 const scope = useMissionScope();
 const missionId = computed(() => scope.value.mission.id);
 const appKey = computed(() => paramText(route.params, "appKey"));
@@ -42,23 +41,11 @@ const app = computed(() =>
     : null,
 );
 const surfaces = computed(() => setupSurfaces(app.value?.surfaces ?? []));
-// A retired surface (a bookmark or an old link) goes to its console home, never an empty tab (ux),
-// without first asking the server for a host it no longer has (qa 11:22Z).
-const retiredHome = computed(() =>
-  retiredSurfaceHome(appKey.value, paramText(route.params, "surface"), spacecraftId.value),
-);
-watch(
-  retiredHome,
-  (home) => {
-    if (home) void router.replace(home).catch(() => undefined);
-  },
-  { immediate: true },
-);
 const surfaceId = computed(
   () => paramText(route.params, "surface") || (surfaces.value[0]?.surface_id ?? null),
 );
 const key = computed(() =>
-  surfaceId.value && !retiredHome.value
+  surfaceId.value
     ? {
         missionId: missionId.value,
         appKey: appKey.value,

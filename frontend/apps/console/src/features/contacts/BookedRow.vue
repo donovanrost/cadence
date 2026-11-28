@@ -5,6 +5,7 @@ import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { useRemoteQuery } from "@/api/index.ts";
 import { fetchPass, type Pass } from "./api.ts";
+import { planRoute, requirementRoute } from "./planLinks.ts";
 
 /**
  * D2's 'Booked' row (ux U74): 'From the 11-14 plan (R3) · for Block 1 daily', both links. A plan
@@ -30,18 +31,7 @@ const planWords = computed(() => {
   const r = p.version === null ? "" : ` (R${p.version})`;
   return p.day ? `the ${p.day.slice(5, 10)} plan${r}` : `a contact plan${r}`;
 });
-const planTo = computed<RouteLocationRaw | null>(() => {
-  const p = plan.value;
-  if (!p) return null;
-  return {
-    name: "ops.contacts.plan",
-    query: {
-      plan: p.id,
-      ...(p.day ? { day: p.day.slice(0, 10) } : {}),
-      ...(p.version === null ? {} : { version: String(p.version) }),
-    },
-  };
-});
+const planTo = computed<RouteLocationRaw | null>(() => (plan.value ? planRoute(plan.value) : null));
 const requirement = computed(() => {
   const r = named.value.requirement;
   return r?.name ? { id: r.id, name: r.name } : null;
@@ -54,14 +44,9 @@ const requirement = computed(() => {
     From <RouterLink :to="planTo" class="text-readout hover:underline">{{ planWords }}</RouterLink
     ><template v-if="requirement">
       · for
-      <RouterLink
-        :to="{
-          name: 'setup.contact-planning.requirement',
-          params: { requirementId: requirement.id },
-        }"
-        class="text-readout hover:underline"
-        >{{ requirement.name }}</RouterLink
-      ></template
+      <RouterLink :to="requirementRoute(requirement.id)" class="text-readout hover:underline">{{
+        requirement.name
+      }}</RouterLink></template
     >
   </p>
 </template>

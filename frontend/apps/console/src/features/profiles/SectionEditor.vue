@@ -22,7 +22,7 @@ import {
   type PreviewCounts,
 } from "./sectionEdit.ts";
 import StagedEditAside from "./StagedEditAside.vue";
-import type { StagedField } from "./staged.ts";
+import { stagedConflict, type StagedField } from "./staged.ts";
 
 /** Profile.md P1 edit + P4 staged edit: one section's form, its dry run, and Stage edit. */
 const props = defineProps<{
@@ -56,7 +56,8 @@ const invalid = computed(() => (edits.value.ok ? null : "Fix the fields first"))
 const conflict = computed(() => {
   const other = dirty.value.map((f) => props.staged.get(f.path)).find((s) => s && !s.mine);
   return other
-    ? `${other.by} already staged ${labels[other.path] ?? other.path}. Resolve it on Staged changes first.`
+    ? // #308 (U25): a path with no field label reads "another setting", never the path.
+      stagedConflict(other, labels[other.path] ?? "another setting")
     : null;
 });
 const blocked = computed(() => invalid.value ?? conflict.value ?? noGo.value);

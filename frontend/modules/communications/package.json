@@ -4,7 +4,6 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./spacecraft-routing": "./src/spacecraft-routing.ts",
     "./form-surfaces": "./src/form-surfaces.ts",
     "./read-surfaces": "./src/read-surfaces.ts",
     ".": "./src/index.ts",

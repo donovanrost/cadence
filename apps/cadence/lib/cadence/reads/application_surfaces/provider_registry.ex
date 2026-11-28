@@ -19,8 +19,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.ProviderRegistry do
     case collect_contributions(
            [
              Cadence.Applications.Comms,
-             Cadence.Applications.Spacecraft,
-             Cadence.Applications.MissionCatalog,
              Cadence.Applications.TelemetryDecom,
              Cadence.Applications.DerivedTelemetry,
              Cadence.Applications.Limits,

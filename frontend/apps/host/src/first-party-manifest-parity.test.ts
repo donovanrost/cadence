@@ -5,10 +5,8 @@ import {
   type FederatedApplicationModule,
   type FederatedSurfaceDefinition,
 } from "@cadence/plugin-sdk";
-import { manifest as missionCatalog } from "../../mission-catalog/src/federated-application";
 import { manifest as opsConsole } from "../../ops-console/src/federated-application";
 import { manifest as organizationAdmin } from "../../organization-admin/src/federated-application";
-import { manifest as spacecraft } from "../../spacecraft/src/federated-application";
 
 type SurfaceRow = readonly [
   surfaceId: string,
@@ -43,97 +41,6 @@ const surface = ([
 });
 
 const expected = [
-  {
-    name: "mission_catalog",
-    manifest: missionCatalog,
-    package: { packageId: "cadence.mission-catalog", version: 1 },
-    displayName: "Mission & Catalog",
-    description: "Manage missions and the immutable catalog records they use.",
-    installableScopes: ["mission"] as const,
-    releaseId: (surfaceId: string) => `mission-catalog-${surfaceId}-v1`,
-    surfaces: [
-      [
-        "mission_overview",
-        "overview",
-        "mission",
-        "application_workspace",
-        "Mission overview",
-        30,
-        "cadence.mission_catalog.mission_overview",
-        [],
-      ],
-      [
-        "mission_applications",
-        "configuration",
-        "mission",
-        "application_workspace",
-        "Applications",
-        40,
-        "cadence.mission_catalog.mission_applications",
-        ["install", "disable", "uninstall"],
-      ],
-      [
-        "catalog_index",
-        "overview",
-        "mission",
-        "application_workspace",
-        "Catalog",
-        50,
-        "cadence.mission_catalog.catalog_index",
-        [],
-      ],
-      [
-        "catalog_database_new",
-        "configuration",
-        "mission",
-        "application_workspace",
-        "New database",
-        60,
-        "cadence.mission_catalog.catalog_database_new",
-        ["validate", "save", "cancel-upload"],
-      ],
-      [
-        "catalog_database_show",
-        "subject_detail",
-        "mission",
-        "application_workspace",
-        "Database",
-        70,
-        "cadence.mission_catalog.catalog_database_show",
-        ["toggle-revision-form", "validate", "save", "cancel-upload"],
-      ],
-      [
-        "catalog_revision_show",
-        "subject_detail",
-        "mission",
-        "application_workspace",
-        "Revision",
-        80,
-        "cadence.mission_catalog.catalog_revision_show",
-        [],
-      ],
-      [
-        "catalog_artifact_show",
-        "subject_detail",
-        "mission",
-        "application_workspace",
-        "Artifact",
-        90,
-        "cadence.mission_catalog.catalog_artifact_show",
-        ["reimport"],
-      ],
-      [
-        "catalog_import_run_show",
-        "activity",
-        "mission",
-        "application_workspace",
-        "Import run",
-        100,
-        "cadence.mission_catalog.catalog_import_run_show",
-        [],
-      ],
-    ] as SurfaceRow[],
-  },
   {
     name: "ops_console",
     manifest: opsConsole,
@@ -359,107 +266,6 @@ const expected = [
       ],
     ] as SurfaceRow[],
   },
-  {
-    name: "spacecraft",
-    manifest: spacecraft,
-    package: { packageId: "cadence.spacecraft", version: 1 },
-    displayName: "Spacecraft",
-    description: "Mission spacecraft configuration and operations surfaces.",
-    installableScopes: ["mission", "spacecraft"] as const,
-    releaseId: () => "spacecraft-v1",
-    surfaces: [
-      [
-        "list",
-        "overview",
-        "mission",
-        "application_workspace",
-        "Spacecraft",
-        10,
-        "cadence.spacecraft.list",
-        [],
-      ],
-      [
-        "profile_list",
-        "overview",
-        "mission",
-        "application_workspace",
-        "Spacecraft profiles",
-        30,
-        "cadence.spacecraft.profiles",
-        [],
-      ],
-      [
-        "profile_show",
-        "subject_detail",
-        "mission",
-        "application_workspace",
-        "Spacecraft profile",
-        50,
-        "cadence.spacecraft.profile.show",
-        [],
-      ],
-      [
-        "show",
-        "overview",
-        "spacecraft",
-        "application_workspace",
-        "Spacecraft overview",
-        10,
-        "cadence.spacecraft.show",
-        [],
-      ],
-      [
-        "readiness",
-        "overview",
-        "spacecraft",
-        "application_workspace",
-        "Spacecraft readiness",
-        30,
-        "cadence.spacecraft.readiness",
-        [],
-      ],
-      [
-        "routing",
-        "configuration",
-        "spacecraft",
-        "application_workspace",
-        "Spacecraft routing",
-        40,
-        "cadence.spacecraft.routing",
-        [],
-      ],
-      [
-        "commanding",
-        "operations",
-        "spacecraft",
-        "application_workspace",
-        "Spacecraft commanding",
-        50,
-        "cadence.spacecraft.commanding",
-        [],
-      ],
-      [
-        "applications",
-        "configuration",
-        "spacecraft",
-        "application_workspace",
-        "Spacecraft applications",
-        60,
-        "cadence.spacecraft.applications",
-        ["install", "disable", "uninstall"],
-      ],
-      [
-        "telemetry_decom",
-        "configuration",
-        "spacecraft",
-        "application_workspace",
-        "Telemetry decomposition",
-        70,
-        "cadence.telemetry_decom.manage",
-        ["save_configuration", "request_activation", "disable"],
-      ],
-    ] as SurfaceRow[],
-  },
 ] as const;
 
 function expectedSurfaces(rows: readonly SurfaceRow[]) {
@@ -479,7 +285,7 @@ function dtoFor(
     surface: surfaceDefinition,
     release: {
       federation: "module_federation",
-      releaseId: application.releaseId(surfaceDefinition.surfaceId),
+      releaseId: application.releaseId(),
       remoteName: `cadence_${application.name}`,
       manifestUrl: `/assets/application-host/${application.name.replaceAll("_", "-")}/mf-manifest.json`,
       exposedModule: "./Application",
@@ -524,7 +330,8 @@ describe("first-party federated manifest parity", () => {
 
     // Sweep row 2: spacecraft's new / profile_new / edit forms left (40 → 37); the
     // organization-admin notifications page left (37 → 36); the ops-console
-    // activation_requests surface left (36 → 35).
-    expect(surfaceCount).toBe(35);
+    // activation_requests surface left (36 → 35). #671: the Mission Catalog (8) and Spacecraft (9)
+    // remotes left (35 → 18).
+    expect(surfaceCount).toBe(18);
   });
 });
