@@ -63,22 +63,27 @@ defmodule Cadence.SemanticRuntime.PlanIndex do
   def empty?(%__MODULE__{empty?: empty?}), do: empty?
 
   @doc """
-  The monitoring plans of a parameter as `spacecraft_id` runs them: the compiled rule rows resolved
-  to that spacecraft's effective rules (`MonitoringPlan.effective/2`); plans without rule rows as
-  they are.
+  The monitoring policies of a parameter as `spacecraft_id` runs them (`MonitoringPlan.resolve/2`).
+  From the cache this reads the parameter's mission entries and that spacecraft's own, never
+  another craft's: the entries are keyed `{plan, :monitoring, parameter_id, :mission | spacecraft_id}`.
   """
   @spec monitoring_for(t(), binary(), binary() | nil) :: [MonitoringPlan.t()]
   def monitoring_for(index, parameter_id, spacecraft_id \\ nil) do
     index
-    |> monitoring_rows(parameter_id)
-    |> Enum.map(&MonitoringPlan.effective(&1, spacecraft_id))
+    |> monitoring_entries(parameter_id, spacecraft_id)
+    |> MonitoringPlan.resolve(spacecraft_id)
   end
 
-  defp monitoring_rows(%__MODULE__{table: nil, monitoring: monitoring}, parameter_id),
+  defp monitoring_entries(%__MODULE__{table: nil, monitoring: monitoring}, parameter_id, _craft),
     do: Map.get(monitoring, parameter_id, [])
 
-  defp monitoring_rows(%__MODULE__{table: table, plan_id: plan_id}, parameter_id),
-    do: lookup(table, {plan_id, :monitoring, parameter_id})
+  defp monitoring_entries(%__MODULE__{table: table, plan_id: plan_id}, parameter_id, nil),
+    do: lookup(table, {plan_id, :monitoring, parameter_id, :mission})
+
+  defp monitoring_entries(%__MODULE__{table: table, plan_id: plan_id}, parameter_id, craft) do
+    lookup(table, {plan_id, :monitoring, parameter_id, :mission}) ++
+      lookup(table, {plan_id, :monitoring, parameter_id, craft})
+  end
 
   @doc "The algorithms that read `parameter_id` as an input (the caller applies their triggers)."
   @spec algorithms_for_input(t(), binary()) :: [AlgorithmPlan.t()]
@@ -100,9 +105,11 @@ defmodule Cadence.SemanticRuntime.PlanIndex do
   # reads back. One definition of the grouping for both forms.
   @spec entries(term(), [AlgorithmPlan.t()], [MonitoringPlan.t()]) :: [{tuple(), list()}]
   def entries(plan_id, algorithms, monitoring) do
+    # One key per parameter per scope: the mission entries, and each craft's own.
     monitoring_entries =
-      for {parameter_id, plans} <- Enum.group_by(monitoring, & &1.parameter_id),
-          do: {{plan_id, :monitoring, parameter_id}, plans}
+      for {{parameter_id, scope_key}, plans} <-
+            Enum.group_by(monitoring, &{&1.parameter_id, scope_key(&1)}),
+          do: {{plan_id, :monitoring, parameter_id, scope_key}, plans}
 
     input_entries =
       for {parameter_id, plans} <- by_input(algorithms),
@@ -114,6 +121,11 @@ defmodule Cadence.SemanticRuntime.PlanIndex do
 
     monitoring_entries ++ input_entries ++ id_entries
   end
+
+  defp scope_key(%MonitoringPlan{scope: :spacecraft, spacecraft_id: id}) when is_binary(id),
+    do: id
+
+  defp scope_key(%MonitoringPlan{}), do: :mission
 
   defp by_input(algorithms) do
     algorithms

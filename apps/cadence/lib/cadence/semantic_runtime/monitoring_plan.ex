@@ -1,7 +1,14 @@
 defmodule Cadence.SemanticRuntime.MonitoringPlan do
-  @moduledoc "Executable monitoring policy for one semantic parameter."
+  @moduledoc """
+  Executable monitoring policy for one semantic parameter, at one scope.
 
-  alias Cadence.SemanticRuntime.EffectiveRules
+  The compiled plan's identity fields (ADR-020 P3, #451, from `MonitoringLowering`):
+  `rule_id` stays fixed across edits, `rule_digest` changes with what is evaluated, and `origin`
+  (`:catalog | :mission_layer`) with `declaration_id` says where the policy came from. `scope` is
+  `:mission` (`spacecraft_id: nil`, every craft on the revision) or `:spacecraft` (that craft
+  only). A partition takes, per `rule_id`, its craft's spacecraft entry when there is one, else the
+  mission entry (`resolve/2`). Plans compiled before P3 carry nil for all of these.
+  """
 
   @type t :: %__MODULE__{
           policy_id: binary(),
@@ -14,7 +21,11 @@ defmodule Cadence.SemanticRuntime.MonitoringPlan do
           invalid_state: atom(),
           disabled: boolean(),
           rule_digest: binary() | nil,
-          rules: [map()]
+          rule_id: binary() | nil,
+          origin: :catalog | :mission_layer | nil,
+          declaration_id: binary() | nil,
+          scope: :mission | :spacecraft | nil,
+          spacecraft_id: binary() | nil
         }
 
   @enforce_keys [:policy_id, :parameter_id]
@@ -31,10 +42,15 @@ defmodule Cadence.SemanticRuntime.MonitoringPlan do
                 # persistence counters reset and the result says so. nil (a plan without digests)
                 # never resets anything.
                 rule_digest: nil,
-                # The compiled rule rows of this parameter, every scope (#451 T2): see
-                # `effective/2`. Empty for a plan whose rules are all in `default_rules`.
-                rules: []
+                rule_id: nil,
+                origin: nil,
+                declaration_id: nil,
+                scope: nil,
+                spacecraft_id: nil
               ]
+
+  @origins %{"catalog" => :catalog, "mission_layer" => :mission_layer}
+  @scopes %{"mission" => :mission, "spacecraft" => :spacecraft}
 
   @spec new(map()) :: t()
   def new(attrs) when is_map(attrs) do
@@ -49,28 +65,49 @@ defmodule Cadence.SemanticRuntime.MonitoringPlan do
       invalid_state: attrs |> value(:invalid_state, :unknown) |> normalize_atom(),
       disabled: value(attrs, :disabled, false),
       rule_digest: value(attrs, :rule_digest),
-      rules: value(attrs, :rules, [])
+      rule_id: value(attrs, :rule_id),
+      origin: attrs |> value(:origin) |> known(@origins),
+      declaration_id: value(attrs, :declaration_id),
+      scope: attrs |> value(:scope) |> known(@scopes),
+      spacecraft_id: value(attrs, :spacecraft_id)
     }
   end
+
+  # A closed vocabulary: anything else (including nil, a pre-P3 plan) is nil, never a new atom.
+  defp known(value, vocabulary) when is_atom(value) and not is_nil(value),
+    do: if(value in Map.values(vocabulary), do: value)
+
+  defp known(value, vocabulary) when is_binary(value), do: Map.get(vocabulary, value)
+  defp known(_value, _vocabulary), do: nil
 
   @doc """
-  The plan as one spacecraft runs it: its compiled rule rows resolved to the spacecraft's
-  effective set (`EffectiveRules`), added to the plan's own `default_rules`, with the digest of what
-  is in force. A plan with no rule rows is returned as it is.
+  The entries of a parameter as `spacecraft_id` runs them (#451 T2): per `rule_id`, that craft's
+  spacecraft entry when there is one, else the mission entry; another craft's entries are dropped;
+  a spacecraft entry with a `rule_id` no mission entry has (a policy for one craft only) is that
+  craft's own; an entry with no `rule_id` (a plan compiled before P3) is always kept. A policy
+  turned off for a craft is its entry with `disabled: true`, which the evaluator reports as
+  `disabled`. Order is the plan's, with an override in the place of the entry it replaces.
   """
-  @spec effective(t(), binary() | nil) :: t()
-  def effective(%__MODULE__{rules: []} = plan, _spacecraft_id), do: plan
+  @spec resolve([t()], binary() | nil) :: [t()]
+  def resolve(entries, spacecraft_id) when is_list(entries) do
+    {craft, mission} =
+      entries
+      |> Enum.filter(&applies?(&1, spacecraft_id))
+      |> Enum.split_with(&(&1.scope == :spacecraft))
 
-  def effective(%__MODULE__{rules: rules} = plan, spacecraft_id) do
-    in_force = EffectiveRules.for_spacecraft(rules, spacecraft_id)
+    overrides = craft |> Enum.reject(&is_nil(&1.rule_id)) |> Map.new(&{&1.rule_id, &1})
+    mission_ids = MapSet.new(mission, & &1.rule_id)
 
-    %__MODULE__{
-      plan
-      | default_rules: plan.default_rules ++ Enum.map(in_force, &EffectiveRules.evaluator_rule/1),
-        rule_digest: EffectiveRules.digest(in_force, plan.rule_digest),
-        rules: []
-    }
+    replaced = Enum.map(mission, &Map.get(overrides, &1.rule_id, &1))
+    added = Enum.reject(craft, &(is_nil(&1.rule_id) or MapSet.member?(mission_ids, &1.rule_id)))
+
+    replaced ++ added
   end
+
+  defp applies?(%__MODULE__{scope: :spacecraft, spacecraft_id: id}, spacecraft_id),
+    do: not is_nil(spacecraft_id) and id == spacecraft_id
+
+  defp applies?(%__MODULE__{}, _spacecraft_id), do: true
 
   defp normalize_atom(value) when is_atom(value), do: value
   defp normalize_atom(value) when is_binary(value), do: String.to_existing_atom(value)

@@ -672,8 +672,7 @@ defmodule Cadence.Runtime.PartitionOwner do
          effect_ordinals: effect_ordinals,
          observation_context:
            MissionRuntimeSpec.observation_context(next_state.active_activation),
-         alarm_rules:
-           AlarmRules.for_result(next_state.active_activation.runtime_plans, semantic_result),
+         alarm_rules: AlarmRules.for_result(next_state.plan_index, semantic_result),
          runtime_records: all_runtime_records
        }, %{next_state | pending_runtime_records: pending_runtime_records}}
     end
