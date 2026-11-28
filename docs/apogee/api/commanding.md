@@ -194,6 +194,14 @@ No side effects. Returns:
   the same revision, or a later withdrawal. Acknowledged like any HOLD (DECISIONS #60/#61): the
   group event `hold_acknowledged` records its evidence. Review re-runs it, so an approver
   acknowledges a withdrawal that is new since submit.
+  **What a GO records.** A group is armed by a GO, or by its submit when no second GO is needed.
+  That arming checks (under its lock) that the acknowledgement it carries covers exactly the
+  withdrawals now (a withdrawal since the preflight is `409 preflight_stale` at submit,
+  `409 command_group_review_stale` at GO) and records, in each armed member's own approval row
+  (append-only, same transaction), the basis of its craft's withdrawal it knew of, or none. An
+  unattended release (a lane draining itself) refuses a craft whose current withdrawal isn't the
+  recorded one, and a member whose row lacks the record fails closed (end_reason
+  `model_approval_withdrawn_after_go`, below).
 - `two_person` is **not a HOLD** (DECISIONS #61): it never blocks submit. Its `result` is
   `second_go` ("needs a second GO") while a second GO is required and not yet given, else `go`.
   `evidence.reasons` and top-level `second_go_required` say why the group goes to approval.
@@ -261,7 +269,11 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
   `awaiting_me=true` (Approve queue: pending, not mine, and I'm the named approver or none was
   named), `mine=true`, `operation_id=` (returns 0 or 1 groups).
   U69 A5 (parity ops (C)): `q` (≤100 chars, case-insensitive substring of the title, log entry,
-  group id, operation id, or a stacked command's id or name), `target=<spacecraft_id>` (groups with
+  group id, operation id, or a stacked command's id or name), `withdrawn_revision=<revision_id>` (E2, #546: groups with a target that runs that mission-model
+  revision, resolved on the server for the authorized mission, so another mission's revision, or
+  one no craft runs, is an empty page; with `state=queued&stage=queued_for_contact` it is the
+  withdraw sheet's "the rest"; `422 invalid_params` with `target`; no id list ever goes in the URL),
+  `target=<spacecraft_id>` (groups with
   it among their targets), `stage=` (comma list of `release_failed | verify_failed | indeterminate
   | in_flight | queued_for_contact`: groups where ANY target is at one; `in_flight` = `radiating`
   or `executed`; queued groups only; decided by the same progress the row shows, so the filter
@@ -291,11 +303,13 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
   boolean on show), `events[] {id, kind, actor, at, payload}` (see Timeline events below),
   and `targets[]`:
   `{spacecraft_id, name, scid, stage, members: [{position, request_id, command_id, command_name, stage,
-  end_reason, caused_by, verify_by, verified_at, timed_out_at, failed_at, occurred_at,
-  release_refusal}], last_event_at, blocked: null}`. U69 A4a: `verified_at` = once every verifier
+  end_reason, caused_by, failure_reason, verify_by, verified_at, timed_out_at, failed_at,
+  occurred_at, release_refusal}], last_event_at, blocked: null}`. U69 A4a: `verified_at` = once every verifier
   instance is satisfied, the latest match; `timed_out_at` = the earliest deadline among instances
   that timed out; `failed_at` = the earliest match among instances whose failure criteria
   matched; each `null` when it doesn't apply (`verify_by` = the latest deadline, as before).
+  `failure_reason` (#795): `null`, or why a failed member failed, from the same fact its
+  `member_failed` event states: `release_failed`, `verify_failed` or `verify_timed_out`.
   U75: list rows and the group read carry `expiry: {expires_at, expired, sent, total} | null` (null
   unless a member ended `expired`): `expired` = members with `end_reason: expired`, `sent` =
   members that went out (radiating, executed, indeterminate, verified, no_verifier, verify_failed),
@@ -316,18 +330,35 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
   two never disagree), with both counts as integers (the `409 command_group_members_changed`
   details' names). In any other state all three are `null`. When it's `true` a GO answers that
   409, so disable GO up front; NO-GO, send back and abort stay allowed.
+- **`withdrawn_after_go` (E2, #546; the release panel's caution).** Each target row, on the show's
+  first page and on every `GET …/targets` page, carries `withdrawn_after_go`: `null`, or
+  `{revision_id, decision: {kind, by, at, reason}}` (`by` is the deciding person's `{kind, id, name}` actor document, or `null` with no decider, as on the workspace's `approval_withdrawn`) when the target's craft runs a
+  withdrawn revision and a member still waiting for its contact has an approval row that recorded
+  a different withdrawal (or none, or predates the record), which is the comparison an unattended
+  release refuses on. The show also carries the group's own `withdrawn_after_go`: `null`, or
+  `{count, latest}`, `count` being the targets flagged across the **whole group** (not the page)
+  and `latest` the newest decision by `at`, in the same shape. Both come from one batched
+  withdrawal read over the group's craft and one read of the waiting members' approval rows, so
+  the query count doesn't depend on the number of targets. A person naming the contact is not
+  refused, so this is a caution for them, not a block.
 - **Paged targets and events (#795).** Show also carries `targets_page: {total, revision,
   next_cursor}` and `events_page: {total, next_cursor}`: how many there are, and `revision` changes
-  whenever any target's stage does (a live client refetches its pages then, or when
+  whenever anything a page of targets shows does: a target's stage, `blocked`, or a member's facts (a live client refetches its pages then, or when
   `events_page.total` moves). Each target also carries its `index`. Today show still lists every
   target and event (`next_cursor: null`); the console moves to the paged reads below, after which
   show carries only the first 100 targets and the latest 50 events, and the group push omits both.
   - `GET /command-groups/:id/targets?limit=&cursor=&stage=&q=`: a page of `targets[]` in target
     order, `{data: {targets}, meta: {total, next_cursor}}`. `limit` 1..500 (default 100). `stage`
     is a comma list of member stages (the target's own); `q` (≤ 100 chars) a case-insensitive
-    substring of the name or spacecraft id. `meta.total` counts the filtered targets.
-  - `GET /command-groups/:id/events?limit=&cursor=`: a page of `events[]`, chronological, the latest
-    first; the cursor reads back to older ones. `limit` 1..200 (default 50).
+    substring of the name or spacecraft id; `needs_you=true` keeps the targets "Needs you" lists: a
+    target at `verify_failed`, `release_failed` or `indeterminate`, or one with `blocked` set (a
+    lane held by a release of unknown outcome, which sits on a waiting target of any stage).
+    Filters combine. `meta.total` counts the filtered targets.
+  - `GET /command-groups/:id/events?limit=&cursor=&kind=`: a page of `events[]`, chronological, the
+    latest first; the cursor reads back to older ones. `limit` 1..200 (default 50). `kind` is a comma
+    list of event kinds (the vocabulary under Timeline events); `meta.total` and the cursor count
+    only those, so a screen that wants one kind (`hold_acknowledged`, written at submit, so the
+    oldest) asks for exactly it.
   - A cursor is opaque and belongs to its mission, group and list: another group's, another
     mission's, the other list's or a malformed one is `422 invalid_params`
     (`details.cursor`); a bad `limit`, `stage` or `q` names its own field. Same authorization as
@@ -335,10 +366,14 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
 - Member `stage`: `awaiting_go | queued_for_contact | radiating | executed | verified | no_verifier
   | verify_failed | release_failed | indeterminate | canceled | rejected | excluded`. A target's stage
   is its first unfinished member's. `end_reason`: `aborted | release_basis_changed |
-  earlier_command_failed | expired | catalog_changed | spacecraft_archived | excluded_at_review |
-  canceled | rejected` (or null). `catalog_changed` (DECISIONS #65): a catalog change set canceled
+  earlier_command_failed | expired | catalog_changed | spacecraft_archived |
+  model_approval_withdrawn_after_go | excluded_at_review | canceled | rejected` (or null). `catalog_changed` (DECISIONS #65): a catalog change set canceled
   it before release. `spacecraft_archived` (L22): its spacecraft was archived before it released,
-  so it never went out.
+  so it never went out. `model_approval_withdrawn_after_go` (E2, #546): the lane was about to send
+  it unattended, and its craft's model approval had been withdrawn after the GO (a withdrawal the
+  GO hadn't acknowledged): the member failed closed, and the group needs a new GO (resubmit; the
+  new preflight carries the `model_approval_withdrawn` HOLD). A person naming the contact
+  (`POST …/release`) is the decision, so that path is not refused.
 - `…/preflight` re-runs preflight on the submitted inputs for Approve (A2) and adds
   `changed_since_submit` (`hold` when the result no longer matches what was submitted). Its
   `conflicts` check leaves out the group's own members, so only other work on the lanes counts.

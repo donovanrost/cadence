@@ -12,15 +12,11 @@ defmodule Cadence.Applications.ApplicationInstallations do
 
   import Ecto.Query
 
-  alias Cadence.Applications.{
-    ApplicationDefinition,
-    ApplicationDependency,
-    ApplicationInstallation
-  }
+  alias Cadence.Applications.{ApplicationDefinition, ApplicationInstallation}
 
   alias Cadence.Applications.ApplicationInstallation.LifecycleEvent
   alias Cadence.Applications.ApplicationInstallations.{InstallationRow, LifecycleEventRow}
-  alias Cadence.Applications.{ConfigurationReference, HostContext, Registry, SurfaceDefinition}
+  alias Cadence.Applications.{ConfigurationReference, HostContext, Registry}
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Listing
   alias Cadence.Missions
@@ -174,34 +170,6 @@ defmodule Cadence.Applications.ApplicationInstallations do
     )
   end
 
-  @doc "Checks an optional capability required by a platform surface without enabling it."
-  @spec authorize_surface(Scope.t(), HostContext.t(), SurfaceDefinition.t()) ::
-          :ok | {:error, term()}
-  def authorize_surface(_scope, _host_context, %SurfaceDefinition{required_application: nil}),
-    do: :ok
-
-  def authorize_surface(scope, host_context, %SurfaceDefinition{
-        required_application: %ApplicationDependency{
-          application_key: key,
-          minimum_version: minimum_version,
-          scope: :same_host,
-          required: true
-        }
-      }) do
-    with {:ok, installation} <- fetch_installed(scope, host_context, key),
-         {:ok, definition} <- Registry.fetch_available(key, installation.application_version),
-         :ok <- ensure_optional(definition),
-         true <- installation.application_version >= minimum_version do
-      :ok
-    else
-      false -> {:error, :application_installation_version_mismatch}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  def authorize_surface(_scope, _host_context, _surface),
-    do: {:error, :invalid_application_surface_definition}
-
   defp ensure_optional(%ApplicationDefinition{installation_policy: :optional}), do: :ok
   defp ensure_optional(%ApplicationDefinition{}), do: {:error, :platform_application}
 
@@ -226,27 +194,15 @@ defmodule Cadence.Applications.ApplicationInstallations do
     end
   end
 
-  @doc """
-  An installed installation by id, without a caller scope: for the change-set apply, which was
-  authorized where it was submitted and holds the configuration lock (packet-input resync, 11-15).
-  """
-  # todo(authz): unscoped by design for the apply; callers must already be authorized.
-  @spec fetch_installed_by_id(binary(), binary()) ::
-          {:ok, ApplicationInstallation.t()} | {:error, term()}
-  def fetch_installed_by_id(organization_id, installation_id) do
-    case Repo.get_by(InstallationRow,
-           organization_id: organization_id,
-           application_installation_id: installation_id
-         ) do
-      %InstallationRow{lifecycle_state: "installed"} = row ->
-        {:ok, InstallationRow.to_domain(row)}
-
-      %InstallationRow{} ->
-        {:error, :application_installation_not_installed}
-
-      nil ->
-        {:error, :application_not_installed}
-    end
+  @doc "Installed applications for a change-set apply that already holds the configuration lock."
+  def installed_by_ids(organization_id, mission_id, ids) do
+    from(row in InstallationRow,
+      where:
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.application_installation_id in ^ids and row.lifecycle_state == "installed"
+    )
+    |> Repo.all()
+    |> Map.new(&{&1.application_installation_id, InstallationRow.to_domain(&1)})
   end
 
   @spec fetch_installed(Scope.t(), HostContext.t(), binary()) ::

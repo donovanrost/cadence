@@ -20,6 +20,7 @@ defmodule Cadence.Commanding.Groups.GroupStore do
   }
 
   alias Cadence.Commanding.Groups.{CommandGroup, CommandGroupEventRow, CommandGroupRow}
+  alias Cadence.Persistence.JsonDocument
   alias Cadence.Repo
 
   @chunk 500
@@ -140,6 +141,58 @@ defmodule Cadence.Commanding.Groups.GroupStore do
     |> order_by([r], asc: r.group_target_index, asc: r.group_position)
     |> Repo.all()
     |> Enum.map(&CommandRequestRow.to_domain/1)
+  end
+
+  @doc """
+  What the GO that armed a member recorded about withdrawn model approvals (E2, #546): the basis
+  string of its craft's withdrawal it knew of, or nil when its craft ran an approved model. A
+  member with no GO row, or one that predates the record, answers `:unrecorded`, which never
+  equals a basis (fail closed).
+  """
+  @spec withdrawn_seen(binary(), binary(), binary()) :: binary() | nil | :unrecorded
+  def withdrawn_seen(org, mission, request_id) do
+    CommandApprovalRow
+    |> where(
+      [a],
+      a.organization_id == ^org and a.mission_id == ^mission and
+        a.command_request_id == ^request_id and a.decision in ["approved", "not_required"]
+    )
+    |> order_by([a], desc: a.decided_at)
+    |> limit(1)
+    |> select([a], a.metadata_document)
+    |> Repo.one()
+    |> case do
+      nil ->
+        :unrecorded
+
+      document ->
+        document |> JsonDocument.unwrap_value() |> Map.get("withdrawn_seen", :unrecorded)
+    end
+  end
+
+  @doc """
+  `withdrawn_seen/3` for many requests in one query: `%{request_id => basis | nil}`; a request
+  with no GO row, or one that predates the record, is absent (read it as `:unrecorded`).
+  """
+  @spec withdrawn_seen_for(binary(), binary(), [binary()]) :: %{binary() => binary() | nil}
+  def withdrawn_seen_for(_org, _mission, []), do: %{}
+
+  def withdrawn_seen_for(org, mission, request_ids) do
+    CommandApprovalRow
+    |> where(
+      [a],
+      a.organization_id == ^org and a.mission_id == ^mission and
+        a.command_request_id in ^request_ids and a.decision in ["approved", "not_required"]
+    )
+    |> order_by([a], asc: a.decided_at)
+    |> select([a], {a.command_request_id, a.metadata_document})
+    |> Repo.all()
+    |> Enum.reduce(%{}, fn {request_id, document}, acc ->
+      case document |> JsonDocument.unwrap_value() |> Map.fetch("withdrawn_seen") do
+        {:ok, seen} -> Map.put(acc, request_id, seen)
+        :error -> Map.delete(acc, request_id)
+      end
+    end)
   end
 
   @doc "`%{command_request_id => command_queue_entry_id}` for the requests' pending queue entries."

@@ -8,6 +8,7 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
   """
 
   alias Cadence.ApplicationDispatch.BindingSet
+  alias Cadence.ApplicationDispatch.BindingSetMembership, as: Membership
   alias Cadence.Catalog.MissionModel.RuntimePlan
   alias Cadence.Platform.ContentHash
   alias Cadence.Runtime.BindingSetIndex
@@ -67,15 +68,16 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
          {:ok, generation} <- fetch_positive_integer(attrs, :generation),
          {:ok, binding_set_id} <- fetch_non_empty_binary(attrs, :binding_set_id),
          {:ok, binding_set_version} <- fetch_positive_integer(attrs, :binding_set_version),
-         {:ok, %BindingSet{} = binding_set} <- fetch_binding_set(attrs),
+         {:ok, binding_set} <- fetch_binding_set(attrs),
          :ok <-
            validate_binding_set_scope(
-             binding_set,
+             identity_of(binding_set),
              mission_id,
              binding_set_id,
              binding_set_version
            ),
-         :ok <- validate_organization_scope(binding_set, Map.get(attrs, :organization_id)),
+         :ok <-
+           validate_organization_scope(identity_of(binding_set), Map.get(attrs, :organization_id)),
          {:ok, %DateTime{} = activated_at} <- fetch_datetime(attrs, :activated_at),
          {:ok, metadata} <- fetch_metadata(attrs),
          content_sha256 <- content_sha256(binding_set),
@@ -114,10 +116,14 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
     end
   end
 
-  @spec content_sha256(BindingSet.t()) :: binary()
+  @spec content_sha256(BindingSet.t() | Membership.t()) :: binary()
   def content_sha256(%BindingSet{} = binding_set) do
     BindingSet.content_sha256(binding_set)
   end
+
+  # A membership set was admitted by its stored hash (its integrity checked against the
+  # activation's hash when it was read, #450), so there is no expansion to hash.
+  def content_sha256(%Membership{content_sha256: content_sha256}), do: content_sha256
 
   @spec identity(t()) :: {binary(), pos_integer(), binary()}
   def identity(%__MODULE__{} = spec) do
@@ -319,6 +325,7 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
   defp fetch_binding_set(attrs) do
     case Map.fetch(attrs, :binding_set) do
       {:ok, %BindingSet{} = binding_set} -> {:ok, binding_set}
+      {:ok, %Membership{} = membership} -> {:ok, membership}
       _other -> {:error, {:invalid_mission_runtime_spec, :binding_set}}
     end
   end
@@ -336,6 +343,9 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
       _other -> {:error, {:invalid_mission_runtime_spec, :metadata}}
     end
   end
+
+  defp identity_of(%Membership{shell: shell}), do: shell
+  defp identity_of(%BindingSet{} = binding_set), do: binding_set
 
   defp validate_binding_set_scope(binding_set, mission_id, binding_set_id, binding_set_version) do
     if binding_set.mission_id == mission_id and binding_set.binding_set_id == binding_set_id and

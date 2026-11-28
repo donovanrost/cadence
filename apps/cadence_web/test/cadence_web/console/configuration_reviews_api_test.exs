@@ -13,6 +13,10 @@ defmodule CadenceWeb.Console.ConfigurationReviewsAPITest do
     user = TestFixtures.persist_user!()
     org = TestFixtures.persist_org!()
     TestFixtures.grant_membership!(user, org, role: :organization_admin)
+    mission_fixture(user, org)
+  end
+
+  defp mission_fixture(user, org) do
     mission = TestFixtures.persist_mission!(org)
     org_id = org.organization_id
     mission_id = mission.mission_id
@@ -24,22 +28,27 @@ defmodule CadenceWeb.Console.ConfigurationReviewsAPITest do
       display_name: "Second TT&C"
     )
 
-    scope = CatalogFixtures.user_scope(org_id, "lead")
-    policy = ActivationPolicy.load(org_id, mission_id)
-
-    {:ok, _} =
-      ActivationPolicy.save(scope, mission_id, policy.token, %{
-        "value" => %{"approval_requirement" => "direct"}
-      })
+    review_policy(mission, "direct")
 
     %{
       user: user,
+      org: org,
       mission: mission,
       revision: revision,
       first: first,
       second: second,
       base: "/api/v1/missions/#{mission_id}"
     }
+  end
+
+  defp review_policy(mission, requirement) do
+    scope = CatalogFixtures.user_scope(mission.organization_id, "lead")
+    policy = ActivationPolicy.load(mission.organization_id, mission.mission_id)
+
+    {:ok, _} =
+      ActivationPolicy.save(scope, mission.mission_id, policy.token, %{
+        "value" => %{"approval_requirement" => requirement}
+      })
   end
 
   defp conn(c), do: TestFixtures.member_conn(c.user)
@@ -49,9 +58,13 @@ defmodule CadenceWeb.Console.ConfigurationReviewsAPITest do
     do: conn(c) |> get(path(c, craft)) |> json_response(200) |> Map.fetch!("data")
 
   # Saves the craft's draft with the imported catalog; returns the fresh snapshot.
-  defp save(c, craft) do
+  defp save(c, craft, changes \\ %{}) do
     data = workspace(c, craft)
-    document = Map.put(data["document"], "catalog_revision_id", c.revision.catalog_revision_id)
+
+    document =
+      data["document"]
+      |> Map.put("catalog_revision_id", c.revision.catalog_revision_id)
+      |> Map.merge(changes)
 
     conn(c)
     |> put(path(c, craft) <> "/draft", %{"token" => data["token"], "document" => document})
@@ -87,13 +100,7 @@ defmodule CadenceWeb.Console.ConfigurationReviewsAPITest do
   end
 
   test "intent review asks for approval when the mission requires it", c do
-    scope = CatalogFixtures.user_scope(c.mission.organization_id, "lead")
-    policy = ActivationPolicy.load(c.mission.organization_id, c.mission.mission_id)
-
-    {:ok, _} =
-      ActivationPolicy.save(scope, c.mission.mission_id, policy.token, %{
-        "value" => %{"approval_requirement" => "independent"}
-      })
+    review_policy(c.mission, "independent")
 
     tokens = %{c.first.spacecraft_id => save(c, c.first)["token"]}
 
@@ -126,6 +133,53 @@ defmodule CadenceWeb.Console.ConfigurationReviewsAPITest do
 
     assert %{"error" => %{"code" => "nothing_to_review"}} =
              reviews(c, %{"all_saved" => true}) |> json_response(422)
+  end
+
+  test "reviewing 2 or 16 drafts in a 50-spacecraft fleet uses the same statement count", c do
+    small = count_bulk_review(c, 2)
+    large = count_bulk_review(mission_fixture(c.user, c.org), 16)
+
+    assert small > 0
+    assert large == small, "2 drafts: #{small}, 16 drafts: #{large}"
+  end
+
+  defp count_bulk_review(c, size) do
+    review_policy(c.mission, "independent")
+
+    fleet =
+      [c.first, c.second] ++
+        Enum.map(3..50, &TestFixtures.persist_spacecraft!(c.mission, display_name: "Fleet #{&1}"))
+
+    assert workspace(c, c.first)["fleet_total"] == 50
+
+    tokens =
+      fleet
+      |> Enum.take(16)
+      |> Map.new(fn craft ->
+        :ok =
+          CatalogFixtures.change_set_switches!(
+            c.mission.organization_id,
+            c.mission.mission_id,
+            craft.spacecraft_id,
+            %{"telemetry_enabled" => true}
+          )
+
+        {craft.spacecraft_id, save(c, craft, %{"handled_apids" => [42]})["token"]}
+      end)
+      |> Enum.sort()
+      |> Enum.take(size)
+      |> Map.new()
+
+    body = %{"spacecraft" => tokens, "policy_token" => policy_token(c), "intent" => "review"}
+    conn = conn(c)
+
+    {response, count} =
+      TestFixtures.count_statements(fn ->
+        conn |> post(c.base <> "/configuration/reviews", body) |> json_response(200)
+      end)
+
+    assert %{"data" => %{"state" => "approval_pending", "spacecraft_count" => ^size}} = response
+    count
   end
 
   test "a token that changed since it was read is refused, and nothing is reviewed", c do

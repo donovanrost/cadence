@@ -392,6 +392,24 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
 
     assert %{"data" => %{"targets" => []}, "meta" => %{"total" => 0}} = page.("?stage=verified")
 
+    # "Needs you": nothing has failed or is held in a fresh group.
+    assert %{"data" => %{"targets" => []}, "meta" => %{"total" => 0}} = page.("?needs_you=true")
+
+    assert %{"error" => %{"code" => "invalid_params", "details" => %{"needs_you" => _}}} =
+             as(c.requester)
+             |> get(base(c) <> "/command-groups/#{id}/targets?needs_you=maybe")
+             |> json_response(422)
+
+    assert %{"data" => %{"events" => []}, "meta" => %{"total" => 0}} =
+             as(c.requester)
+             |> get(base(c) <> "/command-groups/#{id}/events?kind=hold_acknowledged")
+             |> json_response(200)
+
+    assert %{"error" => %{"code" => "invalid_params", "details" => %{"kind" => _}}} =
+             as(c.requester)
+             |> get(base(c) <> "/command-groups/#{id}/events?kind=nope")
+             |> json_response(422)
+
     assert %{"data" => %{"events" => [%{"kind" => "submitted"}]}, "meta" => %{"total" => 1}} =
              as(c.requester)
              |> get(base(c) <> "/command-groups/#{id}/events?limit=1")
@@ -432,6 +450,27 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
              |> json_response(404)
 
     assert code in ["command_group_not_found", "mission_not_found"]
+  end
+
+  # E2 (#546): the Commands list filtered by the craft that run a withdrawn revision. Craft are
+  # resolved on the server (a withdrawn composition can sit on hundreds), never listed in the URL.
+  test "the list filters by withdrawn_revision, and it doesn't mix with target", c do
+    c |> create(body(c, "SET_SIGNED", %{"counter" => 1})) |> json_response(201)
+
+    list = fn query ->
+      as(c.requester) |> get(base(c) <> "/command-groups" <> query) |> json_response(200)
+    end
+
+    # No craft runs it (here nothing is withdrawn), another mission's revision likewise: empty.
+    assert %{"data" => %{"groups" => []}} = list.("?withdrawn_revision=no-such-revision")
+    assert %{"data" => %{"groups" => [_]}} = list.("")
+
+    [{craft, _} | _] = c.crafts
+
+    assert %{"error" => %{"code" => "invalid_params", "details" => %{"withdrawn_revision" => _}}} =
+             as(c.requester)
+             |> get(base(c) <> "/command-groups?withdrawn_revision=r1&target=#{craft}")
+             |> json_response(422)
   end
 
   test "per-target values override the command's for those targets and are echoed back", c do

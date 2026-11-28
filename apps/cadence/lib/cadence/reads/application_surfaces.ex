@@ -91,37 +91,27 @@ defmodule Cadence.Reads.ApplicationSurfaces do
     with {:ok, definition} <- Registry.fetch_available(application_key, application_version),
          :ok <- ensure_declared_surface(definition, surface, host_context),
          :ok <- authorize_surface(current_scope, host_context, surface),
-         :ok <- ApplicationInstallations.authorize_surface(current_scope, host_context, surface),
          {:ok, installation} <-
            maybe_fetch_installation(current_scope, host_context, application_key),
          :ok <- ensure_installation_version(installation, application_version),
          {:ok, query_id, query_version} <- query_contract(surface),
-         {provider_key, provider_surface_id} <-
-           provider_identity(application_key, surface.surface_id, query_id),
-         {:ok, provider} <- fetch_provider(provider_key, query_id) do
+         {:ok, provider} <- fetch_provider(application_key, query_id) do
       ProviderRegistry.dispatch(
         current_scope,
         host_context,
         %SurfaceQueryRequest{
-          application_key: provider_key,
+          application_key: application_key,
           application_version: application_version,
-          surface_id: provider_surface_id,
+          surface_id: surface.surface_id,
           surface_version: surface.version,
           query_id: query_id,
           query_version: query_version,
           params: params
         },
-        %{{provider_key, query_id} => provider}
+        %{{application_key, query_id} => provider}
       )
     end
   end
-
-  # Preserve the historical Spacecraft surface while the canonical query has one domain owner.
-  defp provider_identity("spacecraft", "telemetry_decom", "cadence.telemetry_decom.manage"),
-    do: {"telemetry_decom", "manage"}
-
-  defp provider_identity(application_key, surface_id, _query_id),
-    do: {application_key, surface_id}
 
   defp validate_document(%SurfaceDocument{} = document, %SurfaceDefinition{} = surface) do
     SurfaceDocument.validate(document, surface.actions)

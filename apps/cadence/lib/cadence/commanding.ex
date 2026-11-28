@@ -41,6 +41,7 @@ defmodule Cadence.Commanding do
   alias Cadence.Contacts
   alias Cadence.Contacts.{Path, RealizedContact, TransportBinding}
   alias Cadence.Control.Commanding, as: ControlCommanding
+  alias Cadence.Control.WithdrawnPins
   alias Cadence.MissionModels
   alias Cadence.Persistence.JsonDocument
 
@@ -293,12 +294,18 @@ defmodule Cadence.Commanding do
         attempted_at: attempted_at,
         path_id: path.path_id,
         transport_binding_id: transport_binding.transport_binding_id,
-        process_namespace: process_namespace(opts)
+        process_namespace: process_namespace(opts),
+        unattended: true
       )
       |> case do
         # The head failed closed; the lane's next entry may still release in this contact.
         {:error, reason}
-        when reason in [:release_basis_changed, :earlier_command_failed, :spacecraft_archived] ->
+        when reason in [
+               :release_basis_changed,
+               :earlier_command_failed,
+               :spacecraft_archived,
+               :model_approval_withdrawn_after_go
+             ] ->
           dispatch_lane_head(organization_id, mission_id, queue_lane_key, released_by, opts)
 
         result ->
@@ -596,6 +603,7 @@ defmodule Cadence.Commanding do
          :ok <- LifecyclePolicy.ensure_request_releasable(request_row),
          :ok <- group_armed(organization_id, mission_id, request_row),
          :ok <- group_still_going(organization_id, mission_id, request_row),
+         :ok <- go_still_holds(organization_id, mission_id, request_row, opts),
          :ok <- target_live(organization_id, mission_id, request_row),
          {:ok, %RealizedContact{} = realized_contact} <-
            ReleaseTargetSelection.fetch_realized_contact(
@@ -757,6 +765,49 @@ defmodule Cadence.Commanding do
         )
 
         {:error, :earlier_command_failed}
+    end
+  end
+
+  # E2 (#546): a release nobody is watching (a lane draining itself, `unattended: true`) sends
+  # only what its GO knew about. A craft now running a revision whose approval was withdrawn is
+  # fine only if that same decision was in the GO's record (the member's own approval row, which
+  # `WithdrawnAtGo` wrote when the group was armed); a newer one, or a GO that predates the
+  # record, fails the member closed: its group needs a new GO. A person naming the contact
+  # (`GroupRelease`) is the decision, so it doesn't come through here.
+  defp go_still_holds(organization_id, mission_id, request_row, opts) do
+    if Keyword.get(opts, :unattended, false),
+      do: withdrawal_known_at_go(organization_id, mission_id, request_row),
+      else: :ok
+  end
+
+  defp withdrawal_known_at_go(organization_id, mission_id, request_row) do
+    with {:ok, spacecraft_id} <-
+           ReleaseTargetGuard.target(organization_id, mission_id, request_row.source_endpoint_ref),
+         %{^spacecraft_id => pin} <-
+           WithdrawnPins.for_spacecraft(organization_id, mission_id, [spacecraft_id]) do
+      seen =
+        Groups.GroupStore.withdrawn_seen(
+          organization_id,
+          mission_id,
+          request_row.command_request_id
+        )
+
+      if seen == pin.hold_basis do
+        :ok
+      else
+        fail_closed(
+          organization_id,
+          mission_id,
+          request_row,
+          "model_approval_withdrawn_after_go"
+        )
+
+        {:error, :model_approval_withdrawn_after_go}
+      end
+    else
+      # No withdrawal on this craft's active model (or its target is unknown, which the target
+      # guards answer): nothing to compare.
+      _none -> :ok
     end
   end
 

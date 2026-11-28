@@ -249,6 +249,56 @@ defmodule Cadence.Applications.TelemetryDecom do
     end
   end
 
+  @doc false
+  def project_configurations(_mission, []), do: :ok
+
+  def project_configurations(mission, assignments) do
+    org = mission.organization_id
+    mid = mission.mission_id
+    documents = Map.new(assignments, &{&1.spacecraft_id, &1.document})
+
+    ApplicationBindingStore.project_many(org, mid, @application_key, documents, fn id,
+                                                                                   document,
+                                                                                   existing ->
+      project_binding(org, mid, id, document, existing)
+    end)
+  end
+
+  defp project_binding(org, mission, id, document, existing) do
+    with {:ok, apids} <- APIDSelection.parse(document["handled_apids"]) do
+      catalog = document["catalog_revision_id"]
+      source = document["telemetry_source_endpoint_id"]
+      enabled = document["telemetry_enabled"]
+      project_binding(org, mission, id, catalog, source, apids, enabled, existing)
+    end
+  end
+
+  defp project_binding(_org, _mission, _id, _catalog, nil, _apids, false, nil),
+    do: {:ok, nil}
+
+  defp project_binding(_org, _mission, _id, _catalog, nil, _apids, false, existing),
+    do: {:ok, %{existing | enabled: false}}
+
+  defp project_binding(org, mission, id, catalog, source, apids, enabled, existing) do
+    stamp = preserved_applied_stamp(existing, catalog, source, apids)
+
+    binding =
+      Map.merge(stamp, %{
+        organization_id: org,
+        mission_id: mission,
+        spacecraft_id: id,
+        application_key: @application_key,
+        application_binding_id: application_binding_id(id),
+        catalog_revision_id: catalog,
+        handled_apids: apids,
+        source_endpoint_id: source,
+        enabled: enabled
+      })
+      |> ApplicationBinding.new()
+
+    {:ok, binding}
+  end
+
   defp upsert_config(organization_id, mission_id, spacecraft_id, attrs, config_inputs) do
     case store_config(organization_id, mission_id, spacecraft_id, attrs, config_inputs) do
       {:ok, binding} ->
@@ -663,9 +713,11 @@ defmodule Cadence.Applications.TelemetryDecom do
              active.binding_set_version == binding_set.version do
       ids = applied_configuration_ids(mission, entries)
 
+      wanted = MapSet.new(ids)
+
       configs =
         list_configs(mission.organization_id, mission.mission_id)
-        |> Enum.filter(&(&1.spacecraft_id in ids))
+        |> Enum.filter(&MapSet.member?(wanted, &1.spacecraft_id))
 
       with :ok <- reconcile_application_state(configs, binding_set, ids) do
         PacketBindings.stamp_applied_for_mission(
@@ -957,23 +1009,25 @@ defmodule Cadence.Applications.TelemetryDecom do
 
   defp stamp_applied(configs, %BindingSet{} = binding_set) do
     now = DateTime.utc_now()
+    by_spacecraft = Map.new(configs, &{&1.spacecraft_id, &1})
 
-    Enum.reduce_while(configs, :ok, fn %Config{} = config, _acc ->
-      updated =
-        %Config{
+    ApplicationBindingStore.project_many(
+      binding_set.organization_id,
+      binding_set.mission_id,
+      @application_key,
+      by_spacecraft,
+      fn _id, config, _existing ->
+        stamped = %{
           config
           | applied_binding_set_id: binding_set.binding_set_id,
             applied_binding_set_version: binding_set.version,
             applied_at: now
         }
 
-      case updated
-           |> config_to_binding()
-           |> ApplicationBindingStore.upsert(versioning: :preserve) do
-        {:ok, _binding} -> {:cont, :ok}
-        {:error, reason} -> {:halt, {:error, reason}}
-      end
-    end)
+        {:ok, config_to_binding(stamped)}
+      end,
+      :preserve
+    )
   end
 
   defp clear_disabled_application_state(organization_id, mission_id, spacecraft_ids) do

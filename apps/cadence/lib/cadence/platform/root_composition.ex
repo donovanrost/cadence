@@ -16,7 +16,7 @@ defmodule Cadence.Platform.RootComposition do
   alias Cadence.Protocol.RecordArchive
   alias Cadence.Runtime.{IngressArchiveConsumer, Persistence}
   alias Cadence.Runtime.ProcessNamespace, as: RuntimeProcessNamespace
-  alias Cadence.Telemetry.{CurrentValueStore, DataManagement, HistoryStore, Storage}
+  alias Cadence.Telemetry.{CurrentValueStore, HistoryStore, Storage}
 
   @enforce_keys [
     :platform_supervisor_name,
@@ -34,7 +34,6 @@ defmodule Cadence.Platform.RootComposition do
     :record_archive_policy,
     :runtime_persistence_policy,
     :ingress_archive_consumer_policy,
-    :data_management_policy,
     :profiler,
     :profiler_child_opts,
     :runtime_health_child_opts,
@@ -156,13 +155,6 @@ defmodule Cadence.Platform.RootComposition do
         |> IngressJournal.policy()
       end)
 
-    data_management_policy =
-      Keyword.get_lazy(opts, :data_management_policy, fn ->
-        DataManagement.policy(telemetry_storage_policy, history_store_policy)
-      end)
-      |> Map.put(:storage, telemetry_storage_policy)
-      |> Map.put(:history_store, history_store_policy)
-
     dashboard_runtime_composition =
       opts
       |> Keyword.get_lazy(:dashboard_runtime_composition, fn ->
@@ -250,7 +242,6 @@ defmodule Cadence.Platform.RootComposition do
       record_archive_policy: record_archive_policy,
       runtime_persistence_policy: runtime_persistence_policy,
       ingress_archive_consumer_policy: ingress_archive_consumer_policy,
-      data_management_policy: data_management_policy,
       profiler: profiler,
       profiler_child_opts: profiler_child_opts,
       runtime_health_child_opts: runtime_health_child_opts,

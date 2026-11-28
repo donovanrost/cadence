@@ -17,7 +17,9 @@ defmodule Cadence.Reads.MissionModelApprovals do
   alias Cadence.MissionModels
   alias Cadence.MissionModels.{ApprovalReads, Comparison, CompositionApproval, RevisionDecisions}
   alias Cadence.Reads.Catalog.RevisionBase
+  alias Cadence.Reads.CommandGroups
   alias Cadence.Reads.MissionModelApprovals.CompositionKeys
+  alias Cadence.SpacecraftStore
 
   @spec list(Scope.t(), binary(), binary()) :: [map()]
   def list(%Scope{} = scope, mission_id, status) do
@@ -283,7 +285,8 @@ defmodule Cadence.Reads.MissionModelApprovals do
       record ->
         names = ActorRef.names(org, [record.actor])
 
-        Map.put(view, :decision, %{
+        view
+        |> Map.put(:decision, %{
           kind: "withdrawn",
           # C1 (Control.ActorRef): never the stored name.
           by: withdrawn_by(ActorRef.document(record.actor, names)),
@@ -292,10 +295,54 @@ defmodule Cadence.Reads.MissionModelApprovals do
           reason: record.reason,
           retroactive: false
         })
+        |> Map.merge(affected_groups(org, mission_id, id))
     end
   end
 
-  defp withdrawn(view, _org, _mission_id, _row), do: view
+  defp withdrawn(view, _org, _mission_id, _row),
+    do: Map.merge(view, %{affected_groups: nil, affected_groups_count: nil})
+
+  @group_sample 5
+
+  # The CTO's addition (#546): the GO'd, unreleased command groups the withdrawal reaches, so the
+  # person withdrawing can ask for an abort right away. At most 50 groups (go_unreleased/4's
+  # default), newest GO first. Each names at most 5 of its affected craft (by name) and counts them
+  # all. All the groups' craft are named in one query, so neither the queries nor the payload grow
+  # with the fleet.
+  defp affected_groups(org, mission_id, revision_id) do
+    %{groups: groups, total: total} = CommandGroups.go_unreleased(org, mission_id, revision_id)
+    ids = groups |> Enum.flat_map(& &1.spacecraft_ids) |> Enum.uniq()
+
+    {named, _count} =
+      SpacecraftStore.names_page_of(org, mission_id, ids, nil, max(length(ids), 1))
+
+    order = named |> Enum.with_index() |> Map.new(fn {row, i} -> {row["id"], i} end)
+    by_id = Map.new(named, &{&1["id"], &1})
+
+    %{
+      affected_groups:
+        Enum.map(groups, fn group ->
+          sample =
+            group.spacecraft_ids
+            |> Enum.filter(&Map.has_key?(by_id, &1))
+            |> Enum.sort_by(&Map.fetch!(order, &1))
+            |> Enum.take(@group_sample)
+            |> Enum.map(&craft(Map.fetch!(by_id, &1)))
+
+          %{
+            group_id: group.group_id,
+            name: group.name,
+            state: Atom.to_string(group.state),
+            go_at: group.go_at,
+            spacecraft: sample,
+            spacecraft_count: length(group.spacecraft_ids)
+          }
+        end),
+      affected_groups_count: total
+    }
+  end
+
+  defp craft(%{"id" => id, "name" => name, "scid" => scid}), do: %{id: id, name: name, scid: scid}
 
   # The revision read's `by` form (`{id, name}`), from C1's actor.
   defp withdrawn_by(%{id: id, name: name}), do: %{id: id, name: name}

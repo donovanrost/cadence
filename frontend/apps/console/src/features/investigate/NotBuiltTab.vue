@@ -4,18 +4,21 @@ import type { RouteLocationRaw } from "vue-router";
 import type { SpacecraftTab } from "@/shell";
 import { ApButton, ApEmptyState, ApPanel } from "@/ui";
 
+/** The tabs still showing a link to the old page: not Investigate, and not Points (built). */
+type NotBuilt = Exclude<SpacecraftTab, "investigate" | "points">;
+
 /**
  * Spacecraft tabs other than Investigate (Investigate.md [temporary], DECISIONS #64): an empty
  * state that links to the existing page for this spacecraft, until each tab is built.
  */
 const props = defineProps<{
-  tab: Exclude<SpacecraftTab, "investigate">;
+  tab: NotBuilt;
   sc: Readonly<{ id: string; scid: number; name: string }>;
 }>();
 
 const TABS: Readonly<
   Record<
-    Exclude<SpacecraftTab, "investigate">,
+    NotBuilt,
     (sc: typeof props.sc) => {
       title: string;
       label: string;

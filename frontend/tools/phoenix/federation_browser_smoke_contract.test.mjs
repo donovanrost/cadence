@@ -3216,11 +3216,13 @@ void test("the Ops representative browser gate pins the scoped compatibility des
 
 void test("the shared host body is read on the first load and reused by later 304 checks", async () => {
   const source = await readFile(new URL("./federation_browser_smoke.mjs", import.meta.url), "utf8");
-  // The first representative (Mission Catalog, since §11c removed Organization Admin's page).
-  const missionStart = source.indexOf('applicationKey: "mission_catalog"');
-  const opsStart = source.indexOf('applicationKey: "ops_console"', missionStart);
-  assert.ok(missionStart >= 0 && opsStart > missionStart);
-  assert.match(source.slice(missionStart, opsStart), /readPublishedHostBody: true/);
+  // The first representative (Ops Console, since #671 removed Mission Catalog and Spacecraft).
+  const configsStart = source.indexOf("const representativeConfigs = [");
+  const opsStart = source.indexOf('applicationKey: "ops_console"', configsStart);
+  const configsEnd = source.indexOf("const representatives = [];", opsStart);
+  assert.ok(configsStart >= 0 && opsStart > configsStart && configsEnd > opsStart);
+  assert.doesNotMatch(source.slice(configsStart, opsStart), /applicationKey:/);
+  assert.match(source.slice(opsStart, configsEnd), /readPublishedHostBody: true/);
 
   const commsStart = source.indexOf('queryId: "cadence.comms.overview"');
   const commsEnd = source.indexOf("});", commsStart);

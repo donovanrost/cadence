@@ -63,19 +63,6 @@ defmodule CadenceWeb.HostPageLiveTest do
     assert has_element?(view, "#application-shell")
   end
 
-  test "context requests cannot bypass organization or platform administrator policies" do
-    {conn, _organization, mission} = navigation_fixture()
-
-    # L7 moved /admin and L13 /provider-accounts to the console; data-operations/manage keeps the
-    # organization-admin policy. Start on the mission.
-    for target <- ["/missions/#{mission.mission_id}/ops/data-operations/manage"] do
-      {:ok, view, _html} = live(conn, "/missions/#{mission.mission_id}/ops/timeline")
-
-      assert {:error, {:redirect, %{to: "/console"}}} =
-               render_hook(view, "host:context", %{"path" => target})
-    end
-  end
-
   test "revoked browser sessions cannot keep navigating on an existing socket" do
     {conn, _organization, mission} = navigation_fixture()
     path = "/missions/#{mission.mission_id}/ops/timeline"

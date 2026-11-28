@@ -15,7 +15,7 @@ defmodule Cadence.Reads.FleetStatus do
   one row each in a summary the limit-state writers keep (`Cadence.Limits.Store.FleetSummary`, #849), each spacecraft's newest
   telemetry receipt comes from the current-value store, which keeps it as values are recorded
   (`CurrentValueStore.last_receipts/2`), and the durable history receipts come from a cache
-  (`fleet_durable_receipts_ttl_ms`, 60 s) refreshed off the read's path. The number of queries is
+  (`durable_receipts_ttl_ms`, 60 s) refreshed off the read's path. The number of queries is
   fixed (pinned in `fleet_status_database_test.exs`) however large the fleet is. `build/1` and
   `build_posture/1` stay the pure builders over raw events (tests), reduced to the same
   per-spacecraft facts.
@@ -31,6 +31,7 @@ defmodule Cadence.Reads.FleetStatus do
   alias Cadence.Reads.SpacecraftMetadata
   alias Cadence.Reads.Telemetry, as: TelemetryReads
   alias Cadence.SemanticObservations.FleetAlarms
+  alias Cadence.SemanticRuntime.AlarmLevel
   alias Cadence.Spacecraft
   alias Cadence.SpacecraftType
   alias Cadence.Telemetry.{Sample, SpacecraftReceipts}
@@ -420,8 +421,8 @@ defmodule Cadence.Reads.FleetStatus do
     }
   end
 
-  defp alarm_severity(state) when state in ~w(distress critical severe), do: :critical
-  defp alarm_severity(_watch_or_warning), do: :caution
+  defp alarm_severity(state),
+    do: if(AlarmLevel.level(state) == :critical, do: :critical, else: :caution)
 
   defp latest_receipts(samples, limit_states, durable) do
     sample_times = Enum.map(samples, fn %Sample{} = s -> {s.spacecraft_id, s.receipt_time} end)

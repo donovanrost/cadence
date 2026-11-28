@@ -1,6 +1,6 @@
 import type { RouteLocationRaw } from "vue-router";
 import type { Scid } from "@/api/index.ts";
-import { formatHourMinute, type OpState } from "@/ui";
+import { formatCount, formatHourMinute, plural, type OpState } from "@/ui";
 import type { Density, EventKind, EventSeverity, MissionEvent } from "./api.ts";
 
 /** Timeline (OpsLists §Timeline): pure helpers. */
@@ -255,6 +255,28 @@ export function densityBars(density: Density): { bars: Bar[]; max: number } {
     return { t: Date.parse(b.t), stack: stack.filter((s) => s.to > s.from), total: totals[i] ?? 0 };
   });
   return { bars, max };
+}
+
+/** ops.md events/density: with a spacecraft or plane filter, at most this many events are read. */
+export const DENSITY_READ_CAP = 5_000;
+
+/**
+ * #677: the strip's words when its counts were cut (`truncated`: a filtered window holds more than
+ * the server reads for it). The bars and the total are a floor then, so the label says "at least"
+ * and a line says what to do; null when every event was counted.
+ */
+export function densityTruncation(density: Density): string | null {
+  if (!density.truncated) return null;
+  return `The bars count only the first ${formatCount(DENSITY_READ_CAP)} events in this window. Narrow the window to count them all; the event log below lists every one.`;
+}
+
+/** The strip's accessible summary: "48 events in the window, busiest 04:00Z with 9." */
+export function densityLabel(density: Density): string {
+  const { bars } = densityBars(density);
+  const total = bars.reduce((n, b) => n + b.total, 0);
+  const busiest = [...bars].sort((a, b) => b.total - a.total)[0];
+  const count = density.truncated ? `At least ${plural(total, "event")}` : plural(total, "event");
+  return `${count} in the window${busiest && busiest.total ? `, busiest ${formatHourMinute(new Date(busiest.t))} with ${busiest.total}` : ""}.`;
 }
 
 /**

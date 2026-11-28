@@ -172,6 +172,7 @@ defmodule Cadence.Catalog do
       when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
     catalog_family = Keyword.get(opts, :catalog_family)
     catalog_database_id = Keyword.get(opts, :catalog_database_id)
+    artifact_ids = Keyword.get(opts, :artifact_ids)
 
     ArtifactRow
     |> where(
@@ -180,6 +181,7 @@ defmodule Cadence.Catalog do
     )
     |> maybe_filter_catalog_family(catalog_family)
     |> maybe_filter_catalog_database_id(catalog_database_id)
+    |> maybe_filter_artifact_ids(artifact_ids)
     |> order_by([row], desc: row.uploaded_at, desc: row.artifact_id)
     |> Repo.all()
     |> Enum.map(&ArtifactRow.to_domain/1)
@@ -309,25 +311,6 @@ defmodule Cadence.Catalog do
     |> Enum.map(&ImportRunRow.to_domain/1)
     |> Enum.reduce(%{}, fn %ImportRun{artifact_id: artifact_id} = run, acc ->
       Map.put_new(acc, artifact_id, run)
-    end)
-  end
-
-  @spec latest_import_run_by_database(binary(), binary()) :: %{
-          optional(binary()) => ImportRun.t()
-        }
-  def latest_import_run_by_database(organization_id, mission_id)
-      when is_binary(organization_id) and is_binary(mission_id) do
-    ImportRunRow
-    |> where(
-      [row],
-      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-        not is_nil(row.catalog_database_id)
-    )
-    |> order_by([row], desc: row.started_at, desc: row.import_run_id)
-    |> Repo.all()
-    |> Enum.map(&ImportRunRow.to_domain/1)
-    |> Enum.reduce(%{}, fn %ImportRun{catalog_database_id: catalog_database_id} = run, acc ->
-      Map.put_new(acc, catalog_database_id, run)
     end)
   end
 
@@ -472,22 +455,6 @@ defmodule Cadence.Catalog do
       nil -> {:error, :catalog_revision_not_found}
       %RevisionRow{} = row -> {:ok, RevisionRow.to_domain(row)}
     end
-  end
-
-  @spec latest_revision_by_database(binary(), binary()) :: %{optional(binary()) => Revision.t()}
-  def latest_revision_by_database(organization_id, mission_id)
-      when is_binary(organization_id) and is_binary(mission_id) do
-    RevisionRow
-    |> where(
-      [row],
-      row.organization_id == ^organization_id and row.mission_id == ^mission_id
-    )
-    |> order_by([row], desc: row.revision_number, desc: row.inserted_at)
-    |> Repo.all()
-    |> Enum.map(&RevisionRow.to_domain/1)
-    |> Enum.reduce(%{}, fn %Revision{catalog_database_id: catalog_database_id} = revision, acc ->
-      Map.put_new(acc, catalog_database_id, revision)
-    end)
   end
 
   @spec start_revision_import(binary(), binary(), binary(), Artifact.t(), binary(), keyword()) ::
@@ -923,6 +890,11 @@ defmodule Cadence.Catalog do
 
   defp maybe_filter_catalog_database_id(query, catalog_database_id),
     do: where(query, [row], row.catalog_database_id == ^catalog_database_id)
+
+  defp maybe_filter_artifact_ids(query, nil), do: query
+
+  defp maybe_filter_artifact_ids(query, artifact_ids) when is_list(artifact_ids),
+    do: where(query, [row], row.artifact_id in ^artifact_ids)
 
   defp maybe_filter_artifact_id(query, nil), do: query
 

@@ -11,6 +11,7 @@ defmodule Cadence.Control.MissionRuntimeReconcilerTest do
   alias Cadence.Runtime
   alias Cadence.Runtime.{MissionRuntimeSpec, Missions}
   alias Cadence.SemanticRuntime.RegisteredRegistry
+  alias Cadence.TestSupport.BindingFleet
 
   setup do
     previous = Application.get_env(:cadence, :semantic_algorithm_implementations, %{})
@@ -35,6 +36,68 @@ defmodule Cadence.Control.MissionRuntimeReconcilerTest do
       refute sql =~ "metadata"
       refute_receive {:query, _, _}
     end
+  end
+
+  # #447: the reconciler reads a membership version through `fetch_binding_set`, hashes the
+  # expansion against the activation's recorded hash, and applies it; what the runtime holds must
+  # be the set the rows form would have given.
+  test "a populated membership version reconciles and the applied set is the old expansion (#447)" do
+    %{mission: mission, bindings: bindings} = fixture(populated: 3)
+
+    assert "membership" ==
+             Repo.one!(
+               from(row in "governed_binding_sets",
+                 where: row.mission_id == ^mission,
+                 select: row.storage_form
+               )
+             )
+
+    assert {:ok, %{generation: 1}} = MissionRuntimeReconciler.reconcile(mission)
+    assert {:ok, spec} = Missions.applied_spec(mission)
+    assert spec.binding_set_content_sha256 == MissionRuntimeSpec.content_sha256(bindings)
+
+    # The old expansion of the set as it was written, not of the stored read-back.
+    written = BindingFleet.build(bindings.organization_id, mission, "basis", 1, 3)
+    {:ok, reference} = Cadence.Governance.rows_expansion(written)
+    applied = MissionRuntimeSpec.expand(spec).binding_set
+    assert applied == reference
+    assert length(applied.capability_instances) == 9
+  end
+
+  # #450: the runtime admits a membership version only if its members are the version's. A member
+  # added after the fact is not applied; the generation reads not_applied with the reason.
+  test "a membership version with a member added after it was written is not admitted (#450)" do
+    %{mission: mission, bindings: bindings} = fixture(populated: 3)
+
+    row =
+      Repo.one!(
+        from(row in "governed_binding_sets",
+          where: row.mission_id == ^mission,
+          select: %{id: row.id, organization_id: row.organization_id}
+        )
+      )
+
+    %{rows: [[sha]]} =
+      Repo.query!("SELECT artifact_sha256 FROM governed_binding_set_members LIMIT 1")
+
+    Repo.insert_all("governed_binding_set_members", [
+      %{
+        binding_set_row_id: row.id,
+        organization_id: row.organization_id,
+        mission_id: mission,
+        artifact_sha256: sha,
+        source_endpoint_ref: "spacecraft_runtime:sc-extra",
+        inserted_at: DateTime.utc_now()
+      }
+    ])
+
+    assert {:error, :binding_set_members_mismatch} = MissionRuntimeReconciler.reconcile(mission)
+
+    assert %{last_error: :binding_set_members_mismatch} =
+             MissionRuntimeReconciler.snapshot(mission)
+
+    refute match?({:ok, _}, Missions.applied_spec(mission))
+    assert bindings.mission_id == mission
   end
 
   test "a missing runtime is rebuilt even when the durable generation is unchanged" do
@@ -248,15 +311,28 @@ defmodule Cadence.Control.MissionRuntimeReconcilerTest do
     mission = "mission-reconcile-#{suffix}"
     persist_mission_scope(org, mission)
 
+    # `populated: n`: n spacecraft with real endpoints, so the version is membership with real
+    # artifacts (an empty set expands nothing and pins no expansion path).
     bindings =
-      BindingSet.new(%{
-        organization_id: org,
-        mission_id: mission,
-        binding_set_id: "basis",
-        version: 1
-      })
+      case opts[:populated] do
+        nil ->
+          BindingSet.new(%{
+            organization_id: org,
+            mission_id: mission,
+            binding_set_id: "basis",
+            version: 1
+          })
+
+        craft ->
+          BindingFleet.persist_endpoints!(org, mission, craft)
+          BindingFleet.build(org, mission, "basis", 1, craft)
+      end
 
     assert {:ok, ^bindings} = Cadence.Governance.persist_binding_set(org, bindings)
+
+    # The activation records the hash of the stored set (what admission hashes), not of the
+    # builder's struct, whose lists are not in the stored order.
+    {:ok, bindings} = Cadence.Governance.fetch_binding_set(org, mission, "basis", 1)
 
     declarations = [%{kind: :space_system, qualified_name: "/"}]
 

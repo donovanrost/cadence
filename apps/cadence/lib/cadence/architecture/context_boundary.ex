@@ -89,6 +89,7 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/control/uplink_readiness/groups.ex" => :composition,
     "lib/cadence/applications/telemetry_decom_catalog_contribution.ex" => :composition,
     "lib/cadence/semantic_runtime.ex" => :catalog,
+    "lib/cadence/semantic_runtime/alarm_level.ex" => :catalog,
     "lib/cadence/semantic_runtime/algorithm_plan.ex" => :catalog,
     "lib/cadence/semantic_runtime/expression_evaluator.ex" => :catalog,
     "lib/cadence/semantic_runtime/monitoring_evaluator.ex" => :catalog,
@@ -109,9 +110,7 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/extensions/registry.ex" => :composition,
     "lib/cadence/applications/registry.ex" => :composition,
     "lib/cadence/applications/legacy_comms_overview.ex" => :composition,
-    "lib/cadence/applications/spacecraft.ex" => :composition,
     "lib/cadence/applications/ops_console.ex" => :composition,
-    "lib/cadence/applications/mission_catalog.ex" => :composition,
     "lib/cadence/applications/limits.ex" => :composition,
     "lib/cadence/applications/derived_telemetry.ex" => :composition,
     "lib/cadence/applications/comms.ex" => :composition,
@@ -139,6 +138,7 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/persistence/organization_scope.ex" => :adapter,
     "lib/cadence/application_dispatch/binding_rule.ex" => :catalog,
     "lib/cadence/application_dispatch/binding_set.ex" => :catalog,
+    "lib/cadence/application_dispatch/binding_set_membership.ex" => :catalog,
     "lib/cadence/application_dispatch/capability_config.ex" => :catalog,
     "lib/cadence/application_dispatch/capability_instance.ex" => :catalog,
     "lib/cadence/application_dispatch/selector.ex" => :catalog,
@@ -176,7 +176,6 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/control/contact_fact_consumer.ex" => :commanding,
     "lib/cadence/control/derived_telemetry.ex" => :telemetry,
     "lib/cadence/control/ingress.ex" => :telemetry,
-    "lib/cadence/control/telemetry_data_management.ex" => :telemetry,
     "lib/cadence/control/runtime_fact_consumer.ex" => :commanding,
     "lib/cadence/control/mission_runtime.ex" => :runtime,
     "lib/cadence/management/transports.ex" => :composition,
@@ -429,7 +428,14 @@ defmodule Cadence.Architecture.ContextBoundary do
                                 {"lib/cadence/control/providers.ex",
                                  "lib/cadence/control/contacts/provider_grants.ex"},
                                 {"lib/cadence/governance.ex",
-                                 "lib/cadence/management/comms/source_endpoint_references.ex"}
+                                 "lib/cadence/management/comms/source_endpoint_references.ex"},
+                                # E2 (#546): a GO records, and an unattended release compares,
+                                # which withdrawn model approvals its craft ran on, through the
+                                # composition context's one read of them.
+                                {"lib/cadence/commanding.ex",
+                                 "lib/cadence/control/withdrawn_pins.ex"},
+                                {"lib/cadence/control/commanding/withdrawn_at_go.ex",
+                                 "lib/cadence/control/withdrawn_pins.ex"}
                               ])
 
   @type context ::

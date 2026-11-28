@@ -7,25 +7,24 @@ defmodule Cadence.Jobs.RetentionTest do
 
   @now ~U[2026-11-28 12:00:00Z]
 
-  test "retention index excludes exactly the job types held for durable reads" do
+  test "retention index covers every terminal job, whatever its type" do
     %{rows: [[definition]]} =
       Repo.query!(
         "SELECT pg_get_indexdef('background_jobs_terminal_completed_at_idx'::regclass)",
         []
       )
 
-    excluded_types =
-      definition
-      |> String.split(" WHERE ", parts: 2)
-      |> List.last()
-      |> then(&Regex.scan(~r/'([^']+)'/, &1, capture: :all_but_first))
-      |> List.flatten()
-      |> Enum.reject(&(&1 in ["completed", "failed"]))
+    predicate = definition |> String.split(" WHERE ", parts: 2) |> List.last()
 
-    assert Enum.sort(excluded_types) == Enum.sort(Retention.retained_job_types())
+    refute predicate =~ "job_type"
+
+    assert predicate
+           |> then(&Regex.scan(~r/'([^']+)'/, &1, capture: :all_but_first))
+           |> List.flatten()
+           |> Enum.sort() == ["completed", "failed"]
   end
 
-  test "sweeps old terminal jobs by completion time and keeps live, unknown and recent jobs" do
+  test "sweeps old terminal jobs of every type by completion time and keeps live, unknown and recent jobs" do
     mission = "mission-retention-#{Ecto.UUID.generate()}"
     persist_mission_scope("org-retention-#{Ecto.UUID.generate()}", mission)
 
@@ -44,10 +43,10 @@ defmodule Cadence.Jobs.RetentionTest do
     recent_completed = job!(mission, "completed", old, recent)
     recent_failed = job!(mission, "failed", old, recent)
 
-    assert %{rows: 2, stopped: :done} =
+    assert %{rows: 3, stopped: :done} =
              Sweeper.sweep(Retention, nil, now: @now, chunk_rows: 1, pause_ms: 0)
 
-    for job <- [old_completed, old_failed] do
+    for job <- [old_completed, old_failed, old_workflow] do
       assert {:error, :job_not_found} = Jobs.fetch_job(job.job_id)
     end
 
@@ -55,7 +54,6 @@ defmodule Cadence.Jobs.RetentionTest do
           old_queued,
           old_running,
           old_unknown,
-          old_workflow,
           recent_completed,
           recent_failed
         ] do

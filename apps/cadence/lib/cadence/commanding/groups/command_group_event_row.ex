@@ -14,6 +14,10 @@ defmodule Cadence.Commanding.Groups.CommandGroupEventRow do
             aborted member_failed completed hold_acknowledged
             released_on_contact expired)
 
+  @doc "The event kinds, as text (the paged events read filters by them)."
+  @spec kinds() :: [binary()]
+  def kinds, do: @kinds
+
   schema "command_group_events" do
     field(:command_group_id, :string)
     field(:organization_id, :string)

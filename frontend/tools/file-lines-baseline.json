@@ -59,10 +59,6 @@
     "lines": 407,
     "owner": "legacy (#80): frozen, leaves with its row"
   },
-  "apps/host/src/mission-and-spacecraft/features/profile-creation/SpacecraftTypeNew.vue": {
-    "lines": 405,
-    "owner": "dashboards (deleted by host cleanup a)"
-  },
   "apps/host/src/phoenix-catalog-client.ts": {
     "lines": 403,
     "owner": "legacy (#80): frozen, leaves with its row"

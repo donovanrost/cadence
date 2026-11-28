@@ -102,7 +102,14 @@ defmodule Cadence.Reads.CatalogOverview do
         download_url: download_url(mission_id, artifact.artifact_id)
       },
       revisions: Enum.map(revisions, &Map.take(&1, [:id, :number, :label, :imported_at])),
-      import_runs: run_rows(organization_id, Enum.take(runs, 50), revision_by_run, labels)
+      import_runs:
+        run_rows(
+          organization_id,
+          Enum.take(runs, 50),
+          revision_by_run,
+          labels,
+          %{artifact.artifact_id => artifact}
+        )
     }
   end
 
@@ -125,12 +132,20 @@ defmodule Cadence.Reads.CatalogOverview do
 
     revision_by_run = Map.new(revisions, &{&1.import_run_id, &1})
     revisions = with_model_status(revisions, organization_id, mission_id)
+    runs = Enum.take(runs, @run_limit)
 
     %{
       id: id,
       current_revision: current(organization_id, mission_id, List.first(revisions)),
       revisions: Enum.map(revisions, &Map.drop(&1, [:import_run_id, :model_revision_id])),
-      import_runs: run_rows(organization_id, Enum.take(runs, @run_limit), revision_by_run, labels)
+      import_runs:
+        run_rows(
+          organization_id,
+          runs,
+          revision_by_run,
+          labels,
+          artifacts_by_id(organization_id, mission_id, runs)
+        )
     }
   end
 
@@ -205,19 +220,27 @@ defmodule Cadence.Reads.CatalogOverview do
       ])
 
   # #146 (U103): each row's requested_by, from two batched name queries per table.
-  defp run_rows(organization_id, runs, revision_by_run, labels) do
+  defp run_rows(organization_id, runs, revision_by_run, labels, artifacts_by_id) do
     names = Requesters.names(organization_id, Enum.map(runs, & &1.requested_by))
-    Enum.map(runs, &run_row(&1, revision_by_run, labels, names))
+    Enum.map(runs, &run_row(&1, revision_by_run, labels, names, artifacts_by_id))
   end
 
-  defp run_row(%ImportRun{} = run, revision_by_run, labels, names) do
+  # A run names its own source file, so a failed or running run (no revision yet) still has one.
+  defp artifacts_by_id(organization_id, mission_id, runs) do
+    ids = runs |> Enum.map(& &1.artifact_id) |> Enum.uniq()
+
+    organization_id
+    |> Catalog.list_artifacts(mission_id, artifact_ids: ids)
+    |> Map.new(&{&1.artifact_id, &1})
+  end
+
+  defp run_row(%ImportRun{} = run, revision_by_run, labels, names, artifacts_by_id) do
+    artifact = Map.get(artifacts_by_id, run.artifact_id)
+
     %{
       id: run.import_run_id,
-      file_name:
-        revision_by_run
-        |> Map.get(run.import_run_id, %{artifact: %{}})
-        |> get_in([:artifact, :file_name]),
-      format_label: Map.get(labels, run.importer_key),
+      file_name: artifact && artifact.artifact_name,
+      format_label: artifact && Map.get(labels, artifact.format_key),
       status: status(run.status),
       diagnostic_counts: diagnostic_counts(run.diagnostics),
       revision_number: revision_by_run |> Map.get(run.import_run_id, %{}) |> Map.get(:number),

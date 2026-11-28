@@ -1,12 +1,12 @@
 defmodule Cadence.Dashboards.DataLinkResolverRecoveryTest do
   use Cadence.RuntimeCase, async: false
 
+  import Cadence.BackfillLifecycleFixtures
   import Cadence.Dashboards.DataLinkResolverFixtures
 
   alias Cadence.Contacts.ScheduledContact
   alias Cadence.Dashboards.{DataLink, DataLinkInspector, DataLinkResolver}
   alias Cadence.Reads.MissionEvents, as: MissionEventReads
-  alias Cadence.Telemetry.Storage
 
   test "resolves late-data policy lifecycle source relationships" do
     organization_id = "org-resolver-late-data-policy"
@@ -14,7 +14,7 @@ defmodule Cadence.Dashboards.DataLinkResolverRecoveryTest do
     persist_mission_scope(organization_id, mission_id)
 
     assert {:ok, _source_event} =
-             Storage.record_backfill_lifecycle_event(
+             record_backfill_lifecycle_event(
                %{
                  backfill_lifecycle_event_id: "resolver-late-source-event-1",
                  backfill_run_id: "resolver-late-run-1",
@@ -36,7 +36,7 @@ defmodule Cadence.Dashboards.DataLinkResolverRecoveryTest do
              )
 
     assert {:ok, policy_event} =
-             Storage.record_backfill_lifecycle_event(
+             record_backfill_lifecycle_event(
                %{
                  backfill_lifecycle_event_id: "resolver-late-policy-event-1",
                  backfill_run_id: "resolver-late-run-1",
@@ -125,7 +125,7 @@ defmodule Cadence.Dashboards.DataLinkResolverRecoveryTest do
     }
 
     assert {:ok, source_event} =
-             Storage.record_backfill_lifecycle_event(
+             record_backfill_lifecycle_event(
                Map.merge(base_event, %{
                  backfill_lifecycle_event_id: "resolver-recovery-source-event-1",
                  backfill_run_id: "resolver-recovery-run-1",
@@ -141,7 +141,7 @@ defmodule Cadence.Dashboards.DataLinkResolverRecoveryTest do
              )
 
     assert {:ok, retry_event} =
-             Storage.record_backfill_lifecycle_event(
+             record_backfill_lifecycle_event(
                Map.merge(base_event, %{
                  backfill_lifecycle_event_id: "resolver-recovery-retry-event-1",
                  backfill_run_id: "resolver-recovery-run-1",
@@ -159,7 +159,7 @@ defmodule Cadence.Dashboards.DataLinkResolverRecoveryTest do
              )
 
     assert {:ok, correction_event} =
-             Storage.record_backfill_lifecycle_event(
+             record_backfill_lifecycle_event(
                Map.merge(base_event, %{
                  backfill_lifecycle_event_id: "resolver-recovery-correction-event-1",
                  backfill_run_id: "resolver-recovery-correction-run-1",
@@ -178,7 +178,7 @@ defmodule Cadence.Dashboards.DataLinkResolverRecoveryTest do
              )
 
     assert {:ok, correction_transition_event} =
-             Storage.record_backfill_lifecycle_event(
+             record_backfill_lifecycle_event(
                Map.merge(base_event, %{
                  backfill_lifecycle_event_id: "resolver-recovery-correction-transition-1",
                  backfill_run_id: "resolver-recovery-correction-run-1",
@@ -197,7 +197,7 @@ defmodule Cadence.Dashboards.DataLinkResolverRecoveryTest do
              )
 
     assert {:ok, policy_event} =
-             Storage.record_backfill_lifecycle_event(
+             record_backfill_lifecycle_event(
                Map.merge(base_event, %{
                  backfill_lifecycle_event_id: "resolver-recovery-policy-event-1",
                  backfill_run_id: "resolver-recovery-run-1",
@@ -322,7 +322,7 @@ defmodule Cadence.Dashboards.DataLinkResolverRecoveryTest do
     persist_mission_scope(organization_id, mission_id)
 
     assert {:ok, event} =
-             Storage.record_backfill_lifecycle_event(
+             record_backfill_lifecycle_event(
                %{
                  backfill_lifecycle_event_id: "resolver-backfill-failed-event-1",
                  backfill_run_id: "resolver-backfill-failed-run-1",

@@ -1,8 +1,8 @@
 defmodule Cadence.Catalog.Reimport do
   @moduledoc """
   Scoped request to import an existing immutable Catalog artifact again. Refused while an import of
-  that artifact is still running (`{:import_running, import_run_id}`): every path asks here (the
-  console, the mission catalog host action and the native page), so none can start a second.
+  that artifact is still running (`{:import_running, import_run_id}`), so the console can't start a
+  second.
   The run records who asked (`Catalog.Actor`); before 11-17 it matched the user on `:id` (the key
   is `user_id`), so every reimport stored `%{}`. The run's own model revision counts its runner as
   its importer (`Catalog.ModelImporters`).

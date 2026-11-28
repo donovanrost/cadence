@@ -61,7 +61,7 @@ config :cadence,
   telemetry_current_value_store: [module: Cadence.Telemetry.CurrentValueStore.Postgres]
 
 # The fleet read asks the durable history store every time in tests (the cache is tested on its own).
-config :cadence, fleet_durable_receipts_ttl_ms: 0
+config :cadence, durable_receipts_ttl_ms: 0
 
 config :cadence,
   telemetry_storage: [
@@ -122,3 +122,12 @@ config :cadence, :ephemeris_upload_retries, enabled?: false
 # The watermark coalescer's own timer cannot use a test's sandbox connection: tests flush through
 # a watermark read or `WatermarkCoalescer.flush/0`.
 config :cadence, :source_watermark_coalescing, interval_ms: :infinity
+
+# #447: a binding set that cannot be stored as membership falls back to rows in production, with
+# an error log and a count; under test it raises, so no suite passes through a fallback unseen. The
+# tests of the fallback itself turn this off for their own run.
+config :cadence, :binding_set_storage_raise_on_fallback, true
+
+# #447: every binding set a test persists is read back and compared with its rows-form expansion
+# (the expansion before membership storage), in every path's suite.
+config :cadence, :binding_set_storage_verifier, Cadence.TestSupport.BindingSetEquivalence

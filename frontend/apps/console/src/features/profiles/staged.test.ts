@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
-import { stagedFields, stagedText } from "./staged.ts";
+import { stagedConflict, stagedFields, stagedText } from "./staged.ts";
 
-const change = (authorId: string, name: string, entity: string, changes: unknown) => ({
+const change = (authorId: string, name: string | null, entity: string, changes: unknown) => ({
   id: `c-${authorId}`,
   summary: "x",
   author: { kind: "user" as const, id: authorId, name },
@@ -54,6 +54,35 @@ describe("profile conflict chip (Profile.md States)", () => {
     };
     expect(stagedText(f, { path: f.path, by: "Mira K.", mine: false, value: 1200 })).toBe(
       "Mira K. staged 1,200",
+    );
+    // U25 (#308): a person with no name drops; the act stays. Never "Someone".
+    expect(stagedText(f, { path: f.path, by: null, mine: false, value: 1200 })).toBe(
+      "Staged 1,200",
+    );
+    expect(stagedText(f, { path: f.path, by: null, mine: true, value: 1200 })).toBe(
+      "You staged 1,200",
+    );
+  });
+
+  it("names the author in Stage's conflict reason, or drops a nameless one (U25)", () => {
+    const s = { path: "p", by: "Mira K.", mine: false, value: 1 };
+    expect(stagedConflict(s, "TM frame length")).toBe(
+      "Mira K. already staged TM frame length. Resolve it on Staged changes first.",
+    );
+    expect(stagedConflict({ ...s, by: null }, "TM frame length")).toBe(
+      "Already staged in the open change set: TM frame length. Resolve it on Staged changes first.",
+    );
+  });
+
+  it("reads the author through who(): a nameless person is null, a service identity marked", () => {
+    type Author = Readonly<{ kind: "user" | "service"; id: string; name: string | null }>;
+    const by = (author: Author) => {
+      const c = { ...change("u-2", "x", "prof-1", [{ path: "a", value: 1 }]), author };
+      return stagedFields({ changes: [c] }, "prof-1", "me").get("a")?.by;
+    };
+    expect(by({ kind: "user", id: "u-2", name: null })).toBeNull();
+    expect(by({ kind: "service", id: "s-1", name: "Nightly planner" })).toBe(
+      "Nightly planner (a service identity)",
     );
   });
 });

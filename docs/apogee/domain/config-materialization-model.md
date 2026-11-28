@@ -174,3 +174,28 @@ binding rows and 0.5 MB of documents. A one-craft canary costs the same handful 
 - what `spacecraft_application_bindings.catalog_revision_id` means for 001.
 
 Both are read-only checks I can do next.
+
+## 6. Step 1 landed (#447): measured
+
+Binding-set versions are stored once per distinct configuration plus a membership list
+(`Governance.BindingSetStorage`); `Governance.fetch_binding_set` expands them to the identical
+`BindingSet` (same ids, same order, same `content_sha256`, #108). Old versions read as rows.
+
+`Cadence.Governance.BindingSetStorageMeasureTest` (`mix test ... --include scale`, a catalog the
+size of dev's: 10 packets a craft), laptop 2, develop before and after, rows and bytes added to the
+binding tables and statements run by the review, which writes the version:
+
+| | before | after |
+|---|---|---|
+| 500 craft, one generation | 10,001 rows, 16.1 MB, 15,691 statements | 502 rows, 0.11 MB, 5,698 statements |
+| 500 craft, then a one-craft change | 10,001 rows, 12.3 MB, 10,087 statements | 501 rows, 0.12 MB, 94 statements |
+| 1,000 craft, one generation | 20,001 rows, 32.7 MB, 31,191 statements | 1,002 rows, 0.25 MB, 11,198 statements |
+| 1,000 craft, then a one-craft change | 20,001 rows, 6.1 MB, 20,087 statements | 1,001 rows, 0.23 MB, 94 statements |
+
+The statements that remain in a generation's review are the per-craft ones (`prepare_drafts`,
+#1000), not the binding set's. Wall times are noisy on a shared laptop and are in the PR, not here.
+The apply's statements are unchanged (it reads the same set).
+
+Equivalence is checked on every write and read in the test suites: `Cadence.TestSupport.
+BindingSetEquivalence` reads every persisted version back and compares it with its rows-form
+expansion, struct for struct and by hash, and a fallback to rows raises under test.

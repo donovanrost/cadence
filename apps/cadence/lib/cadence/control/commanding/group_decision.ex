@@ -22,6 +22,7 @@ defmodule Cadence.Control.Commanding.GroupDecision do
   }
 
   alias Cadence.Commanding.Groups.{Admission, CommandGroup, GroupStore}
+  alias Cadence.Control.Commanding.WithdrawnAtGo
   alias Cadence.Governance.Accountability
   alias Cadence.Management.Commanding, as: ManagementCommanding
   alias Cadence.Management.Commanding.ApprovedCommand
@@ -103,10 +104,30 @@ defmodule Cadence.Control.Commanding.GroupDecision do
     with {:ok, group} <- GroupStore.fetch(org, mission, group_id, lock: true),
          :ok <- decidable(group, actor, decision),
          :ok <- same_basis(group, snapshot),
-         :ok <- members_as_submitted(group, decision) do
-      apply_decision(group, actor, decision)
+         :ok <- members_as_submitted(group, decision),
+         {:ok, seen} <- withdrawn_seen(group, decision) do
+      apply_decision(group, actor, decision, seen)
     end
   end
+
+  # E2 (#546): a GO arms the group, so it records which withdrawn model approvals it knew about
+  # (and checks the acknowledgement it carries covers exactly them). Send back and NO-GO arm
+  # nothing. A withdrawal since the review preflight the approver saw is a stale review.
+  defp withdrawn_seen(group, %{kind: kind} = decision) when kind in [:go, :go_excluding] do
+    ids = Enum.map(group.targets, & &1["spacecraft_id"])
+
+    case WithdrawnAtGo.seen(
+           group.organization_id,
+           group.mission_id,
+           ids,
+           Map.get(decision, :hold_acks, [])
+         ) do
+      {:ok, seen} -> {:ok, seen}
+      {:error, :withdrawal_not_acknowledged} -> {:error, :command_group_review_stale}
+    end
+  end
+
+  defp withdrawn_seen(_group, _decision), do: {:ok, %{}}
 
   defp decidable(group, actor, decision) do
     with :ok <- pending(group),
@@ -196,14 +217,21 @@ defmodule Cadence.Control.Commanding.GroupDecision do
       else: {:error, :command_group_basis_changed}
   end
 
-  defp apply_decision(group, actor, decision) do
+  defp apply_decision(group, actor, decision, seen) do
     now = DateTime.utc_now()
     # Before anything changes: the members the decider's token covered (#117 step 4b records it).
     members_digest = members_digest(group)
     members = GroupStore.members(group.organization_id, group.mission_id, group.command_group_id)
     {approved, rejected} = split(members, group, decision)
     note = Map.get(decision, :note)
-    record = %{separated_from: separated_from(group), admin_mode: decision.admin_mode}
+    craft = Map.new(group.targets, &{&1["index"], &1["spacecraft_id"]})
+
+    record = %{
+      separated_from: separated_from(group),
+      admin_mode: decision.admin_mode,
+      seen: seen,
+      craft: craft
+    }
 
     approvals =
       Enum.map(approved, &approval(&1, :approved, actor, now, note, record)) ++
@@ -332,7 +360,11 @@ defmodule Cadence.Control.Commanding.GroupDecision do
       decided_by: actor,
       decided_at: now,
       reason: reason,
-      metadata: %{"command_group_id" => request.command_group_id}
+      metadata:
+        Map.merge(
+          %{"command_group_id" => request.command_group_id},
+          WithdrawnAtGo.metadata(record.seen, record.craft[request.group_slot.target_index])
+        )
     })
   end
 

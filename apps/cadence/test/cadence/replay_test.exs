@@ -355,7 +355,36 @@ defmodule Cadence.ReplayTest do
   end
 
   test "replays managed capability runtime records into replay tables and operational events" do
-    mission_id = "mission-managed-replay"
+    assert_managed_replay("mission-managed-replay")
+  end
+
+  # The same replay over a populated version stored as membership (#447): the mission has an
+  # organization, so storage infers it and writes artifacts and members, and Replay's reader
+  # (fetch_binding_set/3) expands them. Every assertion of the rows-form test above must hold.
+  test "replays a populated membership version exactly as the rows form does (#447)" do
+    mission_id = "mission-managed-replay-membership"
+    persist_mission_scope("org-managed-replay-membership", mission_id)
+
+    assert_managed_replay(mission_id)
+
+    assert "membership" ==
+             Repo.one!(
+               from(row in "governed_binding_sets",
+                 where:
+                   row.mission_id == ^mission_id and row.binding_set_id == "managed-replay-basis",
+                 select: row.storage_form
+               )
+             )
+
+    assert Repo.one!(
+             from(member in "governed_binding_set_members",
+               where: member.mission_id == ^mission_id,
+               select: count(member.id)
+             )
+           ) > 0
+  end
+
+  defp assert_managed_replay(mission_id) do
     source_endpoint = persist_source_endpoint(mission_id)
 
     binding_set =
@@ -617,10 +646,10 @@ defmodule Cadence.ReplayTest do
         source_ref: "provider/" <> mission_id
       })
 
-    assert {:ok, ^source_endpoint} =
-             Cadence.SourceEndpointFixtures.persist(source_endpoint)
+    # The stored endpoint: it carries the mission's organization when the mission has one.
+    assert {:ok, persisted} = Cadence.SourceEndpointFixtures.persist(source_endpoint)
 
-    source_endpoint
+    persisted
   end
 
   defp build_space_packet(apid, sequence_count, packet_data) do

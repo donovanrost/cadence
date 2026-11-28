@@ -211,7 +211,7 @@ defmodule Cadence.Applications.ActionDispatcher do
          {:ok, required_permission} <- declared_action_permission(definition, request.action_id),
          {:ok, provider} <- fetch_provider(request.application_key, registered_providers),
          :ok <- authorize_action(current_scope, host_context, required_permission),
-         :ok <- authorize_surface(current_scope, host_context, definition, request),
+         :ok <- ensure_action_surface(host_context, definition, request),
          {:ok, installation} <-
            maybe_fetch_installation(
              current_scope,
@@ -233,7 +233,7 @@ defmodule Cadence.Applications.ActionDispatcher do
     if placement in scopes, do: :ok, else: {:error, :unsupported_application_host_context}
   end
 
-  defp authorize_surface(scope, host, definition, request) do
+  defp ensure_action_surface(host, definition, request) do
     if is_nil(request.surface_id) and definition.installation_policy == :optional do
       :ok
     else
@@ -241,7 +241,7 @@ defmodule Cadence.Applications.ActionDispatcher do
              Registry.fetch_surface(definition, host.placement, request.surface_id),
            true <- surface.version == request.surface_version,
            true <- request.action_id in surface.actions do
-        ApplicationInstallations.authorize_surface(scope, host, surface)
+        :ok
       else
         _invalid -> {:error, :invalid_application_action_surface}
       end
@@ -440,29 +440,12 @@ defmodule Cadence.Applications.ActionDispatcher do
          current_scope,
          host_context,
          definition,
-         %ActionRequest{action_id: "request_activation"} = request
+         %ActionRequest{action_id: "request_activation"}
        ) do
-    with {:ok, activation_definition} <- activation_definition(definition, host_context, request) do
-      ApplicationPreflight.ensure_ready(current_scope, host_context, activation_definition)
-    end
+    ApplicationPreflight.ensure_ready(current_scope, host_context, definition)
   end
 
   defp ensure_action_preflight(_current_scope, _host_context, _definition, _action_id), do: :ok
-
-  defp activation_definition(
-         %ApplicationDefinition{installation_policy: :platform} = definition,
-         host,
-         request
-       ) do
-    with {:ok, surface} <- Registry.fetch_surface(definition, host.placement, request.surface_id),
-         %{application_key: key} <- surface.required_application do
-      Registry.fetch_available(key)
-    else
-      _invalid -> {:error, :undeclared_application_preflight}
-    end
-  end
-
-  defp activation_definition(definition, _host, _request), do: {:ok, definition}
 
   defp record_installation_outcome(_scope, _host, _request, _provider, _result, nil),
     do: {:ok, nil}
@@ -471,37 +454,14 @@ defmodule Cadence.Applications.ActionDispatcher do
          current_scope,
          host_context,
          %ActionRequest{action_id: "disable", application_key: application_key},
-         provider,
+         _provider,
          _result,
-         installation
+         _installation
        ) do
-    if lifecycle_handled_by_provider?(provider),
-      do: {:ok, installation},
-      else: ApplicationInstallations.disable(current_scope, host_context, application_key)
+    ApplicationInstallations.disable(current_scope, host_context, application_key)
   end
 
   defp record_installation_outcome(
-         current_scope,
-         host_context,
-         %ActionRequest{} = request,
-         provider,
-         result,
-         installation
-       ) do
-    if lifecycle_handled_by_provider?(provider) and request.action_id in ["install", "uninstall"],
-      do: {:ok, installation},
-      else:
-        record_configuration_outcome(
-          current_scope,
-          host_context,
-          request,
-          provider,
-          result,
-          installation
-        )
-  end
-
-  defp record_configuration_outcome(
          current_scope,
          host_context,
          %ActionRequest{application_key: application_key} = request,
@@ -531,11 +491,6 @@ defmodule Cadence.Applications.ActionDispatcher do
     else
       {:ok, installation}
     end
-  end
-
-  defp lifecycle_handled_by_provider?(provider) do
-    function_exported?(provider, :handles_lifecycle_actions?, 0) and
-      provider.handles_lifecycle_actions?()
   end
 
   defp action_provider_failure do

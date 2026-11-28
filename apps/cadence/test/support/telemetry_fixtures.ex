@@ -53,18 +53,6 @@ defmodule Cadence.Dashboards.Sources.TelemetryFixtures do
     |> struct!(overrides)
   end
 
-  def backfill_lifecycle_event(run_id, event_type, overrides) do
-    %{
-      backfill_lifecycle_event_id: "#{run_id}-#{event_type}",
-      backfill_run_id: run_id,
-      event_type: event_type,
-      observable_id: "HK.counter",
-      point_id: "HK.counter",
-      occurred_at: ~U[2026-06-17 12:00:00Z]
-    }
-    |> Map.merge(Map.new(overrides))
-  end
-
   def storage_provenance(observation_identity_id) do
     %{
       "storage" => %{

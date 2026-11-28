@@ -10,7 +10,8 @@ defmodule Cadence.SemanticRuntime.MonitoringPlan do
           minimum_conformance: pos_integer(),
           missing_state: atom(),
           invalid_state: atom(),
-          disabled: boolean()
+          disabled: boolean(),
+          rule_digest: binary() | nil
         }
 
   @enforce_keys [:policy_id, :parameter_id]
@@ -22,7 +23,11 @@ defmodule Cadence.SemanticRuntime.MonitoringPlan do
                 minimum_conformance: 1,
                 missing_state: :unknown,
                 invalid_state: :unknown,
-                disabled: false
+                disabled: false,
+                # The digest of the rules in force for this parameter (#451 T2): when it changes the
+                # persistence counters reset and the result says so. nil (a plan without digests)
+                # never resets anything.
+                rule_digest: nil
               ]
 
   @spec new(map()) :: t()
@@ -36,7 +41,8 @@ defmodule Cadence.SemanticRuntime.MonitoringPlan do
       minimum_conformance: value(attrs, :minimum_conformance, 1),
       missing_state: attrs |> value(:missing_state, :unknown) |> normalize_atom(),
       invalid_state: attrs |> value(:invalid_state, :unknown) |> normalize_atom(),
-      disabled: value(attrs, :disabled, false)
+      disabled: value(attrs, :disabled, false),
+      rule_digest: value(attrs, :rule_digest)
     }
   end
 

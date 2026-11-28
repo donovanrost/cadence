@@ -249,18 +249,10 @@ The UI asks `Cadence.ExtensionCatalog` what compiled contributions are
 available. It does not duplicate module lists, labels, configuration fields, or
 capability maps in a LiveView.
 
-Application inventory surfaces consume
-[`CadenceWeb.ApplicationInventory`](../../apps/cadence_web/lib/cadence_web/application_inventory.ex).
-Use `catalog/2` for a host scope that shows every available optional application,
-and `declared/3` when a Spacecraft Profile supplies the desired application
-keys. The web host first resolves contributions through `Cadence.ExtensionCatalog`,
-then delegates to `Cadence.Reads.Applications.Inventory` to compose durable
-installation lifecycle and the registered status provider. This preserves the
-projection-to-composition dependency boundary. Unknown profile extension keys
-remain visible as unavailable items instead of being dropped. Retained
-installations that are no longer declared by the current profile also remain
-visible and may be disabled or uninstalled; only a brand-new install requires a
-profile declaration.
+Application inventory reads go through
+`Cadence.Reads.Applications.Inventory.declared_with_installations/6`, which
+composes the declared applications with their durable installation lifecycle and
+registered status provider (the console's apps lists read `Cadence.Reads.MissionApps`).
 
 Inventory route shells reuse the existing inventory Vue components and
 `CadenceWeb.ApplicationInventoryLifecycle` for install, enable, disable, and

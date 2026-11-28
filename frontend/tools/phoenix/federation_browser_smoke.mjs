@@ -4675,10 +4675,8 @@ async function assertRemoteSurface({
   const staticRemotePrefix = {
     comms: "/assets/application-host/comms/",
     telemetry_decom: "/assets/application-host/telemetry-decom/",
-    mission_catalog: "/assets/application-host/mission-catalog/",
     ops_console: "/assets/application-host/ops-console/",
     organization_admin: "/assets/application-host/organization-admin/",
-    spacecraft: "/assets/application-host/spacecraft/",
   }[applicationKey];
   assert.ok(staticRemotePrefix, `${applicationKey} has no static fallback prefix contract`);
   const staticFallback = diagnostics
@@ -4984,18 +4982,14 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     nMinus1: {
       comms: requiredArg(args, "--n-minus-1-comms-release-id"),
       telemetry_decom: requiredArg(args, "--n-minus-1-telemetry-release-id"),
-      mission_catalog: requiredArg(args, "--n-minus-1-mission-catalog-release-id"),
       ops_console: requiredArg(args, "--n-minus-1-ops-console-release-id"),
       organization_admin: requiredArg(args, "--n-minus-1-organization-admin-release-id"),
-      spacecraft: requiredArg(args, "--n-minus-1-spacecraft-release-id"),
     },
     n: {
       comms: requiredArg(args, "--n-comms-release-id"),
       telemetry_decom: requiredArg(args, "--n-telemetry-release-id"),
-      mission_catalog: requiredArg(args, "--n-mission-catalog-release-id"),
       ops_console: requiredArg(args, "--n-ops-console-release-id"),
       organization_admin: requiredArg(args, "--n-organization-admin-release-id"),
-      spacecraft: requiredArg(args, "--n-spacecraft-release-id"),
     },
   };
   for (const releaseIds of Object.values(releases)) {
@@ -5050,22 +5044,6 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   /** @type {import("./browser-diagnostics.ts").RepresentativeConfig[]} */
   const representativeConfigs = [
     {
-      argName: "--mission-catalog-url",
-      // L1-L4 federated deleted mission_list; mission_overview is Mission Catalog's sample surface.
-      expectedPath: `/missions/${encodeURIComponent(missionId)}/applications/mission_catalog/mission_overview/federated`,
-      applicationKey: "mission_catalog",
-      surfaceId: "mission_overview",
-      expectedScope: "mission",
-      readyExpression:
-        "Boolean(document.querySelector('#mission-catalog-application [data-surface-id=\"mission_overview\"] #spacecraft-readiness-section') && !document.querySelector('#mission-catalog-error') && !document.querySelector('#remote-error'))",
-      catalogPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/catalog`,
-      queryPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/query`,
-      queryId: "cadence.mission_catalog.mission_overview",
-      expectedReleaseId: releases.nMinus1.mission_catalog,
-      // The first representative loads the shared host bundle: read its body once here.
-      readPublishedHostBody: true,
-    },
-    {
       argName: "--ops-url",
       // OpsConsole's workspace surface (its required application workspace) outlives the ops pages.
       expectedPath: `/missions/${encodeURIComponent(missionId)}/applications/ops_console/workspace/federated`,
@@ -5088,19 +5066,8 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
       queryPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/query`,
       queryId: "cadence.ops.workspace",
       expectedReleaseId: releases.nMinus1.ops_console,
-    },
-    {
-      argName: "--spacecraft-url",
-      expectedPath: `/missions/${encodeURIComponent(missionId)}/applications/spacecraft/list/federated`,
-      applicationKey: "spacecraft",
-      surfaceId: "list",
-      expectedScope: "mission",
-      readyExpression:
-        "Boolean(document.querySelector('#spacecraft-remote-application') && document.querySelector('#spacecraft-list-content') && !document.querySelector('#spacecraft-error') && !document.querySelector('#remote-error'))",
-      catalogPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/catalog`,
-      queryPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/query`,
-      queryId: "cadence.spacecraft.list",
-      expectedReleaseId: releases.nMinus1.spacecraft,
+      // The first representative loads the shared host bundle: read its body once here.
+      readPublishedHostBody: true,
     },
   ];
 
@@ -5117,7 +5084,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
       }),
     );
   }
-  reportProgress("representative mission, ops, and spacecraft remotes mounted");
+  reportProgress("representative ops remote mounted");
   await assertPersistentHostNavigation(client, diagnostics, missionId, origin, signal);
 
   const comms = await assertRemoteSurface({
@@ -5604,9 +5571,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
       [
         { applicationKey: "comms", releaseId: releases.nMinus1.comms },
         { applicationKey: "telemetry_decom", releaseId: releases.nMinus1.telemetry_decom },
-        { applicationKey: "mission_catalog", releaseId: releases.nMinus1.mission_catalog },
         { applicationKey: "ops_console", releaseId: releases.nMinus1.ops_console },
-        { applicationKey: "spacecraft", releaseId: releases.nMinus1.spacecraft },
       ],
       "generation N reload",
     );
@@ -5665,9 +5630,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
       [
         { applicationKey: "comms", releaseId: releases.n.comms },
         { applicationKey: "telemetry_decom", releaseId: releases.n.telemetry_decom },
-        { applicationKey: "mission_catalog", releaseId: releases.n.mission_catalog },
         { applicationKey: "ops_console", releaseId: releases.n.ops_console },
-        { applicationKey: "spacecraft", releaseId: releases.n.spacecraft },
       ],
       "generation N-1 rollback",
     );
@@ -5676,9 +5639,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
       [
         { applicationKey: "comms", releaseId: releases.nMinus1.comms },
         { applicationKey: "telemetry_decom", releaseId: releases.nMinus1.telemetry_decom },
-        { applicationKey: "mission_catalog", releaseId: releases.nMinus1.mission_catalog },
         { applicationKey: "ops_console", releaseId: releases.nMinus1.ops_console },
-        { applicationKey: "spacecraft", releaseId: releases.nMinus1.spacecraft },
       ],
       "generation N-1 rollback",
     );

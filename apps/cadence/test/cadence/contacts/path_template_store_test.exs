@@ -85,8 +85,8 @@ defmodule Cadence.Contacts.PathTemplateStoreTest do
     assert versioned.path_id == "path-2"
     assert versioned.metadata == %{"owner" => "ops", "reviewed" => true}
 
-    assert [%PathTemplate{version: 2}] =
-             PathTemplateStore.list(context.organization_id, context.mission_id)
+    assert %{items: [%PathTemplate{version: 2}]} =
+             PathTemplateStore.list_page(context.organization_id, context.mission_id)
 
     assert Enum.map(
              PathTemplateStore.list_versions(

@@ -1,7 +1,8 @@
 defmodule CadenceWeb.Console.CommandGroupListParams do
   @moduledoc """
   U69 A5a/b/c: `GET /command-groups` query params for `CommandGroups.page/4`: `state`, `stage`,
-  `q`, `target`, `awaiting_me`, `mine`, `cursor`, `limit`. Contract: commanding.md.
+  `q`, `target`, `withdrawn_revision`, `awaiting_me`, `mine`, `cursor`, `limit`. Contract:
+  commanding.md.
   """
 
   alias Cadence.Reads.CommandGroups.Search
@@ -17,6 +18,7 @@ defmodule CadenceWeb.Console.CommandGroupListParams do
           {:stages, "stage", &list(&1, Search.stages())},
           {:q, "q", &q/1},
           {:target, "target", &target/1},
+          {:withdrawn_revision, "withdrawn_revision", &target/1},
           {:limit, "limit", &limit/1}
         ],
         {[], %{}},
@@ -27,6 +29,8 @@ defmodule CadenceWeb.Console.CommandGroupListParams do
           end
         end
       )
+
+    errors = both_filters(params, errors)
 
     if errors == %{},
       do:
@@ -64,6 +68,13 @@ defmodule CadenceWeb.Console.CommandGroupListParams do
   end
 
   defp q(_value), do: {:error, "must be text"}
+
+  # E2 (#546): the two ways to name craft don't mix.
+  defp both_filters(params, errors) do
+    if blank_to_nil(params["target"]) && blank_to_nil(params["withdrawn_revision"]),
+      do: Map.put(errors, "withdrawn_revision", "can't be combined with target"),
+      else: errors
+  end
 
   defp target(nil), do: {:ok, nil}
   defp target(""), do: {:ok, nil}

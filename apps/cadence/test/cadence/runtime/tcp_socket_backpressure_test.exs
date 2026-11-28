@@ -37,17 +37,39 @@ defmodule Cadence.Runtime.TCPSocketBackpressureTest do
         nil
       )
 
-    on_exit(fn -> :telemetry.detach(handler) end)
+    # Each socket read the reader appends is one journal record (receipt time is stamped per read,
+    # by design: bytes that arrive in one read arrive at one instant).
+    appends = "#{handler}-appends"
 
-    {:ok, socket} = :gen_tcp.connect(~c"127.0.0.1", port, [:binary, packet: 0, active: false])
+    :ok =
+      :telemetry.attach(
+        appends,
+        [:cadence, :ingress_journal, :append],
+        fn _event, _measurements, _metadata, _config -> send(test_pid, :journal_append) end,
+        nil
+      )
+
+    on_exit(fn ->
+      :telemetry.detach(handler)
+      :telemetry.detach(appends)
+    end)
+
+    # No Nagle on the client: each send leaves as its own segment.
+    {:ok, socket} =
+      :gen_tcp.connect(~c"127.0.0.1", port, [:binary, packet: 0, active: false, nodelay: true])
+
     on_exit(fn -> :gen_tcp.close(socket) end)
 
     assert :ok = :gen_tcp.send(socket, frame(100))
+    assert_receive :journal_append, 2_000
     assert_receive {:processing_batch, consumer, 1}, 2_000
 
-    # Seven more frames, each its own socket read and journal record, while the consumer waits.
+    # Seven more frames, each its own socket read and journal record, while the consumer waits:
+    # the next goes only once the previous is in the journal, so no two can share a read. The
+    # 50 ms gap keeps the receipt times apart by more than the clock's resolution.
     for count <- 101..107 do
       assert :ok = :gen_tcp.send(socket, frame(count))
+      assert_receive :journal_append, 2_000
       Process.sleep(50)
     end
 
