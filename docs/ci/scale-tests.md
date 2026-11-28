@@ -1,9 +1,9 @@
 # Repeat scale tests on a hosted runner
 
 Dispatch **Scale tests** only when the PR queue is short. It shares the account's
-20 CI job slots. #217 budget measurements come from quiet laptop 2. The hosted
-runner measures repeatability and includes its image, CPU model, and logical
-core count in the results.
+20 CI job slots. The hosted runner measures repeatability and includes its
+image, CPU model, and logical core count in the results. #217 budget
+measurements come from [Earendil scale scorecards](../scale/README.md).
 
 ```sh
 gh workflow run scale-tests.yml --ref develop -f ref=develop -f 'filter=--only scale' -f repeats=3

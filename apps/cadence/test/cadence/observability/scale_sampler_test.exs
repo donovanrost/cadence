@@ -169,6 +169,31 @@ defmodule Cadence.Observability.ScaleSamplerTest do
       assert Host.count_agents(ps) == 3
     end
 
+    test "classifies a Linux runner at its nproc limit with swap disabled" do
+      load = Host.parse_load("4.00 2.10 1.50 1/389 12345\n")
+
+      swap =
+        Host.parse_linux_swap("""
+        MemTotal:       16384000 kB
+        SwapCached:            0 kB
+        SwapTotal:             0 kB
+        SwapFree:              0 kB
+        """)
+
+      assert swap == %{swap_used_mb: 0.0, swap_total_mb: 0.0}
+      cores = Host.parse_nproc("4\n")
+      assert cores == 4
+
+      assert Host.capacity([Map.put(swap, :load, load)], cores) == %{
+               classification: :baseline,
+               max_load_one: 4.0,
+               max_swap_percent: 0.0
+             }
+
+      assert Host.parse_nproc("0\n") == nil
+      assert Host.parse_nproc("4 CPUs\n") == nil
+    end
+
     test "a baseline permits load equal to the core count and swap below half" do
       samples = [host_sample(8.0, 256, 1024), host_sample(5.0, 0, 0)]
 

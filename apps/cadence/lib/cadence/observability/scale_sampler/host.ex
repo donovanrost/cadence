@@ -4,7 +4,8 @@ defmodule Cadence.Observability.ScaleSampler.Host do
   number): load average, swap in use and how many coding agents run on the host. A laptop shared
   with a dozen agents makes timings meaningless without it.
 
-  macOS reads `sysctl`; Linux reads `/proc`. A value that can't be read is `nil`.
+  macOS reads `sysctl`. Linux reads load and swap from `/proc` and counts available CPUs
+  with `nproc`.
   """
 
   @type load_average :: %{one: float(), five: float(), fifteen: float()}
@@ -65,9 +66,25 @@ defmodule Cadence.Observability.ScaleSampler.Host do
     %{
       hostname: to_string(hostname),
       os: :os.type() |> Tuple.to_list() |> Enum.join("/"),
-      logical_cpus: :erlang.system_info(:logical_processors_available),
+      logical_cpus: logical_cpus(),
       ram_mb: ram_mb()
     }
+  end
+
+  defp logical_cpus do
+    case :os.type() do
+      {:unix, :linux} -> cmd("nproc", [], &parse_nproc/1) || :unknown
+      _os -> :erlang.system_info(:logical_processors_available)
+    end
+  end
+
+  @doc "Parses the count of available logical CPUs reported by Linux `nproc`."
+  @spec parse_nproc(binary()) :: pos_integer() | nil
+  def parse_nproc(text) do
+    case text |> String.trim() |> Integer.parse() do
+      {count, ""} when count > 0 -> count
+      _unreadable -> nil
+    end
   end
 
   # The machine's physical memory (the BEAM's own memory is in each row's `beam`).
