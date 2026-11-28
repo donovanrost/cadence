@@ -59,12 +59,13 @@ defmodule Cadence.Applications.SpacecraftConfiguration.CatalogAuthority do
   @spec check(map(), struct(), binary() | nil) ::
           :ok | {:error, :spacecraft_catalog_set_by_profile}
   def check(mission, spacecraft, catalog_revision_id) do
-    case effective(mission, spacecraft) do
-      nil -> :ok
-      ^catalog_revision_id -> :ok
-      _other -> {:error, :spacecraft_catalog_set_by_profile}
-    end
+    check_effective(effective(mission, spacecraft), catalog_revision_id)
   end
+
+  @doc false
+  def check_effective(nil, _catalog), do: :ok
+  def check_effective(catalog, catalog), do: :ok
+  def check_effective(_effective, _catalog), do: {:error, :spacecraft_catalog_set_by_profile}
 
   @doc """
   `:ok` when the spacecraft's own configuration may carry these commanding and telemetry

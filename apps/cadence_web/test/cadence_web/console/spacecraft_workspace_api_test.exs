@@ -331,25 +331,10 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceAPITest do
 
   defp count_request(c, request) do
     conn = conn(c)
-    handler = {__MODULE__, make_ref()}
-    counter = :counters.new(1, [])
-    owner = self()
 
-    :telemetry.attach(
-      handler,
-      [:cadence, :repo, :query],
-      fn _event, _measurements, _metadata, {pid, count} ->
-        if self() == pid, do: :counters.add(count, 1, 1)
-      end,
-      {owner, counter}
-    )
-
-    try do
-      result = conn |> request.() |> json_response(200) |> Map.fetch!("data")
-      {result, :counters.get(counter, 1)}
-    after
-      :telemetry.detach(handler)
-    end
+    TestFixtures.count_statements(fn ->
+      conn |> request.() |> json_response(200) |> Map.fetch!("data")
+    end)
   end
 
   defp conn(c), do: TestFixtures.member_conn(c.user)
