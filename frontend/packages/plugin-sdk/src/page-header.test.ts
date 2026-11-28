@@ -15,8 +15,8 @@ import { href } from "./routes";
 
 const alarms = "/missions/:mission_id/ops/alarms" as const;
 const request = "/missions/:mission_id/ops/commands/requests/:command_request_id/history" as const;
-const catalog = "/missions/:mission_id/catalog" as const;
-const database = "/missions/:mission_id/catalog/databases/:catalog_database_id" as const;
+const settings = "/missions/:mission_id/settings" as const;
+const surface = "/missions/:mission_id/applications/:application_key/:surface_id" as const;
 const link = href(alarms, { mission_id: "m" });
 const ops = { kind: "collection", layer: "ops" } as const;
 
@@ -45,17 +45,17 @@ test("each layer has its own contract and only its own routes", () => {
   const a: PageAction = { id: "a", label: "A", href: link };
   const typed = () => {
     // @ts-expect-error -- a management route is not an Ops page
-    useOpsHeader(catalog, {});
+    useOpsHeader(settings, {});
     // @ts-expect-error -- an Ops route is not a management page
     useManagementHeader(alarms, {});
-    useManagementHeader(catalog, { facts: ["3 configured"], primary: a });
+    useManagementHeader(settings, { facts: ["3 configured"], primary: a });
     // @ts-expect-error -- records reload with the browser; there is no refresh
-    useManagementHeader(catalog, { refresh: { run: () => {} } });
+    useManagementHeader(settings, { refresh: { run: () => {} } });
     // @ts-expect-error -- management headers hold two quiet buttons
-    useManagementHeader(catalog, { actions: [a, a, a] });
-    useManagementHeader(database, { title: "Mission catalog", identifier: "catalog_01" });
+    useManagementHeader(settings, { actions: [a, a, a] });
+    useManagementHeader(surface, { title: "Packet bindings", identifier: "packet_bindings" });
     // @ts-expect-error -- collection pages have no record identifier
-    useManagementHeader(catalog, { identifier: "catalog_01" });
+    useManagementHeader(settings, { identifier: "packet_bindings" });
   };
   expect(typed).toBeTypeOf("function");
 });
