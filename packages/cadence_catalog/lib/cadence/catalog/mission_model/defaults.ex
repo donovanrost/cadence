@@ -5,11 +5,12 @@ defmodule Cadence.Catalog.MissionModel.Defaults do
 
   @defaults %{
     container: [abstract: false],
+    # The runtime's own vocabulary (AlgorithmPlan; #451 T4): one name for each, no bridge.
     algorithm: [
       triggers: [],
       missing_input: :skip,
-      quality_propagation: :worst,
-      time_basis: :receipt
+      quality_policy: :worst_input,
+      time_basis: :receipt_time
     ],
     monitoring_policy: [
       contexts: [],
