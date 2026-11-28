@@ -6,7 +6,7 @@ defmodule CadenceWeb.DashboardExplorationSampleTest do
   alias Cadence.Dashboards.Sources.Telemetry
   alias Cadence.DataSources.{DataBinding, DataSource}
   alias Cadence.Management.DataSources
-  alias Cadence.Reads.Dashboards.{Exploration, ExplorationSnapshot}
+  alias Cadence.Reads.Dashboards.{Exploration, ExplorationSampleSnapshot}
   alias Cadence.Telemetry.{HistoryStore, PhysicalSampleQuery}
   alias Cadence.TestSupport.PhysicalSampleFixtures
   alias CadenceWeb.TestFixtures
@@ -187,11 +187,11 @@ defmodule CadenceWeb.DashboardExplorationSampleTest do
   end
 
   test "browser projection omits retained bindings and raw sample provenance", c do
-    assert {:ok, model} = ExplorationSnapshot.load(c.scope, c.mission, selection(), runtime(c))
-    assert model.version == 3
-    assert model.inspection.status == "ready"
-    assert model.inspection.sample.record.validity_state == "superseded"
-    json = Jason.encode!(model)
+    assert {:ok, read} = Exploration.load(c.scope, c.mission, selection(), runtime(c))
+    inspection = inspection(read)
+    assert inspection.status == "ready"
+    assert inspection.sample.record.validity_state == "superseded"
+    json = Jason.encode!(inspection)
     refute json =~ "private-execution-marker"
     refute json =~ "private-sample-marker"
     refute json =~ "resolved_bindings"
@@ -241,9 +241,16 @@ defmodule CadenceWeb.DashboardExplorationSampleTest do
       "order" => "desc"
     }
 
-    assert {:ok, model} = ExplorationSnapshot.load(c.scope, c.mission, params, opts)
-    assert [row] = model.rows
-    assert model.limited
+    assert {:ok, listed} = Exploration.load(c.scope, c.mission, params, opts)
+
+    # Both segments' rows are in the frame, each with its own binding; the newest is the one kept.
+    assert [
+             %{source: %{data_source_id: "inspection-new"}},
+             %{source: %{data_source_id: "inspection-old"}}
+           ] =
+             rows(listed)
+
+    row = row(listed)
     assert row.sample_id == c.sample.sample_id
     assert row.value == 99.0
     assert row.source.data_source_id == "inspection-new"
@@ -260,24 +267,60 @@ defmodule CadenceWeb.DashboardExplorationSampleTest do
 
     assert {:ok, selected_read} = Exploration.load(c.scope, c.mission, selected, opts)
     assert selected_read.selected_sample == {:ok, newer}
-    assert {:ok, detail} = ExplorationSnapshot.load(c.scope, c.mission, selected, opts)
-    assert detail.inspection.status == "ready"
-    assert detail.inspection.sample.source.data_source_id == "inspection-new"
-    assert detail.inspection.sample.receipt_time == row.time
-    assert detail.inspection.sample.engineering_value.text == "99.0"
-    assert detail.rows == model.rows
+    assert {:ok, detail} = Exploration.load(c.scope, c.mission, selected, opts)
+    assert inspection(detail).status == "ready"
+    assert inspection(detail).sample.source.data_source_id == "inspection-new"
+    assert inspection(detail).sample.receipt_time == row.time
+    assert inspection(detail).sample.engineering_value.text == "99.0"
+    assert row(detail) == row
     assert_received {:physical_read, %{data_source_id: "inspection-new"}}
     assert_received {:physical_read, %{data_source_id: "inspection-new"}}
     refute_received {:physical_read, _}
 
     unavailable = Map.put(selected, "selected_data_source_id", "never-executed")
-    assert {:ok, rejected} = ExplorationSnapshot.load(c.scope, c.mission, unavailable, opts)
-    assert rejected.rows == model.rows
-    assert rejected.inspection.status == "unavailable"
+    assert {:ok, rejected} = Exploration.load(c.scope, c.mission, unavailable, opts)
+    assert row(rejected) == row
+    assert inspection(rejected).status == "unavailable"
     refute_received {:physical_read, _}
   end
 
   def fetch_sample(query, opts), do: Keyword.fetch!(opts, :read).(query, opts)
+
+  # The browser-safe projection of the selected sample (what `Reads.ConsoleSample` serves).
+  defp inspection(read),
+    do: ExplorationSampleSnapshot.build(read.selected_sample, read.query, read.request)
+
+  # The rows of the exploration's frame, newest first, each with the source it came from: a merged
+  # historical frame says per span of rows which binding they came from.
+  defp rows(read) do
+    assert [frame] = read.result.frames_by_placement["exploration"].primary
+    assert [time, value] = frame.fields
+
+    sources =
+      case frame.meta do
+        %{segmented_source_bindings?: true, source_binding_row_spans: spans} ->
+          Enum.flat_map(spans, &List.duplicate(source(&1.source), &1.count))
+
+        meta ->
+          List.duplicate(source(meta), length(time.values))
+      end
+
+    [time.values, value.values, value.metadata.sample_ids, sources]
+    |> Enum.zip()
+    |> Enum.map(fn {at, value, sample_id, source} ->
+      %{time: DateTime.to_iso8601(at), value: value, sample_id: sample_id, source: source}
+    end)
+    |> Enum.sort_by(& &1.time, :desc)
+  end
+
+  # What the read's limit (1) keeps: the newest row, whichever binding it came from.
+  defp row(read), do: read |> rows() |> hd()
+
+  defp source(meta) do
+    meta
+    |> Map.take([:data_source_id, :source_binding_id, :dataset, :realm])
+    |> Map.update(:realm, nil, &to_string/1)
+  end
 
   defp runtime(c, overrides \\ []) do
     parent = self()
