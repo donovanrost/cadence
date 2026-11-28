@@ -21,7 +21,7 @@ defmodule CadenceWeb.Console.DashboardChannel do
 
   alias Cadence.Dashboards.{Documents, RuntimeInvalidation}
   alias Cadence.Reads.Dashboards.{Authors, DashboardPage}
-  alias CadenceWeb.Console.{Access, DashboardRuntime}
+  alias CadenceWeb.Console.{Access, ChannelAccess, DashboardRuntime}
 
   @coalesce_ms 250
 
@@ -49,7 +49,8 @@ defmodule CadenceWeb.Console.DashboardChannel do
          placements: %{},
          tick: nil,
          pending: nil
-       )}
+       )
+       |> ChannelAccess.watch()}
     else
       {:error, reason} when reason in [:dashboard_archived, :dashboard_not_found] ->
         {:error, %{reason: Atom.to_string(reason)}}
@@ -92,6 +93,13 @@ defmodule CadenceWeb.Console.DashboardChannel do
     do: {:reply, {:error, %{reason: "unknown_event"}}, socket}
 
   @impl true
+  # The person's access changed (#1153): re-check, and close if it no longer passes.
+  def handle_info({:access_changed, _user_id} = message, socket),
+    do: ChannelAccess.handle_changed(socket, message)
+
+  def handle_info(:admin_mode_expired, socket),
+    do: ChannelAccess.handle_changed(socket, :admin_mode_expired)
+
   def handle_info({:full, snapshot}, %{assigns: %{subscription: %{}}} = socket),
     do: {:noreply, socket |> push_view(:full, snapshot) |> schedule(snapshot)}
 

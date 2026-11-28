@@ -14,7 +14,7 @@ defmodule CadenceWeb.Console.SpacecraftChannel do
 
   alias Cadence.Dashboards.RuntimeInvalidation
   alias Cadence.Reads.SpacecraftLive
-  alias CadenceWeb.Console.Access
+  alias CadenceWeb.Console.{Access, ChannelAccess}
 
   @throttle_ms 1_000
   @live_boundaries [
@@ -50,7 +50,8 @@ defmodule CadenceWeb.Console.SpacecraftChannel do
          pushed: %{},
          pushed_at: nil,
          timer: nil
-       )}
+       )
+       |> ChannelAccess.watch()}
     else
       {:error, reason} when is_atom(reason) -> {:error, %{reason: Atom.to_string(reason)}}
       _other -> {:error, %{reason: "spacecraft_not_found"}}
@@ -78,6 +79,13 @@ defmodule CadenceWeb.Console.SpacecraftChannel do
   end
 
   @impl true
+  # The person's access changed (#1153): re-check, and close if it no longer passes.
+  def handle_info({:access_changed, _user_id} = message, socket),
+    do: ChannelAccess.handle_changed(socket, message)
+
+  def handle_info(:admin_mode_expired, socket),
+    do: ChannelAccess.handle_changed(socket, :admin_mode_expired)
+
   def handle_info({:dashboard_runtime_invalidated, %{boundary: boundary}}, socket)
       when boundary in @live_boundaries,
       do: {:noreply, schedule(socket)}

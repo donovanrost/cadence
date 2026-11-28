@@ -17,6 +17,13 @@ socket.connect();
 - Websocket only (no longpoll).
 - Sign-out disconnects the socket. When the socket keeps failing to reconnect, call
   `GET /api/v1/session`. A `401` there means the session is gone, so redirect to sign-in.
+- **A channel closes when the person's access ends (#1153).** Every channel (`mission`, `command_group`,
+  `spacecraft`, `dashboard`) re-checks that the person can still operate its mission when their
+  membership is removed or their role changes, and (for a platform admin in admin mode) when admin
+  mode lapses. If they can't, the server closes that channel (the `phx_close` the client already
+  handles), and the client's rejoin goes through the normal join check: `mission_not_found` once the
+  access has gone. The `command_group` channel also re-checks before each push. The socket itself stays
+  connected for the person's other channels.
 
 ## Topic `mission:<mission_id>`
 
