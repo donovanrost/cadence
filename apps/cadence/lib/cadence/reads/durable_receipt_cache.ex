@@ -44,7 +44,7 @@ defmodule Cadence.Reads.DurableReceiptCache do
 
   @tasks Cadence.Reads.DurableReceiptCache.Tasks
 
-  # The cache's process, with the supervisor of the tasks that ask the store (a one-for-all
+  # The cache's process, with the supervisor of the tasks that ask the store (one rest-for-one
   # unit under the application: the tasks go when the cache does).
   def child_spec(opts) do
     %{

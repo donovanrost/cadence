@@ -107,7 +107,9 @@ describe("what a row says", () => {
     expect(detailWords(row())).toBe("above yellow limit");
     expect(detailWords(row({ raw_limit_state: "red_low" }))).toBe("below red limit");
     expect(detailWords(row({ raw_limit_state: "mystery_state" }))).toBe("mystery_state");
-    expect(detailWords(row({ source: "catalog_monitoring", policy_id: "pol-9" }))).toBe("pol-9");
+    expect(detailWords(row({ source: "catalog_monitoring", policy_id: "pol-9" }))).toBe(
+      "Monitoring rule",
+    );
   });
 
   it("a value is shown with its unit, and a live row has none", () => {

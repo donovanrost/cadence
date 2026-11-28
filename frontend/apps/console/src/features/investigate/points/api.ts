@@ -134,10 +134,11 @@ const LIMIT_WORDS: Readonly<Record<(typeof limitStates)[number], string>> = {
   blue: "informational",
 };
 
-/** "Not evaluated yet", the ground limit in words ("above yellow limit"), or the live rule. */
+/** "Not evaluated yet", the ground limit in words ("above yellow limit"), or "Monitoring rule". */
 export function detailWords(row: PointCondition): string {
   if (!row.evaluated) return "Not evaluated yet";
-  if (row.source === "catalog_monitoring") return row.policy_id ?? "";
+  // The rule's id is not shown (ids belong in technical details); the source column says which store.
+  if (row.source === "catalog_monitoring") return "Monitoring rule";
   return row.raw_limit_state === null ? "" : vocabularyText(row.raw_limit_state, LIMIT_WORDS);
 }
 

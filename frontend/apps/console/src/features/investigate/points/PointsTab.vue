@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { RouterLink } from "vue-router";
-import { usePagedQuery } from "@/api/index.ts";
+import { RouterLink, type RouteLocationRaw } from "vue-router";
+import { describeApiError, usePagedQuery } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
 import {
@@ -33,7 +33,7 @@ import {
 } from "./api.ts";
 
 /**
- * Tab · Points (#143): every point of this spacecraft with its current condition, from both
+ * Tab · Points (#143; the rules that never changed state wait on #451): every point of this spacecraft with its current condition, from both
  * stores, critical and caution first, a stale point named stale. One row per (point, source): a
  * ground limit says when its job ran, a monitoring rule is live.
  */
@@ -84,6 +84,13 @@ const columns: readonly ApColumn[] = [
   { key: "value", label: "Value", mono: true },
 ];
 
+/** This spacecraft's Telemetry tab, plotting and focused on the point. */
+const pointLink = (row: PointCondition): RouteLocationRaw => ({
+  name: "ops.spacecraft",
+  params: { scId: props.sc.scid, tab: "telemetry" },
+  query: { points: row.point_id, focus: row.point_id },
+});
+
 const ago = (iso: string) => formatCountdown(new Date(iso), now.value);
 
 /** "evaluated T+00:12:03" for a ground limit, "entered T+…" for live; the bound when unknown. */
@@ -111,6 +118,10 @@ const filterOptions = [
       <ApSegmented v-model="filter" :options="filterOptions" label="Which points" variant="tabs" />
     </div>
     <ApRemote :state="state" loading-label="LOADING POINTS…" @retry="paged.refetch">
+      <p v-if="paged.refreshError.value" role="status" class="m-0 text-sm text-caution-text">
+        Couldn't refresh the points: {{ describeApiError(paged.refreshError.value) }}. Showing what
+        was read before.
+      </p>
       <ApCallout v-if="meta?.telemetry === 'degraded'" tone="caution">
         Last-sample times may be incomplete: the history store did not answer, so a point this node
         has not heard shows its sample time as unknown.
@@ -138,8 +149,8 @@ const filterOptions = [
         >
           <template #cell-point="{ row }">
             <RouterLink
-              class="text-text-1 underline decoration-border-strong underline-offset-2"
-              :to="{ name: 'ops.telemetry', query: { sc: String(sc.scid) } }"
+              class="font-semibold text-readout no-underline hover:underline max-md:hit-44"
+              :to="pointLink(row)"
               >{{ row.point_name }}</RouterLink
             >
             <span class="ml-2 font-mono text-xs text-text-3">{{ sourceWords(row) }}</span>
@@ -176,7 +187,7 @@ const filterOptions = [
           }}</span>
         </div>
         <p class="m-0 text-sm text-text-3">
-          Monitoring rules that have never changed state are not listed until #451.
+          Monitoring rules that have never changed state are not listed yet.
         </p>
       </template>
     </ApRemote>
