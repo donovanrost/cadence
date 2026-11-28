@@ -29,6 +29,7 @@ afterEach(() => mounted.splice(0).forEach((w) => w.unmount()));
 function aside(state: RemoteState<SampleRead>) {
   const w = mount(SampleAside, {
     props: {
+      pick: "s-1",
       state,
       title: "Sample · Battery voltage",
       atLabel: "02:08:11Z",
@@ -75,6 +76,58 @@ describe("ux U80: the Sample aside in T1's column", () => {
     expect(aside(ready(statusOnly("not_found"))).text()).toContain(
       "Cadence couldn't find this sample in the history store.",
     );
+  });
+});
+
+describe("a11y A3 (#362): the Sample sheet below 1100px is a detail sheet", () => {
+  function sheetAside(pick: string, returnTo: HTMLElement) {
+    const w = mount(SampleAside, {
+      props: {
+        pick,
+        state: ready(readySample()),
+        title: "Sample · Battery voltage",
+        atLabel: "02:08:11Z",
+        today: "2026-11-08",
+        wide: false,
+        returnFocus: () => returnTo,
+      },
+      attachTo: document.body,
+    });
+    mounted.push(w);
+    return w;
+  }
+
+  it("is a named, non-modal dialog beside the page, with focus inside on open", async () => {
+    const search = document.createElement("input");
+    document.body.append(search);
+    const w = sheetAside("s-1", search);
+    await nextTick();
+    const dialog = w.get("dialog");
+    expect(dialog.attributes("aria-modal")).toBeUndefined();
+    expect(dialog.attributes("aria-labelledby")).toBeTruthy();
+    expect(dialog.element.contains(document.activeElement)).toBe(true);
+    search.remove();
+  });
+
+  it("moves focus back in on another pick, and Esc returns it to that pick", async () => {
+    const search = document.createElement("input");
+    const firstPick = document.createElement("a");
+    const lastPick = document.createElement("a");
+    for (const a of [firstPick, lastPick]) a.setAttribute("href", "#");
+    document.body.append(search, firstPick, lastPick);
+    firstPick.focus();
+    const w = sheetAside("s-1", search);
+    await nextTick();
+    const dialog = w.get("dialog").element;
+    // Tab may leave the non-modal sheet; a new pick (another ?sample=) brings focus back in.
+    lastPick.focus();
+    await w.setProps({ pick: "s-2" });
+    await nextTick();
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    await w.get("dialog").trigger("keydown", { key: "Escape" });
+    await nextTick();
+    expect(document.activeElement).toBe(lastPick);
+    for (const e of [search, firstPick, lastPick]) e.remove();
   });
 });
 

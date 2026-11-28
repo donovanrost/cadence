@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, useId } from "vue";
+import { onMounted, ref, useId, watch } from "vue";
 import type { RemoteState } from "@/api/index.ts";
 import { ApSheet } from "@/ui";
 import type { SampleRead } from "./api.ts";
@@ -7,9 +7,16 @@ import SampleBody from "./SampleBody.vue";
 
 /**
  * ux U80: the Sample aside. From 1100px it takes T1's column (360px) so the plot doesn't move; the
- * heading takes focus on open, and Esc or × closes it. Below 1100px it's a side sheet.
+ * heading takes focus on open, and Esc or × closes it. Below 1100px it's a side sheet: a detail
+ * sheet (a11y A3, #362), non-modal from 768px so the page stays usable, modal below.
+ *
+ * Picking another sample while it's open (`pick` changes) moves focus back into it, as opening
+ * does, and Esc then returns focus to that last pick (the kit's `detail` sheet) when it's still on
+ * the page, else to T1's search.
  */
 const props = defineProps<{
+  /** The picked sample (its id); a new one while open is a new pick. */
+  pick: string;
   state: RemoteState<SampleRead>;
   title: string;
   atLabel: string | null;
@@ -22,7 +29,15 @@ const emit = defineEmits<{ close: []; retry: [] }>();
 const heading = ref<HTMLElement | null>(null);
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
 const titleId = useId();
-onMounted(() => (props.wide ? heading.value?.focus() : sheet.value?.open()));
+const show = () => (props.wide ? heading.value?.focus() : sheet.value?.open());
+onMounted(show);
+watch(
+  () => props.pick,
+  (now, was) => {
+    if (now !== was) show();
+  },
+  { flush: "post" },
+);
 const onKey = (e: KeyboardEvent) => {
   if (e.key === "Escape") emit("close");
 };
@@ -69,6 +84,7 @@ const onKey = (e: KeyboardEvent) => {
     ref="sheet"
     :title="title"
     placement="side"
+    detail
     :return-focus="returnFocus"
     @closed="$emit('close')"
   >
