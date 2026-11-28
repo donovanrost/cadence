@@ -9,7 +9,8 @@ defmodule Cadence.Runtime.MonitoringPlanCacheScaleTest do
 
   @moduletag :scale
 
-  alias Cadence.Catalog.MissionModel.{Canonical, Expression, RuntimePlan}
+  alias Cadence.Catalog.MissionModel.{Expression, RuntimePlan}
+  alias Cadence.MonitoringPlanFixtures
   alias Cadence.Runtime.MonitoringPlanCache
   alias Cadence.SemanticRuntime
   alias Cadence.SemanticRuntime.{PlanDecoder, State, Update}
@@ -141,42 +142,23 @@ defmodule Cadence.Runtime.MonitoringPlanCacheScaleTest do
     cache
   end
 
-  # Rule rows (#451 T2b): every parameter has a mission rule and a spacecraft rule that replaces it
-  # for sc-1, so each update resolves the effective rules (filter, replace, digest) before it
-  # evaluates. Compared with the plain plan's per-batch cost above.
-  defp rule_plans do
-    rules =
-      for i <- 0..(@parameters - 1), row <- [mission_rule(i), craft_rule(i)], do: row
+  # Policy entries with a per-craft override (#451 T2b, the 12-01 shape): every parameter has a
+  # mission entry and an override for sc-1, so each update resolves its craft's effective policy
+  # (read the mission key and the craft's key, pick by rule_id) before it evaluates. Compared with
+  # the plain plan's per-batch cost above.
+  defp entry_plans do
+    entries =
+      for i <- 0..(@parameters - 1) do
+        [
+          MonitoringPlanFixtures.entry("limit-#{i}", parameter_id: "p#{i}", above: 10),
+          MonitoringPlanFixtures.override("limit-#{i}", "limit-#{i}-sc-1", "sc-1",
+            parameter_id: "p#{i}",
+            above: 15
+          )
+        ]
+      end
 
-    %{
-      monitoring:
-        runtime_plan(:monitoring, "mon-rules-scale", %{
-          policies:
-            for(
-              i <- 0..(@parameters - 1),
-              do: %{policy_id: "policy:p#{i}", parameter_id: "p#{i}"}
-            ),
-          rules: rules
-        })
-    }
-  end
-
-  defp mission_rule(i), do: rule_row(i, "mission", nil, 10)
-  defp craft_rule(i), do: rule_row(i, "spacecraft", "sc-1", 15)
-
-  defp rule_row(i, scope, craft, above) do
-    row = %{
-      rule_id: "limit:p#{i}",
-      scope: scope,
-      spacecraft_id: craft,
-      parameter_id: "p#{i}",
-      kind: "limit",
-      severity: :critical,
-      enabled: true,
-      definition: %{kind: :comparison, operator: :>, value: above}
-    }
-
-    Map.put(row, :rule_digest, Canonical.sha256(row))
+    MonitoringPlanFixtures.plans(List.flatten(entries), "mon-entries-scale")
   end
 
   defp craft_batch(n) do
@@ -184,8 +166,8 @@ defmodule Cadence.Runtime.MonitoringPlanCacheScaleTest do
         do: %{update | metadata: %{mission_id: "m", spacecraft_id: "sc-1"}}
   end
 
-  test "per-batch cost with rule rows: each update resolves its spacecraft's effective rules" do
-    plans = rule_plans()
+  test "per-batch cost with policy entries and a per-craft override: each update resolves its spacecraft's policy" do
+    plans = entry_plans()
     {:ok, cache} = MonitoringPlanCache.start_link()
     {:ok, index} = MonitoringPlanCache.acquire(cache, plans)
     listed = plans |> PlanDecoder.decode()
@@ -198,8 +180,8 @@ defmodule Cadence.Runtime.MonitoringPlanCacheScaleTest do
     sorted = Enum.sort(times)
 
     IO.puts(
-      "SEMANTIC BATCH WITH RULE ROWS of #{@batch} updates, #{@parameters} parameters x " <>
-        "(1 mission rule + 1 craft rule): cached index p50 " <>
+      "SEMANTIC BATCH WITH ENTRIES of #{@batch} updates, #{@parameters} parameters x " <>
+        "(1 mission entry + 1 craft override): cached index p50 " <>
         "#{Float.round(Enum.at(sorted, div(@batches, 2)), 3)} ms / p99 " <>
         "#{Float.round(Enum.at(sorted, @batches - 2), 3)} ms"
     )
