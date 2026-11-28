@@ -13,6 +13,7 @@ defmodule Cadence.MissionModels.AuthoredVersionRow do
     field(:layer_id, :string)
     field(:change_set_id, :string)
     field(:revision_number, :integer)
+    field(:approval, :string)
     field(:decided_at, :utc_datetime_usec)
   end
 end

@@ -15,20 +15,43 @@ defmodule Cadence.Repo.Migrations.MissionModelAuthoredVersions do
       add(:layer_id, :string, null: false, collation: "C")
       add(:change_set_id, :string, null: false, collation: "C")
       add(:revision_number, :integer, null: false)
+      # How the set was approved: its own review, or a 'direct' apply (#93 b).
+      add(:approval, :string, null: false, collation: "C")
       add(:decided_at, :utc_datetime_usec, null: false)
     end
 
     create(constraint(@table, :mission_model_authored_versions_positive, check: "version > 0"))
+
+    create(
+      constraint(@table, :mission_model_authored_versions_approval,
+        check: "approval IN ('reviewed', 'direct')"
+      )
+    )
+
     create(unique_index(@table, [:organization_id, :mission_id, :layer_id]))
+    # One applied set records at most one version.
+    create(unique_index(@table, [:change_set_id]))
+
+    # So a version can only name a change set of its own organization and mission.
+    create(
+      unique_index(:mission_config_change_sets, [:organization_id, :mission_id, :change_set_id],
+        name: :mission_config_change_sets_tenant_idx
+      )
+    )
 
     execute("""
     ALTER TABLE mission_model_authored_versions
       ADD CONSTRAINT mission_model_authored_versions_mission_fk
       FOREIGN KEY (organization_id, mission_id) REFERENCES missions (organization_id, mission_id),
       ADD CONSTRAINT mission_model_authored_versions_layer_fk
-      FOREIGN KEY (layer_id) REFERENCES mission_model_layers (layer_id),
+      FOREIGN KEY (organization_id, mission_id, layer_id)
+      REFERENCES mission_model_layers (organization_id, mission_id, layer_id),
       ADD CONSTRAINT mission_model_authored_versions_change_set_fk
-      FOREIGN KEY (change_set_id) REFERENCES mission_config_change_sets (change_set_id)
+      FOREIGN KEY (organization_id, mission_id, change_set_id)
+      REFERENCES mission_config_change_sets (organization_id, mission_id, change_set_id),
+      ADD CONSTRAINT mission_model_authored_versions_revision_fk
+      FOREIGN KEY (mission_id, revision_number)
+      REFERENCES mission_config_revisions (mission_id, revision_number)
     """)
 
     execute("""
@@ -46,5 +69,6 @@ defmodule Cadence.Repo.Migrations.MissionModelAuthoredVersions do
 
   def down do
     drop(table(@table))
+    drop(index(:mission_config_change_sets, [], name: :mission_config_change_sets_tenant_idx))
   end
 end

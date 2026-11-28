@@ -23,6 +23,24 @@ defmodule Cadence.MissionModels.EffectiveStatuses do
   alias Cadence.MissionModels.{AuthoredHead, EffectiveRevisionRow}
   alias Cadence.Repo
 
+  @doc """
+  The revision whose approval each of `revision_ids` carries: a revision at an authored head maps
+  to its base, any other to itself, and a head revision with no base at its compiler version to
+  nil. The withdrawal read uses it, so a withdrawn base reaches every craft running a head on it.
+  """
+  @spec approval_bases(binary(), binary(), [binary()]) :: %{binary() => binary() | nil}
+  def approval_bases(_organization_id, _mission_id, []), do: %{}
+
+  def approval_bases(organization_id, mission_id, revision_ids) do
+    heads = head_links(organization_id, mission_id, revision_ids)
+    bases = if heads == [], do: %{}, else: bases(organization_id, mission_id, heads)
+
+    by_head =
+      Map.new(heads, &{&1.revision_id, Map.get(bases, {&1.composition_id, &1.compiler_version})})
+
+    Map.new(revision_ids, &{&1, Map.get(by_head, &1, &1)})
+  end
+
   @spec statuses(binary(), binary(), [binary()]) :: %{binary() => atom()}
   def statuses(_organization_id, _mission_id, []), do: %{}
 

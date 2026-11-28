@@ -51,6 +51,8 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/control/configuration_generation.ex" => :composition,
     "lib/cadence/control/configuration_selections.ex" => :composition,
     "lib/cadence/control/model_withdrawal.ex" => :composition,
+    # P3 M1 (#451): records an authored version from an applied set (configuration + model).
+    "lib/cadence/control/authored_versions.ex" => :composition,
     "lib/cadence/control/withdrawn_pins.ex" => :composition,
     "lib/cadence/control/configuration_switches.ex" => :composition,
     "lib/cadence/control/configuration_apids.ex" => :composition,

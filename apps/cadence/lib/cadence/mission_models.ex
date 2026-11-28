@@ -187,6 +187,15 @@ defmodule Cadence.MissionModels do
     to: Cadence.MissionModels.EffectiveStatuses,
     as: :statuses
 
+  @doc """
+  The revision whose approval each of `revision_ids` carries (P3 M1, #451): a revision at an
+  authored head maps to its base, any other to itself. For withdrawal reads (E2): a withdrawn
+  base reaches every craft running a head built on it.
+  """
+  @spec approval_bases(binary(), binary(), [binary()]) :: %{binary() => binary() | nil}
+  defdelegate approval_bases(organization_id, mission_id, revision_ids),
+    to: Cadence.MissionModels.EffectiveStatuses
+
   @spec fetch_plan(binary() | nil, binary(), binary(), atom()) ::
           {:ok, RuntimePlan.t()} | {:error, term()}
   def fetch_plan(organization_id, mission_id, revision_id, target)
