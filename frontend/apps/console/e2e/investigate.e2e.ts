@@ -1,5 +1,6 @@
 import { expectAccessible } from "./support/accessibility.ts";
 import { routeAlarms, type AlarmSpec } from "./support/alarms.ts";
+import { routeEpisodes } from "./support/episodes.ts";
 import { jsonProblem, missionApi, missionPath, openConsole } from "./support/console.ts";
 import { allow, expect, test } from "./support/fixtures.ts";
 
@@ -8,14 +9,10 @@ import { allow, expect, test } from "./support/fixtures.ts";
 const screen = (scid: number) => missionPath(`fleet/${scid}/investigate`);
 
 const sa1 = { id: "EPS.sa1_current", name: "sa1_current", subsystem: "EPS" } as const;
-const thresholds = { red_low: -5.5, yellow_low: -5, yellow_high: 5, red_high: 6 } as const;
 const critical = (scid: number): AlarmSpec => ({
   scid,
   point: sa1,
   severity: "critical",
-  condition: "red_low",
-  value: -6.1,
-  thresholds,
   firstCrossedAt: "2026-11-08T22:55:20Z",
   receivedAt: "2026-11-08T22:55:57Z",
 });
@@ -23,6 +20,8 @@ const critical = (scid: number): AlarmSpec => ({
 test.describe("Investigate (J2), alarm on EARENDIL-001 with a sister on 002", () => {
   test.beforeEach(async ({ page }) => {
     await routeAlarms(page, [critical(1), critical(2)]);
+    // #1117: the alarm row carries no value or condition; B1 reads them from the episode.
+    await routeEpisodes(page);
     await openConsole(page, screen(1));
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("EARENDIL-001");
   });
@@ -31,9 +30,10 @@ test.describe("Investigate (J2), alarm on EARENDIL-001 with a sister on 002", ()
     await expect(page.getByText(/critical/i).first()).toBeVisible();
     await expect(page.getByText("EPS · below red limit", { exact: false })).toBeVisible();
     const readouts = page.getByRole("region", { name: "Readouts" });
+    await expect(readouts).toContainText("Last value");
     await expect(readouts).toContainText(/[−-]6\.1/);
-    await expect(readouts).toContainText("Red limit");
-    await expect(readouts).toContainText(/[−-]5\.5/);
+    await expect(readouts).toContainText(/at \d{2}:\d{2}:\d{2}Z/);
+    await expect(readouts).not.toContainText("Red limit");
     await expect(page.getByText(/first crossed 2026-11-08 22:55:20Z/i)).toBeVisible();
     // The chart carries a text equivalent.
     await expect(page.getByRole("img", { name: /sa1_current over/i })).toBeVisible();
@@ -77,11 +77,13 @@ test.describe("Investigate (J2), honest states", () => {
 
     test("the chart says history is unavailable; the alarm is still shown", async ({ page }) => {
       await routeAlarms(page, [critical(1)]);
+      await routeEpisodes(page);
       await page.route(`${missionApi("telemetry/points/*/history")}**`, (route) =>
         route.fulfill(jsonProblem(503, "history_unavailable")),
       );
       await openConsole(page, screen(1));
       await expect(page.getByText("History not available")).toBeVisible();
+      // The episode's last value still shows (#1117: the alarm row has none).
       await expect(page.getByRole("region", { name: "Readouts" })).toContainText(/[−-]6\.1/);
     });
   });

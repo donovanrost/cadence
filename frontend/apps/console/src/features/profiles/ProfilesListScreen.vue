@@ -2,7 +2,8 @@
 import { computed } from "vue";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
-import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
+import { useMissionScope } from "@/shell";
+import { useCanStage } from "@/features/changes/index.ts";
 import { ApButton, ApEmptyState, ApPageHeader, ApPanel, ApRemote, plural } from "@/ui";
 import ProfilesTable from "./ProfilesTable.vue";
 import { fetchProfiles } from "./api.ts";
@@ -12,9 +13,8 @@ const scope = useMissionScope();
 const missionId = computed(() => scope.value.mission.id);
 const { state, refetch } = useRemoteQuery(missionId, fetchProfiles);
 useMissionInvalidation(missionId, ["spacecraft"], refetch);
-const session = useSession();
 /** Profile.md: read-only without config.stage (same gate as the profile editors). */
-const canStage = computed(() => canAdministerOrganization(session, scope.value.organization));
+const canStage = useCanStage(scope.value.mission.id);
 
 const title = computed(() =>
   state.value.status === "ready" ? plural(state.value.value.length, "profile") : "Profiles",

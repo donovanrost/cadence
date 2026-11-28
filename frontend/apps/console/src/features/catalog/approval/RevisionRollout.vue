@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
+import { useMissionScope } from "@/shell";
+import { useCanStage } from "@/features/changes/index.ts";
 import { ApPanel } from "@/ui";
 import { revisionBreaking } from "../breaking.ts";
 import RolloutPanel from "../RolloutPanel.vue";
@@ -9,13 +10,12 @@ import { rolloutGate } from "./rollout-gate.ts";
 
 /**
  * U102 "Where" (#195): C3 Roll out to on a revision's page, under the Approval panel, by the same
- * rules as the import page's. Staging needs manage_mission, which the server grants to
- * organization admins (qa #4), so only they see it; the server enforces who may stage.
+ * rules as the import page's. Shown to those who may stage (config.stage, operate_mission, #1160);
+ * the server enforces who may stage.
  */
 const props = defineProps<{ revision: ModelRevision }>();
 const scope = useMissionScope();
-const session = useSession();
-const canStage = computed(() => canAdministerOrganization(session, scope.value.organization));
+const canStage = useCanStage(scope.value.mission.id);
 const gate = computed(() => rolloutGate(props.revision));
 </script>
 

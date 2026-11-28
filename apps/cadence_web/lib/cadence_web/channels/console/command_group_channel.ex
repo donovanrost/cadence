@@ -12,7 +12,7 @@ defmodule CadenceWeb.Console.CommandGroupChannel do
 
   alias Cadence.Platform.ScopedReadUpdates
   alias Cadence.Reads.CommandGroups
-  alias CadenceWeb.Console.{Access, CommandGroupJSON}
+  alias CadenceWeb.Console.{Access, ChannelAccess, CommandGroupJSON}
 
   @refresh_ms 1_000
 
@@ -40,7 +40,8 @@ defmodule CadenceWeb.Console.CommandGroupChannel do
          seq: 0,
          digest: nil,
          timer: nil
-       )}
+       )
+       |> ChannelAccess.watch()}
     else
       {:error, :command_group_not_found} -> {:error, %{reason: "command_group_not_found"}}
       {:error, reason} when is_atom(reason) -> {:error, %{reason: Atom.to_string(reason)}}
@@ -49,12 +50,30 @@ defmodule CadenceWeb.Console.CommandGroupChannel do
   end
 
   @impl true
+  # The person's access changed (#1153): re-check, and close if it no longer passes.
+  def handle_info({:access_changed, _user_id} = message, socket),
+    do: ChannelAccess.handle_changed(socket, message)
+
+  def handle_info(:admin_mode_expired, socket),
+    do: ChannelAccess.handle_changed(socket, :admin_mode_expired)
+
   def handle_info({:commanding_changed, _org, _mission}, %{assigns: %{timer: nil}} = socket),
     do: {:noreply, assign(socket, :timer, Process.send_after(self(), :push, @refresh_ms))}
 
   def handle_info({:commanding_changed, _org, _mission}, socket), do: {:noreply, socket}
 
+  # Every push re-checks that the person can still operate the mission (#1153): this channel
+  # carries a group's live commanding state.
   def handle_info(:push, socket) do
+    case ChannelAccess.check(socket) do
+      :ok -> push_view(socket)
+      {:error, :access_revoked} -> {:stop, {:shutdown, :access_revoked}, socket}
+    end
+  end
+
+  def handle_info(_other, socket), do: {:noreply, socket}
+
+  defp push_view(socket) do
     %{scope: scope, mission_id: mission, group_id: id} = socket.assigns
 
     case CommandGroups.get(scope.organization_id, mission, id, viewer(scope)) do
@@ -65,8 +84,6 @@ defmodule CadenceWeb.Console.CommandGroupChannel do
         {:noreply, assign(socket, :timer, nil)}
     end
   end
-
-  def handle_info(_other, socket), do: {:noreply, socket}
 
   defp maybe_push(socket, payload) do
     digest = :erlang.phash2(payload)

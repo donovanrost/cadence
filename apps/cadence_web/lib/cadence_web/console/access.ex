@@ -22,6 +22,7 @@ defmodule CadenceWeb.Console.Access do
           %{
             required(:session_token) => binary(),
             required(:admin_mode?) => boolean(),
+            optional(:admin_mode_expires_at) => integer() | nil,
             optional(:current_organization_id) => binary() | nil
           }
           | %{
@@ -39,7 +40,8 @@ defmodule CadenceWeb.Console.Access do
            session_token: token,
            current_organization_id: session_value(session, :current_organization_id),
            admin_mode?:
-             CadenceWeb.AdminMode.active?(session_value(session, :admin_mode_expires_at))
+             CadenceWeb.AdminMode.active?(session_value(session, :admin_mode_expires_at)),
+           admin_mode_expires_at: session_value(session, :admin_mode_expires_at)
          }}
 
       _other ->
@@ -66,6 +68,18 @@ defmodule CadenceWeb.Console.Access do
 
   def credentials_from_bearer(_token), do: {:error, :unauthenticated}
 
+  @doc """
+  The credentials as of now: admin mode lapses at its expiry, so credentials a socket captured at
+  connect don't keep it for a later join or re-check (#1153). Credentials without an expiry
+  (a request's, built fresh) are returned as they are.
+  """
+  @spec fresh(credentials()) :: credentials()
+  def fresh(%{admin_mode?: true, admin_mode_expires_at: expires_at} = credentials) do
+    %{credentials | admin_mode?: CadenceWeb.AdminMode.active?(expires_at)}
+  end
+
+  def fresh(credentials), do: credentials
+
   @doc "Authenticates credentials into the session's default scope."
   @spec authenticate(credentials()) :: {:ok, Scope.t()} | {:error, :unauthenticated}
   # A service identity's scope is fixed by its token: its own organization (and mission). Asking for
@@ -88,8 +102,10 @@ defmodule CadenceWeb.Console.Access do
   """
   @spec authorize_mission(credentials(), binary()) ::
           {:ok, Scope.t(), Mission.t()} | {:error, :unauthenticated | :mission_not_found}
-  def authorize_mission(%{session_token: token, admin_mode?: admin_mode?}, mission_id)
+  def authorize_mission(%{session_token: token} = credentials, mission_id)
       when is_binary(mission_id) do
+    %{admin_mode?: admin_mode?} = fresh(credentials)
+
     with organization_id when is_binary(organization_id) <-
            Cadence.Missions.organization_id_for_mission(mission_id),
          {:ok, scope} <-

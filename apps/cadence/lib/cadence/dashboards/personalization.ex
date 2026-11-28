@@ -7,9 +7,6 @@ defmodule Cadence.Dashboards.Personalization do
     to: UserPreferences,
     as: :list
 
-  defdelegate navigation(organization_id, mission_id, user_id, summaries),
-    to: UserPreferences
-
   defdelegate set_starred(
                 organization_id,
                 mission_id,

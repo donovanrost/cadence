@@ -28,12 +28,6 @@ export interface SetupRoutes {
     { spacecraftId: Raw; section?: ConfigurationSection | null | undefined },
     { spacecraftId: string; section?: ConfigurationSection | "" }
   >;
-  "setup.spacecraft.app": InMission<
-    "setup.spacecraft.app",
-    "/setup/spacecraft/:spacecraftId/apps/:appKey/:surface?",
-    { spacecraftId: Raw; appKey: Raw; surface?: RawOpt },
-    { spacecraftId: string; appKey: string; surface?: string }
-  >;
   "setup.profiles": InMission<"setup.profiles", "/setup/profiles">;
   "setup.profile.new": InMission<"setup.profile.new", "/setup/profiles/new">;
   "setup.profile": InMission<
@@ -130,12 +124,6 @@ export interface SetupRoutes {
     { sourceId?: string }
   >;
   "setup.apps": InMission<"setup.apps", "/setup/apps">;
-  "setup.app": InMission<
-    "setup.app",
-    "/setup/apps/:appKey/:surface?",
-    { appKey: Raw; surface?: RawOpt },
-    { appKey: string; surface?: string }
-  >;
   "setup.settings": InMission<
     "setup.settings",
     "/setup/settings/:section?",

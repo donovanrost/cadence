@@ -3,7 +3,7 @@ import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
-import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
+import { useMissionScope } from "@/shell";
 import { ApButton, ApEmptyState, ApPageHeader, ApPanel, ApRemote, ApSegmented } from "@/ui";
 import ImportRunsPanel from "./ImportRunsPanel.vue";
 import RevisionsPanel from "./RevisionsPanel.vue";
@@ -11,13 +11,15 @@ import { fetchCatalogIndex, indexRunCap, revisionSummary } from "./api.ts";
 
 /** Setup › Catalog (rail 04). Spec: docs/apogee/ux/screens/Catalog.md § A. */
 const scope = useMissionScope();
-const session = useSession();
-const canManage = computed(() => canAdministerOrganization(session, scope.value.organization));
 /** `?database=` (the old `setup/catalog/:databaseId` path redirects here, ux §7 #8). */
 const initial = useRoute().query["database"];
 const databaseId = ref<string | null>(typeof initial === "string" && initial ? initial : null);
 const key = computed(() => ({ missionId: scope.value.mission.id, databaseId: databaseId.value }));
 const { state, refetch } = useRemoteQuery(key, fetchCatalogIndex);
+/** #1160: importing is any mission operator (`catalog.import`); the approval is the admin's. */
+const canImport = computed(
+  () => state.value.status === "ready" && state.value.value.permissions.includes("catalog.import"),
+);
 useMissionInvalidation(
   computed(() => scope.value.mission.id),
   ["catalog"],
@@ -49,7 +51,7 @@ const selected = computed({
           revisionSummary(state.value.database.current_revision)
         }}</span>
       </template>
-      <ApButton v-if="canManage" variant="primary" :to="{ name: 'setup.catalog.import' }"
+      <ApButton v-if="canImport" variant="primary" :to="{ name: 'setup.catalog.import' }"
         >Import a new revision</ApButton
       >
     </ApPageHeader>

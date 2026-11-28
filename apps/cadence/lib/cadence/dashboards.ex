@@ -104,10 +104,6 @@ defmodule Cadence.Dashboards do
     to: Personalization,
     as: :list_preferences
 
-  defdelegate dashboard_navigation(organization_id, mission_id, user_id, summaries),
-    to: Personalization,
-    as: :navigation
-
   def set_dashboard_starred(
         organization_id,
         mission_id,

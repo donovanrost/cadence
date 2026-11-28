@@ -15,7 +15,6 @@ defmodule CadenceWeb.Console.DataSourceWritesController do
 
   alias Cadence.Applications.{ActionRequest, HostContext}
   alias Cadence.Applications.OpsConsole.Actions.DataSources, as: Actions
-  alias Cadence.Auth.Policy
   alias Cadence.Jobs
   alias Cadence.Management.DataSources
   alias Cadence.Reads.DataSourceDirectory
@@ -223,15 +222,16 @@ defmodule CadenceWeb.Console.DataSourceWritesController do
 
   def run_action(conn, _params), do: Problem.respond(conn, :not_found)
 
-  @doc "D1's permissions: what the writes check (operate_mission today)."
+  @doc """
+  D1's permissions: what the writes check, derived from the very check they make
+  (`Actions.may_manage?/3`, #1160), so `data_sources.manage` goes only to someone whose write
+  passes. Today that is a mission operator who is also an organization admin.
+  """
   def permissions(scope, mission_id) do
-    # todo(authz): Cedar should decide who may manage data sources (any mission operator today).
-    if Policy.authorize(scope, :operate_mission, %{
-         organization_id: scope.organization_id,
-         mission_id: mission_id
-       }) == :ok,
-       do: ["data_sources.manage"],
-       else: []
+    # todo(authz): Cedar should decide who may manage data sources.
+    if Actions.may_manage?(scope, scope.organization_id, mission_id),
+      do: ["data_sources.manage"],
+      else: []
   end
 
   defp toggle(conn, id, action, wanted) do

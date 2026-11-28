@@ -2,7 +2,8 @@
 import { computed, reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useRemoteQuery } from "@/api";
-import { canAdministerOrganization, TakeoverHeader, useMissionScope, useSession } from "@/shell";
+import { TakeoverHeader, useMissionScope } from "@/shell";
+import { useConfigState } from "@/features/changes/index.ts";
 import { ApCallout, ApRemote, ApStepBar } from "@/ui";
 import { fetchProfiles, type ProfileSummary } from "@/features/profiles/index.ts";
 import { fetchSpacecraftDirectory, type SpacecraftDirectory } from "../api.ts";
@@ -20,7 +21,17 @@ const route = useRoute("setup.spacecraft.new");
 const router = useRouter();
 const scope = useMissionScope();
 const missionId = scope.value.mission.id;
-const canManage = canAdministerOrganization(useSession(), scope.value.organization);
+/**
+ * #1160: adding spacecraft stages a change (config.stage, any mission operator). The callout waits
+ * for the config state, so nobody is told they can't while it's still being read.
+ */
+const config = useConfigState(missionId);
+const canManage = computed(
+  () =>
+    config.state.value.status === "ready" &&
+    config.state.value.value.permissions.has("config.stage"),
+);
+const cannotStage = computed(() => config.state.value.status === "ready" && !canManage.value);
 const { state, refetch } = useRemoteQuery(() => scope.value.mission.id, fetchSpacecraftDirectory);
 const profilesQuery = useRemoteQuery(() => scope.value.mission.id, fetchProfiles);
 const profiles = computed((): readonly ProfileSummary[] =>
@@ -86,9 +97,8 @@ function go(next: Step) {
         />
       </template>
     </TakeoverHeader>
-    <ApCallout v-if="!canManage" tone="off">
-      Only an organization admin can add spacecraft. You can prepare a batch here, but not create
-      it.
+    <ApCallout v-if="cannotStage" tone="off">
+      Only mission operators can add spacecraft. You can prepare a batch here, but not create it.
     </ApCallout>
     <ApRemote :state="state" loading-label="Loading this mission's spacecraft…" @retry="refetch">
       <ApRemote

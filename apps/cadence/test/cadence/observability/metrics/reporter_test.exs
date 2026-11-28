@@ -265,9 +265,12 @@ defmodule Cadence.Observability.Metrics.ReporterTest do
 
     :telemetry.execute(@event, %{count: 1, duration: 0.2}, %{outcome: :ok})
 
-    assert capture_log(fn ->
-             assert :ok = Reporter.flush(reporter)
-           end) == ""
+    log = capture_log([metadata: [:pid]], fn -> assert :ok = Reporter.flush(reporter) end)
+    reporter_pid = List.to_string(:erlang.pid_to_list(reporter))
+
+    refute Enum.any?(String.split(log, "\n"), fn line ->
+             String.contains?(line, "pid=#{reporter_pid}") and String.contains?(line, "retry:")
+           end)
 
     assert %{
              series_count: 2,

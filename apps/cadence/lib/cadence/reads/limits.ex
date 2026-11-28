@@ -5,19 +5,14 @@ defmodule Cadence.Reads.Limits do
   A point's latest state, its event history and their watermark are the runtime's alarm states and
   transitions (`Cadence.Reads.AlarmEvents`, #451 T3e), as limit events; its definition intervals
   are empty for monitoring rules (bands are not shown yet, #1127). The mission-wide latest states
-  (`latest_states_for_mission/2,3`, `latest_states_page/3`) still read the ground projection for the
-  legacy readers that remain, and go with them.
+  (`latest_states_for_mission/3`) still read the ground projection for the legacy readers that
+  remain, and go with them.
   """
 
-  alias Cadence.Limits
   alias Cadence.Limits.{DefinitionInterval, Event}
   alias Cadence.Limits.Store
   alias Cadence.Reads.AlarmEvents
   alias Cadence.Telemetry.SourceFilters
-
-  @mission_scope_key "__mission__"
-
-  defdelegate latest_states_page(org, mission, opts), to: Store
 
   @spec latest_state(binary(), binary(), keyword()) :: Event.t() | nil
   def latest_state(mission_id, point_id, opts \\ [])
@@ -36,42 +31,12 @@ defmodule Cadence.Reads.Limits do
   defp latest_state_for_scope(organization_id, mission_id, point_id, opts),
     do: AlarmEvents.latest_state(organization_id, mission_id, point_id, opts)
 
-  @doc """
-  The point ids that have an active limit definition in the mission (ux T1 'No limits':
-  the points read's `has_limits`).
-  """
-  @spec limited_point_ids(binary(), binary()) :: MapSet.t(binary())
-  def limited_point_ids(organization_id, mission_id) do
-    organization_id
-    |> Limits.active_limit_definitions(mission_id)
-    |> MapSet.new(& &1.point_id)
-  end
-
-  @spec latest_states_for_mission(binary(), keyword()) :: [Event.t()]
-  def latest_states_for_mission(mission_id, opts \\ [])
-      when is_binary(mission_id) and is_list(opts) do
-    mission_id
-    |> Store.list_latest_states(opts)
-    |> filter_source_events(opts)
-  end
-
   @spec latest_states_for_mission(binary(), binary(), keyword()) :: [Event.t()]
   def latest_states_for_mission(organization_id, mission_id, opts)
       when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
     mission_id
     |> Store.list_latest_states(Keyword.put(opts, :organization_id, organization_id))
     |> filter_source_events(opts)
-  end
-
-  @spec latest_states_for_points(binary(), [binary()], [binary() | nil]) :: [Event.t()]
-  def latest_states_for_points(mission_id, point_ids, spacecraft_ids)
-      when is_binary(mission_id) and is_list(point_ids) and is_list(spacecraft_ids) do
-    scope_ids = spacecraft_ids |> Enum.map(&spacecraft_scope_id/1) |> Enum.uniq()
-
-    Store.list_latest_states(mission_id,
-      point_ids: point_ids,
-      spacecraft_scope_ids: scope_ids
-    )
   end
 
   @spec event_history(binary(), binary(), keyword()) :: [Event.t()]
@@ -187,9 +152,6 @@ defmodule Cadence.Reads.Limits do
 
   defp provenance_value(map, key) when is_map(map), do: Map.get(map, key)
   defp provenance_value(_value, _key), do: nil
-
-  defp spacecraft_scope_id(nil), do: @mission_scope_key
-  defp spacecraft_scope_id(spacecraft_id), do: spacecraft_id
 
   defp merge_projection_watermarks(left, right) do
     latest_receipt_time = latest_datetime([left, right], :latest_receipt_time)

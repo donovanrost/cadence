@@ -67,5 +67,5 @@ const columns: readonly ApColumn[] = [
       <template #cell-by="{ row }"><VersionByCell :actor="row.actor" /></template>
     </ApTable>
   </ApPanel>
-  <p v-if="!canEdit" class="m-0 text-sm text-text-3">Org admins change contact planning.</p>
+  <p v-if="!canEdit" class="m-0 text-sm text-text-3">Org admins change templates.</p>
 </template>

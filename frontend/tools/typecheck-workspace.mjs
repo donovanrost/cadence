@@ -5,7 +5,7 @@ import { join, relative, resolve, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "typescript";
 
-const containers = ["apps", "modules", "packages"];
+const containers = ["apps", "packages"];
 const excluded = new Set(["node_modules", "dist", "coverage", ".git", "vendor"]);
 const authoredSource = /\.(?:[cm]?[jt]sx?|vue)$/;
 const javascriptSource = /\.[cm]?jsx?$/;

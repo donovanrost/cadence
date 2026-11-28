@@ -13,7 +13,7 @@ export {
 /** @typedef {{kind: "word" | "punctuation" | "regex" | "string" | "template", value: string, dynamic?: boolean, dangerousDynamic?: boolean}} Token */
 /** @typedef {(path: string) => Promise<number | null>} ByteLengthForPath */
 /** @typedef {{record: object, target: string, trail: string}} ByteBoundRecord */
-/** @typedef {{authoritativeHostInitialization?: boolean, generatedModuleFederation?: boolean, authoritativeGeneratedDynamicImport?: boolean, authoritativeHostPublication?: boolean}} ReferenceOptions */
+/** @typedef {{authoritativeHostInitialization?: boolean, generatedModuleFederation?: boolean, authoritativeGeneratedDynamicImport?: boolean}} ReferenceOptions */
 /** @typedef {{root: string, artifacts: readonly {path: string, bytes: Buffer}[]}} ArtifactSnapshot */
 /** @typedef {{repositoryRootInput?: string, requireExternal?: boolean, allowedDeploymentPath?: string, artifactSnapshot?: ArtifactSnapshot}} OutputOptions */
 /** @typedef {{paths: string[], files?: Set<string>, readBytes: (name:string) => Promise<Buffer|null>, readText: (name:string) => Promise<string|null>, byteLengthForPath: ByteLengthForPath}} OutputSnapshot */
@@ -1169,37 +1169,6 @@ function isGeneratedFederationRemoteImportWithoutImportMeta(tokens, index) {
   });
 }
 
-/** @param {Token[]} tokens @param {number} index */
-
-function isGeneratedFederationExternalImport(tokens, index) {
-  const argument = tokens[index + 2];
-  /** @type {[number, string | undefined][]} */
-  const expected = [
-    [index - 1, ":"],
-    [index + 3, ")"],
-    [index + 4, "."],
-    [index + 5, "then"],
-    [index + 6, "("],
-    [index + 7, "word"],
-    [index + 8, ")"],
-    [index + 9, "."],
-    [index + 10, "catch"],
-    [index + 11, "("],
-    [index + 12, "word"],
-    [index + 13, ")"],
-  ];
-  if (argument?.kind !== "word") return false;
-  if (
-    !expected.every(([tokenIndex, value]) => {
-      const token = tokens[tokenIndex];
-      return value === "word" ? token?.kind === "word" : token?.value === value;
-    })
-  ) {
-    return false;
-  }
-  return true;
-}
-
 const workerConstructorNames = new Set(["Worker", "SharedWorker", "ServiceWorker"]);
 
 /** @param {Token[]} tokens @param {number} index */
@@ -1406,22 +1375,15 @@ function isGeneratedRuntimeUrl(tokens, index) {
   return directEntry || memberEntry;
 }
 
-/** @param {Token | undefined} token @param {ReferenceOptions} [options] */
+/** @param {Token | undefined} token */
 
-function isGeneratedFederationDynamicTemplate(
-  token,
-  { authoritativeHostPublication = false } = {},
-) {
+function isGeneratedFederationDynamicTemplate(token) {
   return (
     token?.kind === "template" &&
     token.dynamic === true &&
-    (/^\s*(?:System\.)?import\("\$\{[A-Za-z_$][A-Za-z0-9_$]*\}"\)\$\{[A-Za-z_$][A-Za-z0-9_$]*\}\s*$/.test(
+    /^\s*(?:System\.)?import\("\$\{[A-Za-z_$][A-Za-z0-9_$]*\}"\)\$\{[A-Za-z_$][A-Za-z0-9_$]*\}\s*$/.test(
       token.value,
-    ) ||
-      (authoritativeHostPublication &&
-        /^__module_federation_remote__\$\{[A-Za-z_$][A-Za-z0-9_$]*\([A-Za-z_$][A-Za-z0-9_$]*\)\}$/.test(
-          token.value,
-        )))
+    )
   );
 }
 
@@ -1537,17 +1499,12 @@ export function assertImportReferences(
 ) {
   const tokens = javascriptTokens(source, origin);
   const generatedModuleFederation = options.generatedModuleFederation === true;
-  const authoritativeDynamicImport =
-    options.authoritativeGeneratedDynamicImport === true ||
-    options.authoritativeHostPublication === true;
+  const authoritativeDynamicImport = options.authoritativeGeneratedDynamicImport === true;
   if (
     tokens.some(
       (token) =>
         token.dangerousDynamic &&
-        (!authoritativeDynamicImport ||
-          !isGeneratedFederationDynamicTemplate(token, {
-            authoritativeHostPublication: options.authoritativeHostPublication === true,
-          })),
+        (!authoritativeDynamicImport || !isGeneratedFederationDynamicTemplate(token)),
     )
   ) {
     fail(`${origin} contains an unresolved dynamic template expression`);
@@ -1601,9 +1558,7 @@ export function assertImportReferences(
         } else if (
           authoritativeDynamicImport &&
           (isGeneratedFederationRemoteImport(tokens, index) ||
-            isGeneratedFederationRemoteImportWithoutImportMeta(tokens, index) ||
-            (options.authoritativeHostPublication === true &&
-              isGeneratedFederationExternalImport(tokens, index)))
+            isGeneratedFederationRemoteImportWithoutImportMeta(tokens, index))
         ) {
           continue;
         } else {
@@ -1668,7 +1623,6 @@ export function assertImportReferences(
     if (urlCall) {
       if (isBrowserLocationUrl(tokens, urlCall.start)) continue;
       if (isBrowserOriginUrl(tokens, urlCall.start)) continue;
-      if (options.authoritativeHostPublication === true) continue;
       if (
         generatedModuleFederation &&
         (isGeneratedBrowserRelativeUrl(tokens, urlCall.start) ||

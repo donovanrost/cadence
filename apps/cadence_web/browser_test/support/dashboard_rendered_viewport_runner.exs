@@ -7,23 +7,9 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportRunner do
   @dashboard_viewport_smoke_shutdown_timeout_ms 5_000
   @dashboard_viewport_smoke_kill_observation_timeout_ms 1_000
 
-  import ExUnit.Assertions
   import ExUnit.Callbacks
 
   alias Ecto.Adapters.SQL.Sandbox
-
-  def ensure_assets_built!(app_root) do
-    assert {output, 0} =
-             System.cmd("mix", ["assets.build"],
-               cd: app_root,
-               env: [{"MIX_ENV", "test"}],
-               stderr_to_stdout: true
-             )
-
-    assert output =~ "tailwindcss"
-    assert File.exists?(Path.join(app_root, "priv/static/assets/app.css"))
-    assert File.exists?(Path.join(app_root, "priv/static/assets/app.js"))
-  end
 
   def free_tcp_port do
     {:ok, socket} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])

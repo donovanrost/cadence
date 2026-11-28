@@ -227,6 +227,68 @@ defmodule Cadence.Contacts.ProviderSchedulingTest do
              )
   end
 
+  # Providers work in whole seconds. A window with a fractional start went out as written, so a
+  # provider could offer a pass starting in that window's first second, which Cadence then refused
+  # as starting a fraction of a second early, failing the whole search.
+  test "asks providers for a whole-second window and checks offers against the same one",
+       context do
+    assert {:ok, %{routes: [route]}} =
+             ProviderScheduling.list_ready_downlink_routes(
+               context.organization_id,
+               context.mission_id,
+               context.spacecraft.spacecraft_id
+             )
+
+    second = DateTime.utc_now() |> DateTime.add(120) |> DateTime.truncate(:second)
+    starts_at = DateTime.add(second, 400_000, :microsecond)
+    ends_at = second |> DateTime.add(3_600) |> DateTime.add(600_000, :microsecond)
+    first_whole = DateTime.add(second, 1)
+    last_whole = DateTime.add(second, 3_600)
+
+    offer =
+      route
+      |> opportunity(second)
+      |> Map.merge(%{
+        "starts_at" => DateTime.to_iso8601(first_whole),
+        "ends_at" => DateTime.to_iso8601(last_whole)
+      })
+
+    assert {:ok, %{opportunities: [result]}} =
+             ProviderScheduling.search_opportunities(
+               context.organization_id,
+               context.mission_id,
+               route.route_key,
+               %{
+                 "spacecraft_id" => context.spacecraft.spacecraft_id,
+                 "starts_at" => DateTime.to_iso8601(starts_at),
+                 "ends_at" => DateTime.to_iso8601(ends_at)
+               },
+               client: FakeProviderClient,
+               on_search: fn params ->
+                 assert params["starts_at"] == DateTime.to_iso8601(first_whole)
+                 assert params["ends_at"] == DateTime.to_iso8601(last_whole)
+               end,
+               search_response: {:ok, %{"data" => [offer]}}
+             )
+
+    assert result["id"] == "opportunity-alpha"
+
+    # A window shorter than a second has no whole second in it.
+    assert {:error, :invalid_opportunity_window} =
+             ProviderScheduling.search_opportunities(
+               context.organization_id,
+               context.mission_id,
+               route.route_key,
+               %{
+                 "spacecraft_id" => context.spacecraft.spacecraft_id,
+                 "starts_at" => DateTime.to_iso8601(starts_at),
+                 "ends_at" =>
+                   starts_at |> DateTime.add(300_000, :microsecond) |> DateTime.to_iso8601()
+               },
+               client: FakeProviderClient
+             )
+  end
+
   test "route keys cannot cross organization or mission scope", context do
     assert {:ok, %{routes: [route]}} =
              ProviderScheduling.list_ready_downlink_routes(

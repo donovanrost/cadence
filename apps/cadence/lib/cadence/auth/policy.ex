@@ -6,29 +6,19 @@ defmodule Cadence.Auth.Policy do
 
   alias Cadence.Auth.{MissionOrganizationCache, Scope}
 
-  # #282: the organization-level actions a service identity may perform. Everything else that goes
-  # through authorize_organization_capability/4 is a person's (actor_kind :user). Adding an action
-  # here is a security decision: the test pinning this list (OrganizationActionsPersonOnlyTest)
-  # makes it a visible diff for review. Mission-level access is separate: :manage_mission (the REST
-  # control plane's gate for a mission-scoped service) and :operate_mission don't go through here.
-  #
-  # #384 (director 11-19) retired the bearer routes that were its only entries
-  # (GET /api/organizations/:id, GET/POST /api/organizations/:id/missions), so it is empty: every
-  # organization-level action is a person's. If a deployment ever needs organization-level service
-  # access, it comes back as a scoped design under Cedar (#284), not as an entry here.
-  @service_allowed_organization_actions []
-
-  @doc "The organization-level actions a service identity may perform (#282): none since #384."
-  @spec service_allowed_organization_actions() :: [atom()]
-  def service_allowed_organization_actions, do: @service_allowed_organization_actions
+  # #282: every organization-level action that goes through authorize_organization_capability/4 is
+  # a person's (actor_kind :user); a service identity is refused first, whatever it holds. (#384
+  # retired the bearer routes that were the only exceptions; if a deployment ever needs
+  # organization-level service access it comes back as a scoped design under Cedar, #284.)
+  # Mission-level access is separate: :manage_mission and :operate_mission don't go through here.
+  # OrganizationActionsPersonOnlyTest pins it for each action.
 
   @spec authorize(Scope.t(), atom(), map()) :: :ok | {:error, term()}
   def authorize(%Scope{} = current_scope, :read_organization, %{organization_id: organization_id}) do
     authorize_organization_capability(
       current_scope,
       organization_id,
-      :organization_admin,
-      :read_organization
+      :organization_admin
     )
   end
 
@@ -36,8 +26,7 @@ defmodule Cadence.Auth.Policy do
     authorize_organization_capability(
       current_scope,
       organization_id,
-      :organization_admin,
-      :manage_missions
+      :organization_admin
     )
   end
 
@@ -65,9 +54,22 @@ defmodule Cadence.Auth.Policy do
   def authorize(%Scope{}, action, _params) when action in @delivery_credential_actions,
     do: {:error, :authenticated_user_required}
 
-  # Settings and activation review use named policy actions. The initial policy
-  # admits active human members; customer approval requirements never assign a
-  # built-in role. These action boundaries are the future Cedar integration.
+  # Settings use named policy actions. Reading is any active member's (an organization's settings
+  # through `:operate_organization`, a mission's through `:operate_mission`). Writing a mission's
+  # settings stays a mission operator's; writing an **organization's** settings needs an
+  # organization admin (#1159): they apply to every mission of the organization. These action
+  # boundaries are the future Cedar integration.
+  def authorize(%Scope{actor_kind: :user} = scope, :manage_settings, %{
+        organization_id: organization_id,
+        mission_id: nil
+      }) do
+    authorize_organization_capability(
+      scope,
+      organization_id,
+      :organization_admin
+    )
+  end
+
   def authorize(%Scope{actor_kind: :user} = scope, action, %{
         organization_id: organization_id,
         mission_id: mission_id
@@ -109,8 +111,7 @@ defmodule Cadence.Auth.Policy do
     authorize_organization_capability(
       current_scope,
       organization_id,
-      :organization_admin,
-      :manage_organization_members
+      :organization_admin
     )
   end
 
@@ -120,8 +121,7 @@ defmodule Cadence.Auth.Policy do
     authorize_organization_capability(
       current_scope,
       organization_id,
-      :organization_admin,
-      :create_missions
+      :organization_admin
     )
   end
 
@@ -131,8 +131,7 @@ defmodule Cadence.Auth.Policy do
     authorize_organization_capability(
       current_scope,
       organization_id,
-      :organization_admin,
-      :manage_provider_accounts
+      :organization_admin
     )
   end
 
@@ -142,8 +141,7 @@ defmodule Cadence.Auth.Policy do
     authorize_organization_capability(
       current_scope,
       organization_id,
-      :organization_admin,
-      :approve_provider_changes
+      :organization_admin
     )
   end
 
@@ -158,8 +156,7 @@ defmodule Cadence.Auth.Policy do
     authorize_organization_capability(
       current_scope,
       organization_id,
-      :organization_admin,
-      :approve_mission_model
+      :organization_admin
     )
   end
 
@@ -169,8 +166,7 @@ defmodule Cadence.Auth.Policy do
     authorize_organization_capability(
       current_scope,
       organization_id,
-      :organization_admin,
-      :approve_contact_plans
+      :organization_admin
     )
   end
 
@@ -180,8 +176,7 @@ defmodule Cadence.Auth.Policy do
     authorize_organization_capability(
       current_scope,
       organization_id,
-      :organization_admin,
-      :manage_fleet_planning_policy
+      :organization_admin
     )
   end
 
@@ -191,8 +186,7 @@ defmodule Cadence.Auth.Policy do
     authorize_organization_capability(
       current_scope,
       organization_id,
-      :organization_admin,
-      :approve_fleet_planning_policy
+      :organization_admin
     )
   end
 
@@ -202,8 +196,7 @@ defmodule Cadence.Auth.Policy do
     authorize_organization_capability(
       current_scope,
       organization_id,
-      :organization_admin,
-      :manage_automation_grants
+      :organization_admin
     )
   end
 
@@ -227,26 +220,6 @@ defmodule Cadence.Auth.Policy do
       _invalid_actor ->
         {:error, :authenticated_user_required}
     end
-  end
-
-  def authorize(%Scope{} = current_scope, :read_application_catalog, %{
-        organization_id: organization_id,
-        mission_id: mission_id
-      }) do
-    authorize(current_scope, :operate_mission, %{
-      organization_id: organization_id,
-      mission_id: mission_id
-    })
-  end
-
-  def authorize(%Scope{} = current_scope, :read_legacy_application, %{
-        organization_id: organization_id,
-        mission_id: mission_id
-      }) do
-    authorize(current_scope, :operate_mission, %{
-      organization_id: organization_id,
-      mission_id: mission_id
-    })
   end
 
   # Dashboard authoring deliberately starts with the existing mission-operator
@@ -289,35 +262,55 @@ defmodule Cadence.Auth.Policy do
       authorize_organization_capability(
         current_scope,
         organization_id,
-        :organization_admin,
-        :manage_service_identities
+        :organization_admin
       )
     end
   end
 
+  # #1158: administering a mission is checked against the mission itself, like `:operate_mission`:
+  # it must exist and belong to the organization being authorized, for every principal (a platform
+  # admin included), so the answer never depends on a caller having fetched the mission first.
   def authorize(
         %Scope{} = current_scope,
         :manage_mission,
         %{organization_id: organization_id, mission_id: mission_id}
       ) do
+    with :ok <- valid_mission_id(mission_id),
+         :ok <- mission_in_organization(organization_id, mission_id) do
+      manage_capability(current_scope, organization_id, mission_id)
+    end
+  end
+
+  # A platform admin administers any organization's mission; otherwise the scope must be the
+  # organization's. An organization admin administers every mission of it, except that a service
+  # pinned to one mission administers only that one, whatever capability it holds (#1158); a
+  # mission admin administers its own mission.
+  defp manage_capability(%Scope{} = scope, organization_id, mission_id) do
     cond do
-      MapSet.member?(current_scope.capabilities, :platform_admin) ->
+      MapSet.member?(scope.capabilities, :platform_admin) ->
         :ok
 
-      current_scope.organization_id != organization_id ->
+      scope.organization_id != organization_id ->
         {:error, :scope_mismatch}
 
-      MapSet.member?(current_scope.capabilities, :organization_admin) ->
+      not pinned_to?(scope, mission_id) ->
+        {:error, :forbidden}
+
+      MapSet.member?(scope.capabilities, :organization_admin) ->
         :ok
 
-      MapSet.member?(current_scope.capabilities, :mission_admin) and
-          current_scope.mission_id == mission_id ->
+      MapSet.member?(scope.capabilities, :mission_admin) and scope.mission_id == mission_id ->
         :ok
 
       true ->
         {:error, :forbidden}
     end
   end
+
+  # A scope with no mission pin (a person, an organization-wide service) isn't restricted to one.
+  defp pinned_to?(%Scope{mission_id: nil}, _mission_id), do: true
+  defp pinned_to?(%Scope{mission_id: mission_id}, mission_id), do: true
+  defp pinned_to?(%Scope{}, _mission_id), do: false
 
   @doc """
   The actor holds every capability it would hand a service identity, by issuing it or rotating
@@ -340,25 +333,17 @@ defmodule Cadence.Auth.Policy do
       (capability == :mission_admin and MapSet.member?(held, :organization_admin))
   end
 
-  # #282: organization-level actions are a person's by default. The check comes first, before any
-  # membership or role is read, so every action through here, now or added later, refuses a
-  # service identity (even one holding organization_admin or platform_admin) unless it is listed
-  # in @service_allowed_organization_actions.
+  # #282: organization-level actions are a person's. The check comes first, before any membership
+  # or role is read, so every action through here, now or added later, refuses a service identity
+  # (even one holding organization_admin or platform_admin).
   defp authorize_organization_capability(
          %Scope{} = current_scope,
          organization_id,
-         capability,
-         action
+         capability
        ) do
-    with :ok <- person_unless_service_allowed(current_scope, action) do
+    with :ok <- authenticated_user(current_scope) do
       organization_capability(current_scope, organization_id, capability)
     end
-  end
-
-  defp person_unless_service_allowed(%Scope{} = scope, action) do
-    if Enum.member?(@service_allowed_organization_actions, action),
-      do: :ok,
-      else: authenticated_user(scope)
   end
 
   defp organization_capability(%Scope{} = current_scope, organization_id, capability) do

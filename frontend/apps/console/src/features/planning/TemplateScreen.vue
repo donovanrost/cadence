@@ -22,12 +22,12 @@ const { state, refetch } = useRemoteQuery(
       : null,
   fetchTemplate,
 );
-// Template writes and lifecycle moves share one check (:manage_mission); CP1 says it as planning.edit.
+// Template writes and lifecycle moves share one check (:manage_mission): planning.template.manage.
 const planning = useRemoteQuery(() => scope.value.mission.id, fetchPlanning);
 const canEdit = computed(
   () =>
     planning.state.value.status === "ready" &&
-    planning.state.value.value.permissions.includes("planning.edit"),
+    planning.state.value.value.permissions.includes("planning.template.manage"),
 );
 const editing = ref(false);
 function closed() {

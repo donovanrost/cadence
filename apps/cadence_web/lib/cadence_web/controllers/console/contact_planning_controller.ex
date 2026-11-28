@@ -15,7 +15,13 @@ defmodule CadenceWeb.Console.ContactPlanningController do
     data =
       conn.assigns.current_scope.organization_id
       |> PlanningPolicy.get(conn.assigns.current_mission.mission_id)
-      |> Map.put(:permissions, PlanningPolicy.permissions(conn.assigns.current_scope))
+      |> Map.put(
+        :permissions,
+        PlanningPolicy.permissions(
+          conn.assigns.current_scope,
+          conn.assigns.current_mission.mission_id
+        )
+      )
 
     json(conn, %{data: ConfigJSON.encode(data)})
   end

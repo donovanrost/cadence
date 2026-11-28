@@ -46,51 +46,10 @@ defmodule CadenceWeb.Console.AppAPITest do
     assert get_data(c)["spacecraft_count"] == 2
   end
 
-  defp host(c, path), do: c.user |> TestFixtures.member_conn() |> get("#{c.base}/#{path}")
-
-  test "L9: rows carry status and surfaces; the host serves one surface's catalog with real permissions",
-       c do
+  test "L19: each row carries the app's status and no surfaces (#672)", c do
     ops = Enum.find(get_data(c)["apps"], &(&1["key"] == "ops_console"))
     assert %{"state" => "active", "version" => version} = ops["status"]
     assert is_integer(version)
-
-    assert %{
-             "surface_id" => "workspace",
-             "label" => "Ops Console",
-             "order" => 10,
-             "scope" => "mission"
-           } = Enum.find(ops["surfaces"], &(&1["surface_id"] == "workspace"))
-
-    data =
-      c
-      |> host("ops_console/surfaces/data_sources/host")
-      |> json_response(200)
-      |> Map.fetch!("data")
-
-    assert %{"state" => "active"} = data["status"]
-
-    assert Enum.map(data["surfaces"], & &1["surface_id"]) ==
-             Enum.map(ops["surfaces"], & &1["surface_id"])
-
-    catalog = data["catalog"]
-    assert catalog["schema"] == "cadence.first-party-frontend-catalog.v1"
-
-    assert [%{"applicationKey" => "ops_console", "surface" => %{"surfaceId" => "data_sources"}}] =
-             catalog["applications"]
-
-    # Real permissions: a member may operate a surface with actions (today's Policy, todo(authz)).
-    assert catalog["session"]["context"]["actor"]["permissions"] == [
-             "applications:view",
-             "applications:operate"
-           ]
-
-    assert is_binary(catalog["session"]["sessionId"]) and
-             is_binary(catalog["session"]["csrfToken"])
-
-    assert json_response(host(c, "ops_console/surfaces/nope/host"), 404)["error"]["code"] ==
-             "surface_not_found"
-
-    assert json_response(host(c, "nope/surfaces/manage/host"), 404)["error"]["code"] ==
-             "application_not_found"
+    refute Map.has_key?(ops, "surfaces")
   end
 end

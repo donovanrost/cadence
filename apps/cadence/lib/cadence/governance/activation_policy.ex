@@ -57,7 +57,10 @@ defmodule Cadence.Governance.ActivationPolicy do
   change records nothing.
   """
   def save(scope, mission_id, token, input, opts \\ []) do
-    with :ok <- SettingsAccess.authorize(scope, :manage_settings, mission_id),
+    # Reading the section is any member's; who may CHANGE it is this section's own rule
+    # (`may_change/4`, below), which answers with its own refusal (#1159: the generic settings
+    # gate for an organization's settings is now an organization admin, which would pre-empt it).
+    with :ok <- SettingsAccess.authorize(scope, :read_settings, mission_id),
          {:ok, document} <- decode(mission_id, input) do
       org = scope.organization_id
       acknowledged = Keyword.get(opts, :acknowledged_suspensions)

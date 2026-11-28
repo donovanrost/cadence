@@ -77,7 +77,7 @@ defmodule Cadence.ContactPlanning.ContactRequirements do
   def cancel_superseded(_scope, _mission_id, [], _as_of), do: :ok
 
   def cancel_superseded(%Scope{} = scope, mission_id, cancellations, as_of) do
-    with :ok <- authorize_member(scope, mission_id),
+    with :ok <- authorize_edit(scope, mission_id),
          {:ok, actor} <- actor_id(scope) do
       {:ok, changed_at} = Ecto.Type.cast(:utc_datetime_usec, as_of)
       updated_at = now([])
@@ -154,7 +154,7 @@ defmodule Cadence.ContactPlanning.ContactRequirements do
       when is_binary(mission_id) and is_map(attrs) and is_list(opts) do
     now = now(opts)
 
-    with :ok <- authorize_member(current_scope, mission_id),
+    with :ok <- authorize_edit(current_scope, mission_id),
          {:ok, _mission} <-
            Missions.fetch_mission(current_scope.organization_id, mission_id),
          {:ok, actor_id} <- actor_id(current_scope),
@@ -217,7 +217,7 @@ defmodule Cadence.ContactPlanning.ContactRequirements do
               is_list(opts) do
     now = now(opts)
 
-    with :ok <- authorize_member(current_scope, mission_id),
+    with :ok <- authorize_edit(current_scope, mission_id),
          {:ok, _mission} <-
            Missions.fetch_mission(current_scope.organization_id, mission_id),
          {:ok, actor_id} <- actor_id(current_scope) do
@@ -590,7 +590,7 @@ defmodule Cadence.ContactPlanning.ContactRequirements do
     normalized_reason = reason |> to_string() |> String.trim()
     now = now(opts)
 
-    with :ok <- authorize_member(current_scope, mission_id),
+    with :ok <- authorize_edit(current_scope, mission_id),
          {:ok, _mission} <-
            Missions.fetch_mission(current_scope.organization_id, mission_id),
          {:ok, actor_id} <- actor_id(current_scope),
@@ -838,7 +838,15 @@ defmodule Cadence.ContactPlanning.ContactRequirements do
   defp required_reason(""), do: {:error, :contact_requirement_transition_reason_required}
   defp required_reason(_reason), do: :ok
 
-  defp authorize_member(current_scope, mission_id) do
+  @doc """
+  Who may create, version, close or cancel a requirement: any mission operator
+  (`:operate_mission`). A requirement says what to plan for; nothing books until a contact plan
+  is approved or an automation grant books on its terms, so the human decision sits there
+  (#1160 row 4). The check every write here makes, and `planning.requirement.edit`
+  (`Cadence.Control.PlanningPolicy.permissions/2`) reports.
+  """
+  @spec authorize_edit(Scope.t(), binary()) :: :ok | {:error, term()}
+  def authorize_edit(current_scope, mission_id) do
     Policy.authorize(current_scope, :operate_mission, %{
       organization_id: current_scope.organization_id,
       mission_id: mission_id

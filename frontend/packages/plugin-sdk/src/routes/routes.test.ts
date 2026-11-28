@@ -1,88 +1,35 @@
 // @vitest-environment node
 import { expect, expectTypeOf, test } from "vite-plus/test";
 import { href, isRouteId, routeCatalog, type Href, type RouteHeaderKind } from ".";
-import { existsSync, readFileSync } from "node:fs";
 import catalog from "../../../../apps/host/src/routes.json";
-import retained from "../../../../tools/retained-legacy-routes.json";
 import { projectRoutes } from "./project";
 
-const frontend = new URL("../../../../", import.meta.url);
-
-/**
- * The retained legacy routes as §11c B left them (lead 11-15). The list may only shrink: B12 and
- * (C) remove an entry when they delete its last consumer. Adding a path means editing this frozen
- * baseline too, which is allowed only in a deletion batch's own commit (legacy-deletion.md).
- */
-const RETAINED_BASELINE = [
-  "/missions/:mission_id/settings",
-  "/missions/:mission_id/settings/:section_id",
-] as const;
+const surface = "/missions/:mission_id/applications/:application_key/:surface_id" as const;
 
 test("the generated catalog matches the host route catalog exactly", () => {
-  // Regenerate with `corepack pnpm routes:generate` when this fails. The catalog also holds the
-  // retained legacy routes (tools/retained-legacy-routes.json), until B12 / (C) delete their consumers.
-  expect(routeCatalog).toEqual(projectRoutes([...catalog, ...retained.routes]));
+  // Regenerate with `corepack pnpm routes:generate` when this fails.
+  expect(routeCatalog).toEqual(projectRoutes(catalog));
 });
 
-test("a retained legacy route never comes back into the host catalog", () => {
-  const hostPaths = new Set(catalog.map((route) => route.path));
-  expect(retained.routes.filter((route) => hostPaths.has(route.path))).toEqual([]);
-});
-
-test("the retained list only shrinks: a subset of the frozen baseline, never longer", () => {
-  const baseline = new Set<string>(RETAINED_BASELINE);
-  const paths = retained.routes.map((route) => route.path);
-  expect(paths.filter((path) => !baseline.has(path))).toEqual([]);
-  expect(new Set(paths).size).toBe(paths.length);
-  expect(paths.length).toBeLessThanOrEqual(RETAINED_BASELINE.length);
-});
-
-test("every retained route still has a live consumer that types a header by it", () => {
-  for (const route of retained.routes) {
-    expect(route.consumers.length, route.path).toBeGreaterThan(0);
-    for (const consumer of route.consumers) {
-      const file = new URL(consumer.file, frontend);
-      expect(existsSync(file), `${route.path}: ${consumer.file} is gone`).toBe(true);
-      expect(
-        readFileSync(file, "utf8").includes(JSON.stringify(route.path)),
-        `${route.path}: ${consumer.file} (${consumer.surface}) no longer references it`,
-      ).toBe(true);
-    }
-  }
-});
-
-test("links are built from routes, with encoded params and admitted query keys", () => {
-  expect(href("/missions/:mission_id/ops/alarms", { mission_id: "m 1" })).toBe(
-    "/missions/m%201/ops/alarms",
-  );
+// No catalog route admits a query key since #708 deleted the commands pages, so links are checked
+// for their encoded params only.
+test("links are built from routes, with encoded params", () => {
   expect(
-    href(
-      "/missions/:mission_id/ops/alarms",
-      { mission_id: "m" },
-      { severity: "warning,critical", query: "" },
-    ),
-  ).toBe("/missions/m/ops/alarms?severity=warning%2Ccritical");
-  expect(href("/missions/:mission_id/ops/timeline", { mission_id: "m" })).toBe(
-    "/missions/m/ops/timeline",
-  );
-  expect(isRouteId("/missions/:mission_id/ops/alarms")).toBe(true);
-  expect(isRouteId("/missions/:mission_id/ops/nowhere")).toBe(false);
+    href(surface, { mission_id: "m 1", application_key: "ops_console", surface_id: "a/b" }),
+  ).toBe("/missions/m%201/applications/ops_console/a%2Fb");
+  expect(isRouteId(surface)).toBe(true);
+  expect(isRouteId("/missions/:mission_id/settings")).toBe(false);
 });
 
 test("route drift is a type error", () => {
   expectTypeOf(
-    href("/missions/:mission_id/ops/timeline", { mission_id: "m" }),
+    href(surface, { mission_id: "m", application_key: "ops_console", surface_id: "data_sources" }),
   ).toEqualTypeOf<Href>();
-  expectTypeOf<RouteHeaderKind<"/missions/:mission_id/ops/alarms">>().toEqualTypeOf<"collection">();
-  expectTypeOf<
-    RouteHeaderKind<"/missions/:mission_id/ops/commands/requests/:command_request_id/history">
-  >().toEqualTypeOf<"resource">();
+  expectTypeOf<RouteHeaderKind<typeof surface>>().toEqualTypeOf<"resource">();
   // @ts-expect-error -- routes that do not exist cannot be linked
   expect(() => href("/missions/:mission_id/ops/nowhere", { mission_id: "m" })).not.toThrow();
   // @ts-expect-error -- every path param is required
-  expect(() => href("/missions/:mission_id/ops/alarms", {})).toThrow();
-  // @ts-expect-error -- query keys the route does not admit are rejected
-  href("/missions/:mission_id/ops/alarms", { mission_id: "m" }, { tags: "eps" });
+  expect(() => href(surface, { mission_id: "m" })).toThrow();
   // @ts-expect-error -- a plain string is not a link
   const link: Href = "/missions";
   expect(link).toBe("/missions");

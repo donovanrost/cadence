@@ -3,6 +3,9 @@ defmodule CadenceWeb.Console.CatalogAPITest do
   @moduletag :tmp_dir
   import Ecto.Query, only: [from: 2]
 
+  alias Cadence.Accounts
+  alias Cadence.Auth.Scope
+  alias Cadence.Catalog.{Reimport, Upload}
   alias CadenceWeb.TestFixtures
 
   setup do
@@ -13,6 +16,7 @@ defmodule CadenceWeb.Console.CatalogAPITest do
 
     %{
       user: user,
+      org: org,
       mission: mission,
       base: "/api/v1/missions/#{mission.mission_id}/catalog"
     }
@@ -27,7 +31,52 @@ defmodule CadenceWeb.Console.CatalogAPITest do
       |> Map.fetch!("data")
 
   test "a mission without a catalog has no database", c do
-    assert get_data(c, c.base) == %{"databases" => [], "database" => nil}
+    assert get_data(c, c.base) == %{
+             "databases" => [],
+             "database" => nil,
+             "permissions" => ["catalog.import"]
+           }
+  end
+
+  # #1160 row 3: importing is any mission operator's (the candidate revision still needs an
+  # organization admin's approval). Every read that offers it sends `catalog.import` from the
+  # check the import makes, so a member who isn't an admin holds it and an outsider doesn't.
+  test "catalog.import agrees with the check an import makes, per person", c do
+    admin = TestFixtures.persist_user!()
+    TestFixtures.grant_membership!(admin, c.org, role: :organization_admin)
+    other_org = TestFixtures.persist_org!()
+    outsider = TestFixtures.persist_user!()
+    TestFixtures.grant_membership!(outsider, other_org)
+
+    for {user, org, expected} <- [
+          {c.user, c.org, ["catalog.import"]},
+          {admin, c.org, ["catalog.import"]},
+          {outsider, other_org, []}
+        ] do
+      scope = scope(user, org)
+      mission_id = c.mission.mission_id
+      assert Upload.permissions(scope, mission_id) == expected
+
+      # A reimport authorizes before it looks for the file.
+      imports? =
+        Reimport.execute(scope, mission_id, "none") == {:error, :catalog_artifact_not_found}
+
+      assert imports? == (expected == ["catalog.import"])
+    end
+
+    assert get_data(c, "/api/v1/missions/#{c.mission.mission_id}/readiness")["permissions"] ==
+             ["catalog.import"]
+  end
+
+  defp scope(user, org) do
+    {:ok, membership} = Accounts.fetch_user_membership(user.user_id, org.organization_id)
+
+    Scope.new(%{
+      user: user,
+      organization_id: org.organization_id,
+      organization: org,
+      organization_membership: membership
+    })
   end
 
   test "lists revisions and import runs, and shows a run's detail", c do
@@ -69,6 +118,7 @@ defmodule CadenceWeb.Console.CatalogAPITest do
 
     detail = get_data(c, "#{c.base}/imports/#{run_id}")
     assert detail["status"] == "succeeded"
+    assert detail["permissions"] == ["catalog.import"]
     assert detail["file"]["name"] == "mission.yaml"
     assert is_integer(detail["file"]["size_bytes"])
     assert detail["revision"]["number"] == 1

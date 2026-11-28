@@ -60,4 +60,19 @@ test.describe("Contact planning requirements, organization member", () => {
     await expect(page.getByRole("table").locator("tbody tr")).toHaveCount(10);
     await expect(page.getByRole("link", { name: /new template/i })).toHaveCount(0);
   });
+
+  // #1160 row 4: requirements are any mission operator's (planning.requirement.edit); nothing
+  // books until a plan is approved or a grant books it.
+  test("is offered New requirement, and its form", async ({ page }) => {
+    await openConsole(page, screen);
+    await page
+      .getByRole("link", { name: /new requirement/i })
+      .first()
+      .click();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(/new requirement/i);
+    await expect(page.getByText("Mission operators add requirements.")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /save|create/i }).first()).toBeVisible({
+      timeout: 30_000,
+    });
+  });
 });

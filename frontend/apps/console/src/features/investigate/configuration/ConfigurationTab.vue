@@ -3,7 +3,8 @@ import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
-import { canAdministerOrganization, useMissionScope, useSession } from "@/shell/index.ts";
+import { useMissionScope } from "@/shell/index.ts";
+import { useCanStage } from "@/features/changes/index.ts";
 import {
   ApButton,
   ApCallout,
@@ -27,8 +28,8 @@ import {
 /** Tab · Configuration (Investigate.md): what is it running, and what changed? Read-only in Ops. */
 const props = defineProps<{ sc: FleetSpacecraft }>();
 const scope = useMissionScope();
-const session = useSession();
-const canEdit = computed(() => canAdministerOrganization(session, scope.value.organization));
+/** #1160: Edit in Setup is for those who may stage the change (config.stage, operate_mission). */
+const canEdit = useCanStage(scope.value.mission.id);
 const missionId = computed(() => scope.value.mission.id);
 const config = useRemoteQuery(
   computed(() => ({ m: missionId.value, sc: props.sc.id })),

@@ -71,7 +71,7 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
       when is_binary(mission_id) and is_map(attrs) and is_list(opts) do
     now = now(opts)
 
-    with :ok <- authorize_admin(current_scope, mission_id),
+    with :ok <- authorize_manage(current_scope, mission_id),
          {:ok, _mission} <- Missions.fetch_mission(current_scope.organization_id, mission_id),
          {:ok, actor_id} <- actor_id(current_scope),
          template_id <-
@@ -135,7 +135,7 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
               expected_version > 0 and is_map(attrs) and is_list(opts) do
     now = now(opts)
 
-    with :ok <- authorize_admin(current_scope, mission_id),
+    with :ok <- authorize_manage(current_scope, mission_id),
          {:ok, actor_id} <- actor_id(current_scope) do
       Repo.transaction(fn ->
         version_transaction(
@@ -768,7 +768,7 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
     reason = reason |> to_string() |> String.trim()
     now = now(opts)
 
-    with :ok <- authorize_admin(scope, mission_id),
+    with :ok <- authorize_manage(scope, mission_id),
          {:ok, actor_id} <- actor_id(scope),
          :ok <- require_reason(reason) do
       transition_transaction(
@@ -953,7 +953,13 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
   defp maybe_filter_lifecycle(query, state) when state in [:active, :paused, :closed],
     do: where(query, [template], template.lifecycle_state == ^Atom.to_string(state))
 
-  defp authorize_admin(scope, mission_id) do
+  @doc """
+  Who may create, version, activate, pause or close a template: `:manage_mission`. The check
+  every template write and lifecycle move here makes, and `planning.template.manage`
+  (`Cadence.Control.PlanningPolicy.permissions/2`) reports (#1160 row 5).
+  """
+  @spec authorize_manage(Scope.t(), binary()) :: :ok | {:error, term()}
+  def authorize_manage(scope, mission_id) do
     Policy.authorize(scope, :manage_mission, %{
       organization_id: scope.organization_id,
       mission_id: mission_id

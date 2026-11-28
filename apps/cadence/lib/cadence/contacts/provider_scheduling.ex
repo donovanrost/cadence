@@ -183,6 +183,7 @@ defmodule Cadence.Contacts.ProviderScheduling do
          :ok <- expected_route(route, Keyword.get(opts, :expected_route)),
          {:ok, starts_at} <- parse_time(window, :starts_at),
          {:ok, ends_at} <- parse_time(window, :ends_at),
+         {starts_at, ends_at} = whole_seconds(starts_at, ends_at),
          :ok <- validate_window(starts_at, ends_at, opts),
          result_limit = result_limit(opts),
          {:ok, response} <-
@@ -658,6 +659,18 @@ defmodule Cadence.Contacts.ProviderScheduling do
 
   defp validate_opportunity(_opportunity, _route, _starts_at, _ends_at),
     do: {:error, {:invalid_provider_opportunity, :shape}}
+
+  # Providers offer windows in whole seconds. The window sent and the bounds each offer is checked
+  # against are the same whole-second window, the start rounded up and the end down, so an offer
+  # that starts in the window's first second is inside it rather than a fraction of a second early.
+  defp whole_seconds(starts_at, ends_at), do: {second_ceiling(starts_at), second_floor(ends_at)}
+
+  defp second_floor(%DateTime{} = time), do: DateTime.truncate(time, :second)
+
+  defp second_ceiling(%DateTime{microsecond: {0, _precision}} = time), do: second_floor(time)
+
+  defp second_ceiling(%DateTime{} = time),
+    do: time |> DateTime.add(1, :second) |> second_floor()
 
   defp parse_time(map, key) do
     value = Map.get(map, key, Map.get(map, Atom.to_string(key)))

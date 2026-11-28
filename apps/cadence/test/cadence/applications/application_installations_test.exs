@@ -1,11 +1,7 @@
 defmodule Cadence.Applications.ApplicationInstallationsTest do
   use Cadence.DataCase, async: false
 
-  alias Cadence.Applications.{
-    ApplicationInstallations,
-    HostContext,
-    OpsDock
-  }
+  alias Cadence.Applications.{ApplicationInstallations, HostContext}
 
   alias Cadence.Auth.Scope
   alias Cadence.Spacecraft
@@ -270,23 +266,5 @@ defmodule Cadence.Applications.ApplicationInstallationsTest do
                context.host_context,
                "telemetry_decom"
              )
-  end
-
-  test "Ops Dock discovery stays empty when installed applications declare no dock surfaces",
-       context do
-    assert {:ok, _installation} =
-             ApplicationInstallations.install(
-               context.scope,
-               context.host_context,
-               "telemetry_decom"
-             )
-
-    assert {:ok, installations} =
-             ApplicationInstallations.list_for_mission(context.scope, @mission_id,
-               lifecycle_state: :installed
-             )
-
-    assert Enum.map(installations, & &1.application_key) == ["telemetry_decom"]
-    assert {:ok, []} = OpsDock.list(context.scope, @mission_id)
   end
 end

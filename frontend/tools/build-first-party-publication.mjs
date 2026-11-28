@@ -6,20 +6,13 @@ import { discoverFirstPartyRemotes } from "./first-party-remote-workspace.mjs";
 const frontendRoot = resolve(import.meta.dirname, "..");
 
 export async function buildFirstPartyPublication() {
-  const { host, remotes } = await discoverFirstPartyRemotes(frontendRoot, {
+  const { remotes } = await discoverFirstPartyRemotes(frontendRoot, {
     requireApproved: true,
   });
-  const packages = [host, ...remotes];
 
-  for (const { packageName } of packages) {
+  for (const { packageName } of remotes) {
     await runPnpm(["--filter", packageName, "run", "build:phoenix"]);
   }
-
-  return packages.map(({ packageName, bundle, remoteName }) => ({
-    packageName,
-    bundle: bundle ?? "host",
-    remoteName: remoteName ?? "cadence_host",
-  }));
 }
 
 /** @param {string[]} argumentsList @returns {Promise<void>} */

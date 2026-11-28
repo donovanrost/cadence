@@ -92,6 +92,8 @@ export type Readiness = Readonly<{
    * nothing applied yet. (#313 R2: there's no feed-less case to leave the panel out for.)
    */
   recentChanges: readonly RecentChange[] | null;
+  /** #1160: may this viewer import a catalog (`catalog.import`, operate_mission)? */
+  canImport: boolean;
 }>;
 
 const count: Reader<number> = (value, path = "") => {
@@ -215,6 +217,8 @@ export const readinessReader: Reader<Readiness> = (value, path = "") => {
     areas: array(area, areaKeys.length),
     findings: array(finding, 500),
     recent_changes: nullable(array(recentChange, 50)),
+    /** #1160: the header's Import catalog (the check an upload makes). */
+    permissions: array(known(["catalog.import"] as const), 10),
   })(value, path);
 
   // The six areas arrive in a fixed order; a missing or repeated area would hide a verdict.
@@ -245,6 +249,7 @@ export const readinessReader: Reader<Readiness> = (value, path = "") => {
     areas: raw.areas,
     findings: raw.findings,
     recentChanges: raw.recent_changes,
+    canImport: raw.permissions.includes("catalog.import"),
   };
 };
 

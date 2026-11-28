@@ -65,8 +65,8 @@ watch(
 /** Framing sizes that don't read as numbers (Save waits for them). */
 const invalid = ref(0);
 const errors = computed(() => draft.failure.value?.fields ?? {});
-/** #595a: who can save a draft (api's can_save; can_request until it ships). */
-const editable = (s: ConfigurationSnapshot) => s.approval.can_save ?? s.approval.can_request;
+/** #595a, #1160 row 2: who can save a draft, from the server's own check (can_save). */
+const editable = (s: ConfigurationSnapshot) => s.approval.can_save;
 
 // mms-ux (#595a): leaving with unsaved edits asks first; moving between this craft's tabs doesn't.
 const leaveDialog = ref<InstanceType<typeof ConfirmDialog> | null>(null);

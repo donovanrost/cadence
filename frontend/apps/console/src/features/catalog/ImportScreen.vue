@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
-import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
+import { useMissionScope } from "@/shell";
 import { ApBreadcrumb, ApButton, ApPageHeader, ApRemote, type ApCrumb } from "@/ui";
 import ImportRunBody from "./ImportRunBody.vue";
 import UploadPanel from "./UploadPanel.vue";
@@ -21,9 +21,10 @@ const key = computed(() =>
   importId.value ? { missionId: scope.value.mission.id, importId: importId.value } : null,
 );
 const { state, refetch } = useRemoteQuery(key, fetchImportRun);
-const session = useSession();
-/** Importing needs manage_mission, which the server grants to organization admins (as the upload). */
-const canManage = computed(() => canAdministerOrganization(session, scope.value.organization));
+/** #1160: a new import is the upload's check (`catalog.import`, any mission operator). */
+const canImport = computed(
+  () => state.value.status === "ready" && state.value.value.permissions.includes("catalog.import"),
+);
 // Upload form data (only when no import run is selected).
 const uploadKey = computed(() => (importId.value ? null : scope.value.mission.id));
 const importers = useRemoteQuery(uploadKey, fetchImporters);
@@ -58,7 +59,7 @@ const crumbs = computed((): readonly ApCrumb[] => [
     <ApPageHeader :title="title" size="reading">
       <!-- Catalog.md § C: a different file starts a new import; this run stays in the history. -->
       <ApButton
-        v-if="importId && canManage && state.status === 'ready' && state.value.status !== 'running'"
+        v-if="importId && canImport && state.status === 'ready' && state.value.status !== 'running'"
         :to="{ name: 'setup.catalog.import' }"
         >Replace file</ApButton
       >

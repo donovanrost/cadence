@@ -16,7 +16,7 @@ defineProps<{ summary: PlanningSummary; missionId: MissionId }>();
   <RequirementsPanel
     :mission-id="missionId"
     :templates="summary.templates"
-    :can-edit="summary.permissions.includes('planning.edit')"
+    :can-edit="summary.permissions.includes('planning.requirement.edit')"
   />
   <ApPanel v-if="summary.not_covered.length > 0" index="P3" title="Not covered" flush>
     <ul class="m-0 list-none p-0">
