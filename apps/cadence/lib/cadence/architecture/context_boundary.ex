@@ -95,6 +95,7 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/semantic_runtime/monitoring_plan.ex" => :catalog,
     "lib/cadence/semantic_runtime/monitoring_result.ex" => :catalog,
     "lib/cadence/semantic_runtime/plan_decoder.ex" => :catalog,
+    "lib/cadence/semantic_runtime/plan_index.ex" => :catalog,
     "lib/cadence/semantic_runtime/registered_implementation.ex" => :catalog,
     "lib/cadence/semantic_runtime/registered_registry.ex" => :catalog,
     "lib/cadence/semantic_runtime/result.ex" => :catalog,

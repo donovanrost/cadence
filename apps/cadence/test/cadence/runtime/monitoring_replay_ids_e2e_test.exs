@@ -25,7 +25,16 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Management.Activations
   alias Cadence.Platform.ReplayId
-  alias Cadence.Runtime.{MissionCoordinator, PartitionKey, PartitionOwner, Persistence}
+
+  alias Cadence.Runtime.{
+    MissionCoordinator,
+    MonitoringPlanCache,
+    PartitionKey,
+    PartitionOwner,
+    Persistence,
+    ProcessNamespace
+  }
+
   alias CCSDS.Core.SDUOctets
   alias CCSDS.SDLP.TM.Segmentation
 
@@ -159,6 +168,24 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
 
   # #692: the reply names the partition whose snapshot gates the journal's durable ack, and a
   # stopping partition writes that snapshot, with the offset its stream is processed through.
+  # #451 T1: a running partition holds its monitoring plan in the node's cache, not a decode of its
+  # own, and the plan goes when the partition does.
+  test "a partition holds its activation's plans in the node cache until it stops", c do
+    key = %PartitionKey{affinity: :source_endpoint, value: c.endpoint.source_endpoint_id}
+    cache = MonitoringPlanCache.name(ProcessNamespace.default())
+
+    ingest!(evidence(c, frames(mode: 50, aux: 0, sequence: 1), 0))
+    {:ok, owner} = PartitionOwner.lookup(c.mission.mission_id, key)
+
+    assert :sys.get_state(owner).plan_index.table != nil
+    assert MonitoringPlanCache.loaded(cache) >= 1
+    before = MonitoringPlanCache.loaded(cache)
+
+    :ok = PartitionOwner.stop(owner)
+    # The cache learns of the exit through its monitor: a call after it sees the release.
+    assert MonitoringPlanCache.loaded(cache) == before - 1
+  end
+
   test "a stopping partition snapshots its semantic state and the stream offset", c do
     bytes = frames(mode: 50, aux: 0, sequence: 1)
     key = %PartitionKey{affinity: :source_endpoint, value: c.endpoint.source_endpoint_id}

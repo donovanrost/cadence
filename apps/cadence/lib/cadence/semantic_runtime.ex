@@ -11,6 +11,7 @@ defmodule Cadence.SemanticRuntime do
     ExpressionEvaluator,
     MonitoringEvaluator,
     MonitoringPlan,
+    PlanIndex,
     Result,
     Scope,
     State,
@@ -19,11 +20,15 @@ defmodule Cadence.SemanticRuntime do
 
   @quality_rank %{good: 0, suspect: 1, bad: 2, unknown: 3}
 
-  @type plan :: %{
-          algorithms: [AlgorithmPlan.t()],
-          monitoring: [MonitoringPlan.t()],
-          registered_implementations: map()
-        }
+  # The plan to run: the decoded lists (every existing caller), or an index of the node's plan cache
+  # (a partition, #451 T1).
+  @type plan ::
+          %{
+            algorithms: [AlgorithmPlan.t()],
+            monitoring: [MonitoringPlan.t()],
+            registered_implementations: map()
+          }
+          | PlanIndex.t()
 
   @spec new() :: State.t()
   def new, do: %State{}
@@ -52,11 +57,10 @@ defmodule Cadence.SemanticRuntime do
 
   @spec process(State.t(), [Update.t()], plan()) :: {:ok, Result.t(), State.t()}
   def process(%State{} = state, updates, plan) when is_list(updates) and is_map(plan) do
-    algorithms = Enum.map(Map.get(plan, :algorithms, []), &build_algorithm/1)
-    monitoring = Enum.map(Map.get(plan, :monitoring, []), &build_monitoring/1)
+    index = PlanIndex.wrap(plan)
 
     Enum.reduce_while(updates, {:ok, %Result{}, state}, fn update, {:ok, result, acc_state} ->
-      case process_update(update, algorithms, monitoring, result, acc_state) do
+      case process_update(update, index, result, acc_state) do
         {:ok, next_result, next_state} -> {:cont, {:ok, next_result, next_state}}
         {:error, reason} -> {:halt, {:error, reason}}
       end
@@ -71,72 +75,53 @@ defmodule Cadence.SemanticRuntime do
   @spec timer(State.t(), Scope.t(), binary(), DateTime.t(), plan()) ::
           {:ok, Result.t(), State.t()}
   def timer(%State{} = state, scope, algorithm_id, %DateTime{} = at, plan) do
-    all_algorithms =
-      plan
-      |> Map.get(:algorithms, [])
-      |> Enum.map(&build_algorithm/1)
-
-    algorithms = Enum.filter(all_algorithms, &(&1.algorithm_id == algorithm_id))
+    index = PlanIndex.wrap(plan)
 
     evaluate_algorithms(
-      algorithms,
-      all_algorithms,
+      PlanIndex.algorithms_with_id(index, algorithm_id),
+      index,
       %{
         trigger_id: "timer:" <> algorithm_id <> ":" <> DateTime.to_iso8601(at),
         at: at,
         scope: scope,
         effect_source: ["timer:" <> algorithm_id, 0, DateTime.to_unix(at, :microsecond)]
       },
-      Enum.map(Map.get(plan, :monitoring, []), &build_monitoring/1),
       %Result{},
       state
     )
   end
 
-  defp process_update(%Update{} = update, algorithms, monitoring, result, state) do
+  defp process_update(%Update{} = update, index, result, state) do
     scope = Scope.from_update(update)
     state = put_update(state, scope, update)
-    {result, state} = evaluate_monitoring(update, scope, monitoring, result, state)
+    {result, state} = evaluate_monitoring(update, scope, index, result, state)
 
     impacted =
-      Enum.filter(algorithms, fn algorithm ->
-        update.parameter_id in algorithm.input_parameter_ids and input_trigger?(algorithm, update)
-      end)
+      index
+      |> PlanIndex.algorithms_for_input(update.parameter_id)
+      |> Enum.filter(&input_trigger?(&1, update))
 
     evaluate_algorithms(
       impacted,
-      algorithms,
+      index,
       %{
         trigger_id: update.update_id,
         at: update.receipt_time,
         scope: scope,
         effect_source: effect_source(update.metadata)
       },
-      monitoring,
       append_update(result, update),
       state
     )
   end
 
-  defp evaluate_algorithms(
-         selected_algorithms,
-         all_algorithms,
-         trigger,
-         monitoring,
-         result,
-         state
-       ) do
+  defp evaluate_algorithms(selected_algorithms, index, trigger, result, state) do
     Enum.reduce_while(selected_algorithms, {:ok, result, state}, fn algorithm,
                                                                     {:ok, acc_result, acc_state} ->
       case evaluate_algorithm(algorithm, trigger, acc_state) do
         {:ok, derived_updates, next_state} ->
           derived_updates
-          |> process_derived_updates(
-            all_algorithms,
-            monitoring,
-            acc_result,
-            next_state
-          )
+          |> process_derived_updates(index, acc_result, next_state)
           |> reduction_step()
 
         {:skip, next_state} ->
@@ -148,9 +133,9 @@ defmodule Cadence.SemanticRuntime do
     end)
   end
 
-  defp process_derived_updates(updates, algorithms, monitoring, result, state) do
+  defp process_derived_updates(updates, index, result, state) do
     Enum.reduce_while(updates, {:ok, result, state}, fn update, {:ok, acc_result, acc_state} ->
-      case process_update(update, algorithms, monitoring, acc_result, acc_state) do
+      case process_update(update, index, acc_result, acc_state) do
         {:ok, next_result, next_state} -> {:cont, {:ok, next_result, next_state}}
         {:error, reason} -> {:halt, {:error, reason}}
       end
@@ -330,11 +315,11 @@ defmodule Cadence.SemanticRuntime do
     DateTime.diff(at, update_time, :millisecond) > algorithm.maximum_age_ms
   end
 
-  defp evaluate_monitoring(update, scope, monitoring, result, state) do
+  defp evaluate_monitoring(update, scope, index, result, state) do
     scoped_latest = scoped_latest(state.latest, scope)
 
-    monitoring
-    |> Enum.filter(&(&1.parameter_id == update.parameter_id))
+    index
+    |> PlanIndex.monitoring_for(update.parameter_id)
     |> Enum.reduce({result, state}, fn plan, {%Result{} = acc_result, %State{} = acc_state} ->
       state_key = Scope.state_key(scope, plan.policy_id)
       prior = Map.get(acc_state.monitoring_state, state_key, %{})
@@ -455,11 +440,6 @@ defmodule Cadence.SemanticRuntime do
   defp later_time(left, right) do
     if DateTime.compare(left, right) == :gt, do: left, else: right
   end
-
-  defp build_algorithm(%AlgorithmPlan{} = plan), do: plan
-  defp build_algorithm(attrs), do: AlgorithmPlan.new(attrs)
-  defp build_monitoring(%MonitoringPlan{} = plan), do: plan
-  defp build_monitoring(attrs), do: MonitoringPlan.new(attrs)
 
   defp implementation_kind(implementation) do
     case value(implementation, :kind, :expression) do

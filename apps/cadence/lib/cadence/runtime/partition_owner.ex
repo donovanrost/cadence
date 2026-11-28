@@ -33,6 +33,7 @@ defmodule Cadence.Runtime.PartitionOwner do
     MissionAdmission,
     MissionRuntime,
     MissionRuntimeSpec,
+    MonitoringPlanCache,
     PacketDefinitionCache,
     PartitionKey,
     Persistence,
@@ -41,7 +42,17 @@ defmodule Cadence.Runtime.PartitionOwner do
   }
 
   alias Cadence.SemanticRuntime
-  alias Cadence.SemanticRuntime.{AlarmRules, PlanDecoder, Result, Scope, State, Store, Update}
+
+  alias Cadence.SemanticRuntime.{
+    AlarmRules,
+    PlanDecoder,
+    PlanIndex,
+    Result,
+    Scope,
+    State,
+    Store,
+    Update
+  }
 
   alias Cadence.Platform.ReplayId
 
@@ -65,6 +76,8 @@ defmodule Cadence.Runtime.PartitionOwner do
           active_activation: MissionRuntimeSpec.t(),
           dispatch_cache: DispatchCache.t(),
           packet_definition_cache: GenServer.server(),
+          monitoring_plan_cache: GenServer.server(),
+          plan_index: PlanIndex.t(),
           binding_set: BindingSet.t(),
           runtime_binding_set: BindingSet.t(),
           managed_application_states: %{required(binary()) => term()},
@@ -306,6 +319,13 @@ defmodule Cadence.Runtime.PartitionOwner do
         PacketDefinitionCache.name(process_namespace)
       end)
 
+    # The decoded monitoring and algorithm plans, the same way (#451 T1): the partition holds an
+    # index over the node's cache, not a decode of its own per batch.
+    monitoring_plan_cache =
+      Keyword.get_lazy(opts, :monitoring_plan_cache, fn ->
+        MonitoringPlanCache.name(process_namespace)
+      end)
+
     persist_runtime_records? = Keyword.get(opts, :persist_runtime_records?, true)
 
     persistence_policy =
@@ -358,6 +378,8 @@ defmodule Cadence.Runtime.PartitionOwner do
              partition_key: partition_key,
              active_activation: active_activation,
              packet_definition_cache: packet_definition_cache,
+             monitoring_plan_cache: monitoring_plan_cache,
+             plan_index: acquire_plan_index(monitoring_plan_cache, active_activation),
              dispatch_cache:
                DispatchCache.acquire(packet_definition_cache, active_activation.runtime_plans),
              binding_set: binding_set,
@@ -534,6 +556,7 @@ defmodule Cadence.Runtime.PartitionOwner do
                %{
                  state
                  | active_activation: activation,
+                   plan_index: acquire_plan_index(state.monitoring_plan_cache, activation),
                    dispatch_cache:
                      DispatchCache.acquire(
                        state.packet_definition_cache,
@@ -670,10 +693,10 @@ defmodule Cadence.Runtime.PartitionOwner do
   end
 
   defp process_semantic_outputs(outputs, %{active_activation: activation} = state) do
-    plan = PlanDecoder.decode(activation.runtime_plans)
+    plan = state.plan_index
     annotated_outputs = Enum.map(outputs, &annotate_semantic_basis(&1, activation))
 
-    if plan.algorithms == [] and plan.monitoring == [] do
+    if PlanIndex.empty?(plan) do
       {:ok, annotated_outputs, %Result{}, state}
     else
       # A replay after recovery applies only the frames the snapshot does not already include.
@@ -721,6 +744,12 @@ defmodule Cadence.Runtime.PartitionOwner do
         {:ok, %{state: seeded, writer: writer, resume: resume, dirty?: seeded != recovered}}
       end
     end
+  end
+
+  # The activation's plans as an index over the node's cache (held until the next activation).
+  defp acquire_plan_index(cache, %MissionRuntimeSpec{runtime_plans: plans}) do
+    {:ok, index} = MonitoringPlanCache.acquire(cache, plans)
+    index
   end
 
   defp no_semantic_state,
@@ -904,7 +933,7 @@ defmodule Cadence.Runtime.PartitionOwner do
   end
 
   defp execute_semantic_timer(entry, state) do
-    plan = PlanDecoder.decode(state.active_activation.runtime_plans)
+    plan = state.plan_index
 
     scopes =
       case Scope.all(state.semantic_state.latest) do
