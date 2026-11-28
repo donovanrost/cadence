@@ -1,6 +1,7 @@
 import { mount, RouterLinkStub } from "@vue/test-utils";
 import { describe, expect, it } from "vite-plus/test";
 import type { ApiError } from "@/api";
+import { MONITORING_EDITS_PENDING } from "@/features/telemetry/index.ts";
 import LimitsNotice from "./LimitsNotice.vue";
 import RuleBlock from "./RuleBlock.vue";
 import RuleLegs from "./RuleLegs.vue";
@@ -46,7 +47,7 @@ describe("a rule's legs are named groups (a11y B7)", () => {
   });
 });
 
-describe("P7: a disabled rule, the Limits link (ux §10)", () => {
+describe("P7: a disabled rule, the Limits notice (ux §10)", () => {
   const rule = {
     id: "r1",
     label: "Prime downlink",
@@ -70,10 +71,10 @@ describe("P7: a disabled rule, the Limits link (ux §10)", () => {
     });
     expect(on.get("header").text()).not.toContain("Disabled");
   });
-  it("links Limits to the Limits app by name", () => {
+  it("says where limits are edited, as text: no app to link to (#669, #451)", () => {
     const w = mount(LimitsNotice, { global: { stubs: { RouterLink: RouterLinkStub } } });
-    const link = w.getComponent(RouterLinkStub);
-    expect(link.text()).toBe("Limits");
-    expect(link.props("to")).toEqual({ name: "setup.app", params: { appKey: "limits" } });
+    expect(w.text()).toContain("Limits apply mission-wide per point");
+    expect(w.text()).toContain(MONITORING_EDITS_PENDING);
+    expect(w.findAllComponents(RouterLinkStub)).toHaveLength(0);
   });
 });

@@ -1745,6 +1745,8 @@ The credential contains `credential_ref`, `provider_binding_id`, nullable `retir
 nullable `overlap_ends_at` and `revoked_at`. The read returns the current and previous
 records when present and the most recent revoked record, newest generation first. Dates use
 ISO 8601 UTC. A stale expected generation or transport version returns `409 version_conflict`.
+`within_acceptance_window` is false after expiry, the previous generation's overlap cutoff or
+revocation. It describes the certificate's time window and lifecycle.
 
 Issue accepts `initial_enrollment`. Rotate accepts `scheduled_rotation`,
 `suspected_compromise` or `operator_requested`. Revoke accepts `suspected_compromise`,
@@ -1768,8 +1770,20 @@ certificate expiry. To enable issuance, set the application configuration
 resolves purpose `provider_delivery_issuer` to `certificate_pem` and `private_key_pem`.
 Provision a dedicated deployment client CA in that backend.
 
-Mutual TLS listener activation is gated until the inbound TLS work in #991 lands. The
-credential endpoints can provision and manage certificates ahead of that activation.
+To activate mTLS, select a delivery profile that advertises the mode for the enrolled binding.
+Cadence checks the credential's owning provider and transport at save and again at runtime.
+A listener resolves its server certificate, private key and trusted client CA from the
+`:cadence, :provider_delivery_listener` secret reference under purpose
+`provider_delivery_listener`. The material keys are `certificate_pem`, `private_key_pem`
+and `client_ca_pem`. Use a server certificate whose SAN matches the provider's target.
+Development stack startup creates separate local client and server roots and a loopback server
+leaf in the slot's private directory outside the repository.
+
+One listener endpoint uses one authentication mode. In mTLS mode, a source allowlist is an
+additional check when supplied. Plaintext listeners always require a source allowlist.
+Handshake refusals use the existing listener refusal read, with bounded reasons such as
+`certificate_required`, `unknown_leaf`, `wrong_binding`, `revoked`, `expired`,
+`stale_index` and `mode_mismatch`.
 
 ## `GET /api/v1/missions/:mission_id/config/kinds/:kind/schema`
 

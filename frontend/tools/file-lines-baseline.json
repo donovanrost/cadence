@@ -27,10 +27,6 @@
     "lines": 474,
     "owner": "legacy (#80): frozen, leaves with its row"
   },
-  "modules/derived-telemetry/src/features/definitions/DefinitionsPanel.vue": {
-    "lines": 471,
-    "owner": "legacy (#80): frozen, leaves with its row"
-  },
   "modules/telemetry-decom/src/features/packet-bindings/PacketBindingsPanel.vue": {
     "lines": 467,
     "owner": "legacy (#80): frozen, leaves with its row"

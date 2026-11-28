@@ -608,7 +608,7 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
 
     # This pre-activation host load only bootstraps the host session and CSRF token
     # used by the post-activation query and action requests below.
-    {catalog_bootstrap_conn, catalog_bootstrap} = host_session(member_conn, scope, mission_id)
+    {catalog_bootstrap_conn, catalog_bootstrap} = host_session(member_conn, mission_id)
 
     {_document, _payload, release} =
       admit_release!(
@@ -721,7 +721,7 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     # This pre-activation host load only bootstraps the host session and CSRF token
     # used by the post-activation query and action requests below.
     {catalog_bootstrap_conn, catalog_bootstrap} =
-      host_session(member_conn, scope, mission.mission_id)
+      host_session(member_conn, mission.mission_id)
 
     scope_document =
       ApplicationHostCatalog.scope_document(scope, %{
@@ -2067,17 +2067,11 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     end
   end
 
-  # The console's surface host mints the host session id, CSRF token and pinned scope (limits is
-  # installed here only to have a surface to load).
-  defp host_session(member_conn, scope, mission_id) do
-    {:ok, _installation} =
-      ApplicationInstallations.install(scope, HostContext.mission(mission_id), "limits")
-
+  # The console's surface host mints the host session id, CSRF token and pinned scope (any
+  # surface does; the Ops Console workspace needs no installation).
+  defp host_session(member_conn, mission_id) do
     conn =
-      get(
-        member_conn,
-        "/api/v1/missions/#{mission_id}/apps/limits/surfaces/manage/host"
-      )
+      get(member_conn, "/api/v1/missions/#{mission_id}/apps/ops_console/surfaces/workspace/host")
 
     {conn, json_response(conn, 200)["data"]["catalog"]}
   end

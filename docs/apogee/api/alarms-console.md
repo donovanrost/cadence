@@ -148,6 +148,8 @@ alone for ground limits. With `scope=point` it means the same point under any co
 - `ended` is how the episode ended:
   - `back_in_limits`;
   - `source_stopped`: the source stopped reporting the condition, so the episode was reconciled;
+  - `rule_retired`: a generation dropped the rule that raised it, so nothing evaluates it any more
+    and the episode was cleared when that generation was applied (#451);
   - null while the episode is open.
 
   Clears are always automatic. Acknowledgement is the human action, recorded in

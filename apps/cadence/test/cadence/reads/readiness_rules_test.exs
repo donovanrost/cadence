@@ -93,7 +93,7 @@ defmodule Cadence.Reads.Readiness.RulesTest do
     assert result.verdict.blocker == 2
   end
 
-  test "missing Limits is not_set_up and degrades apps; other apps are optional" do
+  test "every missing app is an optional finding with its description or a fallback" do
     result =
       Rules.build(
         facts(%{
@@ -101,21 +101,18 @@ defmodule Cadence.Reads.Readiness.RulesTest do
             installed_count: 0,
             available_count: 2,
             missing: [
-              %{key: "limits", name: "Limits & Alarming", description: nil},
-              %{key: "derived", name: "Derived telemetry", description: "Computes points"}
+              %{key: "comms", name: "Comms", description: nil},
+              %{key: "ops_console", name: "Ops Console", description: "Mission operations"}
             ]
           }
         })
       )
 
-    assert area(result, :apps).status == :not_set_up
+    assert area(result, :apps).detail == "Comms and Ops Console aren't installed"
 
-    assert area(result, :apps).detail ==
-             "Limits & Alarming and Derived telemetry aren't installed"
-
-    assert Enum.map(result.findings, &{&1.cause, &1.severity}) == [
-             {:"app_not_installed:limits", :not_set_up},
-             {:"app_not_installed:derived", :optional}
+    assert Enum.map(result.findings, &{&1.cause, &1.severity, &1.body}) == [
+             {:"app_not_installed:comms", :optional, "Install it to enable its features."},
+             {:"app_not_installed:ops_console", :optional, "Mission operations"}
            ]
   end
 

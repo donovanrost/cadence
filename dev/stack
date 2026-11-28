@@ -82,6 +82,7 @@ prepare_env() {
   bash "$root/dev/local_secrets.sh" >/dev/null
   set_env CADENCE_DEV_SLOT "$slot"
   set_env CADENCE_DEV_DATABASE "$db"
+  set_env CADENCE_DEV_DELIVERY_TLS_DIRECTORY "$registry_dir/delivery-tls/$slot"
   set_env MIX_TEST_PARTITION "$slot"
   set_env PORT "$server_port"
   set_env PHX_URL_PORT "$server_port"
@@ -204,6 +205,7 @@ case "$command" in
     questdb_up
     run_mix ecto.create -r Cadence.Repo
     run_mix ecto.migrate -r Cadence.Repo
+    run_mix run --no-start -e 'Cadence.Secrets.DevelopmentDeliveryTLS.ensure!(System.fetch_env!("CADENCE_DEV_DELIVERY_TLS_DIRECTORY"))'
     start_process simulator "$root/apps/cadence_simulator" mix run --no-start --no-halt ../../dev/reflect_orbital_simulator.exs
     wait_http "http://127.0.0.1:$sim_port" simulator
     start_process phoenix "$root" mise run cadence

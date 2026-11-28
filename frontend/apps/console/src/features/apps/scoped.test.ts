@@ -38,13 +38,13 @@ describe("scoped apps (L19)", () => {
     };
     try {
       await changeApp(missionIdReader("m1"), "telemetry_decom", "install", spacecraftId("sc 4"));
-      await changeApp(missionIdReader("m1"), "limits", "disable");
+      await changeApp(missionIdReader("m1"), "comms", "disable");
     } finally {
       globalThis.fetch = original;
     }
     expect(calls[0]).toMatch(
       /^POST .*\/missions\/m1\/spacecraft\/sc%204\/apps\/telemetry_decom\/install$/,
     );
-    expect(calls[1]).toMatch(/^POST .*\/missions\/m1\/apps\/limits\/disable$/);
+    expect(calls[1]).toMatch(/^POST .*\/missions\/m1\/apps\/comms\/disable$/);
   });
 });

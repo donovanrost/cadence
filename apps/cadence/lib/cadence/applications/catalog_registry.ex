@@ -6,19 +6,15 @@ defmodule Cadence.Applications.CatalogRegistry do
   alias Cadence.Applications.{
     ApplicationDefinition,
     CatalogContribution,
-    DerivedTelemetry,
     JSONBoundary,
-    Limits,
     OpsConsole,
     TelemetryDecomCatalogContribution
   }
 
   @max_contributions 64
   @contributors [
-    Limits,
     TelemetryDecomCatalogContribution,
-    OpsConsole,
-    DerivedTelemetry
+    OpsConsole
   ]
 
   @spec validate() :: :ok | {:error, :invalid_application_catalog_registry}

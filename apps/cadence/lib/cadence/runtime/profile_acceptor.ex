@@ -4,25 +4,23 @@ defmodule Cadence.Runtime.ProfileAcceptor do
   contacts on one profile used to each listen on the profile's fixed port, so the second failed
   with `:eaddrinuse` until the first ended.
 
-  The acceptor owns only the listening socket. A listen-mode `tcp_socket` adapter REGISTERS with it
-  (its contact, provider binding, spacecraft and SCID) instead of listening. Each accepted peer is
-  checked, identified, then handed to its adapter by `controlling_process` with the bytes read to
-  identify it; from there the adapter runs its connected-session path unchanged. Nothing is
-  persisted.
+  The acceptor owns only the listening socket. A listen-mode `tcp_socket` adapter registers its
+  contact, binding, spacecraft and SCID instead of opening its own listener. Each admitted peer is
+  handed off with the bytes used to identify its SCID and the authenticated stream identity.
 
   An acceptor belongs to one mission and one provider binding (its name), so a connection is
   attributed to that binding before anything is read (#990, DECISIONS #115):
 
-  - each registration carries its own source allowlist (`allowed_peers`, from its contact's
-    profile version). On accept, before any frame is read, the peer must be in the union of the
-    lists registered NOW; a peer outside every one is refused `peer_not_allowed`;
+  - in mutual TLS mode, the fingerprint must authorize an eligible registration during the
+    handshake and again before any frame is read. Each eligible registration also checks its
+    source allowlist when configured. Plaintext requires an allowlist;
   - then the first frame's TM SCID must match exactly one contact registered through THIS
     binding (the same truth the #38 release guard uses). The SCID only picks a contact within the
     binding's mission; it never picks the mission;
   - and the peer must be in THAT registration's own list. Two profile versions can overlap on one
     acceptor; an address only an older version allows never reaches a newer contact (or the
     reverse). Otherwise the connection is refused `peer_not_allowed` and nothing is handed over,
-    so nothing is stored. Mutual TLS (#991) will replace the address as the binding's proof.
+    so nothing is stored.
 
   There is no fallback: a peer whose first frame can't be read is refused.
 
@@ -43,11 +41,13 @@ defmodule Cadence.Runtime.ProfileAcceptor do
   require Logger
 
   alias Cadence.Comms.PeerAddresses
+  alias Cadence.ProviderAdapters.InboundSocket
+  alias Cadence.ProviderAdapters.InboundSocket.Authorization
   alias Cadence.Runtime.ProcessNamespace
 
   @identify_timeout_ms 10_000
   @default_linger_ms 30_000
-  @tcp_opts [:binary, packet: 0, active: false, reuseaddr: true, nodelay: true]
+  @max_tls_routes 8
 
   @type registration :: %{
           required(:adapter) => pid(),
@@ -104,7 +104,7 @@ defmodule Cadence.Runtime.ProfileAcceptor do
 
   defp register_once(namespace, mission_id, profile_id, listen, registration) do
     with {:ok, pid} <- ensure_started(namespace, mission_id, profile_id, listen) do
-      GenServer.call(pid, {:register, registration})
+      GenServer.call(pid, {:register, Map.get(listen, :delivery_auth, :plaintext), registration})
     end
   catch
     :exit, reason -> {:exit, reason}
@@ -159,20 +159,28 @@ defmodule Cadence.Runtime.ProfileAcceptor do
   def start_link(opts),
     do: GenServer.start_link(__MODULE__, opts, name: Keyword.fetch!(opts, :name))
 
+  def close_replaced_listener(namespace, mission_id, profile_id) do
+    if pid = whereis(namespace, mission_id, profile_id), do: GenServer.cast(pid, :check_mode)
+    :ok
+  end
+
   @impl true
   def init(opts) do
     listen = Keyword.fetch!(opts, :listen)
     profile_id = Keyword.fetch!(opts, :profile_id)
+    mode = Map.get(listen, :delivery_auth, :plaintext)
 
-    case :gen_tcp.listen(Map.fetch!(listen, :port), listen_opts(Map.get(listen, :host))) do
+    case InboundSocket.listen(Map.get(listen, :host), Map.fetch!(listen, :port), mode) do
       {:ok, listener} ->
         state = %{
           profile_id: profile_id,
           mission_id: Keyword.fetch!(opts, :mission_id),
           listener: listener,
+          mode: mode,
           port: actual_port(listener, listen.port),
           linger_ms: Map.get(listen, :linger_ms, @default_linger_ms),
           registrations: %{},
+          active_routes: 0,
           accept_ref: nil,
           linger_ref: nil,
           refused: 0
@@ -186,7 +194,11 @@ defmodule Cadence.Runtime.ProfileAcceptor do
   end
 
   @impl true
-  def handle_call({:register, %{adapter: adapter} = registration}, _from, state) do
+  def handle_call({:register, mode, _registration}, _from, %{mode: active} = state)
+      when mode != active,
+      do: {:reply, {:error, :mode_mismatch}, state}
+
+  def handle_call({:register, _mode, %{adapter: adapter} = registration}, _from, state) do
     ref = Process.monitor(adapter)
     state = cancel_linger(state)
     {:reply, {:ok, state.port, self()}, put_in(state.registrations[ref], registration)}
@@ -200,7 +212,7 @@ defmodule Cadence.Runtime.ProfileAcceptor do
       |> Map.values()
       |> Enum.filter(&(Map.get(&1, :provider_binding_id, state.profile_id) == state.profile_id))
 
-    {:reply, %{registrations: registrations}, state}
+    {:reply, %{registrations: registrations, mode: state.mode}, state}
   end
 
   def handle_call(:snapshot, _from, state) do
@@ -212,10 +224,30 @@ defmodule Cadence.Runtime.ProfileAcceptor do
      }, state}
   end
 
+  @impl true
+  def handle_cast(:check_mode, state) do
+    if Enum.any?(Map.values(state.registrations), &mode_replaced?/1),
+      do: {:stop, :normal, state},
+      else: {:noreply, state}
+  end
+
+  defp mode_replaced?(registration),
+    do:
+      Authorization.listener_ready(Map.get(registration, :delivery_authorization)) ==
+        {:error, :mode_mismatch}
+
   # A connection arrived: accept the next at once; its task identifies and hands this one over.
   @impl true
+  def handle_info({:accepted, ref}, %{accept_ref: ref, mode: :mtls} = state),
+    do:
+      {:noreply,
+       schedule_accept(%{state | accept_ref: nil, active_routes: state.active_routes + 1})}
+
   def handle_info({:accepted, ref}, %{accept_ref: ref} = state),
     do: {:noreply, schedule_accept(%{state | accept_ref: nil})}
+
+  def handle_info(:route_finished, %{mode: :mtls} = state),
+    do: {:noreply, schedule_accept(%{state | active_routes: max(0, state.active_routes - 1)})}
 
   def handle_info({:accept_failed, ref, reason}, %{accept_ref: ref} = state) do
     if reason != :closed,
@@ -246,9 +278,18 @@ defmodule Cadence.Runtime.ProfileAcceptor do
 
   @impl true
   def terminate(_reason, state) do
-    _ = :gen_tcp.close(state.listener)
+    _ = InboundSocket.close(state.listener)
     :ok
   end
+
+  @impl true
+  def format_status(status), do: Map.update!(status, :state, &Map.delete(&1, :listener))
+
+  defp schedule_accept(%{accept_ref: ref} = state) when is_reference(ref), do: state
+
+  defp schedule_accept(%{mode: :mtls, active_routes: count} = state)
+       when count >= @max_tls_routes,
+       do: state
 
   defp schedule_accept(state) do
     ref = make_ref()
@@ -257,10 +298,15 @@ defmodule Cadence.Runtime.ProfileAcceptor do
     profile_id = state.profile_id
 
     Task.start(fn ->
-      case :gen_tcp.accept(listener) do
+      case InboundSocket.transport_accept(listener) do
         {:ok, socket} ->
           send(parent, {:accepted, ref})
-          route(socket, GenServer.call(parent, :routing), parent, profile_id)
+
+          try do
+            route(socket, GenServer.call(parent, :routing), parent, profile_id)
+          after
+            send(parent, :route_finished)
+          end
 
         {:error, reason} ->
           send(parent, {:accept_failed, ref, reason})
@@ -272,32 +318,68 @@ defmodule Cadence.Runtime.ProfileAcceptor do
 
   # In the accept task (it owns the socket): identify the peer within a bound, then hand it over
   # with the bytes read to identify it, or refuse it.
-  defp route(socket, %{registrations: registrations}, parent, profile_id) do
-    {ip, peer} = peer_address(socket)
+  defp route(socket, %{registrations: registrations, mode: mode}, parent, profile_id) do
+    with :ok <- require_registrations(registrations),
+         {:ok, connected} <- InboundSocket.authenticate(socket, &authorize(registrations, &1)),
+         %{registrations: current} <- GenServer.call(parent, :routing),
+         eligible = eligible_registrations(current, InboundSocket.identity(connected)),
+         {ip, peer} <- peer_address(connected) do
+      case admit(connected, ip, eligible, mode) do
+        {:ok, registration, prefix} ->
+          hand_over(connected, registration, prefix, peer, profile_id)
 
-    case admit(socket, ip, registrations) do
-      {:ok, registration, prefix} -> hand_over(socket, registration, prefix, peer, profile_id)
-      {:refused, reason} -> refuse(socket, peer, reason, registrations, parent)
+        {:refused, reason} ->
+          refuse(connected, peer, reason, current, parent)
+      end
+    else
+      {:error, reason} ->
+        {_ip, peer} = peer_address(socket)
+        refuse(socket, peer, reason, registrations, parent)
     end
   end
 
-  # The union of the lists registered now, checked before reading; then the matched
-  # registration's own list, checked before anything is handed over.
-  defp admit(_socket, _ip, []), do: {:refused, :no_registered_contact}
+  defp require_registrations([]), do: {:error, :no_registered_contact}
+  defp require_registrations(_regs), do: :ok
 
-  defp admit(socket, ip, registrations) do
-    if Enum.any?(registrations, &peer_allowed?(&1, ip)),
-      do: socket |> identify(registrations) |> own_list(ip),
+  defp authorize(registrations, fingerprint) do
+    Enum.reduce_while(registrations, {:error, :wrong_binding}, fn registration, previous ->
+      case Authorization.authorize(registration[:delivery_authorization], fingerprint) do
+        {:ok, _identity} = authorized -> {:halt, authorized}
+        {:error, :unknown_leaf} -> {:cont, previous}
+        {:error, _reason} = refusal -> {:cont, refusal}
+      end
+    end)
+  end
+
+  defp eligible_registrations(registrations, identity) do
+    Enum.filter(registrations, fn registration ->
+      Authorization.stream_allowed?(registration[:delivery_authorization], identity) == :ok
+    end)
+  end
+
+  defp admit(_socket, _ip, [], :mtls), do: {:refused, :wrong_binding}
+  defp admit(_socket, _ip, [], :plaintext), do: {:refused, :no_registered_contact}
+
+  defp admit(socket, ip, registrations, mode) do
+    if Enum.any?(registrations, &peer_allowed?(&1, ip, mode)) do
+      socket |> identify(registrations) |> own_list(ip, mode)
+    else
+      {:refused, :peer_not_allowed}
+    end
+  end
+
+  defp own_list({:ok, registration, _prefix} = identified, ip, mode) do
+    if peer_allowed?(registration, ip, mode),
+      do: identified,
       else: {:refused, :peer_not_allowed}
   end
 
-  defp own_list({:ok, registration, _prefix} = identified, ip),
-    do: if(peer_allowed?(registration, ip), do: identified, else: {:refused, :peer_not_allowed})
+  defp own_list(refused, _ip, _mode), do: refused
 
-  defp own_list(refused, _ip), do: refused
-
-  defp peer_allowed?(registration, ip),
-    do: PeerAddresses.allowed?(Map.get(registration, :allowed_peers, []), ip)
+  defp peer_allowed?(registration, ip, mode) do
+    ranges = Map.get(registration, :allowed_peers, [])
+    (mode == :mtls and ranges == []) or PeerAddresses.allowed?(ranges, ip)
+  end
 
   defp identify(socket, registrations) do
     frame_size = registrations |> Enum.map(&Map.get(&1, :frame_size)) |> Enum.find(&is_integer/1)
@@ -313,7 +395,7 @@ defmodule Cadence.Runtime.ProfileAcceptor do
 
   # The frame's receipt time is when it was read, not when it's handed over (api-ops review).
   defp read_first_frame(socket, frame_size) when frame_size >= 2 do
-    case :gen_tcp.recv(socket, frame_size, @identify_timeout_ms) do
+    case InboundSocket.recv(socket, frame_size, @identify_timeout_ms) do
       {:ok, frame} -> {:ok, {frame, DateTime.utc_now()}}
       {:error, reason} -> {:error, reason}
     end
@@ -329,12 +411,12 @@ defmodule Cadence.Runtime.ProfileAcceptor do
   end
 
   defp hand_over(socket, %{adapter: adapter} = registration, {prefix, read_at}, peer, profile_id) do
-    case :gen_tcp.controlling_process(socket, adapter) do
+    case InboundSocket.transfer(socket, adapter) do
       :ok ->
         send(adapter, {:peer_accepted, socket, prefix, peer, read_at})
 
       {:error, reason} ->
-        :gen_tcp.close(socket)
+        InboundSocket.close(socket)
 
         Logger.warning(
           "profile acceptor #{profile_id} could not hand #{peer} to " <>
@@ -344,7 +426,7 @@ defmodule Cadence.Runtime.ProfileAcceptor do
   end
 
   defp refuse(socket, peer, reason, registrations, parent) do
-    :gen_tcp.close(socket)
+    InboundSocket.close(socket)
     Enum.each(registrations, &send(&1.adapter, {:peer_refused, peer, reason}))
     send(parent, {:refused, peer, reason})
   end
@@ -362,7 +444,7 @@ defmodule Cadence.Runtime.ProfileAcceptor do
   # The peer's address as a tuple (for the allowlist) and as text (for refusals); an IPv4-mapped
   # IPv6 address (::ffff:a.b.c.d) reads as its IPv4 address (api-ops review).
   defp peer_address(socket) do
-    case :inet.peername(socket) do
+    case InboundSocket.peername(socket) do
       {:ok, {address, _port}} -> {address, format_address(address)}
       _unknown -> {nil, "unknown"}
     end
@@ -373,18 +455,8 @@ defmodule Cadence.Runtime.ProfileAcceptor do
 
   defp format_address(address), do: address |> :inet.ntoa() |> to_string()
 
-  defp listen_opts(nil), do: @tcp_opts
-  defp listen_opts(host) when is_binary(host), do: [{:ip, parse_ip(host)} | @tcp_opts]
-
-  defp parse_ip(host) do
-    case :inet.parse_address(String.to_charlist(host)) do
-      {:ok, ip} -> ip
-      {:error, _} -> {0, 0, 0, 0}
-    end
-  end
-
   defp actual_port(listener, fallback) do
-    case :inet.port(listener) do
+    case InboundSocket.port(listener) do
       {:ok, port} -> port
       _error -> fallback
     end

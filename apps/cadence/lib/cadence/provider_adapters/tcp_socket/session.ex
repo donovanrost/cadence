@@ -2,6 +2,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket.Session do
   @moduledoc false
   alias Cadence.ActionRequests.ProviderRequest
   alias Cadence.Platform.ContentHash
+  alias Cadence.ProviderAdapters.InboundSocket
   alias Cadence.Runtime.{ProcessNamespace, RecoveryExchange, SessionReadiness}
 
   require Logger
@@ -48,14 +49,12 @@ defmodule Cadence.ProviderAdapters.TCPSocket.Session do
 
   # The connected peer's address, so qualification can bind provider evidence to this exact
   # connection (#44 D2).
-  defp peer(socket) when is_port(socket) do
-    case :inet.peername(socket) do
+  defp peer(socket) do
+    case InboundSocket.peername(socket) do
       {:ok, {ip, port}} -> "#{:inet.ntoa(ip)}:#{port}"
       _error -> nil
     end
   end
-
-  defp peer(_socket), do: nil
 
   @doc "The address of a socket's far end, `ip:port` (nil when unknown)."
   def peer_of(socket), do: peer(socket)
