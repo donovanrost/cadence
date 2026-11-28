@@ -30,6 +30,7 @@ const existing = (name: string, scid: number | null): SpacecraftRow => ({
   routingRuleCount: 0,
   ready: false,
   lastReceivedAt: null,
+  approvalWithdrawn: null,
 });
 
 describe("naming patterns", () => {

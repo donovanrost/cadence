@@ -68,7 +68,7 @@ defmodule Cadence.Contacts.ListenerRefusalAttentionTest do
             provider_profile_id: ctx.profile_id,
             mission_id: ctx.mission_id,
             adapter_key: :tcp_socket,
-            version: System.unique_integer([:positive]),
+            version: next_profile_version(ctx),
             configuration: %{"mode" => "listen", "expected_peer_addresses" => ["127.0.0.1/32"]},
             metadata: %{
               "display_name" => "Shared downlink",
@@ -194,6 +194,14 @@ defmodule Cadence.Contacts.ListenerRefusalAttentionTest do
              ctx.mission_id,
              "no-such-contact"
            ) == nil
+  end
+
+  # The item reads the profile's latest version, so each persisted case must be the newest one.
+  defp next_profile_version(ctx) do
+    case ProfileStore.fetch_provider_profile(ctx.organization_id, ctx.mission_id, ctx.profile_id) do
+      {:ok, profile} -> profile.version + 1
+      {:error, :contact_provider_profile_not_found} -> 1
+    end
   end
 
   defp eventually_items(ctx, count) do
