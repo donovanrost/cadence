@@ -1,43 +1,23 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
 import { computed, nextTick, ref, watch } from "vue";
-import {
-  formatClock,
-  ApButton,
-  ApCallout,
-  ApEventLine,
-  ApPanel,
-  ApStatStrip,
-  ApStatTile,
-  ApStatusMark,
-  ApTag,
-  useNow,
-} from "@/ui";
+import { ApButton, ApCallout, ApPanel, ApStatStrip, ApStatTile, useNow } from "@/ui";
 import { groupBlockedLine, recoverable } from "@/features/contacts/readiness.ts";
 import { useStationCodes } from "@/features/contacts/useStationCodes.ts";
 import RecoverUplink from "@/features/contacts/RecoverUplink.vue";
 import type { Group } from "../groups/show.ts";
-import {
-  eventState,
-  eventText,
-  memberStageWord,
-  STAGE_STATE,
-  type PersonName,
-} from "../groups/words.ts";
-import { refusalLine, releaseLogContext, windowLine } from "../groups/release.ts";
-import { ownValuesText } from "./ownValues.ts";
-import { useCatalogArgs } from "./useCatalogArgs.ts";
+import type { PersonName } from "../groups/words.ts";
+import { windowLine } from "../groups/release.ts";
 import AbortPanel from "./AbortPanel.vue";
 import ContactRelease from "./ContactRelease.vue";
 import NeedsYouPanel from "./NeedsYouPanel.vue";
-import TargetMatrix from "./TargetMatrix.vue";
-import { useFleet } from "@/features/fleet/index.ts";
+import RequestLogList from "./RequestLogList.vue";
+import TargetsPanel from "./TargetsPanel.vue";
 import VerifierPanel from "./VerifierPanel.vue";
 import HistorySheet from "./HistorySheet.vue";
 import { abortable, pipeline } from "./uplink.ts";
 import { useVerifierSeries } from "./useVerifierSeries.ts";
-import { targetVerifyTime } from "../groups/verifyTimes.ts";
-import { expirySummary, targetStageWord } from "../groups/expiry.ts";
+import { expirySummary } from "../groups/expiry.ts";
 
 /**
  * C3 · Uplink & verify v1: pipeline tiles, each target's trail, the request log, and Abort
@@ -74,20 +54,11 @@ function onAborted(result: string) {
   emit("changed");
 }
 const tiles = computed(() => pipeline(props.group));
-/** U1 matrix places targets by plane and slot from the fleet read. */
-const fleet = useFleet(computed(() => props.missionId));
-const fleetRows = computed(() =>
-  fleet.state.value.status === "ready" ? fleet.state.value.value.spacecraft : [],
-);
 const series = useVerifierSeries(
   computed(() => props.missionId),
   computed(() => props.group.id),
 );
-const events = computed(() =>
-  [...props.group.events].sort((a, b) => Date.parse(b.at) - Date.parse(a.at)),
-);
 const decisionNote = computed(() => props.group.decision?.note ?? null);
-const pos = (n: number) => String(n + 1).padStart(2, "0");
 /** ux U70: a target's History sheet, opened from its line and its N card. */
 const history = ref<InstanceType<typeof HistorySheet> | null>(null);
 /** U33: the group's pass is blocked; the same line as the list, with expiry, above the trail. */
@@ -104,27 +75,6 @@ const windowText = computed(() => {
   const code = pass.station.code ?? pass.station.name;
   return line && code ? `${code} pass · ${line}` : line;
 });
-/** U46 (b): a member's latest named-release stop, under its target. */
-const refusalOf = (t: Group["targets"][number]) => {
-  const r = t.members.find((m) => m.release_refusal)?.release_refusal;
-  return r ? refusalLine(r, { spacecraft: t.name }) : null;
-};
-/** ux C2: the commands this target sends with its own values, worded as Approve words them. */
-const argsOf = useCatalogArgs(
-  computed(() => props.missionId),
-  computed(() => props.group),
-);
-const ownOf = (t: Group["targets"][number]) =>
-  props.group.commands.flatMap((c) => {
-    const values = ownValuesText(c, t.spacecraft_id, argsOf(c.command_id));
-    return values === null ? [] : [{ position: c.position, name: c.name ?? c.command_id, values }];
-  });
-const release = computed(() =>
-  releaseLogContext(
-    props.group.uplink,
-    props.group.targets.length === 1 ? (props.group.targets[0]?.name ?? null) : null,
-  ),
-);
 </script>
 
 <template>
@@ -194,84 +144,24 @@ const release = computed(() =>
         :state="t.value ? t.state : undefined"
       />
     </ApStatStrip>
-    <NeedsYouPanel :group="group" :series="series.ready.value" @history="(t) => history?.open(t)" />
+    <NeedsYouPanel
+      :group="group"
+      :series="series.ready.value"
+      :mission-id="missionId"
+      @history="(t) => history?.open(t)"
+    />
     <VerifierPanel
       :series="series"
       :mission-id="missionId"
       :group-id="group.id"
-      :name-of="(id) => group.targets.find((t) => t.spacecraft_id === id)?.name ?? id"
+      :name-of="
+        (id) => group.targets.find((t) => t.spacecraft_id === id)?.name ?? 'Unknown spacecraft'
+      "
     />
-    <ApPanel index="U1" title="Targets" :meta="`${group.target_count}`" flush>
-      <TargetMatrix :group="group" :fleet="fleetRows" />
-      <ul class="m-0 list-none border-t border-hairline p-0">
-        <li
-          v-for="t in group.targets"
-          :key="t.spacecraft_id"
-          class="grid grid-cols-[14px_200px_minmax(0,1fr)_auto_auto] items-baseline gap-3 border-t border-hairline-faint px-4 py-2 first:border-t-0"
-        >
-          <ApStatusMark :state="STAGE_STATE[t.stage]" class="self-center" />
-          <span class="font-mono text-md text-readout"
-            >{{ t.name ?? "Unknown spacecraft" }}
-            <span class="text-text-4">SCID {{ t.scid ?? "—" }}</span></span
-          >
-          <span class="min-w-0 truncate font-mono text-sm text-text-3">
-            <template v-for="m in t.members" :key="m.request_id"
-              >{{ pos(m.position) }} {{ m.command_name ?? m.command_id }} ·
-              {{
-                memberStageWord(
-                  m.stage,
-                  group.state,
-                  m.end_reason,
-                  t.name,
-                  group.release?.expires_at ?? null,
-                )
-              }}&ensp;</template
-            >
-          </span>
-          <ApTag :state="STAGE_STATE[t.stage]" :label="targetStageWord(t, group)" />
-          <ApButton
-            size="compact"
-            variant="ghost"
-            aria-haspopup="dialog"
-            :aria-label="`History of ${t.name ?? 'this target'}`"
-            @click="history?.open(t)"
-            >History</ApButton
-          >
-          <!-- ux C2: a target with its own values shows them on its command line. -->
-          <p
-            v-for="o in ownOf(t)"
-            :key="o.position"
-            class="col-span-4 col-start-2 m-0 flex flex-wrap items-center gap-2 font-mono text-sm text-text-2"
-          >
-            {{ pos(o.position) }} {{ o.name }} {{ o.values }}
-            <ApTag state="neutral" label="Own values" />
-          </p>
-          <!-- ux U69 A4a: verify by / verified at / timed out at, with seconds. -->
-          <p
-            v-if="targetVerifyTime(t)"
-            class="col-span-4 col-start-2 m-0 font-mono text-sm text-text-3"
-          >
-            {{ targetVerifyTime(t) }}
-          </p>
-          <p v-if="refusalOf(t)" class="col-span-4 col-start-2 m-0 text-sm text-caution-text">
-            {{ refusalOf(t) }}
-          </p>
-        </li>
-      </ul>
-    </ApPanel>
+    <TargetsPanel :group="group" :mission-id="missionId" @history="(t) => history?.open(t)" />
     <HistorySheet ref="history" :group="group" :mission-id="missionId" />
     <ApPanel index="U3" title="Request log" flush>
-      <ol class="m-0 list-none p-0">
-        <ApEventLine
-          v-for="e in events"
-          :key="e.id"
-          :time="formatClock(new Date(e.at))"
-          :datetime="e.at"
-          :state="eventState(e)"
-          mono
-          >{{ eventText(e, nameOf, group.targets, release) }}</ApEventLine
-        >
-      </ol>
+      <RequestLogList :group="group" :name-of="nameOf" :mission-id="missionId" marked />
     </ApPanel>
   </div>
 </template>

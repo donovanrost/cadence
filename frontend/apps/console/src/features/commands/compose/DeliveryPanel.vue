@@ -9,10 +9,11 @@ import {
   ApStatusMark,
 } from "@/ui";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
-import type { NextContact, TargetEndpoints } from "../groups/api.ts";
+import type { NextContact } from "../groups/api.ts";
 import { useMissionScope } from "@/shell/index.ts";
 import { useStationCodes } from "@/features/contacts/useStationCodes.ts";
 import EndpointCell from "./EndpointCell.vue";
+import { useTargetEndpoints } from "./useTargetEndpoints.ts";
 
 /**
  * C4 · Delivery plan: each target's own next booked contact. The preflight's contact check
@@ -22,8 +23,6 @@ import EndpointCell from "./EndpointCell.vue";
 const props = defineProps<{
   targets: readonly FleetSpacecraft[];
   contacts: ReadonlyMap<string, NextContact | null> | null;
-  /** Per target: what routing resolves (DECISIONS #41), with the endpoints to override with. */
-  endpoints: ReadonlyMap<string, TargetEndpoints>;
   overrides: Readonly<Record<string, string>>;
   /** U68: the request's expiry (epoch ms); a target whose next AOS is after it gets a caution. */
   expiresAt?: number | null | undefined;
@@ -65,6 +64,14 @@ const rows = computed(() =>
     .slice(0, LIMIT),
 );
 const noContact = computed(() => all.value.filter((r) => r.aos === null).length);
+/**
+ * Per row shown: what routing resolves (DECISIONS #41), with the endpoints to override with.
+ * #795: asked for the rows on screen only (at most LIMIT), never every target.
+ */
+const endpoints = useTargetEndpoints(
+  computed(() => scope.value.mission.id),
+  () => rows.value.map((r) => r.sc.id),
+);
 </script>
 
 <template>

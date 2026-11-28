@@ -19,13 +19,10 @@ defmodule CadenceWeb.Console.CommandGroupParams do
   }
 
   @doc """
-  The spacecraft ids of an endpoints read: a list (POST body) or a comma list (the GET query), at
-  most the size guard's `max_targets`, each once.
+  The spacecraft ids of an endpoints read: a list in the POST body, at most the size guard's
+  `max_targets`, each once.
   """
   @spec spacecraft_ids(map()) :: {:ok, [binary()]} | {:error, term()}
-  def spacecraft_ids(%{"spacecraft_ids" => ids}) when is_binary(ids),
-    do: spacecraft_ids(%{"spacecraft_ids" => String.split(ids, ",", trim: true)})
-
   def spacecraft_ids(%{"spacecraft_ids" => ids}) when is_list(ids) do
     max = Validation.bounds().max_targets
 
