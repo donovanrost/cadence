@@ -44,6 +44,7 @@ export const showBody = {
   abort_reason: null,
   abort_result: null,
   resolved_at: "2026-11-08T02:00:00Z",
+  withdrawn_after_go: null,
   progress: { awaiting_go: 2 },
   events: [
     {
@@ -79,6 +80,7 @@ export const showBody = {
       ],
       last_event_at: null,
       blocked: null,
+      withdrawn_after_go: null,
     },
   ],
 };

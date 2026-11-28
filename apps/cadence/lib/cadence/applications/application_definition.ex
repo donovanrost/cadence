@@ -13,7 +13,6 @@ defmodule Cadence.Applications.ApplicationDefinition do
     LifecycleContract,
     ResourceContract,
     SettingsSectionDefinition,
-    StatusPlacement,
     SurfaceDefinition
   }
 
@@ -36,7 +35,6 @@ defmodule Cadence.Applications.ApplicationDefinition do
           resource_contract: ResourceContract.t(),
           lifecycle_contract: LifecycleContract.t(),
           status_query_id: binary() | nil,
-          status_placements: [StatusPlacement.t()],
           preflight_query_id: binary() | nil,
           actions: [ActionDefinition.t()],
           surfaces: [SurfaceDefinition.t()],
@@ -69,7 +67,6 @@ defmodule Cadence.Applications.ApplicationDefinition do
     configuration_contract: %{},
     resource_contract: %ResourceContract{},
     lifecycle_contract: %LifecycleContract{},
-    status_placements: [],
     actions: [],
     surfaces: [],
     settings_sections: [],
@@ -79,7 +76,6 @@ defmodule Cadence.Applications.ApplicationDefinition do
   @scopes [:organization, :user, :admin, :mission, :spacecraft, :source_endpoint, :transport]
   @capability_kinds [:semantic_handler, :managed_application, :projection, :transport_extension]
   @max_dependencies 16
-  @max_status_placements 8
   # Route-level applications may expose a finite action vocabulary per
   # surface. Keep the application-wide envelope explicit while allowing the
   # Ops cohort to retain its exact declared identities.
@@ -126,7 +122,6 @@ defmodule Cadence.Applications.ApplicationDefinition do
          :ok <- ResourceContract.validate(definition.resource_contract),
          :ok <- LifecycleContract.validate(definition.lifecycle_contract),
          true <- optional_text?(definition.status_query_id),
-         true <- valid_status_placements?(definition),
          true <- optional_text?(definition.preflight_query_id),
          true <- valid_actions?(definition.actions, definition.installable_scopes),
          true <- distinct_action_contracts?(definition),
@@ -168,24 +163,6 @@ defmodule Cadence.Applications.ApplicationDefinition do
   end
 
   defp valid_dependencies?(_dependencies, _application_key), do: false
-
-  defp valid_status_placements?(%__MODULE__{} = definition)
-       when is_list(definition.status_placements) do
-    identities = Enum.map(definition.status_placements, &status_placement_identity/1)
-
-    length(definition.status_placements) <= @max_status_placements and
-      Enum.all?(definition.status_placements, &(StatusPlacement.validate(&1) == :ok)) and
-      Enum.all?(definition.status_placements, &(&1.scope in definition.installable_scopes)) and
-      length(Enum.uniq(identities)) == length(identities) and
-      (definition.status_placements == [] or valid_text?(definition.status_query_id))
-  end
-
-  defp valid_status_placements?(%__MODULE__{}), do: false
-
-  defp status_placement_identity(%StatusPlacement{placement: placement, scope: scope}),
-    do: {placement, scope}
-
-  defp status_placement_identity(_status_placement), do: nil
 
   defp dependency_identity(%ApplicationDependency{
          application_key: application_key,

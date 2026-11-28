@@ -5,9 +5,22 @@ import {
   decode,
   pointId as pointIdReader,
 } from "@/api/index.ts";
-import { episodeFor, episodesReader, runEpisodeCommand, type EpisodeDetail } from "./episodes.ts";
+import {
+  episodeEventReader,
+  episodeFor,
+  episodesReader,
+  runEpisodeCommand,
+  type EpisodeDetail,
+} from "./episodes.ts";
 import { episodeFixture } from "./fixtures.ts";
-import { escalationNotice, eventText, sourceTag, statusLine, valueLabel } from "./episodeText.ts";
+import {
+  escalationNotice,
+  eventState,
+  eventText,
+  sourceTag,
+  statusLine,
+  valueLabel,
+} from "./episodeText.ts";
 
 const episode = episodeFixture;
 const now = new Date("2026-11-08T02:44:00Z");
@@ -143,5 +156,31 @@ describe("episode commands (U20 outcomes)", () => {
     expect(
       (await runEpisodeCommand(missionIdReader("m"), "e", { kind: "acknowledge" })).status,
     ).toBe("unclear");
+  });
+});
+
+describe("episode event kinds (#1072, rule 3)", () => {
+  /** Synthetic events in alarms-console.md's shape (#451, #1072), not captured from a server. */
+  const event = (kind: string, payload: unknown = {}) => {
+    const r = decode(episodeEventReader, {
+      id: `ev-${kind}`,
+      kind,
+      actor: null,
+      at: "2026-11-27T10:02:00Z",
+      payload,
+    });
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+    return r.value;
+  };
+
+  it("words rule_changed: the alarm's limits changed, the episode itself didn't", () => {
+    const e = event("rule_changed", { from: "d1", to: "d2", rule_ids: ["r1"], policy_id: "p1" });
+    expect([eventText(e), eventState(e)]).toEqual(["The limits for this alarm changed", "neutral"]);
+  });
+
+  it("reads a kind this console doesn't know as a neutral line with the server's word", () => {
+    const e = event("rule_reset");
+    expect(e.kind).toEqual({ unrecognized: "rule_reset" });
+    expect([eventText(e), eventState(e)]).toEqual(["Rule reset", "neutral"]);
   });
 });

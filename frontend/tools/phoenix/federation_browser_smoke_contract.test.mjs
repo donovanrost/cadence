@@ -217,8 +217,8 @@ function syntheticGateDependencies() {
 /** @param {number} [timeout] */
 function syntheticGateArgs(timeout) {
   return [
-    "--comms-url",
-    `${origin}/missions/mission-1/applications/comms/federated`,
+    "--ops-url",
+    `${origin}/missions/mission-1/applications/ops_console/workspace/federated`,
     ...(timeout ? ["--scenario-timeout-ms", String(timeout)] : []),
   ];
 }
@@ -333,10 +333,10 @@ void test("the browser URL contract uses an actual isolated HTTP endpoint", asyn
       missionId: "mission/one",
       spacecraftId: "sc-1",
     });
-    assert.notEqual(new URL(firstUrls.commsUrl).origin, new URL(secondUrls.commsUrl).origin);
+    assert.notEqual(new URL(firstUrls.opsUrl).origin, new URL(secondUrls.opsUrl).origin);
     assert.equal(
-      new URL(firstUrls.commsUrl).pathname,
-      "/missions/mission%2Fone/applications/comms/federated",
+      new URL(firstUrls.opsUrl).pathname,
+      "/missions/mission%2Fone/applications/ops_console/workspace/federated",
     );
     assert.match(firstUrls.telemetryUrl, new RegExp(`:${first.port}/`));
   } finally {
@@ -640,7 +640,7 @@ void test("manifest validation separates declared candidates from required and o
 
   for (const invalidUrl of /** @type {const} */ ([
     `${origin}/assets/application-host/telemetry-decom/mf-manifest.json`,
-    `${origin}/releases/comms_overview/${releaseId}/artifacts/mf-manifest.json`,
+    `${origin}/releases/spacecraft/${releaseId}/artifacts/mf-manifest.json`,
     `${origin}/releases/telemetry_decom/sha256:${"b".repeat(64)}/artifacts/mf-manifest.json`,
     `${origin}${releasePrefix}remoteEntry.js`,
   ])) {
@@ -659,7 +659,7 @@ void test("manifest validation separates declared candidates from required and o
 
   for (const invalidAsset of /** @type {const} */ ([
     `${origin}/assets/application-host/telemetry-decom/remoteEntry.js`,
-    `${origin}/releases/comms_overview/${releaseId}/artifacts/remoteEntry.js`,
+    `${origin}/releases/spacecraft/${releaseId}/artifacts/remoteEntry.js`,
     `${origin}/releases/telemetry_decom/sha256:${"b".repeat(64)}/artifacts/remoteEntry.js`,
   ])) {
     assert.throws(
@@ -3200,10 +3200,10 @@ void test("the cache-enabled federation browser gate never disables Chrome cache
   assert.equal(source.includes("Network.setCacheDisabled"), false);
 });
 
-void test("the Ops representative browser gate pins the scoped compatibility destination", async () => {
+void test("the Ops Console browser gate pins the scoped compatibility destination", async () => {
   const source = await readFile(new URL("./federation_browser_smoke.mjs", import.meta.url), "utf8");
-  const opsConfigStart = source.indexOf('applicationKey: "ops_console"');
-  const opsConfigEnd = source.indexOf("catalogPath:", opsConfigStart);
+  const opsConfigStart = source.indexOf("const opsSurface = {");
+  const opsConfigEnd = source.indexOf("const ops = await assertRemoteSurface", opsConfigStart);
   assert.ok(opsConfigStart >= 0 && opsConfigEnd > opsConfigStart);
   const opsConfig = source.slice(opsConfigStart, opsConfigEnd);
   assert.equal(opsConfig.includes('surfaceId: "workspace"'), true);
@@ -3216,35 +3216,16 @@ void test("the Ops representative browser gate pins the scoped compatibility des
 
 void test("the shared host body is read on the first load and reused by later 304 checks", async () => {
   const source = await readFile(new URL("./federation_browser_smoke.mjs", import.meta.url), "utf8");
-  // The first representative (Ops Console, since #671 removed Mission Catalog and Spacecraft).
-  const configsStart = source.indexOf("const representativeConfigs = [");
-  const opsStart = source.indexOf('applicationKey: "ops_console"', configsStart);
-  const configsEnd = source.indexOf("const representatives = [];", opsStart);
-  assert.ok(configsStart >= 0 && opsStart > configsStart && configsEnd > opsStart);
-  assert.doesNotMatch(source.slice(configsStart, opsStart), /applicationKey:/);
-  assert.match(source.slice(opsStart, configsEnd), /readPublishedHostBody: true/);
+  const opsStart = source.indexOf("const ops = await assertRemoteSurface");
+  const opsEnd = source.indexOf("});", opsStart);
+  assert.ok(opsStart >= 0 && opsEnd > opsStart);
+  assert.match(source.slice(opsStart, opsEnd), /readPublishedHostBody: true/);
 
-  const commsStart = source.indexOf('queryId: "cadence.comms.overview"');
-  const commsEnd = source.indexOf("});", commsStart);
-  assert.ok(commsStart >= 0 && commsEnd > commsStart);
-  assert.doesNotMatch(source.slice(commsStart, commsEnd), /readPublishedHostBody/);
+  const telemetryStart = source.indexOf("const telemetry = await assertRemoteSurface");
+  const telemetryEnd = source.indexOf("});", telemetryStart);
+  assert.ok(telemetryStart > opsEnd && telemetryEnd > telemetryStart);
+  assert.doesNotMatch(source.slice(telemetryStart, telemetryEnd), /readPublishedHostBody/);
   assert.match(source, /\[200, 304\]\.includes\(hostRecord\.response\.status\)/);
-});
-
-void test("canonical Comms query assertions follow the trusted surface response envelope", async () => {
-  const source = await readFile(new URL("./federation_browser_smoke.mjs", import.meta.url), "utf8");
-  const commsStart = source.indexOf("const comms = await assertRemoteSurface");
-  const commsEnd = source.indexOf(
-    'reportProgress("verifying Comms Overview DOM and network contract")',
-    commsStart,
-  );
-  assert.ok(commsStart >= 0 && commsEnd > commsStart);
-  const commsAssertions = source.slice(commsStart, commsEnd);
-  assert.match(commsAssertions, /comms\.query\.trusted_surface\.root\.attrs\.id/);
-  assert.match(commsAssertions, /comms\.query\.trusted_surface\.overview\.transport\.id/);
-  assert.match(commsAssertions, /comms\.query\.trusted_surface\.overview\.transport\.count/);
-  assert.doesNotMatch(commsAssertions, /comms\.query\.data\./);
-  assert.doesNotMatch(commsAssertions, /comms\.query\.trusted_surface\.data\./);
 });
 
 void test("refresh causality rejects a duplicate pre-action query and accepts only a new post-action query", () => {
@@ -3673,8 +3654,8 @@ void test("sign-in URL validation allows only query/hash variation and runs befo
       client,
       installDiagnostics(makeDiagnosticClient()),
       [
-        "--comms-url",
-        `${origin}/missions/mission-1/applications/comms/federated`,
+        "--ops-url",
+        `${origin}/missions/mission-1/applications/ops_console/workspace/federated`,
         "--telemetry-url",
         `${origin}/missions/mission-1/telemetry/federated`,
         "--login-url",

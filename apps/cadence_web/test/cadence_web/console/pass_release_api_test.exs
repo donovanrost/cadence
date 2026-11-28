@@ -30,6 +30,7 @@ defmodule CadenceWeb.Console.PassReleaseAPITest do
       member: member,
       id: reservation.provider_reservation_id,
       org_id: org.organization_id,
+      mission: mission,
       mission_id: mission.mission_id,
       base: "/api/v1/missions/#{mission.mission_id}"
     }
@@ -51,6 +52,25 @@ defmodule CadenceWeb.Console.PassReleaseAPITest do
              pass(c, c.admin)
 
     assert %{"releasable" => false} = pass(c, c.member)
+  end
+
+  test "pass detail uses the same query count at 5 and 50 spacecraft", c do
+    conn = TestFixtures.member_conn(c.admin)
+    path = c.base <> "/passes/#{c.id}"
+
+    # Resolve the mission's read state before comparing steady-state requests.
+    assert %{"id" => id} = conn |> get(path) |> json_response(200) |> Map.fetch!("data")
+    assert id == c.id
+
+    Enum.each(1..4, fn _ -> TestFixtures.persist_spacecraft!(c.mission) end)
+    {at_five, small_count} = TestFixtures.count_statements(fn -> get(conn, path) end)
+
+    Enum.each(1..45, fn _ -> TestFixtures.persist_spacecraft!(c.mission) end)
+    {at_fifty, large_count} = TestFixtures.count_statements(fn -> get(conn, path) end)
+
+    assert json_response(at_five, 200) == json_response(at_fifty, 200)
+    assert small_count == large_count
+    assert large_count < 50
   end
 
   test "members can't release; stale or missing revisions are refused", c do

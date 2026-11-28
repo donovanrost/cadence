@@ -27,7 +27,7 @@ defmodule Cadence.Comms.RoutingRuleRow do
     field(:role, :string)
     field(:enabled, :boolean, default: true)
     field(:materialized_link_assignment_id, :string)
-    field(:origin, :string, default: "legacy")
+    field(:origin, :string, default: "spacecraft")
     field(:profile_rule_id, :string)
     field(:spacecraft_type_id, :string)
     field(:spacecraft_type_version, :integer)
@@ -50,6 +50,7 @@ defmodule Cadence.Comms.RoutingRuleRow do
     :transport_version,
     :role,
     :enabled,
+    :origin,
     :metadata
   ]
 

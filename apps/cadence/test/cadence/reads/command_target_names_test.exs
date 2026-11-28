@@ -2,36 +2,26 @@ defmodule Cadence.Reads.CommandTargetNamesTest do
   use Cadence.DataCase, async: false
 
   alias Cadence.CommandReviewFixtures, as: Fixtures
-  alias Cadence.Reads.{CommandHistory, CommandMonitor, Commands}
+  alias Cadence.Reads.Commands
   alias Cadence.SourceEndpoints
   alias Cadence.SourceEndpoints.SourceEndpoint
 
-  test "command views resolve scoped display names while retaining the exact target identity" do
+  test "the command summary resolves scoped display names while retaining the exact target identity" do
     c = Fixtures.scope!()
     request = Fixtures.request!(c)
     id = request.source_endpoint_ref
     endpoint!(c, id, "Aurora")
 
-    assert {:ok, monitor} = CommandMonitor.load(c.scope, c.mission, %{"query" => "aurora"})
-    assert [%{target: ^id, target_name: "Aurora"}] = monitor.rows
-    assert [%{id: ^id, name: "Aurora"}] = monitor.targets
     assert [%{target: ^id, target_name: "Aurora"}] = Commands.summary(c.org, c.mission).rows
-
-    assert {:ok, history} =
-             CommandHistory.load(c.scope, c.mission, request.command_request_id, %{})
-
-    assert history["request"]["target"] == id
-    assert history["request"]["target_name"] == "Aurora"
   end
 
-  test "an unavailable endpoint retains command history without borrowing a foreign label" do
+  test "an unavailable endpoint keeps its target without borrowing another mission's label" do
     c = Fixtures.scope!()
     request = Fixtures.request!(c)
     endpoint!(Fixtures.scope!(), request.source_endpoint_ref, "Foreign spacecraft")
 
-    assert {:ok, monitor} = CommandMonitor.load(c.scope, c.mission, %{})
-    assert [%{target_name: nil}] = monitor.rows
-    assert hd(monitor.rows).target == request.source_endpoint_ref
+    assert [%{target: target, target_name: nil}] = Commands.summary(c.org, c.mission).rows
+    assert target == request.source_endpoint_ref
     assert SourceEndpoints.display_names(c.org, c.mission, [request.source_endpoint_ref]) == %{}
   end
 

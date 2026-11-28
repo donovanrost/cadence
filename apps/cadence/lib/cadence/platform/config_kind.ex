@@ -189,7 +189,15 @@ defmodule Cadence.Platform.ConfigKind do
               | {:error, term()}
   @callback batchable?(map()) :: boolean()
 
-  @optional_callbacks stage_check: 5,
+  @doc """
+  The change-set lane the kind's changes stage in (ADR-020 P3, #451; U108): `:configuration`
+  (the default, every kind before P3) or `:monitoring`. Every kind is in exactly one lane, so two
+  lanes never stage the same entity.
+  """
+  @callback lane() :: :configuration | :monitoring
+
+  @optional_callbacks lane: 0,
+                      stage_check: 5,
                       stage_conflicts: 4,
                       translate: 5,
                       absent_errors: 3,

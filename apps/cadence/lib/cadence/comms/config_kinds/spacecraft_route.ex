@@ -45,7 +45,7 @@ defmodule Cadence.Comms.ConfigKinds.SpacecraftRoute do
   end
 
   @impl true
-  def batchable?(op), do: replaces(Map.get(op.payload, "options", %{})) == []
+  def batchable?(_op), do: true
 
   @impl true
   def load_batch(organization_id, mission_id, ids) do
@@ -250,15 +250,14 @@ defmodule Cadence.Comms.ConfigKinds.SpacecraftRoute do
     end
   end
 
-  def write(organization_id, mission_id, action, id, _previous, proposed, options) do
+  def write(organization_id, mission_id, _action, id, _previous, proposed, _options) do
     with {:ok, spacecraft} <- spacecraft(organization_id, mission_id, proposed),
          {:ok, routes} <-
            plan(context(organization_id, mission_id), spacecraft, id, proposed),
-         :ok <- replace_legacy(organization_id, spacecraft, action, routes, replaces(options)),
          :ok <-
            put_routes(
              organization_id,
-             Enum.map(routes, &(&1 |> authored(proposed) |> converted(replaces(options))))
+             Enum.map(routes, &authored(&1, proposed))
            ),
          wanted = MapSet.new(routes, & &1.routing_rule_id),
          :ok <-
@@ -269,26 +268,6 @@ defmodule Cadence.Comms.ConfigKinds.SpacecraftRoute do
       {:ok, document(own_rows(organization_id, mission_id, spacecraft.spacecraft_id, id)), []}
     end
   end
-
-  @doc """
-  Options: `"replaces"`, a create's legacy routing rule ids (the legacy route conversion, director
-  11-16). Each must be an active legacy rule of THIS spacecraft, and together they must be exactly
-  the route's legs: the same direction, role, transport, name and purpose, one rule per leg. The
-  write archives them in the same apply transaction as it writes the route's rows, so a craft is
-  never both legacy and converted, nor neither. An edit or a console create sets no options.
-  """
-  @impl true
-  def normalize_options(:create, %{"replaces" => ids} = options)
-      when map_size(options) == 1 and is_list(ids) and ids != [] do
-    if Enum.all?(ids, &(is_binary(&1) and &1 != "")) and length(Enum.uniq(ids)) == length(ids),
-      do: {:ok, options},
-      else: {:error, [F.error("replaces", "Name each legacy routing rule once")]}
-  end
-
-  def normalize_options(_action, options) when options == %{}, do: {:ok, %{}}
-
-  def normalize_options(_action, _options),
-    do: {:error, [F.error("replaces", "Only a new extra route can replace legacy rules")]}
 
   @impl true
   # ux U25: names, never ids. A new route's name is rendered only when it's written, so a create
@@ -396,53 +375,6 @@ defmodule Cadence.Comms.ConfigKinds.SpacecraftRoute do
     check_profile(spacecraft, routes, profile)
   end
 
-  defp replaces(options), do: Map.get(options || %{}, "replaces", [])
-
-  defp replace_legacy(_organization_id, _spacecraft, _action, _routes, []), do: :ok
-
-  defp replace_legacy(organization_id, spacecraft, :create, routes, ids) do
-    with {:ok, rules} <- legacy_rules(organization_id, spacecraft, ids),
-         :ok <- same_legs(rules, routes) do
-      archive(rules, organization_id)
-    end
-  end
-
-  defp replace_legacy(_organization_id, _spacecraft, _action, _routes, _ids),
-    do: {:error, [F.error("replaces", "Only a new extra route can replace legacy rules")]}
-
-  defp legacy_rules(organization_id, spacecraft, ids) do
-    Enum.reduce_while(ids, {:ok, []}, fn id, {:ok, acc} ->
-      case RoutingRuleStore.fetch_routing_rule(organization_id, spacecraft.mission_id, id) do
-        {:ok, %{origin: :legacy, lifecycle_state: :active, spacecraft_id: sc} = rule}
-        when sc == spacecraft.spacecraft_id ->
-          {:cont, {:ok, [rule | acc]}}
-
-        _other ->
-          {:halt,
-           {:error,
-            [
-              F.error(
-                "replaces",
-                "#{id} isn't an active legacy route of #{spacecraft.display_name}"
-              )
-            ]}}
-      end
-    end)
-  end
-
-  # Faithful or refused: the route's legs are exactly the replaced rules (the plan, the names and
-  # the purposes an operator sees stay the same).
-  defp same_legs(rules, routes) do
-    if Enum.sort(Enum.map(rules, &leg_key/1)) == Enum.sort(Enum.map(routes, &leg_key/1)),
-      do: :ok,
-      else:
-        {:error,
-         [F.error("replaces", "The route's legs don't match the legacy routes it replaces")]}
-  end
-
-  defp leg_key(rule),
-    do: {rule.direction, rule.role, rule.transport_id, rule.display_name, rule.purpose_label}
-
   defp put_routes(organization_id, routes) do
     Enum.reduce_while(routes, :ok, fn route, :ok ->
       # Its written document rides on every row, so an edit that resolves to the same rows still
@@ -483,12 +415,6 @@ defmodule Cadence.Comms.ConfigKinds.SpacecraftRoute do
     do: %{route | metadata: Map.put(route.metadata || %{}, @authored_key, written(proposed))}
 
   defp written(proposed), do: Map.take(proposed, @fields)
-
-  # A route that replaced legacy rules says which (the conversion's progress counts these).
-  defp converted(route, []), do: route
-
-  defp converted(route, ids),
-    do: %{route | metadata: Map.put(route.metadata, "converted_from", ids)}
 
   defp document([%{metadata: %{@authored_key => %{} = written}} | _rows]), do: written
 

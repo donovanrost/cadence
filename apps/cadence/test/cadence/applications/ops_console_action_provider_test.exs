@@ -10,7 +10,7 @@ defmodule Cadence.Applications.OpsConsoleActionProviderTest do
       application_key: "ops_console",
       application_version: 1,
       action_id: "save",
-      surface_id: "fleet_planning",
+      surface_id: "telemetry_explore",
       surface_version: 1,
       params: %{}
     }
@@ -67,8 +67,8 @@ defmodule Cadence.Applications.OpsConsoleActionProviderTest do
     request = %ActionRequest{
       application_key: "ops_console",
       application_version: 1,
-      action_id: "refresh-planning",
-      surface_id: "fleet_planning",
+      action_id: "filter",
+      surface_id: "alarms",
       surface_version: 1,
       params: %{"mission_id" => "mission-2"}
     }
@@ -100,7 +100,7 @@ defmodule Cadence.Applications.OpsConsoleActionProviderTest do
     assert ActionProvider.duplicate_binding_keys() == []
     assert ActionProvider.binding_keys() == Enum.uniq(ActionProvider.binding_keys())
     assert {"alarms", "filter"} in ActionProvider.binding_keys()
-    assert {"contact_schedule", "search"} in ActionProvider.binding_keys()
+    assert {"telemetry_explore", "apply_filters"} in ActionProvider.binding_keys()
   end
 
   defp scope do

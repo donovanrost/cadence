@@ -19,6 +19,7 @@ defmodule Cadence.Reads.CommandGroups do
   """
 
   alias Cadence.Commanding.Groups.{CommandGroup, GroupStore, MemberCheck}
+  alias Cadence.Commanding.RequestValidation
   alias Cadence.Reads.{CommandCatalog, Commands}
   alias Cadence.Reads.CommandGroups.{Expiry, ReleaseRefusals, VerifyTimes, WithdrawnAfterGo}
   alias Cadence.Reads.CommandPreflight.{ResolvedArguments, VerifierGroups}
@@ -142,6 +143,14 @@ defmodule Cadence.Reads.CommandGroups do
 
       revision_id = members |> List.first() |> then(&(&1 && &1.mission_model_revision_id))
 
+      # The verifier groups and the resolved arguments both read each command's pinned basis: once.
+      bases =
+        RequestValidation.resolve_keyed(
+          org,
+          mission,
+          Enum.reject(members, &(&1.lifecycle_state == :rejected))
+        )
+
       {:ok,
        group
        |> summary()
@@ -156,9 +165,9 @@ defmodule Cadence.Reads.CommandGroups do
          expiry: Expiry.summary(group, targets),
          events: events,
          # U2: per stacked command, which targets share which verifiers (as Compose's preflight).
-         verifier_groups: VerifierGroups.for_group(org, mission, group, members),
+         verifier_groups: VerifierGroups.for_group(org, mission, group, members, bases),
          # U68 R1: where the server's values differ from what was entered.
-         resolved_arguments: ResolvedArguments.for_group(org, mission, group, members)
+         resolved_arguments: ResolvedArguments.for_group(org, mission, group, members, bases)
        })
        # #120 (ux U92 "Up front"): the GO refusal's own member test, from the rows loaded above.
        |> Map.merge(MemberCheck.read_fields(group, members))}
@@ -243,6 +252,7 @@ defmodule Cadence.Reads.CommandGroups do
     org
     |> Commands.snapshot(mission,
       requests: fn _org, _mission, _opts -> members end,
+      request_ids: Enum.map(members, & &1.command_request_id),
       target_names: fn _, _, _ -> %{} end
     )
     |> Map.fetch!(:rows)
@@ -347,14 +357,14 @@ defmodule Cadence.Reads.CommandGroups do
   defp held_lanes(_org, _mission, []), do: %{}
 
   defp held_lanes(org, mission, members) do
-    lanes = members |> MapSet.new(& &1.source_endpoint_ref)
+    lanes = members |> Enum.map(& &1.source_endpoint_ref) |> Enum.uniq()
 
     org
-    |> Cadence.Commanding.list_command_release_attempts(mission)
-    |> Enum.filter(&(&1.lifecycle_state == :release_uncertain))
-    |> Enum.map(&{&1.source_endpoint_ref, &1.command_request_id})
-    |> Enum.filter(fn {lane, _id} -> MapSet.member?(lanes, lane) end)
-    |> Map.new()
+    |> Cadence.Commanding.list_command_release_attempts(mission,
+      lifecycle_state: :release_uncertain,
+      source_endpoint_refs: lanes
+    )
+    |> Map.new(&{&1.source_endpoint_ref, &1.command_request_id})
   end
 
   # A target waiting for its contact is blocked when its lane is held by another request's

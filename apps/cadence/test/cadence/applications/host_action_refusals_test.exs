@@ -27,8 +27,6 @@ defmodule Cadence.Applications.HostActionRefusalsTest do
   end
 
   @refused [
-    # Batch 1; routing_new follows with the per-spacecraft Extra route.
-    {"comms", ~w(transport_new ground_station_new ground_station_edit), ~w(validate save)},
     {"ops_console", ~w(data_operations data_operations_manage),
      ~w(validate-request record-historical-workflow-request transition-group retry-group
         request-correction)}

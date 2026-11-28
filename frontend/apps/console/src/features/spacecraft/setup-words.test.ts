@@ -76,6 +76,8 @@ describe("Setup words, part 1 (#308; mms-ux's table b–d)", () => {
         catalog_revision: null,
         decision: null,
         viewer_can_decide: false,
+        affected_groups: null,
+        affected_groups_count: null,
         viewer_is_importer: false,
         cannot_decide_because: null,
         plans_ready: true,

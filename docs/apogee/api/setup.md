@@ -24,6 +24,20 @@ Conventions: [README.md](README.md). Requested shapes: `docs/apogee/plans/setup-
 | kind schema | `GET /missions/:mission_id/config/kinds/:kind/schema` | **implemented** |
 | catalog APIDs | `GET /missions/:mission_id/catalog/revisions/:revision_id/apids` | **implemented** (L17) |
 | revision spacecraft | `GET /missions/:mission_id/catalog/revisions/:revision_id/spacecraft` | **implemented** (#678, `Cadence.Reads.CatalogRevisionSpacecraft`) |
+| change-set lanes | `GET /missions/:mission_id/config?lane=configuration\|monitoring` | **implemented** (#451 slice L; see below) |
+
+## `GET /api/v1/missions/:mission_id/config?lane=`
+
+The head and one lane's staged bar (ADR-020 P3 slice L, #451; ux U108).
+- **`lane`** is `configuration` (the default, so a read without it is unchanged) or `monitoring`. Any other value is `422 invalid_lane`.
+- **The answer** is `{head, lane, change_set, permissions}`.
+  - `change_set` is the lane's active set: configuration's open or in-review set, or monitoring's open set.
+  - A monitoring read adds `in_review`, at most 20 of the monitoring sets in review, oldest first, as summaries `{id, state, opened_at, opened_by, submitted_at, submitted_by, reason, staged_count}`, plus `in_review_count` with the total. Read a set in full through `GET …/config/change-sets/:id`. The read takes the same number of queries however many sets are in review.
+  - Both lanes share `head`: revisions from both are one sequence.
+- **Staging (`POST …/config/stage`)** goes to the lane of its ops' kinds. One request's ops must all be one lane's, or it's `422 mixed_lanes`.
+  - Configuration keeps its rules: one set, frozen while in review (`frozen_in_review`).
+  - Monitoring stages into its open set, opening one when every monitoring set is in review, so review never pauses the lane.
+- **No kind is in the monitoring lane yet.** The limit, alarm-rule and derived-parameter kinds come with slice M.
 
 ## `GET /api/v1/missions/:mission_id/spacecraft`
 
@@ -165,13 +179,12 @@ Refetch on `invalidate` with `spacecraft`.
   (inbound = downlink, outbound = uplink), not the `downlink | uplink | both` that was requested.
   `role`: `primary | candidate | contributing`. Archived rules appear with `active: false`, active
   ones first.
-- `routing_rules[].origin` (ux U79): `legacy | profile | spacecraft` (a future value: decode as
+- `routing_rules[].origin` (ux U79): `profile | spacecraft` (a future value: decode as
   unrecognized, no tag). `route_id`: the extra route's id (the `spacecraft_route` entity) when
   `origin` is `spacecraft`, else `null`; an extra route's two legs are two rows with the same
   `route_id`. `station`: `{id, code, name}` (code and name `null` when the station is gone), or
   `null` when the rule has none. Edit and Remove key on `route_id`; Remove stages
-  `{kind: "spacecraft_route", action: "delete", entity_id: route_id}`. Older (`legacy`) rows are
-  removed through `legacy_routing_rule` (below).
+  `{kind: "spacecraft_route", action: "delete", entity_id: route_id}`.
 - `GET …/spacecraft/:spacecraft_id/routes/:route_id` → `{id, document}`: the extra route as staged,
   for the editor (an empty transport stays empty, a name template stays a template). `404
   spacecraft_route_not_found` when it isn't an extra route of that spacecraft.
@@ -1804,49 +1817,6 @@ Every kind is always present; `count` is the full number and `items` at most 3. 
 only when the name its line needs exists (a route's or pass's spacecraft name, a profile's name, a
 station's transport name); otherwise it is only counted. A station archived together with its
 transports (one stage, or already staged in the open set) isn't refused for them.
-
-## Legacy route conversion (TEMPORARY: removed with 9ac6dc8ee; ux U79, director 11-16)
-
-Older per-spacecraft routing rules (`origin: legacy`) become extra routes in batches of spacecraft,
-each batch alone in its change set and reviewed by someone other than its stager (approval is
-forced on these sets, whatever the mission's policy).
-
-- `GET /api/v1/missions/:mission_id/routes/legacy-conversion` (operate_mission) →
-  `{routes_converted, routes_total, batch_size, batches_total, next_batch: int | null,
-  staged_batch: {change_set_id, batch, author: {id, name | null}} | null, unmappable: {count,
-  routes: [{routing_rule_id, reason: "transport_has_no_station", spacecraft: {id, name | null}}]},
-  can_stage}`. `next_batch` is null while a batch is staged and when nothing is left; `routes` is
-  capped at 50, sorted by spacecraft name. `can_stage`: the viewer holds `manage_mission`
-  (organization admins, mission admins of that mission).
-- `POST` the same path (manage_mission), body optional `{spacecraft: 1..100}` (default 50) →
-  `201 {change_set_id, batch, batches_total, route_count, spacecraft_count,
-  remaining_route_count, unmappable: [the same entries, this batch's craft]}`. Routes that can't be
-  mapped never refuse a batch: the rest stages and they're reported. Description, server-side:
-  'Converted from the old routing page: batch 2 of 10, 150 routes on 50 spacecraft.'
-- Refusals: `409 conversion_already_staged {change_set_id, batch, author: {id, name}}` (one staged
-  batch at a time); `409 open_change_set_not_empty {change_set_id}` (a batch is alone in its set);
-  `422 nothing_to_convert`; `422 invalid_params {spacecraft}`; `409 frozen_in_review`; `403`.
-- While a batch is staged, ANY other staging answers `409 conversion_in_progress {change_set_id,
-  batch | null}` ([changes.md](changes.md)); applying or discarding the batch lifts it.
-- The change set carries `legacy_conversion: {batch, batches_total} | null` and, like every set,
-  `viewer` ([changes.md](changes.md)).
-
-## Older route removal: the `legacy_routing_rule` kind (ux U79, director 11-16)
-
-Delete only, through `POST /config/stage`: `{kind: "legacy_routing_rule", action: "delete",
-entity_id: <routing_rule_id>}`; it archives the rule when the set is applied. Not temporary: it
-stays while any legacy row can exist. The console infers 'Removal staged' per row from the open
-change set (`GET /config`), so the routing read carries no flag.
-
-- Refused at stage (`422 invalid_op`, empty path, nothing staged), in ux's words: 'This route was
-  converted already. Remove it as an extra route.'; 'This rule can't be removed here.'; and for a
-  create or update, 'Older routes can only be removed.'
-- Named in the preview, the change list and the history (`entity_name`) as `“<name>” ·
-  <spacecraft>`, `INU · <spacecraft>` without a name, without ` · …` when the spacecraft has no
-  name; never an id. The console adds its verb ('Remove older route …').
-- A rollback past a removal is NO-GO with a validation item: 'The older route “<name>” ·
-  <spacecraft> was removed and can't be restored. To route that way again, add an extra route.'
-
 
 ## Source endpoints
 

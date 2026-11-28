@@ -34,15 +34,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsoleTest do
              )
   end
 
-  test "requires subject ids for subject-scoped surfaces" do
-    assert {:error, :unsupported_application_surface_query} =
-             OpsConsole.load(
-               scope(),
-               HostContext.mission("mission-1"),
-               request("contact_plan_show", %{})
-             )
-  end
-
   test "keeps every descriptor query pointed at this executable provider" do
     assert Enum.all?(
              Cadence.Applications.OpsConsole.surface_query_contributions(),

@@ -85,6 +85,7 @@ defmodule Cadence.OTPClusterSpike.Runtime do
         generation: 1,
         binding_set_id: binding.binding_set_id,
         binding_set_version: binding.version,
+        binding_set_content_sha256: MissionRuntimeSpec.content_sha256(binding),
         binding_set: binding,
         mission_model_revision_id: compilation.revision.revision_id,
         mission_model_content_sha256: compilation.revision.content_sha256,

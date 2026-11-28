@@ -198,11 +198,26 @@ defmodule Cadence.MissionModels do
           {:ok, %{required(atom()) => RuntimePlan.t()}} | {:error, term()}
   def fetch_runtime_plans(organization_id, mission_id, revision_id)
       when is_binary(mission_id) and is_binary(revision_id) do
-    [:telemetry, :algorithm, :monitoring, :command]
-    |> Enum.reduce_while({:ok, %{}}, fn target, {:ok, plans} ->
-      case fetch_plan(organization_id, mission_id, revision_id, target) do
-        {:ok, plan} -> {:cont, {:ok, Map.put(plans, target, plan)}}
-        {:error, reason} -> {:halt, {:error, {target, reason}}}
+    targets = [:telemetry, :algorithm, :monitoring, :command]
+    names = Enum.map(targets, &Atom.to_string/1)
+
+    # One read for the four plans (a request loads the basis several times). The error is still the
+    # first missing target in this order.
+    found =
+      RuntimePlanRow
+      |> where(
+        [row],
+        row.mission_id == ^mission_id and row.revision_id == ^revision_id and
+          row.target in ^names
+      )
+      |> organization_filter(organization_id)
+      |> Repo.all()
+      |> Map.new(&{&1.target, &1})
+
+    Enum.reduce_while(targets, {:ok, %{}}, fn target, {:ok, plans} ->
+      case Map.fetch(found, Atom.to_string(target)) do
+        {:ok, row} -> {:cont, {:ok, Map.put(plans, target, RuntimePlanRow.to_domain(row))}}
+        :error -> {:halt, {:error, {target, :mission_model_runtime_plan_not_found}}}
       end
     end)
   end

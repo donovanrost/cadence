@@ -21,7 +21,7 @@ defmodule Cadence.Catalog.MissionModel.Reference do
     monitoring_policy command_argument_type command_argument command_encoding command
     command_constraint command_verifier stream service extension)a
   @roles ~w(argument base calibrator command condition criteria effect encoding entry input
-    output parameter type unit)a
+    output overrides parameter type unit)a
   @kinds_by_name Map.new(@kinds, &{Atom.to_string(&1), &1})
   @roles_by_name Map.new(@roles, &{Atom.to_string(&1), &1})
 

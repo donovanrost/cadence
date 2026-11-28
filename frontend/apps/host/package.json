@@ -16,7 +16,6 @@
   },
   "dependencies": {
     "@cadence/commanding": "workspace:*",
-    "@cadence/communications": "workspace:*",
     "@cadence/dashboards-and-exploration": "workspace:*",
     "@cadence/data-operations": "workspace:*",
     "@cadence/design-tokens": "workspace:*",

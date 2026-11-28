@@ -54,6 +54,14 @@ defmodule Cadence.Commanding.LaneDispatcher do
   end
 
   @doc """
+  Asks the lane to dispatch now and returns at once (`drain/1` waits for the answer). A lane that
+  doesn't answer, or never gets this, still dispatches on its own timers and the dispatcher's
+  safety reconcile.
+  """
+  @spec notify(GenServer.server()) :: :ok
+  def notify(server), do: GenServer.cast(server, :notify)
+
+  @doc """
   What the lane last saw and when it dispatches next (#38), for operators: `last_result`
   (`%{result, at}` or nil before its first dispatch), `next_dispatch` (`%{reason, at}` or nil)
   and the wait it last logged. `{:error, :busy}` when the lane is mid-dispatch past `timeout`.
@@ -160,6 +168,18 @@ defmodule Cadence.Commanding.LaneDispatcher do
 
       {:error, error, state} ->
         {:reply, {:error, error}, state}
+    end
+  end
+
+  # An asynchronous `drain` (`notify/1`): nobody waits on the answer (#1041).
+  @impl true
+  def handle_cast(:notify, state) do
+    state = cancel_dispatch_timer(state)
+
+    case drain_available(state, :notification, 0) do
+      {:stop, _summary, state} -> {:stop, :normal, state}
+      {:quiescent, _summary, state} -> {:noreply, state}
+      {:error, _error, state} -> {:noreply, state}
     end
   end
 

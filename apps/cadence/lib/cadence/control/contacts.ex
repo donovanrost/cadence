@@ -195,18 +195,6 @@ defmodule Cadence.Control.Contacts do
     end
   end
 
-  defdelegate list_plan_execution_page(organization_id, mission_id, plan_id, version, page),
-    to: ContactPlanExecutions,
-    as: :list_page
-
-  defdelegate list_contact_records_page(org, mission, kind, page),
-    to: ContactStore,
-    as: :list_record_page
-
-  defdelegate list_provider_reservations_page(org, mission, page),
-    to: ProviderReservations,
-    as: :list_mission_page
-
   @doc "Per-spacecraft in-contact / next AOS / last LOS from booked reservations."
   defdelegate contact_summary(org, mission, now),
     to: ProviderReservations,
@@ -229,14 +217,6 @@ defmodule Cadence.Control.Contacts do
           {:ok, ProviderReservation.t()} | {:error, term()}
   def fetch_provider_reservation(organization_id, mission_id, reservation_id),
     do: ProviderReservations.fetch(organization_id, mission_id, reservation_id)
-
-  defdelegate fetch_provider_change(organization_id, change_id),
-    to: Cadence.Contacts.ProviderReservationChanges,
-    as: :fetch
-
-  defdelegate list_provider_changes_page(org, mission, reservation, before_revision),
-    to: Cadence.Contacts.ProviderReservationChanges,
-    as: :list_page
 
   defdelegate approve_provider_change(scope, change_id, hash, reason),
     to: Cadence.Contacts.ProviderChangeApprovals,

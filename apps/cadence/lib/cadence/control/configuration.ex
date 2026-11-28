@@ -46,10 +46,10 @@ defmodule Cadence.Control.Configuration do
   @spec permissions(Scope.t(), String.t()) :: {:ok, [String.t()]} | {:error, term()}
   defdelegate permissions(scope, mission_id), to: Access
 
-  @spec current(Scope.t(), String.t()) :: {:ok, map()} | {:error, term()}
-  def current(%Scope{} = scope, mission_id) do
+  @spec current(Scope.t(), String.t(), String.t()) :: {:ok, map()} | {:error, term()}
+  def current(%Scope{} = scope, mission_id, lane \\ "configuration") do
     with {:ok, mission} <- Access.authorize(scope, mission_id, :read) do
-      {:ok, Status.current(mission.organization_id, mission.mission_id)}
+      {:ok, Status.current(mission.organization_id, mission.mission_id, lane)}
     end
   end
 
