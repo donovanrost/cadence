@@ -26,8 +26,7 @@ defmodule Cadence.Persistence.Retention do
     * `identity_state_settlement_allowance_hours` (24) and `identity_state_interval_ms` (1 h): the
       identity-state rule (`Cadence.Telemetry.Storage.ObservationIdentityStates.Retention`);
     * `background_job_days` (14): how long completed and failed background jobs remain after
-      completion (`Cadence.Jobs.Retention`); historical telemetry workflow jobs remain until
-      their corrections no longer read source jobs (#976).
+      completion (`Cadence.Jobs.Retention`).
 
   The observation retention is `:telemetry_observation_retention`'s `retention_days` (30), the
   same setting QuestDB's day-partition retention uses.

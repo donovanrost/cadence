@@ -362,6 +362,39 @@ defmodule Cadence.SpacecraftStore do
   end
 
   @doc """
+  One page of `spacecraft_ids` (the mission's only), as `%{"id", "name", "scid"}` sorted by name
+  then id after `after_key` (`{name, id}` or nil), and how many of the ids are the mission's: a
+  keyset page over an id set however large (#678).
+  """
+  @spec names_page_of(binary(), binary(), [binary()], {binary(), binary()} | nil, pos_integer()) ::
+          {[map()], non_neg_integer()}
+  def names_page_of(_organization_id, _mission_id, [], _after_key, _limit), do: {[], 0}
+
+  def names_page_of(organization_id, mission_id, spacecraft_ids, after_key, limit)
+      when is_integer(limit) and limit > 0 do
+    scoped =
+      from(row in SpacecraftRow,
+        where:
+          row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+            row.spacecraft_id in ^spacecraft_ids
+      )
+
+    rows =
+      scoped
+      |> order_by([row], asc: row.display_name, asc: row.spacecraft_id)
+      |> limit(^limit)
+      |> select([row], %{
+        "id" => row.spacecraft_id,
+        "name" => row.display_name,
+        "scid" => row.scid
+      })
+      |> after_name(after_key)
+      |> Repo.all()
+
+    {rows, Repo.aggregate(scoped, :count)}
+  end
+
+  @doc """
   One page of the mission's spacecraft names (#847), the rows `display_names/4` returns with
   `scid: true`, sorted
   by name then id so pages are stable: the `limit` rows after `after` (`{name, id}`, the previous

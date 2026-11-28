@@ -24,7 +24,9 @@ defmodule Cadence.Limits.Evaluator do
   def violation?(:blue), do: false
   def violation?(_state), do: true
 
-  @spec severity(limit_state()) :: non_neg_integer()
+  @spec severity(limit_state() | :unknown) :: non_neg_integer()
+  # A stored state this version does not know (`StateText`, #1025) ranks as no violation.
+  def severity(:unknown), do: 0
   def severity(:green), do: 0
   def severity(:blue), do: 0
   def severity(:yellow_low), do: 1
@@ -32,7 +34,8 @@ defmodule Cadence.Limits.Evaluator do
   def severity(:red_low), do: 2
   def severity(:red_high), do: 2
 
-  @spec normalize_state(limit_state()) :: :red | :yellow | :green | :blue
+  @spec normalize_state(limit_state() | :unknown) :: :red | :yellow | :green | :blue | :unknown
+  def normalize_state(:unknown), do: :unknown
   def normalize_state(:red_low), do: :red
   def normalize_state(:red_high), do: :red
   def normalize_state(:yellow_low), do: :yellow

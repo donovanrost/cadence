@@ -23,6 +23,7 @@ Conventions: [README.md](README.md). Requested shapes: `docs/apogee/plans/setup-
 | G1, T1, T2 | `GET /missions/:mission_id/ground-stations`, `/transports`, `/routing-rules` | **implemented** |
 | kind schema | `GET /missions/:mission_id/config/kinds/:kind/schema` | **implemented** |
 | catalog APIDs | `GET /missions/:mission_id/catalog/revisions/:revision_id/apids` | **implemented** (L17) |
+| revision spacecraft | `GET /missions/:mission_id/catalog/revisions/:revision_id/spacecraft` | **implemented** (#678, `Cadence.Reads.CatalogRevisionSpacecraft`) |
 
 ## `GET /api/v1/missions/:mission_id/spacecraft`
 
@@ -773,6 +774,26 @@ server-computed effect counts.
 - Profiles: active ones, sorted by name. Spacecraft pinned to a deleted profile aren't counted.
 - Errors: `404 catalog_revision_not_found`.
 - Live: refetch on `invalidate` with `catalog` or `spacecraft`.
+
+## `GET /api/v1/missions/:mission_id/catalog/revisions/:revision_id/spacecraft` (#678)
+
+The spacecraft that use a catalog revision, paged by name then id. Members of the mission.
+
+- Answers `{data: {spacecraft: [{id, name, scid, uses, configuration_version}]}, meta: {total,
+  next_cursor}}`.
+- `uses` is a closed vocabulary: a non-empty subset of `["saved", "active"]`, in that order.
+  - `saved`: the craft's **latest** saved configuration names this revision.
+  - `active`: its active generation runs it.
+- `configuration_version` is the craft's latest saved configuration version, or `null` when it
+  has none.
+- `scid` is `null` for a craft without one, and `name` is the craft's display name.
+- `total` counts every craft that uses the revision. `?limit=` is 1–500 (default 200); a limit
+  outside that range falls back to 200.
+- Pass the previous `meta.next_cursor` as `?cursor=` for the next page; it's `null` on the last
+  page.
+- A fixed number of queries for any fleet size.
+- Errors: `404 catalog_revision_not_found`, and `422 invalid_params` (`details.cursor`) for a cursor
+  the server didn't make.
 
 ## `GET /api/v1/missions/:mission_id/catalog/revisions/:revision_id/apids` (§11 L17)
 

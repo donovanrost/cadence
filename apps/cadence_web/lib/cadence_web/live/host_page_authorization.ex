@@ -9,10 +9,8 @@ defmodule CadenceWeb.HostPageAuthorization do
 
   @organization {OrganizationAuth, :require_organization_scope}
   @mission {MissionAuth, :load_mission}
-  @admin {OrganizationAuth, :require_organization_admin}
   @policies %{
-    ops: {@organization, [@mission], true},
-    ops_admin: {@organization, [@admin, @mission], true}
+    ops: {@organization, [@mission], true}
   }
 
   def prepare(socket, policy, params) do

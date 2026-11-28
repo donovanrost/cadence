@@ -18,8 +18,6 @@ config :cadence, :job_handlers, %{
     {Cadence.Projections.TelemetryLatestLimitStates, :execute_enqueued_run},
   mission_event_rebuild: {Cadence.Projections.MissionEvents, :execute_enqueued_run},
   catalog_import_run: {Cadence.Catalog, :execute_enqueued_run},
-  telemetry_historical_data_workflow:
-    {Cadence.Telemetry.DataManagement, :execute_enqueued_historical_data_workflow},
   managed_questdb_provisioning:
     {Cadence.Control.DataSources.ManagedQuestDBProvisioningJobs, :execute_enqueued_run},
   tsdb_backend_lifecycle:

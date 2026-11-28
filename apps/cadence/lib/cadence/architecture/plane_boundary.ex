@@ -129,8 +129,6 @@ defmodule Cadence.Architecture.PlaneBoundary do
                         "lib/cadence/applications/ops_console/actions/data_sources.ex",
                         "lib/cadence/applications/ops_console/actions/platform_bindings.ex",
                         "lib/cadence/applications/ops_console/actions/fleet_planning.ex",
-                        "lib/cadence/applications/ops_console/actions/historical_workflow_actions.ex",
-                        "lib/cadence/applications/ops_console/actions/historical_workflow_request.ex",
                         "lib/cadence/applications/ops_console/actions/plan_decisions.ex",
                         "lib/cadence/applications/ops_console/actions/plan_review_workflow.ex",
                         "lib/cadence/applications/ops_console/actions/provider_change_decisions.ex",

@@ -20,7 +20,7 @@ defmodule Cadence.Reads.CommandGroups do
 
   alias Cadence.Commanding.Groups.{CommandGroup, GroupStore, MemberCheck}
   alias Cadence.Reads.{CommandCatalog, Commands}
-  alias Cadence.Reads.CommandGroups.{Expiry, ReleaseRefusals, VerifyTimes}
+  alias Cadence.Reads.CommandGroups.{Expiry, ReleaseRefusals, VerifyTimes, WithdrawnAfterGo}
   alias Cadence.Reads.CommandPreflight.{ResolvedArguments, VerifierGroups}
 
   # Final member stages. `indeterminate` (an uncertain release) isn't: an operator must resolve
@@ -134,10 +134,11 @@ defmodule Cadence.Reads.CommandGroups do
       lanes = Map.new(members, &{&1.group_slot.target_index, &1.source_endpoint_ref})
       events = GroupStore.events(mission, id)
 
-      targets =
+      {targets, withdrawn_after_go} =
         group
         |> target_views(members, rows, &blocked(&1, &2, lanes, held))
         |> ReleaseRefusals.put(events, org, mission)
+        |> WithdrawnAfterGo.put(org, mission)
 
       revision_id = members |> List.first() |> then(&(&1 && &1.mission_model_revision_id))
 
@@ -149,6 +150,7 @@ defmodule Cadence.Reads.CommandGroups do
          catalog_revision: CommandCatalog.catalog_revision(org, mission, revision_id),
          group: group,
          targets: targets,
+         withdrawn_after_go: withdrawn_after_go,
          progress: Enum.frequencies_by(targets, & &1.stage),
          finished: Enum.all?(targets, &(&1.stage in @finished)),
          expiry: Expiry.summary(group, targets),

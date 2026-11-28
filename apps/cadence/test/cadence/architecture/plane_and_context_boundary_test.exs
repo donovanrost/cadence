@@ -256,7 +256,7 @@ defmodule Cadence.Architecture.PlaneAndContextBoundaryTest do
 
   test "reviewed UI request adapters can orchestrate public owners but cannot consume their rows" do
     for name <-
-          ~w(contact_planning data_sources fleet_planning historical_workflow_actions) do
+          ~w(contact_planning data_sources fleet_planning) do
       path = "lib/cadence/applications/ops_console/actions/#{name}.ex"
       assert PlaneBoundary.classify(path) == :adapter
       assert ContextBoundary.classify(path) == :adapter
