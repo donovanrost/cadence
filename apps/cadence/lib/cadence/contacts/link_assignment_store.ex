@@ -57,11 +57,11 @@ defmodule Cadence.Contacts.LinkAssignmentStore do
       nil ->
         {:error, :contact_link_assignment_not_found}
 
-      %LinkAssignmentRow{lifecycle_state: "deleted"} ->
-        {:error, :contact_link_assignment_not_found}
-
-      %LinkAssignmentRow{} = row ->
+      %LinkAssignmentRow{lifecycle_state: "active"} = row ->
         {:ok, LinkAssignmentRow.to_domain(row)}
+
+      %LinkAssignmentRow{} ->
+        {:error, :contact_link_assignment_not_found}
     end
   end
 
@@ -76,32 +76,45 @@ defmodule Cadence.Contacts.LinkAssignmentStore do
       nil ->
         {:error, :contact_link_assignment_not_found}
 
-      %LinkAssignmentRow{lifecycle_state: "deleted"} ->
-        {:error, :contact_link_assignment_not_found}
-
-      %LinkAssignmentRow{} = row ->
+      %LinkAssignmentRow{lifecycle_state: "active"} = row ->
         {:ok, LinkAssignmentRow.to_domain(row)}
+
+      %LinkAssignmentRow{} ->
+        {:error, :contact_link_assignment_not_found}
     end
   end
 
-  @doc "Non-deleted mission assignments keyed by their exact IDs."
+  @doc "Active mission assignments keyed by ID."
   def fetch_many(organization_id, mission_id, ids) do
     LinkAssignmentRow
     |> where([row], row.organization_id == ^organization_id)
-    |> assignments_by_id(mission_id, Enum.uniq(ids))
+    |> assignments_by_id(mission_id, ids, ["active"])
   end
 
   @doc false
   def fetch_many(mission_id, ids),
-    do: assignments_by_id(LinkAssignmentRow, mission_id, Enum.uniq(ids))
+    do: assignments_by_id(LinkAssignmentRow, mission_id, ids, ["active"])
 
-  defp assignments_by_id(_query, _mission_id, []), do: %{}
+  @doc "Loads recorded contact pins, including assignments superseded by a transport revision."
+  def fetch_pinned_many(organization_id, mission_id, ids)
+      when is_binary(organization_id) and organization_id != "" do
+    LinkAssignmentRow
+    |> where([row], row.organization_id == ^organization_id)
+    |> assignments_by_id(mission_id, ids, ["active", "superseded"])
+  end
 
-  defp assignments_by_id(query, mission_id, ids) do
+  def fetch_pinned_many(_organization_id, mission_id, ids),
+    do: assignments_by_id(LinkAssignmentRow, mission_id, ids, ["active", "superseded"])
+
+  defp assignments_by_id(_query, _mission_id, [], _states), do: %{}
+
+  defp assignments_by_id(query, mission_id, ids, states) do
+    ids = Enum.uniq(ids)
+
     query
     |> where(
       [row],
-      row.mission_id == ^mission_id and row.lifecycle_state != "deleted" and
+      row.mission_id == ^mission_id and row.lifecycle_state in ^states and
         row.link_assignment_id in ^ids
     )
     |> Repo.all()
@@ -170,6 +183,20 @@ defmodule Cadence.Contacts.LinkAssignmentStore do
       LinkAssignmentRow,
       Stream.map(assignments, &LinkAssignmentRow.changeset/1)
     )
+  end
+
+  @doc false
+  def supersede_route_assignments(_organization_id, _mission_id, []), do: :ok
+
+  def supersede_route_assignments(organization_id, mission_id, ids) do
+    from(row in LinkAssignmentRow,
+      where:
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.link_assignment_id in ^ids and row.lifecycle_state == "active"
+    )
+    |> Repo.update_all(set: [lifecycle_state: "superseded"])
+
+    :ok
   end
 
   @doc false

@@ -70,6 +70,15 @@ defmodule Cadence.Contacts.ScheduleOperations do
         {:ok,
          %{contract_version: 2, operation_id: id, status: "not_accepted", reason: "conflict"}}
 
+      {:error, :transport_archived} ->
+        {:ok,
+         %{
+           contract_version: 2,
+           operation_id: id,
+           status: "not_accepted",
+           reason: "transport_archived"
+         }}
+
       {:error, _} ->
         {:ok,
          %{

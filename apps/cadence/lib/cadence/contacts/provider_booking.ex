@@ -66,7 +66,7 @@ defmodule Cadence.Contacts.ProviderBooking do
          {:ok, client} <- resolve_client(context, opts),
          {:ok, attempt} <- build_attempt(organization_id, mission_id, provider, attrs),
          {:ok, reservation, outcome} <-
-           ProviderReservations.create_attempt_with_outcome(organization_id, attempt) do
+           ProviderReservations.create_attempt_with_current_transport(organization_id, attempt) do
       case outcome do
         :existing -> booking_result(reservation)
         :created -> submit_reservation(reservation, context, client, attrs, call_opts)

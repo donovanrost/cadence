@@ -120,12 +120,23 @@ defmodule Cadence.Contacts.ProviderScheduling do
   @spec resolve_ready_downlink_route(binary(), binary(), binary(), binary()) ::
           {:ok, ready_route()} | {:error, term()}
   def resolve_ready_downlink_route(organization_id, mission_id, spacecraft_id, route_key) do
-    with {:ok, %{routes: routes}} <-
+    with {:ok, %{routes: routes, findings: findings}} <-
            list_ready_downlink_routes(organization_id, mission_id, spacecraft_id) do
       case Enum.find(routes, &(&1.route_key == route_key)) do
-        nil -> {:error, :provider_scheduling_route_not_ready}
+        nil -> unavailable_route(findings, spacecraft_id, route_key)
         route -> {:ok, route}
       end
+    end
+  end
+
+  defp unavailable_route(findings, spacecraft_id, route_key) do
+    if Enum.any?(findings, fn finding ->
+         finding.code == :transport_archived and
+           String.starts_with?(route_key, "#{spacecraft_id}:#{finding.resource_id}:")
+       end) do
+      {:error, :transport_archived}
+    else
+      {:error, :provider_scheduling_route_not_ready}
     end
   end
 
@@ -275,7 +286,8 @@ defmodule Cadence.Contacts.ProviderScheduling do
   end
 
   defp resolve_rule(spacecraft, endpoints, rule, pins) do
-    with {:ok, assignment} <- downlink_assignment(rule, pins.assignments),
+    with :ok <- current_transport_pin(rule, pins.current_transports),
+         {:ok, assignment} <- downlink_assignment(rule, pins.assignments),
          {:ok, template} <-
            fetch_pin(
              pins.templates,
@@ -301,6 +313,7 @@ defmodule Cadence.Contacts.ProviderScheduling do
          :ok <- profiles_compatible(service_profile, delivery_profile),
          :ok <- transport_snapshot_matches(transport, provider, service_profile, delivery_profile),
          {:ok, runtime_profile} <- runtime_profile(transport, pins.profiles),
+         :ok <- runtime_profile_pin(runtime_profile, assignment, template),
          {:ok, context} <- ProviderContext.from_mission_provider(provider),
          {:ok, client} <- Registry.fetch(context) do
       {:ok,
@@ -348,6 +361,32 @@ defmodule Cadence.Contacts.ProviderScheduling do
       {:error, reason} ->
         route_error(:provider_route_not_ready, readiness_message(reason), rule)
     end
+  end
+
+  defp current_transport_pin(rule, pins) do
+    case Map.get(pins, rule.transport_id) do
+      nil ->
+        {:error, :transport_not_found}
+
+      {_version, state} when state != "active" ->
+        {:error, :transport_archived, "The Transport is archived."}
+
+      {version, "active"} when version == rule.transport_version ->
+        :ok
+
+      {_version, "active"} ->
+        {:error, :transport_version_changed,
+         "The Routing Rule has not reached the current Transport version."}
+    end
+  end
+
+  defp runtime_profile_pin(profile, assignment, template) do
+    ref = %{"provider_profile_id" => profile.provider_profile_id, "version" => profile.version}
+
+    if ref in template.provider_profile_refs and
+         (assignment.provider_profile_refs == [] or ref in assignment.provider_profile_refs),
+       do: :ok,
+       else: {:error, :transport_runtime_profile_mismatch}
   end
 
   defp downlink_rule?(%RoutingRule{} = rule) do

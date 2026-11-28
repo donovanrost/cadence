@@ -58,6 +58,12 @@ defmodule Cadence.Contacts.ProviderScheduling.RoutePins do
       assignments: assignments,
       templates: templates,
       transports: transports,
+      current_transports:
+        TransportStore.current_route_pins(
+          organization_id,
+          mission_id,
+          Enum.map(rules, & &1.transport_id)
+        ),
       providers: providers,
       provider_readiness:
         Map.new(providers, fn {key, provider} ->

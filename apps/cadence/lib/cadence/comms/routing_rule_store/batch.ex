@@ -1,11 +1,15 @@
 defmodule Cadence.Comms.RoutingRuleStore.Batch do
   @moduledoc false
 
+  import Ecto.Query
+
   alias Cadence.Comms.{RoutingRuleEventRow, RoutingRuleRow, RoutingRuleStore, TransportStore}
   alias Cadence.Comms.UplinkGateway
   alias Cadence.Contacts.{LinkAssignmentStore, PathTemplateStore, ProfileStore}
-  alias Cadence.Persistence.BulkInsert
+  alias Cadence.Persistence.{BulkInsert, JsonDocument}
+  alias Cadence.Repo
   alias Cadence.SourceEndpoints
+  alias Cadence.SpacecraftStore
 
   @updated_fields [
     :lifecycle_state,
@@ -40,6 +44,92 @@ defmodule Cadence.Comms.RoutingRuleStore.Batch do
          :ok <- persist_artifacts(active) do
       persist_rows(changes, active)
     end
+  end
+
+  def repin(_transport, []), do: :ok
+
+  def repin(transport, current) do
+    %{organization_id: org, mission_id: mission, version: version, transport_id: id} = transport
+    next = Enum.map(current, &%{&1 | transport_version: version})
+    changes = Enum.zip_with(current, next, &{&1, &2, :updated})
+    enabled = Enum.filter(changes, fn {_, rule, _} -> rule.enabled? end)
+    spacecraft_ids = Enum.map(enabled, fn {_, rule, _} -> rule.spacecraft_id end)
+    transports = %{id => transport}
+
+    with {:ok, spacecraft} <-
+           SpacecraftStore.fetch_spacecrafts_in_batches(org, mission, spacecraft_ids),
+         context = %{spacecraft: spacecraft, transports: transports},
+         providers = load_providers(org, mission, enabled, transports),
+         {:ok, plans} <- materialize(enabled, context, providers),
+         :ok <- supersede(org, mission, enabled),
+         :ok <-
+           SourceEndpoints.ensure_managed_source_endpoints(org, mission, Map.values(spacecraft)),
+         :ok <- persist_artifacts(plans) do
+      refreshed = Map.new(plans, fn {rule, _, _, _} -> {rule.routing_rule_id, rule} end)
+      rules = Enum.map(next, &Map.get(refreshed, &1.routing_rule_id, &1))
+      write_repinned_rules(transport, rules)
+    else
+      {:error, _route_id, reason} -> {:error, reason}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp supersede(org, mission, changes) do
+    assignments = changes |> retired_by("materialized_link_assignment_ids") |> Map.keys()
+    templates = retired_by(changes, "materialized_path_template_ids")
+
+    with :ok <- LinkAssignmentStore.supersede_route_assignments(org, mission, assignments),
+         {:ok, _} <- PathTemplateStore.retire_route_templates(org, mission, templates) do
+      :ok
+    end
+  end
+
+  defp write_repinned_rules(transport, rules) do
+    count = length(rules)
+
+    with {^count, _rows} <- update_route_pins(transport, rules),
+         {:ok, _} <-
+           BulkInsert.changesets(
+             RoutingRuleEventRow,
+             Enum.map(rules, &event_changeset(&1, :updated))
+           ) do
+      :ok
+    else
+      {updated, _rows} when is_integer(updated) -> {:error, :transport_routes_changed}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp update_route_pins(transport, rules) do
+    changes =
+      Enum.map(rules, fn rule ->
+        %{
+          id: rule.routing_rule_id,
+          assignment: rule.materialized_link_assignment_id,
+          metadata: JsonDocument.wrap_value(rule.metadata)
+        }
+      end)
+
+    types = %{id: :string, assignment: :string, metadata: :map}
+    now = DateTime.utc_now()
+
+    from(row in RoutingRuleRow,
+      join: refreshed in values(changes, types),
+      on: row.routing_rule_id == refreshed.id,
+      where:
+        row.organization_id == ^transport.organization_id and
+          row.mission_id == ^transport.mission_id and
+          row.transport_id == ^transport.transport_id and row.lifecycle_state == "active",
+      update: [
+        set: [
+          transport_version: ^transport.version,
+          materialized_link_assignment_id: refreshed.assignment,
+          metadata: refreshed.metadata,
+          updated_at: ^now
+        ]
+      ]
+    )
+    |> Repo.update_all([])
   end
 
   defp load_providers(org, mission, active, transports) do
@@ -99,14 +189,26 @@ defmodule Cadence.Comms.RoutingRuleStore.Batch do
   end
 
   defp artifacts(rule, spacecraft, transport, provider) do
-    gateway =
-      if rule.direction == :outbound,
-        do: UplinkGateway.profile(rule, spacecraft, transport, provider)
-
     endpoint = SourceEndpoints.managed_source_endpoint_id(spacecraft.spacecraft_id)
-    artifacts = RoutingRuleStore.route_artifacts(rule, endpoint, provider, gateway)
-    {RoutingRuleStore.merge_materialized_refs(rule, [artifacts]), gateway, artifacts}
+
+    {gateways, artifacts} =
+      Enum.map(directions(rule.direction), fn direction ->
+        leg = %{rule | direction: direction}
+
+        gateway =
+          if direction == :outbound,
+            do: UplinkGateway.profile(leg, spacecraft, transport, provider)
+
+        {gateway, RoutingRuleStore.route_artifacts(leg, endpoint, provider, gateway)}
+      end)
+      |> Enum.unzip()
+
+    {RoutingRuleStore.merge_materialized_refs(rule, artifacts), Enum.reject(gateways, &is_nil/1),
+     artifacts}
   end
+
+  defp directions(:bidirectional), do: [:inbound, :outbound]
+  defp directions(direction), do: [direction]
 
   defp retire(org, mission, changes) do
     assignments = retired_by(changes, "materialized_link_assignment_ids")
@@ -127,9 +229,10 @@ defmodule Cadence.Comms.RoutingRuleStore.Batch do
   end
 
   defp persist_artifacts(plans) do
-    gateways = for {_, _, gateway, _} <- plans, gateway != nil, do: gateway
-    templates = Enum.map(plans, fn {_, _, _, artifacts} -> artifacts.path_template end)
-    assignments = Enum.map(plans, fn {_, _, _, artifacts} -> artifacts.link_assignment end)
+    gateways = Enum.flat_map(plans, fn {_, _, gateways, _} -> gateways end)
+    artifacts = Enum.flat_map(plans, fn {_, _, _, artifacts} -> artifacts end)
+    templates = Enum.map(artifacts, & &1.path_template)
+    assignments = Enum.map(artifacts, & &1.link_assignment)
 
     with {:ok, _} <- ProfileStore.persist_route_gateways(gateways),
          {:ok, _} <- PathTemplateStore.persist_route_templates(templates),

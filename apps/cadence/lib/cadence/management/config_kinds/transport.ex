@@ -25,6 +25,7 @@ defmodule Cadence.Management.ConfigKinds.Transport do
     GroundStationStore,
     ListenClaims,
     ListenerChoice,
+    RoutingRuleStore,
     Transport,
     TransportKind,
     TransportStore
@@ -231,6 +232,24 @@ defmodule Cadence.Management.ConfigKinds.Transport do
       {:error, reason} -> {:error, reason}
     end
   end
+
+  @impl true
+  def effect(organization_id, mission_id, :update, id, _previous, _proposed, _options) do
+    case TransportStore.fetch_transport(organization_id, mission_id, id) do
+      {:ok, transport} ->
+        target = %{transport | version: transport.version + 1}
+        count = RoutingRuleStore.count_routes_to_repin(target)
+
+        if count > 0 do
+          %{changes: 0, keeps: [], route_count: count, transport_version: target.version}
+        end
+
+      {:error, _missing} ->
+        nil
+    end
+  end
+
+  def effect(_organization_id, _mission_id, _action, _id, _previous, _proposed, _options), do: nil
 
   @impl true
   def stage_check(organization_id, mission_id, :delete, entity_id, deleting) do
