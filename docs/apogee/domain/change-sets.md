@@ -185,8 +185,16 @@ lazily on the first stage.
 
 `stage(scope, change_attrs, ops)` runs under the mission configuration lock
 (`L/applications/configuration_lock.ex`):
-1. Find or create the open set. Return `{:error, :change_set_in_review}` while a set is in review
-   (one shared set per mission; staging resumes when it is approved or sent back).
+1. Find or create the open set **of the ops' lane** (ADR-020 P3 slice L, #451; U108):
+   - **configuration** keeps one shared set per mission and refuses staging while it's in review
+     (staging resumes when it's approved or sent back);
+   - **monitoring** has one open set, and its sets in review don't count, so staging opens a new
+     one.
+
+   Every kind is in one lane (`ConfigKind.lane/0`, `:configuration` by default). One request's ops
+   must be one lane's (`mixed_lanes`). Both lanes write one ledger, ordered by the head lock. Another
+   lane's revision never makes a set's base stale, because conflicts are checked only on the set's
+   own paths, which the other lane never touches.
 2. Load the current documents for each op, resolve `base`, and run the kind's field validation
    (types, ranges, references). Invalid → `{:error, {:invalid, [%{path, message}]}}`, nothing
    staged.

@@ -32,10 +32,11 @@ defmodule Cadence.Configuration.Staging do
   def stage(organization_id, mission_id, head_revision, actor, attrs, ops)
       when is_list(ops) and length(ops) in 1..@max_ops do
     with {:ok, summary} <- summary(attrs),
-         {:ok, prepared} <- prepare_all(organization_id, mission_id, ops) do
+         {:ok, lane} <- lane(ops),
+         {:ok, prepared} <- prepare_all(organization_id, mission_id, ops, lane) do
       Repo.transaction(fn ->
         organization_id
-        |> ChangeSetStore.lock_or_open(mission_id, head_revision, actor)
+        |> ChangeSetStore.lock_or_open(mission_id, head_revision, actor, lane)
         |> stage_locked(actor, summary, Map.get(attrs, :source, %{}), prepared)
       end)
     end
@@ -77,6 +78,23 @@ defmodule Cadence.Configuration.Staging do
     end
   end
 
+  @doc """
+  The lane one staging request's ops go to (ADR-020 P3, #451): every kind is in exactly one lane,
+  and one request stages into one set, so ops of two lanes are refused (`:mixed_lanes`). An
+  unknown kind is left for its op's own refusal.
+  """
+  @spec lane([op_input()]) :: {:ok, String.t()} | {:error, :mixed_lanes}
+  def lane(ops) do
+    lanes =
+      for op <- ops, {:ok, kind} <- [kind(op)], uniq: true, do: Kinds.lane(kind)
+
+    case lanes do
+      [] -> {:ok, "configuration"}
+      [lane] -> {:ok, lane}
+      _several -> {:error, :mixed_lanes}
+    end
+  end
+
   defp rollback?(%{"rollback" => %{}}), do: true
   defp rollback?(_source), do: false
 
@@ -84,7 +102,8 @@ defmodule Cadence.Configuration.Staging do
   @spec prepare_ops(String.t(), String.t(), [op_input()]) :: {:ok, [map()]} | {:error, term()}
   def prepare_ops(organization_id, mission_id, ops)
       when is_list(ops) and length(ops) in 1..@max_ops do
-    with {:ok, prepared} <- prepare_all(organization_id, mission_id, ops) do
+    with {:ok, lane} <- lane(ops),
+         {:ok, prepared} <- prepare_all(organization_id, mission_id, ops, lane) do
       {:ok,
        prepared
        |> Enum.with_index()
@@ -108,8 +127,8 @@ defmodule Cadence.Configuration.Staging do
   defp summary(_attrs),
     do: {:error, {:invalid_op, 0, [%{path: "summary", message: "Enter a short summary"}]}}
 
-  defp prepare_all(organization_id, mission_id, ops) do
-    deleting = deleting(mission_id, ops)
+  defp prepare_all(organization_id, mission_id, ops, lane) do
+    deleting = deleting(mission_id, ops, lane)
     documents = prefetch_documents(organization_id, mission_id, ops)
 
     ops
@@ -275,9 +294,9 @@ defmodule Cadence.Configuration.Staging do
   # What's being deleted beside an op: this stage's deletes and those already staged in the open
   # set, as {kind, entity_id}. A delete whose only users are going too isn't refused at stage
   # (e.g. a station with its transports); apply checks again against live state, op by op.
-  defp deleting(mission_id, ops) do
+  defp deleting(mission_id, ops, lane) do
     staged =
-      case ChangeSetStore.active(mission_id) do
+      case ChangeSetStore.active(mission_id, lane) do
         nil -> []
         set -> ChangeSetStore.staged_ops(set.change_set_id)
       end

@@ -236,6 +236,8 @@ export type GroupEvent = Decoded<typeof eventReader>;
 /** #795: how many targets there are and a revision that moves with any target's stage. */
 const targetsPage = d.object({
   total: d.integer,
+  /** #1064: the targets with no name across the whole group, whatever the page. */
+  unnamed: d.integer,
   revision: d.integer,
   next_cursor: d.nullable(d.string),
 });
@@ -342,13 +344,27 @@ export type Decision = Readonly<{
   acknowledgedHolds?: readonly HoldAck[];
 }>;
 
+/**
+ * #1051 part 4: the decision answer is a summary of the group as decided, with the group read's
+ * own encodings for these six fields; the full read carries them too, so either decodes.
+ */
+export const decisionSummaryReader = d.object({
+  id: groupShape.id,
+  state: groupShape.state,
+  decision: groupShape.decision,
+  decided_by: groupShape.decided_by,
+  decided_at: groupShape.decided_at,
+  review_token: groupShape.review_token,
+});
+export type DecisionSummary = Decoded<typeof decisionSummaryReader>;
+
 export async function decide(
   missionId: MissionId,
   id: string,
   decision: Decision,
-): Promise<WriteOutcome<Group>> {
+): Promise<WriteOutcome<DecisionSummary>> {
   return outcomeOf(
-    await request(`${one(missionId, id)}/decision`, groupReader, {
+    await request(`${one(missionId, id)}/decision`, decisionSummaryReader, {
       method: "POST",
       body: {
         kind: decision.kind,

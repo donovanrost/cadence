@@ -37,6 +37,8 @@ export type TargetsKey = Readonly<{
   q?: string;
   /** Needs you's targets: failed or uncertain, or held behind a release of unknown outcome. */
   needsYou?: boolean;
+  /** #1064: the targets with no name, the ones the GO check counts. */
+  unnamed?: boolean;
   limit?: number;
 }>;
 
@@ -52,6 +54,7 @@ export async function fetchTargetsPage(
   if (key.stages?.length) params.set("stage", key.stages.join(","));
   if (key.q) params.set("q", key.q.slice(0, 100));
   if (key.needsYou) params.set("needs_you", "true");
+  if (key.unnamed) params.set("unnamed", "true");
   if (cursor !== null) params.set("cursor", cursor);
   const r = await requestPageMeta(
     `${base(key.missionId, key.groupId)}/targets?${params.toString()}`,

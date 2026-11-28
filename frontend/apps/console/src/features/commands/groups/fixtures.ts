@@ -55,7 +55,7 @@ export const showBody = {
       payload: { members: 2, second_go_required: true },
     },
   ],
-  targets_page: { total: 1, revision: 1, next_cursor: null },
+  targets_page: { total: 1, unnamed: 0, revision: 1, next_cursor: null },
   events_page: { total: 1, next_cursor: null },
   targets: [
     {
@@ -107,6 +107,7 @@ export function groupOf(overrides: Record<string, unknown> = {}): Group {
     targets,
     targets_page: overrides["targets_page"] ?? {
       total: targets.length,
+      unnamed: targets.filter((t) => !String(Reflect.get(t, "name") ?? "").trim()).length,
       revision: 1,
       next_cursor: null,
     },

@@ -40,7 +40,8 @@ defmodule Cadence.Observability.ScaleSampler do
   `:modules` (mailboxes to watch, default []), `:top` (5), `:postgres_tables` /
   `:questdb_tables` (`Storage` defaults), `:postgres` (true; false where there's no database to
   ask), `:questdb_exec` (a `sql -> result` function for QuestDB; no QuestDB probes without it),
-  `:owner` (a pid; the sampler stops when it goes down) and `:max_ms` (required: a hard stop).
+  `:owner` (a pid; the sampler stops when it goes down), `:max_ms` (required: a hard stop),
+  and `:pre_run_host` (the dedicated runner's settle result from before the workload).
   """
   @spec start(keyword()) :: GenServer.on_start()
   def start(opts), do: GenServer.start(__MODULE__, opts, name: __MODULE__)
@@ -73,6 +74,7 @@ defmodule Cadence.Observability.ScaleSampler do
         questdb_exec: Keyword.get(opts, :questdb_exec),
         pg_tables: Keyword.get(opts, :postgres_tables, Storage.default_postgres_tables()),
         qdb_tables: Keyword.get(opts, :questdb_tables, Storage.default_questdb_tables()),
+        pre_run_host: Keyword.get(opts, :pre_run_host, :local),
         wall_time_was_on?: :erlang.system_flag(:scheduler_wall_time, true),
         owner: Keyword.get(opts, :owner),
         rows: []
@@ -139,7 +141,9 @@ defmodule Cadence.Observability.ScaleSampler do
   def handle_call(:stop, _from, state) do
     state = record(state)
     meta = meta(state)
-    host_capacity = Host.capacity(Enum.map(state.rows, & &1.host), meta.host.logical_cpus)
+
+    host_capacity =
+      Host.capacity(Enum.map(state.rows, & &1.host), meta.host.logical_cpus, state.pre_run_host)
 
     summary =
       state.rows

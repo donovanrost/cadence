@@ -24,6 +24,20 @@ Conventions: [README.md](README.md). Requested shapes: `docs/apogee/plans/setup-
 | kind schema | `GET /missions/:mission_id/config/kinds/:kind/schema` | **implemented** |
 | catalog APIDs | `GET /missions/:mission_id/catalog/revisions/:revision_id/apids` | **implemented** (L17) |
 | revision spacecraft | `GET /missions/:mission_id/catalog/revisions/:revision_id/spacecraft` | **implemented** (#678, `Cadence.Reads.CatalogRevisionSpacecraft`) |
+| change-set lanes | `GET /missions/:mission_id/config?lane=configuration\|monitoring` | **implemented** (#451 slice L; see below) |
+
+## `GET /api/v1/missions/:mission_id/config?lane=`
+
+The head and one lane's staged bar (ADR-020 P3 slice L, #451; ux U108).
+- **`lane`** is `configuration` (the default, so a read without it is unchanged) or `monitoring`. Any other value is `422 invalid_lane`.
+- **The answer** is `{head, lane, change_set, permissions}`.
+  - `change_set` is the lane's active set: configuration's open or in-review set, or monitoring's open set.
+  - A monitoring read adds `in_review`, at most 20 of the monitoring sets in review, oldest first, as summaries `{id, state, opened_at, opened_by, submitted_at, submitted_by, reason, staged_count}`, plus `in_review_count` with the total. Read a set in full through `GET …/config/change-sets/:id`. The read takes the same number of queries however many sets are in review.
+  - Both lanes share `head`: revisions from both are one sequence.
+- **Staging (`POST …/config/stage`)** goes to the lane of its ops' kinds. One request's ops must all be one lane's, or it's `422 mixed_lanes`.
+  - Configuration keeps its rules: one set, frozen while in review (`frozen_in_review`).
+  - Monitoring stages into its open set, opening one when every monitoring set is in review, so review never pauses the lane.
+- **No kind is in the monitoring lane yet.** The limit, alarm-rule and derived-parameter kinds come with slice M.
 
 ## `GET /api/v1/missions/:mission_id/spacecraft`
 
