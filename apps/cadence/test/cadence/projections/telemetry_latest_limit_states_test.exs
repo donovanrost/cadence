@@ -3,8 +3,8 @@ defmodule Cadence.Projections.TelemetryLatestLimitStatesTest do
 
   alias Cadence.Control.DerivedTelemetry, as: DerivedTelemetryService
   alias Cadence.Jobs
-  alias Cadence.Projections.TelemetryLatestLimitStates
   alias Cadence.Limits.Store
+  alias Cadence.Projections.TelemetryLatestLimitStates
   use Cadence.DataCase, async: false
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
