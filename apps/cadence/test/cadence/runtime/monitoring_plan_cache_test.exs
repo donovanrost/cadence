@@ -159,6 +159,48 @@ defmodule Cadence.Runtime.MonitoringPlanCacheTest do
     assert MonitoringPlanCache.loaded(server) == 1
   end
 
+  @tag capture_log: true
+  test "a plan that cannot be decoded fails its caller; the cache keeps serving the others", %{
+    server: server
+  } do
+    good = plans("good", 2)
+
+    bad = %{
+      plans("bad", 1)
+      | algorithm:
+          runtime_plan(:algorithm, "alg-bad", %{
+            algorithms: [
+              %{
+                algorithm_id: "algorithm:bad",
+                input_parameter_ids: ["p0"],
+                time_basis: "no_such_time_basis_atom",
+                outputs: []
+              }
+            ]
+          })
+    }
+
+    owner = GenServer.whereis(server)
+    ref = Process.monitor(owner)
+
+    assert {:ok, index} = MonitoringPlanCache.acquire(server, good)
+
+    # A second process asks for the bad plan: it raises there, in the asking process.
+    {pid, down} = spawn_monitor(fn -> MonitoringPlanCache.acquire(server, bad) end)
+    assert_receive {:DOWN, ^down, :process, ^pid, {%ArgumentError{message: message}, _stack}}
+    assert message =~ "cannot be decoded"
+
+    # The owner is the same process, still holds the good plan, and loads another.
+    refute_received {:DOWN, ^ref, :process, ^owner, _reason}
+    assert GenServer.whereis(server) == owner
+    assert MonitoringPlanCache.loaded(server) == 1
+
+    assert length(PlanIndex.monitoring_for(index, "p0")) == 1 or
+             PlanIndex.monitoring_for(index, "p0") == []
+
+    assert {:ok, _other} = MonitoringPlanCache.acquire(server, plans("another", 3))
+  end
+
   test "a cache that is not running, even behind a registry that is not, gives an index of its own decode" do
     registry = Module.concat(__MODULE__, "NoSuchRegistry#{System.unique_integer([:positive])}")
 
