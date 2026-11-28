@@ -57,9 +57,8 @@ defmodule Cadence.Control.MonitoringGeneration do
   """
   @spec compositions_in_use(binary(), binary()) :: [binary()]
   def compositions_in_use(organization_id, mission_id) do
-    with {:ok, mission} <- Missions.fetch_mission(organization_id, mission_id) do
-      mission |> active() |> in_use(mission) |> elem(0)
-    else
+    case Missions.fetch_mission(organization_id, mission_id) do
+      {:ok, mission} -> mission |> active() |> in_use(mission) |> elem(0)
       _none -> []
     end
   end

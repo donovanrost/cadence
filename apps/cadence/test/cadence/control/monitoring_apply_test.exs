@@ -60,6 +60,33 @@ defmodule Cadence.Control.MonitoringApplyTest do
            )
   end
 
+  test "a monitoring apply leaves every binding's content as it was, ids aside", c do
+    before = bindings!(c)
+    {:ok, _applied} = apply!(c, [create_op(c, "Bus voltage", 30)])
+
+    # Content equal: only the revision-derived ids may differ (commanding's condition on #1106).
+    assert bindings!(c) == before
+  end
+
+  test "an apply refused at commit answers the closed error, never retries" do
+    refused = %Postgrex.Error{postgres: %{constraint: "mission_model_authored_versions_applied"}}
+
+    assert Configuration.committed(fn -> raise refused end) ==
+             {:error, :authored_version_not_applied}
+
+    unknown = %Postgrex.Error{
+      postgres: %{
+        constraint: "something_else",
+        code: :check_violation,
+        pg_code: "23514",
+        severity: "ERROR",
+        message: "another check"
+      }
+    }
+
+    assert_raise Postgrex.Error, fn -> Configuration.committed(fn -> raise unknown end) end
+  end
+
   test "a set refused at submit leaves no version, no head and the fleet as it was", c do
     bad = put_in(create_op(c, "Nowhere", 10).document["parameter"], "/no/such/point")
 
@@ -108,6 +135,28 @@ defmodule Cadence.Control.MonitoringApplyTest do
     {:ok, %{entries: entries}} = Active.load(mission)
     Map.fetch!(entries, c.craft.spacecraft_id)
   end
+
+  # The active binding set's content for the craft, with the ids that embed the revision dropped.
+  defp bindings!(c) do
+    {:ok, mission} = Cadence.Missions.fetch_mission(c.org, c.mid)
+    {:ok, %{binding_set: set}} = Active.load(mission)
+
+    {Enum.map(set.capability_instances, &without_ids/1), Enum.map(set.rules, &without_ids/1)}
+  end
+
+  @revision_ids ~w(capability_instance_id binding_rule_id rule_id mission_model_revision_id
+    inserted_at updated_at)a
+
+  defp without_ids(%_{} = struct), do: struct |> Map.from_struct() |> without_ids()
+
+  defp without_ids(%{} = map),
+    do:
+      map
+      |> Map.drop(@revision_ids ++ Enum.map(@revision_ids, &Atom.to_string/1))
+      |> Map.new(fn {k, v} -> {k, without_ids(v)} end)
+
+  defp without_ids(list) when is_list(list), do: Enum.map(list, &without_ids/1)
+  defp without_ids(value), do: value
 
   defp command_plan(entry) do
     command = get_in(entry, ["mission_model", "plans", "command"]) || %{}
