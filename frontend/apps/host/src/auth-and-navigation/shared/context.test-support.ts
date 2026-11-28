@@ -13,7 +13,7 @@ export const context = {
   nav_context: "organization",
   nav_item: "missions",
   mission: { mission_id: "mission/1", display_name: "Lunar", slug: "lunar" },
-  ops_nav_item: "commands",
+  ops_nav_item: "dashboards",
   dashboard_navigation: { starred: [], recent: [] },
   dock_surfaces: [],
 };

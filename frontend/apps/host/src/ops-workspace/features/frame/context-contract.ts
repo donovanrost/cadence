@@ -76,7 +76,6 @@ const read = object({
   ),
   ops_context: maybe(
     object({
-      pinned_focus: maybe(object({ kind: string, id: string })),
       modules: optional(array(section)),
     }),
   ),

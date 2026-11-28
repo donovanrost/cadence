@@ -6,7 +6,7 @@ import { join, relative, sep } from "node:path";
 
 export const MAX_LINES = 400;
 /** Source roots, relative to frontend/. */
-const ROOTS = ["apps", "packages", "modules"];
+const ROOTS = ["apps", "packages"];
 const SOURCE = /\.(?:ts|vue|js|mjs)$/;
 /** Tests, test support, declarations, generated files and vendored code don't count. */
 const SKIPPED = [

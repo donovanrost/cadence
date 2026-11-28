@@ -9,7 +9,6 @@ import OpsConsoleApplication from "./OpsConsoleApplication.vue";
 const renderer = { kind: "federated-vue", exposedModule: "./Application" } as const;
 
 const routeSurfaces = [
-  ["commands", "operations", "Commands", "cadence.ops.commands", []],
   [
     "data_sources",
     "configuration",

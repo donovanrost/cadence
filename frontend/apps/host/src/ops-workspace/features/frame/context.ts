@@ -15,14 +15,10 @@ const badge = (severity: keyof typeof tones, count: number, label: string) => ({
 });
 export function contextSections(context: OpsFrameContext) {
   const root = `/missions/${encodeURIComponent(context.mission.mission_id)}`;
-  const focus = context.ops_context?.pinned_focus;
   return (context.ops_context?.modules || []).map((section) => {
-    // The alarms summary has no legacy page to open (#143): the console owns alarms.
-    function presentation<C>(title: string, icon: string, path: string | null, content: C) {
-      const destination =
-        path !== null && focus?.kind === "command" && focus.id
-          ? `${path}?focus_command_id=${encodeURIComponent(focus.id)}`
-          : path;
+    // A section without a host page of its own (alarms since #143, commands since #708) has no
+    // Open link: the console owns them.
+    function presentation<C>(title: string, icon: string, destination: string | null, content: C) {
       return {
         ...section,
         title,
@@ -61,7 +57,7 @@ export function contextSections(context: OpsFrameContext) {
       });
     } else if (section.key === "commands") {
       const data = section.data;
-      return presentation("Commands", "hero-command-line", `${root}/ops/commands`, {
+      return presentation("Commands", "hero-command-line", null, {
         kind: "commands" as const,
         counts: (
           [

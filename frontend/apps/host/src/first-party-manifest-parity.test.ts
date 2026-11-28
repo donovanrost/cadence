@@ -60,16 +60,6 @@ const expected = [
         [],
       ],
       [
-        "commands",
-        "operations",
-        "mission",
-        "ops_workspace",
-        "Commands",
-        10,
-        "cadence.ops.commands",
-        [],
-      ],
-      [
         "data_sources",
         "configuration",
         "mission",
@@ -192,7 +182,8 @@ describe("first-party federated manifest parity", () => {
     // remotes left (35 → 18). #702: the ops-console data_operations and data_operations_manage
     // surfaces left (18 → 16). #672: the Organization Admin remote's notifications bell left
     // (16 → 15). #666/#142/#143: the ops-console timeline, telemetry_explore and alarms surfaces
-    // left (15 → 12). #665: the ops-console planning and contacts surfaces left (12 → 5).
-    expect(surfaceCount).toBe(5);
+    // left (15 → 12). #665: the ops-console planning and contacts surfaces left (12 → 5). #708:
+    // the ops-console commands surface left (5 → 4).
+    expect(surfaceCount).toBe(4);
   });
 });

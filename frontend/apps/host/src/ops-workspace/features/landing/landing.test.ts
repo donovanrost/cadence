@@ -31,7 +31,7 @@ test("mission landing and Ops rail expose approvals to operators regardless of b
     );
   expect(wrapper.findAll("nav a").map((link) => link.attributes("href"))).toEqual(rail(false));
   expect(wrapper.find("#ops-entry-activations").exists()).toBe(false);
-  expect(wrapper.get("#ops-entry-commands").attributes("data-phx-link")).toBe("redirect");
+  expect(wrapper.get("#ops-entry-dashboards").attributes("data-phx-link")).toBe("redirect");
   expect(wrapper.text()).not.toContain("components available");
   expect(wrapper.text()).not.toContain("Server authority connected");
   await wrapper.setProps(props({ ...model, can_administer: true }));

@@ -7,22 +7,21 @@ const context = {
   spacecraft: { display_name: "KST-1" },
 };
 
-test("a record's trail links back to its list", () => {
+// Since #708 the settings pair is the catalog's only list with a page under it, and the
+// application surface its only record.
+test("a page's trail links back to its list", () => {
   expect(
     breadcrumbTrail(
-      {
-        path: "/missions/:mission_id/ops/commands/requests/:command_request_id/history",
-        scope: "mission",
-      },
-      "/missions/m1/ops/commands/requests/r1/history",
+      { path: "/missions/:mission_id/settings/:section_id", scope: "mission" },
+      "/missions/m1/settings/general",
       context,
-      "Command history",
+      "General",
     ),
   ).toEqual([
     { label: "Flight Operations", href: "/" },
     { label: "Kestrel", href: "/missions/m1" },
-    { label: "Commands", href: "/missions/m1/ops/commands" },
-    { label: "Command history" },
+    { label: "Mission settings", href: "/missions/m1/settings" },
+    { label: "General" },
   ]);
 });
 
@@ -31,10 +30,10 @@ test("records above the page are left out; the spacecraft is named by context", 
     breadcrumbTrail({ path: pattern, scope: "mission" }, path, context, "Page").map((c) => c.label);
   expect(
     labels(
-      "/missions/:mission_id/ops/commands/requests/:command_request_id/history/edit",
-      "/missions/m1/ops/commands/requests/r1/history/edit",
+      "/missions/:mission_id/applications/:application_key/:surface_id/edit",
+      "/missions/m1/applications/ops_console/data_sources/edit",
     ),
-  ).toEqual(["Flight Operations", "Kestrel", "Commands", "Page"]);
+  ).toEqual(["Flight Operations", "Kestrel", "Page"]);
   expect(
     labels(
       "/missions/:mission_id/spacecraft/:spacecraft_id/applications/:application_key/:surface_id",

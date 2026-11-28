@@ -69,6 +69,9 @@ const authoritativeHostJavascriptDigests = new Set([
   // Deleted the legacy planning and contacts pages (#665): the checker's tokenizer finds the
   // same 2 federation-loader templates; two identical build:publication runs.
   "bcdf6e6854e46fc03538b4b30c34ed0427e9696987c5c6f0b614bb1a8318baa6",
+  // Deleted the legacy commands host pages and the commanding module (#708): the checker's
+  // tokenizer finds the same 2 federation-loader templates; two identical build:publication runs.
+  "712e30bc74fab5b11a84f1d0be55a71abce870738988c08e7549c2182674e21e",
 ]);
 
 /** @param {string} message @returns {never} */

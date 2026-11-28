@@ -5,35 +5,21 @@ import { contextSections } from "./context";
 import { required } from "../../../../../../test-support/required";
 import { readOpsFrameContext } from "./context-contract";
 import { context } from "../../../auth-and-navigation/shared/context.test-support";
-test("operators see the Act group without a built-in role and links preserve command focus", () => {
-  const operator = { ...context, capabilities: [] };
-  expect(
-    required(
-      opsNavigation(required(readOpsFrameContext(operator))).groups.find(
-        (group) => group.key === "act",
-      ),
-    ).items.map((item) => item.key),
-  ).toEqual(["commands"]);
-  const nav = opsNavigation(
-    required(
-      readOpsFrameContext({
-        ...operator,
-        ops_context: { pinned_focus: { kind: "command", id: "cmd/a?b" } },
-      }),
-    ),
+test("operators see every workspace group without a built-in role and links are plain paths", () => {
+  const nav = opsNavigation(required(readOpsFrameContext({ ...context, capabilities: [] })));
+  expect(nav.groups.map((group) => group.key)).toEqual(["observe", "system"]);
+  const dashboards = required(
+    required(nav.groups[0]).items.find((item) => item.key === "dashboards"),
   );
-  expect(required(required(nav.groups[1]).items[0]).href).toBe(
-    "/missions/mission%2F1/ops/commands?focus_command_id=cmd%2Fa%3Fb",
-  );
-  expect(required(required(nav.groups[1]).items[0]).active).toBe(true);
+  expect(dashboards.href).toBe("/missions/mission%2F1/ops/dashboards");
+  expect(dashboards.active).toBe(true);
 });
-test("operational context preserves unavailable data, severity and command focus", () => {
+test("operational context preserves unavailable data and severity", () => {
   const sections = contextSections(
     required(
       readOpsFrameContext({
         ...context,
         ops_context: {
-          pinned_focus: { kind: "command", id: "cmd-1" },
           modules: [
             {
               key: "fleet_health",

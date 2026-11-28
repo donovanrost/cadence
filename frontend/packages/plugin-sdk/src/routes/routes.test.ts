@@ -51,17 +51,15 @@ test("every retained route still has a live consumer that types a header by it",
   }
 });
 
-test("links are built from routes, with encoded params and admitted query keys", () => {
-  expect(href("/missions/:mission_id/ops/commands", { mission_id: "m 1" })).toBe(
-    "/missions/m%201/ops/commands",
+// No catalog route admits a query key since #708 deleted the commands pages, so links are checked
+// for their encoded params only.
+test("links are built from routes, with encoded params", () => {
+  expect(href("/missions/:mission_id/settings", { mission_id: "m 1" })).toBe(
+    "/missions/m%201/settings",
   );
   expect(
-    href(
-      "/missions/:mission_id/ops/commands",
-      { mission_id: "m" },
-      { status: "queued,failed", query: "" },
-    ),
-  ).toBe("/missions/m/ops/commands?status=queued%2Cfailed");
+    href("/missions/:mission_id/settings/:section_id", { mission_id: "m", section_id: "a/b" }),
+  ).toBe("/missions/m/settings/a%2Fb");
   expect(
     href("/missions/:mission_id/applications/:application_key/:surface_id", {
       mission_id: "m",
@@ -69,8 +67,8 @@ test("links are built from routes, with encoded params and admitted query keys",
       surface_id: "data_sources",
     }),
   ).toBe("/missions/m/applications/ops_console/data_sources");
-  expect(isRouteId("/missions/:mission_id/ops/commands")).toBe(true);
-  expect(isRouteId("/missions/:mission_id/ops/nowhere")).toBe(false);
+  expect(isRouteId("/missions/:mission_id/settings")).toBe(true);
+  expect(isRouteId("/missions/:mission_id/ops/commands")).toBe(false);
 });
 
 test("route drift is a type error", () => {
@@ -81,18 +79,14 @@ test("route drift is a type error", () => {
       surface_id: "data_sources",
     }),
   ).toEqualTypeOf<Href>();
+  expectTypeOf<RouteHeaderKind<"/missions/:mission_id/settings">>().toEqualTypeOf<"collection">();
   expectTypeOf<
-    RouteHeaderKind<"/missions/:mission_id/ops/commands">
-  >().toEqualTypeOf<"collection">();
-  expectTypeOf<
-    RouteHeaderKind<"/missions/:mission_id/ops/commands/requests/:command_request_id/history">
+    RouteHeaderKind<"/missions/:mission_id/applications/:application_key/:surface_id">
   >().toEqualTypeOf<"resource">();
   // @ts-expect-error -- routes that do not exist cannot be linked
   expect(() => href("/missions/:mission_id/ops/nowhere", { mission_id: "m" })).not.toThrow();
   // @ts-expect-error -- every path param is required
-  expect(() => href("/missions/:mission_id/ops/commands", {})).toThrow();
-  // @ts-expect-error -- query keys the route does not admit are rejected
-  href("/missions/:mission_id/ops/commands", { mission_id: "m" }, { tags: "eps" });
+  expect(() => href("/missions/:mission_id/settings", {})).toThrow();
   // @ts-expect-error -- a plain string is not a link
   const link: Href = "/missions";
   expect(link).toBe("/missions");
