@@ -60,7 +60,12 @@ export interface ScaledFleet {
  * server deltas are dropped (they would carry the seeded counts and break the partition). Other
  * frames pass unchanged both ways.
  */
-export async function serveScaledFleet(page: Page, size: number): Promise<ScaledFleet> {
+export async function serveScaledFleet(
+  page: Page,
+  size: number,
+  /** #1037: told of each channel join the page sends (its topic), for the request table. */
+  onJoin: (topic: string) => void = () => undefined,
+): Promise<ScaledFleet> {
   let scaled: Json | null = null;
   const fleet = async (): Promise<Json> => {
     if (scaled) return scaled;
@@ -84,7 +89,11 @@ export async function serveScaledFleet(page: Page, size: number): Promise<Scaled
     (ws) => {
       socket = ws;
       const server = ws.connectToServer();
-      ws.onMessage((message) => server.send(message));
+      ws.onMessage((message) => {
+        const frame = frameOf(message);
+        if (frame?.[3] === "phx_join") onJoin(frame[2]);
+        server.send(message);
+      });
       server.onMessage((message) => {
         const frame = frameOf(message);
         const push = frame?.[4];
