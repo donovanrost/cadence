@@ -5,7 +5,8 @@ defmodule Cadence.Governance.BindingSetStorageMeasureTest do
 
       mix test test/cadence/governance/binding_set_storage_measure_test.exs --include scale
 
-  in a quiet window. It prints rows and bytes added to the binding tables, statements and wall time
+  in a quiet window, on a catalog the size of dev's (10 packets a craft, so the cross product the
+  issue measured: craft × 10 instances and rules). It prints rows and bytes added to the binding tables, statements and wall time
   for the review (which writes the version) and the apply, for a full fleet and for a one-craft
   change after it. The same file runs on develop (the tables of the membership form are read only
   when they exist), so one script gives both sides.
@@ -38,7 +39,10 @@ defmodule Cadence.Governance.BindingSetStorageMeasureTest do
       craft = unquote(craft)
       org = "org-measure-#{craft}"
       mid = "mission-measure-#{craft}"
-      {first, revision, _endpoint} = Fixtures.setup_imported_mission!(org, mid)
+
+      {first, revision, _endpoint} =
+        Fixtures.setup_imported_mission!(org, mid, yaml: Fixtures.dev_sized_yaml())
+
       {:ok, mission} = Cadence.Missions.fetch_mission(org, mid)
       scope = Fixtures.user_scope(org, "operator")
       policy = ActivationPolicy.load(org, mid)
@@ -149,7 +153,7 @@ defmodule Cadence.Governance.BindingSetStorageMeasureTest do
         "catalog_revision_id" => revision.catalog_revision_id,
         "telemetry_enabled" => true,
         "commanding_enabled" => commanding,
-        "handled_apids" => [42]
+        "handled_apids" => Fixtures.dev_sized_apids()
       })
 
     :ok =
