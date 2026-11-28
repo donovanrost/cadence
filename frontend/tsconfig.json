@@ -11,9 +11,6 @@
       "path": "./apps/ops-console"
     },
     {
-      "path": "./apps/organization-admin"
-    },
-    {
       "path": "./apps/surface-fixture"
     },
     {
