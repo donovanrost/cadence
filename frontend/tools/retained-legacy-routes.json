@@ -9,7 +9,6 @@
       "queryAliases": {},
       "viewClass": "contents",
       "metadata": {
-        "nav_item": "settings",
         "page_title": "Mission settings"
       },
       "kind": "settings",
@@ -32,7 +31,6 @@
       "queryAliases": {},
       "viewClass": "contents",
       "metadata": {
-        "nav_item": "settings",
         "page_title": "Mission settings"
       },
       "kind": "settings",

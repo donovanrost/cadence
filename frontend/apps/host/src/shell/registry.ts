@@ -1,4 +1,3 @@
-import BrowserHost from "./BrowserHost.vue";
 import ApplicationShell from "./ApplicationShell.vue";
 import HostPage from "./HostPage.vue";
 import { lazyHostPage } from "./lazy-host-page";
@@ -7,7 +6,6 @@ import { inApplicationShell } from "./page-portal";
 import { FederatedFullPageSurface } from "./federated_full_page_surface";
 
 const components = new Map<string, Component>([
-  ["BrowserHost", BrowserHost],
   ["ApplicationShell", ApplicationShell],
   ["HostPage", HostPage],
   ["StatusBadge", lazyHostPage("StatusBadge", () => import("./StatusBadge.vue"))],
