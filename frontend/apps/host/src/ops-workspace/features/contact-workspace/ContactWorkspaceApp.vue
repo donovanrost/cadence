@@ -61,9 +61,6 @@ watch(
         <RouterLink id="contact-workspace-home" :to="base" class="link"
           >Contact scheduling</RouterLink
         >
-        <a :href="`/missions/${encodeURIComponent(bootstrap.missionId)}/ops`" class="link"
-          >Operations overview</a
-        >
       </nav>
       <p v-if="navigationError" role="alert" class="p-6">{{ navigationError }}</p>
       <div

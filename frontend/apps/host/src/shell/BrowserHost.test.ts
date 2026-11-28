@@ -569,7 +569,7 @@ test("core timeline filters, selected evidence and older pages restore through p
 
 const routeComponents = { ops_module: "OpsModulePage" };
 const routeStubs = Object.fromEntries(
-  [...Object.values(routeComponents), "WorkspaceLanding", "TimelinePage"].map((name) => [
+  [...Object.values(routeComponents), "TimelinePage"].map((name) => [
     name,
     {
       name,
@@ -583,12 +583,7 @@ test.each(hostRoutes)("the host handles $path ($kind)", async (entry) => {
   const route = required(hostRoute(new URL(path, "https://cadence.test")));
   if (route.kind === "unavailable")
     throw new Error("Catalog route must have a registered page kind");
-  const expected =
-    route.kind === "ops_workspace"
-      ? route.workspacePage === "landing"
-        ? "WorkspaceLanding"
-        : "TimelinePage"
-      : routeComponents[route.kind];
+  const expected = route.kind === "ops_workspace" ? "TimelinePage" : routeComponents[route.kind];
   expect(expected).toBeDefined();
   wrapper = mount(BrowserHost, {
     props: { snapshot: snapshot(path, path.includes("/missions/") ? "mission_id-test" : null) },

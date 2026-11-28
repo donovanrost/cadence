@@ -53,19 +53,6 @@ export const routeCatalog = {
       description: null,
     },
   },
-  "/missions/:mission_id/ops": {
-    kind: "ops_workspace",
-    layer: "ops",
-    scope: "mission",
-    title: "Mission Operations",
-    queryKeys: [],
-    header: {
-      kind: "collection",
-      breadcrumbs: true,
-      eyebrow: false,
-      description: null,
-    },
-  },
   "/missions/:mission_id/ops/data-operations": {
     kind: "ops_module",
     layer: "ops",

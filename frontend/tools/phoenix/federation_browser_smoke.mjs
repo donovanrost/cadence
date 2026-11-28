@@ -5026,7 +5026,8 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     origin,
     diagnostics,
     signal,
-    `/missions/${encodeURIComponent(missionId)}/ops`,
+    // The LiveView socket assertions below need a legacy host page: the timeline is one.
+    `/missions/${encodeURIComponent(missionId)}/ops/timeline`,
   );
   reportProgress("authenticated browser session ready");
   await waitForExpression(
@@ -5037,13 +5038,12 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   );
   diagnostics.assertLiveViewWebSocket(origin, { generation: authenticatedGeneration });
   reportProgress("authenticated LiveView websocket asserted");
-  // The shell and socket can be ready while the lazy landing page is still loading.
+  // The shell and socket can be ready while the lazy timeline page is still loading.
   // Finish this visit before navigating away so its module request has a terminal event.
-  // §11c(B): the mission's ops page is the legacy landing (the mission home went to the console).
   await waitForExpression(
     client,
     "Boolean(document.querySelector('main h1') && document.querySelector('#host-page-content > *') && !document.querySelector('[data-host-page-loading], #ops-module-loading'))",
-    "authenticated mission ops landing page",
+    "authenticated mission timeline page",
     { signal },
   );
 

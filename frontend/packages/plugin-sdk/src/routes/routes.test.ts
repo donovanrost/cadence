@@ -89,14 +89,17 @@ test("links are built from routes, with encoded params and admitted query keys",
       { severity: "warning,critical", query: "" },
     ),
   ).toBe("/missions/m/ops/alarms?severity=warning%2Ccritical");
-  // §11c: no parameterless route is left, and the mission settings page is in the console.
-  expect(href("/missions/:mission_id/ops", { mission_id: "m" })).toBe("/missions/m/ops");
+  expect(href("/missions/:mission_id/ops/timeline", { mission_id: "m" })).toBe(
+    "/missions/m/ops/timeline",
+  );
   expect(isRouteId("/missions/:mission_id/ops/alarms")).toBe(true);
   expect(isRouteId("/missions/:mission_id/ops/nowhere")).toBe(false);
 });
 
 test("route drift is a type error", () => {
-  expectTypeOf(href("/missions/:mission_id/ops", { mission_id: "m" })).toEqualTypeOf<Href>();
+  expectTypeOf(
+    href("/missions/:mission_id/ops/timeline", { mission_id: "m" }),
+  ).toEqualTypeOf<Href>();
   expectTypeOf<RouteHeaderKind<"/missions/:mission_id/ops/alarms">>().toEqualTypeOf<"collection">();
   expectTypeOf<
     RouteHeaderKind<"/missions/:mission_id/ops/commands/requests/:command_request_id/history">

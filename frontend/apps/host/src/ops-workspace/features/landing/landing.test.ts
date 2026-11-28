@@ -1,6 +1,5 @@
 import { jsonFixture, fixtureRecord } from "../../../../../../test-support/json-fixture";
 import { mount } from "@vue/test-utils";
-import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { expect, test } from "vite-plus/test";
 import WorkspaceLanding from "./WorkspaceLanding.vue";
 import { readWorkspaceLanding } from "./contracts";
@@ -20,7 +19,7 @@ const props = (model: unknown = fixture()) => ({
 
 test("mission landing and Ops rail expose approvals to operators regardless of built-in role", async () => {
   const model = fixture();
-  const wrapper = mount(pageHeaderHarness("/missions/:mission_id/ops").stage(WorkspaceLanding), {
+  const wrapper = mount(WorkspaceLanding, {
     props: props(model),
   });
   const rail = (admin: boolean) =>
@@ -33,7 +32,6 @@ test("mission landing and Ops rail expose approvals to operators regardless of b
   expect(wrapper.findAll("nav a").map((link) => link.attributes("href"))).toEqual(rail(false));
   expect(wrapper.find("#ops-entry-activations").exists()).toBe(false);
   expect(wrapper.get("#ops-entry-commands").attributes("data-phx-link")).toBe("redirect");
-  expect(wrapper.text()).toContain("Choose a workspace to observe, plan or act on this mission.");
   expect(wrapper.text()).not.toContain("components available");
   expect(wrapper.text()).not.toContain("Server authority connected");
   await wrapper.setProps(props({ ...model, can_administer: true }));
@@ -50,7 +48,7 @@ test.each([
   { ...fixture(), context: { organization_id: "foreign", mission_id: "mission-1" } },
   { ...fixture(), context: { organization_id: "org-1", mission_id: "foreign" } },
 ])("malformed or foreign navigation is unavailable without rendering destinations: %j", (model) => {
-  const wrapper = mount(pageHeaderHarness("/missions/:mission_id/ops").stage(WorkspaceLanding), {
+  const wrapper = mount(WorkspaceLanding, {
     props: props(model),
   });
   expect(wrapper.get("#ops-workspace-landing-unavailable").attributes("role")).toBe("alert");
@@ -59,7 +57,7 @@ test.each([
 });
 
 test("scope changes remove old mission links and valid replacement recovers", async () => {
-  const wrapper = mount(pageHeaderHarness("/missions/:mission_id/ops").stage(WorkspaceLanding), {
+  const wrapper = mount(WorkspaceLanding, {
     props: props(),
   });
   await wrapper.setProps({ missionId: "mission-2" });
@@ -85,7 +83,7 @@ test("actual producer renders scoped navigation without accepting server supplie
     href: "https://foreign.test",
     destinations: [{ href: "javascript:alert(1)" }],
   };
-  const wrapper = mount(pageHeaderHarness("/missions/:mission_id/ops").stage(WorkspaceLanding), {
+  const wrapper = mount(WorkspaceLanding, {
     props: {
       model: input,
       organizationId: model.context.organization_id,
