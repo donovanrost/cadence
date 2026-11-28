@@ -3,8 +3,9 @@ defmodule Cadence.Limits.StateTextTest do
 
   import ExUnit.CaptureLog
 
-  alias Cadence.Limits.{Evaluator, Event, StateText}
+  alias Cadence.Limits.{Event, StateText}
   alias Cadence.Limits.Store.{LatestStateRow, LimitEventRow}
+  alias Cadence.SemanticRuntime.ThresholdLimits
 
   @all [:green, :blue, :yellow_low, :yellow_high, :red_low, :red_high]
 
@@ -12,11 +13,11 @@ defmodule Cadence.Limits.StateTextTest do
     for state <- @all do
       assert StateText.limit_state(Atom.to_string(state)) == state
 
-      normalized = Evaluator.normalize_state(state)
+      normalized = ThresholdLimits.normalize_state(state)
       assert StateText.normalized_state(Atom.to_string(normalized)) == normalized
     end
 
-    # The vocabulary is the evaluator's, nothing more and nothing less.
+    # The vocabulary is the threshold evaluation's, nothing more and nothing less.
     assert Enum.sort(StateText.limit_states()) == Enum.sort(@all)
     assert Enum.sort(StateText.normalized_states()) == [:blue, :green, :red, :yellow]
   end
@@ -67,7 +68,7 @@ defmodule Cadence.Limits.StateTextTest do
                |> LimitEventRow.to_domain()
     end)
 
-    assert Evaluator.severity(:unknown) == 0
-    assert Evaluator.normalize_state(:unknown) == :unknown
+    assert ThresholdLimits.severity(:unknown) == 0
+    assert ThresholdLimits.normalize_state(:unknown) == :unknown
   end
 end

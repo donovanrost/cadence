@@ -9,7 +9,8 @@ import { fetchPlanDays, stripCell, stripDays, type MarkState } from "./day-strip
 
 /**
  * K1's day strip (DECISIONS #100; ScheduleFlow §K1 day strip): the next 7 UTC days, today first,
- * each a link to `?day=` with its plan's state in U61's words. Marks are decoration only.
+ * each a link to `?day=` with its plan's state in U61's words. Marks are decoration only. The days
+ * wrap rather than scroll sideways, so a focused one is always on screen (#1027).
  */
 const props = defineProps<{ day: string }>();
 const route = useRoute();
@@ -35,8 +36,10 @@ const MARK: Readonly<Record<MarkState, string>> = {
 </script>
 
 <template>
-  <nav v-if="cells.length > 0" aria-label="Next 7 days" class="min-w-0 overflow-x-auto">
-    <ul class="m-0 flex list-none gap-1 p-0">
+  <!-- #1027: the days wrap where they don't fit (3 a row at 390), never a sideways strip: a browser
+       doesn't scroll a focused link into view while a sliver of it shows, so Tab left two cut off. -->
+  <nav v-if="cells.length > 0" aria-label="Next 7 days" class="min-w-0">
+    <ul class="m-0 flex list-none flex-wrap gap-1 p-0">
       <li v-for="c in cells" :key="c.day">
         <RouterLink
           :to="{ query: { ...route.query, day: c.day, run: undefined, version: undefined } }"
@@ -46,6 +49,9 @@ const MARK: Readonly<Record<MarkState, string>> = {
           :class="c.day === props.day ? 'bg-raised shadow-[inset_0_-2px_0_var(--color-text)]' : ''"
         >
           <span class="font-mono text-xs text-text-2 uppercase">{{ c.label }}</span>
+          <!-- #1027: a real space, so the shown text reads "Mon 30 No plan" as the name does, never
+               "Mon 30No plan" (WCAG 2.5.3); the template drops plain whitespace between spans. -->
+          {{ " " }}
           <span class="flex items-center gap-1 text-sm"
             ><span v-if="c.mark" aria-hidden="true" :class="MARK[c.mark.state]">{{
               c.mark.glyph

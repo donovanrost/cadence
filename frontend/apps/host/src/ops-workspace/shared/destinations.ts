@@ -45,14 +45,7 @@ export function workspaceGroups(
           item("contacts", "Contacts", "hero-calendar-days"),
         ],
       ],
-      [
-        "system",
-        "System",
-        [
-          item("data_sources", "Data Sources", "hero-circle-stack"),
-          item("data_operations", "Data Operations", "hero-arrow-path-rounded-square"),
-        ],
-      ],
+      ["system", "System", [item("data_sources", "Data Sources", "hero-circle-stack")]],
     ] satisfies [string, string, WorkspaceDestination[]][]
   ).map(([key, label, items], index) => ({
     key,

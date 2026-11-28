@@ -4,7 +4,7 @@ defmodule Cadence.Alarms.EpisodeEventRow do
 
   @type t :: %__MODULE__{}
 
-  @kinds ~w(raised escalated deescalated acknowledged assigned unassigned note handed_off cleared)
+  @kinds ~w(raised escalated deescalated acknowledged assigned unassigned note handed_off cleared rule_changed)
 
   @primary_key {:event_id, :string, autogenerate: false}
   schema "alarm_episode_events" do

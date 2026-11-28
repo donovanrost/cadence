@@ -5,14 +5,14 @@ defmodule CadenceWeb.Console.PredictedPassAPITest do
   alias Cadence.Comms.{GroundStation, GroundStationStore}
   alias Cadence.GroundNetworks.{ElementSets, PredictedPasses}
   alias Cadence.Organizations
-  alias CadenceWeb.{ControlPlaneApiFixtures, TestFixtures}
+  alias CadenceWeb.{MissionReadModelFixtures, TestFixtures}
 
   @now ~U[2026-11-27 00:00:00.000000Z]
   @from "2026-11-27T00:00:00Z"
   @to "2026-11-28T00:00:00Z"
 
   setup %{conn: conn} do
-    fixture = ControlPlaneApiFixtures.bootstrap(conn)
+    fixture = MissionReadModelFixtures.bootstrap(conn)
     {:ok, organization} = Organizations.fetch_organization(fixture.organization_id)
     admin = TestFixtures.persist_user!()
     TestFixtures.grant_membership!(admin, organization, role: :organization_admin)
@@ -23,7 +23,7 @@ defmodule CadenceWeb.Console.PredictedPassAPITest do
 
     crafts =
       for {i, raan} <- [{1, 10.0}, {2, 130.0}, {3, 250.0}] do
-        ControlPlaneApiFixtures.persist_api_spacecraft!(org, mission, %{
+        MissionReadModelFixtures.persist_api_spacecraft!(org, mission, %{
           spacecraft_id: "craft-predicted-#{i}",
           display_name: "Predicted #{i}",
           scid: 700 + i
@@ -164,7 +164,7 @@ defmodule CadenceWeb.Console.PredictedPassAPITest do
     for {method, path} <- [{:get, c.path}, {:post, c.path <> "/recompute"}] do
       assert %{"error" => %{"code" => "service_not_allowed"}} =
                build_conn()
-               |> ControlPlaneApiFixtures.authorize(c.api_token)
+               |> MissionReadModelFixtures.authorize(c.api_token)
                |> dispatch(@endpoint, method, path, %{from: @from, to: @to})
                |> json_response(403)
     end

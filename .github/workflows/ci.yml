@@ -38,10 +38,12 @@ jobs:
     # - backend: code outside the console app and its kit (Elixir quality and suites). Elixir tests
     #   still execute frontend/modules and frontend/apps/host producer code, so those count.
     # - frontend: code outside the Elixir projects (frontend quality)
+    # - scale: Console client, build, fixture and the scaled server entry points
     outputs:
       code: ${{ github.event_name != 'pull_request' || steps.filter.outputs.code == 'true' }}
       backend: ${{ github.event_name != 'pull_request' || steps.filter.outputs.backend == 'true' }}
       frontend: ${{ github.event_name != 'pull_request' || steps.filter.outputs.frontend == 'true' }}
+      scale: ${{ github.event_name != 'pull_request' || steps.filter.outputs.scale == 'true' }}
       merge_base_warning: ${{ steps.merge-base.outputs.warning }}
     steps:
       - name: Check PR merge base
@@ -88,7 +90,7 @@ jobs:
         id: filter
         uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         with:
-          predicate-quantifier: every
+          predicate-quantifier: some-with-excludes
           filters: |
             code:
               - "**"
@@ -110,6 +112,28 @@ jobs:
               - "!dev/**"
               - "!mix.exs"
               - "!mix.lock"
+            scale:
+              - "frontend/**"
+              - ".github/**"
+              - "scripts/ci/{source_index,tune_postgres}.sh"
+              - "mise.toml"
+              - "mix.{exs,lock}"
+              - "apps/{cadence,cadence_web,cadence_simulator}/mix.{exs,lock}"
+              - "config/{config,dev,runtime}.exs"
+              - "apps/{cadence,cadence_web,cadence_simulator}/config/{config,dev,runtime}.exs"
+              - "apps/cadence_web/{assets/**,priv/static/**,package.json,package-lock.json}"
+              - "dev/reflect_orbital_{simulator,demo,planning}.exs"
+              - "dev/apogee_qa_personas.exs"
+              - "dev/reflect_orbital/{fixture,configuration,planning,approver,seed}.exs"
+              - "dev/seed/**"
+              - "dev/catalogs/demo_spacecraft.yaml"
+              - "apps/cadence/lib/cadence/accounts/fixture_passwords.ex"
+              - "apps/cadence/lib/cadence/reads/{fleet_status,passes}.ex"
+              - "apps/cadence_web/lib/cadence_web/controllers/console/{spa_controller,fleet_controller,fleet_json,pass_controller,pass_json}.ex"
+              - "apps/cadence_web/lib/cadence_web/console/{shell,pass_list_params,window_page_params,window_params}.ex"
+              - "apps/cadence_web/lib/cadence_web/channels/console_socket.ex"
+              - "apps/cadence_web/lib/cadence_web/channels/console/{mission_channel,fleet_push,fleet_source}.ex"
+              - "!**/*.md"
 
   repository-hygiene:
     name: Repository hygiene
@@ -676,7 +700,7 @@ jobs:
       # #176: the fleet-scale budgets are timings, so they run alone with one worker, on the shard
       # without the serial specs. Like the serial run, the main run's evidence moves aside first.
       - name: Console fleet-scale budgets
-        if: ${{ !cancelled() && matrix.shard == 2 }}
+        if: ${{ !cancelled() && matrix.shard == 2 && needs.changes.outputs.scale == 'true' }}
         working-directory: frontend/apps/console
         run: |
           if [ -d test-results ]; then mv test-results test-results-main; fi

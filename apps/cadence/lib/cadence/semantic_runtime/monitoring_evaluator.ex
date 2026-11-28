@@ -38,7 +38,7 @@ defmodule Cadence.SemanticRuntime.MonitoringEvaluator do
   # in `metadata`, never a struct field: partition replay verifies results by equality.
   defp apply_rule_digest(%MonitoringPlan{rule_digest: nil}, prior), do: {prior, nil}
 
-  defp apply_rule_digest(%MonitoringPlan{rule_digest: digest}, prior) do
+  defp apply_rule_digest(%MonitoringPlan{rule_digest: digest} = plan, prior) do
     case Map.get(prior, :rule_digest) do
       nil ->
         {prior, nil}
@@ -50,9 +50,13 @@ defmodule Cadence.SemanticRuntime.MonitoringEvaluator do
         reset =
           Map.merge(prior, %{violation_count: 0, conformance_count: 0, candidate_state: nil})
 
-        {reset, %{from: previous, to: digest}}
+        {reset, %{from: previous, to: digest, rule_ids: rule_ids(plan)}}
     end
   end
+
+  # The compiled policy's `rule_id`, so the episode event says which rule's digest changed.
+  defp rule_ids(%MonitoringPlan{rule_id: nil}), do: []
+  defp rule_ids(%MonitoringPlan{rule_id: rule_id}), do: [rule_id]
 
   defp put_rule_digest(next, %MonitoringPlan{rule_digest: nil}), do: next
 
@@ -88,6 +92,18 @@ defmodule Cadence.SemanticRuntime.MonitoringEvaluator do
       {:ok, rules} -> rules |> best_match(update, context_name) |> named_by(plan)
       :ambiguous -> nil
     end
+  end
+
+  @doc """
+  The rule that matches `value` with the highest severity (the first of equals), or `nil`. Pure:
+  the rule selection `evaluate/4` and `matched_rule/3` share, without a plan or a state, for a
+  caller that holds a rule list (threshold limits, `ThresholdLimits`).
+  """
+  @spec best_rule([map()], term()) :: map() | nil
+  def best_rule(rules, value) do
+    rules
+    |> Enum.filter(&rule_matches?(&1, value))
+    |> Enum.max_by(&Map.get(@severity_rank, severity(&1), 0), fn -> nil end)
   end
 
   # A compiled policy is named by its own `rule_id`, stable across edits (#451); an older plan's

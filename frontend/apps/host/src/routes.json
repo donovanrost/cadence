@@ -1,27 +1,5 @@
 [
   {
-    "path": "/missions/:mission_id/ops/data-operations",
-    "scope": "mission",
-    "mountId": "ops-data-operations-component",
-    "queryKeys": [
-      "group",
-      "page",
-      "audit_page",
-      "jobs_page",
-      "origins_page",
-      "bindings_page",
-      "binding_q"
-    ],
-    "queryAliases": {},
-    "viewClass": "contents",
-    "metadata": {
-      "page_title": "Data Operations",
-      "ops_nav_item": "data_operations"
-    },
-    "kind": "ops_module",
-    "contribution": "data-operations.history"
-  },
-  {
     "path": "/missions/:mission_id/ops/planning",
     "kind": "ops_module",
     "contribution": "planning.fleet-directory",
@@ -232,28 +210,6 @@
       "page_title": "Commands",
       "ops_nav_item": "commands"
     }
-  },
-  {
-    "path": "/missions/:mission_id/ops/data-operations/manage",
-    "scope": "mission",
-    "mountId": "ops-data-operations-component",
-    "queryKeys": [
-      "group",
-      "page",
-      "audit_page",
-      "jobs_page",
-      "origins_page",
-      "bindings_page",
-      "binding_q"
-    ],
-    "queryAliases": {},
-    "viewClass": "contents",
-    "metadata": {
-      "page_title": "Data Operations",
-      "ops_nav_item": "data_operations"
-    },
-    "kind": "ops_module",
-    "contribution": "data-operations.history-manage"
   },
   {
     "path": "/missions/:mission_id/ops/explore",

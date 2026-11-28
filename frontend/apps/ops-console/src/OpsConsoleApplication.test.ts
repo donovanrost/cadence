@@ -230,15 +230,6 @@ const expectedSurfaceTable = [
     "cadence.ops.telemetry_explore",
     ["apply_filters", "apply_question"],
   ],
-  ["data_operations", "operations", "mission", "ops_workspace", "cadence.ops.data_operations", []],
-  [
-    "data_operations_manage",
-    "operations",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.data_operations_manage",
-    [],
-  ],
   [
     "data_sources",
     "configuration",
@@ -579,8 +570,6 @@ describe("Ops Console federated application", () => {
       "OpsContactPlanShow",
       "OpsContactRecord",
       "OpsContactSchedule",
-      "OpsDataOperations",
-      "OpsDataOperationsManage",
       "OpsDataSourceRegistration",
       "OpsDataSourceSettings",
       "OpsDataSources",
@@ -615,9 +604,8 @@ describe("Ops Console federated application", () => {
     expect(manifest.application).toMatchObject({ applicationKey: "ops_console", version: 1 });
     expect(manifest.application.installableScopes).toEqual(["mission"]);
     expect(manifest.surfaces).toEqual(surfaceContracts);
-    expect(surfaceContracts).toHaveLength(17);
-    expect(new Set(surfaceContracts.map((surface) => surface.surfaceId)).size).toBe(17);
-    // The data-operations surfaces declare no host actions (their native page does the work).
+    expect(surfaceContracts).toHaveLength(15);
+    expect(new Set(surfaceContracts.map((surface) => surface.surfaceId)).size).toBe(15);
     expect(surfaceContracts.flatMap((surface) => surface.actions)).toHaveLength(44);
     expect(
       new Set(
@@ -640,13 +628,8 @@ describe("Ops Console federated application", () => {
       subjectParam: null,
       queryParams: [],
     });
-    expect(routeQueryContracts.data_operations_manage.queryParams).toEqual(["group"]);
 
-    for (const surfaceId of [
-      "data_source_registration",
-      "data_source_settings",
-      "data_operations_manage",
-    ]) {
+    for (const surfaceId of ["data_source_registration", "data_source_settings"]) {
       const surface = surfaceContracts.find((candidate) => candidate.surfaceId === surfaceId);
       expect(surface?.actions).toBeDefined();
     }

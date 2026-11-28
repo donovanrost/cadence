@@ -2,22 +2,6 @@ defmodule CadenceWeb.API.ParamParser do
   @moduledoc "Shared primitives for parsing product HTTP API parameters."
 
   @direction_values [:uplink, :downlink]
-  @selection_role_values [:selected, :candidate, :contributing]
-  @transport_target_scope_values [:path, :transport]
-
-  def required_string(params, key) do
-    case Map.get(params, key) do
-      value when is_binary(value) and value != "" -> {:ok, value}
-      _missing -> {:error, {:invalid_param, key, :required}}
-    end
-  end
-
-  def required_json_term(params, key) do
-    case Map.get(params, key) do
-      nil -> {:error, {:invalid_param, key, :required}}
-      value -> {:ok, value}
-    end
-  end
 
   def string_value(params, key) do
     case Map.get(params, key) do
@@ -26,27 +10,10 @@ defmodule CadenceWeb.API.ParamParser do
     end
   end
 
-  def required_integer(params, key) do
-    case integer_from_value(Map.get(params, key)) do
-      {:ok, integer} -> {:ok, integer}
-      :error -> {:error, {:invalid_param, key, :integer}}
-    end
-  end
-
   def optional_positive_integer(params, key) do
     case Map.get(params, key) do
       nil -> {:ok, nil}
       value -> integer_from_value(value) |> ensure_positive_integer(key)
-    end
-  end
-
-  def required_datetime(params, key) do
-    case Map.get(params, key) do
-      value when is_binary(value) ->
-        datetime_from_value(value) |> wrap_datetime_result(key)
-
-      _missing ->
-        {:error, {:invalid_param, key, :required}}
     end
   end
 
@@ -114,56 +81,9 @@ defmodule CadenceWeb.API.ParamParser do
 
   def datetime_from_value(_value), do: :error
 
-  def existing_atom(params, key, default) do
-    case Map.get(params, key, default) do
-      nil ->
-        {:ok, nil}
-
-      value when is_atom(value) ->
-        {:ok, value}
-
-      value when is_binary(value) ->
-        try do
-          {:ok, String.to_existing_atom(value)}
-        rescue
-          ArgumentError -> {:error, {:invalid_param, key, :unknown_atom}}
-        end
-
-      _other ->
-        {:error, {:invalid_param, key, :atom}}
-    end
-  end
-
-  def maybe_existing_atom(params, key) when is_map(params) and is_binary(key) do
-    if Map.has_key?(params, key) do
-      existing_atom(params, key, nil)
-    else
-      {:ok, nil}
-    end
-  end
-
-  def allowed_atom_param(params, key, default, allowed)
-      when is_map(params) and is_binary(key) and is_list(allowed) do
-    parse_allowed_atom(Map.get(params, key, default), key, allowed)
-  end
-
   def optional_allowed_atom_param(params, key, allowed)
       when is_map(params) and is_binary(key) and is_list(allowed) do
     parse_allowed_atom(Map.get(params, key), key, allowed)
-  end
-
-  def optional_allowed_atom_list(params, key, allowed)
-      when is_map(params) and is_binary(key) and is_list(allowed) do
-    case Map.get(params, key) do
-      nil ->
-        {:ok, []}
-
-      values when is_list(values) ->
-        reduce_ok(values, &parse_allowed_atom(&1, key, allowed))
-
-      _other ->
-        {:error, {:invalid_param, key, :list}}
-    end
   end
 
   def required_allowed_atom_param(params, key, allowed)
@@ -194,96 +114,6 @@ defmodule CadenceWeb.API.ParamParser do
   def parse_allowed_atom(_value, key, _allowed),
     do: {:error, {:invalid_param, key, :unknown_atom}}
 
-  def required_catalog_family(params, key) do
-    case Map.get(params, key) do
-      nil -> {:error, {:invalid_param, key, :required}}
-      value -> catalog_family_from_value(value, key)
-    end
-  end
-
-  def optional_catalog_family(params, key) do
-    case Map.get(params, key) do
-      nil -> {:ok, nil}
-      value -> catalog_family_from_value(value, key)
-    end
-  end
-
-  def catalog_family_from_value(:telemetry, _key), do: {:ok, :telemetry}
-  def catalog_family_from_value("telemetry", _key), do: {:ok, :telemetry}
-  def catalog_family_from_value(:command, _key), do: {:ok, :command}
-  def catalog_family_from_value("command", _key), do: {:ok, :command}
-  def catalog_family_from_value(:combined, _key), do: {:ok, :combined}
-  def catalog_family_from_value("combined", _key), do: {:ok, :combined}
-
-  def catalog_family_from_value(_other, key),
-    do: {:error, {:invalid_param, key, :unknown_atom}}
-
-  def optional_import_run_status(params, key) do
-    case Map.get(params, key) do
-      nil -> {:ok, nil}
-      value -> import_run_status_from_value(value, key)
-    end
-  end
-
-  def import_run_status_from_value(:running, _key), do: {:ok, :running}
-  def import_run_status_from_value("running", _key), do: {:ok, :running}
-  def import_run_status_from_value(:completed, _key), do: {:ok, :completed}
-  def import_run_status_from_value("completed", _key), do: {:ok, :completed}
-  def import_run_status_from_value(:failed, _key), do: {:ok, :failed}
-  def import_run_status_from_value("failed", _key), do: {:ok, :failed}
-
-  def import_run_status_from_value(_other, key),
-    do: {:error, {:invalid_param, key, :unknown_atom}}
-
-  def mission_event_cursor(params) when is_map(params) do
-    with {:ok, occurred_at} <- optional_datetime(params, "cursor_occurred_at") do
-      case {occurred_at, string_value(params, "cursor_mission_event_id")} do
-        {nil, nil} ->
-          {:ok, nil}
-
-        {nil, _event_id} ->
-          {:error, {:invalid_param, "cursor_occurred_at", :required}}
-
-        {%DateTime{} = cursor_time, nil} ->
-          {:ok, %{occurred_at: cursor_time}}
-
-        {%DateTime{} = cursor_time, event_id} ->
-          {:ok, %{occurred_at: cursor_time, mission_event_id: event_id}}
-      end
-    end
-  end
-
-  def string_or_string_list(params, key) do
-    case Map.get(params, key) do
-      nil ->
-        {:ok, nil}
-
-      value when is_binary(value) and value != "" ->
-        {:ok, value}
-
-      values when is_list(values) ->
-        if Enum.all?(values, &(is_binary(&1) and &1 != "")) do
-          {:ok, values}
-        else
-          {:error, {:invalid_param, key, :string_list}}
-        end
-
-      _other ->
-        {:error, {:invalid_param, key, :string_or_string_list}}
-    end
-  end
-
-  def clock_mode(params) when is_map(params) do
-    case Map.get(params, "clock_mode") do
-      nil -> {:ok, nil}
-      :live -> {:ok, :live}
-      "live" -> {:ok, :live}
-      :replay -> {:ok, :replay}
-      "replay" -> {:ok, :replay}
-      _other -> {:error, {:invalid_param, "clock_mode", :unknown_atom}}
-    end
-  end
-
   def direction(params) when is_map(params) do
     required_allowed_atom_param(params, "direction", @direction_values)
   end
@@ -292,201 +122,10 @@ defmodule CadenceWeb.API.ParamParser do
     optional_allowed_atom_param(params, key, @direction_values)
   end
 
-  def optional_selection_role(params, key) when is_map(params) and is_binary(key) do
-    optional_allowed_atom_param(params, key, @selection_role_values)
-  end
-
-  def selection_role(params) when is_map(params) do
-    allowed_atom_param(params, "selection_role", :candidate, @selection_role_values)
-  end
-
-  def link_template_application_target_mode(params) when is_map(params) do
-    case Map.get(params, "target_mode", "matching") do
-      "matching" -> {:ok, "matching"}
-      "selected" -> {:ok, "selected"}
-      _other -> {:error, {:invalid_param, "target_mode", :unknown_atom}}
-    end
-  end
-
-  def transport_target_scope(params) when is_map(params) do
-    allowed_atom_param(params, "target_scope", :path, @transport_target_scope_values)
-  end
-
-  def validate_password_confirmation(password, password_confirmation)
-      when is_binary(password) and is_binary(password_confirmation) do
-    if password == password_confirmation do
-      :ok
-    else
-      {:error, {:invalid_param, "password_confirmation", :mismatch}}
-    end
-  end
-
-  def optional_transport_target_scope(params, key) when is_map(params) and is_binary(key) do
-    optional_allowed_atom_param(params, key, @transport_target_scope_values)
-  end
-
-  def transport_family_key(params) when is_map(params) do
-    case Map.get(params, "family_key") do
-      nil -> {:error, {:invalid_param, "family_key", :required}}
-      value when is_atom(value) -> {:ok, value}
-      value when is_binary(value) -> existing_atom(%{"family_key" => value}, "family_key", nil)
-      _other -> {:error, {:invalid_param, "family_key", :atom}}
-    end
-  end
-
-  def optional_transport_family_key(params, key) when is_map(params) and is_binary(key) do
-    case Map.get(params, key) do
-      nil ->
-        {:ok, nil}
-
-      value when is_atom(value) ->
-        {:ok, value}
-
-      value when is_binary(value) ->
-        existing_atom(%{key => value}, key, nil)
-
-      _other ->
-        {:error, {:invalid_param, key, :atom}}
-    end
-  end
-
   def map_value(params, key) do
     case Map.get(params, key) do
       value when is_map(value) -> value
       _other -> %{}
-    end
-  end
-
-  def optional_map(params, key), do: optional_map(params, key, nil)
-
-  def optional_map(params, key, default) do
-    case Map.get(params, key, default) do
-      nil -> {:ok, nil}
-      value when is_map(value) -> {:ok, value}
-      _other -> {:error, {:invalid_param, key, :map}}
-    end
-  end
-
-  def list_value(params, key) do
-    case Map.get(params, key, []) do
-      value when is_list(value) -> value
-      _other -> []
-    end
-  end
-
-  def required_string_list(params, key) do
-    case Map.get(params, key) do
-      values when is_list(values) ->
-        if Enum.all?(values, &(is_binary(&1) and &1 != "")) do
-          {:ok, values}
-        else
-          {:error, {:invalid_param, key, :string_list}}
-        end
-
-      _other ->
-        {:error, {:invalid_param, key, :string_list}}
-    end
-  end
-
-  def optional_string_list(params, key) do
-    case Map.get(params, key) do
-      nil ->
-        {:ok, []}
-
-      values when is_list(values) ->
-        if Enum.all?(values, &(is_binary(&1) and &1 != "")) do
-          {:ok, values}
-        else
-          {:error, {:invalid_param, key, :string_list}}
-        end
-
-      _other ->
-        {:error, {:invalid_param, key, :string_list}}
-    end
-  end
-
-  def optional_patch_string_list(params, key) when is_map(params) and is_binary(key) do
-    if Map.has_key?(params, key) do
-      optional_string_list(params, key)
-    else
-      {:ok, nil}
-    end
-  end
-
-  def optional_versioned_ref_list(params, key, id_key)
-      when is_map(params) and is_binary(key) and is_binary(id_key) do
-    case Map.get(params, key) do
-      nil ->
-        {:ok, []}
-
-      refs when is_list(refs) ->
-        reduce_ok(refs, &versioned_ref(&1, id_key))
-
-      _other ->
-        {:error, {:invalid_param, key, :list}}
-    end
-  end
-
-  def optional_ref_list(params, key, id_key)
-      when is_map(params) and is_binary(key) and is_binary(id_key) do
-    case Map.get(params, key) do
-      nil ->
-        {:ok, []}
-
-      refs when is_list(refs) ->
-        reduce_ok(refs, &unversioned_ref(&1, id_key))
-
-      _other ->
-        {:error, {:invalid_param, key, :list}}
-    end
-  end
-
-  def optional_patch_versioned_ref_list(params, key, id_key)
-      when is_map(params) and is_binary(key) and is_binary(id_key) do
-    if Map.has_key?(params, key) do
-      optional_versioned_ref_list(params, key, id_key)
-    else
-      {:ok, nil}
-    end
-  end
-
-  def reduce_ok(values, mapper) when is_list(values) and is_function(mapper, 1) do
-    Enum.reduce_while(values, {:ok, []}, fn value, {:ok, acc} ->
-      case mapper.(value) do
-        {:ok, normalized_value} -> {:cont, {:ok, acc ++ [normalized_value]}}
-        {:error, reason} -> {:halt, {:error, reason}}
-      end
-    end)
-  end
-
-  def versioned_ref(ref, id_key) when is_map(ref) and is_binary(id_key) do
-    ref_id =
-      case Map.get(ref, id_key) do
-        value when is_binary(value) and value != "" -> value
-        _other -> nil
-      end
-
-    with {:ok, version} <- positive_integer(ref, "version", 1),
-         true <- is_binary(ref_id) and ref_id != "" do
-      {:ok, %{id_key => ref_id, "version" => version}}
-    else
-      false -> {:error, {:invalid_param, id_key, :required}}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  def unversioned_ref(ref, id_key) when is_map(ref) and is_binary(id_key) do
-    case Map.get(ref, id_key) do
-      value when is_binary(value) and value != "" -> {:ok, %{id_key => value}}
-      _other -> {:error, {:invalid_param, id_key, :required}}
-    end
-  end
-
-  def optional_patch_map(params, key) when is_map(params) and is_binary(key) do
-    if Map.has_key?(params, key) do
-      optional_map(params, key, %{})
-    else
-      {:ok, nil}
     end
   end
 
@@ -550,67 +189,8 @@ defmodule CadenceWeb.API.ParamParser do
     end
   end
 
-  def maybe_put_opt(opts, _key, nil), do: opts
-  def maybe_put_opt(opts, key, value), do: Keyword.put(opts, key, value)
-
   def maybe_put_attr(map, _key, nil), do: map
   def maybe_put_attr(map, key, value), do: Map.put(map, key, value)
-
-  def maybe_string_override(params, key, existing_value) do
-    if Map.has_key?(params, key) do
-      string_value(params, key) || existing_value
-    else
-      existing_value
-    end
-  end
-
-  def maybe_nullable_string_override(params, key, existing_value) do
-    if Map.has_key?(params, key) do
-      string_value(params, key)
-    else
-      existing_value
-    end
-  end
-
-  def maybe_map_value(params, key, existing_value) do
-    if Map.has_key?(params, key) do
-      map_value(params, key)
-    else
-      existing_value
-    end
-  end
-
-  def maybe_map_override(params, key, existing_value) do
-    if Map.has_key?(params, key) do
-      optional_map(params, key, existing_value)
-    else
-      {:ok, existing_value}
-    end
-  end
-
-  def optional_patch_nullable_string(params, key) when is_map(params) and is_binary(key) do
-    if Map.has_key?(params, key) do
-      {:ok, string_value(params, key)}
-    else
-      {:ok, nil}
-    end
-  end
-
-  def maybe_non_neg_integer(params, key, existing_value) do
-    if Map.has_key?(params, key) do
-      non_neg_integer(params, key, existing_value)
-    else
-      {:ok, existing_value}
-    end
-  end
-
-  def maybe_optional_datetime(params, key, existing_value) do
-    if Map.has_key?(params, key) do
-      optional_datetime(params, key)
-    else
-      {:ok, existing_value}
-    end
-  end
 
   def resolve_spacecraft_id(params, nil), do: {:ok, string_value(params, "spacecraft_id")}
 

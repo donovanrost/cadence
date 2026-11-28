@@ -4,7 +4,7 @@ defmodule Cadence.Limits.Event do
   telemetry samples.
   """
 
-  alias Cadence.Limits.Evaluator
+  alias Cadence.Limits.StateText
 
   @type sample_source_type :: :telemetry_sample | :derived_telemetry_sample
 
@@ -20,8 +20,8 @@ defmodule Cadence.Limits.Event do
           limit_definition_version: pos_integer(),
           limit_set_name: binary(),
           evaluated_value: term(),
-          limit_state: Evaluator.limit_state() | :unknown,
-          normalized_state: :red | :yellow | :green | :blue | :unknown,
+          limit_state: StateText.limit_state(),
+          normalized_state: StateText.normalized_state(),
           violation: boolean(),
           generation_time: DateTime.t() | nil,
           receipt_time: DateTime.t(),

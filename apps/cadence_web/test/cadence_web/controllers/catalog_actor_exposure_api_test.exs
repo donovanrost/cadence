@@ -12,7 +12,7 @@ defmodule CadenceWeb.CatalogActorExposureAPITest do
   """
   use CadenceWeb.ConnCase, async: false
 
-  import CadenceWeb.ControlPlaneApiFixtures
+  import CadenceWeb.MissionReadModelFixtures
   import Ecto.Query
 
   alias Cadence.Applications.TelemetryDecomFixtures, as: CatalogFixtures

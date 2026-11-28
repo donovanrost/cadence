@@ -48,6 +48,18 @@ defmodule Cadence.Alarms.Sources do
     }
   end
 
+  @doc """
+  The observation for a change of the rules in force on a parameter (`rule_changed` in the
+  monitoring result's metadata): the subject of `catalog/4`, with the change in `rule_change`.
+  Applied only while an episode of the subject is open (`Episodes.rule_changed/2`).
+  """
+  @spec rule_changed(map(), map(), %{from: binary(), to: binary(), rule_ids: [binary()]}) :: map()
+  def rule_changed(evaluation_attrs, update, %{from: from, to: to} = change) do
+    evaluation_attrs
+    |> catalog(update, evaluation_attrs.evaluation_id)
+    |> Map.put(:rule_change, %{from: from, to: to, rule_ids: Map.get(change, :rule_ids, [])})
+  end
+
   defp rule_context(%{kind: kind, id: id, label: label}),
     do: %{"rule_kind" => kind, "rule_id" => id, "rule_label" => label}
 

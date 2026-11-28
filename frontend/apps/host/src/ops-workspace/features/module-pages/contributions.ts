@@ -6,14 +6,6 @@ export const opsPages = createPageRegistry<OpsPageContribution<Component>>("ops.
     import("@cadence/limits-and-alarming/alarm-conditions").then(
       (module) => module.alarmConditionsContribution,
     ),
-  "data-operations.history": () =>
-    import("@cadence/data-operations/historical-workflows").then(
-      (module) => module.historicalWorkflowsContribution,
-    ),
-  "data-operations.history-manage": () =>
-    import("@cadence/data-operations/historical-workflows").then(
-      (module) => module.historicalWorkflowsManageContribution,
-    ),
   "planning.contact-schedule": () =>
     import("@cadence/planning-and-contacts/contact-scheduling").then(
       (module) => module.contactScheduleContribution,

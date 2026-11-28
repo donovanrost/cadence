@@ -45,7 +45,7 @@ alarm_episodes
 
 alarm_episode_events          (append-only audit, the Investigate event log)
   event_id PK, episode_id FK, org, mission, kind, actor (doc) NULL, at, payload
-  kind: raised | escalated | deescalated | acknowledged | assigned | unassigned | note | handed_off | cleared
+  kind: raised | escalated | deescalated | acknowledged | assigned | unassigned | note | handed_off | cleared | rule_changed
 ```
 
 **Severity mapping**, kept as the source value plus a normalized value:
@@ -72,6 +72,7 @@ previous and next subject state and returns Multi steps.
 | normal (or none) → alarm | open an episode (`raised`, first value, opened_at = sample generation time or receipt time) |
 | alarm → higher severity | `escalated`, update severity/peak. **Escalation clears the ack** (an acknowledged caution that turns critical is New again) |
 | alarm → lower non-normal severity | `deescalated`; the ack is kept |
+| the rules in force on the parameter change while the episode is open (#451) | `rule_changed`, once per (episode, rule ids, digest pair); the episode is untouched |
 | alarm → normal | `cleared`, state = cleared (auto-clear) |
 | alarm → alarm, same severity | update last_value / last_evaluated_at only (no event) |
 
