@@ -1,14 +1,12 @@
 defmodule Cadence.Platform.StoredHashGuardTest do
   @moduledoc """
-  DECISIONS #108 guard: stored hashes that are recomputed and compared, and that today hash
-  struct terms. A struct is a map, so adding, removing or renaming a field (or changing a
-  default) in any struct these hashes reach changes every stored value, and stored generations
-  stop verifying (the 11-17 calibration restart).
+  DECISIONS #108 and #166 guard: stored hashes that are recomputed and compared. The three
+  high-risk bases now project named struct fields into versioned canonical JSON. Changing an
+  included field or its default changes stored values, so every identity decision is reviewed.
 
-  - SHAPES: each struct reachable from a HIGH hash has its key set pinned here. A change fails
-    this test on purpose. Keep the hash stable in the same commit (leave the field out, or out
-    while at its default, as #73 does), add a legacy-value test, and only then update the list
-    here. Otherwise get a director-approved plan for the stored values.
+  - SHAPES and CANARIES: each struct reachable from these hashes has its key set pinned here.
+    A new field must be put into the versioned basis or explicitly excluded. Included changes
+    require a basis version bump and reseed plan; no frozen legacy basis exists in dev.
   - GOLDEN: fixed fixtures pinned to their hashes, for the hashes a pure fixture reaches:
     BindingSet.content_sha256 (whose value the mission runtime basis hashes in turn) and
     Declaration.fingerprint (checked against an authored override's stored expected_fingerprint).
@@ -17,12 +15,7 @@ defmodule Cadence.Platform.StoredHashGuardTest do
   - DEFAULTS are pinned with the keys: a stored row decoded without a key takes its default, so a
     changed default moves stored hashes exactly like a new field (api-ops).
 
-  The hashes are `:erlang.term_to_binary(term, [:deterministic])` over whole struct terms, so the
-  goldens also move on a struct MODULE rename or move (the `__struct__` atom is hashed), on a
-  field's value changing type (an atom becoming a string), and on an Erlang/OTP or Elixir upgrade
-  that changes the external term format. Every one of those stops every stored generation from
-  verifying. NEVER just re-pin a golden: find what moved it, keep stored values verifying (or get
-  a director-approved plan for them) BEFORE that change lands, and only then update the pin.
+  NEVER just re-pin a golden: find what moved it and review the stored-value migration first.
   """
   use Cadence.UnitCase, async: true
 
@@ -45,6 +38,7 @@ defmodule Cadence.Platform.StoredHashGuardTest do
 
   alias Cadence.Catalog.MissionModel.{Declaration, Provenance, Reference}
   alias Cadence.Telemetry.{FieldDefinition, PacketDefinition}
+  alias Cadence.TestSupport.ContentBasisCanary
 
   @shapes %{
     BindingSet => [
@@ -160,6 +154,20 @@ defmodule Cadence.Platform.StoredHashGuardTest do
       :role,
       :size_bits
     ],
+    Declaration => [
+      :aliases,
+      :definition,
+      :expected_fingerprint,
+      :extensions,
+      :kind,
+      :name,
+      :operation,
+      :provenance,
+      :qualified_name,
+      :references,
+      :semantic_id,
+      :space_system_path
+    ],
     Reference => [
       :expected_kind,
       :provenance,
@@ -195,17 +203,23 @@ defmodule Cadence.Platform.StoredHashGuardTest do
     PacketBindingConfiguration => %{bindings: [], enabled: true, metadata: %{}},
     PacketBinding => %{metadata: %{}, resources: [], selector: %{}},
     PacketBindingResource => %{metadata: %{}},
+    Declaration => %{
+      aliases: [],
+      definition: %{},
+      extensions: %{},
+      operation: :add,
+      references: []
+    },
     Reference => %{required: true},
     Provenance => %{metadata: %{}, source_path: [], transformations: []}
   }
 
-  @rule "it feeds a stored hash (DECISIONS #108). Keep stored values verifying in the same commit " <>
-          "(leave the field out, or out at its default, with a legacy-value test) or get a " <>
-          "director-approved plan; only then update the pin."
+  @rule "it feeds a stored hash (DECISIONS #108/#166). Decide whether a changed field enters " <>
+          "the identity, bump its basis version if it does, and plan a dev/stack reset."
 
-  # Pinned 11-17 on the tree that verifies Earendil's stored generation 9.
-  @golden_binding_set "35734e0ee261b3e9bf041ca5744f66b36bdb6685115262b056547bd24aede372"
-  @golden_declaration "af8853f96fcb709a7e1adadabe3f6eed881327be77142c5c4ce1429241af0976"
+  # The #166 named v1 basis replaces the earlier whole-struct values in dev.
+  @golden_binding_set "binding_set:v1:a92fd1bb439bf1b44ea1f47b91339d6202e173edddd43b8df2aab51d0d9c0970"
+  @golden_declaration "override_fingerprint:v1:d8872b667e94c9cf3e706dc012f4ab8462f95990eb25341a61ea7a2ea7941312"
 
   describe "structs reachable from stored hashes (#108)" do
     for {module, keys} <- @shapes do
@@ -218,6 +232,38 @@ defmodule Cadence.Platform.StoredHashGuardTest do
         assert Map.from_struct(unquote(module).__struct__()) == expected,
                "#{inspect(unquote(module))} changed its fields or defaults; " <> @rule
       end
+    end
+  end
+
+  test "every projected struct field is included or explicitly excluded" do
+    exclusions = %{
+      FieldDefinition => [:parameter_id, :qualified_name],
+      Declaration => [:expected_fingerprint, :name, :operation, :provenance, :space_system_path],
+      ApplicationBinding => [
+        :applied_at,
+        :applied_binding_set_id,
+        :applied_binding_set_version,
+        :updated_at
+      ],
+      PacketBindingConfiguration => [
+        :applied_at,
+        :applied_binding_set_id,
+        :applied_binding_set_version,
+        :inserted_at,
+        :updated_at
+      ]
+    }
+
+    for {name, owner} <- [
+          {"binding_set", BindingSet},
+          {"override_fingerprint", Declaration},
+          {"configuration_inputs", Cadence.Applications.SpacecraftConfiguration.ApplicationInputs}
+        ],
+        {module, included} <- owner.basis_struct_fields() do
+      ContentBasisCanary.assert_struct_fields!(module, name, 1,
+        included: included,
+        excluded: Map.get(exclusions, module, [])
+      )
     end
   end
 
@@ -239,18 +285,40 @@ defmodule Cadence.Platform.StoredHashGuardTest do
       assert BindingSet.content_sha256(named) == @golden_binding_set, golden_message()
     end
 
+    test "a float in the binding set's packet config is part of its basis" do
+      float_config = binding_set(%{"packet" => "HEALTH", "gain" => 1.5})
+      integer_config = binding_set(%{"packet" => "HEALTH", "gain" => 1})
+
+      assert String.starts_with?(BindingSet.content_sha256(float_config), "binding_set:v1:")
+      refute BindingSet.content_sha256(float_config) == BindingSet.content_sha256(integer_config)
+    end
+
     test "Declaration.fingerprint of a fixed declaration" do
       assert Declaration.fingerprint(declaration()) == @golden_declaration, golden_message()
+    end
+
+    test "a polynomial calibrator's float coefficients are part of its fingerprint" do
+      calibrator =
+        Declaration.new(%{
+          kind: :calibrator,
+          qualified_name: "/BUS/HK/temperature_cal",
+          definition: %{algorithm_type: :polynomial, coefficients: [0.0, 1.5], required: false}
+        })
+
+      integer_coefficients =
+        %{calibrator | definition: %{calibrator.definition | coefficients: [0, 1]}}
+
+      assert String.starts_with?(Declaration.fingerprint(calibrator), "override_fingerprint:v1:")
+      refute Declaration.fingerprint(calibrator) == Declaration.fingerprint(integer_coefficients)
     end
   end
 
   defp golden_message do
-    "A golden stored-hash value moved: a struct reached by it changed (fields, defaults, module " <>
-      "name or a value's type), or the Erlang/OTP or Elixir term encoding changed. Don't just " <>
-      "re-pin: " <> @rule
+    "A golden stored-hash value moved. Review the named fields and their canonical JSON " <>
+      "encoding before updating the pin: " <> @rule
   end
 
-  defp binding_set do
+  defp binding_set(packet_config \\ %{"packet" => "HEALTH"}) do
     packet = %PacketDefinition{
       packet_definition_id: "packet-golden",
       organization_id: "org-golden",
@@ -280,7 +348,7 @@ defmodule Cadence.Platform.StoredHashGuardTest do
       ]
     }
 
-    config = %CapabilityConfig{config_type: :telemetry_decom, document: %{"packet" => "HEALTH"}}
+    config = %CapabilityConfig{config_type: :telemetry_decom, document: packet_config}
 
     %BindingSet{
       binding_set_id: "binding-set-golden",

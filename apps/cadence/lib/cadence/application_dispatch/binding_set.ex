@@ -3,10 +3,71 @@ defmodule Cadence.ApplicationDispatch.BindingSet do
   Versioned collection of application dispatch rules.
   """
 
-  alias Cadence.ApplicationDispatch.{BindingRule, CapabilityInstance}
+  alias Cadence.ApplicationDispatch.{
+    BindingRule,
+    CapabilityConfig,
+    CapabilityInstance,
+    Selector,
+    SelectorMatch,
+    SelectorScope
+  }
+
   alias Cadence.Ids
-  alias Cadence.Platform.ContentHash
-  alias Cadence.Telemetry.FieldDefinition
+  alias Cadence.Platform.ContentBasis
+  alias Cadence.Telemetry.{FieldDefinition, PacketDefinition}
+
+  @basis_version 1
+  @basis_fields %{
+    __MODULE__ => [
+      :binding_set_id,
+      :organization_id,
+      :mission_id,
+      :version,
+      :capability_instances,
+      :rules
+    ],
+    BindingRule => [
+      :binding_rule_id,
+      :capability_instance_id,
+      :handler_key,
+      :selector,
+      :capability_config,
+      :priority,
+      :fanout_mode,
+      :handler_configuration
+    ],
+    CapabilityInstance => [
+      :capability_instance_id,
+      :family_key,
+      :target_scope,
+      :source_endpoint_ref,
+      :capability_config,
+      :lifecycle_state,
+      :runtime_configuration
+    ],
+    CapabilityConfig => [:config_type, :document],
+    Selector => [:match, :scope],
+    SelectorScope => [:source_endpoint_ref, :target_scope],
+    SelectorMatch => [:apid, :packet_kind],
+    PacketDefinition => [
+      :apid,
+      :fields,
+      :mission_id,
+      :organization_id,
+      :packet_definition_id,
+      :packet_name,
+      :version
+    ],
+    FieldDefinition => [
+      :byte_order,
+      :data_type,
+      :engineering_unit,
+      :field_id,
+      :name,
+      :offset_bits,
+      :size_bits
+    ]
+  }
 
   @type t :: %__MODULE__{
           binding_set_id: binary(),
@@ -64,33 +125,31 @@ defmodule Cadence.ApplicationDispatch.BindingSet do
   A telemetry field's `parameter_id` and `qualified_name` are left out (DECISIONS #73). They are
   the mission-model plan's semantic identity, which the runtime basis hash already covers through
   the mission model's content hash. Before 11-14 they weren't persisted, so every stored hash was
-  computed without them; leaving them out keeps those generations verifiable, and an in-memory
-  set always hashes like its read-back.
+  computed without them; leaving them out keeps an in-memory set hashing like its read-back.
+  This named v1 basis replaces the earlier whole-struct hash (#166); dev stacks must be reseeded.
   """
   @spec content_sha256(t()) :: binary()
   def content_sha256(%__MODULE__{} = binding_set) do
     binding_set
-    |> without_field_identity()
-    |> ContentHash.term_sha256()
+    |> basis_value()
+    |> Map.to_list()
+    |> then(&ContentBasis.digest("binding_set", @basis_version, &1))
   end
 
-  defp without_field_identity(%FieldDefinition{} = field),
-    do: %{field | parameter_id: nil, qualified_name: nil}
+  @doc false
+  def basis_struct_fields, do: @basis_fields
 
-  defp without_field_identity(%module{} = struct) do
-    fields =
-      struct |> Map.from_struct() |> Map.new(fn {k, v} -> {k, without_field_identity(v)} end)
-
-    struct(module, fields)
+  defp basis_value(%module{} = value) do
+    fields = Map.fetch!(@basis_fields, module)
+    value |> ContentBasis.project(fields) |> basis_value()
   end
 
-  defp without_field_identity(map) when is_map(map),
-    do: Map.new(map, fn {k, v} -> {k, without_field_identity(v)} end)
+  defp basis_value(map) when is_map(map),
+    do: Map.new(map, fn {key, value} -> {key, basis_value(value)} end)
 
-  defp without_field_identity(list) when is_list(list),
-    do: Enum.map(list, &without_field_identity/1)
+  defp basis_value(list) when is_list(list), do: Enum.map(list, &basis_value/1)
 
-  defp without_field_identity(other), do: other
+  defp basis_value(other), do: other
 
   @spec fetch_capability_instance(t(), binary()) :: {:ok, CapabilityInstance.t()} | :error
   def fetch_capability_instance(
