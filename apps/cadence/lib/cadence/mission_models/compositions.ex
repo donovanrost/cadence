@@ -33,6 +33,7 @@ defmodule Cadence.MissionModels.Compositions do
 
   alias Cadence.MissionModels.{
     AuthoredHead,
+    AuthoredScope,
     CompositionLayerRow,
     CompositionRow,
     EffectiveRevisionRow,
@@ -332,17 +333,41 @@ defmodule Cadence.MissionModels.Compositions do
 
   # The composition's imported layers at their mounts, then the authored head last: an authored
   # layer is never mounted, it addresses the composed tree (Mount, #444).
-  defp compile(composition, head, opts) do
-    imported = Enum.map(composition.imported_layers, & &1.layer_id)
-    layer_ids = if head, do: imported ++ [head], else: imported
+  defp compile(composition, nil, opts) do
+    layer_ids = Enum.map(composition.imported_layers, & &1.layer_id)
     mounts = Map.new(composition.imported_layers, &{&1.layer_id, &1.mount})
 
-    if is_nil(head) and reusable?(Keyword.get(opts, :compiled), layer_ids, mounts),
+    if reusable?(Keyword.get(opts, :compiled), layer_ids, mounts),
       do: {:ok, Keyword.fetch!(opts, :compiled)},
       else:
         MissionModels.compose(composition.organization_id, composition.mission_id, layer_ids,
           mounts: mounts
         )
+  end
+
+  # At a head: the imported layers at their mounts, then the head's declarations scoped to this
+  # composition (M2, AuthoredScope), last and unmounted. The revision still names the head's id.
+  defp compile(composition, head, _opts) do
+    %{organization_id: org, mission_id: mission} = composition
+    imported = Enum.map(composition.imported_layers, & &1.layer_id)
+    mounts = Map.new(composition.imported_layers, &{&1.layer_id, &1.mount})
+
+    with {:ok, layers} <- fetch_layers(org, mission, imported),
+         {:ok, authored} <- MissionModels.fetch_layer(org, mission, head) do
+      MissionModels.compile_layers(
+        layers ++ [AuthoredScope.for_composition(authored, composition.composition_id)],
+        mounts: mounts
+      )
+    end
+  end
+
+  defp fetch_layers(org, mission, layer_ids) do
+    Enum.reduce_while(layer_ids, {:ok, []}, fn layer_id, {:ok, acc} ->
+      case MissionModels.fetch_layer(org, mission, layer_id) do
+        {:ok, layer} -> {:cont, {:ok, acc ++ [layer]}}
+        {:error, reason} -> {:halt, {:error, {layer_id, reason}}}
+      end
+    end)
   end
 
   # Only an unmounted single-layer compile of the same layer is the same compile (#456: one
