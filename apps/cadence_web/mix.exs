@@ -46,8 +46,6 @@ defmodule CadenceWeb.MixProject do
       {:opentelemetry_bandit, "~> 0.3.0"},
       {:opentelemetry_phoenix, "~> 2.0"},
       {:phoenix, "~> 1.8.12"},
-      {:phoenix_html, "~> 4.3"},
-      {:phoenix_live_view, "~> 1.2"},
       {:swoosh, "~> 1.17"},
       {:tidewave, "~> 0.5", only: [:dev]}
     ]

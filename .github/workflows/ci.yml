@@ -375,11 +375,10 @@ jobs:
       - name: Create and migrate the cadence test database
         working-directory: apps/cadence
         run: mix db.setup.test
-      # :browser and :browser_smoke stay excluded (test_helper.exs); the Frontend workflow runs
-      # them. :frontend_publication runs in test-web-publication, which builds its input.
+      # :browser and :browser_smoke stay excluded (test_helper.exs).
       - name: mix test --partitions 2
         working-directory: apps/cadence_web
-        run: mix test --partitions 2 --exclude frontend_publication --slowest-modules 10
+        run: mix test --partitions 2 --slowest-modules 10
 
   # The console build, made once for console-e2e.
   browser-assets:
