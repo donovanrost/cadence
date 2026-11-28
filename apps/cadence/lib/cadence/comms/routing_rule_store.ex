@@ -15,6 +15,7 @@ defmodule Cadence.Comms.RoutingRuleStore do
     Transport
   }
 
+  alias Cadence.Comms.RoutingRuleStore.Batch
   alias Cadence.Comms.{TransportStore, UplinkGateway}
 
   alias Cadence.Contacts.{
@@ -278,6 +279,36 @@ defmodule Cadence.Comms.RoutingRuleStore do
     |> order_by([row], asc: row.spacecraft_id, asc: row.purpose_label, asc: row.direction)
     |> Repo.all()
     |> Enum.map(&RoutingRuleRow.to_domain/1)
+  end
+
+  @doc false
+  def count_routes_to_repin(%Transport{} = transport) do
+    transport
+    |> routes_to_repin()
+    |> Repo.aggregate(:count)
+  end
+
+  @doc "Refreshes current routes and their runtime references inside the transport write."
+  def repin_active_transport_routes(%Transport{} = transport) do
+    routes =
+      transport
+      |> routes_to_repin()
+      |> order_by([row], asc: row.routing_rule_id)
+      |> lock("FOR UPDATE")
+      |> Repo.all()
+      |> Enum.map(&RoutingRuleRow.to_domain/1)
+
+    Batch.repin(transport, routes)
+  end
+
+  defp routes_to_repin(transport) do
+    from(row in RoutingRuleRow,
+      where:
+        row.organization_id == ^transport.organization_id and
+          row.mission_id == ^transport.mission_id and
+          row.transport_id == ^transport.transport_id and row.lifecycle_state == "active" and
+          row.transport_version < ^transport.version
+    )
   end
 
   @doc "Materialized legs of the named extra routes, with archived legs for revival."

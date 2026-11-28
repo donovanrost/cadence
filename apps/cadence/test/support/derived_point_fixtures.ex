@@ -25,13 +25,26 @@ defmodule Cadence.DerivedPointFixtures do
   Compiles, persists and activates the model in `mission_id` (already in scope). Returns the
   revision id, the derived parameter's semantic id and the system that owns its algorithm.
   """
-  @spec activate!(binary(), binary()) :: %{
+  @spec activate!(binary(), binary(), keyword()) :: %{
           revision_id: binary(),
           derived_id: binary(),
           raw_id: binary(),
           space_system_id: binary()
         }
-  def activate!(organization_id, mission_id) do
+  def activate!(organization_id, mission_id, opts \\ []) do
+    model = compile!(organization_id, mission_id, opts)
+    activate_binding_set!(organization_id, mission_id, model.raw, model.revision_id)
+    Map.delete(model, :raw)
+  end
+
+  @doc """
+  Compiles and persists a revision that derives `opts[:derived_name]` (default the standard one),
+  without activating it: the second composition's revision of a fleet test. Returns what
+  `activate!/3` does, plus the raw `Declaration`.
+  """
+  @spec compile!(binary(), binary(), keyword()) :: map()
+  def compile!(organization_id, mission_id, opts \\ []) do
+    derived_name = Keyword.get(opts, :derived_name, @derived)
     {raw_type, raw} = typed_parameter(@raw)
 
     unit = %{kind: :unit, qualified_name: "/vehicle/units/volt", definition: %{symbol: "V"}}
@@ -46,7 +59,7 @@ defmodule Cadence.DerivedPointFixtures do
     derived =
       Declaration.new(%{
         kind: :parameter,
-        qualified_name: @derived,
+        qualified_name: derived_name,
         references: [
           reference(:parameter_type, derived_type.qualified_name, :type),
           reference(:unit, unit.qualified_name, :unit)
@@ -75,13 +88,12 @@ defmodule Cadence.DerivedPointFixtures do
       })
 
     {:ok, result} = MissionModels.compile_layers([layer])
-    revision_id = result.revision.revision_id
-    activate_binding_set!(organization_id, mission_id, raw, revision_id)
 
     %{
-      revision_id: revision_id,
+      revision_id: result.revision.revision_id,
       derived_id: derived.semantic_id,
       raw_id: raw.semantic_id,
+      raw: raw,
       space_system_id: hd(result.plans.algorithm.plan["algorithms"])["space_system_id"]
     }
   end

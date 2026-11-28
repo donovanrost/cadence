@@ -803,7 +803,7 @@ never count them toward a requirement.
   station (`ref` is always set). `overlaps` covers every live booking, plan or not. No ready route
   is `offers: []` with `not_ready` saying why, not an error. An archived provider's routes are
   refused with `mission_provider_archived` even while a transport still pins its older active
-  version (#985). Errors: `422 invalid_params` on the
+  version (#985). Routes on archived transports report `transport_archived`. Errors: `422 invalid_params` on the
   field (window in the past, over 7 days, end before start), `404 spacecraft_not_found`, `503
   search_unavailable` (every route's provider search failed).
 - `POST /single-bookings` `{token, note?}` (note ≤ 500) → `{outcome: confirmed | requested |
@@ -812,7 +812,9 @@ never count them toward a requirement.
   first answer; `requested` settles over the `contacts` invalidation. `reason` is the K1 reason
   code. `pass` is the `/passes` row with `off_plan`, or `null` when rejected **or** while the
   provider job hasn't written the reservation yet (the bar appears on the next `contacts`
-  invalidation). Errors: `409 opportunity_expired` ("Search again."), `409 route_changed`, `422
+  invalidation). New bookings use the latest applied transport. A booking keeps the version and
+  path references recorded when it was made. Errors: `409 opportunity_expired` ("Search again."),
+  `409 route_changed`, `409 transport_archived`, `422
   token_invalid`, `422 invalid_params` (`note`), `403 forbidden`.
 - Pass rows carry `off_plan: {booked_by {kind, id, name}, booked_at, note} | null` (`null` for
   plan bookings). Release is `POST /passes/:id/release` above.

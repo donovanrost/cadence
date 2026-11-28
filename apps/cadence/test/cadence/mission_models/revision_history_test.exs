@@ -67,7 +67,9 @@ defmodule Cadence.MissionModels.RevisionHistoryTest do
     assert MissionModels.revisions_at(org, outside.mission_id, @first_receipt) == %{}
   end
 
-  test "each read issues one query at both 100 and 1,000 spacecraft" do
+  test "both reads use one bounded statement under a generic plan at 100 and 1,000 craft" do
+    Repo.query!("SET LOCAL plan_cache_mode = force_generic_plan")
+
     for size <- [100, 1_000] do
       scope = configuration_mission("history-#{size}")
       org = scope.organization_id
@@ -78,15 +80,28 @@ defmodule Cadence.MissionModels.RevisionHistoryTest do
           {"craft-#{i}", if(i <= div(size, 2), do: "left", else: "right")}
         end)
 
-      scope |> activate(1, assignments) |> receive_generation(@first_receipt)
+      for generation <- 1..2 do
+        historical =
+          Map.new(assignments, fn {craft, revision} ->
+            {craft, "#{revision}-#{generation}"}
+          end)
 
-      assert {"left", 1} =
-               count_queries(fn ->
+        at = DateTime.add(@first_receipt, generation - 3, :microsecond)
+        scope |> activate(generation, historical) |> receive_generation(at)
+      end
+
+      scope |> activate(3, assignments) |> receive_generation(@first_receipt)
+
+      assert {"left", single_query} =
+               with_one_query(fn ->
                  MissionModels.revision_at(org, mission, "craft-1", @first_receipt)
                end)
 
-      assert {%{"left" => left, "right" => right}, 1} =
-               count_queries(fn -> MissionModels.revisions_at(org, mission, @first_receipt) end)
+      assert {%{"left" => left, "right" => right}, fleet_query} =
+               with_one_query(fn -> MissionModels.revisions_at(org, mission, @first_receipt) end)
+
+      assert_bounded_plan(:revisions_at, fleet_query, size)
+      assert_bounded_plan(:revision_at, single_query, size)
 
       assert Enum.sort(left ++ right) == Enum.sort(Map.keys(assignments))
       assert length(left) == div(size, 2)
@@ -140,25 +155,60 @@ defmodule Cadence.MissionModels.RevisionHistoryTest do
     assert {1, nil} = Repo.insert_all("mission_generation_receipts", [receipt])
   end
 
-  defp count_queries(fun) do
+  defp with_one_query(fun) do
     owner = self()
-    counter = :counters.new(1, [])
     handler = make_ref()
 
     :ok =
       :telemetry.attach(
         handler,
         [:cadence, :repo, :query],
-        fn _event, _measurements, _metadata, _config ->
-          if self() == owner, do: :counters.add(counter, 1, 1)
+        fn _event, _measurements, metadata, _config ->
+          if self() == owner, do: send(owner, {handler, metadata})
         end,
         nil
       )
 
     try do
-      {fun.(), :counters.get(counter, 1)}
+      result = fun.()
+      assert_receive {^handler, query}
+      refute_received {^handler, _}
+      {result, query}
     after
       :telemetry.detach(handler)
     end
   end
+
+  defp assert_bounded_plan(read, %{query: sql, params: params}, size) do
+    Repo.query!("PREPARE revision_history_probe AS " <> sql)
+
+    try do
+      # PostgreSQL's EXECUTE utility statement takes literal arguments. Quote the
+      # captured binds in PostgreSQL to replay the exact named statement.
+      %{rows: [[explain]]} =
+        Repo.query!(
+          """
+          SELECT 'EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON, TIMING OFF) EXECUTE revision_history_probe('
+            || string_agg(quote_literal(value), ', ' ORDER BY position) || ')'
+          FROM unnest($1::text[]) WITH ORDINALITY AS parameters(value, position)
+          """,
+          [Enum.map(params, &to_string/1)]
+        )
+
+      %{rows: [[[%{"Plan" => plan}]]]} = Repo.query!(explain)
+      buffers = plan["Shared Hit Blocks"] + plan["Shared Read Blocks"]
+      ceiling = 8 * size
+
+      # Allow room for the membership scan and keyed entry reads at both fleet sizes.
+      assert buffers < ceiling,
+             "#{read} touched #{buffers} shared buffers for #{size} craft (ceiling #{ceiling})"
+
+      assert init_plan?(plan), "#{read} must resolve the fleet hash in an init plan"
+    after
+      Repo.query!("DEALLOCATE revision_history_probe")
+    end
+  end
+
+  defp init_plan?(%{"Parent Relationship" => "InitPlan"}), do: true
+  defp init_plan?(plan), do: Enum.any?(Map.get(plan, "Plans", []), &init_plan?/1)
 end

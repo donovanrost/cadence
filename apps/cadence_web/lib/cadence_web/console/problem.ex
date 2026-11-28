@@ -157,6 +157,7 @@ defmodule CadenceWeb.Console.Problem do
     authenticated_user_required:
       {403, "Only a person can do this, not a service identity. Nothing changed."},
     route_changed: {409, "The route to that station changed. Search again."},
+    transport_archived: {409, "The Transport on this route is archived."},
     opportunity_expired: {409, "That offer has gone. Search again."},
     token_invalid: {422, "That offer can't be booked. Search again."},
     search_unavailable: {503, "The providers couldn't be searched right now."},

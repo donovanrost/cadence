@@ -23,6 +23,7 @@ defmodule Cadence.SemanticObservations do
     AlarmTransitionRow,
     FleetAlarms,
     LatestAlarmStateRow,
+    LivePolicies,
     MonitoringEvaluationRow
   }
 
@@ -108,24 +109,37 @@ defmodule Cadence.SemanticObservations do
   end
 
   @doc """
-  A generation's rules no longer include some policies (`live_policy_ids` are the ones it keeps;
-  #451 T3b): their open episodes clear with cause `rule_retired`, their latest alarm states go, and
-  the fleet summaries of the spacecraft they were on are recomputed, in one transaction. One call
-  per generation and mission, however many spacecraft are affected; idempotent, so a second node
-  or a repeat writes nothing more. `ref` names the generation (it keys the episode events), `at`
-  is when it was applied, and `generation` is its number.
+  A generation's rules no longer keep some policies on some spacecraft (#451 T3b): their open
+  episodes clear with cause `rule_retired`, their latest alarm states go, and the fleet summaries of
+  the spacecraft they were on are recomputed, in one transaction. `groups` is what the generation
+  keeps (`LivePolicies`): a mission runs a revision per composition, so a policy is live per group
+  of spacecraft. One call per generation and mission, a statement per group however many
+  spacecraft are affected; idempotent, so a second node or a repeat writes nothing more. `ref`
+  names the generation (it keys the episode events), `at` is when it was applied, and `generation`
+  is its number.
 
-  The same transaction records the generation's policies (`semantic_live_policies`), so a batch
+  The same transaction records the generation's groups (`semantic_live_policies`), so a batch
   persisted later but evaluated under an OLDER generation cannot bring a retired policy's state
-  back (`drop_retired/2`). A run for a generation older than the recorded one does nothing.
+  back (`drop_retired/3`). A run for a generation older than the recorded one does nothing.
   """
-  @spec retire_rules(binary(), binary(), [binary()], binary(), DateTime.t(), pos_integer()) ::
+  @spec retire_rules(
+          binary(),
+          binary(),
+          [LivePolicies.group()],
+          binary(),
+          DateTime.t(),
+          pos_integer()
+        ) ::
           {:ok, %{episodes: non_neg_integer(), states: non_neg_integer()}} | {:error, term()}
-  def retire_rules(organization_id, mission_id, live_policy_ids, ref, at, generation) do
+  def retire_rules(organization_id, mission_id, groups, ref, at, generation) do
+    live = LivePolicies.new(groups)
+
     Repo.transaction(fn ->
-      if record_live_policies(Repo, organization_id, mission_id, live_policy_ids, generation) do
-        {:ok, episodes} = Episodes.retire_rules(Repo, mission_id, live_policy_ids, ref, at)
-        states = retire_states(Repo, organization_id, mission_id, live_policy_ids)
+      if record_live_policies(Repo, organization_id, mission_id, groups, generation) do
+        {:ok, episodes} =
+          Episodes.retire_rules(Repo, mission_id, &LivePolicies.live?(live, &1, &2), ref, at)
+
+        states = retire_states(Repo, organization_id, mission_id, groups)
 
         :ok =
           FleetAlarms.refresh(Repo, organization_id, mission_id, Enum.uniq(episodes ++ states))
@@ -143,8 +157,10 @@ defmodule Cadence.SemanticObservations do
 
   # True when this generation is the newest recorded (or the same one again): the row only moves
   # forward.
-  defp record_live_policies(repo, organization_id, mission_id, policy_ids, generation) do
+  defp record_live_policies(repo, organization_id, mission_id, groups, generation) do
     now = DateTime.utc_now()
+    policy_ids = LivePolicies.union(groups)
+    stored = LivePolicies.dump(groups)
 
     {count, _rows} =
       repo.insert_all(
@@ -155,6 +171,7 @@ defmodule Cadence.SemanticObservations do
             mission_id: mission_id,
             generation: generation,
             policy_ids: policy_ids,
+            groups: stored,
             inserted_at: now,
             updated_at: now
           }
@@ -162,7 +179,14 @@ defmodule Cadence.SemanticObservations do
         on_conflict:
           from(live in "semantic_live_policies",
             where: live.generation <= ^generation,
-            update: [set: [generation: ^generation, policy_ids: ^policy_ids, updated_at: ^now]]
+            update: [
+              set: [
+                generation: ^generation,
+                policy_ids: ^policy_ids,
+                groups: ^stored,
+                updated_at: ^now
+              ]
+            ]
           ),
         conflict_target: [:organization_id, :mission_id]
       )
@@ -170,19 +194,52 @@ defmodule Cadence.SemanticObservations do
     count == 1
   end
 
-  # The spacecraft of the latest states of the mission's policies no generation keeps.
-  defp retire_states(repo, organization_id, mission_id, live_policy_ids) do
-    {_count, spacecraft} =
-      repo.delete_all(
-        from(row in LatestAlarmStateRow,
-          where:
-            row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-              row.policy_id not in ^live_policy_ids,
-          select: row.spacecraft_id
-        )
+  # The spacecraft of the latest states the groups don't keep: per group its spacecraft's states
+  # whose policy it doesn't have, the spacecraft in no group (they run nothing) and a mission-wide
+  # state whose policy no group has. A statement per group, whatever the fleet.
+  defp retire_states(repo, organization_id, mission_id, groups) do
+    base =
+      from(row in LatestAlarmStateRow,
+        where: row.organization_id == ^organization_id and row.mission_id == ^mission_id,
+        select: row.spacecraft_id
       )
 
-    spacecraft
+    {assigned, whole} = Enum.split_with(groups, &is_list(&1.spacecraft))
+
+    per_group =
+      Enum.flat_map(whole, fn %{policies: policies} ->
+        [where(base, [row], row.policy_id not in ^policies)]
+      end)
+
+    crafted =
+      Enum.map(assigned, fn %{policies: policies, spacecraft: crafts} ->
+        where(base, [row], row.spacecraft_id in ^crafts and row.policy_id not in ^policies)
+      end)
+
+    # A craft in no group runs nothing, so everything on it retires: safe only because the groups
+    # were read at the generation's `applied_at` (see `LivePolicies`).
+    unassigned =
+      if whole == [] do
+        all_crafts = Enum.flat_map(assigned, & &1.spacecraft)
+        union = LivePolicies.union(groups)
+
+        [
+          where(
+            base,
+            [row],
+            not is_nil(row.spacecraft_id) and row.spacecraft_id not in ^all_crafts
+          ),
+          where(base, [row], is_nil(row.spacecraft_id) and row.policy_id not in ^union)
+        ]
+      else
+        []
+      end
+
+    (per_group ++ crafted ++ unassigned)
+    |> Enum.flat_map(fn query ->
+      {_count, spacecraft} = repo.delete_all(query)
+      spacecraft
+    end)
   end
 
   defp notify_alarm_changes(changes) do
@@ -298,7 +355,7 @@ defmodule Cadence.SemanticObservations do
 
   defp add_result(%{semantic_result: %Result{} = result} = prepared, accumulator) do
     transitions = Enum.reject(result.monitoring_results, &is_nil(&1.transition))
-    add_transitions(prepared, drop_retired(prepared, transitions), accumulator)
+    add_transitions(prepared, drop_retired(prepared, result, transitions), accumulator)
   end
 
   defp add_result(_prepared, accumulator), do: accumulator
@@ -307,40 +364,51 @@ defmodule Cadence.SemanticObservations do
   # retired one of its policies (`retire_rules/6` already ran): its transition would bring the
   # policy's latest state back (a phantom alarm on Fleet) or touch a cleared episode's story
   # (#451 T3b). Such a transition is not persisted: the mission's recorded generation is newer than
-  # the batch's and does not keep the policy. Nothing is asked for a batch with no transition, and
-  # nothing is dropped for a batch of the recorded generation or a newer one (a generation's own
-  # new policies arrive before its retirement has recorded it).
-  defp drop_retired(_prepared, []), do: []
+  # the batch's and does not keep the policy on that spacecraft. Nothing is asked for a batch with
+  # no transition, and nothing is dropped for a batch of the recorded generation or a newer one (a
+  # generation's own new policies arrive before its retirement has recorded it).
+  defp drop_retired(_prepared, _result, []), do: []
 
-  defp drop_retired(prepared, transitions) do
-    case semantic_context(prepared) do
-      %{organization_id: organization_id, mission_id: mission_id, generation: generation}
-      when is_binary(organization_id) and is_integer(generation) ->
-        policies = transitions |> Enum.map(& &1.policy_id) |> Enum.uniq()
-        kept = kept_policies(organization_id, mission_id, generation, policies)
-        if kept, do: Enum.filter(transitions, &(&1.policy_id in kept)), else: transitions
-
-      _no_generation ->
-        transitions
+  defp drop_retired(prepared, result, transitions) do
+    with %{organization_id: organization_id, mission_id: mission_id, generation: generation}
+         when is_binary(organization_id) and is_integer(generation) <- semantic_context(prepared),
+         %{} = live <- newer_live(organization_id, mission_id, generation) do
+      updates = Map.new(result.parameter_updates, &{&1.update_id, &1})
+      Enum.filter(transitions, &live_transition?(live, updates, &1))
+    else
+      _nothing_newer_to_honour -> transitions
     end
   end
 
-  # Of `policies`, the ones the mission's recorded generation keeps, when that generation is newer
-  # than `generation`; nil when it is not (nothing to drop).
-  defp kept_policies(organization_id, mission_id, generation, policies) do
-    Repo.one(
-      from(live in "semantic_live_policies",
-        where:
-          live.organization_id == ^organization_id and live.mission_id == ^mission_id and
-            live.generation > ^generation,
-        select:
-          fragment(
-            "ARRAY(SELECT p FROM unnest(?::text[]) p WHERE p = ANY(?))",
-            ^policies,
-            live.policy_ids
-          )
+  defp live_transition?(live, updates, transition) do
+    craft = updates |> Map.get(transition.update_id) |> spacecraft_of()
+    LivePolicies.live?(live, craft, transition.policy_id)
+  end
+
+  defp spacecraft_of(nil), do: nil
+
+  defp spacecraft_of(update),
+    do: Map.get(update.metadata, :spacecraft_id, Map.get(update.metadata, "spacecraft_id"))
+
+  # What the mission's recorded generation keeps, when that generation is newer than `generation`;
+  # nil when it is not (nothing to drop). A record with no groups (made before them) keeps its
+  # policies on every spacecraft.
+  defp newer_live(organization_id, mission_id, generation) do
+    row =
+      Repo.one(
+        from(live in "semantic_live_policies",
+          where:
+            live.organization_id == ^organization_id and live.mission_id == ^mission_id and
+              live.generation > ^generation,
+          select: {live.policy_ids, live.groups}
+        )
       )
-    )
+
+    case row do
+      nil -> nil
+      {policy_ids, []} -> LivePolicies.new([%{policies: policy_ids, spacecraft: :all}])
+      {_policy_ids, groups} -> groups |> LivePolicies.load() |> LivePolicies.new()
+    end
   end
 
   defp add_transitions(_prepared, [], accumulator), do: accumulator

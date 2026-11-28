@@ -1,14 +1,27 @@
 defmodule Cadence.Contacts.ProviderSchedulingTest do
   use Cadence.DataCase, async: false
 
+  import Cadence.ConfigurationFixtures, only: [member_scope: 2, with_approval_required: 1]
+
   alias Cadence.Comms.{RoutingRuleStore, TransportStore}
 
   alias Cadence.Comms.{RoutingRule, Transport}
-  alias Cadence.Contacts.ProviderScheduling
+  alias Cadence.ContactPlanning.OpportunityCapability
+
+  alias Cadence.Contacts.{
+    ContactRuntimeConfig,
+    ProviderBooking,
+    ProviderReservations,
+    ProviderScheduling,
+    ScheduleCommands
+  }
+
+  alias Cadence.Control.Configuration
   alias Cadence.Control.Providers.FleetOpportunitySearch
   alias Cadence.GroundNetworks
   alias Cadence.GroundNetworks.MissionProvider
   alias Cadence.Management.Transports
+  alias Cadence.Reads.ConfigLabels
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
   alias Cadence.TestSupport.FakeProviderClient
@@ -102,6 +115,132 @@ defmodule Cadence.Contacts.ProviderSchedulingTest do
 
     assert route.provider_version == context.provider.version
     assert route.provider_display_name == context.provider.display_name
+  end
+
+  test "new bookings use the reviewed version while old contacts keep their paths", c do
+    on_exit(with_approval_required(true))
+    author = member_scope(c.organization_id, :organization_admin)
+    reviewer = member_scope(c.organization_id, :organization_admin)
+    route_v1 = only_route(c)
+    assert {:ok, old_booking} = book(c, route_v1)
+    old_contact = old_booking.scheduled_contact
+    assert old_booking.provider_reservation.transport_version == 1
+    assert {:ok, [path_v1]} = ContactRuntimeConfig.resolve_paths(old_contact)
+
+    op = %{
+      kind: "transport",
+      action: :update,
+      entity_id: c.transport.transport_id,
+      changes: [%{path: "configuration.listener", value: "shared"}]
+    }
+
+    assert {:ok, staged} =
+             Configuration.stage(author, c.mission_id, %{summary: "Share downlink"}, [op])
+
+    assert {:ok, %{verdict: :go} = preview} =
+             Configuration.preview(author, c.mission_id, staged.change_set_id)
+
+    assert [%{route_count: 1, transport_version: 2}] = preview.effects
+
+    assert %{diffs: [%{fields: [%{note: "Routes on this transport: 1 move to version 2."}]}]} =
+             ConfigLabels.preview(c.organization_id, c.mission_id, preview)
+
+    assert only_route(c) == route_v1
+
+    assert {:ok, %{state: :in_review, version: version}} =
+             Configuration.submit(author, c.mission_id, staged.change_set_id, %{
+               reason: "Share one downlink socket",
+               expected_version: staged.version
+             })
+
+    assert only_route(c) == route_v1
+    assert {:ok, during_review} = book(c, route_v1)
+    assert during_review.provider_reservation.transport_version == 1
+
+    assert {:ok, %{state: :applied}} =
+             Configuration.review(reviewer, c.mission_id, staged.change_set_id, :approve, %{
+               expected_version: version
+             })
+
+    route_v2 = only_route(c)
+    assert route_v2.transport_version == 2
+    assert route_v2.provider_profile_id != route_v1.provider_profile_id
+    assert route_v2.path_template_id != route_v1.path_template_id
+    assert {:ok, new_booking} = book(c, route_v2)
+    assert new_booking.provider_reservation.transport_version == 2
+    assert {:ok, [path_v2]} = ContactRuntimeConfig.resolve_paths(new_booking.scheduled_contact)
+    assert [%{configuration: %{"listener" => "shared"}}] = path_v2.provider_bindings
+
+    assert {:ok, [^path_v1]} = ContactRuntimeConfig.resolve_paths(old_contact)
+
+    assert {:ok, persisted} =
+             ProviderReservations.fetch(
+               c.organization_id,
+               c.mission_id,
+               old_booking.provider_reservation.provider_reservation_id
+             )
+
+    assert persisted.transport_version == 1
+
+    assert persisted.request_document["routing"]["path_template_refs"] ==
+             old_contact.path_template_refs
+
+    assert {:error, :route_changed} = book(c, route_v1)
+  end
+
+  test "an archived transport refuses new bookings using an older route pin", c do
+    route = only_route(c)
+
+    assert {:ok, %{lifecycle_state: :archived}} =
+             TransportStore.archive_transport(c.organization_id, c.mission_id, route.transport_id)
+
+    assert {:ok, %{routes: [], findings: [%{code: :transport_archived}]}} =
+             ProviderScheduling.list_ready_downlink_routes(
+               c.organization_id,
+               c.mission_id,
+               c.spacecraft.spacecraft_id
+             )
+
+    assert {:error, :transport_archived} =
+             ProviderScheduling.resolve_ready_downlink_route(
+               c.organization_id,
+               c.mission_id,
+               c.spacecraft.spacecraft_id,
+               route.route_key
+             )
+
+    assert {:error, :transport_archived} = book(c, route)
+
+    assert {:ok, %{transport_version: 1}} =
+             RoutingRuleStore.fetch_routing_rule(
+               c.organization_id,
+               c.mission_id,
+               c.rule.routing_rule_id
+             )
+
+    assert {:ok, _} =
+             RoutingRuleStore.archive_routing_rule(
+               c.organization_id,
+               c.mission_id,
+               c.rule.routing_rule_id
+             )
+
+    token =
+      OpportunityCapability.sign(%{
+        "organization_id" => c.organization_id,
+        "mission_id" => c.mission_id,
+        "spacecraft_id" => route.spacecraft_id,
+        "route_key" => route.route_key,
+        "route" => ProviderScheduling.route_evidence(route),
+        "opportunity" => opportunity(route, DateTime.utc_now())
+      })
+
+    assert {:error, :transport_archived} =
+             ScheduleCommands.reservation_identity(
+               member_scope(c.organization_id, :member),
+               c.mission_id,
+               %{"token" => token}
+             )
   end
 
   test "reports spacecraft mapping and Routing Rule readiness separately", context do
@@ -539,6 +678,51 @@ defmodule Cadence.Contacts.ProviderSchedulingTest do
       "synthetic" => true,
       "extensions" => %{}
     }
+  end
+
+  defp only_route(c) do
+    assert {:ok, %{routes: [route], findings: []}} =
+             ProviderScheduling.list_ready_downlink_routes(
+               c.organization_id,
+               c.mission_id,
+               c.spacecraft.spacecraft_id
+             )
+
+    route
+  end
+
+  defp book(c, route) do
+    id = Cadence.Ids.new("opportunity")
+    starts_at = DateTime.utc_now() |> DateTime.add(300) |> DateTime.truncate(:second)
+    ends_at = DateTime.add(starts_at, 600)
+
+    attrs =
+      Map.merge(ProviderScheduling.route_evidence(route), %{
+        "opportunity_ref" => id,
+        "cadence_spacecraft_id" => route.spacecraft_id,
+        "ground_station_ref" => "station-alpha",
+        "antenna_or_service_pool_ref" => "station-alpha-antenna-1",
+        "transport_display_name" => route.transport_display_name,
+        "service_display_name" => route.service_display_name,
+        "delivery_display_name" => route.delivery_display_name,
+        "delivery_operator_summary" => route.delivery_operator_summary,
+        "starts_at" => DateTime.to_iso8601(starts_at),
+        "ends_at" => DateTime.to_iso8601(ends_at),
+        "source_endpoint_refs" => [route.source_endpoint_id],
+        "path_template_ids" => [route.path_template_id],
+        "path_template_refs" => [
+          %{
+            "path_template_id" => route.path_template_id,
+            "version" => route.path_template_version
+          }
+        ]
+      })
+
+    ProviderBooking.reserve(c.organization_id, c.mission_id, route.provider_id, attrs,
+      client: FakeProviderClient,
+      provider_contact_id: id,
+      contact_window: %{starts_at: starts_at, ends_at: ends_at}
+    )
   end
 
   defp provider_inventory do

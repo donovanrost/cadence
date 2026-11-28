@@ -266,6 +266,14 @@ and its derived preview; nothing is written.
   configuration and direction capability come from the provider.
 - Errors: `403 forbidden` without `config.stage`; `422 invalid_params` for a non-text query value.
 
+## Transport versions in review
+
+A transport update refreshes active profile and extra routes in the apply transaction.
+Existing bookings and contacts keep their recorded versions and path references.
+The preview's transport diff includes a note showing how many routes move and their
+target version. The corresponding `effects` entry includes `route_count` and
+`transport_version`.
+
 ## TCP listener choice
 
 The transport kind schema exposes `configuration.listener` for TCP Listen and Downlink

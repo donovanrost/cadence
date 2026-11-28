@@ -46,7 +46,7 @@ defmodule Cadence.Reads.PointConditions do
       stale_after_s = Keyword.get_lazy(opts, :stale_after_s, &FleetStatus.stale_after_s/0)
       limit = page_size(Keyword.get(opts, :limit))
 
-      points = PointCatalog.list_points(organization_id, mission_id)
+      points = PointCatalog.list_points(organization_id, mission_id, spacecraft_id: spacecraft_id)
       {samples, telemetry} = last_samples(organization_id, mission_id, spacecraft_id)
 
       rows =

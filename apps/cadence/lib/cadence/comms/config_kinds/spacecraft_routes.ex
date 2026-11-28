@@ -69,7 +69,7 @@ defmodule Cadence.Comms.ConfigKinds.SpacecraftRoutes do
 
   # Which spacecraft a set of entries can change the routes of.
   defp affected(organization_id, mission_id, entries) do
-    if Enum.any?(entries, &(&1.kind in ["transport", "ground_station"])) do
+    if Enum.any?(entries, &changes_route_topology?/1) do
       organization_id
       |> SpacecraftStore.list_spacecraft(mission_id)
       |> Enum.reject(&is_nil(&1.spacecraft_type_id))
@@ -80,6 +80,23 @@ defmodule Cadence.Comms.ConfigKinds.SpacecraftRoutes do
       |> Enum.uniq()
     end
   end
+
+  defp changes_route_topology?(%{kind: "ground_station"}), do: true
+
+  defp changes_route_topology?(%{
+         kind: "transport",
+         op: :update,
+         previous: before,
+         proposed: later
+       }) do
+    # The transport store refreshed the version and its artifacts. Re-plan only when a
+    # station or direction change can alter which transport a profile rule selects.
+    keys = ["ground_station_id", "direction_capability"]
+    Map.take(before, keys) != Map.take(later, keys)
+  end
+
+  defp changes_route_topology?(%{kind: "transport"}), do: true
+  defp changes_route_topology?(_entry), do: false
 
   defp spacecraft_of(_org, _mission, %{kind: kind, entity_id: id})
        when kind in ["spacecraft", "spacecraft_override"],

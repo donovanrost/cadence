@@ -9,7 +9,7 @@ defmodule Cadence.Contacts.SingleBookings do
   them toward a requirement, and a repair may pair one with a lost plan booking it covers (#56,
   `live/4`). The booker may cancel one; anything else needs `manage_missions`.
 
-  Errors are a closed set for the console: `:route_changed`, `:opportunity_expired`,
+  Errors are a closed set for the console: `:route_changed`, `:transport_archived`, `:opportunity_expired`,
   `:token_invalid`, `:search_unavailable`, `{:booking_changed, reservation}`, `:not_cancellable`,
   `:forbidden`, `:not_found`, `{:invalid, %{field => message}}`.
   """
@@ -160,8 +160,14 @@ defmodule Cadence.Contacts.SingleBookings do
 
   defp request_reserve(scope, mission, id, input) do
     case ScheduleOperations.request(scope, mission, "reserve", request(id, input)) do
-      {:ok, %{status: "not_accepted"}} -> {:error, :route_changed}
-      other -> other
+      {:ok, %{status: "not_accepted", reason: "transport_archived"}} ->
+        {:error, :transport_archived}
+
+      {:ok, %{status: "not_accepted"}} ->
+        {:error, :route_changed}
+
+      other ->
+        other
     end
   end
 
@@ -174,6 +180,7 @@ defmodule Cadence.Contacts.SingleBookings do
   end
 
   defp reserve_error(:route_changed), do: :route_changed
+  defp reserve_error(:transport_archived), do: :transport_archived
   defp reserve_error(:provider_scheduling_route_not_ready), do: :route_changed
   defp reserve_error(:opportunity_expired_or_unavailable), do: :opportunity_expired
   defp reserve_error(:expired_opportunity_capability), do: :opportunity_expired

@@ -13,6 +13,7 @@ defmodule Cadence.Comms.TransportStore do
     PeerAddresses,
     ProviderDeliveryListenerRead,
     ProviderTransportBasis,
+    RoutingRuleStore,
     Transport,
     TransportKind,
     TransportRow
@@ -64,17 +65,33 @@ defmodule Cadence.Comms.TransportStore do
 
   defp publish_mtls_transport(result, _transport), do: result
 
-  defp store_version(%Transport{version: 1} = transport, _opts), do: insert_transport(transport)
-
   defp store_version(transport, opts) do
     Repo.transact(fn ->
       lock_transport_version(transport.mission_id, transport.transport_id)
 
-      with :ok <- authorize_delivery_transition(transport, opts) do
-        insert_transport(transport)
+      with :ok <- authorize_delivery_transition(transport, opts),
+           {:ok, stored} <- insert_transport(transport),
+           :ok <- repin_routes(stored) do
+        {:ok, stored}
       end
     end)
   end
+
+  defp repin_routes(%Transport{lifecycle_state: :active} = transport) do
+    case latest_versioned_row(
+           transport.organization_id,
+           transport.mission_id,
+           transport.transport_id
+         ) do
+      %TransportRow{version: version} when version == transport.version ->
+        RoutingRuleStore.repin_active_transport_routes(transport)
+
+      _newer ->
+        :ok
+    end
+  end
+
+  defp repin_routes(_archived), do: :ok
 
   @doc "Fetches the latest active transport under its version-write lock in the caller's transaction."
   @spec lock_current_transport(binary(), binary(), binary()) ::
@@ -82,6 +99,22 @@ defmodule Cadence.Comms.TransportStore do
   def lock_current_transport(organization_id, mission_id, transport_id) do
     lock_transport_version(mission_id, transport_id)
     fetch_transport(organization_id, mission_id, transport_id)
+  end
+
+  @doc "Checks a new booking's applied transport pin under the version-write lock."
+  def lock_booking_pin(organization_id, mission_id, transport_id, version) do
+    lock_transport_version(mission_id, transport_id)
+
+    case latest_versioned_row(organization_id, mission_id, transport_id) do
+      %TransportRow{lifecycle_state: state} when state != "active" ->
+        {:error, :transport_archived}
+
+      %TransportRow{lifecycle_state: "active", version: ^version} ->
+        :ok
+
+      _changed ->
+        {:error, :route_changed}
+    end
   end
 
   defp lock_transport_version(mission_id, transport_id) do
@@ -324,16 +357,32 @@ defmodule Cadence.Comms.TransportStore do
   @spec latest_transports(binary(), binary(), [binary()]) :: [Transport.t()]
   def latest_transports(organization_id, mission_id, transport_ids)
       when is_binary(organization_id) and is_binary(mission_id) and is_list(transport_ids) do
-    from(row in TransportRow,
-      where:
-        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-          row.transport_id in ^transport_ids,
-      distinct: row.transport_id,
-      order_by: [asc: row.transport_id, desc: row.version]
-    )
+    organization_id
+    |> latest_rows_for_transports(mission_id, transport_ids)
     |> Repo.all()
     |> Enum.reject(&(&1.lifecycle_state == "archived"))
     |> Enum.map(&TransportRow.to_domain/1)
+  end
+
+  @doc "Latest applied transport pins and lifecycle states for route resolution."
+  def current_route_pins(_organization_id, _mission_id, []), do: %{}
+
+  def current_route_pins(organization_id, mission_id, ids) do
+    organization_id
+    |> latest_rows_for_transports(mission_id, Enum.uniq(ids))
+    |> select([row], {row.transport_id, {row.version, row.lifecycle_state}})
+    |> Repo.all()
+    |> Map.new()
+  end
+
+  defp latest_rows_for_transports(organization_id, mission_id, ids) do
+    from(row in TransportRow,
+      where:
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.transport_id in ^ids,
+      distinct: row.transport_id,
+      order_by: [asc: row.transport_id, desc: row.version]
+    )
   end
 
   @doc "Returns one bounded page of the active latest transport versions."

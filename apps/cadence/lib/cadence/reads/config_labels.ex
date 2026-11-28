@@ -32,6 +32,7 @@ defmodule Cadence.Reads.ConfigLabels do
     names = names(organization_id, mission_id, items, %{})
     fields = schemas(organization_id, mission_id, items)
     relay_names = relay_names(organization_id, mission_id, items)
+    transport_effects = Map.new(Map.get(preview, :effects, []), &{&1.op_id, &1})
 
     %{
       preview
@@ -47,9 +48,25 @@ defmodule Cadence.Reads.ConfigLabels do
                   end)
             }
           end),
-        diffs: Enum.map(preview.diffs, &decorate(&1, names, fields, relay_names))
+        diffs:
+          Enum.map(preview.diffs, fn diff ->
+            diff
+            |> decorate(names, fields, relay_names)
+            |> transport_route_note(Map.get(transport_effects, Map.get(diff, :op_id)))
+          end)
     }
   end
+
+  defp transport_route_note(%{kind: "transport", fields: [first | rest]} = diff, %{
+         route_count: count,
+         transport_version: version
+       }) do
+    note = "Routes on this transport: #{count} move to version #{version}."
+    first = Map.update(first, :note, note, &"#{&1} #{note}")
+    %{diff | fields: [first | rest]}
+  end
+
+  defp transport_route_note(diff, _effect), do: diff
 
   @sample 5
 

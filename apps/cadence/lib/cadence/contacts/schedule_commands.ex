@@ -2,6 +2,7 @@ defmodule Cadence.Contacts.ScheduleCommands do
   @moduledoc "Reviewed scheduling commands shared by durable operations and legacy host adapters."
   alias Cadence.Applications.JSONBoundary
   alias Cadence.Auth.Policy
+  alias Cadence.Comms.TransportStore
   alias Cadence.ContactPlanning.OpportunityCapability
 
   alias Cadence.Contacts.{
@@ -179,9 +180,27 @@ defmodule Cadence.Contacts.ScheduleCommands do
            ) do
       {:ok, route}
     else
-      _invalid -> {:error, :provider_scheduling_route_not_ready}
+      {:error, :transport_archived} = error ->
+        error
+
+      {:error, :provider_scheduling_route_not_ready} ->
+        unavailable_token_route(payload["route"], organization_id, mission_id)
+
+      _invalid ->
+        {:error, :provider_scheduling_route_not_ready}
     end
   end
+
+  # The signed route still identifies its transport if the route was archived with it.
+  defp unavailable_token_route(%{"transport_id" => id}, org, mission) when is_binary(id) do
+    case TransportStore.current_route_pins(org, mission, [id]) do
+      %{^id => {_version, state}} when state != "active" -> {:error, :transport_archived}
+      _other -> {:error, :provider_scheduling_route_not_ready}
+    end
+  end
+
+  defp unavailable_token_route(_route, _org, _mission),
+    do: {:error, :provider_scheduling_route_not_ready}
 
   defp validate_token_route(route, signed_route) do
     if token_route(route) == signed_route, do: :ok, else: {:error, :route_changed}

@@ -9,7 +9,8 @@ defmodule Cadence.Configuration.SpacecraftRouteKindTest do
   import Cadence.ConfigurationFixtures
 
   alias Cadence.Comms.ConfigKinds.SpacecraftRoute
-  alias Cadence.Comms.RoutingRuleStore
+  alias Cadence.Comms.{RouteMaterializer, RoutingRuleStore}
+  alias Cadence.Contacts.{ContactRuntimeConfig, ScheduledContact}
   alias Cadence.Control.Configuration
   alias Cadence.Reads.ConfigKindSchema
 
@@ -82,6 +83,134 @@ defmodule Cadence.Configuration.SpacecraftRouteKindTest do
 
     apply_ops(ctx, "Recovered", [%{kind: "spacecraft_route", action: :delete, entity_id: id}])
     assert own_routes(ctx) == []
+  end
+
+  test "both route origins follow the transport and pinned assignments remain resolvable", ctx do
+    [extra_craft] =
+      apply_ops(ctx, "Add a craft without a profile", [
+        create("spacecraft", spacecraft_doc("EARENDIL-002", 2))
+      ])
+
+    extra = %{
+      "spacecraft_id" => extra_craft,
+      "ground_station_id" => ctx.ids.svb,
+      "transport_id" => ctx.ids.svb_tcp,
+      "purpose_label" => "Downlink",
+      "downlink" => "primary"
+    }
+
+    [keep, remove] =
+      apply_ops(ctx, "Two extra routes", [
+        create("spacecraft_route", extra),
+        create("spacecraft_route", extra)
+      ])
+
+    [archived] = RoutingRuleStore.extra_route_rows(ctx.org, ctx.mission, [remove])[remove]
+
+    apply_ops(ctx, "Remove one extra route", [
+      %{kind: "spacecraft_route", action: :delete, entity_id: remove}
+    ])
+
+    [profile_v1] = routes(ctx, :profile)
+    [extra_v1] = RoutingRuleStore.extra_route_rows(ctx.org, ctx.mission, [keep])[keep]
+
+    pinned =
+      ScheduledContact.new(%{
+        organization_id: ctx.org,
+        mission_id: ctx.mission,
+        starts_at: ~U[2026-11-28 12:00:00Z],
+        ends_at: ~U[2026-11-28 12:10:00Z],
+        link_assignment_refs: [
+          %{"link_assignment_id" => extra_v1.materialized_link_assignment_id}
+        ]
+      })
+
+    assert {:ok, paths_v1} = ContactRuntimeConfig.resolve_paths(pinned)
+
+    apply_ops(ctx, "Version shared transport", [
+      update("transport", ctx.ids.svb_tcp, "display_name", "Svalbard updated")
+    ])
+
+    assert [profile_v2] = routes(ctx, :profile)
+    assert [extra_v2] = RoutingRuleStore.extra_route_rows(ctx.org, ctx.mission, [keep])[keep]
+    assert {profile_v2.transport_version, extra_v2.transport_version} == {2, 2}
+    assert extra_v2.materialized_link_assignment_id != extra_v1.materialized_link_assignment_id
+
+    assert profile_v2.materialized_link_assignment_id !=
+             profile_v1.materialized_link_assignment_id
+
+    assert {:ok, ^paths_v1} = ContactRuntimeConfig.resolve_paths(pinned)
+    assert {:error, :contact_link_assignment_not_found} = ContactRuntimeConfig.prepare(pinned)
+
+    assert {:ok, %{transport_version: 1, lifecycle_state: :archived}} =
+             RoutingRuleStore.fetch_routing_rule_state(
+               ctx.org,
+               ctx.mission,
+               archived.routing_rule_id
+             )
+
+    assert {:ok, []} = RouteMaterializer.materialize(ctx.org, ctx.mission, [ctx.sc])
+    assert [^profile_v2] = routes(ctx, :profile)
+  end
+
+  test "transport preview and apply use the same query counts for 5 and 50 routes", ctx do
+    counts =
+      for {route_count, scid_base} <- [{5, 10}, {50, 100}] do
+        [transport] =
+          apply_ops(ctx, "Create target transport", [
+            create("transport", station_transport("Target transport", ctx.ids.inu, "inbound"))
+          ])
+
+        crafts =
+          apply_ops(
+            ctx,
+            "Add route spacecraft",
+            for index <- 1..route_count do
+              create(
+                "spacecraft",
+                spacecraft_doc("Route spacecraft #{scid_base + index}", scid_base + index)
+              )
+            end
+          )
+
+        route_ids =
+          apply_ops(
+            ctx,
+            "Add routes",
+            for craft <- crafts do
+              create("spacecraft_route", %{
+                "spacecraft_id" => craft,
+                "ground_station_id" => ctx.ids.inu,
+                "transport_id" => transport,
+                "purpose_label" => "Downlink",
+                "downlink" => "primary"
+              })
+            end
+          )
+
+        ops = [update("transport", transport, "display_name", "Target transport updated")]
+
+        preview_queries =
+          count_queries(fn ->
+            assert {:ok, %{verdict: :go, effects: [%{route_count: ^route_count}]}} =
+                     Configuration.preview(ctx.alice, ctx.mission, {:ops, ops})
+          end)
+
+        apply_queries = count_queries(fn -> apply_ops(ctx, "Version target transport", ops) end)
+
+        rows =
+          ctx.org
+          |> RoutingRuleStore.extra_route_rows(ctx.mission, route_ids)
+          |> Map.values()
+          |> List.flatten()
+
+        assert length(rows) == route_count
+        assert Enum.all?(rows, &(&1.transport_version == 2))
+        {preview_queries, apply_queries}
+      end
+
+    assert [counts_at_5, counts_at_50] = counts
+    assert counts_at_5 == counts_at_50
   end
 
   test "route preview and apply use the same query count for one or 40 two-leg routes", ctx do

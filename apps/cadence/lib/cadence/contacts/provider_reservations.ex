@@ -309,23 +309,59 @@ defmodule Cadence.Contacts.ProviderReservations do
     |> published_reservation(organization_id)
   end
 
+  @doc false
+  def create_attempt_with_current_transport(organization_id, %ProviderReservation{} = attempt) do
+    result =
+      Repo.transact(fn ->
+        with {:ok, reservation} <- prepare_reservation(organization_id, attempt),
+             {:ok, _mission} <- Missions.fetch_mission(organization_id, reservation.mission_id),
+             :ok <- validate_documents(reservation),
+             {:ok, stored, outcome} <-
+               insert_attempt_with_current_pin(organization_id, reservation) do
+          {:ok, {stored, outcome}}
+        end
+      end)
+
+    case result do
+      {:ok, {stored, outcome}} -> {:ok, stored, outcome}
+      {:error, _reason} = error -> error
+    end
+    |> published_reservation(organization_id)
+  end
+
+  defp insert_attempt_with_current_pin(organization_id, reservation) do
+    case TransportStore.lock_booking_pin(
+           organization_id,
+           reservation.mission_id,
+           reservation.transport_id,
+           reservation.transport_version
+         ) do
+      :ok -> insert_attempt(organization_id, reservation, mode: :savepoint)
+      {:error, reason} -> resolve_insert_conflict(organization_id, reservation, reason)
+    end
+  end
+
   defp create_attempt_with_outcome_unpublished(organization_id, attrs) do
     with {:ok, reservation} <- prepare_reservation(organization_id, attrs),
          {:ok, _mission} <- Missions.fetch_mission(organization_id, reservation.mission_id),
          :ok <- validate_documents(reservation) do
-      case Repo.insert(ProviderReservationRow.changeset(reservation)) do
-        {:ok, row} ->
-          {:ok, ProviderReservationRow.to_domain(row), :created}
-
-        {:error, %Changeset{} = changeset} ->
-          resolve_insert_conflict(organization_id, reservation, changeset)
-
-        {:error, reason} ->
-          {:error, reason}
-      end
+      insert_attempt(organization_id, reservation, [])
     end
   rescue
     error in [ArgumentError, KeyError] -> {:error, {:invalid_provider_reservation, error.message}}
+  end
+
+  defp insert_attempt(organization_id, reservation, opts) do
+    case Repo.insert(ProviderReservationRow.changeset(reservation), opts) do
+      {:ok, row} ->
+        {:ok, ProviderReservationRow.to_domain(row), :created}
+
+      {:error, %Changeset{} = changeset} ->
+        resolve_insert_conflict(organization_id, reservation, changeset)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   @spec fetch(binary(), binary(), binary()) ::
