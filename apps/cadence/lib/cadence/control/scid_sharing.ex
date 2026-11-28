@@ -15,29 +15,55 @@ defmodule Cadence.Control.ScidSharing do
   alias Cadence.GroundNetworks.{MissionProviders, ProviderAccounts}
   alias Cadence.Missions.Mission
   alias Cadence.Spacecraft.ConfigKinds.ScidHolds
-  alias Cadence.SpacecraftStore
+  alias Cadence.SpacecraftStore.Bulk
 
   @type account :: %{id: binary(), name: binary() | nil}
   @type shared :: %{mission_id: binary(), provider_accounts: [account()]}
 
-  @doc "Per other mission (by id), the provider accounts it shares with `mission_id`."
-  @spec shared(binary(), binary(), non_neg_integer()) :: [shared()]
-  def shared(organization_id, mission_id, scid) do
-    case SpacecraftStore.missions_flying_scid(organization_id, scid, mission_id) do
-      [] ->
-        []
+  @doc """
+  Per SCID, the other missions (by id) and the provider accounts each shares with `mission_id`:
+  `%{scid => [shared]}`, a SCID nobody shares left out. The reads are one for the SCIDs, one for
+  this mission's accounts, and one pair per other mission and per account found, however many
+  SCIDs and spacecraft ask (#1049).
+  """
+  @spec shared_many(binary(), binary(), [non_neg_integer()]) :: %{non_neg_integer() => [shared()]}
+  def shared_many(organization_id, mission_id, scids) do
+    case Bulk.missions_flying_scids(organization_id, scids, mission_id) do
+      flying when flying == %{} ->
+        %{}
 
-      others ->
+      flying ->
         mine = account_ids(organization_id, mission_id)
+        common = common_accounts(organization_id, mine, flying)
+        accounts = named_accounts(organization_id, common)
 
-        for other <- others,
-            common = MapSet.intersection(mine, account_ids(organization_id, other)),
-            MapSet.size(common) > 0 do
-          %{
-            mission_id: other,
-            provider_accounts: Enum.map(common, &account(organization_id, &1))
-          }
-        end
+        for {scid, missions} <- flying,
+            shared = sharing(missions, common, accounts),
+            shared != [],
+            into: %{},
+            do: {scid, shared}
+    end
+  end
+
+  # Per other mission, the provider accounts it shares with this one.
+  defp common_accounts(organization_id, mine, flying) do
+    flying
+    |> Map.values()
+    |> List.flatten()
+    |> Enum.uniq()
+    |> Map.new(&{&1, MapSet.intersection(mine, account_ids(organization_id, &1))})
+  end
+
+  defp named_accounts(organization_id, common) do
+    common
+    |> Map.values()
+    |> Enum.reduce(MapSet.new(), &MapSet.union/2)
+    |> Map.new(&{&1, account(organization_id, &1)})
+  end
+
+  defp sharing(missions, common, accounts) do
+    for other <- missions, shared = Map.fetch!(common, other), MapSet.size(shared) > 0 do
+      %{mission_id: other, provider_accounts: Enum.map(shared, &accounts[&1])}
     end
   end
 
@@ -54,33 +80,42 @@ defmodule Cadence.Control.ScidSharing do
       when tag in [:holds_not_acknowledged, :holds_blocking, :checks_failed],
       do: {:error, {tag, for_viewer(preview, scope, mission)}}
 
-  def for_viewer(%{checks: checks} = preview, %Scope{} = scope, %Mission{} = mission),
-    do: %{preview | checks: Enum.map(checks, &viewer_check(&1, scope, mission))}
+  def for_viewer(%{checks: checks} = preview, %Scope{} = scope, %Mission{} = mission) do
+    shared =
+      shared_many(mission.organization_id, mission.mission_id, held_scids(checks))
+
+    %{preview | checks: Enum.map(checks, &viewer_check(&1, scope, shared))}
+  end
 
   def for_viewer(other, _scope, _mission), do: other
 
-  defp viewer_check(%{items: items} = check, scope, mission),
-    do: %{check | items: Enum.flat_map(items, &viewer_items(&1, scope, mission))}
+  # Every SCID the folded items name, read once for all of them.
+  defp held_scids(checks) do
+    for %{items: items} <- checks,
+        %{details: %{scid: scid}} = item <- items,
+        item[:reason] == ScidHolds.reason(),
+        uniq: true,
+        do: scid
+  end
 
-  defp viewer_check(check, _scope, _mission), do: check
+  defp viewer_check(%{items: items} = check, scope, shared),
+    do: %{check | items: Enum.flat_map(items, &viewer_items(&1, scope, shared))}
 
-  defp viewer_items(%{entity_id: id, details: %{scid: scid}} = item, scope, mission) do
+  defp viewer_check(check, _scope, _shared), do: check
+
+  defp viewer_items(%{entity_id: id, details: %{scid: scid}} = item, scope, shared) do
     if item[:reason] == ScidHolds.reason(),
-      do: split(item, id, scid, scope, mission),
+      do: split(item, id, scid, scope, Map.get(shared, scid, [])),
       else: [item]
   end
 
-  defp viewer_items(item, _scope, _mission), do: [item]
+  defp viewer_items(item, _scope, _shared), do: [item]
 
-  defp split(item, id, scid, scope, mission) do
-    case shared(mission.organization_id, mission.mission_id, scid) do
-      [] ->
-        [item]
+  defp split(item, _id, _scid, _scope, []), do: [item]
 
-      shared ->
-        {named, hidden} = Enum.reduce(shared, {[], []}, &by_visibility(&1, &2, scope))
-        named_items(id, scid, named) ++ folded(id, scid, hidden)
-    end
+  defp split(_item, id, scid, scope, shared) do
+    {named, hidden} = Enum.reduce(shared, {[], []}, &by_visibility(&1, &2, scope))
+    named_items(id, scid, named) ++ folded(id, scid, hidden)
   end
 
   defp by_visibility(other, {named, hidden}, scope) do

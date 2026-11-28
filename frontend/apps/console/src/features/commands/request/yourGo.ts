@@ -5,14 +5,16 @@ import { useMissionInvalidation } from "@/live/index.ts";
 import { formatClock, formatCount, formatRelative, plural } from "@/ui";
 import { fetchGroups, type Preflight } from "../groups/api.ts";
 import { goHoldReason } from "../groups/checks.ts";
-import { fetchGroup, fetchReview, type Group } from "../groups/show.ts";
+import { fetchAllEvents, fetchTargetsPage } from "../groups/pages.ts";
+import { fetchGroup, fetchReview, type Group, type GroupEvent } from "../groups/show.ts";
 import type { PersonName } from "../groups/words.ts";
 import { cannotDecide, noGoAfter } from "./decision.ts";
 
 /**
  * Mobile.md §3 "Your GO is requested" on the paged alarm view: the oldest request awaiting the
  * viewer's GO that targets this spacecraft, with its re-check. The list rows don't carry targets,
- * so up to MAX_LOOKED of the awaiting requests are read whole.
+ * so up to MAX_LOOKED of the awaiting requests are asked whether they target it (#795: a targets
+ * page searched by the spacecraft's id, never the whole request).
  */
 const MAX_LOOKED = 5;
 
@@ -28,10 +30,16 @@ export async function requestFor(
     .sort((a, b) => Date.parse(a.requested_at) - Date.parse(b.requested_at))
     .slice(0, MAX_LOOKED);
   for (const row of oldest) {
+    // q is a substring match, so the page is checked for this exact id.
+    const hit = await fetchTargetsPage(
+      { missionId, groupId: row.id, q: spacecraftId, limit: 100 },
+      null,
+      signal ?? new AbortController().signal,
+    );
+    if (!hit.ok) return hit;
+    if (!hit.value.items.some((t) => t.spacecraft_id === spacecraftId)) continue;
     const g = await fetchGroup(missionId, row.id, signal);
-    if (!g.ok) return g;
-    if (g.value.targets.some((t) => t.spacecraft_id === spacecraftId))
-      return { ok: true, value: g.value };
+    return g.ok ? { ok: true, value: g.value } : g;
   }
   return { ok: true, value: null };
 }
@@ -49,12 +57,18 @@ export function useYourGo(missionId: Ref<MissionId>, spacecraftId: Ref<string | 
     computed(() => (group.value ? { m: missionId.value, id: group.value.id } : null)),
     (k, signal) => fetchReview(k.m, k.id, signal),
   );
+  /** #795: the HOLD acknowledgements, read on their own (written at submit, so the oldest). */
+  const holds = useRemoteQuery(
+    computed(() => (group.value ? { missionId: missionId.value, groupId: group.value.id } : null)),
+    (k, signal) => fetchAllEvents({ ...k, kinds: ["hold_acknowledged"] }, signal),
+  );
   const refetch = () => {
     found.refetch();
     review.refetch();
+    holds.refetch();
   };
   useMissionInvalidation(missionId, ["commanding"], refetch);
-  return { group, review, refetch };
+  return { group, review, holds, refetch };
 }
 
 /**
@@ -67,8 +81,13 @@ export function namelessTargets(
   const ids = group.targets.flatMap((t) => (t.name ? [] : [t.spacecraft_id]));
   const n = ids.length;
   if (n === 0) return null;
+  // #795: the read carries the first targets only; say so rather than count past them.
+  const among =
+    group.targets.length < group.targets_page.total
+      ? ` among the first ${formatCount(group.targets.length)}`
+      : "";
   return {
-    line: `This console can't show the name of ${n} target spacecraft. Check ${n === 1 ? "its id" : "their ids"} in Technical details before you give GO.`,
+    line: `This console can't show the name of ${n} target spacecraft${among}. Check ${n === 1 ? "its id" : "their ids"} in Technical details before you give GO.`,
     ids,
   };
 }
@@ -103,13 +122,15 @@ export function yourGoWords(group: Group, nameOf: PersonName, now: Date) {
 export function phoneGoBlocked(
   group: Group,
   review: Preflight | null,
+  holds: readonly GroupEvent[] | null,
   viewerId: string,
   canApprove: boolean,
   nameOf: PersonName,
 ): string | null {
   const who = cannotDecide(group, viewerId, canApprove, nameOf);
   if (who) return who;
-  if (!review) return "Re-checking before GO…";
-  const name = (id: string) => group.targets.find((t) => t.spacecraft_id === id)?.name ?? id;
-  return noGoAfter(review, new Set()) ?? goHoldReason(review, group.events, {}, name);
+  if (!review || !holds) return "Re-checking before GO…";
+  const name = (id: string) =>
+    group.targets.find((t) => t.spacecraft_id === id)?.name ?? "Unknown spacecraft";
+  return noGoAfter(review, new Set()) ?? goHoldReason(review, holds, {}, name);
 }

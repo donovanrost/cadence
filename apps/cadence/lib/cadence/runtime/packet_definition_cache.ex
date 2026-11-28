@@ -43,8 +43,9 @@ defmodule Cadence.Runtime.PacketDefinitionCache do
   for a real catalog) is only sent to the owner when the revision is not loaded yet.
 
   The cache is keyed by `plan_id` alone, which is correct only because a plan id is
-  content-addressed (`RuntimePlan.new/5` hashes the revision, target, contract and plan content):
-  the same id always means the same definitions. A plan without an id is never cached.
+  content-addressed (`RuntimePlan.new/5` hashes the scope, target, contract, compiler version, status
+  and plan content, not the revision, #443): the same id always means the same definitions, and a
+  revision that leaves the telemetry plan alone keeps its cache entry. A plan without an id is never cached.
   """
   @spec acquire(GenServer.server(), binary() | nil, map()) ::
           {:ok, table()} | {:error, term()}

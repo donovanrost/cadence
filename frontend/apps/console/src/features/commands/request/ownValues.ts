@@ -72,12 +72,19 @@ export type Override = Readonly<{ spacecraftId: string; values: ReadonlyMap<stri
 /** The command's overrides, in the group's target order. */
 export function overridesOf(command: Command, group: Pick<Group, "targets">): Override[] {
   const order = new Map(group.targets.map((t, i) => [t.spacecraft_id, i]));
-  return (command.per_target ?? [])
-    .flatMap((p) => {
-      const values = rawEntries(p.argument_values_json);
-      return values ? [{ spacecraftId: p.spacecraft_id, values }] : [];
-    })
-    .sort((a, b) => (order.get(a.spacecraftId) ?? 0) - (order.get(b.spacecraftId) ?? 0));
+  return (
+    (command.per_target ?? [])
+      .flatMap((p) => {
+        const values = rawEntries(p.argument_values_json);
+        return values ? [{ spacecraftId: p.spacecraft_id, values }] : [];
+      })
+      // #795: targets past the first page keep the server's order, after the ones shown.
+      .sort(
+        (a, b) =>
+          (order.get(a.spacecraftId) ?? Number.MAX_SAFE_INTEGER) -
+          (order.get(b.spacecraftId) ?? Number.MAX_SAFE_INTEGER),
+      )
+  );
 }
 
 /** "8.0–9.5" for numbers (by value, text kept), or the distinct values in order. */

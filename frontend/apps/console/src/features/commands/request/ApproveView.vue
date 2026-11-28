@@ -27,14 +27,23 @@ const props = defineProps<{
 }>();
 defineEmits<{ decided: []; retryReview: [] }>();
 
+const reviewValue = computed(() => (props.review.status === "ready" ? props.review.value : null));
+/**
+ * #795: a target by id, from the group's first page or else the re-check's own target list (which
+ * names every target), so a flagged target past the first page still has its name.
+ */
+const known = computed(() => {
+  const map = new Map<string, { name: string | null; scid: number | null }>();
+  for (const t of reviewValue.value?.targets ?? []) map.set(t.spacecraft_id, t);
+  for (const t of props.group.targets) map.set(t.spacecraft_id, t);
+  return map;
+});
 const targetName = (id: string) => {
-  const t = props.group.targets.find((x) => x.spacecraft_id === id);
+  const t = known.value.get(id);
   return t?.name ? `${t.name}${t.scid === null ? "" : ` (SCID ${t.scid})`}` : "Unknown spacecraft";
 };
-const reviewValue = computed(() => (props.review.status === "ready" ? props.review.value : null));
 /** U51: the reviewer sees each command whose verifiers differ across targets (no gate). */
-const shortName = (id: string) =>
-  props.group.targets.find((x) => x.spacecraft_id === id)?.name ?? "Unknown spacecraft";
+const shortName = (id: string) => known.value.get(id)?.name ?? "Unknown spacecraft";
 const differing = (p: Preflight) =>
   (p.commands ?? [])
     .filter((c) => verifiersDiffer(c.verifier_groups))

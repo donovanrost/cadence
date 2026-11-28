@@ -355,7 +355,18 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
     assert %{"total" => 1, "next_cursor" => nil} = group["events_page"]
     assert [%{"kind" => "submitted"}] = group["events"]
 
-    # The paged variants the console moves onto: the first pages, and a push without the lists.
+    # GET show is the first page too: a group of 2 has both targets and no cursor (#795).
+    shown =
+      as(c.requester)
+      |> get(base(c) <> "/command-groups/#{id}")
+      |> json_response(200)
+      |> Map.fetch!("data")
+
+    assert [%{"index" => 0}, %{"index" => 1}] = shown["targets"]
+    assert %{"total" => 2, "next_cursor" => nil} = shown["targets_page"]
+    assert %{"total" => 1, "next_cursor" => nil} = shown["events_page"]
+
+    # The paged variants directly: the first pages, and a push without the lists.
     {:ok, view} =
       CommandGroups.get(c.org.organization_id, c.mission.mission_id, id, nil)
 
@@ -666,12 +677,6 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
              as(c.requester)
              |> post(base(c) <> "/command-endpoints", %{"spacecraft_ids" => ["a", 7]})
              |> json_response(422)
-
-    # The GET (until the console moves off it) is just as loud.
-    assert %{"error" => %{"code" => "command_group_too_large"}} =
-             as(c.requester)
-             |> get(base(c) <> "/command-endpoints?spacecraft_ids=a,b,c")
-             |> json_response(422)
   end
 
   test "command endpoints: route resolution and candidates per spacecraft", c do
@@ -679,7 +684,7 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
 
     data =
       as(c.requester)
-      |> get(base(c) <> "/command-endpoints?spacecraft_ids=#{id}")
+      |> post(base(c) <> "/command-endpoints", %{"spacecraft_ids" => [id]})
       |> json_response(200)
       |> Map.fetch!("data")
 

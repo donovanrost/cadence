@@ -17,26 +17,12 @@ export const targetExpired = (t: GroupTarget) =>
 export const targetStageWord = (t: GroupTarget, group: Pick<Group, "state">) =>
   memberStageWord(t.stage, group.state, t.members.find((m) => m.stage === t.stage)?.end_reason);
 
-/** Uplinks that went out: released, whatever happened after. */
-const SENT = new Set([
-  "radiating",
-  "executed",
-  "verified",
-  "no_verifier",
-  "verify_failed",
-  "indeterminate",
-]);
-
 export function expiryCounts(group: Group): { sent: number; expired: number; total: number } {
-  // api's own counts when the read carries them (U75), so the line and the list row agree.
+  // api's own counts (U75), so the line and the list row agree. null: nothing expired (#795: the
+  // targets on screen are a page, never the whole request, so they aren't counted here).
   if (group.expiry)
     return { sent: group.expiry.sent, expired: group.expiry.expired, total: group.expiry.total };
-  const members = group.targets.flatMap((t) => t.members);
-  return {
-    sent: members.filter((m) => SENT.has(m.stage)).length,
-    expired: members.filter(isExpired).length,
-    total: members.length,
-  };
+  return { sent: 0, expired: 0, total: group.member_count };
 }
 
 /**

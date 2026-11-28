@@ -51,15 +51,13 @@ export function useResend(
         notice.value = { callout: CAUTION, text: `Couldn't load that request: ${r.message}` };
         return;
       }
-      const { group, stack, missing } = r.value;
+      const { group, targetIds, stack, missing } = r.value;
       sentBackFrom.value = group.id;
       into.query.value = {
         plane: null,
         profile: null,
         states: [],
-        explicit: group.targets
-          .map((t) => t.spacecraft_id)
-          .filter((id) => only.length === 0 || only.includes(id)),
+        explicit: targetIds.filter((id) => only.length === 0 || only.includes(id)),
       };
       into.stack.value = stack;
       into.title.value = group.title;
@@ -82,7 +80,7 @@ export function useResend(
       notice.value = {
         callout: missing.length ? CAUTION : INFO,
         // The quoted note ends the sentence itself; no period after the closing quote.
-        text: `Resending “${group.title}”${only.length ? ` to ${only.length} of ${group.targets.length} targets` : ""}${note ? `, sent back with: “${note}”` : "."}${gone}`,
+        text: `Resending “${group.title}”${only.length ? ` to ${only.length} of ${group.target_count} targets` : ""}${note ? `, sent back with: “${note}”` : "."}${gone}`,
       };
     })
     .catch((e: unknown) => console.error("Resend prefill failed", e));

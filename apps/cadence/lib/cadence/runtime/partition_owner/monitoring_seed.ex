@@ -1,9 +1,11 @@
 defmodule Cadence.Runtime.PartitionOwner.MonitoringSeed do
   @moduledoc """
-  On an empty start, seeds each monitoring policy's effective state from the durable latest alarm
-  state (director 11-15). A partition starts empty on every activation that changes its runtime
-  basis, and when its checkpoint is missing. With every prior at `:normal`, a parameter that went
-  back to normal meanwhile never emitted its clear, and its alarm episode stayed active.
+  Seeds a monitoring policy's effective state from the durable latest alarm state when the
+  recovered state has none for it (director 11-15): a partition's state starts without a policy
+  when its checkpoint is missing, and, since a revision keeps the state of every policy it didn't
+  change (#443, `Carry`), for each policy the revision added or changed. With every prior at
+  `:normal`, a parameter that went back to normal meanwhile never emitted its clear, and its alarm
+  episode stayed active.
 
   Only active (non-normal) states are seeded, since normal is the default prior, for the plan's
   policies in every spacecraft scope of the mission: a handful of rows. A partition only ever
@@ -35,11 +37,14 @@ defmodule Cadence.Runtime.PartitionOwner.MonitoringSeed do
   @active ~w(watch warning distress critical severe disabled unknown)
 
   @doc """
-  `{:ok, state}`, seeded when the recovered state knows no policy yet; otherwise unchanged.
+  `{:ok, state}`, seeded for the policies the recovered state has no entry for; unchanged when it
+  has one for every policy.
   """
   def maybe_seed(activation, %PartitionKey{} = key, plan, %State{} = state) do
-    if plan.monitoring != [] and state.monitoring_state == %{} do
-      entries = entries(activation, plan)
+    unseeded = for %{policy_id: id} <- plan.monitoring, not seeded?(state, id), do: id
+
+    if unseeded != [] do
+      entries = active(activation.mission_id, unseeded)
 
       # Visible in the log, so a live check can see each empty start and what it seeded (qa).
       Logger.info(
@@ -54,12 +59,14 @@ defmodule Cadence.Runtime.PartitionOwner.MonitoringSeed do
   end
 
   @doc "The seed: `[{scope, policy_id, effective_state}]`, active states only."
-  def entries(activation, plan) do
-    case Enum.map(plan.monitoring, & &1.policy_id) do
-      [] -> []
-      policy_ids -> active(activation.mission_id, policy_ids)
-    end
-  end
+  def entries(activation, plan),
+    do: active(activation.mission_id, Enum.map(plan.monitoring, & &1.policy_id))
+
+  # Some spacecraft scope already holds state for the policy: it was carried or evaluated.
+  defp seeded?(%State{monitoring_state: monitoring_state}, policy_id),
+    do: Enum.any?(monitoring_state, fn {{_scope, id}, _state} -> id == policy_id end)
+
+  defp active(_mission_id, []), do: []
 
   defp active(mission_id, policy_ids) do
     from(row in LatestAlarmStateRow,
