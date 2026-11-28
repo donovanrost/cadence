@@ -52,6 +52,10 @@ describe("K1 day strip names (#1027, WCAG 2.5.3)", () => {
       expect(shown).toMatch(/^\w{3} \d{1,2} \S/);
       expect(a.attributes("aria-label")?.startsWith(shown)).toBe(true);
     }
+    // #1027: the days wrap, never a sideways strip. A browser doesn't scroll a focused link into
+    // view while a sliver of it shows, so at 390 Tab left Tue 1 and Fri 4 off screen (measured).
+    expect(w.get("ul").classes()).toContain("flex-wrap");
+    expect(w.get("nav").classes()).not.toContain("overflow-x-auto");
     expect(links[1]?.attributes("aria-label")).toMatch(
       /^\w{3} \d{1,2} No plan, .+, first window 00:00Z$/,
     );
