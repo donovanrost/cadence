@@ -101,14 +101,6 @@ defmodule Cadence.Reads.Limits do
     |> MapSet.new(& &1.point_id)
   end
 
-  @spec latest_states_for_mission(binary(), keyword()) :: [Event.t()]
-  def latest_states_for_mission(mission_id, opts \\ [])
-      when is_binary(mission_id) and is_list(opts) do
-    mission_id
-    |> Store.list_latest_states(opts)
-    |> filter_source_events(opts)
-  end
-
   @spec latest_states_for_mission(binary(), binary(), keyword()) :: [Event.t()]
   def latest_states_for_mission(organization_id, mission_id, opts)
       when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do

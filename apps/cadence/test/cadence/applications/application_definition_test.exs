@@ -185,8 +185,6 @@ defmodule Cadence.Applications.ApplicationDefinitionTest do
     application = %ApplicationDefinition{application | surfaces: [workspace, dock]}
 
     assert :ok = ApplicationDefinition.validate(application)
-    assert [resolved] = Cadence.Applications.Registry.ops_dock_surfaces(application, :mission)
-    assert resolved.surface_id == "activity"
   end
 
   defp valid_application do

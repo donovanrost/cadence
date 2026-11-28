@@ -267,21 +267,4 @@ defmodule Cadence.Applications.ApplicationInstallationsTest do
                "telemetry_decom"
              )
   end
-
-  test "Ops Dock discovery stays empty when installed applications declare no dock surfaces",
-       context do
-    assert {:ok, _installation} =
-             ApplicationInstallations.install(
-               context.scope,
-               context.host_context,
-               "telemetry_decom"
-             )
-
-    assert {:ok, installations} =
-             ApplicationInstallations.list_for_mission(context.scope, @mission_id,
-               lifecycle_state: :installed
-             )
-
-    assert Enum.map(installations, & &1.application_key) == ["telemetry_decom"]
-  end
 end

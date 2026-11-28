@@ -141,22 +141,6 @@ defmodule Cadence.Applications.Registry do
     end
   end
 
-  @spec ops_dock_surfaces(ApplicationDefinition.t(), SurfaceDefinition.scope()) ::
-          [SurfaceDefinition.t()]
-  def ops_dock_surfaces(%ApplicationDefinition{} = definition, scope) do
-    if ApplicationDefinition.validate(definition) == :ok do
-      definition.surfaces
-      |> Enum.filter(fn surface ->
-        surface.scope == scope and surface.placement == :ops_dock
-      end)
-      |> Enum.sort_by(fn surface ->
-        {Map.get(surface.navigation, :order, 0), surface.surface_id}
-      end)
-    else
-      []
-    end
-  end
-
   defp definitions do
     Map.new(all(), &{&1.application_key, &1})
   end

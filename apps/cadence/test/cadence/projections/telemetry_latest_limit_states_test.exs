@@ -11,6 +11,7 @@ defmodule Cadence.Projections.TelemetryLatestLimitStatesTest do
   alias Cadence.DerivedTelemetry.Definition, as: DerivedTelemetryDefinition
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Limits.Definition
+  alias Cadence.Limits.Store
   alias Cadence.Limits.Store.LatestStateRow, as: TelemetryLatestLimitStateRow
   alias Cadence.Limits.Store.LimitEventRow, as: TelemetryLimitEventRow
   alias Cadence.Telemetry.PacketDefinition
@@ -179,7 +180,7 @@ defmodule Cadence.Projections.TelemetryLatestLimitStatesTest do
              "DERIVED.counter_double"
            ).limit_state == :yellow_high
 
-    assert LimitReads.latest_states_for_mission("mission-alpha")
+    assert Store.list_latest_states("mission-alpha")
            |> Enum.map(fn state ->
              {state.point_id, state.limit_state, state.provenance["evaluation_mode"]}
            end) == [
