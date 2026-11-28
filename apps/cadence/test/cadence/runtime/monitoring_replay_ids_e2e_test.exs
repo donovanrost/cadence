@@ -171,6 +171,35 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
     assert frames_refused > 0
   end
 
+  # A craft's SCID is edited through the spacecraft API, with no activation: the partition's routes
+  # are read again after a refusal, so the next batch decodes instead of every frame being refused
+  # until a restart.
+  test "a SCID fixed with no activation decodes on the next batch after the refresh", c do
+    previous = Application.get_env(:cadence, :scid_routes)
+
+    Application.put_env(:cadence, :scid_routes,
+      module: Cadence.Control.ScidRoutes,
+      refresh_ms: 60_000,
+      idle_refresh_ms: 300_000,
+      retry_ms: 0
+    )
+
+    on_exit(fn -> Application.put_env(:cadence, :scid_routes, previous) end)
+
+    # The craft is registered with the wrong SCID: its (correct) frames are refused.
+    {:ok, wrong} = Cadence.SpacecraftStore.update_spacecraft(c.org, %{c.craft | scid: 7})
+    first = frames(mode: 50, aux: 0, sequence: 1)
+    refused = ingest!(evidence(c, first, 0))
+    refute transition?(refused, :critical)
+    assert [] = refused.packet_records
+
+    # The SCID is corrected: no activation, no restart.
+    {:ok, _fixed} = Cadence.SpacecraftStore.update_spacecraft(c.org, %{wrong | scid: 11})
+    second = frames(mode: 50, aux: 0, sequence: 2)
+
+    assert transition?(ingest!(evidence(c, second, byte_size(first))), :critical)
+  end
+
   # #161/#162: a sample's id comes from its packet (the journal position), not from the evidence
   # that carried it, so a replay cut into other batches re-derives the same sample ids, and the
   # monitoring evaluation and transition ids built over them: nothing is written twice.

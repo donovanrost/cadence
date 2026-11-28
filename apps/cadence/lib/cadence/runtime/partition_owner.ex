@@ -1138,7 +1138,7 @@ defmodule Cadence.Runtime.PartitionOwner do
         {:ok, decode_result,
          %{
            state
-           | scid_routes: scid_routes,
+           | scid_routes: ScidRoutesCache.note_refusals(scid_routes, decode_result),
              tm_pipeline_state: next_tm_pipeline_state,
              tm_continuity_state: next_tm_continuity_state,
              tm_frame_remainder: rest
@@ -1149,7 +1149,7 @@ defmodule Cadence.Runtime.PartitionOwner do
     end
   end
 
-  # The endpoint's SCID routes (E1b), refreshed on a clock for a relay.
+  # The endpoint's SCID routes (E1b), refreshed on a clock and after a refusal (ScidRoutesCache).
   defp current_scid_routes(%{scid_routes: cache} = state),
     do: ScidRoutesCache.current(cache, state.active_activation, state.partition_key)
 
