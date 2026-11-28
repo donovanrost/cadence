@@ -14,7 +14,7 @@ defmodule Cadence.MonitoringPlanFixtures do
   alias Cadence.MissionModels
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Repo
-  alias Cadence.SemanticObservations.LatestAlarmStateRow
+  alias Cadence.SemanticObservations.{FleetAlarms, LatestAlarmStateRow}
 
   @doc """
   The runtime plans of a revision compiled from `catalog` (the imported policies) and `authored`
@@ -100,7 +100,7 @@ defmodule Cadence.MonitoringPlanFixtures do
       ])
 
     :ok =
-      Cadence.SemanticObservations.FleetAlarms.refresh(Repo, organization_id, mission_id, [
+      FleetAlarms.refresh(Repo, organization_id, mission_id, [
         spacecraft_id
       ])
   end
