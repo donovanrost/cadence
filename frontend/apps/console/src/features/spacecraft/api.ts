@@ -113,7 +113,7 @@ const directoryRow: Reader<SpacecraftRow> = (value, path = "") => {
     routingRuleCount: raw.routing_rule_count,
     ready: raw.ready,
     lastReceivedAt: raw.last_received_at,
-    approvalWithdrawn: raw.approval_withdrawn ?? null,
+    approvalWithdrawn: raw.approval_withdrawn,
   };
 };
 

@@ -17,6 +17,7 @@ const wireRow = (n: number) => ({
   routing_rule_count: 0,
   ready: false,
   last_received_at: null,
+  approval_withdrawn: null,
 });
 
 /** A server holding `total` spacecraft, `size` to a page, answering by cursor (the first index). */

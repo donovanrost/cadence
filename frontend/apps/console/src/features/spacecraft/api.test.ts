@@ -30,6 +30,7 @@ const row = (extra: Record<string, unknown> = {}) => ({
   routing_rule_count: 6,
   ready: true,
   last_received_at: "2026-11-08T02:41:15Z",
+  approval_withdrawn: null,
   ...extra,
 });
 
@@ -47,6 +48,7 @@ describe("directoryPageReader", () => {
             routing_rule_count: 0,
             ready: false,
             last_received_at: null,
+            approval_withdrawn: null,
           }),
         ],
       }),
@@ -143,6 +145,7 @@ describe("S9 (#313): the directory's SCIDs in use", () => {
 describe("the directory row's approval_withdrawn", () => {
   const withdrawal = {
     revision_id: "mission_model_revision:r3",
+    earlier_approved: null,
     decision: {
       kind: "withdrawn",
       by: { kind: "user", id: "u-ana", name: "Ana R." },
@@ -150,7 +153,7 @@ describe("the directory row's approval_withdrawn", () => {
       reason: null,
     },
   };
-  it("reads it, and an approved row or a server before #924 as null", () => {
+  it("reads it, and an approved row as null", () => {
     const sent = decode(
       directoryPageReader,
       page({ spacecraft: [row({ approval_withdrawn: withdrawal })] }),
@@ -163,7 +166,5 @@ describe("the directory row's approval_withdrawn", () => {
       page({ spacecraft: [row({ approval_withdrawn: null })] }),
     );
     expect(approved.ok && approved.value.rows[0]?.approvalWithdrawn).toBeNull();
-    const before = decode(directoryPageReader, page({ spacecraft: [row()] }));
-    expect(before.ok && before.value.rows[0]?.approvalWithdrawn).toBeNull();
   });
 });

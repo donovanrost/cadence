@@ -24,6 +24,7 @@ const raw = (id: string, scid: number, extra: Record<string, unknown> = {}) => (
   routing_rule_count: 0,
   ready: false,
   last_received_at: null,
+  approval_withdrawn: null,
   ...extra,
 });
 function rows(): readonly SpacecraftRow[] {
@@ -32,6 +33,7 @@ function rows(): readonly SpacecraftRow[] {
       raw("earendil-004", 4, {
         approval_withdrawn: {
           revision_id: "mission_model_revision:r3",
+          earlier_approved: null,
           decision: { kind: "withdrawn", by: null, at: "2026-11-20T09:12:00Z", reason: null },
         },
       }),

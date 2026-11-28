@@ -28,6 +28,7 @@ const row = (n: number) => ({
   routing_rule_count: 0,
   ready: false,
   last_received_at: null,
+  approval_withdrawn: null,
 });
 
 /** `total` craft, `size` a page, answering `q` by name and the cursor as the first index. */

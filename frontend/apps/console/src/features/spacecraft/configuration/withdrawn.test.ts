@@ -40,6 +40,7 @@ const withdrawn = (
   extra: Record<string, unknown> = {},
 ): ApprovalWithdrawn => {
   const r = decode(approvalWithdrawnReader, {
+    earlier_approved: null,
     ...extra,
     revision_id: "mission_model_revision:r3",
     decision: {
@@ -55,8 +56,8 @@ const withdrawn = (
 };
 
 describe("approval_withdrawn decoder", () => {
-  it("reads a server before #924 (absent) and an approved craft (null)", () => {
-    expect(decode(approvalWithdrawnKey, undefined)).toEqual({ ok: true, value: undefined });
+  it("reads an approved craft (null) and refuses a read without the key", () => {
+    expect(decode(approvalWithdrawnKey, undefined).ok).toBe(false);
     expect(decode(approvalWithdrawnKey, null)).toEqual({ ok: true, value: null });
   });
 
@@ -82,18 +83,18 @@ describe("compositionName (U109)", () => {
 describe("withdrawnStateLine (U109's caution words)", () => {
   it("says who withdrew it, when and why, and that the craft stays on it", () => {
     expect(withdrawnStateLine(withdrawn(), composed, "EARENDIL-004")).toBe(
-      "Composition 3 is no longer approved: Ana R. withdrew its approval at 11-20 09:12Z: “Wrong TM table”. EARENDIL-004 stays on it until a new configuration is applied.",
+      "Composition 3 is no longer approved: Ana R. withdrew its approval at 11-20 09:12Z: “Wrong TM table”. EARENDIL-004 stays on it until a new configuration is applied. Move it to an approved composition.",
     );
   });
 
   it("words a rejection, a missing name, and a missing reason", () => {
     expect(withdrawnStateLine(withdrawn({ kind: "rejected" }), oneCatalog, "EARENDIL-004")).toBe(
-      "Catalog rev 4 is no longer approved: Ana R. rejected it at 11-20 09:12Z: “Wrong TM table”. EARENDIL-004 stays on it until a new configuration is applied.",
+      "Catalog rev 4 is no longer approved: Ana R. rejected it at 11-20 09:12Z: “Wrong TM table”. EARENDIL-004 stays on it until a new configuration is applied. Move it to an approved composition.",
     );
     expect(
       withdrawnStateLine(withdrawn({ by: null, reason: null }), composed, "EARENDIL-004"),
     ).toBe(
-      "Composition 3 is no longer approved: its approval was withdrawn at 11-20 09:12Z. EARENDIL-004 stays on it until a new configuration is applied.",
+      "Composition 3 is no longer approved: its approval was withdrawn at 11-20 09:12Z. EARENDIL-004 stays on it until a new configuration is applied. Move it to an approved composition.",
     );
     expect(
       withdrawnStateLine(withdrawn({ kind: "rejected", by: null }), composed, "EARENDIL-004"),
@@ -106,13 +107,13 @@ describe("withdrawnStateLine (U109's caution words)", () => {
   it("names a service identity as one, and a craft without a name as this spacecraft", () => {
     const service = { kind: "service", id: "si-1", name: "ingest" };
     expect(withdrawnStateLine(withdrawn({ by: service }), composed, "  ")).toBe(
-      "Composition 3 is no longer approved: ingest (a service identity) withdrew its approval at 11-20 09:12Z: “Wrong TM table”. This spacecraft stays on it until a new configuration is applied.",
+      "Composition 3 is no longer approved: ingest (a service identity) withdrew its approval at 11-20 09:12Z: “Wrong TM table”. This spacecraft stays on it until a new configuration is applied. Move it to an approved composition.",
     );
   });
 
   it("says only what's known for a decision kind it doesn't know (U20)", () => {
     expect(withdrawnStateLine(withdrawn({ kind: "revoked" }), composed, "EARENDIL-004")).toBe(
-      "Composition 3 is no longer approved since 11-20 09:12Z. EARENDIL-004 stays on it until a new configuration is applied.",
+      "Composition 3 is no longer approved since 11-20 09:12Z. EARENDIL-004 stays on it until a new configuration is applied. Move it to an approved composition.",
     );
   });
 
@@ -130,10 +131,6 @@ describe("withdrawnStateLine (U109's caution words)", () => {
       withdrawnStateLine(withdrawn({}, { earlier_approved: null }), oneCatalog, "EARENDIL-004"),
     ).toMatch(
       /stays on it until a new configuration is applied\. Move it to an approved composition\.$/,
-    );
-    // A server from before #924's follow-up doesn't say what's left: no way out, never a guess.
-    expect(withdrawnStateLine(withdrawn(), composed, "EARENDIL-004")).toMatch(
-      /until a new configuration is applied\.$/,
     );
   });
 
@@ -162,7 +159,7 @@ describe("WithdrawnApprovalLine", () => {
 });
 
 describe("the workspace read's active.approval_withdrawn", () => {
-  it("reads the withdrawal on the active configuration, and its absence as before #924", () => {
+  it("reads the withdrawal on the active configuration, and null when it's approved", () => {
     const active = { version: 3, generation: 9, document: snapshotWire().document };
     const sent = decode(
       snapshotReader,
@@ -171,13 +168,17 @@ describe("the workspace read's active.approval_withdrawn", () => {
           ...active,
           approval_withdrawn: {
             revision_id: "mission_model_revision:r3",
+            earlier_approved: null,
             decision: { kind: "rejected", by: ana, at: "2026-11-20T09:12:00Z", reason: null },
           },
         },
       }),
     );
     expect(sent.ok && sent.value.active?.approval_withdrawn?.decision.kind).toBe("rejected");
-    const before = decode(snapshotReader, snapshotWire({ active }));
-    expect(before.ok && before.value.active?.approval_withdrawn).toBeUndefined();
+    const approved = decode(
+      snapshotReader,
+      snapshotWire({ active: { ...active, approval_withdrawn: null } }),
+    );
+    expect(approved.ok && approved.value.active?.approval_withdrawn).toBeNull();
   });
 });

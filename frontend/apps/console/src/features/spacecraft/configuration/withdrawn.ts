@@ -12,7 +12,7 @@ import { formatAbsolute, formatShort } from "@/ui";
  * E2b (#546, #924; U109): a craft whose running revision's approval was withdrawn or rejected.
  * The workspace read carries it as `active.approval_withdrawn`, and the directory row as
  * `approval_withdrawn`: `{revision_id, earlier_approved, decision: {kind, by, at, reason}}`, or
- * null. The keys are optional so the console reads a server from before #924 and its follow-up.
+ * null.
  */
 export const approvalDecisionKinds = ["withdrawn", "rejected"] as const;
 
@@ -35,9 +35,9 @@ export const approvalWithdrawnReader = d.object({
   revision_id: d.token,
   /**
    * The way out (U109): an earlier approved, runnable version the next staging would move to, or
-   * null when none is left. Absent on a server from before #924's follow-up.
+   * null when none is left (#999).
    */
-  earlier_approved: d.optional(d.nullable(earlierApproved)),
+  earlier_approved: d.nullable(earlierApproved),
   decision: d.object({
     // Open on purpose: a decision kind this console doesn't know reads U109's neutral form.
     kind: d.knownText(approvalDecisionKinds),
@@ -49,8 +49,8 @@ export const approvalWithdrawnReader = d.object({
 });
 export type ApprovalWithdrawn = Decoded<typeof approvalWithdrawnReader>;
 
-/** The optional key both reads carry. */
-export const approvalWithdrawnKey = d.optional(d.nullable(approvalWithdrawnReader));
+/** The key both reads carry: null when the craft's revision is approved. */
+export const approvalWithdrawnKey = d.nullable(approvalWithdrawnReader);
 
 /**
  * The composition's name in U109's sentences: "composition 3", "catalog rev 4" for one catalog,
@@ -87,7 +87,6 @@ function decisionClause(w: ApprovalWithdrawn): string {
  *
  * Then U109's way out, by `earlier_approved`: "Stage a new configuration to move it to composition
  * 3's earlier approved version." when one is left, "Move it to an approved composition." when null.
- * Absent (a server from before #924's follow-up): the line ends before it rather than guess.
  */
 export function withdrawnStateLine(
   w: ApprovalWithdrawn,
@@ -98,16 +97,14 @@ export function withdrawnStateLine(
   const name = capital(named);
   const who = craft?.trim() ? craft : "This spacecraft";
   const stays = `${who} stays on it until a new configuration is applied.`;
-  const out = wayOut(w, named);
-  const tail = out ? `${stays} ${out}` : stays;
+  const tail = `${stays} ${wayOut(w, named)}`;
   if (!isKnown(w.decision.kind))
     return `${name} is no longer approved since ${formatShort(new Date(w.decision.at))}. ${tail}`;
   return `${name} is no longer approved: ${decisionClause(w)}. ${tail}`;
 }
 
-/** U109's way out, or null when the server doesn't say what's left. */
-function wayOut(w: ApprovalWithdrawn, named: string): string | null {
-  if (w.earlier_approved === undefined) return null;
+/** U109's way out: an earlier approved version, or none left. */
+function wayOut(w: ApprovalWithdrawn, named: string): string {
   if (w.earlier_approved === null) return "Move it to an approved composition.";
   return `Stage a new configuration to move it to ${named}'s earlier approved version.`;
 }
