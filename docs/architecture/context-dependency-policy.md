@@ -171,7 +171,7 @@ changes to either constructor must preserve that value-only boundary.
 
 The exact public composition value ledger also names the compiled application
 and extension catalogs and the metadata-only application contributors: Comms,
-DerivedTelemetry, Limits, MissionCatalog, OpsConsole, Spacecraft,
+DerivedTelemetry, Limits, MissionCatalog, Spacecraft,
 LegacyCommsOverview and OrganizationAdmin. Their public APIs assemble typed
 contribution declarations, provider identities and validated catalog values.
 Callers consume these declarations without obtaining workflow authority. The

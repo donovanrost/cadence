@@ -27,14 +27,11 @@ const statusWords: Readonly<Record<AppStatus["state"], string | null>> = {
   failed: "Failed to load its status",
   unrecognized: "Status not known",
 };
-const word = (a: App) =>
-  a.platform
-    ? "Platform · always on"
-    : a.state === "installed"
-      ? "Installed"
-      : a.state === "disabled"
-        ? "Disabled"
-        : "Not set up";
+const stateWords: Readonly<Record<App["state"], string>> = {
+  installed: "Installed",
+  disabled: "Disabled",
+  not_installed: "Not set up",
+};
 </script>
 
 <template>
@@ -50,12 +47,15 @@ const word = (a: App) =>
   >
     <template #action>
       <div class="flex flex-col items-end gap-2">
-        <ApTag :state="app.state === 'installed' ? 'nominal' : 'off'" :label="word(app)" />
+        <ApTag
+          :state="app.state === 'installed' ? 'nominal' : 'off'"
+          :label="stateWords[app.state]"
+        />
         <span v-if="app.status && statusWords[app.status.state]" class="text-sm text-text-3">{{
           statusWords[app.status.state]
         }}</span>
         <AppActions
-          v-if="!app.platform && canInstall"
+          v-if="canInstall"
           :mission-id="missionId"
           :app="app"
           :uninstall-scope="uninstallScope"

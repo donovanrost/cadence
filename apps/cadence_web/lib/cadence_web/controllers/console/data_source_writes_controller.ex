@@ -3,20 +3,19 @@ defmodule CadenceWeb.Console.DataSourceWritesController do
   L11 data-source writes and the reads their screens need (owner: api-ops), under
   `/api/v1/missions/:mission_id`. Contract: docs/apogee/api/setup.md §Data sources (L11).
 
-  Writes go through `OpsConsole.Actions.DataSources`, the adapter the legacy page uses: the same
-  validation and authorization (`operate_mission`), and since e80c9d872 only the organization's
-  own sources and bindings (platform-shared ones need a platform admin in admin mode:
-  `403 platform_source`). Each write answers with the source's D1 row.
+  Writes go through `Cadence.Management.DataSources.Writes`: its validation and authorization
+  (`operate_mission` and `read_organization`), and only the organization's own sources and
+  bindings (platform-shared ones need a platform admin in admin mode: `403 platform_source`).
+  Each write answers with the source's D1 row.
   """
 
   use CadenceWeb, :controller
 
   require Logger
 
-  alias Cadence.Applications.{ActionRequest, HostContext}
-  alias Cadence.Applications.OpsConsole.Actions.DataSources, as: Actions
   alias Cadence.Jobs
   alias Cadence.Management.DataSources
+  alias Cadence.Management.DataSources.Writes
   alias Cadence.Reads.DataSourceDirectory
   alias CadenceWeb.Console.{ConfigJSON, Problem}
   alias CadenceWeb.Console.DataSourceRunError, as: RunError
@@ -116,8 +115,8 @@ defmodule CadenceWeb.Console.DataSourceWritesController do
       nil ->
         Problem.respond(conn, :binding_not_found)
 
-      # The switch is confirmed against the source the sheet showed; the action checks it (and the
-      # write re-checks it under a lock), so the host action path can't skip it either.
+      # The switch is confirmed against the source the sheet showed; the write checks it (and
+      # re-checks it under a lock).
       _binding when not is_binary(expected) ->
         Problem.respond(conn, :invalid_params, %{field: "expected_data_source_id"})
 
@@ -224,12 +223,12 @@ defmodule CadenceWeb.Console.DataSourceWritesController do
 
   @doc """
   D1's permissions: what the writes check, derived from the very check they make
-  (`Actions.may_manage?/3`, #1160), so `data_sources.manage` goes only to someone whose write
+  (`Writes.may_manage?/3`, #1160), so `data_sources.manage` goes only to someone whose write
   passes. Today that is a mission operator who is also an organization admin.
   """
   def permissions(scope, mission_id) do
     # todo(authz): Cedar should decide who may manage data sources.
-    if Actions.may_manage?(scope, scope.organization_id, mission_id),
+    if Writes.may_manage?(scope, scope.organization_id, mission_id),
       do: ["data_sources.manage"],
       else: []
   end
@@ -242,21 +241,8 @@ defmodule CadenceWeb.Console.DataSourceWritesController do
     end
   end
 
-  defp act(conn, action_id, params) do
-    Actions.execute(
-      conn.assigns.current_scope,
-      HostContext.mission(mission(conn)),
-      "data_sources",
-      %ActionRequest{
-        application_key: "ops_console",
-        application_version: 1,
-        surface_id: "data_sources",
-        surface_version: 1,
-        action_id: action_id,
-        params: params
-      }
-    )
-  end
+  defp act(conn, action_id, params),
+    do: Writes.execute(conn.assigns.current_scope, mission(conn), action_id, params)
 
   defp respond({:ok, _result}, conn, status, id) do
     conn

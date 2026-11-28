@@ -1,12 +1,11 @@
-defmodule Cadence.Applications.OpsConsole.Actions.DataSourcesTest do
+defmodule Cadence.Management.DataSources.WritesTest do
   use Cadence.DataCase, async: false
 
   alias Cadence.Accounts.{OrganizationMembership, User}
-  alias Cadence.Applications.{ActionRequest, HostContext}
-  alias Cadence.Applications.OpsConsole.Actions.DataSources, as: DataSourcesAction
   alias Cadence.Auth.Scope
   alias Cadence.DataSources.{DataBinding, DataSource}
   alias Cadence.Management.DataSources
+  alias Cadence.Management.DataSources.Writes
 
   @organization_id "org-ops-data-sources-actions"
   @mission_id "mission-ops-data-sources-actions"
@@ -16,7 +15,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSourcesTest do
     :ok
   end
 
-  test "register-source executes the scoped domain persistence and returns JSON-safe output" do
+  test "register-source persists the source in the caller's organization and mission" do
     request =
       request("register-source", %{
         "source" => %{
@@ -34,25 +33,14 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSourcesTest do
       })
 
     assert {:ok, %DataSource{} = source} =
-             DataSourcesAction.execute(
-               scope(),
-               HostContext.mission(@mission_id),
-               "data_sources",
-               request
-             )
+             write(scope(), request)
 
     assert source.data_source_id == "action-managed-source"
     assert source.organization_id == @organization_id
     assert source.mission_id == @mission_id
-
-    assert DataSourcesAction.result(source) == %{
-             "dataSourceId" => "action-managed-source",
-             "organizationId" => @organization_id,
-             "missionId" => @mission_id,
-             "status" => "active",
-             "kind" => "managed_tsdb",
-             "isolationLevel" => "mission_isolated"
-           }
+    assert source.status == :active
+    assert source.kind == :managed_tsdb
+    assert source.isolation_level == :mission_isolated
   end
 
   test "register-source refuses an endpoint variable this environment doesn't allow" do
@@ -73,12 +61,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSourcesTest do
       })
 
     assert {:error, :env_credential_name_not_allowed} =
-             DataSourcesAction.execute(
-               scope(),
-               HostContext.mission(@mission_id),
-               "data_sources",
-               request
-             )
+             write(scope(), request)
 
     assert {:error, _not_found} = DataSources.fetch_data_source("action-env-source")
   end
@@ -115,12 +98,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSourcesTest do
       })
 
     assert {:error, :env_material_profile_not_allowed} =
-             DataSourcesAction.execute(
-               scope(),
-               HostContext.mission(@mission_id),
-               "data_sources",
-               request
-             )
+             write(scope(), request)
   end
 
   test "rejects a resource from another mission before domain mutation" do
@@ -142,12 +120,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSourcesTest do
     request = request("disable-source", %{"data-source-id" => "other-mission-source"})
 
     assert {:error, :scope_mismatch} =
-             DataSourcesAction.execute(
-               scope(),
-               HostContext.mission(@mission_id),
-               "data_sources",
-               request
-             )
+             write(scope(), request)
   end
 
   test "rejects a cross-mission parameter" do
@@ -158,30 +131,22 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSourcesTest do
       })
 
     assert {:error, :scope_mismatch} =
-             DataSourcesAction.execute(
-               scope(),
-               HostContext.mission(@mission_id),
-               "data_sources",
-               request
+             write(scope(), request)
+  end
+
+  test "params are exact before policy or domain calls" do
+    assert {:error, :malformed_action_input} =
+             execute(
+               request("retry-deployment-run", %{"job-id" => "job-1", "unexpected" => "rejected"})
              )
   end
 
   test "rejects unknown and malformed actions fail-closed" do
-    assert {:error, :unsupported_application_action} =
-             DataSourcesAction.execute(
-               scope(),
-               HostContext.mission(@mission_id),
-               "data_sources",
-               request("unknown-source-action", %{})
-             )
+    assert {:error, :unsupported_action} =
+             write(scope(), request("unknown-source-action", %{}))
 
     assert {:error, :malformed_action_input} =
-             DataSourcesAction.execute(
-               scope(),
-               HostContext.mission(@mission_id),
-               "data_sources",
-               request("disable-source", %{"data-source-id" => self()})
-             )
+             write(scope(), request("disable-source", %{"data-source-id" => self()}))
   end
 
   describe "writes only on the caller's own sources (shared and other-org sources are refused)" do
@@ -276,10 +241,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSourcesTest do
       own = persist_source!("own-target-source", @organization_id, @mission_id, :mission_isolated)
 
       assert {:error, :platform_target_required} =
-               DataSourcesAction.execute(
+               write(
                  platform_admin(),
-                 HostContext.mission(@mission_id),
-                 "data_sources",
                  request("change-binding", %{
                    "binding" => %{
                      "binding_id" => "platform-shared-binding-target",
@@ -301,10 +264,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSourcesTest do
       org_shared = persist_source!("org-shared-target-source", @organization_id, nil, :shared)
 
       assert {:error, :platform_target_required} =
-               DataSourcesAction.execute(
+               write(
                  platform_admin(),
-                 HostContext.mission(@mission_id),
-                 "data_sources",
                  request("change-binding", %{
                    "binding" => %{
                      "binding_id" => "platform-shared-binding-target",
@@ -333,10 +294,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSourcesTest do
         })
 
       assert {:ok, %DataSource{status: :disabled}} =
-               DataSourcesAction.execute(
+               write(
                  admin,
-                 HostContext.mission(@mission_id),
-                 "data_sources",
                  request("disable-source", %{"data-source-id" => c.shared.data_source_id})
                )
     end
@@ -432,14 +391,10 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSourcesTest do
     })
   end
 
-  defp execute(request),
-    do:
-      DataSourcesAction.execute(
-        scope(),
-        HostContext.mission(@mission_id),
-        "data_sources",
-        request
-      )
+  defp execute(request), do: write(scope(), request)
+
+  defp write(scope, {action_id, params}),
+    do: Writes.execute(scope, @mission_id, action_id, params)
 
   defp persist_source!(id, organization_id, mission_id, isolation) do
     {:ok, source} =
@@ -458,18 +413,9 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSourcesTest do
     source
   end
 
-  defp request(action_id, params) do
-    %ActionRequest{
-      application_key: "ops_console",
-      application_version: 1,
-      action_id: action_id,
-      surface_id: "data_sources",
-      surface_version: 1,
-      params: params
-    }
-  end
+  defp request(action_id, params), do: {action_id, params}
 
-  # A person: the ops console's actions run in the app host, a browser session, never as a
+  # A person: the console's writes come from a browser session, never from a
   # service. Since #384 an organization-level action refuses a service (#282).
   defp scope do
     %Scope{

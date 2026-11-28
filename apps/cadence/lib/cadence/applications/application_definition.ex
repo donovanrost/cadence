@@ -11,7 +11,6 @@ defmodule Cadence.Applications.ApplicationDefinition do
 
   @type availability :: :available | :roadmap
   @type trust :: :first_party
-  @type installation_policy :: :platform | :optional
   @type scope ::
           :organization
           | :user
@@ -27,7 +26,6 @@ defmodule Cadence.Applications.ApplicationDefinition do
           display_name: binary(),
           description: binary(),
           trust: trust(),
-          installation_policy: installation_policy(),
           availability: availability(),
           installable_scopes: [scope()],
           configuration_contract: map(),
@@ -55,7 +53,6 @@ defmodule Cadence.Applications.ApplicationDefinition do
     :trust,
     :availability,
     :status_query_id,
-    installation_policy: :optional,
     installable_scopes: [],
     configuration_contract: %{},
     resource_contract: %ResourceContract{},
@@ -71,13 +68,6 @@ defmodule Cadence.Applications.ApplicationDefinition do
   def available?(%__MODULE__{availability: :available}), do: true
   def available?(%__MODULE__{}), do: false
 
-  @doc "Whether a platform definition supports this scope without an installation."
-  @spec platform?(t(), scope()) :: boolean()
-  def platform?(%__MODULE__{installation_policy: :platform} = definition, scope),
-    do: scope in definition.installable_scopes
-
-  def platform?(%__MODULE__{}, _scope), do: false
-
   @spec validate(t()) :: :ok | {:error, :invalid_application_definition}
   def validate(%__MODULE__{} = definition) do
     with true <- valid_text?(definition.application_key),
@@ -85,7 +75,6 @@ defmodule Cadence.Applications.ApplicationDefinition do
          true <- valid_text?(definition.display_name),
          true <- valid_text?(definition.description),
          true <- definition.trust == :first_party,
-         true <- definition.installation_policy in [:platform, :optional],
          true <- definition.availability in [:available, :roadmap],
          true <- valid_installable_scopes?(definition.installable_scopes),
          true <- valid_configuration_contract?(definition.configuration_contract),

@@ -36,20 +36,6 @@ defmodule Cadence.Applications.ApplicationInstallationsTest do
     %{scope: scope, host_context: host_context}
   end
 
-  test "platform modules cannot acquire or change installation lifecycle", %{scope: scope} do
-    host = HostContext.mission(@mission_id)
-
-    for key <- ["ops_console"] do
-      assert {:error, :platform_application} = ApplicationInstallations.install(scope, host, key)
-      assert {:error, :platform_application} = ApplicationInstallations.disable(scope, host, key)
-
-      assert {:error, :platform_application} =
-               ApplicationInstallations.uninstall(scope, host, key)
-    end
-
-    assert {:ok, []} = ApplicationInstallations.list(scope, host)
-  end
-
   test "installs once per application and scope and records an idempotent lifecycle", context do
     assert {:ok, installed} =
              ApplicationInstallations.install(

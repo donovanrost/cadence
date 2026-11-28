@@ -25,7 +25,7 @@ const installedCount = computed(() =>
     <ApPageHeader
       :label="`${scope.mission.name} · apps`"
       :title="
-        state.status === 'ready'
+        state.status === 'ready' && state.value.apps.length > 0
           ? `${installedCount} of ${state.value.apps.length} installed`
           : 'Apps'
       "
@@ -40,7 +40,13 @@ const installedCount = computed(() =>
       />
       <ApRemote v-else :state="state" loading-label="Loading apps…" @retry="refetch">
         <template #default="{ value }">
-          <ul class="m-0 list-none p-0">
+          <ApEmptyState
+            v-if="value.apps.length === 0"
+            state="off"
+            headline="No apps install on the whole mission"
+            sentence="Apps that work per spacecraft are on each spacecraft's page."
+          />
+          <ul v-else class="m-0 list-none p-0">
             <AppRow
               v-for="a in value.apps"
               :key="a.key"

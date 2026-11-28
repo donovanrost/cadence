@@ -15,7 +15,6 @@ afterEach(() => call.fn.mockReset());
 const app = (state: App["state"]): App => ({
   key: "comms",
   name: "Communications",
-  platform: false,
   description: null,
   installed: state === "installed",
   state,

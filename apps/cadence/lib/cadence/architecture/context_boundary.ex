@@ -116,7 +116,6 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/control/model_approval_gate.ex" => :catalog,
     "lib/cadence/extensions/registry.ex" => :composition,
     "lib/cadence/applications/registry.ex" => :composition,
-    "lib/cadence/applications/ops_console.ex" => :composition,
     "lib/cadence/runtime/process_namespace.ex" => :composition,
     "lib/cadence/runtime/supervisor.ex" => :composition,
     "lib/cadence/platform/root_composition.ex" => :composition,

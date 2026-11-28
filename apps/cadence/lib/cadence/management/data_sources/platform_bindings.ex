@@ -1,4 +1,4 @@
-defmodule Cadence.Applications.OpsConsole.Actions.PlatformBindings do
+defmodule Cadence.Management.DataSources.PlatformBindings do
   @moduledoc """
   Platform-wide data-source bindings (DECISIONS #90, ux U53): a binding with no organization is
   the default every mission reads for its logical source and realm unless it has its own. A switch

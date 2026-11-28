@@ -11,15 +11,13 @@ defmodule Cadence.Applications.ApplicationDefinitionTest do
     assert :ok = ApplicationDefinition.validate(valid_application())
   end
 
-  test "an optional application is valid on its installable scopes" do
+  test "an application is valid on several installable scopes" do
     application = %ApplicationDefinition{
       valid_application()
-      | installation_policy: :optional,
-        installable_scopes: [:mission, :spacecraft]
+      | installable_scopes: [:mission, :spacecraft]
     }
 
     assert :ok = ApplicationDefinition.validate(application)
-    refute ApplicationDefinition.platform?(application, :mission)
   end
 
   test "rejects unknown or duplicate installable scopes" do
@@ -51,7 +49,6 @@ defmodule Cadence.Applications.ApplicationDefinitionTest do
       display_name: "Example",
       description: "A bounded application definition.",
       trust: :first_party,
-      installation_policy: :platform,
       availability: :available,
       installable_scopes: [:mission],
       configuration_contract: %{schema_id: "cadence.example.configuration", version: 1}
