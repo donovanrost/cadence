@@ -207,12 +207,9 @@ defmodule Cadence.Architecture.PlaneAndContextBoundaryTest do
   end
 
   test "host providers have their actual owners" do
-    for name <-
-          ~w(telemetry_decom/action_provider) do
-      path = "lib/cadence/applications/#{name}.ex"
-      assert PlaneBoundary.classify(path) == :adapter
-      assert ContextBoundary.classify(path) == :adapter
-    end
+    path = "lib/cadence/applications/ops_console/action_provider.ex"
+    assert PlaneBoundary.classify(path) == :adapter
+    assert ContextBoundary.classify(path) == :adapter
 
     assert PlaneBoundary.classify("lib/cadence/notifications/store.ex") == :platform
 
@@ -597,18 +594,7 @@ defmodule Cadence.Architecture.PlaneAndContextBoundaryTest do
              PlaneBoundary.classify("lib/cadence/applications/resource_claim_definition.ex")
 
     assert :shared ==
-             PlaneBoundary.classify("lib/cadence/applications/preflight_report.ex")
-
-    assert :shared ==
              PlaneBoundary.classify("lib/cadence/applications/status_placement.ex")
-
-    assert :management ==
-             PlaneBoundary.classify("lib/cadence/applications/application_preflight.ex")
-
-    assert :management ==
-             PlaneBoundary.classify(
-               "lib/cadence/applications/application_preflights/telemetry_decom.ex"
-             )
 
     assert :shared ==
              PlaneBoundary.classify("lib/cadence/capabilities/definitions/uplink_gateway.ex")

@@ -5,13 +5,11 @@ defmodule Cadence.Applications.ReleaseRegistry do
 
   alias Cadence.Applications.{
     OpsConsole,
-    ReleaseContribution,
-    TelemetryDecomCatalogContribution
+    ReleaseContribution
   }
 
   @max_contributions 128
   @contributors [
-    TelemetryDecomCatalogContribution,
     OpsConsole
   ]
 

@@ -29,7 +29,6 @@ export { default as CadenceDashboardSettingsSectionFrame } from "./CadenceDashbo
 export { default as CadenceDataRow } from "./CadenceDataRow.vue";
 export { default as CadenceDefinitionListPanel } from "./CadenceDefinitionListPanel.vue";
 export { default as CadenceDetailsFrame } from "./CadenceDetailsFrame.vue";
-export { default as CadenceDiagnosticsSectionFrame } from "./CadenceDiagnosticsSectionFrame.vue";
 export { default as CadenceEmptyState } from "./CadenceEmptyState.vue";
 export { default as CadenceEmptyStateFrame } from "./CadenceEmptyStateFrame.vue";
 export { default as CadenceField } from "./CadenceField.vue";
@@ -51,7 +50,6 @@ export { default as CadencePageTitle } from "./CadencePageTitle.vue";
 export { default as CadencePaginationFrame } from "./CadencePaginationFrame.vue";
 export { default as CadencePanel } from "./CadencePanel.vue";
 export { default as CadencePresentationNode } from "./CadencePresentationNode.vue";
-export { default as CadenceStatTile } from "./CadenceStatTile.vue";
 export { default as CadenceTableFrame } from "./CadenceTableFrame.vue";
 export { default as CadenceValidationMessage } from "./CadenceValidationMessage.vue";
 export { default as WidgetFormField } from "./WidgetFormField.vue";

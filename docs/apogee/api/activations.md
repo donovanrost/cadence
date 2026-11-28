@@ -12,8 +12,8 @@ that fails or stalls shows on Now).
 ## `<row>`
 
 ```json
-{"id": "activation_request_…", "kind": "telemetry_decom", "app": {"key": "telemetry_decom", "name": "Telemetry Decom"},
- "summary": "Decom composition for 3 spacecraft",
+{"id": "activation_request_…", "kind": "spacecraft_configuration",
+ "summary": "Spacecraft configuration for 3 spacecraft",
  "binding_set": {"id": "…", "version": 4},
  "requested_by": {"kind": "user", "id": "…", "name": "Mira K."}, "requested_at": "…Z",
  "state": "approval_pending",
@@ -22,9 +22,9 @@ that fails or stalls shows on Now).
  "can_decide": true}
 ```
 
-- `kind`: `telemetry_decom | spacecraft_configuration | null` (null: a mission activation with
-  neither). `app` is null except for decom. `summary` is the same sentence the Now item shows
-  (`Control.Activations.Description`).
+- `kind`: `spacecraft_configuration | null` (null: any other mission activation). `summary` is
+  the same sentence the Now item shows (`Control.Activations.Description`). The decom kind and
+  `app` went with Telemetry Decom's activation path (#669).
 - `state`: `approval_pending | approved | rejected | withdrawn | superseded` (domain 444c6126b).
   `superseded`: a newer request for the same binding set (or, for spacecraft configuration, the
   same reviewed spacecraft) arrived. `superseded_by` (that request's id) and `superseded_at` are set

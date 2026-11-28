@@ -30,7 +30,6 @@ defmodule Cadence.Platform.StoredHashGuardTest do
   }
 
   alias Cadence.Applications.{
-    ApplicationBinding,
     PacketBinding,
     PacketBindingConfiguration,
     PacketBindingResource
@@ -91,23 +90,6 @@ defmodule Cadence.Platform.StoredHashGuardTest do
       :parameter_id,
       :qualified_name,
       :size_bits
-    ],
-    ApplicationBinding => [
-      :application_binding_id,
-      :application_key,
-      :applied_at,
-      :applied_binding_set_id,
-      :applied_binding_set_version,
-      :catalog_revision_id,
-      :configuration_version,
-      :enabled,
-      :handled_apids,
-      :metadata,
-      :mission_id,
-      :organization_id,
-      :source_endpoint_id,
-      :spacecraft_id,
-      :updated_at
     ],
     PacketBindingConfiguration => [
       :application_installation_id,
@@ -199,7 +181,6 @@ defmodule Cadence.Platform.StoredHashGuardTest do
     SelectorMatch => %{},
     PacketDefinition => %{fields: []},
     FieldDefinition => %{byte_order: :big_endian},
-    ApplicationBinding => %{enabled: true, handled_apids: [], metadata: %{}},
     PacketBindingConfiguration => %{bindings: [], enabled: true, metadata: %{}},
     PacketBinding => %{metadata: %{}, resources: [], selector: %{}},
     PacketBindingResource => %{metadata: %{}},
@@ -239,12 +220,6 @@ defmodule Cadence.Platform.StoredHashGuardTest do
     exclusions = %{
       FieldDefinition => [:parameter_id, :qualified_name],
       Declaration => [:expected_fingerprint, :name, :operation, :provenance, :space_system_path],
-      ApplicationBinding => [
-        :applied_at,
-        :applied_binding_set_id,
-        :applied_binding_set_version,
-        :updated_at
-      ],
       PacketBindingConfiguration => [
         :applied_at,
         :applied_binding_set_id,

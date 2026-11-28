@@ -248,7 +248,7 @@ pin → head and assignment; head plus artifact → expansion → runtime; tenan
 | MM-2 (`importer_recorded=false`; seed counts no one) | Fixed: #513 (#516, merged 11-20): a system import records its runner (`run_by`), who counts as an importer and is named on the run. A system run from before #513 counts no one. #435 made `importer_recorded` count services. |
 | MM-3 (#119 content-addressed revisions across tenants) | Fixed by #119's scoped re-read. CB-2 and CB-7 apply the same rule to compositions and artifacts. |
 | MM-4 (upload publishes a job inside a transaction) | Open, low. |
-| MM-5 (`request_promotion` writes before it authorizes) | Open, low. |
+| MM-5 (`request_promotion` writes before it authorizes) | Closed: `request_promotion` is deleted (#669 b). |
 | MM-6 (qualification cases have no second person) | Open, dormant. |
 | SC-1 (client-set request metadata drives the approver's view) | Likely closed for spacecraft configuration by #329 (L10 derives what a request changes; ca-security). To verify when #235 closes. |
 | SC-2, SC-3 (REST spacecraft create outside change sets) | Fixed: #328 (#332). |

@@ -108,6 +108,7 @@ defmodule CadenceWeb.Console.TransportProviderOptionsAPITest do
              "preview" => %{
                "configuration" => configuration,
                "direction_capability" => "inbound",
+               "listener_eligible" => true,
                "provider_version" => ^version,
                "summary" => summary
              },

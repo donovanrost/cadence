@@ -14,6 +14,7 @@ Elixir dependencies (`mise exec -- mix workspace.run -t deps.get`), and frontend
 ```sh
 dev/stack up       # create and migrate both stores, start services, seed data
 dev/stack up --no-seed     # start services without any data seeds
+dev/stack up --review      # build the console and serve it over this laptop's tailnet
 dev/stack seed-rest        # rerun the REST Earendil and QA seeds against a running stack
 dev/stack status   # show this slot's names, ports, and process state
 dev/stack down     # stop this worktree's processes and QuestDB container
@@ -27,6 +28,19 @@ It starts the simulator, Phoenix and the Console dev server, then runs the stand
 seeds in order: Earendil, QA people, planning and two QA missions. `reset` deletes only this
 slot's dev data. The scripts in `dev/seed/` use HTTP sessions and the simulator's HTTP API;
 they never call Cadence domain modules.
+
+For a tailnet review, run `dev/stack up --review` or add `--no-seed`. It builds the console
+into Phoenix's `priv/static/console`, starts no console Vite server, and serves the built
+console through `tailscale serve` over HTTPS to tailnet members only. `status` prints the
+review URL; `down` removes this worktree's Serve listener. Each slot uses its own HTTPS
+port, so another worktree's Serve configuration is left alone. Tailscale must be running,
+and its CLI must be on `PATH` or available in `/Applications/Tailscale.app`. For another
+CLI location, set `CADENCE_TAILSCALE_BIN`; to select an explicit tailnet origin, set
+`CADENCE_DEV_REVIEW_ORIGIN=https://host.tailnet.ts.net:port` when starting the stack.
+The endpoint allows that origin for LiveView sockets and uses its host, scheme, and port
+in generated URLs. Plain `up` clears the review origin and starts the console dev server.
+The seed still calls Phoenix on loopback. Review mode uses known development credentials,
+so use Tailscale Serve only; never enable Funnel for this stack.
 
 If a worktree database predates the #718 migration baseline, run `dev/stack reset`. The old
 migration ledger and schema cannot be upgraded in place; the baseline reports that instruction

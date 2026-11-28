@@ -20,6 +20,12 @@ import {
   type ProviderErrorPath,
 } from "./provider-options.ts";
 import ProviderTransportPreview from "./ProviderTransportPreview.vue";
+import {
+  listenerOptions,
+  stageListenerRefusal,
+  stopsSharing,
+  type ListenerChoice,
+} from "./provider-listener.ts";
 import { blockedReason, formFromDocument, providerOp } from "./provider-transport.ts";
 
 /**
@@ -39,6 +45,7 @@ const name = ref(start.name);
 const providerId = ref(start.providerId);
 const serviceId = ref(start.serviceId);
 const deliveryId = ref(start.deliveryId);
+const listener = ref<ListenerChoice | "">(start.listener);
 // A changed choice clears the ones that depended on it.
 watch(providerId, () => ((serviceId.value = ""), (deliveryId.value = "")));
 watch(serviceId, () => (deliveryId.value = ""));
@@ -69,11 +76,21 @@ const fieldError = (path: ProviderErrorPath) => {
   return e ? errorWords(e) : null;
 };
 const general = computed(() => ready.value?.errors.filter((e) => e.path === null) ?? []);
+/** #202: the Listener is offered only for a listening downlink; null until the preview is in. */
+const eligible = computed(() =>
+  ready.value?.preview ? ready.value.preview.listener_eligible : null,
+);
+/** U83: the choices hide a stored Shared, so the transport goes back to its own listener. */
+const resetNote = computed(() => stopsSharing(props.document, eligible.value));
+/** A refused stage's Listener error, under the field until the choice changes. */
+const listenerError = ref<string | null>(null);
+watch(listener, () => (listenerError.value = null));
 const form = computed(() => ({
   name: name.value,
   providerId: providerId.value,
   serviceId: serviceId.value,
   deliveryId: deliveryId.value,
+  listener: listener.value || "own",
 }));
 const blocked = computed(() => blockedReason(form.value, ready.value));
 const busy = ref(false);
@@ -101,8 +118,13 @@ async function stage() {
     });
     if (!result.ok) {
       const egress = stageEgressRefusal(result.error);
+      listenerError.value = stageListenerRefusal(result.error);
       const outcome = failureOutcome(result.error, "staged");
-      failure.value = egress ? `Nothing was staged. ${egress}` : outcome.sentence;
+      failure.value = egress
+        ? `Nothing was staged. ${egress}`
+        : listenerError.value
+          ? "Nothing was staged. Change the Listener choice."
+          : outcome.sentence;
       failureLink.value = outcome.link ?? null;
       return;
     }
@@ -145,6 +167,15 @@ async function stage() {
     />
     <ApCallout v-for="(e, i) in general" :key="i" tone="caution">{{ e.message }}</ApCallout>
     <ProviderTransportPreview v-if="ready?.preview" :preview="ready.preview" />
+    <ApSelect
+      v-if="eligible"
+      v-model="listener"
+      label="Listener"
+      required
+      :options="listenerOptions"
+      :error="listenerError"
+    />
+    <ApCallout v-if="resetNote" tone="info">{{ resetNote }}</ApCallout>
     <!-- a11y B6 (#243): a refused stage is the person's own act refused: an alert. -->
     <ApCallout v-if="failure" tone="caution" role="alert"
       >{{ failure }}

@@ -60,13 +60,7 @@ defmodule Cadence.Control.CommandEncodingPreview do
   end
 
   defp basis(organization_id, mission_id, request) do
-    case RequestValidation.resolve_basis(
-           organization_id,
-           mission_id,
-           request.mission_model_revision_id,
-           request.command_id,
-           request.source_endpoint_ref
-         ) do
+    case RequestValidation.resolve_basis_of(organization_id, mission_id, request) do
       {:ok, basis} ->
         {:ok, basis}
 

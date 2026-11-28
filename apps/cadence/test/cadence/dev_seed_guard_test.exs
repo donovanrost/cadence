@@ -36,7 +36,7 @@ defmodule Cadence.DevSeedGuardTest do
     assert tables == MapSet.new(DecisionRecord.tables())
     # Every decision table has a schema module the scan knows by name.
     assert MapSet.size(schemas) >= length(DecisionRecord.tables())
-    assert "reflect_orbital/seed.exs" in seed_files()
+    assert "seed/earendil.exs" in seed_files()
   end
 
   test "the scanner flags a decision schema and raw SQL, not a public call" do

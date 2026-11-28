@@ -20,6 +20,7 @@ defmodule Cadence.Control.ActivationPreflightTest do
   alias Cadence.Management.Activations.{ActivationDecisionRow, ActivationRequestRow}
   alias Cadence.MissionModelApproval
   alias Cadence.MissionModelCatalogNaming
+  alias Cadence.MissionModelFixtures
   alias Cadence.MissionModels
   alias Cadence.MissionModels.RevisionRow
   alias Cadence.Persistence.JsonDocument
@@ -43,7 +44,7 @@ defmodule Cadence.Control.ActivationPreflightTest do
     revision = compile_and_approve(mission_id)
 
     {:ok, request} =
-      MissionModels.request_promotion(
+      MissionModelFixtures.request_model_activation(
         user_scope("requester"),
         mission_id,
         revision.revision_id,

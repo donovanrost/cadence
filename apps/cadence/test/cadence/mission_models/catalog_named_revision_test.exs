@@ -1,7 +1,7 @@
 defmodule Cadence.MissionModels.CatalogNamedRevisionTest do
   @moduledoc """
-  A mission-model revision that no catalog revision names can be neither approved nor requested
-  for activation (director 11-17, interim). Every import run compiles its own model revision; a
+  A mission-model revision that no catalog revision names can be neither approved nor applied
+  (director 11-17, interim). Every import run compiles its own model revision; a
   run that makes no catalog revision (a reimport) leaves one that no catalog revision names, and
   the model approval's importer separation is recorded against catalog revisions.
   """
@@ -14,12 +14,11 @@ defmodule Cadence.MissionModels.CatalogNamedRevisionTest do
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Auth.Scope
   alias Cadence.Catalog
-  alias Cadence.Catalog.MissionModel.Layer
   alias Cadence.Catalog.{ModelRevisions, RevisionRow}
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Control.Activations.Resume
   alias Cadence.Management.Activations, as: ManagementActivations
-  alias Cadence.MissionModelApproval
+  alias Cadence.MissionModelFixtures
   alias Cadence.MissionModels
   alias Cadence.MissionModels.Comparison
 
@@ -55,59 +54,8 @@ defmodule Cadence.MissionModels.CatalogNamedRevisionTest do
     assert {:error, :mission_model_revision_not_in_catalog} = approve(c.other_admin, c, unnamed)
   end
 
-  test "an approved model revision no catalog revision names can't be requested for activation",
-       c do
-    unnamed = run_again!(c, %{"user_id" => "reimporter-b"})
-    {:ok, _approved} = MissionModelApproval.approve!(c.org, c.mid, unnamed)
-    binding_set = persist_binding_set!(c)
-
-    assert {:error, :mission_model_revision_not_in_catalog} =
-             MissionModels.request_promotion(
-               c.other_admin,
-               c.mid,
-               unnamed,
-               binding_set.binding_set_id,
-               binding_set.version
-             )
-  end
-
-  test "a revision a catalog revision names is approved and requested as before", c do
+  test "a revision a catalog revision names is approved as before", c do
     assert {:ok, %{status: :approved}} = approve(c.other_admin, c, c.model)
-    binding_set = persist_binding_set!(c)
-
-    assert {:ok, %{state: _requested}} =
-             MissionModels.request_promotion(
-               c.other_admin,
-               c.mid,
-               c.model,
-               binding_set.binding_set_id,
-               binding_set.version
-             )
-  end
-
-  test "a revision compiled without a catalog revision (a fixture missing its naming helper) is refused",
-       c do
-    layer =
-      Layer.new(%{
-        organization_id: c.org,
-        mission_id: c.mid,
-        name: "unnamed fixture model",
-        declarations: [%{kind: :space_system, qualified_name: "/"}]
-      })
-
-    {:ok, compilation} = MissionModels.compile_layers([layer])
-    unnamed = compilation.revision.revision_id
-    {:ok, _approved} = MissionModelApproval.approve!(c.org, c.mid, unnamed)
-    binding_set = persist_binding_set!(c)
-
-    assert {:error, :mission_model_revision_not_in_catalog} =
-             MissionModels.request_promotion(
-               c.other_admin,
-               c.mid,
-               unnamed,
-               binding_set.binding_set_id,
-               binding_set.version
-             )
   end
 
   test "an approved request whose revision no catalog revision names isn't applied, and isn't retried",
@@ -116,7 +64,7 @@ defmodule Cadence.MissionModels.CatalogNamedRevisionTest do
     binding_set = persist_binding_set!(c)
 
     {:ok, request} =
-      MissionModels.request_promotion(
+      MissionModelFixtures.request_model_activation(
         c.importer,
         c.mid,
         c.model,

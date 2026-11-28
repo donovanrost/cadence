@@ -1,9 +1,8 @@
 // The console federation smoke: the federation contract (signed-out containment, remote mount,
 // release N-1 -> N -> rollback, cache reuse, CSRF through the console's host bridge, a scope change
 // without a reload) proven on the CONSOLE, which hosts federated surfaces now, against the
-// test-only surface_fixture application (product deletions can't remove it), plus one real surface
-// as a canary: telemetry_decom/packet_bindings. It gates §11c(C), which removes most of the legacy
-// host that federation_browser_smoke.mjs drives (lead, 11-15).
+// test-only surface_fixture application (product deletions can't remove it). It gates §11c(C),
+// which removes most of the legacy host that federation_browser_smoke.mjs drives (lead, 11-15).
 //
 // Driver: apps/cadence_web/browser_test/cadence_web/assets/console_federation_smoke_test.exs.
 import assert from "node:assert/strict";
@@ -128,7 +127,6 @@ await runBrowserGate(
       const org = arg(argv, "--org-slug");
       const mission = arg(argv, "--mission-slug");
       const missionId = arg(argv, "--mission-id");
-      const spacecraftId = arg(argv, "--spacecraft-id");
       const fixtureNMinus1 = arg(argv, "--fixture-n-minus-1-release-id");
       const fixtureN = arg(argv, "--fixture-n-release-id");
       const lifecycleUrl = arg(argv, "--federation-lifecycle-url");
@@ -141,7 +139,8 @@ await runBrowserGate(
       assert.ok(secret?.password, "login secret is required");
       const missionRoot = `/console/${org}/${mission}`;
       const fixtureMission = `${missionRoot}/setup/apps/surface_fixture/mission_surface`;
-      const canary = `${missionRoot}/setup/spacecraft/${spacecraftId}/apps/telemetry_decom/packet_bindings`;
+      // A console screen with no surface: the route change away from the fixture and back.
+      const appsScreen = `${missionRoot}/setup/apps`;
       const actionsPath = `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/actions`;
 
       // 1. Signed out, the app surface bounces to the console's sign-in screen; that screen asks
@@ -220,10 +219,11 @@ await runBrowserGate(
         `no surface_fixture artifact under ${prefix}`,
       );
 
-      // 4. Scope change without a reload, both ways: the console's router (the history API it
-      //    listens to) moves to the canary, a real product surface at spacecraft scope, then back;
-      //    the same document mounts each, and the fixture shows the mission context again.
-      reportProgress("console: mission -> spacecraft (canary) -> mission in the same document");
+      // 4. A route change without a reload, both ways: the console's router (the history API it
+      //    listens to) moves to Setup › Apps, which hosts no surface, then back; the same document
+      //    remounts the fixture with the mission context. No product surface has spacecraft scope
+      //    since Telemetry Decom went headless (#669), so there is no scope change to make.
+      reportProgress("console: fixture -> apps screen -> fixture in the same document");
       await record(
         client,
         "(() => { window.__consoleDocumentProbe = Date.now(); return { ok: true }; })()",
@@ -233,23 +233,23 @@ await runBrowserGate(
       await record(
         client,
         `(() => {
-          history.pushState(null, "", ${JSON.stringify(canary)});
+          history.pushState(null, "", ${JSON.stringify(appsScreen)});
           dispatchEvent(new PopStateEvent("popstate", { state: null }));
           return { ok: true };
         })()`,
-        "router navigation to the canary",
+        "router navigation to the apps screen",
         signal,
       );
       await waitForExpression(
         client,
-        "Boolean(document.querySelector('[data-testid=\"save-packet-bindings\"]'))",
-        "telemetry_decom packet_bindings mounted on the console",
+        `location.pathname === ${JSON.stringify(appsScreen)} && Boolean(document.querySelector('main h1')) && !document.querySelector('#surface-fixture')`,
+        "the console's apps screen, with no surface mounted",
         { signal },
       );
       await record(client, "(() => { history.back(); return { ok: true }; })()", "back", signal);
       await waitForExpression(
         client,
-        `location.pathname === ${JSON.stringify(fixtureMission)} && !document.querySelector('[data-testid="save-packet-bindings"]')`,
+        `location.pathname === ${JSON.stringify(fixtureMission)}`,
         "router back to the fixture",
         { signal },
       );

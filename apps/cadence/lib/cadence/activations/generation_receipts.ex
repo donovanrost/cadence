@@ -88,4 +88,38 @@ defmodule Cadence.Activations.GenerationReceipts do
       nil -> nil
     end
   end
+
+  @doc false
+  def fleet_at_query(org, mission, %DateTime{} = at) do
+    effective =
+      from(receipt in "mission_generation_receipts",
+        where:
+          receipt.organization_id == ^org and receipt.mission_id == ^mission and
+            receipt.applied_at <= type(^at, :utc_datetime_usec),
+        order_by: [desc: receipt.applied_at, desc: receipt.generation],
+        limit: 1,
+        select: %{
+          organization_id: receipt.organization_id,
+          mission_id: receipt.mission_id,
+          activation_id: receipt.activation_id
+        }
+      )
+
+    from(receipt in subquery(effective),
+      join: activation in BindingSetActivationRow,
+      on:
+        activation.activation_id == receipt.activation_id and
+          activation.organization_id == receipt.organization_id and
+          activation.mission_id == receipt.mission_id,
+      where:
+        fragment("? #>> '{value,spacecraft_configuration_version}'", activation.metadata) == "2",
+      where:
+        fragment("? #>> '{value,fleet,mission_id}'", activation.metadata) == receipt.mission_id,
+      select: %{
+        organization_id: receipt.organization_id,
+        mission_id: receipt.mission_id,
+        fleet_sha256: fragment("? #>> '{value,fleet,sha256}'", activation.metadata)
+      }
+    )
+  end
 end

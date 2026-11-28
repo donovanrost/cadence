@@ -74,11 +74,7 @@ defmodule Cadence.Projections.DataSources.Health do
       current_row = Repo.get(StatusRow, seed.source_health_key)
       current_status = current_row && StatusRow.to_domain(current_row)
 
-      if same_health?(current_status, seed) do
-        touch_status!(current_row, seed)
-      else
-        record_transition!(attrs, seed, current_status)
-      end
+      record_or_touch(attrs, seed, current_row, current_status, opts)
     end)
     |> case do
       {:ok, {:changed, event, status}} ->
@@ -93,9 +89,16 @@ defmodule Cadence.Projections.DataSources.Health do
     end
   end
 
+  @doc """
+  Records a source's health observation when health events are enabled. A resolve that carries a
+  registry snapshot (`DataSourceRegistry.with_snapshot/3`, #1058) first looks at the status the
+  snapshot read: unchanged and observed within the touch interval, it is already recorded, so the
+  call costs no query; otherwise it records as `record_source_health/2` does (a transition writes
+  an event, an unchanged one is touched at most once per interval).
+  """
   @spec maybe_record_source_health(map(), keyword()) :: :ok | {:error, term()}
   def maybe_record_source_health(attrs, opts \\ []) when is_map(attrs) and is_list(opts) do
-    if enabled?(opts) do
+    if enabled?(opts) and not recorded_in_snapshot?(attrs, opts) do
       case record_source_health(attrs, opts) do
         {:ok, :unchanged, _status} -> :ok
         {:ok, _event, _status} -> :ok
@@ -139,6 +142,7 @@ defmodule Cadence.Projections.DataSources.Health do
     StatusRow
     |> maybe_scope_organization(organization_id)
     |> maybe_scope_mission(mission_id)
+    |> maybe_filter_in(:source_health_key, Keyword.get(opts, :source_health_keys))
     |> maybe_filter(:logical_source, Keyword.get(opts, :logical_source))
     |> maybe_filter(:data_source_id, Keyword.get(opts, :data_source_id))
     |> maybe_filter(:source_binding_id, Keyword.get(opts, :source_binding_id))
@@ -177,9 +181,16 @@ defmodule Cadence.Projections.DataSources.Health do
       |> Map.merge(%{source_binding_id: nil, realm: nil, replay_run_id: nil, dataset: nil})
       |> SourceHealthEvent.source_health_key()
 
-    case fetch_source_health_status(exact_key) do
-      {:ok, status} -> {:ok, status}
-      {:error, :source_health_status_not_found} -> fetch_source_health_status(source_key)
+    # One statement for both keys, the exact one preferred (#1058; it was a read, then a second).
+    rows =
+      StatusRow
+      |> where([row], row.source_health_key in ^Enum.uniq([exact_key, source_key]))
+      |> Repo.all()
+
+    case Enum.find(rows, &(&1.source_health_key == exact_key)) ||
+           Enum.find(rows, &(&1.source_health_key == source_key)) do
+      nil -> {:error, :source_health_status_not_found}
+      row -> {:ok, StatusRow.to_domain(row)}
     end
   end
 
@@ -249,6 +260,55 @@ defmodule Cadence.Projections.DataSources.Health do
     do: status.source_health == event.source_health
 
   defp same_health?(_status, _event), do: false
+
+  # Nothing changed and it was seen a moment ago: a read that re-observes a source on every request
+  # writes nothing (#1058). Unchanged but older: touched. Changed: a transition event.
+  defp record_or_touch(attrs, seed, current_row, current_status, opts) do
+    cond do
+      same_health?(current_status, seed) and fresh?(current_status, seed, opts) ->
+        {:unchanged, current_status}
+
+      same_health?(current_status, seed) ->
+        touch_status!(current_row, seed)
+
+      true ->
+        record_transition!(attrs, seed, current_status)
+    end
+  end
+
+  # Seen within the touch interval, so a touch would only move `last_seen_at` a little.
+  @default_touch_interval_ms 15_000
+
+  defp fresh?(%SourceHealthStatus{} = status, %SourceHealthEvent{} = event, opts) do
+    case status.last_seen_at || status.observed_at do
+      %DateTime{} = last ->
+        now = event.observed_at || DateTime.utc_now()
+        DateTime.diff(now, last, :millisecond) < touch_interval_ms(opts)
+
+      _never ->
+        false
+    end
+  end
+
+  defp fresh?(_status, _event, _opts), do: false
+
+  defp touch_interval_ms(opts) do
+    Keyword.get_lazy(opts, :health_touch_interval_ms, fn ->
+      :cadence
+      |> Application.get_env(:data_source_health_touch_interval_ms, @default_touch_interval_ms)
+    end)
+  end
+
+  defp recorded_in_snapshot?(attrs, opts) do
+    with %{health_statuses: statuses} <- Keyword.get(opts, :registry_snapshot),
+         seed = SourceHealthEvent.new(attrs),
+         %SourceHealthStatus{} = status <-
+           Enum.find(statuses, &(&1.source_health_key == seed.source_health_key)) do
+      same_health?(status, seed) and fresh?(status, seed, opts)
+    else
+      _no_snapshot_or_status -> false
+    end
+  end
 
   defp touch_status!(%StatusRow{} = row, %SourceHealthEvent{} = event) do
     case Repo.update(StatusRow.touch_changeset(row, event.observed_at, event.payload)) do

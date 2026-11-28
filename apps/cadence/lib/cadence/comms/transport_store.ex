@@ -9,6 +9,7 @@ defmodule Cadence.Comms.TransportStore do
 
   alias Cadence.Comms.{
     ListenClaims,
+    ListenerChoice,
     PeerAddresses,
     ProviderDeliveryListenerRead,
     ProviderTransportBasis,
@@ -96,14 +97,19 @@ defmodule Cadence.Comms.TransportStore do
          configuration: config
        })
        when is_map(config) do
+    check_direct_delivery_auth(config)
+  end
+
+  defp allow_delivery_auth(_transport), do: :ok
+
+  @doc "Validates the authentication modes a direct transport can request."
+  def check_direct_delivery_auth(config) do
     case Map.get(config, "delivery_auth", Map.get(config, :delivery_auth)) do
       mode when mode in [nil, "plaintext", :plaintext] -> :ok
       mode when mode in ["mtls", :mtls] -> {:error, :delivery_binding_unavailable}
       _unknown -> {:error, :provider_delivery_auth_unsupported}
     end
   end
-
-  defp allow_delivery_auth(_transport), do: :ok
 
   defp authorize_delivery_transition(%Transport{lifecycle_state: :archived}, _opts), do: :ok
 
@@ -508,7 +514,7 @@ defmodule Cadence.Comms.TransportStore do
            find_profile(provider, "delivery_profiles", transport.delivery_profile_ref),
          :ok <- require_profile_compatibility(service_profile, delivery_profile),
          :ok <- require_delivery_auth(provider, delivery_profile),
-         {:ok, configuration} <- delivery_configuration(delivery_profile) do
+         {:ok, configuration} <- delivery_configuration(delivery_profile, transport.configuration) do
       {:ok,
        %Transport{
          transport
@@ -626,17 +632,31 @@ defmodule Cadence.Comms.TransportStore do
     end
   end
 
-  defp delivery_configuration(delivery_profile) do
+  defp delivery_configuration(delivery_profile, input) do
+    choice = ListenerChoice.value(input)
+
     case TCPSocket.from_delivery_profile(delivery_profile) do
       {:ok, configuration} ->
-        {:ok, configuration}
+        TCPSocket.with_listener(configuration, choice)
 
       {:error, message} ->
-        # A provider-connects profile without usable egress addresses gets a named code (#990).
-        case TCPSocket.egress_refusal(delivery_profile) do
-          nil -> {:error, {:provider_delivery_profile_unusable, message}}
-          code -> {:error, code}
-        end
+        {:error, delivery_refusal(delivery_profile, input, message)}
+    end
+  end
+
+  defp delivery_refusal(profile, input, message) do
+    # A provider-connects profile without usable egress addresses gets a named code (#990).
+    code = TCPSocket.egress_refusal(profile)
+
+    cond do
+      is_nil(code) ->
+        {:provider_delivery_profile_unusable, message}
+
+      ListenerChoice.shared?(input) and profile["delivery_auth"] != "mtls" ->
+        :shared_listener_requires_allowlist
+
+      true ->
+        code
     end
   end
 

@@ -3,10 +3,6 @@
     "lines": 1806,
     "owner": "legacy (#80): frozen, leaves with its row"
   },
-  "modules/telemetry-decom/src/features/configuration/ConfigurationPanel.vue": {
-    "lines": 694,
-    "owner": "legacy (#80): frozen, leaves with its row"
-  },
   "modules/planning-and-contacts/src/features/contact-scheduling/OpsContactSchedule.vue": {
     "lines": 539,
     "owner": "legacy (#80): frozen, leaves with its row"
@@ -19,16 +15,8 @@
     "lines": 529,
     "owner": "legacy (#80): frozen, leaves with its row"
   },
-  "modules/telemetry-decom/src/features/configuration/contracts.ts": {
-    "lines": 506,
-    "owner": "legacy (#80): frozen, leaves with its row"
-  },
   "modules/planning-and-contacts/src/features/fleet-planning/OpsFleetPlanningRun.vue": {
     "lines": 474,
-    "owner": "legacy (#80): frozen, leaves with its row"
-  },
-  "modules/telemetry-decom/src/features/packet-bindings/PacketBindingsPanel.vue": {
-    "lines": 467,
     "owner": "legacy (#80): frozen, leaves with its row"
   },
   "packages/plugin-sdk/src/bridge.ts": {
@@ -37,10 +25,6 @@
   },
   "modules/dashboards-and-exploration/src/features/exploration/ExplorationPanel.vue": {
     "lines": 411,
-    "owner": "legacy (#80): frozen, leaves with its row"
-  },
-  "modules/telemetry-decom/src/features/packet-bindings/state.ts": {
-    "lines": 407,
     "owner": "legacy (#80): frozen, leaves with its row"
   },
   "apps/host/src/phoenix-catalog-client.ts": {

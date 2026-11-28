@@ -505,62 +505,18 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
              )
   end
 
-  test "post-cutover default admission scans to the valid telemetry surface and builds its catalog" do
+  test "post-cutover admission of an installed headless application finds no surface (#669)" do
     {_document, _payload, release} = admit_release!(@artifact_bytes, "reader-default-scan")
     digest = snapshot_digest("initial", 1, "2026-09-01T18:00:00Z", release, nil)
     document = v2_document("initial", 1, "2026-09-01T18:00:00Z", release, nil, digest)
 
+    # The signed fixture release still names telemetry_decom/packet_bindings; the definition no
+    # longer declares that surface, so the active release admits nothing.
     assert {:ok, %{status: 201}} = activate(document, "reader-default-scan-key")
 
     {scope, route_context} = installed_telemetry_context()
 
-    assert {:ok, admission} =
-             ApplicationHostCatalog.admit_application(
-               scope,
-               route_context,
-               "telemetry_decom",
-               nil,
-               now: @now
-             )
-
-    assert admission.surface.surface_id == "packet_bindings"
-    assert admission.release.package_id == "cadence.telemetry-applications"
-    assert admission.release.package_version == 1
-
-    assert {:ok, catalog} =
-             ApplicationHostCatalog.build(
-               scope,
-               route_context,
-               session_id: "reader-default-scan-session",
-               application_key: "telemetry_decom",
-               csrf_token: "reader-default-scan-csrf",
-               bridge_base_url: ApplicationHostCatalog.bridge_base_path(route_context),
-               manifest_url: fn path -> "https://example.test" <> path end,
-               now: @now
-             )
-
-    assert [application] = catalog["applications"]
-    assert application["applicationKey"] == "telemetry_decom"
-    assert application["surface"]["surfaceId"] == "packet_bindings"
-    assert application["release"]["releaseId"] == release["releaseId"]
-  end
-
-  test "post-cutover installed admission rejects a release with a mismatched package" do
-    {_document, _payload, release} =
-      admit_release!(
-        @artifact_bytes,
-        "reader-package-mismatch-installed",
-        package: %{"id" => "cadence.untrusted-package", "version" => 1}
-      )
-
-    digest = snapshot_digest("initial", 1, "2026-09-01T18:00:00Z", release, nil)
-    document = v2_document("initial", 1, "2026-09-01T18:00:00Z", release, nil, digest)
-
-    assert {:ok, %{status: 201}} = activate(document, "reader-package-mismatch-installed-key")
-
-    {scope, route_context} = installed_telemetry_context()
-
-    assert {:error, :application_unavailable} =
+    assert {:error, :unknown_surface} =
              ApplicationHostCatalog.admit_application(
                scope,
                route_context,
@@ -846,18 +802,15 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
              ApplicationReleaseRegistry.snapshot(now: @now)
 
     assert {:ok, static_release} =
-             ApplicationReleaseRegistry.fetch("telemetry_decom", 1, "packet_bindings", 1,
-               now: @now
-             )
+             ApplicationReleaseRegistry.fetch("ops_console", 1, "workspace", 1, now: @now)
 
     assert static_release.manifest_path ==
-             "/assets/application-host/telemetry-decom/mf-manifest.json"
+             "/assets/application-host/ops-console/mf-manifest.json"
 
-    assert Enum.any?(entries, fn {key, _release} ->
-             key == {"telemetry_decom", 1, "packet_bindings", 1}
-           end)
+    assert Enum.any?(entries, fn {key, _release} -> key == {"ops_console", 1, "workspace", 1} end)
+    refute Enum.any?(entries, fn {{key, _, _, _}, _release} -> key == "telemetry_decom" end)
 
-    assert static_release.release_id == "telemetry-decom-v1"
+    assert static_release.release_id == "ops-console-v1"
     refute static_release.release_id == release["releaseId"]
   end
 

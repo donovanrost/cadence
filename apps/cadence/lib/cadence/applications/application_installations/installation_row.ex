@@ -5,7 +5,7 @@ defmodule Cadence.Applications.ApplicationInstallations.InstallationRow do
 
   import Ecto.Changeset
 
-  alias Cadence.Applications.{ApplicationInstallation, ConfigurationReference}
+  alias Cadence.Applications.ApplicationInstallation
   alias Cadence.Persistence.JsonDocument
 
   @primary_key {:application_installation_id, :string, autogenerate: false}
@@ -19,9 +19,6 @@ defmodule Cadence.Applications.ApplicationInstallations.InstallationRow do
     field(:spacecraft_id, :string)
     field(:application_key, :string)
     field(:application_version, :integer)
-    field(:configuration_kind, :string)
-    field(:configuration_id, :string)
-    field(:configuration_version, :integer)
     field(:lifecycle_state, :string)
     field(:metadata, :map, default: %{})
 
@@ -37,9 +34,6 @@ defmodule Cadence.Applications.ApplicationInstallations.InstallationRow do
     :spacecraft_id,
     :application_key,
     :application_version,
-    :configuration_kind,
-    :configuration_id,
-    :configuration_version,
     :lifecycle_state,
     :metadata
   ]
@@ -65,7 +59,6 @@ defmodule Cadence.Applications.ApplicationInstallations.InstallationRow do
     |> validate_scope_reference()
     |> validate_inclusion(:lifecycle_state, ["installed", "disabled", "uninstalled"])
     |> validate_number(:application_version, greater_than: 0)
-    |> validate_configuration_reference()
     |> unique_constraint(
       [:organization_id, :mission_id, :scope_kind, :scope_id, :application_key],
       name: :application_installations_scope_idx
@@ -82,7 +75,6 @@ defmodule Cadence.Applications.ApplicationInstallations.InstallationRow do
       scope_id: row.scope_id,
       application_key: row.application_key,
       application_version: row.application_version,
-      configuration_ref: configuration_ref(row),
       lifecycle_state: row.lifecycle_state,
       inserted_at: row.inserted_at,
       updated_at: row.updated_at,
@@ -91,8 +83,6 @@ defmodule Cadence.Applications.ApplicationInstallations.InstallationRow do
   end
 
   defp domain_attrs(%ApplicationInstallation{} = installation) do
-    ref = installation.configuration_ref
-
     %{
       application_installation_id: installation.application_installation_id,
       organization_id: installation.organization_id,
@@ -103,46 +93,9 @@ defmodule Cadence.Applications.ApplicationInstallations.InstallationRow do
         if(installation.scope_kind == :spacecraft, do: installation.scope_id, else: nil),
       application_key: installation.application_key,
       application_version: installation.application_version,
-      configuration_kind: ref && ref.kind,
-      configuration_id: ref && ref.id,
-      configuration_version: ref && ref.version,
       lifecycle_state: Atom.to_string(installation.lifecycle_state),
       metadata: JsonDocument.wrap_value(installation.metadata)
     }
-  end
-
-  defp configuration_ref(%__MODULE__{
-         configuration_kind: kind,
-         configuration_id: id,
-         configuration_version: version
-       })
-       when is_binary(kind) and is_binary(id) and is_integer(version) do
-    %ConfigurationReference{kind: kind, id: id, version: version}
-  end
-
-  defp configuration_ref(%__MODULE__{}), do: nil
-
-  defp validate_configuration_reference(changeset) do
-    values =
-      Enum.map(
-        [:configuration_kind, :configuration_id, :configuration_version],
-        &get_field(changeset, &1)
-      )
-
-    cond do
-      Enum.all?(values, &is_nil/1) ->
-        changeset
-
-      Enum.all?(values, &(not is_nil(&1))) ->
-        validate_number(changeset, :configuration_version, greater_than: 0)
-
-      true ->
-        add_error(
-          changeset,
-          :configuration_version,
-          "must identify a complete configuration reference"
-        )
-    end
   end
 
   defp validate_scope_reference(changeset) do

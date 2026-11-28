@@ -78,6 +78,54 @@ defmodule Cadence.Catalog.FleetSnapshot do
 
   def fleet_sha256(_metadata), do: nil
 
+  @doc """
+  What commands resolve against in the fleet, as one digest (#1107): per craft, in id order, whether
+  commanding is on, its configuration revision and version, its catalog revision, its source
+  endpoints and its **command** runtime plan's id (content-derived). Nothing about its other plans or
+  its model revision's id, so a generation that only moves craft to a new revision with the same command plan
+  (a monitoring apply) leaves it equal. Computed in the database: one read, no entries decoded
+  here, for a fleet of any size. `{:error, :invalid_spacecraft_model_bindings}` when `metadata`
+  isn't a v2 fleet.
+  """
+  @spec command_digest(map()) :: {:ok, String.t()} | {:error, :invalid_spacecraft_model_bindings}
+  def command_digest(%{"spacecraft_configuration_version" => 2, "fleet" => fleet}) do
+    case members_query(fleet) do
+      nil ->
+        {:error, :invalid_spacecraft_model_bindings}
+
+      query ->
+        digest =
+          query
+          |> join(:inner, [m], e in EntryRow,
+            on: e.mission_id == m.mission_id and e.entry_sha256 == m.entry_sha256
+          )
+          |> select(
+            [m, e],
+            fragment(
+              """
+              encode(sha256(convert_to(coalesce(string_agg(? || ':' || jsonb_build_array(
+                ?->'commanding_enabled', ?->'configuration_revision_id', ?->'configuration_version',
+                ?->'catalog_revision_id', ?->'source_endpoint_ids', ?->'mission_model'->'plans'->'command'->'plan_id'
+              )::text, '|' ORDER BY ?), ''), 'UTF8')), 'hex')
+              """,
+              m.spacecraft_id,
+              e.entry,
+              e.entry,
+              e.entry,
+              e.entry,
+              e.entry,
+              e.entry,
+              m.spacecraft_id
+            )
+          )
+          |> Repo.one()
+
+        {:ok, digest}
+    end
+  end
+
+  def command_digest(_metadata), do: {:error, :invalid_spacecraft_model_bindings}
+
   @doc "Every entry of the fleet (`spacecraft_id => entry`)."
   @spec entries(map()) :: {:ok, map()} | {:error, :invalid_spacecraft_model_bindings}
   def entries(%{"spacecraft_configuration_version" => 2, "fleet" => fleet}) do
@@ -219,6 +267,24 @@ defmodule Cadence.Catalog.FleetSnapshot do
   end
 
   def catalog_usage(_metadata), do: %{}
+
+  @doc false
+  def revision_assignments_query(fleet) do
+    from(member in MemberRow,
+      join: fleet in subquery(fleet),
+      on:
+        member.organization_id == fleet.organization_id and
+          member.mission_id == fleet.mission_id and member.fleet_sha256 == fleet.fleet_sha256,
+      join: entry in EntryRow,
+      on:
+        entry.organization_id == member.organization_id and entry.mission_id == member.mission_id and
+          entry.entry_sha256 == member.entry_sha256,
+      select: %{
+        spacecraft_id: member.spacecraft_id,
+        revision_id: fragment("? #>> '{mission_model,revision_id}'", entry.entry)
+      }
+    )
+  end
 
   @doc "Commanding-enabled entries only (`spacecraft_id => entry`)."
   @spec commanding_entries(map()) :: {:ok, map()} | {:error, term()}

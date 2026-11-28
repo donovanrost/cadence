@@ -51,13 +51,7 @@ defmodule Cadence.Control.CommandBrief do
   defp arguments(organization_id, mission_id, request, spacecraft_id) do
     values = request.resolved_argument_values || %{}
 
-    case RequestValidation.resolve_basis(
-           organization_id,
-           mission_id,
-           request.mission_model_revision_id,
-           request.command_id,
-           request.source_endpoint_ref
-         ) do
+    case RequestValidation.resolve_basis_of(organization_id, mission_id, request) do
       {:ok, %{runtime_definition: definition}} ->
         describe(definition, values, fn point_id ->
           current(organization_id, mission_id, request, spacecraft_id, point_id)

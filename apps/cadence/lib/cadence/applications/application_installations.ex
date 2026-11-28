@@ -16,7 +16,7 @@ defmodule Cadence.Applications.ApplicationInstallations do
 
   alias Cadence.Applications.ApplicationInstallation.LifecycleEvent
   alias Cadence.Applications.ApplicationInstallations.{InstallationRow, LifecycleEventRow}
-  alias Cadence.Applications.{ConfigurationReference, HostContext, Registry}
+  alias Cadence.Applications.{HostContext, Registry}
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Listing
   alias Cadence.Missions
@@ -129,39 +129,6 @@ defmodule Cadence.Applications.ApplicationInstallations do
          :ok <- ensure_optional_key(application_key),
          {:ok, actor_id} <- actor_id(current_scope) do
       transact(fn -> persist_uninstall(scope_attrs, application_key, actor_id) end)
-    end
-    |> ScopedReadUpdates.publish_result(
-      :spacecraft_configuration_changed,
-      current_scope.organization_id,
-      host_context.mission_id
-    )
-  end
-
-  @spec put_configuration_reference(
-          Scope.t(),
-          HostContext.t(),
-          binary(),
-          ConfigurationReference.t()
-        ) :: {:ok, ApplicationInstallation.t()} | {:error, term()}
-  def put_configuration_reference(
-        %Scope{} = current_scope,
-        %HostContext{} = host_context,
-        application_key,
-        %ConfigurationReference{} = configuration_ref
-      )
-      when is_binary(application_key) do
-    with {:ok, scope_attrs} <- scope_attrs(current_scope, host_context),
-         :ok <- authorize_management(current_scope, scope_attrs),
-         :ok <- ensure_optional_key(application_key),
-         {:ok, actor_id} <- actor_id(current_scope) do
-      transact(fn ->
-        persist_configuration_reference(
-          scope_attrs,
-          application_key,
-          configuration_ref,
-          actor_id
-        )
-      end)
     end
     |> ScopedReadUpdates.publish_result(
       :spacecraft_configuration_changed,
@@ -408,44 +375,6 @@ defmodule Cadence.Applications.ApplicationInstallations do
     end
   end
 
-  defp persist_configuration_reference(
-         scope_attrs,
-         application_key,
-         configuration_ref,
-         actor_id
-       ) do
-    case locked_row(scope_attrs, application_key) do
-      nil ->
-        Repo.rollback(:application_not_installed)
-
-      %InstallationRow{} = row ->
-        %ApplicationInstallation{} = current = InstallationRow.to_domain(row)
-        update_configuration_reference(row, current, configuration_ref, actor_id)
-    end
-  end
-
-  defp update_configuration_reference(
-         %InstallationRow{} = row,
-         %ApplicationInstallation{} = current,
-         %ConfigurationReference{} = configuration_ref,
-         actor_id
-       ) do
-    cond do
-      current.lifecycle_state == :disabled ->
-        Repo.rollback(:application_installation_disabled)
-
-      current.lifecycle_state == :uninstalled ->
-        Repo.rollback(:application_installation_uninstalled)
-
-      current.configuration_ref == configuration_ref ->
-        current
-
-      true ->
-        updated = %ApplicationInstallation{current | configuration_ref: configuration_ref}
-        persist_transition(row, updated, :configuration_updated, actor_id)
-    end
-  end
-
   defp reinstall(
          %InstallationRow{} = row,
          %ApplicationInstallation{} = current,
@@ -506,19 +435,11 @@ defmodule Cadence.Applications.ApplicationInstallations do
       current_lifecycle_state: current.lifecycle_state,
       previous_application_version: previous && previous.application_version,
       current_application_version: current.application_version,
-      previous_configuration_version: configuration_version(previous),
-      current_configuration_version: configuration_version(current),
       actor_id: actor_id,
       occurred_at: DateTime.utc_now() |> DateTime.truncate(:microsecond),
       payload: %{}
     })
   end
-
-  defp configuration_version(nil), do: nil
-  defp configuration_version(%ApplicationInstallation{configuration_ref: nil}), do: nil
-
-  defp configuration_version(%ApplicationInstallation{configuration_ref: configuration_ref}),
-    do: configuration_ref.version
 
   defp locked_row(scope_attrs, application_key) do
     scope_attrs

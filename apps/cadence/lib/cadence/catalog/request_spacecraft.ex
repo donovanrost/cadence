@@ -1,8 +1,8 @@
 defmodule Cadence.Catalog.RequestSpacecraft do
   @moduledoc """
   The spacecraft an activation request covers, whichever kind wrote its metadata (#734): a
-  configuration review (`Catalog.ConfigurationReviews`), a change set's generation
-  (`Catalog.ChangeSetSpacecraft`), or a single triggering spacecraft. The metadata holds only
+  configuration review (`Catalog.ConfigurationReviews`) or a change set's generation
+  (`Catalog.ChangeSetSpacecraft`). The metadata holds only
   references and counts, so a list of requests costs no query for its counts, and one query per
   kind to ask which of them touch a spacecraft.
   """
@@ -12,8 +12,7 @@ defmodule Cadence.Catalog.RequestSpacecraft do
   @doc "How many spacecraft the request covers, from its metadata alone; nil when unknown."
   @spec count(map()) :: non_neg_integer() | nil
   def count(metadata) when is_map(metadata) do
-    ChangeSetSpacecraft.count(metadata) || ConfigurationReviews.count(metadata) ||
-      if(is_binary(metadata["triggering_spacecraft_id"]), do: 1)
+    ChangeSetSpacecraft.count(metadata) || ConfigurationReviews.count(metadata)
   end
 
   def count(_metadata), do: nil
@@ -21,18 +20,13 @@ defmodule Cadence.Catalog.RequestSpacecraft do
   @doc "The covered spacecraft ids, sorted; `[]` for a request that names none or can't be read."
   @spec ids(String.t(), String.t(), map()) :: [String.t()]
   def ids(organization_id, mission_id, metadata) when is_map(metadata) do
-    cond do
-      ChangeSetSpacecraft.change_set?(metadata) ->
-        ChangeSetSpacecraft.spacecraft_ids(organization_id, mission_id, metadata)
-
-      is_binary(metadata["triggering_spacecraft_id"]) ->
-        [metadata["triggering_spacecraft_id"]]
-
-      true ->
-        case ConfigurationReviews.spacecraft_ids(organization_id, mission_id, metadata) do
-          {:ok, ids} -> ids
-          {:error, _unreadable} -> []
-        end
+    if ChangeSetSpacecraft.change_set?(metadata) do
+      ChangeSetSpacecraft.spacecraft_ids(organization_id, mission_id, metadata)
+    else
+      case ConfigurationReviews.spacecraft_ids(organization_id, mission_id, metadata) do
+        {:ok, ids} -> ids
+        {:error, _unreadable} -> []
+      end
     end
   end
 
@@ -69,9 +63,6 @@ defmodule Cadence.Catalog.RequestSpacecraft do
       cond do
         ChangeSetSpacecraft.change_set?(metadata) ->
           {metadata["change_set"]["id"], metadata["change_set"]["revision"]} in change_sets
-
-        is_binary(metadata["triggering_spacecraft_id"]) ->
-          metadata["triggering_spacecraft_id"] == spacecraft_id
 
         sha = ConfigurationReviews.sha(metadata) ->
           sha in reviews

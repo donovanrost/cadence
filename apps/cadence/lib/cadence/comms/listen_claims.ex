@@ -6,10 +6,10 @@ defmodule Cadence.Comms.ListenClaims do
   as its single peer). If two missions listened on one host:port, one mission's pass could be
   taken by the other's listener and its telemetry stored as the other mission's spacecraft.
 
-  A mission's claim on a listen endpoint is any of its latest ACTIVE provider profiles or
-  transports whose configuration listens there. Claims span every organization, because the port
-  is a resource of the node, not of a tenant. The same mission may reuse an endpoint (a station
-  pair sharing one port by design); only another mission's use is refused:
+  Claims span every organization and come from the latest active transport or provider profile
+  versions. A shared claim carries the stable transport ID, or the profile ID for a standalone
+  profile. Plaintext Shared admits one binding. Distinct bindings can share an endpoint with
+  mTLS and a common bind address and ownership mode.
 
   - at save: `guard/3` around a provider-profile or transport write, under a per-port advisory
     lock so two missions saving at once can't both pass;
@@ -21,7 +21,7 @@ defmodule Cadence.Comms.ListenClaims do
 
   import Ecto.Query
 
-  alias Cadence.Comms.TransportRow
+  alias Cadence.Comms.{ListenerChoice, TransportRow}
   alias Cadence.Contacts.ProfileStore
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Repo
@@ -30,7 +30,7 @@ defmodule Cadence.Comms.ListenClaims do
   @loopback_hosts ["localhost", "127.0.0.1"]
 
   @type endpoint :: %{host: binary(), port: pos_integer()}
-  @type reason :: {:listen_endpoint_claimed | :listen_endpoint_mode_mismatch, map()}
+  @type reason :: {atom(), endpoint()}
 
   @doc "The words a form shows for a refused endpoint (class-level; names no mission)."
   @spec message() :: binary()
@@ -61,7 +61,15 @@ defmodule Cadence.Comms.ListenClaims do
   def check(_mission_id, nil), do: :ok
 
   def check(mission_id, endpoint) when is_binary(mission_id),
-    do: check_claims(mission_id, endpoint, nil, nil)
+    do: check_mission(mission_id, endpoint, claims(endpoint.port))
+
+  @doc "Checks the proposed configuration against current claims, before the write's locked check."
+  def check_configuration(mission_id, configuration, owner) do
+    case claim(mission_id, configuration, owner) do
+      nil -> :ok
+      candidate -> check_candidate(candidate, claims(candidate.endpoint.port))
+    end
+  end
 
   @doc """
   Runs `write` (a fun returning `{:ok, _} | {:error, _}`) only if `configuration`'s listen
@@ -71,20 +79,19 @@ defmodule Cadence.Comms.ListenClaims do
   @spec guard(binary(), term(), (-> {:ok, term()} | {:error, term()}), term()) ::
           {:ok, term()} | {:error, term()}
   def guard(mission_id, configuration, write, owner \\ nil) when is_function(write, 0) do
-    case endpoint(configuration) do
+    case claim(mission_id, configuration, owner) do
       nil ->
         write.()
 
-      endpoint ->
-        mode = auth_mode(configuration)
-        Repo.transaction(fn -> locked_write(mission_id, endpoint, mode, owner, write) end)
+      candidate ->
+        Repo.transaction(fn -> locked_write(candidate, write) end)
     end
   end
 
-  defp locked_write(mission_id, %{port: port} = endpoint, mode, owner, write) do
+  defp locked_write(%{endpoint: %{port: port}} = candidate, write) do
     Repo.query!("SELECT pg_advisory_xact_lock(hashtext($1))", ["listen_port:#{port}"])
 
-    with :ok <- check_claims(mission_id, endpoint, mode, owner),
+    with :ok <- check_candidate(candidate, claims(port)),
          {:ok, result} <- write.() do
       result
     else
@@ -92,31 +99,136 @@ defmodule Cadence.Comms.ListenClaims do
     end
   end
 
-  defp check_claims(_mission_id, nil, _mode, _owner), do: :ok
+  @doc "Checks new claims together with the other staged transport claims on those ports."
+  def check_staged(mission_id, proposed, request) do
+    staged_by_owner =
+      Map.new(proposed, fn {owner, config} -> {owner, claim(mission_id, config, owner)} end)
 
-  defp check_claims(mission_id, %{port: port} = endpoint, mode, owner) do
-    claims = overlapping_claims(port, endpoint)
+    staged_by_port =
+      staged_by_owner
+      |> Map.values()
+      |> Enum.reject(&is_nil/1)
+      |> Enum.group_by(& &1.endpoint.port)
 
-    cond do
-      Enum.any?(claims, &(&1.mission_id != mission_id)) ->
-        {:error, {:listen_endpoint_claimed, endpoint}}
+    persisted_by_port =
+      staged_by_port |> Map.keys() |> claims_on_ports() |> Enum.group_by(& &1.endpoint.port)
 
-      mode && Enum.any?(claims, &conflicting_mode?(&1, owner, mode)) ->
-        {:error, {:listen_endpoint_mode_mismatch, endpoint}}
+    position = Map.new(request, fn {index, owner} -> {owner, index} end)
 
-      true ->
-        :ok
+    Enum.find_value(request, :ok, fn {index, owner} ->
+      with %{endpoint: %{port: port}} = candidate <- Map.get(staged_by_owner, owner),
+           existing =
+             staged_persisted(
+               Map.get(persisted_by_port, port, []),
+               staged_by_owner,
+               mission_id,
+               position,
+               index
+             ),
+           staged = Enum.filter(staged_by_port[port], &(Map.get(position, &1.owner, -1) < index)),
+           {:error, reason} <- check_shared_at_stage(candidate, existing ++ staged) do
+        {:error, index, reason}
+      else
+        _accepted -> nil
+      end
+    end)
+  end
+
+  # Another operation can release a claim before this one. The write checks the same endpoint
+  # against the actual rows under the lock, so applying in a different order fails safely.
+  defp staged_persisted(claims, staged, mission_id, position, index) do
+    Enum.reject(claims, fn claim ->
+      claim.mission_id == mission_id and Map.has_key?(staged, claim.owner) and
+        Map.get(position, claim.owner, -1) < index
+    end)
+  end
+
+  defp check_shared_at_stage(candidate, claims) do
+    overlapping = Enum.filter(claims, &collides?(&1, candidate))
+
+    if candidate.shared? or Enum.any?(overlapping, &(&1.shared? and not &1.projected?)),
+      do: check_overlapping(candidate, overlapping),
+      else: :ok
+  end
+
+  defp check_candidate(candidate, claims) do
+    check_overlapping(candidate, Enum.filter(claims, &collides?(&1, candidate)))
+  end
+
+  defp check_overlapping(candidate, overlapping) do
+    with :ok <- exclusive_mission(candidate.mission_id, candidate.endpoint, overlapping),
+         :ok <- shared_allowlist(candidate) do
+      Enum.find_value(overlapping, :ok, &conflict_result(candidate, &1))
     end
   end
 
-  defp overlapping_claims(port, endpoint) do
-    (profile_claims(port) ++ transport_claims(port))
-    |> Enum.filter(&overlaps?(&1.endpoint, endpoint))
+  defp conflict_result(candidate, other) do
+    case conflict(candidate, other) do
+      nil -> nil
+      reason -> {:error, {reason, candidate.endpoint}}
+    end
   end
 
-  defp conflicting_mode?(%{projected?: true}, _owner, _mode), do: false
-  defp conflicting_mode?(%{owner: owner}, owner, _mode), do: false
-  defp conflicting_mode?(claim, _owner, mode), do: claim.mode != mode
+  defp shared_allowlist(%{shared?: true, configuration: config, endpoint: endpoint}) do
+    case ListenerChoice.check_allowlist(config) do
+      :ok -> :ok
+      {:error, reason} -> {:error, {reason, endpoint}}
+    end
+  end
+
+  defp shared_allowlist(_claim), do: :ok
+
+  defp conflict(_candidate, %{projected?: true}), do: nil
+
+  defp conflict(%{owner: owner}, %{owner: owner}) when not is_nil(owner), do: nil
+
+  defp conflict(a, b) when a.shared? or b.shared?, do: shared_conflict(a, b)
+  defp conflict(a, b) when a.mode != b.mode, do: :listen_endpoint_mode_mismatch
+  defp conflict(_a, _b), do: nil
+
+  defp shared_conflict(a, b) when a.mode == :plaintext or b.mode == :plaintext,
+    do: :shared_listener_requires_mtls
+
+  defp shared_conflict(a, b) when a.shared? != b.shared?, do: :listen_endpoint_listener_mismatch
+  defp shared_conflict(a, b) when a.bind != b.bind, do: :shared_listener_bind_mismatch
+  defp shared_conflict(_a, _b), do: nil
+
+  defp collides?(a, b) do
+    if a.shared? or b.shared?,
+      do: overlaps?(a.bind, b.bind),
+      else: overlaps?(a.endpoint, b.endpoint)
+  end
+
+  defp claims(port), do: claims_on_ports([port])
+
+  defp claims_on_ports([]), do: []
+  defp claims_on_ports(ports), do: profile_claims(ports) ++ transport_claims(ports)
+
+  defp check_mission(mission_id, endpoint, claims) do
+    exclusive_mission(
+      mission_id,
+      endpoint,
+      Enum.filter(claims, &overlaps?(&1.endpoint, endpoint))
+    )
+  end
+
+  defp exclusive_mission(mission_id, endpoint, claims) do
+    if Enum.any?(claims, &(&1.mission_id != mission_id)),
+      do: {:error, {:listen_endpoint_claimed, endpoint}},
+      else: :ok
+  end
+
+  defp check_path(_mission_id, nil, _mode), do: :ok
+
+  defp check_path(mission_id, endpoint, mode) do
+    overlaps = Enum.filter(claims(endpoint.port), &overlaps?(&1.endpoint, endpoint))
+
+    with :ok <- exclusive_mission(mission_id, endpoint, overlaps) do
+      if Enum.any?(overlaps, &(not &1.projected? and &1.mode != mode)),
+        do: {:error, {:listen_endpoint_mode_mismatch, endpoint}},
+        else: :ok
+    end
+  end
 
   @doc """
   `check/2` for every listen binding on a contact's paths (fail closed at start). A refusal also
@@ -131,7 +243,7 @@ defmodule Cadence.Comms.ListenClaims do
     |> Enum.reduce_while(:ok, fn binding, :ok ->
       config = Map.get(binding, :configuration) || %{}
 
-      case check_claims(mission_id, endpoint(config), auth_mode(config), nil) do
+      case check_path(mission_id, endpoint(config), auth_mode(config)) do
         :ok ->
           {:cont, :ok}
 
@@ -151,17 +263,17 @@ defmodule Cadence.Comms.ListenClaims do
     }
   end
 
-  defp profile_claims(port),
-    do: port |> ProfileStore.latest_provider_profiles_on_port() |> claimed_endpoints(:profile)
+  defp profile_claims(ports),
+    do: ports |> ProfileStore.latest_provider_profiles_on_ports() |> claimed_endpoints(:profile)
 
   # Transports mentioning `port`, at their LATEST version: only one that is
   # still active and still listens there claims it.
-  defp transport_claims(port) do
-    port_text = Integer.to_string(port)
+  defp transport_claims(ports) do
+    port_text = Enum.map(ports, &Integer.to_string/1)
 
     candidates =
       from(row in TransportRow,
-        where: fragment("(?->'value'->>'port') = ?", row.configuration, ^port_text),
+        where: fragment("?->'value'->>'port'", row.configuration) in ^port_text,
         select: %{mission_id: row.mission_id, transport_id: row.transport_id},
         distinct: true
       )
@@ -186,16 +298,39 @@ defmodule Cadence.Comms.ListenClaims do
   defp claimed_endpoints(latest_rows, kind) do
     for %{lifecycle_state: state, configuration: configuration} = row <- latest_rows,
         state in ["active", :active],
-        endpoint = endpoint(configuration),
-        not is_nil(endpoint),
-        do: %{
-          mission_id: row.mission_id,
-          owner: {kind, row.owner_id},
-          projected?: is_binary(Map.get(row, :materialized_transport)),
-          endpoint: endpoint,
-          mode: auth_mode(configuration)
-        }
+        entry = claim(row.mission_id, configuration, claim_owner(row, kind)),
+        do: %{entry | projected?: is_binary(Map.get(row, :materialized_transport))}
   end
+
+  defp claim_owner(%{materialized_transport: id}, _kind) when is_binary(id), do: {:transport, id}
+  defp claim_owner(row, kind), do: {kind, row.owner_id}
+
+  defp claim(mission_id, configuration, owner) do
+    if endpoint = endpoint(configuration) do
+      %{
+        mission_id: mission_id,
+        owner: owner,
+        projected?: false,
+        endpoint: endpoint,
+        bind: %{endpoint | host: bind_host(get(configuration, :host))},
+        mode: auth_mode(configuration),
+        shared?: ListenerChoice.shared?(configuration),
+        configuration: configuration
+      }
+    end
+  end
+
+  # InboundSocket binds an unspecified address when the host isn't a literal IP.
+  defp bind_host(nil), do: "127.0.0.1"
+
+  defp bind_host(host) when is_binary(host) do
+    case :inet.parse_address(String.to_charlist(host)) do
+      {:ok, ip} -> ip |> :inet.ntoa() |> List.to_string()
+      {:error, _reason} -> "0.0.0.0"
+    end
+  end
+
+  defp bind_host(_host), do: "0.0.0.0"
 
   defp auth_mode(configuration) do
     if get(configuration, :delivery_auth) in ["mtls", :mtls], do: :mtls, else: :plaintext

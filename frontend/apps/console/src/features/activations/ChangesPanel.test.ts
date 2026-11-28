@@ -141,7 +141,6 @@ describe("#235 What changes panel", () => {
     const request: ActivationDetail = {
       id: "act_1",
       kind: "spacecraft_configuration",
-      app: null,
       summary: "Spacecraft configuration for 6 spacecraft",
       binding_set: { id: "bs_1", version: 4 },
       requested_by: { kind: "user", id: "u1", name: "Mira K." },

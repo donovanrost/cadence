@@ -260,17 +260,5 @@
     "metadata": {
       "nav_item": "applications"
     }
-  },
-  {
-    "path": "/missions/:mission_id/spacecraft/:spacecraft_id/applications/:application_key/:surface_id",
-    "kind": "application_surface",
-    "scope": "spacecraft",
-    "mountId": "application-surface",
-    "queryKeys": [],
-    "queryAliases": {},
-    "viewClass": "contents",
-    "metadata": {
-      "nav_item": "spacecraft"
-    }
   }
 ]

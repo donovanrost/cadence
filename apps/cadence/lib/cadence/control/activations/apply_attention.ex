@@ -121,7 +121,6 @@ defmodule Cadence.Control.Activations.ApplyAttention do
       activation_request_id: row.activation_request_id,
       summary: description.summary,
       kind: description.kind,
-      app: description.app,
       spacecraft_ids: ids,
       spacecraft_id: if(match?([_one], ids), do: hd(ids)),
       spacecraft_count: length(ids),

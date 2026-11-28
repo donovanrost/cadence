@@ -18,6 +18,7 @@ const chosen = {
       { label: "Port", value: "7000" },
     ],
     direction_capability: "inbound",
+    listener_eligible: true,
     provider_version: 3,
     summary: [{ label: "Endpoint", value: "gs.northlight.example:7000" }],
   },
@@ -38,6 +39,7 @@ describe("provider-options reader", () => {
     expect(r.value.preview?.summary).toEqual([
       { label: "Endpoint", value: "gs.northlight.example:7000" },
     ]);
+    expect(r.value.preview?.listener_eligible).toBe(true);
   });
 
   it("reads derive's refusals: a known field path, or null for a general one", () => {

@@ -155,12 +155,9 @@ export const attentionReader = d.object({
   ),
   // free-text: the server's sentence for the failure (never the raw reason)
   error: d.optional(d.nullable(d.string)),
-  // free-text: the server's sentence for what it activates ("Decom composition for 3 spacecraft")
+  // free-text: the server's sentence for what it activates ("Spacecraft configuration for 3 spacecraft")
   summary: d.optional(d.nullable(d.string)),
-  kind: d.optional(
-    d.nullable(d.knownText(["telemetry_decom", "spacecraft_configuration"] as const)),
-  ),
-  app: d.optional(d.nullable(d.object({ key: d.token, name: d.nullable(d.string) }))),
+  kind: d.optional(d.nullable(d.knownText(["spacecraft_configuration"] as const))),
   spacecraft_ids: d.optional(d.nullable(d.array(spacecraftIdReader, 10_000))),
   spacecraft_count: d.optional(d.nullable(d.integer)),
   /** false: retrying can't help (review stale, content mismatch); request activation again (U41). */
