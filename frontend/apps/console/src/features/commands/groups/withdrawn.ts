@@ -1,5 +1,7 @@
 import { decoders as d, isKnown, orNull, type Decoded } from "@/api/index.ts";
 import {
+  actorInSentence,
+  compositionActor,
   compositionInSentence,
   compositionKey,
   isComposed,
@@ -111,3 +113,47 @@ export function wayOut(name: string, earlier: unknown): string | null {
     ? "Move it to an approved composition."
     : `Stage a new configuration to move it to ${name}'s earlier approved version.`;
 }
+
+/**
+ * E2 (#546, #1042; the release panel's caution): a target whose craft runs a withdrawn revision
+ * that its waiting uplinks' GO didn't know about. An unattended release refuses those uplinks; a
+ * person naming the contact is not refused, so this cautions them.
+ */
+export const withdrawnAfterGoReader = d.object({
+  revision_id: d.token,
+  decision: d.object({
+    kind: decisionKind,
+    /** The deciding person, as the workspace's approval_withdrawn names them; null with none. */
+    by: d.nullable(compositionActor),
+    at: d.timestamp,
+    // free-text: the deciding person's reason, quoted as written (U65).
+    reason: d.nullable(d.string),
+  }),
+});
+export type WithdrawnAfterGo = Decoded<typeof withdrawnAfterGoReader>;
+
+/** The group's own: how many targets are flagged across the whole group, and the newest decision. */
+export const groupWithdrawnAfterGoReader = d.nullable(
+  d.object({ count: d.integer, latest: withdrawnAfterGoReader }),
+);
+export type GroupWithdrawnAfterGo = NonNullable<Decoded<typeof groupWithdrawnAfterGoReader>>;
+
+/**
+ * The release panel's caution (E2): "The model's approval was withdrawn after GO on 3 spacecraft,
+ * latest by Ana R. at 11-27 10:02Z: “Wrong TM table”. Their uplinks won't go out on their own:
+ * resubmit for a new GO, or release on a contact you name." A rejection says rejected; a decision
+ * kind this console doesn't know says only that it's no longer approved.
+ */
+export function withdrawnAfterGoLine(w: GroupWithdrawnAfterGo): string {
+  const x = w.latest.decision;
+  const who = actorInSentence(x.by);
+  const on = w.count === 1 ? "on 1 spacecraft" : `on ${w.count} spacecraft, latest`;
+  const head = !isKnown(x.kind)
+    ? `The model ${w.count === 1 ? "1 spacecraft runs" : `${w.count} spacecraft run`} is no longer approved${since(x.at)}`
+    : `The model's approval was ${x.kind === "rejected" ? "rejected" : "withdrawn"} after GO ${on}${who ? ` by ${who}` : ""}${at(x.at)}${why(x.reason)}`;
+  const them = w.count === 1 ? "Its uplinks" : "Their uplinks";
+  return `${head}. ${them} won't go out on their own: resubmit for a new GO, or release on a contact you name.`;
+}
+
+/** A flagged target's tag (E2): the word beside its stage. */
+export const WITHDRAWN_AFTER_GO_TAG = "Approval withdrawn after GO";

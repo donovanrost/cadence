@@ -10,6 +10,9 @@ import {
   holdOneLine,
   holdPlaceholder,
   holdSeveralLine,
+  groupWithdrawnAfterGoReader,
+  withdrawnAfterGoLine,
+  withdrawnAfterGoReader,
 } from "./withdrawn.ts";
 
 /** U109 (E2, #546, readers first): the Composition HOLD and the shared words. */
@@ -183,5 +186,47 @@ describe("the Composition check (#546 readers first)", () => {
       },
     ]);
     expect(pf.checks[0]?.per_target[0]?.composition).toBeUndefined();
+  });
+});
+
+describe("E2 withdrawn after GO (#546, #1042): the release panel's caution", () => {
+  const latest = (decision: Record<string, unknown> = {}) => ({
+    revision_id: "mission_model_revision:r3",
+    decision: {
+      kind: "withdrawn",
+      by: { kind: "user", id: "u-ana", name: "Ana R." },
+      at: "2026-11-27T10:02:00Z",
+      reason: "Wrong TM table",
+      ...decision,
+    },
+  });
+  const read = (count: number, decision: Record<string, unknown> = {}) => {
+    const r = decode(groupWithdrawnAfterGoReader, { count, latest: latest(decision) });
+    if (!r.ok || r.value === null) throw new Error(JSON.stringify(r));
+    return r.value;
+  };
+
+  it("names how many, the latest decider and time, the reason, and the way out", () => {
+    expect(withdrawnAfterGoLine(read(3))).toBe(
+      "The model's approval was withdrawn after GO on 3 spacecraft, latest by Ana R. at 11-27 10:02Z: “Wrong TM table”. Their uplinks won't go out on their own: resubmit for a new GO, or release on a contact you name.",
+    );
+    expect(withdrawnAfterGoLine(read(1, { reason: null }))).toBe(
+      "The model's approval was withdrawn after GO on 1 spacecraft by Ana R. at 11-27 10:02Z. Its uplinks won't go out on their own: resubmit for a new GO, or release on a contact you name.",
+    );
+  });
+
+  it("says rejected for a rejection, drops a missing decider, and stays neutral for an unknown kind", () => {
+    expect(withdrawnAfterGoLine(read(2, { kind: "rejected", by: null, reason: null }))).toBe(
+      "The model's approval was rejected after GO on 2 spacecraft, latest at 11-27 10:02Z. Their uplinks won't go out on their own: resubmit for a new GO, or release on a contact you name.",
+    );
+    expect(withdrawnAfterGoLine(read(2, { kind: "revoked" }))).toBe(
+      "The model 2 spacecraft run is no longer approved since 11-27 10:02Z. Their uplinks won't go out on their own: resubmit for a new GO, or release on a contact you name.",
+    );
+  });
+
+  it("reads null as nothing flagged, and a target's own flag", () => {
+    expect(decode(groupWithdrawnAfterGoReader, null)).toEqual({ ok: true, value: null });
+    const t = decode(withdrawnAfterGoReader, latest({ by: null }));
+    expect(t.ok && t.value.decision.by).toBeNull();
   });
 });
