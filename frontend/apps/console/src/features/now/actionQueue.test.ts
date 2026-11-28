@@ -893,9 +893,8 @@ describe("activation_apply (domain 9b8456132; ux U41)", () => {
         activation_request_id: "act-1",
         error_code: null,
         error: "Applying failed.",
-        summary: "Decom composition for 3 spacecraft",
-        kind: "telemetry_decom",
-        app: { key: "decom", name: "Decom" },
+        summary: "Spacecraft configuration for 3 spacecraft",
+        kind: "spacecraft_configuration",
         spacecraft_ids: [],
         spacecraft_count: 3,
         runtime_not_applied: false,
@@ -924,7 +923,7 @@ describe("activation_apply (domain 9b8456132; ux U41)", () => {
 
   it("says what didn't apply, why, and links its review page", () => {
     const row = rowOf({ approved_by: { name: "Mira K." }, approved_at: "2026-11-13T02:10:00Z" });
-    expect(row?.title).toBe("Decom composition for 3 spacecraft · approved, not applied");
+    expect(row?.title).toBe("Spacecraft configuration for 3 spacecraft · approved, not applied");
     expect(row?.sentence).toBe("Applying failed.");
     expect(row?.meta).toBe("APPROVED BY MIRA K. AT 02:10Z · SINCE 02:14Z");
     expect(row?.action).toEqual({

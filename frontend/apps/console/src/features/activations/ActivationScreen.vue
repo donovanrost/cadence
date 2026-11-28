@@ -66,7 +66,7 @@ function decided(n: DecidedNote) {
     <ApRemote :state="page.state.value" loading-label="Loading activation…" @retry="page.refetch">
       <template #default="{ value }">
         <ApPageHeader
-          :label="`${scope.mission.name} · activation · ${value.app?.name ?? 'app'}`"
+          :label="`${scope.mission.name} · activation · app`"
           :title="value.summary"
           size="reading"
         >

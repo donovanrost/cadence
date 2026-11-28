@@ -16,7 +16,6 @@ defmodule Cadence.Applications.ActionDispatcher do
     ApplicationDefinition,
     ApplicationInstallation,
     ApplicationInstallations,
-    ApplicationPreflight,
     ConfigurationReference,
     HostContext,
     LifecycleContract,
@@ -92,7 +91,7 @@ defmodule Cadence.Applications.ActionDispatcher do
   def dispatch(%Scope{}, %HostContext{}, %ActionRequest{}),
     do: {:error, :application_action_scope_required}
 
-  @doc "Runs every action authorization and preflight check without executing the provider."
+  @doc "Runs every action authorization check without executing the provider."
   @spec authorize(Scope.t(), HostContext.t(), ActionRequest.t()) :: :ok | {:error, term()}
   def authorize(
         %Scope{} = current_scope,
@@ -219,9 +218,7 @@ defmodule Cadence.Applications.ActionDispatcher do
              request.application_key
            ),
          :ok <- ensure_installation_version(installation, request.application_version),
-         :ok <- ensure_expected_configuration_version(installation, request),
-         :ok <-
-           ensure_action_preflight(current_scope, host_context, definition, request) do
+         :ok <- ensure_expected_configuration_version(installation, request) do
       {:ok, %{provider: provider, installation: installation}}
     end
   end
@@ -435,17 +432,6 @@ defmodule Cadence.Applications.ActionDispatcher do
          %ActionRequest{expected_configuration_version: expected_version}
        ),
        do: {:error, {:application_configuration_version_conflict, expected_version, nil}}
-
-  defp ensure_action_preflight(
-         current_scope,
-         host_context,
-         definition,
-         %ActionRequest{action_id: "request_activation"}
-       ) do
-    ApplicationPreflight.ensure_ready(current_scope, host_context, definition)
-  end
-
-  defp ensure_action_preflight(_current_scope, _host_context, _definition, _action_id), do: :ok
 
   defp record_installation_outcome(_scope, _host, _request, _provider, _result, nil),
     do: {:ok, nil}

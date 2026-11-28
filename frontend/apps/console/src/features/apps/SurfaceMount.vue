@@ -11,12 +11,10 @@ import { ApButton, ApCallout } from "@/ui";
 import type { SurfaceHost } from "./host.ts";
 import { lostText, repinningBridge, type RepinningBridge } from "./hostBridge.ts";
 import { surfaceLink } from "./surfaces.ts";
-import { saveOutcome, type SaveOutcome } from "./saveOutcome.ts";
 
 /**
- * L9 surface body (ux AppSurfaces.md): loads the server-approved federated module, gives it a
- * re-pinning host bridge (one scope per session, api), and passes every action receipt through the
- * app's save-outcome adapter (the seam, DECISIONS #77). One surface is mounted at a time.
+ * L9 surface body (ux AppSurfaces.md): loads the server-approved federated module and gives it a
+ * re-pinning host bridge (one scope per session, api). One surface is mounted at a time.
  */
 const props = defineProps<{
   host: SurfaceHost;
@@ -24,7 +22,6 @@ const props = defineProps<{
   /** Re-requests the `/host` read to re-pin the app-host session. */
   repin: () => Promise<HostSessionDescriptor | null>;
 }>();
-const emit = defineEmits<{ outcome: [outcome: SaveOutcome] }>();
 const router = useRouter();
 const route = useRoute();
 const app = props.host.catalog.applications[0];
@@ -70,10 +67,6 @@ async function load() {
       create: (session) => createHttpHostBridge(session, app, { navigate }),
       repin: props.repin,
       navigate,
-      onReceipt: (actionId) => {
-        const outcome = saveOutcome(app.applicationKey, actionId);
-        if (outcome) emit("outcome", outcome);
-      },
       onLost: () => (lost.value = true),
       onReport: (state) => {
         if (state.dirty !== undefined) dirty.value = state.dirty;

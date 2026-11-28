@@ -7,6 +7,7 @@ defmodule CadenceWeb.Console.SpacecraftAppAPITest do
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Applications.TelemetryDecom
   alias Cadence.Auth.Scope
+  alias Cadence.Catalog.ConfigurationReviews
   alias Cadence.Management.Activations
   alias CadenceWeb.TestFixtures
 
@@ -29,6 +30,16 @@ defmodule CadenceWeb.Console.SpacecraftAppAPITest do
   end
 
   defp get_conn(c, path), do: c.user |> TestFixtures.member_conn() |> get(path)
+
+  # A request that reviewed this spacecraft's configuration, and no other.
+  defp review(c) do
+    {:ok, ref} =
+      ConfigurationReviews.store(c.org.organization_id, c.mission.mission_id, [
+        %{id: c.craft.spacecraft_id, configuration_revision_id: "r-1", configuration_token: "t"}
+      ])
+
+    %{"configuration_review" => ConfigurationReviews.metadata(ref, nil)}
+  end
 
   test "lists the spacecraft-scope apps with only spacecraft surfaces; an unknown one is 404",
        c do
@@ -84,7 +95,7 @@ defmodule CadenceWeb.Console.SpacecraftAppAPITest do
 
     {:ok, _request} =
       Activations.request(scope, c.mission.mission_id, binding.binding_set_id, 1,
-        metadata: %{"triggering_spacecraft_id" => c.craft.spacecraft_id}
+        metadata: review(c)
       )
 
     state = fn base ->
@@ -149,7 +160,7 @@ defmodule CadenceWeb.Console.SpacecraftAppAPITest do
 
     {:ok, _request} =
       Activations.request(scope, c.mission.mission_id, binding.binding_set_id, 1,
-        metadata: %{"triggering_spacecraft_id" => c.craft.spacecraft_id}
+        metadata: review(c)
       )
 
     leaver_id = leaver.user_id

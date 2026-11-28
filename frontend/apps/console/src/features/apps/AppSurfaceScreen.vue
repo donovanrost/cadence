@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed } from "vue";
 import { useRoute } from "vue-router";
 import { useRemoteQuery, type SpacecraftId } from "@/api";
 import { paramText, useMissionScope } from "@/shell";
@@ -16,7 +16,6 @@ import AppSurfaceNotice from "./AppSurfaceNotice.vue";
 import { fetchSpacecraftDetail } from "@/features/spacecraft/index.ts";
 import { fetchScopedApps } from "./api.ts";
 import { fetchSurfaceHost } from "./host.ts";
-import type { SaveOutcome } from "./saveOutcome.ts";
 import { hostRefusal, setupSurfaces } from "./surfaces.ts";
 import SurfaceMount from "./SurfaceMount.vue";
 
@@ -71,8 +70,6 @@ async function repin() {
   const r = await fetchSurfaceHost(k, new AbortController().signal);
   return r.ok ? r.value.catalog.session : null;
 }
-const outcome = ref<SaveOutcome | null>(null);
-watch(surfaceId, () => (outcome.value = null));
 const name = computed(() => app.value?.name ?? appKey.value);
 const title = computed(
   () => surfaces.value.find((s) => s.surface_id === surfaceId.value)?.label ?? name.value,
@@ -127,11 +124,7 @@ const crumbs = computed((): readonly ApCrumb[] =>
   <div class="mx-auto flex w-full max-w-[1400px] flex-col gap-4">
     <ApBreadcrumb :crumbs="crumbs" />
     <ApPageHeader :label="`${scope.mission.name} · apps · ${name}`" :title="title" size="reading">
-      <AppStatusLine
-        :app-key="appKey"
-        :status="status"
-        :requested="outcome?.kind === 'activation_requested'"
-      />
+      <AppStatusLine :status="status" />
     </ApPageHeader>
     <ApTabLinks
       v-if="links.length > 1"
@@ -145,7 +138,6 @@ const crumbs = computed((): readonly ApCrumb[] =>
       :refusal="refusal"
       :no-surface="apps.state.value.status === 'ready' && !surfaceId"
       :read-only="readOnly"
-      :outcome="outcome"
     />
     <ApRemote
       v-if="!refusal && surfaceId"
@@ -154,13 +146,7 @@ const crumbs = computed((): readonly ApCrumb[] =>
       @retry="host.refetch"
     >
       <template #default="{ value }">
-        <SurfaceMount
-          :key="surfaceId"
-          :host="value"
-          :app-name="name"
-          :repin="repin"
-          @outcome="outcome = $event"
-        />
+        <SurfaceMount :key="surfaceId" :host="value" :app-name="name" :repin="repin" />
       </template>
     </ApRemote>
   </div>

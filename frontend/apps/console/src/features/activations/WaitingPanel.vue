@@ -50,7 +50,7 @@ const columns: readonly ApColumn[] = [
         <RouterLink
           :to="{ name: 'setup.activation', params: { requestId: row.id } }"
           class="font-semibold text-primary no-underline hover:underline max-md:hit-44"
-          >{{ row.app?.name ?? "App" }}</RouterLink
+          >App</RouterLink
         >
         <span class="text-text-2"> · {{ row.summary }}</span>
       </template>

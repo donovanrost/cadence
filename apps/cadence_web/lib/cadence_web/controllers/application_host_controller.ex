@@ -467,15 +467,6 @@ defmodule CadenceWeb.ApplicationHostController do
     )
   end
 
-  defp bridge_problem(conn, {:application_preflight_blocked, _application_key}) do
-    problem(
-      conn,
-      :unprocessable_entity,
-      "preflight_blocked",
-      "Resolve the blocking activation checks, then refresh and review before requesting mission changes."
-    )
-  end
-
   defp bridge_problem(conn, %ActionFailure{code: code, message: message}) do
     problem(conn, :unprocessable_entity, code, message)
   end

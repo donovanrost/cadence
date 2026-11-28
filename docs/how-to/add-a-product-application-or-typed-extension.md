@@ -57,15 +57,13 @@ For a product application, add or reuse:
   [`Cadence.Applications.Registry`](../../apps/cadence/lib/cadence/applications/registry.ex);
 - typed action definitions and an `ActionProvider` for durable mutations;
 - a versioned surface-query provider for declarative surfaces; and
-- resource claims or activation preflight providers when the application owns
-  scarce runtime resources.
+- resource claims when the application owns scarce runtime resources.
 
 Application provider registries remain separated by authority plane:
 
 | Contract | Registry boundary |
 | --- | --- |
 | Actions | `Cadence.Applications.ActionDispatcher` in management |
-| Activation preflight | `Cadence.Applications.ApplicationPreflight` in management |
 | Status | `Cadence.Reads.Applications` in projections |
 | Declarative surface queries | `Cadence.Reads.ApplicationSurfaces` in projections |
 | Surface references | `Cadence.Reads.ApplicationSurfaces.ReferenceResolver` in projections |
@@ -222,19 +220,13 @@ identity.
 (`:platform`) from optional product capabilities (`:optional`, the default).
 Mission/Catalog, Spacecraft, Comms, Ops, and administration are platform modules
 at their declared scopes. They do not require installation records. Telemetry
-Decom, Derived Telemetry, and Limits remain optional installations.
+Decom remains an optional installation.
 
 Use the registry's canonical policy for host admission; do not maintain separate
 installation-exemption lists in navigation, query, or action code. Platform
 availability does not bypass authentication, scope permissions, declared
 surface/action contracts, or approved frontend-release admission. Vue federation
 is a delivery choice, not a product installation or operational activation.
-
-A platform surface exposing an optional capability declares `required_application`
-on its `SurfaceDefinition`. For example, Spacecraft's Telemetry Decom surface
-requires the spacecraft's active Telemetry Decom installation. Catalog admission,
-reads, and actions enforce that requirement; activation still runs the optional
-application's preflight.
 
 Inventory lists and profile choices expose optional capabilities only. Platform
 installation mutations are rejected. Legacy platform installation rows are
@@ -303,9 +295,9 @@ mix cadence.extensions.check
 The command validates every compiled package, dependency, compatibility
 declaration, typed contribution, exact owning-registry resolution, package-id
 ownership, and contribution ownership. It also proves that every declared
-application action, activation preflight, status query, declarative surface
-query, and reference identity has a valid plane-owned provider, with no orphaned
-provider entries. It then prints the composed inventory.
+application action, status query, declarative surface query, and reference
+identity has a valid plane-owned provider, with no orphaned provider entries. It
+then prints the composed inventory.
 
 Finish with:
 

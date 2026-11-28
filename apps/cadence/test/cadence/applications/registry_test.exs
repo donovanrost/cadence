@@ -4,7 +4,6 @@ defmodule Cadence.Applications.RegistryTest do
   alias Cadence.Applications.{
     ActionDefinition,
     ApplicationDefinition,
-    LifecycleActionDefinition,
     LifecycleContract,
     Registry,
     ResourceClaimDefinition,
@@ -25,7 +24,7 @@ defmodule Cadence.Applications.RegistryTest do
              ApplicationDefinition.validate(%{optional | installation_policy: :automatic})
   end
 
-  test "resolves the latest registered application, headless at the spacecraft (#669)" do
+  test "resolves the latest registered application, headless and action-free at the spacecraft (#669)" do
     assert {:ok, %ApplicationDefinition{} = definition} =
              Registry.fetch("telemetry_decom")
 
@@ -33,21 +32,10 @@ defmodule Cadence.Applications.RegistryTest do
     assert definition.installable_scopes == [:spacecraft]
     assert definition.status_query_id == "cadence.telemetry_decom.status"
 
-    assert definition.preflight_query_id == "cadence.telemetry_decom.activation_preflight"
-
-    assert %LifecycleContract{
-             actions: ["save_configuration", "request_activation", "disable"]
-           } = definition.lifecycle_contract
-
-    assert {:ok,
-            %LifecycleActionDefinition{
-              required_permission: "request_activation",
-              execution: :approval_required
-            }} =
-             LifecycleContract.fetch_action(
-               definition.lifecycle_contract,
-               "request_activation"
-             )
+    # No actions either: spacecraft configuration drives it, and the console installs, disables
+    # and uninstalls it through ApplicationInstallations.
+    assert definition.actions == []
+    assert definition.lifecycle_contract == %LifecycleContract{actions: []}
 
     assert %ResourceContract{
              claims: [

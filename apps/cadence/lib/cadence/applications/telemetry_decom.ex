@@ -15,11 +15,11 @@ defmodule Cadence.Applications.TelemetryDecom do
   a managed runtime source endpoint so the dispatcher can disambiguate
   overlapping APIDs across heterogeneous spacecraft.
 
-  The application is headless (#669): it declares no surfaces, and the console's spacecraft
-  configuration and activation screens drive it through `Cadence.Applications.SpacecraftConfiguration`.
+  The application is headless (#669): it declares no surfaces and no actions, and the console's
+  spacecraft configuration and activation screens drive it through
+  `Cadence.Applications.SpacecraftConfiguration`.
   """
 
-  alias Cadence.Platform.ScopedReadUpdates
   alias Cadence.Reads.MissionModels.ActiveBasis
 
   alias Cadence.Applications.SpacecraftConfiguration.ApplicationInputs,
@@ -31,10 +31,8 @@ defmodule Cadence.Applications.TelemetryDecom do
   alias Cadence.Applications.{MissionBindingComposer, MissionBindingContribution}
 
   alias Cadence.Applications.{
-    ActionDefinition,
     ApplicationDefinition,
     ConfigurationLock,
-    LifecycleContract,
     PacketBindings,
     ResourceClaimDefinition,
     ResourceContract
@@ -43,13 +41,9 @@ defmodule Cadence.Applications.TelemetryDecom do
   alias Cadence.Applications.SpacecraftConfiguration.TelemetryDecomProjection
   alias Cadence.Applications.TelemetryDecom.APIDSelection
   alias Cadence.Applications.TelemetryDecom.Config
-  alias Cadence.Auth.Scope
   alias Cadence.Catalog
   alias Cadence.Catalog.Revision
   alias Cadence.Catalog.TelemetryBinding
-  alias Cadence.Governance
-  alias Cadence.Management.Activations.ActivationRequest
-  alias Cadence.MissionModels
   alias Cadence.MissionModels.{SystemSelection, TelemetryProjection}
   alias Cadence.Missions
   alias Cadence.SourceEndpoints
@@ -58,9 +52,6 @@ defmodule Cadence.Applications.TelemetryDecom do
 
   @application_key "telemetry_decom"
   @type status :: :not_configured | :configured | :applied | :outdated | :disabled
-
-  @spec action_provider() :: module()
-  def action_provider, do: Cadence.Applications.TelemetryDecom.ActionProvider
 
   @spec application_key() :: binary()
   def application_key, do: @application_key
@@ -91,31 +82,7 @@ defmodule Cadence.Applications.TelemetryDecom do
           }
         ]
       },
-      lifecycle_contract: %LifecycleContract{
-        actions: ["save_configuration", "request_activation", "disable"]
-      },
       status_query_id: "cadence.telemetry_decom.status",
-      preflight_query_id: "cadence.telemetry_decom.activation_preflight",
-      actions: [
-        %ActionDefinition{
-          action_id: "save_packet_bindings",
-          version: 1,
-          intent: :configuration,
-          scope: :spacecraft,
-          input_contract: %{
-            schema_id: "cadence.packet_bindings.selection_input",
-            version: 1
-          },
-          result_contract: %{
-            schema_id: "cadence.packet_bindings.configuration",
-            version: 1
-          },
-          required_permission: "operate_mission",
-          effect: :durable,
-          execution: :immediate,
-          concurrency: %{strategy: :expected_version}
-        }
-      ],
       capability_contributions: [
         %{kind: :semantic_handler, family_key: :definition_bound_telemetry}
       ]
@@ -137,43 +104,6 @@ defmodule Cadence.Applications.TelemetryDecom do
              document["telemetry_source_endpoint_id"]
            ) do
       {:ok, %{document | "handled_apids" => apids, "telemetry_source_endpoint_id" => endpoint}}
-    end
-  end
-
-  @doc false
-  def configure(_organization_id, _mission_id, _spacecraft_id, _attrs),
-    do: {:error, :spacecraft_configuration_review_required}
-
-  defp mission_contributors(organization_id, mission_id) do
-    packet_binding_contributors =
-      organization_id
-      |> PacketBindings.list_for_mission(mission_id,
-        enabled: true,
-        application_key: @application_key
-      )
-      |> Enum.map(fn configuration ->
-        %{
-          "application_installation_id" => configuration.application_installation_id,
-          "application_key" => configuration.application_key,
-          "application_version" => configuration.application_version,
-          "input_id" => configuration.input_id,
-          "input_version" => configuration.input_version,
-          "configuration_version" => configuration.configuration_version
-        }
-      end)
-
-    if packet_binding_contributors == [] do
-      list_configs(organization_id, mission_id)
-      |> Enum.filter(& &1.enabled)
-      |> Enum.map(fn config ->
-        %{
-          "application_key" => @application_key,
-          "spacecraft_id" => config.spacecraft_id,
-          "configuration_version" => config.configuration_version
-        }
-      end)
-    else
-      packet_binding_contributors
     end
   end
 
@@ -211,131 +141,12 @@ defmodule Cadence.Applications.TelemetryDecom do
     end
   end
 
-  @doc """
-  Compile every enabled spacecraft config in the mission into a single merged
-  binding set and activate it. Returns the updated config for the spacecraft
-  that triggered the apply.
-  """
-  @spec request_mission_apply(Scope.t(), binary(), binary(), keyword()) ::
-          {:ok, %{config: Config.t(), activation_request: ActivationRequest.t()}}
-          | {:error, term()}
-  def request_mission_apply(
-        %Scope{} = current_scope,
-        mission_id,
-        triggering_spacecraft_id,
-        opts \\ []
-      )
-      when is_binary(mission_id) and
-             is_binary(triggering_spacecraft_id) do
-    organization_id = current_scope.organization_id
-
-    ConfigurationLock.run(organization_id, mission_id, fn ->
-      with :ok <-
-             ConfigurationDrafts.legacy_apply_allowed(
-               organization_id,
-               mission_id
-             ),
-           {:ok, _mission} <- Missions.fetch_mission(organization_id, mission_id),
-           {:ok, config} <-
-             fetch_config(organization_id, mission_id, triggering_spacecraft_id),
-           all_configs <- list_configs(organization_id, mission_id),
-           configs <- Enum.filter(all_configs, & &1.enabled),
-           {:ok, contribution} <-
-             compile_mission_contribution(organization_id, mission_id, configs),
-           {:ok, binding_set} <-
-             MissionBindingComposer.compose(organization_id, mission_id, [contribution]),
-           {:ok, _persisted} <- Governance.persist_binding_set(organization_id, binding_set),
-           {:ok, mission_model_revision_id} <-
-             mission_model_revision_for_apply(
-               organization_id,
-               mission_id,
-               configs,
-               config
-             ),
-           {:ok, %ActivationRequest{} = activation_request} <-
-             MissionModels.request_promotion(
-               current_scope,
-               mission_id,
-               mission_model_revision_id,
-               binding_set.binding_set_id,
-               binding_set.version,
-               metadata: %{
-                 "composition" => "mission_applications",
-                 "contributors" => mission_contributors(organization_id, mission_id),
-                 "triggering_spacecraft_id" => triggering_spacecraft_id,
-                 "reviewed_configuration_basis" =>
-                   Keyword.get(opts, :reviewed_configuration_basis)
-               }
-             ) do
-        {:ok, %{config: config, activation_request: activation_request}}
-      end
-    end)
-    |> ScopedReadUpdates.publish_result(:activations_changed, organization_id, mission_id)
-  end
-
-  defp mission_model_revision_for_apply(
-         organization_id,
-         mission_id,
-         enabled_configs,
-         triggering_config
-       ) do
-    configs = if enabled_configs == [], do: [triggering_config], else: enabled_configs
-
-    configs
-    |> Enum.reduce_while({:ok, MapSet.new()}, fn config, {:ok, revision_ids} ->
-      case Catalog.fetch_revision(
-             organization_id,
-             mission_id,
-             config.catalog_revision_id
-           ) do
-        {:ok, %Revision{} = revision} ->
-          {:cont, {:ok, MapSet.put(revision_ids, revision.mission_model_revision_id)}}
-
-        {:error, reason} ->
-          {:halt, {:error, reason}}
-      end
-    end)
-    |> case do
-      {:ok, revision_ids} ->
-        case revision_ids |> MapSet.to_list() |> Enum.sort() do
-          [revision_id] ->
-            {:ok, revision_id}
-
-          ids ->
-            {:error, {:telemetry_decom_requires_one_mission_model_revision, ids}}
-        end
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  @doc "Records the applied state produced by a governed Telemetry Decom activation."
+  @doc "Records the applied state produced by a spacecraft-configuration activation."
   @spec activation_applied(BindingSet.t(), map() | {:fleet, map()}) :: :ok | {:error, term()}
   def activation_applied(%BindingSet{} = binding_set, {:fleet, entries}) when is_map(entries) do
     ConfigurationLock.run(binding_set.organization_id, binding_set.mission_id, fn ->
       apply_spacecraft_configuration_state(binding_set, entries)
     end)
-  end
-
-  def activation_applied(
-        %BindingSet{binding_set_id: binding_set_id} = binding_set,
-        %{"composition" => "mission_applications"}
-      ) do
-    if binding_set_id == binding_set_id(binding_set.mission_id) do
-      ConfigurationLock.run(binding_set.organization_id, binding_set.mission_id, fn ->
-        apply_configuration_state(binding_set)
-      end)
-    else
-      {:error, :telemetry_decom_activation_binding_set_mismatch}
-    end
-  end
-
-  def activation_applied(
-        %BindingSet{} = binding_set,
-        %{"application" => @application_key}
-      ) do
-    activation_applied(binding_set, %{"composition" => "mission_applications"})
   end
 
   def activation_applied(%BindingSet{}, _metadata), do: :ok
@@ -383,20 +194,6 @@ defmodule Cadence.Applications.TelemetryDecom do
     end)
   end
 
-  defp apply_configuration_state(binding_set) do
-    PacketBindings.stamp_applied_for_mission(
-      binding_set.organization_id,
-      binding_set.mission_id,
-      binding_set.binding_set_id,
-      binding_set.version,
-      application_key: @application_key
-    )
-  end
-
-  @doc false
-  def disable(_organization_id, _mission_id, _spacecraft_id),
-    do: {:error, :spacecraft_configuration_review_required}
-
   @doc """
   Return a high-level state label for a config suitable for user-facing UI.
   """
@@ -434,35 +231,6 @@ defmodule Cadence.Applications.TelemetryDecom do
   @spec binding_set_id(binary()) :: binary()
   def binding_set_id(mission_id) when is_binary(mission_id),
     do: MissionBindingComposer.binding_set_id(mission_id)
-
-  @doc """
-  Compile the preview runtime artifacts for a single config. Exposed for the
-  UI so it can show packet definition counts and diagnostics without applying.
-  """
-  @spec preview(binary(), binary(), Config.t()) ::
-          {:ok,
-           %{
-             mission_model_revision: Cadence.Catalog.MissionModel.Revision.t(),
-             telemetry_plan: Cadence.Catalog.MissionModel.RuntimePlan.t(),
-             compilation: map(),
-             selected_packets: [PacketDefinition.t()],
-             unassigned_apids: [non_neg_integer()]
-           }}
-          | {:error, term()}
-  def preview(organization_id, mission_id, %Config{} = config) do
-    with {:ok, telemetry} <- fetch_telemetry_for_config(organization_id, mission_id, config) do
-      compilation = compile_runtime_artifacts(telemetry, config, 1)
-
-      {:ok,
-       %{
-         mission_model_revision: telemetry.mission_model_revision,
-         telemetry_plan: telemetry.telemetry_plan,
-         compilation: compilation,
-         selected_packets: selected_packets(telemetry.packet_definitions, config.handled_apids),
-         unassigned_apids: unassigned_apids(telemetry.packet_definitions, config.handled_apids)
-       }}
-    end
-  end
 
   @type apid_row :: %{
           apid: non_neg_integer(),
@@ -658,12 +426,6 @@ defmodule Cadence.Applications.TelemetryDecom do
 
   defp selected_packets(packet_definitions, handled_apids),
     do: SystemSelection.select(packet_definitions, {:apids, handled_apids})
-
-  defp unassigned_apids(packet_definitions, handled_apids) do
-    packet_definitions
-    |> all_packet_apids()
-    |> Enum.reject(&(&1 in handled_apids))
-  end
 
   defp all_packet_apids(packet_definitions) do
     packet_definitions

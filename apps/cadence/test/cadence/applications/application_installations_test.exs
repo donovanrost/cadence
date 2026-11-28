@@ -2,8 +2,6 @@ defmodule Cadence.Applications.ApplicationInstallationsTest do
   use Cadence.DataCase, async: false
 
   alias Cadence.Applications.{
-    ActionDispatcher,
-    ActionRequest,
     ApplicationInstallations,
     ConfigurationReference,
     HostContext,
@@ -320,40 +318,5 @@ defmodule Cadence.Applications.ApplicationInstallationsTest do
 
     assert Enum.map(installations, & &1.application_key) == ["telemetry_decom"]
     assert {:ok, []} = OpsDock.list(context.scope, @mission_id)
-  end
-
-  test "action dispatch requires an exact installed configuration version", context do
-    request = %ActionRequest{
-      application_key: "telemetry_decom",
-      application_version: 1,
-      action_id: "disable"
-    }
-
-    assert {:error, :application_not_installed} =
-             ActionDispatcher.dispatch(context.scope, context.host_context, request)
-
-    assert {:ok, _installation} =
-             ApplicationInstallations.install(
-               context.scope,
-               context.host_context,
-               "telemetry_decom"
-             )
-
-    assert {:ok, _installation} =
-             ApplicationInstallations.put_configuration_reference(
-               context.scope,
-               context.host_context,
-               "telemetry_decom",
-               %ConfigurationReference{
-                 kind: "test_configuration",
-                 id: "binding-1",
-                 version: 3
-               }
-             )
-
-    stale_request = %ActionRequest{request | expected_configuration_version: 2}
-
-    assert {:error, {:application_configuration_version_conflict, 2, 3}} =
-             ActionDispatcher.dispatch(context.scope, context.host_context, stale_request)
   end
 end

@@ -2,8 +2,7 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
   use Cadence.RuntimeCase, async: false
 
   alias Cadence.Activations.SpacecraftConfiguration, as: ConfigurationActivation
-  alias Cadence.Applications.{ActionRequest, HostContext, TelemetryDecom}
-  alias Cadence.Applications.TelemetryDecom.ActionProvider, as: DecomActions
+  alias Cadence.Applications.TelemetryDecom
   alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Control.ActivationRequests
   alias Cadence.Control.Activations, as: ControlActivations
@@ -196,35 +195,6 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
                active.binding_set.version,
                binding_set_content_sha256: activation.binding_set_content_sha256
              )
-
-    # Sweep row 6 (rule (b)): the direct host writes are refused server-side and write nothing.
-    # Telemetry Decom is headless (#669), so no surface admits them at all.
-    host = HostContext.spacecraft(c.mission.mission_id, c.first.spacecraft_id)
-
-    {:ok, before} =
-      TelemetryDecom.fetch_config(c.org, c.mission.mission_id, c.first.spacecraft_id)
-
-    for {surface, action} <- [
-          {"manage", "save_configuration"},
-          {"manage", "disable"},
-          {"packet_bindings", "save_packet_bindings"}
-        ] do
-      request = %ActionRequest{
-        application_key: "telemetry_decom",
-        application_version: 1,
-        surface_id: surface,
-        surface_version: 1,
-        action_id: action,
-        params: %{}
-      }
-
-      assert {:error, :unsupported_application_action} =
-               DecomActions.execute(c.scope, host, request),
-             action
-    end
-
-    assert {:ok, ^before} =
-             TelemetryDecom.fetch_config(c.org, c.mission.mission_id, c.first.spacecraft_id)
 
     assert {:error, :invalid_spacecraft_model_bindings} =
              ConfigurationActivation.admit(%{

@@ -51,7 +51,6 @@ defmodule Cadence.Control.ActivationRequests.Rows do
       %{
         id: request.activation_request_id,
         kind: description.kind,
-        app: description.app,
         summary: description.summary,
         binding_set: %{id: request.binding_set_id, version: request.binding_set_version},
         requested_by: actor(request.requester_actor_document, names),
