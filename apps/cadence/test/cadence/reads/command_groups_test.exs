@@ -131,7 +131,15 @@ defmodule Cadence.Reads.CommandGroupsTest do
     |> Repo.update_all(set: [lifecycle_state: "canceled"])
 
     {:ok, view} = CommandGroups.get(c.org, c.mission, group.command_group_id, nil)
-    assert [%{stage: :release_failed, members: [%{end_reason: nil}]}, _] = view.targets
+
+    assert [
+             %{
+               stage: :release_failed,
+               members: [%{end_reason: nil, failure_reason: :release_failed}]
+             },
+             _
+           ] =
+             view.targets
   end
 
   test "a member canceled by a catalog change set reads end_reason catalog_changed (#65)", c do
